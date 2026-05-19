@@ -37,3 +37,8 @@ cli-state.json
 *.db-journal
 *.db-wal
 *.db-shm
+*.sqlite
+*.sqlite-journal
+
+# Scratch directories de testes E2E — outputs, payloads de injeção, sqlite junk
+tests/reports/e2e-scratch/
