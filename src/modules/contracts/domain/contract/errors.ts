@@ -1,0 +1,15 @@
+export type ContractError =
+  | 'contract-sequential-number-required'
+  | 'contract-sequential-number-invalid-format'
+  | 'contract-title-required'
+  | 'contract-objective-required'
+  | 'contract-invalid-signed-at'
+  | 'contract-original-value-zero'
+  | 'contract-invalid-event-date'
+  | 'contract-not-active'
+  | 'contract-cannot-expire-yet'
+  | 'contract-cannot-expire-indefinite-period'
+  | 'contract-cannot-extend-indefinite-period'
+  | 'contract-value-would-go-negative'
+  | 'contract-period-extension-not-after-current-end'
+  | 'contract-amendment-already-applied';
