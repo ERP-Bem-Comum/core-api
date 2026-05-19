@@ -1,0 +1,29 @@
+node_modules/
+dist/
+.env
+.env.local
+.env.*.local
+*.log
+.DS_Store
+.vscode/
+.idea/
+coverage/
+.tsbuildinfo
+
+# Configs locais de ferramentas auxiliares (Gemini CLI, MCP, etc — específicas da máquina)
+.gemini/
+
+# Docker Compose secrets — arquivos com senhas locais
+# Pasta secrets/ é versionada (com .gitkeep); apenas os .txt dentro são ignorados
+/secrets/*.txt
+
+# Estado local do CLI (memory driver — pode conter dados sensíveis em dev)
+cli-state.json
+*.state.json
+
+# SQLite local files (criados pelo adapter Drizzle/SQLite — removidos em
+# CTR-CLEANUP-SQLITE, mas mantemos por segurança até o ticket fechar)
+*.db
+*.db-journal
+*.db-wal
+*.db-shm

@@ -1,0 +1,19 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Compose override para CI (GitHub Actions). Remove expose externo de portas
+# — app e mysql conversam pela network interna `core-api`.
+#
+# Uso:
+#   docker compose -f compose.yaml -f compose.ci.yaml up -d
+#
+# Justificativa: ADR-0020 §"Topologia de execução" — em CI, expor portas é
+# surface de ataque desnecessária; jobs paralelos brigariam pela 3306 do
+# runner. Compose Specification 2024.4+ define `!reset null` que remove a
+# chave completamente em vez de sobrescrever.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  mysql:
+    ports: !reset null
+
+  minio:
+    ports: !reset null

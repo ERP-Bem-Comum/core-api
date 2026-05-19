@@ -1,0 +1,20 @@
+node_modules/
+dist/
+coverage/
+.tsbuildinfo
+cli-state.json
+*.log
+.DS_Store
+
+# Documentação organizacional fica fora — mantemos formatação manual
+.claude/
+.pipeline/
+# Handbook (copiado do monorepo pai; preserva formatação original)
+handbook/
+
+# Lock files são gerados — não formatar
+pnpm-lock.yaml
+package-lock.json
+
+# Artefatos de relatórios E2E (incluem JSON intencionalmente malformado p/ testes de tamper)
+tests/reports/

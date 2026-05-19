@@ -1,0 +1,40 @@
+{
+  "name": "core-api",
+  "version": "0.1.0",
+  "description": "Modular Monolith do ERP Bem Comum. Fase 1: módulo Contratos.",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "imports": {
+    "#src/*": "./src/*"
+  },
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "node --test --experimental-strip-types --no-warnings 'tests/**/*.test.ts'",
+    "test:integration": "mkdir -p secrets && printf 'rootpw-migration-test-only' > secrets/mysql_root_password.txt && printf 'apppw-migration-test-only' > secrets/mysql_app_password.txt && printf 'ropw-migration-test-only' > secrets/mysql_readonly_password.txt && chmod 600 secrets/mysql_*.txt && docker compose up -d mysql --wait && MYSQL_INTEGRATION=1 node --test --test-concurrency=1 --experimental-strip-types --no-warnings 'tests/modules/contracts/adapters/persistence/migrations/*.test.ts' 'tests/modules/contracts/adapters/persistence/mysql-driver.test.ts' 'tests/modules/contracts/adapters/persistence/drizzle-mysql.test.ts' 'tests/cli/contracts.cli.mysql.test.ts'; rc=$?; docker compose down -v >/dev/null; rm -f secrets/mysql_*.txt; exit $rc",
+    "cli:contracts": "node --experimental-strip-types --no-warnings src/modules/contracts/cli/main.ts",
+    "secrets:setup": "node --experimental-strip-types --no-warnings ./scripts/setup-secrets.ts",
+    "db:generate": "drizzle-kit generate"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^22.10.0",
+    "@typescript/native-preview": "7.0.0-dev.20260515.1",
+    "drizzle-kit": "^0.31.10",
+    "eslint": "^10.3.0",
+    "eslint-config-prettier": "^10.1.8",
+    "prettier": "^3.8.3",
+    "typescript": "^6.0.0",
+    "typescript-eslint": "^8.59.3"
+  },
+  "dependencies": {
+    "drizzle-orm": "^0.45.2",
+    "mysql2": "^3.22.3"
+  }
+}

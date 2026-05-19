@@ -1,0 +1,84 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# .dockerignore — exclusões do build context enviado ao daemon Docker.
+#
+# Toda entrada aqui REDUZ o build context. Build mais rápido, imagem menor,
+# menos surface de leak (ex.: nunca mandar `.git/` para o build).
+#
+# Sintaxe: gitignore-like. Padrão prefixado com `!` é exceção (volta a incluir).
+# ─────────────────────────────────────────────────────────────────────────────
+
+# Node / pnpm ─ instalado dentro do container, não copiado de fora
+node_modules/
+.pnpm-store/
+.npm/
+
+# Build artifacts ─ Fase 1 roda via --experimental-strip-types, sem dist/
+dist/
+build/
+*.tsbuildinfo
+coverage/
+
+# Git ─ nunca enviar histórico para o daemon
+.git/
+.gitignore
+.gitattributes
+.github/
+
+# IDEs e editores
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Documentação organizacional ─ inerte para o runtime
+.claude/
+.pipeline/
+.gemini/
+handbook/
+README.md
+CLAUDE.md
+*.md
+
+# Configurações de dev/lint que NÃO são consumidas pelo runtime
+.editorconfig
+.prettierignore
+.prettierrc.json
+eslint.config.js
+.eslintcache
+
+# Estado local do CLI (NUNCA enviar — pode conter dados sensíveis)
+cli-state.json
+*.state.json
+
+# Logs e temporários
+*.log
+logs/
+tmp/
+temp/
+
+# Test reports e scratch files
+tests/reports/
+tests/bdd/
+tests/regression/
+
+# Compose / Docker meta (não vão dentro da imagem)
+Dockerfile*
+.dockerignore
+compose.yaml
+compose.yml
+docker-compose*.yml
+docker-compose*.yaml
+volumes/
+
+# Secrets explícitos (defense in depth, mesmo com .gitignore cobrindo)
+.env
+.env.*
+*.pem
+*.key
+*.crt
+secrets/
+
+# Lockfile do package manager DEVE ser enviado — explicitamente reincluído.
+!pnpm-lock.yaml
+!package.json

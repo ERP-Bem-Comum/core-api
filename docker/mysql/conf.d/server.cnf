@@ -1,0 +1,61 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# MySQL 8.4 — configuração canônica para core-api (dev/CI/staging).
+# Sustentação: ADR-0020 §"Decisões com citação", ADR-0014 §"Charset/Collation".
+# Cada bloco cita o ADR ou o Refman 8.4 que sustenta o valor.
+# ─────────────────────────────────────────────────────────────────────────────
+[mysqld]
+
+# D2 — Charset utf8mb4 (ADR-0014 §"Atenção crítica" — bloqueia utf8mb3 alias)
+character-set-server          = utf8mb4
+collation-server              = utf8mb4_unicode_ci
+init-connect                  = 'SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci'
+
+# D3 — SQL mode estrito (MySQL Refman 8.4 §"Server SQL Modes")
+sql-mode                      = STRICT_ALL_TABLES,NO_ZERO_DATE,NO_ZERO_IN_DATE,ERROR_FOR_DIVISION_BY_ZERO,NO_ENGINE_SUBSTITUTION
+
+# D4 — Time zone UTC (MySQL Refman 8.4 §"MySQL Server Time Zone Support")
+default-time-zone             = '+00:00'
+
+# D5 — InnoDB file-per-table + row format DYNAMIC (Refman §"InnoDB File-Per-Table Tablespaces")
+innodb-file-per-table         = ON
+innodb-default-row-format     = DYNAMIC
+
+# D6 — Binlog ROW + GTID para PITR e CDC futuro (Refman §"Replication Formats")
+log-bin                       = mysql-bin
+binlog-format                 = ROW
+gtid-mode                     = ON
+enforce-gtid-consistency      = ON
+binlog-expire-logs-seconds    = 604800
+binlog-row-image              = FULL
+
+# D7 — ACID FULL em todos ambientes. ADR-0020 §"Princípio condutor":
+# "MySQL local roda como prod roda". Skill database-engineer §anti-padrões #16:
+# "aceitar 'mas funciona' como justificativa" foi a regra que ganhou — paridade
+# comportamental dev↔prod vale os ms extras por commit.
+innodb-flush-log-at-trx-commit = 1
+sync-binlog                   = 1
+
+# D8 — caching_sha2_password (default 8.0+; mysql2 suporta nativamente).
+# MySQL 8.4 REMOVEU `default-authentication-plugin` (deprecated em 8.0.27).
+# A syntax canônica em 8.4+ é `authentication-policy` com 3 slots:
+# `<plugin1>,[<plugin2>,[<plugin3>]]`. Slots vazios significam "nenhum
+# adicional aceito". Refman 8.4 §"Configuring the Multifactor Authentication".
+authentication-policy         = caching_sha2_password,,
+
+# Memória e conexões — valores dev. Em prod (RDS/Cloud SQL) o params group
+# ajusta buffer_pool a 60-70% da RAM.
+innodb-buffer-pool-size       = 256M
+max-connections               = 100
+
+# Operacionais — MySQL 8.4 REMOVEU `skip-host-cache`. Substituto: `host-cache-size=0`
+host-cache-size               = 0
+skip-name-resolve
+slow-query-log                = ON
+slow-query-log-file           = /var/lib/mysql/slow.log
+long-query-time               = 1
+log-output                    = FILE
+
+# Sockets e binding
+bind-address                  = 0.0.0.0
+# X Protocol desligado — não usamos doc store / NoSQL interface
+mysqlx                        = OFF

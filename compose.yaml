@@ -1,0 +1,203 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# Docker Compose — ambiente de DESENVOLVIMENTO/HOMOLOGAÇÃO local
+#
+# Materializa simultaneamente:
+#   - ADR-0019 — storage de documentos via MinIO (S3-compatível) em dev
+#   - ADR-0020 — MySQL 8.4 como único dialeto (supersedes ADR-0018)
+#   - ADR-0014 — isolamento por database `core`, charset utf8mb4_unicode_ci
+#   - ADR-0011 — supply chain: digest pin + secrets via files (não env vars)
+#
+# Em produção este compose NÃO sobe — endpoints viram managed services
+# (AWS S3, AWS RDS/Cloud SQL) com secrets vindo do Secrets Manager.
+#
+# Setup inicial (1 vez):
+#   pnpm secrets:setup                         # gera ./secrets/*.txt (TS script)
+#   docker compose up -d                       # sobe minio + mysql + bootstrap
+#
+# Para CI (sem expor portas):
+#   docker compose -f compose.yaml -f compose.ci.yaml up -d
+#
+# Profile opt-in:
+#   docker compose --profile app up -d         # adiciona o serviço `app` buildado
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: core-api-dev
+
+services:
+  # ──────────────────────────────────────────────────────────────────────────
+  # MinIO — equivalente local do AWS S3 (ADR-0019).
+  # Licença AGPLv3: uso interno em dev/homologação NÃO dispara cláusulas
+  # copyleft (ver ADR-0019 §"Análise de Licenciamento").
+  # ──────────────────────────────────────────────────────────────────────────
+  minio:
+    # ADR-0011 §"Pin de versões" — digest pin do index multi-arch.
+    # Para atualizar: docker buildx imagetools inspect minio/minio:latest --format '{{.Manifest.Digest}}'
+    image: minio/minio:latest@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
+    container_name: core-api-minio
+    restart: unless-stopped
+    command: server /data --console-address ":9001"
+    ports:
+      - '${MINIO_API_PORT:-9000}:9000'
+      - '${MINIO_CONSOLE_PORT:-9001}:9001'
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-dev-access-key}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-dev-secret-key-min-8-chars}
+      MINIO_PROMETHEUS_AUTH_TYPE: public
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ['CMD', 'mc', 'ready', 'local']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+    # Hardening — Compose reference §"Service-level elements". Impede que o
+    # processo dentro do container ganhe novos privilégios via setuid/setgid.
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - core-api
+
+  minio-bootstrap:
+    image: minio/mc:latest
+    container_name: core-api-minio-bootstrap
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-dev-access-key} ${MINIO_ROOT_PASSWORD:-dev-secret-key-min-8-chars};
+      mc mb --ignore-existing local/contracts-documents;
+      mc version enable local/contracts-documents;
+      mc anonymous set download local/contracts-documents;
+      echo 'Bootstrap concluído: bucket contracts-documents pronto.';
+      "
+    restart: 'no'
+    networks:
+      - core-api
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # MySQL 8.4 — engine único de persistência relacional (ADR-0020).
+  #
+  # Configuração canônica (charset, sql_mode, time zone, binlog, GTID, ACID
+  # full) em ./docker/mysql/conf.d/server.cnf — montado read-only.
+  #
+  # Bootstrap (CREATE DATABASE core + users + grants + time zone tables) em
+  # ./docker/mysql/initdb.d/*.sh — roda APENAS na primeira inicialização do
+  # volume, convenção da imagem oficial mysql.
+  #
+  # Secrets via Docker Compose `secrets:` top-level — senhas como files em
+  # /run/secrets/<name>, nunca env vars (não vaza em docker inspect).
+  # Imagem oficial reconhece o sufixo _FILE para todas as senhas.
+  # ──────────────────────────────────────────────────────────────────────────
+  mysql:
+    # ADR-0011 §"Pin de versões" — digest pin do index multi-arch (linux/amd64 + arm64v8).
+    # Para atualizar: docker buildx imagetools inspect mysql:8.4 --format '{{.Manifest.Digest}}'
+    image: mysql:8.4@sha256:c36050afdca850f23cef85703f84c7531a5ae155a11b5ee1c60acb09937c4084
+    container_name: core-api-mysql
+    restart: unless-stopped
+    ports:
+      - '${MYSQL_PORT:-3306}:3306'
+    environment:
+      MYSQL_ROOT_PASSWORD_FILE: /run/secrets/mysql_root_password
+      MYSQL_DATABASE: core
+      MYSQL_USER: ${MYSQL_USER:-core_app}
+      MYSQL_PASSWORD_FILE: /run/secrets/mysql_app_password
+    volumes:
+      - mysql-data:/var/lib/mysql
+      - ./docker/mysql/conf.d:/etc/mysql/conf.d:ro
+      - ./docker/mysql/initdb.d:/docker-entrypoint-initdb.d:ro
+    secrets:
+      - mysql_root_password
+      - mysql_app_password
+      - mysql_readonly_password
+    healthcheck:
+      # Login real com user de aplicação via TCP em 127.0.0.1 — não só
+      # `mysqladmin ping` (que dá falso positivo durante init scripts ainda
+      # rodando) e não via socket Unix default (que aceita conexões antes do
+      # listener TCP estar pronto — `compose up --wait` retornaria prematuro
+      # e quebraria a 1ª conexão do `mysql2` rodando no HOST via porta 3306
+      # exposta, ver `tests/reports/CA-3-flakiness-investigation/`).
+      test:
+        - CMD-SHELL
+        - >-
+          mysql --protocol=tcp -h 127.0.0.1
+          --user="$$MYSQL_USER"
+          --password="$$(cat /run/secrets/mysql_app_password)"
+          --execute="SELECT 1" "$$MYSQL_DATABASE"
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    # Hardening — Compose reference §"Service-level elements".
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - core-api
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Aplicação core-api (opt-in via profile `app`).
+  # Por padrão você roda a CLI local via `pnpm cli:contracts`. Este serviço
+  # serve para validar o build da imagem e exercitar smoke end-to-end contra
+  # o MySQL na mesma network — fluxo coberto pelo ticket #7
+  # (CTR-CLI-MYSQL-SMOKE).
+  #
+  # Convenção: a CLI consome a conexão via flag `--connection-string`. Não há
+  # leitura de env vars MYSQL_*/S3_* — quando vier o wiring HTTP/storage real,
+  # esse contrato é revisitado.
+  # ──────────────────────────────────────────────────────────────────────────
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      cache_from:
+        - core-api:dev
+    image: core-api:dev
+    container_name: core-api-app
+    depends_on:
+      minio:
+        condition: service_healthy
+      mysql:
+        condition: service_healthy
+    # CLI single-shot: o command override do profile passa a connection string
+    # explícita. A senha sai do secret file via $(cat). Stdin/stdout do
+    # subcomando vão para os logs do compose.
+    command:
+      - 'listar-contratos'
+      - '--driver'
+      - 'mysql'
+      - '--connection-string'
+      - 'mysql://core_app:$$(cat /run/secrets/mysql_app_password)@mysql:3306/core'
+    environment:
+      NODE_ENV: development
+    secrets:
+      - mysql_app_password
+    security_opt:
+      - no-new-privileges:true
+    networks:
+      - core-api
+    profiles:
+      - app
+
+# ────────────────────────────────────────────────────────────────────────────
+# Top-level secrets — populados pelo scripts/setup-secrets.sh.
+# Compose falha se algum arquivo estiver ausente (RED válido em W0 — CA-2).
+# ────────────────────────────────────────────────────────────────────────────
+secrets:
+  mysql_root_password:
+    file: ./secrets/mysql_root_password.txt
+  mysql_app_password:
+    file: ./secrets/mysql_app_password.txt
+  mysql_readonly_password:
+    file: ./secrets/mysql_readonly_password.txt
+
+volumes:
+  minio-data:
+    name: core-api-minio-data
+  mysql-data:
+    name: core-api-mysql-data
+
+networks:
+  core-api:
+    name: core-api
+    driver: bridge
