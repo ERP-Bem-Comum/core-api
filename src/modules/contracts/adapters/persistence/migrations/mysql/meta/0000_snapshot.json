@@ -1,0 +1,347 @@
+{
+  "version": "5",
+  "dialect": "mysql",
+  "id": "ec2796c7-cfee-491f-b4f9-933d125e37ae",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "tables": {
+    "ctr_amendments": {
+      "name": "ctr_amendments",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "contract_id": {
+          "name": "contract_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amendment_number": {
+          "name": "amendment_number",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "varchar(1000)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "impact_value_cents": {
+          "name": "impact_value_cents",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "new_end_date": {
+          "name": "new_end_date",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "signed_document_ref": {
+          "name": "signed_document_ref",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "homologated_at": {
+          "name": "homologated_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "homologated_by": {
+          "name": "homologated_by",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "ctr_amendments_contract_id_idx": {
+          "name": "ctr_amendments_contract_id_idx",
+          "columns": ["contract_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "ctr_amend_contract_fk": {
+          "name": "ctr_amend_contract_fk",
+          "tableFrom": "ctr_amendments",
+          "tableTo": "ctr_contracts",
+          "columnsFrom": ["contract_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "ctr_amendments_id": {
+          "name": "ctr_amendments_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {
+        "ctr_amendments_kind_chk": {
+          "name": "ctr_amendments_kind_chk",
+          "value": "`ctr_amendments`.`kind` IN ('Addition','Suppression','TermChange','Misc')"
+        },
+        "ctr_amendments_status_chk": {
+          "name": "ctr_amendments_status_chk",
+          "value": "`ctr_amendments`.`status` IN ('Pending','Homologated')"
+        },
+        "ctr_amendments_homologation_completeness_chk": {
+          "name": "ctr_amendments_homologation_completeness_chk",
+          "value": "\n        `ctr_amendments`.`status` <> 'Homologated'\n        OR (\n          `ctr_amendments`.`homologated_at` IS NOT NULL\n          AND `ctr_amendments`.`homologated_by` IS NOT NULL\n          AND `ctr_amendments`.`signed_document_ref` IS NOT NULL\n        )\n      "
+        }
+      }
+    },
+    "ctr_contract_homologated_amendments": {
+      "name": "ctr_contract_homologated_amendments",
+      "columns": {
+        "contract_id": {
+          "name": "contract_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "amendment_id": {
+          "name": "amendment_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "ctr_chom_amends_contract_fk": {
+          "name": "ctr_chom_amends_contract_fk",
+          "tableFrom": "ctr_contract_homologated_amendments",
+          "tableTo": "ctr_contracts",
+          "columnsFrom": ["contract_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        },
+        "ctr_chom_amends_amendment_fk": {
+          "name": "ctr_chom_amends_amendment_fk",
+          "tableFrom": "ctr_contract_homologated_amendments",
+          "tableTo": "ctr_amendments",
+          "columnsFrom": ["amendment_id"],
+          "columnsTo": ["id"],
+          "onDelete": "no action",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "ctr_contract_homologated_amendments_contract_id_amendment_id_pk": {
+          "name": "ctr_contract_homologated_amendments_contract_id_amendment_id_pk",
+          "columns": ["contract_id", "amendment_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "ctr_contracts": {
+      "name": "ctr_contracts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "sequential_number": {
+          "name": "sequential_number",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "title": {
+          "name": "title",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "objective": {
+          "name": "objective",
+          "type": "varchar(1000)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "signed_at": {
+          "name": "signed_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "original_value_cents": {
+          "name": "original_value_cents",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "original_period_kind": {
+          "name": "original_period_kind",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "original_period_start": {
+          "name": "original_period_start",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "original_period_end": {
+          "name": "original_period_end",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "current_value_cents": {
+          "name": "current_value_cents",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "current_period_kind": {
+          "name": "current_period_kind",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "current_period_start": {
+          "name": "current_period_start",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "current_period_end": {
+          "name": "current_period_end",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "ended_at": {
+          "name": "ended_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "ctr_contracts_status_idx": {
+          "name": "ctr_contracts_status_idx",
+          "columns": ["status"],
+          "isUnique": false
+        },
+        "ctr_contracts_signed_at_idx": {
+          "name": "ctr_contracts_signed_at_idx",
+          "columns": ["signed_at"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "ctr_contracts_id": {
+          "name": "ctr_contracts_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {
+        "ctr_contracts_sequential_number_unique": {
+          "name": "ctr_contracts_sequential_number_unique",
+          "columns": ["sequential_number"]
+        }
+      },
+      "checkConstraint": {
+        "ctr_contracts_original_period_kind_chk": {
+          "name": "ctr_contracts_original_period_kind_chk",
+          "value": "`ctr_contracts`.`original_period_kind` IN ('Fixed','Indefinite')"
+        },
+        "ctr_contracts_current_period_kind_chk": {
+          "name": "ctr_contracts_current_period_kind_chk",
+          "value": "`ctr_contracts`.`current_period_kind` IN ('Fixed','Indefinite')"
+        },
+        "ctr_contracts_status_chk": {
+          "name": "ctr_contracts_status_chk",
+          "value": "`ctr_contracts`.`status` IN ('Active','Expired','Terminated')"
+        },
+        "ctr_contracts_ended_at_consistency_chk": {
+          "name": "ctr_contracts_ended_at_consistency_chk",
+          "value": "(`ctr_contracts`.`ended_at` IS NOT NULL) = (`ctr_contracts`.`status` IN ('Expired','Terminated'))"
+        }
+      }
+    }
+  },
+  "views": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "tables": {},
+    "indexes": {}
+  }
+}
