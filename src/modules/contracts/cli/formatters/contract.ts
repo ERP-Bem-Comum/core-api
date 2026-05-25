@@ -18,7 +18,8 @@ export const formatContract = (c: Contract): string => {
   lines.push(`  Vigência original: ${formatPeriod(c.originalPeriod)}`);
   lines.push(`  Vigência vigente: ${formatPeriod(c.currentPeriod)}`);
   lines.push(`  Aditivos homologados: ${c.homologatedAmendmentIds.length}`);
-  if (c.endedAt !== null) {
+  // Narrow via discriminator — só Expired/Terminated têm `endedAt`.
+  if (c.status !== 'Active') {
     lines.push(`  Encerrado em: ${formatDate(c.endedAt)}`);
   }
   return lines.join('\n');

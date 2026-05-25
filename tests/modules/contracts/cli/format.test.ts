@@ -1,9 +1,11 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
-import { Money } from '#src/modules/contracts/domain/shared/money.ts';
-import { Period } from '#src/modules/contracts/domain/shared/period.ts';
-import { AmendmentId, ContractId } from '#src/modules/contracts/domain/shared/ids.ts';
+import * as Money from '#src/shared/kernel/money.ts';
+import * as NonZeroMoney from '#src/shared/kernel/non-zero-money.ts';
+import * as Period from '#src/shared/kernel/period.ts';
+import * as AmendmentId from '#src/modules/contracts/domain/shared/amendment-id.ts';
+import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
 import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
 import { Amendment } from '#src/modules/contracts/domain/amendment/amendment.ts';
 import {
@@ -18,6 +20,13 @@ import {
 
 const money = (cents: number) => {
   const r = Money.fromCents(cents);
+  if (!r.ok) throw new Error('fixture broken');
+  return r.value;
+};
+
+const nonZeroMoney = (cents: number) => {
+  const m = money(cents);
+  const r = NonZeroMoney.from(m);
   if (!r.ok) throw new Error('fixture broken');
   return r.value;
 };
@@ -149,7 +158,7 @@ describe('formatContract / formatAmendment — real newlines (Defeito #2)', () =
       description: 'X',
       createdAt: new Date('2026-03-01'),
       kind: 'Addition',
-      impactValue: money(500000),
+      impactValue: nonZeroMoney(500000),
     });
     if (!created.ok) throw new Error('fixture broken');
     const result = formatAmendment(created.value.amendment);

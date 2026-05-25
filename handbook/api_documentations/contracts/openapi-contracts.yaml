@@ -1,0 +1,1290 @@
+openapi: 3.0.3
+info:
+  title: Bem Comum ERP - Contratos API
+  description: |
+    API de Contratos do ERP Bem Comum. Gerencia contratos, aditivos, histórico de pagamentos e exportações.
+    Integra com os módulos de Fornecedores, Colaboradores, Financiadores, Programas e Plano Orçamentário.
+  version: 1.0.0
+  contact:
+    name: Equipe de Desenvolvimento
+
+servers:
+  - url: http://localhost:3003
+    description: Servidor de desenvolvimento local (NestJS)
+
+tags:
+  - name: Contratos
+    description: CRUD de contratos e aditivos
+  - name: Histórico
+    description: Histórico de pagamentos do contrato
+  - name: Exportação
+    description: Exportação de dados em CSV e PDF
+
+paths:
+  # ---------------------------------------------
+  # LISTAR CONTRATOS (com filtros e paginação)
+  # ---------------------------------------------
+  /contracts:
+    get:
+      tags:
+        - Contratos
+      summary: Listar contratos filtrados
+      description: |
+        Retorna lista paginada de contratos com filtros por tipo, status, período, programa e pagamento.
+        Cada contrato inclui seus aditivos (children) para cálculo de valor atual e vigência.
+      operationId: getAllFilteredContracts
+      parameters:
+        - name: page
+          in: query
+          description: Página atual
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          description: Itens por página
+          schema:
+            type: integer
+            default: 10
+        - name: search
+          in: query
+          description: Busca por texto (objeto, código, nome do contratado)
+          schema:
+            type: string
+        - name: agreement
+          in: query
+          description: Filtro por acordo (0 = não, 1 = sim)
+          schema:
+            type: integer
+        - name: budgetPlanId
+          in: query
+          description: ID do plano orçamentário
+          schema:
+            type: integer
+        - name: contractType
+          in: query
+          description: Tipo de contrato
+          schema:
+            $ref: '#/components/schemas/ContractType'
+        - name: contractStatus
+          in: query
+          description: Status do contrato
+          schema:
+            $ref: '#/components/schemas/ContractStatus'
+        - name: contractPeriod[start]
+          in: query
+          description: Data de início do período (filtro)
+          schema:
+            type: string
+            format: date
+        - name: contractPeriod[end]
+          in: query
+          description: Data de fim do período (filtro)
+          schema:
+            type: string
+            format: date
+      responses:
+        '200':
+          description: Lista de contratos com metadados de paginação
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/ContractRow'
+                  meta:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '400':
+          description: Parâmetros inválidos
+        '403':
+          description: Sem permissão de acesso
+        '500':
+          description: Erro interno do servidor
+
+    post:
+      tags:
+        - Contratos
+      summary: Criar novo contrato
+      description: |
+        Cria um contrato base (não aditivo). Requer dados do contratado, objeto, valor, vigência, programa e plano orçamentário.
+        Para contratos de Fornecedor ou Colaborador, é obrigatório informar dados bancários ou PIX.
+      operationId: createContract
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContractCreate'
+      responses:
+        '201':
+          description: Contrato criado com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    description: ID do contrato criado
+        '400':
+          description: Dados inválidos (validação Zod)
+        '403':
+          description: Sem permissão
+        '500':
+          description: Erro interno
+
+  # ---------------------------------------------
+  # ADITIVOS
+  # ---------------------------------------------
+  /contracts/aditive:
+    post:
+      tags:
+        - Contratos
+      summary: Criar aditivo de contrato
+      description: |
+        Cria um aditivo vinculado a um contrato pai. O campo `parentId` é obrigatório.
+        Suporta tipos de aditivo: prazo, valor, escopo, outro.
+        O status do aditivo é definido automaticamente com base nos dados enviados:
+        - **Rascunho**: quando salvo explicitamente como rascunho
+        - **Pendente**: quando preenchido sem arquivo anexado
+        - **Homologado**: quando possui arquivo anexado + data de assinatura
+      operationId: createAditive
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AditiveCreate'
+      responses:
+        '201':
+          description: Aditivo criado com sucesso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                    description: ID do aditivo criado
+        '400':
+          description: Dados inválidos
+        '403':
+          description: Sem permissão
+        '500':
+          description: Erro interno
+
+  # ---------------------------------------------
+  # DETALHE DO CONTRATO
+  # ---------------------------------------------
+  /contracts/{id}:
+    get:
+      tags:
+        - Contratos
+      summary: Obter contrato por ID
+      description: |
+        Retorna o contrato completo com todos os dados do contratado, informações bancárias,
+        arquivo assinado e lista de aditivos (children). Usado na tela de detalhe do contrato.
+      operationId: getContractById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID do contrato
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Contrato encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractDetail'
+        '404':
+          description: Contrato não encontrado
+        '403':
+          description: Sem permissão
+        '500':
+          description: Erro interno
+
+    put:
+      tags:
+        - Contratos
+      summary: Atualizar contrato
+      description: |
+        Atualiza os dados de um contrato existente. Permite alterar objeto, valor, vigência,
+        status, informações bancárias e arquivos anexos.
+      operationId: updateContract
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID do contrato
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContractUpdate'
+      responses:
+        '200':
+          description: Contrato atualizado com sucesso
+        '400':
+          description: Dados inválidos
+        '404':
+          description: Contrato não encontrado
+        '403':
+          description: Sem permissão
+        '500':
+          description: Erro interno
+
+    delete:
+      tags:
+        - Contratos
+      summary: Deletar contrato
+      description: Remove permanentemente um contrato e seus aditivos do sistema.
+      operationId: deleteContract
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID do contrato
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Contrato removido com sucesso
+        '404':
+          description: Contrato não encontrado
+        '403':
+          description: Sem permissão
+        '500':
+          description: Erro interno
+
+  # ---------------------------------------------
+  # INFORMAÇÕES BANCÁRIAS
+  # ---------------------------------------------
+  /contracts/bancaryInfo/{id}:
+    put:
+      tags:
+        - Contratos
+      summary: Atualizar informações bancárias/PIX
+      description: |
+        Atualiza apenas os dados bancários e PIX de um contrato.
+        Útil para edição rápida na tela de detalhe sem alterar outros campos.
+      operationId: editContractPaymentInfo
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID do contrato
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PaymentInfoUpdate'
+      responses:
+        '200':
+          description: Informações atualizadas com sucesso
+        '400':
+          description: Dados inválidos
+        '404':
+          description: Contrato não encontrado
+        '403':
+          description: Sem permissão
+        '500':
+          description: Erro interno
+
+  # ---------------------------------------------
+  # HISTÓRICO DE PAGAMENTOS
+  # ---------------------------------------------
+  /contracts/history/{id}:
+    get:
+      tags:
+        - Histórico
+      summary: Histórico de pagamentos do contrato
+      description: |
+        Retorna o histórico completo de pagamentos (payables e receivables) de um contrato,
+        incluindo parcelas e log de ações dos usuários.
+      operationId: getHistoryById
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: ID do contrato
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Histórico encontrado
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractPaymentHistory'
+        '404':
+          description: Contrato não encontrado
+        '403':
+          description: Sem permissão
+        '500':
+          description: Erro interno
+
+  # ---------------------------------------------
+  # EXPORTAÇÃO CSV
+  # ---------------------------------------------
+  /contracts/csv:
+    get:
+      tags:
+        - Exportação
+      summary: Exportar contratos para CSV
+      description: Exporta a lista filtrada de contratos em formato CSV.
+      operationId: getContractsCSV
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: agreement
+          in: query
+          schema:
+            type: integer
+        - name: budgetPlanId
+          in: query
+          schema:
+            type: integer
+        - name: contractType
+          in: query
+          schema:
+            $ref: '#/components/schemas/ContractType'
+        - name: contractStatus
+          in: query
+          schema:
+            $ref: '#/components/schemas/ContractStatus'
+      responses:
+        '200':
+          description: Arquivo CSV
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '403':
+          description: Sem permissão
+        '500':
+          description: Erro interno
+
+  # ---------------------------------------------
+  # EXPORTAÇÃO PDF
+  # ---------------------------------------------
+  /contracts/pdf:
+    get:
+      tags:
+        - Exportação
+      summary: Exportar contratos para PDF
+      description: Exporta a lista filtrada de contratos em formato PDF.
+      operationId: getContractsPDF
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+        - name: search
+          in: query
+          schema:
+            type: string
+        - name: agreement
+          in: query
+          schema:
+            type: integer
+        - name: budgetPlanId
+          in: query
+          schema:
+            type: integer
+        - name: contractType
+          in: query
+          schema:
+            $ref: '#/components/schemas/ContractType'
+        - name: contractStatus
+          in: query
+          schema:
+            $ref: '#/components/schemas/ContractStatus'
+      responses:
+        '200':
+          description: Arquivo PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '403':
+          description: Sem permissão
+        '500':
+          description: Erro interno
+
+security:
+  - cookieAuth: []
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: next-auth.session-token
+      description: Autenticação via sessão NextAuth (cookie-based)
+
+  schemas:
+    # ═══════════════════════════════════════════════
+    # ENUMS
+    # ═══════════════════════════════════════════════
+    ContractType:
+      type: string
+      enum:
+        - Fornecedor
+        - Financiador
+        - Colaborador
+      description: Tipo de contratado
+
+    ContractModel:
+      type: string
+      enum:
+        - Serviço
+        - Doação
+      description: Modelo de contrato
+
+    ContractStatus:
+      type: string
+      enum:
+        - Pendente
+        - Assinado
+        - 'Em andamento'
+        - Finalizado
+      description: |
+        Status do contrato. Regras de derivação:
+        - **Distrato** (withdrawalUrl preenchido) → status final especial
+        - **Pendente** → ainda não iniciado
+        - **Em andamento** → dentro do período de vigência
+        - **Finalizado** → vigência encerrada
+
+    AditivoType:
+      type: string
+      enum:
+        - prazo
+        - valor
+        - escopo
+        - outro
+      description: Tipo de aditivo contratual
+
+    AditivoStatus:
+      type: string
+      enum:
+        - Rascunho
+        - Pendente
+        - Homologado
+      description: |
+        Status do aditivo. Regras:
+        - **Rascunho**: sem validação, sem impacto nos dados do contrato
+        - **Pendente**: preenchido sem arquivo anexado, sem impacto
+        - **Homologado**: requer arquivo anexado + dataAssinatura, impacta valor/vigência
+
+    # ═══════════════════════════════════════════════
+    # TIPOS AUXILIARES
+    # ═══════════════════════════════════════════════
+    ContractPeriod:
+      type: object
+      required:
+        - start
+        - isIndefinite
+      properties:
+        start:
+          type: string
+          format: date-time
+          description: Data de início da vigência
+        end:
+          type: string
+          format: date-time
+          nullable: true
+          description: Data de fim da vigência (null quando indeterminado)
+        isIndefinite:
+          type: boolean
+          default: false
+          description: Prazo indeterminado
+
+    PixInfo:
+      type: object
+      properties:
+        key_type:
+          type: string
+          nullable: true
+          description: Tipo da chave PIX (CNPJ, CPF, EMAIL, CELULAR, ALEATORIA)
+        key:
+          type: string
+          nullable: true
+          description: Valor da chave PIX
+
+    BancaryInfo:
+      type: object
+      properties:
+        bank:
+          type: string
+          nullable: true
+          description: Código do banco
+        agency:
+          type: string
+          nullable: true
+          description: Agência no formato 0000-0
+        accountNumber:
+          type: string
+          nullable: true
+          description: Número da conta
+        dv:
+          type: string
+          maxLength: 1
+          nullable: true
+          description: Dígito verificador da conta
+
+    PaginationMeta:
+      type: object
+      properties:
+        itemCount:
+          type: integer
+          description: Total de itens na página atual
+        totalItems:
+          type: integer
+          description: Total de itens na base
+        itemsPerPage:
+          type: integer
+          description: Limite por página
+        totalPages:
+          type: integer
+          description: Total de páginas
+        currentPage:
+          type: integer
+          description: Página atual
+
+    FileAttachment:
+      type: object
+      properties:
+        id:
+          type: integer
+        fileUrl:
+          type: string
+          format: uri
+          description: URL pública do arquivo
+
+    # ═══════════════════════════════════════════════
+    # ENTIDADES RELACIONADAS (resumidas)
+    # ═══════════════════════════════════════════════
+    SupplierSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        cnpj:
+          type: string
+          description: CNPJ formatado (00.000.000/0000-00)
+        corporateName:
+          type: string
+          description: Razão social
+        fantasyName:
+          type: string
+          nullable: true
+          description: Nome fantasia
+        serviceCategory:
+          type: string
+          nullable: true
+          description: Categoria de serviço
+        bancaryInfo:
+          $ref: '#/components/schemas/BancaryInfo'
+        pixInfo:
+          $ref: '#/components/schemas/PixInfo'
+
+    FinancierSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        cnpj:
+          type: string
+        corporateName:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        telephone:
+          type: string
+          nullable: true
+
+    CollaboratorSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+        cpf:
+          type: string
+          description: CPF formatado (000.000.000-00)
+        email:
+          type: string
+          nullable: true
+        role:
+          type: string
+          nullable: true
+          description: Cargo/função
+
+    ProgramSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        name:
+          type: string
+          description: Nome completo do programa
+
+    BudgetPlanSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        scenarioName:
+          type: string
+          description: Nome do cenário orçamentário
+        year:
+          type: integer
+          description: Ano do orçamento
+        version:
+          type: integer
+          description: Versão do cenário
+
+    # ═══════════════════════════════════════════════
+    # CHILDREN (ADITIVOS)
+    # ═══════════════════════════════════════════════
+    ContractChild:
+      type: object
+      description: |
+        Representa um aditivo contratual. Filho de um contrato base (parentId).
+        Campos aditivoType, aditivoStatus e dataAssinatura controlam o fluxo de trabalho do aditivo.
+      properties:
+        id:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        contractType:
+          $ref: '#/components/schemas/ContractType'
+        object:
+          type: string
+          description: Objeto/escopo do aditivo
+        contractPeriod:
+          $ref: '#/components/schemas/ContractPeriod'
+        totalValue:
+          type: integer
+          description: |
+            Valor do aditivo em centavos. Positivo = acréscimo, negativo = supressão.
+            Exemplo: 4500000 = R$ 45.000,00
+        contractModel:
+          $ref: '#/components/schemas/ContractModel'
+        supplier:
+          $ref: '#/components/schemas/SupplierSummary'
+          nullable: true
+        financier:
+          $ref: '#/components/schemas/FinancierSummary'
+          nullable: true
+        program:
+          $ref: '#/components/schemas/ProgramSummary'
+        collaborator:
+          $ref: '#/components/schemas/CollaboratorSummary'
+          nullable: true
+        budgetPlan:
+          $ref: '#/components/schemas/BudgetPlanSummary'
+        contractStatus:
+          $ref: '#/components/schemas/ContractStatus'
+        contractCode:
+          type: string
+          description: "Código do aditivo (ex: CNT-2026-0001-A1)"
+        parentId:
+          type: integer
+          nullable: true
+          description: ID do contrato pai
+        pending:
+          type: integer
+          description: Quantidade de pendências
+        withdrawalUrl:
+          type: string
+          nullable: true
+          description: URL do documento de distrato
+        settleTermUrl:
+          type: string
+          nullable: true
+          description: URL do termo de acordo
+        signedContractUrl:
+          type: string
+          nullable: true
+          description: URL do contrato/aditivo assinado (blob ou file URL)
+        # --- Campos do fluxo de aditivos ---
+        aditivoType:
+          $ref: '#/components/schemas/AditivoType'
+          nullable: true
+        aditivoStatus:
+          $ref: '#/components/schemas/AditivoStatus'
+          nullable: true
+        dataAssinatura:
+          type: string
+          nullable: true
+          description: Data da assinatura do aditivo (DD/MM/AAAA)
+
+    # ═══════════════════════════════════════════════
+    # CONTRACT ROW (resposta da listagem)
+    # ═══════════════════════════════════════════════
+    ContractRow:
+      type: object
+      description: |
+        Representação enxuta do contrato usada na listagem (grid).
+        Inclui children para cálculo de valor atual no frontend.
+      properties:
+        id:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        contractType:
+          $ref: '#/components/schemas/ContractType'
+        object:
+          type: string
+        contractPeriod:
+          $ref: '#/components/schemas/ContractPeriod'
+        totalValue:
+          type: integer
+          description: Valor base do contrato em centavos
+        contractModel:
+          $ref: '#/components/schemas/ContractModel'
+        supplier:
+          $ref: '#/components/schemas/SupplierSummary'
+          nullable: true
+        financier:
+          $ref: '#/components/schemas/FinancierSummary'
+          nullable: true
+        program:
+          $ref: '#/components/schemas/ProgramSummary'
+        collaborator:
+          $ref: '#/components/schemas/CollaboratorSummary'
+          nullable: true
+        budgetPlan:
+          $ref: '#/components/schemas/BudgetPlanSummary'
+        contractStatus:
+          $ref: '#/components/schemas/ContractStatus'
+        contractCode:
+          type: string
+          description: "Código do contrato (ex: CNT-2026-0001)"
+        pending:
+          type: integer
+        withdrawalUrl:
+          type: string
+          nullable: true
+        settleTermUrl:
+          type: string
+          nullable: true
+        signedContractUrl:
+          type: string
+          nullable: true
+        children:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/ContractChild'
+
+    # ═══════════════════════════════════════════════
+    # CONTRACT DETAIL (resposta do GET /contracts/{id})
+    # ═══════════════════════════════════════════════
+    ContractDetail:
+      type: object
+      description: |
+        Representação completa do contrato usada na tela de detalhe.
+        Inclui dados bancários, PIX, arquivos e lista completa de aditivos.
+      properties:
+        id:
+          type: integer
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        contractType:
+          $ref: '#/components/schemas/ContractType'
+        object:
+          type: string
+        contractPeriod:
+          $ref: '#/components/schemas/ContractPeriod'
+        totalValue:
+          type: integer
+          description: Valor base do contrato em centavos
+        agreement:
+          type: boolean
+          description: Indica se é um acordo
+        contractModel:
+          $ref: '#/components/schemas/ContractModel'
+        supplier:
+          $ref: '#/components/schemas/SupplierSummary'
+        financier:
+          $ref: '#/components/schemas/FinancierSummary'
+        program:
+          $ref: '#/components/schemas/ProgramSummary'
+        collaborator:
+          $ref: '#/components/schemas/CollaboratorSummary'
+        budgetPlan:
+          $ref: '#/components/schemas/BudgetPlanSummary'
+        contractStatus:
+          $ref: '#/components/schemas/ContractStatus'
+        contractCode:
+          type: string
+        pixInfo:
+          $ref: '#/components/schemas/PixInfo'
+        bancaryInfo:
+          $ref: '#/components/schemas/BancaryInfo'
+        files:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileAttachment'
+        currentFiles:
+          type: array
+          items:
+            type: object
+            description: Arquivos no formato CustomFile do frontend
+        payable:
+          type: object
+          properties:
+            id:
+              type: integer
+        receivable:
+          type: object
+          properties:
+            id:
+              type: integer
+        withdrawalUrl:
+          type: string
+          nullable: true
+        settleTermUrl:
+          type: string
+          nullable: true
+        signedContractUrl:
+          type: string
+          nullable: true
+        children:
+          type: array
+          nullable: true
+          items:
+            $ref: '#/components/schemas/ContractChild'
+        # --- Campos do fluxo de aditivos (no detalhe do contrato base, geralmente null) ---
+        aditivoType:
+          $ref: '#/components/schemas/AditivoType'
+          nullable: true
+        aditivoStatus:
+          $ref: '#/components/schemas/AditivoStatus'
+          nullable: true
+        dataAssinatura:
+          type: string
+          nullable: true
+          description: Data da assinatura (DD/MM/AAAA)
+
+    # ═══════════════════════════════════════════════
+    # CONTRACT CREATE (POST /contracts)
+    # ═══════════════════════════════════════════════
+    ContractCreate:
+      type: object
+      required:
+        - contractModel
+        - object
+        - totalValue
+        - agreement
+        - contractPeriod
+        - budgetPlanId
+        - programId
+        - contractType
+      properties:
+        contractModel:
+          $ref: '#/components/schemas/ContractModel'
+        object:
+          type: string
+          minLength: 1
+        totalValue:
+          type: integer
+          description: Valor em centavos
+        agreement:
+          type: boolean
+        contractPeriod:
+          $ref: '#/components/schemas/ContractPeriod'
+        supplierId:
+          type: integer
+          nullable: true
+        financierId:
+          type: integer
+          nullable: true
+        collaboratorId:
+          type: integer
+          nullable: true
+        budgetPlanId:
+          type: integer
+        programId:
+          type: integer
+        contractType:
+          $ref: '#/components/schemas/ContractType'
+        pixInfo:
+          $ref: '#/components/schemas/PixInfo'
+          nullable: true
+        bancaryInfo:
+          $ref: '#/components/schemas/BancaryInfo'
+          nullable: true
+        createdById:
+          type: integer
+          nullable: true
+        updatedBy:
+          type: integer
+          nullable: true
+
+    # ═══════════════════════════════════════════════
+    # ADITIVE CREATE (POST /contracts/aditive)
+    # ═══════════════════════════════════════════════
+    AditiveCreate:
+      type: object
+      description: |
+        Payload para criação de aditivo. Requer parentId para vinculação ao contrato base.
+        O campo totalValue pode ser negativo para supressão de valor.
+      required:
+        - parentId
+        - contractModel
+        - object
+        - contractPeriod
+        - contractType
+      properties:
+        parentId:
+          type: integer
+          description: ID do contrato pai
+        contractModel:
+          $ref: '#/components/schemas/ContractModel'
+        object:
+          type: string
+          description: Resumo/escopo do aditivo
+        totalValue:
+          type: integer
+          nullable: true
+          description: Valor em centavos (positivo = acréscimo, negativo = supressão)
+        contractPeriod:
+          $ref: '#/components/schemas/ContractPeriod'
+        supplierId:
+          type: integer
+          nullable: true
+        financierId:
+          type: integer
+          nullable: true
+        collaboratorId:
+          type: integer
+          nullable: true
+        budgetPlanId:
+          type: integer
+          nullable: true
+        programId:
+          type: integer
+          nullable: true
+        contractType:
+          $ref: '#/components/schemas/ContractType'
+        pixInfo:
+          $ref: '#/components/schemas/PixInfo'
+          nullable: true
+        bancaryInfo:
+          $ref: '#/components/schemas/BancaryInfo'
+          nullable: true
+        # --- Campos específicos do aditivo ---
+        aditivoType:
+          $ref: '#/components/schemas/AditivoType'
+          nullable: true
+        aditivoStatus:
+          $ref: '#/components/schemas/AditivoStatus'
+          nullable: true
+        dataAssinatura:
+          type: string
+          nullable: true
+          description: Data da assinatura (DD/MM/AAAA)
+        signedContractUrl:
+          type: string
+          nullable: true
+          description: URL do arquivo do aditivo assinado
+
+    # ═══════════════════════════════════════════════
+    # CONTRACT UPDATE (PUT /contracts/{id})
+    # ═══════════════════════════════════════════════
+    ContractUpdate:
+      type: object
+      description: |
+        Payload para atualização completa de contrato. Todos os campos são opcionais
+        (partial update). O backend deve aplicar apenas os campos enviados.
+      properties:
+        contractModel:
+          $ref: '#/components/schemas/ContractModel'
+        object:
+          type: string
+        totalValue:
+          type: integer
+        agreement:
+          type: boolean
+        contractPeriod:
+          $ref: '#/components/schemas/ContractPeriod'
+        supplierId:
+          type: integer
+          nullable: true
+        financierId:
+          type: integer
+          nullable: true
+        collaboratorId:
+          type: integer
+          nullable: true
+        budgetPlanId:
+          type: integer
+        programId:
+          type: integer
+        contractType:
+          $ref: '#/components/schemas/ContractType'
+        contractStatus:
+          $ref: '#/components/schemas/ContractStatus'
+        pixInfo:
+          $ref: '#/components/schemas/PixInfo'
+          nullable: true
+        bancaryInfo:
+          $ref: '#/components/schemas/BancaryInfo'
+          nullable: true
+        updatedBy:
+          type: integer
+          nullable: true
+        # --- Campos de arquivo ---
+        withdrawalUrl:
+          type: string
+          nullable: true
+        settleTermUrl:
+          type: string
+          nullable: true
+        signedContractUrl:
+          type: string
+          nullable: true
+
+    # ═══════════════════════════════════════════════
+    # PAYMENT INFO UPDATE (PUT /contracts/bancaryInfo/{id})
+    # ═══════════════════════════════════════════════
+    PaymentInfoUpdate:
+      type: object
+      description: |
+        Atualização parcial de dados bancários/PIX.
+        Regra de validação: deve informar bancaryInfo OU pixInfo (pelo menos um).
+      properties:
+        bancaryInfo:
+          $ref: '#/components/schemas/BancaryInfo'
+          nullable: true
+        pixInfo:
+          $ref: '#/components/schemas/PixInfo'
+          nullable: true
+        updatedBy:
+          type: integer
+          nullable: true
+
+    # ═══════════════════════════════════════════════
+    # CONTRACT PAYMENT HISTORY
+    # ═══════════════════════════════════════════════
+    Installment:
+      type: object
+      properties:
+        id:
+          type: integer
+        value:
+          type: integer
+          description: Valor da parcela em centavos
+        dueDate:
+          type: string
+          format: date-time
+        paidDate:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum:
+            - Pendente
+            - Pago
+            - Atrasado
+
+    PayableSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        paymentType:
+          type: string
+          enum:
+            - Único
+            - Parcelado
+        installments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Installment'
+
+    ReceivableSummary:
+      type: object
+      properties:
+        id:
+          type: integer
+        receivableType:
+          type: string
+          enum:
+            - Único
+            - Parcelado
+        installments:
+          type: array
+          items:
+            $ref: '#/components/schemas/Installment'
+
+    HistoryAction:
+      type: object
+      properties:
+        id:
+          type: integer
+        actionType:
+          type: string
+          enum:
+            - Criado
+            - Editado
+            - Deletado
+            - Homologado
+            - Pago
+        user:
+          type: object
+          properties:
+            id:
+              type: integer
+            name:
+              type: string
+            email:
+              type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    ContractPaymentHistory:
+      type: object
+      description: Histórico completo de pagamentos e ações do contrato
+      properties:
+        id:
+          type: integer
+        contractCode:
+          type: string
+        payable:
+          type: array
+          items:
+            $ref: '#/components/schemas/PayableSummary'
+        receivable:
+          type: array
+          items:
+            $ref: '#/components/schemas/ReceivableSummary'
+        historys:
+          type: array
+          items:
+            $ref: '#/components/schemas/HistoryAction'
+
+  # ═══════════════════════════════════════════════
+  # RESPONSES PADRÃO
+  # ═══════════════════════════════════════════════
+  responses:
+    BadRequest:
+      description: Requisição inválida
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              statusCode:
+                type: integer
+                example: 400
+              message:
+                type: string
+              error:
+                type: string
+
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              statusCode:
+                type: integer
+                example: 404
+              message:
+                type: string
+                example: Contrato não encontrado
+              error:
+                type: string
+
+    Forbidden:
+      description: Sem permissão de acesso
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              statusCode:
+                type: integer
+                example: 403
+              message:
+                type: string
+                example: Forbidden resource
+              error:
+                type: string
+
+    InternalError:
+      description: Erro interno do servidor
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              statusCode:
+                type: integer
+                example: 500
+              message:
+                type: string
+              error:
+                type: string

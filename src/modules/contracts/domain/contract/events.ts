@@ -1,6 +1,6 @@
 import type { AmendmentId, ContractId } from '../shared/ids.ts';
-import type { Money } from '../shared/money.ts';
-import type { Period } from '../shared/period.ts';
+import type { Money } from '../../../../shared/kernel/money.ts';
+import type { Period } from '../../../../shared/kernel/period.ts';
 
 export type ContractEvent = Readonly<
   | { type: 'ContractCreated'; contractId: ContractId; occurredAt: Date }

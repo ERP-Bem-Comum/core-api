@@ -1,15 +1,24 @@
-import { type Result, ok, err } from '../../../../shared/result.ts';
+import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import { isValidDate } from '../../../../shared/utils/date.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
-import { ContractId } from '../../domain/shared/ids.ts';
-import { Money, type MoneyError } from '../../domain/shared/money.ts';
-import { Period, type PeriodError } from '../../domain/shared/period.ts';
+import * as ContractId from '../../domain/shared/contract-id.ts';
+import * as Money from '#src/shared/kernel/money.ts';
+import type { MoneyError } from '#src/shared/kernel/money.ts';
+import * as Period from '#src/shared/kernel/period.ts';
+import type { PeriodError } from '#src/shared/kernel/period.ts';
 import { Contract } from '../../domain/contract/contract.ts';
 import type { Contract as ContractEntity } from '../../domain/contract/types.ts';
 import type { ContractEvent } from '../../domain/contract/events.ts';
 import type { ContractError } from '../../domain/contract/errors.ts';
-import type { ContractRepository, ContractRepositoryError } from '../ports/contract-repository.ts';
-import type { EventBus, EventBusError } from '../ports/event-bus.ts';
+import type {
+  ContractRepository,
+  ContractRepositoryError,
+} from '../../domain/contract/repository.ts';
+
+// CA-5+CA-6 (CTR-OUTBOX-INTEGRATION-IN-REPOS):
+//   - eventBus removido de Deps — use case NÃO conhece mais EventBus.
+//   - O evento é passado como 2º argumento de contractRepo.save — o adapter
+//     persiste state + outbox atomicamente (D2, ADR-0015).
 
 export type CreateContractCommand = Readonly<{
   sequentialNumber: string;
@@ -29,8 +38,7 @@ export type CreateContractError =
   | MoneyError
   | PeriodError
   | ContractError
-  | ContractRepositoryError
-  | EventBusError;
+  | ContractRepositoryError;
 
 export type CreateContractOutput = Readonly<{
   contract: ContractEntity;
@@ -39,7 +47,6 @@ export type CreateContractOutput = Readonly<{
 
 type Deps = Readonly<{
   contractRepo: ContractRepository;
-  eventBus: EventBus;
   clock: Clock;
 }>;
 
@@ -88,11 +95,9 @@ export const createContract =
     if (!existing.ok) return existing;
     if (existing.value !== null) return err('contract-sequential-number-duplicated');
 
-    const saveResult = await deps.contractRepo.save(created.value.contract);
+    // CA-5: evento passado diretamente no save — persiste state + outbox atomicamente.
+    const saveResult = await deps.contractRepo.save(created.value.contract, [created.value.event]);
     if (!saveResult.ok) return saveResult;
-
-    const publishResult = await deps.eventBus.publish(created.value.event);
-    if (!publishResult.ok) return publishResult;
 
     return ok({
       contract: created.value.contract,

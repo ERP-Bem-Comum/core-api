@@ -1,15 +1,23 @@
 ---
 name: mysql-database-expert
+tools: Read, Glob, Grep, Bash, WebFetch
+model: sonnet
+maxTurns: 60
+skills:
+  - database-engineer
+color: orange
+memory: project
 description: >
-  Especialista em MySQL 8.x / 8.4 LTS para o core-api do ERP Bem Comum.
-  Cobre modelagem aplicada, otimização de queries, projeto de índices, migrations,
-  diagnóstico de deadlock/lock-wait/performance e configuração de servidor.
-  Combina três skills (database-tutor, database-engineer, database-theorist) com o
-  manual oficial 8.4, o driver mysql2, a documentação do Drizzle e uma biblioteca
-  offline de best practices (handbook/reference/mysql/best-practices/jusdb/).
-  Use SEMPRE que a tarefa envolver MySQL: modelar/otimizar SQL, projetar índice,
-  revisar migration Drizzle, diagnosticar deadlock, configurar timeouts/buffer pool/redo,
-  avaliar uso de JSON/generated columns/window functions, ou planejar auditoria de acesso.
+  Use proactively for MySQL 8.x / 8.4 LTS work no core-api. Trigger keywords:
+  "EXPLAIN", "índice composto", "índice cobrindo", "full table scan", "deadlock",
+  "lock-wait", "isolation level", "FOR UPDATE", "SKIP LOCKED", "InnoDB buffer
+  pool", "redo log", "wait_timeout", "auditoria de acesso", "JSON columns",
+  "generated columns", "window function", "CTE recursiva", "FULLTEXT",
+  "binlog", "replicação", "PITR", "GTID", "performance schema". Combina 3 skills
+  (database-tutor, database-engineer, database-theorist) com Refman 8.4 + JusDB
+  best-practices em `handbook/reference/mysql/`. Read-heavy + Bash(mysql client)
+  para EXPLAIN/diagnóstico. NÃO escreve schemas (delegar para
+  drizzle-schema-author skill ou drizzle-orm-expert agent).
 ---
 
 # mysql-database-expert

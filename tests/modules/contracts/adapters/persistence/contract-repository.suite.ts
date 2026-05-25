@@ -6,10 +6,10 @@
 import { describe, it, beforeEach } from 'node:test';
 import { strict as assert } from 'node:assert';
 
-import type { ContractRepository } from '#src/modules/contracts/application/ports/contract-repository.ts';
+import type { ContractRepository } from '#src/modules/contracts/domain/contract/repository.ts';
 import type { Contract } from '#src/modules/contracts/domain/contract/types.ts';
-import { ContractId } from '#src/modules/contracts/domain/shared/ids.ts';
-import { Period } from '#src/modules/contracts/domain/shared/period.ts';
+import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
+import * as Period from '#src/shared/kernel/period.ts';
 
 import { buildContract } from './fixtures.ts';
 
@@ -32,7 +32,7 @@ const expectContract = async (
   ctx: string,
 ): Promise<Contract> => {
   const r = await repo.findById(id);
-  if (!r.ok) throw new Error(`${ctx}: findById falhou — ${r.error}`);
+  if (!r.ok) throw new Error(`${ctx}: findById falhou — ${JSON.stringify(r.error)}`);
   if (r.value === null) throw new Error(`${ctx}: contrato não encontrado`);
   return r.value;
 };
@@ -98,7 +98,8 @@ export const runContractRepositoryContract = (
           periodStartISO: '2026-02-01',
           periodEndISO: '2026-12-31',
         });
-        const save = await repo.save(c);
+        // CA1 — save aceita events como 2º argumento (W0: repo ainda não tem a assinatura nova)
+        const save = await repo.save(c, []);
         assert.equal(save.ok, true);
 
         const got = await expectContract(repo, c.id, 'round-trip Fixed');
@@ -110,7 +111,8 @@ export const runContractRepositoryContract = (
         assert.equal(got.originalValue.cents, c.originalValue.cents);
         assert.equal(got.currentValue.cents, c.currentValue.cents);
         assert.equal(got.status, 'Active');
-        assert.equal(got.endedAt, null);
+        // CTR-DOMAIN-STATE-MACHINE-CONTRACT — ActiveContract não tem campo `endedAt`.
+        assert.equal('endedAt' in got, false, 'ActiveContract não deve expor endedAt');
         assert.deepEqual([...got.homologatedAmendmentIds], []);
         assert.equal(Period.equals(got.originalPeriod, c.originalPeriod), true);
         assert.equal(Period.equals(got.currentPeriod, c.currentPeriod), true);
@@ -128,7 +130,7 @@ export const runContractRepositoryContract = (
           periodKind: 'Indefinite',
           periodStartISO: '2026-02-01',
         });
-        await repo.save(c);
+        await repo.save(c, []);
         const got = await expectContract(repo, c.id, 'round-trip Indefinite');
         assert.equal(got.originalPeriod.kind, 'Indefinite');
         assert.equal(got.currentPeriod.kind, 'Indefinite');
@@ -146,7 +148,7 @@ export const runContractRepositoryContract = (
           sequentialNumber: '044/2026',
           originalValueCents: bigCents,
         });
-        await repo.save(c);
+        await repo.save(c, []);
         const got = await expectContract(repo, c.id, 'big cents');
         assert.equal(got.originalValue.cents, bigCents);
         assert.equal(got.currentValue.cents, bigCents);
@@ -165,11 +167,12 @@ export const runContractRepositoryContract = (
           id: 'ffffffff-ffff-4fff-8fff-ffffffffffff',
           sequentialNumber: '102/2026',
         });
-        await repo.save(a);
-        await repo.save(b);
+        await repo.save(a, []);
+        await repo.save(b, []);
 
         const found = await repo.findBySequentialNumber('102/2026');
-        if (!found.ok) throw new Error(`findBySequentialNumber falhou: ${found.error}`);
+        if (!found.ok)
+          throw new Error(`findBySequentialNumber falhou: ${JSON.stringify(found.error)}`);
         if (found.value === null) throw new Error('102/2026 não encontrado');
         assert.equal(found.value.id, b.id);
       } finally {
@@ -190,10 +193,11 @@ export const runContractRepositoryContract = (
               id,
               sequentialNumber: `${String(200 + idx).padStart(3, '0')}/2026`,
             }),
+            [],
           );
         }
         const r = await repo.list();
-        if (!r.ok) throw new Error(`list falhou: ${r.error}`);
+        if (!r.ok) throw new Error(`list falhou: ${JSON.stringify(r.error)}`);
         assert.equal(r.value.length, 3);
         const persistedIds = new Set(r.value.map((c: Contract) => c.id as unknown as string));
         for (const id of ids) {
@@ -209,10 +213,10 @@ export const runContractRepositoryContract = (
         const id = '99999999-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
         const v1 = buildContract({ id, sequentialNumber: '301/2026', title: 'V1' });
         const v2 = buildContract({ id, sequentialNumber: '301/2026', title: 'V2 atualizado' });
-        await repo.save(v1);
-        await repo.save(v2);
+        await repo.save(v1, []);
+        await repo.save(v2, []);
         const list = await repo.list();
-        if (!list.ok) throw new Error(`list falhou: ${list.error}`);
+        if (!list.ok) throw new Error(`list falhou: ${JSON.stringify(list.error)}`);
         assert.equal(list.value.length, 1);
         const got = await expectContract(repo, v1.id, 'idempotent save');
         assert.equal(got.title, 'V2 atualizado');
@@ -228,7 +232,7 @@ export const runContractRepositoryContract = (
           sequentialNumber: '401/2026',
           originalValueCents: 1,
         });
-        await repo.save(c);
+        await repo.save(c, []);
         const got = await expectContract(repo, c.id, 'one cent');
         assert.equal(got.originalValue.cents, 1);
       } finally {
@@ -242,7 +246,7 @@ export const runContractRepositoryContract = (
           id: '77777777-aaaa-4aaa-8aaa-aaaaaaaaaaaa',
           sequentialNumber: '501/2026',
         });
-        await repo.save(present);
+        await repo.save(present, []);
 
         const absent = await repo.findById(unwrapId('66666666-aaaa-4aaa-8aaa-aaaaaaaaaaaa'));
         assert.equal(absent.ok, true);
@@ -263,7 +267,7 @@ export const runContractRepositoryContract = (
           sequentialNumber: '601/2026',
           signedAtISO,
         });
-        await repo.save(c);
+        await repo.save(c, []);
         const got = await expectContract(repo, c.id, 'ms precision');
         assert.equal(got.signedAt.toISOString(), signedAtISO);
       } finally {

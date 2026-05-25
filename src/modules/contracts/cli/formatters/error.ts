@@ -1,5 +1,25 @@
+// CTR-DOMAIN-TAGGED-ERRORS — atualização do formatter.
+//
+// O dicionário precisa lidar com duas formas de erro que coexistem:
+//
+//   1. **Tagged record** (`{ tag: 'PascalCase', ...payload? }`) — saída dos
+//      novos `ContractError`/`AmendmentError` do domínio (Padrão D, DO D§22).
+//
+//   2. **String literal** — saída de:
+//        - VOs folha (`'money-non-integer-value'`, `'period-end-before-start'`,
+//          `'contract-id-invalid'`).
+//        - Use cases (`'contract-not-found'`, `'amendment-contract-mismatch'`).
+//        - Mappers de persistência (`'contract-mapper-invalid-money'`).
+//        - Repos (`'contract-repo-unavailable'`).
+//        - State file (`'state-file-corrupted'`).
+//        - CLI flag parsing (`'cli-driver-unknown'`).
+//
+// `formatErrorCode` aceita ambos: se for objeto com `tag` string, mapeia pelo
+// tag; senão, mapeia pelo próprio code string.
+
 const ERROR_DICTIONARY: Readonly<Record<string, string>> = {
-  // ContractError
+  // ─── ContractError — string literal antigo (compat retrô) ─────────────────
+  // Mantido para qualquer caller herdado que ainda usa o formato pré-D22.
   'contract-sequential-number-required': 'Número sequencial é obrigatório.',
   'contract-title-required': 'Título é obrigatório.',
   'contract-objective-required': 'Objetivo é obrigatório.',
@@ -15,7 +35,26 @@ const ERROR_DICTIONARY: Readonly<Record<string, string>> = {
     'Supressão excede o valor vigente — resultado ficaria negativo.',
   'contract-period-extension-not-after-current-end': 'Nova data fim precisa ser posterior à atual.',
   'contract-amendment-already-applied': 'Este aditivo já foi aplicado ao contrato.',
-  // AmendmentError
+  'contract-original-value-zero': 'Valor original do contrato não pode ser zero.',
+  // ─── ContractError — tagged PascalCase (CTR-DOMAIN-TAGGED-ERRORS) ─────────
+  ContractSequentialNumberRequired: 'Número sequencial é obrigatório.',
+  ContractSequentialNumberInvalidFormat:
+    'Número sequencial inválido. Formato esperado: XXX/AAAA (ex.: 001/2026).',
+  ContractTitleRequired: 'Título é obrigatório.',
+  ContractObjectiveRequired: 'Objetivo é obrigatório.',
+  ContractInvalidSignedAt: 'Data de assinatura inválida.',
+  ContractOriginalValueZero: 'Valor original do contrato não pode ser zero.',
+  ContractInvalidEventDate: 'Data do evento inválida.',
+  ContractNotActive: 'Contrato já está encerrado — não aceita aditivos.',
+  ContractCannotExpireYet: 'Contrato ainda não pode expirar (data fim não chegou).',
+  ContractCannotExpireIndefinitePeriod:
+    'Contrato com vigência indefinida só pode ser distratado, não expirado.',
+  ContractCannotExtendIndefinitePeriod:
+    'Contrato com vigência indefinida não pode ter prazo estendido.',
+  ContractValueWouldGoNegative: 'Supressão excede o valor vigente — resultado ficaria negativo.',
+  ContractPeriodExtensionNotAfterCurrentEnd: 'Nova data fim precisa ser posterior à atual.',
+  ContractAmendmentAlreadyApplied: 'Este aditivo já foi aplicado ao contrato.',
+  // ─── AmendmentError — string literal antigo (compat retrô) ────────────────
   'amendment-number-required': 'Número do aditivo é obrigatório.',
   'amendment-description-required': 'Descrição do aditivo é obrigatória.',
   'amendment-invalid-created-at': 'Data de criação do aditivo inválida.',
@@ -28,7 +67,18 @@ const ERROR_DICTIONARY: Readonly<Record<string, string>> = {
     'Aditivo precisa ter documento assinado anexado para ser homologado.',
   'amendment-suppression-exceeds-current-value':
     'Supressão excede o valor vigente do contrato — não é possível criar este aditivo.',
-  // MoneyError
+  // ─── AmendmentError — tagged PascalCase (CTR-DOMAIN-TAGGED-ERRORS) ────────
+  AmendmentNumberRequired: 'Número do aditivo é obrigatório.',
+  AmendmentDescriptionRequired: 'Descrição do aditivo é obrigatória.',
+  AmendmentInvalidCreatedAt: 'Data de criação do aditivo inválida.',
+  AmendmentInvalidNewEndDate: 'Nova data fim do aditivo inválida.',
+  AmendmentImpactValueZero: 'Valor de impacto não pode ser zero.',
+  AmendmentInvalidEventDate: 'Data do evento inválida.',
+  AmendmentNotPending: 'Aditivo não está em estado Pendente.',
+  AmendmentDocumentAlreadyAttached: 'Documento assinado já foi anexado a este aditivo.',
+  AmendmentWithoutSignedDocument:
+    'Aditivo precisa ter documento assinado anexado para ser homologado.',
+  // ─── MoneyError ───────────────────────────────────────────────────────────
   'money-negative-value': 'Valor monetário não pode ser negativo.',
   'money-exceeds-safe-integer':
     'Valor monetário excede o limite seguro de precisão (acima de Number.MAX_SAFE_INTEGER centavos).',
@@ -93,8 +143,17 @@ const ERROR_DICTIONARY: Readonly<Record<string, string>> = {
     'Falha ao aplicar migration MySQL. Confira o estado do schema e os logs do drizzle-orm/mysql2/migrator.',
 };
 
-export const formatErrorCode = (code: string): string => {
-  const known = ERROR_DICTIONARY[code];
+// CTR-DOMAIN-TAGGED-ERRORS — input alargado para aceitar tanto string literal
+// (use cases, mappers, repos, VOs folha) quanto tagged record do domínio
+// (`{ tag: 'PascalCase', ...payload }`).
+type ErrorCode = string | Readonly<{ tag: string }>;
+
+const isTagged = (e: ErrorCode): e is Readonly<{ tag: string }> =>
+  typeof e === 'object' && typeof e.tag === 'string';
+
+export const formatErrorCode = (code: ErrorCode): string => {
+  const lookupKey = isTagged(code) ? code.tag : code;
+  const known = ERROR_DICTIONARY[lookupKey];
   if (known !== undefined) return known;
-  return `Erro desconhecido (código interno: ${code}).`;
+  return `Erro desconhecido (código interno: ${lookupKey}).`;
 };

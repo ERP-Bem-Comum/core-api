@@ -58,7 +58,6 @@ export const run = async (ctx: CliContext, argv: readonly string[]): Promise<num
 
   const useCase = createContract({
     contractRepo: ctx.contractRepo,
-    eventBus: ctx.eventBus,
     clock: ctx.clock,
   });
 

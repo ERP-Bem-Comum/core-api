@@ -1,11 +1,11 @@
 # Inquiry-0003: Estratégia multi-cloud (AWS legado + GCP novo)
 
-- **Status:** Pending Response
+- **Status:** Decided
 - **Opened:** 2026-04-27
-- **Closed/Decided:** —
+- **Closed/Decided:** 2026-05-22
 - **Opened by:** Gabriel Aderaldo (via Alessandra Castro)
-- **Asked to:** Codebit (infra) — Maria Isabel Martins ou ponto focal técnico
-- **Impact:** [ADR-0007](../architecture/adr/0007-multi-cloud-aws-gcp.md) (atualmente Proposed), `infrastructure/01-infra-handoff.md`
+- **Asked to:** Codebit (infra) — Maria Isabel Martins ou ponto focal técnico (a maioria das perguntas técnicas ficou sem retorno; decisão final veio de fonte alternativa, ver §3)
+- **Impact:** [ADR-0007](../architecture/adr/0007-multi-cloud-aws-gcp.md) (Superseded por [ADR-0021](../architecture/adr/0021-aws-primary-magalu-pbe-supersedes-0007.md))
 
 ---
 
@@ -62,8 +62,25 @@ Mensagem unificada preparada para encaminhamento à Codebit (10 perguntas):
 
 ## 3. Respostas / Investigação
 
-### Pendente
-**Aguardando retorno da Codebit.** Sem essas respostas, ADR-0007 (Multi-cloud) fica em status `Proposed` e não pode ser confirmado.
+### 2026-05-22 — Decisão executiva da Bem Comum (substitui retorno técnico da Codebit)
+
+A resposta às perguntas A1–A5 (estratégia de cloud) não veio da Codebit. Veio da própria **Bem Comum**, como **decisão executiva** baseada em critério financeiro/logístico:
+
+> A Bem Comum quer **fornecedor único de infra**. Codebit é o fornecedor atual e só opera AWS. Portanto, **todo o stack produtivo fica em AWS** — legado, `core-api`, `bff-gateway`, MySQL `legacy` (com dump), MySQL `core`, VM Windows do STCPCLT, S3 de documentos. Sem GCP.
+
+Implicações diretas das perguntas A1–A5:
+
+| Pergunta | Resposta |
+| :--- | :--- |
+| A1 — ERP legado roda em AWS hoje? | ✅ Sim (mantido). |
+| A2 — Novo ERP em GCP, conforme Cadu? | ❌ Não. O e-mail do Cadu mencionando "GCP" é reinterpretado como expressão genérica de "cloud nova" (compromisso técnico não confirmado). **Novo também em AWS**. |
+| A3 — Migração AWS → GCP ou multi-cloud permanente? | ❌ Nenhuma. **AWS é definitiva** para produção. |
+| A4 — Codebit opera ambas as clouds? | Não aplicável. Apenas AWS. |
+| A5 — VPN/Interconnect AWS↔GCP? | Não aplicável. Sem cross-cloud em produção. |
+
+**Adição não-Bem-Comum (iniciativa da equipe):** entra **MagaluCloud (MGC)** como ambiente PBE/homologação interno — custeado pela equipe (não Bem Comum, não Codebit), sem dump de DB legado, sem dados reais, para early-access. Analogia: PBE da Riot Games.
+
+As perguntas B (Bradesco/VAN), C (Migração de dados), D (Observabilidade) e E (Coordenação) permanecem em aberto operacionalmente, mas sua resposta agora é **moldada por dentro do mesmo VPC AWS** — o que simplifica todas elas (sem latência cross-cloud, sem egress, IAM unificado, observabilidade já existe em CloudWatch/S3/ELB/CloudFront).
 
 ---
 
@@ -86,18 +103,21 @@ Mais provável: **AWS → GCP como migração definitiva**, com legado vivendo e
 
 ## 5. Decisão final
 
-**PENDENTE.** Bloqueador: respostas da Codebit.
+**Decided em 2026-05-22:** topologia **AWS-primary (Codebit) + MagaluCloud-PBE (equipe)**, formalizada em [ADR-0021](../architecture/adr/0021-aws-primary-magalu-pbe-supersedes-0007.md) que supersedes [ADR-0007](../architecture/adr/0007-multi-cloud-aws-gcp.md).
 
-**Cronograma esperado:** desejo de resposta em 1-2 dias úteis para começar implementação.
+**Bloqueador original** (aguardar Codebit) foi **substituído** por decisão executiva da Bem Comum (ver §3). As perguntas B/C/D/E continuam relevantes operacionalmente, mas dentro do escopo simplificado de uma única cloud — viram trabalho de implementação, não bloqueio arquitetural.
 
 ---
 
 ## 6. Saídas
 
-- [x] [ADR-0007](../architecture/adr/0007-multi-cloud-aws-gcp.md) criado em status **Proposed** com pendências documentadas.
-- [x] Mensagem unificada preparada e disponibilizada para encaminhamento.
-- [ ] Atualizar `infrastructure/01-infra-handoff.md` quando respostas chegarem.
-- [ ] Promover ADR-0007 a `Accepted` ou criar substituto após esclarecimento.
+- [x] [ADR-0007](../architecture/adr/0007-multi-cloud-aws-gcp.md) criado em status **Proposed** com pendências documentadas (2026-04-28).
+- [x] Mensagem unificada preparada e disponibilizada para encaminhamento (2026-04-28).
+- [x] [ADR-0021](../architecture/adr/0021-aws-primary-magalu-pbe-supersedes-0007.md) criado em status **Accepted** (2026-05-22) substituindo ADR-0007.
+- [x] ADR-0007 marcado como **Superseded by ADR-0021** (2026-05-22).
+- [ ] Atualizar `infrastructure/01-infra-handoff.md` para refletir AWS-único + MagaluCloud PBE (próximo ticket).
+- [ ] Confirmar com Codebit operação técnica das peças remanescentes (perguntas B/C/D/E) — agora simplificadas por serem intra-AWS.
+- [ ] Provisionar PBE MagaluCloud (ticket operacional separado, fora do escopo do `core-api` por ora).
 
 ---
 

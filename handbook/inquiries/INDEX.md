@@ -10,12 +10,12 @@
 
 | # | Status | Última atualização |
 | :--- | :--- | :--- |
-| Total | 15 | 2026-05-18 |
-| `Decided` | 9 | — |
-| `Pending Response` | 1 | — |
+| Total | 16 | 2026-05-22 |
+| `Decided` | 10 | — |
+| `Pending Response` | 0 | — |
 | `Obsoleta (revisada)` | 1 | — |
 | `Open` | 4 | — |
-| `Deferred` | 0 | — |
+| `Deferred` | 1 | — |
 
 ---
 
@@ -35,12 +35,11 @@
 | [0009](./0009-email-strategy-nodemailer-with-adapter.md) | Email — Nodemailer com Service Adapter | [ADR-0010](../architecture/adr/0010-email-port-adapter-pattern.md) | 2026-04-28 |
 | [0010](./0010-mysql-engine-correction.md) | Correção de assunção — engine real é MySQL 8 | [ADR-0013](../architecture/adr/0013-mysql-database-engine.md), [ADR-0014](../architecture/adr/0014-mysql-database-isolation.md), [ADR-0015](../architecture/adr/0015-mysql-outbox-pattern.md) | 2026-04-28 |
 | [0013](./0013-local-dev-simulator-and-ci.md) | Simulador local da cloud (Devbox + Tilt + docker-compose) + CI GitHub Actions | (sem ADR ainda — implementação pendente) | 2026-05-13 |
+| [0003](./0003-multi-cloud-strategy.md) | Estratégia multi-cloud (originalmente AWS+GCP) | [ADR-0021](../architecture/adr/0021-aws-primary-magalu-pbe-supersedes-0007.md) (supersedes [ADR-0007](../architecture/adr/0007-multi-cloud-aws-gcp.md)) | 2026-05-22 |
 
 ### ⏳ Pending Response
 
-| # | Título | Aguardando | Bloqueio |
-| :--- | :--- | :--- | :--- |
-| [0003](./0003-multi-cloud-strategy.md) | Estratégia multi-cloud (AWS + GCP) | Codebit (Maria Isabel) | Bloqueia provisionamento de infra e início real de implementação |
+_Nenhuma._
 
 ### 🟢 Open
 
@@ -53,7 +52,9 @@
 
 ### 🔵 Deferred
 
-_Nenhuma._
+| # | Título | Quando reabrir | Bloqueio |
+| :--- | :--- | :--- | :--- |
+| [0016](./0016-nodejs-native-eventbus-pubsub-observer.md) | Soluções nativas Node.js para EventBus / Pub-Sub / Observer | Quando surgir o primeiro caso real de evento intra-módulo (provavelmente `ContractCreated` → adapter outbox) | Nenhum — estudo arquivado como watchlist; regra provisória definida na seção 5 |
 
 ---
 
@@ -91,6 +92,9 @@ _Nenhuma._
 
 ### Persistência & Dívida Tipográfica
 - [0015 — Charset/collate por tabela via drizzle-orm](./0015-charset-drizzle-roadmap.md)
+
+### Eventos & Mensageria Intra-Processo
+- [0016 — EventBus / Pub-Sub / Observer nativos do Node.js](./0016-nodejs-native-eventbus-pubsub-observer.md)
 
 ---
 

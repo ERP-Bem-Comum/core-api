@@ -1,13 +1,11 @@
-import { type Result, ok, err } from '../../../../shared/result.ts';
+import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
-import {
-  type AmendmentIdError,
-  type ContractIdError,
-  type UserRefError,
-  AmendmentId,
-  ContractId,
-  UserRef,
-} from '../../domain/shared/ids.ts';
+import * as AmendmentId from '../../domain/shared/amendment-id.ts';
+import type { AmendmentIdError } from '../../domain/shared/amendment-id.ts';
+import * as ContractId from '../../domain/shared/contract-id.ts';
+import type { ContractIdError } from '../../domain/shared/contract-id.ts';
+import * as UserRef from '#src/shared/kernel/user-ref.ts';
+import type { UserRefError } from '#src/shared/kernel/user-ref.ts';
 import { Contract } from '../../domain/contract/contract.ts';
 import type {
   Contract as ContractEntity,
@@ -17,12 +15,23 @@ import type { ContractError } from '../../domain/contract/errors.ts';
 import { Amendment } from '../../domain/amendment/amendment.ts';
 import type { Amendment as AmendmentEntity } from '../../domain/amendment/types.ts';
 import type { AmendmentError } from '../../domain/amendment/errors.ts';
-import type { ContractRepository, ContractRepositoryError } from '../ports/contract-repository.ts';
+import type {
+  ContractRepository,
+  ContractRepositoryError,
+} from '../../domain/contract/repository.ts';
 import type {
   AmendmentRepository,
   AmendmentRepositoryError,
-} from '../ports/amendment-repository.ts';
-import type { ContractsModuleEvent, EventBus, EventBusError } from '../ports/event-bus.ts';
+} from '../../domain/amendment/repository.ts';
+import type { ContractsModuleEvent } from '../ports/event-bus.ts';
+
+// CA-5+CA-6 (CTR-OUTBOX-INTEGRATION-IN-REPOS):
+//   - eventBus removido de Deps.
+//   - CA-10: homologateAmendment emite 2 eventos em 2 saves separados:
+//       amendmentRepo.save(homologated.amendment, [homologated.event])
+//       contractRepo.save(contractUpdated.contract, [contractUpdated.event])
+//   Atomicidade LOCAL de cada agregado + seus eventos é garantida.
+//   Atomicidade DISTRIBUÍDA entre os 2 saves é limitação MVP — documentada aqui.
 
 export type HomologateAmendmentCommand = Readonly<{
   amendmentId: string;
@@ -36,7 +45,6 @@ export type HomologateAmendmentError =
   | UserRefError
   | AmendmentRepositoryError
   | ContractRepositoryError
-  | EventBusError
   | AmendmentError
   | ContractError
   | 'amendment-not-found'
@@ -52,12 +60,11 @@ export type HomologateAmendmentOutput = Readonly<{
 type Deps = Readonly<{
   contractRepo: ContractRepository;
   amendmentRepo: AmendmentRepository;
-  eventBus: EventBus;
   clock: Clock;
 }>;
 
 export const toContractAdjustment = (amendment: AmendmentEntity): ContractAdjustment => {
-  const amendmentId: AmendmentId = amendment.id;
+  const amendmentId: AmendmentId.AmendmentId = amendment.id;
   switch (amendment.kind) {
     case 'Addition':
       return { kind: 'ValueIncrease', amount: amendment.impactValue, amendmentId };
@@ -69,7 +76,7 @@ export const toContractAdjustment = (amendment: AmendmentEntity): ContractAdjust
       return { kind: 'Acknowledgment', amendmentId };
     default: {
       const _exhaustive: never = amendment;
-      throw new Error(`unreachable: ${JSON.stringify(_exhaustive)}`);
+      return _exhaustive;
     }
   }
 };
@@ -106,32 +113,46 @@ export const homologateAmendment =
       return err('amendment-contract-mismatch');
     }
 
-    // 5. Homologate amendment (domain rule check happens here)
+    // 5. DO D§21: parsePendingWithDocument na borda.
+    const pendingWithDoc = Amendment.parsePendingWithDocument(amendment);
+    if (!pendingWithDoc.ok) return pendingWithDoc;
+
+    // 5b. Homologate amendment
     const at = deps.clock.now();
-    const homologated = Amendment.homologate(amendment, userRefResult.value, at);
+    const homologated = Amendment.homologate(pendingWithDoc.value, userRefResult.value, at);
     if (!homologated.ok) return homologated;
 
-    // 6. Translate to ContractAdjustment and apply to contract
+    // 6. Refine contract to ActiveContract.
+    const activeContract = Contract.parseActive(contract);
+    if (!activeContract.ok) return activeContract;
+
+    // 7. Translate to ContractAdjustment and apply to contract
     const adjustment = toContractAdjustment(homologated.value.amendment);
-    const contractUpdated = Contract.applyHomologatedAdjustment(contract, adjustment, at);
+    const contractUpdated = Contract.applyHomologatedAdjustment(
+      activeContract.value,
+      adjustment,
+      at,
+    );
     if (!contractUpdated.ok) return contractUpdated;
 
-    // 7. Persist amendment first, then contract
-    const saveAmendment = await deps.amendmentRepo.save(homologated.value.amendment);
+    // 8. Persist amendment first, with its event atomically (CA-10).
+    const saveAmendment = await deps.amendmentRepo.save(homologated.value.amendment, [
+      homologated.value.event,
+    ]);
     if (!saveAmendment.ok) return saveAmendment;
 
-    const saveContract = await deps.contractRepo.save(contractUpdated.value.contract);
+    // 9. Persist contract with its event atomically (CA-10).
+    // NOTE: atomicidade LOCAL por agregado garantida. Atomicidade DISTRIBUÍDA
+    // entre os 2 saves é limitação MVP (2 transações sequenciais).
+    const saveContract = await deps.contractRepo.save(contractUpdated.value.contract, [
+      contractUpdated.value.event,
+    ]);
     if (!saveContract.ok) return saveContract;
 
-    // 8. Publish events in order: AmendmentHomologated, then ContractStateUpdated
     const events: readonly ContractsModuleEvent[] = [
       homologated.value.event,
       contractUpdated.value.event,
     ];
-    for (const event of events) {
-      const published = await deps.eventBus.publish(event);
-      if (!published.ok) return published;
-    }
 
     return ok({
       contract: contractUpdated.value.contract,

@@ -1,9 +1,10 @@
 # 📋 Planejamento — Outbox MySQL (ADR-0015)
 
-> **Status:** Planejamento pausado em 2026-05-16. Aguardando confirmação do usuário em 3 decisões antes de abrir tickets.
-> **Skills obrigatórias quando retomar:** [`database-theorist`](../skills/database-theorist/SKILL.md), [`database-engineer`](../skills/database-engineer/SKILL.md), [`ports-and-adapters`](../skills/ports-and-adapters/SKILL.md), [`ts-domain-modeler`](../skills/ts-domain-modeler/SKILL.md).
+> **Status:** ✅ **ENTREGUE em 2026-05-21.** Série de 7 tickets `CTR-OUTBOX-*` fechada ALL-GREEN. Este arquivo é **histórico/auditável** — não é mais plano ativo.
+> **Tickets fechados:** `CTR-OUTBOX-SCHEMA`, `CTR-OUTBOX-PORTS-AND-MAPPERS`, `CTR-OUTBOX-ADAPTER-DRIZZLE`, `CTR-OUTBOX-INTEGRATION-IN-REPOS`, `CTR-OUTBOX-WORKER`, `CTR-OUTBOX-CLI-WORKER`, `CTR-OUTBOX-PUBLIC-API`. Audit trail em `.claude/.pipeline/CTR-OUTBOX-*/`.
 > **ADR fonte:** [`handbook/architecture/adr/0015-mysql-outbox-pattern.md`](../../handbook/architecture/adr/0015-mysql-outbox-pattern.md).
-> **Para o futuro Claude/dev que abrir este arquivo:** o usuário pediu para anotar o plano antes de fechar o terminal. Retome lendo este arquivo inteiro + o ADR-0015. **Não comece a executar sem confirmação das 3 decisões pendentes (§"Decisões a confirmar").**
+> **Para o futuro Claude/dev que abrir este arquivo:** se o usuário pedir "continuar outbox", confirmar primeiro se é melhoria nova (dead letter avançado, retries com backoff exponencial, métricas de delivery, etc.) — a série base **está fechada**. Ver §"Lições & Best Practices Alcançadas" no fim do arquivo para o resumo do que foi entregue.
+> **Skills relevantes para evoluções futuras:** [`database-theorist`](../skills/database-theorist/SKILL.md), [`database-engineer`](../skills/database-engineer/SKILL.md), [`ports-and-adapters`](../skills/ports-and-adapters/SKILL.md), [`ts-domain-modeler`](../skills/ts-domain-modeler/SKILL.md).
 
 ---
 
@@ -144,3 +145,84 @@ Após confirmação → abrir ticket #1 (`CTR-OUTBOX-SCHEMA`) seguindo padrão `
 - `pnpm test:integration` 10/10 PASS back-to-back após fix do healthcheck.
 
 **Para retomar:** ler este arquivo + ADR-0015 + esperar usuário confirmar D1/D2/D4.
+
+---
+
+## ✨ Lições & Best Practices Alcançadas (em curso)
+
+Anotação rolling durante a execução dos 7 tickets — para preservar padrões a manter nos próximos e em refresh futuros da SKILL.md.
+
+### Após ticket #1 — CTR-OUTBOX-SCHEMA (2026-05-21)
+
+- **CHARSET/COLLATE manual aplicado no SQL gerado pelo Drizzle:** `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci` nas 3 tabelas + `COLLATE utf8mb4_bin` em todos os UUIDs (`event_id`, `aggregate_id`). Sem isso, ordenação binária dos UUIDs ficaria inconsistente. ADR-0020 § "Hardening de migration" reforça.
+- **Índice composto `(processed_at, occurred_at)` com `NULL` agrupado na 1ª posição:** worker faz range scan eficiente sobre eventos pendentes, ordenando por `occurred_at` dentro do bucket NULL. Confirmado via EXPLAIN no CA6-T4.
+- **`eventos_processados` sem prefix `ctr_*`:** exceção PT-BR justificada por ser **tabela cross-módulo** (qualquer consumer, não só Contratos). Documentado no schema e no 000-request. Padrão para repetir em futuros recursos cross-módulo.
+- **`.prettierignore` ganhou `migrations/mysql/meta/`:** artefatos gerados pelo `db:generate` não devem entrar no `prettier --check` — consistente com `pnpm-lock.yaml`.
+
+### Após ticket #3 — CTR-OUTBOX-ADAPTER-DRIZZLE (2026-05-21)
+
+- **`.for('update', { skipLocked: true })` API do Drizzle 0.45 funciona:** API documentada presente; não precisou de raw SQL fallback. Padrão para futuros adapters que precisem locking reads.
+- **`markProcessed` idempotente via `AND processed_at IS NULL`:** UPDATE com filtro extra evita dupla marcação em retries do worker. Padrão a manter.
+- **`moveToDeadLetter` atômico via `db.transaction`:** INSERT DLQ + DELETE outbox numa tx. Test mock-fail no DELETE confirma rollback do INSERT.
+- **ER_DUP_ENTRY detection:** `err.errno === 1062` ou `err.code === 'ER_DUP_ENTRY'`. Pattern reutilizável para qualquer adapter que precise capturar UNIQUE violations.
+- **W2 round 1 pegou `class extends Error`** usado para out-param de transação — refactor para mutable closure variable (`let captured: T | undefined`) manteve atomicidade sem violar CLAUDE.md "Sem class". Padrão para qualquer transação Drizzle que precise emitir erro tipado de dentro do callback.
+
+### Após ticket #2 — CTR-OUTBOX-PORTS-AND-MAPPERS (2026-05-21)
+
+- **Padrão D 100% aplicado:** module-as-namespace + tagged records flat + case constructors free functions + switch exaustivo sem `default: throw` + `OUTBOX_SCHEMA_VERSION = 1` versionado para evolução de wire format. Padrão a manter rigorosamente nos próximos tickets do Outbox.
+- **`LoggerEventDelivery` entrega JSONL para stdout + arquivo opcional** — primeiro adapter funcional do `EventDelivery`, pronto para uso pelo worker do ticket #5. Format `{ eventId, eventType, schemaVersion, deliveredAt, payload }` por linha. Padrão a reutilizar quando módulo Financeiro entrar.
+- **Round-trip serializa/desserializa via smart constructors do domínio:** `Money.fromCents`, `Period.create`/`createIndefinite`, `Date(ISO)`, `ContractId.rehydrate`, etc. Qualquer drift entre payload e shape do evento é detectado em runtime via `outboxRowToEvent → err(OutboxMapperInvalidPayload)`. Test contratual cobre os 6 event types.
+- **Suite contratual parametrizada (`outbox.contract.ts`, `event-delivery.contract.ts`):** mesma suite roda contra InMemory adapter agora; vai rodar contra Drizzle adapter no ticket #3 sem reescrita. Padrão a manter — invariante de adapter swap.
+
+### 🏆 SÉRIE OUTBOX COMPLETA (2026-05-21) — 7/7 tickets fechados ALL GREEN
+
+Baseline final: **706 testes / 693 pass / 0 fail / 13 skipped**. 24 tickets consecutivos protocolo Opção B sem regressão acumulada.
+
+ADR-0015 implementado integralmente. Pronto para Frente C (módulo Financeiro consumidor) ou Frente D (Frente B+: Event Sourcing + Observability + Property-based testing — entrevista 0002).
+
+### Após ticket #7 — CTR-OUTBOX-PUBLIC-API (2026-05-21)
+
+- **`public-api/events.ts` é o único ponto de import externo** (ADR-0006). Outros módulos NÃO importam de `<module>/domain/` ou `<module>/application/`. Re-export controlado de `OutboxRow` permite consumer passar row para `decodeContractsModuleEventV1` sem acessar adapters.
+- **Decoder versionado v1:** `decodeContractsModuleEventV1(row): Result<Event, DecoderError>`. Permite evolução do wire format — quando subir v2, manter v1 para compat. Padrão a aplicar em todos os módulos que exporem events.
+- **Type guard `isContractsModuleEvent(u: unknown)`:** Set-based check + runtime narrow. Usado em borda externa (webhook listener, HTTP handler) onde unknown chega via JSON parse.
+- **3 tagged errors no decoder** (`DecoderInvalidShape`, `DecoderSchemaVersionMismatch`, `DecoderInvalidPayload`) — wrapping de `OutboxMapperError` em `DecoderInvalidPayload` preserva evidência da causa raiz.
+- **Sem ciclo de import:** public-api importa de adapters/persistence/mappers (para `outboxRowToEvent`), mappers NÃO importa de public-api. Verificável via grep — invariante a manter.
+
+### Após ticket #5 — CTR-OUTBOX-WORKER (2026-05-21)
+
+- **`runOnce` puro + `runLoop` wrapper:** separação canônica — `runOnce` é função pura idempotente testável; `runLoop` é só `while(!aborted) { runOnce + sleep }`. Tests unit cobrem `runOnce` exaustivamente; `runLoop` precisa só de smoke test com `AbortSignal` timeout 100ms.
+- **`sleep(ms, signal?)` com AbortSignal-cancellation:** padrão Node 24 — `setTimeout` + `signal.addEventListener('abort', cleanup, { once: true })`. Worker termina graciosamente em SIGTERM. Padrão a reutilizar em qualquer loop polling.
+- **Backoff inteligente (idle vs working):** `runLoop` usa `idleSleepMs` (longer) quando 0 entregues e `pollIntervalMs` (curto) quando há trabalho. Evita overheating do MySQL com queries vazias. Default: idle=500ms, polling=100ms.
+- **`InMemoryOutbox` expande com 8 helpers** (`findPendingForUpdate`, `markProcessed`/`Sync`, `markFailed`, `moveToDeadLetter`, `deadLetter`, `setAttempts`, `corruptRow`) — mesma interface do Drizzle adapter. `markProcessedSync` necessária para suite contratual síncrona herdada do #2.
+- **`corruptRow` helper:** injeta payload malformado no InMemoryOutbox para testar caminho de erro do mapper sem precisar do MySQL real. Padrão para qualquer adapter InMemory que precisa simular dados corrompidos para tests.
+- **Concorrência 2 workers integration test (CA-I2):** 2 pools mysql2 distintos + 2 chamadas paralelas de `findPendingForUpdate(10)`. `FOR UPDATE SKIP LOCKED` particiona automaticamente — nenhum evento entregue 2×. Padrão para validar SKIP LOCKED em qualquer outbox-like pattern.
+
+### Após ticket #6 — CTR-OUTBOX-CLI-WORKER (2026-05-21)
+
+- **`WorkerOutboxOps` exportado de `outbox-worker.ts`:** tipo nomeado para os 4 helpers do worker. Permite que `CliContext` referencie a interseção `OutboxPort & WorkerOutboxOps` sem importar `WorkerDeps` inteiro (que puxa `EventDelivery` e `Clock`). Padrão: extrair sub-tipo nomeado quando um tipo composto é reutilizado em camadas distintas.
+- **`CliContext` expandido com `driver`, `outbox`, `outboxCleanup`:** `driver: DriverKind` permite que subcomandos rejeitem drivers incompatíveis (ex.: `run-outbox-worker` requer `'mysql'`). Padrão para qualquer subcomando com restrição de driver.
+- **Merge manual `OutboxPort & WorkerOutboxOps` nos drivers:** `{ append: outbox.port.append, findPendingForUpdate, markProcessed, markFailed, moveToDeadLetter }` — evita polimorfismo desnecessário. Padrão: montar intersection explícito nos drivers em vez de usar spread (`{ ...obj1, ...obj2 }`) que perde type safety.
+- **`exactOptionalPropertyTypes`: nunca atribuir `undefined` explicitamente a campos opcionais** — omitir a chave. `outboxCleanup: undefined` causa erro de compilação; a solução é simplesmente não incluir a propriedade no literal. Padrão crítico para qualquer contexto com `exactOptionalPropertyTypes: true`.
+- **`--test-abort` flag de teste injetada na allowlist do subcomando:** pré-aborta o AbortController antes de `runLoop`, tornando CA-T3 determinístico sem sleep real. Alternativa (injetar `AbortSignal` como argumento do `run`) foi descartada por mudar a assinatura do `SubCommand`. Padrão para qualquer subcomando que precise testar loops longos.
+- **`no-unsafe-member-access` não está desligado na config de testes:** ao fazer monkey-patch em `process.stdout.write` (cast `as any`), o ESLint dispara mesmo com `@typescript-eslint/no-explicit-any` suprimido. Solução: adicionar `@typescript-eslint/no-unsafe-member-access` no mesmo disable comment da linha. Padrão a aplicar em qualquer test helper que faça monkey-patch em objetos Node.js.
+
+### Após ticket #4 — CTR-OUTBOX-INTEGRATION-IN-REPOS (2026-05-21)
+
+- **`appendOutboxInTx` lança em vez de retornar Result:** dentro do callback `db.transaction`, lançar é correto — o Drizzle faz rollback quando o callback rejeita. O repo pai captura via `safe()` e converte para `RepositoryError`. Padrão para qualquer helper que precisa participar de uma tx alheia sem acesso ao `safe()` externo.
+- **`typeof schema` como argumento de `appendOutboxInTx`:** é necessário `import type * as schema` no arquivo do outbox para usar `typeof schema` como tipo do parâmetro. Funciona com `verbatimModuleSyntax` porque só é usado como tipo.
+- **`eslint-disable-next-line` deve estar IMEDIATAMENTE antes do parâmetro infrator**, não antes da declaração da função. Colocar o comment na linha da `const fn = async (` não suprime a violação na linha do parâmetro — W2 detectou e W2-Round-2 aprovou após fix.
+- **`ContractRepositoryError` agora inclui tagged records (`OutboxAppendError`):** template literals que interpolam `r.error` de `ContractRepository` precisam de `JSON.stringify(r.error)` — `restrict-template-expressions` e `no-base-to-string` blocam `${taggedObject}`. Padrão a aplicar em todos os testes que acessam erros de repos que incluem outbox na union.
+- **`InMemoryContractRepository(outbox.port)` com default** — a assinatura `(outbox: OutboxPort = InMemoryOutbox().port)` permite que callers antigos (ex: `InMemoryContractRepository()`) continuem funcionando sem argumento. Só testes que precisam inspecionar eventos precisam injetar o outbox explicitamente.
+- **`outbox.clear()` em `setupWorld`** — obrigatório para isolar eventos do caso de uso testado dos eventos do setup de fixtures. Padrão: `outbox.clear()` no final do setup, depois de popular repos.
+- **Domínio não importa de application:** `ContractsModuleEvent` e `OutboxAppendError` são definidos em `application/ports/` mas precisam aparecer na assinatura do port em `domain/`. A solução é aceitar que os repositórios (que ficam em `domain/` por Critério H2) importem esses tipos de `application/ports/` — layer inversion menor, documentada, e explicitada no 000-request como "migração futura".
+
+### Após ticket #3 — CTR-OUTBOX-ADAPTER-DRIZZLE (2026-05-21)
+
+- **`class extends Error` proibido pelo ESLint em TODO o projeto** (não só no domínio) — `no-restricted-syntax` trava `ClassDeclaration` globalmente. Canal de controle dentro de `db.transaction` deve usar out-param (`[OutboxQueryError | null]`) em vez de `throw new CustomError`. Padrão a aplicar em qualquer adapter que precise sinalizar erro lógico (not-found, duplicate) de dentro de um callback de transação.
+- **`let` sem inicialização falha `init-declarations: always`** — refatorar para `const` direto; se a lógica de try/catch tornava necessário o `let`, rever se o try ainda é necessário (no caso `eventToOutboxInsert` é puro e não lança — o try era YAGNI).
+- **Helpers síncronos para suite contratual via buffer interno:** o adapter Drizzle expõe `testHelpers.all()`, `testHelpers.pending()`, `testHelpers.markProcessed()` com buffer mantido em memória — satisfaz a interface síncrona da suite sem ir ao DB. Documentado como test-only no JSDoc. Padrão a replicar em qualquer adapter Drizzle que precise satisfazer suite contratual existente.
+- **`idGenerator?: () => string` como opt-in de teste** — permite injetar UUID fixo para testar ER_DUP_ENTRY deterministicamente. Custo zero em prod (parâmetro opcional, default `randomUUID`). Padrão a aplicar em adapters que fazem INSERT com chave gerada pelo app.
+- **`FOR UPDATE SKIP LOCKED` disponível via `.for('update', { skipLocked: true })`** no Drizzle 0.45.x mysql-core — API confirmada em `mysql-core/query-builders/select.types.d.ts`. Não é necessário sql raw. Funciona corretamente em 2 connections paralelas (CA-7 confirmado).
+- **`markProcessed` idempotente via `AND processed_at IS NULL`** — o WHERE duplo é o padrão canônico para operações "mark once" em outbox. 0 rows affected = OK, não é erro.
+- **`moveToDeadLetter` atômico sem `class`** — pattern out-param `[OutboxQueryError | null]` funciona dentro de `db.transaction` callback porque o callback é `async` e a transação permanece aberta até o Promise resolver. Não há race condition.
+

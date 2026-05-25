@@ -19,7 +19,7 @@ import { migrate } from 'drizzle-orm/mysql2/migrator';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import { type Result, ok, err } from '../../../../../shared/result.ts';
+import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
 import * as schema from '../schemas/mysql.ts';
 
 export type MysqlConnectOptions = Readonly<{

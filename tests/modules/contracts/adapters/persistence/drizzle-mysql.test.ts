@@ -142,9 +142,9 @@ if (integrationEnabled()) {
         id: 'bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb',
         sequentialNumber: '999/2026', // mesmo número, id diferente — deve falhar
       });
-      const r1 = await repo.save(c1);
-      assert.ok(r1.ok, `1º save falhou: ${!r1.ok ? r1.error : ''}`);
-      const r2 = await repo.save(c2);
+      const r1 = await repo.save(c1, []);
+      assert.ok(r1.ok, `1º save falhou: ${!r1.ok ? JSON.stringify(r1.error) : ''}`);
+      const r2 = await repo.save(c2, []);
       assert.equal(r2.ok, false, '2º save com mesmo sequentialNumber deveria falhar');
     });
 
@@ -156,16 +156,16 @@ if (integrationEnabled()) {
         sequentialNumber: '888/2026',
         title: 'original',
       });
-      const r1 = await repo.save(c1);
-      assert.ok(r1.ok, `1º save falhou: ${!r1.ok ? r1.error : ''}`);
+      const r1 = await repo.save(c1, []);
+      assert.ok(r1.ok, `1º save falhou: ${!r1.ok ? JSON.stringify(r1.error) : ''}`);
 
       const c2 = buildContract({
         id: 'cccccccc-3333-4333-8333-cccccccccccc', // mesmo id
         sequentialNumber: '888/2026',
         title: 'atualizado', // mudou
       });
-      const r2 = await repo.save(c2);
-      assert.ok(r2.ok, `2º save (upsert) falhou: ${!r2.ok ? r2.error : ''}`);
+      const r2 = await repo.save(c2, []);
+      assert.ok(r2.ok, `2º save (upsert) falhou: ${!r2.ok ? JSON.stringify(r2.error) : ''}`);
 
       // Verifica que o título foi atualizado (upsert atualizou a row existente)
       const idR = await repo.findById(c1.id);
@@ -189,7 +189,7 @@ describe('CTR-DB-DRIVER-MYSQL — CA-13/14: buildMysqlContext', () => {
     const ctx = r.value;
     assert.ok(ctx.contractRepo, 'ctx.contractRepo ausente');
     assert.ok(ctx.amendmentRepo, 'ctx.amendmentRepo ausente');
-    assert.ok(ctx.eventBus, 'ctx.eventBus ausente');
+    // CA-6: eventBus removido do CliContext (CTR-OUTBOX-INTEGRATION-IN-REPOS)
     assert.ok(ctx.clock, 'ctx.clock ausente');
     assert.equal(typeof ctx.persist, 'function', 'ctx.persist deveria ser função');
     assert.equal(typeof ctx.shutdown, 'function', 'ctx.shutdown deveria ser função');

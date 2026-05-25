@@ -10,12 +10,14 @@ import {
   statSync,
 } from 'node:fs';
 import { randomUUID } from 'node:crypto';
-import { type Result, ok, err } from '../../../shared/result.ts';
-import { isUuidV4 } from '../../../shared/id.ts';
+import { type Result, ok, err } from '../../../shared/primitives/result.ts';
+import { isUuidV4 } from '../../../shared/utils/id.ts';
 import type { Contract, ContractStatus } from '../domain/contract/types.ts';
 import type { Amendment, AmendmentStatus, AmendmentKind } from '../domain/amendment/types.ts';
-import type { InMemoryContractRepositoryHandle } from '../adapters/contract-repository.in-memory.ts';
-import type { InMemoryAmendmentRepositoryHandle } from '../adapters/amendment-repository.in-memory.ts';
+import type { ContractDocument, DocumentCategory } from '../domain/document/types.ts';
+import type { InMemoryContractRepositoryHandle } from '../adapters/persistence/repos/contract-repository.in-memory.ts';
+import type { InMemoryAmendmentRepositoryHandle } from '../adapters/persistence/repos/amendment-repository.in-memory.ts';
+import type { InMemoryDocumentRepositoryHandle } from '../adapters/persistence/repos/document-repository.in-memory.ts';
 
 // Defeito #12: I/O síncrono lança; convertemos para Result na borda do adapter
 // conforme regra do CLAUDE.md raiz.
@@ -48,6 +50,13 @@ const DATE_KEYS = new Set([
   'start',
   'end',
   'newEndDate',
+  // CTR-AMENDMENT-DOCUMENT-LINK: ContractDocument carrega 2 campos Date.
+  'uploadedAt',
+  'retentionUntil',
+  // CTR-USECASE-DELETE-DOCUMENT: campo audit de exclusao logica.
+  'deletedAt',
+  // CTR-USECASE-SUPERSEDE-DOCUMENT: campo audit de substituicao.
+  'supersededAt',
 ]);
 
 const reviver = (key: string, value: unknown): unknown => {
@@ -60,14 +69,81 @@ const reviver = (key: string, value: unknown): unknown => {
 type Snapshot = Readonly<{
   contracts: readonly Contract[];
   amendments: readonly Amendment[];
+  documents?: readonly ContractDocument[];
 }>;
 
 const isSnapshot = (
   v: unknown,
-): v is { contracts: readonly unknown[]; amendments: readonly unknown[] } => {
+): v is {
+  contracts: readonly unknown[];
+  amendments: readonly unknown[];
+  documents?: readonly unknown[];
+} => {
   if (typeof v !== 'object' || v === null) return false;
-  const candidate = v as { contracts?: unknown; amendments?: unknown };
-  return Array.isArray(candidate.contracts) && Array.isArray(candidate.amendments);
+  const candidate = v as { contracts?: unknown; amendments?: unknown; documents?: unknown };
+  if (!Array.isArray(candidate.contracts) || !Array.isArray(candidate.amendments)) return false;
+  if (candidate.documents !== undefined && !Array.isArray(candidate.documents)) return false;
+  return true;
+};
+
+const DOCUMENT_CATEGORIES: ReadonlySet<DocumentCategory> = new Set([
+  'signed_contract',
+  'signed_amendment',
+  'opinion',
+  'certificate',
+  'justification',
+  'technical_attachment',
+  'publication',
+  'other',
+]);
+
+const SHA256_LOWER_HEX = /^[0-9a-f]{64}$/;
+
+const isValidDateInstance = (d: unknown): d is Date =>
+  d instanceof Date && !Number.isNaN(d.getTime());
+
+const isValidContractDocument = (raw: unknown): raw is ContractDocument => {
+  if (typeof raw !== 'object' || raw === null) return false;
+  const d = raw as Record<string, unknown>;
+  if (typeof d['id'] !== 'string' || !isUuidV4(d['id'])) return false;
+  if (d['parentType'] !== 'Contract' && d['parentType'] !== 'Amendment') return false;
+  if (typeof d['parentId'] !== 'string' || !isUuidV4(d['parentId'])) return false;
+  if (
+    typeof d['categoria'] !== 'string' ||
+    !DOCUMENT_CATEGORIES.has(d['categoria'] as DocumentCategory)
+  )
+    return false;
+  if (typeof d['fileName'] !== 'string' || d['fileName'].length === 0) return false;
+  if (typeof d['mimeType'] !== 'string' || d['mimeType'].length === 0) return false;
+  if (typeof d['sizeBytes'] !== 'number' || !Number.isInteger(d['sizeBytes']) || d['sizeBytes'] < 0)
+    return false;
+  if (typeof d['hashSha256'] !== 'string' || !SHA256_LOWER_HEX.test(d['hashSha256'])) return false;
+  if (typeof d['bucket'] !== 'string') return false;
+  if (typeof d['storageKey'] !== 'string') return false;
+  if (typeof d['signedElectronically'] !== 'boolean') return false;
+  if (typeof d['version'] !== 'number' || !Number.isInteger(d['version']) || d['version'] < 1)
+    return false;
+  if (!isValidDateInstance(d['uploadedAt'])) return false;
+  if (typeof d['uploadedBy'] !== 'string' || !isUuidV4(d['uploadedBy'])) return false;
+  if (d['retentionUntil'] !== null && !isValidDateInstance(d['retentionUntil'])) return false;
+  // CTR-USECASE-DELETE-DOCUMENT: status='Active' OR 'LogicallyDeleted' (com 3 campos audit).
+  if (d['status'] === 'Active') {
+    return true;
+  }
+  if (d['status'] === 'LogicallyDeleted') {
+    if (!isValidDateInstance(d['deletedAt'])) return false;
+    if (typeof d['deletedBy'] !== 'string' || !isUuidV4(d['deletedBy'])) return false;
+    if (typeof d['deletedReason'] !== 'string' || d['deletedReason'].length === 0) return false;
+    return true;
+  }
+  if (d['status'] === 'Superseded') {
+    if (!isValidDateInstance(d['supersededAt'])) return false;
+    if (typeof d['supersededBy'] !== 'string' || !isUuidV4(d['supersededBy'])) return false;
+    if (typeof d['supersededByDocumentId'] !== 'string' || !isUuidV4(d['supersededByDocumentId']))
+      return false;
+    return true;
+  }
+  return false;
 };
 
 // =============================================================================
@@ -93,9 +169,6 @@ const isValidMoneyShape = (raw: unknown): boolean => {
     cents <= Number.MAX_SAFE_INTEGER
   );
 };
-
-const isValidDateInstance = (d: unknown): d is Date =>
-  d instanceof Date && !Number.isNaN(d.getTime());
 
 const isValidPeriodShape = (raw: unknown): boolean => {
   if (typeof raw !== 'object' || raw === null) return false;
@@ -132,8 +205,16 @@ const isValidContract = (raw: unknown): raw is Contract => {
   for (const id of c['homologatedAmendmentIds'] as readonly unknown[]) {
     if (typeof id !== 'string' || !isUuidV4(id)) return false;
   }
+  // CTR-DOMAIN-STATE-MACHINE-CONTRACT — `endedAt` é AUSENTE em Active e
+  // obrigatório (Date) em Expired/Terminated (DO C§29). Aceita `null` também
+  // para compatibilidade com state files gravados antes do refactor.
+  const status = c['status'] as ContractStatus;
   const endedAt = c['endedAt'];
-  if (endedAt !== null && !isValidDateInstance(endedAt)) return false;
+  if (status === 'Active') {
+    if (endedAt !== undefined && endedAt !== null) return false;
+  } else {
+    if (!isValidDateInstance(endedAt)) return false;
+  }
   return true;
 };
 
@@ -158,14 +239,26 @@ const isValidAmendment = (raw: unknown): raw is Amendment => {
   if (a['kind'] === 'TermChange') {
     if (!isValidDateInstance(a['newEndDate'])) return false;
   }
+  // CTR-DOMAIN-STATE-MACHINE-AMENDMENT — validação de consistência por status.
+  // Pending: homologatedAt e homologatedBy devem ser null (shape impossível rejeitado).
+  // Homologated: signedDocumentRef, homologatedAt e homologatedBy devem estar presentes.
+  const status = a['status'] as AmendmentStatus;
   const signedDocRef = a['signedDocumentRef'];
-  if (signedDocRef !== null) {
-    if (typeof signedDocRef !== 'string' || !isUuidV4(signedDocRef)) return false;
-  }
   const homologatedAt = a['homologatedAt'];
-  if (homologatedAt !== null && !isValidDateInstance(homologatedAt)) return false;
   const homologatedBy = a['homologatedBy'];
-  if (homologatedBy !== null) {
+
+  if (status === 'Pending') {
+    // signedDocumentRef pode ser null (PendingWithoutDocument) ou UUID válido (PendingWithDocument)
+    if (signedDocRef !== null) {
+      if (typeof signedDocRef !== 'string' || !isUuidV4(signedDocRef)) return false;
+    }
+    // Pending NUNCA pode ter campos terminais preenchidos
+    if (homologatedAt !== null) return false;
+    if (homologatedBy !== null) return false;
+  } else {
+    // Homologated: todos os 3 campos terminais obrigatórios
+    if (typeof signedDocRef !== 'string' || !isUuidV4(signedDocRef)) return false;
+    if (!isValidDateInstance(homologatedAt)) return false;
     if (typeof homologatedBy !== 'string' || !isUuidV4(homologatedBy)) return false;
   }
   return true;
@@ -226,6 +319,7 @@ export const loadState = (
   path: string,
   contractRepo: InMemoryContractRepositoryHandle,
   amendmentRepo: InMemoryAmendmentRepositoryHandle,
+  documentRepo: InMemoryDocumentRepositoryHandle,
 ): Result<void, StateError> => {
   if (!existsSync(path)) return ok(undefined);
 
@@ -268,13 +362,23 @@ export const loadState = (
   for (const raw of parsed.amendments) {
     if (!isValidAmendment(raw)) return err('state-entity-invalid');
   }
+  const documentsRaw = parsed.documents ?? [];
+  for (const raw of documentsRaw) {
+    if (!isValidContractDocument(raw)) return err('state-entity-invalid');
+  }
 
   // Validação completa — agora podemos popular os repos.
+  // Restauração de estado: sem eventos — os eventos já foram emitidos quando
+  // os agregados foram criados originalmente. Passamos [] para satisfazer a
+  // nova assinatura save(aggregate, events).
   for (const c of parsed.contracts as readonly Contract[]) {
-    void contractRepo.repo.save(c);
+    void contractRepo.repo.save(c, []);
   }
   for (const a of parsed.amendments as readonly Amendment[]) {
-    void amendmentRepo.repo.save(a);
+    void amendmentRepo.repo.save(a, []);
+  }
+  for (const d of documentsRaw as readonly ContractDocument[]) {
+    void documentRepo.repo.save(d, []);
   }
   return ok(undefined);
 };
@@ -286,10 +390,12 @@ export const saveState = (
   path: string,
   contractRepo: InMemoryContractRepositoryHandle,
   amendmentRepo: InMemoryAmendmentRepositoryHandle,
+  documentRepo: InMemoryDocumentRepositoryHandle,
 ): Result<void, StateError> => {
   const snapshot: Snapshot = {
     contracts: contractRepo.store(),
     amendments: amendmentRepo.store(),
+    documents: documentRepo.store(),
   };
   const tmpPath = `${path}.tmp.${randomUUID()}`;
   try {

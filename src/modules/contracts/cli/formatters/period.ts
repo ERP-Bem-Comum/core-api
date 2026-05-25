@@ -1,4 +1,4 @@
-import type { Period } from '../../domain/shared/period.ts';
+import type { Period } from '#src/shared/kernel/period.ts';
 import { formatDate } from './date.ts';
 
 export const formatPeriod = (p: Period): string => {
@@ -9,7 +9,7 @@ export const formatPeriod = (p: Period): string => {
       return `${formatDate(p.start)} (indefinido)`;
     default: {
       const _exhaustive: never = p;
-      throw new Error(`unreachable: ${JSON.stringify(_exhaustive)}`);
+      return _exhaustive;
     }
   }
 };

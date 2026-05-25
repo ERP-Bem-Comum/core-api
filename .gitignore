@@ -17,6 +17,11 @@ coverage/
 # (versão versionada do projeto é .claude/settings.json se existir)
 .claude/settings.local.json
 
+# Claude Code worktrees — sessões paralelas isoladas via `claude --worktree`
+# Conteúdo gerado automaticamente; doc: handbook/reference/claude-code/worktrees.md
+# Lista de arquivos a copiar para cada worktree novo: .worktreeinclude (versionado)
+.claude/worktrees/
+
 # Guidelines locais — material de referência com copyright/restrição de terceiros
 # (PDFs do Bradesco, guias internos não-distribuíveis). Visível para IAs CLI via
 # leitura direta do filesystem, mas NÃO entra no repo. Ver `CLAUDE.md` §"Política

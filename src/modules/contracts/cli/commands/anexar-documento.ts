@@ -36,7 +36,7 @@ export const run = async (ctx: CliContext, argv: readonly string[]): Promise<num
 
   const useCase = attachSignedDocument({
     amendmentRepo: ctx.amendmentRepo,
-    eventBus: ctx.eventBus,
+    documentRepo: ctx.documentRepo,
   });
 
   const r = await useCase({

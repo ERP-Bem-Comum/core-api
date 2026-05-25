@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "CTR-ADAPTERS-CLEANUP-EVENT-BUS",
+  "size": "XS",
+  "createdAt": "2026-05-22T12:09:30.595Z",
+  "closedAt": "2026-05-22T12:13:52.669Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "main-session",
+      "startedAt": "2026-05-22T12:10:38.308Z",
+      "finishedAt": "2026-05-22T12:10:38.561Z",
+      "rounds": 1,
+      "reportPath": "no-new-tests",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "main-session",
+      "startedAt": "2026-05-22T12:10:38.812Z",
+      "finishedAt": "2026-05-22T12:13:51.392Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-05-22T12:13:51.647Z",
+      "finishedAt": "2026-05-22T12:13:51.895Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-05-22T12:13:52.150Z",
+      "finishedAt": "2026-05-22T12:13:52.410Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

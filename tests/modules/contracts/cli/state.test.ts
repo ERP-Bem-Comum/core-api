@@ -5,8 +5,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { isErr, isOk } from '#src/shared/index.ts';
-import { InMemoryContractRepository } from '#src/modules/contracts/adapters/contract-repository.in-memory.ts';
-import { InMemoryAmendmentRepository } from '#src/modules/contracts/adapters/amendment-repository.in-memory.ts';
+import { InMemoryContractRepository } from '#src/modules/contracts/adapters/persistence/repos/contract-repository.in-memory.ts';
+import { InMemoryAmendmentRepository } from '#src/modules/contracts/adapters/persistence/repos/amendment-repository.in-memory.ts';
+import { InMemoryDocumentRepository } from '#src/modules/contracts/adapters/persistence/repos/document-repository.in-memory.ts';
 import { loadState, saveState } from '#src/modules/contracts/cli/state.ts';
 
 let tempDir: string;
@@ -23,7 +24,13 @@ describe('loadState — Defeito #12 (I/O boundary → Result)', () => {
   it('returns Ok for non-existent file (initial run)', () => {
     const contractRepo = InMemoryContractRepository();
     const amendmentRepo = InMemoryAmendmentRepository();
-    const r = loadState(join(tempDir, 'nonexistent.json'), contractRepo, amendmentRepo);
+    const documentRepo = InMemoryDocumentRepository();
+    const r = loadState(
+      join(tempDir, 'nonexistent.json'),
+      contractRepo,
+      amendmentRepo,
+      documentRepo,
+    );
     assert.equal(isOk(r), true);
   });
 
@@ -32,7 +39,8 @@ describe('loadState — Defeito #12 (I/O boundary → Result)', () => {
     writeFileSync(path, '', 'utf-8');
     const contractRepo = InMemoryContractRepository();
     const amendmentRepo = InMemoryAmendmentRepository();
-    const r = loadState(path, contractRepo, amendmentRepo);
+    const documentRepo = InMemoryDocumentRepository();
+    const r = loadState(path, contractRepo, amendmentRepo, documentRepo);
     assert.equal(isOk(r), true);
   });
 
@@ -41,7 +49,8 @@ describe('loadState — Defeito #12 (I/O boundary → Result)', () => {
     writeFileSync(path, 'invalid {{{ json', 'utf-8');
     const contractRepo = InMemoryContractRepository();
     const amendmentRepo = InMemoryAmendmentRepository();
-    const r = loadState(path, contractRepo, amendmentRepo);
+    const documentRepo = InMemoryDocumentRepository();
+    const r = loadState(path, contractRepo, amendmentRepo, documentRepo);
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'state-file-corrupted');
   });
@@ -51,7 +60,8 @@ describe('loadState — Defeito #12 (I/O boundary → Result)', () => {
     writeFileSync(path, JSON.stringify({ contracts: 'oops', amendments: [] }), 'utf-8');
     const contractRepo = InMemoryContractRepository();
     const amendmentRepo = InMemoryAmendmentRepository();
-    const r = loadState(path, contractRepo, amendmentRepo);
+    const documentRepo = InMemoryDocumentRepository();
+    const r = loadState(path, contractRepo, amendmentRepo, documentRepo);
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'state-schema-invalid');
   });
@@ -61,7 +71,8 @@ describe('loadState — Defeito #12 (I/O boundary → Result)', () => {
     writeFileSync(path, JSON.stringify({ contracts: [], amendments: { broken: true } }), 'utf-8');
     const contractRepo = InMemoryContractRepository();
     const amendmentRepo = InMemoryAmendmentRepository();
-    const r = loadState(path, contractRepo, amendmentRepo);
+    const documentRepo = InMemoryDocumentRepository();
+    const r = loadState(path, contractRepo, amendmentRepo, documentRepo);
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'state-schema-invalid');
   });
@@ -69,7 +80,8 @@ describe('loadState — Defeito #12 (I/O boundary → Result)', () => {
   it('returns Err state-file-not-readable when path is a directory', () => {
     const contractRepo = InMemoryContractRepository();
     const amendmentRepo = InMemoryAmendmentRepository();
-    const r = loadState(tempDir, contractRepo, amendmentRepo);
+    const documentRepo = InMemoryDocumentRepository();
+    const r = loadState(tempDir, contractRepo, amendmentRepo, documentRepo);
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'state-file-not-readable');
   });
@@ -79,7 +91,8 @@ describe('loadState — Defeito #12 (I/O boundary → Result)', () => {
     writeFileSync(path, JSON.stringify({ contracts: [], amendments: [] }), 'utf-8');
     const contractRepo = InMemoryContractRepository();
     const amendmentRepo = InMemoryAmendmentRepository();
-    const r = loadState(path, contractRepo, amendmentRepo);
+    const documentRepo = InMemoryDocumentRepository();
+    const r = loadState(path, contractRepo, amendmentRepo, documentRepo);
     assert.equal(isOk(r), true);
   });
 });
@@ -89,7 +102,8 @@ describe('saveState — Defeito #12 (I/O boundary → Result)', () => {
     const path = join(tempDir, 'output.json');
     const contractRepo = InMemoryContractRepository();
     const amendmentRepo = InMemoryAmendmentRepository();
-    const r = saveState(path, contractRepo, amendmentRepo);
+    const documentRepo = InMemoryDocumentRepository();
+    const r = saveState(path, contractRepo, amendmentRepo, documentRepo);
     assert.equal(isOk(r), true);
   });
 
@@ -97,7 +111,8 @@ describe('saveState — Defeito #12 (I/O boundary → Result)', () => {
     const path = join(tempDir, 'no-such-dir', 'output.json');
     const contractRepo = InMemoryContractRepository();
     const amendmentRepo = InMemoryAmendmentRepository();
-    const r = saveState(path, contractRepo, amendmentRepo);
+    const documentRepo = InMemoryDocumentRepository();
+    const r = saveState(path, contractRepo, amendmentRepo, documentRepo);
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'state-file-not-writable');
   });
@@ -105,7 +120,8 @@ describe('saveState — Defeito #12 (I/O boundary → Result)', () => {
   it('returns Err state-file-not-writable when path is a directory', () => {
     const contractRepo = InMemoryContractRepository();
     const amendmentRepo = InMemoryAmendmentRepository();
-    const r = saveState(tempDir, contractRepo, amendmentRepo);
+    const documentRepo = InMemoryDocumentRepository();
+    const r = saveState(tempDir, contractRepo, amendmentRepo, documentRepo);
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'state-file-not-writable');
   });

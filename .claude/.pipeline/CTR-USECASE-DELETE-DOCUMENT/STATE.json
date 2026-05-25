@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "CTR-USECASE-DELETE-DOCUMENT",
+  "size": "M",
+  "createdAt": "2026-05-22T14:20:08.525Z",
+  "closedAt": "2026-05-22T14:26:33.459Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-05-22T14:20:08.780Z",
+      "finishedAt": "2026-05-22T14:21:30.374Z",
+      "rounds": 1,
+      "reportPath": "tests-only",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "main-session",
+      "startedAt": "2026-05-22T14:21:30.641Z",
+      "finishedAt": "2026-05-22T14:26:32.223Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-05-22T14:26:32.472Z",
+      "finishedAt": "2026-05-22T14:26:32.727Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-05-22T14:26:32.980Z",
+      "finishedAt": "2026-05-22T14:26:33.230Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

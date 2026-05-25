@@ -38,7 +38,6 @@ export const run = async (ctx: CliContext, argv: readonly string[]): Promise<num
   const useCase = homologateAmendment({
     contractRepo: ctx.contractRepo,
     amendmentRepo: ctx.amendmentRepo,
-    eventBus: ctx.eventBus,
     clock: ctx.clock,
   });
 
