@@ -23,8 +23,9 @@ const BRL_FORMATTER = new Intl.NumberFormat('pt-BR', {
 });
 
 // Intl insere NBSP (U+00A0) entre "R$" e o valor — normalizamos para espaço
-// regular (mais ergonômico em terminal e copy/paste).
-const NBSP_REGEX = / /g;
+// regular (mais ergonômico em terminal e copy/paste). Escape `\u00A0` em vez do
+// caractere literal (lint `no-irregular-whitespace`); runtime idêntico.
+const NBSP_REGEX = /\u00A0/g;
 
 export const formatMoney = (m: Money): string =>
   BRL_FORMATTER.format(m.cents / 100).replace(NBSP_REGEX, ' ');

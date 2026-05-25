@@ -5,7 +5,9 @@
  * `Record<PayableStatus, string>` força exaustividade em compile-time —
  * novo status no domínio quebra o build aqui.
  *
- * Pattern espelha `src/modules/contracts/cli/formatters/status.ts`.
+ * Pattern **estrutural** espelha `src/modules/contracts/cli/formatters/status.ts`
+ * (Record<Status, string> com lookup-only). Conteúdo é específico ao agregado
+ * Payable (7 status vs 3 do Contract).
  */
 
 import type { PayableStatus } from '#src/modules/financial/domain/payable/types.ts';

@@ -14,6 +14,13 @@
  *      - Paid+: Pago em + (Bank: FITID + Data bancária | Manual: Registrado por)
  *      - Settled: Liquidado em + Liquidado por
  *
+ * **⚠️ Narrow pragmático (não TS-exaustivo):** os `if`s checam pelos 7 status
+ * atuais. Novo status no `PayableStatus` union NÃO quebra o build aqui — o
+ * cabeçalho base sempre roda, mas as linhas específicas faltarão. Validação só
+ * em runtime (CA-19..21 cobrem Open/Approved/PaidFromBank). Ao entrar novo
+ * status, adicionar o bloco `if` correspondente E o teste E2E que o exercite.
+ * `status.ts` (Record exaustivo) é o complemento que quebra em compile-time.
+ *
  * Pattern espelha `src/modules/contracts/cli/formatters/contract.ts` (versão
  * mais rica por causa dos 7 estados do agregado Payable).
  */

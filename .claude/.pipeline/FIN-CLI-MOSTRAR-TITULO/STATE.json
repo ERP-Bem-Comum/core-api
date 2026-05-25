@@ -4,7 +4,7 @@
   "size": "S",
   "createdAt": "2026-05-23T15:22:51.974Z",
   "closedAt": null,
-  "currentWave": "W2",
+  "currentWave": "W3",
   "status": "in-progress",
   "waves": [
     {
@@ -29,19 +29,19 @@
     },
     {
       "id": "W2",
-      "status": "in-progress",
+      "status": "done",
       "agent": "code-reviewer",
       "startedAt": "2026-05-23T15:43:27.385Z",
-      "finishedAt": null,
+      "finishedAt": "2026-05-25T11:27:55.204Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
     },
     {
       "id": "W3",
-      "status": "pending",
-      "agent": null,
-      "startedAt": null,
+      "status": "in-progress",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-05-25T11:27:55.472Z",
       "finishedAt": null,
       "rounds": 1,
       "reportPath": null,
@@ -49,5 +49,5 @@
     }
   ],
   "blockers": [],
-  "lastEvent": "W2 started (code-reviewer)"
+  "lastEvent": "W3 started (ts-quality-checker)"
 }
