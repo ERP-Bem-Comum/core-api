@@ -3,9 +3,9 @@
   "ticket": "FIN-CLI-MOSTRAR-TITULO",
   "size": "S",
   "createdAt": "2026-05-23T15:22:51.974Z",
-  "closedAt": null,
-  "currentWave": "W3",
-  "status": "in-progress",
+  "closedAt": "2026-05-25T15:05:40.490Z",
+  "currentWave": null,
+  "status": "closed-green",
   "waves": [
     {
       "id": "W0",
@@ -39,15 +39,15 @@
     },
     {
       "id": "W3",
-      "status": "in-progress",
+      "status": "done",
       "agent": "ts-quality-checker",
       "startedAt": "2026-05-25T11:27:55.472Z",
-      "finishedAt": null,
+      "finishedAt": "2026-05-25T15:05:40.188Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "ALL-GREEN"
     }
   ],
   "blockers": [],
-  "lastEvent": "W3 started (ts-quality-checker)"
+  "lastEvent": "closed-green"
 }
