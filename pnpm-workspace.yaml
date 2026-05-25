@@ -1,0 +1,7 @@
+# pnpm 10 desabilita postinstall por padrão (supply-chain — ADR-0011).
+# Liberar build apenas para deps auditadas. Ver handbook/reference/pnpm/settings.md#allowbuilds.
+allowBuilds:
+  # Transitive via drizzle-kit: baixa binário nativo no postinstall.
+  esbuild: true
+  # Em desuso (ADR-0020 §228, CTR-CLEANUP-SQLITE). Build nativo dispensável até a remoção.
+  'better-sqlite3': false
