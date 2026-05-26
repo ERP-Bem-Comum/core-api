@@ -4,6 +4,29 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-05-25 — Acabamento de Contracts (UC-07 + R4) + 2 inquiries arquiteturais
+
+### Contexto
+
+Sessão de fechamento de gaps do módulo Contracts a partir do `RELATORIO-COBERTURA-DOMINIO-2026-05-25.md`. Executados os 2 gaps prontos (domínio existente) via pipeline W0→W3; os arquiteturais viraram inquiry antes de qualquer código (regra do orquestrador).
+
+### Adicionado (código — tickets fechados closed-green)
+
+- **`CTR-USECASE-END-CONTRACT`** — UC-07 Encerramento de contrato (`03-gestao-contratos-context.md:70-74`). Use case `endContract` (Expire/Terminate) orquestrando `Contract.expire`/`terminate` + comando CLI `encerrar-contrato`. Publica `ContractEnded` via outbox.
+- **`CTR-AMENDMENT-CHRONOLOGY-R4`** — R4 cronologia do aditivo (`04-aditivos-context.md:86`). Guard em `homologateAmendment`: rejeita `amendment.createdAt < contract.signedAt` (âncora = `signedAt`, decisão do P.O.).
+
+### Aberto (inquiries — pendentes, sem código)
+
+- **[Inquiry-0017](./inquiries/0017-timeline-read-model-vs-adr-0020.md)** — Timeline (UC-02/UC-08) vs. ADR-0020 (proíbe coluna JSON). Fork: projeção dedicada vs. event-store append-only. Bloqueia `CTR-TIMELINE-READ-MODEL`.
+- **[Inquiry-0018](./inquiries/0018-auditlog-transversal-todos-bcs.md)** — `AuditLogGenerated` transversal (`06-event-line-context.md:24`). Depende de identidade/RBAC (Fase 2+); sinergia de event-store com a 0017.
+- **[Inquiry-0019](./inquiries/0019-hard-delete-tripwire-sem-superficie.md)** — `TentativaDeExclusaoDetectada` (gap 5). Achado: não há superfície de deleção física no sistema (port só `findById`/`list`/`save`); melhor prevenir por privilégio MySQL que detectar por evento de domínio. Não-código.
+
+### Backlog rastreado (não iniciado)
+
+- `CTR-IMPORT-LEGACY` (gap 3 / UC-11 — feature grande), `FIN-ACL-CONTRACT-EVENTS` (gap 7 — módulo Financial, ADR-0014).
+
+---
+
 ## 2026-05-19 — Entrevista 0001 (DDD Funcional) ENCERRADA
 
 ### Contexto

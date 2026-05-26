@@ -10,11 +10,11 @@
 
 | # | Status | Última atualização |
 | :--- | :--- | :--- |
-| Total | 16 | 2026-05-22 |
+| Total | 19 | 2026-05-25 |
 | `Decided` | 10 | — |
 | `Pending Response` | 0 | — |
 | `Obsoleta (revisada)` | 1 | — |
-| `Open` | 4 | — |
+| `Open` | 7 | — |
 | `Deferred` | 1 | — |
 
 ---
@@ -49,6 +49,9 @@ _Nenhuma._
 | [0012](./0012-bff-managed-api-gateway-vs-fastify.md) | BFF — AWS API Gateway managed vs. Fastify burro próprio | Banca interna + DevOps + dono do legado | Bloqueia skeleton do `bff-gateway`. Possível supersede do ADR-0005. Legado precisa de `setGlobalPrefix('api/v1')` antes de viabilizar Hipótese A |
 | [0014](./0014-schema-legado-vs-modelo-alvo.md) | Schema legado real vs. modelo alvo do handbook (4 perguntas Q1–Q4) | Banca interna + P.O. | Bloqueia (Q1) revisão do ADR-0017; (Q2) abertura de BC novo de Planejamento Orçamentário; (Q3) política de migração de `contracts`; (Q4) primeiro vertical slice |
 | [0015](./0015-charset-drizzle-roadmap.md) | Charset/collate por tabela via API drizzle-orm — roadmap | Upstream `drizzle-team/drizzle-orm` | Dívida tipográfica não-bloqueante: hoje SQL manual na migration `0000_*.sql` com comentário forte no schema TS. Reabrir quando drizzle-orm suportar `charset`/`collate` table-level + per-column |
+| [0017](./0017-timeline-read-model-vs-adr-0020.md) | Timeline (read-model UC-02/UC-08) vs. ADR-0020 (sem JSON) | P.O. + investigação do ciclo de vida do outbox | Bloqueia ticket `CTR-TIMELINE-READ-MODEL`. Decisão A (projeção) vs C (event-store) — preferencialmente junto da 0018 |
+| [0018](./0018-auditlog-transversal-todos-bcs.md) | `AuditLogGenerated` transversal a todos os BCs | Estratégia de identidade/RBAC (Fase 2+) | Auditoria "Quem/De/Para" depende de ator autenticado inexistente. Sinergia de event-store com a 0017 |
+| [0019](./0019-hard-delete-tripwire-sem-superficie.md) | `TentativaDeExclusaoDetectada` — tripwire sem superfície | P.O. + decisão de infra/segurança | Não há comando de deleção física no sistema; melhor prevenir por privilégio MySQL que detectar por evento. Acopla a 0018 + RBAC |
 
 ### 🔵 Deferred
 
@@ -86,6 +89,13 @@ _Nenhuma._
 
 ### Reporting & Auditoria
 - [0011 — Auditoria fiscal cross-período (Strangler Fig)](./0011-auditoria-fiscal-cross-periodo.md)
+- [0018 — AuditLogGenerated transversal a todos os BCs](./0018-auditlog-transversal-todos-bcs.md)
+
+### Segurança & Imutabilidade
+- [0019 — TentativaDeExclusaoDetectada (tripwire sem superfície)](./0019-hard-delete-tripwire-sem-superficie.md)
+
+### Read-models & CQRS
+- [0017 — Timeline (Memória Operacional) read-model vs. ADR-0020](./0017-timeline-read-model-vs-adr-0020.md)
 
 ### Descoberta de Domínio
 - [0014 — Schema legado vs. modelo alvo](./0014-schema-legado-vs-modelo-alvo.md)
