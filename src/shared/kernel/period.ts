@@ -1,57 +1,51 @@
 import { type Result, ok, err } from '../primitives/result.ts';
 import { immutable } from '../primitives/immutable.ts';
-import { isValidDate } from '../utils/date.ts';
+import * as PlainDate from './plain-date.ts';
 import type { Brand } from '../primitives/brand.ts';
 
 // Padrão D (entrevista 0001 §B DO§8): module-as-namespace.
 // Consumir com `import * as Period from '#src/shared/kernel/period.ts'`.
 //
-// Shared Kernel (§3.H.4 DO H§36): VO genuinamente cross-BC.
-// Period é universal — qualquer entidade com vigência temporal.
+// Shared Kernel (§3.H.4 DO H§36): VO genuinamente cross-BC — qualquer entidade
+// com vigência temporal. `start`/`end` são `PlainDate` (data-calendário, sem
+// hora/timezone), não `Date` — ver inquiry 0020. A validade da data e o range
+// de ano são garantidos na construção do `PlainDate`; aqui só validamos ordem.
 
 type PeriodShape =
-  | Readonly<{ kind: 'Fixed'; start: Date; end: Date }>
-  | Readonly<{ kind: 'Indefinite'; start: Date }>;
+  | Readonly<{ kind: 'Fixed'; start: PlainDate.PlainDate; end: PlainDate.PlainDate }>
+  | Readonly<{ kind: 'Indefinite'; start: PlainDate.PlainDate }>;
 
 export type Period = Brand<PeriodShape, 'Period'>;
 
-export type PeriodError =
-  | 'period-invalid-start-date'
-  | 'period-invalid-end-date'
-  | 'period-end-before-start'
-  | 'period-zero-duration'
-  | 'period-year-out-of-range';
+export type PeriodError = 'period-end-before-start' | 'period-zero-duration';
 
-// Defeito #7: range mínimo de ano para proteger contra typos (`0001-01-01`).
-// 2000 alinha com escopo prático do ERP (Bem Comum nasceu nos anos 2000+).
-const MIN_YEAR = 2000;
-
-const isYearInRange = (d: Date): boolean => d.getUTCFullYear() >= MIN_YEAR;
-
-export const create = (start: Date, end: Date): Result<Period, PeriodError> => {
-  if (!isValidDate(start)) return err('period-invalid-start-date');
-  if (!isValidDate(end)) return err('period-invalid-end-date');
-  if (!isYearInRange(start) || !isYearInRange(end)) return err('period-year-out-of-range');
-  if (end.getTime() < start.getTime()) return err('period-end-before-start');
-  // Defeito #7: período de 0 instantes (start === end) é noop conceitual.
-  if (end.getTime() === start.getTime()) return err('period-zero-duration');
+export const create = (
+  start: PlainDate.PlainDate,
+  end: PlainDate.PlainDate,
+): Result<Period, PeriodError> => {
+  const cmp = PlainDate.compare(end, start);
+  if (cmp < 0) return err('period-end-before-start');
+  // Defeito #7: período de 0 dias (start === end) é noop conceitual.
+  if (cmp === 0) return err('period-zero-duration');
   return ok(immutable({ kind: 'Fixed' as const, start, end }) as Period);
 };
 
-export const createIndefinite = (start: Date): Result<Period, PeriodError> => {
-  if (!isValidDate(start)) return err('period-invalid-start-date');
-  if (!isYearInRange(start)) return err('period-year-out-of-range');
-  return ok(immutable({ kind: 'Indefinite' as const, start }) as Period);
-};
+export const createIndefinite = (start: PlainDate.PlainDate): Period =>
+  immutable({ kind: 'Indefinite' as const, start }) as Period;
 
+/**
+ * `contains` — testa se um INSTANTE (`Date`) cai na faixa de calendário do
+ * período. O instante é projetado para sua data-calendário UTC antes da
+ * comparação (faixa inclusiva nas duas pontas).
+ */
 export const contains = (p: Period, instant: Date): boolean => {
-  if (!isValidDate(instant)) return false;
-  const t = instant.getTime();
+  if (Number.isNaN(instant.getTime())) return false;
+  const d = PlainDate.fromDate(instant);
   switch (p.kind) {
     case 'Fixed':
-      return t >= p.start.getTime() && t <= p.end.getTime();
+      return PlainDate.compare(d, p.start) >= 0 && PlainDate.compare(d, p.end) <= 0;
     case 'Indefinite':
-      return t >= p.start.getTime();
+      return PlainDate.compare(d, p.start) >= 0;
   }
   // Exhaustive: TS verifica que `kind` é coberto em compile time.
 };
@@ -59,10 +53,10 @@ export const contains = (p: Period, instant: Date): boolean => {
 export const equals = (a: Period, b: Period): boolean => {
   if (a.kind !== b.kind) return false;
   if (a.kind === 'Fixed' && b.kind === 'Fixed') {
-    return a.start.getTime() === b.start.getTime() && a.end.getTime() === b.end.getTime();
+    return PlainDate.equals(a.start, b.start) && PlainDate.equals(a.end, b.end);
   }
   if (a.kind === 'Indefinite' && b.kind === 'Indefinite') {
-    return a.start.getTime() === b.start.getTime();
+    return PlainDate.equals(a.start, b.start);
   }
   return false;
 };

@@ -8,6 +8,7 @@ import { strict as assert } from 'node:assert';
 import type { AmendmentRepository } from '#src/modules/contracts/domain/amendment/repository.ts';
 import type { Amendment } from '#src/modules/contracts/domain/amendment/types.ts';
 import * as AmendmentId from '#src/modules/contracts/domain/shared/amendment-id.ts';
+import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 
 import { buildAmendment, buildHomologatedAmendment } from './fixtures.ts';
 
@@ -137,7 +138,7 @@ export const runAmendmentRepositoryContract = (
         const got = await expectAmendment(repo, a.id, 'TermChange');
         assert.equal(got.kind, 'TermChange');
         if (got.kind === 'TermChange') {
-          assert.equal(got.newEndDate.toISOString(), '2027-12-31T23:59:59.000Z');
+          assert.equal(PlainDate.toISOString(got.newEndDate), '2027-12-31');
         }
       } finally {
         await cleanup();

@@ -1,6 +1,7 @@
 import type { AmendmentId, ContractId } from '../shared/ids.ts';
 import type { Money } from '../../../../shared/kernel/money.ts';
 import type { Period } from '../../../../shared/kernel/period.ts';
+import type { PlainDate } from '../../../../shared/kernel/plain-date.ts';
 import { immutable } from '../../../../shared/primitives/immutable.ts';
 
 /**
@@ -114,7 +115,7 @@ export const updateContract = <T extends Contract>(prev: T, patch: ContractUpdat
 export type ContractAdjustment = Readonly<
   | { kind: 'ValueIncrease'; amount: Money; amendmentId: AmendmentId }
   | { kind: 'ValueDecrease'; amount: Money; amendmentId: AmendmentId }
-  | { kind: 'PeriodExtension'; newEnd: Date; amendmentId: AmendmentId }
+  | { kind: 'PeriodExtension'; newEnd: PlainDate; amendmentId: AmendmentId }
   | { kind: 'Acknowledgment'; amendmentId: AmendmentId }
 >;
 

@@ -9,6 +9,7 @@ import * as DocumentId from '../../../domain/shared/document-id.ts';
 import * as UserRef from '../../../../../shared/kernel/user-ref.ts';
 import * as Money from '../../../../../shared/kernel/money.ts';
 import * as Period from '../../../../../shared/kernel/period.ts';
+import * as PlainDate from '../../../../../shared/kernel/plain-date.ts';
 import {
   createBucketName,
   createStorageKey,
@@ -180,9 +181,13 @@ const serializeMoney = (m: Money.Money): MoneyPayload => ({ cents: m.cents });
 const serializePeriod = (p: Period.Period): PeriodPayload => {
   switch (p.kind) {
     case 'Fixed':
-      return { kind: 'Fixed', start: p.start.toISOString(), end: p.end.toISOString() };
+      return {
+        kind: 'Fixed',
+        start: PlainDate.toISOString(p.start),
+        end: PlainDate.toISOString(p.end),
+      };
     case 'Indefinite':
-      return { kind: 'Indefinite', start: p.start.toISOString() };
+      return { kind: 'Indefinite', start: PlainDate.toISOString(p.start) };
   }
 };
 
@@ -322,22 +327,20 @@ const deserializePeriod = (p: unknown): Result<Period.Period, string> => {
   if (typeof obj['kind'] !== 'string') return err('period-missing-kind');
   if (typeof obj['start'] !== 'string') return err('period-missing-start');
 
-  const startDate = new Date(obj['start']);
-  if (isNaN(startDate.getTime())) return err('period-invalid-start');
+  const start = PlainDate.from(obj['start']);
+  if (!start.ok) return err(`period-invalid-start: ${start.error}`);
 
   if (obj['kind'] === 'Fixed') {
     if (typeof obj['end'] !== 'string') return err('period-fixed-missing-end');
-    const endDate = new Date(obj['end']);
-    if (isNaN(endDate.getTime())) return err('period-invalid-end');
-    const r = Period.create(startDate, endDate);
+    const end = PlainDate.from(obj['end']);
+    if (!end.ok) return err(`period-invalid-end: ${end.error}`);
+    const r = Period.create(start.value, end.value);
     if (!r.ok) return err(r.error);
     return ok(r.value);
   }
 
   if (obj['kind'] === 'Indefinite') {
-    const r = Period.createIndefinite(startDate);
-    if (!r.ok) return err(r.error);
-    return ok(r.value);
+    return ok(Period.createIndefinite(start.value));
   }
 
   return err(`period-unknown-kind: ${obj['kind'] as string}`);

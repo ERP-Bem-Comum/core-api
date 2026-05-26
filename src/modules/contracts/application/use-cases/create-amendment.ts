@@ -1,5 +1,4 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
-import { isValidDate } from '../../../../shared/utils/date.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
 import * as AmendmentId from '../../domain/shared/amendment-id.ts';
 import * as ContractId from '../../domain/shared/contract-id.ts';
@@ -7,6 +6,7 @@ import type { ContractIdError } from '../../domain/shared/contract-id.ts';
 import * as Money from '#src/shared/kernel/money.ts';
 import type { MoneyError } from '#src/shared/kernel/money.ts';
 import * as NonZeroMoney from '#src/shared/kernel/non-zero-money.ts';
+import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import { Amendment } from '../../domain/amendment/amendment.ts';
 import type {
   PendingWithoutDocumentAmendment,
@@ -89,11 +89,11 @@ const buildDomainInput = (
       return ok({ ...baseFields, kind: cmd.kind, impactValue: nonZero.value });
     }
     case 'TermChange': {
-      const newEnd = new Date(cmd.newEndDate);
-      if (!isValidDate(newEnd)) {
+      const newEnd = PlainDate.from(cmd.newEndDate);
+      if (!newEnd.ok) {
         return err('create-amendment-invalid-new-end-date');
       }
-      return ok({ ...baseFields, kind: 'TermChange', newEndDate: newEnd });
+      return ok({ ...baseFields, kind: 'TermChange', newEndDate: newEnd.value });
     }
     case 'Misc':
       return ok({ ...baseFields, kind: 'Misc' });
@@ -122,7 +122,7 @@ export const createAmendment =
       if (currentPeriod.kind === 'Indefinite') {
         return err('create-amendment-cannot-extend-indefinite');
       }
-      if (domainInput.value.newEndDate.getTime() <= currentPeriod.end.getTime()) {
+      if (PlainDate.compare(domainInput.value.newEndDate, currentPeriod.end) <= 0) {
         return err('create-amendment-term-change-not-extending');
       }
     }

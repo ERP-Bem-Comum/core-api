@@ -29,6 +29,7 @@
 
 import type { ContractStatus } from './types.ts';
 import type { Money } from '../../../../shared/kernel/money.ts';
+import type { PlainDate } from '../../../../shared/kernel/plain-date.ts';
 import type { AmendmentId } from '../shared/ids.ts';
 
 // ─── Variants (tagged records, PascalCase adjetival/factual — DO D§24) ─────
@@ -59,8 +60,8 @@ export type ContractNotActive = Readonly<{
 
 export type ContractCannotExpireYet = Readonly<{
   tag: 'ContractCannotExpireYet';
-  currentEnd: Date;
-  attemptedAt: Date;
+  currentEnd: PlainDate;
+  attemptedAt: PlainDate;
 }>;
 
 export type ContractCannotExpireIndefinitePeriod = Readonly<{
@@ -79,8 +80,8 @@ export type ContractValueWouldGoNegative = Readonly<{
 
 export type ContractPeriodExtensionNotAfterCurrentEnd = Readonly<{
   tag: 'ContractPeriodExtensionNotAfterCurrentEnd';
-  currentEnd: Date;
-  attemptedEnd: Date;
+  currentEnd: PlainDate;
+  attemptedEnd: PlainDate;
 }>;
 
 export type ContractAmendmentAlreadyApplied = Readonly<{
@@ -150,8 +151,8 @@ export const contractNotActive = (currentStatus: ContractStatus): ContractNotAct
 });
 
 export const contractCannotExpireYet = (
-  currentEnd: Date,
-  attemptedAt: Date,
+  currentEnd: PlainDate,
+  attemptedAt: PlainDate,
 ): ContractCannotExpireYet => ({
   tag: 'ContractCannotExpireYet',
   currentEnd,
@@ -176,8 +177,8 @@ export const contractValueWouldGoNegative = (
 });
 
 export const contractPeriodExtensionNotAfterCurrentEnd = (
-  currentEnd: Date,
-  attemptedEnd: Date,
+  currentEnd: PlainDate,
+  attemptedEnd: PlainDate,
 ): ContractPeriodExtensionNotAfterCurrentEnd => ({
   tag: 'ContractPeriodExtensionNotAfterCurrentEnd',
   currentEnd,

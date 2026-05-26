@@ -6,6 +6,7 @@ import * as Money from '#src/shared/kernel/money.ts';
 import type { MoneyError } from '#src/shared/kernel/money.ts';
 import * as Period from '#src/shared/kernel/period.ts';
 import type { PeriodError } from '#src/shared/kernel/period.ts';
+import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import { Contract } from '../../domain/contract/contract.ts';
 import type { Contract as ContractEntity } from '../../domain/contract/types.ts';
 import type { ContractEvent } from '../../domain/contract/events.ts';
@@ -67,25 +68,21 @@ export const buildContract = (
   const signedAt = new Date(cmd.signedAt);
   if (!isValidDate(signedAt)) return err('create-contract-invalid-signed-at');
 
-  const periodStart = new Date(cmd.originalPeriodStart);
-  if (!isValidDate(periodStart)) {
-    return err('create-contract-invalid-period-start');
-  }
+  const periodStart = PlainDate.from(cmd.originalPeriodStart);
+  if (!periodStart.ok) return err('create-contract-invalid-period-start');
 
   const moneyResult = Money.fromCents(cmd.originalValueCents);
   if (!moneyResult.ok) return moneyResult;
 
-  const periodResult =
-    cmd.originalPeriodEnd === null
-      ? Period.createIndefinite(periodStart)
-      : (() => {
-          const end = new Date(cmd.originalPeriodEnd);
-          if (!isValidDate(end)) {
-            return err('create-contract-invalid-period-end' as const);
-          }
-          return Period.create(periodStart, end);
-        })();
-  if (!periodResult.ok) return periodResult;
+  const buildPeriod = (): Result<Period.Period, BuildContractError> => {
+    if (cmd.originalPeriodEnd === null) return ok(Period.createIndefinite(periodStart.value));
+    const end = PlainDate.from(cmd.originalPeriodEnd);
+    if (!end.ok) return err('create-contract-invalid-period-end');
+    return Period.create(periodStart.value, end.value);
+  };
+  const periodR = buildPeriod();
+  if (!periodR.ok) return periodR;
+  const originalPeriod = periodR.value;
 
   const created = Contract.create({
     id: ContractId.generate(),
@@ -94,7 +91,7 @@ export const buildContract = (
     objective: cmd.objective,
     signedAt,
     originalValue: moneyResult.value,
-    originalPeriod: periodResult.value,
+    originalPeriod,
   });
   if (!created.ok) return created;
 

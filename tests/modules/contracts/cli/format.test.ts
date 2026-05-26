@@ -4,6 +4,7 @@ import { strict as assert } from 'node:assert';
 import * as Money from '#src/shared/kernel/money.ts';
 import * as NonZeroMoney from '#src/shared/kernel/non-zero-money.ts';
 import * as Period from '#src/shared/kernel/period.ts';
+import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import * as AmendmentId from '#src/modules/contracts/domain/shared/amendment-id.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
 import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
@@ -17,6 +18,12 @@ import {
   formatPeriod,
   formatStatus,
 } from '#src/modules/contracts/cli/formatters/index.ts';
+
+const pd = (iso: string): PlainDate.PlainDate => {
+  const r = PlainDate.from(iso.slice(0, 10));
+  if (!r.ok) throw new Error('fixture broken');
+  return r.value;
+};
 
 const money = (cents: number) => {
   const r = Money.fromCents(cents);
@@ -69,15 +76,14 @@ describe('formatDate', () => {
 
 describe('formatPeriod', () => {
   it('formats Fixed period as "start a end"', () => {
-    const p = Period.create(new Date('2026-01-01'), new Date('2026-12-31'));
+    const p = Period.create(pd('2026-01-01'), pd('2026-12-31'));
     if (!p.ok) throw new Error('fixture broken');
     assert.equal(formatPeriod(p.value), '01/01/2026 a 31/12/2026');
   });
 
   it('formats Indefinite period', () => {
-    const p = Period.createIndefinite(new Date('2026-01-01'));
-    if (!p.ok) throw new Error('fixture broken');
-    assert.equal(formatPeriod(p.value), '01/01/2026 (indefinido)');
+    const p = Period.createIndefinite(pd('2026-01-01'));
+    assert.equal(formatPeriod(p), '01/01/2026 (indefinido)');
   });
 });
 
@@ -116,7 +122,7 @@ describe('formatErrorCode', () => {
 
 describe('formatContract / formatAmendment — real newlines (Defeito #2)', () => {
   const buildPeriod = () => {
-    const r = Period.create(new Date('2026-01-01'), new Date('2026-12-31'));
+    const r = Period.create(pd('2026-01-01'), pd('2026-12-31'));
     if (!r.ok) throw new Error('fixture broken');
     return r.value;
   };

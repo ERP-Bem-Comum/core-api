@@ -22,6 +22,7 @@ import * as DocumentId from '#src/modules/contracts/domain/shared/document-id.ts
 import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import * as Money from '#src/shared/kernel/money.ts';
 import * as Period from '#src/shared/kernel/period.ts';
+import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import type { ContractsModuleEvent } from '#src/modules/contracts/application/ports/event-bus.ts';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
@@ -35,10 +36,10 @@ const unwrap = <T>(label: string, r: { ok: true; value: T } | { ok: false; error
 };
 
 const mkMoney = (cents: number) => unwrap('Money', Money.fromCents(cents));
+const mkPlainDate = (iso: string) => unwrap('PlainDate', PlainDate.from(iso.slice(0, 10)));
 const mkFixedPeriod = (start: string, end: string) =>
-  unwrap('Period.Fixed', Period.create(new Date(start), new Date(end)));
-const mkIndefinitePeriod = (start: string) =>
-  unwrap('Period.Indefinite', Period.createIndefinite(new Date(start)));
+  unwrap('Period.Fixed', Period.create(mkPlainDate(start), mkPlainDate(end)));
+const mkIndefinitePeriod = (start: string) => Period.createIndefinite(mkPlainDate(start));
 
 // Converte OutboxInsert para OutboxRow adicionando os campos de controle ausentes
 // (processedAt null, attempts 0) — simula o que o banco devolveria após INSERT.
@@ -122,13 +123,10 @@ describe('outbox.mapper — round-trip dos 6 event types', () => {
         assert.equal(rehydrated.value.newCurrentPeriod.kind, 'Fixed');
         if (rehydrated.value.newCurrentPeriod.kind === 'Fixed') {
           assert.equal(
-            rehydrated.value.newCurrentPeriod.start.toISOString(),
-            new Date('2026-01-01T00:00:00.000Z').toISOString(),
+            PlainDate.toISOString(rehydrated.value.newCurrentPeriod.start),
+            '2026-01-01',
           );
-          assert.equal(
-            rehydrated.value.newCurrentPeriod.end.toISOString(),
-            new Date('2026-12-31T00:00:00.000Z').toISOString(),
-          );
+          assert.equal(PlainDate.toISOString(rehydrated.value.newCurrentPeriod.end), '2026-12-31');
         }
       }
     });
@@ -155,8 +153,8 @@ describe('outbox.mapper — round-trip dos 6 event types', () => {
         assert.equal(rehydrated.value.newCurrentPeriod.kind, 'Indefinite');
         if (rehydrated.value.newCurrentPeriod.kind === 'Indefinite') {
           assert.equal(
-            rehydrated.value.newCurrentPeriod.start.toISOString(),
-            new Date('2026-03-01T00:00:00.000Z').toISOString(),
+            PlainDate.toISOString(rehydrated.value.newCurrentPeriod.start),
+            '2026-03-01',
           );
         }
       }

@@ -6,6 +6,7 @@ import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import * as Money from '#src/shared/kernel/money.ts';
 import * as NonZeroMoney from '#src/shared/kernel/non-zero-money.ts';
 import * as Period from '#src/shared/kernel/period.ts';
+import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import * as AmendmentId from '#src/modules/contracts/domain/shared/amendment-id.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
 import * as DocumentId from '#src/modules/contracts/domain/shared/document-id.ts';
@@ -25,6 +26,11 @@ import { homologateAmendment } from '#src/modules/contracts/application/use-case
 // CA10 — homologateAmendment emite 2 eventos em saves separados.
 
 const D = (iso: string): Date => new Date(iso);
+const pd = (iso: string): PlainDate.PlainDate => {
+  const r = PlainDate.from(iso.slice(0, 10));
+  if (!r.ok) throw new Error(`fixture broken: ${r.error}`);
+  return r.value;
+};
 const VALID_USER_UUID = '7f3a1234-5678-4abc-9def-fedcba987654';
 
 const money = (cents: number) => {
@@ -41,7 +47,7 @@ const nonZeroMoney = (cents: number) => {
 };
 
 const fixedPeriod = (startISO: string, endISO: string) => {
-  const r = Period.create(D(startISO), D(endISO));
+  const r = Period.create(pd(startISO), pd(endISO));
   if (!r.ok) throw new Error(`fixture broken: ${r.error}`);
   return r.value;
 };
@@ -483,7 +489,7 @@ describe('InMemoryOutbox', () => {
     const outbox = InMemoryOutbox();
     const contractId = ContractId.generate();
     const amendmentId = AmendmentId.generate();
-    const fixedPeriodValue = Period.create(D('2026-01-01'), D('2026-12-31'));
+    const fixedPeriodValue = Period.create(pd('2026-01-01'), pd('2026-12-31'));
     if (!fixedPeriodValue.ok) throw new Error('fixture broken');
     const fixedMoneyValue = Money.fromCents(10000000);
     if (!fixedMoneyValue.ok) throw new Error('fixture broken');

@@ -1,6 +1,7 @@
 import type { Amendment, AmendmentKind, AmendmentStatus } from '../../domain/amendment/types.ts';
 import { formatMoney } from './money.ts';
 import { formatDate } from './date.ts';
+import { formatPlainDate } from './plain-date.ts';
 import { stripControlChars } from './sanitize.ts';
 
 // Tabelas dispatch substituem o `switch` com `throw unreachable` (REGR #2,
@@ -34,7 +35,7 @@ export const formatAmendment = (a: Amendment): string => {
     lines.push(`  Valor de impacto: ${formatMoney(a.impactValue)}`);
   }
   if (a.kind === 'TermChange') {
-    lines.push(`  Nova data fim: ${formatDate(a.newEndDate)}`);
+    lines.push(`  Nova data fim: ${formatPlainDate(a.newEndDate)}`);
   }
   lines.push(`  Documento anexado: ${a.signedDocumentRef === null ? 'não' : 'sim'}`);
   if (a.homologatedAt !== null) {

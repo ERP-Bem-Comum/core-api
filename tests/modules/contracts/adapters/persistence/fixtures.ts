@@ -5,6 +5,7 @@
 import * as Money from '#src/shared/kernel/money.ts';
 import * as NonZeroMoney from '#src/shared/kernel/non-zero-money.ts';
 import * as Period from '#src/shared/kernel/period.ts';
+import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import * as AmendmentId from '#src/modules/contracts/domain/shared/amendment-id.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
 import * as DocumentId from '#src/modules/contracts/domain/shared/document-id.ts';
@@ -45,11 +46,14 @@ export const someNonZeroMoney = (cents: number) => {
   return unwrap('NonZeroMoney', NonZeroMoney.from(m));
 };
 
+// Helper de teste: aceita 'YYYY-MM-DD' ou ISO datetime (usa só a parte de data).
+export const somePlainDate = (iso: string) => unwrap('PlainDate', PlainDate.from(iso.slice(0, 10)));
+
 export const someFixedPeriod = (startISO: string, endISO: string) =>
-  unwrap('Period.Fixed', Period.create(new Date(startISO), new Date(endISO)));
+  unwrap('Period.Fixed', Period.create(somePlainDate(startISO), somePlainDate(endISO)));
 
 export const someIndefinitePeriod = (startISO: string) =>
-  unwrap('Period.Indefinite', Period.createIndefinite(new Date(startISO)));
+  Period.createIndefinite(somePlainDate(startISO));
 
 export type ContractOverrides = Partial<{
   id: string;
@@ -154,7 +158,7 @@ const buildPendingAmendment = (
         ? {
             ...baseInput,
             kind,
-            newEndDate: new Date(overrides.newEndDateISO ?? '2027-12-31'),
+            newEndDate: somePlainDate(overrides.newEndDateISO ?? '2027-12-31'),
           }
         : { ...baseInput, kind };
   return unwrap('Amendment.create', Amendment.create(input)).amendment;

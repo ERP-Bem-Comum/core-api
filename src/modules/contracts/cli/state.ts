@@ -12,6 +12,7 @@ import {
 import { randomUUID } from 'node:crypto';
 import { type Result, ok, err } from '../../../shared/primitives/result.ts';
 import { isUuidV4 } from '../../../shared/utils/id.ts';
+import * as PlainDate from '../../../shared/kernel/plain-date.ts';
 import type { Contract, ContractStatus } from '../domain/contract/types.ts';
 import type { Amendment, AmendmentStatus, AmendmentKind } from '../domain/amendment/types.ts';
 import type { ContractDocument, DocumentCategory } from '../domain/document/types.ts';
@@ -47,9 +48,8 @@ const DATE_KEYS = new Set([
   'createdAt',
   'homologatedAt',
   'occurredAt',
-  'start',
-  'end',
-  'newEndDate',
+  // `start`/`end`/`newEndDate` deixaram de ser Date — agora são PlainDate
+  // ({year,month,day}), serializados como objeto. NÃO entram aqui (CTR-PERIOD-PLAIN-DATE).
   // CTR-AMENDMENT-DOCUMENT-LINK: ContractDocument carrega 2 campos Date.
   'uploadedAt',
   'retentionUntil',
@@ -170,17 +170,31 @@ const isValidMoneyShape = (raw: unknown): boolean => {
   );
 };
 
+const isValidPlainDateShape = (raw: unknown): raw is PlainDate.PlainDate => {
+  if (typeof raw !== 'object' || raw === null) return false;
+  const d = raw as { year?: unknown; month?: unknown; day?: unknown };
+  return (
+    typeof d.year === 'number' &&
+    typeof d.month === 'number' &&
+    d.month >= 1 &&
+    d.month <= 12 &&
+    typeof d.day === 'number' &&
+    d.day >= 1 &&
+    d.day <= 31
+  );
+};
+
 const isValidPeriodShape = (raw: unknown): boolean => {
   if (typeof raw !== 'object' || raw === null) return false;
   const kind = (raw as { kind?: unknown }).kind;
   if (kind === 'Fixed') {
     const { start, end } = raw as { start?: unknown; end?: unknown };
-    if (!isValidDateInstance(start) || !isValidDateInstance(end)) return false;
-    return end.getTime() >= start.getTime();
+    if (!isValidPlainDateShape(start) || !isValidPlainDateShape(end)) return false;
+    return PlainDate.compare(end, start) >= 0;
   }
   if (kind === 'Indefinite') {
     const { start } = raw as { start?: unknown };
-    return isValidDateInstance(start);
+    return isValidPlainDateShape(start);
   }
   return false;
 };
@@ -237,7 +251,7 @@ const isValidAmendment = (raw: unknown): raw is Amendment => {
     if (!isValidMoneyShape(a['impactValue'])) return false;
   }
   if (a['kind'] === 'TermChange') {
-    if (!isValidDateInstance(a['newEndDate'])) return false;
+    if (!isValidPlainDateShape(a['newEndDate'])) return false;
   }
   // CTR-DOMAIN-STATE-MACHINE-AMENDMENT — validação de consistência por status.
   // Pending: homologatedAt e homologatedBy devem ser null (shape impossível rejeitado).

@@ -1,6 +1,7 @@
 import type { AmendmentId, ContractId, DocumentId } from '../shared/ids.ts';
 import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
 import type { NonZeroMoney } from '../../../../shared/kernel/non-zero-money.ts';
+import type { PlainDate } from '../../../../shared/kernel/plain-date.ts';
 import { immutable } from '../../../../shared/primitives/immutable.ts';
 
 /**
@@ -28,7 +29,7 @@ import { immutable } from '../../../../shared/primitives/immutable.ts';
 export type AmendmentVariant = Readonly<
   | { kind: 'Addition'; impactValue: NonZeroMoney }
   | { kind: 'Suppression'; impactValue: NonZeroMoney }
-  | { kind: 'TermChange'; newEndDate: Date }
+  | { kind: 'TermChange'; newEndDate: PlainDate }
   | { kind: 'Misc' }
 >;
 
@@ -167,6 +168,6 @@ export type CreateAmendmentInput = CreateAmendmentInputBase &
   Readonly<
     | { kind: 'Addition'; impactValue: NonZeroMoney }
     | { kind: 'Suppression'; impactValue: NonZeroMoney }
-    | { kind: 'TermChange'; newEndDate: Date }
+    | { kind: 'TermChange'; newEndDate: PlainDate }
     | { kind: 'Misc' }
   >;

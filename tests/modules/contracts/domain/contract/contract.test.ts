@@ -4,6 +4,7 @@ import { strict as assert } from 'node:assert';
 import { isErr, isOk } from '#src/shared/index.ts';
 import * as Money from '#src/shared/kernel/money.ts';
 import * as Period from '#src/shared/kernel/period.ts';
+import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import * as AmendmentId from '#src/modules/contracts/domain/shared/amendment-id.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
 import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
@@ -17,6 +18,11 @@ import { updateContract } from '#src/modules/contracts/domain/contract/types.ts'
 
 const D = (iso: string): Date => new Date(iso);
 const INVALID_DATE = new Date('not-a-date');
+const pd = (iso: string): PlainDate.PlainDate => {
+  const r = PlainDate.from(iso.slice(0, 10));
+  if (!r.ok) throw new Error(`test fixture broken: ${r.error}`);
+  return r.value;
+};
 
 const money = (cents: number) => {
   const r = Money.fromCents(cents);
@@ -25,16 +31,12 @@ const money = (cents: number) => {
 };
 
 const fixedPeriod = (startISO: string, endISO: string) => {
-  const r = Period.create(D(startISO), D(endISO));
+  const r = Period.create(pd(startISO), pd(endISO));
   if (!r.ok) throw new Error(`test fixture broken: ${r.error}`);
   return r.value;
 };
 
-const indefinitePeriod = (startISO: string) => {
-  const r = Period.createIndefinite(D(startISO));
-  if (!r.ok) throw new Error(`test fixture broken: ${r.error}`);
-  return r.value;
-};
+const indefinitePeriod = (startISO: string) => Period.createIndefinite(pd(startISO));
 
 const validInput = (overrides: Partial<CreateContractInput> = {}): CreateContractInput => ({
   id: ContractId.generate(),
@@ -212,8 +214,8 @@ describe('Contract.expire — rejections', () => {
     if (!r.ok) {
       assert.equal(r.error.tag, 'ContractCannotExpireYet');
       if (r.error.tag === 'ContractCannotExpireYet') {
-        assert.equal(r.error.currentEnd.getTime(), D('2026-12-31').getTime());
-        assert.equal(r.error.attemptedAt.getTime(), D('2026-06-15').getTime());
+        assert.equal(PlainDate.equals(r.error.currentEnd, pd('2026-12-31')), true);
+        assert.equal(PlainDate.equals(r.error.attemptedAt, pd('2026-06-15')), true);
       }
     }
   });
@@ -384,14 +386,14 @@ describe('Contract.applyHomologatedAdjustment — PeriodExtension', () => {
     const contract = createActive();
     const adjustment: ContractAdjustment = {
       kind: 'PeriodExtension',
-      newEnd: D('2027-06-30'),
+      newEnd: pd('2027-06-30'),
       amendmentId: AmendmentId.generate(),
     };
     const r = Contract.applyHomologatedAdjustment(contract, adjustment, D('2026-11-01'));
     assert.equal(isOk(r), true);
     if (!r.ok) return;
     if (r.value.contract.currentPeriod.kind === 'Fixed') {
-      assert.equal(r.value.contract.currentPeriod.end.getTime(), D('2027-06-30').getTime());
+      assert.equal(PlainDate.equals(r.value.contract.currentPeriod.end, pd('2027-06-30')), true);
     } else {
       throw new Error('expected Fixed currentPeriod');
     }
@@ -401,7 +403,7 @@ describe('Contract.applyHomologatedAdjustment — PeriodExtension', () => {
     const contract = createActive();
     const adjustment: ContractAdjustment = {
       kind: 'PeriodExtension',
-      newEnd: D('2026-06-30'),
+      newEnd: pd('2026-06-30'),
       amendmentId: AmendmentId.generate(),
     };
     const r = Contract.applyHomologatedAdjustment(contract, adjustment, D('2026-03-01'));
@@ -409,8 +411,8 @@ describe('Contract.applyHomologatedAdjustment — PeriodExtension', () => {
     if (!r.ok) {
       assert.equal(r.error.tag, 'ContractPeriodExtensionNotAfterCurrentEnd');
       if (r.error.tag === 'ContractPeriodExtensionNotAfterCurrentEnd') {
-        assert.equal(r.error.currentEnd.getTime(), D('2026-12-31').getTime());
-        assert.equal(r.error.attemptedEnd.getTime(), D('2026-06-30').getTime());
+        assert.equal(PlainDate.equals(r.error.currentEnd, pd('2026-12-31')), true);
+        assert.equal(PlainDate.equals(r.error.attemptedEnd, pd('2026-06-30')), true);
       }
     }
   });
@@ -420,7 +422,7 @@ describe('Contract.applyHomologatedAdjustment — PeriodExtension', () => {
     if (!r.ok) throw new Error('fixture broken');
     const adjustment: ContractAdjustment = {
       kind: 'PeriodExtension',
-      newEnd: D('2099-01-01'),
+      newEnd: pd('2099-01-01'),
       amendmentId: AmendmentId.generate(),
     };
     const applied = Contract.applyHomologatedAdjustment(

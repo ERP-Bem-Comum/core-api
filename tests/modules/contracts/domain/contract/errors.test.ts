@@ -6,9 +6,14 @@ import { strict as assert } from 'node:assert';
 // deve compilar e expor as case constructors como free functions no W1.
 import * as ContractError from '#src/modules/contracts/domain/contract/errors.ts';
 import * as Money from '#src/shared/kernel/money.ts';
+import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import * as AmendmentId from '#src/modules/contracts/domain/shared/amendment-id.ts';
 
-const D = (iso: string): Date => new Date(iso);
+const pd = (iso: string): PlainDate.PlainDate => {
+  const r = PlainDate.from(iso);
+  if (!r.ok) throw new Error(`test fixture broken: ${r.error}`);
+  return r.value;
+};
 
 const money = (cents: number) => {
   const r = Money.fromCents(cents);
@@ -91,14 +96,14 @@ describe('ContractError variants — tagged records (DO D§22 + D24)', () => {
 
   it('contractCannotExpireYet cria { tag: "ContractCannotExpireYet", currentEnd, attemptedAt } (D23)', () => {
     // Arrange
-    const currentEnd = D('2026-12-31');
-    const attemptedAt = D('2026-06-15');
+    const currentEnd = pd('2026-12-31');
+    const attemptedAt = pd('2026-06-15');
     // Act
     const e = ContractError.contractCannotExpireYet(currentEnd, attemptedAt);
     // Assert
     assert.equal(e.tag, 'ContractCannotExpireYet');
-    assert.equal(e.currentEnd.getTime(), currentEnd.getTime());
-    assert.equal(e.attemptedAt.getTime(), attemptedAt.getTime());
+    assert.equal(PlainDate.equals(e.currentEnd, currentEnd), true);
+    assert.equal(PlainDate.equals(e.attemptedAt, attemptedAt), true);
   });
 
   it('contractValueWouldGoNegative cria { tag, currentValue, attemptedDecrease } (D23)', () => {
@@ -115,14 +120,14 @@ describe('ContractError variants — tagged records (DO D§22 + D24)', () => {
 
   it('contractPeriodExtensionNotAfterCurrentEnd cria { tag, currentEnd, attemptedEnd } (D23)', () => {
     // Arrange
-    const currentEnd = D('2026-12-31');
-    const attemptedEnd = D('2026-06-30');
+    const currentEnd = pd('2026-12-31');
+    const attemptedEnd = pd('2026-06-30');
     // Act
     const e = ContractError.contractPeriodExtensionNotAfterCurrentEnd(currentEnd, attemptedEnd);
     // Assert
     assert.equal(e.tag, 'ContractPeriodExtensionNotAfterCurrentEnd');
-    assert.equal(e.currentEnd.getTime(), currentEnd.getTime());
-    assert.equal(e.attemptedEnd.getTime(), attemptedEnd.getTime());
+    assert.equal(PlainDate.equals(e.currentEnd, currentEnd), true);
+    assert.equal(PlainDate.equals(e.attemptedEnd, attemptedEnd), true);
   });
 
   it('contractAmendmentAlreadyApplied cria { tag, amendmentId } (D23)', () => {
@@ -243,7 +248,7 @@ describe('ContractError — tag value matches PascalCase do nome do construtor (
       ['ContractNotActive', () => ContractError.contractNotActive('Expired')],
       [
         'ContractCannotExpireYet',
-        () => ContractError.contractCannotExpireYet(D('2026-12-31'), D('2026-06-15')),
+        () => ContractError.contractCannotExpireYet(pd('2026-12-31'), pd('2026-06-15')),
       ],
       [
         'ContractValueWouldGoNegative',
@@ -252,7 +257,10 @@ describe('ContractError — tag value matches PascalCase do nome do construtor (
       [
         'ContractPeriodExtensionNotAfterCurrentEnd',
         () =>
-          ContractError.contractPeriodExtensionNotAfterCurrentEnd(D('2026-12-31'), D('2026-06-30')),
+          ContractError.contractPeriodExtensionNotAfterCurrentEnd(
+            pd('2026-12-31'),
+            pd('2026-06-30'),
+          ),
       ],
       [
         'ContractAmendmentAlreadyApplied',

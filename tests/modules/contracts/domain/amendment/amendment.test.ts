@@ -4,6 +4,7 @@ import { strict as assert } from 'node:assert';
 import { isErr, isOk } from '#src/shared/index.ts';
 import * as Money from '#src/shared/kernel/money.ts';
 import * as NonZeroMoney from '#src/shared/kernel/non-zero-money.ts';
+import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import * as AmendmentId from '#src/modules/contracts/domain/shared/amendment-id.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
 import * as DocumentId from '#src/modules/contracts/domain/shared/document-id.ts';
@@ -15,6 +16,11 @@ import { toContractAdjustment } from '#src/modules/contracts/application/use-cas
 
 const D = (iso: string): Date => new Date(iso);
 const INVALID_DATE = new Date('not-a-date');
+const pd = (iso: string): PlainDate.PlainDate => {
+  const r = PlainDate.from(iso);
+  if (!r.ok) throw new Error(`test fixture broken: ${r.error}`);
+  return r.value;
+};
 const VALID_UUID = '7f3a1234-5678-4abc-9def-fedcba987654';
 
 const money = (cents: number) => {
@@ -132,24 +138,14 @@ describe('Amendment.create — TermChange', () => {
     const r = Amendment.create({
       ...baseInput(),
       kind: 'TermChange',
-      newEndDate: D('2027-06-30'),
+      newEndDate: pd('2027-06-30'),
     });
     assert.equal(isOk(r), true);
     if (!r.ok) return;
     assert.equal(r.value.amendment.kind, 'TermChange');
     if (r.value.amendment.kind === 'TermChange') {
-      assert.equal(r.value.amendment.newEndDate.getTime(), D('2027-06-30').getTime());
+      assert.equal(PlainDate.equals(r.value.amendment.newEndDate, pd('2027-06-30')), true);
     }
-  });
-
-  it('rejects invalid newEndDate', () => {
-    const r = Amendment.create({
-      ...baseInput(),
-      kind: 'TermChange',
-      newEndDate: INVALID_DATE,
-    });
-    assert.equal(isErr(r), true);
-    if (!r.ok) assert.equal(r.error.tag, 'AmendmentInvalidNewEndDate');
   });
 });
 
@@ -331,13 +327,13 @@ describe('toContractAdjustment', () => {
     const r = Amendment.create({
       ...baseInput(),
       kind: 'TermChange',
-      newEndDate: D('2027-12-31'),
+      newEndDate: pd('2027-12-31'),
     });
     if (!r.ok) throw new Error('fixture broken');
     const adj = toContractAdjustment(r.value.amendment);
     assert.equal(adj.kind, 'PeriodExtension');
     if (adj.kind === 'PeriodExtension') {
-      assert.equal(adj.newEnd.getTime(), D('2027-12-31').getTime());
+      assert.equal(PlainDate.equals(adj.newEnd, pd('2027-12-31')), true);
     }
   });
 

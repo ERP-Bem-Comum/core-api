@@ -41,6 +41,7 @@ import * as DocumentId from '#src/modules/contracts/domain/shared/document-id.ts
 import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
 import * as Money from '#src/shared/kernel/money.ts';
 import * as Period from '#src/shared/kernel/period.ts';
+import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 
 const CONTRACT_UUID = '44444444-4444-4444-8444-444444444444';
 const USER_UUID = '55555555-5555-4555-8555-555555555555';
@@ -49,6 +50,8 @@ const fromOk = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }, la
   if (!r.ok) throw new Error(`fixture ${label}: ${JSON.stringify(r.error)}`);
   return r.value;
 };
+
+const pd = (iso: string) => fromOk(PlainDate.from(iso), 'plainDate');
 
 const setupWorld = async (overrides?: {
   storage?: DocumentStorage;
@@ -64,7 +67,7 @@ const setupWorld = async (overrides?: {
   // Cria contract para servir de parent valido.
   const contractId = fromOk(ContractId.rehydrate(CONTRACT_UUID), 'contractId');
   const moneyR = Money.fromCents(100_000);
-  const periodR = Period.create(new Date('2026-01-01'), new Date('2026-12-31'));
+  const periodR = Period.create(pd('2026-01-01'), pd('2026-12-31'));
   if (!moneyR.ok || !periodR.ok) throw new Error('fixture money/period');
   const created = Contract.create({
     id: contractId,

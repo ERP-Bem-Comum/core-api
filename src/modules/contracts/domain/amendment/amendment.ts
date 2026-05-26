@@ -86,9 +86,7 @@ const validateVariantInput = (
       // não como runtime guard aqui. O caso de uso (rota γ, DO D§26) é o ponto de refinamento.
       return ok(true);
     case 'TermChange':
-      if (!isValidDate(input.newEndDate)) {
-        return err(AmendmentError.amendmentInvalidNewEndDate());
-      }
+      // `newEndDate` é `PlainDate` — validade da data garantida na construção (VO).
       return ok(true);
     case 'Misc':
       return ok(true);

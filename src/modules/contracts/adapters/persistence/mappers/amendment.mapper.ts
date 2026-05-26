@@ -3,6 +3,7 @@
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
 import type { NonZeroMoney } from '#src/shared/kernel/non-zero-money.ts';
 import * as NonZeroMoneyNS from '#src/shared/kernel/non-zero-money.ts';
+import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import type {
   Amendment,
   AmendmentKind,
@@ -176,7 +177,13 @@ export const amendmentToInsert = (a: Amendment): AmendmentInsert => {
     case 'Suppression':
       return { ...base, impactValueCents: a.impactValue.cents, newEndDate: null };
     case 'TermChange':
-      return { ...base, impactValueCents: null, newEndDate: a.newEndDate };
+      // Coluna `new_end_date` segue `DATETIME(3)`; converte PlainDate → Date UTC
+      // na borda (ver inquiry 0020 / period.mapper). Fase 2b migra a coluna.
+      return {
+        ...base,
+        impactValueCents: null,
+        newEndDate: new Date(Date.UTC(a.newEndDate.year, a.newEndDate.month - 1, a.newEndDate.day)),
+      };
     case 'Misc':
       return { ...base, impactValueCents: null, newEndDate: null };
     default: {
@@ -194,7 +201,7 @@ export const amendmentToInsert = (a: Amendment): AmendmentInsert => {
 type VariantPart =
   | Readonly<{ kind: 'Addition'; impactValue: NonZeroMoney }>
   | Readonly<{ kind: 'Suppression'; impactValue: NonZeroMoney }>
-  | Readonly<{ kind: 'TermChange'; newEndDate: Date }>
+  | Readonly<{ kind: 'TermChange'; newEndDate: PlainDate.PlainDate }>
   | Readonly<{ kind: 'Misc' }>;
 
 // Campos base comuns (sem variant, sem estado).
@@ -236,7 +243,7 @@ const variantFromRow = (
     case 'TermChange': {
       if (newEndDate === null)
         return err(amendmentMapperImpossibleShape('missing-new-end-date-for-term-change'));
-      return ok({ kind: 'TermChange' as const, newEndDate });
+      return ok({ kind: 'TermChange' as const, newEndDate: PlainDate.fromDate(newEndDate) });
     }
     case 'Misc':
       return ok({ kind: 'Misc' as const });

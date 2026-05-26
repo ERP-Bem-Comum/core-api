@@ -5,6 +5,7 @@ import { isErr, isOk } from '#src/shared/index.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import * as Money from '#src/shared/kernel/money.ts';
 import * as Period from '#src/shared/kernel/period.ts';
+import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
 import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
 import type { Contract as ContractEntity } from '#src/modules/contracts/domain/contract/types.ts';
@@ -17,6 +18,11 @@ import { endContract } from '#src/modules/contracts/application/use-cases/end-co
 // ContractEnded via outbox no save. deps = { contractRepo, clock }.
 
 const D = (iso: string): Date => new Date(iso);
+const pd = (iso: string): PlainDate.PlainDate => {
+  const r = PlainDate.from(iso.slice(0, 10));
+  if (!r.ok) throw new Error(`fixture broken: ${JSON.stringify(r.error)}`);
+  return r.value;
+};
 
 const money = (cents: number) => {
   const r = Money.fromCents(cents);
@@ -25,16 +31,12 @@ const money = (cents: number) => {
 };
 
 const fixedPeriod = (startISO: string, endISO: string) => {
-  const r = Period.create(D(startISO), D(endISO));
+  const r = Period.create(pd(startISO), pd(endISO));
   if (!r.ok) throw new Error(`fixture broken: ${JSON.stringify(r.error)}`);
   return r.value;
 };
 
-const indefinitePeriod = (startISO: string) => {
-  const r = Period.createIndefinite(D(startISO));
-  if (!r.ok) throw new Error(`fixture broken: ${JSON.stringify(r.error)}`);
-  return r.value;
-};
+const indefinitePeriod = (startISO: string) => Period.createIndefinite(pd(startISO));
 
 // ============================================================================
 // Test harness — mundo com um contrato Active (ou pré-encerrado) persistido

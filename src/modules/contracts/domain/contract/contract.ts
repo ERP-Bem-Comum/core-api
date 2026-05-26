@@ -3,6 +3,7 @@ import { isValidDate } from '../../../../shared/utils/date.ts';
 import { isBlank } from '../../../../shared/utils/string.ts';
 import * as Money from '../../../../shared/kernel/money.ts';
 import * as Period from '../../../../shared/kernel/period.ts';
+import * as PlainDate from '../../../../shared/kernel/plain-date.ts';
 import type {
   Contract as ContractEntity,
   ActiveContract,
@@ -117,8 +118,9 @@ const expire = (
     return err(ContractError.contractCannotExpireIndefinitePeriod());
   }
 
-  if (at.getTime() < contract.currentPeriod.end.getTime()) {
-    return err(ContractError.contractCannotExpireYet(contract.currentPeriod.end, at));
+  const atDate = PlainDate.fromDate(at);
+  if (PlainDate.isBefore(atDate, contract.currentPeriod.end)) {
+    return err(ContractError.contractCannotExpireYet(contract.currentPeriod.end, atDate));
   }
 
   // Construção direta de ExpiredContract — sem `updateContract` (que retorna
@@ -216,7 +218,7 @@ const applyHomologatedAdjustment = (
       if (contract.currentPeriod.kind === 'Indefinite') {
         return err(ContractError.contractCannotExtendIndefinitePeriod());
       }
-      if (adjustment.newEnd.getTime() <= contract.currentPeriod.end.getTime()) {
+      if (PlainDate.compare(adjustment.newEnd, contract.currentPeriod.end) <= 0) {
         return err(
           ContractError.contractPeriodExtensionNotAfterCurrentEnd(
             contract.currentPeriod.end,
