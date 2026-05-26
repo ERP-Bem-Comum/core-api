@@ -46,6 +46,12 @@
             "if": "Bash(npm *)",
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-npm.sh",
             "statusMessage": "Verificando comando npm (proibido)..."
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-cross-project-docker.sh",
+            "timeout": 10,
+            "statusMessage": "Verificando isolamento Docker core-api <-> legacy..."
           }
         ]
       }
