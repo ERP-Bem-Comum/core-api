@@ -1,11 +1,11 @@
 # Inquiry-0017: Timeline (Memória Operacional) — read-model vs. ADR-0020 (sem JSON)
 
-- **Status:** Open
+- **Status:** Decided
 - **Opened:** 2026-05-25
-- **Closed/Decided:** —
+- **Closed/Decided:** 2026-05-26
 - **Opened by:** Gabriel Aderaldo (via orquestrador)
 - **Asked to:** P.O. + análise interna do handbook
-- **Impact:** novo ADR (read-model de Timeline) + possivelmente revisão de UC-02/UC-08; bloqueia ticket `CTR-TIMELINE-READ-MODEL`
+- **Impact:** [ADR-0022](../architecture/adr/0022-read-models-via-projection-over-event-stream.md); desbloqueia ticket `CTR-TIMELINE-READ-MODEL`
 
 ---
 
@@ -97,9 +97,18 @@ histórico e a Alternativa B fica inviável.
 
 ## 5. Decisão final
 
-**PENDENTE.** Bloqueador: confirmar o ciclo de vida do outbox (pergunta 3) e a posição do P.O.
-sobre A vs. C. Nada de código no BC Timeline até a decisão (regra do orquestrador:
-dúvida arquitetural duradoura → inquiry antes de codar).
+**DECIDIDA (2026-05-26) → [ADR-0022](../architecture/adr/0022-read-models-via-projection-over-event-stream.md).**
+
+Investigação da pergunta 3 resolvida: **o outbox retém as entradas** (worker faz `markProcessed`,
+não deleta; índice em `processedAt`; dead-letter table) → o `ctr_outbox` **já é o log append-only**
+de eventos. Logo:
+
+- **Alt. C (event-store novo) rejeitada** — redundante com o outbox.
+- **Alt. B (derive on-read) rejeitada** — acopla leitura à entrega; payload VARCHAR serializado.
+- **Alt. A escolhida** — Timeline é **read-model projetado** sobre o stream, alimentado pelo
+  event-delivery existente, com colunas decompostas (ADR-0020). Implementar **agora**.
+
+Decidida em conjunto com [Inquiry-0018](./0018-auditlog-transversal-todos-bcs.md) (mesmo padrão de projeção).
 
 ---
 

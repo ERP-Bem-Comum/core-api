@@ -1,11 +1,11 @@
 # Inquiry-0018: `AuditLogGenerated` — trilha de auditoria transversal a todos os BCs
 
-- **Status:** Open
-- **Closed/Decided:** —
+- **Status:** Decided (deferred)
 - **Opened:** 2026-05-25
+- **Closed/Decided:** 2026-05-26
 - **Opened by:** Gabriel Aderaldo (via orquestrador)
 - **Asked to:** P.O. + análise interna do handbook
-- **Impact:** novo ADR (auditoria transversal); cruza Contracts + Financial + módulos futuros; depende da estratégia de identidade/RBAC
+- **Impact:** [ADR-0022](../architecture/adr/0022-read-models-via-projection-over-event-stream.md) (padrão de projeção decidido; materialização diferida até RBAC)
 
 ---
 
@@ -81,8 +81,13 @@ quando o "Quem" passa a ser confiável.
 
 ## 5. Decisão final
 
-**PENDENTE.** Bloqueadores: (a) estratégia de identidade/RBAC (Fase 2+); (b) decisão sobre
-event-store compartilhado com Inquiry-0017. Nada de código transversal de auditoria até lá.
+**DECIDIDA-DIFERIDA (2026-05-26) → [ADR-0022](../architecture/adr/0022-read-models-via-projection-over-event-stream.md).**
+
+- **Padrão decidido:** AuditLog será um **read-model projetado** sobre o stream de eventos (mesmo
+  mecanismo da Timeline — [Inquiry-0017](./0017-timeline-read-model-vs-adr-0020.md)), **transversal**
+  (fora dos prefixos de módulo). O outbox já é o log append-only — sem event-store novo.
+- **Materialização DIFERIDA** até existir identidade/RBAC: sem ator autenticado, o "Quem" é de
+  fachada. **Reabrir** quando a inquiry/ADR de identidade & RBAC for decidida.
 
 ---
 

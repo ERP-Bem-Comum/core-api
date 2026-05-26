@@ -4,6 +4,22 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-05-26 — ADR-0022: Read-models via projeção (decide inquiries 0017 + 0018)
+
+### Decisão
+
+[Inquiry-0017](./inquiries/0017-timeline-read-model-vs-adr-0020.md) (Timeline) e [Inquiry-0018](./inquiries/0018-auditlog-transversal-todos-bcs.md) (AuditLog) decididas em conjunto → **[ADR-0022](./architecture/adr/0022-read-models-via-projection-over-event-stream.md)**.
+
+Achado decisivo: o `ctr_outbox` **retém** entradas após entrega (`markProcessed`, não delete) — já é o **log append-only** de eventos. Logo:
+
+- Outbox = log canônico; **sem event-store novo** (rejeitado por redundância).
+- **Derive-on-read do outbox rejeitado** (acopla leitura à entrega; payload VARCHAR serializado).
+- **Read-models via projeção** sobre o stream (alimentados pelo event-delivery existente), colunas decompostas (ADR-0020).
+- **Timeline:** implementar agora (`ctr_timeline_*`; UC-02/UC-08). Desbloqueia `CTR-TIMELINE-READ-MODEL`.
+- **AuditLog:** mesmo padrão (transversal), **diferido** até identidade/RBAC (o "Quem" não é confiável sem ator autenticado).
+
+---
+
 ## 2026-05-25 — Acabamento de Contracts (UC-07 + R4) + 2 inquiries arquiteturais
 
 ### Contexto

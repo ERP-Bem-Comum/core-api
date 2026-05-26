@@ -10,11 +10,11 @@
 
 | # | Status | Última atualização |
 | :--- | :--- | :--- |
-| Total | 19 | 2026-05-25 |
-| `Decided` | 10 | — |
+| Total | 19 | 2026-05-26 |
+| `Decided` | 12 | — |
 | `Pending Response` | 0 | — |
 | `Obsoleta (revisada)` | 1 | — |
-| `Open` | 7 | — |
+| `Open` | 5 | — |
 | `Deferred` | 1 | — |
 
 ---
@@ -36,6 +36,8 @@
 | [0010](./0010-mysql-engine-correction.md) | Correção de assunção — engine real é MySQL 8 | [ADR-0013](../architecture/adr/0013-mysql-database-engine.md), [ADR-0014](../architecture/adr/0014-mysql-database-isolation.md), [ADR-0015](../architecture/adr/0015-mysql-outbox-pattern.md) | 2026-04-28 |
 | [0013](./0013-local-dev-simulator-and-ci.md) | Simulador local da cloud (Devbox + Tilt + docker-compose) + CI GitHub Actions | (sem ADR ainda — implementação pendente) | 2026-05-13 |
 | [0003](./0003-multi-cloud-strategy.md) | Estratégia multi-cloud (originalmente AWS+GCP) | [ADR-0021](../architecture/adr/0021-aws-primary-magalu-pbe-supersedes-0007.md) (supersedes [ADR-0007](../architecture/adr/0007-multi-cloud-aws-gcp.md)) | 2026-05-22 |
+| [0017](./0017-timeline-read-model-vs-adr-0020.md) | Timeline read-model vs. ADR-0020 (sem JSON) | [ADR-0022](../architecture/adr/0022-read-models-via-projection-over-event-stream.md) (projeção; outbox é o log append-only) | 2026-05-26 |
+| [0018](./0018-auditlog-transversal-todos-bcs.md) | `AuditLogGenerated` transversal | [ADR-0022](../architecture/adr/0022-read-models-via-projection-over-event-stream.md) — **decided-deferred** (padrão de projeção; materialização espera RBAC) | 2026-05-26 |
 
 ### ⏳ Pending Response
 
@@ -49,8 +51,6 @@ _Nenhuma._
 | [0012](./0012-bff-managed-api-gateway-vs-fastify.md) | BFF — AWS API Gateway managed vs. Fastify burro próprio | Banca interna + DevOps + dono do legado | Bloqueia skeleton do `bff-gateway`. Possível supersede do ADR-0005. Legado precisa de `setGlobalPrefix('api/v1')` antes de viabilizar Hipótese A |
 | [0014](./0014-schema-legado-vs-modelo-alvo.md) | Schema legado real vs. modelo alvo do handbook (4 perguntas Q1–Q4) | Banca interna + P.O. | Bloqueia (Q1) revisão do ADR-0017; (Q2) abertura de BC novo de Planejamento Orçamentário; (Q3) política de migração de `contracts`; (Q4) primeiro vertical slice |
 | [0015](./0015-charset-drizzle-roadmap.md) | Charset/collate por tabela via API drizzle-orm — roadmap | Upstream `drizzle-team/drizzle-orm` | Dívida tipográfica não-bloqueante: hoje SQL manual na migration `0000_*.sql` com comentário forte no schema TS. Reabrir quando drizzle-orm suportar `charset`/`collate` table-level + per-column |
-| [0017](./0017-timeline-read-model-vs-adr-0020.md) | Timeline (read-model UC-02/UC-08) vs. ADR-0020 (sem JSON) | P.O. + investigação do ciclo de vida do outbox | Bloqueia ticket `CTR-TIMELINE-READ-MODEL`. Decisão A (projeção) vs C (event-store) — preferencialmente junto da 0018 |
-| [0018](./0018-auditlog-transversal-todos-bcs.md) | `AuditLogGenerated` transversal a todos os BCs | Estratégia de identidade/RBAC (Fase 2+) | Auditoria "Quem/De/Para" depende de ator autenticado inexistente. Sinergia de event-store com a 0017 |
 | [0019](./0019-hard-delete-tripwire-sem-superficie.md) | `TentativaDeExclusaoDetectada` — tripwire sem superfície | P.O. + decisão de infra/segurança | Não há comando de deleção física no sistema; melhor prevenir por privilégio MySQL que detectar por evento. Acopla a 0018 + RBAC |
 
 ### 🔵 Deferred

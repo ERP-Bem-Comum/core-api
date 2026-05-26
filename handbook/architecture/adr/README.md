@@ -109,6 +109,7 @@ Um **ADR (Architecture Decision Record)** é um documento curto que captura uma 
 | [0019](./0019-document-storage-s3-with-minio-dev.md) | Document Storage — AWS S3 (produção) com MinIO via Docker (dev/homologação) | Accepted | 2026-05-15 |
 | [0020](./0020-mysql-only-supersedes-dual-dialect.md) | MySQL como Único Dialeto de Persistência (supersedes 0018) | Accepted | 2026-05-15 |
 | [0021](./0021-aws-primary-magalu-pbe-supersedes-0007.md) | Topologia Cloud — AWS (Codebit) Primária + MagaluCloud PBE Interno (supersedes 0007) | Accepted | 2026-05-22 |
+| [0022](./0022-read-models-via-projection-over-event-stream.md) | Read-Models via Projeção sobre o Event Stream (Timeline agora, AuditLog diferido) | Accepted | 2026-05-26 |
 
 ---
 
