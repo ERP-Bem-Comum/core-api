@@ -22,6 +22,10 @@ coverage/
 # Lista de arquivos a copiar para cada worktree novo: .worktreeinclude (versionado)
 .claude/worktrees/
 
+# Memória local de sub-agentes — notas geradas por agents durante a sessão
+# (efêmero, específico da máquina; não é fonte de verdade do projeto)
+.claude/agent-memory/
+
 # Guidelines locais — material de referência com copyright/restrição de terceiros
 # (PDFs do Bradesco, guias internos não-distribuíveis). Visível para IAs CLI via
 # leitura direta do filesystem, mas NÃO entra no repo. Ver `CLAUDE.md` §"Política
