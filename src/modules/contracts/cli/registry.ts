@@ -8,6 +8,7 @@ import * as subirDocumento from './commands/subir-documento.ts';
 import * as excluirDocumento from './commands/excluir-documento.ts';
 import * as substituirDocumento from './commands/substituir-documento.ts';
 import * as homologarAditivo from './commands/homologar-aditivo.ts';
+import * as encerrarContrato from './commands/encerrar-contrato.ts';
 import * as runOutboxWorker from './commands/run-outbox-worker.ts';
 
 export type SubCommand = Readonly<{
@@ -26,5 +27,6 @@ export const REGISTRY: Readonly<Record<string, SubCommand>> = {
   'excluir-documento': excluirDocumento,
   'substituir-documento': substituirDocumento,
   'homologar-aditivo': homologarAditivo,
+  'encerrar-contrato': encerrarContrato,
   'run-outbox-worker': runOutboxWorker,
 };
