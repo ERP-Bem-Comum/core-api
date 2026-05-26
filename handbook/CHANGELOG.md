@@ -4,19 +4,60 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
-## 2026-05-26 — ADR-0022: Read-models via projeção (decide inquiries 0017 + 0018)
+## 2026-05-26 — Acabamento de Contracts (parte 2): UC-11 import, Timeline e ADR-0022
 
-### Decisão
+### Contexto
 
-[Inquiry-0017](./inquiries/0017-timeline-read-model-vs-adr-0020.md) (Timeline) e [Inquiry-0018](./inquiries/0018-auditlog-transversal-todos-bcs.md) (AuditLog) decididas em conjunto → **[ADR-0022](./architecture/adr/0022-read-models-via-projection-over-event-stream.md)**.
+Continuação da sessão de fechamento de gaps (parte 1 em 2026-05-25). Executados os gaps que
+estavam no backlog + decisão arquitetural dos itens que dependiam de investigação. Tudo via
+pipeline W0→W3 e commitado/pushed na branch `wip/checkpoint-2026-05-25`.
 
-Achado decisivo: o `ctr_outbox` **retém** entradas após entrega (`markProcessed`, não delete) — já é o **log append-only** de eventos. Logo:
+### Decisão arquitetural — ADR-0022 (decide inquiries 0017 + 0018)
+
+[Inquiry-0017](./inquiries/0017-timeline-read-model-vs-adr-0020.md) (Timeline) e
+[Inquiry-0018](./inquiries/0018-auditlog-transversal-todos-bcs.md) (AuditLog) decididas em
+conjunto → **[ADR-0022](./architecture/adr/0022-read-models-via-projection-over-event-stream.md)** (Accepted).
+
+Achado decisivo: o `ctr_outbox` **retém** entradas após entrega (`markProcessed`, não delete) —
+já é o **log append-only** de eventos. Logo:
 
 - Outbox = log canônico; **sem event-store novo** (rejeitado por redundância).
 - **Derive-on-read do outbox rejeitado** (acopla leitura à entrega; payload VARCHAR serializado).
 - **Read-models via projeção** sobre o stream (alimentados pelo event-delivery existente), colunas decompostas (ADR-0020).
-- **Timeline:** implementar agora (`ctr_timeline_*`; UC-02/UC-08). Desbloqueia `CTR-TIMELINE-READ-MODEL`.
+- **Timeline:** implementada (projeção + UC-08); pass 2 (CLI + MySQL) no backlog.
 - **AuditLog:** mesmo padrão (transversal), **diferido** até identidade/RBAC (o "Quem" não é confiável sem ator autenticado).
+- Índice de ADRs e `inquiries/INDEX.md` atualizados (0017 `Decided`, 0018 `Decided (deferred)`; Decided 10→12, Open 7→5).
+
+### Adicionado (código — tickets closed-green)
+
+- **`CTR-IMPORT-LEGACY` (UC-11, núcleo)** — `especificacao-dominio.md:463-476`. Use case `importContracts`
+  (v1 só Contratos Mãe): dry-run + persistente, relatório por linha, atomicidade por linha, duplicidade
+  intra-arquivo + vs repo. **CNPJ validado e descartado** (D2) via novo `shared/kernel/cnpj.ts`.
+  Extraído `buildContract` puro de `create-contract.ts` (determinismo dry-run = persistente).
+- **`CTR-IMPORT-LEGACY-CLI` (UC-11, passada 2)** — parser CSV (subset RFC-4180, hand-rolled, **zero
+  dependência** por ADR-0011) + JSON nativo, UTF-8; comando CLI `importar-contratos --arquivo/--formato/--confirmar`
+  (dry-run por default). Relatório PT-BR.
+- **`CTR-TIMELINE-READ-MODEL` (UC-08, passada 1)** — read-model projetado (ADR-0022): `toTimelineEntry`
+  puro, port `TimelineRepository` (+ in-memory idempotente), `TimelineProjectionDelivery` como
+  `EventDelivery` (consumer `timeline`), use case `getContractTimeline`. Resolve `contractId` de eventos
+  que não o carregam via índice `amendmentId→contractId`.
+
+### Aberto / atualizado (inquiries)
+
+- **[Inquiry-0019](./inquiries/0019-hard-delete-tripwire-sem-superficie.md)** — `TentativaDeExclusaoDetectada`
+  (gap 5). Achado: não há superfície de deleção física (port só `findById`/`list`/`save`); recomendação:
+  prevenir por privilégio MySQL (`REVOKE DELETE`) em vez de detectar por evento. Não-código.
+
+### Backlog rastreado (não iniciado)
+
+- `CTR-IMPORT-LEGACY` **v2** (aditivos legados — depende de [Inquiry-0014 Q3](./inquiries/0014-schema-legado-vs-modelo-alvo.md)).
+- `CTR-TIMELINE-CLI-PERSISTENCE` (pass 2 — UC-02 + CLI `ver-timeline` + MySQL `ctr_timeline_*` + wiring no worker).
+- `FIN-ACL-CONTRACT-EVENTS` (gap 7 — módulo Financial, ADR-0014).
+- AuditLog (Inquiry-0018) — reabre com identidade/RBAC.
+
+### Estado da suíte
+
+`pnpm test`: **1162 testes / 1146 pass / 0 fail / 16 skipped** (skips = integração Docker). 7 commits pushed na sessão (parte 1 + parte 2).
 
 ---
 
@@ -33,13 +74,13 @@ Sessão de fechamento de gaps do módulo Contracts a partir do `RELATORIO-COBERT
 
 ### Aberto (inquiries — pendentes, sem código)
 
-- **[Inquiry-0017](./inquiries/0017-timeline-read-model-vs-adr-0020.md)** — Timeline (UC-02/UC-08) vs. ADR-0020 (proíbe coluna JSON). Fork: projeção dedicada vs. event-store append-only. Bloqueia `CTR-TIMELINE-READ-MODEL`.
-- **[Inquiry-0018](./inquiries/0018-auditlog-transversal-todos-bcs.md)** — `AuditLogGenerated` transversal (`06-event-line-context.md:24`). Depende de identidade/RBAC (Fase 2+); sinergia de event-store com a 0017.
+- **[Inquiry-0017](./inquiries/0017-timeline-read-model-vs-adr-0020.md)** — Timeline (UC-02/UC-08) vs. ADR-0020 (proíbe coluna JSON). Fork: projeção dedicada vs. event-store append-only. → **decidida em 2026-05-26 (ADR-0022)**.
+- **[Inquiry-0018](./inquiries/0018-auditlog-transversal-todos-bcs.md)** — `AuditLogGenerated` transversal (`06-event-line-context.md:24`). Depende de identidade/RBAC (Fase 2+). → **decidida-diferida em 2026-05-26 (ADR-0022)**.
 - **[Inquiry-0019](./inquiries/0019-hard-delete-tripwire-sem-superficie.md)** — `TentativaDeExclusaoDetectada` (gap 5). Achado: não há superfície de deleção física no sistema (port só `findById`/`list`/`save`); melhor prevenir por privilégio MySQL que detectar por evento de domínio. Não-código.
 
-### Backlog rastreado (não iniciado)
+### Backlog rastreado (status nesta data)
 
-- `CTR-IMPORT-LEGACY` (gap 3 / UC-11 — feature grande), `FIN-ACL-CONTRACT-EVENTS` (gap 7 — módulo Financial, ADR-0014).
+- `CTR-IMPORT-LEGACY` (gap 3 / UC-11 — feature grande) → **executado em 2026-05-26** (ver entrada acima). `FIN-ACL-CONTRACT-EVENTS` (gap 7 — módulo Financial, ADR-0014) — segue não iniciado.
 
 ---
 
