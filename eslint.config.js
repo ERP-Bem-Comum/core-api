@@ -51,6 +51,39 @@ export default tseslint.config(
         },
       ],
 
+      // Libs proibidas — ADR-0011 §4 (supply-chain hardening).
+      'no-restricted-imports': 'off',
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'axios',
+              message:
+                'Proibida (ADR-0011 §4): supply chain compromise em mar/2026. Use `fetch` global.',
+            },
+            {
+              name: 'request',
+              message: 'Proibida (ADR-0011 §4): deprecated desde 2020. Use `fetch` global.',
+            },
+            {
+              name: 'moment',
+              message: 'Proibida (ADR-0011 §4): manutenção mínima. Use `Intl` ou `date-fns`.',
+            },
+            {
+              name: 'crypto-js',
+              message: 'Proibida (ADR-0011 §4): inativo. Use Web Crypto nativo (`crypto.subtle`).',
+            },
+          ],
+          patterns: [
+            {
+              group: ['lodash', 'lodash/*'],
+              message: 'Proibida (ADR-0011 §4): surface area enorme. O runtime nativo cobre.',
+            },
+          ],
+        },
+      ],
+
       'prefer-const': 'error',
       'no-var': 'error',
       '@typescript-eslint/no-explicit-any': 'error',

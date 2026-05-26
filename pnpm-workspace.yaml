@@ -5,3 +5,9 @@ allowBuilds:
   esbuild: true
   # Em desuso (ADR-0020 §228, CTR-CLEANUP-SQLITE). Build nativo dispensável até a remoção.
   'better-sqlite3': false
+
+# Quarentena de versões recém-publicadas (supply-chain — ADR-0011 §2).
+# Default é 0 no pnpm 10.x; explicitamos 1 dia. Releases maliciosos são
+# normalmente detectados e removidos do registry em < 1h.
+# Ver handbook/reference/pnpm/settings.md#minimumreleaseage (v10.16.0+).
+minimumReleaseAge: 1440
