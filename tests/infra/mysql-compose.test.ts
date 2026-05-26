@@ -83,9 +83,12 @@ const writeSecrets = (): void => {
   writeFileSync(join(SECRETS_DIR, 'mysql_root_password.txt'), DUMMY_ROOT_PWD);
   writeFileSync(join(SECRETS_DIR, 'mysql_app_password.txt'), DUMMY_APP_PWD);
   writeFileSync(join(SECRETS_DIR, 'mysql_readonly_password.txt'), DUMMY_RO_PWD);
-  chmodSync(join(SECRETS_DIR, 'mysql_root_password.txt'), 0o600);
-  chmodSync(join(SECRETS_DIR, 'mysql_app_password.txt'), 0o600);
-  chmodSync(join(SECRETS_DIR, 'mysql_readonly_password.txt'), 0o600);
+  // 0644, não 0600 — o initdb script roda como o user `mysql` (uid 999) e lê
+  // /run/secrets/mysql_readonly_password via `cat`. Espelha o modo de
+  // `scripts/setup-secrets.ts`. Ver CTR-INFRA-READONLY-BI-AUTH.
+  chmodSync(join(SECRETS_DIR, 'mysql_root_password.txt'), 0o644);
+  chmodSync(join(SECRETS_DIR, 'mysql_app_password.txt'), 0o644);
+  chmodSync(join(SECRETS_DIR, 'mysql_readonly_password.txt'), 0o644);
 };
 
 const removeSecrets = (): void => {
@@ -208,10 +211,24 @@ describe('CTR-DB-COMPOSE-MYSQL — bootstrap completo (CA-3..CA-19)', { skip: sk
     assert.equal(r.stdout.trim(), '1');
   });
 
-  it('CA-6: readonly_bi NÃO consegue CREATE TABLE', () => {
+  it('CA-6: readonly_bi recebe privilege-denied (não auth-denied) ao CREATE TABLE', () => {
+    // Anti-falso-positivo (CTR-INFRA-READONLY-BI-AUTH): se readonly_bi falhasse
+    // no login, o CREATE TABLE retornaria "Access denied ... using password"
+    // antes de checar privilégio — satisfazendo um /denied/ frouxo sem nunca
+    // exercitar o GRANT. Exigimos ER_TABLEACCESS_DENIED_ERROR (1142) para provar
+    // que a autenticação ocorreu e só o privilégio foi negado.
     const r = mysqlExec('readonly_bi', DUMMY_RO_PWD, 'CREATE TABLE t_should_fail (id INT);');
     assert.notEqual(r.code, 0, 'CREATE TABLE deveria ter falhado');
-    assert.match(r.stderr, /denied|access/i, `mensagem deveria ser Access denied: ${r.stderr}`);
+    assert.match(
+      r.stderr,
+      /CREATE command denied/i,
+      `esperado privilege-denied (1142), foi: ${r.stderr}`,
+    );
+    assert.doesNotMatch(
+      r.stderr,
+      /Access denied for user/i,
+      `readonly_bi falhou na autenticação, não no privilégio: ${r.stderr}`,
+    );
   });
 
   it('CA-7: character_set_server = utf8mb4', () => {

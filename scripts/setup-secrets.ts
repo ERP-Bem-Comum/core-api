@@ -207,12 +207,20 @@ const writeSecret = async (
   if (!pwResult.ok) return { ok: false, error: pwResult.error };
 
   try {
-    await writeAtomic(file, pwResult.password, 0o600);
+    // 0644 (não 0600): o compose monta `secrets.file:` como bind-mount
+    // preservando uid/gid/mode do host. O initdb script `01-databases-and-users.sh`
+    // roda como o user `mysql` (uid 999), depois do step-down `gosu` do entrypoint,
+    // e faz `cat /run/secrets/mysql_readonly_password`. Com 0600 owned pelo uid do
+    // host, esse `cat` falha (Permission denied) e `readonly_bi` nunca é criado.
+    // `core_app` escapa por ser lido pelo entrypoint AINDA como root, antes do gosu.
+    // 0644 dá o read-bit para `others` (sem write) — alinhado ao modo 0444 dos
+    // secrets do Docker Swarm e a CA-16 (sem world/group write).
+    await writeAtomic(file, pwResult.password, 0o644);
   } catch (e: unknown) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 
-  stderr.write(`  ✓ ${spec.name}.txt criado (chmod 0600)\n`);
+  stderr.write(`  ✓ ${spec.name}.txt criado (chmod 0644)\n`);
   return { ok: true, action: 'created' };
 };
 
