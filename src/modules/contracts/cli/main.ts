@@ -1,3 +1,7 @@
+import {
+  installLastResortHandlers,
+  processLastResortDeps,
+} from '../../../shared/runtime/last-resort.ts';
 import { buildContext, type CliContextError } from './context.ts';
 import { formatErrorCode } from './formatters/error.ts';
 import { parseDriverFlags } from './parse-driver-flags.ts';
@@ -109,10 +113,19 @@ const main = async (): Promise<number> => {
   }
 
   const ctx = ctxR.value;
+  // `handle.close()` (pool MySQL) não é idempotente; o guard garante shutdown
+  // único entre o handler de último recurso e o `finally`.
+  let shuttingDown = false;
+  const shutdownOnce = async (): Promise<void> => {
+    if (shuttingDown) return;
+    shuttingDown = true;
+    await ctx.shutdown();
+  };
+  installLastResortHandlers(shutdownOnce, processLastResortDeps());
   try {
     return await cmd.run(ctx, parsedR.value.rest);
   } finally {
-    await ctx.shutdown();
+    await shutdownOnce();
   }
 };
 
