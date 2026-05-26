@@ -30,14 +30,19 @@ export type CreateContractCommand = Readonly<{
   originalPeriodEnd: string | null;
 }>;
 
-export type CreateContractError =
+// Erros da construção PURA (validação + Contract.create), sem IO. Reusados pelo
+// import legado (CTR-IMPORT-LEGACY) para garantir determinismo dry-run = persistente.
+export type BuildContractError =
   | 'create-contract-invalid-signed-at'
   | 'create-contract-invalid-period-start'
   | 'create-contract-invalid-period-end'
-  | 'contract-sequential-number-duplicated'
   | MoneyError
   | PeriodError
-  | ContractError
+  | ContractError;
+
+export type CreateContractError =
+  | BuildContractError
+  | 'contract-sequential-number-duplicated'
   | ContractRepositoryError;
 
 export type CreateContractOutput = Readonly<{
@@ -50,44 +55,59 @@ type Deps = Readonly<{
   clock: Clock;
 }>;
 
+/**
+ * Construção pura de um Contrato a partir do command — validação + `Contract.create`,
+ * SEM IO (sem repo, sem checagem de duplicidade, sem save). Extraído para que
+ * `createContract` e `importContracts` compartilhem exatamente a mesma validação
+ * (determinismo dry-run = persistente, NFR-4 do CTR-IMPORT-LEGACY).
+ */
+export const buildContract = (
+  cmd: CreateContractCommand,
+): Result<CreateContractOutput, BuildContractError> => {
+  const signedAt = new Date(cmd.signedAt);
+  if (!isValidDate(signedAt)) return err('create-contract-invalid-signed-at');
+
+  const periodStart = new Date(cmd.originalPeriodStart);
+  if (!isValidDate(periodStart)) {
+    return err('create-contract-invalid-period-start');
+  }
+
+  const moneyResult = Money.fromCents(cmd.originalValueCents);
+  if (!moneyResult.ok) return moneyResult;
+
+  const periodResult =
+    cmd.originalPeriodEnd === null
+      ? Period.createIndefinite(periodStart)
+      : (() => {
+          const end = new Date(cmd.originalPeriodEnd);
+          if (!isValidDate(end)) {
+            return err('create-contract-invalid-period-end' as const);
+          }
+          return Period.create(periodStart, end);
+        })();
+  if (!periodResult.ok) return periodResult;
+
+  const created = Contract.create({
+    id: ContractId.generate(),
+    sequentialNumber: cmd.sequentialNumber,
+    title: cmd.title,
+    objective: cmd.objective,
+    signedAt,
+    originalValue: moneyResult.value,
+    originalPeriod: periodResult.value,
+  });
+  if (!created.ok) return created;
+
+  return ok({ contract: created.value.contract, event: created.value.event });
+};
+
 export const createContract =
   (deps: Deps) =>
   async (
     cmd: CreateContractCommand,
   ): Promise<Result<CreateContractOutput, CreateContractError>> => {
-    const signedAt = new Date(cmd.signedAt);
-    if (!isValidDate(signedAt)) return err('create-contract-invalid-signed-at');
-
-    const periodStart = new Date(cmd.originalPeriodStart);
-    if (!isValidDate(periodStart)) {
-      return err('create-contract-invalid-period-start');
-    }
-
-    const moneyResult = Money.fromCents(cmd.originalValueCents);
-    if (!moneyResult.ok) return moneyResult;
-
-    const periodResult =
-      cmd.originalPeriodEnd === null
-        ? Period.createIndefinite(periodStart)
-        : (() => {
-            const end = new Date(cmd.originalPeriodEnd);
-            if (!isValidDate(end)) {
-              return err('create-contract-invalid-period-end' as const);
-            }
-            return Period.create(periodStart, end);
-          })();
-    if (!periodResult.ok) return periodResult;
-
-    const created = Contract.create({
-      id: ContractId.generate(),
-      sequentialNumber: cmd.sequentialNumber,
-      title: cmd.title,
-      objective: cmd.objective,
-      signedAt,
-      originalValue: moneyResult.value,
-      originalPeriod: periodResult.value,
-    });
-    if (!created.ok) return created;
+    const built = buildContract(cmd);
+    if (!built.ok) return built;
 
     // Defeito #5: regra de unicidade de sequentialNumber (R4 do handbook).
     // Check antes do save; MySQL real terá UNIQUE INDEX como rede de segurança.
@@ -96,11 +116,8 @@ export const createContract =
     if (existing.value !== null) return err('contract-sequential-number-duplicated');
 
     // CA-5: evento passado diretamente no save — persiste state + outbox atomicamente.
-    const saveResult = await deps.contractRepo.save(created.value.contract, [created.value.event]);
+    const saveResult = await deps.contractRepo.save(built.value.contract, [built.value.event]);
     if (!saveResult.ok) return saveResult;
 
-    return ok({
-      contract: created.value.contract,
-      event: created.value.event,
-    });
+    return ok(built.value);
   };
