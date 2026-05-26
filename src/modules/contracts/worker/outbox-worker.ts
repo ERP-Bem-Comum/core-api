@@ -1,6 +1,10 @@
 import process from 'node:process';
 
 import { type Result, ok, err } from '../../../shared/primitives/result.ts';
+import {
+  withNewCorrelation,
+  currentCorrelationId,
+} from '../../../shared/observability/correlation.ts';
 import type { EventDelivery, ProcessedEvent } from '../application/ports/event-delivery.ts';
 import type { Clock } from '../../../shared/ports/clock.ts';
 import { outboxRowToEvent, type OutboxRow } from '../adapters/persistence/mappers/outbox.mapper.ts';
@@ -97,6 +101,18 @@ const sleep = async (ms: number, signal?: AbortSignal): Promise<void> =>
     );
   });
 
+// ─── log tag ──────────────────────────────────────────────────────────────────
+
+/**
+ * workerTag — prefixo dos logs do worker, anexando o correlation-id da iteração
+ * quando há escopo ativo (ver `runLoop` → `withNewCorrelation`). Fora de escopo
+ * (ex.: `runOnce` chamado direto em teste) mantém o prefixo simples.
+ */
+const workerTag = (): string => {
+  const id = currentCorrelationId();
+  return id === undefined ? '[outbox-worker] ' : `[outbox-worker ${id}] `;
+};
+
 // ─── runOnce ──────────────────────────────────────────────────────────────────
 
 /**
@@ -149,7 +165,7 @@ export const runOnce = async (
       );
       if (!dlqResult.ok) {
         process.stderr.write(
-          `[outbox-worker] moveToDeadLetter(corrupt) failed for ${row.eventId}: ${dlqResult.error.tag}\n`,
+          `${workerTag()}moveToDeadLetter(corrupt) failed for ${row.eventId}: ${dlqResult.error.tag}\n`,
         );
       }
       dlqMoved += 1;
@@ -171,7 +187,7 @@ export const runOnce = async (
       const markResult = await deps.outbox.markProcessed(row.eventId, deps.clock.now());
       if (!markResult.ok) {
         process.stderr.write(
-          `[outbox-worker] markProcessed failed for ${row.eventId}: ${markResult.error.tag}\n`,
+          `${workerTag()}markProcessed failed for ${row.eventId}: ${markResult.error.tag}\n`,
         );
       }
       delivered += 1;
@@ -187,7 +203,7 @@ export const runOnce = async (
         );
         if (!dlqResult.ok) {
           process.stderr.write(
-            `[outbox-worker] moveToDeadLetter failed for ${row.eventId}: ${dlqResult.error.tag}\n`,
+            `${workerTag()}moveToDeadLetter failed for ${row.eventId}: ${dlqResult.error.tag}\n`,
           );
         }
         dlqMoved += 1;
@@ -200,7 +216,7 @@ export const runOnce = async (
         );
         if (!failResult.ok) {
           process.stderr.write(
-            `[outbox-worker] markFailed failed for ${row.eventId}: ${failResult.error.tag}\n`,
+            `${workerTag()}markFailed failed for ${row.eventId}: ${failResult.error.tag}\n`,
           );
         }
         failed += 1;
@@ -236,11 +252,19 @@ export const runLoop = async (
   let totals: WorkerStats = { iterations: 0, delivered: 0, failed: 0, movedToDeadLetter: 0 };
 
   while (deps.abortSignal?.aborted !== true) {
-    const round = await runOnce(deps, config);
+    // Cada iteração roda num escopo de correlação próprio: todos os logs do
+    // worker (runOnce + o log de erro abaixo) compartilham o mesmo id rastreável.
+    const round = await withNewCorrelation(async () => {
+      const r = await runOnce(deps, config);
+      if (!r.ok) {
+        // Erro crítico de I/O — log dentro do escopo para carregar o id.
+        process.stderr.write(`${workerTag()}runOnce failed: ${r.error.tag}\n`);
+      }
+      return r;
+    });
 
     if (!round.ok) {
-      // Erro crítico de I/O — log + backoff antes de retry.
-      process.stderr.write(`[outbox-worker] runOnce failed: ${round.error.tag}\n`);
+      // Backoff antes de retry. Sleep fora do escopo — intervalo entre batches.
       await sleep(config.pollIntervalMs, deps.abortSignal);
       continue;
     }
