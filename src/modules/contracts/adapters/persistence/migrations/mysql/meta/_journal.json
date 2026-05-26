@@ -36,6 +36,13 @@
       "when": 1779460483305,
       "tag": "0004_fast_shatterstar",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1779803209935,
+      "tag": "0005_swift_havok",
+      "breakpoints": true
     }
   ]
 }

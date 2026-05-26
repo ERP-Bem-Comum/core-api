@@ -1,6 +1,7 @@
 // Schema MySQL — alinhado com ADR-0020 (MySQL como único dialeto).
-// Tipos: varchar/bigint/datetime(3). Sem JSON, sem ENUM, sem AUTO_INCREMENT.
-// Money cents: `bigint`. Dates: `datetime(3)`. Period decomposto em 3 colunas.
+// Tipos: varchar/bigint/datetime(3)/date. Sem JSON, sem ENUM, sem AUTO_INCREMENT.
+// Money cents: `bigint`. Instantes: `datetime(3)`. Datas-calendário (vigência,
+// prazo de aditivo): `date` — VO PlainDate (inquiry 0020). Period decomposto em colunas.
 //
 // Convenção de nomenclatura (ADR-0020 §"Convenção"):
 //   - Tabelas: prefixo `ctr_*` dentro do database `core` — torna o owner
@@ -43,6 +44,7 @@ import {
   boolean,
   char,
   check,
+  date,
   datetime,
   foreignKey,
   index,
@@ -63,12 +65,12 @@ export const contracts = mysqlTable(
     signedAt: datetime('signed_at', { mode: 'date', fsp: 3 }).notNull(),
     originalValueCents: bigint('original_value_cents', { mode: 'number' }).notNull(),
     originalPeriodKind: varchar('original_period_kind', { length: 16 }).notNull(),
-    originalPeriodStart: datetime('original_period_start', { mode: 'date', fsp: 3 }).notNull(),
-    originalPeriodEnd: datetime('original_period_end', { mode: 'date', fsp: 3 }),
+    originalPeriodStart: date('original_period_start', { mode: 'date' }).notNull(),
+    originalPeriodEnd: date('original_period_end', { mode: 'date' }),
     currentValueCents: bigint('current_value_cents', { mode: 'number' }).notNull(),
     currentPeriodKind: varchar('current_period_kind', { length: 16 }).notNull(),
-    currentPeriodStart: datetime('current_period_start', { mode: 'date', fsp: 3 }).notNull(),
-    currentPeriodEnd: datetime('current_period_end', { mode: 'date', fsp: 3 }),
+    currentPeriodStart: date('current_period_start', { mode: 'date' }).notNull(),
+    currentPeriodEnd: date('current_period_end', { mode: 'date' }),
     status: varchar('status', { length: 16 }).notNull(),
     endedAt: datetime('ended_at', { mode: 'date', fsp: 3 }),
   },
@@ -118,7 +120,7 @@ export const amendments = mysqlTable(
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
     kind: varchar('kind', { length: 16 }).notNull(),
     impactValueCents: bigint('impact_value_cents', { mode: 'number' }),
-    newEndDate: datetime('new_end_date', { mode: 'date', fsp: 3 }),
+    newEndDate: date('new_end_date', { mode: 'date' }),
     status: varchar('status', { length: 16 }).notNull(),
     signedDocumentRef: varchar('signed_document_ref', { length: 36 }),
     homologatedAt: datetime('homologated_at', { mode: 'date', fsp: 3 }),
