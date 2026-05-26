@@ -75,7 +75,8 @@ Faseamento: **Fase 1** = VO + `Clock.today()` (adição pura). **Fase 2** = migr
 ## 6. Saídas (outputs concretos)
 
 - [x] **Fase 1 — `CTR-VO-PLAIN-DATE`** (closed-green, 2026-05-26): VO `src/shared/kernel/plain-date.ts` (backend `{y,m,d}` puro) + `Clock.today()` + adapters real/fixed.
-- [ ] **Fase 2 — `CTR-PERIOD-PLAIN-DATE`**: migrar `Period`, `contract.ts` (expiração/ajuste), mappers, **schema** (`datetime` → `date` + migration) e **eventos da public-api** (`ContractCreated` carrega período — versionar) + dedupe dos 2 formatters de data.
+- [x] **Fase 2 — `CTR-PERIOD-PLAIN-DATE`** (closed-green, 2026-05-26): `Period`/`contract.ts`/`amendment`/mappers/`outbox`/CLI migrados para `PlainDate` (43 arquivos). Colunas seguem `DATETIME` com conversão na borda do mapper (sem migration — ver Fase 2b). Evento serializa período como `YYYY-MM-DD`.
+- [ ] **Fase 2b (opcional)** — migrar colunas `datetime` → `date` no schema (toca hardening/migration tests).
 - [ ] **Fase 3 — ADR** novo (supersedes ADR-0009) incluindo a troca `PlainDate` → `Temporal.PlainDate` — **gatilho: Node 26 Active LTS, 2026-10-28**.
 - [x] Estudo registrado: `.claude/.pipeline/CTR-NODE-TEMPORAL-API-STUDY/STUDY.md`.
 
