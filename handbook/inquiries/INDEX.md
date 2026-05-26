@@ -10,8 +10,8 @@
 
 | # | Status | Última atualização |
 | :--- | :--- | :--- |
-| Total | 19 | 2026-05-26 |
-| `Decided` | 12 | — |
+| Total | 20 | 2026-05-26 |
+| `Decided` | 13 | — |
 | `Pending Response` | 0 | — |
 | `Obsoleta (revisada)` | 1 | — |
 | `Open` | 5 | — |
@@ -38,6 +38,7 @@
 | [0003](./0003-multi-cloud-strategy.md) | Estratégia multi-cloud (originalmente AWS+GCP) | [ADR-0021](../architecture/adr/0021-aws-primary-magalu-pbe-supersedes-0007.md) (supersedes [ADR-0007](../architecture/adr/0007-multi-cloud-aws-gcp.md)) | 2026-05-22 |
 | [0017](./0017-timeline-read-model-vs-adr-0020.md) | Timeline read-model vs. ADR-0020 (sem JSON) | [ADR-0022](../architecture/adr/0022-read-models-via-projection-over-event-stream.md) (projeção; outbox é o log append-only) | 2026-05-26 |
 | [0018](./0018-auditlog-transversal-todos-bcs.md) | `AuditLogGenerated` transversal | [ADR-0022](../architecture/adr/0022-read-models-via-projection-over-event-stream.md) — **decided-deferred** (padrão de projeção; materialização espera RBAC) | 2026-05-26 |
+| [0020](./0020-temporal-api-adoption.md) | Adoção do Temporal API (ES2026) | Opção C — VO `PlainDate` agora, `Temporal.PlainDate` nativo no Node 26 LTS; ADR futuro (gatilho 2026-10-28) | 2026-05-26 |
 
 ### ⏳ Pending Response
 
@@ -83,6 +84,7 @@ _Nenhuma._
 ### Stack & Versões
 - [0004 — Node 24 + TypeScript 7](./0004-node-version-and-typescript-future.md)
 - [0006 — pnpm vs Bun](./0006-package-manager-pnpm-vs-bun.md)
+- [0020 — Adoção do Temporal API (ES2026)](./0020-temporal-api-adoption.md)
 
 ### Segurança & Governance
 - [0005 — Supply chain Axios](./0005-supply-chain-axios-and-dependency-hardening.md)
