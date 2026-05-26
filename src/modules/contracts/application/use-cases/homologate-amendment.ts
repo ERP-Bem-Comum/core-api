@@ -49,7 +49,9 @@ export type HomologateAmendmentError =
   | ContractError
   | 'amendment-not-found'
   | 'contract-not-found'
-  | 'amendment-contract-mismatch';
+  | 'amendment-contract-mismatch'
+  // R4 (04-aditivos-context.md:86): aditivo com data retroativa ao início (signedAt) do Contrato Mãe.
+  | 'amendment-retroactive-to-contract-start';
 
 export type HomologateAmendmentOutput = Readonly<{
   contract: ContractEntity;
@@ -111,6 +113,12 @@ export const homologateAmendment =
     // 4. Validate amendment belongs to contract
     if (amendment.contractId !== contract.id) {
       return err('amendment-contract-mismatch');
+    }
+
+    // 4b. R4 cronologia (04-aditivos-context.md:86): não homologar aditivo com data
+    //     retroativa ao início do Contrato Mãe (= signedAt). Igualdade é permitida.
+    if (amendment.createdAt.getTime() < contract.signedAt.getTime()) {
+      return err('amendment-retroactive-to-contract-start');
     }
 
     // 5. DO D§21: parsePendingWithDocument na borda.

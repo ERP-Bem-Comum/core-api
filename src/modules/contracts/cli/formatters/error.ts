@@ -115,6 +115,8 @@ const ERROR_DICTIONARY: Readonly<Record<string, string>> = {
   'contract-not-found': 'Contrato não encontrado.',
   'amendment-not-found': 'Aditivo não encontrado.',
   'amendment-contract-mismatch': 'Aditivo pertence a outro contrato — verifique os IDs.',
+  'amendment-retroactive-to-contract-start':
+    'Aditivo tem data anterior à assinatura do contrato — não pode ser homologado (R4, cronologia).',
   'create-contract-invalid-signed-at': 'Data de assinatura inválida.',
   'create-contract-invalid-period-start': 'Data início inválida.',
   'create-contract-invalid-period-end': 'Data fim inválida.',
