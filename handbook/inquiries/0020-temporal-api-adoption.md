@@ -76,7 +76,7 @@ Faseamento: **Fase 1** = VO + `Clock.today()` (adição pura). **Fase 2** = migr
 
 - [x] **Fase 1 — `CTR-VO-PLAIN-DATE`** (closed-green, 2026-05-26): VO `src/shared/kernel/plain-date.ts` (backend `{y,m,d}` puro) + `Clock.today()` + adapters real/fixed.
 - [x] **Fase 2 — `CTR-PERIOD-PLAIN-DATE`** (closed-green, 2026-05-26): `Period`/`contract.ts`/`amendment`/mappers/`outbox`/CLI migrados para `PlainDate` (43 arquivos). Colunas seguem `DATETIME` com conversão na borda do mapper (sem migration — ver Fase 2b). Evento serializa período como `YYYY-MM-DD`.
-- [ ] **Fase 2b (opcional)** — migrar colunas `datetime` → `date` no schema (toca hardening/migration tests).
+- [x] **Fase 2b — `CTR-PERIOD-PLAIN-DATE-SCHEMA`** (closed-green, 2026-05-26): 5 colunas de data-calendário (`ctr_contracts.{original,current}_period_{start,end}` + `ctr_amendments.new_end_date`) migradas `datetime(3)` → `date` (migration `0005`). Mappers intocados; round-trips de período/`newEndDate` verdes contra MySQL real. Colunas de instante seguem `datetime(3)`.
 - [ ] **Fase 3 — ADR** novo (supersedes ADR-0009) incluindo a troca `PlainDate` → `Temporal.PlainDate` — **gatilho: Node 26 Active LTS, 2026-10-28**.
 - [x] Estudo registrado: `.claude/.pipeline/CTR-NODE-TEMPORAL-API-STUDY/STUDY.md`.
 
