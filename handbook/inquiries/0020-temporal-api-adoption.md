@@ -64,7 +64,9 @@ Compatibilidade: a Opção C respeita ADR-0011 (sem nova dep), ADR-0002 (mesmo r
 
 ## 5. Decisão final
 
-**Adotar a Opção C.** Capturar o ganho semântico agora via um VO `PlainDate` no shared kernel (backend `Date`, interface de data-calendário), e trocar o backend para `Temporal.PlainDate` nativo quando o projeto migrar para Node 26 **LTS** (out/2026).
+**Adotar a Opção C, refinada.** Capturar o ganho semântico agora via um VO `PlainDate` no shared kernel — **backend `{year, month, day}` puro** (inteiros, sem `Date`, sem timezone), que elimina o bug de timezone *imediatamente* (não só o isola). O shape é subconjunto estrutural de `Temporal.PlainDate` e `compare` é função livre espelhando o estático nativo, tornando a troca de backend para `Temporal.PlainDate` (Node 26 LTS, out/2026) uma reescrita de um único arquivo. O único pedaço que é porta de verdade — o "hoje" — entra no `Clock` port (`today(): PlainDate`).
+
+Faseamento: **Fase 1** = VO + `Clock.today()` (adição pura). **Fase 2** = migrar `Period`/domínio/mappers/schema/eventos (toca persistência + contrato de evento cross-módulo → ticket próprio).
 
 **Não fazer agora:** polyfill em produção (ADR-0011); bump para Node 26 Current (risco de compliance, ADR-0009).
 
@@ -72,8 +74,9 @@ Compatibilidade: a Opção C respeita ADR-0011 (sem nova dep), ADR-0002 (mesmo r
 
 ## 6. Saídas (outputs concretos)
 
-- [ ] Ticket `CTR-VO-PLAIN-DATE` — criar `src/shared/kernel/plain-date.ts`, migrar `Period` + formatters duplicados (escopo S/M). **Aguardando autorização da P.O.**
-- [ ] ADR novo (supersedes ADR-0009) incluindo a troca `PlainDate` → `Temporal.PlainDate` — **gatilho: Node 26 Active LTS, 2026-10-28**.
+- [x] **Fase 1 — `CTR-VO-PLAIN-DATE`** (closed-green, 2026-05-26): VO `src/shared/kernel/plain-date.ts` (backend `{y,m,d}` puro) + `Clock.today()` + adapters real/fixed.
+- [ ] **Fase 2 — `CTR-PERIOD-PLAIN-DATE`**: migrar `Period`, `contract.ts` (expiração/ajuste), mappers, **schema** (`datetime` → `date` + migration) e **eventos da public-api** (`ContractCreated` carrega período — versionar) + dedupe dos 2 formatters de data.
+- [ ] **Fase 3 — ADR** novo (supersedes ADR-0009) incluindo a troca `PlainDate` → `Temporal.PlainDate` — **gatilho: Node 26 Active LTS, 2026-10-28**.
 - [x] Estudo registrado: `.claude/.pipeline/CTR-NODE-TEMPORAL-API-STUDY/STUDY.md`.
 
 ---
