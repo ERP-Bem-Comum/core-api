@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
 import type { ContractsModuleEvent } from '../../../application/ports/event-bus.ts';
+import type { OutboxRow } from '../../../application/ports/outbox.ts';
 import type { ctrOutbox } from '../schemas/mysql.ts';
 import * as ContractId from '../../../domain/shared/contract-id.ts';
 import * as AmendmentId from '../../../domain/shared/amendment-id.ts';
@@ -15,10 +16,26 @@ import {
   createStorageKey,
 } from '../../../application/ports/document-storage.types.ts';
 
-// ─── Row types (inferred from schema) ────────────────────────────────────────
+// ─── Row types ────────────────────────────────────────────────────────────────
+//
+// `OutboxRow` é o tipo canônico do CONSUMIDOR e vive no port
+// (application/ports/outbox.ts) — reexportado aqui por compatibilidade dos
+// importadores deste mapper. `OutboxInsert` segue inferido do schema (lado de
+// escrita, interno ao adapter).
 
-export type OutboxRow = typeof ctrOutbox.$inferSelect;
+export type { OutboxRow };
 export type OutboxInsert = typeof ctrOutbox.$inferInsert;
+
+// CA4 guard (CTR-OUTBOX-CONSUMER-PORT): trava o drift schema↔port. Se uma coluna de
+// `ctr_outbox` for adicionada, removida ou retipada, a linha inferida do schema
+// (`$inferSelect`) deixa de ser estruturalmente equivalente ao `OutboxRow` do port
+// e uma das asserções vira `false` — `AssertTrue<false>` quebra o typecheck.
+type OutboxRowSchema = typeof ctrOutbox.$inferSelect;
+type AssertTrue<T extends true> = T;
+const _outboxRowDriftGuard: [
+  AssertTrue<OutboxRowSchema extends OutboxRow ? true : false>,
+  AssertTrue<OutboxRow extends OutboxRowSchema ? true : false>,
+] = [true, true];
 
 // ─── Schema version ───────────────────────────────────────────────────────────
 

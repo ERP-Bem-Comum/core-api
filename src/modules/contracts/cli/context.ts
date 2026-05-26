@@ -4,8 +4,7 @@ import type { ContractRepository } from '../domain/contract/repository.ts';
 import type { AmendmentRepository } from '../domain/amendment/repository.ts';
 import type { DocumentRepository } from '../domain/document/repository.ts';
 import type { MysqlDriverError } from '../adapters/persistence/drivers/mysql-driver.ts';
-import type { WorkerOutboxOps } from '../worker/outbox-worker.ts';
-import type { OutboxPort } from '../application/ports/outbox.ts';
+import type { OutboxPort, WorkerOutboxOps } from '../application/ports/outbox.ts';
 
 import type { DriverFlags, DriverKind } from './parse-driver-flags.ts';
 import type { StateError } from './state.ts';

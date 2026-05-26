@@ -4,8 +4,7 @@ import type { OutboxPort } from '../../application/ports/outbox.ts';
 import { outboxAppendDuplicateEventId } from '../../application/ports/outbox.ts';
 import { eventToOutboxInsert, type OutboxRow } from '../persistence/mappers/outbox.mapper.ts';
 import type { ctrOutboxDeadLetter } from '../persistence/schemas/mysql.ts';
-import type { OutboxQueryError } from '../../application/ports/outbox.ts';
-import type { OutboxBatchOps } from '../../worker/outbox-worker.ts';
+import type { OutboxQueryError, OutboxBatchOps } from '../../application/ports/outbox.ts';
 
 // ─── Dead letter row type (inferred from schema) ──────────────────────────────
 
@@ -44,7 +43,6 @@ export const InMemoryOutbox = (): {
   // ── helpers do worker (mesma interface que o adapter Drizzle) ────────────
   withPendingBatch: <R>(
     limit: number,
-    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
     handler: (rows: readonly OutboxRow[], ops: OutboxBatchOps) => Promise<R>,
   ) => Promise<Result<R, OutboxQueryError>>;
   findPendingForUpdate: (limit: number) => Promise<Result<readonly OutboxRow[], OutboxQueryError>>;
@@ -200,7 +198,6 @@ export const InMemoryOutbox = (): {
 
   const withPendingBatch = async <R>(
     limit: number,
-    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
     handler: (rows: readonly OutboxRow[], ops: OutboxBatchOps) => Promise<R>,
   ): Promise<Result<R, OutboxQueryError>> => {
     const pending = rows

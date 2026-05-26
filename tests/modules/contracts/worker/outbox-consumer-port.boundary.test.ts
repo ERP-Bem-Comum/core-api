@@ -125,18 +125,21 @@ describe('CTR-OUTBOX-CONSUMER-PORT — INV-3: contrato declarado em application/
 
 // ─── CA3 — worker consome o contrato a partir do port (INV-5) ───────────────
 
+// O worker consome o contrato pelo tipo de ENTRADA `WorkerOutboxOps` (em
+// `WorkerDeps.outbox`). `OutboxBatchOps` chega por inferência no handler de
+// `withPendingBatch` — importá-lo no worker seria import morto (no-unused-vars).
+// Que `OutboxBatchOps` viva no port é garantido por INV-3.
+
 describe('CTR-OUTBOX-CONSUMER-PORT — INV-5: worker importa o contrato do port', () => {
-  for (const t of CONTRACT_TYPES) {
-    it(`worker importa \`${t}\` de application/ports/`, () => {
-      const fromPorts = parseImports(read(WORKER)).some(
-        (i) => i.path.includes('application/ports') && new RegExp(`\\b${t}\\b`).test(i.bindings),
-      );
-      assert.ok(
-        fromPorts,
-        `worker não importa ${t} de application/ports/ (hoje declara localmente)`,
-      );
-    });
-  }
+  it('worker importa `WorkerOutboxOps` de application/ports/', () => {
+    const fromPorts = parseImports(read(WORKER)).some(
+      (i) => i.path.includes('application/ports') && /\bWorkerOutboxOps\b/.test(i.bindings),
+    );
+    assert.ok(
+      fromPorts,
+      'worker não importa WorkerOutboxOps de application/ports/ (esperado: contrato consumido do port)',
+    );
+  });
 });
 
 // ─── CA2 — application não cruza para adapters (INV-4, guard) ───────────────

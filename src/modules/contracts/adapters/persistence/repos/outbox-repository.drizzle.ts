@@ -9,12 +9,15 @@ import {
   outboxQueryUnavailable,
   outboxEventNotFound,
 } from '../../../application/ports/outbox.ts';
-import type { OutboxAppendError, OutboxQueryError } from '../../../application/ports/outbox.ts';
+import type {
+  OutboxAppendError,
+  OutboxQueryError,
+  OutboxBatchOps,
+} from '../../../application/ports/outbox.ts';
 import type { ContractsModuleEvent } from '../../../application/ports/event-bus.ts';
 import type { MysqlHandle } from '../drivers/mysql-driver.ts';
 import { eventToOutboxInsert, type OutboxRow } from '../mappers/outbox.mapper.ts';
 import type * as schema from '../schemas/mysql.ts';
-import type { OutboxBatchOps } from '../../../worker/outbox-worker.ts';
 
 // ─── ER_DUP_ENTRY detection ───────────────────────────────────────────────────
 
@@ -114,7 +117,6 @@ export const createDrizzleOutboxRepository = (
 ): OutboxPort & {
   withPendingBatch: <R>(
     limit: number,
-    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
     handler: (rows: readonly OutboxRow[], ops: OutboxBatchOps) => Promise<R>,
   ) => Promise<Result<R, OutboxQueryError>>;
   findPendingForUpdate: (limit: number) => Promise<Result<readonly OutboxRow[], OutboxQueryError>>;
@@ -204,7 +206,6 @@ export const createDrizzleOutboxRepository = (
 
   const withPendingBatch = async <R>(
     limit: number,
-    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
     handler: (rows: readonly OutboxRow[], ops: OutboxBatchOps) => Promise<R>,
   ): Promise<Result<R, OutboxQueryError>> => {
     try {

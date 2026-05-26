@@ -8,8 +8,8 @@ import {
 import type { EventDelivery, ProcessedEvent } from '../application/ports/event-delivery.ts';
 import { deliveryUnavailable } from '../application/ports/event-delivery.ts';
 import type { Clock } from '../../../shared/ports/clock.ts';
-import { outboxRowToEvent, type OutboxRow } from '../adapters/persistence/mappers/outbox.mapper.ts';
-import type { OutboxQueryError } from '../application/ports/outbox.ts';
+import { outboxRowToEvent } from '../adapters/persistence/mappers/outbox.mapper.ts';
+import type { WorkerOutboxOps, OutboxQueryError } from '../application/ports/outbox.ts';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -29,64 +29,6 @@ export type WorkerStats = Readonly<{
   delivered: number;
   failed: number;
   movedToDeadLetter: number;
-}>;
-
-/**
- * OutboxBatchOps — operações de marcação ligadas à transação do batch corrente.
- *
- * Passadas ao handler de `withPendingBatch` para que a marcação (`markProcessed`
- * etc.) ocorra na MESMA transação que travou as rows via `FOR UPDATE SKIP LOCKED`.
- * É isso que dá efeito ao SKIP LOCKED entre workers concorrentes (CTR-OUTBOX-SKIPLOCKED-DUP):
- * o lock sobrevive até o COMMIT, depois do delivery + marcação.
- */
-export type OutboxBatchOps = Readonly<{
-  markProcessed: (eventId: string, now: Date) => Promise<Result<void, OutboxQueryError>>;
-  markFailed: (
-    eventId: string,
-    now: Date,
-    errorTag: string,
-    attempt: number,
-  ) => Promise<Result<void, OutboxQueryError>>;
-  moveToDeadLetter: (
-    eventId: string,
-    now: Date,
-    errorMessage: string,
-  ) => Promise<Result<void, OutboxQueryError>>;
-}>;
-
-/**
- * WorkerOutboxOps — o que o worker precisa do adapter de outbox.
- *
- * `withPendingBatch` é a operação canônica de consumo: abre uma transação, trava
- * até `limit` rows pendentes com `FOR UPDATE SKIP LOCKED`, e invoca o handler com
- * as rows + `OutboxBatchOps` ligadas à mesma transação. Commit ao fim do handler.
- *
- * Os 4 helpers diretos (`findPendingForUpdate`/`markProcessed`/...) permanecem para
- * inspeção e testes de unidade dos adapters — NÃO usar para consumo concorrente
- * (rodam em autocommit; o lock do SELECT não sobrevive ao statement).
- *
- * Exportado separadamente para que `CliContext` possa referenciar este tipo
- * sem importar `WorkerDeps` inteiro (que puxa `EventDelivery` e `Clock`).
- */
-export type WorkerOutboxOps = Readonly<{
-  withPendingBatch: <R>(
-    limit: number,
-    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-    handler: (rows: readonly OutboxRow[], ops: OutboxBatchOps) => Promise<R>,
-  ) => Promise<Result<R, OutboxQueryError>>;
-  findPendingForUpdate: (limit: number) => Promise<Result<readonly OutboxRow[], OutboxQueryError>>;
-  markProcessed: (eventId: string, now: Date) => Promise<Result<void, OutboxQueryError>>;
-  markFailed: (
-    eventId: string,
-    now: Date,
-    errorTag: string,
-    attempt: number,
-  ) => Promise<Result<void, OutboxQueryError>>;
-  moveToDeadLetter: (
-    eventId: string,
-    now: Date,
-    errorMessage: string,
-  ) => Promise<Result<void, OutboxQueryError>>;
 }>;
 
 /**
