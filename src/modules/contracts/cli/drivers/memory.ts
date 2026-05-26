@@ -59,6 +59,7 @@ export const buildMemoryContext = async (
     // .pipeline/CTR-OUTBOX-INTEGRATION-IN-REPOS/000-request.md §Risco 4).
     outbox: {
       append: outbox.port.append,
+      withPendingBatch: outbox.withPendingBatch,
       findPendingForUpdate: outbox.findPendingForUpdate,
       markProcessed: outbox.markProcessed,
       markFailed: outbox.markFailed,

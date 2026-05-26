@@ -39,6 +39,27 @@ export const outboxAppendDuplicateEventId = (eventId: string): OutboxAppendDupli
   eventId,
 });
 
+// ─── OutboxQueryError (consumo — Padrão D) ────────────────────────────────────
+//
+// Erros do lado de leitura/consumo do outbox (worker). Vivem no port (não no
+// adapter Drizzle) para que worker e adapters dependam do contrato, nunca o
+// inverso — quebra o ciclo de import adapter↔worker (CTR-OUTBOX-SKIPLOCKED-DUP).
+
+export type OutboxQueryUnavailable = Readonly<{ tag: 'OutboxQueryUnavailable'; cause: string }>;
+export type OutboxEventNotFound = Readonly<{ tag: 'OutboxEventNotFound'; eventId: string }>;
+
+export type OutboxQueryError = OutboxQueryUnavailable | OutboxEventNotFound;
+
+export const outboxQueryUnavailable = (cause: string): OutboxQueryUnavailable => ({
+  tag: 'OutboxQueryUnavailable',
+  cause,
+});
+
+export const outboxEventNotFound = (eventId: string): OutboxEventNotFound => ({
+  tag: 'OutboxEventNotFound',
+  eventId,
+});
+
 // ─── Port ─────────────────────────────────────────────────────────────────────
 
 /**

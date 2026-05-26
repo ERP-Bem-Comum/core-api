@@ -4,7 +4,8 @@ import type { OutboxPort } from '../../application/ports/outbox.ts';
 import { outboxAppendDuplicateEventId } from '../../application/ports/outbox.ts';
 import { eventToOutboxInsert, type OutboxRow } from '../persistence/mappers/outbox.mapper.ts';
 import type { ctrOutboxDeadLetter } from '../persistence/schemas/mysql.ts';
-import type { OutboxQueryError } from '../persistence/repos/outbox-repository.drizzle.ts';
+import type { OutboxQueryError } from '../../application/ports/outbox.ts';
+import type { OutboxBatchOps } from '../../worker/outbox-worker.ts';
 
 // ─── Dead letter row type (inferred from schema) ──────────────────────────────
 
@@ -41,6 +42,11 @@ export const InMemoryOutbox = (): {
   pending: () => readonly OutboxRow[];
   deadLetter: () => readonly OutboxDeadLetterRow[];
   // ── helpers do worker (mesma interface que o adapter Drizzle) ────────────
+  withPendingBatch: <R>(
+    limit: number,
+    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+    handler: (rows: readonly OutboxRow[], ops: OutboxBatchOps) => Promise<R>,
+  ) => Promise<Result<R, OutboxQueryError>>;
   findPendingForUpdate: (limit: number) => Promise<Result<readonly OutboxRow[], OutboxQueryError>>;
   markProcessed: (eventId: string, now?: Date) => Promise<Result<void, OutboxQueryError>>;
   markFailed: (
@@ -187,6 +193,25 @@ export const InMemoryOutbox = (): {
     return ok(undefined);
   };
 
+  // ── withPendingBatch ───────────────────────────────────────────────────────
+  // Espelha a semântica transacional do adapter Drizzle. Ambiente single-threaded:
+  // não há concorrência real, então o "lock" é implícito — o handler processa as
+  // rows e marca via ops antes de qualquer outra chamada observar o estado.
+
+  const withPendingBatch = async <R>(
+    limit: number,
+    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+    handler: (rows: readonly OutboxRow[], ops: OutboxBatchOps) => Promise<R>,
+  ): Promise<Result<R, OutboxQueryError>> => {
+    const pending = rows
+      .filter((r) => r.processedAt === null)
+      .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime())
+      .slice(0, limit) as readonly OutboxRow[];
+    const ops: OutboxBatchOps = { markProcessed, markFailed, moveToDeadLetter };
+    const result = await handler(pending, ops);
+    return ok(result);
+  };
+
   // ── helpers exclusivos de teste ────────────────────────────────────────────
 
   const markProcessedSync = (eventId: string): void => {
@@ -221,6 +246,7 @@ export const InMemoryOutbox = (): {
     all: () => rows as readonly OutboxRow[],
     pending: () => rows.filter((r) => r.processedAt === null) as readonly OutboxRow[],
     deadLetter: () => dlqRows as readonly OutboxDeadLetterRow[],
+    withPendingBatch,
     findPendingForUpdate,
     markProcessed,
     markFailed,

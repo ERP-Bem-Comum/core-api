@@ -34,7 +34,7 @@ import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts
 import type { ContractsModuleEvent } from '#src/modules/contracts/application/ports/event-bus.ts';
 import { err } from '#src/shared/primitives/result.ts';
 import { deliveryUnavailable } from '#src/modules/contracts/application/ports/event-delivery.ts';
-import type { OutboxQueryError } from '#src/modules/contracts/adapters/persistence/repos/outbox-repository.drizzle.ts';
+import type { OutboxQueryError } from '#src/modules/contracts/application/ports/outbox.ts';
 
 // ─── Fixtures ─────────────────────────────────────────────────────────────────
 

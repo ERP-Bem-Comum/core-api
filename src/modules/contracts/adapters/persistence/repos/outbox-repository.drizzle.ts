@@ -6,29 +6,15 @@ import type { OutboxPort } from '../../../application/ports/outbox.ts';
 import {
   outboxAppendUnavailable,
   outboxAppendDuplicateEventId,
+  outboxQueryUnavailable,
+  outboxEventNotFound,
 } from '../../../application/ports/outbox.ts';
-import type { OutboxAppendError } from '../../../application/ports/outbox.ts';
+import type { OutboxAppendError, OutboxQueryError } from '../../../application/ports/outbox.ts';
 import type { ContractsModuleEvent } from '../../../application/ports/event-bus.ts';
 import type { MysqlHandle } from '../drivers/mysql-driver.ts';
 import { eventToOutboxInsert, type OutboxRow } from '../mappers/outbox.mapper.ts';
 import type * as schema from '../schemas/mysql.ts';
-
-// ─── OutboxQueryError (tagged — Padrão D) ─────────────────────────────────────
-
-export type OutboxQueryUnavailable = Readonly<{ tag: 'OutboxQueryUnavailable'; cause: string }>;
-export type OutboxEventNotFound = Readonly<{ tag: 'OutboxEventNotFound'; eventId: string }>;
-
-export type OutboxQueryError = OutboxQueryUnavailable | OutboxEventNotFound;
-
-export const outboxQueryUnavailable = (cause: string): OutboxQueryUnavailable => ({
-  tag: 'OutboxQueryUnavailable',
-  cause,
-});
-
-export const outboxEventNotFound = (eventId: string): OutboxEventNotFound => ({
-  tag: 'OutboxEventNotFound',
-  eventId,
-});
+import type { OutboxBatchOps } from '../../../worker/outbox-worker.ts';
 
 // ─── ER_DUP_ENTRY detection ───────────────────────────────────────────────────
 
@@ -126,6 +112,11 @@ export const createDrizzleOutboxRepository = (
   handle: MysqlHandle, // eslint-disable-line @typescript-eslint/prefer-readonly-parameter-types
   opts?: DrizzleOutboxRepositoryOptions,
 ): OutboxPort & {
+  withPendingBatch: <R>(
+    limit: number,
+    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+    handler: (rows: readonly OutboxRow[], ops: OutboxBatchOps) => Promise<R>,
+  ) => Promise<Result<R, OutboxQueryError>>;
   findPendingForUpdate: (limit: number) => Promise<Result<readonly OutboxRow[], OutboxQueryError>>;
   markProcessed: (eventId: string, now: Date) => Promise<Result<void, OutboxQueryError>>;
   markFailed: (
@@ -196,11 +187,81 @@ export const createDrizzleOutboxRepository = (
         .select()
         .from(schema.ctrOutbox)
         .where(isNull(schema.ctrOutbox.processedAt))
-        .orderBy(asc(schema.ctrOutbox.occurredAt))
+        .orderBy(asc(schema.ctrOutbox.processedAt), asc(schema.ctrOutbox.occurredAt))
         .limit(limit)
         .for('update', { skipLocked: true });
       return rows as readonly OutboxRow[];
     });
+  };
+
+  // ── withPendingBatch ──────────────────────────────────────────────────────
+  // Consumo concorrente correto: abre UMA transação, trava até `limit` rows com
+  // FOR UPDATE SKIP LOCKED, e invoca `handler` com as rows + ops de marcação
+  // ligadas à MESMA transação (tx). O lock sobrevive até o COMMIT (ao fim do
+  // handler) — é isso que faz o SKIP LOCKED particionar entre workers paralelos
+  // (CTR-OUTBOX-SKIPLOCKED-DUP). As ops capturam erro de I/O em Result (best-effort,
+  // como os helpers diretos); erro lançado pelo SELECT aborta a tx → err + rollback.
+
+  const withPendingBatch = async <R>(
+    limit: number,
+    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+    handler: (rows: readonly OutboxRow[], ops: OutboxBatchOps) => Promise<R>,
+  ): Promise<Result<R, OutboxQueryError>> => {
+    try {
+      const result = await db.transaction(async (tx) => {
+        const rows = (await tx
+          .select()
+          .from(schema.ctrOutbox)
+          .where(isNull(schema.ctrOutbox.processedAt))
+          .orderBy(asc(schema.ctrOutbox.processedAt), asc(schema.ctrOutbox.occurredAt))
+          .limit(limit)
+          .for('update', { skipLocked: true })) as readonly OutboxRow[];
+
+        const ops: OutboxBatchOps = {
+          markProcessed: async (eventId, now) =>
+            safe('withPendingBatch:markProcessed', async () => {
+              await tx
+                .update(schema.ctrOutbox)
+                .set({ processedAt: now })
+                .where(
+                  and(eq(schema.ctrOutbox.eventId, eventId), isNull(schema.ctrOutbox.processedAt)),
+                );
+            }),
+          markFailed: async (eventId, _now, _errorTag, attempt) =>
+            safe('withPendingBatch:markFailed', async () => {
+              await tx
+                .update(schema.ctrOutbox)
+                .set({ attempts: attempt })
+                .where(eq(schema.ctrOutbox.eventId, eventId));
+            }),
+          moveToDeadLetter: async (eventId, now, errorMessage) =>
+            safe('withPendingBatch:moveToDeadLetter', async () => {
+              const target = rows.find((r) => r.eventId === eventId);
+              if (target === undefined) return;
+              await tx.insert(schema.ctrOutboxDeadLetter).values({
+                eventId: target.eventId,
+                aggregateId: target.aggregateId,
+                aggregateType: target.aggregateType,
+                eventType: target.eventType,
+                schemaVersion: target.schemaVersion,
+                occurredAt: target.occurredAt,
+                enqueuedAt: target.enqueuedAt,
+                failedAt: now,
+                attempts: target.attempts,
+                lastError: errorMessage,
+                payload: target.payload,
+              });
+              await tx.delete(schema.ctrOutbox).where(eq(schema.ctrOutbox.eventId, eventId));
+            }),
+        };
+
+        return handler(rows, ops);
+      });
+      return ok(result);
+    } catch (cause) {
+      process.stderr.write(`[outbox-repo:withPendingBatch] ${String(cause)}\n`);
+      return err(outboxQueryUnavailable(String(cause)));
+    }
   };
 
   // ── markProcessed ─────────────────────────────────────────────────────────
@@ -319,6 +380,7 @@ export const createDrizzleOutboxRepository = (
 
   return {
     append,
+    withPendingBatch,
     findPendingForUpdate,
     markProcessed,
     markFailed,

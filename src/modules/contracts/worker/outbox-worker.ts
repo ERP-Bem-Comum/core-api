@@ -1,14 +1,15 @@
 import process from 'node:process';
 
-import { type Result, ok, err } from '../../../shared/primitives/result.ts';
+import { type Result, err } from '../../../shared/primitives/result.ts';
 import {
   withNewCorrelation,
   currentCorrelationId,
 } from '../../../shared/observability/correlation.ts';
 import type { EventDelivery, ProcessedEvent } from '../application/ports/event-delivery.ts';
+import { deliveryUnavailable } from '../application/ports/event-delivery.ts';
 import type { Clock } from '../../../shared/ports/clock.ts';
 import { outboxRowToEvent, type OutboxRow } from '../adapters/persistence/mappers/outbox.mapper.ts';
-import type { OutboxQueryError } from '../adapters/persistence/repos/outbox-repository.drizzle.ts';
+import type { OutboxQueryError } from '../application/ports/outbox.ts';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -31,12 +32,48 @@ export type WorkerStats = Readonly<{
 }>;
 
 /**
- * WorkerOutboxOps — os 4 helpers que o worker precisa do adapter de outbox.
+ * OutboxBatchOps — operações de marcação ligadas à transação do batch corrente.
+ *
+ * Passadas ao handler de `withPendingBatch` para que a marcação (`markProcessed`
+ * etc.) ocorra na MESMA transação que travou as rows via `FOR UPDATE SKIP LOCKED`.
+ * É isso que dá efeito ao SKIP LOCKED entre workers concorrentes (CTR-OUTBOX-SKIPLOCKED-DUP):
+ * o lock sobrevive até o COMMIT, depois do delivery + marcação.
+ */
+export type OutboxBatchOps = Readonly<{
+  markProcessed: (eventId: string, now: Date) => Promise<Result<void, OutboxQueryError>>;
+  markFailed: (
+    eventId: string,
+    now: Date,
+    errorTag: string,
+    attempt: number,
+  ) => Promise<Result<void, OutboxQueryError>>;
+  moveToDeadLetter: (
+    eventId: string,
+    now: Date,
+    errorMessage: string,
+  ) => Promise<Result<void, OutboxQueryError>>;
+}>;
+
+/**
+ * WorkerOutboxOps — o que o worker precisa do adapter de outbox.
+ *
+ * `withPendingBatch` é a operação canônica de consumo: abre uma transação, trava
+ * até `limit` rows pendentes com `FOR UPDATE SKIP LOCKED`, e invoca o handler com
+ * as rows + `OutboxBatchOps` ligadas à mesma transação. Commit ao fim do handler.
+ *
+ * Os 4 helpers diretos (`findPendingForUpdate`/`markProcessed`/...) permanecem para
+ * inspeção e testes de unidade dos adapters — NÃO usar para consumo concorrente
+ * (rodam em autocommit; o lock do SELECT não sobrevive ao statement).
  *
  * Exportado separadamente para que `CliContext` possa referenciar este tipo
  * sem importar `WorkerDeps` inteiro (que puxa `EventDelivery` e `Clock`).
  */
 export type WorkerOutboxOps = Readonly<{
+  withPendingBatch: <R>(
+    limit: number,
+    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+    handler: (rows: readonly OutboxRow[], ops: OutboxBatchOps) => Promise<R>,
+  ) => Promise<Result<R, OutboxQueryError>>;
   findPendingForUpdate: (limit: number) => Promise<Result<readonly OutboxRow[], OutboxQueryError>>;
   markProcessed: (eventId: string, now: Date) => Promise<Result<void, OutboxQueryError>>;
   markFailed: (
@@ -142,89 +179,96 @@ export const runOnce = async (
   deps: WorkerDeps,
   config: WorkerConfig,
 ): Promise<Result<WorkerStats, OutboxQueryError>> => {
-  // 1. Ler pendentes — falha crítica se o banco não responde.
-  const pendingResult = await deps.outbox.findPendingForUpdate(config.batchSize);
-  if (!pendingResult.ok) return err(pendingResult.error);
+  // O batch inteiro roda numa única transação: o `FOR UPDATE SKIP LOCKED` que trava
+  // as rows (dentro de `withPendingBatch`) só isola workers concorrentes se o lock
+  // sobreviver até a marcação. Por isso delivery + markProcessed ocorrem aqui dentro,
+  // antes do COMMIT (CTR-OUTBOX-SKIPLOCKED-DUP). Erro crítico de I/O → tx rollback → err.
+  return deps.outbox.withPendingBatch(config.batchSize, async (rows, ops) => {
+    let delivered = 0;
+    let failed = 0;
+    let dlqMoved = 0;
 
-  const rows = pendingResult.value;
+    for (const row of rows) {
+      // 2a. Deserializar payload.
+      const eventResult = outboxRowToEvent(row);
 
-  let delivered = 0;
-  let failed = 0;
-  let dlqMoved = 0;
-
-  for (const row of rows) {
-    // 2a. Deserializar payload.
-    const eventResult = outboxRowToEvent(row);
-
-    if (!eventResult.ok) {
-      // Payload corrupto → DLQ direto (sem incrementar attempt — não é retry de delivery).
-      const dlqResult = await deps.outbox.moveToDeadLetter(
-        row.eventId,
-        deps.clock.now(),
-        `mapper-error: ${eventResult.error.tag}`,
-      );
-      if (!dlqResult.ok) {
-        process.stderr.write(
-          `${workerTag()}moveToDeadLetter(corrupt) failed for ${row.eventId}: ${dlqResult.error.tag}\n`,
-        );
-      }
-      dlqMoved += 1;
-      continue;
-    }
-
-    // 2b. Montar ProcessedEvent e entregar.
-    const processed: ProcessedEvent = {
-      eventId: row.eventId,
-      eventType: row.eventType,
-      schemaVersion: row.schemaVersion,
-      event: eventResult.value,
-    };
-
-    const deliveryResult = await deps.delivery.deliver(processed);
-
-    if (deliveryResult.ok) {
-      // 2c-ok. Marcar como processado.
-      const markResult = await deps.outbox.markProcessed(row.eventId, deps.clock.now());
-      if (!markResult.ok) {
-        process.stderr.write(
-          `${workerTag()}markProcessed failed for ${row.eventId}: ${markResult.error.tag}\n`,
-        );
-      }
-      delivered += 1;
-    } else {
-      // 2c-err. Incrementar attempts; rotear para DLQ se atingiu maxAttempts.
-      const newAttempt = row.attempts + 1;
-
-      if (newAttempt >= config.maxAttempts) {
-        const dlqResult = await deps.outbox.moveToDeadLetter(
+      if (!eventResult.ok) {
+        // Payload corrupto → DLQ direto (sem incrementar attempt — não é retry de delivery).
+        const dlqResult = await ops.moveToDeadLetter(
           row.eventId,
           deps.clock.now(),
-          `delivery-error: ${deliveryResult.error.tag}`,
+          `mapper-error: ${eventResult.error.tag}`,
         );
         if (!dlqResult.ok) {
           process.stderr.write(
-            `${workerTag()}moveToDeadLetter failed for ${row.eventId}: ${dlqResult.error.tag}\n`,
+            `${workerTag()}moveToDeadLetter(corrupt) failed for ${row.eventId}: ${dlqResult.error.tag}\n`,
           );
         }
         dlqMoved += 1;
-      } else {
-        const failResult = await deps.outbox.markFailed(
-          row.eventId,
-          deps.clock.now(),
-          deliveryResult.error.tag,
-          newAttempt,
-        );
-        if (!failResult.ok) {
+        continue;
+      }
+
+      // 2b. Montar ProcessedEvent e entregar.
+      const processed: ProcessedEvent = {
+        eventId: row.eventId,
+        eventType: row.eventType,
+        schemaVersion: row.schemaVersion,
+        event: eventResult.value,
+      };
+
+      // Guard: um adapter de delivery mal-comportado que LANCE (em vez de retornar
+      // err) não pode propagar para fora do handler — isso abortaria a transação e
+      // faria rollback do batch inteiro já entregue. Convertemos throw → err aqui,
+      // tratando como falha de delivery comum (markFailed/DLQ). (CTR-OUTBOX-SKIPLOCKED-DUP)
+      const deliveryResult = await deps.delivery.deliver(processed).catch((cause: unknown) => {
+        process.stderr.write(`${workerTag()}delivery threw for ${row.eventId}: ${String(cause)}\n`);
+        return err(deliveryUnavailable(`deliver-threw: ${String(cause)}`));
+      });
+
+      if (deliveryResult.ok) {
+        // 2c-ok. Marcar como processado (mesma tx do claim).
+        const markResult = await ops.markProcessed(row.eventId, deps.clock.now());
+        if (!markResult.ok) {
           process.stderr.write(
-            `${workerTag()}markFailed failed for ${row.eventId}: ${failResult.error.tag}\n`,
+            `${workerTag()}markProcessed failed for ${row.eventId}: ${markResult.error.tag}\n`,
           );
         }
-        failed += 1;
+        delivered += 1;
+      } else {
+        // 2c-err. Incrementar attempts; rotear para DLQ se atingiu maxAttempts.
+        const newAttempt = row.attempts + 1;
+
+        if (newAttempt >= config.maxAttempts) {
+          const dlqResult = await ops.moveToDeadLetter(
+            row.eventId,
+            deps.clock.now(),
+            `delivery-error: ${deliveryResult.error.tag}`,
+          );
+          if (!dlqResult.ok) {
+            process.stderr.write(
+              `${workerTag()}moveToDeadLetter failed for ${row.eventId}: ${dlqResult.error.tag}\n`,
+            );
+          }
+          dlqMoved += 1;
+        } else {
+          const failResult = await ops.markFailed(
+            row.eventId,
+            deps.clock.now(),
+            deliveryResult.error.tag,
+            newAttempt,
+          );
+          if (!failResult.ok) {
+            process.stderr.write(
+              `${workerTag()}markFailed failed for ${row.eventId}: ${failResult.error.tag}\n`,
+            );
+          }
+          failed += 1;
+        }
       }
     }
-  }
 
-  return ok({ iterations: 1, delivered, failed, movedToDeadLetter: dlqMoved });
+    return { iterations: 1, delivered, failed, movedToDeadLetter: dlqMoved };
+  });
 };
 
 // ─── runLoop ──────────────────────────────────────────────────────────────────

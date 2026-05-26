@@ -40,6 +40,7 @@ export const buildMysqlContext = async (
     // Reutiliza o mesmo handle/pool que os repos de contrato e aditivo.
     outbox: {
       append: outboxRepo.append,
+      withPendingBatch: outboxRepo.withPendingBatch,
       findPendingForUpdate: outboxRepo.findPendingForUpdate,
       markProcessed: outboxRepo.markProcessed,
       markFailed: outboxRepo.markFailed,
