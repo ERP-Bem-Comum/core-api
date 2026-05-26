@@ -20,6 +20,7 @@
     "#src/*": "./src/*"
   },
   "scripts": {
+    "preinstall": "node --experimental-strip-types --no-warnings scripts/only-allow-pnpm.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
