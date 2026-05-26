@@ -54,6 +54,7 @@ const truncateAll = (): void => {
       `docker exec ${CONTAINER} mysql --protocol=tcp -h 127.0.0.1 -uroot -p"${DUMMY_ROOT_PWD}" -e "` +
         `SET FOREIGN_KEY_CHECKS=0; ` +
         `TRUNCATE TABLE ctr_contract_homologated_amendments; ` +
+        `TRUNCATE TABLE ctr_documents; ` +
         `TRUNCATE TABLE ctr_amendments; ` +
         `TRUNCATE TABLE ctr_contracts; ` +
         `SET FOREIGN_KEY_CHECKS=1;` +
@@ -217,8 +218,25 @@ if (integrationEnabled()) {
       assert.equal(aditivo.exitCode, 0, `criar-aditivo: ${aditivo.stderr}`);
       const amendmentId = requireUuid(aditivo.stdout, 'ID:', 'CA-6 criar-aditivo');
 
-      // Anexa documento (UUID fictício — neste ticket o storage não é wired).
+      // Registra o documento no agregado ContractDocument antes de anexar:
+      // `attachSignedDocument` valida que o documento existe via documentRepo.findById
+      // (CTR-AMENDMENT-DOCUMENT-LINK). `subir-documento` cria o agregado mínimo.
       const documentId = 'dddddddd-6666-4666-8666-dddddddddddd';
+      const sobe = runCli([
+        'subir-documento',
+        '--driver',
+        'mysql',
+        '--connection-string',
+        VALID_CONN,
+        '--parent-id',
+        amendmentId,
+        '--parent-tipo',
+        'Amendment',
+        '--doc-id',
+        documentId,
+      ]);
+      assert.equal(sobe.exitCode, 0, `subir-documento: ${sobe.stderr}`);
+
       const anexa = runCli([
         'anexar-documento',
         '--driver',
