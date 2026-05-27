@@ -23,6 +23,7 @@ import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
 import type { CreatePendingContractInput } from '#src/modules/contracts/domain/contract/types.ts';
 
 const D = (iso: string): Date => new Date(iso);
+const INVALID_DATE = new Date('not-a-date');
 
 const pd = (iso: string): PlainDate.PlainDate => {
   const r = PlainDate.from(iso.slice(0, 10));
@@ -159,5 +160,55 @@ describe('Contract.create — Active preservado (regressão CA3)', () => {
     if (!r.ok) return;
     assert.equal(r.value.contract.status, 'Active');
     assert.equal('signedAt' in r.value.contract, true);
+  });
+});
+
+// ============================================================================
+// activate — transição Pending → Active (CTR-DOMAIN-CONTRACT-ACTIVATE)
+// ============================================================================
+
+describe('Contract.activate — Pending → Active (ADR-0023)', () => {
+  const buildPending = () => {
+    const r = Contract.createPending(validPendingInput());
+    if (!r.ok) throw new Error(`fixture broken: ${JSON.stringify(r.error)}`);
+    return r.value.contract;
+  };
+
+  it('CA-A1: ativa com signedAt → ActiveContract com vigência = original', () => {
+    const pending = buildPending();
+    const signedAt = D('2026-02-01');
+
+    const r = Contract.activate(pending, signedAt);
+
+    assert.equal(isOk(r), true);
+    if (!r.ok) return;
+    const { contract } = r.value;
+    assert.equal(contract.status, 'Active');
+    assert.equal(contract.signedAt.getTime(), signedAt.getTime());
+    assert.equal(contract.currentValue.cents, pending.originalValue.cents);
+    assert.equal(Period.equals(contract.currentPeriod, pending.originalPeriod), true);
+    assert.equal(contract.homologatedAmendmentIds.length, 0);
+    // Identidade/cadastro preservados.
+    assert.equal(contract.id, pending.id);
+    assert.equal(contract.sequentialNumber, pending.sequentialNumber);
+  });
+
+  it('CA-A2: signedAt inválido → ContractInvalidSignedAt', () => {
+    const r = Contract.activate(buildPending(), INVALID_DATE);
+    assert.equal(isErr(r), true);
+    if (!r.ok) assert.equal(r.error.tag, 'ContractInvalidSignedAt');
+  });
+
+  it('CA-A3: emite ContractActivated com occurredAt = signedAt', () => {
+    const signedAt = D('2026-03-15');
+    const r = Contract.activate(buildPending(), signedAt);
+
+    assert.equal(isOk(r), true);
+    if (!r.ok) return;
+    assert.equal(r.value.event.type, 'ContractActivated');
+    if (r.value.event.type === 'ContractActivated') {
+      assert.equal(r.value.event.contractId, r.value.contract.id);
+      assert.equal(r.value.event.occurredAt.getTime(), signedAt.getTime());
+    }
   });
 });

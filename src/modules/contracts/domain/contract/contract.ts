@@ -95,6 +95,38 @@ const createPending = (
 };
 
 /**
+ * Transição `Pending → Active` (ADR-0023) — ativação por assinatura.
+ *
+ * Recebe `PendingContract` — o compilador rejeita estados efetivos em compile
+ * time (espelha `expire`/`terminate`). A vigência efetiva inicia aqui:
+ * `current = original`. A exigência de documento assinado (RN-CV-02) é validada
+ * pelo use case (application), não pelo agregado.
+ */
+const activate = (
+  contract: PendingContract,
+  signedAt: Date,
+): Result<{ contract: ActiveContract; event: ContractEvent }, ContractError.ContractError> => {
+  if (!isValidDate(signedAt)) return err(ContractError.contractInvalidSignedAt());
+
+  const next: ActiveContract = immutable({
+    ...contract,
+    signedAt,
+    currentValue: contract.originalValue,
+    currentPeriod: contract.originalPeriod,
+    status: 'Active' as const,
+    homologatedAmendmentIds: [] as readonly never[],
+  });
+
+  const event: ContractEvent = {
+    type: 'ContractActivated',
+    contractId: contract.id,
+    occurredAt: signedAt,
+  };
+
+  return ok({ contract: next, event });
+};
+
+/**
  * Cria um novo contrato no estado `Active`.
  *
  * Caminho "nasce já assinado" — exige `signedAt`. O tipo de retorno
@@ -312,6 +344,7 @@ const applyHomologatedAdjustment = (
 export const Contract = {
   create,
   createPending,
+  activate,
   parseActive,
   expire,
   terminate,

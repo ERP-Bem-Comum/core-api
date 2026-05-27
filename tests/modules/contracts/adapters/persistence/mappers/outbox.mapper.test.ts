@@ -94,6 +94,36 @@ describe('outbox.mapper — round-trip dos 6 event types', () => {
     });
   });
 
+  // CTR-DOMAIN-CONTRACT-ACTIVATE — evento da transição Pending → Active.
+  describe('ContractActivated', () => {
+    it('round-trip preserva contractId, occurredAt e eventType', () => {
+      const contractId = ContractId.generate();
+      const occurredAt = mkDate('2026-03-15T08:00:00.000Z');
+      const event: ContractsModuleEvent = { type: 'ContractActivated', contractId, occurredAt };
+
+      const { insert, rehydrated } = roundTrip(event);
+
+      assert.equal(insert.eventType, 'ContractActivated');
+      assert.equal(insert.aggregateType, 'Contract');
+      assert.equal(insert.aggregateId, contractId as unknown as string);
+
+      assert.equal(
+        isOk(rehydrated),
+        true,
+        `rehydration falhou: ${JSON.stringify(!rehydrated.ok ? rehydrated.error : '')}`,
+      );
+      if (!rehydrated.ok) return;
+      assert.equal(rehydrated.value.type, 'ContractActivated');
+      if (rehydrated.value.type === 'ContractActivated') {
+        assert.equal(
+          rehydrated.value.contractId as unknown as string,
+          contractId as unknown as string,
+        );
+        assert.equal(rehydrated.value.occurredAt.toISOString(), occurredAt.toISOString());
+      }
+    });
+  });
+
   describe('ContractStateUpdated', () => {
     it('round-trip preserva newCurrentValue.cents com Period.Fixed', () => {
       const contractId = ContractId.generate();

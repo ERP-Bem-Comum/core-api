@@ -37,6 +37,22 @@ describe('toTimelineEntry — mapeamento por evento (CA-1)', () => {
     assert.equal(entry.subjectAmendmentId, null);
   });
 
+  it('ContractActivated → kind ContractActivated, sem actor, sem subjectAmendmentId', () => {
+    const contractId = ContractId.generate();
+    const event: ContractsModuleEvent = {
+      type: 'ContractActivated',
+      contractId,
+      occurredAt: D('2026-03-15'),
+    };
+    const entry = toTimelineEntry(event, 'evt-act', contractId);
+
+    assert.equal(entry.kind, 'ContractActivated');
+    assert.equal(entry.contractId, contractId);
+    assert.equal(entry.occurredAt.getTime(), D('2026-03-15').getTime());
+    assert.equal(entry.actor, null);
+    assert.equal(entry.subjectAmendmentId, null);
+  });
+
   it('ContractEnded → kind ContractEnded', () => {
     const contractId = ContractId.generate();
     const event: ContractsModuleEvent = {

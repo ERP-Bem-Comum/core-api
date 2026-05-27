@@ -21,6 +21,7 @@ export const toTimelineEntry = (
 
   switch (event.type) {
     case 'ContractCreated':
+    case 'ContractActivated':
     case 'ContractEnded':
       return { ...base, actor: null, subjectAmendmentId: null };
     case 'ContractStateUpdated':

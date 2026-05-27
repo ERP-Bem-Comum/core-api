@@ -100,6 +100,12 @@ type ContractCreatedPayload = Readonly<{
   occurredAt: string;
 }>;
 
+// ADR-0023: mesmo shape de ContractCreated (contractId + occurredAt).
+type ContractActivatedPayload = Readonly<{
+  contractId: string;
+  occurredAt: string;
+}>;
+
 type ContractStateUpdatedPayload = Readonly<{
   contractId: string;
   amendmentId: string;
@@ -175,6 +181,7 @@ const extractAggregateInfo = (
 ): { id: string; type: 'Contract' | 'Amendment' | 'Document' } => {
   switch (event.type) {
     case 'ContractCreated':
+    case 'ContractActivated':
     case 'ContractStateUpdated':
     case 'ContractEnded':
       return { id: event.contractId as unknown as string, type: 'Contract' };
@@ -215,6 +222,12 @@ const serializeEvent = (event: ContractsModuleEvent): unknown => {
         contractId: event.contractId as unknown as string,
         occurredAt: event.occurredAt.toISOString(),
       } satisfies ContractCreatedPayload;
+
+    case 'ContractActivated':
+      return {
+        contractId: event.contractId as unknown as string,
+        occurredAt: event.occurredAt.toISOString(),
+      } satisfies ContractActivatedPayload;
 
     case 'ContractStateUpdated':
       return {
@@ -392,6 +405,15 @@ const deserializeEvent = (
       const r = ContractId.rehydrate(p['contractId']);
       if (!r.ok) return err(outboxMapperInvalidPayload(`ContractCreated-contractId: ${r.error}`));
       return ok({ type: 'ContractCreated', contractId: r.value, occurredAt });
+    }
+
+    case 'ContractActivated': {
+      if (typeof p['contractId'] !== 'string') {
+        return err(outboxMapperInvalidPayload('ContractActivated-missing-contractId'));
+      }
+      const r = ContractId.rehydrate(p['contractId']);
+      if (!r.ok) return err(outboxMapperInvalidPayload(`ContractActivated-contractId: ${r.error}`));
+      return ok({ type: 'ContractActivated', contractId: r.value, occurredAt });
     }
 
     case 'ContractStateUpdated': {
