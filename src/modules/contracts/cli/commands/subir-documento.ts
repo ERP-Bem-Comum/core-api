@@ -31,6 +31,7 @@ import {
 } from '../../application/ports/document-storage.types.ts';
 
 const ALLOWED = ['parent-id', 'parent-tipo', 'doc-id', 'user-id', 'help', 'h'] as const;
+export const allowedFlags: readonly string[] = ALLOWED;
 
 export const descricao =
   'Registra um documento minimo no agregado (sem upload de bytes — usado para fechar fluxo de anexacao em dev/E2E).';

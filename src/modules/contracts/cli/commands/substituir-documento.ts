@@ -16,6 +16,7 @@ import { formatFlagError } from './_flag-errors.ts';
 import { supersedeDocument } from '../../application/use-cases/supersede-document.ts';
 
 const ALLOWED = ['documento', 'substituido-por', 'user-id', 'help', 'h'] as const;
+export const allowedFlags: readonly string[] = ALLOWED;
 
 export const descricao = 'Substitui um documento por nova versao (RN-AS-02) preservando audit.';
 

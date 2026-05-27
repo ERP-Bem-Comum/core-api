@@ -18,6 +18,7 @@ const ALLOWED = [
   'help',
   'h',
 ] as const;
+export const allowedFlags: readonly string[] = ALLOWED;
 
 export const descricao = 'Cria um Aditivo Pendente vinculado a um contrato.';
 

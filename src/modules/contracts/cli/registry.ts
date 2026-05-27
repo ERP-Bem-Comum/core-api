@@ -15,6 +15,9 @@ import * as runOutboxWorker from './commands/run-outbox-worker.ts';
 export type SubCommand = Readonly<{
   descricao: string;
   help: string;
+  // Allowlist de flags do subcomando — exposta para o `main` validar flags
+  // desconhecidas ANTES de carregar o state (CTR-CLI-VALIDATE-FLAGS-BEFORE-STATE).
+  allowedFlags: readonly string[];
   run: (ctx: CliContext, argv: readonly string[]) => Promise<number>;
 }>;
 

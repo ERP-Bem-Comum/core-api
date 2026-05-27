@@ -6,6 +6,7 @@ import { formatContract, formatErrorCode } from '../formatters/index.ts';
 import { formatFlagError } from './_flag-errors.ts';
 
 const ALLOWED = ['contrato', 'motivo', 'help', 'h'] as const;
+export const allowedFlags: readonly string[] = ALLOWED;
 
 // PT-BR na borda (CLAUDE.md §Idioma): `expiracao`/`distrato` → kind do domínio.
 const MOTIVO_TO_KIND: Readonly<Record<string, EndContractKind>> = {

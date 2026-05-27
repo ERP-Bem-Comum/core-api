@@ -14,6 +14,7 @@ const REQUIRED = [
 ] as const;
 
 const ALLOWED = [...REQUIRED, 'fim', 'sem-fim', 'help', 'h'] as const;
+export const allowedFlags: readonly string[] = ALLOWED;
 
 export const descricao = 'Cria um novo Contrato Mãe (status Ativo).';
 

@@ -5,6 +5,7 @@ import { formatContract, formatErrorCode } from '../formatters/index.ts';
 import { formatFlagError } from './_flag-errors.ts';
 
 const ALLOWED = ['id', 'help', 'h'] as const;
+export const allowedFlags: readonly string[] = ALLOWED;
 
 export const descricao = 'Mostra detalhes de um contrato pelo ID.';
 

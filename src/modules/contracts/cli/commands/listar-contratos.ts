@@ -6,6 +6,7 @@ import { formatFlagError } from './_flag-errors.ts';
 
 // listar-contratos não tem flags do subcomando; só aceita --help/-h.
 const ALLOWED = ['help', 'h'] as const;
+export const allowedFlags: readonly string[] = ALLOWED;
 
 export const descricao = 'Lista todos os contratos.';
 

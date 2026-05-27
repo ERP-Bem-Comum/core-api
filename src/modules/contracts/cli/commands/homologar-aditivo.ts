@@ -5,6 +5,7 @@ import { formatAmendment, formatContract, formatErrorCode } from '../formatters/
 import { formatFlagError } from './_flag-errors.ts';
 
 const ALLOWED = ['aditivo', 'contrato', 'usuario', 'help', 'h'] as const;
+export const allowedFlags: readonly string[] = ALLOWED;
 
 export const descricao = 'Homologa um Aditivo Pendente, aplicando o efeito no Contrato vigente.';
 

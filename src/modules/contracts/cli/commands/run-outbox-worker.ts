@@ -21,6 +21,7 @@ const ALLOWED = [
   // Reconhecida pelo parser mas não documentada no help público.
   'test-abort',
 ] as const;
+export const allowedFlags: readonly string[] = ALLOWED;
 
 // ─── Exports obrigatórios do SubCommand ───────────────────────────────────────
 

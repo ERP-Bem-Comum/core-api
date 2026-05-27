@@ -2,9 +2,11 @@ import {
   installLastResortHandlers,
   processLastResortDeps,
 } from '../../../shared/runtime/last-resort.ts';
+import { formatFlagError } from './commands/_flag-errors.ts';
 import { buildContext, type CliContextError } from './context.ts';
 import { formatErrorCode } from './formatters/error.ts';
 import { parseDriverFlags } from './parse-driver-flags.ts';
+import { parseFlags, validateAllowedFlags } from './parse-flags.ts';
 import { REGISTRY } from './registry.ts';
 
 // REGR #8 (2026-05-15): `--help` intencional vai para stdout (suporta `cli --help | less`);
@@ -103,6 +105,20 @@ const main = async (): Promise<number> => {
   const parsedR = parseDriverFlags(subArgv);
   if (!parsedR.ok) {
     process.stderr.write(`❌ ${formatErrorCode(parsedR.error)}\n`);
+    return EXIT_USAGE;
+  }
+
+  // Valida flags do subcomando ANTES de qualquer I/O de state: um typo (ex.
+  // `--no-stat`) não deve disparar EX_IOERR (74) no load de um cli-state.json
+  // inválido, mascarando o erro de uso (CTR-CLI-VALIDATE-FLAGS-BEFORE-STATE).
+  const subFlagsR = parseFlags(parsedR.value.rest);
+  if (!subFlagsR.ok) {
+    process.stderr.write(formatFlagError(subFlagsR.error));
+    return EXIT_USAGE;
+  }
+  const unknownR = validateAllowedFlags(subFlagsR.value, cmd.allowedFlags);
+  if (!unknownR.ok) {
+    process.stderr.write(formatFlagError(unknownR.error));
     return EXIT_USAGE;
   }
 

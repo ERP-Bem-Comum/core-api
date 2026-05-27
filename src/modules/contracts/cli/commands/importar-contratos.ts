@@ -15,6 +15,7 @@ import {
 } from '../formatters/index.ts';
 
 const ALLOWED = ['arquivo', 'formato', 'confirmar', 'help', 'h'] as const;
+export const allowedFlags: readonly string[] = ALLOWED;
 
 export const descricao =
   'Importa Contratos Mãe de um arquivo CSV/JSON (UTF-8). Dry-run por padrão; --confirmar persiste.';

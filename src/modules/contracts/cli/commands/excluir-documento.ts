@@ -18,6 +18,7 @@ import { formatFlagError } from './_flag-errors.ts';
 import { deleteDocument } from '../../application/use-cases/delete-document.ts';
 
 const ALLOWED = ['documento', 'motivo', 'user-id', 'help', 'h'] as const;
+export const allowedFlags: readonly string[] = ALLOWED;
 
 export const descricao = 'Exclui logicamente um documento (RN-11) preservando audit trail.';
 
