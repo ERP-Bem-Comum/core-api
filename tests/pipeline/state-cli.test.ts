@@ -501,3 +501,21 @@ describe('state-cli — supersede (CTR-PIPELINE-SUPERSEDE-STATUS)', () => {
     assert.equal(content.status, 'closed-green', 'ticket terminal não deve ser sobrescrito');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CTR-PIPELINE-SUPERSEDE-NO-SELF — recusa auto-referência (`--by` == ticket).
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('state-cli — supersede recusa auto-referência (CTR-PIPELINE-SUPERSEDE-NO-SELF)', () => {
+  it('CA-S4: supersede <ticket> --by <ticket> (mesmo id) falha com exit 2 e não altera o status', async () => {
+    const ticket = 'CTR-SUPERSEDE-SELF';
+    const root = await makeTicketDir(ticket);
+    await runCli(root, ['init', ticket, '--size', 'S']);
+
+    const r = await runCli(root, ['supersede', ticket, '--by', ticket]);
+
+    assert.equal(r.code, 2, `esperado exit 2 para auto-referência; stderr: ${r.stderr}`);
+    const content = await readJson<StateSnapshot>(stateJsonPath(root, ticket));
+    assert.equal(content.status, 'open', 'auto-referência não deve mudar o status');
+  });
+});

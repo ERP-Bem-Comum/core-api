@@ -327,6 +327,9 @@ const SUPERSEDE_BLOCKED_STATUSES: readonly PipelineState['status'][] = [
 
 const cmdSupersede = async (cwd: string, ticket: string, flags: Flags): Promise<void> => {
   const winner = requireFlag(flags, 'by');
+  if (winner === ticket) {
+    exitFail(2, `--by não pode ser o próprio ticket (${ticket}) — auto-referência inválida`);
+  }
   const dir = ticketDirOf(cwd, ticket);
   const state = await loadState(dir);
 
