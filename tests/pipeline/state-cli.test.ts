@@ -235,3 +235,202 @@ describe('state-cli — comandos CLI', () => {
     assert.equal(content.closedAt, null, 'closedAt deve continuar null');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CTR-PIPELINE-WAVE-REOPEN — subcomando `wave-reopen <ticket> <Wn> [--agent <a>]`.
+// Modela o ciclo W2 REJECTED → fix → re-review → APPROVED sem editar STATE.json à mão.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const stateJsonPath = (root: string, ticket: string): string =>
+  join(root, '.claude', '.pipeline', ticket, 'STATE.json');
+
+// Leva o ticket até `<wave>` done com o outcome informado, partindo do init.
+// Fecha as waves anteriores em sequência para respeitar a ordem do pipeline.
+const driveToWaveDone = async (
+  root: string,
+  ticket: string,
+  wave: 'W0' | 'W1' | 'W2' | 'W3',
+  outcome: string,
+): Promise<void> => {
+  const order = ['W0', 'W1', 'W2', 'W3'] as const;
+  const reports = [
+    '002-tests/REPORT.md',
+    '003-impl/REPORT.md',
+    '004-code-review/REVIEW.md',
+    '005-quality/REPORT.md',
+  ];
+  const agents = ['tdd-strategist', 'ts-domain-modeler', 'code-reviewer', 'ts-quality-checker'];
+  const targetIdx = order.indexOf(wave);
+  await runCli(root, ['init', ticket, '--size', 'S']);
+  for (let i = 0; i <= targetIdx; i++) {
+    await runCli(root, ['wave-start', ticket, order[i]!, '--agent', agents[i]!]);
+    const waveOutcome =
+      i === targetIdx ? outcome : i === 0 ? 'RED' : i === 1 ? 'GREEN' : 'APPROVED';
+    await runCli(root, [
+      'wave-finish',
+      ticket,
+      order[i]!,
+      '--outcome',
+      waveOutcome,
+      '--report',
+      reports[i]!,
+    ]);
+  }
+};
+
+describe('state-cli — wave-reopen (CTR-PIPELINE-WAVE-REOPEN)', () => {
+  it('CA-1: reabre wave done+REJECTED → in-progress, rounds++, limpa outcome/finishedAt', async () => {
+    // Arrange — W2 done REJECTED (W3 pending)
+    const ticket = 'CTR-REOPEN-1';
+    const root = await makeTicketDir(ticket);
+    await driveToWaveDone(root, ticket, 'W2', 'REJECTED');
+
+    // Act
+    const r = await runCli(root, ['wave-reopen', ticket, 'W2', '--agent', 'code-reviewer']);
+
+    // Assert
+    assert.equal(r.code, 0, `esperado exit 0; stderr: ${r.stderr}`);
+    const content = await readJson<StateSnapshot>(stateJsonPath(root, ticket));
+    const w2 = content.waves.find((w) => w.id === 'W2');
+    assert.equal(w2?.status, 'in-progress', 'W2 deve voltar a in-progress');
+    assert.equal(w2?.outcome, null, 'outcome deve ser limpo');
+    assert.equal(w2?.rounds, 2, 'rounds deve incrementar de 1 para 2');
+    assert.equal(content.currentWave, 'W2', 'currentWave deve voltar para W2');
+  });
+
+  it('CA-2: após reopen, wave-finish APPROVED fecha a wave e re-renderiza STATE.md', async () => {
+    // Arrange
+    const ticket = 'CTR-REOPEN-2';
+    const root = await makeTicketDir(ticket);
+    await driveToWaveDone(root, ticket, 'W2', 'REJECTED');
+    await runCli(root, ['wave-reopen', ticket, 'W2']);
+
+    // Act
+    const r = await runCli(root, [
+      'wave-finish',
+      ticket,
+      'W2',
+      '--outcome',
+      'APPROVED',
+      '--report',
+      '004-code-review/REVIEW.md',
+    ]);
+
+    // Assert
+    assert.equal(r.code, 0, `esperado exit 0; stderr: ${r.stderr}`);
+    const content = await readJson<StateSnapshot>(stateJsonPath(root, ticket));
+    const w2 = content.waves.find((w) => w.id === 'W2');
+    assert.equal(w2?.status, 'done');
+    assert.equal(w2?.outcome, 'APPROVED', 'outcome final deve ser APPROVED');
+    assert.equal(content.currentWave, 'W3', 'currentWave deve avançar para W3');
+
+    const md = await readFile(join(root, '.claude', '.pipeline', ticket, 'STATE.md'), 'utf8');
+    assert.match(md, /APPROVED/, 'STATE.md deve refletir o novo outcome');
+  });
+
+  it('CA-3: recusa reabrir wave com outcome ≠ REJECTED (exit ≠ 0)', async () => {
+    // Arrange — W0 done RED, sem waves posteriores não-pending
+    const ticket = 'CTR-REOPEN-3';
+    const root = await makeTicketDir(ticket);
+    await driveToWaveDone(root, ticket, 'W0', 'RED');
+
+    // Act
+    const r = await runCli(root, ['wave-reopen', ticket, 'W0']);
+
+    // Assert — exit 2 (violação de invariante) e mensagem específica de outcome,
+    // não o exit 1 genérico de "subcomando desconhecido".
+    assert.equal(r.code, 2, `esperado exit 2; obtido ${r.code}; stderr: ${r.stderr}`);
+    assert.match(r.stderr, /REJECTED/i, 'stderr deve explicar que só REJECTED é reabrível');
+    const content = await readJson<StateSnapshot>(stateJsonPath(root, ticket));
+    const w0 = content.waves.find((w) => w.id === 'W0');
+    assert.equal(w0?.status, 'done', 'W0 deve permanecer done');
+    assert.equal(w0?.outcome, 'RED', 'outcome não deve mudar');
+  });
+
+  it('CA-4: recusa reabrir se alguma wave posterior não está pending (exit ≠ 0)', async () => {
+    // Arrange — W1 done REJECTED, W2 in-progress (posterior não-pending)
+    const ticket = 'CTR-REOPEN-4';
+    const root = await makeTicketDir(ticket);
+    await runCli(root, ['init', ticket, '--size', 'S']);
+    await runCli(root, ['wave-start', ticket, 'W0', '--agent', 'tdd-strategist']);
+    await runCli(root, [
+      'wave-finish',
+      ticket,
+      'W0',
+      '--outcome',
+      'RED',
+      '--report',
+      '002-tests/REPORT.md',
+    ]);
+    await runCli(root, ['wave-start', ticket, 'W1', '--agent', 'ts-domain-modeler']);
+    await runCli(root, [
+      'wave-finish',
+      ticket,
+      'W1',
+      '--outcome',
+      'REJECTED',
+      '--report',
+      '003-impl/REPORT.md',
+    ]);
+    await runCli(root, ['wave-start', ticket, 'W2', '--agent', 'code-reviewer']);
+
+    // Act — tenta reabrir W1 com W2 já in-progress
+    const r = await runCli(root, ['wave-reopen', ticket, 'W1']);
+
+    // Assert — exit 2 e mensagem citando a wave posterior, não o exit 1 genérico.
+    assert.equal(r.code, 2, `esperado exit 2; obtido ${r.code}; stderr: ${r.stderr}`);
+    assert.match(r.stderr, /posterior|W2/i, 'stderr deve mencionar a wave posterior que bloqueia');
+    const content = await readJson<StateSnapshot>(stateJsonPath(root, ticket));
+    const w1 = content.waves.find((w) => w.id === 'W1');
+    assert.equal(w1?.status, 'done', 'W1 deve permanecer done');
+  });
+
+  it('CA-5: respeita MAX_ROUNDS = 3 — reopen na wave já em 3 rounds escala (exit ≠ 0)', async () => {
+    // Arrange — W2 in-progress, eleva rounds a 3, finaliza REJECTED
+    const ticket = 'CTR-REOPEN-5';
+    const root = await makeTicketDir(ticket);
+    await runCli(root, ['init', ticket, '--size', 'S']);
+    await runCli(root, ['wave-start', ticket, 'W0', '--agent', 'tdd-strategist']);
+    await runCli(root, [
+      'wave-finish',
+      ticket,
+      'W0',
+      '--outcome',
+      'RED',
+      '--report',
+      '002-tests/REPORT.md',
+    ]);
+    await runCli(root, ['wave-start', ticket, 'W1', '--agent', 'ts-domain-modeler']);
+    await runCli(root, [
+      'wave-finish',
+      ticket,
+      'W1',
+      '--outcome',
+      'GREEN',
+      '--report',
+      '003-impl/REPORT.md',
+    ]);
+    await runCli(root, ['wave-start', ticket, 'W2', '--agent', 'code-reviewer']);
+    await runCli(root, ['wave-round', ticket, 'W2']); // 1→2
+    await runCli(root, ['wave-round', ticket, 'W2']); // 2→3
+    await runCli(root, [
+      'wave-finish',
+      ticket,
+      'W2',
+      '--outcome',
+      'REJECTED',
+      '--report',
+      '004-code-review/REVIEW.md',
+    ]);
+
+    // Act — W2 done+REJECTED com rounds=3; reopen excederia MAX_ROUNDS
+    const r = await runCli(root, ['wave-reopen', ticket, 'W2']);
+
+    // Assert
+    assert.equal(r.code, 2, `esperado exit 2 (escala humano); stderr: ${r.stderr}`);
+    const content = await readJson<StateSnapshot>(stateJsonPath(root, ticket));
+    const w2 = content.waves.find((w) => w.id === 'W2');
+    assert.equal(w2?.rounds, 3, 'rounds deve permanecer travado em 3');
+    assert.equal(w2?.status, 'done', 'W2 não deve reabrir além do limite');
+  });
+});

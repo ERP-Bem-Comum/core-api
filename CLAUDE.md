@@ -171,6 +171,7 @@ pnpm run pipeline:state init <ticket> --size S
 pnpm run pipeline:state wave-start <ticket> W0 --agent tdd-strategist
 pnpm run pipeline:state wave-finish <ticket> W0 --outcome RED --report 002-tests/REPORT.md
 pnpm run pipeline:state wave-round <ticket> W2     # incrementa round (max 3)
+pnpm run pipeline:state wave-reopen <ticket> W2    # reabre wave done+REJECTED → in-progress (round++, max 3)
 pnpm run pipeline:state close <ticket>             # exige todas as 4 waves done
 pnpm run pipeline:state render <ticket>            # regenera STATE.md de STATE.json
 

@@ -233,6 +233,70 @@ const cmdWaveRound = async (cwd: string, ticket: string, wave: WaveId): Promise<
   process.stdout.write(`${wave} round ${newRounds}\n`);
 };
 
+const cmdWaveReopen = async (
+  cwd: string,
+  ticket: string,
+  wave: WaveId,
+  flags: Flags,
+): Promise<void> => {
+  const dir = ticketDirOf(cwd, ticket);
+  const state = await loadState(dir);
+
+  const idx = indexOfWave(wave);
+  const target = state.waves[idx];
+  if (target === undefined) {
+    exitFail(1, `wave ${wave} não existe no STATE.json`);
+  }
+  if (target.status !== 'done') {
+    exitFail(
+      2,
+      `wave ${wave} não está done (status atual: ${target.status}) — só waves done+REJECTED podem ser reabertas`,
+    );
+  }
+  if (target.outcome !== 'REJECTED') {
+    exitFail(
+      2,
+      `wave ${wave} tem outcome ${target.outcome ?? 'nenhum'} — só REJECTED pode ser reaberto`,
+    );
+  }
+  if (target.rounds >= MAX_ROUNDS) {
+    exitFail(2, `wave ${wave} atingiu max rounds (${MAX_ROUNDS}); escalar ao humano`);
+  }
+  const laterNonPending = state.waves.slice(idx + 1).find((w) => w.status !== 'pending');
+  if (laterNonPending !== undefined) {
+    exitFail(
+      2,
+      `wave posterior ${laterNonPending.id} não está pending (status: ${laterNonPending.status}) — não é possível reabrir ${wave}`,
+    );
+  }
+
+  const agentFlag = flags.get('agent');
+  const now = new Date().toISOString();
+  const newRounds = target.rounds + 1;
+  const newWaves: readonly WaveEntry[] = state.waves.map((w) =>
+    w.id === wave
+      ? {
+          ...w,
+          status: 'in-progress',
+          outcome: null,
+          finishedAt: null,
+          startedAt: now,
+          rounds: newRounds,
+          agent: agentFlag !== undefined && agentFlag !== '' ? agentFlag : w.agent,
+        }
+      : w,
+  );
+  const newState: PipelineState = {
+    ...state,
+    waves: newWaves,
+    currentWave: wave,
+    status: 'in-progress',
+    lastEvent: `${wave} reopened (round ${newRounds})`,
+  };
+  await writeStateAndMd(dir, newState);
+  process.stdout.write(`${wave} reopened (round ${newRounds})\n`);
+};
+
 const cmdClose = async (cwd: string, ticket: string): Promise<void> => {
   const dir = ticketDirOf(cwd, ticket);
   const state = await loadState(dir);
@@ -269,7 +333,7 @@ const main = async (): Promise<void> => {
 
   if (subcommand === undefined) {
     process.stderr.write(
-      'uso: pipeline:state <init|wave-start|wave-finish|wave-round|close|render> <ticket> [args]\n',
+      'uso: pipeline:state <init|wave-start|wave-finish|wave-round|wave-reopen|close|render> <ticket> [args]\n',
     );
     process.exit(1);
   }
@@ -308,6 +372,9 @@ const main = async (): Promise<void> => {
       return;
     case 'wave-round':
       await cmdWaveRound(cwd, ticket, maybeWave);
+      return;
+    case 'wave-reopen':
+      await cmdWaveReopen(cwd, ticket, maybeWave, flags);
       return;
     default:
       process.stderr.write(`subcomando desconhecido: ${subcommand}\n`);
