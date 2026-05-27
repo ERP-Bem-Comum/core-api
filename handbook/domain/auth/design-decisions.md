@@ -187,6 +187,17 @@ SKILL.md correspondente). Rastreabilidade dos pareceres (agentIds desta sessão)
 
 ---
 
+## DD-LOGIN-02 — refresh token opaco: `randomBytes(32)` + `sha256` (não argon2)
+
+- **Status:** Aceita (2026-05-27) · **Confiança:** alta
+- **Decisão:** `RefreshTokenMinter.mint()` (port, síncrono) → `{ token, tokenHash }`. `token` =
+  `base64url(randomBytes(32))` (256 bits, vai ao cliente); `tokenHash` = `sha256(token)` hex (persiste).
+  **Não usa argon2** — refresh é **alta-entropia aleatória** (≠ senha de baixa entropia que exige KDF lento).
+  O `authenticate` (A5b) emite o par: access JWT (ES256) + refresh opaco persistido.
+- **Honra:** ADR-0024 (sessão híbrida). O `findByTokenHash` (A3) é o lookup do A6 (refresh/rotação).
+
+---
+
 ## Notas propagadas para tickets futuros
 
 - **D6 / refresh (sessão):** `disable` e `changePassword` devem **invalidar sessões/refresh ativos**
