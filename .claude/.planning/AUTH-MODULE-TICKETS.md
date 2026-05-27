@@ -31,7 +31,8 @@ Aprovado em 2026-05-27. ADRs: [0024](../../handbook/architecture/adr/0024-identi
 | A2 | `AUTH-REPO-ROLE` | S | port `RoleRepository` em `domain/authorization/` + contract-suite + InMemory | D4 |
 | A3 | `AUTH-REPO-SESSION` | S | port `RefreshTokenRepository` em `domain/session/` + contract-suite + InMemory | D6 |
 | A4 | `AUTH-USECASE-REGISTER-USER` | S | `registerUser` (valida → cria → persiste → emite `UserRegistered`) | A1,A2,X1 |
-| A5 | `AUTH-USECASE-AUTHENTICATE` | M | `authenticate` (verifica credencial → emite access+refresh → `UserAuthenticated`) | A1,A3,X1,X2 |
+| A5 | `AUTH-USECASE-AUTHENTICATE` | S | `authenticate` (verifica credencial → emite **access JWT**; sem refresh) | A1,X1,X2 |
+| A5b | `AUTH-USECASE-AUTHENTICATE-REFRESH` | S | `RefreshTokenMinter` (randomBytes+sha256) + emissão/persistência do **refresh opaco** no login | A5,A3 |
 | A6 | `AUTH-USECASE-REFRESH` | S | `refreshAccessToken` (valida + rotaciona refresh → `AccessTokenRefreshed`) | A3,X2 |
 | A7 | `AUTH-USECASE-REVOKE-SESSION` | S | `revokeSession` (logout → `SessionRevoked`) | A3 |
 | A8 | `AUTH-USECASE-CHANGE-PASSWORD` | S | `changePassword` (→ `PasswordChanged`) | A1,X1 |

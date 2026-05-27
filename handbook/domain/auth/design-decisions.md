@@ -171,6 +171,22 @@ SKILL.md correspondente). Rastreabilidade dos pareceres (agentIds desta sessão)
 
 ---
 
+## DD-LOGIN-01 — `authenticate`: senha não valida política; respostas anti-enumeration; refresh em A5b
+
+- **Status:** Aceita (2026-05-27) · **Confiança:** alta
+- **Decisão:**
+  - No login, falha de `Email.parse` **ou** `Password.parse` → **`'invalid-credentials'`** (não vaza formato
+    nem política — a política de força é só de **registro/troca**, não de login).
+  - **Ordem anti-enumeration:** `findByEmail` null → `invalid-credentials`; `verify` false → `invalid-credentials`
+    (mesma resposta); `'user-disabled'` **só após** a senha correta (não revela conta desabilitada a quem não tem a senha).
+  - **A5 emite só o access JWT.** O refresh token opaco (`RefreshTokenMinter` randomBytes+sha256 + persistência)
+    fica em **A5b** (fatiamento aprovado 2026-05-27).
+- **Trade-off:** se a política de senha endurecer, senhas antigas válidas falhariam `Password.parse` no login →
+  rehash-on-login ou `verify(raw: string)`. Revisitar então.
+- **Honra:** ADR-0024 (sessão híbrida, access curto), DD-USER-02 (authorize separado).
+
+---
+
 ## Notas propagadas para tickets futuros
 
 - **D6 / refresh (sessão):** `disable` e `changePassword` devem **invalidar sessões/refresh ativos**
