@@ -21,17 +21,23 @@ Aprovado em 2026-05-27. ADRs: [0024](../../handbook/architecture/adr/0024-identi
 
 ## Fase A — Application (`ports-and-adapters` + `tdd-strategist`)
 
+> **Re-fatiado em 2026-05-27** (decisão DD-PORTS-01): o `AUTH-PORTS` monolítico virou um ticket por
+> repo. `Clock` reusa `shared/ports/clock.ts`; sem port `IdGenerator` (padrão `XxxId.generate()`);
+> `PasswordHasher`/`TokenIssuer` definidos junto dos adapters X1/X2.
+
 | # | Ticket | Size | Entrega | Depende |
 | :-- | :-- | :-- | :-- | :-- |
-| A1 | `AUTH-PORTS` | S | `UserWriteRepository`, `UserReader`, `RoleRepository`, `RefreshTokenRepository`, `PasswordHasher`, `TokenIssuer`, `Clock`, `IdGenerator` | D* |
-| A2 | `AUTH-USECASE-REGISTER-USER` | S | `registerUser` (valida → cria → persiste → emite `UserRegistered`) | A1 |
-| A3 | `AUTH-USECASE-AUTHENTICATE` | M | `authenticate` (verifica credencial → emite access+refresh → `UserAuthenticated`) | A1,D6 |
-| A4 | `AUTH-USECASE-REFRESH` | S | `refreshAccessToken` (valida + rotaciona refresh → `AccessTokenRefreshed`) | A1,D6 |
-| A5 | `AUTH-USECASE-REVOKE-SESSION` | S | `revokeSession` (logout → `SessionRevoked`) | A1,D6 |
-| A6 | `AUTH-USECASE-CHANGE-PASSWORD` | S | `changePassword` (→ `PasswordChanged`) | A1,D5 |
-| A7 | `AUTH-USECASE-ASSIGN-ROLE` | S | `assignRole` (→ `RoleAssigned`) | A1,D5 |
+| A1 | `AUTH-REPO-USER` | S | ports `UserRepository` (write) + `UserReader` (read, ADR-0026) em `domain/identity/user/repository.ts` + contract-suite + adapter InMemory | D5 |
+| A2 | `AUTH-REPO-ROLE` | S | port `RoleRepository` em `domain/authorization/` + contract-suite + InMemory | D4 |
+| A3 | `AUTH-REPO-SESSION` | S | port `RefreshTokenRepository` em `domain/session/` + contract-suite + InMemory | D6 |
+| A4 | `AUTH-USECASE-REGISTER-USER` | S | `registerUser` (valida → cria → persiste → emite `UserRegistered`) | A1,A2,X1 |
+| A5 | `AUTH-USECASE-AUTHENTICATE` | M | `authenticate` (verifica credencial → emite access+refresh → `UserAuthenticated`) | A1,A3,X1,X2 |
+| A6 | `AUTH-USECASE-REFRESH` | S | `refreshAccessToken` (valida + rotaciona refresh → `AccessTokenRefreshed`) | A3,X2 |
+| A7 | `AUTH-USECASE-REVOKE-SESSION` | S | `revokeSession` (logout → `SessionRevoked`) | A3 |
+| A8 | `AUTH-USECASE-CHANGE-PASSWORD` | S | `changePassword` (→ `PasswordChanged`) | A1,X1 |
+| A9 | `AUTH-USECASE-ASSIGN-ROLE` | S | `assignRole` (→ `RoleAssigned`) | A1,A2 |
 
-> Adapter `InMemory` de cada port entra junto via contract-suite reutilizável (`*.contract.ts`/`*.suite.ts`).
+> Cada repo entra com contract-suite reutilizável (`*.contract.ts`) + adapter `InMemory` que a satisfaz.
 
 ## Fase X — Cripto & Token (adapters; `nodejs-runtime-expert` / `pnpm-workspace-expert`)
 

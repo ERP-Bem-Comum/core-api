@@ -116,6 +116,25 @@ SKILL.md correspondente). Rastreabilidade dos pareceres (agentIds desta sessão)
 
 ---
 
+## DD-PORTS-01 — Ports da Fase A: repos no domínio, fatiados por agregado, read/write split
+
+- **Status:** Aceita (2026-05-27) · **Confiança:** alta
+- **Decisão:**
+  1. Os 3 repositórios (User, Role, RefreshToken) são ports **ditados por invariância** → vivem em
+     `domain/<agg>/repository.ts` (§3.H.2), cada um com **contract-suite** parametrizada + adapter **InMemory**.
+  2. **Fatiar a Fase A por agregado:** `AUTH-REPO-USER`/`-ROLE`/`-SESSION` (não um `AUTH-PORTS` monolítico).
+  3. **`User` tem 2 ports** (ADR-0026, read/write split desde já): `UserRepository` (write: `save`) +
+     `UserReader` (read: `findById`, `findByEmail`).
+  4. **`Clock` reusa** `src/shared/ports/clock.ts` (+ `clock-fixed` nos testes). **Sem port `IdGenerator`** —
+     padrão do projeto é `XxxId.generate()` no domínio (`shared/utils/id.ts`).
+  5. **`PasswordHasher`/`TokenIssuer`** (capacidades técnicas, não invariância) são definidos **junto dos
+     adapters** X1 (argon2id) / X2 (JWT), em `application/ports/`.
+- **Racional:** §3.H.2 (port de invariância no domínio); ADR-0026 (split na borda); reuso de infra; tickets
+  pequenos e testáveis end-to-end (contract-suite roda contra InMemory).
+- **Gatilho de revisão:** se `UserReader` e `UserRepository` nunca divergirem de implementação, reconsiderar unificar.
+
+---
+
 ## Notas propagadas para tickets futuros
 
 - **D6 / refresh (sessão):** `disable` e `changePassword` devem **invalidar sessões/refresh ativos**
@@ -137,3 +156,4 @@ SKILL.md correspondente). Rastreabilidade dos pareceres (agentIds desta sessão)
 
 - **2026-05-27** — Criação. Decisões `DD-USER-01..05` a partir do painel de 6 skills. (Gabriel Aderaldo + painel)
 - **2026-05-27** — `DD-SESSION-01..03` (agregado `RefreshToken`, D6): estado temporal computado (diverge de DD-USER-01), sem eventos no agregado, `rotate`≠`revoke`. (Gabriel Aderaldo)
+- **2026-05-27** — `DD-PORTS-01` (Fase A): repos no domínio (§3.H.2), fatiar por agregado, read/write split do User, reuso de Clock, sem IdGenerator port. (Gabriel Aderaldo + reality-check)
