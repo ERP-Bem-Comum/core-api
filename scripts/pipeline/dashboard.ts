@@ -133,10 +133,22 @@ const summarize = (snapshots: readonly TicketSnapshot[]): Summary => {
   let superseded = 0;
   let blocked = 0;
   for (const s of snapshots) {
-    if (s.state.status === 'open' || s.state.status === 'in-progress') open++;
-    else if (s.state.status === 'closed-green' || s.state.status === 'closed-rejected') closed++;
-    else if (s.state.status === 'superseded') superseded++;
-    else blocked++;
+    switch (s.state.status) {
+      case 'open':
+      case 'in-progress':
+        open++;
+        break;
+      case 'closed-green':
+      case 'closed-rejected':
+        closed++;
+        break;
+      case 'superseded':
+        superseded++;
+        break;
+      case 'blocked':
+        blocked++;
+        break;
+    }
   }
   return { total: snapshots.length, open, closed, superseded, blocked };
 };

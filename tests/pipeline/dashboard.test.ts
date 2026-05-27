@@ -374,3 +374,62 @@ describe('dashboard — superseded (CTR-PIPELINE-SUPERSEDE-STATUS)', () => {
     assert.ok(md.includes('0 blocked'), `esperado "0 blocked" na linha-resumo, foi:\n${md}`);
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// CTR-PIPELINE-SUMMARIZE-EXHAUSTIVE — `summarize` exaustivo (sem `else` catch-all).
+// O catch-all atual contaria qualquer status fora dos baldes conhecidos como
+// `blocked` — o mesmo defeito que CTR-PIPELINE-SUPERSEDE-STATUS corrigiu pontualmente.
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('dashboard — summarize exaustivo (CTR-PIPELINE-SUMMARIZE-EXHAUSTIVE)', () => {
+  const now = new Date('2026-05-27T00:00:00.000Z');
+
+  const snapOf = (status: PipelineState['status'], ticket: string): TicketSnapshot => ({
+    state: makeState({ ticket, status }),
+    ticketDir: `/tmp/${ticket}`,
+    daysOpen: 0,
+    w2Rounds: 1,
+  });
+
+  it('CA-E1 (caracterização): cada status real cai no balde certo', () => {
+    const snaps: readonly TicketSnapshot[] = [
+      snapOf('open', 'A'),
+      snapOf('in-progress', 'B'),
+      snapOf('closed-green', 'C'),
+      snapOf('closed-rejected', 'D'),
+      snapOf('superseded', 'E'),
+      snapOf('blocked', 'F'),
+    ];
+    const json = JSON.parse(renderDashboardJson(snaps, { filter: 'all', now })) as {
+      summary: { total: number; open: number; closed: number; superseded: number; blocked: number };
+    };
+    assert.equal(json.summary.total, 6);
+    assert.equal(json.summary.open, 2, 'open + in-progress');
+    assert.equal(json.summary.closed, 2, 'closed-green + closed-rejected');
+    assert.equal(json.summary.superseded, 1);
+    assert.equal(json.summary.blocked, 1);
+  });
+
+  it('CA-E2: status fora do enum NÃO é silenciosamente contado como blocked', () => {
+    // Cast deliberado: simula um status adicionado ao enum no futuro sem atualizar
+    // `summarize`. Com o `else` catch-all atual vira blocked; com switch exaustivo,
+    // o ESLint pegaria a omissão em compile-time e o runtime não o classifica como blocked.
+    const mystery: TicketSnapshot = {
+      state: makeState({
+        ticket: 'CTR-MYSTERY',
+        status: 'mystery-future' as PipelineState['status'],
+      }),
+      ticketDir: '/tmp/CTR-MYSTERY',
+      daysOpen: 0,
+      w2Rounds: 1,
+    };
+    const json = JSON.parse(renderDashboardJson([mystery], { filter: 'all', now })) as {
+      summary: { blocked: number };
+    };
+    assert.equal(
+      json.summary.blocked,
+      0,
+      'status desconhecido não pode ser silenciosamente classificado como blocked',
+    );
+  });
+});
