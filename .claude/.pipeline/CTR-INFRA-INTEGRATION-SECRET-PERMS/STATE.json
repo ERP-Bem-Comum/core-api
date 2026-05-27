@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "CTR-INFRA-INTEGRATION-SECRET-PERMS",
+  "size": "S",
+  "createdAt": "2026-05-26T19:17:23.073Z",
+  "closedAt": "2026-05-27T00:47:17.094Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-05-26T23:31:57.117Z",
+      "finishedAt": "2026-05-26T23:35:42.050Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "pnpm-workspace-expert",
+      "startedAt": "2026-05-26T23:35:49.481Z",
+      "finishedAt": "2026-05-26T23:36:21.665Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-05-26T23:36:44.271Z",
+      "finishedAt": "2026-05-26T23:37:23.773Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-05-26T23:57:23.570Z",
+      "finishedAt": "2026-05-27T00:47:16.589Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "ALL-GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}
