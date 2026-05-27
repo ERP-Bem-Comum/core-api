@@ -4,7 +4,33 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
-## 2026-05-27 — Série de ADRs do módulo `auth` + HTTP + read/write split (ADR-0024/0025/0026, Proposed)
+## 2026-05-27 — Módulo `auth`: ADRs aceitos + Fase D entregue + log vivo de decisões de design
+
+### Contexto
+
+Sequência da decisão de criar o módulo de autenticação. Os ADRs 0024/0025/0026 foram **aceitos** (de
+`Proposed`), a Fase D (VOs + 1º agregado) entrou via pipeline W0→W3, e as decisões de design de domínio
+passaram a ser registradas num **log vivo** (a pedido: "para sempre consultadas, criticadas e melhoradas").
+
+### Adicionado
+
+- **[`domain/auth/design-decisions.md`](./domain/auth/design-decisions.md)** — log **vivo** (mutável, ≠ ADR)
+  de decisões de design do módulo `auth`. Inaugurado com `DD-USER-01..05` (agregado `User`), destiladas de
+  um **painel de 6 skills** (ts-domain-modeler, ports-and-adapters, clean-code-reviewer, tdd-strategist,
+  requirements-engineer, security-reviewer). Registra votos, objeções da minoria e gatilho de revisão por decisão.
+
+### Entregue (código — tickets closed-green, Fase D do módulo `auth`)
+
+- `AUTH-VO-EMAIL`, `AUTH-VO-PERMISSION`, `AUTH-VO-PASSWORD` (Password + PasswordHash), `AUTH-AGG-ROLE`.
+  Domínio puro; hashing fica no port `PasswordHasher` (X1). **D5 `AUTH-AGG-USER`** em andamento.
+
+### Atualizado
+
+- ADRs **0024/0025/0026** `Proposed → Accepted` (índice de ADRs atualizado). A entrada abaixo descreve o conteúdo dos três.
+
+---
+
+## 2026-05-27 — Série de ADRs do módulo `auth` + HTTP + read/write split (ADR-0024/0025/0026)
 
 ### Contexto
 
