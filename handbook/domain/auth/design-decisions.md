@@ -135,6 +135,25 @@ SKILL.md correspondente). Rastreabilidade dos pareceres (agentIds desta sessão)
 
 ---
 
+## DD-CRYPTO-01 — argon2id via `hash-wasm` (WASM puro); impl própria PROIBIDA
+
+- **Status:** Aceita (2026-05-27) · **Confiança:** alta
+- **Decisão:** o port `PasswordHasher` (`application/ports/`) usa **argon2id via `hash-wasm`** (WASM puro):
+  zero dependência transitiva, **sem `node-gyp`/binário nativo per-plataforma** — um artefato portável,
+  ideal para Docker multi-arch e supply-chain. Parâmetros OWASP: `memorySize` 19456 KiB, `iterations` 2,
+  `parallelism` 1, `hashLength` 32, salt 16 bytes (`crypto.randomBytes`), `outputType: 'encoded'` (PHC).
+  Adapter **fake** (sha256 + `timingSafeEqual`, nativo, determinístico) para testes/CLI/use cases.
+- **Recusado:**
+  - **Implementação própria de argon2** — "don't roll your own crypto": memory-hard + constant-time exigem
+    controle que JS não dá com segurança; risco de timing/bugs silenciosos; sem auditoria. Anti-padrão grave.
+  - `@node-rs/argon2` (Rust nativo) — bom, mas binário per-plataforma; preferimos WASM portável.
+  - `scrypt` nativo — divergiria do ADR-0024 (argon2id).
+- **Honra:** ADR-0024 (argon2id), ADR-0011 (dep mínima auditável, sem toolchain), ADR-0020 (Docker sem C++).
+- **Gatilho de revisão:** se o custo do WASM em login (latência) virar problema medido, avaliar `@node-rs/argon2`.
+- **Auditoria 2026-05-27 (issue [Daninet/hash-wasm#69](https://github.com/Daninet/hash-wasm/issues/69)):** o leak relatado é da API de **instância** (`createCRC32()` reutilizada em loop, sem cleanup). A API **one-shot** `argon2id()` que usamos **não vaza** — sonda de 60 hashes sequenciais manteve RSS estável (~97 MB; delta iter10→60 = −19 MB). Sem ação no código. Nota: a one-shot é serializada por lock global do hash-wasm — revisitar se a taxa de login exigir paralelismo (worker/pool).
+
+---
+
 ## Notas propagadas para tickets futuros
 
 - **D6 / refresh (sessão):** `disable` e `changePassword` devem **invalidar sessões/refresh ativos**
@@ -157,3 +176,4 @@ SKILL.md correspondente). Rastreabilidade dos pareceres (agentIds desta sessão)
 - **2026-05-27** — Criação. Decisões `DD-USER-01..05` a partir do painel de 6 skills. (Gabriel Aderaldo + painel)
 - **2026-05-27** — `DD-SESSION-01..03` (agregado `RefreshToken`, D6): estado temporal computado (diverge de DD-USER-01), sem eventos no agregado, `rotate`≠`revoke`. (Gabriel Aderaldo)
 - **2026-05-27** — `DD-PORTS-01` (Fase A): repos no domínio (§3.H.2), fatiar por agregado, read/write split do User, reuso de Clock, sem IdGenerator port. (Gabriel Aderaldo + reality-check)
+- **2026-05-27** — `DD-CRYPTO-01` (X1): argon2id via `hash-wasm` (WASM puro); impl própria recusada; fake sha256 para testes. (Gabriel Aderaldo)
