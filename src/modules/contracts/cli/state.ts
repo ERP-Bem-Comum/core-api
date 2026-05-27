@@ -150,7 +150,12 @@ const isValidContractDocument = (raw: unknown): raw is ContractDocument => {
 // REGR #1 — revalidação das entidades carregadas do snapshot.
 // =============================================================================
 
-const CONTRACT_STATUSES: ReadonlySet<ContractStatus> = new Set(['Active', 'Expired', 'Terminated']);
+const CONTRACT_STATUSES: ReadonlySet<ContractStatus> = new Set([
+  'Pending',
+  'Active',
+  'Expired',
+  'Terminated',
+]);
 const AMENDMENT_STATUSES: ReadonlySet<AmendmentStatus> = new Set(['Pending', 'Homologated']);
 const AMENDMENT_KINDS: ReadonlySet<AmendmentKind> = new Set([
   'Addition',
@@ -203,26 +208,38 @@ const isValidContract = (raw: unknown): raw is Contract => {
   if (typeof raw !== 'object' || raw === null) return false;
   const c = raw as Record<string, unknown>;
 
+  // Cadastro — comum a todos os estados (inclusive Pending).
   if (typeof c['id'] !== 'string' || !isUuidV4(c['id'])) return false;
   if (typeof c['sequentialNumber'] !== 'string') return false;
   if (typeof c['title'] !== 'string') return false;
   if (typeof c['objective'] !== 'string') return false;
-  if (!isValidDateInstance(c['signedAt'])) return false;
   if (!isValidMoneyShape(c['originalValue'])) return false;
-  if (!isValidMoneyShape(c['currentValue'])) return false;
   if (!isValidPeriodShape(c['originalPeriod'])) return false;
-  if (!isValidPeriodShape(c['currentPeriod'])) return false;
   if (typeof c['status'] !== 'string' || !CONTRACT_STATUSES.has(c['status'] as ContractStatus)) {
     return false;
   }
+  const status = c['status'] as ContractStatus;
+
+  // ADR-0023: `Pending` não tem assinatura/vigência efetiva nem aditivos.
+  if (status === 'Pending') {
+    return (
+      c['signedAt'] === undefined &&
+      c['currentValue'] === undefined &&
+      c['currentPeriod'] === undefined &&
+      (c['endedAt'] === undefined || c['endedAt'] === null)
+    );
+  }
+
+  // Estados efetivos — exigem assinatura + vigência + lista de aditivos.
+  if (!isValidDateInstance(c['signedAt'])) return false;
+  if (!isValidMoneyShape(c['currentValue'])) return false;
+  if (!isValidPeriodShape(c['currentPeriod'])) return false;
   if (!Array.isArray(c['homologatedAmendmentIds'])) return false;
   for (const id of c['homologatedAmendmentIds'] as readonly unknown[]) {
     if (typeof id !== 'string' || !isUuidV4(id)) return false;
   }
-  // CTR-DOMAIN-STATE-MACHINE-CONTRACT — `endedAt` é AUSENTE em Active e
-  // obrigatório (Date) em Expired/Terminated (DO C§29). Aceita `null` também
-  // para compatibilidade com state files gravados antes do refactor.
-  const status = c['status'] as ContractStatus;
+  // CTR-DOMAIN-STATE-MACHINE-CONTRACT — `endedAt` AUSENTE em Active, obrigatório
+  // (Date) em Expired/Terminated (DO C§29). Aceita `null` p/ compat com files antigos.
   const endedAt = c['endedAt'];
   if (status === 'Active') {
     if (endedAt !== undefined && endedAt !== null) return false;
