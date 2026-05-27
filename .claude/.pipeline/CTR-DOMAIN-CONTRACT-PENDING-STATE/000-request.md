@@ -29,12 +29,18 @@ Padrão a espelhar: o agregado `Amendment` (`amendment/types.ts`) já modela
   efetivos — acessá-los num `PendingContract` é **erro de compilação** (campos pertencem aos
   estados ativos/terminais, via refino do `ContractCore`). Carrega: `id`, `sequentialNumber`,
   `title`, `objective`, `originalValue`, `originalPeriod`.
-- **CA2:** `Contract.create` **sem dados de assinatura** produz `PendingContract` (`status: 'Pending'`).
-  O evento `ContractCreated` reflete o estado inicial e usa um timestamp de criação injetado
-  (NÃO `signedAt`, que não existe em Pending) — `createdAt`/`at` vem do input (use case injeta via clock).
-- **CA3:** `Contract.create` **com dados de assinatura** (`signedAt` válido) produz `ActiveContract`
-  exatamente como hoje (vigência inicia: `current = original`). **Comportamento atual preservado** —
-  o use case `create-contract` e seus testes existentes continuam verdes sem alteração.
+- **CA2:** **`Contract.createPending(input)`** (input **sem** `signedAt`) produz `PendingContract`
+  (`status: 'Pending'`). O evento `ContractCreated` usa um timestamp de criação injetado
+  (`createdAt`, NÃO `signedAt` — que não existe em Pending; o use case injeta via clock).
+- **CA3:** `Contract.create(input)` (com `signedAt` válido) **permanece inalterado** → `ActiveContract`
+  (vigência inicia: `current = original`). O use case `create-contract` e seus testes existentes
+  seguem verdes **sem alteração**.
+
+> **Refino W0 (decisão de API):** optou-se por **construtor separado `createPending`** em vez de
+> sobrecarregar `create` com `signedAt` opcional. Razão: (1) preserva 100% o `create → Active`
+> (CA3 trivial, retorno não vira union); (2) espelha o agregado `Amendment`, cujo `create` nasce no
+> estado inicial e transições (`attach`/`homologate`) levam adiante. O caminho "nascer já Active"
+> segue via `create`; a ponte `Pending → Active` é a transição `activate` do próximo ticket.
 - **CA4:** As validações de cadastro (formato `NNN/AAAA` do `sequentialNumber`, `title`/`objective`
   não-branco, `originalValue` ≠ 0) valem para **ambos** os caminhos.
 - **CA5:** `ContractStatus` passa a incluir `'Pending'`; `switch` exaustivo sobre `Contract`/status

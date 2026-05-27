@@ -7,10 +7,12 @@ import * as PlainDate from '../../../../shared/kernel/plain-date.ts';
 import type {
   Contract as ContractEntity,
   ActiveContract,
+  PendingContract,
   ExpiredContract,
   TerminatedContract,
   ContractAdjustment,
   CreateContractInput,
+  CreatePendingContractInput,
 } from './types.ts';
 import { immutable } from '../../../../shared/primitives/immutable.ts';
 import type { ContractEvent } from './events.ts';
@@ -37,17 +39,15 @@ const stateUpdatedEvent = (
 // Defeito #6: formato canônico XXX/AAAA (3 dígitos, barra, 4 dígitos)
 const SEQUENTIAL_NUMBER_FORMAT = /^\d{3}\/\d{4}$/;
 
-// ─── Operações do agregado ────────────────────────────────────────────────────
-
 /**
- * Cria um novo contrato no estado `Active`.
- *
- * Todo contrato nasce Active — o tipo de retorno `ActiveContract` garante
- * isso estaticamente sem checagem extra (DO D§20).
+ * Validações de **cadastro** comuns a todo nascimento de contrato (`create` e
+ * `createPending`): identificação textual. NÃO inclui `signedAt` (só `create`)
+ * nem `originalValue` zero — cada construtor checa o valor na posição original
+ * da sua sequência de validação (preserva a precedência de erro histórica).
  */
-const create = (
-  input: CreateContractInput,
-): Result<{ contract: ActiveContract; event: ContractEvent }, ContractError.ContractError> => {
+const validateRegistration = (
+  input: Readonly<{ sequentialNumber: string; title: string; objective: string }>,
+): Result<null, ContractError.ContractError> => {
   if (isBlank(input.sequentialNumber)) {
     return err(ContractError.contractSequentialNumberRequired());
   }
@@ -56,6 +56,55 @@ const create = (
   }
   if (isBlank(input.title)) return err(ContractError.contractTitleRequired());
   if (isBlank(input.objective)) return err(ContractError.contractObjectiveRequired());
+  return ok(null);
+};
+
+// ─── Operações do agregado ────────────────────────────────────────────────────
+
+/**
+ * Cria um contrato no estado `Pending` (ADR-0023) — cadastrado sem documento
+ * assinado, sem efetividade. O tipo de retorno `PendingContract` garante
+ * estaticamente a ausência de `signedAt`/vigência (DO D§20). A transição
+ * `activate` (ticket seguinte) leva a `Active`.
+ */
+const createPending = (
+  input: CreatePendingContractInput,
+): Result<{ contract: PendingContract; event: ContractEvent }, ContractError.ContractError> => {
+  const reg = validateRegistration(input);
+  if (!reg.ok) return reg;
+  // Defeito #9: contrato com valor original zero não tem propósito de negócio.
+  if (input.originalValue.cents === 0) return err(ContractError.contractOriginalValueZero());
+
+  const contract: PendingContract = immutable({
+    id: input.id,
+    sequentialNumber: input.sequentialNumber,
+    title: input.title,
+    objective: input.objective,
+    originalValue: input.originalValue,
+    originalPeriod: input.originalPeriod,
+    status: 'Pending' as const,
+  });
+
+  const event: ContractEvent = {
+    type: 'ContractCreated',
+    contractId: contract.id,
+    occurredAt: input.createdAt,
+  };
+
+  return ok({ contract, event });
+};
+
+/**
+ * Cria um novo contrato no estado `Active`.
+ *
+ * Caminho "nasce já assinado" — exige `signedAt`. O tipo de retorno
+ * `ActiveContract` garante o estado estaticamente sem checagem extra (DO D§20).
+ */
+const create = (
+  input: CreateContractInput,
+): Result<{ contract: ActiveContract; event: ContractEvent }, ContractError.ContractError> => {
+  const reg = validateRegistration(input);
+  if (!reg.ok) return reg;
   if (!isValidDate(input.signedAt)) return err(ContractError.contractInvalidSignedAt());
   // Defeito #9: contrato com valor original zero não tem propósito de negócio.
   if (input.originalValue.cents === 0) return err(ContractError.contractOriginalValueZero());
@@ -262,6 +311,7 @@ const applyHomologatedAdjustment = (
 // `parseActive` é o único refinement constructor (DO D§21).
 export const Contract = {
   create,
+  createPending,
   parseActive,
   expire,
   terminate,

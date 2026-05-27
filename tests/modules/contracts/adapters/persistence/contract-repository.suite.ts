@@ -7,7 +7,8 @@ import { describe, it, beforeEach } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import type { ContractRepository } from '#src/modules/contracts/domain/contract/repository.ts';
-import type { Contract } from '#src/modules/contracts/domain/contract/types.ts';
+import type { Contract, ActiveContract } from '#src/modules/contracts/domain/contract/types.ts';
+import { Contract as ContractAgg } from '#src/modules/contracts/domain/contract/contract.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
 import * as Period from '#src/shared/kernel/period.ts';
 
@@ -30,11 +31,14 @@ const expectContract = async (
   repo: ContractRepository,
   id: ReturnType<typeof unwrapId>,
   ctx: string,
-): Promise<Contract> => {
+): Promise<ActiveContract> => {
   const r = await repo.findById(id);
   if (!r.ok) throw new Error(`${ctx}: findById falhou — ${JSON.stringify(r.error)}`);
   if (r.value === null) throw new Error(`${ctx}: contrato não encontrado`);
-  return r.value;
+  // A suite persiste apenas contratos Active; narrowing falha claro se não for.
+  const active = ContractAgg.parseActive(r.value);
+  if (!active.ok) throw new Error(`${ctx}: esperado ActiveContract, status=${r.value.status}`);
+  return active.value;
 };
 
 export const runContractRepositoryContract = (

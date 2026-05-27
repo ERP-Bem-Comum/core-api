@@ -8,6 +8,8 @@ import type { MoneyError } from '#src/shared/kernel/money.ts';
 import * as NonZeroMoney from '#src/shared/kernel/non-zero-money.ts';
 import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import { Amendment } from '../../domain/amendment/amendment.ts';
+import { Contract } from '../../domain/contract/contract.ts';
+import type { ContractNotActive } from '../../domain/contract/errors.ts';
 import type {
   PendingWithoutDocumentAmendment,
   CreateAmendmentInput,
@@ -51,6 +53,8 @@ export type CreateAmendmentError =
   | 'amendment-suppression-exceeds-current-value'
   | MoneyError
   | AmendmentError
+  // RN-CV-01/R3: aditivo só em contrato vigente (Active). Pendente e terminais recusam.
+  | ContractNotActive
   | ContractRepositoryError
   | AmendmentRepositoryError;
 
@@ -113,12 +117,18 @@ export const createAmendment =
     if (!contractLoad.ok) return contractLoad;
     if (contractLoad.value === null) return err('contract-not-found');
 
+    // RN-CV-01/R3 (ADR-0023): aditivo só em contrato vigente. Pendente (sem
+    // efetividade) e terminais (Expired/Terminated) recusam — `parseActive`
+    // garante estaticamente a vigência antes de ler `current*`.
+    const active = Contract.parseActive(contractLoad.value);
+    if (!active.ok) return active;
+
     const domainInput = buildDomainInput(cmd, contractIdResult.value, deps.clock.now());
     if (!domainInput.ok) return domainInput;
 
     // Defeito #11: fail-fast em TermChange retroativo.
     if (domainInput.value.kind === 'TermChange') {
-      const currentPeriod = contractLoad.value.currentPeriod;
+      const currentPeriod = active.value.currentPeriod;
       if (currentPeriod.kind === 'Indefinite') {
         return err('create-amendment-cannot-extend-indefinite');
       }
@@ -130,7 +140,7 @@ export const createAmendment =
     // REGR #7: fail-fast em Suppression que excederia o valor vigente.
     if (
       domainInput.value.kind === 'Suppression' &&
-      domainInput.value.impactValue.cents > contractLoad.value.currentValue.cents
+      domainInput.value.impactValue.cents > active.value.currentValue.cents
     ) {
       return err('amendment-suppression-exceeds-current-value');
     }

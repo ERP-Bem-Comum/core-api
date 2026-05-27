@@ -5,7 +5,7 @@ import type {
   ContractRepository,
   ContractRepositoryError,
 } from '../../../domain/contract/repository.ts';
-import type { Contract } from '../../../domain/contract/types.ts';
+import type { Contract, EffectiveContract } from '../../../domain/contract/types.ts';
 import type { ContractId } from '../../../domain/shared/ids.ts';
 import type { ContractsModuleEvent } from '../../../application/ports/event-bus.ts';
 import type { MysqlHandle } from '../drivers/mysql-driver.ts';
@@ -55,7 +55,7 @@ export const createDrizzleContractRepository = (
   const persistContractInTx = async (
     // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
     tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
-    c: Contract,
+    c: EffectiveContract,
   ): Promise<void> => {
     const { row, homologatedAmendmentIds } = contractToInsert(c);
     // Upsert estrito por PK (`id`), com defesa em profundidade contra
@@ -194,7 +194,7 @@ export const createDrizzleContractRepository = (
     // CA-3: save(contract, events) abre UMA transação que persiste state + outbox atomicamente.
     // appendOutboxInTx é chamado dentro do mesmo callback — rollback automático se qualquer
     // operação falhar (Drizzle garante rollback quando o callback lança).
-    save: async (contract: Contract, events: readonly ContractsModuleEvent[]) =>
+    save: async (contract: EffectiveContract, events: readonly ContractsModuleEvent[]) =>
       safe('save', async () => {
         await db.transaction(async (tx) => {
           await persistContractInTx(tx, contract);

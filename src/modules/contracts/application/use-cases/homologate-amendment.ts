@@ -7,10 +7,7 @@ import type { ContractIdError } from '../../domain/shared/contract-id.ts';
 import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import type { UserRefError } from '#src/shared/kernel/user-ref.ts';
 import { Contract } from '../../domain/contract/contract.ts';
-import type {
-  Contract as ContractEntity,
-  ContractAdjustment,
-} from '../../domain/contract/types.ts';
+import type { ActiveContract, ContractAdjustment } from '../../domain/contract/types.ts';
 import type { ContractError } from '../../domain/contract/errors.ts';
 import { Amendment } from '../../domain/amendment/amendment.ts';
 import type { Amendment as AmendmentEntity } from '../../domain/amendment/types.ts';
@@ -54,7 +51,7 @@ export type HomologateAmendmentError =
   | 'amendment-retroactive-to-contract-start';
 
 export type HomologateAmendmentOutput = Readonly<{
-  contract: ContractEntity;
+  contract: ActiveContract;
   amendment: AmendmentEntity;
   events: readonly ContractsModuleEvent[];
 }>;
@@ -108,14 +105,20 @@ export const homologateAmendment =
     const contractLoad = await deps.contractRepo.findById(contractIdResult.value);
     if (!contractLoad.ok) return contractLoad;
     if (contractLoad.value === null) return err('contract-not-found');
-    const contract = contractLoad.value;
 
-    // 4. Validate amendment belongs to contract
+    // 4. Refine to ActiveContract na borda (RN-CV-01/R3): só contrato vigente
+    //    homologa aditivo. Pendente (sem `signedAt`/efetividade) e terminais recusam.
+    //    Feito ANTES das checagens que leem `signedAt`.
+    const activeContract = Contract.parseActive(contractLoad.value);
+    if (!activeContract.ok) return activeContract;
+    const contract = activeContract.value;
+
+    // 4b. Validate amendment belongs to contract
     if (amendment.contractId !== contract.id) {
       return err('amendment-contract-mismatch');
     }
 
-    // 4b. R4 cronologia (04-aditivos-context.md:86): não homologar aditivo com data
+    // 4c. R4 cronologia (04-aditivos-context.md:86): não homologar aditivo com data
     //     retroativa ao início do Contrato Mãe (= signedAt). Igualdade é permitida.
     if (amendment.createdAt.getTime() < contract.signedAt.getTime()) {
       return err('amendment-retroactive-to-contract-start');
@@ -129,10 +132,6 @@ export const homologateAmendment =
     const at = deps.clock.now();
     const homologated = Amendment.homologate(pendingWithDoc.value, userRefResult.value, at);
     if (!homologated.ok) return homologated;
-
-    // 6. Refine contract to ActiveContract.
-    const activeContract = Contract.parseActive(contract);
-    if (!activeContract.ok) return activeContract;
 
     // 7. Translate to ContractAdjustment and apply to contract
     const adjustment = toContractAdjustment(homologated.value.amendment);

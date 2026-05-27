@@ -193,7 +193,9 @@ describe('homologateAmendment — happy path (Addition)', () => {
     if (!persistedContract.ok || persistedContract.value === null) {
       throw new Error('contract not persisted');
     }
-    assert.equal(persistedContract.value.currentValue.cents, 10500000);
+    const persisted = persistedContract.value;
+    if (persisted.status === 'Pending') throw new Error('expected effective contract');
+    assert.equal(persisted.currentValue.cents, 10500000);
   });
 
   it('appends events to outbox in order: AmendmentHomologated then ContractStateUpdated', async () => {

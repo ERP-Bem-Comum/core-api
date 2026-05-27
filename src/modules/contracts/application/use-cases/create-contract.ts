@@ -8,7 +8,7 @@ import * as Period from '#src/shared/kernel/period.ts';
 import type { PeriodError } from '#src/shared/kernel/period.ts';
 import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import { Contract } from '../../domain/contract/contract.ts';
-import type { Contract as ContractEntity } from '../../domain/contract/types.ts';
+import type { ActiveContract } from '../../domain/contract/types.ts';
 import type { ContractEvent } from '../../domain/contract/events.ts';
 import type { ContractError } from '../../domain/contract/errors.ts';
 import type {
@@ -47,7 +47,7 @@ export type CreateContractError =
   | ContractRepositoryError;
 
 export type CreateContractOutput = Readonly<{
-  contract: ContractEntity;
+  contract: ActiveContract;
   event: ContractEvent;
 }>;
 

@@ -4,6 +4,7 @@
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
 import type {
   Contract,
+  EffectiveContract,
   ActiveContract,
   ExpiredContract,
   TerminatedContract,
@@ -121,8 +122,12 @@ export const contractMapperInvalidEndedAt = (
 
 // ─── Helpers internos ────────────────────────────────────────────────────────
 
-const STATUSES: readonly ContractStatus[] = ['Active', 'Expired', 'Terminated'];
-const isStatus = (v: string): v is ContractStatus => (STATUSES as readonly string[]).includes(v);
+// Apenas estados EFETIVOS são persistidos (ADR-0023: `Pending` não vai ao banco
+// até a migration de schema). O predicado narrowa para os efetivos, mantendo o
+// switch de `contractFromRow` exaustivo.
+const PERSISTED_STATUSES = ['Active', 'Expired', 'Terminated'] as const;
+const isStatus = (v: string): v is (typeof PERSISTED_STATUSES)[number] =>
+  (PERSISTED_STATUSES as readonly string[]).includes(v);
 
 const isPeriodKind = (v: string): v is PeriodKindRaw => v === 'Fixed' || v === 'Indefinite';
 
@@ -132,7 +137,7 @@ const periodErrorReason = (e: unknown): string =>
   typeof e === 'string' ? e : (e as { tag: string }).tag;
 
 export const contractToInsert = (
-  c: Contract,
+  c: EffectiveContract,
 ): { row: ContractInsert; homologatedAmendmentIds: readonly string[] } => {
   const orig = periodToColumns(c.originalPeriod);
   const curr = periodToColumns(c.currentPeriod);
