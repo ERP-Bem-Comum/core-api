@@ -154,6 +154,23 @@ SKILL.md correspondente). Rastreabilidade dos pareceres (agentIds desta sessão)
 
 ---
 
+## DD-TOKEN-01 — Access token JWT em ES256 via `jose`; chaves injetadas
+
+- **Status:** Aceita (2026-05-27) · **Confiança:** alta
+- **Decisão:** `TokenIssuer` (`application/ports/`) emite o **access token JWT** assinado em **ES256**
+  (ECDSA P-256) via **`jose` 6.x** (zero dep, Web Crypto nativo). **core-api assina com chave PRIVADA;
+  BFF valida com PÚBLICA** (ADR-0005/0024 — emite≠valida; o BFF não pode forjar). Claims mínimas:
+  `sub`=userId, `iat`, `exp` (TTL ~15 min — access curto), `iss`. **Permissions NÃO** vão no token
+  (authz é do core via `authorize`, DD-USER-02). As **chaves são injetadas** no adapter (`CryptoKey`):
+  `generateKeyPair('ES256')` nos testes; `importPKCS8`/`importSPKI` de PEM (secrets) no composition root.
+  Fake adapter (round-trip base64, sem assinatura) para use cases.
+- **Recusado:** HS256 (segredo compartilhado — BFF poderia forjar); `jsonwebtoken` (CJS, deps); impl
+  própria de assinatura ("don't roll your own crypto").
+- **Honra:** ADR-0024 (JWT curto, emite/valida), ADR-0011 (`jose` zero-dep, nativo).
+- **Gatilho de revisão:** se múltiplos validadores externos surgirem, expor **JWKS** (`/.well-known/jwks.json`) e `kid` para rotação de chave.
+
+---
+
 ## Notas propagadas para tickets futuros
 
 - **D6 / refresh (sessão):** `disable` e `changePassword` devem **invalidar sessões/refresh ativos**
@@ -179,3 +196,4 @@ SKILL.md correspondente). Rastreabilidade dos pareceres (agentIds desta sessão)
 - **2026-05-27** — `DD-SESSION-01..03` (agregado `RefreshToken`, D6): estado temporal computado (diverge de DD-USER-01), sem eventos no agregado, `rotate`≠`revoke`. (Gabriel Aderaldo)
 - **2026-05-27** — `DD-PORTS-01` (Fase A): repos no domínio (§3.H.2), fatiar por agregado, read/write split do User, reuso de Clock, sem IdGenerator port. (Gabriel Aderaldo + reality-check)
 - **2026-05-27** — `DD-CRYPTO-01` (X1): argon2id via `hash-wasm` (WASM puro); impl própria recusada; fake sha256 para testes. (Gabriel Aderaldo)
+- **2026-05-27** — `DD-TOKEN-01` (X2): access JWT ES256 via `jose`; core assina (privada) / BFF valida (pública); chaves injetadas; HS256 e impl própria recusados. (Gabriel Aderaldo)
