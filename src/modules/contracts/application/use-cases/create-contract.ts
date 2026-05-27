@@ -2,11 +2,9 @@ import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import { isValidDate } from '../../../../shared/utils/date.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
 import * as ContractId from '../../domain/shared/contract-id.ts';
-import * as Money from '#src/shared/kernel/money.ts';
 import type { MoneyError } from '#src/shared/kernel/money.ts';
-import * as Period from '#src/shared/kernel/period.ts';
 import type { PeriodError } from '#src/shared/kernel/period.ts';
-import * as PlainDate from '#src/shared/kernel/plain-date.ts';
+import { parseOriginalValueAndPeriod } from './contract-input-parse.ts';
 import { Contract } from '../../domain/contract/contract.ts';
 import type { ActiveContract } from '../../domain/contract/types.ts';
 import type { ContractEvent } from '../../domain/contract/events.ts';
@@ -68,21 +66,12 @@ export const buildContract = (
   const signedAt = new Date(cmd.signedAt);
   if (!isValidDate(signedAt)) return err('create-contract-invalid-signed-at');
 
-  const periodStart = PlainDate.from(cmd.originalPeriodStart);
-  if (!periodStart.ok) return err('create-contract-invalid-period-start');
-
-  const moneyResult = Money.fromCents(cmd.originalValueCents);
-  if (!moneyResult.ok) return moneyResult;
-
-  const buildPeriod = (): Result<Period.Period, BuildContractError> => {
-    if (cmd.originalPeriodEnd === null) return ok(Period.createIndefinite(periodStart.value));
-    const end = PlainDate.from(cmd.originalPeriodEnd);
-    if (!end.ok) return err('create-contract-invalid-period-end');
-    return Period.create(periodStart.value, end.value);
-  };
-  const periodR = buildPeriod();
-  if (!periodR.ok) return periodR;
-  const originalPeriod = periodR.value;
+  const parsed = parseOriginalValueAndPeriod({
+    originalValueCents: cmd.originalValueCents,
+    periodStart: cmd.originalPeriodStart,
+    periodEnd: cmd.originalPeriodEnd,
+  });
+  if (!parsed.ok) return parsed;
 
   const created = Contract.create({
     id: ContractId.generate(),
@@ -90,8 +79,8 @@ export const buildContract = (
     title: cmd.title,
     objective: cmd.objective,
     signedAt,
-    originalValue: moneyResult.value,
-    originalPeriod,
+    originalValue: parsed.value.originalValue,
+    originalPeriod: parsed.value.originalPeriod,
   });
   if (!created.ok) return created;
 
