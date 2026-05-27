@@ -57,7 +57,7 @@ Em ordem decrescente de autoridade:
 - [ ] Todo type de entity é `Readonly<>` ou tem `readonly` em cada campo.
 - [ ] Todo array de domínio é `readonly T[]`.
 - [ ] Toda função exportada tem return type explícito.
-- [ ] Eventos têm `ocorridoEm: Date` injetado, não `new Date()`.
+- [ ] Eventos têm `occurredAt: Date` injetado, não `new Date()`.
 
 ### B. Smart constructors e Branded types
 
@@ -68,7 +68,7 @@ Em ordem decrescente de autoridade:
 
 ### C. Discriminated unions e exhaustiveness
 
-- [ ] Toda discriminated union tem campo `tipo` (PT-BR para entities) ou `type` (EN para events/commands).
+- [ ] Toda discriminated union tem discriminador em **EN**: `kind` para variantes de entidade, `type` para events/commands.
 - [ ] Switch sobre union tem `default: { const _: never = x; ... }`.
 - [ ] Campos opcionais não são usados para "variar payload por tipo" — em vez disso, variantes diferentes da union.
 
@@ -97,13 +97,17 @@ Em ordem decrescente de autoridade:
 - [ ] Sem `require`, `module.exports`, `namespace`, `enum`.
 - [ ] `tsc --noEmit` zero erros (delegado a W3, mas se já tem evidência de erro, mark REJECTED).
 
-### G. Naming, PT-BR/EN, clareza
+### G. Naming, idioma (EN no código), clareza
 
-- [ ] Domain identifiers em **PT-BR** (Contrato, Aditivo, Moeda, Periodo, encerrar, distratar).
-- [ ] Events em **EN passado** (ContratoMaeCriado, AditivoHomologado).
+> **Idioma — fonte de verdade:** CLAUDE.md raiz §Idioma. **Código sempre EN** (tipos, funções, variáveis, pastas, arquivos). PT só em strings ao humano, via dicionário em `cli/formatters/`.
+
+- [ ] **Identificadores de domínio em EN** (`Contract`, `Amendment`, `Money`, `Period`, `terminate`, `homologate`). PT no código de domínio é REJECTED.
+- [ ] Events em **EN passado** (`ContractCreated`, `AmendmentHomologated`).
+- [ ] Erros internos em **EN kebab-case** (`'contract-not-active'`).
+- [ ] Strings ao humano (CLI / mensagens formatadas) em **PT** via dicionário em `cli/formatters/` — único lugar com PT no código.
 - [ ] Result helpers em EN (`ok`, `err`, `isOk`, `combine`).
 - [ ] Sem nomes vagos: `data`, `value`, `info` — preferir nomes específicos do contexto.
-- [ ] Sem prefix `I` em type/interface, sem sufixo `Impl` em adapter (use `ContratoRepositoryMysql`, não `ContratoRepositoryImpl`).
+- [ ] Sem prefixo `I` em type/interface, sem sufixo `Impl` em adapter (use `ContractRepositoryMysql`, não `ContractRepositoryImpl`).
 
 ### H. Tests (`*.test.ts`)
 
