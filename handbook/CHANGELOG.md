@@ -4,6 +4,62 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-05-27 — ✅ CHECKPOINT: módulo `auth` — domínio + repos + login híbrido (14 tickets, todos ALL-GREEN)
+
+### Resumo da sessão
+
+Sessão longa que partiu da análise do `api_documentations/doc.yaml` (contrato REST do legado NestJS),
+desenhou o **módulo de autenticação** do core-api do zero e o levou até o **login funcional com sessão
+híbrida**. **14 tickets** `auth` fechados (todos `closed-green`, **W2 round 1 — zero rejeições**), +3 ADRs
+aceitos, 2 dependências auditadas, **21 commits**. Suíte: **1370 testes** (1354 pass / 0 fail / 16 skip),
+partindo de ~1266 no início da sessão (**+104 testes**). `src/modules/auth`: **31** arquivos; testes: **28**.
+
+### ADRs aceitos (0024–0026)
+
+- **[ADR-0024](./architecture/adr/0024-identity-and-rbac-auth-module.md)** — Identidade & RBAC (módulo `auth`): identidade própria OIDC-ready, sessão híbrida (JWT curto + refresh stateful), permissions granulares. Cumpre o pré-requisito de identidade do [ADR-0022](./architecture/adr/0022-read-models-via-projection-over-event-stream.md).
+- **[ADR-0025](./architecture/adr/0025-http-server-fastify-core-api.md)** — Servidor HTTP no core-api com Fastify (adapter de borda; BFF segue burro, ADR-0005 não superseded). **Reservado→ativável.**
+- **[ADR-0026](./architecture/adr/0026-mysql-read-write-split-connection.md)** — Read/Write split de conexão (writer/reader, Master-Slave ready), transversal.
+
+### Entregue (código — 14 tickets `closed-green`)
+
+| Fase | Tickets |
+| :-- | :-- |
+| **D — domínio** | `AUTH-VO-EMAIL`, `AUTH-VO-PERMISSION`, `AUTH-VO-PASSWORD` (Password+PasswordHash), `AUTH-AGG-ROLE`, `AUTH-AGG-USER` (+`authorize`), `AUTH-AGG-SESSION` (RefreshToken) |
+| **A — repos** | `AUTH-REPO-USER` (write/read split), `AUTH-REPO-ROLE`, `AUTH-REPO-SESSION` — port no domínio + contract-suite + InMemory |
+| **A — use cases** | `AUTH-USECASE-REGISTER-USER`, `AUTH-USECASE-AUTHENTICATE` (access), `AUTH-USECASE-AUTHENTICATE-REFRESH` (refresh) |
+| **X — cripto/token** | `AUTH-ADAPTER-ARGON2-HASHER` (argon2id), `AUTH-ADAPTER-JWT-ISSUER` (ES256), `RefreshTokenMinter` |
+
+**Fluxo funcional:** `registerUser` (argon2id, sem persistir senha em claro) + `authenticateUser`
+(credencial → access JWT ES256 + refresh opaco persistido). Tudo com adapter `InMemory`/fake; MySQL e
+HTTP em fases futuras.
+
+### Dependências adicionadas (auditadas)
+
+- **`hash-wasm@4.12.0`** (argon2id, WASM puro, zero dep nativa). **Auditado o issue [#69](https://github.com/Daninet/hash-wasm/issues/69)** (leak): afeta a API de instância, **não** a one-shot `argon2id()` — probe de 60 hashes confirmou RSS estável.
+- **`jose@6.2.3`** (JWT ES256, zero dep, Web Crypto). Recusados: impl própria de cripto, HS256, `@node-rs/argon2` (binário nativo), `jsonwebtoken`.
+
+### Decisões de design (log vivo)
+
+[`domain/auth/design-decisions.md`](./domain/auth/design-decisions.md) — **mutável, consultar/criticar antes de cada ticket `auth`**. 14 decisões: `DD-USER-01..05`, `DD-SESSION-01..03`, `DD-PORTS-01`, `DD-CRYPTO-01`, `DD-TOKEN-01`, `DD-LOGIN-01..02`. Destaques: `User` como state machine refinada (`ActiveUser|DisabledUser`); `authorize` fail-closed fora do agregado; `RefreshToken` com estado **computado** (`state(token,now)`); argon2id via hash-wasm; access JWT ES256 (core assina/BFF valida); login anti-enumeration.
+
+### Notas propagadas (fases futuras — em `design-decisions.md`)
+
+- **EventBus/outbox do auth:** use cases retornam o evento mas não publicam (destrava AuditLog do ADR-0022 quando o transporte existir).
+- **Fase P (MySQL):** `auth_user.email` UNIQUE INDEX; `rehydrate(row)` dispatcher por `status`.
+- **Sessão (A6/A7):** `disable`/`changePassword` devem invalidar sessões; lockout fora do `User`.
+- **Hardening HTTP:** timing-oracle no login (hash dummy quando user não existe).
+
+### Pendente (próximos)
+
+- **A6** `refreshAccessToken` (rotação), **A7** `revokeSession`, **A8** `changePassword`, **A9** `assignRole`.
+- **Fase P** (schema/repos Drizzle MySQL `auth_*`), **Fase H** (borda Fastify — ativa ADR-0025), **I1** (RW split pools).
+
+### Métricas
+
+`pnpm run pipeline:metrics --write` → [`.claude/.pipeline/_METRICS.md`](../.claude/.pipeline/_METRICS.md). Os 14 tickets `auth` fecharam em **W2 round 1** (zero rejeições de review).
+
+---
+
 ## 2026-05-27 — Módulo `auth`: ADRs aceitos + Fase D entregue + log vivo de decisões de design
 
 ### Contexto
