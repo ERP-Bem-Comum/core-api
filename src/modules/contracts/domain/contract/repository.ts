@@ -1,6 +1,6 @@
 import type { Result } from '../../../../shared/primitives/result.ts';
 import type { ContractId } from '../shared/ids.ts';
-import type { Contract, EffectiveContract } from './types.ts';
+import type { Contract } from './types.ts';
 import type { OutboxAppendError } from '../../application/ports/outbox.ts';
 import type { ContractsModuleEvent } from '../../application/ports/event-bus.ts';
 
@@ -26,11 +26,10 @@ export type ContractRepository = Readonly<{
   // CA-1: 2º argumento `events` — adapter persiste state + outbox atomicamente (D2).
   // Use case não conhece tx; apenas passa os eventos produzidos pela operação de domínio.
   //
-  // ADR-0023: aceita apenas `EffectiveContract` — persistir `PendingContract` exige
-  // migration de schema (colunas nuláveis) e é tratado num ticket próprio. O tipo
-  // impede salvar um Pendente até lá.
+  // ADR-0023: aceita `Contract` (inclusive `Pending`) — a migration tornou as colunas
+  // de vigência/assinatura nuláveis (CTR-DOMAIN-CONTRACT-PENDING-PERSISTENCE).
   save: (
-    contract: EffectiveContract,
+    contract: Contract,
     events: readonly ContractsModuleEvent[],
   ) => Promise<Result<void, ContractRepositoryError>>;
 }>;

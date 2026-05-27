@@ -386,9 +386,6 @@ export const loadState = (
   // os agregados foram criados originalmente. Passamos [] para satisfazer a
   // nova assinatura save(aggregate, events).
   for (const c of parsed.contracts as readonly Contract[]) {
-    // Pendente não é persistível ainda (ADR-0023 — migration de schema pendente).
-    // Restauração cobre apenas os estados efetivos; nenhum state legado tem Pending.
-    if (c.status === 'Pending') continue;
     void contractRepo.repo.save(c, []);
   }
   for (const a of parsed.amendments as readonly Amendment[]) {

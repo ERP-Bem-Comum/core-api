@@ -14,6 +14,7 @@ import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
 import { Amendment } from '#src/modules/contracts/domain/amendment/amendment.ts';
 import type {
   ActiveContract,
+  PendingContract,
   ExpiredContract,
   TerminatedContract,
 } from '#src/modules/contracts/domain/contract/types.ts';
@@ -89,6 +90,31 @@ export const buildContract = (overrides: ContractOverrides = {}): ActiveContract
     originalPeriod: period,
   });
   return unwrap('Contract.create', r).contract;
+};
+
+// CTR-DOMAIN-CONTRACT-PENDING-PERSISTENCE — contrato `Pendente` (sem vigência).
+export const buildPendingContract = (overrides: ContractOverrides = {}): PendingContract => {
+  const id = unwrap(
+    'ContractId',
+    ContractId.rehydrate(overrides.id ?? '99999999-9999-4999-8999-999999999999'),
+  );
+  const period =
+    overrides.periodKind === 'Indefinite'
+      ? someIndefinitePeriod(overrides.periodStartISO ?? '2026-02-01')
+      : someFixedPeriod(
+          overrides.periodStartISO ?? '2026-02-01',
+          overrides.periodEndISO ?? '2026-12-31',
+        );
+  const r = Contract.createPending({
+    id,
+    sequentialNumber: overrides.sequentialNumber ?? '900/2026',
+    title: overrides.title ?? 'Contrato Pendente Fixture',
+    objective: overrides.objective ?? 'Aguardando documento assinado',
+    originalValue: someMoney(overrides.originalValueCents ?? 10_000_000),
+    originalPeriod: period,
+    createdAt: new Date('2026-01-10T00:00:00.000Z'),
+  });
+  return unwrap('Contract.createPending', r).contract;
 };
 
 // ─── CTR-DOMAIN-STATE-MACHINE-CONTRACT — builders de subtipos refinados ──────

@@ -62,14 +62,16 @@ export const contracts = mysqlTable(
     sequentialNumber: varchar('sequential_number', { length: 16 }).notNull().unique(),
     title: varchar('title', { length: 255 }).notNull(),
     objective: varchar('objective', { length: 1000 }).notNull(),
-    signedAt: datetime('signed_at', { mode: 'date', fsp: 3 }).notNull(),
+    // ADR-0023: NULL em contrato `Pending` (sem assinatura).
+    signedAt: datetime('signed_at', { mode: 'date', fsp: 3 }),
     originalValueCents: bigint('original_value_cents', { mode: 'number' }).notNull(),
     originalPeriodKind: varchar('original_period_kind', { length: 16 }).notNull(),
     originalPeriodStart: date('original_period_start', { mode: 'date' }).notNull(),
     originalPeriodEnd: date('original_period_end', { mode: 'date' }),
-    currentValueCents: bigint('current_value_cents', { mode: 'number' }).notNull(),
-    currentPeriodKind: varchar('current_period_kind', { length: 16 }).notNull(),
-    currentPeriodStart: date('current_period_start', { mode: 'date' }).notNull(),
+    // ADR-0023: vigência efetiva NULL em `Pending` (derivada só a partir de Active).
+    currentValueCents: bigint('current_value_cents', { mode: 'number' }),
+    currentPeriodKind: varchar('current_period_kind', { length: 16 }),
+    currentPeriodStart: date('current_period_start', { mode: 'date' }),
     currentPeriodEnd: date('current_period_end', { mode: 'date' }),
     status: varchar('status', { length: 16 }).notNull(),
     endedAt: datetime('ended_at', { mode: 'date', fsp: 3 }),
@@ -84,7 +86,18 @@ export const contracts = mysqlTable(
       'ctr_contracts_current_period_kind_chk',
       sql`${t.currentPeriodKind} IN ('Fixed','Indefinite')`,
     ),
-    check('ctr_contracts_status_chk', sql`${t.status} IN ('Active','Expired','Terminated')`),
+    check(
+      'ctr_contracts_status_chk',
+      sql`${t.status} IN ('Pending','Active','Expired','Terminated')`,
+    ),
+
+    // ADR-0023: bicondicional `Pending ⟺ sem vigência efetiva`. Pendente tem
+    // assinatura e estado vigente NULL; os demais estados têm ambos preenchidos.
+    // Espelha o CHECK F-L1 de `ended_at` (`=` entre booleans = bicondicional).
+    check(
+      'ctr_contracts_pending_consistency_chk',
+      sql`(${t.status} = 'Pending') = (${t.signedAt} IS NULL AND ${t.currentValueCents} IS NULL AND ${t.currentPeriodKind} IS NULL AND ${t.currentPeriodStart} IS NULL)`,
+    ),
 
     // F-L1: bicondicional entre status terminado e endedAt populado.
     // `(A) = (B)` em MySQL retorna 1 se ambos true ou ambos false.

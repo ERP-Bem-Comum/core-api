@@ -12,7 +12,7 @@ import { Contract as ContractAgg } from '#src/modules/contracts/domain/contract/
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
 import * as Period from '#src/shared/kernel/period.ts';
 
-import { buildContract } from './fixtures.ts';
+import { buildContract, buildPendingContract } from './fixtures.ts';
 
 export interface ContractRepoFactory {
   make: () => Promise<{
@@ -121,6 +121,34 @@ export const runContractRepositoryContract = (
         assert.equal(Period.equals(got.originalPeriod, c.originalPeriod), true);
         assert.equal(Period.equals(got.currentPeriod, c.currentPeriod), true);
         assert.equal(got.originalPeriod.kind, 'Fixed');
+      } finally {
+        await cleanup();
+      }
+    });
+
+    it('CA6: save + findById preserva PendingContract (sem vigência/assinatura)', async () => {
+      try {
+        const c = buildPendingContract({
+          id: '99999999-9999-4999-8999-999999999999',
+          sequentialNumber: '901/2026',
+        });
+        const save = await repo.save(c, []);
+        assert.equal(
+          save.ok,
+          true,
+          `save Pending falhou: ${JSON.stringify(!save.ok && save.error)}`,
+        );
+
+        const r = await repo.findById(c.id);
+        if (!r.ok || r.value === null) throw new Error('Pending não persistido');
+        assert.equal(r.value.status, 'Pending');
+        assert.equal('signedAt' in r.value, false, 'PendingContract não deve expor signedAt');
+        assert.equal(
+          'currentValue' in r.value,
+          false,
+          'PendingContract não deve expor currentValue',
+        );
+        assert.equal(r.value.sequentialNumber, '901/2026');
       } finally {
         await cleanup();
       }

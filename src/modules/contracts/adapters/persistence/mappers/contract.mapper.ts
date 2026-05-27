@@ -4,7 +4,7 @@
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
 import type {
   Contract,
-  EffectiveContract,
+  PendingContract,
   ActiveContract,
   ExpiredContract,
   TerminatedContract,
@@ -59,6 +59,15 @@ export type ContractMapperInvalidEndedAt = Readonly<{
   endedAtPresent: boolean;
 }>;
 
+// ADR-0023: inconsistência entre `status` e a presença da vigência/assinatura.
+// `Pending` exige vigência NULL; estados efetivos exigem vigência preenchida.
+// (O CHECK `pending_consistency_chk` evita gravar; este erro é a rede do mapper.)
+export type ContractMapperInvalidPendingShape = Readonly<{
+  tag: 'ContractMapperInvalidPendingShape';
+  status: ContractStatus;
+  effectiveFieldsPresent: boolean;
+}>;
+
 // ─── Union ────────────────────────────────────────────────────────────────────
 
 export type ContractMapperError =
@@ -67,7 +76,8 @@ export type ContractMapperError =
   | ContractMapperInvalidMoney
   | ContractMapperInvalidPeriod
   | ContractMapperInvalidAmendmentId
-  | ContractMapperInvalidEndedAt;
+  | ContractMapperInvalidEndedAt
+  | ContractMapperInvalidPendingShape;
 
 // ─── Case constructors (Padrão D — free functions, DO D§22) ──────────────────
 //
@@ -120,14 +130,20 @@ export const contractMapperInvalidEndedAt = (
   endedAtPresent,
 });
 
+export const contractMapperInvalidPendingShape = (
+  status: ContractStatus,
+  effectiveFieldsPresent: boolean,
+): ContractMapperInvalidPendingShape => ({
+  tag: 'ContractMapperInvalidPendingShape',
+  status,
+  effectiveFieldsPresent,
+});
+
 // ─── Helpers internos ────────────────────────────────────────────────────────
 
-// Apenas estados EFETIVOS são persistidos (ADR-0023: `Pending` não vai ao banco
-// até a migration de schema). O predicado narrowa para os efetivos, mantendo o
-// switch de `contractFromRow` exaustivo.
-const PERSISTED_STATUSES = ['Active', 'Expired', 'Terminated'] as const;
-const isStatus = (v: string): v is (typeof PERSISTED_STATUSES)[number] =>
-  (PERSISTED_STATUSES as readonly string[]).includes(v);
+const KNOWN_STATUSES = ['Pending', 'Active', 'Expired', 'Terminated'] as const;
+const isStatus = (v: string): v is (typeof KNOWN_STATUSES)[number] =>
+  (KNOWN_STATUSES as readonly string[]).includes(v);
 
 const isPeriodKind = (v: string): v is PeriodKindRaw => v === 'Fixed' || v === 'Indefinite';
 
@@ -137,9 +153,35 @@ const periodErrorReason = (e: unknown): string =>
   typeof e === 'string' ? e : (e as { tag: string }).tag;
 
 export const contractToInsert = (
-  c: EffectiveContract,
+  c: Contract,
 ): { row: ContractInsert; homologatedAmendmentIds: readonly string[] } => {
   const orig = periodToColumns(c.originalPeriod);
+
+  // ADR-0023: `Pending` não tem assinatura nem vigência efetiva — colunas NULL.
+  if (c.status === 'Pending') {
+    return {
+      row: {
+        id: c.id as unknown as string,
+        sequentialNumber: c.sequentialNumber,
+        title: c.title,
+        objective: c.objective,
+        signedAt: null,
+        originalValueCents: c.originalValue.cents,
+        originalPeriodKind: orig.kind,
+        originalPeriodStart: orig.start,
+        originalPeriodEnd: orig.end,
+        currentValueCents: null,
+        currentPeriodKind: null,
+        currentPeriodStart: null,
+        currentPeriodEnd: null,
+        status: 'Pending',
+        endedAt: null,
+      },
+      homologatedAmendmentIds: [],
+    };
+  }
+
+  // `c` é efetivo (Active | Expired | Terminated) — vigência presente.
   const curr = periodToColumns(c.currentPeriod);
   return {
     row: {
@@ -175,15 +217,10 @@ export const contractFromRow = (
   if (!isStatus(row.status)) return err(contractMapperInvalidStatus(row.status));
   if (!isPeriodKind(row.originalPeriodKind))
     return err(contractMapperInvalidPeriod('originalPeriod', 'invalid-kind'));
-  if (!isPeriodKind(row.currentPeriodKind))
-    return err(contractMapperInvalidPeriod('currentPeriod', 'invalid-kind'));
 
   const origValue = moneyFromCents(row.originalValueCents);
   if (!origValue.ok)
     return err(contractMapperInvalidMoney('originalValueCents', row.originalValueCents));
-  const currValue = moneyFromCents(row.currentValueCents);
-  if (!currValue.ok)
-    return err(contractMapperInvalidMoney('currentValueCents', row.currentValueCents));
 
   const origPeriod = periodFromColumns({
     kind: row.originalPeriodKind,
@@ -192,6 +229,43 @@ export const contractFromRow = (
   });
   if (!origPeriod.ok)
     return err(contractMapperInvalidPeriod('originalPeriod', periodErrorReason(origPeriod.error)));
+
+  // Campos de cadastro — comuns a todos os estados (inclusive Pending).
+  const registration = {
+    id: idR.value,
+    sequentialNumber: row.sequentialNumber,
+    title: row.title,
+    objective: row.objective,
+    originalValue: origValue.value,
+    originalPeriod: origPeriod.value,
+  } as const;
+
+  // ADR-0023: `Pending` bifurca ANTES de exigir vigência/assinatura. As colunas
+  // efetivas devem vir NULL (garantido pelo CHECK `pending_consistency_chk`);
+  // defesa em profundidade rejeita shape corrompido.
+  if (row.status === 'Pending') {
+    if (row.signedAt !== null || row.currentValueCents !== null || row.currentPeriodKind !== null) {
+      return err(contractMapperInvalidPendingShape('Pending', true));
+    }
+    const pending: PendingContract = { ...registration, status: 'Pending' };
+    return ok(pending);
+  }
+
+  // Estados efetivos (Active | Expired | Terminated) — exigem vigência + assinatura
+  // não-nulas (CHECK `pending_consistency_chk` garante; guard defensivo + narrowing).
+  if (
+    row.signedAt === null ||
+    row.currentValueCents === null ||
+    row.currentPeriodKind === null ||
+    row.currentPeriodStart === null
+  ) {
+    return err(contractMapperInvalidPendingShape(row.status, false));
+  }
+  if (!isPeriodKind(row.currentPeriodKind))
+    return err(contractMapperInvalidPeriod('currentPeriod', 'invalid-kind'));
+  const currValue = moneyFromCents(row.currentValueCents);
+  if (!currValue.ok)
+    return err(contractMapperInvalidMoney('currentValueCents', row.currentValueCents));
   const currPeriod = periodFromColumns({
     kind: row.currentPeriodKind,
     start: row.currentPeriodStart,
@@ -207,16 +281,10 @@ export const contractFromRow = (
     homologatedIds.push(r.value);
   }
 
-  // Campos do núcleo comum (ContractCore), excluindo status e endedAt.
-  // Usados como base para construir cada subtipo no switch abaixo.
+  // Núcleo efetivo (cadastro + vigência), excluindo status e endedAt.
   const core = {
-    id: idR.value,
-    sequentialNumber: row.sequentialNumber,
-    title: row.title,
-    objective: row.objective,
+    ...registration,
     signedAt: row.signedAt,
-    originalValue: origValue.value,
-    originalPeriod: origPeriod.value,
     currentValue: currValue.value,
     currentPeriod: currPeriod.value,
     homologatedAmendmentIds: homologatedIds,

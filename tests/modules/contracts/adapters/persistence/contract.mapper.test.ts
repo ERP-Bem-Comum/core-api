@@ -23,8 +23,16 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk, isErr } from '#src/shared/index.ts';
-import { contractFromRow } from '#src/modules/contracts/adapters/persistence/mappers/contract.mapper.ts';
+import {
+  contractFromRow,
+  contractToInsert,
+} from '#src/modules/contracts/adapters/persistence/mappers/contract.mapper.ts';
 import type { ContractRow } from '#src/modules/contracts/adapters/persistence/mappers/contract.mapper.ts';
+import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
+import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
+import * as Money from '#src/shared/kernel/money.ts';
+import * as Period from '#src/shared/kernel/period.ts';
+import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 
 // ─── Helpers de fixture de row ────────────────────────────────────────────────
 
@@ -256,6 +264,102 @@ describe('contractFromRow — DB corrompido: id inválido (CA6 — tagged payloa
     if (!r.ok) {
       assert.equal((r.error as unknown as { tag: string }).tag, 'ContractMapperInvalidAmendmentId');
       assert.equal((r.error as unknown as { attemptedValue: string }).attemptedValue, BAD_AMD_ID);
+    }
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CTR-DOMAIN-CONTRACT-PENDING-PERSISTENCE — mapeamento do estado `Pending`.
+// Vigência/assinatura vão como NULL no banco (colunas nuláveis após migration).
+// REDs (sem Docker): antes do W1, `contractToInsert` lia `currentPeriod` (ausente em
+// Pending) e `contractFromRow` rejeitava status 'Pending' (fora dos status conhecidos).
+// ─────────────────────────────────────────────────────────────────────────────
+
+const pd = (iso: string): PlainDate.PlainDate => {
+  const r = PlainDate.from(iso.slice(0, 10));
+  if (!r.ok) throw new Error(`fixture broken: ${r.error}`);
+  return r.value;
+};
+const money = (cents: number) => {
+  const r = Money.fromCents(cents);
+  if (!r.ok) throw new Error(`fixture broken: ${r.error}`);
+  return r.value;
+};
+const fixedPeriod = (s: string, e: string) => {
+  const r = Period.create(pd(s), pd(e));
+  if (!r.ok) throw new Error(`fixture broken: ${r.error}`);
+  return r.value;
+};
+
+const buildPending = () => {
+  const r = Contract.createPending({
+    id: ContractId.generate(),
+    sequentialNumber: '900/2026',
+    title: 'Contrato Pendente',
+    objective: 'Aguardando documento assinado',
+    originalValue: money(10_000_000),
+    originalPeriod: fixedPeriod('2026-02-01', '2026-12-31'),
+    createdAt: new Date('2026-01-10T00:00:00.000Z'),
+  });
+  if (!r.ok) throw new Error(`fixture broken: ${JSON.stringify(r.error)}`);
+  return r.value.contract;
+};
+
+describe('contractToInsert — Pending (CTR-DOMAIN-CONTRACT-PENDING-PERSISTENCE)', () => {
+  it('CA-M1: Pending → row com status Pending e vigência/assinatura NULL', () => {
+    const { row, homologatedAmendmentIds } = contractToInsert(buildPending());
+
+    assert.equal(row.status, 'Pending');
+    assert.equal(row.signedAt, null, 'Pending não tem signedAt');
+    assert.equal(row.currentValueCents, null, 'Pending não tem currentValue');
+    assert.equal(row.currentPeriodKind, null, 'Pending não tem currentPeriod');
+    assert.equal(row.currentPeriodStart, null);
+    assert.equal(row.endedAt, null);
+    // Cadastro preservado.
+    assert.equal(row.sequentialNumber, '900/2026');
+    assert.equal(row.originalValueCents, 10_000_000);
+    assert.deepEqual([...homologatedAmendmentIds], []);
+  });
+});
+
+describe('contractFromRow — Pending (CTR-DOMAIN-CONTRACT-PENDING-PERSISTENCE)', () => {
+  it('CA-M2: row Pending (vigência NULL) → PendingContract', () => {
+    const row = {
+      ...BASE_ROW,
+      signedAt: null,
+      currentValueCents: null,
+      currentPeriodKind: null,
+      currentPeriodStart: null,
+      currentPeriodEnd: null,
+      status: 'Pending',
+      endedAt: null,
+    } as unknown as ContractRow;
+
+    const r = contractFromRow(row, []);
+
+    assert.equal(isOk(r), true);
+    if (r.ok) {
+      assert.equal(r.value.status, 'Pending');
+      assert.equal('signedAt' in r.value, false, 'PendingContract não expõe signedAt');
+      assert.equal('currentValue' in r.value, false, 'PendingContract não expõe currentValue');
+    }
+  });
+
+  it('CA-M3: row Pending com vigência preenchida (corrompido) → InvalidPendingShape', () => {
+    const row = {
+      ...BASE_ROW,
+      status: 'Pending', // mas signedAt/current* preenchidos (BASE_ROW) — viola a bicondicional
+      endedAt: null,
+    } as unknown as ContractRow;
+
+    const r = contractFromRow(row, []);
+
+    assert.equal(isErr(r), true, 'Pending com vigência preenchida deve ser rejeitado');
+    if (!r.ok) {
+      assert.equal(
+        (r.error as unknown as { tag: string }).tag,
+        'ContractMapperInvalidPendingShape',
+      );
     }
   });
 });
