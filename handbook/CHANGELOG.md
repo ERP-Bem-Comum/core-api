@@ -4,6 +4,35 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-05-27 — Ciclo de vida do Contrato revisado: estado `Pendente` (ADR-0023)
+
+### Contexto
+
+Ao planejar a exposição HTTP do módulo Contratos (ACL sobre o `openapi.yaml` legado), a divergência
+de status entre domínio (3 estados) e legado (5) foi levada à P.O. via
+[Inquiry-0021](./inquiries/0021-contract-status-lifecycle-http.md).
+
+### Decisão — ADR-0023 (decide Inquiry-0021)
+
+A P.O. confirmou que **`Pendente` é regra real**: o contrato é cadastrado antes da assinatura, sem
+efetividade (não inicia vigência, não aceita aditivos), e é **ativado** ao subir o documento
+assinado + data. → **[ADR-0023](./architecture/adr/0023-contract-lifecycle-pending-state.md)** (Accepted):
+ciclo de vida passa de 3 para **4 estados** (`Pendente → Em Andamento → Finalizado / Distrato`).
+
+- Agregado `Contract` ganha o estado refinado `PendingContract` + transição `activate` (espelha
+  `Amendment`: `Pending → PendingWithDocument → Homologated`).
+- Nomenclatura: código EN (`Pending | Active | Expired | Terminated`); UI/ACL em PT
+  (`Pendente | Em Andamento | Finalizado | Distrato`).
+- **HTTP fica bloqueado** até a revisão de domínio entrar (handbook `gestao-contratos.md` + série de
+  tickets `ts-domain-modeler`).
+
+### Pendente
+
+- Atualizar `gestao-contratos.md` (máquina de estados 4 nós, RN-CV-01/02, evento `ContractActivated`).
+- Série de tickets de domínio (estado `PendingContract`, `create` dual, `activate`, persistência, CLI).
+
+---
+
 ## 2026-05-26 — Acabamento de Contracts (parte 2): UC-11 import, Timeline e ADR-0022
 
 ### Contexto

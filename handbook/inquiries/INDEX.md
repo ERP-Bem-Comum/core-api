@@ -10,8 +10,8 @@
 
 | # | Status | Última atualização |
 | :--- | :--- | :--- |
-| Total | 20 | 2026-05-26 |
-| `Decided` | 13 | — |
+| Total | 21 | 2026-05-27 |
+| `Decided` | 14 | — |
 | `Pending Response` | 0 | — |
 | `Obsoleta (revisada)` | 1 | — |
 | `Open` | 5 | — |
@@ -39,6 +39,7 @@
 | [0017](./0017-timeline-read-model-vs-adr-0020.md) | Timeline read-model vs. ADR-0020 (sem JSON) | [ADR-0022](../architecture/adr/0022-read-models-via-projection-over-event-stream.md) (projeção; outbox é o log append-only) | 2026-05-26 |
 | [0018](./0018-auditlog-transversal-todos-bcs.md) | `AuditLogGenerated` transversal | [ADR-0022](../architecture/adr/0022-read-models-via-projection-over-event-stream.md) — **decided-deferred** (padrão de projeção; materialização espera RBAC) | 2026-05-26 |
 | [0020](./0020-temporal-api-adoption.md) | Adoção do Temporal API (ES2026) | Opção C — VO `PlainDate` agora, `Temporal.PlainDate` nativo no Node 26 LTS; ADR futuro (gatilho 2026-10-28) | 2026-05-26 |
+| [0021](./0021-contract-status-lifecycle-http.md) | Ciclo de vida (status) do Contrato — 3 vs. 5 estados | P.O.: **4 estados** (`Pendente → Em Andamento → Finalizado/Distrato`). **Aciona revisão do agregado `Contract`** (novo estado `Pendente`) + atualização do handbook antes do HTTP | 2026-05-27 |
 
 ### ⏳ Pending Response
 
@@ -101,6 +102,7 @@ _Nenhuma._
 
 ### Descoberta de Domínio
 - [0014 — Schema legado vs. modelo alvo](./0014-schema-legado-vs-modelo-alvo.md)
+- [0021 — Ciclo de vida (status) do Contrato — 3 vs. 5 estados](./0021-contract-status-lifecycle-http.md)
 
 ### Persistência & Dívida Tipográfica
 - [0015 — Charset/collate por tabela via drizzle-orm](./0015-charset-drizzle-roadmap.md)
