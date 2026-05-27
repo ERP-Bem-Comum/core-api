@@ -27,7 +27,13 @@ export type WaveEntry = Readonly<{
   outcome: WaveOutcome | null;
 }>;
 
-export type TicketStatus = 'open' | 'in-progress' | 'closed-green' | 'closed-rejected' | 'blocked';
+export type TicketStatus =
+  | 'open'
+  | 'in-progress'
+  | 'closed-green'
+  | 'closed-rejected'
+  | 'superseded'
+  | 'blocked';
 
 export type TicketSize = 'XS' | 'S' | 'M' | 'L' | 'XL';
 
@@ -42,6 +48,9 @@ export type PipelineState = Readonly<{
   waves: readonly WaveEntry[];
   blockers: readonly string[];
   lastEvent: string;
+  // Presente apenas quando status === 'superseded'. Campo opcional para
+  // retrocompatibilidade com STATE.json legados (não entra em REQUIRED_FIELDS).
+  supersededBy?: string;
 }>;
 
 export type ParseError =

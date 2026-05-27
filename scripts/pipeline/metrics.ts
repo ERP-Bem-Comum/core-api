@@ -25,6 +25,7 @@ export type StatusBreakdown = Readonly<{
   inProgress: number;
   closedGreen: number;
   closedRejected: number;
+  superseded: number;
   blocked: number;
 }>;
 
@@ -88,6 +89,7 @@ const byStatusOf = (snapshots: readonly TicketSnapshot[]): StatusBreakdown => {
   let inProgress = 0;
   let closedGreen = 0;
   let closedRejected = 0;
+  let superseded = 0;
   let blocked = 0;
   for (const s of snapshots) {
     switch (s.state.status) {
@@ -103,12 +105,15 @@ const byStatusOf = (snapshots: readonly TicketSnapshot[]): StatusBreakdown => {
       case 'closed-rejected':
         closedRejected++;
         break;
+      case 'superseded':
+        superseded++;
+        break;
       case 'blocked':
         blocked++;
         break;
     }
   }
-  return { open, inProgress, closedGreen, closedRejected, blocked };
+  return { open, inProgress, closedGreen, closedRejected, superseded, blocked };
 };
 
 const bySizeOf = (snapshots: readonly TicketSnapshot[]): SizeBreakdown => {
@@ -238,6 +243,7 @@ export const renderMetricsMd = (m: PipelineMetrics): string => {
   lines.push(`| in-progress | ${m.byStatus.inProgress} |`);
   lines.push(`| closed-green | ${m.byStatus.closedGreen} |`);
   lines.push(`| closed-rejected | ${m.byStatus.closedRejected} |`);
+  lines.push(`| superseded | ${m.byStatus.superseded} |`);
   lines.push(`| blocked | ${m.byStatus.blocked} |`);
   lines.push('');
   lines.push('## Size');

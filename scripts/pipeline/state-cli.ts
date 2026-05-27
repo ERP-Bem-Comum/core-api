@@ -317,6 +317,40 @@ const cmdClose = async (cwd: string, ticket: string): Promise<void> => {
   process.stdout.write(`closed-green: ${ticket}\n`);
 };
 
+// Estados que NÃO podem virar superseded: sucesso definitivo (`closed-green`)
+// e idempotência (`superseded`). `closed-rejected` permanece reclassificável —
+// um ticket abandonado/rejeitado pode depois revelar-se duplicata de outro.
+const SUPERSEDE_BLOCKED_STATUSES: readonly PipelineState['status'][] = [
+  'closed-green',
+  'superseded',
+];
+
+const cmdSupersede = async (cwd: string, ticket: string, flags: Flags): Promise<void> => {
+  const winner = requireFlag(flags, 'by');
+  const dir = ticketDirOf(cwd, ticket);
+  const state = await loadState(dir);
+
+  if (SUPERSEDE_BLOCKED_STATUSES.includes(state.status)) {
+    exitFail(2, `ticket em estado ${state.status} não pode ser superseded`);
+  }
+
+  const winnerState = await readState(ticketDirOf(cwd, winner));
+  if (!winnerState.ok) {
+    exitFail(2, `ticket vencedor --by ${winner} não encontrado`);
+  }
+
+  const newState: PipelineState = {
+    ...state,
+    status: 'superseded',
+    closedAt: new Date().toISOString(),
+    currentWave: null,
+    supersededBy: winner,
+    lastEvent: `superseded by ${winner}`,
+  };
+  await writeStateAndMd(dir, newState);
+  process.stdout.write(`superseded: ${ticket} (by ${winner})\n`);
+};
+
 const cmdRender = async (cwd: string, ticket: string): Promise<void> => {
   const dir = ticketDirOf(cwd, ticket);
   const state = await loadState(dir);
@@ -333,7 +367,7 @@ const main = async (): Promise<void> => {
 
   if (subcommand === undefined) {
     process.stderr.write(
-      'uso: pipeline:state <init|wave-start|wave-finish|wave-round|wave-reopen|close|render> <ticket> [args]\n',
+      'uso: pipeline:state <init|wave-start|wave-finish|wave-round|wave-reopen|close|supersede|render> <ticket> [args]\n',
     );
     process.exit(1);
   }
@@ -348,6 +382,10 @@ const main = async (): Promise<void> => {
   }
   if (subcommand === 'close') {
     await cmdClose(cwd, ticket);
+    return;
+  }
+  if (subcommand === 'supersede') {
+    await cmdSupersede(cwd, ticket, parseFlags(rest));
     return;
   }
   if (subcommand === 'render') {

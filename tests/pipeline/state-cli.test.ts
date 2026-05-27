@@ -434,3 +434,70 @@ describe('state-cli — wave-reopen (CTR-PIPELINE-WAVE-REOPEN)', () => {
     assert.equal(w2?.status, 'done', 'W2 não deve reabrir além do limite');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CTR-PIPELINE-SUPERSEDE-STATUS — subcomando `supersede <ticket> --by <outro>`.
+// Encerra um ticket como substituído/duplicado por outro, sem exigir as 4 waves
+// done — diferente de `close`, que só aceita ticket com pipeline completo.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type SupersededSnapshot = StateSnapshot & { supersededBy?: string | null };
+
+describe('state-cli — supersede (CTR-PIPELINE-SUPERSEDE-STATUS)', () => {
+  it('CA-S1: supersede seta status superseded + supersededBy + closedAt sem exigir waves done', async () => {
+    // Arrange — ticket alvo e ticket vencedor, ambos recém-criados (waves pending)
+    const ticket = 'CTR-SUPERSEDE-1';
+    const winner = 'CTR-SUPERSEDE-1-WINNER';
+    const root = await makeTicketDir(ticket);
+    await runCli(root, ['init', ticket, '--size', 'S']);
+    await runCli(root, ['init', winner, '--size', 'S']);
+
+    // Act — supersede num ticket com TODAS as waves pending
+    const r = await runCli(root, ['supersede', ticket, '--by', winner]);
+
+    // Assert
+    assert.equal(r.code, 0, `esperado exit 0; stderr: ${r.stderr}`);
+    const content = await readJson<SupersededSnapshot>(stateJsonPath(root, ticket));
+    assert.equal(content.status, 'superseded', 'status deve virar superseded');
+    assert.equal(content.supersededBy, winner, 'supersededBy deve apontar o ticket vencedor');
+    assert.notEqual(content.closedAt, null, 'closedAt deve ser preenchido');
+    assert.ok(
+      content.waves.every((w) => w.status === 'pending'),
+      'supersede não deve exigir nem alterar as waves',
+    );
+  });
+
+  it('CA-S2: supersede sem --by falha citando a flag e não altera o status', async () => {
+    // Arrange
+    const ticket = 'CTR-SUPERSEDE-2';
+    const root = await makeTicketDir(ticket);
+    await runCli(root, ['init', ticket, '--size', 'S']);
+
+    // Act
+    const r = await runCli(root, ['supersede', ticket]);
+
+    // Assert — erro específico de flag, não o exit genérico de "wave id obrigatória"
+    assert.notEqual(r.code, 0, 'deve falhar sem --by');
+    assert.match(r.stderr, /--by/, 'stderr deve citar a flag --by ausente');
+    const content = await readJson<StateSnapshot>(stateJsonPath(root, ticket));
+    assert.equal(content.status, 'open', 'status não deve mudar sem --by');
+  });
+
+  it('CA-S3: supersede recusa ticket já terminal (exit 2)', async () => {
+    // Arrange — ticket levado a closed-green
+    const ticket = 'CTR-SUPERSEDE-3';
+    const winner = 'CTR-SUPERSEDE-3-WINNER';
+    const root = await makeTicketDir(ticket);
+    await driveToWaveDone(root, ticket, 'W3', 'ALL-GREEN');
+    await runCli(root, ['close', ticket]);
+    await runCli(root, ['init', winner, '--size', 'S']);
+
+    // Act
+    const r = await runCli(root, ['supersede', ticket, '--by', winner]);
+
+    // Assert — não sobrescreve um terminal já alcançado
+    assert.equal(r.code, 2, `esperado exit 2; stderr: ${r.stderr}`);
+    const content = await readJson<StateSnapshot>(stateJsonPath(root, ticket));
+    assert.equal(content.status, 'closed-green', 'ticket terminal não deve ser sobrescrito');
+  });
+});

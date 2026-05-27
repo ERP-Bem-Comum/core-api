@@ -37,7 +37,11 @@ import type {
   WaveOutcome,
 } from '../../scripts/pipeline/state-schema.ts';
 import type { TicketSnapshot } from '../../scripts/pipeline/dashboard.ts';
-import { computeMetrics, renderMetricsJson } from '../../scripts/pipeline/metrics.ts';
+import {
+  computeMetrics,
+  renderMetricsJson,
+  renderMetricsMd,
+} from '../../scripts/pipeline/metrics.ts';
 
 // ----------------------------------------------------------------------------
 // Fixtures helpers
@@ -385,5 +389,62 @@ describe('metrics-cli - comando CLI', () => {
     const direct = renderMetricsJson(computeMetrics([makeSnapshot(state)]));
     const directParsed = JSON.parse(direct) as { total: number };
     assert.equal(directParsed.total, 1);
+  });
+});
+
+// ----------------------------------------------------------------------------
+// CTR-PIPELINE-SUPERSEDE-STATUS - status `superseded` nas metricas.
+// Hoje `byStatusOf` tem switch sem default: status superseded some das contagens
+// (total deixa de bater com a soma das linhas).
+// ----------------------------------------------------------------------------
+
+describe('metrics - superseded (CTR-PIPELINE-SUPERSEDE-STATUS)', () => {
+  it('CA-M1: byStatus conta superseded em campo proprio', () => {
+    const snaps = [
+      makeSnapshot(
+        makeState({ ticket: 'A', status: 'superseded', closedAt: '2026-05-22T00:00:00.000Z' }),
+      ),
+    ];
+    const m = computeMetrics(snaps);
+    assert.equal((m.byStatus as { superseded?: number }).superseded, 1);
+  });
+
+  it('CA-M2: total bate com a soma das contagens de status (superseded incluso)', () => {
+    const snaps = [
+      makeSnapshot(makeState({ ticket: 'A', status: 'open' })),
+      makeSnapshot(
+        makeState({ ticket: 'B', status: 'closed-green', closedAt: '2026-05-22T00:00:00.000Z' }),
+      ),
+      makeSnapshot(
+        makeState({ ticket: 'C', status: 'superseded', closedAt: '2026-05-22T00:00:00.000Z' }),
+      ),
+    ];
+    const m = computeMetrics(snaps);
+    const bs = m.byStatus as {
+      open: number;
+      inProgress: number;
+      closedGreen: number;
+      closedRejected: number;
+      blocked: number;
+      superseded?: number;
+    };
+    const sum =
+      bs.open +
+      bs.inProgress +
+      bs.closedGreen +
+      bs.closedRejected +
+      bs.blocked +
+      (bs.superseded ?? 0);
+    assert.equal(sum, m.total, 'soma das linhas de status deve igualar o total de tickets');
+  });
+
+  it('CA-M3: renderMetricsMd inclui linha de superseded na tabela Status', () => {
+    const m = computeMetrics([
+      makeSnapshot(
+        makeState({ ticket: 'A', status: 'superseded', closedAt: '2026-05-22T00:00:00.000Z' }),
+      ),
+    ]);
+    const md = renderMetricsMd(m);
+    assert.match(md, /\| superseded \| 1 \|/, 'tabela Status deve ter linha superseded');
   });
 });

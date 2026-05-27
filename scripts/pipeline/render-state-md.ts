@@ -38,7 +38,7 @@ export const renderStateMd = (state: PipelineState): string => {
     '',
     `> **Size:** ${state.size} · **Status:** ${state.status} · **Created:** ${state.createdAt}${
       state.closedAt === null ? '' : ` · **Closed:** ${state.closedAt}`
-    }`,
+    }${state.supersededBy === undefined ? '' : ` · **Superseded by:** ${state.supersededBy}`}`,
     '',
     '| Wave | Status | Skill | REPORT | Última atualização |',
     '| :--- | :--- | :--- | :--- | :--- |',

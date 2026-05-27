@@ -17,8 +17,10 @@
 > - **Estado da branch:** teste já pós-fix (secrets `0644`; `CA-6` endurecido para exigir
 >   `ER_TABLEACCESS_DENIED_ERROR (1142)`). AUTH fechou 21/21 com Docker vivo.
 >
-> Marcado `closed-rejected` (terminal sem entrega de código — o schema do pipeline não modela
-> `superseded`; ver `scripts/pipeline/state-schema.ts`). **Nenhuma wave foi executada.**
+> Status `superseded` via `pnpm run pipeline:state supersede CTR-INFRA-READONLY-BI-GRANT --by
+> CTR-INFRA-READONLY-BI-AUTH` (comando entregue por `CTR-PIPELINE-SUPERSEDE-STATUS`). Antes,
+> paliativamente marcado `closed-rejected` porque o schema ainda não modelava `superseded`.
+> **Nenhuma wave foi executada.**
 
 ## Origem
 

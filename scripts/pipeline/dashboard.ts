@@ -59,7 +59,11 @@ const filterMatches = (state: PipelineState, filter: DashboardFilter): boolean =
     case 'open':
       return state.status === 'open' || state.status === 'in-progress';
     case 'closed':
-      return state.status === 'closed-green' || state.status === 'closed-rejected';
+      return (
+        state.status === 'closed-green' ||
+        state.status === 'closed-rejected' ||
+        state.status === 'superseded'
+      );
     case 'blocked':
       return state.status === 'blocked';
   }
@@ -115,18 +119,26 @@ const enrichSnapshot = (snapshot: TicketSnapshot, now: Date): TicketSnapshot => 
   daysOpen: computeDaysOpen(snapshot.state.createdAt, now),
 });
 
-type Summary = Readonly<{ total: number; open: number; closed: number; blocked: number }>;
+type Summary = Readonly<{
+  total: number;
+  open: number;
+  closed: number;
+  superseded: number;
+  blocked: number;
+}>;
 
 const summarize = (snapshots: readonly TicketSnapshot[]): Summary => {
   let open = 0;
   let closed = 0;
+  let superseded = 0;
   let blocked = 0;
   for (const s of snapshots) {
     if (s.state.status === 'open' || s.state.status === 'in-progress') open++;
     else if (s.state.status === 'closed-green' || s.state.status === 'closed-rejected') closed++;
+    else if (s.state.status === 'superseded') superseded++;
     else blocked++;
   }
-  return { total: snapshots.length, open, closed, blocked };
+  return { total: snapshots.length, open, closed, superseded, blocked };
 };
 
 const outcomeOf = (state: PipelineState): string => {
@@ -145,7 +157,7 @@ export const renderDashboardTable = (
   const lines: readonly string[] = [
     '# Pipeline Dashboard',
     '',
-    `${summary.total} tickets | ${summary.open} open | ${summary.closed} closed | ${summary.blocked} blocked`,
+    `${summary.total} tickets | ${summary.open} open | ${summary.closed} closed | ${summary.superseded} superseded | ${summary.blocked} blocked`,
     '',
     '| Ticket | Size | Status | Wave atual | Days open | W2 rounds | Outcome |',
     '| :--- | :---: | :--- | :---: | ---: | ---: | :--- |',

@@ -339,3 +339,38 @@ describe('dashboard-cli — comando CLI', () => {
     assert.equal(parsed.summary.total, 0);
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// CTR-PIPELINE-SUPERSEDE-STATUS — status `superseded` no resumo e nos filtros.
+// Hoje `summarize` joga qualquer status fora de open/closed no balde `blocked`;
+// superseded é terminal e NÃO pode ser contado como blocked.
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('dashboard — superseded (CTR-PIPELINE-SUPERSEDE-STATUS)', () => {
+  const now = new Date('2026-05-27T00:00:00.000Z');
+
+  const supersededSnap = (): TicketSnapshot => ({
+    state: makeState({
+      ticket: 'CTR-SUPERSEDED',
+      status: 'superseded',
+      closedAt: '2026-05-27T00:00:00.000Z',
+    }),
+    ticketDir: '/tmp/CTR-SUPERSEDED',
+    daysOpen: 0,
+    w2Rounds: 1,
+  });
+
+  it('CA-D1: superseded NÃO conta como blocked e tem contagem própria no summary JSON', () => {
+    const out = renderDashboardJson([supersededSnap()], { filter: 'all', now });
+    const json = JSON.parse(out) as {
+      summary: { open: number; closed: number; blocked: number; superseded?: number };
+    };
+    assert.equal(json.summary.blocked, 0, 'superseded não pode cair no balde blocked');
+    assert.equal(json.summary.superseded, 1, 'summary deve expor contagem própria de superseded');
+  });
+
+  it('CA-D2: linha-resumo do markdown não classifica superseded como blocked', () => {
+    const md = renderDashboardTable([supersededSnap()], { filter: 'all', now });
+    assert.ok(md.includes('0 blocked'), `esperado "0 blocked" na linha-resumo, foi:\n${md}`);
+  });
+});

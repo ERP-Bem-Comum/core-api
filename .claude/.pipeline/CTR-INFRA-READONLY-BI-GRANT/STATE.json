@@ -3,9 +3,9 @@
   "ticket": "CTR-INFRA-READONLY-BI-GRANT",
   "size": "S",
   "createdAt": "2026-05-26T14:15:58.695Z",
-  "closedAt": "2026-05-27T13:04:16.000Z",
+  "closedAt": "2026-05-27T13:23:16.782Z",
   "currentWave": null,
-  "status": "closed-rejected",
+  "status": "superseded",
   "waves": [
     {
       "id": "W0",
@@ -49,5 +49,6 @@
     }
   ],
   "blockers": [],
-  "lastEvent": "superseded-by-CTR-INFRA-READONLY-BI-AUTH"
+  "lastEvent": "superseded by CTR-INFRA-READONLY-BI-AUTH",
+  "supersededBy": "CTR-INFRA-READONLY-BI-AUTH"
 }

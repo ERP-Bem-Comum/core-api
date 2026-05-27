@@ -1,6 +1,6 @@
 # Estado do Ticket CTR-INFRA-READONLY-BI-GRANT
 
-> **Size:** S · **Status:** closed-rejected · **Created:** 2026-05-26T14:15:58.695Z · **Closed:** 2026-05-27T13:04:16.000Z
+> **Size:** S · **Status:** superseded · **Created:** 2026-05-26T14:15:58.695Z · **Closed:** 2026-05-27T13:23:16.782Z · **Superseded by:** CTR-INFRA-READONLY-BI-AUTH
 
 | Wave | Status | Skill | REPORT | Última atualização |
 | :--- | :--- | :--- | :--- | :--- |
@@ -11,4 +11,4 @@
 
 ## Último evento
 
-superseded-by-CTR-INFRA-READONLY-BI-AUTH
+superseded by CTR-INFRA-READONLY-BI-AUTH

@@ -103,3 +103,24 @@ describe('renderStateMd — determinismo e compat com hook', () => {
     assert.ok(md.includes('RED'), 'deve refletir outcome RED do W0');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CTR-PIPELINE-SUPERSEDE-STATUS — STATE.md de ticket superseded cita o vencedor.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('renderStateMd — superseded (CTR-PIPELINE-SUPERSEDE-STATUS)', () => {
+  it('CA-R1: rotula status superseded e cita o ticket que substituiu', () => {
+    const state: PipelineState = {
+      ...fixture(),
+      ticket: 'CTR-LOSER',
+      status: 'superseded',
+      closedAt: '2026-05-27T00:00:00.000Z',
+      supersededBy: 'CTR-WINNER',
+    };
+
+    const md = renderStateMd(state);
+
+    assert.match(md, /superseded/i, 'header deve mostrar o status superseded');
+    assert.match(md, /CTR-WINNER/, 'STATE.md deve citar o ticket que substituiu');
+  });
+});
