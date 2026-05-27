@@ -1,5 +1,25 @@
 # CTR-INFRA-READONLY-BI-GRANT — `readonly_bi` recebe `Access denied` no login
 
+> **⛔ SUPERSEDED em 2026-05-27 por [`CTR-INFRA-READONLY-BI-AUTH`](../CTR-INFRA-READONLY-BI-AUTH/) (closed-green).**
+>
+> Este ticket é **duplicata** do `CTR-INFRA-READONLY-BI-AUTH`, criado 4h depois (mesmo
+> sintoma, mesmos critérios de aceite) e **já resolvido**. As três hipóteses abaixo foram
+> todas verificadas pelo AUTH:
+>
+> - **Causa raiz (não era GRANT nem auth-plugin nem host):** os secrets eram gravados em
+>   `0600`. O seed `docker/mysql/initdb.d/01-databases-and-users.sh` roda como user `mysql`
+>   (uid 999); o bind-mount do Compose standalone preserva o mode do host (`0600`, dono uid
+>   1000), então `cat /run/secrets/mysql_readonly_password` dava `Permission denied` e, com
+>   `set -eu`, o seed abortava → **`readonly_bi` nunca era criado** → login `1045`. Por isso
+>   `core_app` (provisionado pelo entrypoint oficial, que lê o secret como root) funcionava.
+> - **Fix:** commit `948b76c` — `0600 → 0644` em `scripts/setup-secrets.ts` e no
+>   `writeSecrets()` de `tests/infra/mysql-compose.test.ts`. Nenhuma mudança de SQL/GRANT.
+> - **Estado da branch:** teste já pós-fix (secrets `0644`; `CA-6` endurecido para exigir
+>   `ER_TABLEACCESS_DENIED_ERROR (1142)`). AUTH fechou 21/21 com Docker vivo.
+>
+> Marcado `closed-rejected` (terminal sem entrega de código — o schema do pipeline não modela
+> `superseded`; ver `scripts/pipeline/state-schema.ts`). **Nenhuma wave foi executada.**
+
 ## Origem
 
 Descoberto em 2026-05-26 ao fechar `CTR-PERIOD-PLAIN-DATE-SCHEMA`, quando o daemon
