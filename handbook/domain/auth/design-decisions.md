@@ -161,6 +161,8 @@ SKILL.md correspondente). Rastreabilidade dos pareceres (agentIds desta sessão)
   revoga (`SessionRevoked`). Lockout/`failedAttempts` também moram na camada de sessão, não no `User`.
 - **Persistência (P1/P2):** `rehydrate(row)` dispatcher por `row.status` para reconstruir o tipo refinado (DD-USER-01).
 - **X1 (PasswordHasher):** invariante DD-USER-04 — senha em claro descartada após o hash; nunca logada.
+- **EventBus do auth (futuro):** os use cases (A4 `registerUser`, A5–A9) já **retornam** o evento no output mas **não publicam** (não há EventBus/outbox no `auth`). Ao criar o transporte de eventos do módulo, ligar `eventBus.publish(event)` **após** `repo.save` — destrava o AuditLog (ADR-0022). A assinatura dos use cases não muda.
+- **Persistência do auth (Fase P):** `auth_user.email` precisa de **`UNIQUE INDEX`** como rede real de unicidade (o `findByEmail`+`save` do use case não é atômico — race sob concorrência). Mapear o erro de violação → `'email-already-registered'`. Mesmo padrão de `sequentialNumber` em `contracts`.
 
 ## Decisões de design anteriores do módulo (resumo; detalhe nos tickets)
 
