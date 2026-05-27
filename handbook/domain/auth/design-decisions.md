@@ -88,6 +88,34 @@ SKILL.md correspondente). Rastreabilidade dos pareceres (agentIds desta sessão)
 
 ---
 
+## DD-SESSION-01 — estado do `RefreshToken` é **computado** por `state(token, now)`, não tipos refinados
+
+- **Status:** Aceita (2026-05-27) · **Confiança:** média (diverge conscientemente de DD-USER-01)
+- **Decisão:** o agregado `RefreshToken` **não** usa união refinada de tipos (como `User`). Os estados
+  `active | expired | revoked | rotated` são derivados por uma função pura `state(token, now: Date)`.
+- **Racional:** o estado `expired` depende de `now` (relógio), que **não é armazenável** no tipo — um
+  `ExpiredToken` só existe relativo a um instante. Forçar tipos refinados exigiria recriar o tipo a cada
+  leitura de relógio. Estado **temporal** ≠ estado **armazenado** (o `User` é armazenado → refinado cabe).
+- **Consequência:** a borda usa `verify(token, now): Result<void, …>` (gate, análogo a `parseActive`).
+
+## DD-SESSION-02 — agregado sem eventos; eventos de sessão nascem nos use cases
+
+- **Status:** Aceita (2026-05-27) · **Confiança:** média
+- **Decisão:** `issue`/`revoke`/`rotate` retornam só o `RefreshToken` (sem `{token, event}`). Os eventos
+  `SessionRevoked`/`AccessTokenRefreshed` (vocabulário do ADR-0024) são emitidos pelos **use cases** de
+  sessão (A3/A4/A5), não pelo agregado puro — mesmo critério do `Role` (D4).
+- **Gatilho de revisão:** se o AuditLog exigir o "Quem/Quando" dessas transições direto do agregado, reabrir.
+
+## DD-SESSION-03 — `rotate` ≠ `revoke`; precedência de estado e `tokenHash` opaco
+
+- **Status:** Aceita (2026-05-27) · **Confiança:** alta
+- **Decisão:** `rotate(token, replacementId, at)` marca `replacedBy` (token foi sucedido na renovação);
+  `revoke(token, at)` marca `revokedAt` (logout/admin). São estados distintos. **Precedência** em `state`:
+  `revoked` > `rotated` > `expired` > `active`. `tokenHash` é string **opaca** não-vazia (não vira VO
+  próprio agora — YAGNI; nunca em claro, nunca logado — herda invariante DD-USER-04).
+
+---
+
 ## Notas propagadas para tickets futuros
 
 - **D6 / refresh (sessão):** `disable` e `changePassword` devem **invalidar sessões/refresh ativos**
@@ -108,3 +136,4 @@ SKILL.md correspondente). Rastreabilidade dos pareceres (agentIds desta sessão)
 ## Histórico de revisão
 
 - **2026-05-27** — Criação. Decisões `DD-USER-01..05` a partir do painel de 6 skills. (Gabriel Aderaldo + painel)
+- **2026-05-27** — `DD-SESSION-01..03` (agregado `RefreshToken`, D6): estado temporal computado (diverge de DD-USER-01), sem eventos no agregado, `rotate`≠`revoke`. (Gabriel Aderaldo)
