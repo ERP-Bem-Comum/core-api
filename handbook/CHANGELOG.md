@@ -4,6 +4,44 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-05-27 — Série de ADRs do módulo `auth` + HTTP + read/write split (ADR-0024/0025/0026, Proposed)
+
+### Contexto
+
+Discussão de design para um **módulo de autenticação**. A análise da `api_documentations/doc.yaml` (contrato REST do
+legado NestJS) e a decisão da liderança técnica — **HTTP entra, CLI sai para este módulo, MySQL com isolamento que
+permita Master-Slave ao escalar, sob infra reduzida** — geraram três decisões encadeadas. O [ADR-0022](./architecture/adr/0022-read-models-via-projection-over-event-stream.md)
+já registrava identidade/RBAC como pré-requisito disparado (`:44`, `:72`), de modo que o ADR-0024 cumpre uma
+pendência pré-existente, não uma invenção nova.
+
+### Adicionado (ADRs — `Status: Proposed`, aguardam aprovação)
+
+- **[ADR-0024](./architecture/adr/0024-identity-and-rbac-auth-module.md)** — Identidade & RBAC, módulo `auth`.
+  Identidade **própria OIDC-ready** (port `Authenticator` abstrai a fonte; `password_hash` nullable); **sessão híbrida**
+  (access token JWT curto validado stateless pelo BFF + refresh token stateful rotacionável/revogável em `auth_refresh_token`);
+  **permissions granulares** (`Permission` branded `resource:action`, authorization service puro). core-api emite,
+  BFF valida (ADR-0005). Destrava o AuditLog diferido no ADR-0022. Tabelas `auth_*` no database `core` (ADR-0014/0020).
+- **[ADR-0025](./architecture/adr/0025-http-server-fastify-core-api.md)** — Servidor HTTP no core-api com **Fastify**
+  como adapter de borda (ativa o agente `fastify-server-expert`). Domínio/application permanecem sem framework (ADR-0006);
+  o BFF continua burro (ADR-0005 **não** superseded). Desbloqueia auth (0024) e exposição HTTP de Contratos (origem no ADR-0023).
+- **[ADR-0026](./architecture/adr/0026-mysql-read-write-split-connection.md)** — Read/Write split de conexão MySQL
+  (pools `writer`/`reader`, **Master-Slave ready**), **transversal** ao core-api. Single node hoje (ambos os pools no mesmo
+  host); réplica vira só configuração. Read-after-write crítico lê do primário. Preserva a regra de ouro do ADR-0014
+  (um único escritor). Nota honesta: o ganho do split vem de `contracts`/`fin` e read-models (ADR-0022), não do `auth`
+  (write-heavy).
+
+### Atualizado
+
+- [`architecture/adr/README.md`](./architecture/adr/README.md) — índice com as 3 entradas (Proposed).
+
+### Pendente
+
+- Aprovação dos 3 ADRs (mover `Proposed → Accepted`).
+- Após aprovação: revisão de domínio do módulo `auth` (handbook) + série de tickets W0→W3 (VOs `Email`/`Permission` →
+  agregado `User` → `authenticate` → adapters → borda Fastify). Estender ADR-0014 documentando o prefixo `auth_*`.
+
+---
+
 ## 2026-05-27 — Ciclo de vida do Contrato revisado: estado `Pendente` (ADR-0023)
 
 ### Contexto

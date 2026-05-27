@@ -111,6 +111,9 @@ Um **ADR (Architecture Decision Record)** é um documento curto que captura uma 
 | [0021](./0021-aws-primary-magalu-pbe-supersedes-0007.md) | Topologia Cloud — AWS (Codebit) Primária + MagaluCloud PBE Interno (supersedes 0007) | Accepted | 2026-05-22 |
 | [0022](./0022-read-models-via-projection-over-event-stream.md) | Read-Models via Projeção sobre o Event Stream (Timeline agora, AuditLog diferido) | Accepted | 2026-05-26 |
 | [0023](./0023-contract-lifecycle-pending-state.md) | Ciclo de vida do Contrato — estado `Pendente` (4 estados) | Accepted | 2026-05-27 |
+| [0024](./0024-identity-and-rbac-auth-module.md) | Identidade & RBAC — Módulo `auth` (identidade própria OIDC-ready, sessão híbrida, permissions granulares) | Accepted | 2026-05-27 |
+| [0025](./0025-http-server-fastify-core-api.md) | Servidor HTTP no `core-api` com Fastify (adapter de borda, BFF continua burro) | Accepted | 2026-05-27 |
+| [0026](./0026-mysql-read-write-split-connection.md) | Read/Write Split de Conexão MySQL (writer/reader pools — Master-Slave ready) | Accepted | 2026-05-27 |
 
 ---
 
