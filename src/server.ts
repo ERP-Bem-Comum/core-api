@@ -17,6 +17,7 @@ import {
   authHttpPlugin,
   buildAuthHttpDeps,
   makeRequireAuth,
+  parseE2eAuthSeed,
 } from '#src/modules/auth/public-api/http.ts';
 import {
   contractsHttpPlugin,
@@ -28,11 +29,13 @@ const main = async (): Promise<void> => {
 
   const authDriver = process.env['AUTH_DRIVER'] === 'mysql' ? 'mysql' : 'memory';
   const authConnString = process.env['AUTH_DATABASE_URL'];
-  const authDeps = await buildAuthHttpDeps(
-    authConnString !== undefined
-      ? { driver: authDriver, connectionString: authConnString }
-      : { driver: authDriver },
-  );
+  // Seed RBAC via env — inerte fora de E2E/dev (guarda dupla CORE_API_E2E + AUTH_SEED_JSON).
+  const authSeed = parseE2eAuthSeed(process.env);
+  const authDeps = await buildAuthHttpDeps({
+    driver: authDriver,
+    ...(authConnString !== undefined ? { connectionString: authConnString } : {}),
+    ...(authSeed !== undefined ? { seed: authSeed } : {}),
+  });
 
   // RW split (ADR-0026): CONTRACTS_DATABASE_URL = writer; CONTRACTS_READER_URL = réplica
   // (ausente → reusa o writer, single-node). Reads roteiam ao reader.
@@ -52,7 +55,10 @@ const main = async (): Promise<void> => {
   const requireAuth = makeRequireAuth(authDeps.verifyAccessToken);
 
   const app = await buildApp({
-    routes: [authHttpPlugin(authDeps), contractsHttpPlugin(contractsDeps, { requireAuth })],
+    routes: [
+      authHttpPlugin(authDeps),
+      contractsHttpPlugin(contractsDeps, { requireAuth, authorize: authDeps.authorize }),
+    ],
     config,
   });
 

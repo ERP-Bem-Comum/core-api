@@ -97,7 +97,13 @@ const applyMigrationsTo = async (
   db: MySql2Database<typeof schema>, // eslint-disable-line @typescript-eslint/prefer-readonly-parameter-types
 ): Promise<Result<true, MysqlDriverError>> => {
   try {
-    await migrate(db, { migrationsFolder: MIGRATIONS_FOLDER });
+    // `migrationsTable` por módulo (ADR-0014 isolamento): auth e contracts compartilham o DB `core`,
+    // então um journal `__drizzle_migrations` compartilhado faria o migrator de um módulo pular as
+    // migrations do outro por comparação de timestamp. Tabela de journal própria evita a colisão.
+    await migrate(db, {
+      migrationsFolder: MIGRATIONS_FOLDER,
+      migrationsTable: '__drizzle_migrations_contracts',
+    });
     return ok(true);
   } catch (cause) {
     process.stderr.write(`[mysql-driver:migrate] ${String(cause)}\n`);
