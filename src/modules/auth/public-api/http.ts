@@ -12,6 +12,7 @@
 
 export { authHttpPlugin } from '../adapters/http/plugin.ts';
 export { buildAuthHttpDeps } from '../adapters/http/composition.ts';
+export { makeRequireAuth, makeAuthorize } from '../adapters/http/auth-hook.ts';
 export type {
   AuthHttpDeps,
   AuthCompositionConfig,

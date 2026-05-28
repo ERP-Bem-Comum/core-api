@@ -36,3 +36,7 @@ export const refreshResponseSchema = loginResponseSchema;
 export const logoutBodySchema = z.object({
   refreshToken: z.string(),
 });
+
+export const meResponseSchema = z.object({
+  userId: z.string(),
+});

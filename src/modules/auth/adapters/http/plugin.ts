@@ -19,6 +19,7 @@ import { ok } from '#src/shared/primitives/result.ts';
 import { sendResult } from '#src/shared/http/reply.ts';
 
 import type { AuthHttpDeps } from './composition.ts';
+import { makeRequireAuth } from './auth-hook.ts';
 import {
   registerBodySchema,
   registerResponseSchema,
@@ -27,11 +28,15 @@ import {
   refreshBodySchema,
   refreshResponseSchema,
   logoutBodySchema,
+  meResponseSchema,
 } from './schemas.ts';
 
 const authRoutes =
   (deps: AuthHttpDeps): FastifyPluginAsyncZodOpenApi =>
   async (scope) => {
+    scope.decorateRequest('userId', '');
+    const requireAuth = makeRequireAuth(deps.verifyAccessToken);
+
     scope.route({
       method: 'POST',
       url: '/register',
@@ -110,6 +115,14 @@ const authRoutes =
         const result = await deps.revokeSession({ refreshToken: req.body.refreshToken });
         return sendResult(reply, result, { ok: 204 });
       },
+    });
+
+    scope.route({
+      method: 'GET',
+      url: '/me',
+      preHandler: requireAuth,
+      schema: { response: { 200: meResponseSchema } } satisfies FastifyZodOpenApiSchema,
+      handler: (req) => ({ userId: req.userId }),
     });
   };
 

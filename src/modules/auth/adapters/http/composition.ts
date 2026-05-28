@@ -28,6 +28,7 @@ import { revokeSession } from '../../application/use-cases/revoke-session.ts';
 
 import type { UserReader, UserRepository } from '../../domain/identity/user/repository.ts';
 import type { RefreshTokenRepository } from '../../domain/session/refresh-token-repository.ts';
+import type { TokenIssuer } from '../../application/ports/token-issuer.ts';
 
 export type AuthDriver = 'memory' | 'mysql';
 
@@ -45,6 +46,8 @@ export type AuthHttpDeps = Readonly<{
   authenticateUser: ReturnType<typeof authenticateUser>;
   refreshAccessToken: ReturnType<typeof refreshAccessToken>;
   revokeSession: ReturnType<typeof revokeSession>;
+  /** Verificador de access JWT — consumido pelo preHandler `requireAuth`. */
+  verifyAccessToken: TokenIssuer['verifyAccessToken'];
   shutdown: () => Promise<void>;
 }>;
 
@@ -146,6 +149,7 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
       refreshTokenRepo: stores.refreshTokenRepo,
       clock,
     }),
+    verifyAccessToken: tokenIssuer.verifyAccessToken,
     shutdown: stores.shutdown,
   };
 };
