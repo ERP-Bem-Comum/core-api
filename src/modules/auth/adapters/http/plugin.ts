@@ -1,12 +1,11 @@
 /**
- * Plugin HTTP do módulo auth (ADR-0025/0028).
+ * Plugin HTTP do módulo auth (ADR-0024/0025/0028).
  *
- * Encapsula o sub-prefixo `/auth`; o composition root registra este plugin sob `/api/v2`
- * (resultando em `/api/v2/auth/*`). Exposto ao root apenas via `public-api/http.ts` (ADR-0006).
+ * Factory `(deps) => FastifyPluginAsync`: recebe os use cases já instanciados (composition.ts)
+ * por injeção — o plugin só os invoca, sem conhecer adapter algum (ADR-0006). Encapsula `/auth`;
+ * o root registra sob `/api/v2` → `/api/v2/auth/*`. Zod contract-first (ADR-0027).
  *
- * Rota sentinela `__ping`: prova o wiring ponta-a-ponta e materializa o padrão Zod
- * contract-first (ADR-0027) que as rotas reais do H1 (register/login/refresh/logout)
- * replicam. Sentinela temporária — o H1 a remove. NÃO toca domain/application.
+ * H1a: register + login. refresh + logout chegam no H1b (mesmas deps).
  */
 
 import type { FastifyPluginAsync } from 'fastify';
@@ -15,23 +14,74 @@ import type {
   FastifyZodOpenApiSchema,
   FastifyZodOpenApiTypeProvider,
 } from 'fastify-zod-openapi';
-import * as z from 'zod/v4';
 
-const pingResponse = z.object({
-  pong: z.literal(true).meta({ description: 'Sentinela de saúde do plugin auth' }),
-});
+import { ok } from '#src/shared/primitives/result.ts';
+import { sendResult } from '#src/shared/http/reply.ts';
 
-const authRoutes: FastifyPluginAsyncZodOpenApi = async (scope) => {
-  scope.route({
-    method: 'GET',
-    url: '/__ping',
-    schema: { response: { 200: pingResponse } } satisfies FastifyZodOpenApiSchema,
-    handler: () => ({ pong: true as const }),
-  });
-};
+import type { AuthHttpDeps } from './composition.ts';
+import {
+  registerBodySchema,
+  registerResponseSchema,
+  loginBodySchema,
+  loginResponseSchema,
+} from './schemas.ts';
 
-export const authHttpPlugin: FastifyPluginAsync = async (app) => {
-  await app
-    .withTypeProvider<FastifyZodOpenApiTypeProvider>()
-    .register(authRoutes, { prefix: '/auth' });
-};
+const authRoutes =
+  (deps: AuthHttpDeps): FastifyPluginAsyncZodOpenApi =>
+  async (scope) => {
+    scope.route({
+      method: 'POST',
+      url: '/register',
+      schema: {
+        body: registerBodySchema,
+        response: { 201: registerResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.registerUser({
+          email: req.body.email,
+          password: req.body.password,
+        });
+        const mapped = result.ok
+          ? ok({ userId: result.value.user.id, email: result.value.user.email })
+          : result;
+        return sendResult(reply, mapped, {
+          ok: 201,
+          errors: {
+            'email-already-registered': 409,
+            'email-empty': 422,
+            'email-invalid-format': 422,
+            'email-too-long': 422,
+            'password-too-short': 422,
+            'password-too-long': 422,
+          },
+        });
+      },
+    });
+
+    scope.route({
+      method: 'POST',
+      url: '/login',
+      schema: {
+        body: loginBodySchema,
+        response: { 200: loginResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.authenticateUser({
+          email: req.body.email,
+          password: req.body.password,
+        });
+        return sendResult(reply, result, {
+          ok: 200,
+          errors: { 'invalid-credentials': 401, 'user-disabled': 403 },
+        });
+      },
+    });
+  };
+
+export const authHttpPlugin =
+  (deps: AuthHttpDeps): FastifyPluginAsync =>
+  async (app) => {
+    await app
+      .withTypeProvider<FastifyZodOpenApiTypeProvider>()
+      .register(authRoutes(deps), { prefix: '/auth' });
+  };

@@ -13,17 +13,26 @@ import {
   installLastResortHandlers,
   processLastResortDeps,
 } from '#src/shared/runtime/last-resort.ts';
-import { authHttpPlugin } from '#src/modules/auth/public-api/http.ts';
+import { authHttpPlugin, buildAuthHttpDeps } from '#src/modules/auth/public-api/http.ts';
 
 const main = async (): Promise<void> => {
   const config = readHttpConfig(process.env);
 
-  const app = await buildApp({ routes: [authHttpPlugin], config });
+  const authDriver = process.env['AUTH_DRIVER'] === 'mysql' ? 'mysql' : 'memory';
+  const authConnString = process.env['AUTH_DATABASE_URL'];
+  const authDeps = await buildAuthHttpDeps(
+    authConnString !== undefined
+      ? { driver: authDriver, connectionString: authConnString }
+      : { driver: authDriver },
+  );
+
+  const app = await buildApp({ routes: [authHttpPlugin(authDeps)], config });
 
   // Graceful shutdown: SIGTERM / SIGINT → app.close() (drena conexoes abertas)
   const shutdown = async (): Promise<void> => {
     app.log.info('Graceful shutdown iniciado…');
     await app.close();
+    await authDeps.shutdown();
     app.log.info('Servidor encerrado.');
   };
 

@@ -1,11 +1,19 @@
 /**
  * Ponto público HTTP do módulo auth (ADR-0006/0028).
  *
- * Único ponto de import externo do plugin de rotas — o composition root (`src/server.ts`)
- * importa daqui, nunca de `../adapters/` ou `../application/` diretamente.
+ * Único ponto de import externo da borda HTTP do módulo — o composition root
+ * (`src/server.ts`) importa daqui:
+ *  - `buildAuthHttpDeps(config)`: monta adapters por driver e instancia os use cases;
+ *  - `authHttpPlugin(deps)`: factory do plugin Fastify (registra as rotas sob /auth).
  *
- * Separado de um eventual barrel `index.ts` (contrato de domínio/eventos) de propósito:
- * importar este módulo arrasta Fastify, que não deve alcançar consumidores de eventos.
+ * Separado de um eventual barrel `index.ts` (eventos) de propósito: importar este módulo
+ * arrasta Fastify, que não deve alcançar consumidores de evento.
  */
 
 export { authHttpPlugin } from '../adapters/http/plugin.ts';
+export { buildAuthHttpDeps } from '../adapters/http/composition.ts';
+export type {
+  AuthHttpDeps,
+  AuthCompositionConfig,
+  AuthDriver,
+} from '../adapters/http/composition.ts';
