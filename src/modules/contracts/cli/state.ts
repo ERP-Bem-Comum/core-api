@@ -86,7 +86,7 @@ const isSnapshot = (
   return true;
 };
 
-const DOCUMENT_CATEGORIES: ReadonlySet<DocumentCategory> = new Set([
+export const DOCUMENT_CATEGORIES: ReadonlySet<DocumentCategory> = new Set([
   'signed_contract',
   'signed_amendment',
   'opinion',

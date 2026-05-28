@@ -29,9 +29,21 @@ import {
   createBucketName,
   createStorageKey,
 } from '../../application/ports/document-storage.types.ts';
+import { DOCUMENT_CATEGORIES } from '../state.ts';
+import type { DocumentCategory } from '../../domain/document/types.ts';
 
-const ALLOWED = ['parent-id', 'parent-tipo', 'doc-id', 'user-id', 'help', 'h'] as const;
+const ALLOWED = [
+  'parent-id',
+  'parent-tipo',
+  'doc-id',
+  'user-id',
+  'categoria',
+  'help',
+  'h',
+] as const;
 export const allowedFlags: readonly string[] = ALLOWED;
+
+const categoriasValidas = (): string => [...DOCUMENT_CATEGORIES].join(', ');
 
 export const descricao =
   'Registra um documento minimo no agregado (sem upload de bytes — usado para fechar fluxo de anexacao em dev/E2E).';
@@ -44,7 +56,10 @@ Flags obrigatorias:
 
 Flags opcionais:
   --doc-id <uuid>         Forca o DocumentId (default = randomUUID)
-  --user-id <uuid>        UserRef de quem fez upload (default = randomUUID)`;
+  --user-id <uuid>        UserRef de quem fez upload (default = randomUUID)
+  --categoria <cat>       Categoria do documento (default = other). Validas:
+                          signed_contract, signed_amendment, opinion, certificate,
+                          justification, technical_attachment, publication, other`;
 
 export const run = async (ctx: CliContext, argv: readonly string[]): Promise<number> => {
   const parsed = parseFlags(argv);
@@ -99,6 +114,15 @@ export const run = async (ctx: CliContext, argv: readonly string[]): Promise<num
     return 1;
   }
 
+  const categoriaRaw = flags['categoria'] ?? 'other';
+  if (!DOCUMENT_CATEGORIES.has(categoriaRaw as DocumentCategory)) {
+    process.stderr.write(
+      `--categoria invalida: ${categoriaRaw}. Validas: ${categoriasValidas()}\n`,
+    );
+    return 64;
+  }
+  const categoria = categoriaRaw as DocumentCategory;
+
   const bucketR = createBucketName('contracts-documents');
   const keyR = createStorageKey(`contracts/cli/${docIdR.value}/placeholder.txt`);
   if (!bucketR.ok || !keyR.ok) {
@@ -110,7 +134,7 @@ export const run = async (ctx: CliContext, argv: readonly string[]): Promise<num
     id: docIdR.value,
     parentType: parentTipo,
     parentId: parentIdR.value,
-    categoria: 'other',
+    categoria,
     fileName: 'placeholder.txt',
     mimeType: 'application/octet-stream',
     sizeBytes: 0,

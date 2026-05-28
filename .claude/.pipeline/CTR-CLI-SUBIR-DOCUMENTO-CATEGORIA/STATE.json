@@ -3,51 +3,51 @@
   "ticket": "CTR-CLI-SUBIR-DOCUMENTO-CATEGORIA",
   "size": "S",
   "createdAt": "2026-05-27T18:55:27.587Z",
-  "closedAt": null,
+  "closedAt": "2026-05-28T04:39:18.665Z",
   "currentWave": null,
-  "status": "open",
+  "status": "closed-green",
   "waves": [
     {
       "id": "W0",
-      "status": "pending",
-      "agent": null,
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-05-27T19:01:51.419Z",
+      "finishedAt": "2026-05-27T19:01:51.703Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
     },
     {
       "id": "W1",
-      "status": "pending",
-      "agent": null,
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "agent": "application-cli-builder",
+      "startedAt": "2026-05-27T19:05:41.228Z",
+      "finishedAt": "2026-05-27T19:05:41.497Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
     },
     {
       "id": "W2",
-      "status": "pending",
-      "agent": null,
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-05-28T04:36:27.050Z",
+      "finishedAt": "2026-05-28T04:37:16.120Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
     },
     {
       "id": "W3",
-      "status": "pending",
-      "agent": null,
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-05-28T04:37:19.792Z",
+      "finishedAt": "2026-05-28T04:39:15.228Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "ALL-GREEN"
     }
   ],
   "blockers": [],
-  "lastEvent": "init"
+  "lastEvent": "closed-green"
 }
