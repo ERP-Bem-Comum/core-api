@@ -33,7 +33,10 @@ const makeApp = async () => {
   const contractsDeps = await buildContractsHttpDeps({ driver: 'memory' });
   const requireAuth = makeRequireAuth(authDeps.verifyAccessToken);
   const app = await buildApp({
-    routes: [authHttpPlugin(authDeps), contractsHttpPlugin(contractsDeps, { requireAuth })],
+    routes: [
+      authHttpPlugin(authDeps),
+      contractsHttpPlugin(contractsDeps, { requireAuth, authorize: authDeps.authorize }),
+    ],
   });
   const teardown = async (): Promise<void> => {
     await app.close();
