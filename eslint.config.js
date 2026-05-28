@@ -268,12 +268,30 @@ export default tseslint.config(
   },
 
   // -----------------------------------------------------------
+  // Borda HTTP — adapter Fastify (ADR-0025): tipos externos mutáveis
+  // (FastifyRequest/FastifyReply) e handlers que retornam reply.send()
+  // (promise) sem await. Mesmas folgas dos demais adapters.
+  // ADR-0028: shell transversal em src/shared/http; HTTP de feature em
+  // src/modules/<m>/adapters/http.
+  // -----------------------------------------------------------
+  {
+    files: ['src/shared/http/**/*.ts', 'src/modules/*/adapters/http/**/*.ts'],
+    rules: {
+      '@typescript-eslint/prefer-readonly-parameter-types': 'off',
+      '@typescript-eslint/promise-function-async': 'off',
+      '@typescript-eslint/require-await': 'off',
+    },
+  },
+
+  // -----------------------------------------------------------
   // Testes — node:test design + narrowing depois de cast
   // -----------------------------------------------------------
   {
     files: ['tests/**/*.ts'],
     rules: {
       '@typescript-eslint/no-floating-promises': 'off',
+      // Handlers/fixtures inline podem retornar promise sem async.
+      '@typescript-eslint/promise-function-async': 'off',
       '@typescript-eslint/no-unnecessary-condition': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/no-unused-expressions': 'off',

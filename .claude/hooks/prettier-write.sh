@@ -46,8 +46,10 @@ case "$FILE" in
   *) exit 0 ;;  # qualquer outra extensão → skip
 esac
 
-# Roda Prettier; ignora código de saída pra não bloquear o turno (apenas log).
-if ! npx --no-install prettier --write --ignore-unknown --log-level warn "$FILE" 2>&1 | grep -v '^$' >&2; then
+# Roda Prettier via pnpm (NUNCA npx: npm aborta com EBADDEVENGINES quando a versão
+# de Node diverge de package.json#devEngines.runtime — ADR-0012, pnpm é canônico).
+# Ignora código de saída pra não bloquear o turno (apenas log).
+if ! pnpm exec prettier --write --ignore-unknown --log-level warn "$FILE" 2>&1 | grep -v '^$' >&2; then
   # Prettier não instalado ou erro real — silencioso (não atrapalha o Claude).
   :
 fi

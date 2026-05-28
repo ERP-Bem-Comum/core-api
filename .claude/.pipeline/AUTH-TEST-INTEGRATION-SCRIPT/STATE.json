@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "AUTH-TEST-INTEGRATION-SCRIPT",
+  "size": "S",
+  "createdAt": "2026-05-28T00:56:57.741Z",
+  "closedAt": "2026-05-28T01:04:40.315Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-05-28T00:57:43.977Z",
+      "finishedAt": "2026-05-28T00:58:28.409Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "pnpm-workspace-expert",
+      "startedAt": "2026-05-28T00:58:28.700Z",
+      "finishedAt": "2026-05-28T01:00:20.669Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-05-28T01:00:20.957Z",
+      "finishedAt": "2026-05-28T01:00:54.011Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-05-28T01:00:54.286Z",
+      "finishedAt": "2026-05-28T01:04:40.005Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "ALL-GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

@@ -1,0 +1,1201 @@
+openapi: 3.0.3
+info:
+  title: ERP Financeiro — Módulo de Contratos
+  description: |
+    API REST do módulo de Contratos do ERP Financeiro.
+    Gerencia contratos, aditivos, ordens de serviço, histórico de pagamentos
+    e arquivos anexos (contrato assinado, termo de acerto, termo de rescisão).
+  version: 1.0.0
+  contact:
+    name: Time ERP Financeiro
+
+servers:
+  - url: http://localhost:3001
+    description: Desenvolvimento local (NestJS)
+  - url: https://api.erp-financeiro.com.br
+    description: Produção
+
+tags:
+  - name: Contratos
+    description: CRUD de contratos, aditivos e filtros
+  - name: Contratos — Exportação
+    description: Exportação de contratos em CSV e PDF
+  - name: Contratos — Arquivos
+    description: Upload e gestão de arquivos anexos aos contratos
+  - name: Contratos — Histórico
+    description: Histórico de pagamentos e ações de um contrato
+
+paths:
+  /contracts:
+    get:
+      summary: Listar contratos
+      description: |
+        Retorna uma lista paginada de contratos com suporte a filtros
+        (tipo, status, período, plano orçamentário) e busca textual.
+      tags: [Contratos]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+        - name: search
+          in: query
+          schema:
+            type: string
+          description: Busca textual em objeto, fornecedor, financiador, etc.
+        - name: budgetPlanId
+          in: query
+          schema:
+            type: integer
+            nullable: true
+        - name: contractPeriodStart
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Início do período do contrato (filtro)
+        - name: contractPeriodEnd
+          in: query
+          schema:
+            type: string
+            format: date
+          description: Fim do período do contrato (filtro)
+        - name: contractType
+          in: query
+          schema:
+            $ref: '#/components/schemas/ContractType'
+        - name: contractStatus
+          in: query
+          schema:
+            $ref: '#/components/schemas/ContractStatus'
+        - name: order
+          in: query
+          schema:
+            type: string
+            enum: [ASC, DESC]
+            default: DESC
+      responses:
+        '200':
+          description: Lista de contratos paginada
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedContractRows'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    post:
+      summary: Criar contrato
+      description: |
+        Cria um novo contrato ou ordem de serviço.
+        Regras de negócio:
+        - O contrato é registrado diretamente em status Pendente (sem documento assinado)
+          ou Em andamento (com documento assinado + data de assinatura). Não existe Rascunho.
+        - Ordem de Serviço tem teto máximo de R$ 9.999,99.
+        - Dados bancários e PIX são herdados do cadastro do parceiro selecionado
+          (fornecedor/colaborador/financiador/ACT) e NÃO podem ser editados no contrato.
+      tags: [Contratos]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContractCreateInput'
+      responses:
+        '201':
+          description: Contrato criado com sucesso
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractCreateResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /contracts/{id}:
+    get:
+      summary: Obter contrato por ID
+      description: Retorna os detalhes completos de um contrato, incluindo aditivos (children).
+      tags: [Contratos]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Detalhes do contrato
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IContract'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      summary: Atualizar contrato
+      description: |
+        Atualiza um contrato existente. Regras de validação idênticas à criação.
+        Também permite atualizar arquivos anexos via multipart em conjunto
+        (ver endpoint `/files/contracts` separadamente).
+      tags: [Contratos]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContractCreateInput'
+      responses:
+        '200':
+          description: Contrato atualizado com sucesso
+          content:
+            application/json:
+              schema:
+                type: boolean
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    delete:
+      summary: Remover contrato
+      description: |
+        Remove um contrato e seus arquivos associados.
+        **Restrição:** exclusão permitida apenas para contratos com status Pendente.
+        Contratos com status Em andamento, Assinado, Finalizado ou Distrato não podem ser excluídos.
+      tags: [Contratos]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Contrato removido com sucesso
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          description: |
+            Operação não permitida. Apenas contratos com status Pendente podem ser excluídos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /contracts/aditive:
+    post:
+      summary: Criar aditivo
+      description: |
+        Cria um aditivo (prazo, valor, escopo, outro ou distrato) vinculado a um contrato pai.
+        O contrato pai é identificado pelo campo `parentId` no body.
+      tags: [Contratos]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ContractCreateInput'
+      responses:
+        '201':
+          description: Aditivo criado com sucesso
+          content:
+            application/json:
+              schema:
+                type: integer
+                description: ID do aditivo criado
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+
+  /contracts/history/{id}:
+    get:
+      summary: Histórico de pagamentos e ações
+      description: |
+        Retorna o histórico completo de um contrato: pagamentos (payables),
+        recebimentos (receivables) e log de ações (quem criou, editou, etc.).
+      tags: [Contratos — Histórico]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Histórico do contrato
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContractPaymentHistory'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /contracts/csv:
+    get:
+      summary: Exportar contratos (CSV)
+      description: Exporta a lista filtrada de contratos em formato CSV.
+      tags: [Contratos — Exportação]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 10 }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: budgetPlanId
+          in: query
+          schema: { type: integer, nullable: true }
+        - name: contractPeriodStart
+          in: query
+          schema: { type: string, format: date }
+        - name: contractPeriodEnd
+          in: query
+          schema: { type: string, format: date }
+        - name: contractType
+          in: query
+          schema:
+            $ref: '#/components/schemas/ContractType'
+        - name: contractStatus
+          in: query
+          schema:
+            $ref: '#/components/schemas/ContractStatus'
+      responses:
+        '200':
+          description: Arquivo CSV
+          content:
+            text/csv:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /contracts/pdf:
+    get:
+      summary: Exportar contratos (PDF)
+      description: Exporta a lista filtrada de contratos em formato PDF.
+      tags: [Contratos — Exportação]
+      security:
+        - BearerAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema: { type: integer, default: 1 }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 10 }
+        - name: search
+          in: query
+          schema: { type: string }
+        - name: budgetPlanId
+          in: query
+          schema: { type: integer, nullable: true }
+        - name: contractPeriodStart
+          in: query
+          schema: { type: string, format: date }
+        - name: contractPeriodEnd
+          in: query
+          schema: { type: string, format: date }
+        - name: contractType
+          in: query
+          schema:
+            $ref: '#/components/schemas/ContractType'
+        - name: contractStatus
+          in: query
+          schema:
+            $ref: '#/components/schemas/ContractStatus'
+      responses:
+        '200':
+          description: Arquivo PDF
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  # ───────────────────────────────────────
+  # Arquivos de Contrato
+  # ───────────────────────────────────────
+
+  /files/contracts:
+    post:
+      summary: Upload de arquivos de contrato
+      description: |
+        Faz upload de arquivos anexos a um contrato (contrato digitalizado,
+        minutas, etc.). Aceita multipart/form-data.
+      tags: [Contratos — Arquivos]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                contractId:
+                  type: integer
+                userId:
+                  type: integer
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+              required: [contractId]
+      responses:
+        '201':
+          description: Arquivos enviados com sucesso
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+    put:
+      summary: Atualizar arquivos de contrato
+      description: |
+        Substitui/adciona arquivos de um contrato existente.
+        `currentFiles` deve conter os arquivos já existentes que serão mantidos.
+      tags: [Contratos — Arquivos]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                contractId:
+                  type: integer
+                userId:
+                  type: integer
+                currentFiles:
+                  type: array
+                  items:
+                    type: object
+                files:
+                  type: array
+                  items:
+                    type: string
+                    format: binary
+              required: [contractId]
+      responses:
+        '200':
+          description: Arquivos atualizados com sucesso
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /files/contracts/signed:
+    post:
+      summary: Upload de contrato assinado
+      description: Faz upload do contrato assinado digitalmente.
+      tags: [Contratos — Arquivos]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                contractId:
+                  type: integer
+                file:
+                  type: string
+                  format: binary
+              required: [contractId, file]
+      responses:
+        '201':
+          description: Contrato assinado enviado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /files/contracts/settle:
+    post:
+      summary: Upload de termo de acerto
+      description: Faz upload do termo de acerto (settle term) do contrato.
+      tags: [Contratos — Arquivos]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                contractId:
+                  type: integer
+                file:
+                  type: string
+                  format: binary
+              required: [contractId, file]
+      responses:
+        '201':
+          description: Termo de acerto enviado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+  /files/contracts/withdrawal:
+    post:
+      summary: Upload de termo de rescisão
+      description: Faz upload do termo de rescisão (withdrawal) do contrato.
+      tags: [Contratos — Arquivos]
+      security:
+        - BearerAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                contractId:
+                  type: integer
+                file:
+                  type: string
+                  format: binary
+              required: [contractId, file]
+      responses:
+        '201':
+          description: Termo de rescisão enviado
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '500':
+          $ref: '#/components/responses/InternalServerError'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: Token JWT obtido via autenticação. Enviado no header Authorization.
+
+  schemas:
+    # ─── Enums ───
+    ContractClassification:
+      type: string
+      enum:
+        - Contrato
+        - 'Ordem de Serviço'
+      description: |
+        Contrato = contrato formal com valor ilimitado.
+        Ordem de Serviço = contrato simplificado com teto de R$ 9.999,99.
+
+    ContractType:
+      type: string
+      enum:
+        - Fornecedor
+        - Financiador
+        - Colaborador
+        - ACT
+      description: |
+        Tipo do contratante/contratado.
+        Fornecedor, Financiador, Colaborador e ACT (Acordo Coletivo de Trabalho).
+
+    ContractModel:
+      type: string
+      enum:
+        - Serviço
+        - Doação
+      description: Modelo de contrato — prestação de serviço ou doação.
+
+    ContractStatus:
+      type: string
+      enum:
+        - Pendente
+        - Assinado
+        - 'Em andamento'
+        - Finalizado
+        - Distrato
+      description: |
+        Status do ciclo de vida do contrato.
+        Pendente → Assinado → Em andamento → Finalizado/Distrato.
+        Não existe status Rascunho. O contrato é registrado diretamente como Pendente
+        (sem documento assinado) ou Em andamento (com documento assinado + data de assinatura).
+
+    AditivoStatus:
+      type: string
+      enum:
+        - Rascunho
+        - Pendente
+        - Homologado
+      description: Status do aditivo dentro do fluxo de aprovação.
+
+    AditivoType:
+      type: string
+      enum:
+        - prazo
+        - valor
+        - escopo
+        - outro
+        - distrato
+      description: Tipo de aditivo/modificação contratual.
+
+    # ─── Tipos compostos ───
+    ContractPeriod:
+      type: object
+      required: [start, end]
+      properties:
+        start:
+          type: string
+          format: date-time
+          description: Data de início do contrato
+        end:
+          type: string
+          format: date-time
+          description: Data de término do contrato
+        isIndefinite:
+          type: boolean
+          default: false
+          description: Indica se o contrato é por tempo indeterminado
+
+    BancaryInfo:
+      type: object
+      properties:
+        bank:
+          type: string
+          nullable: true
+        agency:
+          type: string
+          nullable: true
+          pattern: '^\d{4}(-\d{1})?$'
+          description: 'Formato: 0000 ou 0000-0'
+        accountNumber:
+          type: string
+          nullable: true
+        dv:
+          type: string
+          maxLength: 1
+          nullable: true
+
+    PixInfo:
+      type: object
+      properties:
+        key_type:
+          type: string
+          nullable: true
+          description: Tipo da chave PIX (CPF, CNPJ, EMAIL, TELEFONE, ALEATORIA)
+        key:
+          type: string
+          nullable: true
+          description: Valor da chave PIX
+
+    Contractor:
+      type: object
+      properties:
+        id:
+          type: integer
+          nullable: true
+        name:
+          type: string
+          nullable: true
+        email:
+          type: string
+          nullable: true
+        telephone:
+          type: string
+          nullable: true
+        cnpj:
+          type: string
+          nullable: true
+        cpf:
+          type: string
+          nullable: true
+        corporateName:
+          type: string
+          nullable: true
+        fantasyName:
+          type: string
+          nullable: true
+        serviceCategory:
+          type: string
+          nullable: true
+        role:
+          type: string
+          nullable: true
+        address:
+          type: string
+          nullable: true
+        bancaryInfo:
+          $ref: '#/components/schemas/BancaryInfo'
+          nullable: true
+        pixInfo:
+          $ref: '#/components/schemas/PixInfo'
+          nullable: true
+
+    FileAttachment:
+      type: object
+      required: [id, fileUrl]
+      properties:
+        id:
+          type: integer
+        fileUrl:
+          type: string
+          format: uri
+
+    # ─── Contrato base (input) ───
+    ContractCreateInput:
+      type: object
+      required:
+        - classification
+        - contractModel
+        - object
+        - totalValue
+        - contractPeriod
+        - contractType
+      properties:
+        classification:
+          $ref: '#/components/schemas/ContractClassification'
+        contractModel:
+          $ref: '#/components/schemas/ContractModel'
+        object:
+          type: string
+          minLength: 1
+          description: Objeto do contrato (descrição do que será executado)
+        totalValue:
+          type: number
+          format: float
+          minimum: 0
+          description: |
+            Valor original do contrato. Para Ordem de Serviço,
+            máximo permitido é 9999.99.
+        contractPeriod:
+          $ref: '#/components/schemas/ContractPeriod'
+        contractType:
+          $ref: '#/components/schemas/ContractType'
+        supplierId:
+          type: integer
+          nullable: true
+        financierId:
+          type: integer
+          nullable: true
+        collaboratorId:
+          type: integer
+          nullable: true
+        budgetPlanId:
+          type: integer
+          nullable: true
+        programId:
+          type: integer
+          nullable: true
+        supplier:
+          $ref: '#/components/schemas/Contractor'
+          nullable: true
+        financier:
+          $ref: '#/components/schemas/Contractor'
+          nullable: true
+        collaborator:
+          $ref: '#/components/schemas/Contractor'
+          nullable: true
+        parentId:
+          type: integer
+          nullable: true
+          description: ID do contrato pai (quando é aditivo)
+        contractStatus:
+          $ref: '#/components/schemas/ContractStatus'
+          nullable: true
+        dataAssinatura:
+          type: string
+          nullable: true
+          description: Data de assinatura no formato dd/mm/aaaa
+        signedContractUrl:
+          type: string
+          nullable: true
+          description: URL do contrato assinado (base64 ou URI)
+        observations:
+          type: string
+          nullable: true
+          description: Observações internas
+        categorizacao:
+          type: array
+          items:
+            type: string
+          nullable: true
+        centroDeCusto:
+          type: array
+          items:
+            type: string
+          nullable: true
+        createdById:
+          type: integer
+          nullable: true
+        updatedBy:
+          type: integer
+          nullable: true
+
+    ContractCreateResponse:
+      type: object
+      properties:
+        id:
+          type: integer
+          description: ID do contrato/aditivo criado
+
+    # ─── Contrato completo (response) ───
+    IContract:
+      allOf:
+        - $ref: '#/components/schemas/ContractCreateInput'
+        - type: object
+          required: [id, createdAt, updatedAt]
+          properties:
+            id:
+              type: integer
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+            contractCode:
+              type: string
+              description: 'Código identificador do contrato (ex: C-2024-0001)'
+            program:
+              type: object
+              properties:
+                id:
+                  type: integer
+                name:
+                  type: string
+            budgetPlan:
+              type: object
+              properties:
+                id:
+                  type: integer
+                scenarioName:
+                  type: string
+                year:
+                  type: integer
+                version:
+                  type: integer
+            files:
+              type: array
+              items:
+                $ref: '#/components/schemas/FileAttachment'
+            payable:
+              type: object
+              properties:
+                id:
+                  type: integer
+            receivable:
+              type: object
+              properties:
+                id:
+                  type: integer
+            currentFiles:
+              type: array
+              items:
+                type: object
+            withdrawalUrl:
+              type: string
+              nullable: true
+            settleTermUrl:
+              type: string
+              nullable: true
+            children:
+              type: array
+              items:
+                $ref: '#/components/schemas/Children'
+              description: Aditivos e distrato vinculados ao contrato
+            aditivoType:
+              $ref: '#/components/schemas/AditivoType'
+            aditivoStatus:
+              $ref: '#/components/schemas/AditivoStatus'
+            bancaryInfo:
+              $ref: '#/components/schemas/BancaryInfo'
+              readOnly: true
+              description: Dados bancários herdados do cadastro do parceiro. Imutável no contrato.
+            pixInfo:
+              $ref: '#/components/schemas/PixInfo'
+              readOnly: true
+              description: Dados PIX herdados do cadastro do parceiro. Imutável no contrato.
+
+    Children:
+      allOf:
+        - type: object
+          required: [id, createdAt, updatedAt]
+          properties:
+            id:
+              type: integer
+            createdAt:
+              type: string
+              format: date-time
+            updatedAt:
+              type: string
+              format: date-time
+            contractCode:
+              type: string
+            contractStatus:
+              $ref: '#/components/schemas/ContractStatus'
+            withdrawalUrl:
+              type: string
+              nullable: true
+            settleTermUrl:
+              type: string
+              nullable: true
+            signedContractUrl:
+              type: string
+              nullable: true
+            parentId:
+              type: integer
+              nullable: true
+            pending:
+              type: number
+              description: Valor pendente de execução/pagamento
+            paidValue:
+              type: number
+              nullable: true
+              description: Valor pago/executado para cálculo de saldo
+            aditivoType:
+              $ref: '#/components/schemas/AditivoType'
+            aditivoStatus:
+              $ref: '#/components/schemas/AditivoStatus'
+            bancaryInfo:
+              $ref: '#/components/schemas/BancaryInfo'
+              readOnly: true
+              description: Dados bancários herdados do cadastro do parceiro. Imutável no contrato.
+            pixInfo:
+              $ref: '#/components/schemas/PixInfo'
+              readOnly: true
+              description: Dados PIX herdados do cadastro do parceiro. Imutável no contrato.
+            dataAssinatura:
+              type: string
+              nullable: true
+            observations:
+              type: string
+              nullable: true
+        - type: object
+          properties:
+            classification:
+              $ref: '#/components/schemas/ContractClassification'
+            contractType:
+              $ref: '#/components/schemas/ContractType'
+            object:
+              type: string
+            contractPeriod:
+              $ref: '#/components/schemas/ContractPeriod'
+            totalValue:
+              type: number
+              format: float
+            contractModel:
+              $ref: '#/components/schemas/ContractModel'
+            supplier:
+              type: object
+              nullable: true
+              properties:
+                id:
+                  type: integer
+                name:
+                  type: string
+                cnpj:
+                  type: string
+                corporateName:
+                  type: string
+            financier:
+              type: object
+              nullable: true
+              properties:
+                id:
+                  type: integer
+                name:
+                  type: string
+                cnpj:
+                  type: string
+                corporateName:
+                  type: string
+            program:
+              type: object
+              properties:
+                id:
+                  type: integer
+                name:
+                  type: string
+            collaborator:
+              type: object
+              nullable: true
+              properties:
+                id:
+                  type: integer
+                name:
+                  type: string
+                cpf:
+                  type: string
+            budgetPlan:
+              type: object
+              properties:
+                id:
+                  type: integer
+                scenarioName:
+                  type: string
+                year:
+                  type: integer
+                version:
+                  type: integer
+
+    ContractRow:
+      allOf:
+        - $ref: '#/components/schemas/Children'
+        - type: object
+          properties:
+            children:
+              type: array
+              nullable: true
+              items:
+                $ref: '#/components/schemas/Children'
+
+    PaginatedContractRows:
+      type: object
+      required: [items, meta]
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ContractRow'
+        meta:
+          type: object
+          required: [itemCount, totalItems, itemsPerPage, totalPages, currentPage]
+          properties:
+            itemCount:
+              type: integer
+            totalItems:
+              type: integer
+            itemsPerPage:
+              type: integer
+            totalPages:
+              type: integer
+            currentPage:
+              type: integer
+
+    # ─── Histórico de pagamentos ───
+    ContractPaymentHistory:
+      type: object
+      required: [id, contractCode]
+      properties:
+        id:
+          type: integer
+        contractCode:
+          type: string
+        payable:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              paymentType:
+                type: string
+              installments:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Installment'
+        receivable:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              receivableType:
+                type: string
+              installments:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Installment'
+        historys:
+          type: array
+          items:
+            type: object
+            properties:
+              id:
+                type: integer
+              actionType:
+                type: string
+              user:
+                type: object
+                properties:
+                  id:
+                    type: integer
+                  name:
+                    type: string
+                  email:
+                    type: string
+              createdAt:
+                type: string
+                format: date-time
+              updatedAt:
+                type: string
+                format: date-time
+
+    Installment:
+      type: object
+      required: [installmentNumber, value, dueDate, type, status, totalInstallments]
+      properties:
+        id:
+          type: integer
+        installmentNumber:
+          type: integer
+        value:
+          type: number
+          format: float
+        dueDate:
+          type: string
+          format: date-time
+        type:
+          type: string
+        status:
+          type: string
+        totalInstallments:
+          type: integer
+        receivableId:
+          type: integer
+          nullable: true
+        payableId:
+          type: integer
+          nullable: true
+        relatedLiquidInstallmentId:
+          type: integer
+          nullable: true
+
+    # ─── Erros ───
+    ErrorResponse:
+      type: object
+      required: [status, error]
+      properties:
+        status:
+          type: integer
+        data:
+          nullable: true
+        error:
+          type: string
+        meta:
+          nullable: true
+
+  responses:
+    BadRequest:
+      description: Requisição inválida — dados malformados ou validação de negócio falhou
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Unauthorized:
+      description: Não autenticado — token JWT ausente, expirado ou inválido
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    Forbidden:
+      description: Acesso negado — usuário não tem permissão para esta operação
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    NotFound:
+      description: Recurso não encontrado
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    UnprocessableEntity:
+      description: 'Entidade não processável — validação semântica falhou (ex: teto de OS excedido)'
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+    InternalServerError:
+      description: Erro interno do servidor
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'

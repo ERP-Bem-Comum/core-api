@@ -114,6 +114,8 @@ Um **ADR (Architecture Decision Record)** é um documento curto que captura uma 
 | [0024](./0024-identity-and-rbac-auth-module.md) | Identidade & RBAC — Módulo `auth` (identidade própria OIDC-ready, sessão híbrida, permissions granulares) | Accepted | 2026-05-27 |
 | [0025](./0025-http-server-fastify-core-api.md) | Servidor HTTP no `core-api` com Fastify (adapter de borda, BFF continua burro) | Accepted | 2026-05-27 |
 | [0026](./0026-mysql-read-write-split-connection.md) | Read/Write Split de Conexão MySQL (writer/reader pools — Master-Slave ready) | Accepted | 2026-05-27 |
+| [0027](./0027-zod-openapi-contract-first-http-edge.md) | Zod + zod-openapi como contract-first da borda HTTP (validação de I/O + OpenAPI 3.1.1) | Accepted | 2026-05-27 |
+| [0028](./0028-http-edge-shell-location.md) | Localização do shell HTTP de borda (`src/shared/http/`) e do composition root (`src/server.ts`) — verticalidade por feature | Accepted | 2026-05-28 |
 
 ---
 

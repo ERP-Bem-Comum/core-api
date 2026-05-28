@@ -109,5 +109,17 @@ export const runUserRepositoryContract = (label: string, factory: UserRepoFactor
       if (found.ok) assert.equal(found.value?.status, 'disabled');
       await cleanup();
     });
+
+    it('CA6: save de e-mail duplicado (outro id) -> email-already-registered', async () => {
+      const a = buildActive('dup@example.com');
+      const savedA = await repository.save(a);
+      assert.equal(savedA.ok, true);
+
+      const b = buildActive('dup@example.com'); // mesmo e-mail, id diferente
+      const savedB = await repository.save(b);
+      assert.equal(savedB.ok, false);
+      if (!savedB.ok) assert.equal(savedB.error, 'email-already-registered');
+      await cleanup();
+    });
   });
 };

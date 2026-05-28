@@ -4,6 +4,32 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-05-28 — 🧭 ADR-0028 (localização do shell HTTP + verticalidade por feature)
+
+### Decisão
+
+- **[ADR-0028](./architecture/adr/0028-http-edge-shell-location.md)** — fixa onde vive a borda HTTP do core-api: **shell transversal** (`buildApp`, error envelope, `sendResult`, config) em `src/shared/http/`; **composition root** (entrypoint + `listen` + graceful shutdown) em `src/server.ts` (raiz); **HTTP de cada feature** (plugin, rotas, schemas Zod) em `src/modules/<m>/adapters/http/`, exposto via `<m>/public-api/http.ts`. **Cumpre** o ADR-0006:53-63 (`shared/` + `server.ts`) e o ADR-0025:37 (composition root único) — não superseda nenhum. Motivação: o H0 entregou o shell em `src/http/` (topo), que aparentava "camada HTTP horizontal" em tensão com a organização vertical-por-feature (Modular Monolith).
+
+### Consequência operacional
+
+- Ticket de refactor `CORE-HTTP-SHELL-RELOCATE` move `src/http/` → `src/shared/http/` + `src/server.ts`, reescreve imports `#src/http/*` → `#src/shared/http/*`, move `tests/http/` → `tests/shared/http/` e estende o glob ESLint para `src/shared/http/**` + `src/modules/*/adapters/http/**`. Sem mudança de comportamento (testes do H0 cobrem). `EPIC-HTTP-CORE-API.md` atualizado com os novos paths.
+
+---
+
+## 2026-05-27 — 📐 ADR-0027 (Zod contract-first) + planejamento do épico HTTP (spec-driven)
+
+### Decisão
+
+- **[ADR-0027](./architecture/adr/0027-zod-openapi-contract-first-http-edge.md)** — Zod v4 + `zod-openapi` + `fastify-zod-openapi` como **contract-first da borda HTTP**: um schema Zod por rota valida I/O e **gera o OpenAPI 3.1.1**. Invariante: Zod só em `adapters/http/`; smart constructors mantêm a regra de negócio (ADR-0006/0025:30). O `openapi.yaml` legado (3.0.3) deixa de ser contrato vivo e vira ACL/referência de migração.
+
+### Planejamento (sem código de produção)
+
+- **Método spec-driven nativo** adotado — **sem** instalar o spec-kit oficial (conflito com ADR-0011 supply-chain + ADR-0012 Node/pnpm puro; exigiria Python/uv e duplicaria o W0→W3). Template `.claude/templates/spec.md` + runbook `.claude/runbooks/spec-driven-pipeline.md`; artefato `001-spec/SPEC.md` como gate pré-W0.
+- **Épico `EPIC-HTTP-CORE-API`** especificado (`.claude/.planning/EPIC-HTTP-CORE-API.md`): borda HTTP de auth (primeiro) + contracts; TLS termina no BFF (ADR-0005); fatiado em H0 (bootstrap Fastify) → H1/H2 (rotas+authz auth) → I1 (RW split, ADR-0026), contracts em spec-filha. Recursos (agente·skill·docs) mapeados por etapa. Aguarda aprovação para abrir o H0.
+- **Tickets fechados** `closed-green`: `AUTH-DB-REPO-SESSION` (W2/W3 reconciliados) e `AUTH-TEST-INTEGRATION-SCRIPT` (runner `pnpm run test:integration:auth` — fecha o gap de integração auth fora do gate padrão).
+
+---
+
 ## 2026-05-27 — ✅ CHECKPOINT: módulo `auth` — domínio + repos + login híbrido (14 tickets, todos ALL-GREEN)
 
 ### Resumo da sessão

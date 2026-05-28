@@ -11,7 +11,7 @@ import type { UserId } from '../user-id.ts';
 import type { Email } from '../email.ts';
 import type { User } from './types.ts';
 
-export type UserRepositoryError = 'user-repo-unavailable';
+export type UserRepositoryError = 'user-repo-unavailable' | 'email-already-registered';
 
 export type UserRepository = Readonly<{
   save: (user: User) => Promise<Result<void, UserRepositoryError>>;

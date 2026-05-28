@@ -29,5 +29,21 @@ export const runRefreshTokenMinterContract = (
       assert.notEqual(a.token, b.token);
       assert.notEqual(a.tokenHash, b.tokenHash);
     });
+
+    it('A6a/CA1: hash(token) retorna string nao-vazia', () => {
+      const h = factory.make().hash('qualquer-token-em-claro');
+      assert.equal(h.length > 0, true);
+    });
+
+    it('A6a/CA2 (invariante): hash(mint().token) === mint().tokenHash', () => {
+      const minter = factory.make();
+      const minted = minter.mint();
+      assert.equal(minter.hash(minted.token), minted.tokenHash);
+    });
+
+    it('A6a/CA3: hash e deterministico para o mesmo input', () => {
+      const minter = factory.make();
+      assert.equal(minter.hash('input-x'), minter.hash('input-x'));
+    });
   });
 };

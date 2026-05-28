@@ -86,6 +86,65 @@ SKILL.md correspondente). Rastreabilidade dos pareceres (agentIds desta sessão)
 - **Fora do agregado `User`:** `UserAuthenticated`, `AccessTokenRefreshed`, `SessionRevoked` pertencem à
   camada de **sessão/credencial** (D6 + fase HTTP), não a este agregado.
 
+## DD-PERSIST-01 — `UserRepository` Drizzle (P1): roles via junção + `email-already-registered` no port
+
+- **Status:** Aceita (2026-05-27) · **Confiança:** alta (decidida com o usuário)
+- **save:** transação — upsert `auth_user` (SELECT-then-UPDATE-or-INSERT, padrão ADR-0020, **sem** `ON DUPLICATE
+  KEY`) + **replace** das associações `auth_user_role` (DELETE do `user_id` + INSERT das atuais). **Não** cria
+  `auth_role`/`auth_permission` (responsabilidade do `RoleRepository`, P2) — a FK `auth_urt_role_fk` exige roles
+  preexistentes; salvar User com role inexistente é violação de FK (esperado).
+- **findById/findByEmail:** reidratam `roles[]` via JOIN `auth_user_role → auth_role → auth_role_permission →
+  auth_permission`; o mapper agrupa por role, monta `Role.create` + `Permission.parse`, e despacha por
+  `row.status` → `ActiveUser | DisabledUser` (DD-USER-01; o domínio não tem `rehydrate`, o mapper reconstrói a
+  borda). Tudo `Result<User | null, …>`; corrupção de row → `user-repo-unavailable`.
+- **UNIQUE email (rede de unicidade, nota propagada do log):** o adapter Drizzle mapeia `ER_DUP_ENTRY` (errno
+  1062) no índice `auth_user_email_idx` → **`'email-already-registered'`**. `UserRepositoryError` **ganha** esse
+  código; o `InMemory` passa a detectar e-mail duplicado (outro `id`); o `registerUser` propaga (o literal já
+  está no seu union). Cobre a **race** que o `findByEmail`+`save` não-atômico deixa aberta.
+- **Teste:** contract-suite compartilhada (`user-repository.contract.ts`) ganha CA de e-mail duplicado (InMemory
+  **e** Drizzle passam); teste Drizzle-específico de reidratação de roles usa **fixture SQL** de
+  `auth_role`/`auth_permission`/`auth_role_permission` (desacopla do `RoleRepository` P2).
+
+## DD-USER-06 — `changePassword` (A8): **re-autentica** (senha atual) e **revoga todas as sessões**
+
+- **Status:** Aceita (2026-05-27) · **Confiança:** alta (decidida com o usuário)
+- **Decisão:** o use case A8 `changePassword({ userId, currentPassword, newPassword })`:
+  1. `findById(userId)`; `null` → `err('invalid-credentials')`; `parseActive` falho → `err('user-disabled')`.
+  2. **Re-autenticação:** `Password.parse(currentPassword)` falho **ou** `passwordHasher.verify` false →
+     `err('invalid-credentials')` (mesma resposta — não vaza qual falhou; senha **antiga** não revalida política).
+  3. `Password.parse(newPassword)` falho → erro de política (`PasswordPolicyError`/`weak-password`) — política
+     aplica à **nova** senha. `passwordHasher.hash(new)` → `User.changePassword(active, hash, now)` → `save`.
+  4. **Revoga TODAS as sessões** do usuário (`findRevocableByUserId` + `revoke`+`save`) **após** o save da senha
+     (a troca é a operação primária; a revogação é consequência de segurança — OWASP ASVS V3.3).
+- **Racional da revogação no use case:** mesmo precedente de DD-SESSION-04 — o **EventBus não existe**, então
+  deixar para o "consumidor de `PasswordChanged`" (nota propagada, linha ~261) deixaria um gap real: trocar a
+  senha após suspeita de roubo não expulsaria o atacante com refresh ativo. Quando o EventBus existir, a
+  revogação migra para o handler de `PasswordChanged` e este passo vira redundante (fail-closed, mantém).
+- **Revoga todas (inclui a sessão atual):** mais simples e mais seguro; o usuário re-loga. Preservar a sessão
+  atual (excluir o refresh corrente) exigiria recebê-lo no input — YAGNI agora.
+- **Output:** `{ user: ActiveUser; event: PasswordChanged }` (espelha `registerUser`; não publica — EventBus futuro).
+- **Helper local** `revokeAllForUser(refreshTokenRepo, userId, at)` no arquivo do A8 (3ª ocorrência do loop
+  revoke; extração compartilhada com `revokeAllSessions`/`revokeChain` fica para refactor futuro com ticket).
+
+## DD-USER-07 — `assignRole` (A9): **autoriza o ator** (`authorize`/`forbidden`), fail-closed
+
+- **Status:** Aceita (2026-05-27) · **Confiança:** alta (decidida com o usuário)
+- **Decisão:** o use case A9 `assignRole({ actorId, targetUserId, roleId })` é a **primeira** materialização de
+  DD-USER-02 (`authorize` chamado pelo use case). Atribuir papel é privilegiado (admin sobre outro user):
+  1. Carrega o **ator** (`findById(actorId)`); `null` **ou** `parseActive` falho → `err('forbidden')`
+     (fail-closed: ator inexistente/desabilitado não autoriza; não vaza qual).
+  2. `authorize(actor, REQUIRED)` onde `REQUIRED = Permission.parse('user:assign-role')`; `!ok` → `err('forbidden')`.
+     Se a constante de permissão não parsear (impossível — string estática válida `resource:action`), também
+     `err('forbidden')` (fail-closed).
+  3. Carrega o **target** (`findById(targetUserId)`); `null` → `err('user-not-found')`; `parseActive` falho →
+     `err('user-disabled')` (não se atribui papel a conta desabilitada — `assignRole` exige `ActiveUser`).
+  4. Carrega o **role** (`RoleRepository.findById(roleId)`); `null` → `err('role-not-found')`.
+  5. `User.assignRole(target, role, now)` (idempotente — `grant` no-op se já tem) → `save` → `ok({ user, event })`.
+- **Permission exigida:** `'user:assign-role'` (`resource:action` kebab — VO `Permission`). Convenção; ajustável.
+- **Output:** `{ user: ActiveUser; event: RoleAssigned }` (espelha os demais; não publica — EventBus futuro).
+- **Erros:** `'forbidden' | 'user-not-found' | 'user-disabled' | 'role-not-found' | UserRepositoryError | RoleRepositoryError`.
+- **Edge:** `actorId === targetUserId` (atribuir a si) é permitido se o ator tiver a permissão — sem tratamento especial.
+
 ---
 
 ## DD-SESSION-01 — estado do `RefreshToken` é **computado** por `state(token, now)`, não tipos refinados
@@ -113,6 +172,64 @@ SKILL.md correspondente). Rastreabilidade dos pareceres (agentIds desta sessão)
   `revoke(token, at)` marca `revokedAt` (logout/admin). São estados distintos. **Precedência** em `state`:
   `revoked` > `rotated` > `expired` > `active`. `tokenHash` é string **opaca** não-vazia (não vira VO
   próprio agora — YAGNI; nunca em claro, nunca logado — herda invariante DD-USER-04).
+
+## DD-SESSION-04 — `refreshAccessToken` (A6) valida **User ativo** (defense-in-depth)
+
+- **Status:** Aceita (2026-05-27) · **Confiança:** alta (decidida com o usuário)
+- **Decisão:** o use case A6 carrega o `User` via `UserReader.findById(token.userId)` **depois** de `verify` do
+  refresh, e nega a renovação se a conta estiver `DisabledUser` → `err('user-disabled')`, **revogando** o refresh
+  apresentado (`revoke` + `save`) antes de retornar.
+- **Racional:** o **EventBus de revogação ainda não existe** (nota D6 / "EventBus do auth"): hoje `disable` **não**
+  invalida sessões ativas. Sem este check, um usuário desabilitado renovaria o access indefinidamente — gap real de
+  segurança no estado atual. `UserReader` (read port, DD-PORTS-01) entra como dep do use case.
+- **Gatilho de revisão:** quando o consumidor de `UserDisabled` revogar sessões via evento (transporte futuro), o
+  refresh de conta desabilitada já nascerá `revoked` e `verify` barraria antes — este check vira defense-in-depth
+  redundante (manter mesmo assim é barato e fail-closed).
+
+> **Refino 2026-05-27:** método do repo é `findRevocableByUserId` (não `findActiveByUserId`) — `active` é temporal
+> e o repo não tem relógio (DD-SESSION-01). Detalhe em DD-SESSION-05.
+
+## DD-SESSION-06 — A7 revoke: `revokeSession` (single) + `revokeAllSessions` (global); **idempotente**
+
+- **Status:** Aceita (2026-05-27) · **Confiança:** alta (decidida com o usuário)
+- **Decisão:** o ticket A7 entrega **dois** use cases de revogação por **refresh em claro** (ADR-0024:45
+  "logout/admin revoga imediatamente"):
+  1. `revokeSession({ refreshToken })` — logout **deste** dispositivo: `hash` → `findByTokenHash` →
+     `revoke(token, now)` + `save`.
+  2. `revokeAllSessions({ refreshToken })` — "sair de **todos** os dispositivos": resolve o `userId` pelo
+     refresh apresentado → `findRevocableByUserId` (A6a) → `revoke`+`save` em cada.
+- **Idempotência (anti-enumeration):** refresh **não encontrado** → `ok(undefined)` (não `err`). Logout é
+  idempotente — o objetivo é encerrar a sessão; se o token já sumiu/expirou, o objetivo está cumprido.
+  Não vaza se o token existe. `revoke` de já-revogado é no-op (agregado, DD-SESSION-03). **Diverge
+  conscientemente** do A6b (`refreshAccessToken`), que retorna `refresh-token-not-found` — lá o not-found é
+  informação útil de fluxo; aqui é ruído.
+- **Input por refresh (não `userId`):** o cliente porta o refresh, não o `userId`; manter `userId` fora do
+  contrato. **Admin revoga por `userId` de terceiro** fica YAGNI/futuro (precisaria de `authorize` + outro input).
+- **Sem evento no output:** espelha `authenticate-user`/`refreshAccessToken`; `SessionRevoked` (ADR-0024:72)
+  entra com o EventBus do auth (nota "EventBus do auth (futuro)").
+- **Arquivo:** ambos em `application/use-cases/revoke-session.ts` (variações coesas do mesmo conceito,
+  como A5+A5b em `authenticate-user.ts`).
+- **Não usa `Clock` externo?** usa — `revoke(token, at)` recebe `clock.now()`.
+
+## DD-SESSION-05 — reuse detection: refresh `rotated` reapresentado → **revoga a cadeia ativa do usuário**
+
+- **Status:** Aceita (2026-05-27) · **Confiança:** alta (decidida com o usuário)
+- **Decisão:** apresentar um refresh já `rotated` é sinal clássico de **replay/roubo** (OWASP ASVS V3.3). O A6, ao
+  detectar `verify → 'refresh-token-rotated'`, **revoga todos os refresh ativos** do `userId` antes de falhar
+  (`err('refresh-token-rotated')`). Caminho feliz (token `active`) **não** paga esse custo.
+- **Modelagem do port (exigência):**
+  1. `RefreshTokenRepository` ganha `findRevocableByUserId(userId): Promise<Result<readonly RefreshToken[], E>>`
+     (read) — retorna os refresh com `revokedAt === null` (tudo que **ainda pode** ser revogado). **Não** se chama
+     `findActiveByUserId` porque `active` é estado **temporal** (depende do relógio, DD-SESSION-01) e o repo não tem
+     `Clock`; `revokedAt === null` é critério **armazenável**. Revogar um já-expirado é no-op semântico inofensivo
+     (fail-closed). O use case aplica `revoke` (domínio puro, idempotente) em cada e `save` — **mutação fica no
+     Functional Core**, não num `revokeAllByUserId` que empurraria a regra para o adapter.
+  2. `RefreshTokenMinter` ganha `hash(rawToken): string` (sha256 hex, **mesma primitiva** do `mint`) — o A6 hasheia
+     o refresh em claro recebido para o lookup `findByTokenHash`. Invariante: `hash(mint().token) === mint().tokenHash`.
+- **Trade-off aceito:** o loop revoke/save **não é atômico** sob concorrência. Aceitável — reuse detection é evento
+  raro de segurança; a janela é desprezível e o efeito (revogar demais) é fail-closed.
+- **Fatiamento:** **A6a** (`AUTH-SESSION-REFRESH-PRIMITIVES`, S) entrega os 2 primitivos de port + adapters +
+  contract-suites; **A6b** (`AUTH-USECASE-REFRESH-ACCESS`, M) entrega o use case que os consome.
 
 ---
 
@@ -224,3 +341,7 @@ SKILL.md correspondente). Rastreabilidade dos pareceres (agentIds desta sessão)
 - **2026-05-27** — `DD-PORTS-01` (Fase A): repos no domínio (§3.H.2), fatiar por agregado, read/write split do User, reuso de Clock, sem IdGenerator port. (Gabriel Aderaldo + reality-check)
 - **2026-05-27** — `DD-CRYPTO-01` (X1): argon2id via `hash-wasm` (WASM puro); impl própria recusada; fake sha256 para testes. (Gabriel Aderaldo)
 - **2026-05-27** — `DD-TOKEN-01` (X2): access JWT ES256 via `jose`; core assina (privada) / BFF valida (pública); chaves injetadas; HS256 e impl própria recusados. (Gabriel Aderaldo)
+- **2026-05-27** — `DD-SESSION-04..05` (A6): refresh valida User ativo (defense-in-depth, pois EventBus de revogação ainda não existe); reuse detection de refresh `rotated` revoga a cadeia ativa do usuário (OWASP ASVS V3.3); port ganha `findActiveByUserId` + `RefreshTokenMinter.hash`; fatiado em A6a (primitivos) + A6b (use case). (Gabriel Aderaldo + decisão de escopo)
+- **2026-05-27** — `DD-SESSION-06` (A7): `revokeSession` (single) + `revokeAllSessions` (global, reusa `findRevocableByUserId`); input por refresh em claro; not-found → idempotente `ok` (diverge do A6b); admin-by-userId YAGNI. (Gabriel Aderaldo + decisão de escopo)
+- **2026-05-27** — `DD-USER-06` (A8): `changePassword` re-autentica (verifica senha atual → `invalid-credentials`) e revoga TODAS as sessões após o save (defense-in-depth, pois EventBus não existe); política aplica à nova senha; output `{user, event}`. (Gabriel Aderaldo + decisão de escopo)
+- **2026-05-27** — `DD-USER-07` (A9): `assignRole` autoriza o ator via `authorize`/`forbidden` (1ª aplicação de DD-USER-02); input `{actorId, targetUserId, roleId}`; permissão `user:assign-role`; fail-closed (ator null/disabled/sem-permissão → forbidden); `role-not-found`/`user-not-found`/`user-disabled`. (Gabriel Aderaldo + decisão de escopo)

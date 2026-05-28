@@ -9,6 +9,12 @@ import { runRefreshTokenRepositoryContract } from './refresh-token-repository.co
 runRefreshTokenRepositoryContract('InMemory', {
   make: () => {
     const store = makeInMemoryRefreshTokenStore();
-    return { repository: store.repository };
+    // InMemory não tem FK — seedUser é no-op (Drizzle insere o auth_user pai).
+    return {
+      repository: store.repository,
+      seedUser: async () => {
+        await Promise.resolve();
+      },
+    };
   },
 });

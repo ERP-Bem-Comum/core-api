@@ -19,4 +19,9 @@ describe('Node minter — especifico', () => {
     const expected = createHash('sha256').update(token).digest('hex');
     assert.equal(tokenHash, expected);
   });
+
+  it('A6a/CA4: hash(x) = sha256(x) em hex', () => {
+    const expected = createHash('sha256').update('valor-arbitrario').digest('hex');
+    assert.equal(makeNodeRefreshTokenMinter().hash('valor-arbitrario'), expected);
+  });
 });

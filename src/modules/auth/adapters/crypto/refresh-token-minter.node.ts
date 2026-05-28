@@ -8,10 +8,12 @@
 import { randomBytes, createHash } from 'node:crypto';
 import type { RefreshTokenMinter } from '../../application/ports/refresh-token-minter.ts';
 
+const sha256Hex = (raw: string): string => createHash('sha256').update(raw).digest('hex');
+
 export const makeNodeRefreshTokenMinter = (): RefreshTokenMinter => ({
   mint: () => {
     const token = randomBytes(32).toString('base64url');
-    const tokenHash = createHash('sha256').update(token).digest('hex');
-    return { token, tokenHash };
+    return { token, tokenHash: sha256Hex(token) };
   },
+  hash: sha256Hex,
 });
