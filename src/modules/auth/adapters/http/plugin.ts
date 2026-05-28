@@ -24,6 +24,9 @@ import {
   registerResponseSchema,
   loginBodySchema,
   loginResponseSchema,
+  refreshBodySchema,
+  refreshResponseSchema,
+  logoutBodySchema,
 } from './schemas.ts';
 
 const authRoutes =
@@ -74,6 +77,38 @@ const authRoutes =
           ok: 200,
           errors: { 'invalid-credentials': 401, 'user-disabled': 403 },
         });
+      },
+    });
+
+    scope.route({
+      method: 'POST',
+      url: '/refresh',
+      schema: {
+        body: refreshBodySchema,
+        response: { 200: refreshResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.refreshAccessToken({ refreshToken: req.body.refreshToken });
+        return sendResult(reply, result, {
+          ok: 200,
+          errors: {
+            'refresh-token-not-found': 401,
+            'refresh-token-revoked': 401,
+            'refresh-token-rotated': 401,
+            'refresh-token-expired': 401,
+            'user-disabled': 403,
+          },
+        });
+      },
+    });
+
+    scope.route({
+      method: 'POST',
+      url: '/logout',
+      schema: { body: logoutBodySchema } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.revokeSession({ refreshToken: req.body.refreshToken });
+        return sendResult(reply, result, { ok: 204 });
       },
     });
   };

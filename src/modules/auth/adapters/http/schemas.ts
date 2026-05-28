@@ -25,3 +25,14 @@ export const loginResponseSchema = z.object({
   refreshToken: z.string(),
   userId: z.string(),
 });
+
+export const refreshBodySchema = z.object({
+  refreshToken: z.string().meta({ description: 'Refresh token opaco emitido no login' }),
+});
+
+/** Response do refresh tem o mesmo shape do login (access + refresh rotacionado + userId). */
+export const refreshResponseSchema = loginResponseSchema;
+
+export const logoutBodySchema = z.object({
+  refreshToken: z.string(),
+});
