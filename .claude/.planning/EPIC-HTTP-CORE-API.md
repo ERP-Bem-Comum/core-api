@@ -106,7 +106,7 @@ primeiro** (decisão 2026-05-27).
 | 3 | `AUTH-HTTP-ROUTES` (H1a) | M | **✅ closed-green** — composition root auth (memory+mysql, chaves ES256) + `POST /api/v2/auth/{register→201,login→200}`; factory `authHttpPlugin(deps)`; erro→HTTP (409/422/401/403); enumeração-safe; `__ping` removida. Fatiado de H1 (SPEC §8) | H0, #2 |
 | 3b | `AUTH-HTTP-ROUTES-SESSION` (H1b) | S | **✅ closed-green** — `POST /api/v2/auth/{refresh→200 rotação, logout→204 idempotente}`; reusou o composition root (só +2 schemas +2 rotas); erro→HTTP 401/403. **4 rotas auth completas.** | H1a |
 | 4 | `AUTH-HTTP-AUTHZ-HOOK` (H2) | S | **✅ closed-green** — `makeRequireAuth(verifyAccessToken)` (preHandler authn, defense-in-depth, decora `req.userId`) + `GET /api/v2/auth/me` (prova real) + `makeAuthorize(userReader)(permission)` (RBAC, exposto p/ rotas futuras); 401/403; exposto via `public-api/http.ts` | H1 |
-| 5 | `CORE-DB-RW-SPLIT-POOLS` (I1) | M | Dual pool writer/reader (ADR-0026) injetado no composition root; paralelizável após H0 | H0 |
+| 5 | `CORE-DB-RW-SPLIT-POOLS` (I1) | M | **⏸️ DIFERIDO (2026-05-28, Gabriel)** — ADR-0026:90 manda reavaliar "quando a réplica for provisionada"; ADR-0026:22 diz que o `auth` é write-heavy (ganho marginal) e o ganho real é em `contracts`/`fin`/read-models. **Gatilho de retomada:** réplica provisionada **OU** adoção do split em `contracts`/`fin`. Dual pool writer/reader (ADR-0026) injetado no composition root | H0 |
 | 6+ | `CONTRACTS-HTTP-*` | épico-filho | ACL sobre os 12 endpoints do `openapi.yaml` legado — **spec-filha própria** após a borda auth fechar | H0, H2 |
 
 **Caminho crítico:** H0 → (#2 se necessário) → H1 → H2. I1 paralelo após H0. Contracts após auth.
