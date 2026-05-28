@@ -13,7 +13,15 @@ import {
   installLastResortHandlers,
   processLastResortDeps,
 } from '#src/shared/runtime/last-resort.ts';
-import { authHttpPlugin, buildAuthHttpDeps } from '#src/modules/auth/public-api/http.ts';
+import {
+  authHttpPlugin,
+  buildAuthHttpDeps,
+  makeRequireAuth,
+} from '#src/modules/auth/public-api/http.ts';
+import {
+  contractsHttpPlugin,
+  buildContractsHttpDeps,
+} from '#src/modules/contracts/public-api/http.ts';
 
 const main = async (): Promise<void> => {
   const config = readHttpConfig(process.env);
@@ -26,13 +34,34 @@ const main = async (): Promise<void> => {
       : { driver: authDriver },
   );
 
-  const app = await buildApp({ routes: [authHttpPlugin(authDeps)], config });
+  // RW split (ADR-0026): CONTRACTS_DATABASE_URL = writer; CONTRACTS_READER_URL = réplica
+  // (ausente → reusa o writer, single-node). Reads roteiam ao reader.
+  const contractsWriterUrl = process.env['CONTRACTS_DATABASE_URL'];
+  const contractsReaderUrl = process.env['CONTRACTS_READER_URL'];
+  const contractsDeps = await buildContractsHttpDeps(
+    process.env['CONTRACTS_DRIVER'] === 'mysql'
+      ? {
+          driver: 'mysql',
+          ...(contractsWriterUrl !== undefined ? { writerUrl: contractsWriterUrl } : {}),
+          ...(contractsReaderUrl !== undefined ? { readerUrl: contractsReaderUrl } : {}),
+        }
+      : { driver: 'memory' },
+  );
+
+  // requireAuth do auth (cross-módulo via public-api, ADR-0006/0024) protege as rotas de contracts.
+  const requireAuth = makeRequireAuth(authDeps.verifyAccessToken);
+
+  const app = await buildApp({
+    routes: [authHttpPlugin(authDeps), contractsHttpPlugin(contractsDeps, { requireAuth })],
+    config,
+  });
 
   // Graceful shutdown: SIGTERM / SIGINT → app.close() (drena conexoes abertas)
   const shutdown = async (): Promise<void> => {
     app.log.info('Graceful shutdown iniciado…');
     await app.close();
     await authDeps.shutdown();
+    await contractsDeps.shutdown();
     app.log.info('Servidor encerrado.');
   };
 
