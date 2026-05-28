@@ -1,19 +1,19 @@
 ---
 name: docker-compose-expert
+tools: Read, Glob, Grep, Edit, Write, Bash
+model: sonnet
+maxTurns: 60
+color: blue
 description: >
-  Especialista em Docker + Docker Compose para o core-api. Cobre Dockerfile (multi-stage
-  com `node:24-bookworm-slim`), BuildKit, build best practices, Compose file (services
-  para MySQL 8.4 + MinIO dev/CI), healthchecks, volumes, secrets (`secrets/*.txt`),
-  redes, profiles, `depends_on` + `condition: service_healthy`, `--wait`, init
-  process (`tini`), root vs non-root, image hardening, layer caching, multi-arch
-  builds. Ancorado em `handbook/reference/docker/` (Dockerfile reference, Compose
-  file reference, Multi-stage builds, Building best practices, BuildKit, Docker
-  overview) + ADR-0013/0019/0020.
-  Use SEMPRE que a tarefa envolver containers: editar `Dockerfile`, escrever ou
-  ajustar `docker-compose.yml` (MySQL 8.4 LTS + MinIO + outras deps), planejar
-  build em multi-stage, configurar healthcheck, propor secret management,
-  diagnosticar erro de Docker build/run/exec, ou pensar em CI com `docker compose
-  up --wait`.
+  Use proactively for Docker + Docker Compose work. Trigger: editar `Dockerfile`
+  ou `compose.yaml`/`docker-compose.yml`, "multi-stage build", "BuildKit cache
+  mount" / "secret mount", "node:24-bookworm-slim", "tini init", "non-root user",
+  "image digest pin", "healthcheck", "depends_on service_healthy", "docker
+  compose --wait", "MinIO local" (ADR-0019), "MySQL service" (ADR-0013),
+  "layer caching", "multi-arch", "container unhealthy", "exit 137 OOM",
+  "build cache invalidando", "secret management via secrets/*.txt". Ancorado em
+  `handbook/reference/docker/` (Dockerfile reference, Compose file reference,
+  Multi-stage builds, Building best practices, BuildKit) + ADR-0013/0019/0020.
 ---
 
 # docker-compose-expert

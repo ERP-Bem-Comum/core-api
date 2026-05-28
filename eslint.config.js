@@ -51,6 +51,39 @@ export default tseslint.config(
         },
       ],
 
+      // Libs proibidas — ADR-0011 §4 (supply-chain hardening).
+      'no-restricted-imports': 'off',
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'axios',
+              message:
+                'Proibida (ADR-0011 §4): supply chain compromise em mar/2026. Use `fetch` global.',
+            },
+            {
+              name: 'request',
+              message: 'Proibida (ADR-0011 §4): deprecated desde 2020. Use `fetch` global.',
+            },
+            {
+              name: 'moment',
+              message: 'Proibida (ADR-0011 §4): manutenção mínima. Use `Intl` ou `date-fns`.',
+            },
+            {
+              name: 'crypto-js',
+              message: 'Proibida (ADR-0011 §4): inativo. Use Web Crypto nativo (`crypto.subtle`).',
+            },
+          ],
+          patterns: [
+            {
+              group: ['lodash', 'lodash/*'],
+              message: 'Proibida (ADR-0011 §4): surface area enorme. O runtime nativo cobre.',
+            },
+          ],
+        },
+      ],
+
       'prefer-const': 'error',
       'no-var': 'error',
       '@typescript-eslint/no-explicit-any': 'error',
@@ -235,12 +268,30 @@ export default tseslint.config(
   },
 
   // -----------------------------------------------------------
+  // Borda HTTP — adapter Fastify (ADR-0025): tipos externos mutáveis
+  // (FastifyRequest/FastifyReply) e handlers que retornam reply.send()
+  // (promise) sem await. Mesmas folgas dos demais adapters.
+  // ADR-0028: shell transversal em src/shared/http; HTTP de feature em
+  // src/modules/<m>/adapters/http.
+  // -----------------------------------------------------------
+  {
+    files: ['src/shared/http/**/*.ts', 'src/modules/*/adapters/http/**/*.ts'],
+    rules: {
+      '@typescript-eslint/prefer-readonly-parameter-types': 'off',
+      '@typescript-eslint/promise-function-async': 'off',
+      '@typescript-eslint/require-await': 'off',
+    },
+  },
+
+  // -----------------------------------------------------------
   // Testes — node:test design + narrowing depois de cast
   // -----------------------------------------------------------
   {
     files: ['tests/**/*.ts'],
     rules: {
       '@typescript-eslint/no-floating-promises': 'off',
+      // Handlers/fixtures inline podem retornar promise sem async.
+      '@typescript-eslint/promise-function-async': 'off',
       '@typescript-eslint/no-unnecessary-condition': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/no-unused-expressions': 'off',

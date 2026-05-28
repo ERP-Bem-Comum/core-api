@@ -95,7 +95,7 @@ Um **ADR (Architecture Decision Record)** é um documento curto que captura uma 
 | [0004](./0004-postgres-outbox-pattern.md) | Postgres Outbox como bus de eventos inicial | **Superseded by 0015** | 2026-04-27 |
 | [0005](./0005-thin-bff-gateway.md) | BFF Gateway burro (apenas roteamento) | Accepted | 2026-04-27 |
 | [0006](./0006-modular-monolith-core-api.md) | Modular Monolith para o `core-api` (granularidade de serviço) | Accepted | 2026-04-27 |
-| [0007](./0007-multi-cloud-aws-gcp.md) | Topologia Multi-Cloud (AWS legado + GCP novo) | **Proposed** | 2026-04-28 |
+| [0007](./0007-multi-cloud-aws-gcp.md) | Topologia Multi-Cloud (AWS legado + GCP novo) | **Superseded by 0021** | 2026-04-28 |
 | [0008](./0008-bradesco-integration-architecture.md) | Arquitetura da Integração Bradesco (REST API + VAN via Windows VM) | Accepted | 2026-04-28 |
 | [0009](./0009-node-24-typescript-6-with-7-roadmap.md) | Node.js 24 LTS + TypeScript 6 com plano de migração para TS 7.0 | Accepted (supersedes parcial de 0002) | 2026-04-28 |
 | [0010](./0010-email-port-adapter-pattern.md) | Email — Port & Adapter Pattern com Nodemailer inicial | Accepted | 2026-04-28 |
@@ -108,6 +108,14 @@ Um **ADR (Architecture Decision Record)** é um documento curto que captura uma 
 | [0018](./0018-persistence-dual-dialect-drizzle.md) | Persistência Dual-Dialect — Drizzle com MySQL (produção) e SQLite (dev/CI) | **Superseded by 0020** | 2026-05-14 |
 | [0019](./0019-document-storage-s3-with-minio-dev.md) | Document Storage — AWS S3 (produção) com MinIO via Docker (dev/homologação) | Accepted | 2026-05-15 |
 | [0020](./0020-mysql-only-supersedes-dual-dialect.md) | MySQL como Único Dialeto de Persistência (supersedes 0018) | Accepted | 2026-05-15 |
+| [0021](./0021-aws-primary-magalu-pbe-supersedes-0007.md) | Topologia Cloud — AWS (Codebit) Primária + MagaluCloud PBE Interno (supersedes 0007) | Accepted | 2026-05-22 |
+| [0022](./0022-read-models-via-projection-over-event-stream.md) | Read-Models via Projeção sobre o Event Stream (Timeline agora, AuditLog diferido) | Accepted | 2026-05-26 |
+| [0023](./0023-contract-lifecycle-pending-state.md) | Ciclo de vida do Contrato — estado `Pendente` (4 estados) | Accepted | 2026-05-27 |
+| [0024](./0024-identity-and-rbac-auth-module.md) | Identidade & RBAC — Módulo `auth` (identidade própria OIDC-ready, sessão híbrida, permissions granulares) | Accepted | 2026-05-27 |
+| [0025](./0025-http-server-fastify-core-api.md) | Servidor HTTP no `core-api` com Fastify (adapter de borda, BFF continua burro) | Accepted | 2026-05-27 |
+| [0026](./0026-mysql-read-write-split-connection.md) | Read/Write Split de Conexão MySQL (writer/reader pools — Master-Slave ready) | Accepted | 2026-05-27 |
+| [0027](./0027-zod-openapi-contract-first-http-edge.md) | Zod + zod-openapi como contract-first da borda HTTP (validação de I/O + OpenAPI 3.1.1) | Accepted | 2026-05-27 |
+| [0028](./0028-http-edge-shell-location.md) | Localização do shell HTTP de borda (`src/shared/http/`) e do composition root (`src/server.ts`) — verticalidade por feature | Accepted | 2026-05-28 |
 
 ---
 

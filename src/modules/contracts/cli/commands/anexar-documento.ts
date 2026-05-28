@@ -5,6 +5,7 @@ import { formatAmendment, formatErrorCode } from '../formatters/index.ts';
 import { formatFlagError } from './_flag-errors.ts';
 
 const ALLOWED = ['aditivo', 'documento', 'help', 'h'] as const;
+export const allowedFlags: readonly string[] = ALLOWED;
 
 export const descricao = 'Anexa um documento assinado a um Aditivo Pendente.';
 
@@ -36,7 +37,7 @@ export const run = async (ctx: CliContext, argv: readonly string[]): Promise<num
 
   const useCase = attachSignedDocument({
     amendmentRepo: ctx.amendmentRepo,
-    eventBus: ctx.eventBus,
+    documentRepo: ctx.documentRepo,
   });
 
   const r = await useCase({

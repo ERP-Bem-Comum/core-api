@@ -25,6 +25,12 @@
     "isolatedModules": true,
     "verbatimModuleSyntax": true
   },
-  "include": ["src/**/*", "tests/**/*", "scripts/**/*", "drizzle.config.ts"],
+  "include": [
+    "src/**/*",
+    "tests/**/*",
+    "scripts/**/*",
+    "drizzle.config.ts",
+    "drizzle.config.auth.ts"
+  ],
   "exclude": ["node_modules", "dist"]
 }

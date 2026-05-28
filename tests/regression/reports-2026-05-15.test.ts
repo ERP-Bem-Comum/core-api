@@ -49,9 +49,10 @@ import { resolve } from 'node:path';
 
 import { isErr } from '#src/shared/index.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
-import { InMemoryContractRepository } from '#src/modules/contracts/adapters/contract-repository.in-memory.ts';
-import { InMemoryAmendmentRepository } from '#src/modules/contracts/adapters/amendment-repository.in-memory.ts';
-import { InMemoryEventBus } from '#src/modules/contracts/adapters/event-bus.in-memory.ts';
+import { InMemoryContractRepository } from '#src/modules/contracts/adapters/persistence/repos/contract-repository.in-memory.ts';
+import { InMemoryAmendmentRepository } from '#src/modules/contracts/adapters/persistence/repos/amendment-repository.in-memory.ts';
+import { InMemoryDocumentRepository } from '#src/modules/contracts/adapters/persistence/repos/document-repository.in-memory.ts';
+import { InMemoryOutbox } from '#src/modules/contracts/adapters/outbox/outbox.in-memory.ts';
 import { createContract } from '#src/modules/contracts/application/use-cases/create-contract.ts';
 import { createAmendment } from '#src/modules/contracts/application/use-cases/create-amendment.ts';
 import { loadState } from '#src/modules/contracts/cli/state.ts';
@@ -116,8 +117,9 @@ describe('REGR #1 — loadState rejeita state tampered (smart constructor na bor
 
     const contractRepo = InMemoryContractRepository();
     const amendmentRepo = InMemoryAmendmentRepository();
+    const documentRepo = InMemoryDocumentRepository();
 
-    const r = loadState(path, contractRepo, amendmentRepo);
+    const r = loadState(path, contractRepo, amendmentRepo, documentRepo);
 
     assert.equal(isErr(r), true, 'loadState deve falhar com state tampered');
     if (!r.ok) {
@@ -143,7 +145,8 @@ describe('REGR #1 — loadState rejeita state tampered (smart constructor na bor
 
     const contractRepo = InMemoryContractRepository();
     const amendmentRepo = InMemoryAmendmentRepository();
-    const r = loadState(path, contractRepo, amendmentRepo);
+    const documentRepo = InMemoryDocumentRepository();
+    const r = loadState(path, contractRepo, amendmentRepo, documentRepo);
 
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'state-entity-invalid');
@@ -165,7 +168,8 @@ describe('REGR #1 — loadState rejeita state tampered (smart constructor na bor
 
     const contractRepo = InMemoryContractRepository();
     const amendmentRepo = InMemoryAmendmentRepository();
-    const r = loadState(path, contractRepo, amendmentRepo);
+    const documentRepo = InMemoryDocumentRepository();
+    const r = loadState(path, contractRepo, amendmentRepo, documentRepo);
 
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'state-entity-invalid');
@@ -437,14 +441,13 @@ describe('REGR #6 — ordem de --driver vs subcomando', () => {
 
 describe('REGR #7 — createAmendment rejeita Suppression que excede currentValue', () => {
   it('Suppression com impactValueCents > contract.currentValue.cents falha na CRIAÇÃO', async () => {
-    const contractRepo = InMemoryContractRepository();
-    const amendmentRepo = InMemoryAmendmentRepository();
-    const eventBus = InMemoryEventBus();
+    const outbox = InMemoryOutbox();
+    const contractRepo = InMemoryContractRepository(outbox.port);
+    const amendmentRepo = InMemoryAmendmentRepository(outbox.port);
     const clock = ClockFixed(new Date('2026-03-01'));
 
     const created = await createContract({
       contractRepo: contractRepo.repo,
-      eventBus: eventBus.bus,
       clock,
     })({
       sequentialNumber: '001/2026',
@@ -455,14 +458,14 @@ describe('REGR #7 — createAmendment rejeita Suppression que excede currentValu
       originalPeriodStart: '2026-01-01',
       originalPeriodEnd: '2026-12-31',
     });
-    if (!created.ok) throw new Error(`fixture broken: ${created.error}`);
+    if (!created.ok) throw new Error(`fixture broken: ${JSON.stringify(created.error)}`);
 
-    eventBus.clear();
+    // Limpa o outbox após setup do contrato (isola eventos do teste)
+    outbox.clear();
 
     const r = await createAmendment({
       contractRepo: contractRepo.repo,
       amendmentRepo: amendmentRepo.repo,
-      eventBus: eventBus.bus,
       clock,
     })({
       contractId: created.value.contract.id as unknown as string,
@@ -487,9 +490,9 @@ describe('REGR #7 — createAmendment rejeita Suppression que excede currentValu
       'nenhum aditivo deve ser persistido quando excede valor',
     );
     assert.equal(
-      eventBus.published().length,
+      outbox.all().length,
       0,
-      'nenhum evento AmendmentCreated deve ser publicado',
+      'nenhum evento AmendmentCreated deve ser publicado no outbox',
     );
   });
 });

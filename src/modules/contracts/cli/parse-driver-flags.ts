@@ -1,4 +1,4 @@
-import { type Result, ok, err } from '../../../shared/result.ts';
+import { type Result, ok, err } from '../../../shared/primitives/result.ts';
 
 // ADR-0020: drivers vivos são `memory` e `mysql`.
 // `memory` recebe `--state <path>` ou `--no-state`.

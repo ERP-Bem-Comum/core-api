@@ -1,4 +1,4 @@
-import type { Money } from '../../domain/shared/money.ts';
+import type { Money } from '#src/shared/kernel/money.ts';
 
 // Defeito #10: Intl.NumberFormat é robusto contra magnitudes grandes
 // (não cospe `1e+23` nem perde precisão de milhares).

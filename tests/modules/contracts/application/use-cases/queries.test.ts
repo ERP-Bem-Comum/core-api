@@ -3,20 +3,19 @@ import { strict as assert } from 'node:assert';
 
 import { isErr, isOk } from '#src/shared/index.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
-import { InMemoryContractRepository } from '#src/modules/contracts/adapters/contract-repository.in-memory.ts';
-import { InMemoryEventBus } from '#src/modules/contracts/adapters/event-bus.in-memory.ts';
+import { InMemoryContractRepository } from '#src/modules/contracts/adapters/persistence/repos/contract-repository.in-memory.ts';
+import { InMemoryOutbox } from '#src/modules/contracts/adapters/outbox/outbox.in-memory.ts';
 import { createContract } from '#src/modules/contracts/application/use-cases/create-contract.ts';
 import { listContracts } from '#src/modules/contracts/application/use-cases/list-contracts.ts';
 import { getContract } from '#src/modules/contracts/application/use-cases/get-contract.ts';
-import { ContractId } from '#src/modules/contracts/domain/shared/ids.ts';
+import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
 
 const setupWithContracts = async (n: number) => {
-  const contractRepo = InMemoryContractRepository();
-  const eventBus = InMemoryEventBus();
+  const outbox = InMemoryOutbox();
+  const contractRepo = InMemoryContractRepository(outbox.port);
   const clock = ClockFixed(new Date('2026-01-01'));
   const create = createContract({
     contractRepo: contractRepo.repo,
-    eventBus: eventBus.bus,
     clock,
   });
 
@@ -31,7 +30,7 @@ const setupWithContracts = async (n: number) => {
       originalPeriodStart: '2026-01-01',
       originalPeriodEnd: '2026-12-31',
     });
-    if (!r.ok) throw new Error(`fixture broken: ${r.error}`);
+    if (!r.ok) throw new Error(`fixture broken: ${JSON.stringify(r.error)}`);
     created.push(r.value.contract);
   }
 

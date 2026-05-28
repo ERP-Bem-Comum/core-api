@@ -1,7 +1,5 @@
-import type { Result } from '../../../../shared/result.ts';
-import type { BucketName } from '../../domain/shared/bucket-name.ts';
-import type { StorageKey } from '../../domain/shared/storage-key.ts';
-import type { StorageRef } from '../../domain/shared/storage-ref.ts';
+import type { Result } from '../../../../shared/primitives/result.ts';
+import type { BucketName, StorageKey, StorageRef } from './document-storage.types.ts';
 
 // Port do storage de documentos contratuais. Tipo puro (sem `class`, sem `this`).
 // Adapters concretos (InMemory, S3-compatible) implementam este contrato em

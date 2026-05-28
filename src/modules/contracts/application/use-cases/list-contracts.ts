@@ -1,6 +1,9 @@
-import type { Result } from '../../../../shared/result.ts';
+import type { Result } from '../../../../shared/primitives/result.ts';
 import type { Contract } from '../../domain/contract/types.ts';
-import type { ContractRepository, ContractRepositoryError } from '../ports/contract-repository.ts';
+import type {
+  ContractRepository,
+  ContractRepositoryError,
+} from '../../domain/contract/repository.ts';
 
 type Deps = Readonly<{ contractRepo: ContractRepository }>;
 

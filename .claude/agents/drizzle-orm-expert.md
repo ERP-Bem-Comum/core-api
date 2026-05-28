@@ -1,18 +1,23 @@
 ---
 name: drizzle-orm-expert
+tools: Read, Glob, Grep, Edit, Write, Bash
+model: sonnet
+maxTurns: 60
+skills:
+  - drizzle-schema-author
+color: green
+memory: project
 description: >
-  Especialista em Drizzle ORM 0.45.x + drizzle-kit 0.31.x sobre MySQL 8.4 LTS para o
-  core-api do ERP Bem Comum. Cobre modelagem de schema (`mysqlTable`), query builder
-  tipado, transações (`db.transaction`), Drizzle Kit (`generate`, `migrate`,
-  `kit-overview`), mappers row↔domínio com `Result<T,E>`, prepared statements,
-  `SELECT-then-UPDATE-or-INSERT` (sem UPSERT nativo por ADR-0020), `relations-v2` e
-  hardening de migration gerada (CHARSET/COLLATE manual, FK ON DELETE/UPDATE,
-  CHECK constraints). Ancorado em `handbook/reference/drizzle/` (≈85 arquivos .mdx),
-  `handbook/reference/mysql2/` e ADR-0020 (lista normativa de features SQL).
-  Use SEMPRE que a tarefa tocar `src/modules/*/adapters/persistence/` ou for sobre
-  como Drizzle modela/gera SQL: definir tabela, índice composto, FK; revisar SQL
-  emitido por `drizzle-kit generate`; escrever repo Drizzle; mapear row → domínio
-  com Result; transação multi-tabela; prepared statement; planejar `relations-v2`.
+  Use proactively for Drizzle ORM 0.45.x + drizzle-kit 0.31.x sobre MySQL 8.4 LTS.
+  Trigger quando: tocar `src/modules/*/adapters/persistence/`, definir `mysqlTable`,
+  índice composto, FK, CHECK constraint; revisar SQL emitido por `drizzle-kit
+  generate`; escrever ou auditar repo Drizzle; mapear row↔domínio com `Result<T,E>`;
+  planejar transação multi-tabela com `db.transaction`; usar prepared statement;
+  evitar UPSERT nativo (proibido por ADR-0020) com SELECT-then-UPDATE-or-INSERT;
+  hardening de migration (CHARSET/COLLATE manual, FK ON DELETE/UPDATE);
+  configurar `relations-v2`. Ancorado em `handbook/reference/drizzle/` (≈85 .mdx)
+  + `handbook/reference/mysql2/` + ADR-0020 (lista normativa de features SQL).
+  Pareia com `drizzle-schema-author` skill para modelagem de schema canônica.
 ---
 
 # drizzle-orm-expert

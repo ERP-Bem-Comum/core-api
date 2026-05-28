@@ -1,11 +1,12 @@
-import type { Result } from '../../../shared/result.ts';
+import type { Result } from '../../../shared/primitives/result.ts';
 import type { Clock } from '../../../shared/ports/clock.ts';
-import type { ContractRepository } from '../application/ports/contract-repository.ts';
-import type { AmendmentRepository } from '../application/ports/amendment-repository.ts';
-import type { EventBus } from '../application/ports/event-bus.ts';
+import type { ContractRepository } from '../domain/contract/repository.ts';
+import type { AmendmentRepository } from '../domain/amendment/repository.ts';
+import type { DocumentRepository } from '../domain/document/repository.ts';
 import type { MysqlDriverError } from '../adapters/persistence/drivers/mysql-driver.ts';
+import type { OutboxPort, WorkerOutboxOps } from '../application/ports/outbox.ts';
 
-import type { DriverFlags } from './parse-driver-flags.ts';
+import type { DriverFlags, DriverKind } from './parse-driver-flags.ts';
 import type { StateError } from './state.ts';
 
 import { buildMemoryContext } from './drivers/memory.ts';
@@ -18,14 +19,27 @@ import { buildMysqlContext } from './drivers/mysql.ts';
 //  - mysql: persist é no-op (DB grava a cada save); shutdown fecha o pool.
 //
 // ADR-0020 (CTR-CLEANUP-SQLITE #5): SQLite foi removido como driver.
+// CA-6 (CTR-OUTBOX-INTEGRATION-IN-REPOS): eventBus removido do CliContext —
+// use cases não expõem mais EventBus; eventos fluem via outbox embutido nos repos.
+//
+// CA-9 (CTR-OUTBOX-CLI-WORKER): CliContext expandido para incluir:
+//   - `driver`: kind do driver ativo ('memory' | 'mysql') — permite que subcomandos
+//     rejeitem drivers incompatíveis (ex.: run-outbox-worker requer 'mysql').
+//   - `outbox`: OutboxPort & WorkerOutboxOps — expõe os 4 helpers do worker além
+//     do `append`. Driver memory usa InMemoryOutbox; driver mysql usa DrizzleOutboxRepo.
+//   - `outboxCleanup`: hook opcional para fechar recursos exclusivos do outbox
+//     (ex.: pool separado no driver mysql quando o worker precisar de pool próprio).
 
 export type CliContextError = StateError | MysqlDriverError;
 
 export type CliContext = Readonly<{
   contractRepo: ContractRepository;
   amendmentRepo: AmendmentRepository;
-  eventBus: EventBus;
+  documentRepo: DocumentRepository;
   clock: Clock;
+  driver: DriverKind;
+  outbox: OutboxPort & WorkerOutboxOps;
+  outboxCleanup?: () => Promise<void>;
   persist: () => Promise<Result<void, StateError>>;
   shutdown: () => Promise<void>;
 }>;

@@ -1,4 +1,4 @@
-import { type Result, ok, err } from '../../../shared/result.ts';
+import { type Result, ok, err } from '../../../shared/primitives/result.ts';
 
 export type ParsedFlags = Readonly<Record<string, string>>;
 

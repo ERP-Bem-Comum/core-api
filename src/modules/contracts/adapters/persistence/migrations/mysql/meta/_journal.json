@@ -8,6 +8,48 @@
       "when": 1778855635800,
       "tag": "0000_superb_inhumans",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1779350061804,
+      "tag": "0001_motionless_wind_dancer",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1779456768303,
+      "tag": "0002_chemical_giant_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1779459854902,
+      "tag": "0003_mature_jack_murdock",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1779460483305,
+      "tag": "0004_fast_shatterstar",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1779803209935,
+      "tag": "0005_swift_havok",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1779902127453,
+      "tag": "0006_typical_alex_wilder",
+      "breakpoints": true
     }
   ]
 }

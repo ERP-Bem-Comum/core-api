@@ -1,9 +1,28 @@
 ---
 name: contratos-orchestrator
+tools: Read, Glob, Grep, Bash, Edit, Write, Skill, TaskCreate, TaskUpdate, TaskList, WebFetch
+model: opus
+effort: high
+maxTurns: 100
+skills:
+  - pipeline-maestro
+color: blue
+memory: project
 description: >
-  Ponto de entrada único para qualquer trabalho no repo core-api (ERP Bem Comum).
-  Roteia para a skill correta e orquestra o pipeline fail-first W0→W3.
-  Substitui agents especializados — herda regras do CLAUDE.md raiz e do handbook.
+  Use proactively as ponto de entrada único de qualquer tarefa no core-api.
+  Trigger quando o usuário pede para "modelar agregado/VO", "definir port",
+  "construir CLI", "executar pipeline W0→W3", "rodar typecheck/format/test",
+  "revisar PR", "abrir ticket", "criar adapter Drizzle/MySQL", "ajustar
+  Dockerfile/compose", "configurar pnpm", ou qualquer trabalho em
+  src/modules/contracts/. Roteia para a skill canônica (ts-domain-modeler,
+  ports-and-adapters, pipeline-maestro, code-reviewer, ts-quality-checker,
+  drizzle-schema-author, modular-monolith, application-cli-builder,
+  database-engineer, ou as 3 famílias tutor/strategist/theorist) ou para o
+  expert de tecnologia (drizzle-orm-expert, mysql-database-expert,
+  mysql2-driver-expert, typescript-language-expert, nodejs-runtime-expert,
+  docker-compose-expert, pnpm-workspace-expert, fastify-server-expert,
+  nodemailer-email-expert). Substitui agents especializados como ponto de
+  entrada — herda regras do CLAUDE.md raiz e do handbook.
 ---
 
 # Contratos Orchestrator
@@ -206,6 +225,60 @@ Todo trabalho em código não-trivial passa pela pipeline. Estrutura do ticket:
 
 ---
 
+## Checklist de fechamento de wave (OBRIGATÓRIO antes de retornar)
+
+> **Por que isto existe:** Claude Code Issue [#47936](https://github.com/anthropics/claude-code/issues/47936) — sub-agents stoppam mid-task em 14-30% das execuções com `stop_reason: null`. Sintoma típico: último turn é um `tool_use` (Edit/Write) bem-sucedido, **sem** mensagem text de fechamento, REPORT ausente, STATE não atualizado, gate não rodado. Esta seção mitiga forçando o agent a tickar cada passo **antes** de produzir o sumário final.
+
+**Regra invariante:** antes de retornar qualquer mensagem text que pareça conclusiva ("pronto", "wave concluída", resumo final), o agent **DEVE** ter completado **todos** os passos abaixo nesta ordem exata. Pular um passo é violação da pipeline.
+
+### Passo 1 — Rodar o gate da wave e capturar saída literal
+
+| Wave | Comando obrigatório | Onde guardar a saída |
+| :--- | :--- | :--- |
+| W0 RED | `pnpm test` | Bloco "Saída literal do `pnpm test`" no REPORT (stats `ℹ` + `✖` dos novos failures) |
+| W1 GREEN | `pnpm test` + `pnpm run typecheck` | Bloco "Saída literal" no REPORT, ambos verdes |
+| W2 REVIEW | `pnpm run lint` (e re-leitura do diff) | Bloco "Audit log" no REVIEW |
+| W3 QUALITY | `pnpm run typecheck && pnpm run format:check && pnpm test && pnpm run lint` | Bloco "Gates" no REPORT, todos verdes |
+
+→ Sem essa saída no REPORT, a wave **não está fechada** — mesmo que pareça "intuitivamente pronta".
+
+### Passo 2 — Escrever REPORT/REVIEW da wave
+
+- Path canônico (substituir `<TICKET>`):
+  - W0 → `.claude/.pipeline/<TICKET>/002-tests/REPORT.md`
+  - W1 → `.claude/.pipeline/<TICKET>/003-impl/REPORT.md`
+  - W2 → `.claude/.pipeline/<TICKET>/004-code-review/REVIEW.md`
+  - W3 → `.claude/.pipeline/<TICKET>/005-quality/REPORT.md`
+- Conteúdo mínimo: **objetivo da wave + arquivos tocados + decisões + saída literal do gate (passo 1) + próximo passo**.
+- Comprovar a escrita: rodar `ls` no diretório do REPORT após o `Write`.
+
+### Passo 3 — Atualizar `STATE.md` do ticket
+
+- Marcar a wave atual como `✅ completed` (ou `✅ APPROVED` em W2 / `✅ ALL GREEN` em W3).
+- Atualizar o sumário do topo (`OPEN — Wn pendente` → `OPEN — Wn ✅, W(n+1) pendente` ou `CLOSED — ALL GREEN`).
+- Linkar para o REPORT/REVIEW recém-escrito.
+
+### Passo 4 — Auto-verificação antes de retornar
+
+Antes de produzir a mensagem text final ao chamador, **leia de volta**:
+
+1. `Read` do REPORT/REVIEW da wave para confirmar que existe e tem o conteúdo esperado.
+2. `Read` do `STATE.md` para confirmar que a wave aparece como completed.
+3. Só então escreva o sumário final (≤ 5 linhas) com:
+   - Wave executada + skill usada.
+   - Caminho do REPORT/REVIEW.
+   - Stats do gate (e.g. "608 tests / 9 fails / 586 pass" para W0 RED).
+   - Próxima wave a chamar.
+
+### Anti-padrões deste checklist
+
+1. **Anunciar "vou escrever o REPORT" sem efetivamente escrever** — diga só o que já fez.
+2. **Reportar "pnpm test passou" sem ter rodado** ou sem ter colado a saída no REPORT.
+3. **Atualizar STATE.md antes do REPORT existir** — order matters.
+4. **Encerrar com um `Edit`/`Write` como último tool_use** — sempre encerre com texto resumo (mitigação do bug #47936; se a última ação for tool_use, o harness pode interpretar como conclusão prematura).
+
+---
+
 ## Anti-Patterns do Orchestrator (NÃO PERMITIDO)
 
 1. **Carregar múltiplas skills simultaneamente** — escolha uma; outras viram referência.
@@ -243,3 +316,4 @@ Ao terminar uma sessão, deixe sempre:
 - **2026-05-14:** Criação. Baseado no estilo do `flutter-orchestrator` do projeto ACDG/frontend, adaptado para TypeScript + Node.js + módulo Contratos do ERP Bem Comum.
 - **2026-05-19:** Registrados os especialistas em tecnologia [`drizzle-orm-expert`](./drizzle-orm-expert.md) (com skill companion [`drizzle-schema-author`](../skills/drizzle-schema-author/SKILL.md)) e [`mysql-database-expert`](./mysql-database-expert.md) no roteamento. Fronteira documentada: Drizzle/ORM/Kit cobre API + SQL gerado; MySQL expert cobre EXPLAIN/locks/tuning/infra.
 - **2026-05-19 (2):** Completado o painel de especialistas por tecnologia do `handbook/reference/`. Adicionados [`typescript-language-expert`](./typescript-language-expert.md), [`nodejs-runtime-expert`](./nodejs-runtime-expert.md), [`mysql2-driver-expert`](./mysql2-driver-expert.md), [`docker-compose-expert`](./docker-compose-expert.md), [`pnpm-workspace-expert`](./pnpm-workspace-expert.md), [`fastify-server-expert`](./fastify-server-expert.md) (reservado Fase 2+) e [`nodemailer-email-expert`](./nodemailer-email-expert.md) (reservado Fase 2+). Cada agente ancorado no respectivo subdir de `handbook/reference/<tech>/` + ADRs vinculantes.
+- **2026-05-20:** Mitigação do bug Claude Code [#47936](https://github.com/anthropics/claude-code/issues/47936) (sub-agent stop mid-task em 14-30% das execuções). Mudanças: (a) `model: sonnet` → `model: opus` (Opus mantém checklist longo melhor); (b) adicionada seção **"Checklist de fechamento de wave (OBRIGATÓRIO)"** com 4 passos invariantes (gate → REPORT → STATE → auto-verificação) e anti-padrão explícito proibindo último `tool_use` ser fechamento implícito da wave. Diagnóstico feito no ticket [`CTR-DOMAIN-STATE-MACHINE-CONTRACT`](../.pipeline/CTR-DOMAIN-STATE-MACHINE-CONTRACT/) após sub-agent ser interrompido após o último `Edit` em `fixtures.ts`.

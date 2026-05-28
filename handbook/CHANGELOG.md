@@ -4,6 +4,274 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-05-28 — 🛡️ Especialistas de segurança web (backend + frontend) — agentes + skills
+
+### Tooling (.claude/)
+
+- **2 agentes + 2 skills** de segurança web JS/TS, mirados no **stack real do projeto** (não genéricos):
+  - **Backend:** `security-backend-expert` (agente) + `web-security-backend` (skill) — Node.js 24 · TS 6 · Fastify 5 · pnpm/supply-chain · Magalu Cloud (S3-compat). Ancorado em `handbook/reference/{nodejs,typescript,fastify,pnpm,magalu-cloud}` + ADRs 0005/0025 (TLS no BFF), 0011/0012, 0024, 0019/0021, 0020/0027.
+  - **Frontend:** `security-frontend-expert` (agente) + `web-security-frontend` (skill) — TanStack Start (React) + TS. Ancorado na doc oficial do TanStack Start (server functions = RPC, CSRF, env inlining) + reference React do openai/skills.
+- **Base:** openai/skills `.curated/{security-best-practices, security-threat-model, security-ownership-map}` (adaptados, não copiados) + `handbook/reference/skills-base/security/owasp-ai-exchange.md`.
+- Cada skill tem `references/*.md` normativas (MUST/SHOULD + regras de auditoria `BE-NNN`/`FE-NNN`/`SC-NNN`/`CL-NNN`) e roda em 3 modos (generation / passive review / active audit). Distintos da skill `security-reviewer` (OWASP-AI/LLM). Registrados nas tabelas de roteamento do `CLAUDE.md`.
+- **Postura ajustada aos ADRs:** TLS termina no BFF (ADR-0005/0025) ⇒ não reportar "falta de HTTPS" no core-api; secret nunca no browser (ADR-0005); IDs opacos UUID; Zod só na borda (ADR-0027).
+
+---
+
+## 2026-05-28 — 🧭 ADR-0028 (localização do shell HTTP + verticalidade por feature)
+
+### Decisão
+
+- **[ADR-0028](./architecture/adr/0028-http-edge-shell-location.md)** — fixa onde vive a borda HTTP do core-api: **shell transversal** (`buildApp`, error envelope, `sendResult`, config) em `src/shared/http/`; **composition root** (entrypoint + `listen` + graceful shutdown) em `src/server.ts` (raiz); **HTTP de cada feature** (plugin, rotas, schemas Zod) em `src/modules/<m>/adapters/http/`, exposto via `<m>/public-api/http.ts`. **Cumpre** o ADR-0006:53-63 (`shared/` + `server.ts`) e o ADR-0025:37 (composition root único) — não superseda nenhum. Motivação: o H0 entregou o shell em `src/http/` (topo), que aparentava "camada HTTP horizontal" em tensão com a organização vertical-por-feature (Modular Monolith).
+
+### Consequência operacional
+
+- Ticket de refactor `CORE-HTTP-SHELL-RELOCATE` move `src/http/` → `src/shared/http/` + `src/server.ts`, reescreve imports `#src/http/*` → `#src/shared/http/*`, move `tests/http/` → `tests/shared/http/` e estende o glob ESLint para `src/shared/http/**` + `src/modules/*/adapters/http/**`. Sem mudança de comportamento (testes do H0 cobrem). `EPIC-HTTP-CORE-API.md` atualizado com os novos paths.
+
+---
+
+## 2026-05-27 — 📐 ADR-0027 (Zod contract-first) + planejamento do épico HTTP (spec-driven)
+
+### Decisão
+
+- **[ADR-0027](./architecture/adr/0027-zod-openapi-contract-first-http-edge.md)** — Zod v4 + `zod-openapi` + `fastify-zod-openapi` como **contract-first da borda HTTP**: um schema Zod por rota valida I/O e **gera o OpenAPI 3.1.1**. Invariante: Zod só em `adapters/http/`; smart constructors mantêm a regra de negócio (ADR-0006/0025:30). O `openapi.yaml` legado (3.0.3) deixa de ser contrato vivo e vira ACL/referência de migração.
+
+### Planejamento (sem código de produção)
+
+- **Método spec-driven nativo** adotado — **sem** instalar o spec-kit oficial (conflito com ADR-0011 supply-chain + ADR-0012 Node/pnpm puro; exigiria Python/uv e duplicaria o W0→W3). Template `.claude/templates/spec.md` + runbook `.claude/runbooks/spec-driven-pipeline.md`; artefato `001-spec/SPEC.md` como gate pré-W0.
+- **Épico `EPIC-HTTP-CORE-API`** especificado (`.claude/.planning/EPIC-HTTP-CORE-API.md`): borda HTTP de auth (primeiro) + contracts; TLS termina no BFF (ADR-0005); fatiado em H0 (bootstrap Fastify) → H1/H2 (rotas+authz auth) → I1 (RW split, ADR-0026), contracts em spec-filha. Recursos (agente·skill·docs) mapeados por etapa. Aguarda aprovação para abrir o H0.
+- **Tickets fechados** `closed-green`: `AUTH-DB-REPO-SESSION` (W2/W3 reconciliados) e `AUTH-TEST-INTEGRATION-SCRIPT` (runner `pnpm run test:integration:auth` — fecha o gap de integração auth fora do gate padrão).
+
+---
+
+## 2026-05-27 — ✅ CHECKPOINT: módulo `auth` — domínio + repos + login híbrido (14 tickets, todos ALL-GREEN)
+
+### Resumo da sessão
+
+Sessão longa que partiu da análise do `api_documentations/doc.yaml` (contrato REST do legado NestJS),
+desenhou o **módulo de autenticação** do core-api do zero e o levou até o **login funcional com sessão
+híbrida**. **14 tickets** `auth` fechados (todos `closed-green`, **W2 round 1 — zero rejeições**), +3 ADRs
+aceitos, 2 dependências auditadas, **21 commits**. Suíte: **1370 testes** (1354 pass / 0 fail / 16 skip),
+partindo de ~1266 no início da sessão (**+104 testes**). `src/modules/auth`: **31** arquivos; testes: **28**.
+
+### ADRs aceitos (0024–0026)
+
+- **[ADR-0024](./architecture/adr/0024-identity-and-rbac-auth-module.md)** — Identidade & RBAC (módulo `auth`): identidade própria OIDC-ready, sessão híbrida (JWT curto + refresh stateful), permissions granulares. Cumpre o pré-requisito de identidade do [ADR-0022](./architecture/adr/0022-read-models-via-projection-over-event-stream.md).
+- **[ADR-0025](./architecture/adr/0025-http-server-fastify-core-api.md)** — Servidor HTTP no core-api com Fastify (adapter de borda; BFF segue burro, ADR-0005 não superseded). **Reservado→ativável.**
+- **[ADR-0026](./architecture/adr/0026-mysql-read-write-split-connection.md)** — Read/Write split de conexão (writer/reader, Master-Slave ready), transversal.
+
+### Entregue (código — 14 tickets `closed-green`)
+
+| Fase | Tickets |
+| :-- | :-- |
+| **D — domínio** | `AUTH-VO-EMAIL`, `AUTH-VO-PERMISSION`, `AUTH-VO-PASSWORD` (Password+PasswordHash), `AUTH-AGG-ROLE`, `AUTH-AGG-USER` (+`authorize`), `AUTH-AGG-SESSION` (RefreshToken) |
+| **A — repos** | `AUTH-REPO-USER` (write/read split), `AUTH-REPO-ROLE`, `AUTH-REPO-SESSION` — port no domínio + contract-suite + InMemory |
+| **A — use cases** | `AUTH-USECASE-REGISTER-USER`, `AUTH-USECASE-AUTHENTICATE` (access), `AUTH-USECASE-AUTHENTICATE-REFRESH` (refresh) |
+| **X — cripto/token** | `AUTH-ADAPTER-ARGON2-HASHER` (argon2id), `AUTH-ADAPTER-JWT-ISSUER` (ES256), `RefreshTokenMinter` |
+
+**Fluxo funcional:** `registerUser` (argon2id, sem persistir senha em claro) + `authenticateUser`
+(credencial → access JWT ES256 + refresh opaco persistido). Tudo com adapter `InMemory`/fake; MySQL e
+HTTP em fases futuras.
+
+### Dependências adicionadas (auditadas)
+
+- **`hash-wasm@4.12.0`** (argon2id, WASM puro, zero dep nativa). **Auditado o issue [#69](https://github.com/Daninet/hash-wasm/issues/69)** (leak): afeta a API de instância, **não** a one-shot `argon2id()` — probe de 60 hashes confirmou RSS estável.
+- **`jose@6.2.3`** (JWT ES256, zero dep, Web Crypto). Recusados: impl própria de cripto, HS256, `@node-rs/argon2` (binário nativo), `jsonwebtoken`.
+
+### Decisões de design (log vivo)
+
+[`domain/auth/design-decisions.md`](./domain/auth/design-decisions.md) — **mutável, consultar/criticar antes de cada ticket `auth`**. 14 decisões: `DD-USER-01..05`, `DD-SESSION-01..03`, `DD-PORTS-01`, `DD-CRYPTO-01`, `DD-TOKEN-01`, `DD-LOGIN-01..02`. Destaques: `User` como state machine refinada (`ActiveUser|DisabledUser`); `authorize` fail-closed fora do agregado; `RefreshToken` com estado **computado** (`state(token,now)`); argon2id via hash-wasm; access JWT ES256 (core assina/BFF valida); login anti-enumeration.
+
+### Notas propagadas (fases futuras — em `design-decisions.md`)
+
+- **EventBus/outbox do auth:** use cases retornam o evento mas não publicam (destrava AuditLog do ADR-0022 quando o transporte existir).
+- **Fase P (MySQL):** `auth_user.email` UNIQUE INDEX; `rehydrate(row)` dispatcher por `status`.
+- **Sessão (A6/A7):** `disable`/`changePassword` devem invalidar sessões; lockout fora do `User`.
+- **Hardening HTTP:** timing-oracle no login (hash dummy quando user não existe).
+
+### Pendente (próximos)
+
+- **A6** `refreshAccessToken` (rotação), **A7** `revokeSession`, **A8** `changePassword`, **A9** `assignRole`.
+- **Fase P** (schema/repos Drizzle MySQL `auth_*`), **Fase H** (borda Fastify — ativa ADR-0025), **I1** (RW split pools).
+
+### Métricas
+
+`pnpm run pipeline:metrics --write` → [`.claude/.pipeline/_METRICS.md`](../.claude/.pipeline/_METRICS.md). Os 14 tickets `auth` fecharam em **W2 round 1** (zero rejeições de review).
+
+---
+
+## 2026-05-27 — Módulo `auth`: ADRs aceitos + Fase D entregue + log vivo de decisões de design
+
+### Contexto
+
+Sequência da decisão de criar o módulo de autenticação. Os ADRs 0024/0025/0026 foram **aceitos** (de
+`Proposed`), a Fase D (VOs + 1º agregado) entrou via pipeline W0→W3, e as decisões de design de domínio
+passaram a ser registradas num **log vivo** (a pedido: "para sempre consultadas, criticadas e melhoradas").
+
+### Adicionado
+
+- **[`domain/auth/design-decisions.md`](./domain/auth/design-decisions.md)** — log **vivo** (mutável, ≠ ADR)
+  de decisões de design do módulo `auth`. Inaugurado com `DD-USER-01..05` (agregado `User`), destiladas de
+  um **painel de 6 skills** (ts-domain-modeler, ports-and-adapters, clean-code-reviewer, tdd-strategist,
+  requirements-engineer, security-reviewer). Registra votos, objeções da minoria e gatilho de revisão por decisão.
+
+### Entregue (código — tickets closed-green, Fase D do módulo `auth`)
+
+- `AUTH-VO-EMAIL`, `AUTH-VO-PERMISSION`, `AUTH-VO-PASSWORD` (Password + PasswordHash), `AUTH-AGG-ROLE`.
+  Domínio puro; hashing fica no port `PasswordHasher` (X1). **D5 `AUTH-AGG-USER`** em andamento.
+
+### Atualizado
+
+- ADRs **0024/0025/0026** `Proposed → Accepted` (índice de ADRs atualizado). A entrada abaixo descreve o conteúdo dos três.
+
+---
+
+## 2026-05-27 — Série de ADRs do módulo `auth` + HTTP + read/write split (ADR-0024/0025/0026)
+
+### Contexto
+
+Discussão de design para um **módulo de autenticação**. A análise da `api_documentations/doc.yaml` (contrato REST do
+legado NestJS) e a decisão da liderança técnica — **HTTP entra, CLI sai para este módulo, MySQL com isolamento que
+permita Master-Slave ao escalar, sob infra reduzida** — geraram três decisões encadeadas. O [ADR-0022](./architecture/adr/0022-read-models-via-projection-over-event-stream.md)
+já registrava identidade/RBAC como pré-requisito disparado (`:44`, `:72`), de modo que o ADR-0024 cumpre uma
+pendência pré-existente, não uma invenção nova.
+
+### Adicionado (ADRs — `Status: Proposed`, aguardam aprovação)
+
+- **[ADR-0024](./architecture/adr/0024-identity-and-rbac-auth-module.md)** — Identidade & RBAC, módulo `auth`.
+  Identidade **própria OIDC-ready** (port `Authenticator` abstrai a fonte; `password_hash` nullable); **sessão híbrida**
+  (access token JWT curto validado stateless pelo BFF + refresh token stateful rotacionável/revogável em `auth_refresh_token`);
+  **permissions granulares** (`Permission` branded `resource:action`, authorization service puro). core-api emite,
+  BFF valida (ADR-0005). Destrava o AuditLog diferido no ADR-0022. Tabelas `auth_*` no database `core` (ADR-0014/0020).
+- **[ADR-0025](./architecture/adr/0025-http-server-fastify-core-api.md)** — Servidor HTTP no core-api com **Fastify**
+  como adapter de borda (ativa o agente `fastify-server-expert`). Domínio/application permanecem sem framework (ADR-0006);
+  o BFF continua burro (ADR-0005 **não** superseded). Desbloqueia auth (0024) e exposição HTTP de Contratos (origem no ADR-0023).
+- **[ADR-0026](./architecture/adr/0026-mysql-read-write-split-connection.md)** — Read/Write split de conexão MySQL
+  (pools `writer`/`reader`, **Master-Slave ready**), **transversal** ao core-api. Single node hoje (ambos os pools no mesmo
+  host); réplica vira só configuração. Read-after-write crítico lê do primário. Preserva a regra de ouro do ADR-0014
+  (um único escritor). Nota honesta: o ganho do split vem de `contracts`/`fin` e read-models (ADR-0022), não do `auth`
+  (write-heavy).
+
+### Atualizado
+
+- [`architecture/adr/README.md`](./architecture/adr/README.md) — índice com as 3 entradas (Proposed).
+
+### Pendente
+
+- Aprovação dos 3 ADRs (mover `Proposed → Accepted`).
+- Após aprovação: revisão de domínio do módulo `auth` (handbook) + série de tickets W0→W3 (VOs `Email`/`Permission` →
+  agregado `User` → `authenticate` → adapters → borda Fastify). Estender ADR-0014 documentando o prefixo `auth_*`.
+
+---
+
+## 2026-05-27 — Ciclo de vida do Contrato revisado: estado `Pendente` (ADR-0023)
+
+### Contexto
+
+Ao planejar a exposição HTTP do módulo Contratos (ACL sobre o `openapi.yaml` legado), a divergência
+de status entre domínio (3 estados) e legado (5) foi levada à P.O. via
+[Inquiry-0021](./inquiries/0021-contract-status-lifecycle-http.md).
+
+### Decisão — ADR-0023 (decide Inquiry-0021)
+
+A P.O. confirmou que **`Pendente` é regra real**: o contrato é cadastrado antes da assinatura, sem
+efetividade (não inicia vigência, não aceita aditivos), e é **ativado** ao subir o documento
+assinado + data. → **[ADR-0023](./architecture/adr/0023-contract-lifecycle-pending-state.md)** (Accepted):
+ciclo de vida passa de 3 para **4 estados** (`Pendente → Em Andamento → Finalizado / Distrato`).
+
+- Agregado `Contract` ganha o estado refinado `PendingContract` + transição `activate` (espelha
+  `Amendment`: `Pending → PendingWithDocument → Homologated`).
+- Nomenclatura: código EN (`Pending | Active | Expired | Terminated`); UI/ACL em PT
+  (`Pendente | Em Andamento | Finalizado | Distrato`).
+- **HTTP fica bloqueado** até a revisão de domínio entrar (handbook `gestao-contratos.md` + série de
+  tickets `ts-domain-modeler`).
+
+### Pendente
+
+- Atualizar `gestao-contratos.md` (máquina de estados 4 nós, RN-CV-01/02, evento `ContractActivated`).
+- Série de tickets de domínio (estado `PendingContract`, `create` dual, `activate`, persistência, CLI).
+
+---
+
+## 2026-05-26 — Acabamento de Contracts (parte 2): UC-11 import, Timeline e ADR-0022
+
+### Contexto
+
+Continuação da sessão de fechamento de gaps (parte 1 em 2026-05-25). Executados os gaps que
+estavam no backlog + decisão arquitetural dos itens que dependiam de investigação. Tudo via
+pipeline W0→W3 e commitado/pushed na branch `wip/checkpoint-2026-05-25`.
+
+### Decisão arquitetural — ADR-0022 (decide inquiries 0017 + 0018)
+
+[Inquiry-0017](./inquiries/0017-timeline-read-model-vs-adr-0020.md) (Timeline) e
+[Inquiry-0018](./inquiries/0018-auditlog-transversal-todos-bcs.md) (AuditLog) decididas em
+conjunto → **[ADR-0022](./architecture/adr/0022-read-models-via-projection-over-event-stream.md)** (Accepted).
+
+Achado decisivo: o `ctr_outbox` **retém** entradas após entrega (`markProcessed`, não delete) —
+já é o **log append-only** de eventos. Logo:
+
+- Outbox = log canônico; **sem event-store novo** (rejeitado por redundância).
+- **Derive-on-read do outbox rejeitado** (acopla leitura à entrega; payload VARCHAR serializado).
+- **Read-models via projeção** sobre o stream (alimentados pelo event-delivery existente), colunas decompostas (ADR-0020).
+- **Timeline:** implementada (projeção + UC-08); pass 2 (CLI + MySQL) no backlog.
+- **AuditLog:** mesmo padrão (transversal), **diferido** até identidade/RBAC (o "Quem" não é confiável sem ator autenticado).
+- Índice de ADRs e `inquiries/INDEX.md` atualizados (0017 `Decided`, 0018 `Decided (deferred)`; Decided 10→12, Open 7→5).
+
+### Adicionado (código — tickets closed-green)
+
+- **`CTR-IMPORT-LEGACY` (UC-11, núcleo)** — `especificacao-dominio.md:463-476`. Use case `importContracts`
+  (v1 só Contratos Mãe): dry-run + persistente, relatório por linha, atomicidade por linha, duplicidade
+  intra-arquivo + vs repo. **CNPJ validado e descartado** (D2) via novo `shared/kernel/cnpj.ts`.
+  Extraído `buildContract` puro de `create-contract.ts` (determinismo dry-run = persistente).
+- **`CTR-IMPORT-LEGACY-CLI` (UC-11, passada 2)** — parser CSV (subset RFC-4180, hand-rolled, **zero
+  dependência** por ADR-0011) + JSON nativo, UTF-8; comando CLI `importar-contratos --arquivo/--formato/--confirmar`
+  (dry-run por default). Relatório PT-BR.
+- **`CTR-TIMELINE-READ-MODEL` (UC-08, passada 1)** — read-model projetado (ADR-0022): `toTimelineEntry`
+  puro, port `TimelineRepository` (+ in-memory idempotente), `TimelineProjectionDelivery` como
+  `EventDelivery` (consumer `timeline`), use case `getContractTimeline`. Resolve `contractId` de eventos
+  que não o carregam via índice `amendmentId→contractId`.
+
+### Aberto / atualizado (inquiries)
+
+- **[Inquiry-0019](./inquiries/0019-hard-delete-tripwire-sem-superficie.md)** — `TentativaDeExclusaoDetectada`
+  (gap 5). Achado: não há superfície de deleção física (port só `findById`/`list`/`save`); recomendação:
+  prevenir por privilégio MySQL (`REVOKE DELETE`) em vez de detectar por evento. Não-código.
+
+### Backlog rastreado (não iniciado)
+
+- `CTR-IMPORT-LEGACY` **v2** (aditivos legados — depende de [Inquiry-0014 Q3](./inquiries/0014-schema-legado-vs-modelo-alvo.md)).
+- `CTR-TIMELINE-CLI-PERSISTENCE` (pass 2 — UC-02 + CLI `ver-timeline` + MySQL `ctr_timeline_*` + wiring no worker).
+- `FIN-ACL-CONTRACT-EVENTS` (gap 7 — módulo Financial, ADR-0014).
+- AuditLog (Inquiry-0018) — reabre com identidade/RBAC.
+
+### Estado da suíte
+
+`pnpm test`: **1162 testes / 1146 pass / 0 fail / 16 skipped** (skips = integração Docker). 7 commits pushed na sessão (parte 1 + parte 2).
+
+---
+
+## 2026-05-25 — Acabamento de Contracts (UC-07 + R4) + 2 inquiries arquiteturais
+
+### Contexto
+
+Sessão de fechamento de gaps do módulo Contracts a partir do `RELATORIO-COBERTURA-DOMINIO-2026-05-25.md`. Executados os 2 gaps prontos (domínio existente) via pipeline W0→W3; os arquiteturais viraram inquiry antes de qualquer código (regra do orquestrador).
+
+### Adicionado (código — tickets fechados closed-green)
+
+- **`CTR-USECASE-END-CONTRACT`** — UC-07 Encerramento de contrato (`03-gestao-contratos-context.md:70-74`). Use case `endContract` (Expire/Terminate) orquestrando `Contract.expire`/`terminate` + comando CLI `encerrar-contrato`. Publica `ContractEnded` via outbox.
+- **`CTR-AMENDMENT-CHRONOLOGY-R4`** — R4 cronologia do aditivo (`04-aditivos-context.md:86`). Guard em `homologateAmendment`: rejeita `amendment.createdAt < contract.signedAt` (âncora = `signedAt`, decisão do P.O.).
+
+### Aberto (inquiries — pendentes, sem código)
+
+- **[Inquiry-0017](./inquiries/0017-timeline-read-model-vs-adr-0020.md)** — Timeline (UC-02/UC-08) vs. ADR-0020 (proíbe coluna JSON). Fork: projeção dedicada vs. event-store append-only. → **decidida em 2026-05-26 (ADR-0022)**.
+- **[Inquiry-0018](./inquiries/0018-auditlog-transversal-todos-bcs.md)** — `AuditLogGenerated` transversal (`06-event-line-context.md:24`). Depende de identidade/RBAC (Fase 2+). → **decidida-diferida em 2026-05-26 (ADR-0022)**.
+- **[Inquiry-0019](./inquiries/0019-hard-delete-tripwire-sem-superficie.md)** — `TentativaDeExclusaoDetectada` (gap 5). Achado: não há superfície de deleção física no sistema (port só `findById`/`list`/`save`); melhor prevenir por privilégio MySQL que detectar por evento de domínio. Não-código.
+
+### Backlog rastreado (status nesta data)
+
+- `CTR-IMPORT-LEGACY` (gap 3 / UC-11 — feature grande) → **executado em 2026-05-26** (ver entrada acima). `FIN-ACL-CONTRACT-EVENTS` (gap 7 — módulo Financial, ADR-0014) — segue não iniciado.
+
+---
+
 ## 2026-05-19 — Entrevista 0001 (DDD Funcional) ENCERRADA
 
 ### Contexto

@@ -12,18 +12,27 @@ export const formatContract = (c: Contract): string => {
   lines.push(`  Título: ${stripControlChars(c.title)}`);
   lines.push(`  Objetivo: ${stripControlChars(c.objective)}`);
   lines.push(`  Status: ${formatStatus(c.status)}`);
-  lines.push(`  Assinado em: ${formatDate(c.signedAt)}`);
   lines.push(`  Valor original: ${formatMoney(c.originalValue)}`);
-  lines.push(`  Valor vigente: ${formatMoney(c.currentValue)}`);
   lines.push(`  Vigência original: ${formatPeriod(c.originalPeriod)}`);
+  // Pendente não tem vigência efetiva nem assinatura (ADR-0023).
+  if (c.status === 'Pending') {
+    lines.push('  (aguardando documento assinado — sem vigência efetiva)');
+    return lines.join('\n');
+  }
+  // Daqui em diante `c` é efetivo (Active | Expired | Terminated).
+  lines.push(`  Assinado em: ${formatDate(c.signedAt)}`);
+  lines.push(`  Valor vigente: ${formatMoney(c.currentValue)}`);
   lines.push(`  Vigência vigente: ${formatPeriod(c.currentPeriod)}`);
   lines.push(`  Aditivos homologados: ${c.homologatedAmendmentIds.length}`);
-  if (c.endedAt !== null) {
+  // Narrow via discriminator — só Expired/Terminated têm `endedAt`.
+  if (c.status !== 'Active') {
     lines.push(`  Encerrado em: ${formatDate(c.endedAt)}`);
   }
   return lines.join('\n');
 };
 
 export const formatContractSummary = (c: Contract): string => {
-  return `${stripControlChars(c.sequentialNumber)} [${formatStatus(c.status)}] ${formatMoney(c.currentValue)}`;
+  // Pendente não tem `currentValue` — mostra o valor original.
+  const value = c.status === 'Pending' ? c.originalValue : c.currentValue;
+  return `${stripControlChars(c.sequentialNumber)} [${formatStatus(c.status)}] ${formatMoney(value)}`;
 };

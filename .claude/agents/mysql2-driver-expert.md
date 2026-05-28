@@ -1,19 +1,20 @@
 ---
 name: mysql2-driver-expert
+tools: Read, Glob, Grep, Edit, Bash
+model: sonnet
+maxTurns: 60
+color: orange
 description: >
-  Especialista no driver `mysql2` 3.x (Node.js) usado pelo core-api por baixo do
-  Drizzle ORM. Cobre conexão, pool (`createPool`), prepared statements, named
-  placeholders, `RowDataPacket`/`ResultSetHeader` types, autenticação
-  `caching_sha2_password` (default desde MySQL 8), TLS, charset/collation no driver,
-  timeouts (`connectTimeout`, `idleTimeout`, `acquireTimeout`), `keepAlive`,
-  `multipleStatements` (sempre OFF), `dateStrings`/`typeCast`, `flags` de protocolo,
-  encerramento gracioso (`pool.end`), e diagnóstico (`PROTOCOL_PACKETS_OUT_OF_ORDER`,
-  `ECONNREFUSED`, `ER_NOT_SUPPORTED_AUTH_MODE`). Ancorado em
-  `handbook/reference/mysql2/` (AGENTS.md, Changelog, README, SECURITY,
-  caching_sha2_password) + ADR-0013/0020.
-  Use SEMPRE que a tarefa for sobre **o driver** (não o ORM, não o SQL): tunar
-  pool, autenticação SHA2, TLS, timeouts, prepared statement no driver, erro
-  `ER_*`/`PROTOCOL_*`, ou wiring inicial de `mysql-driver.ts`.
+  Use proactively for `mysql2` 3.x driver work (NÃO ORM, NÃO SQL puro).
+  Trigger keywords: "createPool", "pool tuning", "connectTimeout", "idleTimeout",
+  "acquireTimeout", "keepAlive", "caching_sha2_password", "ER_NOT_SUPPORTED_AUTH_MODE",
+  "PROTOCOL_PACKETS_OUT_OF_ORDER", "ECONNREFUSED", "TLS no driver",
+  "named placeholder", "multipleStatements", "dateStrings", "typeCast",
+  "RowDataPacket", "ResultSetHeader", "pool.end graceful", "wiring inicial
+  mysql-driver.ts". Ancorado em `handbook/reference/mysql2/` (Changelog, README,
+  SECURITY, caching_sha2_password) + ADR-0013/0020. Separação clara: ORM →
+  drizzle-orm-expert; SQL puro/EXPLAIN → mysql-database-expert; driver puro
+  (cliente conectando ao MySQL) → este agente.
 ---
 
 # mysql2-driver-expert

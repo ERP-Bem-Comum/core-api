@@ -1,21 +1,17 @@
 import type { CliContext } from '../context.ts';
 import { parseFlags, validateAllowedFlags } from '../parse-flags.ts';
 import { createContract } from '../../application/use-cases/create-contract.ts';
+import { createPendingContract } from '../../application/use-cases/create-pending-contract.ts';
 import { formatContract, formatErrorCode } from '../formatters/index.ts';
 import { formatFlagError } from './_flag-errors.ts';
 
-const REQUIRED = [
-  'numero',
-  'titulo',
-  'objetivo',
-  'assinado-em',
-  'valor-centavos',
-  'inicio',
-] as const;
+// `assinado-em` é OPCIONAL (ADR-0023): sem ela, o contrato nasce Pendente.
+const REQUIRED = ['numero', 'titulo', 'objetivo', 'valor-centavos', 'inicio'] as const;
 
-const ALLOWED = [...REQUIRED, 'fim', 'sem-fim', 'help', 'h'] as const;
+const ALLOWED = [...REQUIRED, 'assinado-em', 'fim', 'sem-fim', 'help', 'h'] as const;
+export const allowedFlags: readonly string[] = ALLOWED;
 
-export const descricao = 'Cria um novo Contrato Mãe (status Ativo).';
+export const descricao = 'Cria um Contrato Mãe (Pendente sem --assinado-em; Em Andamento com).';
 
 export const help = `Uso: criar-contrato [flags]
 
@@ -23,11 +19,12 @@ Flags obrigatórias:
   --numero <string>             Numeração sequencial do contrato (ex.: 001/2026)
   --titulo <string>             Título do contrato
   --objetivo <string>           Objetivo / descrição
-  --assinado-em <YYYY-MM-DD>    Data de assinatura
   --valor-centavos <inteiro>    Valor original em centavos (ex.: 10000000 = R$ 100.000,00)
   --inicio <YYYY-MM-DD>         Início da vigência
 
-Flag opcional:
+Flags opcionais:
+  --assinado-em <YYYY-MM-DD>    Data de assinatura. Sem ela, o contrato nasce Pendente
+                                (ativar depois com documento assinado).
   --fim <YYYY-MM-DD>            Fim da vigência (omita para vigência indefinida)`;
 
 export const run = async (ctx: CliContext, argv: readonly string[]): Promise<number> => {
@@ -56,28 +53,38 @@ export const run = async (ctx: CliContext, argv: readonly string[]): Promise<num
     return 64;
   }
 
-  const useCase = createContract({
-    contractRepo: ctx.contractRepo,
-    eventBus: ctx.eventBus,
-    clock: ctx.clock,
-  });
-
   // `--sem-fim` = vigência indefinida (sinônimo explícito de omitir --fim).
   // `--fim <date>` = vigência fixa.
   const semFimRequested = flags['sem-fim'] !== undefined;
   const fimRaw = flags['fim'];
-  const originalPeriodEnd =
-    semFimRequested || fimRaw === undefined || fimRaw === '' ? null : fimRaw;
+  const periodEnd = semFimRequested || fimRaw === undefined || fimRaw === '' ? null : fimRaw;
 
-  const r = await useCase({
-    sequentialNumber: flags['numero'] ?? '',
-    title: flags['titulo'] ?? '',
-    objective: flags['objetivo'] ?? '',
-    signedAt: flags['assinado-em'] ?? '',
-    originalValueCents: valorCentavos,
-    originalPeriodStart: flags['inicio'] ?? '',
-    originalPeriodEnd,
-  });
+  const sequentialNumber = flags['numero'] ?? '';
+  const title = flags['titulo'] ?? '';
+  const objective = flags['objetivo'] ?? '';
+  const periodStart = flags['inicio'] ?? '';
+  const signedAtRaw = flags['assinado-em'];
+
+  // ADR-0023: com `--assinado-em` nasce Ativo; sem ela, Pendente.
+  const r =
+    signedAtRaw !== undefined && signedAtRaw !== ''
+      ? await createContract({ contractRepo: ctx.contractRepo, clock: ctx.clock })({
+          sequentialNumber,
+          title,
+          objective,
+          signedAt: signedAtRaw,
+          originalValueCents: valorCentavos,
+          originalPeriodStart: periodStart,
+          originalPeriodEnd: periodEnd,
+        })
+      : await createPendingContract({ contractRepo: ctx.contractRepo, clock: ctx.clock })({
+          sequentialNumber,
+          title,
+          objective,
+          originalValueCents: valorCentavos,
+          periodStart,
+          periodEnd,
+        });
 
   if (!r.ok) {
     process.stderr.write(`❌ ${formatErrorCode(r.error)}\n`);

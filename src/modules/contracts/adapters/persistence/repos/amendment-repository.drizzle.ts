@@ -1,14 +1,17 @@
 import { eq } from 'drizzle-orm';
 
-import { type Result, ok, err } from '../../../../../shared/result.ts';
+import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
 import type {
   AmendmentRepository,
   AmendmentRepositoryError,
-} from '../../../application/ports/amendment-repository.ts';
+} from '../../../domain/amendment/repository.ts';
 import type { Amendment } from '../../../domain/amendment/types.ts';
 import type { AmendmentId } from '../../../domain/shared/ids.ts';
+import type { ContractsModuleEvent } from '../../../application/ports/event-bus.ts';
 import type { MysqlHandle } from '../drivers/mysql-driver.ts';
 import { amendmentFromRow, amendmentToInsert } from '../mappers/amendment.mapper.ts';
+import { appendOutboxInTx } from './outbox-repository.drizzle.ts';
+import process from 'node:process';
 
 // W2 NOTE 1: erro original registrado via stderr antes de ser substituído
 // pelo código do port (que só conhece `amendment-repo-unavailable`).
@@ -41,11 +44,12 @@ export const createDrizzleAmendmentRepository = (
         const row = rows[0];
         if (row === undefined) return null;
         const r = amendmentFromRow(row);
-        if (!r.ok) throw new Error(r.error);
+        if (!r.ok) throw new Error(r.error.tag);
         return r.value as Amendment | null;
       }),
 
-    save: async (amendment: Amendment) =>
+    // CA-3: save(amendment, events) abre UMA transação que persiste state + outbox atomicamente.
+    save: async (amendment: Amendment, events: readonly ContractsModuleEvent[]) =>
       safe('save', async () => {
         const row = amendmentToInsert(amendment);
         // Upsert estrito por PK (`id`). Mesma motivação do `contract-repository.drizzle.ts`:
@@ -68,6 +72,8 @@ export const createDrizzleAmendmentRepository = (
           } else {
             await tx.insert(schema.amendments).values(row);
           }
+          // CA-3: outbox appended atomically within the same transaction.
+          await appendOutboxInTx(tx, schema, events);
         });
       }),
   };

@@ -18,6 +18,7 @@ const ALLOWED = [
   'help',
   'h',
 ] as const;
+export const allowedFlags: readonly string[] = ALLOWED;
 
 export const descricao = 'Cria um Aditivo Pendente vinculado a um contrato.';
 
@@ -105,7 +106,6 @@ export const run = async (ctx: CliContext, argv: readonly string[]): Promise<num
   const useCase = createAmendment({
     contractRepo: ctx.contractRepo,
     amendmentRepo: ctx.amendmentRepo,
-    eventBus: ctx.eventBus,
     clock: ctx.clock,
   });
 

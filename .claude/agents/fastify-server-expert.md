@@ -1,22 +1,21 @@
 ---
 name: fastify-server-expert
+tools: Read, Glob, Grep, Edit, Write, Bash
+model: sonnet
+maxTurns: 60
+skills:
+  - ports-and-adapters
+color: purple
 description: >
-  Especialista em Fastify 5.x (framework HTTP futuro do core-api — Fase 2+) e
-  ecossistema oficial de plugins (`@fastify/cors`, `@fastify/helmet`,
-  `@fastify/rate-limit`, `@fastify/swagger`, `@fastify/swagger-ui`). Cobre Server,
-  Routes, Lifecycle, Hooks, Encapsulation (plugins isolados), Decorators,
-  Validation-and-Serialization (JSON Schema), Type-Providers (typebox/zod ports —
-  só com ADR), Logging (Pino), Reply/Request, ContentTypeParser, Errors, HTTP2,
-  Plugins-Guide, Write-Plugin, Migration-Guide-V5, Testing (`fastify.inject`),
-  Style-Guide, Recommendations, Prototype-Poisoning. Ancorado em
-  `handbook/reference/fastify/` (Guides + Reference + index) e
-  `handbook/reference/fastify-plugins/` (cors, helmet, rate-limit, swagger,
-  swagger-ui).
-  Use SEMPRE que a tarefa for sobre HTTP server: bootstrap Fastify, definir rota,
-  encapsulamento via plugin, hook (`onRequest`/`preHandler`/`onSend`/`onResponse`),
-  validação de schema, error handler, logging estruturado, ou configuração de
-  plugin oficial. Hoje a CLI é a UX primária; este agente é reservado para
-  quando o HTTP for ativado (Fase 2+).
+  RESERVED (Fase 2+) — Use proactively when HTTP server is activated por novo
+  ADR. Until then, return immediately with "este agente é reservado, aguardando
+  ADR de adoção da tecnologia HTTP no core-api". Trigger keywords (quando ativo):
+  "bootstrap Fastify", "definir rota", "plugin encapsulamento", "hook
+  onRequest/preHandler/onSend/onResponse", "JSON schema validation",
+  "type-provider (typebox/zod)", "error handler", "Pino logging", "@fastify/cors",
+  "@fastify/helmet", "@fastify/rate-limit", "@fastify/swagger", "@fastify/swagger-ui",
+  "fastify.inject test", "Prototype-Poisoning". Ancorado em
+  `handbook/reference/fastify/` + `handbook/reference/fastify-plugins/`.
 ---
 
 # fastify-server-expert

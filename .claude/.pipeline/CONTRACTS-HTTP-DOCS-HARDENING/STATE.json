@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "CONTRACTS-HTTP-DOCS-HARDENING",
+  "size": "S",
+  "createdAt": "2026-05-28T19:54:03.872Z",
+  "closedAt": "2026-05-28T20:11:22.326Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-05-28T19:54:42.450Z",
+      "finishedAt": "2026-05-28T19:55:40.420Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "fastify-server-expert",
+      "startedAt": "2026-05-28T19:55:40.801Z",
+      "finishedAt": "2026-05-28T20:08:25.027Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-05-28T20:08:25.327Z",
+      "finishedAt": "2026-05-28T20:09:36.202Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-05-28T20:09:36.502Z",
+      "finishedAt": "2026-05-28T20:11:22.010Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

@@ -2,9 +2,15 @@
 
 # ADR-0007: Topologia Multi-Cloud (AWS legado + GCP novo)
 
-- **Status:** Proposed
+- **Status:** Superseded by [ADR-0021](./0021-aws-primary-magalu-pbe-supersedes-0007.md) (2026-05-22)
 - **Date:** 2026-04-28
 - **Deciders:** Arquiteto técnico (a confirmar com Codebit)
+
+> ⚠️ **Superseded by [ADR-0021](./0021-aws-primary-magalu-pbe-supersedes-0007.md)** em 2026-05-22.
+>
+> A inferência "AWS legado + GCP novo" deste ADR não se confirmou. Decisão executiva da Bem Comum estabeleceu **fornecedor único de infra** (Codebit, que só opera AWS) para todo o stack produtivo. Multi-cloud continua existindo, mas com semântica diferente: **AWS para produção + MagaluCloud para PBE/homologação interno (custeado pela equipe, não pela Bem Comum)**.
+>
+> O conteúdo abaixo é preservado integralmente como histórico de raciocínio (ratio legis). Não usar como referência para decisões atuais — consultar [ADR-0021](./0021-aws-primary-magalu-pbe-supersedes-0007.md).
 
 ---
 

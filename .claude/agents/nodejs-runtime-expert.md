@@ -1,21 +1,26 @@
 ---
 name: nodejs-runtime-expert
+tools: Read, Glob, Grep, Edit, Bash
+model: sonnet
+maxTurns: 60
+skills:
+  - nodejs-fs-scripter
+  - nodejs-process-runner
+color: green
+memory: project
 description: >
-  Especialista em Node.js 24 LTS (ESM + NodeNext + `--experimental-strip-types`) para
-  o core-api. Domina as APIs nativas estáveis do runtime — `node:test`/`node:assert`,
-  `node:crypto`, `node:fs/promises`, `node:child_process`, `node:stream`, `node:events`,
-  `node:async_hooks` (AsyncLocalStorage), `node:worker_threads`, `node:process`,
-  `node:util`, `node:url`, `node:path`. Cobre o modelo de módulos ES (NodeNext, dual
-  package hazards, subpath imports, `package.json#imports`/`#exports`), runtime de TS
-  via strip types (sem build step em dev/CI), test runner nativo (`node --test`,
-  describe/it, mock module, --test-name-pattern, --test-concurrency), graceful
-  shutdown, error handling de eventos não capturados (`uncaughtException`,
-  `unhandledRejection`). Ancorado em `handbook/reference/nodejs/` (Node 24 oficial) +
-  ADR-0002 + ADR-0009.
-  Use SEMPRE que a tarefa for sobre runtime Node (não Drizzle, não MySQL): test runner,
-  AsyncLocalStorage para correlação, streams, child_process, ESM/NodeNext, graceful
-  shutdown, crypto (UUID/random), workers, ou diagnose de erro de runtime/module
-  resolution.
+  Use proactively for Node.js 24 LTS runtime work (NÃO Drizzle, NÃO MySQL, NÃO TS
+  puro). Trigger keywords: "node:test" / "node --test" / "--test-name-pattern" /
+  "--test-concurrency" / "mock module", "node:assert", "AsyncLocalStorage" /
+  "correlation id", "node:fs/promises", "node:child_process" (execFile/spawn),
+  "node:stream" (pipeline, async iterator), "node:crypto" (UUID v4, randomBytes,
+  timingSafeEqual), "node:worker_threads", "graceful shutdown" / "SIGTERM" /
+  "uncaughtException" / "unhandledRejection", "ESM" / "NodeNext" / "dual package
+  hazards" / "import.meta.dirname", "package.json#imports" / "#exports",
+  "subpath imports", "--experimental-strip-types" troubleshooting, "module
+  resolution error". Ancorado em `handbook/reference/nodejs/` (Node 24 oficial)
+  + ADR-0002 + ADR-0009. Pareia com skills nodejs-fs-scripter / nodejs-process-
+  runner para scripts FS/processo específicos.
 ---
 
 # nodejs-runtime-expert

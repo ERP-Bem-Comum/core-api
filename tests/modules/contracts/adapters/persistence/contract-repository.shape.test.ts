@@ -99,7 +99,7 @@ describe('CTR-DB-REPO-LIST-N1 — CA-13: list() sem N+1', () => {
 describe('CTR-DB-REPO-LIST-N1 — CA-14: persistContract junction em batch', () => {
   it('CA-14: junction insert NÃO está dentro de for-loop linha-a-linha', () => {
     const src = readSource();
-    const persistBlock = extractBlock(src, /const\s+persistContract\s*=\s*async/);
+    const persistBlock = extractBlock(src, /const\s+persistContract(?:InTx)?\s*=\s*async/);
     // Padrão proibido: `for (...) { ... .insert(schema.contractHomologatedAmendments).values({...}) ... }`.
     // Detectamos a presença de qualquer `await tx.insert(schema.contractHomologatedAmendments).values({ ... })`
     // (single object literal) dentro de um `for (...)`.

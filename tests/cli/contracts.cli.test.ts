@@ -130,6 +130,20 @@ describe('CLI E2E — BDD 1.2: Motor de cálculo (Addition)', () => {
     const amendmentId = requireUuid(amendment.stdout, 'ID:', 'criar-aditivo');
 
     const docId = randomUUID();
+    // CTR-AMENDMENT-DOCUMENT-LINK: documento precisa existir no repo antes do attach.
+    const upload = runCli([
+      'subir-documento',
+      '--state',
+      state,
+      '--parent-id',
+      amendmentId,
+      '--parent-tipo',
+      'Amendment',
+      '--doc-id',
+      docId,
+    ]);
+    assert.equal(upload.exitCode, 0, `subir-documento falhou: ${upload.stderr}`);
+
     const attach = runCli([
       'anexar-documento',
       '--state',

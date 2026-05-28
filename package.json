@@ -5,26 +5,48 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=24.0.0"
+    "node": ">=24.0.0",
+    "pnpm": ">=10.0.0 <11"
   },
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "24.16.0",
+      "onFail": "download"
+    }
+  },
+  "packageManager": "pnpm@10.33.4",
   "imports": {
     "#src/*": "./src/*"
   },
   "scripts": {
+    "preinstall": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/only-allow-pnpm.ts",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
-    "test": "node --test --experimental-strip-types --no-warnings 'tests/**/*.test.ts'",
-    "test:integration": "mkdir -p secrets && printf 'rootpw-migration-test-only' > secrets/mysql_root_password.txt && printf 'apppw-migration-test-only' > secrets/mysql_app_password.txt && printf 'ropw-migration-test-only' > secrets/mysql_readonly_password.txt && chmod 600 secrets/mysql_*.txt && docker compose up -d mysql --wait && MYSQL_INTEGRATION=1 node --test --test-concurrency=1 --experimental-strip-types --no-warnings 'tests/modules/contracts/adapters/persistence/migrations/*.test.ts' 'tests/modules/contracts/adapters/persistence/mysql-driver.test.ts' 'tests/modules/contracts/adapters/persistence/drizzle-mysql.test.ts' 'tests/cli/contracts.cli.mysql.test.ts'; rc=$?; docker compose down -v >/dev/null; rm -f secrets/mysql_*.txt; exit $rc",
-    "cli:contracts": "node --experimental-strip-types --no-warnings src/modules/contracts/cli/main.ts",
-    "secrets:setup": "node --experimental-strip-types --no-warnings ./scripts/setup-secrets.ts",
-    "db:generate": "drizzle-kit generate"
+    "test": "node --test --experimental-strip-types --enable-source-maps --no-warnings 'tests/**/*.test.ts'",
+    "test:integration": "mkdir -p secrets && printf 'rootpw-migration-test-only' > secrets/mysql_root_password.txt && printf 'apppw-migration-test-only' > secrets/mysql_app_password.txt && printf 'ropw-migration-test-only' > secrets/mysql_readonly_password.txt && chmod 644 secrets/mysql_*.txt && docker compose up -d mysql --wait && MYSQL_INTEGRATION=1 node --test --test-concurrency=1 --experimental-strip-types --enable-source-maps --no-warnings 'tests/modules/contracts/adapters/persistence/migrations/*.test.ts' 'tests/modules/contracts/adapters/persistence/mysql-driver.test.ts' 'tests/modules/contracts/adapters/persistence/drizzle-mysql.test.ts' 'tests/modules/contracts/adapters/persistence/outbox-schema.test.ts' 'tests/modules/contracts/adapters/persistence/repos/outbox-repository.drizzle.test.ts' 'tests/modules/contracts/worker/outbox-worker.integration.test.ts' 'tests/cli/contracts.cli.mysql.test.ts'; rc=$?; docker compose down -v >/dev/null; rm -f secrets/mysql_*.txt; exit $rc",
+    "cli:contracts": "node --experimental-strip-types --enable-source-maps --no-warnings src/modules/contracts/cli/main.ts",
+    "cli:financial": "node --experimental-strip-types --enable-source-maps --no-warnings src/modules/financial/cli/main.ts",
+    "secrets:setup": "node --experimental-strip-types --enable-source-maps --no-warnings ./scripts/setup-secrets.ts",
+    "pipeline:state": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/pipeline/state-cli.ts",
+    "pipeline:status": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/pipeline/dashboard-cli.ts",
+    "pipeline:metrics": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/pipeline/metrics-cli.ts",
+    "test:integration:notifications": "NOTIFICATIONS_INTEGRATION=1 node --test --experimental-strip-types --enable-source-maps --no-warnings 'tests/modules/notifications/**/*.test.ts'",
+    "test:integration:storage": "docker compose up -d minio --wait && STORAGE_INTEGRATION=1 node --test --experimental-strip-types --enable-source-maps --no-warnings 'tests/modules/contracts/adapters/storage/s3.integration.test.ts'; rc=$?; docker compose down -v >/dev/null; exit $rc",
+    "test:integration:auth": "mkdir -p secrets && printf 'rootpw-migration-test-only' > secrets/mysql_root_password.txt && printf 'apppw-migration-test-only' > secrets/mysql_app_password.txt && printf 'ropw-migration-test-only' > secrets/mysql_readonly_password.txt && chmod 644 secrets/mysql_*.txt && docker compose up -d mysql --wait && MYSQL_INTEGRATION=1 node --test --test-concurrency=1 --experimental-strip-types --enable-source-maps --no-warnings 'tests/modules/auth/adapters/persistence/refresh-token-repository.drizzle.test.ts' 'tests/modules/auth/adapters/persistence/user-repository.drizzle.test.ts' 'tests/modules/auth/adapters/persistence/role-repository.drizzle.test.ts' 'tests/modules/auth/adapters/persistence/schema-hardening.test.ts'; rc=$?; docker compose down -v >/dev/null; rm -f secrets/mysql_*.txt; exit $rc",
+    "serve": "node --experimental-strip-types --enable-source-maps --no-warnings src/server.ts",
+    "test:e2e:auth": "bash scripts/e2e-auth.sh",
+    "test:e2e:contracts": "bash scripts/e2e-contracts.sh",
+    "db:generate": "drizzle-kit generate",
+    "db:generate:auth": "drizzle-kit generate --config drizzle.config.auth.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.10.0",
+    "@types/nodemailer": "^8.0.0",
     "@typescript/native-preview": "7.0.0-dev.20260515.1",
     "drizzle-kit": "^0.31.10",
     "eslint": "^10.3.0",
@@ -34,7 +56,21 @@
     "typescript-eslint": "^8.59.3"
   },
   "dependencies": {
-    "drizzle-orm": "^0.45.2",
-    "mysql2": "^3.22.3"
+    "@aws-sdk/client-s3": "^3.1052.0",
+    "@aws-sdk/s3-request-presigner": "^3.1052.0",
+    "@fastify/cors": "11.2.0",
+    "@fastify/helmet": "13.0.2",
+    "@fastify/rate-limit": "10.3.0",
+    "@fastify/swagger": "9.7.0",
+    "@fastify/swagger-ui": "5.2.6",
+    "drizzle-orm": "0.45.2",
+    "fastify": "5.8.5",
+    "fastify-zod-openapi": "5.6.1",
+    "hash-wasm": "^4.12.0",
+    "jose": "^6.2.3",
+    "mysql2": "^3.22.3",
+    "nodemailer": "^8.0.7",
+    "zod": "4.4.3",
+    "zod-openapi": "5.4.6"
   }
 }

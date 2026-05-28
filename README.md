@@ -145,18 +145,18 @@ Todo trabalho não-trivial passa pela **pipeline 4-wave fail-first** (W0 RED →
 
 Cada agente é ancorado num subdir de [`handbook/reference/`](./handbook/reference/) + ADRs vinculantes, invocado pelo `contratos-orchestrator`.
 
-| Agente                                                                                 | Tecnologia                       | Status            |
-| -------------------------------------------------------------------------------------- | -------------------------------- | ----------------- |
-| [`contratos-orchestrator`](./.claude/agents/contratos-orchestrator.md)                 | Roteamento + pipeline W0→W3      | ✅ ativo          |
-| [`typescript-language-expert`](./.claude/agents/typescript-language-expert.md)         | TypeScript 6 / type system       | ✅ ativo          |
-| [`nodejs-runtime-expert`](./.claude/agents/nodejs-runtime-expert.md)                   | Node 24 / ESM / `node:test`      | ✅ ativo          |
-| [`drizzle-orm-expert`](./.claude/agents/drizzle-orm-expert.md)                         | Drizzle ORM + Drizzle Kit        | ✅ ativo          |
-| [`mysql-database-expert`](./.claude/agents/mysql-database-expert.md)                   | MySQL 8.4 (SQL, índices, locks)  | ✅ ativo          |
-| [`mysql2-driver-expert`](./.claude/agents/mysql2-driver-expert.md)                     | Driver `mysql2` (pool, auth, TLS) | ✅ ativo          |
-| [`docker-compose-expert`](./.claude/agents/docker-compose-expert.md)                   | Docker / Compose / BuildKit      | ✅ ativo          |
-| [`pnpm-workspace-expert`](./.claude/agents/pnpm-workspace-expert.md)                   | pnpm / supply-chain              | ✅ ativo          |
-| [`fastify-server-expert`](./.claude/agents/fastify-server-expert.md)                   | Fastify 5 + plugins              | 🟡 reservado F2+ |
-| [`nodemailer-email-expert`](./.claude/agents/nodemailer-email-expert.md)               | Nodemailer SMTP adapter          | 🟡 reservado F2+ |
+| Agente                                                                         | Tecnologia                        | Status           |
+| ------------------------------------------------------------------------------ | --------------------------------- | ---------------- |
+| [`contratos-orchestrator`](./.claude/agents/contratos-orchestrator.md)         | Roteamento + pipeline W0→W3       | ✅ ativo         |
+| [`typescript-language-expert`](./.claude/agents/typescript-language-expert.md) | TypeScript 6 / type system        | ✅ ativo         |
+| [`nodejs-runtime-expert`](./.claude/agents/nodejs-runtime-expert.md)           | Node 24 / ESM / `node:test`       | ✅ ativo         |
+| [`drizzle-orm-expert`](./.claude/agents/drizzle-orm-expert.md)                 | Drizzle ORM + Drizzle Kit         | ✅ ativo         |
+| [`mysql-database-expert`](./.claude/agents/mysql-database-expert.md)           | MySQL 8.4 (SQL, índices, locks)   | ✅ ativo         |
+| [`mysql2-driver-expert`](./.claude/agents/mysql2-driver-expert.md)             | Driver `mysql2` (pool, auth, TLS) | ✅ ativo         |
+| [`docker-compose-expert`](./.claude/agents/docker-compose-expert.md)           | Docker / Compose / BuildKit       | ✅ ativo         |
+| [`pnpm-workspace-expert`](./.claude/agents/pnpm-workspace-expert.md)           | pnpm / supply-chain               | ✅ ativo         |
+| [`fastify-server-expert`](./.claude/agents/fastify-server-expert.md)           | Fastify 5 + plugins               | 🟡 reservado F2+ |
+| [`nodemailer-email-expert`](./.claude/agents/nodemailer-email-expert.md)       | Nodemailer SMTP adapter           | 🟡 reservado F2+ |
 
 Skills (19) cobrem disciplinas/técnicas aplicadas: `ts-domain-modeler`, `ports-and-adapters`, `drizzle-schema-author`, `modular-monolith`, `application-cli-builder`, `pipeline-maestro`, `code-reviewer`, `ts-quality-checker`, e as famílias `database-*`, `tdd-*`, `clean-code-*`, `nodejs-*-scripter`/`-process-runner`. Tabela completa em [`CLAUDE.md §Roteamento`](./CLAUDE.md#roteamento-via-contratos-orchestrator).
 
