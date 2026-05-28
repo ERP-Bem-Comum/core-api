@@ -52,20 +52,41 @@ export type BuildAppOptions = Readonly<{
   config?: HttpConfig;
 }>;
 
+/**
+ * Opções do logger Pino com redact de credenciais (BE-050 — web-security-backend).
+ * Função pura/testável: nenhum token, cookie ou secret deve aparecer em log.
+ */
+export const buildLoggerOptions = (
+  env: Readonly<Record<string, string | undefined>>,
+): Readonly<{ level: string; redact: readonly string[] }> => ({
+  level: env['LOG_LEVEL'] ?? 'warn',
+  redact: [
+    'req.headers.authorization',
+    'req.headers.cookie',
+    'res.headers["set-cookie"]',
+    'req.headers["x-api-key"]',
+    '*.password',
+    '*.token',
+    '*.accessToken',
+    '*.refreshToken',
+    '*.secret',
+  ],
+});
+
 export const buildApp = async (opts: BuildAppOptions = {}): Promise<FastifyAppWithZod> => {
   const config = opts.config ?? readHttpConfig({});
+  const loggerOptions = buildLoggerOptions(process.env);
   const app = Fastify({
-    logger: {
-      level: process.env['LOG_LEVEL'] ?? 'warn',
-      redact: ['req.headers.authorization', '*.password'],
-    },
+    logger: { level: loggerOptions.level, redact: [...loggerOptions.redact] },
     genReqId: (req): string => {
       const incomingId = req.headers['x-request-id'];
       if (typeof incomingId === 'string' && incomingId.length > 0) return incomingId;
       return randomUUID();
     },
     bodyLimit: 1_048_576, // 1 MiB
-    trustProxy: true,
+    trustProxy: config.trustProxy,
+    requestTimeout: config.requestTimeout,
+    keepAliveTimeout: config.keepAliveTimeout,
   }).withTypeProvider<FastifyZodOpenApiTypeProvider>();
 
   // --- Zod compiler (ADR-0027) ---
@@ -126,6 +147,12 @@ export const buildApp = async (opts: BuildAppOptions = {}): Promise<FastifyAppWi
   // --- Hook onRequest: request-id → AsyncLocalStorage (ADR-0025:38) ---
   app.addHook('onRequest', (req, _reply, done) => {
     runWithCorrelation(req.id, done as () => void);
+  });
+
+  // --- Hook onSend: no-store em rotas de negocio /api/v2 (dado sensivel; sem cache em proxy/browser) ---
+  app.addHook('onSend', (req, reply, payload, done) => {
+    if (req.url.startsWith('/api/v2')) reply.header('cache-control', 'no-store');
+    done(null, payload);
   });
 
   // --- Error handlers (CA2, CA5) ---

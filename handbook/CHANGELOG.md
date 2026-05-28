@@ -4,6 +4,19 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-05-28 — 🛡️ Especialistas de segurança web (backend + frontend) — agentes + skills
+
+### Tooling (.claude/)
+
+- **2 agentes + 2 skills** de segurança web JS/TS, mirados no **stack real do projeto** (não genéricos):
+  - **Backend:** `security-backend-expert` (agente) + `web-security-backend` (skill) — Node.js 24 · TS 6 · Fastify 5 · pnpm/supply-chain · Magalu Cloud (S3-compat). Ancorado em `handbook/reference/{nodejs,typescript,fastify,pnpm,magalu-cloud}` + ADRs 0005/0025 (TLS no BFF), 0011/0012, 0024, 0019/0021, 0020/0027.
+  - **Frontend:** `security-frontend-expert` (agente) + `web-security-frontend` (skill) — TanStack Start (React) + TS. Ancorado na doc oficial do TanStack Start (server functions = RPC, CSRF, env inlining) + reference React do openai/skills.
+- **Base:** openai/skills `.curated/{security-best-practices, security-threat-model, security-ownership-map}` (adaptados, não copiados) + `handbook/reference/skills-base/security/owasp-ai-exchange.md`.
+- Cada skill tem `references/*.md` normativas (MUST/SHOULD + regras de auditoria `BE-NNN`/`FE-NNN`/`SC-NNN`/`CL-NNN`) e roda em 3 modos (generation / passive review / active audit). Distintos da skill `security-reviewer` (OWASP-AI/LLM). Registrados nas tabelas de roteamento do `CLAUDE.md`.
+- **Postura ajustada aos ADRs:** TLS termina no BFF (ADR-0005/0025) ⇒ não reportar "falta de HTTPS" no core-api; secret nunca no browser (ADR-0005); IDs opacos UUID; Zod só na borda (ADR-0027).
+
+---
+
 ## 2026-05-28 — 🧭 ADR-0028 (localização do shell HTTP + verticalidade por feature)
 
 ### Decisão

@@ -117,6 +117,8 @@ Carrega **um único** agente por turno.
 | pnpm / lockfile / supply-chain / corepack                                  | [`pnpm-workspace-expert`](./.claude/agents/pnpm-workspace-expert.md)           |
 | Fastify (HTTP — **reservado, Fase 2+, exige ADR**)                         | [`fastify-server-expert`](./.claude/agents/fastify-server-expert.md)           |
 | Nodemailer (adapter SMTP — **ativo** desde `CTR-EMAIL-ADAPTER-NODEMAILER`) | [`nodemailer-email-expert`](./.claude/agents/nodemailer-email-expert.md)       |
+| Segurança backend web (Node/TS/Fastify/pnpm/Magalu)                        | [`security-backend-expert`](./.claude/agents/security-backend-expert.md)       |
+| Segurança frontend web (TanStack Start/React)                              | [`security-frontend-expert`](./.claude/agents/security-frontend-expert.md)     |
 
 ### Skills (técnicas/disciplinas aplicadas)
 
@@ -135,6 +137,8 @@ Carrega **um único** agente por turno.
 | Code review / Clean Code / fundamentos                   | [`clean-code-reviewer`](./.claude/skills/clean-code-reviewer/SKILL.md) · [`clean-code-tutor`](./.claude/skills/clean-code-tutor/SKILL.md) · [`clean-code-theorist`](./.claude/skills/clean-code-theorist/SKILL.md)             |
 | Engenharia de requisitos (aplicada / tutor / theorist)   | [`requirements-engineer`](./.claude/skills/requirements-engineer/SKILL.md) · [`requirements-tutor`](./.claude/skills/requirements-tutor/SKILL.md) · [`requirements-theorist`](./.claude/skills/requirements-theorist/SKILL.md) |
 | Threat modeling / OWASP AI (reservado p/ Fase 2+ com IA) | [`security-reviewer`](./.claude/skills/security-reviewer/SKILL.md)                                                                                                                                                             |
+| Segurança backend aplicada (Node/Fastify/pnpm/Magalu)    | [`web-security-backend`](./.claude/skills/web-security-backend/SKILL.md)                                                                                                                                                       |
+| Segurança frontend aplicada (TanStack Start/React)       | [`web-security-frontend`](./.claude/skills/web-security-frontend/SKILL.md)                                                                                                                                                     |
 | Executar pipeline W0→W3 de um ticket                     | [`pipeline-maestro`](./.claude/skills/pipeline-maestro/SKILL.md)                                                                                                                                                               |
 | Revisão read-only (W2)                                   | [`code-reviewer`](./.claude/skills/code-reviewer/SKILL.md)                                                                                                                                                                     |
 | Gate final de qualidade (W3)                             | [`ts-quality-checker`](./.claude/skills/ts-quality-checker/SKILL.md)                                                                                                                                                           |

@@ -1,7 +1,7 @@
 # SPEC — Expor o plugin Fastify do `auth` via `public-api/http.ts` (`AUTH-HTTP-PLUGIN-EXPORT`)
 
 > **Tipo:** ticket · **Size:** S · **Épico-pai:** `EPIC-HTTP-CORE-API`
-> **Status da spec:** draft
+> **Status da spec:** aprovada (2026-05-28, Gabriel)
 > **ADRs tocados:** `ADR-0006`, `ADR-0025`, `ADR-0027`, `ADR-0005`
 
 ## 1. Problema & contexto

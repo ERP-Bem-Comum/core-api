@@ -13,11 +13,12 @@ import {
   installLastResortHandlers,
   processLastResortDeps,
 } from '#src/shared/runtime/last-resort.ts';
+import { authHttpPlugin } from '#src/modules/auth/public-api/http.ts';
 
 const main = async (): Promise<void> => {
   const config = readHttpConfig(process.env);
 
-  const app = await buildApp({ routes: [], config });
+  const app = await buildApp({ routes: [authHttpPlugin], config });
 
   // Graceful shutdown: SIGTERM / SIGINT → app.close() (drena conexoes abertas)
   const shutdown = async (): Promise<void> => {

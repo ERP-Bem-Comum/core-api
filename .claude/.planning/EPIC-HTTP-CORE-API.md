@@ -102,7 +102,7 @@ primeiro** (decisão 2026-05-27).
 | :-- | :-- | :-- | :-- | :-- |
 | 1 | `CORE-HTTP-FASTIFY-BOOTSTRAP` (H0) | M | Instala Fastify + **stack Zod contract-first** (`zod` v4, `zod-openapi`, `fastify-zod-openapi`, `@fastify/swagger`+`swagger-ui`); composition root; type-provider + validator/serializer compilers; error handler `Result`→HTTP; helmet/cors/rate-limit; Pino+`request-id`; `GET /health` + `GET /docs` (OpenAPI 3.1.1). **Decide o padrão de composição de rotas (§5).** Transversal | — |
 | 1.5 | `CORE-HTTP-SHELL-RELOCATE` | S | **✅ closed-green** — move o shell (H0) para `src/shared/http/` + composition root `src/server.ts` (ADR-0028); estende glob ESLint p/ `src/shared/http/**` + `src/modules/*/adapters/http/**`. Refactor sem mudança de comportamento | H0 |
-| 2 | `AUTH-HTTP-PLUGIN-EXPORT` (S) | S | *(condicional ao H0)* Expõe o plugin de rotas de auth ao root sem ferir ADR-0006 (estende `public-api/` ou equivalente). Pode ser absorvido pelo H1 se o H0 decidir plugin-por-módulo | H0 |
+| 2 | `AUTH-HTTP-PLUGIN-EXPORT` (S) | S | **✅ closed-green** — `auth/adapters/http/plugin.ts` (`authHttpPlugin`, sub-escopo `/auth` + rota sentinela `__ping` Zod) + `auth/public-api/http.ts` (re-export, ADR-0006) + wiring em `src/server.ts`. Padrão de plugin-por-módulo estabelecido p/ o H1 | H0 |
 | 3 | `AUTH-HTTP-ROUTES` (H1) | M | `POST /api/v2/auth/{register,login,refresh,logout}` → use cases; validação por smart constructor; Result→HTTP | H0, #2 |
 | 4 | `AUTH-HTTP-AUTHZ-HOOK` (H2) | S | preHandler authn (verify access JWT) + `authorize(permission)`; 401/403 | H1 |
 | 5 | `CORE-DB-RW-SPLIT-POOLS` (I1) | M | Dual pool writer/reader (ADR-0026) injetado no composition root; paralelizável após H0 | H0 |
