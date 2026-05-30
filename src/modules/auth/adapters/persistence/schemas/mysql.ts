@@ -34,6 +34,7 @@ import {
   datetime,
   foreignKey,
   index,
+  int,
   mysqlTable,
   primaryKey,
   uniqueIndex,
@@ -296,6 +297,32 @@ export const authPasswordReset = mysqlTable(
   ],
 );
 
+// ─── auth_login_lockout ───────────────────────────────────────────────────────
+// Cooldown de login por conta (BE-REC-001). Uma linha por usuário (PK = user_id):
+//   failed_attempts (contador) + locked_until (NULL = sem cooldown ativo).
+export const authLoginLockout = mysqlTable(
+  'auth_login_lockout',
+  {
+    // PK = user_id: 1 lockout por conta. FK física abaixo (auth_ll_user_fk).
+    userId: varchar('user_id', { length: 36 }).primaryKey().notNull(),
+    failedAttempts: int('failed_attempts').notNull(),
+    // null = sem bloqueio ativo; Date = bloqueado até este instante.
+    lockedUntil: datetime('locked_until', { mode: 'date', fsp: 3 }),
+  },
+  (t) => [
+    // CHECK: contador não-negativo.
+    check('auth_ll_attempts_chk', sql`${t.failedAttempts} >= 0`),
+    // FK auth_ll_user_fk → auth_user.id (RESTRICT, espelha as demais).
+    foreignKey({
+      name: 'auth_ll_user_fk',
+      columns: [t.userId],
+      foreignColumns: [authUser.id],
+    })
+      .onDelete('restrict')
+      .onUpdate('restrict'),
+  ],
+);
+
 // ─── Tipos do schema — consumidos pelos mappers ───────────────────────────────
 export type PermissionRow = typeof authPermission.$inferSelect;
 export type NewPermissionRow = typeof authPermission.$inferInsert;
@@ -317,3 +344,6 @@ export type NewRefreshTokenRow = typeof authRefreshToken.$inferInsert;
 
 export type PasswordResetRow = typeof authPasswordReset.$inferSelect;
 export type NewPasswordResetRow = typeof authPasswordReset.$inferInsert;
+
+export type LoginLockoutRow = typeof authLoginLockout.$inferSelect;
+export type NewLoginLockoutRow = typeof authLoginLockout.$inferInsert;

@@ -25,6 +25,7 @@ import { makeNodePasswordResetTokenMinter } from '../crypto/password-reset-token
 import { makeInMemoryLoginLockoutStore } from '../persistence/repos/login-lockout-store.in-memory.ts';
 import { makeInMemoryPasswordResetTokenStore } from '../persistence/repos/password-reset-token-repository.in-memory.ts';
 import { createDrizzlePasswordResetTokenStore } from '../persistence/repos/password-reset-token-repository.drizzle.ts';
+import { createDrizzleLoginLockoutStore } from '../persistence/repos/login-lockout-store.drizzle.ts';
 import { makeNodeRefreshTokenMinter } from '../crypto/refresh-token-minter.node.ts';
 import { makeEs256TokenIssuer, type Es256Config } from '../crypto/token-issuer.es256.ts';
 
@@ -47,6 +48,7 @@ import type { PasswordHasher } from '../../application/ports/password-hasher.ts'
 import type { LockoutPolicy } from '../../domain/session/account-lockout.ts';
 import type { PasswordResetTokenRepository } from '../../domain/session/password-reset-token-repository.ts';
 import type { PasswordResetMailer } from '../../application/ports/password-reset-mailer.ts';
+import type { LoginLockoutStore } from '../../application/ports/login-lockout-store.ts';
 import { ok } from '#src/shared/primitives/result.ts';
 import {
   parseSmtpConfig,
@@ -140,6 +142,7 @@ type Stores = Readonly<{
   userRepo: UserRepository;
   refreshTokenRepo: RefreshTokenRepository;
   resetTokenRepo: PasswordResetTokenRepository;
+  lockoutStore: LoginLockoutStore;
   roleRepo: RoleRepository;
   shutdown: () => Promise<void>;
 }>;
@@ -168,6 +171,7 @@ const buildStores = async (config: AuthCompositionConfig): Promise<Stores> => {
       userRepo: userStore.repository,
       refreshTokenRepo: refreshStore.repository,
       resetTokenRepo: makeInMemoryPasswordResetTokenStore().repository,
+      lockoutStore: makeInMemoryLoginLockoutStore(),
       roleRepo: roleStore.repository,
       shutdown: () => Promise.resolve(),
     };
@@ -191,6 +195,7 @@ const buildStores = async (config: AuthCompositionConfig): Promise<Stores> => {
     userRepo: userStore.repository,
     refreshTokenRepo: refreshStore.repository,
     resetTokenRepo: createDrizzlePasswordResetTokenStore(handle).repository,
+    lockoutStore: createDrizzleLoginLockoutStore(handle).repository,
     roleRepo: roleStore.repository,
     shutdown: handle.close,
   };
@@ -281,9 +286,8 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
   if (!dummyHashR.ok) throw new Error('auth-composition: falha ao gerar dummy hash');
   const dummyPasswordHash = dummyHashR.value;
 
-  // BE-REC-001: store do cooldown por conta. In-memory por ora (mesma limitação do rate-limit;
-  // adapter persistente é follow-up CTR-AUTH-LOCKOUT-PERSISTENCE).
-  const lockoutStore = makeInMemoryLoginLockoutStore();
+  // BE-REC-001: store do cooldown por conta — InMemory (memory) ou Drizzle (mysql), via buildStores.
+  const lockoutStore = stores.lockoutStore;
   const lockoutPolicy = config.lockoutPolicy ?? DEFAULT_LOCKOUT_POLICY;
 
   // BE-REC-003: token de reset + entrega por e-mail. Com SMTP (env) + AUTH_RESET_FROM válidos,

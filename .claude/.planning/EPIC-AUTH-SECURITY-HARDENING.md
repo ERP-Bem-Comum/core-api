@@ -46,7 +46,8 @@ Não existe. Rotas auth: register, login, refresh, logout, me.
 
 > **BE-REC-003 (cadeia de reset) COMPLETA — toda a spec 003 entregue.** Follow-ups:
 > - ✅ `CTR-AUTH-RESET-MAILER-SMTP` — **ENTREGUE (closed-green, 2026-05-30)**. `buildResetMailer(env)` fia o Nodemailer real (SMTP_* + `AUTH_RESET_FROM`) ou no-op seguro. Reset funciona ponta-a-ponta com SMTP.
-> - ⏳ store compartilhado Redis p/ rate-limit+lockout; `CTR-AUTH-LOCKOUT-PERSISTENCE` (Drizzle); validar integração MySQL (porta 3306).
+> - ✅ `CTR-AUTH-LOCKOUT-PERSISTENCE` — **ENTREGUE (closed-green, 2026-05-30)**. Adapter Drizzle do `LoginLockoutStore` (tabela `auth_login_lockout` + mapper + migration `0002`). Lockout **persiste no MySQL** (driver mysql); deixa de ser in-memory.
+> - ⏳ **restantes:** store Redis p/ **rate-limit** (ainda in-memory); validar integração MySQL (porta 3306 ocupada por container alheio nas sessões).
 
 ## Sequência sugerida
 1. BE-REC-001 rate-limit por rota (rápido, alto valor 🔴).
