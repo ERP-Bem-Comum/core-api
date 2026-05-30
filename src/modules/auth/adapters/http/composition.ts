@@ -8,6 +8,7 @@
  * Chaves ES256 (DD-TOKEN-01): carregadas de env (PKCS8/SPKI) ou geradas efêmeras em dev.
  */
 
+import { randomBytes } from 'node:crypto';
 import { generateKeyPair, importPKCS8, importSPKI } from 'jose';
 
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
@@ -20,19 +21,25 @@ import { createDrizzleRefreshTokenStore } from '../persistence/repos/refresh-tok
 import { createDrizzleRoleStore } from '../persistence/repos/role-repository.drizzle.ts';
 import { openAuthMysql } from '../persistence/drivers/mysql-driver.ts';
 import { makeArgon2PasswordHasher } from '../crypto/password-hasher.argon2.ts';
+import { makeInMemoryLoginLockoutStore } from '../persistence/repos/login-lockout-store.in-memory.ts';
 import { makeNodeRefreshTokenMinter } from '../crypto/refresh-token-minter.node.ts';
 import { makeEs256TokenIssuer, type Es256Config } from '../crypto/token-issuer.es256.ts';
 
 import { registerUser } from '../../application/use-cases/register-user.ts';
 import { authenticateUser } from '../../application/use-cases/authenticate-user.ts';
 import { refreshAccessToken } from '../../application/use-cases/refresh-access-token.ts';
-import { revokeSession } from '../../application/use-cases/revoke-session.ts';
+import {
+  revokeSession,
+  revokeAllSessionsForUser,
+} from '../../application/use-cases/revoke-session.ts';
+import { changePassword } from '../../application/use-cases/change-password.ts';
 
 import type { UserReader, UserRepository } from '../../domain/identity/user/repository.ts';
 import type { RefreshTokenRepository } from '../../domain/session/refresh-token-repository.ts';
 import type { RoleRepository } from '../../domain/authorization/role-repository.ts';
 import type { TokenIssuer } from '../../application/ports/token-issuer.ts';
 import type { PasswordHasher } from '../../application/ports/password-hasher.ts';
+import type { LockoutPolicy } from '../../domain/session/account-lockout.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
 
 // Seed RBAC (CONTRACTS-HTTP-READS C1, D4): bootstrap de permissões para dev/test.
@@ -67,6 +74,13 @@ export type AuthCompositionConfig = Readonly<{
   refreshTtlSeconds?: number;
   /** Seed RBAC inline (dev/test). Aplicado após os stores; cria users com Role embutido. */
   seed?: AuthSeed;
+  /**
+   * Rate-limit dedicado e mais restritivo das rotas sensíveis (`/login`, `/refresh`) — BE-REC-001,
+   * OWASP WSTG-ATHN-03. Separado do teto global (200/min). Default: 5 por minuto.
+   */
+  sensitiveRateLimit?: Readonly<{ max: number; timeWindow: string }>;
+  /** Política do account lockout (BE-REC-001). Default: 5 falhas → 1/5/15/60min progressivo. */
+  lockoutPolicy?: LockoutPolicy;
 }>;
 
 export type AuthHttpDeps = Readonly<{
@@ -74,6 +88,8 @@ export type AuthHttpDeps = Readonly<{
   authenticateUser: ReturnType<typeof authenticateUser>;
   refreshAccessToken: ReturnType<typeof refreshAccessToken>;
   revokeSession: ReturnType<typeof revokeSession>;
+  changePassword: ReturnType<typeof changePassword>;
+  revokeAllSessionsForUser: ReturnType<typeof revokeAllSessionsForUser>;
   /** Verificador de access JWT — consumido pelo preHandler `requireAuth`. */
   verifyAccessToken: TokenIssuer['verifyAccessToken'];
   /**
@@ -81,12 +97,18 @@ export type AuthHttpDeps = Readonly<{
    * `Permission`) para não vazar `auth/domain` a outros módulos (ADR-0006); valida internamente.
    */
   authorize: (permissionName: string) => preHandlerAsyncHookHandler;
+  /** Config do rate-limit dedicado das rotas sensíveis (login/refresh) — BE-REC-001. */
+  sensitiveRateLimit: Readonly<{ max: number; timeWindow: string }>;
   shutdown: () => Promise<void>;
 }>;
 
 const DEFAULT_ISSUER = 'core-api';
 const DEFAULT_ACCESS_TTL = 900; // 15 min
 const DEFAULT_REFRESH_TTL = 2_592_000; // 30 dias
+// BE-REC-001: poucas tentativas por minuto num endpoint de senha (vs 200/min global).
+const DEFAULT_SENSITIVE_RATE_LIMIT = { max: 5, timeWindow: '1 minute' } as const;
+// BE-REC-001: cooldown por conta — 5 falhas → 1min, depois 5/15min, cap 60min. Sempre temporário.
+const DEFAULT_LOCKOUT_POLICY: LockoutPolicy = { threshold: 5, stepsMinutes: [1, 5, 15, 60] };
 
 type Stores = Readonly<{
   userReader: UserReader;
@@ -205,6 +227,19 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
   const refreshTokenMinter = makeNodeRefreshTokenMinter();
   const clock = ClockReal();
 
+  // Hash dummy do login anti-timing (BE-REC-002): computado uma vez no boot a partir de uma senha
+  // aleatoria (nunca corresponde a credencial real). Custo de setup unico; o verify por request usa-o.
+  const dummyPlain = Password.parse(randomBytes(24).toString('base64'));
+  if (!dummyPlain.ok) throw new Error('auth-composition: falha ao gerar dummy password');
+  const dummyHashR = await passwordHasher.hash(dummyPlain.value);
+  if (!dummyHashR.ok) throw new Error('auth-composition: falha ao gerar dummy hash');
+  const dummyPasswordHash = dummyHashR.value;
+
+  // BE-REC-001: store do cooldown por conta. In-memory por ora (mesma limitação do rate-limit;
+  // adapter persistente é follow-up CTR-AUTH-LOCKOUT-PERSISTENCE).
+  const lockoutStore = makeInMemoryLoginLockoutStore();
+  const lockoutPolicy = config.lockoutPolicy ?? DEFAULT_LOCKOUT_POLICY;
+
   if (config.seed !== undefined) {
     await applyRbacSeed(config.seed, {
       userRepo: stores.userRepo,
@@ -229,6 +264,9 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
       refreshTokenRepo: stores.refreshTokenRepo,
       clock,
       refreshTtlSeconds,
+      dummyPasswordHash,
+      lockoutStore,
+      lockoutPolicy,
     }),
     refreshAccessToken: refreshAccessToken({
       userReader: stores.userReader,
@@ -243,7 +281,19 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
       refreshTokenRepo: stores.refreshTokenRepo,
       clock,
     }),
+    changePassword: changePassword({
+      userReader: stores.userReader,
+      userRepo: stores.userRepo,
+      passwordHasher,
+      refreshTokenRepo: stores.refreshTokenRepo,
+      clock,
+    }),
+    revokeAllSessionsForUser: revokeAllSessionsForUser({
+      refreshTokenRepo: stores.refreshTokenRepo,
+      clock,
+    }),
     verifyAccessToken: tokenIssuer.verifyAccessToken,
+    sensitiveRateLimit: config.sensitiveRateLimit ?? DEFAULT_SENSITIVE_RATE_LIMIT,
     authorize: (permissionName: string): preHandlerAsyncHookHandler => {
       const parsed = Permission.parse(permissionName);
       if (!parsed.ok) {

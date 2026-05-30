@@ -40,3 +40,9 @@ export const logoutBodySchema = z.object({
 export const meResponseSchema = z.object({
   userId: z.string(),
 });
+
+// BE-REC-004: troca de senha autenticada. O userId vem do access JWT (requireAuth), nunca do body.
+export const changePasswordBodySchema = z.object({
+  currentPassword: z.string().meta({ description: 'Senha atual (re-autenticacao)' }),
+  newPassword: z.string().meta({ description: 'Nova senha (validada pela policy do dominio)' }),
+});

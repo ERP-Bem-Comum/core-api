@@ -31,10 +31,20 @@ const main = async (): Promise<void> => {
   const authConnString = process.env['AUTH_DATABASE_URL'];
   // Seed RBAC via env — inerte fora de E2E/dev (guarda dupla CORE_API_E2E + AUTH_SEED_JSON).
   const authSeed = parseE2eAuthSeed(process.env);
+  // BE-REC-001: limite dedicado de login/refresh via env; ausente/malformado → default (5/min).
+  const sensitiveMax = Number.parseInt(process.env['AUTH_LOGIN_RATE_LIMIT_MAX'] ?? '', 10);
+  const sensitiveRateLimit =
+    Number.isInteger(sensitiveMax) && sensitiveMax > 0
+      ? {
+          max: sensitiveMax,
+          timeWindow: process.env['AUTH_LOGIN_RATE_LIMIT_WINDOW'] ?? '1 minute',
+        }
+      : undefined;
   const authDeps = await buildAuthHttpDeps({
     driver: authDriver,
     ...(authConnString !== undefined ? { connectionString: authConnString } : {}),
     ...(authSeed !== undefined ? { seed: authSeed } : {}),
+    ...(sensitiveRateLimit !== undefined ? { sensitiveRateLimit } : {}),
   });
 
   // RW split (ADR-0026): CONTRACTS_DATABASE_URL = writer; CONTRACTS_READER_URL = réplica
