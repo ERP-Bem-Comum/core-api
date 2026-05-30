@@ -10,10 +10,12 @@ const config: Config = {
     'O backend modular monolith por dentro: arquitetura, domínio e as decisões que nos trouxeram até aqui',
   favicon: 'img/favicon.svg',
 
-  url: 'https://docs.bem-comum.local',
-  baseUrl: '/',
+  // GitHub Pages (project page da org ERP-Bem-Comum). github.io usa o slug em minúsculas.
+  url: 'https://erp-bem-comum.github.io',
+  baseUrl: '/core-api/',
+  trailingSlash: false,
 
-  organizationName: 'envolve-bem-comum',
+  organizationName: 'ERP-Bem-Comum',
   projectName: 'core-api',
 
   onBrokenLinks: 'warn',
