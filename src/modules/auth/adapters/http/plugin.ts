@@ -32,6 +32,7 @@ import {
   meResponseSchema,
   changePasswordBodySchema,
   forgotPasswordBodySchema,
+  resetPasswordBodySchema,
 } from './schemas.ts';
 
 const authRoutes =
@@ -179,6 +180,34 @@ const authRoutes =
         const result = await deps.requestPasswordReset({ email: req.body.email });
         if (!result.ok) req.log.error({ err: result.error }, 'forgot-password falhou');
         return reply.code(202).send();
+      },
+    });
+
+    // BE-REC-003: confirma o reset com o token (one-time) + nova senha. Troca a senha e revoga
+    // todas as sessoes. Erros de token/senha mapeados; sucesso 204.
+    scope.route({
+      method: 'POST',
+      url: '/reset-password',
+      config: { rateLimit: deps.sensitiveRateLimit },
+      schema: { body: resetPasswordBodySchema } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.confirmPasswordReset({
+          token: req.body.token,
+          newPassword: req.body.newPassword,
+        });
+        const mapped = result.ok ? ok(undefined) : result;
+        return sendResult(reply, mapped, {
+          ok: 204,
+          errors: {
+            'reset-token-invalid': 400,
+            'reset-token-expired': 400,
+            'reset-token-used': 400,
+            'password-too-short': 422,
+            'password-too-long': 422,
+            'password-too-common': 422,
+            'user-disabled': 403,
+          },
+        });
       },
     });
 

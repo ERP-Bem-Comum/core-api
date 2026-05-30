@@ -51,3 +51,9 @@ export const changePasswordBodySchema = z.object({
 export const forgotPasswordBodySchema = z.object({
   email: z.string().meta({ description: 'E-mail da conta para recuperação de senha' }),
 });
+
+// BE-REC-003: confirmação do reset com o token recebido por e-mail + nova senha.
+export const resetPasswordBodySchema = z.object({
+  token: z.string().meta({ description: 'Token de reset recebido por e-mail (one-time)' }),
+  newPassword: z.string().meta({ description: 'Nova senha (validada pela policy do domínio)' }),
+});

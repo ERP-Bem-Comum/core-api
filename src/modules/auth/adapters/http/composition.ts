@@ -37,6 +37,7 @@ import {
 } from '../../application/use-cases/revoke-session.ts';
 import { changePassword } from '../../application/use-cases/change-password.ts';
 import { requestPasswordReset } from '../../application/use-cases/request-password-reset.ts';
+import { confirmPasswordReset } from '../../application/use-cases/confirm-password-reset.ts';
 
 import type { UserReader, UserRepository } from '../../domain/identity/user/repository.ts';
 import type { RefreshTokenRepository } from '../../domain/session/refresh-token-repository.ts';
@@ -112,6 +113,8 @@ export type AuthHttpDeps = Readonly<{
   sensitiveRateLimit: Readonly<{ max: number; timeWindow: string }>;
   /** Use case do fluxo de reset (BE-REC-003), consumido pela rota /forgot-password. */
   requestPasswordReset: ReturnType<typeof requestPasswordReset>;
+  /** Confirma o reset (BE-REC-003), consumido pela rota /reset-password. */
+  confirmPasswordReset: ReturnType<typeof confirmPasswordReset>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -329,6 +332,15 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
       clock,
       resetTtlSeconds,
       resetBaseUrl,
+    }),
+    confirmPasswordReset: confirmPasswordReset({
+      resetTokenRepo: stores.resetTokenRepo,
+      minter: resetMinter,
+      userReader: stores.userReader,
+      userRepo: stores.userRepo,
+      passwordHasher,
+      refreshTokenRepo: stores.refreshTokenRepo,
+      clock,
     }),
     verifyAccessToken: tokenIssuer.verifyAccessToken,
     sensitiveRateLimit: config.sensitiveRateLimit ?? DEFAULT_SENSITIVE_RATE_LIMIT,

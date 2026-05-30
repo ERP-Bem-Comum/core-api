@@ -42,7 +42,11 @@ Não existe. Rotas auth: register, login, refresh, logout, me.
 - ✅ `CTR-AUTH-RESET-TOKEN` — **ENTREGUE (closed-green, 2026-05-30)**. Domínio puro `PasswordResetToken` (one-time + TTL, estados pending>expired>used, `consume`) + `PasswordResetTokenId`, em `domain/session/`. Espelha RefreshToken.
 - ✅ `CTR-AUTH-RESET-PERSISTENCE` — **ENTREGUE (closed-green, 2026-05-30)**. Port `PasswordResetTokenRepository` + InMemory + schema `auth_password_reset` + mapper + repo Drizzle + migration `0001` (hardening manual). Integração MySQL **pendente** (porta 3306 ocupada). O minter (`randomBytes`+sha256) foi movido para o `CTR-AUTH-RESET-REQUEST`.
 - ✅ `CTR-AUTH-RESET-REQUEST` — **ENTREGUE (closed-green, 2026-05-30)**. Minter (port+node) + port/adapter `PasswordResetMailer` (consome `notifications/public-api`) + use case `requestPasswordReset` (anti-enumeração, invalida pendentes, origem confiável) + rota `POST /forgot-password` (sempre 202, rate-limit). Mailer real (Nodemailer) **pendente** (no-op seguro sem SMTP; adapter pronto). Integração MySQL pendente.
-- `CTR-AUTH-RESET-CONFIRM` — **próximo (último da cadeia).** Use case `confirmPasswordReset`: lookup por `findByTokenHash(minter.hash(token))`, `consume` (one-time + TTL), `User.changePassword` + nova `PasswordHash`, **revoga todas as sessões** (`revokeAllSessionsForUser`) + rota `POST /reset-password`.
+- ✅ `CTR-AUTH-RESET-CONFIRM` — **ENTREGUE (closed-green, 2026-05-30)**. Use case `confirmPasswordReset` (lookup por hash, valida senha antes de consumir, `consume` one-time+TTL, `User.changePassword`, marca token usado, **revoga todas as sessões**) + rota `POST /reset-password` (204/400/422/403).
+
+> **BE-REC-003 (cadeia de reset) COMPLETA — toda a spec 003 entregue.** Follow-ups abertos (não
+> bloqueiam): fiar mailer Nodemailer real (SMTP); store compartilhado Redis p/ rate-limit+lockout;
+> `CTR-AUTH-LOCKOUT-PERSISTENCE` (Drizzle); validar integração MySQL (porta 3306).
 
 ## Sequência sugerida
 1. BE-REC-001 rate-limit por rota (rápido, alto valor 🔴).

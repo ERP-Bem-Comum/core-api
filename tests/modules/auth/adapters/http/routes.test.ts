@@ -273,6 +273,18 @@ describe('AUTH-HTTP-ROUTES — forgot-password (BE-REC-003)', () => {
     assert.equal(ghost.statusCode, 202);
     await app.close();
   });
+
+  it('reset-password com token inválido -> 400 reset-token-invalid', async () => {
+    const app = await makeApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/reset-password',
+      payload: { token: 'token-inexistente', newPassword: 'New-Str0ng-Phrase-2027!' },
+    });
+    assert.equal(res.statusCode, 400);
+    assert.equal((res.json() as { error: { code: string } }).error.code, 'reset-token-invalid');
+    await app.close();
+  });
 });
 
 // Sentinela para garantir que o composition memory sobe sem segredo externo (chaves ES256 efêmeras).
