@@ -1,0 +1,3 @@
+# Ancora o portal de docs como workspace root próprio, isolando-o do core-api
+# (não herda minimumReleaseAge/allowBuilds da raiz). Projeto único, sem `packages:`.
+# Aprovação de build scripts fica em package.json#pnpm.onlyBuiltDependencies.
