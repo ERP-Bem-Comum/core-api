@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "CTR-PNPM-11-MIGRATION",
+  "size": "M",
+  "createdAt": "2026-05-30T15:56:36.420Z",
+  "closedAt": "2026-05-30T16:14:25.574Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-05-30T16:14:20.734Z",
+      "finishedAt": "2026-05-30T16:14:21.334Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "claude",
+      "startedAt": "2026-05-30T16:14:21.984Z",
+      "finishedAt": "2026-05-30T16:14:22.593Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-05-30T16:14:23.193Z",
+      "finishedAt": "2026-05-30T16:14:23.776Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-05-30T16:14:24.385Z",
+      "finishedAt": "2026-05-30T16:14:24.965Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

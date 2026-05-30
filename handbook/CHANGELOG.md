@@ -4,6 +4,20 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-05-30 — 📦 pnpm 11.x com defaults de supply-chain (ADR-0029 supersedes ADR-0012)
+
+### Decisões (ADR)
+
+- **ADR-0029 aceito** — adota **`pnpm 11.x`** (pinado em `pnpm@11.5.0`) como package manager único, **supersedes ADR-0012** (que fixava `10.x`). A escolha pnpm-vs-Bun-vs-npm **não** é reaberta — muda só a major.
+- **Motivação:** o pnpm 11 torna _default_ proteções de supply-chain exigidas pelo ADR-0011 — `minimumReleaseAge: 1440` (default desde v11), `minimumReleaseAgeStrict`, `trustPolicy: no-downgrade`, `blockExoticSubdeps`. Fundamentado em `handbook/reference/pnpm/{supply-chain-security,settings}.md` com citação literal.
+- **ADR-0012 marcado como Superseded** — a parte "por que pnpm" segue válida; as `Configurações padrão` (`pnpm@10`, `engines >=10`) ficam desatualizadas, apontando para o ADR-0029.
+
+### Migração (config)
+
+- `package.json`: `packageManager` → `pnpm@11.5.0`; `engines.pnpm` → `>=11.0.0 <12`.
+- `Dockerfile`: `ENV PNPM_VERSION=11.5.0`.
+- `pnpm-workspace.yaml`: settings de supply-chain explicitadas; lockfile re-gerado com pnpm 11 (lockfileVersion `9.0` mantido).
+
 ## 2026-05-28 — 🛡️ Especialistas de segurança web (backend + frontend) — agentes + skills
 
 ### Tooling (.claude/)
