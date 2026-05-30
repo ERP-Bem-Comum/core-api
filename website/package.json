@@ -7,9 +7,6 @@
   "engines": {
     "node": ">=24.0.0"
   },
-  "pnpm": {
-    "onlyBuiltDependencies": ["@swc/core", "core-js", "core-js-pure", "esbuild"]
-  },
   "scripts": {
     "docusaurus": "docusaurus",
     "start": "docusaurus start",

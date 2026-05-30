@@ -9,7 +9,7 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Módulos',
       collapsed: false,
-      items: ['modulos/contratos', 'modulos/financeiro'],
+      items: ['modulos/contratos', 'modulos/auth', 'modulos/financeiro'],
     },
     'glossario',
   ],

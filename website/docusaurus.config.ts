@@ -41,7 +41,20 @@ const config: Config = {
           sidebarPath: './sidebars.ts',
           editUrl: undefined,
         },
-        blog: false,
+        // Blog reaproveitado como Changelog: posts datados (release notes), tags navegáveis e RSS.
+        blog: {
+          path: 'changelog',
+          routeBasePath: 'changelog',
+          blogTitle: 'Changelog — core-api',
+          blogDescription:
+            'Histórico vivo do core-api: releases, decisões (ADRs) e marcos de cada entrega.',
+          blogSidebarTitle: 'Marcos recentes',
+          blogSidebarCount: 'ALL',
+          showReadingTime: false,
+          feedOptions: { type: 'all', title: 'core-api — Changelog' },
+          onInlineAuthors: 'ignore',
+          onUntruncatedBlogPosts: 'ignore',
+        },
         theme: {
           customCss: './src/css/custom.css',
         },
@@ -55,7 +68,8 @@ const config: Config = {
       {
         hashed: true,
         language: ['pt', 'en'],
-        indexBlog: false,
+        indexBlog: true,
+        blogRouteBasePath: '/changelog',
         docsRouteBasePath: '/',
         highlightSearchTermsOnTargetPage: true,
       },
@@ -98,6 +112,11 @@ const config: Config = {
           position: 'left',
           label: 'Glossário',
         },
+        {
+          to: '/changelog',
+          position: 'right',
+          label: 'Changelog',
+        },
       ],
     },
     footer: {
@@ -109,12 +128,14 @@ const config: Config = {
             { label: 'Começar', to: '/comecar' },
             { label: 'Arquitetura', to: '/arquitetura/visao-geral' },
             { label: 'Decisões (ADRs)', to: '/decisoes/o-que-e-adr' },
+            { label: 'Changelog', to: '/changelog' },
           ],
         },
         {
           title: 'Módulos',
           items: [
             { label: 'Contratos', to: '/modulos/contratos' },
+            { label: 'Auth', to: '/modulos/auth' },
             { label: 'Financeiro', to: '/modulos/financeiro' },
           ],
         },

@@ -23,7 +23,7 @@ sem um refactor traumático.
 | Runtime           | Node.js 24 LTS                         | ADR-0002, ADR-0009 |
 | Linguagem         | TypeScript 6 (roadmap TS 7)            | ADR-0009           |
 | Módulos           | ESM (`type: module`, `NodeNext`)       | —                  |
-| Package manager   | pnpm (nunca npm)                       | ADR-0012           |
+| Package manager   | pnpm 11 (nunca npm)                    | ADR-0012 → ADR-0029 |
 | Persistência      | Drizzle ORM + `mysql2` sobre MySQL 8.4 | ADR-0013, ADR-0020 |
 | Borda HTTP        | Fastify (adapter de borda)             | ADR-0025           |
 | Contrato de borda | Zod + zod-openapi (OpenAPI 3.1.1)      | ADR-0027           |

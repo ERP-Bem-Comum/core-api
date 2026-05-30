@@ -42,10 +42,18 @@ Antes de qualquer arquitetura, três ideias atravessam todo o código:
 
 - **Contratos:** domínio completo, persistência MySQL (Drizzle), CLI, **borda HTTP
   `/api/v2/contracts`** completa (reads, writes, documentos, export CSV).
-- **Auth:** identidade própria + RBAC por permissão, JWT ES256, borda HTTP
-  `/api/v2/auth` (ADR-0024).
+- **Auth:** identidade própria + RBAC, sessão híbrida (JWT ES256 + refresh opaco com rotação),
+  **hardening de segurança completo** (rate-limit dedicado, account lockout persistido, reset de
+  senha via e-mail, anti-timing, blocklist) — ver **[Módulo Auth](/modulos/auth)** e o
+  **[Changelog](/changelog/auth-security-hardening)**.
 - **Eventos:** Outbox MySQL (ADR-0015) para comunicação cross-módulo.
 - **Storage:** S3 (prod) / MinIO (dev) via port único `DocumentStorage` (ADR-0019).
+- **Tooling:** **pnpm 11** com defaults de supply-chain (ADR-0029).
+
+:::tip Acompanhe as mudanças
+O **[Changelog](/changelog)** registra cada marco (releases, decisões, hardening) em formato de
+release notes — dê uma olhada para ver a evolução recente.
+:::
 
 ## Por onde seguir
 

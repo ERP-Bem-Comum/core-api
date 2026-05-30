@@ -121,3 +121,30 @@
   font-size: 1.6rem;
   margin-bottom: 0.5rem;
 }
+
+/* ---------- Changelog (blog) ---------- */
+
+/* Acento à esquerda em cada entrada do changelog — leitura de "timeline". */
+article {
+  scroll-margin-top: 5rem;
+}
+
+.blog-list-page article,
+.blog-post-page article {
+  border-left: 3px solid var(--ifm-color-primary);
+  padding-left: 1.25rem;
+}
+
+/* Título da entrada com um respiro a mais. */
+.blog-list-page article header h2 {
+  font-size: 1.6rem;
+  letter-spacing: -0.01em;
+}
+
+/* Tags do changelog como "pílulas". */
+.blog-list-page .badge,
+.blog-post-page .badge {
+  border-radius: 999px;
+  font-weight: 600;
+}
+

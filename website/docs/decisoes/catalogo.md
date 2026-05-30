@@ -6,8 +6,8 @@ description: Os 28 Architecture Decision Records do core-api, agrupados por tema
 
 # Catálogo de ADRs
 
-Os 28 ADRs do `core-api`, agrupados por tema. Legenda de status: ✅ aceito ·
-⚠️ superseded (substituído) · 🟦 base histórica. O texto normativo literal de cada um
+Os 30 ADRs do `core-api`, agrupados por tema. Legenda de status: ✅ aceito ·
+⚠️ superseded (substituído) · 🟦 proposed (proposto/aguardando gatilho). O texto normativo literal de cada um
 está em `handbook/architecture/adr/`.
 
 :::info
@@ -64,14 +64,16 @@ Os ADRs **críticos** para entender o sistema hoje: **0006** (modular monolith),
 | 0019 | **Document Storage** — S3 (prod) + MinIO (dev) |   ✅   | `@aws-sdk/client-s3` único |
 | 0021 | Topologia Cloud — AWS primária + Magalu PBE    |   ✅   | supersedes 0007            |
 | 0017 | Chaves de correlação cross-período (auditoria) |   ✅   | sob Strangler Fig          |
+| 0030 | Store compartilhado (Valkey via ioredis)       |   🟦   | **Proposed** — adiado até multi-instância |
 
 ## Tooling & supply-chain
 
 | ADR  | Título                              | Status | Nota                                      |
 | :--- | :---------------------------------- | :----: | :---------------------------------------- |
-| 0010 | Email — Port & Adapter (Nodemailer) |   ✅   | Fase 2+                                   |
+| 0010 | Email — Port & Adapter (Nodemailer) |   ✅   | Fase 2+ (ativo no reset de senha)         |
 | 0011 | **Supply-chain hardening**          |   ✅   | corepack, only-allow=pnpm, approve-builds |
-| 0012 | **pnpm** como package manager       |   ✅   | nunca npm                                 |
+| 0012 | pnpm como package manager           |   ⚠️   | superseded por 0029                       |
+| 0029 | **pnpm 11.x** com defaults de supply-chain |   ✅   | supersedes 0012; minimumReleaseAge, trustPolicy |
 
 :::tip Como ler o original
 Cada ADR é um arquivo em `handbook/architecture/adr/NNNN-titulo.md`. Eles seguem o
