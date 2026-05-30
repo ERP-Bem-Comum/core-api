@@ -108,7 +108,8 @@ export const buildApp = async (opts: BuildAppOptions = {}): Promise<FastifyAppWi
     credentials: true,
   });
 
-  // rate-limit: usa config.rateLimitMax/Window (in-memory; producao sobrepoe com store Redis)
+  // rate-limit: usa config.rateLimitMax/Window. Store in-memory enquanto single-instance (ADR-0030
+  // Proposed); store compartilhado (Valkey via ioredis) quando o core-api escalar horizontalmente.
   await app.register(rateLimit, {
     max: config.rateLimitMax,
     timeWindow: config.rateLimitWindow,

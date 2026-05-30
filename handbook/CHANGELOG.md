@@ -4,6 +4,16 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-05-30 — 🔐 Hardening de auth (spec 003) + ADR-0030 (store compartilhado adiado)
+
+### Decisões (ADR)
+
+- **ADR-0030 proposto** — store compartilhado (**Valkey** via `ioredis`) para rate-limit/cache **adiado** enquanto o core-api for single-instance (YAGNI); direção fixada para quando escalar horizontalmente. Discussão em `.claude/.planning/REDIS-RATE-LIMIT-STORE.md`.
+
+### Segurança (módulo auth — spec 003)
+
+- **BE-REC-001..005 entregues** (tickets `CTR-AUTH-*`): blocklist de senhas, dummy-hash anti-timing, rotas change-password/revoke-all, rate-limit dedicado de login/refresh, account lockout progressivo (persistido em MySQL), e cadeia completa de reset de senha (token → persistência → request via EmailPort/Nodemailer → confirm). Detalhe no épico `EPIC-AUTH-SECURITY-HARDENING`.
+
 ## 2026-05-30 — 📦 pnpm 11.x com defaults de supply-chain (ADR-0029 supersedes ADR-0012)
 
 ### Decisões (ADR)
