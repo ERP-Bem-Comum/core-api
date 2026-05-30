@@ -18,6 +18,9 @@ import { makeFakePasswordHasher } from '#src/modules/auth/adapters/crypto/passwo
 import { makeFakeTokenIssuer } from '#src/modules/auth/adapters/crypto/token-issuer.fake.ts';
 import { makeFakeRefreshTokenMinter } from '#src/modules/auth/adapters/crypto/refresh-token-minter.fake.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
+import { DUMMY_PASSWORD_HASH } from '../../_support/dummy-password-hash.ts';
+import { makeInMemoryLoginLockoutStore, TEST_LOCKOUT_POLICY } from '../../_support/lockout.ts';
+import type { PasswordHasher } from '#src/modules/auth/application/ports/password-hasher.ts';
 import * as User from '#src/modules/auth/domain/identity/user/user.ts';
 
 const AT = new Date('2026-05-27T12:00:00.000Z');
@@ -28,6 +31,7 @@ const REFRESH_TTL = 2_592_000; // 30 dias
 const makeCtx = () => {
   const store = makeInMemoryUserStore();
   const refreshStore = makeInMemoryRefreshTokenStore();
+  const lockoutStore = makeInMemoryLoginLockoutStore();
   const passwordHasher = makeFakePasswordHasher();
   const tokenIssuer = makeFakeTokenIssuer();
   const refreshTokenMinter = makeFakeRefreshTokenMinter();
@@ -45,8 +49,11 @@ const makeCtx = () => {
     refreshTokenRepo: refreshStore.repository,
     clock: ClockFixed(AT),
     refreshTtlSeconds: REFRESH_TTL,
+    dummyPasswordHash: DUMMY_PASSWORD_HASH,
+    lockoutStore,
+    lockoutPolicy: TEST_LOCKOUT_POLICY,
   });
-  return { store, refreshStore, tokenIssuer, register, authenticate };
+  return { store, refreshStore, tokenIssuer, register, authenticate, lockoutStore };
 };
 
 describe('authenticateUser (com refresh)', () => {
@@ -117,5 +124,67 @@ describe('authenticateUser (com refresh)', () => {
     const r = await authenticate({ email: EMAIL, password: PASSWORD });
     assert.equal(r.ok, false);
     if (!r.ok) assert.equal(r.error, 'user-disabled');
+  });
+
+  // BE-REC-002 (anti-timing): com usuario inexistente, o verify ainda roda (contra o dummy hash),
+  // para que o tempo de resposta seja equivalente ao ramo "senha errada".
+  it('BE-REC-002: roda verify (dummy) mesmo quando o usuario nao existe', async () => {
+    const base = makeFakePasswordHasher();
+    let verifyCalls = 0;
+    const spyHasher: PasswordHasher = {
+      hash: base.hash,
+      verify: (plain, hash) => {
+        verifyCalls += 1;
+        return base.verify(plain, hash);
+      },
+    };
+    const store = makeInMemoryUserStore();
+    const refreshStore = makeInMemoryRefreshTokenStore();
+    const authenticate = authenticateUser({
+      userReader: store.reader,
+      passwordHasher: spyHasher,
+      tokenIssuer: makeFakeTokenIssuer(),
+      refreshTokenMinter: makeFakeRefreshTokenMinter(),
+      refreshTokenRepo: refreshStore.repository,
+      clock: ClockFixed(AT),
+      refreshTtlSeconds: REFRESH_TTL,
+      dummyPasswordHash: DUMMY_PASSWORD_HASH,
+      lockoutStore: makeInMemoryLoginLockoutStore(),
+      lockoutPolicy: TEST_LOCKOUT_POLICY,
+    });
+
+    const r = await authenticate({ email: 'ghost@example.com', password: PASSWORD });
+
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'invalid-credentials');
+    assert.equal(verifyCalls, 1);
+  });
+
+  // BE-REC-001 (account lockout): após `threshold` falhas, a conta entra em cooldown — mesmo a
+  // senha CORRETA é rejeitada com a resposta genérica (não vaza o bloqueio).
+  it('BE-REC-001: cooldown após threshold falhas bloqueia até senha correta', async () => {
+    const { register, authenticate } = makeCtx();
+    await register({ email: EMAIL, password: PASSWORD });
+
+    for (let i = 0; i < TEST_LOCKOUT_POLICY.threshold; i += 1) {
+      const fail = await authenticate({ email: EMAIL, password: 'senha-errada-000' });
+      assert.equal(fail.ok, false);
+    }
+
+    const blocked = await authenticate({ email: EMAIL, password: PASSWORD });
+    assert.equal(blocked.ok, false);
+    if (!blocked.ok) assert.equal(blocked.error, 'invalid-credentials');
+  });
+
+  it('BE-REC-001: falhas abaixo do threshold não impedem o login com senha correta (reset)', async () => {
+    const { register, authenticate } = makeCtx();
+    await register({ email: EMAIL, password: PASSWORD });
+
+    for (let i = 0; i < TEST_LOCKOUT_POLICY.threshold - 1; i += 1) {
+      await authenticate({ email: EMAIL, password: 'senha-errada-000' });
+    }
+
+    const ok1 = await authenticate({ email: EMAIL, password: PASSWORD });
+    assert.equal(ok1.ok, true);
   });
 });

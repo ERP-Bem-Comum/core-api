@@ -1,4 +1,4 @@
-# pnpm 10 desabilita postinstall por padrão (supply-chain — ADR-0011).
+# pnpm desabilita postinstall por padrão (supply-chain — ADR-0011).
 # Liberar build apenas para deps auditadas. Ver handbook/reference/pnpm/settings.md#allowbuilds.
 allowBuilds:
   # Transitive via drizzle-kit: baixa binário nativo no postinstall.
@@ -6,8 +6,25 @@ allowBuilds:
   # Em desuso (ADR-0020 §228, CTR-CLEANUP-SQLITE). Build nativo dispensável até a remoção.
   'better-sqlite3': false
 
-# Quarentena de versões recém-publicadas (supply-chain — ADR-0011 §2).
-# Default é 0 no pnpm 10.x; explicitamos 1 dia. Releases maliciosos são
-# normalmente detectados e removidos do registry em < 1h.
-# Ver handbook/reference/pnpm/settings.md#minimumreleaseage (v10.16.0+).
+# Supply-chain hardening explícito (ADR-0011 / ADR-0029). Mantemos os valores
+# explícitos mesmo quando coincidem com o default do pnpm 11 — explícito é auditável.
+
+# Quarentena de versões recém-publicadas. Default no pnpm 11 é 1440 (antes: 0).
+# Ver handbook/reference/pnpm/settings.md#minimumreleaseage.
 minimumReleaseAge: 1440
+# Falha a resolução em vez de cair silenciosamente para versão não-madura.
+# Ver handbook/reference/pnpm/settings.md#minimumreleaseagestrict (v11.0.0).
+minimumReleaseAgeStrict: true
+# Bloqueia instalação se o trust level de um pacote regrediu vs releases anteriores
+# (vetor do incidente axios — ADR-0011). Ver settings.md#trustpolicy.
+trustPolicy: no-downgrade
+# Exceções cirúrgicas (por versão) à trustPolicy. Ver settings.md#trustpolicyexclude.
+trustPolicyExclude:
+  # Transitiva legítima de @types/node@22 (pacote de tipos do undici, mantido pelo
+  # time do Node.js). O downgrade sinalizado é de evidência de provenance, não
+  # takeover. Exceção fixada na versão para não afrouxar a política globalmente.
+  # Avaliado em CTR-PNPM-11-MIGRATION (2026-05-30).
+  - 'undici-types@6.21.0'
+# Transitivas só de fontes confiáveis (registry/workspace), nunca git/tarball exótico.
+# Default no pnpm 11. Ver settings.md#blockexoticsubdeps.
+blockExoticSubdeps: true

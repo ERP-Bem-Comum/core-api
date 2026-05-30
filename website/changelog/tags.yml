@@ -1,0 +1,24 @@
+seguranca:
+  label: Segurança
+  permalink: /seguranca
+  description: Hardening, OWASP, supply-chain.
+
+auth:
+  label: Auth
+  permalink: /auth
+  description: Identidade, sessão híbrida, RBAC e recuperação de senha.
+
+tooling:
+  label: Tooling
+  permalink: /tooling
+  description: Build, package manager, supply-chain.
+
+docs:
+  label: Docs
+  permalink: /docs
+  description: Documentação e portal.
+
+arquitetura:
+  label: Arquitetura
+  permalink: /arquitetura
+  description: ADRs e decisões de arquitetura.

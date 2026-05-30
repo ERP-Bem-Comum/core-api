@@ -12,12 +12,16 @@ cli-state.json
 # Handbook (copiado do monorepo pai; preserva formatação original)
 handbook/
 
+# Portal de docs (Docusaurus) — projeto isolado com formatação própria
+website/
+
 # Lock files são gerados — não formatar
 pnpm-lock.yaml
 package-lock.json
 
 # Drizzle Kit artifacts — gerados por `pnpm run db:generate`, não formatar
 src/modules/contracts/adapters/persistence/migrations/mysql/meta/
+src/modules/auth/adapters/persistence/migrations/mysql/meta/
 
 # Artefatos de relatórios E2E (incluem JSON intencionalmente malformado p/ testes de tamper)
 tests/reports/

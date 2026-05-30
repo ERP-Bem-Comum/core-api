@@ -21,6 +21,8 @@ import { makeFakePasswordHasher } from '#src/modules/auth/adapters/crypto/passwo
 import { makeFakeTokenIssuer } from '#src/modules/auth/adapters/crypto/token-issuer.fake.ts';
 import { makeFakeRefreshTokenMinter } from '#src/modules/auth/adapters/crypto/refresh-token-minter.fake.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
+import { DUMMY_PASSWORD_HASH } from '../../_support/dummy-password-hash.ts';
+import { makeInMemoryLoginLockoutStore, TEST_LOCKOUT_POLICY } from '../../_support/lockout.ts';
 import * as RefreshToken from '#src/modules/auth/domain/session/refresh-token.ts';
 
 const AT = new Date('2026-05-27T12:00:00.000Z');
@@ -49,6 +51,9 @@ const makeCtx = () => {
     refreshTokenRepo: refreshStore.repository,
     clock: ClockFixed(AT),
     refreshTtlSeconds: REFRESH_TTL,
+    dummyPasswordHash: DUMMY_PASSWORD_HASH,
+    lockoutStore: makeInMemoryLoginLockoutStore(),
+    lockoutPolicy: TEST_LOCKOUT_POLICY,
   });
   const deps = {
     refreshTokenMinter,

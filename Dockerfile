@@ -29,8 +29,8 @@ FROM node:24.15-alpine@sha256:d1b3b4da11eefd5941e7f0b9cf17783fc99d9c6fc34884a665
 # (Alpine não monta `/init`; equivalente ao flag `--init` do `docker run`).
 RUN apk add --no-cache tini
 
-# Corepack habilita pnpm sem npm install global. Versão pinada (ADR-0012).
-ENV PNPM_VERSION=10.0.0
+# Corepack habilita pnpm sem npm install global. Versão pinada (ADR-0029).
+ENV PNPM_VERSION=11.5.0
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 WORKDIR /app

@@ -94,4 +94,24 @@ describe('Password.parse', () => {
       assert.equal(r.error, 'password-too-long');
     }
   });
+
+  // BE-REC-005: blocklist de senhas vazadas/comuns (OWASP WSTG-ATHN-07, NIST 800-63B).
+  it('BE-REC-005: senha comum no comprimento valido retorna err password-too-common', () => {
+    for (const common of ['password123', 'senha123', '12345678', 'qwerty123']) {
+      const r = Password.parse(common);
+      assert.equal(r.ok, false, `esperava bloquear "${common}"`);
+      if (!r.ok) assert.equal(r.error, 'password-too-common');
+    }
+  });
+
+  it('BE-REC-005: blocklist e case-insensitive', () => {
+    const r = Password.parse('PASSWORD123');
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'password-too-common');
+  });
+
+  it('BE-REC-005: senha forte fora da blocklist passa', () => {
+    const r = Password.parse('correct-horse-battery-staple-42');
+    assert.equal(r.ok, true);
+  });
 });

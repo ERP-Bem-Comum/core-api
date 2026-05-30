@@ -1,0 +1,16 @@
+# Ancora o portal de docs como workspace root próprio, isolando-o do core-api
+# (não herda minimumReleaseAge/allowBuilds da raiz). Projeto único, sem `packages:`.
+#
+# pnpm 11: aprovação de build scripts via `allowBuilds` (map nome→bool), igual ao root do core-api.
+# esbuild/@swc/core precisam do build nativo; core-js* têm só postinstall de telemetria (dispensável).
+allowBuilds:
+  esbuild: true
+  '@swc/core': true
+  core-js: false
+  core-js-pure: false
+
+# A quarentena de supply-chain do ADR-0011 mira o core-api (runtime de produção do ERP).
+# Este workspace é um GERADOR DE DOCS estático isolado — o default do pnpm 11 (1440) cria fricção
+# contínua com as deps de build do Docusaurus (que atualizam com frequência) sem ganho de risco
+# proporcional. Mantemos 0 aqui; o regime de hardening continua valendo no core-api.
+minimumReleaseAge: 0

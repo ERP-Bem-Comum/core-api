@@ -11,6 +11,7 @@
 import { type Result, ok } from '../../../../shared/primitives/result.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
 import * as RefreshToken from '../../domain/session/refresh-token.ts';
+import type { UserId } from '../../domain/identity/user-id.ts';
 import type {
   RefreshTokenRepository,
   RefreshTokenRepositoryError,
@@ -50,6 +51,28 @@ export const revokeAllSessions =
     const now = deps.clock.now();
     const revocable = await deps.refreshTokenRepo.findRevocableByUserId(found.value.userId);
     if (!revocable.ok) return revocable;
+    for (const token of revocable.value) {
+      const saved = await deps.refreshTokenRepo.save(RefreshToken.revoke(token, now));
+      if (!saved.ok) return saved;
+    }
+    return ok(undefined);
+  };
+
+// BE-REC-004: variante por userId, para a rota HTTP autenticada (o access JWT da o userId, nao o
+// refresh em claro). Revoga toda a cadeia revogavel do usuario (sair de todos os dispositivos).
+type RevokeAllForUserDeps = Readonly<{
+  refreshTokenRepo: RefreshTokenRepository;
+  clock: Clock;
+}>;
+
+export type RevokeAllSessionsForUserCommand = Readonly<{ userId: UserId }>;
+
+export const revokeAllSessionsForUser =
+  (deps: RevokeAllForUserDeps) =>
+  async (cmd: RevokeAllSessionsForUserCommand): Promise<Result<void, RevokeSessionError>> => {
+    const revocable = await deps.refreshTokenRepo.findRevocableByUserId(cmd.userId);
+    if (!revocable.ok) return revocable;
+    const now = deps.clock.now();
     for (const token of revocable.value) {
       const saved = await deps.refreshTokenRepo.save(RefreshToken.revoke(token, now));
       if (!saved.ok) return saved;
