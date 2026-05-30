@@ -249,6 +249,32 @@ describe('AUTH-HTTP-ROUTES — change-password + revoke-all (BE-REC-004)', () =>
   });
 });
 
+// BE-REC-003: solicitação de reset responde 202 uniforme (anti-enumeração).
+describe('AUTH-HTTP-ROUTES — forgot-password (BE-REC-003)', () => {
+  it('responde 202 tanto para conta existente quanto inexistente', async () => {
+    const app = await makeApp();
+    await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/register',
+      payload: { email: EMAIL, password: STRONG },
+    });
+    const exists = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/forgot-password',
+      payload: { email: EMAIL },
+    });
+    assert.equal(exists.statusCode, 202);
+
+    const ghost = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/forgot-password',
+      payload: { email: 'ghost@example.com' },
+    });
+    assert.equal(ghost.statusCode, 202);
+    await app.close();
+  });
+});
+
 // Sentinela para garantir que o composition memory sobe sem segredo externo (chaves ES256 efêmeras).
 before(() => {
   assert.equal(typeof buildAuthHttpDeps, 'function');

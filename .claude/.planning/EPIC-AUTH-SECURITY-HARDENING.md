@@ -41,8 +41,8 @@ Não existe. Rotas auth: register, login, refresh, logout, me.
 ### Esboço de tickets
 - ✅ `CTR-AUTH-RESET-TOKEN` — **ENTREGUE (closed-green, 2026-05-30)**. Domínio puro `PasswordResetToken` (one-time + TTL, estados pending>expired>used, `consume`) + `PasswordResetTokenId`, em `domain/session/`. Espelha RefreshToken.
 - ✅ `CTR-AUTH-RESET-PERSISTENCE` — **ENTREGUE (closed-green, 2026-05-30)**. Port `PasswordResetTokenRepository` + InMemory + schema `auth_password_reset` + mapper + repo Drizzle + migration `0001` (hardening manual). Integração MySQL **pendente** (porta 3306 ocupada). O minter (`randomBytes`+sha256) foi movido para o `CTR-AUTH-RESET-REQUEST`.
-- `CTR-AUTH-RESET-REQUEST` — **próximo.** Minter de token (`randomBytes`+sha256) + use case `requestPasswordReset` + EmailPort (consome `notifications/public-api`) + rota `POST /forgot-password` (anti-enumeração: resposta sempre 202; origem confiável via config, nunca header Host). Invalida tokens pendentes anteriores (`findUnusedByUserId`).
-- `CTR-AUTH-RESET-CONFIRM` — use case `confirmPasswordReset` (one-time, TTL, revoga sessões) + rota `POST /reset-password`.
+- ✅ `CTR-AUTH-RESET-REQUEST` — **ENTREGUE (closed-green, 2026-05-30)**. Minter (port+node) + port/adapter `PasswordResetMailer` (consome `notifications/public-api`) + use case `requestPasswordReset` (anti-enumeração, invalida pendentes, origem confiável) + rota `POST /forgot-password` (sempre 202, rate-limit). Mailer real (Nodemailer) **pendente** (no-op seguro sem SMTP; adapter pronto). Integração MySQL pendente.
+- `CTR-AUTH-RESET-CONFIRM` — **próximo (último da cadeia).** Use case `confirmPasswordReset`: lookup por `findByTokenHash(minter.hash(token))`, `consume` (one-time + TTL), `User.changePassword` + nova `PasswordHash`, **revoga todas as sessões** (`revokeAllSessionsForUser`) + rota `POST /reset-password`.
 
 ## Sequência sugerida
 1. BE-REC-001 rate-limit por rota (rápido, alto valor 🔴).

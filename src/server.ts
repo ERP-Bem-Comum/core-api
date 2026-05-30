@@ -40,11 +40,14 @@ const main = async (): Promise<void> => {
           timeWindow: process.env['AUTH_LOGIN_RATE_LIMIT_WINDOW'] ?? '1 minute',
         }
       : undefined;
+  // BE-REC-003: origem confiável do link de reset (nunca header Host). Ausente → default (dev).
+  const resetBaseUrl = process.env['AUTH_RESET_BASE_URL'];
   const authDeps = await buildAuthHttpDeps({
     driver: authDriver,
     ...(authConnString !== undefined ? { connectionString: authConnString } : {}),
     ...(authSeed !== undefined ? { seed: authSeed } : {}),
     ...(sensitiveRateLimit !== undefined ? { sensitiveRateLimit } : {}),
+    ...(resetBaseUrl !== undefined && resetBaseUrl.length > 0 ? { resetBaseUrl } : {}),
   });
 
   // RW split (ADR-0026): CONTRACTS_DATABASE_URL = writer; CONTRACTS_READER_URL = réplica

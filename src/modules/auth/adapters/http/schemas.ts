@@ -46,3 +46,8 @@ export const changePasswordBodySchema = z.object({
   currentPassword: z.string().meta({ description: 'Senha atual (re-autenticacao)' }),
   newPassword: z.string().meta({ description: 'Nova senha (validada pela policy do dominio)' }),
 });
+
+// BE-REC-003: solicitação de reset. Resposta sempre 202 (anti-enumeração), sem corpo.
+export const forgotPasswordBodySchema = z.object({
+  email: z.string().meta({ description: 'E-mail da conta para recuperação de senha' }),
+});

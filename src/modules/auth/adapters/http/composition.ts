@@ -21,7 +21,10 @@ import { createDrizzleRefreshTokenStore } from '../persistence/repos/refresh-tok
 import { createDrizzleRoleStore } from '../persistence/repos/role-repository.drizzle.ts';
 import { openAuthMysql } from '../persistence/drivers/mysql-driver.ts';
 import { makeArgon2PasswordHasher } from '../crypto/password-hasher.argon2.ts';
+import { makeNodePasswordResetTokenMinter } from '../crypto/password-reset-token-minter.node.ts';
 import { makeInMemoryLoginLockoutStore } from '../persistence/repos/login-lockout-store.in-memory.ts';
+import { makeInMemoryPasswordResetTokenStore } from '../persistence/repos/password-reset-token-repository.in-memory.ts';
+import { createDrizzlePasswordResetTokenStore } from '../persistence/repos/password-reset-token-repository.drizzle.ts';
 import { makeNodeRefreshTokenMinter } from '../crypto/refresh-token-minter.node.ts';
 import { makeEs256TokenIssuer, type Es256Config } from '../crypto/token-issuer.es256.ts';
 
@@ -33,6 +36,7 @@ import {
   revokeAllSessionsForUser,
 } from '../../application/use-cases/revoke-session.ts';
 import { changePassword } from '../../application/use-cases/change-password.ts';
+import { requestPasswordReset } from '../../application/use-cases/request-password-reset.ts';
 
 import type { UserReader, UserRepository } from '../../domain/identity/user/repository.ts';
 import type { RefreshTokenRepository } from '../../domain/session/refresh-token-repository.ts';
@@ -40,6 +44,9 @@ import type { RoleRepository } from '../../domain/authorization/role-repository.
 import type { TokenIssuer } from '../../application/ports/token-issuer.ts';
 import type { PasswordHasher } from '../../application/ports/password-hasher.ts';
 import type { LockoutPolicy } from '../../domain/session/account-lockout.ts';
+import type { PasswordResetTokenRepository } from '../../domain/session/password-reset-token-repository.ts';
+import type { PasswordResetMailer } from '../../application/ports/password-reset-mailer.ts';
+import { ok } from '#src/shared/primitives/result.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
 
 // Seed RBAC (CONTRACTS-HTTP-READS C1, D4): bootstrap de permissões para dev/test.
@@ -81,6 +88,10 @@ export type AuthCompositionConfig = Readonly<{
   sensitiveRateLimit?: Readonly<{ max: number; timeWindow: string }>;
   /** Política do account lockout (BE-REC-001). Default: 5 falhas → 1/5/15/60min progressivo. */
   lockoutPolicy?: LockoutPolicy;
+  /** Origem confiável do link de reset (BE-REC-003). Nunca derivada do header Host. */
+  resetBaseUrl?: string;
+  /** TTL do token de reset em segundos (BE-REC-003). Default: 900 (15min). */
+  resetTtlSeconds?: number;
 }>;
 
 export type AuthHttpDeps = Readonly<{
@@ -99,6 +110,8 @@ export type AuthHttpDeps = Readonly<{
   authorize: (permissionName: string) => preHandlerAsyncHookHandler;
   /** Config do rate-limit dedicado das rotas sensíveis (login/refresh) — BE-REC-001. */
   sensitiveRateLimit: Readonly<{ max: number; timeWindow: string }>;
+  /** Use case do fluxo de reset (BE-REC-003), consumido pela rota /forgot-password. */
+  requestPasswordReset: ReturnType<typeof requestPasswordReset>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -109,11 +122,15 @@ const DEFAULT_REFRESH_TTL = 2_592_000; // 30 dias
 const DEFAULT_SENSITIVE_RATE_LIMIT = { max: 5, timeWindow: '1 minute' } as const;
 // BE-REC-001: cooldown por conta — 5 falhas → 1min, depois 5/15min, cap 60min. Sempre temporário.
 const DEFAULT_LOCKOUT_POLICY: LockoutPolicy = { threshold: 5, stepsMinutes: [1, 5, 15, 60] };
+// BE-REC-003: TTL curto do token de reset + origem default (dev). Prod sobrepõe via config/env.
+const DEFAULT_RESET_TTL = 900; // 15 min
+const DEFAULT_RESET_BASE_URL = 'http://localhost:3000/reset-password';
 
 type Stores = Readonly<{
   userReader: UserReader;
   userRepo: UserRepository;
   refreshTokenRepo: RefreshTokenRepository;
+  resetTokenRepo: PasswordResetTokenRepository;
   roleRepo: RoleRepository;
   shutdown: () => Promise<void>;
 }>;
@@ -141,6 +158,7 @@ const buildStores = async (config: AuthCompositionConfig): Promise<Stores> => {
       userReader: userStore.reader,
       userRepo: userStore.repository,
       refreshTokenRepo: refreshStore.repository,
+      resetTokenRepo: makeInMemoryPasswordResetTokenStore().repository,
       roleRepo: roleStore.repository,
       shutdown: () => Promise.resolve(),
     };
@@ -163,6 +181,7 @@ const buildStores = async (config: AuthCompositionConfig): Promise<Stores> => {
     userReader: userStore.reader,
     userRepo: userStore.repository,
     refreshTokenRepo: refreshStore.repository,
+    resetTokenRepo: createDrizzlePasswordResetTokenStore(handle).repository,
     roleRepo: roleStore.repository,
     shutdown: handle.close,
   };
@@ -240,6 +259,16 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
   const lockoutStore = makeInMemoryLoginLockoutStore();
   const lockoutPolicy = config.lockoutPolicy ?? DEFAULT_LOCKOUT_POLICY;
 
+  // BE-REC-003: token de reset + entrega por e-mail. Sem SMTP configurado, o mailer é um no-op
+  // SEGURO (não loga e-mail nem o link). O adapter real `makeEmailPasswordResetMailer` (consome
+  // notifications/public-api) entra quando a config SMTP for fiada — follow-up.
+  const resetMinter = makeNodePasswordResetTokenMinter();
+  const resetMailer: PasswordResetMailer = {
+    sendResetLink: async () => ok(undefined),
+  };
+  const resetBaseUrl = config.resetBaseUrl ?? DEFAULT_RESET_BASE_URL;
+  const resetTtlSeconds = config.resetTtlSeconds ?? DEFAULT_RESET_TTL;
+
   if (config.seed !== undefined) {
     await applyRbacSeed(config.seed, {
       userRepo: stores.userRepo,
@@ -291,6 +320,15 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
     revokeAllSessionsForUser: revokeAllSessionsForUser({
       refreshTokenRepo: stores.refreshTokenRepo,
       clock,
+    }),
+    requestPasswordReset: requestPasswordReset({
+      userReader: stores.userReader,
+      resetTokenRepo: stores.resetTokenRepo,
+      minter: resetMinter,
+      mailer: resetMailer,
+      clock,
+      resetTtlSeconds,
+      resetBaseUrl,
     }),
     verifyAccessToken: tokenIssuer.verifyAccessToken,
     sensitiveRateLimit: config.sensitiveRateLimit ?? DEFAULT_SENSITIVE_RATE_LIMIT,

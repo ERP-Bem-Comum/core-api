@@ -31,6 +31,7 @@ import {
   logoutBodySchema,
   meResponseSchema,
   changePasswordBodySchema,
+  forgotPasswordBodySchema,
 } from './schemas.ts';
 
 const authRoutes =
@@ -163,6 +164,21 @@ const authRoutes =
             'password-too-common': 422,
           },
         });
+      },
+    });
+
+    // BE-REC-003: solicitação de reset de senha. Resposta SEMPRE 202 (anti-enumeração) —
+    // o use case faz best-effort (não revela existência); erro real é só logado.
+    scope.route({
+      method: 'POST',
+      url: '/forgot-password',
+      // Rate-limit dedicado: endpoint de e-mail é abusável (spam/enumeração por volume).
+      config: { rateLimit: deps.sensitiveRateLimit },
+      schema: { body: forgotPasswordBodySchema } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.requestPasswordReset({ email: req.body.email });
+        if (!result.ok) req.log.error({ err: result.error }, 'forgot-password falhou');
+        return reply.code(202).send();
       },
     });
 
