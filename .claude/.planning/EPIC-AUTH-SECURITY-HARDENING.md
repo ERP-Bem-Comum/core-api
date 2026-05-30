@@ -44,9 +44,9 @@ Não existe. Rotas auth: register, login, refresh, logout, me.
 - ✅ `CTR-AUTH-RESET-REQUEST` — **ENTREGUE (closed-green, 2026-05-30)**. Minter (port+node) + port/adapter `PasswordResetMailer` (consome `notifications/public-api`) + use case `requestPasswordReset` (anti-enumeração, invalida pendentes, origem confiável) + rota `POST /forgot-password` (sempre 202, rate-limit). Mailer real (Nodemailer) **pendente** (no-op seguro sem SMTP; adapter pronto). Integração MySQL pendente.
 - ✅ `CTR-AUTH-RESET-CONFIRM` — **ENTREGUE (closed-green, 2026-05-30)**. Use case `confirmPasswordReset` (lookup por hash, valida senha antes de consumir, `consume` one-time+TTL, `User.changePassword`, marca token usado, **revoga todas as sessões**) + rota `POST /reset-password` (204/400/422/403).
 
-> **BE-REC-003 (cadeia de reset) COMPLETA — toda a spec 003 entregue.** Follow-ups abertos (não
-> bloqueiam): fiar mailer Nodemailer real (SMTP); store compartilhado Redis p/ rate-limit+lockout;
-> `CTR-AUTH-LOCKOUT-PERSISTENCE` (Drizzle); validar integração MySQL (porta 3306).
+> **BE-REC-003 (cadeia de reset) COMPLETA — toda a spec 003 entregue.** Follow-ups:
+> - ✅ `CTR-AUTH-RESET-MAILER-SMTP` — **ENTREGUE (closed-green, 2026-05-30)**. `buildResetMailer(env)` fia o Nodemailer real (SMTP_* + `AUTH_RESET_FROM`) ou no-op seguro. Reset funciona ponta-a-ponta com SMTP.
+> - ⏳ store compartilhado Redis p/ rate-limit+lockout; `CTR-AUTH-LOCKOUT-PERSISTENCE` (Drizzle); validar integração MySQL (porta 3306).
 
 ## Sequência sugerida
 1. BE-REC-001 rate-limit por rota (rápido, alto valor 🔴).

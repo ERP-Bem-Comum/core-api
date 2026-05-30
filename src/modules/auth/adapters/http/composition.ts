@@ -48,6 +48,12 @@ import type { LockoutPolicy } from '../../domain/session/account-lockout.ts';
 import type { PasswordResetTokenRepository } from '../../domain/session/password-reset-token-repository.ts';
 import type { PasswordResetMailer } from '../../application/ports/password-reset-mailer.ts';
 import { ok } from '#src/shared/primitives/result.ts';
+import {
+  parseSmtpConfig,
+  createNodemailerEmailSender,
+  parseEmailAddress,
+} from '#src/modules/notifications/public-api/index.ts';
+import { makeEmailPasswordResetMailer } from '../notifications/password-reset-mailer.email.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
 
 // Seed RBAC (CONTRACTS-HTTP-READS C1, D4): bootstrap de permissões para dev/test.
@@ -237,6 +243,24 @@ const applyRbacSeed = async (seed: AuthSeed, deps: SeedDeps): Promise<void> => {
   }
 };
 
+// BE-REC-003: resolve o mailer de reset a partir da env. SMTP (parseSmtpConfig) + AUTH_RESET_FROM
+// válidos → Nodemailer real (notifications/public-api); senão → no-op SEGURO (não envia, não loga
+// e-mail/link). Mantém o boot resiliente em dev/test sem SMTP configurado.
+const buildResetMailer = (env: Readonly<NodeJS.ProcessEnv>): PasswordResetMailer => {
+  const smtp = parseSmtpConfig(env);
+  const fromRaw = env['AUTH_RESET_FROM'];
+  if (smtp.ok && fromRaw !== undefined && fromRaw.length > 0) {
+    const from = parseEmailAddress(fromRaw);
+    if (from.ok) {
+      return makeEmailPasswordResetMailer({
+        emailSender: createNodemailerEmailSender(smtp.value),
+        from: from.value,
+      });
+    }
+  }
+  return { sendResetLink: async () => ok(undefined) };
+};
+
 export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<AuthHttpDeps> => {
   const issuer = config.issuer ?? DEFAULT_ISSUER;
   const accessTtlSeconds = config.accessTtlSeconds ?? DEFAULT_ACCESS_TTL;
@@ -262,13 +286,11 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
   const lockoutStore = makeInMemoryLoginLockoutStore();
   const lockoutPolicy = config.lockoutPolicy ?? DEFAULT_LOCKOUT_POLICY;
 
-  // BE-REC-003: token de reset + entrega por e-mail. Sem SMTP configurado, o mailer é um no-op
-  // SEGURO (não loga e-mail nem o link). O adapter real `makeEmailPasswordResetMailer` (consome
-  // notifications/public-api) entra quando a config SMTP for fiada — follow-up.
+  // BE-REC-003: token de reset + entrega por e-mail. Com SMTP (env) + AUTH_RESET_FROM válidos,
+  // usa o Nodemailer real (notifications/public-api); senão, no-op SEGURO (não envia, não loga
+  // e-mail/link). Ver buildResetMailer.
   const resetMinter = makeNodePasswordResetTokenMinter();
-  const resetMailer: PasswordResetMailer = {
-    sendResetLink: async () => ok(undefined),
-  };
+  const resetMailer = buildResetMailer(process.env);
   const resetBaseUrl = config.resetBaseUrl ?? DEFAULT_RESET_BASE_URL;
   const resetTtlSeconds = config.resetTtlSeconds ?? DEFAULT_RESET_TTL;
 
