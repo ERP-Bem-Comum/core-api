@@ -15,7 +15,7 @@ import type { UserId } from '#src/modules/auth/domain/identity/user-id.ts';
 
 import { runRefreshTokenRepositoryContract } from './refresh-token-repository.contract.ts';
 
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = `mysql://root:rootpw-migration-test-only@127.0.0.1:${process.env['MYSQL_PORT'] ?? '3306'}/core`;
 const integrationEnabled = (): boolean => process.env['MYSQL_INTEGRATION'] === '1';
 const SEED_AT = new Date('2026-05-27T10:00:00.000Z');
 
