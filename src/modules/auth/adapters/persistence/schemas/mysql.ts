@@ -260,6 +260,42 @@ export const authRefreshToken = mysqlTable(
   ],
 );
 
+// ─── auth_password_reset ──────────────────────────────────────────────────────
+// Token de reset de senha (BE-REC-003). Opaco (SHA-256 hex do valor aleatório), one-time + TTL:
+//   emitido → (pending) → consumido (used_at NOT NULL) ou expirado (now >= expires_at).
+export const authPasswordReset = mysqlTable(
+  'auth_password_reset',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    // user_id: soft FK (FK física abaixo: auth_pr_user_fk). COLLATE utf8mb4_bin no SQL manual.
+    userId: varchar('user_id', { length: 36 }).notNull(),
+    // SHA-256 hex (64 chars). UNIQUE (findByTokenHash). COLLATE utf8mb4_bin (hash ASCII).
+    tokenHash: char('token_hash', { length: 64 }).notNull(),
+    requestedAt: datetime('requested_at', { mode: 'date', fsp: 3 }).notNull(),
+    expiresAt: datetime('expires_at', { mode: 'date', fsp: 3 }).notNull(),
+    // null = pending; NOT NULL = consumido (one-time).
+    usedAt: datetime('used_at', { mode: 'date', fsp: 3 }),
+  },
+  (t) => [
+    // CHECK: expires_at > requested_at.
+    check('auth_pr_expiry_chk', sql`${t.expiresAt} > ${t.requestedAt}`),
+    // CHECK: token_hash não-vazio (defesa em profundidade).
+    check('auth_pr_hash_nonempty_chk', sql`CHAR_LENGTH(${t.tokenHash}) > 0`),
+    // FK auth_pr_user_fk → auth_user.id (RESTRICT, espelha auth_rt_user_fk).
+    foreignKey({
+      name: 'auth_pr_user_fk',
+      columns: [t.userId],
+      foreignColumns: [authUser.id],
+    })
+      .onDelete('restrict')
+      .onUpdate('restrict'),
+    // UNIQUE em token_hash: findByTokenHash (type=const).
+    uniqueIndex('auth_pr_token_hash_idx').on(t.tokenHash),
+    // Composto (user_id, used_at): findUnusedByUserId (WHERE user_id=? AND used_at IS NULL).
+    index('auth_pr_user_used_idx').on(t.userId, t.usedAt),
+  ],
+);
+
 // ─── Tipos do schema — consumidos pelos mappers ───────────────────────────────
 export type PermissionRow = typeof authPermission.$inferSelect;
 export type NewPermissionRow = typeof authPermission.$inferInsert;
@@ -278,3 +314,6 @@ export type NewUserRoleRow = typeof authUserRole.$inferInsert;
 
 export type RefreshTokenRow = typeof authRefreshToken.$inferSelect;
 export type NewRefreshTokenRow = typeof authRefreshToken.$inferInsert;
+
+export type PasswordResetRow = typeof authPasswordReset.$inferSelect;
+export type NewPasswordResetRow = typeof authPasswordReset.$inferInsert;

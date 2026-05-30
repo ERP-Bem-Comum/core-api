@@ -40,8 +40,8 @@ Não existe. Rotas auth: register, login, refresh, logout, me.
 
 ### Esboço de tickets
 - ✅ `CTR-AUTH-RESET-TOKEN` — **ENTREGUE (closed-green, 2026-05-30)**. Domínio puro `PasswordResetToken` (one-time + TTL, estados pending>expired>used, `consume`) + `PasswordResetTokenId`, em `domain/session/`. Espelha RefreshToken.
-- `CTR-AUTH-RESET-PERSISTENCE` — schema Drizzle + repo (`auth_password_reset`). **Próximo.** Inclui o minter (`randomBytes` + sha256, espelhando RefreshTokenMinter) e o port `PasswordResetTokenRepository`.
-- `CTR-AUTH-RESET-REQUEST` — use case `requestPasswordReset` + EmailPort + rota `POST /forgot-password` (anti-enumeração).
+- ✅ `CTR-AUTH-RESET-PERSISTENCE` — **ENTREGUE (closed-green, 2026-05-30)**. Port `PasswordResetTokenRepository` + InMemory + schema `auth_password_reset` + mapper + repo Drizzle + migration `0001` (hardening manual). Integração MySQL **pendente** (porta 3306 ocupada). O minter (`randomBytes`+sha256) foi movido para o `CTR-AUTH-RESET-REQUEST`.
+- `CTR-AUTH-RESET-REQUEST` — **próximo.** Minter de token (`randomBytes`+sha256) + use case `requestPasswordReset` + EmailPort (consome `notifications/public-api`) + rota `POST /forgot-password` (anti-enumeração: resposta sempre 202; origem confiável via config, nunca header Host). Invalida tokens pendentes anteriores (`findUnusedByUserId`).
 - `CTR-AUTH-RESET-CONFIRM` — use case `confirmPasswordReset` (one-time, TTL, revoga sessões) + rota `POST /reset-password`.
 
 ## Sequência sugerida
