@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { asc, eq } from 'drizzle-orm';
 
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
 import type {
@@ -6,7 +6,7 @@ import type {
   AmendmentRepositoryError,
 } from '../../../domain/amendment/repository.ts';
 import type { Amendment } from '../../../domain/amendment/types.ts';
-import type { AmendmentId } from '../../../domain/shared/ids.ts';
+import type { AmendmentId, ContractId } from '../../../domain/shared/ids.ts';
 import type { ContractsModuleEvent } from '../../../application/ports/event-bus.ts';
 import type { MysqlHandle } from '../drivers/mysql-driver.ts';
 import { amendmentFromRow, amendmentToInsert } from '../mappers/amendment.mapper.ts';
@@ -46,6 +46,24 @@ export const createDrizzleAmendmentRepository = (
         const r = amendmentFromRow(row);
         if (!r.ok) throw new Error(r.error.tag);
         return r.value as Amendment | null;
+      }),
+
+    // Leitura agregada: aditivos do contrato (índice `ctr_amendments_contract_id_idx`),
+    // ordenados por `amendment_number` asc — paridade com o adapter InMemory.
+    findByContractId: async (contractId: ContractId) =>
+      safe('findByContractId', async () => {
+        const rows = await db
+          .select()
+          .from(schema.amendments)
+          .where(eq(schema.amendments.contractId, contractId as unknown as string))
+          .orderBy(asc(schema.amendments.amendmentNumber));
+        const amendments: Amendment[] = [];
+        for (const row of rows) {
+          const r = amendmentFromRow(row);
+          if (!r.ok) throw new Error(r.error.tag);
+          amendments.push(r.value);
+        }
+        return amendments as readonly Amendment[];
       }),
 
     // CA-3: save(amendment, events) abre UMA transação que persiste state + outbox atomicamente.

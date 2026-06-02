@@ -25,7 +25,7 @@ import { toErrorEnvelope } from '#src/shared/http/errors.ts';
 import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
 
 import type { ContractsHttpDeps } from './composition.ts';
-import { contractToListItem } from './contract-dto.ts';
+import { contractToListItem, contractToDetailDto } from './contract-dto.ts';
 import { timelineEntryToDto } from './timeline-dto.ts';
 import { amendmentToDto } from './amendment-dto.ts';
 import { documentToDto } from './document-dto.ts';
@@ -34,6 +34,7 @@ import { CONTRACT_PERMISSION } from '../../public-api/permissions.ts';
 import {
   contractListSchema,
   contractDetailSchema,
+  contractFullDetailSchema,
   contractIdParamSchema,
   timelineSchema,
   createContractBodySchema,
@@ -186,22 +187,30 @@ const contractsRoutes =
       },
     });
 
+    // Detalhe enriquecido (ADR-0032): compõe Contract + Amendment[] + Document[] na borda
+    // (rota de leitura composta transitória até o BFF v2 assumir). O list-item de
+    // GET /contracts permanece enxuto.
     scope.route({
       method: 'GET',
       url: '/contracts/:id',
       preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.read)],
       schema: {
         params: contractIdParamSchema,
-        response: { 200: contractDetailSchema },
+        response: { 200: contractFullDetailSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
-        const result = await deps.getContract({ contractId: req.params.id });
+        const result = await deps.getContractDetail({ contractId: req.params.id });
         if (!result.ok) {
           return sendResult(reply, err(toErrorCode(result.error)), {
-            errors: { 'contract-not-found': 404, 'contract-repo-unavailable': 503 },
+            errors: {
+              'contract-not-found': 404,
+              'contract-repo-unavailable': 503,
+              'amendment-repo-unavailable': 503,
+              'document-repository-unavailable': 503,
+            },
           });
         }
-        return sendResult(reply, ok(contractToListItem(result.value)), { ok: 200 });
+        return sendResult(reply, ok(contractToDetailDto(result.value)), { ok: 200 });
       },
     });
 

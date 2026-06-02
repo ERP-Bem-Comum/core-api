@@ -22,6 +22,13 @@ export const InMemoryAmendmentRepository = (
 
   const repo: AmendmentRepository = {
     findById: async (id) => ok(map.get(id) ?? null),
+    // Leitura agregada: aditivos do contrato ordenados por `amendmentNumber` asc
+    // (determinismo + paridade com o adapter Drizzle).
+    findByContractId: async (contractId) => {
+      const matches = [...map.values()].filter((a) => a.contractId === contractId);
+      matches.sort((a, b) => a.amendmentNumber.localeCompare(b.amendmentNumber));
+      return ok(matches);
+    },
     // CA-4: save persiste o agregado na map E appenda eventos no outbox.
     save: async (amendment: Amendment, events: readonly ContractsModuleEvent[]) => {
       map.set(amendment.id, amendment);
