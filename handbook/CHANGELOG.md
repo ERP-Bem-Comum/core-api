@@ -4,6 +4,39 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-02 — 🔚 Rota HTTP de encerrar contrato + gate da suite mysql-compose
+
+### Borda HTTP (contracts)
+
+- **`POST /api/v2/contracts/:id/end`** (ticket `CONTRACTS-HTTP-END`, W0→W3 verde) — encerra contrato via use case `endContract` (writer pool, ADR-0026), body `{ kind: 'Expire' | 'Terminate' }`, protegido por `requireAuth` + `authorize('contract:write')`. Mapeamento de erro reusa a infra existente do plugin (`ContractNotActive`→409, `contract-not-found`→404, `ContractCannotExpireYet`/`...IndefinitePeriod`→422, repo→503). Documentado em `docs/02-http-api.md` §4.
+
+### Infra / testes
+
+- **Suite `tests/infra/mysql-compose.test.ts` gateada por opt-in** (ticket `mysql-compose skip-guard`) — bootstrap exige `COMPOSE_INTEGRATION=1` (mesma convenção de `MYSQL_INTEGRATION`/`STORAGE_INTEGRATION`); sem o opt-in fica `skipped`, nunca `failed`, mesmo com o daemon vivo e a 3306 do stack de dev ocupada. Novo script `pnpm run test:integration:infra` aplica o override `compose.ci.yaml` (`ports: !reset null`) e usa `docker exec`, coexistindo com o stack de dev. Documentado em `docs/04-dev-guide.md` §6.
+
+### Manutenção
+
+- **Política de regressão zero** formalizada no `CLAUDE.md` raiz (anti-padrão #14 + seção dedicada) e espelhada no output-style `erp-contracts`: nenhum vermelho é "erro alheio/ambiental"; conserta-se a causa OU o gate mal-classificado (com prova de verde), nunca se fecha com falha não-endereçada.
+- **Ticket `PARTNERS-ETL-BOOTSTRAP` aberto** (L, ETL one-shot legado→core-api, épico Parceiros/Cadastros §4) com 5 pré-requisitos mapeados; `CTR-CLI-ACTIVAR-CONTRATO` marcado `superseded` por `CONTRACTS-HTTP-WRITES-CORE`.
+
+## 2026-06-01 — 🤝 Módulo `partners` (ADR-0031) + BC Parceiros/Cadastros
+
+### Decisões (ADR)
+
+- **ADR-0031 aceito** — cria o módulo **`partners`** no core-api (prefixo `par_*`), primeira das 4 fronteiras do legacy API a migrar (`suppliers`/`financiers`/`collaborators` + `collaborator_history` + geografias). Três agregados internos (supplier, financier, collaborator); `collaborator` fundido por YAGNI; geografias como lookup; perfil de usuário como agregado separado referenciando `auth.User`; VOs `Cpf`/`Cnpj`/`Email` promovidos ao shared-kernel; enums legados → unions EN com exceções (race/gender/serviceCategory/occupationArea). Precedido de sessão de design multi-agente read-only (5 especialistas).
+
+### Domínio
+
+- **BC Parceiros/Cadastros documentado** — novo `handbook/domain/11-parceiros-cadastros-context.md` (responsabilidades, agregados, relacionamentos cross-BC, linguagem ubíqua). `02-context-map.md` atualizado com a fronteira e o relacionamento Títulos/Contratos → Parceiros (ID + snapshot).
+
+### Planejamento
+
+- **Design consolidado** em `.claude/.planning/EPIC-PARTNERS-CADASTROS.md` — convergências, 9 decisões (4 fechadas pela banca, 5 P.O./ETL pendentes) e fatiamento em ~13 tickets W0→W3.
+
+### Manutenção
+
+- Índice de ADRs (`adr/README.md`) atualizado — incluídas as entradas **0029**, **0030** e **0031** (estava parado em 0028).
+
 ## 2026-05-30 — 🔐 Hardening de auth (spec 003) + ADR-0030 (store compartilhado adiado)
 
 ### Decisões (ADR)

@@ -37,6 +37,7 @@ import {
   timelineSchema,
   createContractBodySchema,
   activateContractBodySchema,
+  endContractBodySchema,
   createAmendmentBodySchema,
   homologateBodySchema,
   amendmentParamSchema,
@@ -282,6 +283,26 @@ const contractsRoutes =
         const result = await deps.activateContract({
           contractId: req.params.id,
           signedAt: req.body.signedAt,
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(contractToListItem(result.value.contract)), { ok: 200 });
+      },
+    });
+
+    // Encerramento (UC-07): `Expire` (chegada da data fim) ou `Terminate` (distrato).
+    scope.route({
+      method: 'POST',
+      url: '/contracts/:id/end',
+      preHandler: [hooks.requireAuth, hooks.authorize('contract:write')],
+      schema: {
+        params: contractIdParamSchema,
+        body: endContractBodySchema,
+        response: { 200: contractDetailSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.endContract({
+          contractId: req.params.id,
+          kind: req.body.kind,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(reply, ok(contractToListItem(result.value.contract)), { ok: 200 });

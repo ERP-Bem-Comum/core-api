@@ -1,0 +1,117 @@
+/**
+ * Operações do agregado `Financier` (Financiador).
+ *
+ * Agregado exportado como funções soltas, consumidas via
+ * `import * as Financier from './financier.ts'` (pattern de `payable.ts`).
+ * Transições constroem novo subtipo refinado via `immutable(...)`. IDs e
+ * instantes são injetados pelo caller (sem `new Date()`/geração no domínio).
+ *
+ * Operações:
+ *   - `register` — smart constructor: nasce `Active`.
+ *   - `deactivate` — Active → Inactive (soft-delete do módulo partners).
+ *   - `reactivate` — Inactive → Active.
+ */
+
+import { type Result, ok, err } from '#src/shared/primitives/result.ts';
+import { immutable } from '#src/shared/primitives/immutable.ts';
+import * as Cnpj from '#src/shared/kernel/cnpj.ts';
+import type {
+  ActiveFinancier,
+  Financier,
+  InactiveFinancier,
+  RegisterFinancierInput,
+  RehydrateFinancierInput,
+} from './types.ts';
+import type { FinancierEvent } from './events.ts';
+import type { FinancierError } from './errors.ts';
+
+const isBlank = (s: string): boolean => s.trim().length === 0;
+
+export const register = (
+  input: RegisterFinancierInput,
+): Result<{ financier: ActiveFinancier; event: FinancierEvent }, FinancierError> => {
+  if (isBlank(input.name)) return err('financier-name-required');
+  if (isBlank(input.corporateName)) return err('financier-corporate-name-required');
+  if (isBlank(input.legalRepresentative)) return err('financier-legal-representative-required');
+  if (isBlank(input.telephone)) return err('financier-telephone-required');
+  if (isBlank(input.address)) return err('financier-address-required');
+
+  const cnpj = Cnpj.parse(input.cnpj);
+  if (!cnpj.ok) return err('invalid-cnpj');
+
+  const financier: ActiveFinancier = immutable({
+    id: input.id,
+    name: input.name.trim(),
+    corporateName: input.corporateName.trim(),
+    legalRepresentative: input.legalRepresentative.trim(),
+    cnpj: cnpj.value,
+    telephone: input.telephone.trim(),
+    address: input.address.trim(),
+    status: 'Active',
+  });
+
+  const event: FinancierEvent = {
+    type: 'FinancierRegistered',
+    financierId: financier.id,
+    cnpj: financier.cnpj,
+    occurredAt: input.registeredAt,
+  };
+
+  return ok({ financier, event });
+};
+
+export const deactivate = (
+  financier: Financier,
+  at: Date,
+): Result<{ financier: InactiveFinancier; event: FinancierEvent }, FinancierError> => {
+  if (financier.status === 'Inactive') return err('financier-already-inactive');
+
+  const inactive: InactiveFinancier = immutable({
+    ...financier,
+    status: 'Inactive',
+    deactivatedAt: at,
+  });
+
+  return ok({
+    financier: inactive,
+    event: { type: 'FinancierDeactivated', financierId: financier.id, occurredAt: at },
+  });
+};
+
+export const reactivate = (
+  financier: Financier,
+  at: Date,
+): Result<{ financier: ActiveFinancier; event: FinancierEvent }, FinancierError> => {
+  if (financier.status === 'Active') return err('financier-already-active');
+
+  const { deactivatedAt: _deactivatedAt, ...core } = financier;
+  const active: ActiveFinancier = immutable({ ...core, status: 'Active' });
+
+  return ok({
+    financier: active,
+    event: { type: 'FinancierReactivated', financierId: financier.id, occurredAt: at },
+  });
+};
+
+/**
+ * Reidrata o agregado a partir de dados persistidos (sem emitir evento). VOs já
+ * reconstruídos pela borda; valida apenas a coerência do estado.
+ */
+export const rehydrate = (input: RehydrateFinancierInput): Result<Financier, FinancierError> => {
+  const core = {
+    id: input.id,
+    name: input.name,
+    corporateName: input.corporateName,
+    legalRepresentative: input.legalRepresentative,
+    cnpj: input.cnpj,
+    telephone: input.telephone,
+    address: input.address,
+  };
+
+  if (input.status === 'Active') {
+    return ok(immutable({ ...core, status: 'Active' }));
+  }
+
+  if (input.deactivatedAt === null) return err('financier-inactive-requires-deactivated-at');
+  return ok(immutable({ ...core, status: 'Inactive', deactivatedAt: input.deactivatedAt }));
+};

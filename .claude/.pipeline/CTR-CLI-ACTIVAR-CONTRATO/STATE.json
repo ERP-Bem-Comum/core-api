@@ -3,9 +3,9 @@
   "ticket": "CTR-CLI-ACTIVAR-CONTRATO",
   "size": "S",
   "createdAt": "2026-05-28T04:45:09.086Z",
-  "closedAt": null,
+  "closedAt": "2026-06-02T03:15:39.584Z",
   "currentWave": null,
-  "status": "open",
+  "status": "superseded",
   "waves": [
     {
       "id": "W0",
@@ -49,5 +49,6 @@
     }
   ],
   "blockers": [],
-  "lastEvent": "init"
+  "lastEvent": "superseded by CONTRACTS-HTTP-WRITES-CORE",
+  "supersededBy": "CONTRACTS-HTTP-WRITES-CORE"
 }

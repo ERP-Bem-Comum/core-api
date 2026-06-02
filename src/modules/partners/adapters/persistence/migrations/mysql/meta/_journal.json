@@ -1,0 +1,34 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1780292952809,
+      "tag": "0000_parched_songbird",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1780340991008,
+      "tag": "0001_organic_zaladane",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1780361156686,
+      "tag": "0002_young_cerise",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1780369289569,
+      "tag": "0003_absent_morph",
+      "breakpoints": true
+    }
+  ]
+}

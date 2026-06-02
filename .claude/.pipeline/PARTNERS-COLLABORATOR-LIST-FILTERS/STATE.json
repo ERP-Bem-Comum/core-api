@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "PARTNERS-COLLABORATOR-LIST-FILTERS",
+  "size": "M",
+  "createdAt": "2026-06-02T01:23:57.179Z",
+  "closedAt": "2026-06-02T01:29:04.618Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-06-02T01:23:57.781Z",
+      "finishedAt": "2026-06-02T01:24:47.489Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "application-cli-builder",
+      "startedAt": "2026-06-02T01:24:48.068Z",
+      "finishedAt": "2026-06-02T01:25:44.014Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-06-02T01:25:44.632Z",
+      "finishedAt": "2026-06-02T01:26:12.755Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-06-02T01:26:13.370Z",
+      "finishedAt": "2026-06-02T01:29:04.003Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

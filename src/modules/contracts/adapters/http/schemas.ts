@@ -105,6 +105,9 @@ export const createContractBodySchema = z.discriminatedUnion('mode', [
 /** Body `POST /contracts/:id/activate`. */
 export const activateContractBodySchema = z.object({ signedAt: z.string() });
 
+/** Body `POST /contracts/:id/end` — `Expire` (chegada da data fim) ou `Terminate` (distrato). */
+export const endContractBodySchema = z.object({ kind: z.enum(['Expire', 'Terminate']) });
+
 const amendmentWriteShape = {
   amendmentNumber: z.string(),
   description: z.string(),

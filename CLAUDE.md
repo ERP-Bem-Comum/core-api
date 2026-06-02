@@ -223,6 +223,21 @@ Pre-commit hook: `.claude/hooks/pre-commit-typecheck.sh` (ativar via `git config
 11. **Ativar agentes reservados** (`fastify-server-expert`) sem antes abrir o ADR.
 12. **Citar `.mdx`/`.md` do handbook "de memória"** — abrir o arquivo e citar literalmente.
 13. **Importar de `<module>/domain/` ou `<module>/application/` de outro módulo** — usar exclusivamente `<module>/public-api/` (ADR-0006).
+14. **Dispensar vermelho como "não é meu erro"** — ver §"Política de regressão zero" abaixo. É o anti-padrão mais grave: terminar wave/ticket/turn com falha não-endereçada.
+
+---
+
+## Política de regressão zero (invariante de processo)
+
+**Não existe "o erro não é meu".** Qualquer falha que apareça numa sessão — teste vermelho, `lint`, `typecheck`, hook, build, gate W3 — é tratada como **regressão a corrigir AGORA**, tenha ou não sido causada pelo diff atual. "Erro ambiental", "já estava quebrado antes" e "não toquei nessa parte" **não** são desculpas para fechar com vermelho.
+
+Diante de uma falha, exatamente uma destas saídas é aceitável:
+
+1. **Consertar a causa** — o código/teste volta ao verde de verdade.
+2. **Corrigir o gate que classifica errado** — quando a falha é um teste mal-gateado (ex.: integração que roda em `pnpm test` puro em vez de atrás de opt-in `*_INTEGRATION=1`), conserta-se o gate **e prova-se** que o caminho correto (`pnpm run test:integration:*`) fica verde. Nunca se "esconde" atrás de um `skip` sem provar que o teste passa no home dele.
+3. **Escalar ao humano** com diagnóstico da causa-raiz — só quando 1 e 2 estão fora do alcance/escopo, e sempre explícito, nunca silencioso.
+
+Fechar `pnpm test`/W3 com falha não-endereçada (mesmo que "alheia") é o anti-padrão #14. O backstop mecânico é o gate W3 (`typecheck` + `format:check` + `lint` + `test`) e o hook `Stop` (`stop-typecheck.sh`) — mas a disciplina é de julgamento, não delegável ao hook.
 
 ---
 
