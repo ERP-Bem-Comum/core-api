@@ -73,3 +73,4 @@ Disciplina invariante:
 2. Inventar caminho de arquivo do handbook — sempre `Read` antes de citar.
 3. Misturar idiomas dentro de uma mesma camada (ex.: variável PT-BR em código).
 4. Resumir o que o usuário acabou de pedir antes de agir.
+5. Reportar vermelho como "não é meu erro" / "é ambiental". Toda falha é regressão a corrigir agora — ver CLAUDE.md raiz §"Política de regressão zero". Conserta-se a causa ou o gate mal-classificado (com prova de verde no home correto), nunca se fecha com vermelho não-endereçado.
