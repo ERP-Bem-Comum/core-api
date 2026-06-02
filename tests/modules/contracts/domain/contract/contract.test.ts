@@ -57,6 +57,11 @@ const validInput = (overrides: Partial<CreateContractInput> = {}): CreateContrac
   originalValue: money(10000000),
   originalPeriod: fixedPeriod('2026-01-01', '2026-12-31'),
   contractorRef: someContractorRef,
+  classification: 'Contract',
+  contractModel: 'Service',
+  category: null,
+  costCenter: null,
+  observations: null,
   ...overrides,
 });
 

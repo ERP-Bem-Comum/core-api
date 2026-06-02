@@ -77,6 +77,11 @@ const setupWorld = async (opts: {
     originalValue: money(10000000),
     originalPeriod: fixedPeriod(opts.contractSignedAt, '2027-12-31'),
     contractorRef: someContractorRef,
+    classification: 'Contract',
+    contractModel: 'Service',
+    category: null,
+    costCenter: null,
+    observations: null,
   });
   if (!contractCreate.ok)
     throw new Error(`fixture broken: ${JSON.stringify(contractCreate.error)}`);

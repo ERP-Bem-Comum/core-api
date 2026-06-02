@@ -32,6 +32,11 @@ const validCommand = (overrides: Partial<Record<string, unknown>> = {}) => ({
   periodEnd: '2026-12-31' as string | null,
   contractorType: 'Supplier',
   contractorId: '55555555-5555-4555-8555-555555555555',
+  classification: 'Contract',
+  contractModel: 'Service',
+  category: null as string | null,
+  costCenter: null as string | null,
+  observations: null as string | null,
   ...overrides,
 });
 

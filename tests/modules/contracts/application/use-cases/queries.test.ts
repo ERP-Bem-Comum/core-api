@@ -31,6 +31,11 @@ const setupWithContracts = async (n: number) => {
       originalPeriodEnd: '2026-12-31',
       contractorType: 'Supplier',
       contractorId: '55555555-5555-4555-8555-555555555555',
+      classification: 'Contract',
+      contractModel: 'Service',
+      category: null,
+      costCenter: null,
+      observations: null,
     });
     if (!r.ok) throw new Error(`fixture broken: ${JSON.stringify(r.error)}`);
     created.push(r.value.contract);

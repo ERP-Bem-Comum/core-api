@@ -120,6 +120,11 @@ if (integrationEnabled()) {
             endedAt: null,
             contractorType: 'Supplier',
             contractorId: '55555555-5555-4555-8555-555555555555',
+            classification: 'Contract',
+            contractModel: 'Service',
+            category: null,
+            costCenter: null,
+            observations: null,
           });
         },
       };

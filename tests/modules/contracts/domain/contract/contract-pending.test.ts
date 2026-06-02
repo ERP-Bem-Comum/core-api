@@ -65,6 +65,11 @@ const validPendingInput = (
   originalPeriod: fixedPeriod('2026-01-01', '2026-12-31'),
   createdAt: D('2026-01-01'),
   contractorRef: someContractorRef,
+  classification: 'Contract',
+  contractModel: 'Service',
+  category: null,
+  costCenter: null,
+  observations: null,
   ...overrides,
 });
 
@@ -167,6 +172,11 @@ describe('Contract.create — Active preservado (regressão CA3)', () => {
       originalValue: money(5000000),
       originalPeriod: fixedPeriod('2026-01-01', '2026-12-31'),
       contractorRef: someContractorRef,
+      classification: 'Contract',
+      contractModel: 'Service',
+      category: null,
+      costCenter: null,
+      observations: null,
     });
     assert.equal(isOk(r), true);
     if (!r.ok) return;

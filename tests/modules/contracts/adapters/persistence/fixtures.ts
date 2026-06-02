@@ -9,6 +9,10 @@ import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import * as AmendmentId from '#src/modules/contracts/domain/shared/amendment-id.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
 import * as ContractorRef from '#src/modules/contracts/domain/shared/contractor-ref.ts';
+import * as Classification from '#src/modules/contracts/domain/contract/classification.ts';
+import * as ContractModel from '#src/modules/contracts/domain/contract/contract-model.ts';
+import * as Category from '#src/modules/contracts/domain/contract/category.ts';
+import * as CostCenter from '#src/modules/contracts/domain/contract/cost-center.ts';
 import * as DocumentId from '#src/modules/contracts/domain/shared/document-id.ts';
 import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
@@ -74,7 +78,23 @@ export type ContractOverrides = Partial<{
   periodEndISO: string;
   contractorType: 'Supplier' | 'Financier' | 'Collaborator';
   contractorId: string;
+  classification: 'Contract' | 'ServiceOrder';
+  contractModel: 'Service' | 'Donation';
+  category: 'Evaluation' | 'Operational' | 'Process';
+  costCenter: 'HR' | 'GeneralServices' | 'Events';
+  observations: string;
 }>;
+
+// Metadados de cadastro (CTR-CONTRACT-REGISTRATION-METADATA). Defaults:
+// `Contract`/`Service`; opcionais ficam `null` salvo override.
+const someMetadata = (o: ContractOverrides) => ({
+  classification: unwrap('Classification', Classification.parse(o.classification ?? 'Contract')),
+  contractModel: unwrap('ContractModel', ContractModel.parse(o.contractModel ?? 'Service')),
+  category: o.category === undefined ? null : unwrap('Category', Category.parse(o.category)),
+  costCenter:
+    o.costCenter === undefined ? null : unwrap('CostCenter', CostCenter.parse(o.costCenter)),
+  observations: o.observations ?? null,
+});
 
 export const buildContract = (overrides: ContractOverrides = {}): ActiveContract => {
   const id = unwrap(
@@ -97,6 +117,7 @@ export const buildContract = (overrides: ContractOverrides = {}): ActiveContract
     originalValue: someMoney(overrides.originalValueCents ?? 10_000_000),
     originalPeriod: period,
     contractorRef: someContractorRef(overrides.contractorType, overrides.contractorId),
+    ...someMetadata(overrides),
   });
   return unwrap('Contract.create', r).contract;
 };
@@ -123,6 +144,7 @@ export const buildPendingContract = (overrides: ContractOverrides = {}): Pending
     originalPeriod: period,
     createdAt: new Date('2026-01-10T00:00:00.000Z'),
     contractorRef: someContractorRef(overrides.contractorType, overrides.contractorId),
+    ...someMetadata(overrides),
   });
   return unwrap('Contract.createPending', r).contract;
 };

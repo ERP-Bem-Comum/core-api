@@ -130,6 +130,37 @@ describe('importContracts — H3 linha inválida isolada', () => {
 });
 
 // ============================================================================
+// Classificação da linha respeitada (CTR-CONTRACT-REGISTRATION-METADATA)
+// ============================================================================
+describe('importContracts — classificação da linha respeitada (não força Contract)', () => {
+  it('ServiceOrder acima do teto R1 falha; no teto é criada', async () => {
+    const w = setup();
+    const useCase = importContracts(w.deps);
+
+    const r = await useCase({
+      rows: [
+        // OS acima de R$ 9.999,99 — antes era mascarada como Contract e escapava do teto.
+        baseRow({ numero: '030/2026', classificacao: 'ServiceOrder', valorCentavos: '1000000' }),
+        // OS exatamente no teto — passa.
+        baseRow({ numero: '031/2026', classificacao: 'ServiceOrder', valorCentavos: '999999' }),
+      ],
+      dryRun: false,
+    });
+
+    assert.equal(isOk(r), true);
+    if (!r.ok) return;
+    assert.equal(r.value.succeeded, 1);
+    assert.equal(r.value.failed, 1);
+    assert.equal(r.value.failures[0]?.index, 1);
+    const e = r.value.failures[0]?.error;
+    if (e !== undefined && typeof e === 'object' && 'tag' in e) {
+      assert.equal(e.tag, 'ContractServiceOrderExceedsCap');
+    }
+    assert.equal(w.outbox.all().length, 1);
+  });
+});
+
+// ============================================================================
 // H4 — duplicidade intra-arquivo e vs repositório
 // ============================================================================
 

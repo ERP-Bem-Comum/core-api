@@ -54,6 +54,11 @@ const activeInput = (): CreateContractInput & { contractorRef: ContractorRef.Con
   originalValue: money(10_000_000),
   originalPeriod: fixedPeriod('2026-01-01', '2026-12-31'),
   contractorRef: supplierRef(),
+  classification: 'Contract',
+  contractModel: 'Service',
+  category: null,
+  costCenter: null,
+  observations: null,
 });
 
 const pendingInput = (): CreatePendingContractInput & {
@@ -67,6 +72,11 @@ const pendingInput = (): CreatePendingContractInput & {
   originalPeriod: fixedPeriod('2026-01-01', '2026-12-31'),
   createdAt: new Date('2026-01-01T00:00:00.000Z'),
   contractorRef: supplierRef(),
+  classification: 'Contract',
+  contractModel: 'Service',
+  category: null,
+  costCenter: null,
+  observations: null,
 });
 
 describe('Contract.create — carries contractorRef', () => {

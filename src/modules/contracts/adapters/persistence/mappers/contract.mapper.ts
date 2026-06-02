@@ -13,6 +13,10 @@ import type {
 import * as AmendmentId from '../../../domain/shared/amendment-id.ts';
 import * as ContractId from '../../../domain/shared/contract-id.ts';
 import * as ContractorRef from '../../../domain/shared/contractor-ref.ts';
+import * as Classification from '../../../domain/contract/classification.ts';
+import * as ContractModel from '../../../domain/contract/contract-model.ts';
+import * as Category from '../../../domain/contract/category.ts';
+import * as CostCenter from '../../../domain/contract/cost-center.ts';
 import type { AmendmentId as AmendmentIdType } from '../../../domain/shared/amendment-id.ts';
 import { moneyFromCents } from './money.mapper.ts';
 import { periodFromColumns, periodToColumns, type PeriodKindRaw } from './period.mapper.ts';
@@ -79,6 +83,15 @@ export type ContractMapperInvalidContractorType = Readonly<{
   attemptedId: string;
 }>;
 
+// Metadado de cadastro corrompido no banco (CTR-CONTRACT-REGISTRATION-METADATA):
+// `classification`/`contract_model`/`category`/`cost_center` fora do conjunto. O
+// CHECK respectivo evita gravar; este erro é a rede do mapper (defesa em profundidade).
+export type ContractMapperInvalidMetadata = Readonly<{
+  tag: 'ContractMapperInvalidMetadata';
+  field: 'classification' | 'contractModel' | 'category' | 'costCenter';
+  attemptedValue: string;
+}>;
+
 // ─── Union ────────────────────────────────────────────────────────────────────
 
 export type ContractMapperError =
@@ -89,7 +102,8 @@ export type ContractMapperError =
   | ContractMapperInvalidAmendmentId
   | ContractMapperInvalidEndedAt
   | ContractMapperInvalidPendingShape
-  | ContractMapperInvalidContractorType;
+  | ContractMapperInvalidContractorType
+  | ContractMapperInvalidMetadata;
 
 // ─── Case constructors (Padrão D — free functions, DO D§22) ──────────────────
 //
@@ -160,6 +174,15 @@ export const contractMapperInvalidContractorType = (
   attemptedId,
 });
 
+export const contractMapperInvalidMetadata = (
+  field: ContractMapperInvalidMetadata['field'],
+  attemptedValue: string,
+): ContractMapperInvalidMetadata => ({
+  tag: 'ContractMapperInvalidMetadata',
+  field,
+  attemptedValue,
+});
+
 // ─── Helpers internos ────────────────────────────────────────────────────────
 
 const KNOWN_STATUSES = ['Pending', 'Active', 'Expired', 'Terminated'] as const;
@@ -199,6 +222,11 @@ export const contractToInsert = (
         endedAt: null,
         contractorType: c.contractorRef.kind,
         contractorId: c.contractorRef.id as unknown as string,
+        classification: c.classification,
+        contractModel: c.contractModel,
+        category: c.category,
+        costCenter: c.costCenter,
+        observations: c.observations,
       },
       homologatedAmendmentIds: [],
     };
@@ -227,6 +255,11 @@ export const contractToInsert = (
       endedAt: c.status === 'Active' ? null : c.endedAt,
       contractorType: c.contractorRef.kind,
       contractorId: c.contractorRef.id as unknown as string,
+      classification: c.classification,
+      contractModel: c.contractModel,
+      category: c.category,
+      costCenter: c.costCenter,
+      observations: c.observations,
     },
     homologatedAmendmentIds: c.homologatedAmendmentIds.map((id) => id as unknown as string),
   };
@@ -262,6 +295,21 @@ export const contractFromRow = (
   if (!contractorRefR.ok)
     return err(contractMapperInvalidContractorType(row.contractorType, row.contractorId));
 
+  // Metadados de cadastro — enums validados (rejeita valor corrompido do banco).
+  const classificationR = Classification.parse(row.classification);
+  if (!classificationR.ok)
+    return err(contractMapperInvalidMetadata('classification', row.classification));
+  const contractModelR = ContractModel.parse(row.contractModel);
+  if (!contractModelR.ok)
+    return err(contractMapperInvalidMetadata('contractModel', row.contractModel));
+  const categoryR: Result<Category.Category | null, Category.CategoryError> =
+    row.category === null ? ok(null) : Category.parse(row.category);
+  if (!categoryR.ok) return err(contractMapperInvalidMetadata('category', row.category ?? ''));
+  const costCenterR: Result<CostCenter.CostCenter | null, CostCenter.CostCenterError> =
+    row.costCenter === null ? ok(null) : CostCenter.parse(row.costCenter);
+  if (!costCenterR.ok)
+    return err(contractMapperInvalidMetadata('costCenter', row.costCenter ?? ''));
+
   // Campos de cadastro — comuns a todos os estados (inclusive Pending).
   const registration = {
     id: idR.value,
@@ -271,6 +319,11 @@ export const contractFromRow = (
     originalValue: origValue.value,
     originalPeriod: origPeriod.value,
     contractorRef: contractorRefR.value,
+    classification: classificationR.value,
+    contractModel: contractModelR.value,
+    category: categoryR.value,
+    costCenter: costCenterR.value,
+    observations: row.observations,
   } as const;
 
   // ADR-0023: `Pending` bifurca ANTES de exigir vigência/assinatura. As colunas

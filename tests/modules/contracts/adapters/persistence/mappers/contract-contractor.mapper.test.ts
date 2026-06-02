@@ -44,6 +44,11 @@ const activeRow = (overrides: Partial<RowWithContractor> = {}): RowWithContracto
   endedAt: null,
   contractorType: 'Supplier',
   contractorId: SUPPLIER_ID,
+  classification: 'Contract',
+  contractModel: 'Service',
+  category: null,
+  costCenter: null,
+  observations: null,
   ...overrides,
 });
 

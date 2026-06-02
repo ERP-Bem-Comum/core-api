@@ -51,6 +51,14 @@ export type ContractInvalidSignedAt = Readonly<{ tag: 'ContractInvalidSignedAt' 
 
 export type ContractOriginalValueZero = Readonly<{ tag: 'ContractOriginalValueZero' }>;
 
+// R1 — teto de Ordem de Serviço. Invariante de cadastro: carrega as duas peças
+// de evidência que colidiram (D§23) — o teto e o valor tentado.
+export type ContractServiceOrderExceedsCap = Readonly<{
+  tag: 'ContractServiceOrderExceedsCap';
+  cap: Money;
+  attempted: Money;
+}>;
+
 export type ContractInvalidEventDate = Readonly<{ tag: 'ContractInvalidEventDate' }>;
 
 export type ContractNotActive = Readonly<{
@@ -98,6 +106,7 @@ export type ContractError =
   | ContractObjectiveRequired
   | ContractInvalidSignedAt
   | ContractOriginalValueZero
+  | ContractServiceOrderExceedsCap
   | ContractInvalidEventDate
   | ContractNotActive
   | ContractCannotExpireYet
@@ -139,6 +148,15 @@ export const contractInvalidSignedAt = (): ContractInvalidSignedAt => ({
 
 export const contractOriginalValueZero = (): ContractOriginalValueZero => ({
   tag: 'ContractOriginalValueZero',
+});
+
+export const contractServiceOrderExceedsCap = (
+  cap: Money,
+  attempted: Money,
+): ContractServiceOrderExceedsCap => ({
+  tag: 'ContractServiceOrderExceedsCap',
+  cap,
+  attempted,
 });
 
 export const contractInvalidEventDate = (): ContractInvalidEventDate => ({

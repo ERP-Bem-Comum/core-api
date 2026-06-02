@@ -1,5 +1,9 @@
 import type { AmendmentId, ContractId } from '../shared/ids.ts';
 import type { ContractorRef } from '../shared/contractor-ref.ts';
+import type { Classification } from './classification.ts';
+import type { ContractModel } from './contract-model.ts';
+import type { Category } from './category.ts';
+import type { CostCenter } from './cost-center.ts';
 import type { Money } from '../../../../shared/kernel/money.ts';
 import type { Period } from '../../../../shared/kernel/period.ts';
 import type { PlainDate } from '../../../../shared/kernel/plain-date.ts';
@@ -27,6 +31,14 @@ type ContractRegistration = Readonly<{
   // em todas as variantes, inclusive `Pending`. Dado de Parceiros NUNCA entra
   // aqui; só a referência branded (ADR-0006/0014).
   contractorRef: ContractorRef;
+  // Metadados de cadastro (ADR-0032: "atributo do próprio contrato → evolui o
+  // agregado"). `classification`/`contractModel` obrigatórios; os demais opcionais.
+  // Enums autocontidos (não vínculo a outro módulo). `classification` governa R1.
+  classification: Classification;
+  contractModel: ContractModel;
+  category: Category | null;
+  costCenter: CostCenter | null;
+  observations: string | null;
 }>;
 
 /**
@@ -172,6 +184,11 @@ export type CreateContractInput = Readonly<{
   originalValue: Money;
   originalPeriod: Period;
   contractorRef: ContractorRef;
+  classification: Classification;
+  contractModel: ContractModel;
+  category: Category | null;
+  costCenter: CostCenter | null;
+  observations: string | null;
 }>;
 
 /**
@@ -189,4 +206,9 @@ export type CreatePendingContractInput = Readonly<{
   originalPeriod: Period;
   createdAt: Date;
   contractorRef: ContractorRef;
+  classification: Classification;
+  contractModel: ContractModel;
+  category: Category | null;
+  costCenter: CostCenter | null;
+  observations: string | null;
 }>;

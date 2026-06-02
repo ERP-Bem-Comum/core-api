@@ -84,6 +84,11 @@ const seedPending = () => {
     originalPeriod: fixedPeriod('2026-02-01', '2026-12-31'),
     createdAt: new Date('2026-01-10T00:00:00.000Z'),
     contractorRef: someContractorRef,
+    classification: 'Contract',
+    contractModel: 'Service',
+    category: null,
+    costCenter: null,
+    observations: null,
   });
   return fromOk(r, 'createPending').contract;
 };
@@ -131,6 +136,11 @@ describe('activateContract — Pending → Active (RN-CV-02)', () => {
         originalValue: money(5_000_000),
         originalPeriod: fixedPeriod('2026-02-01', '2026-12-31'),
         contractorRef: someContractorRef,
+        classification: 'Contract',
+        contractModel: 'Service',
+        category: null,
+        costCenter: null,
+        observations: null,
       }),
       'create',
     ).contract;

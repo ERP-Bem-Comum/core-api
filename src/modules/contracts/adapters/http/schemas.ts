@@ -26,6 +26,13 @@ const registrationShape = {
   objective: z.string(),
   originalValue: moneySchema,
   originalPeriod: periodSchema,
+  // Metadados de cadastro (CTR-CONTRACT-REGISTRATION-METADATA; po-feedback/0001).
+  // Códigos EN; rótulo PT (Contrato/Ordem de Serviço, Avaliação/…) é tradução do BFF.
+  classification: z.enum(['Contract', 'ServiceOrder']),
+  contractModel: z.enum(['Service', 'Donation']),
+  category: z.enum(['Evaluation', 'Operational', 'Process']).nullable(),
+  costCenter: z.enum(['HR', 'GeneralServices', 'Events']).nullable(),
+  observations: z.string().nullable(),
 };
 
 const effectiveShape = {
@@ -138,6 +145,16 @@ const contractWriteShape = {
   // tratamento de datas/valores acima.
   contractorType: z.string(),
   contractorId: z.string(),
+  // Metadados de cadastro (CTR-CONTRACT-REGISTRATION-METADATA). Strings cruas →
+  // 422 via `parseRegistrationMetadata` no domínio (enum fora do conjunto), igual
+  // ao `contractorType`. `category`/`costCenter`/`observations` aceitam null.
+  classification: z.string(),
+  contractModel: z.string(),
+  category: z.string().nullable(),
+  costCenter: z.string().nullable(),
+  // `.max(1000)` casa com a coluna `varchar(1000)`: estouro vira 400 (Zod) claro,
+  // não erro de INSERT/truncamento silencioso no MySQL.
+  observations: z.string().max(1000).nullable(),
 };
 
 /** Body `POST /contracts` — discrimina cadastro (`Pending`) vs cadastro+assinatura (`Active`). */

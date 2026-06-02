@@ -86,6 +86,11 @@ const setupWorld = async (overrides?: {
       if (!r.ok) throw new Error('fixture contractorRef');
       return r.value;
     })(),
+    classification: 'Contract',
+    contractModel: 'Service',
+    category: null,
+    costCenter: null,
+    observations: null,
   });
   if (!created.ok) throw new Error('fixture contract create');
   await contractRepo.repo.save(created.value.contract, []);

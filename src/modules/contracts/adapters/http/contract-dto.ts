@@ -33,6 +33,11 @@ export const contractToListItem = (c: Contract): ContractListItemDto => {
     objective: c.objective,
     originalValue: { cents: c.originalValue.cents },
     originalPeriod: periodToDto(c.originalPeriod),
+    classification: c.classification,
+    contractModel: c.contractModel,
+    category: c.category,
+    costCenter: c.costCenter,
+    observations: c.observations,
   };
 
   switch (c.status) {

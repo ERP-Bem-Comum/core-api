@@ -80,6 +80,11 @@ const setupWorld = async (
     originalValue: money(opts.valueCents ?? 10000000),
     originalPeriod: period,
     contractorRef: someContractorRef,
+    classification: 'Contract',
+    contractModel: 'Service',
+    category: null,
+    costCenter: null,
+    observations: null,
   });
   if (!created.ok) throw new Error(`fixture broken: ${JSON.stringify(created.error)}`);
 

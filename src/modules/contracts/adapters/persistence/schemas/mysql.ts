@@ -80,6 +80,14 @@ export const contracts = mysqlTable(
     // NOT NULL: todo contrato tem contratado (invariante forte).
     contractorType: varchar('contractor_type', { length: 16 }).notNull(),
     contractorId: varchar('contractor_id', { length: 36 }).notNull(),
+    // Metadados de cadastro (CTR-CONTRACT-REGISTRATION-METADATA; ADR-0032).
+    // Enums via varchar+CHECK (ENUM nativo banido — ADR-0020). `classification`
+    // (governa R1) e `contract_model` NOT NULL; os demais opcionais.
+    classification: varchar('classification', { length: 16 }).notNull(),
+    contractModel: varchar('contract_model', { length: 16 }).notNull(),
+    category: varchar('category', { length: 16 }),
+    costCenter: varchar('cost_center', { length: 16 }),
+    observations: varchar('observations', { length: 1000 }),
   },
   (t) => [
     // CHECKs de domínio (enums via varchar+CHECK — ADR-0018 §"Features proibidas" baniu ENUM nativo)
@@ -90,6 +98,21 @@ export const contracts = mysqlTable(
     check(
       'ctr_contracts_contractor_type_chk',
       sql`${t.contractorType} IN ('Supplier','Financier','Collaborator')`,
+    ),
+    // Metadados de cadastro — enums via CHECK. `category`/`cost_center` nuláveis:
+    // `NULL IN (...)` é NULL (não FALSE), então o CHECK aceita NULL naturalmente.
+    check(
+      'ctr_contracts_classification_chk',
+      sql`${t.classification} IN ('Contract','ServiceOrder')`,
+    ),
+    check('ctr_contracts_contract_model_chk', sql`${t.contractModel} IN ('Service','Donation')`),
+    check(
+      'ctr_contracts_category_chk',
+      sql`${t.category} IN ('Evaluation','Operational','Process')`,
+    ),
+    check(
+      'ctr_contracts_cost_center_chk',
+      sql`${t.costCenter} IN ('HR','GeneralServices','Events')`,
     ),
     check(
       'ctr_contracts_current_period_kind_chk',

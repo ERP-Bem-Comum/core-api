@@ -53,6 +53,11 @@ const BASE_ROW: Omit<ContractRow, 'status' | 'endedAt'> = {
   currentPeriodEnd: new Date('2026-12-31T00:00:00.000Z'),
   contractorType: 'Supplier',
   contractorId: '55555555-5555-4555-8555-555555555555',
+  classification: 'Contract',
+  contractModel: 'Service',
+  category: null,
+  costCenter: null,
+  observations: null,
 };
 
 const activeRow = (): ContractRow => ({
@@ -313,6 +318,11 @@ const buildPending = () => {
     originalPeriod: fixedPeriod('2026-02-01', '2026-12-31'),
     createdAt: new Date('2026-01-10T00:00:00.000Z'),
     contractorRef: someContractorRef,
+    classification: 'Contract',
+    contractModel: 'Service',
+    category: null,
+    costCenter: null,
+    observations: null,
   });
   if (!r.ok) throw new Error(`fixture broken: ${JSON.stringify(r.error)}`);
   return r.value.contract;

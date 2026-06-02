@@ -113,11 +113,15 @@ const recordToRow = (
   const cnpj = asNullableString(rec['cnpj']);
   const contratadoTipo = asNullableString(rec['contratado_tipo']);
   const contratadoId = asNullableString(rec['contratado_id']);
+  const classificacao = asNullableString(rec['classificacao']);
+  const modelo = asNullableString(rec['modelo']);
   const row: ImportContractRow = {
     ...base,
     ...(cnpj === null ? {} : { cnpj }),
     ...(contratadoTipo === null ? {} : { contratadoTipo }),
     ...(contratadoId === null ? {} : { contratadoId }),
+    ...(classificacao === null ? {} : { classificacao }),
+    ...(modelo === null ? {} : { modelo }),
   };
   return ok(row);
 };

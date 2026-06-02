@@ -4,7 +4,9 @@ import * as ContractId from '../../domain/shared/contract-id.ts';
 import * as ContractorRef from '../../domain/shared/contractor-ref.ts';
 import {
   parseOriginalValueAndPeriod,
+  parseRegistrationMetadata,
   type ContractInputParseError,
+  type RegistrationMetadataParseError,
 } from './contract-input-parse.ts';
 import { Contract } from '../../domain/contract/contract.ts';
 import type { PendingContract } from '../../domain/contract/types.ts';
@@ -28,11 +30,17 @@ export type CreatePendingContractCommand = Readonly<{
   periodEnd: string | null;
   contractorType: string;
   contractorId: string;
+  classification: string;
+  contractModel: string;
+  category: string | null;
+  costCenter: string | null;
+  observations: string | null;
 }>;
 
 export type CreatePendingContractError =
   | ContractInputParseError
   | ContractorRef.ContractorRefError
+  | RegistrationMetadataParseError
   | 'contract-sequential-number-duplicated'
   | ContractError
   | ContractRepositoryError;
@@ -70,6 +78,15 @@ export const createPendingContract =
     });
     if (!contractorRef.ok) return contractorRef;
 
+    const metadata = parseRegistrationMetadata({
+      classification: cmd.classification,
+      contractModel: cmd.contractModel,
+      category: cmd.category,
+      costCenter: cmd.costCenter,
+      observations: cmd.observations,
+    });
+    if (!metadata.ok) return metadata;
+
     const created = Contract.createPending({
       id: ContractId.generate(),
       sequentialNumber: cmd.sequentialNumber,
@@ -79,6 +96,11 @@ export const createPendingContract =
       originalPeriod: parsed.value.originalPeriod,
       createdAt: deps.clock.now(),
       contractorRef: contractorRef.value,
+      classification: metadata.value.classification,
+      contractModel: metadata.value.contractModel,
+      category: metadata.value.category,
+      costCenter: metadata.value.costCenter,
+      observations: metadata.value.observations,
     });
     if (!created.ok) return created;
 

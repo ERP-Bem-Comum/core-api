@@ -28,6 +28,11 @@ export type ImportContractRow = Readonly<{
   // contrato tem contratado). Resolução CNPJ→partner ref é ticket futuro.
   contratadoTipo?: string;
   contratadoId?: string;
+  // Classificação/modelo opcionais na linha (CTR-CONTRACT-REGISTRATION-METADATA).
+  // Ausentes → fallback Contract/Service no command; PRESENTES (ex.: ServiceOrder)
+  // são respeitados — uma OS legada não escapa do teto R1.
+  classificacao?: string;
+  modelo?: string;
 }>;
 
 export type ImportRowError =
@@ -69,6 +74,14 @@ const toCreateCommand = (row: ImportContractRow): CreateContractCommand => ({
   originalPeriodEnd: row.fim,
   contractorType: row.contratadoTipo ?? '',
   contractorId: row.contratadoId ?? '',
+  // Classificação/modelo vêm da linha quando presentes; o fallback Contract/Service
+  // só vale para CSV legado sem a coluna. Valor inválido → 422 no domínio (não é
+  // silenciado). `category`/`costCenter`/`observations` seguem default (não afetam R1).
+  classification: row.classificacao ?? 'Contract',
+  contractModel: row.modelo ?? 'Service',
+  category: null,
+  costCenter: null,
+  observations: null,
 });
 
 export const importContracts =

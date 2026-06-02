@@ -147,6 +147,11 @@ describe('formatContract / formatAmendment — real newlines (Defeito #2)', () =
       originalValue: money(10000000),
       originalPeriod: buildPeriod(),
       contractorRef: someContractorRef,
+      classification: 'Contract',
+      contractModel: 'Service',
+      category: null,
+      costCenter: null,
+      observations: null,
     });
     if (!created.ok) throw new Error('fixture broken');
     const result = formatContract(created.value.contract);
@@ -167,6 +172,11 @@ describe('formatContract / formatAmendment — real newlines (Defeito #2)', () =
       originalValue: money(10000000),
       originalPeriod: buildPeriod(),
       contractorRef: someContractorRef,
+      classification: 'Contract',
+      contractModel: 'Service',
+      category: null,
+      costCenter: null,
+      observations: null,
     });
     if (!c.ok) throw new Error('fixture broken');
     const created = Amendment.create({

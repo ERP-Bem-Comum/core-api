@@ -16,7 +16,16 @@ const REQUIRED = [
   'contratado-id',
 ] as const;
 
-const ALLOWED = [...REQUIRED, 'assinado-em', 'fim', 'sem-fim', 'help', 'h'] as const;
+const ALLOWED = [
+  ...REQUIRED,
+  'assinado-em',
+  'fim',
+  'sem-fim',
+  'classificacao',
+  'modelo',
+  'help',
+  'h',
+] as const;
 export const allowedFlags: readonly string[] = ALLOWED;
 
 export const descricao = 'Cria um Contrato Mãe (Pendente sem --assinado-em; Em Andamento com).';
@@ -35,7 +44,9 @@ Flags obrigatórias:
 Flags opcionais:
   --assinado-em <YYYY-MM-DD>    Data de assinatura. Sem ela, o contrato nasce Pendente
                                 (ativar depois com documento assinado).
-  --fim <YYYY-MM-DD>            Fim da vigência (omita para vigência indefinida)`;
+  --fim <YYYY-MM-DD>            Fim da vigência (omita para vigência indefinida)
+  --classificacao <tipo>       Contract | ServiceOrder (default: Contract). ServiceOrder tem teto R$ 9.999,99
+  --modelo <tipo>              Service | Donation (default: Service)`;
 
 export const run = async (ctx: CliContext, argv: readonly string[]): Promise<number> => {
   const parsed = parseFlags(argv);
@@ -76,6 +87,10 @@ export const run = async (ctx: CliContext, argv: readonly string[]): Promise<num
   const contractorType = flags['contratado-tipo'] ?? '';
   const contractorId = flags['contratado-id'] ?? '';
   const signedAtRaw = flags['assinado-em'];
+  // Classificação/modelo das flags (default Contract/Service). Valor inválido → 422
+  // no domínio; `ServiceOrder` ativa o teto R1. Demais metadados ficam default.
+  const classification = flags['classificacao'] ?? 'Contract';
+  const contractModel = flags['modelo'] ?? 'Service';
 
   // ADR-0023: com `--assinado-em` nasce Ativo; sem ela, Pendente.
   const r =
@@ -90,6 +105,11 @@ export const run = async (ctx: CliContext, argv: readonly string[]): Promise<num
           originalPeriodEnd: periodEnd,
           contractorType,
           contractorId,
+          classification,
+          contractModel,
+          category: null,
+          costCenter: null,
+          observations: null,
         })
       : await createPendingContract({ contractRepo: ctx.contractRepo, clock: ctx.clock })({
           sequentialNumber,
@@ -100,6 +120,11 @@ export const run = async (ctx: CliContext, argv: readonly string[]): Promise<num
           periodEnd,
           contractorType,
           contractorId,
+          classification,
+          contractModel,
+          category: null,
+          costCenter: null,
+          observations: null,
         });
 
   if (!r.ok) {

@@ -88,6 +88,11 @@ const setupWorld = async (
     originalValue: money(overrides.contractValueCents ?? 10000000),
     originalPeriod: fixedPeriod('2026-01-01', '2026-12-31'),
     contractorRef: someContractorRef,
+    classification: 'Contract',
+    contractModel: 'Service',
+    category: null,
+    costCenter: null,
+    observations: null,
   });
   if (!contractCreate.ok)
     throw new Error(`fixture broken: ${JSON.stringify(contractCreate.error)}`);
@@ -316,6 +321,11 @@ describe('homologateAmendment — mismatch', () => {
       originalValue: money(5000000),
       originalPeriod: fixedPeriod('2026-01-01', '2026-12-31'),
       contractorRef: someContractorRef,
+      classification: 'Contract',
+      contractModel: 'Service',
+      category: null,
+      costCenter: null,
+      observations: null,
     });
     if (!otherContract.ok) throw new Error('fixture broken');
     await world.contractRepo.repo.save(otherContract.value.contract, []);
@@ -476,6 +486,11 @@ describe('InMemoryContractRepository', () => {
       originalValue: money(100),
       originalPeriod: fixedPeriod('2026-01-01', '2026-12-31'),
       contractorRef: someContractorRef,
+      classification: 'Contract',
+      contractModel: 'Service',
+      category: null,
+      costCenter: null,
+      observations: null,
     });
     if (!created.ok) throw new Error('fixture broken');
 

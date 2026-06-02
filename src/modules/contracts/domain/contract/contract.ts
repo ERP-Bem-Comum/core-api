@@ -16,6 +16,7 @@ import type {
 } from './types.ts';
 import { immutable } from '../../../../shared/primitives/immutable.ts';
 import type { ContractEvent } from './events.ts';
+import type { Classification } from './classification.ts';
 import * as ContractError from './errors.ts';
 
 // ─── Helpers internos ─────────────────────────────────────────────────────────
@@ -59,6 +60,24 @@ const validateRegistration = (
   return ok(null);
 };
 
+// R1 — teto de Ordem de Serviço (R$ 9.999,99). Só `ServiceOrder` é limitado;
+// `Contract` não tem teto. `SERVICE_ORDER_CAP` é construído via smart constructor
+// (o valor é sempre válido; `ZERO` é fallback inalcançável que evita `throw`).
+export const SERVICE_ORDER_CAP_CENTS = 999_999;
+
+const SERVICE_ORDER_CAP: Money.Money = (() => {
+  const r = Money.fromCents(SERVICE_ORDER_CAP_CENTS);
+  return r.ok ? r.value : Money.ZERO;
+})();
+
+const validateServiceOrderCap = (
+  input: Readonly<{ classification: Classification; originalValue: Money.Money }>,
+): Result<null, ContractError.ContractServiceOrderExceedsCap> =>
+  input.classification === 'ServiceOrder' &&
+  Money.greaterThan(input.originalValue, SERVICE_ORDER_CAP)
+    ? err(ContractError.contractServiceOrderExceedsCap(SERVICE_ORDER_CAP, input.originalValue))
+    : ok(null);
+
 // ─── Operações do agregado ────────────────────────────────────────────────────
 
 /**
@@ -74,6 +93,8 @@ const createPending = (
   if (!reg.ok) return reg;
   // Defeito #9: contrato com valor original zero não tem propósito de negócio.
   if (input.originalValue.cents === 0) return err(ContractError.contractOriginalValueZero());
+  const cap = validateServiceOrderCap(input);
+  if (!cap.ok) return cap;
 
   const contract: PendingContract = immutable({
     id: input.id,
@@ -83,6 +104,11 @@ const createPending = (
     originalValue: input.originalValue,
     originalPeriod: input.originalPeriod,
     contractorRef: input.contractorRef,
+    classification: input.classification,
+    contractModel: input.contractModel,
+    category: input.category,
+    costCenter: input.costCenter,
+    observations: input.observations,
     status: 'Pending' as const,
   });
 
@@ -141,6 +167,8 @@ const create = (
   if (!isValidDate(input.signedAt)) return err(ContractError.contractInvalidSignedAt());
   // Defeito #9: contrato com valor original zero não tem propósito de negócio.
   if (input.originalValue.cents === 0) return err(ContractError.contractOriginalValueZero());
+  const cap = validateServiceOrderCap(input);
+  if (!cap.ok) return cap;
 
   // ActiveContract não tem `endedAt` — o campo simplesmente está ausente.
   // `'Active' as const` garante o narrowing do discriminador (DO D§20).
@@ -153,6 +181,11 @@ const create = (
     originalValue: input.originalValue,
     originalPeriod: input.originalPeriod,
     contractorRef: input.contractorRef,
+    classification: input.classification,
+    contractModel: input.contractModel,
+    category: input.category,
+    costCenter: input.costCenter,
+    observations: input.observations,
     currentValue: input.originalValue,
     currentPeriod: input.originalPeriod,
     status: 'Active' as const,

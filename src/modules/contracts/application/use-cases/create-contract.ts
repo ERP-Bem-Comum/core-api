@@ -5,7 +5,11 @@ import * as ContractId from '../../domain/shared/contract-id.ts';
 import * as ContractorRef from '../../domain/shared/contractor-ref.ts';
 import type { MoneyError } from '#src/shared/kernel/money.ts';
 import type { PeriodError } from '#src/shared/kernel/period.ts';
-import { parseOriginalValueAndPeriod } from './contract-input-parse.ts';
+import {
+  parseOriginalValueAndPeriod,
+  parseRegistrationMetadata,
+  type RegistrationMetadataParseError,
+} from './contract-input-parse.ts';
 import { Contract } from '../../domain/contract/contract.ts';
 import type { ActiveContract } from '../../domain/contract/types.ts';
 import type { ContractEvent } from '../../domain/contract/events.ts';
@@ -30,6 +34,11 @@ export type CreateContractCommand = Readonly<{
   originalPeriodEnd: string | null;
   contractorType: string;
   contractorId: string;
+  classification: string;
+  contractModel: string;
+  category: string | null;
+  costCenter: string | null;
+  observations: string | null;
 }>;
 
 // Erros da construção PURA (validação + Contract.create), sem IO. Reusados pelo
@@ -39,6 +48,7 @@ export type BuildContractError =
   | 'create-contract-invalid-period-start'
   | 'create-contract-invalid-period-end'
   | ContractorRef.ContractorRefError
+  | RegistrationMetadataParseError
   | MoneyError
   | PeriodError
   | ContractError;
@@ -83,6 +93,15 @@ export const buildContract = (
   });
   if (!contractorRef.ok) return contractorRef;
 
+  const metadata = parseRegistrationMetadata({
+    classification: cmd.classification,
+    contractModel: cmd.contractModel,
+    category: cmd.category,
+    costCenter: cmd.costCenter,
+    observations: cmd.observations,
+  });
+  if (!metadata.ok) return metadata;
+
   const created = Contract.create({
     id: ContractId.generate(),
     sequentialNumber: cmd.sequentialNumber,
@@ -92,6 +111,11 @@ export const buildContract = (
     originalValue: parsed.value.originalValue,
     originalPeriod: parsed.value.originalPeriod,
     contractorRef: contractorRef.value,
+    classification: metadata.value.classification,
+    contractModel: metadata.value.contractModel,
+    category: metadata.value.category,
+    costCenter: metadata.value.costCenter,
+    observations: metadata.value.observations,
   });
   if (!created.ok) return created;
 

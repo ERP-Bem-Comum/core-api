@@ -152,6 +152,15 @@ const CONTRACTOR = {
   contractorId: '55555555-5555-4555-8555-555555555555',
 };
 
+// Metadados de cadastro exigidos pelo body (CTR-CONTRACT-REGISTRATION-METADATA).
+const METADATA = {
+  classification: 'Contract',
+  contractModel: 'Service',
+  category: null,
+  costCenter: null,
+  observations: null,
+};
+
 const activeBody = (overrides: Record<string, unknown> = {}) => ({
   mode: 'Active',
   sequentialNumber: '500/2026',
@@ -162,6 +171,7 @@ const activeBody = (overrides: Record<string, unknown> = {}) => ({
   periodStart: '2026-02-01',
   periodEnd: '2026-12-31',
   ...CONTRACTOR,
+  ...METADATA,
   ...overrides,
 });
 
@@ -174,6 +184,7 @@ const pendingBody = (overrides: Record<string, unknown> = {}) => ({
   periodStart: '2026-02-01',
   periodEnd: '2026-12-31',
   ...CONTRACTOR,
+  ...METADATA,
   ...overrides,
 });
 
@@ -229,6 +240,58 @@ describe('CONTRACTS-HTTP-WRITES-CORE (C2) — POST /contracts', () => {
     });
     assert.equal(res.statusCode, 201);
     assert.equal((res.json() as { status: string }).status, 'Pending');
+    await teardown();
+  });
+
+  it('CA5: metadados de cadastro entram no POST e voltam no DTO', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/contracts',
+      headers: bearer(token),
+      payload: activeBody({
+        classification: 'ServiceOrder',
+        contractModel: 'Donation',
+        category: 'Operational',
+        costCenter: 'HR',
+        observations: 'Observação de teste',
+        originalValueCents: 999_999, // no teto da OS (R1) — passa
+      }),
+    });
+    assert.equal(res.statusCode, 201);
+    const dto = res.json() as Record<string, unknown>;
+    assert.equal(dto.classification, 'ServiceOrder');
+    assert.equal(dto.contractModel, 'Donation');
+    assert.equal(dto.category, 'Operational');
+    assert.equal(dto.costCenter, 'HR');
+    assert.equal(dto.observations, 'Observação de teste');
+    await teardown();
+  });
+
+  it('CA5/R1: ServiceOrder acima do teto -> 422 (domínio, não 400 Zod)', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/contracts',
+      headers: bearer(token),
+      payload: activeBody({ classification: 'ServiceOrder', originalValueCents: 1_000_000 }),
+    });
+    assert.equal(res.statusCode, 422);
+    await teardown();
+  });
+
+  it('CA5: classification inválida -> 422 (domínio, espelha contractorType)', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/contracts',
+      headers: bearer(token),
+      payload: activeBody({ classification: 'Contrato' }),
+    });
+    assert.equal(res.statusCode, 422);
     await teardown();
   });
 
