@@ -20,8 +20,8 @@ description: >
   database-engineer, ou as 3 famílias tutor/strategist/theorist) ou para o
   expert de tecnologia (drizzle-orm-expert, mysql-database-expert,
   mysql2-driver-expert, typescript-language-expert, nodejs-runtime-expert,
-  docker-compose-expert, pnpm-workspace-expert, fastify-server-expert,
-  nodemailer-email-expert). Substitui agents especializados como ponto de
+  docker-compose-expert, pnpm-workspace-expert, github-actions-expert,
+  fastify-server-expert, nodemailer-email-expert). Substitui agents especializados como ponto de
   entrada — herda regras do CLAUDE.md raiz e do handbook.
 ---
 
@@ -165,6 +165,17 @@ ADRs do handbook são **imutáveis**. Nunca contradizer um ADR aceito — abrir 
 - "alguém escreveu `npm install` num doc/PR" → [`pnpm-workspace-expert`](./pnpm-workspace-expert.md)
 
 > **NUNCA `npm`. SEMPRE `pnpm`.** (CLAUDE.md raiz + ADR-0012.)
+
+### ⚙️ GitHub Actions (workflows `.yml` + CI/CD)
+
+- "editar `.github/workflows/*.yml`" → [`github-actions-expert`](./github-actions-expert.md)
+- "trigger (`push`/`pull_request`/`workflow_dispatch`/`schedule`/`workflow_call`)" → [`github-actions-expert`](./github-actions-expert.md)
+- "cache do pnpm store / corepack no CI / `--frozen-lockfile`" → [`github-actions-expert`](./github-actions-expert.md)
+- "`permissions` mínimas, pin de action por SHA, OIDC `id-token: write`" → [`github-actions-expert`](./github-actions-expert.md)
+- "deploy GitHub Pages, `environment`, `concurrency`" → [`github-actions-expert`](./github-actions-expert.md)
+- "workflow vermelho no CI, cache miss, expression `${{ }}` não avalia" → [`github-actions-expert`](./github-actions-expert.md)
+
+> Ancorado em `handbook/reference/github-actions/`. **Dockerfile/compose dentro de um step** → `docker-compose-expert`; **lockfile/corepack em si** → `pnpm-workspace-expert`.
 
 ### 🌐 Fastify (HTTP server — **reservado, Fase 2+**)
 
@@ -317,3 +328,4 @@ Ao terminar uma sessão, deixe sempre:
 - **2026-05-19:** Registrados os especialistas em tecnologia [`drizzle-orm-expert`](./drizzle-orm-expert.md) (com skill companion [`drizzle-schema-author`](../skills/drizzle-schema-author/SKILL.md)) e [`mysql-database-expert`](./mysql-database-expert.md) no roteamento. Fronteira documentada: Drizzle/ORM/Kit cobre API + SQL gerado; MySQL expert cobre EXPLAIN/locks/tuning/infra.
 - **2026-05-19 (2):** Completado o painel de especialistas por tecnologia do `handbook/reference/`. Adicionados [`typescript-language-expert`](./typescript-language-expert.md), [`nodejs-runtime-expert`](./nodejs-runtime-expert.md), [`mysql2-driver-expert`](./mysql2-driver-expert.md), [`docker-compose-expert`](./docker-compose-expert.md), [`pnpm-workspace-expert`](./pnpm-workspace-expert.md), [`fastify-server-expert`](./fastify-server-expert.md) (reservado Fase 2+) e [`nodemailer-email-expert`](./nodemailer-email-expert.md) (reservado Fase 2+). Cada agente ancorado no respectivo subdir de `handbook/reference/<tech>/` + ADRs vinculantes.
 - **2026-05-20:** Mitigação do bug Claude Code [#47936](https://github.com/anthropics/claude-code/issues/47936) (sub-agent stop mid-task em 14-30% das execuções). Mudanças: (a) `model: sonnet` → `model: opus` (Opus mantém checklist longo melhor); (b) adicionada seção **"Checklist de fechamento de wave (OBRIGATÓRIO)"** com 4 passos invariantes (gate → REPORT → STATE → auto-verificação) e anti-padrão explícito proibindo último `tool_use` ser fechamento implícito da wave. Diagnóstico feito no ticket [`CTR-DOMAIN-STATE-MACHINE-CONTRACT`](../.pipeline/CTR-DOMAIN-STATE-MACHINE-CONTRACT/) após sub-agent ser interrompido após o último `Edit` em `fixtures.ts`.
+- **2026-06-02:** Registrado [`github-actions-expert`](./github-actions-expert.md) no roteamento (CI/CD ativa: 2 workflows em `.github/workflows/`). Ancorado em `handbook/reference/github-actions/` (snapshot oficial de `github/docs`: 243 content + 483 reusables + 28 variables) + ADR-0011. Fronteira: cobre o pipeline `.yml`; Dockerfile/compose dentro de step → `docker-compose-expert`; lockfile/corepack em si → `pnpm-workspace-expert`.

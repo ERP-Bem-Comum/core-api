@@ -115,6 +115,7 @@ Carrega **um único** agente por turno.
 | Driver `mysql2` (pool, `caching_sha2_password`, TLS, timeouts)             | [`mysql2-driver-expert`](./.claude/agents/mysql2-driver-expert.md)             |
 | Docker / Compose / Dockerfile / BuildKit                                   | [`docker-compose-expert`](./.claude/agents/docker-compose-expert.md)           |
 | pnpm / lockfile / supply-chain / corepack                                  | [`pnpm-workspace-expert`](./.claude/agents/pnpm-workspace-expert.md)           |
+| GitHub Actions / workflows `.yml` / CI / deploy Pages / runners            | [`github-actions-expert`](./.claude/agents/github-actions-expert.md)           |
 | Fastify (HTTP — **reservado, Fase 2+, exige ADR**)                         | [`fastify-server-expert`](./.claude/agents/fastify-server-expert.md)           |
 | Caddy (edge/reverse-proxy — **reservado, Fase 2+, exige ADR**)             | [`caddy-server-expert`](./.claude/agents/caddy-server-expert.md)               |
 | Nodemailer (adapter SMTP — **ativo** desde `CTR-EMAIL-ADAPTER-NODEMAILER`) | [`nodemailer-email-expert`](./.claude/agents/nodemailer-email-expert.md)       |
