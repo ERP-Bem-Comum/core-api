@@ -88,8 +88,18 @@ Consulta read-only a `mysql-database-expert`, `mysql2-driver-expert`, `drizzle-o
 - **D13 — Overflow:** `biography longtext→varchar(2000)` e `telephone varchar(255)→varchar(30)` que estouram → **quarentena** (nunca truncar silenciosamente).
 - **P3 naming:** permission canônica = **`contract:mass-approve`** (alinha com o domínio, não `approval:*`).
 
-### Cadeia de execução (tickets separados primeiro)
+### Cadeia de execução
 
-1. **`PARTNERS-LEGACY-ID-COLUMNS`** (P2) — migration `legacy_id` + uniqueIndex nas 4 `par_*`. Size S. ✅ closed-green.
-2. **`CTR-PERMISSION-CATALOG`** (P3) — catálogo type-safe `CONTRACT_PERMISSION` (`const` object + union derivada) em `contracts/public-api`; substitui magic strings do `plugin.ts`; a ETL importa `contract:mass-approve` tipado. Size XS.
-3. **`PARTNERS-ETL-BOOTSTRAP`** (este) — script ETL + P4a (gera token) + P4b (CLI de disparo). Size L.
+**Pré-requisitos (entregues, em `dev` via PR #5):**
+1. **`PARTNERS-LEGACY-ID-COLUMNS`** (P2) — `legacy_id` + uniqueIndex nas 4 `par_*`. ✅ closed-green.
+2. **`CTR-PERMISSION-CATALOG`** (P3) — catálogo `CONTRACT_PERMISSION` em `contracts/public-api`. ✅ closed-green.
+
+**Slices do ETL (branch `feat/partners-etl-bootstrap`, commits locais):**
+- pré · **`PARTNERS-DISABLE-REASON-LEGACY-MARKER`** (XS) — `LEGACY_MIGRATION` no enum. ✅ closed-green · `8d46e20`.
+- 1 · **`PARTNERS-ETL-CORE`** (M) — quarentena + reconciliação + 4 mappers puros. ✅ closed-green · `7c36509`.
+- 2 · **`PARTNERS-ETL-READER`** (M) — decode + MySQL efêmero + reader. ✅ closed-green · `5389615` · integração verificada.
+- 3 · **`PARTNERS-ETL-WRITER`** (M) — writer idempotente + orquestrador + `auth.User` + reconciliação. ⬜ **PRÓXIMO**.
+- 4 · **`PARTNERS-ETL-RESET-TOKENS`** (P4a, S) — gera token de reset (TTL 72h, sem enviar). ⬜
+- 5 · **`PARTNERS-ETL-RESET-DISPATCH`** (P4b, S) — CLI de disparo (`--dry-run`/Ethereal). ⬜
+
+> **Continuação pós-`/clear`:** ler [`HANDOFF.md`](./HANDOFF.md) — API exportada do CORE+READER, spec do WRITER, gotchas e segurança do dump.

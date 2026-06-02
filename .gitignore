@@ -57,3 +57,6 @@ cli-state.json
 
 # Scratch directories de testes E2E — outputs, payloads de injeção, sqlite junk
 tests/reports/e2e-scratch/
+
+# ETL — cold storage (collaborator_history) e dumps locais (PII; nunca versionar)
+scripts/etl/archive/
