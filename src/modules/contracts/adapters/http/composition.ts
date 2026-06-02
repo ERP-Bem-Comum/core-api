@@ -103,6 +103,8 @@ export type GetDocument = (
 
 export type ContractsHttpDeps = Readonly<{
   listContracts: ReturnType<typeof listContracts>;
+  /** Listagem completa não-paginada — usada pelo export CSV (C4). Reusa `contractRepo.list()`. */
+  listAllContracts: ContractRepository['list'];
   getContract: ReturnType<typeof getContract>;
   getContractDetail: ReturnType<typeof getContractDetail>;
   getContractTimeline: ReturnType<typeof getContractTimeline>;
@@ -221,6 +223,7 @@ const makeDeps = (
   return {
     // Reads → reader pool.
     listContracts: listContracts({ contractRepo: pools.contractReaderRepo }),
+    listAllContracts: pools.contractReaderRepo.list,
     getContract: getContract({ contractRepo: pools.contractReaderRepo }),
     // Detalhe enriquecido (ADR-0032): composição de leitura Contract + Amendment[] + Document[].
     getContractDetail: getContractDetail({

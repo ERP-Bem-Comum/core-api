@@ -38,18 +38,25 @@ const setupWithContracts = async (n: number) => {
 };
 
 describe('listContracts', () => {
-  it('returns empty array when no contracts exist', async () => {
+  // CTR-HTTP-CONTRACT-LIST-FILTERS — listContracts agora é paginado: recebe
+  // ListContractsQuery e retorna { items, meta }.
+  const Q = { page: 1, limit: 50, order: 'ASC' } as const;
+
+  it('returns empty items when no contracts exist', async () => {
     const repo = InMemoryContractRepository();
-    const r = await listContracts({ contractRepo: repo.repo })();
+    const r = await listContracts({ contractRepo: repo.repo })(Q);
     assert.equal(isOk(r), true);
-    if (r.ok) assert.equal(r.value.length, 0);
+    if (r.ok) assert.equal(r.value.items.length, 0);
   });
 
   it('returns all contracts when present', async () => {
     const w = await setupWithContracts(3);
-    const r = await listContracts({ contractRepo: w.contractRepo.repo })();
+    const r = await listContracts({ contractRepo: w.contractRepo.repo })(Q);
     assert.equal(isOk(r), true);
-    if (r.ok) assert.equal(r.value.length, 3);
+    if (r.ok) {
+      assert.equal(r.value.items.length, 3);
+      assert.equal(r.value.meta.total, 3);
+    }
   });
 });
 

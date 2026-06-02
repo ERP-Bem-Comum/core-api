@@ -32,7 +32,8 @@ import { documentToDto } from './document-dto.ts';
 import { contractsToCsv } from './contracts-csv.ts';
 import { CONTRACT_PERMISSION } from '../../public-api/permissions.ts';
 import {
-  contractListSchema,
+  contractListPagedSchema,
+  contractListQuerySchema,
   contractDetailSchema,
   contractFullDetailSchema,
   contractIdParamSchema,
@@ -151,16 +152,32 @@ const contractsRoutes =
       url: '/contracts',
       preHandler: hooks.requireAuth,
       schema: {
-        response: { 200: contractListSchema },
+        querystring: contractListQuerySchema,
+        response: { 200: contractListPagedSchema },
       } satisfies FastifyZodOpenApiSchema,
-      handler: async (_req, reply) => {
-        const result = await deps.listContracts();
+      handler: async (req, reply) => {
+        // Query já validada/coerced pelo Zod (page≥1, limit com teto, order/status enum).
+        const q = req.query;
+        const result = await deps.listContracts({
+          page: q.page,
+          limit: q.limit,
+          order: q.order,
+          ...(q.search !== undefined ? { search: q.search } : {}),
+          ...(q.status !== undefined ? { status: q.status } : {}),
+        });
         if (!result.ok) {
           return sendResult(reply, err(toErrorCode(result.error)), {
             errors: { 'contract-repo-unavailable': 503 },
           });
         }
-        return sendResult(reply, ok(result.value.map(contractToListItem)), { ok: 200 });
+        return sendResult(
+          reply,
+          ok({
+            items: result.value.items.map(contractToListItem),
+            meta: result.value.meta,
+          }),
+          { ok: 200 },
+        );
       },
     });
 
@@ -173,7 +190,8 @@ const contractsRoutes =
         response: { 200: csvResponse() },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (_req, reply) => {
-        const result = await deps.listContracts();
+        // CSV exporta TODOS os contratos (sem filtro/paginação) — reusa list() direto.
+        const result = await deps.listAllContracts();
         if (!result.ok) {
           return sendResult(reply, err(toErrorCode(result.error)), {
             errors: { 'contract-repo-unavailable': 503 },

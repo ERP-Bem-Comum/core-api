@@ -1,9 +1,10 @@
-import { eq, inArray } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, like, or, sql, type SQL } from 'drizzle-orm';
 
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
 import type {
   ContractRepository,
   ContractRepositoryError,
+  ListContractsQuery,
 } from '../../../domain/contract/repository.ts';
 import type { Contract } from '../../../domain/contract/types.ts';
 import type { ContractId } from '../../../domain/shared/ids.ts';
@@ -136,6 +137,28 @@ export const createDrizzleContractRepository = (
     return buildContract(row, homologatedRows);
   };
 
+  // CTR-HTTP-CONTRACT-LIST-FILTERS — predicado WHERE da listagem paginada.
+  // search → LIKE %term% em title/objective/sequential_number (collation
+  // utf8mb4_unicode_ci já é case-insensitive; ADR-0020 permite LIKE). Escapa
+  // os curingas `%`/`_`/`\` do termo do usuário para tratá-los como literais.
+  const listWhere = (query: ListContractsQuery): SQL | undefined => {
+    const clauses: SQL[] = [];
+    if (query.status !== undefined) {
+      clauses.push(eq(schema.contracts.status, query.status));
+    }
+    if (query.search !== undefined && query.search.length > 0) {
+      const escaped = query.search.replace(/[\\%_]/g, (ch) => `\\${ch}`);
+      const pattern = `%${escaped}%`;
+      const textMatch = or(
+        like(schema.contracts.title, pattern),
+        like(schema.contracts.objective, pattern),
+        like(schema.contracts.sequentialNumber, pattern),
+      );
+      if (textMatch !== undefined) clauses.push(textMatch);
+    }
+    return clauses.length === 0 ? undefined : and(...clauses);
+  };
+
   return {
     findById: async (id: ContractId) =>
       safe('findById', async () => {
@@ -189,6 +212,66 @@ export const createDrizzleContractRepository = (
           results.push(r.value);
         }
         return results as readonly Contract[];
+      }),
+
+    // CTR-HTTP-CONTRACT-LIST-FILTERS — listagem filtrada/paginada NO BANCO.
+    //   (1) COUNT(*) com o mesmo WHERE → total absoluto (para `meta`).
+    //   (2) SELECT ... WHERE ... ORDER BY sequential_number ... LIMIT ? OFFSET ?.
+    //   (3) SELECT junction só para os ids da página (`IN`), reconstrói agregados.
+    // ORDER BY sequential_number (UNIQUE) é determinístico — sem tie-break extra.
+    listPaged: async (query: ListContractsQuery) =>
+      safe('listPaged', async () => {
+        const where = listWhere(query);
+
+        const totalRows = await db
+          .select({ total: sql<number>`count(*)` })
+          .from(schema.contracts)
+          .where(where);
+        const total = totalRows[0]?.total ?? 0;
+
+        const offset = (query.page - 1) * query.limit;
+        const orderBy =
+          query.order === 'DESC'
+            ? desc(schema.contracts.sequentialNumber)
+            : asc(schema.contracts.sequentialNumber);
+        const rows = await db
+          .select()
+          .from(schema.contracts)
+          .where(where)
+          .orderBy(orderBy)
+          .limit(query.limit)
+          .offset(offset);
+
+        if (rows.length === 0) {
+          return { items: [] as readonly Contract[], total };
+        }
+
+        const pageIds = rows.map((r) => r.id);
+        const links = await db
+          .select({
+            contractId: schema.contractHomologatedAmendments.contractId,
+            amendmentId: schema.contractHomologatedAmendments.amendmentId,
+          })
+          .from(schema.contractHomologatedAmendments)
+          .where(inArray(schema.contractHomologatedAmendments.contractId, pageIds));
+
+        const byContract = new Map<string, string[]>();
+        for (const link of links) {
+          const arr = byContract.get(link.contractId) ?? [];
+          arr.push(link.amendmentId);
+          byContract.set(link.contractId, arr);
+        }
+
+        const items: Contract[] = [];
+        for (const row of rows) {
+          const homologatedIds = (byContract.get(row.id) ?? []).map((amendmentId) => ({
+            amendmentId,
+          }));
+          const r = buildContract(row, homologatedIds);
+          if (!r.ok) throw new Error(JSON.stringify(r.error));
+          items.push(r.value);
+        }
+        return { items: items as readonly Contract[], total };
       }),
 
     // CA-3: save(contract, events) abre UMA transação que persiste state + outbox atomicamente.

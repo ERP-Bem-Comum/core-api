@@ -79,7 +79,7 @@ describe('CONTRACTS-HTTP (C0) — GET /api/v2/contracts', () => {
     await teardown();
   });
 
-  it('CA2: com Bearer <accessToken válido> -> 200 e array (vazio em memory é válido)', async () => {
+  it('CA2: com Bearer <accessToken válido> -> 200 e { items, meta } (vazio em memory é válido)', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app);
     const res = await app.inject({
@@ -88,7 +88,10 @@ describe('CONTRACTS-HTTP (C0) — GET /api/v2/contracts', () => {
       headers: { authorization: `Bearer ${token}` },
     });
     assert.equal(res.statusCode, 200);
-    assert.ok(Array.isArray(res.json()));
+    // CTR-HTTP-CONTRACT-LIST-FILTERS — response paginado: { items: [], meta }.
+    const body = res.json() as { items: unknown[]; meta: { total: number } };
+    assert.ok(Array.isArray(body.items));
+    assert.equal(body.meta.total, 0);
     await teardown();
   });
 
@@ -106,7 +109,7 @@ describe('CONTRACTS-HTTP (C0) — composition dual-pool (ADR-0026)', () => {
     const deps = await buildContractsHttpDeps({ driver: 'memory' });
     assert.equal(typeof deps.listContracts, 'function');
     assert.equal(typeof deps.shutdown, 'function');
-    const r = await deps.listContracts();
+    const r = await deps.listContracts({ page: 1, limit: 20, order: 'ASC' });
     assert.equal(r.ok, true);
     await deps.shutdown();
   });

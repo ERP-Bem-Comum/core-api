@@ -53,6 +53,41 @@ export const contractListItemSchema = z.discriminatedUnion('status', [
 
 export const contractListSchema = z.array(contractListItemSchema);
 
+// ─── CTR-HTTP-CONTRACT-LIST-FILTERS — query + response paginado ──────────────
+//
+// Query string do GET /contracts. `page`/`limit` chegam como string → `z.coerce`.
+// `limit` tem teto (DoS guard, D request). `status` ∈ estados do agregado;
+// `order` ASC|DESC (default ASC). `search` texto livre (LIKE no banco).
+
+const LIST_LIMIT_MAX = 100;
+const LIST_LIMIT_DEFAULT = 20;
+
+export const contractListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(LIST_LIMIT_MAX).default(LIST_LIMIT_DEFAULT),
+  order: z.enum(['ASC', 'DESC']).default('ASC'),
+  search: z.string().min(1).optional(),
+  status: z.enum(['Pending', 'Active', 'Expired', 'Terminated']).optional(),
+});
+
+export type ContractListQuery = z.infer<typeof contractListQuerySchema>;
+
+/** Meta de paginação devolvida no envelope `{ items, meta }`. */
+const contractListMetaSchema = z.object({
+  page: z.number().int().meta({ description: 'Página atual (1-based)' }),
+  limit: z.number().int().meta({ description: 'Tamanho da página' }),
+  total: z.number().int().nonnegative().meta({ description: 'Total de itens (todos os filtros)' }),
+  totalPages: z.number().int().nonnegative().meta({ description: 'ceil(total/limit)' }),
+});
+
+/** Response paginado do GET /contracts (CTR-HTTP-CONTRACT-LIST-FILTERS). */
+export const contractListPagedSchema = z.object({
+  items: z.array(contractListItemSchema),
+  meta: contractListMetaSchema,
+});
+
+export type ContractListPagedDto = z.infer<typeof contractListPagedSchema>;
+
 /**
  * Detalhe "enxuto" de um contrato — mesmo shape do item de lista. Resposta das rotas
  * de ESCRITA (POST /contracts, activate, end, homologate) que serializam o agregado
