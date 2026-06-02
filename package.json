@@ -17,7 +17,8 @@
   },
   "packageManager": "pnpm@11.5.0",
   "imports": {
-    "#src/*": "./src/*"
+    "#src/*": "./src/*",
+    "#scripts/*": "./scripts/*"
   },
   "scripts": {
     "preinstall": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/only-allow-pnpm.ts",
