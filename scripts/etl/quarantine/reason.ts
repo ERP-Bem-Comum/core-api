@@ -14,7 +14,11 @@ export type QuarantineReason =
   | Readonly<{ tag: 'EnumUnknown'; field: string; attempted: string }>
   | Readonly<{ tag: 'RequiredFieldMissing'; field: string }>
   | Readonly<{ tag: 'Overflow'; field: string; attempted: string; maxLength: number }>
-  | Readonly<{ tag: 'DateInvalid'; field: string; attempted: string }>;
+  | Readonly<{ tag: 'DateInvalid'; field: string; attempted: string }>
+  // Falha de um port (persistencia/auth/rehydrate na borda do orquestrador). `portError`
+  // carrega o codigo kebab-case EN do erro REAL do port (ex.: 'partners-etl-store-unavailable').
+  // Codigo EN, nunca dado de linha — PII-free, seguro no resumo versionavel.
+  | Readonly<{ tag: 'PortError'; field: string; portError: string }>;
 
 export type QuarantineSummary = Readonly<{ tag: QuarantineReason['tag']; field: string }>;
 
@@ -41,6 +45,8 @@ export const describeReason = (reason: QuarantineReason): string => {
       return `Valor excede ${reason.maxLength} caracteres no campo ${reason.field}`;
     case 'DateInvalid':
       return `Data inválida no campo ${reason.field}`;
+    case 'PortError':
+      return `Falha de port na etapa ${reason.field}: ${reason.portError}`;
     default: {
       const _exhaustive: never = reason;
       return _exhaustive;

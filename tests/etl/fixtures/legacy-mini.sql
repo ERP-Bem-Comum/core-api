@@ -39,9 +39,12 @@ CREATE TABLE `suppliers` (
   `updatedAt` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- CNPJs DEVEM ser distintos entre suppliers: par_suppliers tem UNIQUE(cnpj) no destino
+-- (par_suppliers_cnpj_idx). Reusar o mesmo CNPJ faria o 2º supplier cair em quarentena
+-- por ER_DUP_ENTRY, quebrando a reconciliação/idempotência da ETL.
 INSERT INTO `suppliers` VALUES
   (1,'Forn Fake','forn@fake.test','11444777000161','Forn Fake LTDA','FF','INFORMATICA',1,'001','1234','567890','1',NULL,NULL,'2024-01-01 12:00:00','2024-01-02 12:00:00'),
-  (2,'Forn Pix','pixforn@fake.test','11444777000161','Forn Pix LTDA','FP','LIMPEZA',1,NULL,NULL,NULL,NULL,'email','pix@fake.test','2024-01-01 12:00:00','2024-01-02 12:00:00');
+  (2,'Forn Pix','pixforn@fake.test','11222333000181','Forn Pix LTDA','FP','LIMPEZA',1,NULL,NULL,NULL,NULL,'email','pix@fake.test','2024-01-01 12:00:00','2024-01-02 12:00:00');
 
 CREATE TABLE `collaborators` (
   `id` int NOT NULL AUTO_INCREMENT,
@@ -73,11 +76,17 @@ CREATE TABLE `collaborators` (
   `updatedAt` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   PRIMARY KEY (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- `role` é OBRIGATÓRIO no domínio do core-api (CollaboratorCore.role: string,
+-- par_collaborators.role NOT NULL) embora o legado permita NULL. A fixture (caminho
+-- feliz, 100% migrável) usa role não-nulo nas 2 linhas. O caso role=NULL → quarentena
+-- (RequiredFieldMissing) é coberto pelo teste unitário collaborator.mapper.test.ts.
+-- Decisão D18 (HANDOFF §11): role=NULL na ETL real → quarentena (não backfill: role é
+-- cargo de pessoa, ≠ disableBy/D10). Dump de produção atual: 91/91 com role preenchido.
 INSERT INTO `collaborators`
   (`id`,`name`,`email`,`cpf`,`occupationArea`,`role`,`startOfContract`,`employmentRelationship`,`status`,`active`,`disableBy`,`createdAt`,`updatedAt`)
 VALUES
   (1,'Colab Fake','colab@fake.test','52998224725','PARC','Analista','2024-01-01 12:00:00','CLT','CADASTRO_COMPLETO',1,NULL,'2024-01-01 12:00:00','2024-01-02 12:00:00'),
-  (2,'Colab Inativo','inativo@fake.test','11144477735','DDI',NULL,'2024-01-01 12:00:00','PJ','PRE_CADASTRO',0,NULL,'2024-01-01 12:00:00','2024-01-02 12:00:00');
+  (2,'Colab Inativo','inativo@fake.test','11144477735','DDI','Auxiliar Operacional','2024-01-01 12:00:00','PJ','PRE_CADASTRO',0,NULL,'2024-01-01 12:00:00','2024-01-02 12:00:00');
 
 CREATE TABLE `users` (
   `id` int NOT NULL AUTO_INCREMENT,

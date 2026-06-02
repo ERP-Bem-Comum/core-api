@@ -207,3 +207,68 @@ await port.close();
 4. **Reconciliação:** usar `reconcile.ts` (CORE). `read = migrated + quarantined + alreadyExists` por entidade. Reportar inativos com `LEGACY_MIGRATION` (D10).
 5. **Teste integração gated** (`PARTNERS_ETL_INTEGRATION=1`): DOIS DBs — legado efêmero (leitura, `compose.etl.yaml` :3309) + core-api efêmero (escrita). Verificar idempotência (rodar 2× não duplica) + reconciliação. **Lembrar `MYSQL_PORT=3307`** se 3306 ocupada pelo ambiente `bemcomum-*`.
 6. Cleanup/SIGTERM (CTR-NODE-LAST-RESORT-HANDLERS). Lint estrito em `scripts/`.
+
+---
+
+## 11. Auditoria 2026-06-02 (4 especialistas) — bug da integração 2-DB + achados
+
+A 1ª execução da integração 2-DB do 3b-ii pegou um bug. Causa raiz confirmada por auditoria
+adversarial (mysql-database-expert + mysql2-driver-expert + drizzle-orm-expert + nodejs-runtime-expert).
+
+### Bug encontrado e corrigido (3b-ii)
+- **Sintoma:** teste de idempotência falha (`suppliers.alreadyExists` = 1, esperado 2).
+- **Causa raiz:** `tests/etl/fixtures/legacy-mini.sql` tinha 2 suppliers com o MESMO CNPJ
+  (`11444777000161`). `par_suppliers` impõe `UNIQUE(cnpj)` (`par_suppliers_cnpj_idx`,
+  `schemas/mysql.ts:121`) → o 2º supplier (`Forn Pix`) falha o INSERT com `ER_DUP_ENTRY (1062)`
+  e cai em quarentena toda rodada, nunca persistindo. **Defeito de dado na fixture, não bug de código.**
+- **Fix:** supplier 2 agora usa CNPJ válido distinto `11222333000181` (DV módulo-11 conferido) +
+  comentário documentando o invariante. **Hardening:** teste 1 agora asserta `quarantined === 0`
+  por entidade (contrato "fixture 100% migrável" explícito; pega fixture-suja cedo).
+
+### Achado 1 — RISCO DE PRODUÇÃO (escalar ao dono antes do go-live)
+O dump legado **não tem** `UNIQUE(cnpj)`. Se houver 2+ registros com mesmo CNPJ/CPF/email em
+produção, a ETL **quarentena os duplicados** (não merge), e a **ordem de PK decide qual sobrevive**.
+Rodar no dump legado, ANTES da migração real, e levar duplicatas para decisão de negócio:
+```sql
+SELECT cnpj, COUNT(*) qty, GROUP_CONCAT(id ORDER BY id) ids FROM suppliers   GROUP BY cnpj  HAVING qty>1;
+SELECT cnpj, COUNT(*) qty, GROUP_CONCAT(id ORDER BY id) ids FROM financiers GROUP BY cnpj  HAVING qty>1;
+SELECT cpf,  COUNT(*) qty, GROUP_CONCAT(id ORDER BY id) ids FROM collaborators GROUP BY cpf HAVING qty>1;
+SELECT email,COUNT(*) qty, GROUP_CONCAT(id ORDER BY id) ids FROM collaborators GROUP BY email HAVING qty>1;
+SELECT cpf,  COUNT(*) qty, GROUP_CONCAT(id ORDER BY id) ids FROM users        GROUP BY cpf  HAVING qty>1;
+```
+
+### Achado 2 — BUG DE OBSERVABILIDADE no adapter (ticket follow-up · módulo partners)
+Em `src/modules/partners/adapters/persistence/repos/partners-etl-store.drizzle.ts`:
+- `runProvision` só reconhece `ER_DUP_ENTRY` no índice `*_legacy_id_idx` (idempotência). Um 1062
+  numa UNIQUE **secundária** (cnpj/cpf/email) cai no catch genérico → `err('partners-etl-store-unavailable')`
+  — **erro de DADO mascarado como erro de INFRA**. Na DLQ de produção, o operador investigará
+  "banco caiu" quando é CNPJ duplicado no legado.
+- `log()` (linha ~37) faz `String(cause)`, que descarta o `.cause` (o `DrizzleQueryError` esconde
+  o `code`/`errno`/`sqlMessage` reais do mysql2) — por isso o errno truncou no diagnóstico.
+- **Fix proposto (ticket próprio):** variante `'partners-etl-store-integrity-violation'` distinta
+  de `-unavailable`; `runProvision` inspeciona o índice violado; `log()` preserva `.cause`. Afeta
+  `PartnersEtlStoreError` (port public-api) + testes do `PARTNERS-ETL-WRITE-PORT` (já closed-green).
+  **NÃO é regressão do 3b-ii** — é melhoria de qualidade do port; merece W0→W3 dedicado.
+
+### Achado 3 — `role=NULL` em collaborator (2ª iteração; exposto pelo hardening)
+O hardening `quarantined === 0` expôs um 2º registro mascarado: collaborator legado id=2 com
+`role = NULL` caía em quarentena (`RequiredFieldMissing/role`). Auditado pelos 4 especialistas.
+- **Mecânica (consenso 4/4):** `role` é obrigatório de ponta a ponta — domínio
+  `CollaboratorCore.role: string` (`types.ts:49`, "OpenAPI required"), schema
+  `varchar(255).notNull()` (`mysql.ts:147` + migration `0002_young_cerise.sql:9`), mapper
+  `requireRole` (`collaborator.mapper.ts:44-45`). O legado permite `role DEFAULT NULL`. O mapper
+  está CORRETO em quarentenar — **não é bug**.
+- **Risco de produção: BAIXO.** O `mysql-database-expert` consultou o dump real: **91/91
+  colaboradores têm `role` preenchido**. Nenhum NULL. O collaborator role=NULL é exclusivo da
+  fixture sintética.
+- **Cobertura preservada:** o caso `role=NULL → RequiredFieldMissing` já tem teste unitário
+  (`tests/etl/mappers/collaborator.mapper.test.ts:81`), independente da fixture de integração.
+- **Fix:** fixture agora dá `role='Auxiliar Operacional'` ao collaborator id=2 (caminho feliz
+  100% migrável). O caminho inativo/D10 continua exercido.
+
+### D18 — `role=NULL` na ETL real → quarentena (decisão a confirmar pelo dono)
+Recomendação unânime dos 4 especialistas: se aparecer `role=NULL` num colaborador legado na
+migração real, **quarentena** (revisão manual), **NÃO backfill** — `role` é cargo de pessoa real,
+diferente de `disableBy` (estado de sistema, backfill D10). Mudar o domínio para `role` nullable
+foi avaliado e rejeitado (sem necessidade: produção não tem NULL; blast-radius toca a camada de
+domínio). Status: **comportamento já implementado (quarentena); decisão pendente de aval formal.**
