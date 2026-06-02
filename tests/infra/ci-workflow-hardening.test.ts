@@ -44,9 +44,11 @@ test('roda actionlint no CI', async () => {
 
 test('preserva a ordem dos gates de qualidade', async () => {
   const wf = await load();
-  const order = ['typecheck', 'format:check', 'lint', 'audit', 'test'].map((g) =>
-    wf.indexOf(`pnpm run ${g}`) === -1 ? wf.indexOf(`pnpm ${g}`) : wf.indexOf(`pnpm run ${g}`),
-  );
+  const gateIdx = (g: string): number => {
+    const full = wf.indexOf(`pnpm run ${g}`);
+    return full !== -1 ? full : wf.indexOf(`pnpm ${g}`);
+  };
+  const order = ['typecheck', 'format:check', 'lint', 'audit', 'test'].map(gateIdx);
   for (const idx of order) assert.ok(idx !== -1, 'gate ausente');
   const sorted = [...order].sort((a, b) => a - b);
   assert.deepEqual(order, sorted, 'gates fora de ordem');
