@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "PARTNERS-USER-PROFILE-PERSISTENCE",
+  "size": "M",
+  "createdAt": "2026-06-02T02:59:30.184Z",
+  "closedAt": "2026-06-02T03:04:57.889Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-06-02T02:59:30.748Z",
+      "finishedAt": "2026-06-02T03:00:37.250Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "drizzle-schema-author",
+      "startedAt": "2026-06-02T03:00:37.815Z",
+      "finishedAt": "2026-06-02T03:02:24.021Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-06-02T03:02:24.638Z",
+      "finishedAt": "2026-06-02T03:02:58.316Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-06-02T03:02:58.894Z",
+      "finishedAt": "2026-06-02T03:04:57.320Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

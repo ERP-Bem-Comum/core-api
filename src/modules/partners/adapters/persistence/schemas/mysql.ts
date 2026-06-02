@@ -169,3 +169,29 @@ export const parCollaborators = mysqlTable(
 
 export type CollaboratorRow = typeof parCollaborators.$inferSelect;
 export type NewCollaboratorRow = typeof parCollaborators.$inferInsert;
+
+// ─── par_user_profiles ──────────────────────────────────────────────────────
+// Perfil de usuário (legado `users` — porção de perfil; autenticação fica no auth).
+// Identidade = `user_ref` (PK natural, 1:1 com auth.User). Sem soft-delete (ciclo de
+// vida é do auth.User). `cpf` UNIQUE. `collaborator_ref` referencia o colaborador por
+// ID (sem FK cross-agregado — ADR-0014).
+export const parUserProfiles = mysqlTable(
+  'par_user_profiles',
+  {
+    // UUID v4 do auth.User. COLLATE utf8mb4_bin no SQL manual.
+    userRef: varchar('user_ref', { length: 36 }).primaryKey().notNull(),
+    name: varchar('name', { length: 255 }).notNull(),
+    // 11 dígitos. UNIQUE + COLLATE utf8mb4_bin no SQL manual.
+    cpf: varchar('cpf', { length: 11 }).notNull(),
+    telephone: varchar('telephone', { length: 30 }).notNull(),
+    avatarUrl: varchar('avatar_url', { length: 500 }),
+    // UUID do colaborador (referência por ID, sem FK). COLLATE utf8mb4_bin no SQL manual.
+    collaboratorRef: varchar('collaborator_ref', { length: 36 }),
+    createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
+    updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
+  },
+  (t) => [uniqueIndex('par_user_profiles_cpf_idx').on(t.cpf)],
+);
+
+export type UserProfileRow = typeof parUserProfiles.$inferSelect;
+export type NewUserProfileRow = typeof parUserProfiles.$inferInsert;
