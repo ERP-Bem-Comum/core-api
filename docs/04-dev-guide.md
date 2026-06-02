@@ -68,6 +68,7 @@ compartilham o DB `core`.
 
 ```bash
 pnpm run test:integration              # contracts: sobe MySQL --wait + migrations + repos Drizzle
+pnpm run test:integration:infra        # suite mysql-compose (COMPOSE_INTEGRATION=1 + override compose.ci.yaml)
 pnpm run test:integration:auth         # auth (MYSQL_INTEGRATION=1)
 pnpm run test:integration:storage      # storage S3 contra MinIO
 pnpm run test:integration:notifications
@@ -77,6 +78,11 @@ pnpm run test:e2e:contracts            # smoke E2E contracts: dual-pool + RBAC +
 
 Os scripts E2E sobem o compose, iniciam o server real e fazem teardown (`trap`) mesmo em falha. Exigem
 Docker; não entram no `pnpm test`.
+
+**Opt-in por env var:** suites de integração descobertas pelo glob (ex.: `tests/infra/mysql-compose.test.ts`)
+só executam o bootstrap quando a flag correspondente está setada (`COMPOSE_INTEGRATION`, `MYSQL_INTEGRATION`,
+`STORAGE_INTEGRATION`, …). Sem a flag a suite fica `skipped` — nunca `failed` — então `pnpm test` puro
+permanece verde mesmo com o Docker daemon vivo. Use sempre o script `test:integration:*` dedicado.
 
 ## 7. Pipeline fail-first W0→W3
 

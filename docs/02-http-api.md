@@ -55,6 +55,7 @@ Todas exigem `requireAuth`. As de leitura detalhada e escrita somam RBAC fino.
 | :------------------------------------------------------- | :------------------------------- | :----------------------- |
 | `POST /contracts`                                        | create (`mode: Pending\|Active`) | 201 contrato             |
 | `POST /contracts/:id/activate`                           | activate                         | 200                      |
+| `POST /contracts/:id/end`                                | end (`kind: Expire\|Terminate`)  | 200 contrato encerrado   |
 | `POST /contracts/:id/amendments`                         | create amendment (`kind`)        | 201 aditivo              |
 | `POST /contracts/:id/amendments/:amendmentId/homologate` | homologate                       | 200 contrato recalculado |
 | `POST /contracts/:id/documents`                          | upload (parentType Contract)     | 201 documento            |

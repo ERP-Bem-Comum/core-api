@@ -4,6 +4,21 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-02 — 🔚 Rota HTTP de encerrar contrato + gate da suite mysql-compose
+
+### Borda HTTP (contracts)
+
+- **`POST /api/v2/contracts/:id/end`** (ticket `CONTRACTS-HTTP-END`, W0→W3 verde) — encerra contrato via use case `endContract` (writer pool, ADR-0026), body `{ kind: 'Expire' | 'Terminate' }`, protegido por `requireAuth` + `authorize('contract:write')`. Mapeamento de erro reusa a infra existente do plugin (`ContractNotActive`→409, `contract-not-found`→404, `ContractCannotExpireYet`/`...IndefinitePeriod`→422, repo→503). Documentado em `docs/02-http-api.md` §4.
+
+### Infra / testes
+
+- **Suite `tests/infra/mysql-compose.test.ts` gateada por opt-in** (ticket `mysql-compose skip-guard`) — bootstrap exige `COMPOSE_INTEGRATION=1` (mesma convenção de `MYSQL_INTEGRATION`/`STORAGE_INTEGRATION`); sem o opt-in fica `skipped`, nunca `failed`, mesmo com o daemon vivo e a 3306 do stack de dev ocupada. Novo script `pnpm run test:integration:infra` aplica o override `compose.ci.yaml` (`ports: !reset null`) e usa `docker exec`, coexistindo com o stack de dev. Documentado em `docs/04-dev-guide.md` §6.
+
+### Manutenção
+
+- **Política de regressão zero** formalizada no `CLAUDE.md` raiz (anti-padrão #14 + seção dedicada) e espelhada no output-style `erp-contracts`: nenhum vermelho é "erro alheio/ambiental"; conserta-se a causa OU o gate mal-classificado (com prova de verde), nunca se fecha com falha não-endereçada.
+- **Ticket `PARTNERS-ETL-BOOTSTRAP` aberto** (L, ETL one-shot legado→core-api, épico Parceiros/Cadastros §4) com 5 pré-requisitos mapeados; `CTR-CLI-ACTIVAR-CONTRATO` marcado `superseded` por `CONTRACTS-HTTP-WRITES-CORE`.
+
 ## 2026-06-01 — 🤝 Módulo `partners` (ADR-0031) + BC Parceiros/Cadastros
 
 ### Decisões (ADR)
