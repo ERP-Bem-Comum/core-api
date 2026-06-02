@@ -1,0 +1,54 @@
+name: Test and Quality
+
+# Disparado em push na main e pull requests contra main.
+# Espelha o padrão do deploy-docs.yml — setup corepack, cache pnpm store.
+# Ver handbook/reference/pnpm/continuous-integration.md.
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-and-quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Setup Node 24 + corepack (referência handbook/reference/pnpm/continuous-integration.md)
+      - name: Setup Node 24 e corepack
+        uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: corepack enable
+
+      # Cache do pnpm store (usando hash de pnpm-lock.yaml)
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.pnpm-store
+            ${{ env.PNPM_HOME }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('**/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      # Install com frozen-lockfile (ADR-0011 + handbook CI)
+      - name: Instala dependências (frozen lockfile)
+        run: pnpm install --frozen-lockfile
+
+      # Gates de qualidade na ordem correta
+      - name: typecheck
+        run: pnpm run typecheck
+
+      - name: format:check
+        run: pnpm run format:check
+
+      - name: lint
+        run: pnpm run lint
+
+      - name: audit
+        run: pnpm run audit
+
+      - name: test
+        run: pnpm test

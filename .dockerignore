@@ -57,10 +57,8 @@ logs/
 tmp/
 temp/
 
-# Test reports e scratch files
-tests/reports/
-tests/bdd/
-tests/regression/
+# Tests — nenhum arquivo de test vai para o build context
+tests/
 
 # Compose / Docker meta (não vão dentro da imagem)
 Dockerfile*

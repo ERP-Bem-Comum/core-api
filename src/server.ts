@@ -13,6 +13,7 @@ import {
   installLastResortHandlers,
   processLastResortDeps,
 } from '#src/shared/runtime/last-resort.ts';
+import { makeShutdownOnce } from '#src/shared/runtime/shutdown-once.ts';
 import {
   authHttpPlugin,
   buildAuthHttpDeps,
@@ -75,14 +76,18 @@ const main = async (): Promise<void> => {
     config,
   });
 
-  // Graceful shutdown: SIGTERM / SIGINT → app.close() (drena conexoes abertas)
-  const shutdown = async (): Promise<void> => {
+  // Graceful shutdown: SIGTERM / SIGINT → app.close() (drena conexoes abertas).
+  // makeShutdownOnce garante idempotência: SIGTERM + uncaughtException no mesmo
+  // ciclo de vida não executam app.close()/deps.shutdown() 2×.
+  // Ref: handbook/reference/nodejs/Process.md §"Warning: Using
+  // 'uncaughtException' correctly".
+  const shutdown = makeShutdownOnce(async () => {
     app.log.info('Graceful shutdown iniciado…');
     await app.close();
     await authDeps.shutdown();
     await contractsDeps.shutdown();
     app.log.info('Servidor encerrado.');
-  };
+  });
 
   const onSignal = (): void => {
     void shutdown().catch((err: unknown) => {

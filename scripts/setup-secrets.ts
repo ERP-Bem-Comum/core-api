@@ -50,6 +50,8 @@ const SECRETS_TO_GENERATE: readonly SecretSpec[] = [
   { name: 'mysql_root_password', label: 'root MySQL' },
   { name: 'mysql_app_password', label: 'core_app (escritor único de core.*)' },
   { name: 'mysql_readonly_password', label: 'readonly_bi (SELECT em core.*)' },
+  { name: 'minio_root_user', label: 'MinIO root user (access key)' },
+  { name: 'minio_root_password', label: 'MinIO root password (secret key, mín. 8 chars)' },
 ];
 
 const USAGE = `Uso: pnpm secrets:setup [--random] [--force] [--help]

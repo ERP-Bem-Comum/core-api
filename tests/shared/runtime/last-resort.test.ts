@@ -1,10 +1,10 @@
 /**
- * CTR-NODE-LAST-RESORT-HANDLERS — W0 (RED)
+ * CTR-NODE-LAST-RESORT-HANDLERS
  *
- * Cobre CA1, CA2, CA3 via deps injetáveis (sem registrar handlers no process global).
+ * Cobre CA1–CA5 via deps injetáveis (sem registrar handlers no process global).
  *
- * Estado W0: RED — `src/shared/runtime/last-resort.ts` não existe →
- *   import falha com ERR_MODULE_NOT_FOUND.
+ * CA4/CA5 (CTR-DEVOPS-HARDENING): verifica que o write recebe o stack completo
+ * quando causa é Error (não apenas String(cause) que perde o stack).
  */
 
 import { describe, it } from 'node:test';
@@ -79,5 +79,48 @@ describe('last-resort handlers', () => {
     });
 
     assert.deepEqual(h.order, ['shutdown', 'exit']);
+  });
+
+  // CA4 (CTR-DEVOPS-HARDENING — P2): causa é Error com .stack → write deve conter
+  // o stack, não apenas String(cause) = "Error: msg" (sem frames).
+  // Ref: handbook/reference/nodejs/Process.md §"Warning: Using 'uncaughtException' correctly"
+  it('CA4: dado Error com .stack, write contém o stack trace (não só a mensagem)', async () => {
+    const h = makeHarness();
+    installLastResortHandlers(async () => {
+      await Promise.resolve();
+    }, h.deps);
+
+    const err = new Error('stack-trace-test');
+    // .stack é definido pelo V8 na criação: "Error: stack-trace-test\n    at ..."
+    assert.ok(
+      typeof err.stack === 'string' && err.stack.includes('at '),
+      'pré-condição: .stack contém frames',
+    );
+
+    h.listeners.get('uncaughtException')!(err);
+    await new Promise((r) => {
+      setImmediate(r);
+    });
+
+    const written = h.writes.join('');
+    // Deve conter o stack completo (com "at " de frames), não apenas "Error: stack-trace-test"
+    assert.match(written, /at /, 'write deve conter frames do stack trace');
+    assert.match(written, /stack-trace-test/, 'write deve conter a mensagem do erro');
+  });
+
+  // CA5 (CTR-DEVOPS-HARDENING — P2): causa NÃO é Error → fallback String(cause) continua
+  it('CA5: dado não-Error (string), write cai no fallback String(cause)', async () => {
+    const h = makeHarness();
+    installLastResortHandlers(async () => {
+      await Promise.resolve();
+    }, h.deps);
+
+    h.listeners.get('unhandledRejection')!('apenas-uma-string');
+    await new Promise((r) => {
+      setImmediate(r);
+    });
+
+    const written = h.writes.join('');
+    assert.match(written, /apenas-uma-string/);
   });
 });

@@ -7,9 +7,10 @@
 # stage `deps` não precisa de toolchain C++.
 #
 # Camadas:
-#   1. base    — pin do node:24.15-alpine por digest (ADR-0011 supply chain)
-#   2. deps    — instala dependências (sem toolchain C++)
-#   3. runtime — imagem final mínima, non-root, signal-safe
+#   1. base      — pin do node:24.16-bookworm-slim por digest (ADR-0011 supply chain)
+#   2. deps      — instala TODAS as dependências (incl. devDeps) — para CI/lint
+#   3. deps-prod — instala apenas produção (--prod); alimenta o runtime
+#   4. runtime   — imagem final mínima, non-root, signal-safe
 #
 # Por que esta arquitetura?
 #   - Multi-stage isola pnpm install no estágio `deps` (cache mount BuildKit),
@@ -20,14 +21,19 @@
 
 # ────────────────────────────────────────────────────────────────────────────
 # Stage 1 — base
-# Pin: digest do índice multi-arch (amd64 + arm64 + s390x), Alpine 3.23.
-# Para atualizar: `docker buildx imagetools inspect node:24.15-alpine --format '{{.Manifest.Digest}}'`
+# Pin: digest do índice multi-arch (amd64 + arm64), Debian bookworm-slim (glibc).
+# glibc (não Alpine/musl): binários nativos de devDeps — ex. @typescript/native-preview
+# (tsgo, ADR-0009) — só publicam variante glibc; em musl o pnpm install quebra com
+# ERR_PNPM_NO_RESOLUTION_MATCHED. Para atualizar o digest:
+#   docker buildx imagetools inspect node:24.16-bookworm-slim --format '{{.Manifest.Digest}}'
 # ────────────────────────────────────────────────────────────────────────────
-FROM node:24.15-alpine@sha256:d1b3b4da11eefd5941e7f0b9cf17783fc99d9c6fc34884a665f40a06dbdfc94f AS base
+FROM node:24.16-bookworm-slim@sha256:242549cd46785b480c832479a730f4f2a20865d61ea2e404fdb2a5c3d3b73ecf AS base
 
 # tini é o init mínimo (PID 1) para reaping de zumbis e forward de SIGTERM/SIGINT
-# (Alpine não monta `/init`; equivalente ao flag `--init` do `docker run`).
-RUN apk add --no-cache tini
+# (equivalente ao flag `--init` do `docker run`).
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends tini \
+ && rm -rf /var/lib/apt/lists/*
 
 # Corepack habilita pnpm sem npm install global. Versão pinada (ADR-0029).
 ENV PNPM_VERSION=11.5.0
@@ -36,7 +42,8 @@ RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 WORKDIR /app
 
 # ────────────────────────────────────────────────────────────────────────────
-# Stage 2 — deps
+# Stage 2 — deps (todas as dependências, incluindo devDeps)
+# Usada apenas para CI/typecheck/lint. Não vai para a imagem final.
 # Sem toolchain C++ (CTR-CLEANUP-SQLITE #5 removeu better-sqlite3). Cache mount
 # BuildKit acelera builds repetidos em CI.
 # ────────────────────────────────────────────────────────────────────────────
@@ -54,9 +61,30 @@ RUN --mount=type=cache,id=pnpm,target=/root/.local/share/pnpm/store \
       --ignore-scripts
 
 # ────────────────────────────────────────────────────────────────────────────
-# Stage 3 — runtime
-# Imagem final: Node + tini + node_modules + src. Non-root, signal-safe.
-# Sem libc6-compat (nenhum binário nativo linkado contra glibc).
+# Stage 3 — deps-prod (somente dependências de produção)
+# Multi-stage builds §"Stop at a specific build stage" — instala apenas as
+# deps declaradas em `dependencies` (sem devDeps: drizzle-kit, typescript,
+# eslint, prettier, @types/*, etc.). Reduz node_modules copiado para o runtime.
+#
+# drizzle-kit é devDep — NÃO é necessário em runtime. O migrador usa
+# `drizzle-orm/mysql2/migrator` (produção) com os arquivos SQL já gerados em
+# src/modules/*/adapters/persistence/migrations/. Nunca chama `drizzle-kit` em
+# runtime (confirmado: zero imports de 'drizzle-kit' em src/).
+# ────────────────────────────────────────────────────────────────────────────
+FROM base AS deps-prod
+
+COPY package.json pnpm-lock.yaml ./
+
+RUN --mount=type=cache,id=pnpm-prod,target=/root/.local/share/pnpm/store \
+    pnpm install \
+      --frozen-lockfile \
+      --prod \
+      --ignore-scripts
+
+# ────────────────────────────────────────────────────────────────────────────
+# Stage 4 — runtime
+# Imagem final: Node + tini + node_modules (prod-only) + src. Non-root, signal-safe.
+# Base glibc (bookworm-slim): binários nativos rodam sem shim de compatibilidade.
 # ────────────────────────────────────────────────────────────────────────────
 FROM base AS runtime
 
@@ -67,7 +95,7 @@ LABEL org.opencontainers.image.title="core-api" \
       org.opencontainers.image.vendor="Envolve / Bem Comum" \
       org.opencontainers.image.source="https://github.com/envolve/bem-comum-core-api" \
       org.opencontainers.image.licenses="proprietary" \
-      org.opencontainers.image.base.name="docker.io/library/node:24.15-alpine"
+      org.opencontainers.image.base.name="docker.io/library/node:24.16-bookworm-slim"
 
 # Variáveis de runtime.
 # - NODE_ENV=production: stripping de warnings, otimizações.
@@ -76,24 +104,27 @@ LABEL org.opencontainers.image.title="core-api" \
 #   (defesa em profundidade contra NODE_NO_WARNINGS ser desativado por debugger).
 ENV NODE_ENV=production \
     NODE_NO_WARNINGS=1 \
-    NODE_OPTIONS="--experimental-strip-types --no-warnings"
+    NODE_OPTIONS="--experimental-strip-types --enable-source-maps --no-warnings"
 
-# Copia node_modules do estágio deps.
-COPY --from=deps /app/node_modules ./node_modules
+# Copia node_modules do estágio deps-prod (somente produção — sem drizzle-kit,
+# typescript, eslint, etc.). Reduz a superfície da imagem final.
+COPY --from=deps-prod /app/node_modules ./node_modules
 COPY package.json pnpm-lock.yaml ./
 
 # Código de produção. `tsconfig.json` e `drizzle.config.ts` ficam pra suportar
-# `drizzle-kit` se chamado em runtime para migrations.
+# o carregamento de módulos TS em runtime via --experimental-strip-types.
+# `drizzle-kit` NÃO está no node_modules desta imagem (produção); migrations
+# já são SQL pré-gerados em src/modules/*/adapters/persistence/migrations/.
 COPY src ./src
 COPY tsconfig.json drizzle.config.ts ./
 
 # Usuário não-root com UID explícito (estabilidade entre rebuilds — Docker
 # Building best practices §USER). 10001 escolhido fora do range padrão do
-# Alpine (1000-9999) para evitar conflito.
+# Debian (1000-59999) para evitar conflito.
 ARG APP_UID=10001
 ARG APP_GID=10001
-RUN addgroup -S -g ${APP_GID} app \
- && adduser -S -u ${APP_UID} -G app -h /app -s /sbin/nologin app \
+RUN groupadd -r -g ${APP_GID} app \
+ && useradd -r -u ${APP_UID} -g app -d /app -s /usr/sbin/nologin app \
  && chown -R app:app /app
 USER app:app
 

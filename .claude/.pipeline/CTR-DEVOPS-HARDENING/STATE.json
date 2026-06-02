@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "CTR-DEVOPS-HARDENING",
+  "size": "L",
+  "createdAt": "2026-06-02T21:23:34.194Z",
+  "closedAt": "2026-06-02T21:35:19.319Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "nodejs-runtime-expert",
+      "startedAt": "2026-06-02T21:34:56.703Z",
+      "finishedAt": "2026-06-02T21:35:14.767Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "docker-compose-expert",
+      "startedAt": "2026-06-02T21:35:15.442Z",
+      "finishedAt": "2026-06-02T21:35:16.267Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-06-02T21:35:16.900Z",
+      "finishedAt": "2026-06-02T21:35:17.532Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-06-02T21:35:18.127Z",
+      "finishedAt": "2026-06-02T21:35:18.738Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

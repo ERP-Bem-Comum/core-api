@@ -44,7 +44,12 @@ export const installLastResortHandlers = (
   const onFatal =
     (label: string) =>
     (cause: unknown): void => {
-      deps.write(`❌ ${label}: ${String(cause)}\n`);
+      // Preserva o stack trace completo quando a causa é um Error.
+      // String(cause) produz apenas "Error: msg", perdendo os frames.
+      // Ref: handbook/reference/nodejs/Process.md §"Warning: Using
+      // 'uncaughtException' correctly" — cleanup deve ter diagnóstico completo.
+      const detail = cause instanceof Error ? (cause.stack ?? cause.message) : String(cause);
+      deps.write(`❌ ${label}: ${detail}\n`);
       void shutdown().finally(() => {
         deps.exit(1);
       });
