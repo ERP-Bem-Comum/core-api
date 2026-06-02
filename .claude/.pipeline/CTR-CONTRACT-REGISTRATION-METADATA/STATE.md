@@ -1,6 +1,6 @@
 # Estado do Ticket CTR-CONTRACT-REGISTRATION-METADATA
 
-> **Size:** M · **Status:** closed-green · **Created:** 2026-06-02T20:02:39.229Z · **Closed:** 2026-06-02T21:18:06.706Z
+> **Size:** M · **Status:** closed-green · **Created:** 2026-06-02T20:02:39.229Z · **Closed:** 2026-06-02T21:22:26.925Z
 
 | Wave | Status | Skill | REPORT | Última atualização |
 | :--- | :--- | :--- | :--- | :--- |
