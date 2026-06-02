@@ -4,6 +4,19 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-02 — 🔁 ETL Parceiros (PARTNERS-ETL-BOOTSTRAP) — CORE + READER (em andamento)
+
+> Branch `feat/partners-etl-bootstrap` (commits locais). Handoff completo em `.claude/.pipeline/PARTNERS-ETL-BOOTSTRAP/HANDOFF.md`.
+
+### Migração one-shot legado → core-api (módulo `partners`)
+
+ETL fatiado em 5 slices, cada um W0→W3. Pré-requisitos P2 (`legacy_id`) + P3 (`CONTRACT_PERMISSION`) já em `dev` (PR #5). Decisões do dono D9–D13 no `000-request.md` (reset P4a/P4b separados; inativos com backfill; `collaborator_history` em cold storage; quarentena dupla sem PII; overflow→quarentena).
+
+- **Decisão de domínio:** `LEGACY_MIGRATION` adicionado ao enum `DisableReason` (marcador de proveniência de ETL, não motivo de RH) — para satisfazer `InactiveCollaborator.disableBy` não-null sem fabricar causa nem perder registro.
+- **`PARTNERS-ETL-CORE`** (closed-green) — camada pura em `scripts/etl/`: `QuarantineReason` (+ `toSummary` PII-free), reconciliação (invariante de balanço), e os **4 mappers** row-legada→domínio (`parse → combine → rehydrate`, backfill D10, overflow→quarentena D13). Fixtures sintéticos.
+- **`PARTNERS-ETL-READER`** (closed-green) — `decode.ts` (`password` nunca lido), `compose.etl.yaml` (MySQL 8.4 efêmero `tmpfs`/localhost-only), `restore.ts` (spawn docker + teardown garantido), `reader.ts` (mysql2 SELECT-only). **Integração verificada end-to-end com Docker** contra dump sintético; `collaborator_history` em cold storage (D11).
+- **Próximo:** `PARTNERS-ETL-WRITER` → P4a/P4b.
+
 ## 2026-06-02 — 🔚 Rota HTTP de encerrar contrato + gate da suite mysql-compose
 
 ### Borda HTTP (contracts)
