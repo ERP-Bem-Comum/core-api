@@ -53,7 +53,11 @@ export const contractListItemSchema = z.discriminatedUnion('status', [
 
 export const contractListSchema = z.array(contractListItemSchema);
 
-/** Detalhe de um contrato (`GET /contracts/:id`). Mesmo shape do item de lista. */
+/**
+ * Detalhe "enxuto" de um contrato — mesmo shape do item de lista. Resposta das rotas
+ * de ESCRITA (POST /contracts, activate, end, homologate) que serializam o agregado
+ * via `contractToListItem` pós-save. NÃO inclui filhos.
+ */
 export const contractDetailSchema = contractListItemSchema;
 
 export type ContractListItemDto = z.infer<typeof contractListItemSchema>;
@@ -228,6 +232,45 @@ export const documentSchema = z.object({
 });
 
 export type DocumentDto = z.infer<typeof documentSchema>;
+
+// ─── Detalhe enriquecido (GET /contracts/:id) ───────────────────────────────
+//
+// CTR-HTTP-CONTRACT-DETAIL-CHILDREN-FILES (ADR-0032): o GET de detalhe enriquece o
+// list-item com `amendments[]` + `documents[]` aninhados. Composição transitória na
+// borda até o BFF v2. Reusa os shapes do cabeçalho (`registrationShape`/`effectiveShape`)
+// e os schemas de filho (`amendmentSchema`/`documentSchema`). O list-item (GET /contracts)
+// e as respostas de escrita seguem com `contractListItemSchema`/`contractDetailSchema`.
+
+const childrenShape = {
+  amendments: z.array(amendmentSchema),
+  documents: z.array(documentSchema),
+};
+
+export const contractFullDetailSchema = z.discriminatedUnion('status', [
+  z.object({ ...registrationShape, status: z.literal('Pending'), ...childrenShape }),
+  z.object({
+    ...registrationShape,
+    ...effectiveShape,
+    status: z.literal('Active'),
+    ...childrenShape,
+  }),
+  z.object({
+    ...registrationShape,
+    ...effectiveShape,
+    status: z.literal('Expired'),
+    endedAt: z.string(),
+    ...childrenShape,
+  }),
+  z.object({
+    ...registrationShape,
+    ...effectiveShape,
+    status: z.literal('Terminated'),
+    endedAt: z.string(),
+    ...childrenShape,
+  }),
+]);
+
+export type ContractDetailDto = z.infer<typeof contractFullDetailSchema>;
 
 /**
  * `requestBody` das rotas de upload (E1/E2) — documenta o corpo binário no OpenAPI sem

@@ -34,6 +34,7 @@ import { parseAwsS3Env } from '../storage/s3-config-aws.ts';
 
 import { listContracts } from '../../application/use-cases/list-contracts.ts';
 import { getContract } from '../../application/use-cases/get-contract.ts';
+import { getContractDetail } from '../../application/use-cases/get-contract-detail.ts';
 import { getContractTimeline } from '../../application/use-cases/get-contract-timeline.ts';
 import { createContract } from '../../application/use-cases/create-contract.ts';
 import { createPendingContract } from '../../application/use-cases/create-pending-contract.ts';
@@ -103,6 +104,7 @@ export type GetDocument = (
 export type ContractsHttpDeps = Readonly<{
   listContracts: ReturnType<typeof listContracts>;
   getContract: ReturnType<typeof getContract>;
+  getContractDetail: ReturnType<typeof getContractDetail>;
   getContractTimeline: ReturnType<typeof getContractTimeline>;
   createContract: ReturnType<typeof createContract>;
   createPendingContract: ReturnType<typeof createPendingContract>;
@@ -220,6 +222,12 @@ const makeDeps = (
     // Reads → reader pool.
     listContracts: listContracts({ contractRepo: pools.contractReaderRepo }),
     getContract: getContract({ contractRepo: pools.contractReaderRepo }),
+    // Detalhe enriquecido (ADR-0032): composição de leitura Contract + Amendment[] + Document[].
+    getContractDetail: getContractDetail({
+      contractRepo: pools.contractReaderRepo,
+      amendmentRepo: pools.amendmentRepo,
+      documentRepo: pools.documentRepo,
+    }),
     getContractTimeline: getContractTimeline({ timelineRepo }),
     // Writes → writer pool.
     createContract: createContract({ contractRepo: pools.contractWriterRepo, clock }),

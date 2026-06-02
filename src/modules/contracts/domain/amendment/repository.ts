@@ -1,5 +1,5 @@
 import type { Result } from '../../../../shared/primitives/result.ts';
-import type { AmendmentId } from '../shared/ids.ts';
+import type { AmendmentId, ContractId } from '../shared/ids.ts';
 import type { Amendment } from './types.ts';
 import type { OutboxAppendError } from '../../application/ports/outbox.ts';
 import type { ContractsModuleEvent } from '../../application/ports/event-bus.ts';
@@ -15,6 +15,12 @@ export type AmendmentRepositoryError =
 
 export type AmendmentRepository = Readonly<{
   findById: (id: AmendmentId) => Promise<Result<Amendment | null, AmendmentRepositoryError>>;
+  // Leitura agregada (CTR-HTTP-CONTRACT-DETAIL-CHILDREN-FILES): todos os aditivos de um
+  // contrato, ordenados por `amendmentNumber` asc. Read-only; não toca o agregado nem o
+  // ciclo de escrita. Usado pela composição de detalhe na borda HTTP (ADR-0032).
+  findByContractId: (
+    contractId: ContractId,
+  ) => Promise<Result<readonly Amendment[], AmendmentRepositoryError>>;
   // CA-2: 2º argumento `events` — adapter persiste state + outbox atomicamente (D2).
   save: (
     amendment: Amendment,
