@@ -40,7 +40,7 @@ import { isOk } from '#src/shared/index.ts';
 
 // ─── Configuração ─────────────────────────────────────────────────────────────
 
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = `mysql://root:rootpw-migration-test-only@127.0.0.1:${process.env['MYSQL_PORT'] ?? '3306'}/core`;
 
 const integrationEnabled = (): boolean => process.env.MYSQL_INTEGRATION === '1';
 

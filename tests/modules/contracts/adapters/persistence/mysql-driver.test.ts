@@ -32,8 +32,9 @@ const PACKAGE_JSON = join(PROJECT_ROOT, 'package.json');
 
 // Credenciais sincronizadas com os secrets fixos do `pnpm test:integration`
 // (escritos pelo script no `package.json`). Não usar em produção.
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
-const BAD_AUTH_CONN = 'mysql://invalid:invalid@127.0.0.1:3306/inexistente';
+const MYSQL_PORT = process.env['MYSQL_PORT'] ?? '3306';
+const VALID_CONN = `mysql://root:rootpw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core`;
+const BAD_AUTH_CONN = `mysql://invalid:invalid@127.0.0.1:${MYSQL_PORT}/inexistente`;
 
 const integrationEnabled = (): boolean => process.env.MYSQL_INTEGRATION === '1';
 const skipReason = (): string =>

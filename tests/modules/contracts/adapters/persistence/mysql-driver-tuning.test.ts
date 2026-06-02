@@ -26,7 +26,7 @@ import {
 } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
 
 // Credenciais sincronizadas com `pnpm test:integration`.
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = `mysql://root:rootpw-migration-test-only@127.0.0.1:${process.env['MYSQL_PORT'] ?? '3306'}/core`;
 const DUMMY_ROOT_PWD = 'rootpw-migration-test-only';
 const CONTAINER = 'core-api-mysql';
 

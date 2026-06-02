@@ -26,7 +26,7 @@ import { sql } from 'drizzle-orm';
 import { openMysql } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
 import type { MysqlHandle } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
 
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = `mysql://root:rootpw-migration-test-only@127.0.0.1:${process.env['MYSQL_PORT'] ?? '3306'}/core`;
 
 const integrationEnabled = (): boolean => process.env.MYSQL_INTEGRATION === '1';
 

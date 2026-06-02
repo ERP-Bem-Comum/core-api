@@ -30,7 +30,7 @@ if (!integrationOn) {
     make: async () => {
       const connStr =
         process.env['MYSQL_CONNECTION_STRING'] ??
-        'mysql://core_app:apppw-migration-test-only@127.0.0.1:3306/core';
+        `mysql://core_app:apppw-migration-test-only@127.0.0.1:${process.env['MYSQL_PORT'] ?? '3306'}/core`;
       const driver = await openMysql({
         connectionString: connStr,
         applyMigrations: false,

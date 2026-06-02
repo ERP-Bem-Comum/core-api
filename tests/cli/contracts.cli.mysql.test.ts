@@ -38,8 +38,9 @@ import { extractUuidAfter } from './helpers/extract.ts';
 const DUMMY_APP_PWD = 'apppw-migration-test-only';
 const DUMMY_ROOT_PWD = 'rootpw-migration-test-only';
 const CONTAINER = 'core-api-mysql';
-const VALID_CONN = `mysql://core_app:${DUMMY_APP_PWD}@127.0.0.1:3306/core`;
-const BAD_CONN = 'mysql://invalid:invalid@127.0.0.1:3306/core';
+const MYSQL_PORT = process.env['MYSQL_PORT'] ?? '3306';
+const VALID_CONN = `mysql://core_app:${DUMMY_APP_PWD}@127.0.0.1:${MYSQL_PORT}/core`;
+const BAD_CONN = `mysql://invalid:invalid@127.0.0.1:${MYSQL_PORT}/core`;
 
 const integrationEnabled = (): boolean => process.env.MYSQL_INTEGRATION === '1';
 
