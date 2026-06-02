@@ -40,7 +40,7 @@ existem; **não** há coexistência longa.
 | --- | --- | --- |
 | P1 | `PARTNERS-USER-PROFILE-PERSISTENCE` — tabela `par_user_profiles` + repo Drizzle | ✅ entregue (commit `4458e5a`) |
 | P2 | Coluna `legacy_id` (correlação) nas tabelas `par_*` migráveis + migration | ⛔ pendente → ticket `PARTNERS-LEGACY-ID-COLUMNS` (1º da cadeia) |
-| P3 | Permission `'contract:mass-approve'` no RBAC do auth (migração do `massApprovalPermission`) | ⛔ pendente → ticket `AUTH-PERM-MASS-APPROVE` (2º da cadeia) |
+| P3 | Permission `'contract:mass-approve'` canônica (migração do `massApprovalPermission`) | ⛔ pendente → ticket `CTR-PERMISSION-CATALOG` (2º da cadeia). **Achado:** RBAC do auth aceita permission como string livre — não há código auth a mudar; o trabalho real é um **catálogo type-safe por módulo** em `contracts` (decisão pós-consulta a security + TS + 3 especialistas externos) |
 | P4 | Fluxo de reset de senha na criação de user (token/EmailPort) — D6 | ⚠️ parcial → decomposto em P4a (ETL gera token) + P4b (CLI dispara) |
 | P5 | Fonte de dados do legado definida (dump SQL / acesso DB / CSV) | ✅ resolvido — dump de PROD (ver [[project-prod-dump-etl-source]]) |
 
@@ -90,6 +90,6 @@ Consulta read-only a `mysql-database-expert`, `mysql2-driver-expert`, `drizzle-o
 
 ### Cadeia de execução (tickets separados primeiro)
 
-1. **`PARTNERS-LEGACY-ID-COLUMNS`** (P2) — migration `legacy_id` + uniqueIndex nas 4 `par_*`. Size S.
-2. **`AUTH-PERM-MASS-APPROVE`** (P3) — permission `contract:mass-approve` no RBAC + seed. Size S.
+1. **`PARTNERS-LEGACY-ID-COLUMNS`** (P2) — migration `legacy_id` + uniqueIndex nas 4 `par_*`. Size S. ✅ closed-green.
+2. **`CTR-PERMISSION-CATALOG`** (P3) — catálogo type-safe `CONTRACT_PERMISSION` (`const` object + union derivada) em `contracts/public-api`; substitui magic strings do `plugin.ts`; a ETL importa `contract:mass-approve` tipado. Size XS.
 3. **`PARTNERS-ETL-BOOTSTRAP`** (este) — script ETL + P4a (gera token) + P4b (CLI de disparo). Size L.

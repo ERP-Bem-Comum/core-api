@@ -30,6 +30,7 @@ import { timelineEntryToDto } from './timeline-dto.ts';
 import { amendmentToDto } from './amendment-dto.ts';
 import { documentToDto } from './document-dto.ts';
 import { contractsToCsv } from './contracts-csv.ts';
+import { CONTRACT_PERMISSION } from '../../public-api/permissions.ts';
 import {
   contractListSchema,
   contractDetailSchema,
@@ -166,7 +167,7 @@ const contractsRoutes =
     scope.route({
       method: 'GET',
       url: '/contracts/export.csv',
-      preHandler: [hooks.requireAuth, hooks.authorize('contract:read')],
+      preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.read)],
       schema: {
         response: { 200: csvResponse() },
       } satisfies FastifyZodOpenApiSchema,
@@ -188,7 +189,7 @@ const contractsRoutes =
     scope.route({
       method: 'GET',
       url: '/contracts/:id',
-      preHandler: [hooks.requireAuth, hooks.authorize('contract:read')],
+      preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.read)],
       schema: {
         params: contractIdParamSchema,
         response: { 200: contractDetailSchema },
@@ -207,7 +208,7 @@ const contractsRoutes =
     scope.route({
       method: 'GET',
       url: '/contracts/:id/history',
-      preHandler: [hooks.requireAuth, hooks.authorize('contract:read')],
+      preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.read)],
       schema: {
         params: contractIdParamSchema,
         response: { 200: timelineSchema },
@@ -235,7 +236,7 @@ const contractsRoutes =
     scope.route({
       method: 'POST',
       url: '/contracts',
-      preHandler: [hooks.requireAuth, hooks.authorize('contract:write')],
+      preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
       schema: {
         body: createContractBodySchema,
         response: { 201: contractDetailSchema },
@@ -273,7 +274,7 @@ const contractsRoutes =
     scope.route({
       method: 'POST',
       url: '/contracts/:id/activate',
-      preHandler: [hooks.requireAuth, hooks.authorize('contract:write')],
+      preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
       schema: {
         params: contractIdParamSchema,
         body: activateContractBodySchema,
@@ -293,7 +294,7 @@ const contractsRoutes =
     scope.route({
       method: 'POST',
       url: '/contracts/:id/end',
-      preHandler: [hooks.requireAuth, hooks.authorize('contract:write')],
+      preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
       schema: {
         params: contractIdParamSchema,
         body: endContractBodySchema,
@@ -312,7 +313,7 @@ const contractsRoutes =
     scope.route({
       method: 'POST',
       url: '/contracts/:id/amendments',
-      preHandler: [hooks.requireAuth, hooks.authorize('contract:write')],
+      preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
       schema: {
         params: contractIdParamSchema,
         body: createAmendmentBodySchema,
@@ -340,7 +341,7 @@ const contractsRoutes =
     scope.route({
       method: 'POST',
       url: '/contracts/:id/amendments/:amendmentId/homologate',
-      preHandler: [hooks.requireAuth, hooks.authorize('contract:write')],
+      preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
       schema: {
         params: amendmentParamSchema,
         body: homologateBodySchema,
@@ -362,7 +363,7 @@ const contractsRoutes =
     scope.route({
       method: 'POST',
       url: '/contracts/:id/documents',
-      preHandler: [hooks.requireAuth, hooks.authorize('contract:write')],
+      preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
       schema: {
         params: contractIdParamSchema,
         querystring: uploadDocumentQuerySchema,
@@ -400,7 +401,7 @@ const contractsRoutes =
     scope.route({
       method: 'POST',
       url: '/contracts/:id/amendments/:amendmentId/documents',
-      preHandler: [hooks.requireAuth, hooks.authorize('contract:write')],
+      preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
       schema: {
         params: amendmentParamSchema,
         querystring: uploadDocumentQuerySchema,
@@ -447,7 +448,7 @@ const contractsRoutes =
     scope.route({
       method: 'POST',
       url: '/contracts/:id/documents/:documentId/supersede',
-      preHandler: [hooks.requireAuth, hooks.authorize('contract:write')],
+      preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
       schema: {
         params: documentParamSchema,
         body: supersedeDocumentBodySchema,

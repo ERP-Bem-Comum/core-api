@@ -25,6 +25,11 @@ export type {
   OutboxRow,
 } from './events.ts';
 
+// ─── Permissions (catálogo RBAC do módulo — CTR-PERMISSION-CATALOG) ──────────
+
+export { CONTRACT_PERMISSION } from './permissions.ts';
+export type { ContractPermission } from './permissions.ts';
+
 // ─── Storage (DocumentStorage port + S3-compatible adapter) ─────────────────
 // ADR-0019. InMemory NAO e exposto (adapter de teste interno).
 // awsS3Config + parseAwsS3Env: builder/parser de config AWS S3.
