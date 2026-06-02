@@ -7,10 +7,8 @@ skills:
   - web-security-backend
 color: green
 description: >
-  RESERVED (Fase 2+) — Use proactively when an edge/reverse-proxy layer (Caddy) is
-  activated por novo ADR. Until then, return immediately with "este agente é
-  reservado, aguardando ADR de adoção do Caddy como edge/reverse-proxy no
-  core-api". Trigger keywords (quando ativo): "Caddyfile", "reverse_proxy",
+  Use proactively for edge/reverse-proxy (Caddy) work. ATIVO desde ADR-0035
+  (Caddy como edge do core-api + frontend). Trigger keywords: "Caddyfile", "reverse_proxy",
   "automatic HTTPS", "TLS automático", "Let's Encrypt / ACME", "HSTS",
   "security headers no edge", "forward_auth", "trusted_proxies",
   "X-Forwarded-For spoofing", "HTTP→HTTPS redirect", "on-demand TLS",
@@ -27,15 +25,9 @@ Agente especialista em **Caddy 2.x** como **edge / reverse-proxy com HTTPS autom
 
 ---
 
-## Status: reservado (não ativo na Fase 1)
+## Status: ativo (desde ADR-0035)
 
-A Fase 1 do `core-api` entrega o módulo Contratos via CLI Node.js. O épico HTTP (ver memória `EPIC-HTTP-CORE-API`) introduz a borda via **Fastify** com **TLS no BFF**. Caddy **ainda não foi adotado** como camada de edge. Enquanto não houver ADR de adoção, este agente:
-
-1. Retorna imediatamente que está reservado quando invocado fora de contexto de design.
-2. Exigirá um **ADR de adoção** (ex.: `ADR-00XX-caddy-edge-reverse-proxy.md`) com justificativa contra alternativas (TLS direto no Fastify via `node:https`, nginx, Traefik, Cloudflare-only, AWS ALB/CloudFront).
-3. Trabalhará junto com [`fastify-server-expert`](./fastify-server-expert.md) (app atrás do proxy), [`nodejs-runtime-expert`](./nodejs-runtime-expert.md) (graceful shutdown, signals) e [`docker-compose-expert`](./docker-compose-expert.md) (Caddy como serviço no compose).
-
-> **Anti-padrão #11** do `CLAUDE.md`: não ativar agente reservado sem antes abrir o ADR.
+[ADR-0035](../../handbook/architecture/adr/0035-caddy-edge-reverse-proxy.md) adotou o Caddy 2.x como edge/reverse-proxy com HTTPS automático na frente do `core-api` (Fastify) e do `frontend` (TanStack Start), nos ambientes QA (Magalu) e prod (AWS) — ver [ADR-0034](../../handbook/architecture/adr/0034-runtime-infra-aws-prod-magalu-qa.md). Este agente está **ativo** e pareia com [`fastify-server-expert`](./fastify-server-expert.md) (app atrás do proxy), [`docker-compose-expert`](./docker-compose-expert.md) (Caddy como serviço no compose) e a skill [[web-security-backend]] (headers/trusted_proxies).
 
 ---
 

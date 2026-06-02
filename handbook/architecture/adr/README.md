@@ -126,6 +126,8 @@ Um **ADR (Architecture Decision Record)** é um documento curto que captura uma 
 | [0031](./0031-partners-registry-module.md)                     | Módulo `partners` — fronteira de Cadastros/Counterparties (supplier, financier, collaborator) migrada do legado                          | Accepted                              | 2026-06-01 |
 | [0032](./0032-transient-http-composition-read-until-bff.md)    | Composição de leitura transitória no adapter HTTP (rota gorda com `Sunset`) até o BFF v2 — domínio intocado, cross-módulo via public-api | Accepted                              | 2026-06-02 |
 | [0033](./0033-container-base-image-debian-glibc.md)            | Imagem-base do container — Debian `bookworm-slim` (glibc) sobre Alpine (musl), por causa do tsgo glibc-only                              | Accepted                              | 2026-06-02 |
+| [0034](./0034-runtime-infra-aws-prod-magalu-qa.md)            | Infra de runtime — PROD AWS (EC2+Compose+RDS+S3) / QA Magalu (mirror por container); deploy keyless OIDC                                  | Accepted                              | 2026-06-02 |
+| [0035](./0035-caddy-edge-reverse-proxy.md)                    | Caddy 2.x como edge/reverse-proxy com HTTPS automático na frente do core-api e do frontend; destrava o agente reservado                  | Accepted                              | 2026-06-02 |
 
 ---
 

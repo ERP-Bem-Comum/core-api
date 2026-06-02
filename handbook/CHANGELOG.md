@@ -4,6 +4,20 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-02 — ☁️ ADR-0034 (infra runtime AWS/Magalu) + ADR-0035 (edge Caddy)
+
+> Ticket `CTR-ADR-DEVOPS-FOUNDATION` (épico `EPIC-DEVOPS-FOUNDATION`).
+
+### ADR-0034 — Infra de runtime: PROD AWS / QA Magalu (paridade por container)
+
+PROD na **AWS**: EC2 `t4g.small` (ARM) + Docker Compose + Caddy + **RDS MySQL `db.t4g.micro`** (managed, backups/PITR) + **S3**; deploy **keyless via GitHub OIDC + SSM**. QA na **Magalu Cloud**: VM + Compose + Caddy + MySQL container + object-storage S3-compat. Paridade dev↔QA↔prod pela **mesma imagem multi-arch** (ADR-0033), diferindo só nos endpoints managed. Caminho de escala EC2→ECS Fargate+ALB sem refactor. Rejeitadas: ECS+ALB (custo fixo agora), App Runner, Lightsail, Aurora Serverless, MySQL on-box em prod.
+
+### ADR-0035 — Caddy 2.x como edge / reverse-proxy
+
+Adota o **Caddy** como edge único (TLS automático ACME, HTTP→HTTPS, HSTS, security headers, `trusted_proxies`, `reverse_proxy` `api.*`→core-api e `app.*`→frontend) nos ambientes QA/prod. **Destrava** o agente `caddy-server-expert` (sai de reservado — anti-padrão #11). Rejeitadas: TLS direto no Fastify, nginx/Traefik, ALB/CloudFront, Cloudflare-only.
+
+---
+
 ## 2026-06-02 — 🐳 ADR-0033 (imagem-base Debian glibc) + DevOps hardening
 
 > Tickets `CTR-DEVOPS-HARDENING` + `CTR-TEST-MYSQL-PORT-CONFIGURABLE`.
