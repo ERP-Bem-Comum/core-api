@@ -59,6 +59,7 @@ describe('financier.mapper — financierFromRow', () => {
     deactivatedAt: null,
     createdAt: NOW,
     updatedAt: NOW,
+    legacyId: null,
   };
 
   it('reconstrói Active', () => {
