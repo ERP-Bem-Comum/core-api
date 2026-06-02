@@ -1,7 +1,10 @@
 import { ok, err } from '../../../../../shared/primitives/result.ts';
 import type { ContractId } from '../../../domain/shared/ids.ts';
 import type { Contract } from '../../../domain/contract/types.ts';
-import type { ContractRepository } from '../../../domain/contract/repository.ts';
+import type {
+  ContractRepository,
+  ListContractsQuery,
+} from '../../../domain/contract/repository.ts';
 import type { OutboxPort } from '../../../application/ports/outbox.ts';
 import type { ContractsModuleEvent } from '../../../application/ports/event-bus.ts';
 import { InMemoryOutbox } from '../../outbox/outbox.in-memory.ts';
@@ -21,6 +24,19 @@ export type InMemoryContractRepositoryHandle = Readonly<{
   clear: () => void;
 }>;
 
+// CTR-HTTP-CONTRACT-LIST-FILTERS — espelha em memória o que o Drizzle faz no SQL:
+// search case-insensitive em title/objective/sequentialNumber, filtro de status,
+// ordenação por sequentialNumber e paginação. Mantém o mesmo contrato observável.
+const matchesQuery = (c: Contract, query: ListContractsQuery): boolean => {
+  if (query.status !== undefined && c.status !== query.status) return false;
+  if (query.search !== undefined && query.search.length > 0) {
+    const term = query.search.toLowerCase();
+    const haystack = `${c.title}\n${c.objective}\n${c.sequentialNumber}`.toLowerCase();
+    if (!haystack.includes(term)) return false;
+  }
+  return true;
+};
+
 export const InMemoryContractRepository = (
   outbox: OutboxPort = InMemoryOutbox().port,
 ): InMemoryContractRepositoryHandle => {
@@ -31,6 +47,18 @@ export const InMemoryContractRepository = (
     findBySequentialNumber: async (sequentialNumber) =>
       ok([...map.values()].find((c) => c.sequentialNumber === sequentialNumber) ?? null),
     list: async () => ok([...map.values()]),
+    listPaged: async (query) => {
+      const filtered = [...map.values()]
+        .filter((c) => matchesQuery(c, query))
+        .sort((a, b) =>
+          query.order === 'DESC'
+            ? b.sequentialNumber.localeCompare(a.sequentialNumber)
+            : a.sequentialNumber.localeCompare(b.sequentialNumber),
+        );
+      const offset = (query.page - 1) * query.limit;
+      const items = filtered.slice(offset, offset + query.limit);
+      return ok({ items, total: filtered.length });
+    },
     // CA-4: save persiste o agregado na map E appenda eventos no outbox.
     // Se o outbox retornar erro, propagamos como ContractRepositoryError.
     save: async (contract: Contract, events: readonly ContractsModuleEvent[]) => {

@@ -230,9 +230,10 @@ describe('GET /contracts — list-item permanece enxuto (não-regressão, CA5)',
       headers: bearer(token),
     });
     assert.equal(res.statusCode, 200);
-    const items = res.json() as Record<string, unknown>[];
-    assert.ok(items.length >= 1);
-    for (const item of items) {
+    // CTR-HTTP-CONTRACT-LIST-FILTERS — response paginado: itens sob `.items`.
+    const body = res.json() as { items: Record<string, unknown>[] };
+    assert.ok(body.items.length >= 1);
+    for (const item of body.items) {
       assert.equal('amendments' in item, false);
       assert.equal('documents' in item, false);
     }

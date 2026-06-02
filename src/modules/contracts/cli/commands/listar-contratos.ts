@@ -25,20 +25,23 @@ export const run = async (ctx: CliContext, argv: readonly string[]): Promise<num
   }
 
   const useCase = listContracts({ contractRepo: ctx.contractRepo });
-  const r = await useCase();
+  // CTR-HTTP-CONTRACT-LIST-FILTERS — listContracts agora é paginado. A CLI lista
+  // tudo: 1ª página com o teto de limit; sem filtros (search/status) nem ordenação
+  // customizada (default ASC por sequentialNumber).
+  const r = await useCase({ page: 1, limit: 100, order: 'ASC' });
 
   if (!r.ok) {
     process.stderr.write(`❌ ${formatErrorCode(r.error)}\n`);
     return 1;
   }
 
-  if (r.value.length === 0) {
+  if (r.value.items.length === 0) {
     process.stdout.write('Nenhum contrato cadastrado.\n');
     return 0;
   }
 
-  process.stdout.write(`${r.value.length} contrato(s):\n`);
-  for (const contract of r.value) {
+  process.stdout.write(`${r.value.meta.total} contrato(s):\n`);
+  for (const contract of r.value.items) {
     process.stdout.write(`  - ${formatContractSummary(contract)}\n`);
     process.stdout.write(`      ID: ${contract.id as unknown as string}\n`);
   }

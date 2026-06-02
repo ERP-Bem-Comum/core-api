@@ -218,6 +218,7 @@ describe('importContracts — falha de infra aborta', () => {
       findById: fail,
       findBySequentialNumber: fail,
       list: fail,
+      listPaged: fail,
       save: fail,
     };
     const useCase = importContracts({ contractRepo: failingRepo, clock });
