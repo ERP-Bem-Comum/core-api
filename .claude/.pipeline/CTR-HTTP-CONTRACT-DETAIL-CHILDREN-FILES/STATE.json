@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "CTR-HTTP-CONTRACT-DETAIL-CHILDREN-FILES",
+  "size": "M",
+  "createdAt": "2026-06-02T16:24:44.032Z",
+  "closedAt": null,
+  "currentWave": null,
+  "status": "open",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W1",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W2",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W3",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "init"
+}
