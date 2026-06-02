@@ -315,6 +315,33 @@ SKILL.md correspondente). Rastreabilidade dos pareceres (agentIds desta sessão)
 
 ---
 
+## DD-USER-OIDC — Usuário federado não tem credencial local (`passwordHash: PasswordHash | null`)
+
+- **Status:** Aceita (2026-06-02) · **Confiança:** alta · **Ticket:** `AUTH-USER-PASSWORD-OPTIONAL`
+- **Decisão:** `UserCore.passwordHash` é `PasswordHash | null` (Opção A; **`| null`, não opcional `?`** —
+  `exactOptionalPropertyTypes`). `null` modela o usuário federado/OIDC, que **nunca autentica por senha local**.
+  O compilador força todo consumidor a tratar a ausência (fail-closed por tipo).
+  - **Mapper (persistência):** `password_hash NULL ↔ passwordHash null` byte-a-byte, **sem placeholder**.
+    Leitura: `NULL → null` (não roda `PasswordHash.fromString`); hash não-nulo continua reidratando o branded
+    (rejeita vazio: defesa contra DB corrompido). Escrita: `passwordHash null → password_hash NULL`.
+    (Corrige o bug latente do `?? ''` que fazia todo user federado falhar a hidratação.)
+  - **`authenticateUser` (anti-timing, OWASP WSTG-ATHN):** o ramo `passwordHash === null` **roda o dummy verify**
+    (contra `dummyPasswordHash`) antes de responder `'invalid-credentials'`, espelhando o ramo "usuário inexistente"
+    (BE-REC-002). Sem isso, o relógio delataria quais e-mails são contas federadas (sem senha local).
+  - **`changePassword`:** `passwordHash === null` → `'invalid-credentials'` (genérico, anti-enumeration), sem
+    inspecionar/verificar o `null`. Usuário OIDC não tem senha local para re-autenticar.
+  - **`confirmPasswordReset`:** `passwordHash === null` → `'reset-token-invalid'` (genérico). Um reset não pode
+    **criar** credencial local para conta federada; não revela que a conta é OIDC.
+- **Rejeitadas:** **Opção B** (placeholder/sentinel não-vazio) — esconde o estado real, o verify rodaria contra lixo;
+  **Opção C** (discriminated union `LocalUser | FederatedUser`) — over-engineering; `| null` já dá fail-closed.
+  Reavaliar C se a federação crescer.
+- **Honra:** DD-LOGIN-01 (anti-enumeration), DD-USER-04 (hash opaco, senha em claro nunca no domínio),
+  ADR-0006 (isolamento), ADR-0020 (coluna nullable já existia no schema). BE-REC-002 (dummy verify).
+- **Fora de escopo:** fluxo de login OIDC propriamente dito (federação real). Aqui só se garante que um user **sem**
+  senha local **hidrata** e **nunca** autentica por senha.
+
+---
+
 ## Notas propagadas para tickets futuros
 
 - **D6 / refresh (sessão):** `disable` e `changePassword` devem **invalidar sessões/refresh ativos**
@@ -345,3 +372,4 @@ SKILL.md correspondente). Rastreabilidade dos pareceres (agentIds desta sessão)
 - **2026-05-27** — `DD-SESSION-06` (A7): `revokeSession` (single) + `revokeAllSessions` (global, reusa `findRevocableByUserId`); input por refresh em claro; not-found → idempotente `ok` (diverge do A6b); admin-by-userId YAGNI. (Gabriel Aderaldo + decisão de escopo)
 - **2026-05-27** — `DD-USER-06` (A8): `changePassword` re-autentica (verifica senha atual → `invalid-credentials`) e revoga TODAS as sessões após o save (defense-in-depth, pois EventBus não existe); política aplica à nova senha; output `{user, event}`. (Gabriel Aderaldo + decisão de escopo)
 - **2026-05-27** — `DD-USER-07` (A9): `assignRole` autoriza o ator via `authorize`/`forbidden` (1ª aplicação de DD-USER-02); input `{actorId, targetUserId, roleId}`; permissão `user:assign-role`; fail-closed (ator null/disabled/sem-permissão → forbidden); `role-not-found`/`user-not-found`/`user-disabled`. (Gabriel Aderaldo + decisão de escopo)
+- **2026-06-02** — `DD-USER-OIDC` (`AUTH-USER-PASSWORD-OPTIONAL`): `passwordHash: PasswordHash | null` (Opção A). User federado/OIDC sem credencial local: mapper mapeia `password_hash NULL ↔ null` byte-a-byte (corrige bug `?? ''`); `authenticateUser` roda dummy verify no ramo `null` (anti-timing, OWASP WSTG-ATHN); `changePassword`/`confirmPasswordReset` respondem erro genérico anti-enumeration. Opções B (placeholder) e C (discriminated union) rejeitadas. (Gabriel Aderaldo + auditoria security-backend/drizzle-orm)

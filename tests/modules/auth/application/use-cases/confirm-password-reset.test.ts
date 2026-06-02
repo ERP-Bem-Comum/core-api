@@ -95,7 +95,7 @@ describe('confirmPasswordReset (BE-REC-003)', () => {
     // senha trocada: o hash do user mudou para o da nova senha
     const after = await userStore.reader.findByEmail(reg.value.user.email);
     assert.equal(after.ok, true);
-    if (after.ok && after.value !== null) {
+    if (after.ok && after.value !== null && after.value.passwordHash !== null) {
       const verified = await passwordHasher.verify(
         // a nova senha deve validar contra o hash persistido
         NEW_PASSWORD as never,

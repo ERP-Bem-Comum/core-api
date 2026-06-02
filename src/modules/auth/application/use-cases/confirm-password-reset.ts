@@ -88,6 +88,11 @@ export const confirmPasswordReset =
     const active = User.parseActive(userR.value);
     if (!active.ok) return err('user-disabled');
 
+    // DD-USER-OIDC: usuario federado (passwordHash null) nao tem credencial local. Um reset nao
+    // pode criar uma senha local para conta OIDC. Responde generico (reset-token-invalid,
+    // anti-enumeration) sem revelar que a conta e federada.
+    if (active.value.passwordHash === null) return err('reset-token-invalid');
+
     const newHash = await deps.passwordHasher.hash(newPassword.value);
     if (!newHash.ok) return newHash;
 

@@ -106,6 +106,15 @@ export const authenticateUser =
       return err('invalid-credentials');
     }
 
+    // DD-USER-OIDC (anti-timing): usuario federado nao tem credencial local (passwordHash null).
+    // Nunca autentica por senha. Para nao vazar quais contas sao federadas (timing side-channel,
+    // OWASP WSTG-ATHN — mesma familia do BE-REC-002), paga o verify "dummy" antes de responder
+    // o erro generico, espelhando o ramo "usuario inexistente" (acima).
+    if (found.value.passwordHash === null) {
+      await deps.passwordHasher.verify(password.value, deps.dummyPasswordHash);
+      return err('invalid-credentials');
+    }
+
     const verified = await deps.passwordHasher.verify(password.value, found.value.passwordHash);
     if (!verified.ok) return verified;
     if (!verified.value) {

@@ -144,14 +144,16 @@ export const userFromRows = (
   const emailR = Email.parse(userRow.email);
   if (!emailR.ok) return err(invalidEmail(userRow.email));
 
-  // Reidratar password hash (nullable — OIDC-ready; se null, usa string vazia)
-  // A coluna e nullable (usuarios OIDC). Mapper trata null como hash vazio que
-  // PasswordHash.fromString rejeitaria. Por ora usuarios locais sempre tem hash.
-  // Se null -> usar placeholder que nao e vazio para nao rejeitar o mapper;
-  // o use case de autenticacao recusa credencial local se hash estiver ausente.
-  const rawHash = userRow.passwordHash ?? '';
-  const hashR = PasswordHash.fromString(rawHash);
-  if (!hashR.ok) return err(invalidPasswordHash('password-hash-empty'));
+  // Reidratar password hash (nullable — OIDC-ready, DD-USER-OIDC).
+  // A coluna password_hash e nullable: usuario federado/OIDC nao tem credencial local.
+  // password_hash NULL -> passwordHash: null no agregado (sem placeholder, byte-a-byte).
+  // hash nao-null -> PasswordHash.fromString (rejeita vazio: defesa contra DB corrompido).
+  let passwordHash: PasswordHash.PasswordHash | null = null;
+  if (userRow.passwordHash !== null) {
+    const hashR = PasswordHash.fromString(userRow.passwordHash);
+    if (!hashR.ok) return err(invalidPasswordHash('password-hash-empty'));
+    passwordHash = hashR.value;
+  }
 
   // Agrupar permissoes por role_id (Map<roleId, Permission[]>)
   const permsByRole = new Map<string, string[]>();
@@ -186,7 +188,7 @@ export const userFromRows = (
     const user: ActiveUser = {
       id: idR.value,
       email: emailR.value,
-      passwordHash: hashR.value,
+      passwordHash,
       roles,
       status: 'active' as const,
     };
@@ -198,7 +200,7 @@ export const userFromRows = (
     const user: DisabledUser = {
       id: idR.value,
       email: emailR.value,
-      passwordHash: hashR.value,
+      passwordHash,
       roles,
       status: 'disabled' as const,
       disabledAt: userRow.disabledAt,
@@ -217,11 +219,16 @@ export const userFromRows = (
 // password_hash: null para usuarios OIDC (PasswordHash opaco, nunca vazio no dominio local).
 
 export const userToInsert = (user: User, now: Date): NewUserRow => {
+  // password_hash NULL para user federado/OIDC (passwordHash === null); senao a string opaca.
+  // DD-USER-OIDC: mapeia passwordHash null <-> coluna NULL byte-a-byte (sem placeholder).
+  const passwordHash: string | null =
+    user.passwordHash === null ? null : (user.passwordHash as unknown as string);
+
   if (user.status === 'active') {
     return {
       id: user.id as unknown as string,
       email: user.email as unknown as string,
-      passwordHash: user.passwordHash as unknown as string,
+      passwordHash,
       status: 'active',
       disabledAt: null,
       createdAt: now,
@@ -233,7 +240,7 @@ export const userToInsert = (user: User, now: Date): NewUserRow => {
   return {
     id: user.id as unknown as string,
     email: user.email as unknown as string,
-    passwordHash: user.passwordHash as unknown as string,
+    passwordHash,
     status: 'disabled',
     disabledAt: user.disabledAt,
     createdAt: now,

@@ -77,6 +77,10 @@ export const changePassword =
     const active = User.parseActive(found.value);
     if (!active.ok) return err('user-disabled');
 
+    // DD-USER-OIDC: usuario federado (passwordHash null) nao tem senha local para re-autenticar.
+    // Responde o erro generico (anti-enumeration, DD-LOGIN-01), sem inspecionar/verificar o null.
+    if (active.value.passwordHash === null) return err('invalid-credentials');
+
     const current = Password.parse(cmd.currentPassword);
     if (!current.ok) return err('invalid-credentials');
     const verified = await deps.passwordHasher.verify(current.value, active.value.passwordHash);

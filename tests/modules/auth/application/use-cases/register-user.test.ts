@@ -78,9 +78,10 @@ describe('registerUser', () => {
     assert.equal(r.ok, true);
     if (!r.ok) return;
     assert.notEqual(r.value.user.passwordHash, 'super-secret-123');
+    assert.notEqual(r.value.user.passwordHash, null, 'registro local sempre tem hash');
     const pw = Password.parse('super-secret-123');
     if (!pw.ok) throw new Error('fixture');
-    const v = await passwordHasher.verify(pw.value, r.value.user.passwordHash);
+    const v = await passwordHasher.verify(pw.value, r.value.user.passwordHash!);
     assert.equal(v.ok && v.value, true);
   });
 });

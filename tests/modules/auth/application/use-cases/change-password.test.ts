@@ -83,7 +83,7 @@ const login = async (ctx: Ctx, email: string): Promise<string> => {
 
 const verifyPlain = async (ctx: Ctx, userId: UserId.UserId, plain: string): Promise<boolean> => {
   const u = await ctx.store.reader.findById(userId);
-  if (!u.ok || u.value === null) return false;
+  if (!u.ok || u.value?.passwordHash == null) return false;
   const p = Password.parse(plain);
   if (!p.ok) return false;
   const v = await ctx.passwordHasher.verify(p.value, u.value.passwordHash);
