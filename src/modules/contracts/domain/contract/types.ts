@@ -1,4 +1,5 @@
 import type { AmendmentId, ContractId } from '../shared/ids.ts';
+import type { ContractorRef } from '../shared/contractor-ref.ts';
 import type { Money } from '../../../../shared/kernel/money.ts';
 import type { Period } from '../../../../shared/kernel/period.ts';
 import type { PlainDate } from '../../../../shared/kernel/plain-date.ts';
@@ -22,6 +23,10 @@ type ContractRegistration = Readonly<{
   objective: string;
   originalValue: Money;
   originalPeriod: Period;
+  // Vínculo ao contratado (ADR-0032). Conhecido desde o cadastro inicial — vale
+  // em todas as variantes, inclusive `Pending`. Dado de Parceiros NUNCA entra
+  // aqui; só a referência branded (ADR-0006/0014).
+  contractorRef: ContractorRef;
 }>;
 
 /**
@@ -122,7 +127,8 @@ type ContractImmutableField =
   | 'objective'
   | 'signedAt'
   | 'originalValue'
-  | 'originalPeriod';
+  | 'originalPeriod'
+  | 'contractorRef';
 
 /**
  * Patch parcial aceito por `updateContract`.
@@ -165,6 +171,7 @@ export type CreateContractInput = Readonly<{
   signedAt: Date;
   originalValue: Money;
   originalPeriod: Period;
+  contractorRef: ContractorRef;
 }>;
 
 /**
@@ -181,4 +188,5 @@ export type CreatePendingContractInput = Readonly<{
   originalValue: Money;
   originalPeriod: Period;
   createdAt: Date;
+  contractorRef: ContractorRef;
 }>;

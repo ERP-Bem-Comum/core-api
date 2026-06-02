@@ -75,12 +75,21 @@ export const contracts = mysqlTable(
     currentPeriodEnd: date('current_period_end', { mode: 'date' }),
     status: varchar('status', { length: 16 }).notNull(),
     endedAt: datetime('ended_at', { mode: 'date', fsp: 3 }),
+    // Vínculo ao contratado (ADR-0032; CTR-CONTRACT-CONTRACTOR-REF). `type` via
+    // varchar+CHECK (ENUM nativo banido — ADR-0020); `id` é UUID v4 (varchar(36)).
+    // NOT NULL: todo contrato tem contratado (invariante forte).
+    contractorType: varchar('contractor_type', { length: 16 }).notNull(),
+    contractorId: varchar('contractor_id', { length: 36 }).notNull(),
   },
   (t) => [
     // CHECKs de domínio (enums via varchar+CHECK — ADR-0018 §"Features proibidas" baniu ENUM nativo)
     check(
       'ctr_contracts_original_period_kind_chk',
       sql`${t.originalPeriodKind} IN ('Fixed','Indefinite')`,
+    ),
+    check(
+      'ctr_contracts_contractor_type_chk',
+      sql`${t.contractorType} IN ('Supplier','Financier','Collaborator')`,
     ),
     check(
       'ctr_contracts_current_period_kind_chk',

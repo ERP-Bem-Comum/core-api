@@ -118,6 +118,8 @@ if (integrationEnabled()) {
             currentPeriodEnd: new Date('2026-12-31'),
             status: 'Active',
             endedAt: null,
+            contractorType: 'Supplier',
+            contractorId: '55555555-5555-4555-8555-555555555555',
           });
         },
       };

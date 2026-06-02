@@ -114,6 +114,8 @@ export const runContractRepositoryContract = (
         assert.equal(got.signedAt.getTime(), c.signedAt.getTime());
         assert.equal(got.originalValue.cents, c.originalValue.cents);
         assert.equal(got.currentValue.cents, c.currentValue.cents);
+        // CTR-CONTRACT-CONTRACTOR-REF (CA3/CA7) — vínculo do contratado sobrevive ao round-trip.
+        assert.deepEqual(got.contractorRef, c.contractorRef);
         assert.equal(got.status, 'Active');
         // CTR-DOMAIN-STATE-MACHINE-CONTRACT — ActiveContract não tem campo `endedAt`.
         assert.equal('endedAt' in got, false, 'ActiveContract não deve expor endedAt');

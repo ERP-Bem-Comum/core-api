@@ -7,6 +7,7 @@ import * as Period from '#src/shared/kernel/period.ts';
 import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import * as AmendmentId from '#src/modules/contracts/domain/shared/amendment-id.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
+import * as ContractorRef from '#src/modules/contracts/domain/shared/contractor-ref.ts';
 import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
 import type {
   ContractAdjustment,
@@ -38,6 +39,15 @@ const fixedPeriod = (startISO: string, endISO: string) => {
 
 const indefinitePeriod = (startISO: string) => Period.createIndefinite(pd(startISO));
 
+const someContractorRef = (() => {
+  const r = ContractorRef.rehydrate({
+    type: 'Supplier',
+    id: '55555555-5555-4555-8555-555555555555',
+  });
+  if (!r.ok) throw new Error(`test fixture broken: ${r.error}`);
+  return r.value;
+})();
+
 const validInput = (overrides: Partial<CreateContractInput> = {}): CreateContractInput => ({
   id: ContractId.generate(),
   sequentialNumber: '001/2026',
@@ -46,6 +56,7 @@ const validInput = (overrides: Partial<CreateContractInput> = {}): CreateContrac
   signedAt: D('2026-01-01'),
   originalValue: money(10000000),
   originalPeriod: fixedPeriod('2026-01-01', '2026-12-31'),
+  contractorRef: someContractorRef,
   ...overrides,
 });
 

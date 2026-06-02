@@ -111,7 +111,14 @@ const recordToRow = (
   };
 
   const cnpj = asNullableString(rec['cnpj']);
-  const row: ImportContractRow = cnpj === null ? base : { ...base, cnpj };
+  const contratadoTipo = asNullableString(rec['contratado_tipo']);
+  const contratadoId = asNullableString(rec['contratado_id']);
+  const row: ImportContractRow = {
+    ...base,
+    ...(cnpj === null ? {} : { cnpj }),
+    ...(contratadoTipo === null ? {} : { contratadoTipo }),
+    ...(contratadoId === null ? {} : { contratadoId }),
+  };
   return ok(row);
 };
 

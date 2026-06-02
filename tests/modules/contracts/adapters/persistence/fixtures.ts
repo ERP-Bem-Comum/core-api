@@ -8,6 +8,7 @@ import * as Period from '#src/shared/kernel/period.ts';
 import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import * as AmendmentId from '#src/modules/contracts/domain/shared/amendment-id.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
+import * as ContractorRef from '#src/modules/contracts/domain/shared/contractor-ref.ts';
 import * as DocumentId from '#src/modules/contracts/domain/shared/document-id.ts';
 import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
@@ -56,6 +57,11 @@ export const someFixedPeriod = (startISO: string, endISO: string) =>
 export const someIndefinitePeriod = (startISO: string) =>
   Period.createIndefinite(somePlainDate(startISO));
 
+export const someContractorRef = (
+  type: 'Supplier' | 'Financier' | 'Collaborator' = 'Supplier',
+  id = '55555555-5555-4555-8555-555555555555',
+) => unwrap('ContractorRef', ContractorRef.rehydrate({ type, id }));
+
 export type ContractOverrides = Partial<{
   id: string;
   sequentialNumber: string;
@@ -66,6 +72,8 @@ export type ContractOverrides = Partial<{
   periodKind: 'Fixed' | 'Indefinite';
   periodStartISO: string;
   periodEndISO: string;
+  contractorType: 'Supplier' | 'Financier' | 'Collaborator';
+  contractorId: string;
 }>;
 
 export const buildContract = (overrides: ContractOverrides = {}): ActiveContract => {
@@ -88,6 +96,7 @@ export const buildContract = (overrides: ContractOverrides = {}): ActiveContract
     signedAt: new Date(overrides.signedAtISO ?? '2026-01-15'),
     originalValue: someMoney(overrides.originalValueCents ?? 10_000_000),
     originalPeriod: period,
+    contractorRef: someContractorRef(overrides.contractorType, overrides.contractorId),
   });
   return unwrap('Contract.create', r).contract;
 };
@@ -113,6 +122,7 @@ export const buildPendingContract = (overrides: ContractOverrides = {}): Pending
     originalValue: someMoney(overrides.originalValueCents ?? 10_000_000),
     originalPeriod: period,
     createdAt: new Date('2026-01-10T00:00:00.000Z'),
+    contractorRef: someContractorRef(overrides.contractorType, overrides.contractorId),
   });
   return unwrap('Contract.createPending', r).contract;
 };

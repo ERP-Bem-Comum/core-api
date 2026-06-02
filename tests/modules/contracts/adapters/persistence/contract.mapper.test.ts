@@ -30,6 +30,7 @@ import {
 import type { ContractRow } from '#src/modules/contracts/adapters/persistence/mappers/contract.mapper.ts';
 import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
+import * as ContractorRef from '#src/modules/contracts/domain/shared/contractor-ref.ts';
 import * as Money from '#src/shared/kernel/money.ts';
 import * as Period from '#src/shared/kernel/period.ts';
 import * as PlainDate from '#src/shared/kernel/plain-date.ts';
@@ -50,6 +51,8 @@ const BASE_ROW: Omit<ContractRow, 'status' | 'endedAt'> = {
   currentPeriodKind: 'Fixed',
   currentPeriodStart: new Date('2026-01-15T00:00:00.000Z'),
   currentPeriodEnd: new Date('2026-12-31T00:00:00.000Z'),
+  contractorType: 'Supplier',
+  contractorId: '55555555-5555-4555-8555-555555555555',
 };
 
 const activeRow = (): ContractRow => ({
@@ -291,6 +294,15 @@ const fixedPeriod = (s: string, e: string) => {
   return r.value;
 };
 
+const someContractorRef = (() => {
+  const r = ContractorRef.rehydrate({
+    type: 'Supplier',
+    id: '55555555-5555-4555-8555-555555555555',
+  });
+  if (!r.ok) throw new Error(`fixture broken: ${r.error}`);
+  return r.value;
+})();
+
 const buildPending = () => {
   const r = Contract.createPending({
     id: ContractId.generate(),
@@ -300,6 +312,7 @@ const buildPending = () => {
     originalValue: money(10_000_000),
     originalPeriod: fixedPeriod('2026-02-01', '2026-12-31'),
     createdAt: new Date('2026-01-10T00:00:00.000Z'),
+    contractorRef: someContractorRef,
   });
   if (!r.ok) throw new Error(`fixture broken: ${JSON.stringify(r.error)}`);
   return r.value.contract;

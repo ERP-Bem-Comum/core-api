@@ -6,7 +6,15 @@ import { formatContract, formatErrorCode } from '../formatters/index.ts';
 import { formatFlagError } from './_flag-errors.ts';
 
 // `assinado-em` é OPCIONAL (ADR-0023): sem ela, o contrato nasce Pendente.
-const REQUIRED = ['numero', 'titulo', 'objetivo', 'valor-centavos', 'inicio'] as const;
+const REQUIRED = [
+  'numero',
+  'titulo',
+  'objetivo',
+  'valor-centavos',
+  'inicio',
+  'contratado-tipo',
+  'contratado-id',
+] as const;
 
 const ALLOWED = [...REQUIRED, 'assinado-em', 'fim', 'sem-fim', 'help', 'h'] as const;
 export const allowedFlags: readonly string[] = ALLOWED;
@@ -21,6 +29,8 @@ Flags obrigatórias:
   --objetivo <string>           Objetivo / descrição
   --valor-centavos <inteiro>    Valor original em centavos (ex.: 10000000 = R$ 100.000,00)
   --inicio <YYYY-MM-DD>         Início da vigência
+  --contratado-tipo <tipo>      Tipo do contratado: Supplier | Financier | Collaborator
+  --contratado-id <uuid>        ID (UUID v4) do contratado no módulo Parceiros
 
 Flags opcionais:
   --assinado-em <YYYY-MM-DD>    Data de assinatura. Sem ela, o contrato nasce Pendente
@@ -63,6 +73,8 @@ export const run = async (ctx: CliContext, argv: readonly string[]): Promise<num
   const title = flags['titulo'] ?? '';
   const objective = flags['objetivo'] ?? '';
   const periodStart = flags['inicio'] ?? '';
+  const contractorType = flags['contratado-tipo'] ?? '';
+  const contractorId = flags['contratado-id'] ?? '';
   const signedAtRaw = flags['assinado-em'];
 
   // ADR-0023: com `--assinado-em` nasce Ativo; sem ela, Pendente.
@@ -76,6 +88,8 @@ export const run = async (ctx: CliContext, argv: readonly string[]): Promise<num
           originalValueCents: valorCentavos,
           originalPeriodStart: periodStart,
           originalPeriodEnd: periodEnd,
+          contractorType,
+          contractorId,
         })
       : await createPendingContract({ contractRepo: ctx.contractRepo, clock: ctx.clock })({
           sequentialNumber,
@@ -84,6 +98,8 @@ export const run = async (ctx: CliContext, argv: readonly string[]): Promise<num
           originalValueCents: valorCentavos,
           periodStart,
           periodEnd,
+          contractorType,
+          contractorId,
         });
 
   if (!r.ok) {

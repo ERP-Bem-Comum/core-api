@@ -12,6 +12,7 @@ import type {
 } from '../../../domain/contract/types.ts';
 import * as AmendmentId from '../../../domain/shared/amendment-id.ts';
 import * as ContractId from '../../../domain/shared/contract-id.ts';
+import * as ContractorRef from '../../../domain/shared/contractor-ref.ts';
 import type { AmendmentId as AmendmentIdType } from '../../../domain/shared/amendment-id.ts';
 import { moneyFromCents } from './money.mapper.ts';
 import { periodFromColumns, periodToColumns, type PeriodKindRaw } from './period.mapper.ts';
@@ -68,6 +69,16 @@ export type ContractMapperInvalidPendingShape = Readonly<{
   effectiveFieldsPresent: boolean;
 }>;
 
+// Vínculo do contratado corrompido no banco (CTR-CONTRACT-CONTRACTOR-REF):
+// `contractor_type` fora do conjunto ou `contractor_id` malformado. O CHECK
+// `ctr_contracts_contractor_type_chk` evita gravar `type` inválido; este erro
+// é a rede do mapper (defesa em profundidade, incluindo o `id`).
+export type ContractMapperInvalidContractorType = Readonly<{
+  tag: 'ContractMapperInvalidContractorType';
+  attemptedType: string;
+  attemptedId: string;
+}>;
+
 // ─── Union ────────────────────────────────────────────────────────────────────
 
 export type ContractMapperError =
@@ -77,7 +88,8 @@ export type ContractMapperError =
   | ContractMapperInvalidPeriod
   | ContractMapperInvalidAmendmentId
   | ContractMapperInvalidEndedAt
-  | ContractMapperInvalidPendingShape;
+  | ContractMapperInvalidPendingShape
+  | ContractMapperInvalidContractorType;
 
 // ─── Case constructors (Padrão D — free functions, DO D§22) ──────────────────
 //
@@ -139,6 +151,15 @@ export const contractMapperInvalidPendingShape = (
   effectiveFieldsPresent,
 });
 
+export const contractMapperInvalidContractorType = (
+  attemptedType: string,
+  attemptedId: string,
+): ContractMapperInvalidContractorType => ({
+  tag: 'ContractMapperInvalidContractorType',
+  attemptedType,
+  attemptedId,
+});
+
 // ─── Helpers internos ────────────────────────────────────────────────────────
 
 const KNOWN_STATUSES = ['Pending', 'Active', 'Expired', 'Terminated'] as const;
@@ -176,6 +197,8 @@ export const contractToInsert = (
         currentPeriodEnd: null,
         status: 'Pending',
         endedAt: null,
+        contractorType: c.contractorRef.kind,
+        contractorId: c.contractorRef.id as unknown as string,
       },
       homologatedAmendmentIds: [],
     };
@@ -202,6 +225,8 @@ export const contractToInsert = (
       // `endedAt` só existe em ExpiredContract / TerminatedContract (DO C§29).
       // ActiveContract não tem o campo — usa null para a coluna MySQL.
       endedAt: c.status === 'Active' ? null : c.endedAt,
+      contractorType: c.contractorRef.kind,
+      contractorId: c.contractorRef.id as unknown as string,
     },
     homologatedAmendmentIds: c.homologatedAmendmentIds.map((id) => id as unknown as string),
   };
@@ -230,6 +255,13 @@ export const contractFromRow = (
   if (!origPeriod.ok)
     return err(contractMapperInvalidPeriod('originalPeriod', periodErrorReason(origPeriod.error)));
 
+  const contractorRefR = ContractorRef.rehydrate({
+    type: row.contractorType,
+    id: row.contractorId,
+  });
+  if (!contractorRefR.ok)
+    return err(contractMapperInvalidContractorType(row.contractorType, row.contractorId));
+
   // Campos de cadastro — comuns a todos os estados (inclusive Pending).
   const registration = {
     id: idR.value,
@@ -238,6 +270,7 @@ export const contractFromRow = (
     objective: row.objective,
     originalValue: origValue.value,
     originalPeriod: origPeriod.value,
+    contractorRef: contractorRefR.value,
   } as const;
 
   // ADR-0023: `Pending` bifurca ANTES de exigir vigência/assinatura. As colunas

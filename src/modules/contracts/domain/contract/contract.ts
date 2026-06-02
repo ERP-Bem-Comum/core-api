@@ -82,6 +82,7 @@ const createPending = (
     objective: input.objective,
     originalValue: input.originalValue,
     originalPeriod: input.originalPeriod,
+    contractorRef: input.contractorRef,
     status: 'Pending' as const,
   });
 
@@ -151,6 +152,7 @@ const create = (
     signedAt: input.signedAt,
     originalValue: input.originalValue,
     originalPeriod: input.originalPeriod,
+    contractorRef: input.contractorRef,
     currentValue: input.originalValue,
     currentPeriod: input.originalPeriod,
     status: 'Active' as const,

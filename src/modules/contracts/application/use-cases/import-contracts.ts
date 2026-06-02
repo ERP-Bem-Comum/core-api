@@ -23,6 +23,11 @@ export type ImportContractRow = Readonly<{
   inicio: string;
   fim: string | null;
   cnpj?: string;
+  // Vínculo ao contratado (ADR-0032). Opcional na linha; ausente → o command
+  // recebe '' e `buildContract` reporta a linha como falha (invariante: todo
+  // contrato tem contratado). Resolução CNPJ→partner ref é ticket futuro.
+  contratadoTipo?: string;
+  contratadoId?: string;
 }>;
 
 export type ImportRowError =
@@ -62,6 +67,8 @@ const toCreateCommand = (row: ImportContractRow): CreateContractCommand => ({
   originalValueCents: Number(row.valorCentavos),
   originalPeriodStart: row.inicio,
   originalPeriodEnd: row.fim,
+  contractorType: row.contratadoTipo ?? '',
+  contractorId: row.contratadoId ?? '',
 });
 
 export const importContracts =

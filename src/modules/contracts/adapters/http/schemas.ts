@@ -133,6 +133,11 @@ const contractWriteShape = {
   originalValueCents: z.number().int(),
   periodStart: z.string(),
   periodEnd: z.string().nullable(),
+  // Vínculo ao contratado (ADR-0032). Strings cruas: o tipo/UUID inválido vira
+  // 422 via `ContractorRef.rehydrate` no domínio (não 400 no Zod), espelhando o
+  // tratamento de datas/valores acima.
+  contractorType: z.string(),
+  contractorId: z.string(),
 };
 
 /** Body `POST /contracts` — discrimina cadastro (`Pending`) vs cadastro+assinatura (`Active`). */

@@ -1,6 +1,7 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
 import * as ContractId from '../../domain/shared/contract-id.ts';
+import * as ContractorRef from '../../domain/shared/contractor-ref.ts';
 import {
   parseOriginalValueAndPeriod,
   type ContractInputParseError,
@@ -25,10 +26,13 @@ export type CreatePendingContractCommand = Readonly<{
   originalValueCents: number;
   periodStart: string;
   periodEnd: string | null;
+  contractorType: string;
+  contractorId: string;
 }>;
 
 export type CreatePendingContractError =
   | ContractInputParseError
+  | ContractorRef.ContractorRefError
   | 'contract-sequential-number-duplicated'
   | ContractError
   | ContractRepositoryError;
@@ -60,6 +64,12 @@ export const createPendingContract =
     if (!existing.ok) return existing;
     if (existing.value !== null) return err('contract-sequential-number-duplicated');
 
+    const contractorRef = ContractorRef.rehydrate({
+      type: cmd.contractorType,
+      id: cmd.contractorId,
+    });
+    if (!contractorRef.ok) return contractorRef;
+
     const created = Contract.createPending({
       id: ContractId.generate(),
       sequentialNumber: cmd.sequentialNumber,
@@ -68,6 +78,7 @@ export const createPendingContract =
       originalValue: parsed.value.originalValue,
       originalPeriod: parsed.value.originalPeriod,
       createdAt: deps.clock.now(),
+      contractorRef: contractorRef.value,
     });
     if (!created.ok) return created;
 
