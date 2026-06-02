@@ -1,23 +1,13 @@
 /**
- * Serialização CSV da listagem de contratos (C4) — RFC 4180 + hardening anti-fórmula.
- *
- * Função pura: `contractsToCsv(contracts) => string`. Reusa `contractToListItem` (C1) para
- * achatar o agregado discriminado por `status` em campos planos — sem reduplicar a lógica de
- * `Money`/`Period`. Colunas em ordem fixa (D2). BOM UTF-8 no início (D5, Excel + PT-BR).
- *
- * Escape (D3/D4):
- *  - Anti-fórmula (CSV injection): célula iniciando em `= + - @ \t \r` recebe prefixo `'` —
- *    senão Excel/Sheets executam a fórmula (security-backend MUST).
- *  - RFC 4180: célula com `,` `"` `\n` `\r` é envolta em aspas; `"` interno vira `""`.
+ * Serialização CSV da listagem de contratos (C4). Achata o agregado discriminado por `status`
+ * (via `contractToListItem`, C1) em células planas; a mecânica de formato (escape RFC 4180,
+ * anti-fórmula, BOM) vem do util compartilhado `#src/shared/utils/csv.ts`. Colunas em ordem fixa (D2).
  */
 
+import { toCsv } from '#src/shared/utils/csv.ts';
 import type { Contract } from '../../domain/contract/types.ts';
 import { contractToListItem } from './contract-dto.ts';
 import type { ContractListItemDto } from './schemas.ts';
-
-const BOM = '﻿';
-const SEPARATOR = ',';
-const LINE_TERMINATOR = '\r\n';
 
 const HEADER: readonly string[] = [
   'id',
@@ -34,19 +24,6 @@ const HEADER: readonly string[] = [
   'currentPeriodEnd',
   'endedAt',
 ];
-
-const FORMULA_TRIGGERS: ReadonlySet<string> = new Set(['=', '+', '-', '@', '\t', '\r']);
-const RFC4180_SPECIAL = /[",\n\r]/;
-
-const neutralizeFormula = (value: string): string => {
-  const first = value[0];
-  return first !== undefined && FORMULA_TRIGGERS.has(first) ? `'${value}` : value;
-};
-
-const escapeCell = (raw: string): string => {
-  const neutralized = neutralizeFormula(raw);
-  return RFC4180_SPECIAL.test(neutralized) ? `"${neutralized.replaceAll('"', '""')}"` : neutralized;
-};
 
 type PeriodDto = ContractListItemDto['originalPeriod'];
 const periodEnd = (p: PeriodDto): string => (p.kind === 'Fixed' ? p.end : '');
@@ -89,9 +66,8 @@ const cellsFor = (dto: ContractListItemDto): readonly string[] => {
   }
 };
 
-const toLine = (cells: readonly string[]): string => cells.map(escapeCell).join(SEPARATOR);
-
-export const contractsToCsv = (contracts: readonly Contract[]): string => {
-  const rows = [toLine(HEADER), ...contracts.map((c) => toLine(cellsFor(contractToListItem(c))))];
-  return BOM + rows.join(LINE_TERMINATOR) + LINE_TERMINATOR;
-};
+export const contractsToCsv = (contracts: readonly Contract[]): string =>
+  toCsv(
+    HEADER,
+    contracts.map((c) => cellsFor(contractToListItem(c))),
+  );

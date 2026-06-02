@@ -1,8 +1,10 @@
 /**
- * Validador de CNPJ numérico (14 dígitos) — módulo 11.
+ * CNPJ numérico (14 dígitos) — módulo 11.
  *
- * Função pura, sem IO. Usada pelo import de contratos legados (UC-11): o CNPJ é
- * validado e DESCARTADO (decisão D2 — o agregado Contract não modela fornecedor).
+ * Função pura, sem IO. `isValidCnpj` é usado pelo import de contratos legados
+ * (UC-11): o CNPJ é validado e DESCARTADO (decisão D2 — o agregado Contract não
+ * modela fornecedor). O VO `Cnpj` (Padrão D) é a fonte cross-BC promovida ao
+ * kernel por ADR-0031 §4 — consumir com `import * as Cnpj from '...cnpj.ts'`.
  *
  * Escopo: CNPJ numérico tradicional (legado). O CNPJ alfanumérico Serpro/2026
  * vive no VO `financial/domain/shared/tax-id.ts` e NÃO é importável aqui
@@ -10,6 +12,11 @@
  *
  * Pesos do módulo 11 e regra final do DV: idênticos ao tax-id (Receita Federal).
  */
+import { type Result, ok, err } from '../primitives/result.ts';
+import type { Brand } from '../primitives/brand.ts';
+
+export type Cnpj = Brand<string, 'Cnpj'>;
+export type CnpjError = 'invalid-cnpj';
 
 const DV1_WEIGHTS: readonly number[] = [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
 const DV2_WEIGHTS: readonly number[] = [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2];
@@ -37,3 +44,10 @@ export const isValidCnpj = (raw: string): boolean => {
   if (checkDigit(digits, DV2_WEIGHTS) !== Number(digits[13])) return false;
   return true;
 };
+
+/**
+ * `parse` valida e normaliza um CNPJ. Aceita máscara (`00.000.000/0000-00`) ou
+ * bare; o valor brandado é sempre os 14 dígitos sem máscara. Reusa `isValidCnpj`.
+ */
+export const parse = (raw: string): Result<Cnpj, CnpjError> =>
+  isValidCnpj(raw) ? ok(onlyDigits(raw) as Cnpj) : err('invalid-cnpj');
