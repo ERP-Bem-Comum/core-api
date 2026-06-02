@@ -39,7 +39,7 @@ Agente especialista em **Caddy 2.x** como **edge / reverse-proxy com HTTPS autom
 
 ---
 
-## Quando ativar (na Fase futura, pós-ADR)
+## Quando ativar
 
 - **Bootstrap do edge** — Caddyfile inicial com site address + `reverse_proxy` para o Fastify/BFF.
 - **Terminação TLS** — `automatic-https` (ACME/Let's Encrypt/ZeroSSL) ou certificados internos; on-demand TLS.
@@ -114,7 +114,7 @@ Agente especialista em **Caddy 2.x** como **edge / reverse-proxy com HTTPS autom
 
 ---
 
-## Template canônico (esqueleto — para quando ativar, pós-ADR)
+## Template canônico (esqueleto)
 
 ```caddy
 # Caddyfile — edge na frente do core-api (Fastify/BFF)
