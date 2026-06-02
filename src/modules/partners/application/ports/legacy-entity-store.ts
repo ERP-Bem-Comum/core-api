@@ -9,7 +9,9 @@
 
 import type { Result } from '../../../../shared/primitives/result.ts';
 
-export type PartnersEtlStoreError = 'partners-etl-store-unavailable';
+export type PartnersEtlStoreError =
+  | 'partners-etl-store-unavailable'
+  | 'partners-etl-store-integrity-violation';
 
 export type ProvisionOutcome = 'created' | 'already-exists';
 

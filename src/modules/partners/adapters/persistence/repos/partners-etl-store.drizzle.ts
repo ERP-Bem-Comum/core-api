@@ -33,27 +33,77 @@ import { financierToInsert } from '../mappers/financier.mapper.ts';
 import { collaboratorToInsert } from '../mappers/collaborator.mapper.ts';
 import { userProfileToInsert } from '../mappers/user-profile.mapper.ts';
 
-const log = (ctx: string, cause: unknown): void => {
-  process.stderr.write(`[partners-etl-store:${ctx}] ${String(cause)}\n`);
+// Serializacao defensiva para o stderr: Error -> message + errno/code/sqlMessage do mysql2 quando
+// presentes; objeto -> JSON; resto -> String. (Evita o '[object Object]' default e mantem o
+// errno/sqlMessage real legiveis no diagnostico.)
+const describeCause = (cause: unknown): string => {
+  if (cause instanceof Error) {
+    const obj = cause as unknown as Record<string, unknown>;
+    const errno = obj['errno'];
+    const code = obj['code'];
+    const sqlMessage = obj['sqlMessage'];
+    const extras: string[] = [];
+    if (typeof errno === 'number') extras.push(`errno=${errno}`);
+    if (typeof code === 'string') extras.push(`code=${code}`);
+    if (typeof sqlMessage === 'string') extras.push(`sqlMessage=${sqlMessage}`);
+    return extras.length > 0 ? `${cause.message} (${extras.join(' ')})` : cause.message;
+  }
+  if (typeof cause === 'object' && cause !== null) {
+    try {
+      return JSON.stringify(cause);
+    } catch {
+      return Object.prototype.toString.call(cause);
+    }
+  }
+  return String(cause);
 };
 
-// ER_DUP_ENTRY no indice de legacy_id da entidade: corrida de dois inserts -> idempotente.
-const isLegacyDupEntry = (e: unknown, dupIndex: string): boolean => {
-  const candidates: unknown[] = [e];
-  if (e instanceof Error && e.cause !== undefined) candidates.push(e.cause);
+const log = (ctx: string, cause: unknown): void => {
+  // .cause carrega o errno/sqlMessage real do mysql2 embrulhado pelo DrizzleQueryError; sem ele o
+  // diagnostico perde o errno. PII (valor duplicado no sqlMessage) e aceitavel SO no stderr efemero.
+  const nested =
+    cause instanceof Error && cause.cause !== undefined
+      ? ` | cause: ${describeCause(cause.cause)}`
+      : '';
+  process.stderr.write(`[partners-etl-store:${ctx}] ${describeCause(cause)}${nested}\n`);
+};
+
+// Classe de erro de provision derivada do erro do mysql2 (eventualmente aninhado em .cause via
+// DrizzleQueryError). PII-free: e um literal fixo, jamais o valor duplicado do sqlMessage.
+export type ProvisionErrorClass = 'already-exists' | 'integrity-violation' | 'unavailable';
+
+// Extrai o nome do indice citado por um ER_DUP_ENTRY (`... for key 'NOME'`), ou null.
+const dupEntryIndexName = (cause: unknown): string | null => {
+  const candidates: unknown[] = [cause];
+  if (cause instanceof Error && cause.cause !== undefined) candidates.push(cause.cause);
   for (const c of candidates) {
     if (typeof c === 'object' && c !== null) {
       const obj = c as Record<string, unknown>;
-      if (
-        obj['errno'] === 1062 &&
-        typeof obj['sqlMessage'] === 'string' &&
-        obj['sqlMessage'].includes(dupIndex)
-      ) {
-        return true;
+      const sqlMessage = obj['sqlMessage'];
+      if (obj['errno'] === 1062 && typeof sqlMessage === 'string') {
+        const match = /for key '([^']+)'/.exec(sqlMessage);
+        if (match?.[1] !== undefined) return match[1];
       }
     }
   }
-  return false;
+  return null;
+};
+
+// Classifica o erro de provision SEM tocar MySQL (testavel). Regras:
+//   1062 em <legacyIdIndex>            -> 'already-exists'      (idempotencia ETL; preservado)
+//   1062 em outra UNIQUE par_*_idx     -> 'integrity-violation' (dado do legado, NAO infra)
+//   demais (nao-1062, PRIMARY, opaco)  -> 'unavailable'         (infra; conservador)
+export const classifyProvisionError = (
+  cause: unknown,
+  legacyIdIndex: string,
+): ProvisionErrorClass => {
+  const indexName = dupEntryIndexName(cause);
+  if (indexName === null) return 'unavailable';
+  if (indexName === legacyIdIndex) return 'already-exists';
+  // So UNIQUE secundarias de dado (par_<entidade>_<campo>_idx) sinalizam violacao de integridade;
+  // PRIMARY ou indice nao-reconhecivel cai em 'unavailable' (conservador).
+  if (indexName.startsWith('par_') && indexName.endsWith('_idx')) return 'integrity-violation';
+  return 'unavailable';
 };
 
 const safe = async <T>(
@@ -70,15 +120,23 @@ const safe = async <T>(
 
 const runProvision = async (
   ctx: string,
-  dupIndex: string,
+  legacyIdIndex: string,
   body: () => Promise<ProvisionOutcome>,
 ): Promise<Result<ProvisionOutcome, PartnersEtlStoreError>> => {
   try {
     return ok(await body());
   } catch (cause) {
-    if (isLegacyDupEntry(cause, dupIndex)) return ok('already-exists');
-    log(ctx, cause);
-    return err('partners-etl-store-unavailable');
+    const klass = classifyProvisionError(cause, legacyIdIndex);
+    switch (klass) {
+      case 'already-exists':
+        return ok('already-exists');
+      case 'integrity-violation':
+        log(ctx, cause);
+        return err('partners-etl-store-integrity-violation');
+      case 'unavailable':
+        log(ctx, cause);
+        return err('partners-etl-store-unavailable');
+    }
   }
 };
 
