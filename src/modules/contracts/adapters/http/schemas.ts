@@ -243,6 +243,18 @@ export const supersedeDocumentBodySchema = z.object({
   supersededByDocumentId: z.uuid().meta({ description: 'UUID do documento substituto' }),
 });
 
+/**
+ * Body de `DELETE …/documents/:documentId` (E4) — exclusão LÓGICA (RN-11, princípio #14).
+ * `reason` é obrigatório (auditoria): não-vazio, ≤ 500 chars. Reason inválido → 400 (Zod).
+ */
+export const deleteDocumentBodySchema = z.object({
+  reason: z
+    .string()
+    .min(1)
+    .max(500)
+    .meta({ description: 'Motivo da exclusão lógica (auditoria; 1..500 chars)' }),
+});
+
 /** Params da rota de supersede — contrato + documento. */
 export const documentParamSchema = z.object({
   id: z.uuid().meta({ description: 'UUID do contrato' }),

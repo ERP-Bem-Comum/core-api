@@ -47,6 +47,7 @@ import {
   amendmentSchema,
   uploadDocumentQuerySchema,
   supersedeDocumentBodySchema,
+  deleteDocumentBodySchema,
   documentParamSchema,
   documentSchema,
   octetStreamUploadBody,
@@ -504,6 +505,56 @@ const contractsRoutes =
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(reply, ok(documentToDto(result.value.document)), { ok: 200 });
+      },
+    });
+
+    // E4: exclusão LÓGICA do documento (RN-11, princípio #14 — nunca apaga fisicamente).
+    // O documento permanece na trilha com status `LogicallyDeleted`; `reason` é obrigatório
+    // (auditoria, validado no body Zod). 204 sem corpo em sucesso. Diferente das demais
+    // rotas de documento, "já-excluído"/"já-superseded" são tratados como 404 (recurso não
+    // mais excluível — SPEC do ticket CTR-HTTP-DOCUMENT-DELETE), não 409.
+    scope.route({
+      method: 'DELETE',
+      url: '/contracts/:id/documents/:documentId',
+      preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
+      // Sucesso é 204 sem corpo → sem `response` schema (mesma convenção das rotas 204 de auth).
+      schema: {
+        params: documentParamSchema,
+        body: deleteDocumentBodySchema,
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        // Ownership (IDOR/BOLA): o documento do path deve pertencer ao contrato `:id` —
+        // diretamente (parentType Contract) ou via aditivo daquele contrato (Amendment).
+        const doc = await deps.getDocument(req.params.documentId);
+        if (!doc.ok) return sendDomainError(reply, doc.error);
+        if (doc.value === null) return sendDomainError(reply, 'document-not-found');
+        if (doc.value.parentType === 'Amendment') {
+          const amendment = await deps.getAmendment(String(doc.value.parentId));
+          if (!amendment.ok) return sendDomainError(reply, amendment.error);
+          if (amendment.value === null) return sendDomainError(reply, 'amendment-not-found');
+          if (String(amendment.value.contractId) !== req.params.id) {
+            return sendDomainError(reply, 'document-contract-mismatch');
+          }
+        } else if (String(doc.value.parentId) !== req.params.id) {
+          return sendDomainError(reply, 'document-contract-mismatch');
+        }
+        const result = await deps.deleteDocument({
+          documentId: req.params.documentId,
+          deletedReason: req.body.reason,
+          deletedBy: req.userId,
+        });
+        // SPEC do ticket: já-excluído / já-superseded → 404 (recurso não mais excluível),
+        // diferente do 409 padrão das demais rotas de documento.
+        const mapped = result.ok ? ok(undefined) : err(toErrorCode(result.error));
+        return sendResult(reply, mapped, {
+          ok: 204,
+          errors: {
+            'document-not-found': 404,
+            'document-already-deleted': 404,
+            'document-already-superseded': 404,
+            'document-repository-unavailable': 503,
+          },
+        });
       },
     });
   };
