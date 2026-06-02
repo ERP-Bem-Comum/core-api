@@ -4,6 +4,24 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-01 — 🤝 Módulo `partners` (ADR-0031) + BC Parceiros/Cadastros
+
+### Decisões (ADR)
+
+- **ADR-0031 aceito** — cria o módulo **`partners`** no core-api (prefixo `par_*`), primeira das 4 fronteiras do legacy API a migrar (`suppliers`/`financiers`/`collaborators` + `collaborator_history` + geografias). Três agregados internos (supplier, financier, collaborator); `collaborator` fundido por YAGNI; geografias como lookup; perfil de usuário como agregado separado referenciando `auth.User`; VOs `Cpf`/`Cnpj`/`Email` promovidos ao shared-kernel; enums legados → unions EN com exceções (race/gender/serviceCategory/occupationArea). Precedido de sessão de design multi-agente read-only (5 especialistas).
+
+### Domínio
+
+- **BC Parceiros/Cadastros documentado** — novo `handbook/domain/11-parceiros-cadastros-context.md` (responsabilidades, agregados, relacionamentos cross-BC, linguagem ubíqua). `02-context-map.md` atualizado com a fronteira e o relacionamento Títulos/Contratos → Parceiros (ID + snapshot).
+
+### Planejamento
+
+- **Design consolidado** em `.claude/.planning/EPIC-PARTNERS-CADASTROS.md` — convergências, 9 decisões (4 fechadas pela banca, 5 P.O./ETL pendentes) e fatiamento em ~13 tickets W0→W3.
+
+### Manutenção
+
+- Índice de ADRs (`adr/README.md`) atualizado — incluídas as entradas **0029**, **0030** e **0031** (estava parado em 0028).
+
 ## 2026-05-30 — 🔐 Hardening de auth (spec 003) + ADR-0030 (store compartilhado adiado)
 
 ### Decisões (ADR)

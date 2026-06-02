@@ -1,0 +1,560 @@
+// =============================================================================
+//  ERP Bem Comum — Esquema EXATO do banco de dados (MySQL)
+//  Fonte de verdade: entities TypeORM em src/modules/**/entities/*.entity.ts
+//  Formato: DBML (https://dbml.dbdiagram.io) — cole em https://dbdiagram.io
+//
+//  Convenções herdadas de AbstractEntity (todas as tabelas):
+//    id        INT PK AUTO_INCREMENT
+//    createdAt DATETIME(6)  -- @CreateDateColumn
+//    updatedAt DATETIME(6)  -- @UpdateDateColumn
+//
+//  Colunas "embedded" (TypeORM @Column(() => Classe)) são achatadas com o nome
+//  da propriedade como PREFIXO, sem separador. Ex.: bancaryInfo.bank → bancaryInfoBank.
+//  Isso está refletido abaixo exatamente como o TypeORM gera no MySQL.
+//
+//  Valores *InCents / bigint = inteiros em centavos.
+// =============================================================================
+
+Project erp_bem_comum {
+  database_type: 'MySQL'
+  Note: 'Esquema gerado a partir das entities TypeORM (synchronize/migrations).'
+}
+
+// ============================ ENUMS ==========================================
+Enum occupation_area        { PARC; DDI; DCE; EPV }
+Enum employment_relationship { CLT; PJ }
+Enum registration_status    { PRE_CADASTRO; CADASTRO_COMPLETO }
+Enum gender_identity        { PREFIRO_NAO_RESPONDER; HOMEM_CIS; HOMEM_TRANS; MULHER_CIS; MULHER_TRANS; TRAVESTI; NAO_BINARIO; OUTRO }
+Enum race                   { AMARELO; BRANCO; PARDO; INDIGENA; PRETO; PREFIRO_NAO_RESPONDER }
+Enum food_category          { ONIVORO; VEGANO; VEGETARIANO; PESCETARIANO; OUTRO; PREFIRO_NAO_RESPONDER }
+Enum education              { EDUCACAO_INFANTIL; ENSINO_FUNDAMENTAL; ENSINO_MEDIO; ENSINO_SUPERIOR; POS_GRADUACAO; MESTRADO; DOUTORADO }
+Enum disable_by             { DESLIGAMENTO_ABC; FALECIMENTO; TEMPO_CONTRATO_FINALIZADO; SOLICITACAO_RESCISAO_CONTRATUAL }
+
+Enum category_supplier {
+  AGUA; ALIMENTACAO; AR_CONDICIONADO; ASSESSORIA; AUDITORIA_EXTERNA; BUFFET
+  COMPRAS_E_SUPRIMENTOS; CONSULTORIA; CONTABEIS; DEDETIZACAO; ELETRICO
+  EMISSAO_DE_PASSAGEM; ENERGIA; ENTREGA; ESGOTO; GRAFICA; HIDRAULICO; INFORMATICA
+  INTERNET; JURIDICO; LAVAGEM; LIMPEZA; LOCATICIOS; MANUTENCAO; MARCENARIA
+  MATERIAL_DE_CONSUMO; MATERIAL_DE_INFORMATICA; MATERIAL_DE_LIMPEZA; MATERIAL_EXPEDIENTE
+  OBRAS; ONGANIZACAO_DE_EVENTOS; PINTURA; PRODUCAO; RESERVA_DE_HOSPEDAGEM; SEGURANCA
+  SERVICOS_ADMINISTRATIVOS; TRASPORTE; VIDRACARIA; BANCO
+}
+Enum pix_types              { CPF; CNPJ; EMAIL; CELLPHONE; ALEATORY_KEY }
+
+Enum budget_plan_status     { APROVADO; EM_CALIBRACAO; RASCUNHO }
+Enum cost_center_type       { "A PAGAR"; "A RECEBER" }
+Enum sub_category_type      { INSTITUCIONAL; REDE }
+Enum sub_category_release   { IPCA; CAED; DESPESAS_PESSOAIS; DESPESAS_LOGISTICAS }
+
+Enum movimentation_status   { "NÃO FATURADO"; "FATURADO" }   // armazenado em coluna ENUM
+Enum bank_reconciliation_type { TRANSACTION_ENTRY; TRANSFER; PROFIT; TAX }
+
+// As colunas abaixo são VARCHAR no banco (não ENUM nativo), mas só aceitam estes valores:
+//   payable_status  : PENDENTE | EM APROVAÇÃO | LANÇADO | NÃO EFETIVADO | EFETIVADO | ATRASADO | CONCLUIDO
+//   receivable_status: PENDENTE | APROVADO | RECEBIDO | ATRASADO | CONCLUIDO
+//   payment_type    : COM CONTRATO | SEM CONTRATO | REEMBOLSO | DISTRATO | TERMO DE QUITAÇÃO | FATURA CARTÃO
+//   payment_method / receipt_method : TED | DOC | PIX | BOLETO
+//   doc_type        : NOTA FISCAL | FATURA | RECIBO | RPA | BOLETO BANCÁRIO | REEMBOLSO | ORDEM DE SERVIÇO | PEDIDO DE COMPRA | OUTROS
+//   debtor_type     : COLABORADOR | FORNECEDOR
+//   recurrence_type : SEMANAL | MENSAL | BIMESTRAL | TRIMESTRAL | SEMESTRAL | ANUAL
+//   contract_type   : Fornecedor | Financiador | Colaborador
+//   contract_model  : Serviço | Doação
+//   contract_status : Pendente | Assinado | Em andamento | Finalizado
+//   receivable_type : CONTRATO | DOAÇÃO | DISTRATO | TERMO DE QUITAÇÃO
+//   installment.type: LIQUIDO | IMPOSTO     installment.status: PENDENTE | PAGO | CANCELADO | ATRASADO
+//   history.action_type: INSERT | UPDATE | DELETE | SIGN | WITHDRAWAL | SETTLE
+
+// ============================ PARCEIROS / CADASTROS ==========================
+
+Table users {
+  id int [pk, increment]
+  name varchar [not null]
+  email varchar [not null, unique]
+  cpf varchar(11) [not null, unique]
+  telephone varchar [not null]
+  imageUrl varchar [null]
+  password varchar [not null, note: 'select:false — nunca retornado nas queries padrão']
+  active boolean [not null, default: true]
+  massApprovalPermission boolean [not null, default: false]
+  collaboratorId int [null, ref: > collaborators.id]
+  createdAt datetime
+  updatedAt datetime
+}
+
+Table collaborators {
+  id int [pk, increment]
+  name varchar [not null]
+  emergencyContactName varchar [null]
+  email varchar [not null, unique]
+  telephone varchar [null]
+  emergencyContactTelephone varchar [null]
+  cpf varchar(11) [not null, unique]
+  rg varchar [null, unique]
+  occupationArea occupation_area [not null]
+  genderIdentity gender_identity [null]
+  race race [null]
+  role varchar [null]
+  startOfContract timestamp [not null]
+  dateOfBirth datetime [null]
+  employmentRelationship employment_relationship [not null]
+  foodCategory food_category [null]
+  foodCategoryDescription varchar [null]
+  education education [null]
+  disableBy disable_by [null]
+  status registration_status [not null, default: 'PRE_CADASTRO']
+  biography longtext [null]
+  completeAddress varchar [null]
+  allergies varchar [null]
+  experienceInThePublicSector boolean [null]
+  active boolean [default: true]
+  createdAt datetime
+  updatedAt datetime
+
+  indexes {
+    race [name: 'idx_collaborators_race']
+  }
+}
+
+Table collaborator_history {
+  id int [pk, increment]
+  collaboratorId int [not null, ref: > collaborators.id]
+  previousRole varchar [null]
+  newRole varchar [null]
+  previousStartOfContract timestamp [null]
+  newStartOfContract timestamp [null]
+  previousRemuneration "decimal(10,2)" [null]
+  newRemuneration "decimal(10,2)" [null]
+  previousActive boolean [null]
+  newActive boolean [null]
+  previousDisableBy disable_by [null]
+  newDisableBy disable_by [null]
+  changedField varchar [null, note: "role | startOfContract | remuneration | active | disableBy | INCLUSAO | PROGRAMA"]
+  previousOccupationArea varchar [null]
+  newOccupationArea varchar [null]
+  historico_antes varchar(1000) [null]
+  historico_depois varchar(1000) [null]
+  createdAt datetime
+  updatedAt datetime
+}
+
+Table financiers {
+  id int [pk, increment]
+  name varchar [not null]
+  corporateName varchar [not null]
+  legalRepresentative varchar [not null]
+  cnpj varchar(14) [not null, unique]
+  telephone varchar [not null]
+  address varchar [not null]
+  active boolean [default: true]
+  createdAt datetime
+  updatedAt datetime
+}
+
+Table suppliers {
+  id int [pk, increment]
+  name varchar [not null]
+  email varchar [not null]
+  cnpj varchar(14) [not null, unique]
+  corporateName varchar [not null]
+  fantasyName varchar [not null]
+  serviceCategory category_supplier [not null]
+  serviceEvaluation int [null]
+  commentEvaluation varchar [null]
+  // embedded bancaryInfo (prefixo "bancaryInfo")
+  bancaryInfoBank varchar(120) [null]
+  bancaryInfoAgency varchar(20) [null, note: 'formato 0000-0']
+  bancaryInfoAccountNumber varchar(20) [null]
+  bancaryInfoDv varchar(1) [null]
+  // embedded pixInfo (prefixo "pixInfo")
+  pixInfoKey_type pix_types [null]
+  pixInfoKey varchar [null]
+  active boolean [default: true]
+  createdAt datetime
+  updatedAt datetime
+}
+
+Table partner_states {
+  id int [pk, increment]
+  name varchar [not null, unique]
+  abbreviation varchar(2) [not null, unique]
+  createdAt datetime
+  updatedAt datetime
+}
+
+Table partner_municipalities {
+  id int [pk, increment]
+  name varchar [not null]
+  uf varchar(2) [not null]
+  cod varchar [not null, unique, note: 'código IBGE']
+  createdAt datetime
+  updatedAt datetime
+
+  indexes {
+    (name, uf) [unique]
+    uf
+  }
+}
+
+Table programs {
+  id int [pk, increment]
+  name varchar [not null]
+  abbreviation varchar [not null, unique]
+  director varchar [not null]
+  description longtext [not null]
+  logo varchar [null]
+  active boolean [not null, default: true]
+  createdAt datetime
+  updatedAt datetime
+}
+
+// ============================ PLANEJAMENTO ORÇAMENTÁRIO ======================
+
+Table budget_plans {
+  id int [pk, increment]
+  year int [not null]
+  scenarioName varchar [null]
+  version float [not null]
+  totalInCents bigint [not null, default: 0]
+  status budget_plan_status [not null, default: 'RASCUNHO']
+  programId int [not null, ref: > programs.id]
+  updatedById int [not null, ref: > users.id]
+  parentId int [null, ref: > budget_plans.id, note: 'árvore materialized-path (versões/cenários)']
+  mpath varchar [null, note: 'coluna gerada pelo @Tree("materialized-path")']
+  createdAt datetime
+  updatedAt datetime
+
+  indexes {
+    (year, programId, version)
+    (year, programId, version, parentId) [unique]
+    programId
+    parentId
+  }
+}
+
+Table cost_centers {
+  id int [pk, increment]
+  name varchar [not null]
+  type cost_center_type [not null, default: 'A PAGAR']
+  active boolean [not null, default: true]
+  budgetPlanId int [not null, ref: > budget_plans.id]
+  createdAt datetime
+  updatedAt datetime
+}
+
+Table cost_centers_categories {
+  id int [pk, increment]
+  name varchar [not null]
+  costCenterId int [not null, ref: > cost_centers.id]
+  active boolean [not null, default: true]
+  createdAt datetime
+  updatedAt datetime
+}
+
+Table cost_centers_sub_categories {
+  id int [pk, increment]
+  name varchar [not null]
+  type sub_category_type [not null]
+  releaseType sub_category_release [not null]
+  active boolean [not null, default: true]
+  costCenterCategoryId int [not null, ref: > cost_centers_categories.id]
+  createdAt datetime
+  updatedAt datetime
+}
+
+Table budgets {
+  id int [pk, increment]
+  valueInCents bigint [not null, default: 0]
+  budgetPlanId int [not null, ref: > budget_plans.id]
+  partnerStateId int [null, ref: > partner_states.id]
+  partnerMunicipalityId int [null, ref: > partner_municipalities.id]
+  createdAt datetime
+  updatedAt datetime
+
+  indexes {
+    (budgetPlanId, partnerStateId) [unique]
+    (budgetPlanId, partnerMunicipalityId) [unique]
+    budgetPlanId
+    partnerStateId
+    partnerMunicipalityId
+  }
+}
+
+Table budget_results {
+  id int [pk, increment]
+  month int [not null]
+  valueInCents bigint [not null, default: 0]
+  budgetId int [not null, ref: > budgets.id]
+  costCenterSubCategoryId int [not null, ref: > cost_centers_sub_categories.id]
+  costCenterCategoryId int [not null, ref: > cost_centers_categories.id]
+  data json [not null, note: 'memória de cálculo bruta do lançamento']
+  createdAt datetime
+  updatedAt datetime
+
+  indexes {
+    (budgetId, costCenterSubCategoryId, month) [unique]
+    (budgetId, costCenterCategoryId)
+    (budgetId, costCenterSubCategoryId)
+  }
+}
+
+Table share_budget_plans {
+  id int [pk, increment]
+  username varchar [null, unique]
+  password varchar [not null, unique]
+  budgetPlanIds "simple-array" [not null, note: 'lista de ids serializada (CSV)']
+  createdAt datetime
+  updatedAt datetime
+
+  indexes {
+    (password, username) [unique]
+  }
+}
+
+// ============================ CONTRATOS ======================================
+
+Table contracts {
+  id int [pk, increment]
+  contractCode varchar(30) [not null]
+  contractType varchar(30) [not null, note: 'Fornecedor | Financiador | Colaborador']
+  contractModel varchar(30) [not null, note: 'Serviço | Doação']
+  contractStatus varchar(30) [not null, default: 'Pendente']
+  object varchar(100) [not null]
+  totalValue float [not null]
+  agreement boolean [not null, default: false]
+  budgetPlanId int [null, ref: > budget_plans.id]
+  programId int [null, ref: > programs.id]
+  // embedded contractPeriod
+  contractPeriodStart timestamp [null]
+  contractPeriodEnd timestamp [null]
+  contractPeriodIsIndefinite boolean [default: false]
+  // embedded pixInfo
+  pixInfoKey_type pix_types [null]
+  pixInfoKey varchar [null]
+  // embedded bancaryInfo
+  bancaryInfoBank varchar(120) [null]
+  bancaryInfoAgency varchar(20) [null]
+  bancaryInfoAccountNumber varchar(20) [null]
+  bancaryInfoDv varchar(1) [null]
+  supplierId int [null, ref: > suppliers.id]
+  financierId int [null, ref: > financiers.id]
+  collaboratorId int [null, ref: > collaborators.id]
+  signedContractUrl varchar [null]
+  settleTermUrl varchar [null]
+  withdrawalUrl varchar [null]
+  parentId int [null, ref: > contracts.id, note: 'árvore (aditivos)']
+  createdAt datetime
+  updatedAt datetime
+
+  indexes {
+    parentId
+  }
+}
+
+Table history {
+  id int [pk, increment]
+  actionType varchar(10) [not null, note: 'INSERT | UPDATE | DELETE | SIGN | WITHDRAWAL | SETTLE']
+  contractId int [not null, ref: > contracts.id]
+  userId int [not null, ref: > users.id]
+  createdAt datetime
+  updatedAt datetime
+}
+
+// ============================ FINANCEIRO =====================================
+
+Table accounts {
+  id int [pk, increment]
+  name varchar(200) [not null]
+  apiAccountId int [null]
+  initialBalance double [default: 0]
+  balance double [default: 0, note: 'preenchido via arquivo de retorno bancário']
+  systemBalance double [default: 0]
+  integracao varchar(150) [null]
+  bank varchar(150) [not null]
+  agency varchar(25) [not null]
+  accountNumber varchar(25) [not null]
+  dv varchar(3) [not null]
+  lastReconciliation datetime [null]
+  createdAt datetime
+  updatedAt datetime
+}
+
+Table payables {
+  id int [pk, increment]
+  identifierCode varchar [null]
+  debtorType varchar [not null, default: 'FORNECEDOR', note: 'COLABORADOR | FORNECEDOR']
+  supplierId int [null, ref: > suppliers.id]
+  collaboratorId int [null, ref: > collaborators.id]
+  payableStatus varchar [default: 'EM APROVAÇÃO']
+  paymentType varchar [not null]
+  obs varchar [null]
+  liquidValue float [not null]
+  taxValue float [not null]
+  totalValue float [not null]
+  paymentMethod varchar [null, note: 'TED | DOC | PIX | BOLETO']
+  barcode varchar [null]
+  docType varchar [null]
+  accountId int [null, ref: > accounts.id]
+  contractId int [null, ref: > contracts.id]
+  lastAditiveId int [null]
+  recurrent boolean [default: false]
+  // embedded recurenceData
+  recurenceDataRecurrenceType varchar(50) [null]
+  recurenceDataStartDate timestamp [null]
+  recurenceDataEndDate timestamp [null]
+  recurenceDataDueDay int [null]
+  dueDate timestamp [null]
+  paymentDate timestamp [null]
+  competence_date date [null]
+  createdById int [not null]
+  updatedById int [null]
+  createdAt datetime
+  updatedAt datetime
+}
+
+Table approvals {
+  id int [pk, increment]
+  collaboratorId int [null, ref: > collaborators.id]
+  userId int [null, ref: > users.id]
+  payableId int [not null, ref: > payables.id]
+  password varchar [not null]
+  approved boolean [null, default: null]
+  obs varchar [null]
+  createdAt datetime
+  updatedAt datetime
+}
+
+Table receivables {
+  id int [pk, increment]
+  identifierCode varchar [null, unique]
+  financierId int [not null, ref: > financiers.id]
+  receivableStatus varchar [default: 'APROVADO']
+  receivableType varchar [not null, note: 'CONTRATO | DOAÇÃO | DISTRATO | TERMO DE QUITAÇÃO']
+  totalValue float [not null]
+  receiptMethod varchar [null]
+  docType varchar [null]
+  accountId int [null, ref: > accounts.id]
+  contractId int [null, ref: > contracts.id]
+  lastAditiveId int [null]
+  description varchar [null]
+  recurrent boolean [default: false]
+  // embedded recurenceData
+  recurenceDataRecurrenceType varchar(50) [null]
+  recurenceDataStartDate timestamp [null]
+  recurenceDataEndDate timestamp [null]
+  recurenceDataDueDay int [null]
+  dueDate timestamp [null]
+  createdAt datetime
+  updatedAt datetime
+}
+
+Table installments {
+  id int [pk, increment]
+  payableId int [null, ref: > payables.id]
+  receivableId int [null, ref: > receivables.id]
+  relatedLiquidInstallmentId int [null, ref: - installments.id]
+  installmentNumber int [not null]
+  totalInstallments int [not null]
+  type varchar [not null, default: 'LIQUIDO', note: 'LIQUIDO | IMPOSTO']
+  dueDate datetime [not null, default: `CURRENT_TIMESTAMP`]
+  value float [not null]
+  status varchar [default: 'PENDENTE', note: 'PENDENTE | PAGO | CANCELADO | ATRASADO']
+  createdAt datetime
+  updatedAt datetime
+}
+
+Table creditCard {
+  id int [pk, increment]
+  name varchar(200) [not null]
+  lastDigits varchar(4) [not null]
+  responsible varchar(200) [not null]
+  instituition varchar(200) [not null]
+  accountId int [null, ref: > accounts.id]
+  dueDay int [default: 1]
+  active boolean [default: true]
+  createdAt datetime
+  updatedAt datetime
+}
+
+Table cardMovimentation {
+  id int [pk, increment]
+  description varchar(200) [not null]
+  purchaseDate timestamp [default: `CURRENT_TIMESTAMP`]
+  referenceDate timestamp [default: `CURRENT_TIMESTAMP`]
+  hasInstallments boolean [not null]
+  installmentId varchar(200) [default: '', note: 'uuid de agrupamento de parcelas']
+  numberOfInstallments int [default: 1]
+  currentInstallment int [default: 1]
+  value float [default: 0]
+  cardId int [not null, ref: > creditCard.id]
+  payableId int [null, ref: > payables.id]
+  status movimentation_status [default: 'NÃO FATURADO']
+  createdAt datetime
+  updatedAt datetime
+}
+
+Table "bank-reconciliation" {
+  id int [pk, increment]
+  accountId int [not null, ref: > accounts.id]
+  type bank_reconciliation_type [not null]
+  recordSystemId int [null, ref: - installments.id]
+  transferedById int [null, ref: - accounts.id]
+  recordApiId int [null, ref: - "bank-record-api".id]
+  createdAt datetime
+  updatedAt datetime
+}
+
+Table "bank-record-api" {
+  id int [pk, increment]
+  documentNumber varchar [not null]
+  transactionAmount float [not null]
+  transactionDate timestamp [not null]
+  fullTransactionDescription varchar [not null]
+  createdAt datetime
+  updatedAt datetime
+}
+
+// ============================ CATEGORIZAÇÃO (hub financeiro→orçamento) ========
+
+Table categorization {
+  id int [pk, increment]
+  programId int [not null, ref: > programs.id]
+  budgetPlanId int [not null, ref: > budget_plans.id]
+  costCenterId int [not null, ref: > cost_centers.id]
+  categoryId int [not null, ref: > cost_centers_categories.id]
+  subCategoryId int [not null, ref: > cost_centers_sub_categories.id]
+  payableRelationalId int [null, ref: - payables.id]
+  receivableRelationalId int [null, ref: - receivables.id]
+  cardMovRelationalId int [null, ref: - cardMovimentation.id]
+  bankRecordApiId int [null, ref: - "bank-record-api".id]
+  createdAt datetime
+  updatedAt datetime
+}
+
+// ============================ ARQUIVOS / AUTH ================================
+
+Table files {
+  id int [pk, increment]
+  payableId int [null, ref: > payables.id]
+  receivableId int [null, ref: > receivables.id]
+  contractId int [null, ref: > contracts.id]
+  fileUrl varchar [not null]
+  createdAt datetime
+  updatedAt datetime
+}
+
+Table token {
+  id int [pk, increment]
+  token text [not null]
+  expirationDate timestamp [not null]
+  createdAt datetime
+  updatedAt datetime
+}
+
+Table forgot_password {
+  id int [pk, increment]
+  token varchar [not null, unique]
+  isValid boolean [default: true]
+  userId int [not null, ref: - users.id]
+  createdAt datetime
+  updatedAt datetime
+}

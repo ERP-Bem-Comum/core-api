@@ -1,0 +1,3188 @@
+openapi: 3.1.0
+
+# ============================================================================
+#  ERP Bem Comum — Contrato de API (módulos NÃO financeiro / NÃO contratos / NÃO auth)
+# ----------------------------------------------------------------------------
+#  Esta especificação foi gerada a partir da fonte de verdade REAL do backend
+#  (NestJS): controllers em `src/modules/*/**.controller.ts`, DTOs (class-validator),
+#  entities (TypeORM) e enums. Onde o "contrato esperado pelo front" divergia do
+#  backend, a divergência está anotada com  ⚠️ DIVERGÊNCIA  na descrição do recurso.
+#
+#  Convenção de envelope (axios `return response.data`):
+#    - Recurso único       → o objeto direto (ex.: GET /programs/{id} → Program)
+#    - Listagem paginada   → { items: T[], meta: PaginationMeta, links?: PaginationLinks }
+#                            (nestjs-typeorm-paginate)
+#    - Erro                → { message, statusCode?, error? }  (padrão NestJS HttpException)
+#    - Mutações (POST/PUT/PATCH/DELETE) → na maioria retornam corpo VAZIO (void).
+#      O front ignora o corpo nesses casos. Documentado como 200/201/204 sem schema.
+# ============================================================================
+
+info:
+  title: ERP Bem Comum — API (Parceiros, Programas, Usuários, Orçamento, Relatórios)
+  version: "1.0.0"
+  description: |
+    Contrato dos módulos transversais e de planejamento orçamentário do ERP.
+
+    **Fora do escopo deste arquivo** (possuem/terão documentação própria):
+    `auth` (`/auth/*`), `contratos` (`/contracts/*`) e `financeiro`
+    (`/payables`, `/receivables`, `/accounts`, `/cards`, `/card-movimentations`,
+    `/bank-reconciliation`, `/apiBradesco/*`). As rotas de `/files/*` aparecem aqui
+    apenas porque o **service de arquivos é compartilhado** — `payable`/`receivable`
+    pertencem ao financeiro e `contracts*` aos contratos.
+
+    ### Autenticação
+    - **bearerAuth** (JWT): padrão da maioria dos endpoints. Header `Authorization: Bearer <jwt>`.
+    - **jwtOrBasic**: endpoints `/options` aceitam Bearer **ou** Basic Auth (cliente `apiOptions`).
+    - **basicAuth** (compartilhamento externo): endpoints `*/shared` usam
+      `Authorization: Basic base64(shareUsername:sharePassword)`. As credenciais vêm de
+      cookies preenchidos após `POST /share-budget-plans/check-credentials`.
+
+    ### Valores monetários
+    Campos com sufixo `InCents` são **inteiros em centavos** (`bigint` no banco). Nunca floats.
+  contact:
+    name: Time Envolve / Bem Comum
+  license:
+    name: Proprietário
+
+servers:
+  - url: http://localhost:4010
+    description: Desenvolvimento local (default `NEXT_PUBLIC_API_URL`)
+  - url: https://api.staging.bemcomum.org
+    description: Homologação (exemplo — ajustar)
+  - url: https://api.bemcomum.org
+    description: Produção (exemplo — ajustar)
+
+# ----------------------------------------------------------------------------
+#  TAGS
+# ----------------------------------------------------------------------------
+tags:
+  - name: Colaboradores
+    description: Gestão de parceiros — colaboradores (PJ/CLT), histórico e importação.
+  - name: Financiadores
+    description: Gestão de parceiros — financiadores (doadores / fontes de recurso).
+  - name: Fornecedores
+    description: Gestão de parceiros — fornecedores e seus dados de pagamento.
+  - name: Estados Parceiros
+    description: Catálogo de estados (UF) parceiros.
+  - name: Municípios Parceiros
+    description: Catálogo de municípios parceiros (código IBGE).
+  - name: Programas
+    description: Programas institucionais (com logo e diretor).
+  - name: Usuários
+    description: Usuários do sistema (autenticáveis), troca de senha e avatar.
+  - name: Planos Orçamentários
+    description: Planos orçamentários anuais, versões/cenários (árvore), aprovação e calibração.
+  - name: Orçamentos
+    description: Orçamentos por estado/município dentro de um plano.
+  - name: Resultados dos Orçamentos
+    description: Memória de cálculo (IPCA, CAED, Despesas Pessoais, Despesas Logísticas).
+  - name: Centros de Custo
+    description: Centros de custo, categorias e subcategorias (árvore do plano).
+  - name: Compartilhar Planos Orçamentários
+    description: Geração/validação de links externos de compartilhamento.
+  - name: Relatórios
+    description: Relatórios analíticos e exports (CSV/PDF).
+  - name: Estatísticas
+    description: Dashboard consolidado.
+  - name: Arquivos
+    description: Upload/download genérico (transversal a vários domínios).
+
+# ----------------------------------------------------------------------------
+#  SECURITY (default global = bearerAuth; overrides por operação)
+# ----------------------------------------------------------------------------
+security:
+  - bearerAuth: []
+
+paths:
+
+  # ==========================================================================
+  #  1.1 COLABORADORES
+  # ==========================================================================
+  /collaborators:
+    get:
+      tags: [Colaboradores]
+      summary: Listar colaboradores (paginado, multifiltro)
+      operationId: listCollaborators
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Active'
+        - $ref: '#/components/parameters/Order'
+        - { name: age, in: query, schema: { type: string }, description: Idade (string conforme DTO). }
+        - { name: yearOfContract, in: query, schema: { type: string }, description: Ano de início de contrato. }
+        - name: genderIdentities
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, items: { $ref: '#/components/schemas/GenderIdentity' } }
+        - name: breeds
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, items: { $ref: '#/components/schemas/Race' } }
+        - name: educations
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, items: { $ref: '#/components/schemas/Education' } }
+        - name: status
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, items: { $ref: '#/components/schemas/RegistrationStatus' } }
+        - name: occupationAreas
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, items: { $ref: '#/components/schemas/OccupationArea' } }
+        - name: employmentRelationships
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, items: { $ref: '#/components/schemas/EmploymentRelationship' } }
+        - name: disableBy
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, items: { $ref: '#/components/schemas/DisableBy' } }
+        - name: roles
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, items: { type: string } }
+      responses:
+        '200':
+          description: Página de colaboradores.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginatedCollaborators' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Colaboradores]
+      summary: Criar colaborador (pré-cadastro)
+      description: |
+        Cria um colaborador no estado `PRE_CADASTRO`. ⚠️ DIVERGÊNCIA: o backend valida
+        `occupationArea` como **enum** (`PARC|DDI|DCE|EPV`) e `employmentRelationship`
+        como **enum** (`CLT|PJ`), não como string livre. Resposta sem corpo (void).
+      operationId: createCollaborator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCollaborator' }
+      responses:
+        '201': { $ref: '#/components/responses/CreatedNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /collaborators/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Colaboradores]
+      summary: Obter colaborador completo
+      operationId: getCollaborator
+      responses:
+        '200':
+          description: Colaborador.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Collaborator' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Colaboradores]
+      summary: Atualizar colaborador
+      operationId: updateCollaborator
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateCollaborator' }
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /collaborators/{id}/toggle-active:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    patch:
+      tags: [Colaboradores]
+      summary: Ativar/inativar colaborador
+      description: Ao inativar, informe o motivo em `disableBy`.
+      operationId: toggleCollaboratorActive
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                disableBy:
+                  oneOf:
+                    - { $ref: '#/components/schemas/DisableBy' }
+                    - { type: 'null' }
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /collaborators/{id}/complete-registration:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    post:
+      tags: [Colaboradores]
+      summary: Completar cadastro do colaborador
+      description: |
+        Rota **pública** (sem JwtAuthGuard no controller) usada no fluxo de auto-cadastro
+        do colaborador. Promove o status para `CADASTRO_COMPLETO`.
+      operationId: completeCollaboratorRegistration
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CompleteRegistrationCollaborator' }
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /collaborators/{id}/check-first-three-numbers-cpf/{cpf}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+      - { name: cpf, in: path, required: true, schema: { type: string }, description: Três primeiros dígitos (ou CPF) a validar. }
+    get:
+      tags: [Colaboradores]
+      summary: Validar 3 primeiros dígitos do CPF
+      description: Rota pública usada no fluxo de auto-cadastro para conferência de identidade.
+      operationId: checkFirstThreeNumbersCpf
+      security: []
+      responses:
+        '200':
+          description: Colaborador correspondente (quando validado).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Collaborator' }
+
+  /collaborators/nameOrCPF:
+    get:
+      tags: [Colaboradores]
+      summary: Buscar 1 colaborador por nome ou CPF
+      operationId: findCollaboratorByNameOrCpf
+      parameters:
+        - { name: nameOrCPF, in: query, required: true, schema: { type: string } }
+        - { name: payableOrReceivableId, in: query, required: false, schema: { type: integer } }
+      responses:
+        '200':
+          description: Colaborador encontrado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Collaborator' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /collaborators/options:
+    get:
+      tags: [Colaboradores]
+      summary: Options de colaboradores (dropdown)
+      operationId: collaboratorOptions
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+      responses:
+        '200': { $ref: '#/components/responses/OptionsList' }
+
+  /collaborators/food-categories/options:
+    get:
+      tags: [Colaboradores]
+      summary: Options de categorias alimentares
+      description: Retorna `value`, `label` e `description` para cada `FoodCategory`.
+      operationId: foodCategoryOptions
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+      responses:
+        '200':
+          description: Lista de opções de categoria alimentar.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    value: { $ref: '#/components/schemas/FoodCategory' }
+                    label: { type: string }
+                    description: { type: string }
+
+  /collaborators/data:
+    get:
+      tags: [Colaboradores]
+      summary: Dados cadastrais (formato exportação Excel, paginado)
+      description: Mesmo conjunto de filtros da listagem; formato voltado a BI.
+      operationId: collaboratorData
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Dados cadastrais paginados.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { type: object, additionalProperties: true }
+                  meta: { $ref: '#/components/schemas/PaginationMeta' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /collaborators/csv:
+    get:
+      tags: [Colaboradores]
+      summary: Exportar colaboradores (CSV)
+      operationId: collaboratorsCsv
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Active'
+      responses:
+        '200': { $ref: '#/components/responses/CsvBlob' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /collaborators/timeline/csv:
+    get:
+      tags: [Colaboradores]
+      summary: Exportar timeline de colaboradores (CSV tabular por período)
+      description: Uma linha por período por colaborador. Ideal para BigQuery/BI.
+      operationId: collaboratorsTimelineCsv
+      responses:
+        '200': { $ref: '#/components/responses/CsvBlob' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /collaborators/import:
+    post:
+      tags: [Colaboradores]
+      summary: Importar colaboradores via CSV
+      description: |
+        Apenas insere novos colaboradores (não atualiza). Valida unicidade por CPF, Email e RG.
+        Pode retornar importação **parcial** com a lista de `errors` por linha.
+      operationId: importCollaborators
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary, description: Arquivo .csv com colunas da exportação. }
+      responses:
+        '200':
+          description: Resultado da importação.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ImportResult' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /collaborators/history/import:
+    post:
+      tags: [Colaboradores]
+      summary: Importar histórico de colaboradores (CSV/Excel)
+      description: Alimenta a base retroativamente com dados anteriores à implementação.
+      operationId: importCollaboratorHistory
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string, format: binary }
+      responses:
+        '200':
+          description: Resultado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  imported: { type: integer }
+                  errors: { type: array, items: { type: string } }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /collaborators/history/migrate-occupation-area:
+    post:
+      tags: [Colaboradores]
+      summary: Migrar Área de Atuação no histórico legado
+      description: Popula retroativamente `newOccupationArea`. Executar uma única vez após atualização.
+      operationId: migrateOccupationArea
+      responses:
+        '200':
+          description: Migração concluída.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  success: { type: boolean }
+                  updated: { type: integer }
+                  skipped: { type: integer }
+                  message: { type: string }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ==========================================================================
+  #  1.2 FINANCIADORES
+  # ==========================================================================
+  /financiers:
+    get:
+      tags: [Financiadores]
+      summary: Listar financiadores (paginado)
+      operationId: listFinanciers
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+      responses:
+        '200':
+          description: Página de financiadores.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/Financier' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Financiadores]
+      summary: Criar financiador
+      operationId: createFinancier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateFinancier' }
+      responses:
+        '201': { $ref: '#/components/responses/CreatedNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /financiers/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Financiadores]
+      summary: Obter financiador
+      operationId: getFinancier
+      responses:
+        '200':
+          description: Financiador.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Financier' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Financiadores]
+      summary: Atualizar financiador
+      operationId: updateFinancier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateFinancier' }
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /financiers/{id}/toggle-active:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    patch:
+      tags: [Financiadores]
+      summary: Ativar/inativar financiador
+      operationId: toggleFinancierActive
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /financiers/nameOrCNPJ:
+    get:
+      tags: [Financiadores]
+      summary: Buscar 1 financiador por nome ou CNPJ
+      operationId: findFinancierByNameOrCnpj
+      parameters:
+        - { name: nameOrCNPJ, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Financiador encontrado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Financier' }
+
+  /financiers/options:
+    get:
+      tags: [Financiadores]
+      summary: Options de financiadores
+      operationId: financierOptions
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+      responses:
+        '200': { $ref: '#/components/responses/OptionsList' }
+
+  # ==========================================================================
+  #  1.3 FORNECEDORES
+  # ==========================================================================
+  /suppliers:
+    get:
+      tags: [Fornecedores]
+      summary: Listar fornecedores (paginado)
+      operationId: listSuppliers
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Active'
+        - $ref: '#/components/parameters/Order'
+        - name: categories
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, items: { $ref: '#/components/schemas/CategorySupplier' } }
+      responses:
+        '200':
+          description: Página de fornecedores.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/Supplier' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Fornecedores]
+      summary: Criar fornecedor
+      operationId: createSupplier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateSupplier' }
+      responses:
+        '201': { $ref: '#/components/responses/CreatedNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /suppliers/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Fornecedores]
+      summary: Obter fornecedor
+      operationId: getSupplier
+      responses:
+        '200':
+          description: Fornecedor.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Supplier' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Fornecedores]
+      summary: Atualizar fornecedor (cadastro OU dados de pagamento)
+      description: |
+        `UpdateSupplierDto = PartialType(CreateSupplierDto)` — todos os campos opcionais.
+        Usado tanto para (A) editar dados cadastrais quanto (B) gravar `bancaryInfo`/`pixInfo`.
+        Validação cruzada exige **pelo menos um** entre dados bancários ou Pix preenchidos.
+      operationId: updateSupplier
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateSupplier' }
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /suppliers/{id}/toggle-active:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    patch:
+      tags: [Fornecedores]
+      summary: Ativar/inativar fornecedor
+      operationId: toggleSupplierActive
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+
+  /suppliers/nameOrCNPJ:
+    get:
+      tags: [Fornecedores]
+      summary: Buscar 1 fornecedor por nome ou CNPJ
+      operationId: findSupplierByNameOrCnpj
+      parameters:
+        - { name: nameOrCNPJ, in: query, required: true, schema: { type: string } }
+        - { name: payableOrReceivableId, in: query, required: false, schema: { type: integer } }
+      responses:
+        '200':
+          description: Fornecedor encontrado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Supplier' }
+
+  /suppliers/options:
+    get:
+      tags: [Fornecedores]
+      summary: Options de fornecedores
+      operationId: supplierOptions
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+      responses:
+        '200': { $ref: '#/components/responses/OptionsList' }
+
+  /suppliers/csv:
+    get:
+      tags: [Fornecedores]
+      summary: Exportar fornecedores (CSV)
+      operationId: suppliersCsv
+      parameters:
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Active'
+      responses:
+        '200': { $ref: '#/components/responses/CsvBlob' }
+
+  # ==========================================================================
+  #  1.4 ESTADOS PARCEIROS
+  # ==========================================================================
+  /partner-states:
+    get:
+      tags: [Estados Parceiros]
+      summary: Listar estados parceiros (array simples, sem paginação)
+      operationId: listPartnerStates
+      responses:
+        '200':
+          description: Lista de estados.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/PartnerState' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Estados Parceiros]
+      summary: Criar estado parceiro
+      operationId: createPartnerState
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePartnerState' }
+      responses:
+        '201': { $ref: '#/components/responses/CreatedNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /partner-states/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Estados Parceiros]
+      summary: Obter estado parceiro
+      operationId: getPartnerState
+      responses:
+        '200':
+          description: Estado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PartnerState' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Estados Parceiros]
+      summary: Remover estado parceiro
+      operationId: deletePartnerState
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /partner-states/options:
+    get:
+      tags: [Estados Parceiros]
+      summary: Options de estados parceiros
+      operationId: partnerStateOptions
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+      responses:
+        '200': { $ref: '#/components/responses/OptionsList' }
+
+  /partner-states/all/shared:
+    get:
+      tags: [Estados Parceiros]
+      summary: Listar estados (compartilhado externo)
+      operationId: listPartnerStatesShared
+      security:
+        - basicAuth: []
+      responses:
+        '200':
+          description: Lista de estados.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/PartnerState' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ==========================================================================
+  #  1.5 MUNICÍPIOS PARCEIROS
+  # ==========================================================================
+  /partner-municipalities:
+    get:
+      tags: [Municípios Parceiros]
+      summary: Listar municípios parceiros (paginado)
+      operationId: listPartnerMunicipalities
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+        - { name: uf, in: query, required: false, schema: { type: string, maxLength: 2 } }
+      responses:
+        '200':
+          description: Página de municípios.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/PartnerMunicipality' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Municípios Parceiros]
+      summary: Criar município parceiro
+      operationId: createPartnerMunicipality
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreatePartnerMunicipality' }
+      responses:
+        '201': { $ref: '#/components/responses/CreatedNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /partner-municipalities/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Municípios Parceiros]
+      summary: Obter município parceiro
+      operationId: getPartnerMunicipality
+      responses:
+        '200':
+          description: Município.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PartnerMunicipality' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Municípios Parceiros]
+      summary: Remover município parceiro
+      operationId: deletePartnerMunicipality
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /partner-municipalities/options:
+    get:
+      tags: [Municípios Parceiros]
+      summary: Options de municípios parceiros
+      operationId: partnerMunicipalityOptions
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+      responses:
+        '200': { $ref: '#/components/responses/OptionsList' }
+
+  /partner-municipalities/all/shared:
+    get:
+      tags: [Municípios Parceiros]
+      summary: Listar municípios (compartilhado externo)
+      operationId: listPartnerMunicipalitiesShared
+      security:
+        - basicAuth: []
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+      responses:
+        '200':
+          description: Página de municípios.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/PartnerMunicipality' } }
+
+  # ==========================================================================
+  #  2. PROGRAMAS
+  # ==========================================================================
+  /programs:
+    get:
+      tags: [Programas]
+      summary: Listar programas (paginado)
+      operationId: listPrograms
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Active'
+      responses:
+        '200':
+          description: Página de programas.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/Program' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Programas]
+      summary: Criar programa (multipart, com logo)
+      operationId: createProgram
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/CreateProgramMultipart' }
+      responses:
+        '201': { $ref: '#/components/responses/CreatedNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /programs/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Programas]
+      summary: Obter programa
+      operationId: getProgram
+      responses:
+        '200':
+          description: Programa.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Program' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Programas]
+      summary: Atualizar programa (multipart)
+      operationId: updateProgram
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/CreateProgramMultipart' }
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /programs/{id}/toggle-active:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    patch:
+      tags: [Programas]
+      summary: Ativar/inativar programa
+      operationId: toggleProgramActive
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+
+  /programs/options:
+    get:
+      tags: [Programas]
+      summary: Options de programas
+      operationId: programOptions
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+      responses:
+        '200': { $ref: '#/components/responses/OptionsList' }
+
+  /programs/files/{file}:
+    parameters:
+      - { name: file, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Programas]
+      summary: Baixar logo do programa
+      operationId: getProgramLogo
+      security: []
+      responses:
+        '200':
+          description: Imagem.
+          content:
+            image/*: { schema: { type: string, format: binary } }
+
+  # ==========================================================================
+  #  3. USUÁRIOS
+  # ==========================================================================
+  /users:
+    get:
+      tags: [Usuários]
+      summary: Listar usuários (paginado)
+      operationId: listUsers
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+        - $ref: '#/components/parameters/Active'
+      responses:
+        '200':
+          description: Página de usuários.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/User' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Usuários]
+      summary: Criar usuário (multipart, com avatar)
+      operationId: createUser
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/CreateUserMultipart' }
+      responses:
+        '201': { $ref: '#/components/responses/CreatedNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /users/me:
+    get:
+      tags: [Usuários]
+      summary: Usuário autenticado atual
+      description: Retorna o usuário extraído do JWT. ⚠️ Endpoint não estava no contrato do front.
+      operationId: getMe
+      responses:
+        '200':
+          description: Usuário atual.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /users/change-password:
+    patch:
+      tags: [Usuários]
+      summary: Trocar senha do usuário autenticado
+      operationId: changePassword
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChangePassword' }
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /users/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Usuários]
+      summary: Obter usuário
+      operationId: getUser
+      responses:
+        '200':
+          description: Usuário.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/User' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    put:
+      tags: [Usuários]
+      summary: Atualizar usuário (multipart)
+      operationId: updateUser
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/CreateUserMultipart' }
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /users/{id}/toggle-active:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    patch:
+      tags: [Usuários]
+      summary: Ativar/inativar usuário
+      operationId: toggleUserActive
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+
+  /users/files/{file}:
+    parameters:
+      - { name: file, in: path, required: true, schema: { type: string } }
+    get:
+      tags: [Usuários]
+      summary: Baixar avatar do usuário
+      operationId: getUserAvatar
+      security: []
+      responses:
+        '200':
+          description: Imagem.
+          content:
+            image/*: { schema: { type: string, format: binary } }
+
+  # ==========================================================================
+  #  4.1 PLANOS ORÇAMENTÁRIOS
+  # ==========================================================================
+  /budget-plans:
+    get:
+      tags: [Planos Orçamentários]
+      summary: Listar planos orçamentários (paginado, com árvore de versões)
+      operationId: listBudgetPlans
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+        - { name: year, in: query, required: false, schema: { type: integer } }
+        - { name: programId, in: query, required: false, schema: { type: integer } }
+        - { name: status, in: query, required: false, schema: { $ref: '#/components/schemas/BudgetPlanStatus' } }
+      responses:
+        '200':
+          description: Página de planos (itens com `children[]`).
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/BudgetPlanListItem' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Planos Orçamentários]
+      summary: Criar plano orçamentário
+      description: '⚠️ DIVERGÊNCIA: `programId` é **obrigatório** no backend (contrato do front permitia null).'
+      operationId: createBudgetPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBudgetPlan' }
+      responses:
+        '201':
+          description: Plano criado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BudgetPlan' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /budget-plans/scenery:
+    post:
+      tags: [Planos Orçamentários]
+      summary: Criar novo cenário (filho na árvore)
+      operationId: createScenery
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateScenery' }
+      responses:
+        '201':
+          description: Cenário criado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BudgetPlan' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /budget-plans/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Planos Orçamentários]
+      summary: Obter plano orçamentário completo
+      description: Inclui `costCenters[]`, `budgets[]`, `parent?` e `children[]`.
+      operationId: getBudgetPlan
+      responses:
+        '200':
+          description: Plano completo.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BudgetPlan' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Planos Orçamentários]
+      summary: Remover plano orçamentário
+      operationId: deleteBudgetPlan
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /budget-plans/{id}/approve:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    patch:
+      tags: [Planos Orçamentários]
+      summary: Aprovar plano (status → APROVADO)
+      operationId: approveBudgetPlan
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /budget-plans/{id}/start-calibration:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    post:
+      tags: [Planos Orçamentários]
+      summary: Iniciar calibração (status → EM_CALIBRACAO)
+      operationId: startCalibration
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+
+  /budget-plans/{id}/insights:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Planos Orçamentários]
+      summary: Insights dos últimos 5 anos
+      operationId: getBudgetPlanInsights
+      responses:
+        '200':
+          description: Insights.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Insight' } }
+                  medInCentsTheLastFiveYears: { type: integer, format: int64 }
+
+  /budget-plans/{id}/generate-csv:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Planos Orçamentários]
+      summary: Gerar CSV de 1 plano (enviado por e-mail / blob)
+      operationId: generateBudgetPlanCsv
+      responses:
+        '200': { $ref: '#/components/responses/CsvBlob' }
+
+  /budget-plans/consolidated-result:
+    get:
+      tags: [Planos Orçamentários]
+      summary: Resultado consolidado
+      operationId: consolidatedResult
+      parameters:
+        - { name: year, in: query, required: true, schema: { type: integer } }
+        - { name: programId, in: query, required: false, schema: { type: integer } }
+        - { name: status, in: query, required: false, schema: { $ref: '#/components/schemas/BudgetPlanStatus' } }
+      responses:
+        '200':
+          description: Resultado consolidado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConsolidatedResult' }
+
+  /budget-plans/consolidated-result/csv:
+    get:
+      tags: [Planos Orçamentários]
+      summary: CSV do resultado consolidado
+      operationId: consolidatedResultCsv
+      parameters:
+        - { name: year, in: query, required: true, schema: { type: integer } }
+        - { name: programId, in: query, required: false, schema: { type: integer } }
+      responses:
+        '200': { $ref: '#/components/responses/CsvBlob' }
+
+  /budget-plans/options:
+    get:
+      tags: [Planos Orçamentários]
+      summary: Options de planos orçamentários
+      operationId: budgetPlanOptions
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+      responses:
+        '200': { $ref: '#/components/responses/OptionsList' }
+
+  # ---- Endpoints /shared de planos (Basic Auth) ----
+  /budget-plans/{id}/shared:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Planos Orçamentários]
+      summary: Obter plano (compartilhado externo)
+      operationId: getBudgetPlanShared
+      security: [ { basicAuth: [] } ]
+      responses:
+        '200':
+          description: Plano (com `program`).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/BudgetPlan' }
+
+  /budget-plans/{id}/insights/shared:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Planos Orçamentários]
+      summary: Insights (compartilhado externo)
+      operationId: getBudgetPlanInsightsShared
+      security: [ { basicAuth: [] } ]
+      responses:
+        '200':
+          description: Insights.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/Insight' } }
+                  medInCentsTheLastFiveYears: { type: integer, format: int64 }
+
+  /budget-plans/{id}/generate-csv/shared:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Planos Orçamentários]
+      summary: Gerar CSV de 1 plano (compartilhado externo)
+      operationId: generateBudgetPlanCsvShared
+      security: [ { basicAuth: [] } ]
+      parameters:
+        - { name: email, in: query, required: true, schema: { type: string, format: email } }
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+
+  /budget-plans/consolidated-result/shared:
+    get:
+      tags: [Planos Orçamentários]
+      summary: Resultado consolidado (compartilhado externo)
+      operationId: consolidatedResultShared
+      security: [ { basicAuth: [] } ]
+      responses:
+        '200':
+          description: Resultado consolidado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ConsolidatedResult' }
+
+  /budget-plans/consolidated-result/csv/shared:
+    get:
+      tags: [Planos Orçamentários]
+      summary: CSV do consolidado (compartilhado externo, enviado por e-mail)
+      operationId: consolidatedResultCsvShared
+      security: [ { basicAuth: [] } ]
+      parameters:
+        - { name: email, in: query, required: true, schema: { type: string, format: email } }
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+
+  # ==========================================================================
+  #  4.2 ORÇAMENTOS
+  # ==========================================================================
+  /budgets:
+    get:
+      tags: [Orçamentos]
+      summary: Listar orçamentos (de um plano)
+      description: '⚠️ DIVERGÊNCIA: `budgetPlanId` é **obrigatório** no backend.'
+      operationId: listBudgets
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - { name: budgetPlanId, in: query, required: true, schema: { type: integer } }
+        - { name: partnerStateId, in: query, required: false, schema: { type: integer } }
+        - { name: partnerMunicipalityId, in: query, required: false, schema: { type: integer } }
+        - { name: isForMonth, in: query, required: false, schema: { type: integer, default: 0 } }
+      responses:
+        '200':
+          description: Página de orçamentos.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/Budget' } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    post:
+      tags: [Orçamentos]
+      summary: Criar orçamento
+      operationId: createBudget
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBudget' }
+      responses:
+        '201':
+          description: Orçamento criado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Budget' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /budgets/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    get:
+      tags: [Orçamentos]
+      summary: Obter orçamento (com resultados)
+      operationId: getBudget
+      responses:
+        '200':
+          description: Orçamento com `budgetResults[]`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Budget' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    delete:
+      tags: [Orçamentos]
+      summary: Remover orçamento
+      operationId: deleteBudget
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /budgets/all/shared:
+    get:
+      tags: [Orçamentos]
+      summary: Listar orçamentos de um plano (compartilhado externo)
+      operationId: listBudgetsShared
+      security: [ { basicAuth: [] } ]
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+      responses:
+        '200':
+          description: Página de orçamentos.
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/PaginatedEnvelope'
+                  - type: object
+                    properties:
+                      items: { type: array, items: { $ref: '#/components/schemas/Budget' } }
+
+  # ==========================================================================
+  #  4.3 RESULTADOS DOS ORÇAMENTOS (memória de cálculo)
+  # ==========================================================================
+  /budget-results/ipca:
+    post:
+      tags: [Resultados dos Orçamentos]
+      summary: Lançamento IPCA
+      operationId: createResultIpca
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBudgetResultIPCA' }
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /budget-results/caed:
+    post:
+      tags: [Resultados dos Orçamentos]
+      summary: Lançamento CAED
+      operationId: createResultCaed
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBudgetResultCAED' }
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /budget-results/personal-expenses:
+    post:
+      tags: [Resultados dos Orçamentos]
+      summary: Lançamento de Despesas Pessoais
+      operationId: createResultPersonalExpenses
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBudgetResultPersonal' }
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /budget-results/logistics-expenses:
+    post:
+      tags: [Resultados dos Orçamentos]
+      summary: Lançamento de Despesas Logísticas
+      operationId: createResultLogisticsExpenses
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateBudgetResultLogistics' }
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /budget-results/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    delete:
+      tags: [Resultados dos Orçamentos]
+      summary: Remover um resultado
+      operationId: deleteBudgetResult
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '404': { $ref: '#/components/responses/NotFound' }
+
+  /budget-results/logistics-expenses/{budgetId}/{categoryId}:
+    parameters:
+      - { name: budgetId, in: path, required: true, schema: { type: integer } }
+      - { name: categoryId, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Resultados dos Orçamentos]
+      summary: Resultados logísticos por categoria
+      operationId: getLogisticsByCategory
+      responses:
+        '200':
+          description: Lista de resultados.
+          content:
+            application/json:
+              schema: { type: array, items: { type: object, additionalProperties: true } }
+
+  /budget-results/all-by-budget-and-sub-category/{budgetId}/{subCategoryId}:
+    parameters:
+      - { name: budgetId, in: path, required: true, schema: { type: integer } }
+      - { name: subCategoryId, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Resultados dos Orçamentos]
+      summary: Resultados por orçamento e subcategoria
+      operationId: getResultsByBudgetAndSubCategory
+      responses:
+        '200':
+          description: Lista de resultados.
+          content:
+            application/json:
+              schema: { type: array, items: { type: object, additionalProperties: true } }
+
+  /budget-results/all-last-year/{budgetId}/{subCategoryId}:
+    parameters:
+      - { name: budgetId, in: path, required: true, schema: { type: integer } }
+      - { name: subCategoryId, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Resultados dos Orçamentos]
+      summary: Histórico do ano anterior
+      operationId: getResultsLastYear
+      responses:
+        '200':
+          description: Lista de resultados.
+          content:
+            application/json:
+              schema: { type: array, items: { type: object, additionalProperties: true } }
+
+  # ==========================================================================
+  #  4.4 CENTROS DE CUSTO
+  # ==========================================================================
+  /cost-centers:
+    get:
+      tags: [Centros de Custo]
+      summary: Listar todos os centros de custo
+      operationId: listCostCenters
+      responses:
+        '200':
+          description: Lista.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/CostCenter' } }
+    post:
+      tags: [Centros de Custo]
+      summary: Criar centro de custo
+      operationId: createCostCenter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCostCenter' }
+      responses:
+        '201':
+          description: Criado.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CostCenter' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /cost-centers/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    put:
+      tags: [Centros de Custo]
+      summary: Atualizar centro de custo
+      operationId: updateCostCenter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/CreateCostCenter'
+                - type: object
+                  properties:
+                    active: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+    delete:
+      tags: [Centros de Custo]
+      summary: Remover centro de custo
+      operationId: deleteCostCenter
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+
+  /cost-centers/{id}/toggle-active:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    patch:
+      tags: [Centros de Custo]
+      summary: Ativar/inativar centro de custo
+      operationId: toggleCostCenterActive
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+
+  /cost-centers/options:
+    get:
+      tags: [Centros de Custo]
+      summary: Options de centros de custo
+      operationId: costCenterOptions
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+      responses:
+        '200': { $ref: '#/components/responses/OptionsList' }
+
+  /cost-centers/all-by-budget-plan/{budgetPlanId}:
+    parameters:
+      - { name: budgetPlanId, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Centros de Custo]
+      summary: Árvore completa de centros de custo do plano
+      operationId: costCentersByBudgetPlan
+      responses:
+        '200':
+          description: Árvore (centros → categorias → subcategorias).
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/CostCenter' } }
+
+  /cost-centers/all-by-budget-plan/{budgetPlanId}/shared:
+    parameters:
+      - { name: budgetPlanId, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Centros de Custo]
+      summary: Árvore de centros de custo (compartilhado externo)
+      operationId: costCentersByBudgetPlanShared
+      security: [ { basicAuth: [] } ]
+      responses:
+        '200':
+          description: Árvore.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/CostCenter' } }
+
+  /cost-centers/all-active-by-budget-plan/{budgetPlanId}:
+    parameters:
+      - { name: budgetPlanId, in: path, required: true, schema: { type: integer } }
+    get:
+      tags: [Centros de Custo]
+      summary: Árvore de centros de custo ativos do plano
+      operationId: activeCostCentersByBudgetPlan
+      responses:
+        '200':
+          description: Árvore (apenas ativos).
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/CostCenter' } }
+
+  /cost-centers/categories:
+    get:
+      tags: [Centros de Custo]
+      summary: Listar categorias
+      operationId: listCostCenterCategories
+      responses:
+        '200':
+          description: Lista.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/CostCenterCategory' } }
+    post:
+      tags: [Centros de Custo]
+      summary: Criar categoria
+      operationId: createCostCenterCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCostCenterCategory' }
+      responses:
+        '201':
+          description: Criada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CostCenterCategory' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /cost-centers/categories/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    put:
+      tags: [Centros de Custo]
+      summary: Atualizar categoria
+      operationId: updateCostCenterCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - $ref: '#/components/schemas/CreateCostCenterCategory'
+                - type: object
+                  properties:
+                    active: { type: boolean }
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+    delete:
+      tags: [Centros de Custo]
+      summary: Remover categoria
+      operationId: deleteCostCenterCategory
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+
+  /cost-centers/categories/{id}/toggle-active:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    patch:
+      tags: [Centros de Custo]
+      summary: Ativar/inativar categoria
+      operationId: toggleCostCenterCategoryActive
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+
+  /cost-centers/categories/options:
+    get:
+      tags: [Centros de Custo]
+      summary: Options de categorias
+      operationId: costCenterCategoryOptions
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+      responses:
+        '200': { $ref: '#/components/responses/OptionsList' }
+
+  /cost-centers/categories/sub:
+    get:
+      tags: [Centros de Custo]
+      summary: Listar subcategorias
+      operationId: listCostCenterSubCategories
+      responses:
+        '200':
+          description: Lista.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/CostCenterSubCategory' } }
+    post:
+      tags: [Centros de Custo]
+      summary: Criar subcategoria
+      operationId: createCostCenterSubCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCostCenterSubCategory' }
+      responses:
+        '201':
+          description: Criada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/CostCenterSubCategory' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /cost-centers/categories/sub/{id}:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    put:
+      tags: [Centros de Custo]
+      summary: Atualizar subcategoria
+      operationId: updateCostCenterSubCategory
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCostCenterSubCategory' }
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+    delete:
+      tags: [Centros de Custo]
+      summary: Remover subcategoria
+      operationId: deleteCostCenterSubCategory
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+
+  /cost-centers/categories/sub/{id}/toggle-active:
+    parameters:
+      - $ref: '#/components/parameters/IdPath'
+    patch:
+      tags: [Centros de Custo]
+      summary: Ativar/inativar subcategoria
+      operationId: toggleCostCenterSubCategoryActive
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+
+  /cost-centers/categories/sub/options:
+    get:
+      tags: [Centros de Custo]
+      summary: Options de subcategorias
+      operationId: costCenterSubCategoryOptions
+      security:
+        - bearerAuth: []
+        - basicAuth: []
+      responses:
+        '200': { $ref: '#/components/responses/OptionsList' }
+
+  # ==========================================================================
+  #  4.5 COMPARTILHAR PLANOS ORÇAMENTÁRIOS
+  # ==========================================================================
+  /share-budget-plans:
+    post:
+      tags: [Compartilhar Planos Orçamentários]
+      summary: Compartilhar um plano por e-mail
+      operationId: shareBudgetPlan
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ShareBudgetPlan' }
+      responses:
+        '201': { $ref: '#/components/responses/CreatedNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /share-budget-plans/consolidated-result:
+    post:
+      tags: [Compartilhar Planos Orçamentários]
+      summary: Compartilhar resultado consolidado de vários planos
+      operationId: shareConsolidatedResult
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ShareConsolidatedResult' }
+      responses:
+        '201': { $ref: '#/components/responses/CreatedNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+
+  /share-budget-plans/check-credentials:
+    post:
+      tags: [Compartilhar Planos Orçamentários]
+      summary: Validar credenciais do link compartilhado
+      description: |
+        Rota pública (sem auth). ⚠️ DIVERGÊNCIA: o backend espera
+        `{ username, password }` (`ValidateShareBudgetPlanDto`), e **não**
+        `{ budgetPlanId, password }` como descrito no contrato do front.
+      operationId: checkShareCredentials
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ValidateShareCredentials' }
+      responses:
+        '200':
+          description: Credenciais válidas (eco do payload).
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ValidateShareCredentials' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ==========================================================================
+  #  5. RELATÓRIOS
+  # ==========================================================================
+  /reports/cashflow:
+    get:
+      tags: [Relatórios]
+      summary: Fluxo de caixa
+      operationId: reportCashflow
+      parameters:
+        - $ref: '#/components/parameters/ReportFilters'
+      responses:
+        '200':
+          description: Linhas de Receivables e Payables.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  Receivables: { type: array, items: { $ref: '#/components/schemas/CashflowRow' } }
+                  Payables: { type: array, items: { $ref: '#/components/schemas/CashflowRow' } }
+
+  /reports/cashflow/chart:
+    get:
+      tags: [Relatórios]
+      summary: Fluxo de caixa (dados de gráfico)
+      operationId: reportCashflowChart
+      parameters:
+        - $ref: '#/components/parameters/ReportFilters'
+      responses:
+        '200':
+          description: Linhas com `Installments_dueDate`.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  allOf:
+                    - $ref: '#/components/schemas/CashflowRow'
+                    - type: object
+                      properties:
+                        Installments_dueDate: { type: string, format: date }
+
+  /reports/position/payables:
+    get:
+      tags: [Relatórios]
+      summary: Posição de contas a pagar (árvore)
+      operationId: reportPositionPayables
+      parameters:
+        - $ref: '#/components/parameters/ReportFilters'
+      responses:
+        '200':
+          description: Árvore de posição.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PositionReport' }
+
+  /reports/position/receivables:
+    get:
+      tags: [Relatórios]
+      summary: Posição de contas a receber (árvore)
+      operationId: reportPositionReceivables
+      parameters:
+        - $ref: '#/components/parameters/ReportFilters'
+      responses:
+        '200':
+          description: Árvore de posição.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PositionReport' }
+
+  /reports/noContract:
+    get:
+      tags: [Relatórios]
+      summary: Fornecedores sem contrato
+      operationId: reportNoContract
+      parameters:
+        - $ref: '#/components/parameters/ReportFilters'
+      responses:
+        '200':
+          description: Lista.
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/NoContractRow' } }
+
+  /reports/analysis/payables:
+    get:
+      tags: [Relatórios]
+      summary: Análise de contas a pagar
+      operationId: reportAnalysisPayables
+      parameters:
+        - $ref: '#/components/parameters/ReportFilters'
+      responses:
+        '200':
+          description: Análise.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalysisReport' }
+
+  /reports/analysis/receivables:
+    get:
+      tags: [Relatórios]
+      summary: Análise de contas a receber
+      operationId: reportAnalysisReceivables
+      parameters:
+        - $ref: '#/components/parameters/ReportFilters'
+      responses:
+        '200':
+          description: Análise.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AnalysisReport' }
+
+  /reports/analysis/chart:
+    get:
+      tags: [Relatórios]
+      summary: Análise (dados de gráfico, sem query)
+      operationId: reportAnalysisChart
+      responses:
+        '200':
+          description: Lista resumida.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    name: { type: string }
+                    total: { type: number }
+
+  /reports/realized:
+    get:
+      tags: [Relatórios]
+      summary: Relatório realizado x previsto x provisionado
+      operationId: reportRealized
+      parameters:
+        - { name: programId, in: query, required: false, schema: { type: integer } }
+        - { name: budgetPlanId, in: query, required: false, schema: { type: integer } }
+        - { name: partnerStateId, in: query, required: false, schema: { type: integer } }
+        - { name: partnerMunicipalityId, in: query, required: false, schema: { type: integer } }
+        - { name: year, in: query, required: true, schema: { type: string, format: date }, description: 'Data ISO; o backend usa apenas o ano.' }
+        - { name: formatValues, in: query, required: false, schema: { type: boolean, default: false } }
+      responses:
+        '200':
+          description: Árvore expected/realized/provisioned.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/RealizedReport' }
+
+  /reports/generalReport:
+    get:
+      tags: [Relatórios]
+      summary: Relatório geral (linhas planas, colunas configuráveis)
+      operationId: reportGeneral
+      parameters:
+        - $ref: '#/components/parameters/ReportFilters'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - name: columns
+          in: query
+          style: form
+          explode: true
+          schema: { type: array, items: { $ref: '#/components/schemas/GeneralReportColumn' } }
+        - { name: reportType, in: query, required: false, schema: { $ref: '#/components/schemas/ReportType' } }
+      responses:
+        '200':
+          description: Linhas planas.
+          content:
+            application/json:
+              schema: { type: array, items: { type: object, additionalProperties: true } }
+
+  /reports/team:
+    get:
+      tags: [Relatórios]
+      summary: Equipe (colaboradores, mesma query de /collaborators)
+      operationId: reportTeam
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/Limit'
+        - $ref: '#/components/parameters/Search'
+      responses:
+        '200':
+          description: Página de colaboradores.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginatedCollaborators' }
+
+  # ---- Exports CSV ----
+  /reports/cashflow/csv:
+    get:
+      tags: [Relatórios]
+      summary: Fluxo de caixa (CSV)
+      operationId: reportCashflowCsv
+      parameters: [ { $ref: '#/components/parameters/ReportFilters' } ]
+      responses:
+        '200': { $ref: '#/components/responses/CsvBlob' }
+  /reports/position/csv:
+    get:
+      tags: [Relatórios]
+      summary: Posição (CSV)
+      operationId: reportPositionCsv
+      parameters:
+        - { $ref: '#/components/parameters/ReportFilters' }
+        - { name: type, in: query, required: true, schema: { type: string, enum: [p, r] }, description: 'p=payable, r=receivable' }
+      responses:
+        '200': { $ref: '#/components/responses/CsvBlob' }
+  /reports/noContract/csv:
+    get:
+      tags: [Relatórios]
+      summary: Sem contrato (CSV)
+      operationId: reportNoContractCsv
+      parameters: [ { $ref: '#/components/parameters/ReportFilters' } ]
+      responses:
+        '200': { $ref: '#/components/responses/CsvBlob' }
+  /reports/analysis/csv:
+    get:
+      tags: [Relatórios]
+      summary: Análise (CSV)
+      operationId: reportAnalysisCsv
+      parameters:
+        - { $ref: '#/components/parameters/ReportFilters' }
+        - { name: type, in: query, required: true, schema: { type: string, enum: [p, r] } }
+      responses:
+        '200': { $ref: '#/components/responses/CsvBlob' }
+  /reports/realized/csv:
+    get:
+      tags: [Relatórios]
+      summary: Realizado (CSV)
+      operationId: reportRealizedCsv
+      parameters:
+        - { name: year, in: query, required: true, schema: { type: string, format: date } }
+        - { name: formatValues, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/CsvBlob' }
+  /reports/general/csv:
+    get:
+      tags: [Relatórios]
+      summary: Relatório geral (CSV)
+      operationId: reportGeneralCsv
+      parameters: [ { $ref: '#/components/parameters/ReportFilters' } ]
+      responses:
+        '200': { $ref: '#/components/responses/CsvBlob' }
+
+  # ---- Exports PDF ----
+  /reports/pdf/cashflow:
+    get:
+      tags: [Relatórios]
+      summary: Fluxo de caixa (PDF)
+      operationId: reportCashflowPdf
+      parameters: [ { $ref: '#/components/parameters/ReportFilters' } ]
+      responses:
+        '200': { $ref: '#/components/responses/PdfBlob' }
+  /reports/pdf/position:
+    get:
+      tags: [Relatórios]
+      summary: Posição (PDF)
+      operationId: reportPositionPdf
+      parameters:
+        - { $ref: '#/components/parameters/ReportFilters' }
+        - { name: type, in: query, required: true, schema: { type: string, enum: [p, r] } }
+      responses:
+        '200': { $ref: '#/components/responses/PdfBlob' }
+  /reports/pdf/nocontracts:
+    get:
+      tags: [Relatórios]
+      summary: Sem contrato (PDF)
+      operationId: reportNoContractPdf
+      parameters: [ { $ref: '#/components/parameters/ReportFilters' } ]
+      responses:
+        '200': { $ref: '#/components/responses/PdfBlob' }
+  /reports/pdf/analysis:
+    get:
+      tags: [Relatórios]
+      summary: Análise (PDF)
+      operationId: reportAnalysisPdf
+      parameters:
+        - { $ref: '#/components/parameters/ReportFilters' }
+        - { name: type, in: query, required: true, schema: { type: string, enum: [p, r] } }
+      responses:
+        '200': { $ref: '#/components/responses/PdfBlob' }
+  /reports/pdf/realized:
+    get:
+      tags: [Relatórios]
+      summary: Realizado (PDF)
+      operationId: reportRealizedPdf
+      parameters:
+        - { name: year, in: query, required: true, schema: { type: string, format: date } }
+        - { name: formatValues, in: query, required: false, schema: { type: boolean } }
+      responses:
+        '200': { $ref: '#/components/responses/PdfBlob' }
+  /reports/pdf/general:
+    get:
+      tags: [Relatórios]
+      summary: Relatório geral (PDF)
+      operationId: reportGeneralPdf
+      parameters: [ { $ref: '#/components/parameters/ReportFilters' } ]
+      responses:
+        '200': { $ref: '#/components/responses/PdfBlob' }
+
+  # ==========================================================================
+  #  6. ESTATÍSTICAS
+  # ==========================================================================
+  /statistics/dashboard:
+    get:
+      tags: [Estatísticas]
+      summary: Estatísticas do dashboard
+      operationId: dashboardStatistics
+      responses:
+        '200':
+          description: Estatísticas consolidadas.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/DashboardStatistics' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  # ==========================================================================
+  #  7. ARQUIVOS (transversal)
+  # ==========================================================================
+  /files:
+    get:
+      tags: [Arquivos]
+      summary: Download de arquivo por URL
+      operationId: downloadFile
+      parameters:
+        - { name: fileUrl, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: Conteúdo binário do arquivo.
+          headers:
+            Content-Disposition:
+              schema: { type: string }
+              description: 'attachment; filename="..."'
+          content:
+            application/octet-stream: { schema: { type: string, format: binary } }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+  /files/{path}:
+    parameters:
+      - name: path
+        in: path
+        required: true
+        schema: { type: string, enum: [payable, receivable, contracts] }
+        description: |
+          Destino do anexo. `payable`/`receivable` → financeiro; `contracts` → contratos.
+          (O backend expõe rotas fixas `/files/payable`, `/files/receivable`, `/files/contracts`;
+          aqui são unificadas como parâmetro de caminho.)
+    post:
+      tags: [Arquivos]
+      summary: Anexar arquivos (multipart, múltiplos)
+      operationId: createFiles
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/CreateFilesMultipart' }
+      responses:
+        '201': { $ref: '#/components/responses/CreatedNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+    put:
+      tags: [Arquivos]
+      summary: Atualizar arquivos (multipart, múltiplos)
+      operationId: updateFiles
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/UpdateFilesMultipart' }
+      responses:
+        '200': { $ref: '#/components/responses/OkNoBody' }
+        '400': { $ref: '#/components/responses/BadRequest' }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+
+# ============================================================================
+#  COMPONENTS
+# ============================================================================
+components:
+
+  # --------------------------------------------------------------------------
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: 'JWT do usuário (Authorization: Bearer <jwt>).'
+    basicAuth:
+      type: http
+      scheme: basic
+      description: 'Basic base64(shareUsername:sharePassword) para endpoints */shared.'
+
+  # --------------------------------------------------------------------------
+  parameters:
+    IdPath:
+      name: id
+      in: path
+      required: true
+      schema: { type: integer, format: int64, minimum: 1 }
+      description: ID numérico do recurso (validado por ParseNumericIdPipe).
+    Page:
+      name: page
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, default: 1 }
+      description: Página (1-indexed).
+    Limit:
+      name: limit
+      in: query
+      required: false
+      schema: { type: integer, minimum: 1, default: 5 }
+      description: Itens por página.
+    Search:
+      name: search
+      in: query
+      required: false
+      schema: { type: string, nullable: true }
+    Active:
+      name: active
+      in: query
+      required: false
+      schema: { type: integer, enum: [0, 1], nullable: true }
+      description: 0 = inativo, 1 = ativo.
+    Order:
+      name: order
+      in: query
+      required: false
+      schema: { type: string, enum: [ASC, DESC], default: ASC }
+    ReportFilters:
+      name: reportFilters
+      in: query
+      required: false
+      description: |
+        Filtros achatados (`flattenParams`) compartilhados pelos relatórios. Cada propriedade
+        de `ReportFilters` vira um query param plano; `dueBetween` é enviado como
+        `dueBetween.start` / `dueBetween.end` (datas ISO). Valores null/undefined são removidos.
+      style: deepObject
+      explode: true
+      schema: { $ref: '#/components/schemas/ReportFilters' }
+
+  # --------------------------------------------------------------------------
+  responses:
+    OkNoBody:
+      description: Operação realizada com sucesso (sem corpo de retorno).
+    CreatedNoBody:
+      description: Recurso criado (o backend retorna void; o front ignora o corpo).
+    OptionsList:
+      description: Lista de opções para dropdown.
+      content:
+        application/json:
+          schema:
+            type: array
+            items: { $ref: '#/components/schemas/Option' }
+    CsvBlob:
+      description: Arquivo CSV (blob binário). Nome no header Content-Disposition.
+      headers:
+        Content-Disposition:
+          schema: { type: string }
+      content:
+        text/csv:
+          schema: { type: string, format: binary }
+    PdfBlob:
+      description: Arquivo PDF (blob binário).
+      headers:
+        Content-Disposition:
+          schema: { type: string }
+      content:
+        application/pdf:
+          schema: { type: string, format: binary }
+    BadRequest:
+      description: Requisição inválida (validação class-validator).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    Unauthorized:
+      description: |
+        Não autenticado. Em `{ message: "Unauthorized" }` com 401 o front faz logout automático.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+    NotFound:
+      description: Recurso não encontrado.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorResponse' }
+
+  # --------------------------------------------------------------------------
+  schemas:
+
+    # ---------- Envelopes / utilitários ----------
+    PaginationMeta:
+      type: object
+      description: Metadados de paginação (nestjs-typeorm-paginate).
+      properties:
+        itemCount: { type: integer, description: Itens na página atual. }
+        totalItems: { type: integer, description: Total na base. }
+        itemsPerPage: { type: integer, description: '= limit.' }
+        totalPages: { type: integer }
+        currentPage: { type: integer, description: 1-indexed. }
+      required: [itemCount, totalItems, itemsPerPage, totalPages, currentPage]
+    PaginationLinks:
+      type: object
+      properties:
+        first: { type: string }
+        previous: { type: string }
+        next: { type: string }
+        last: { type: string }
+    PaginatedEnvelope:
+      type: object
+      properties:
+        items: { type: array, items: { type: object } }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+        links: { $ref: '#/components/schemas/PaginationLinks' }
+      required: [items, meta]
+    Option:
+      type: object
+      properties:
+        id: { oneOf: [ { type: integer }, { type: string } ] }
+        parentId: { type: integer }
+        name: { type: string }
+      required: [id, name]
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          oneOf:
+            - { type: string }
+            - { type: array, items: { type: string } }
+        statusCode: { type: integer }
+        error: { type: string }
+      required: [message]
+    PixInfo:
+      type: object
+      properties:
+        key_type: { $ref: '#/components/schemas/PixTypes' }
+        key: { type: string, nullable: true }
+    BancaryInfo:
+      type: object
+      properties:
+        bank: { type: string, nullable: true }
+        agency: { type: string, nullable: true, pattern: '^(\d{4}-\d{1})?$', description: 'Formato 0000-0.' }
+        accountNumber: { type: string, nullable: true }
+        dv: { type: string, nullable: true, maxLength: 1 }
+
+    # ---------- Enums ----------
+    GenderIdentity:
+      type: string
+      enum: [PREFIRO_NAO_RESPONDER, HOMEM_CIS, HOMEM_TRANS, MULHER_CIS, MULHER_TRANS, TRAVESTI, NAO_BINARIO, OUTRO]
+    Race:
+      type: string
+      enum: [AMARELO, BRANCO, PARDO, INDIGENA, PRETO, PREFIRO_NAO_RESPONDER]
+    Education:
+      type: string
+      enum: [EDUCACAO_INFANTIL, ENSINO_FUNDAMENTAL, ENSINO_MEDIO, ENSINO_SUPERIOR, POS_GRADUACAO, MESTRADO, DOUTORADO]
+    OccupationArea:
+      type: string
+      enum: [PARC, DDI, DCE, EPV]
+      description: '⚠️ Enum real do backend (não string livre).'
+    EmploymentRelationship:
+      type: string
+      enum: [CLT, PJ]
+      description: '⚠️ Enum real do backend (apenas CLT/PJ).'
+    RegistrationStatus:
+      type: string
+      enum: [PRE_CADASTRO, CADASTRO_COMPLETO]
+      description: '⚠️ Valores reais do backend.'
+    FoodCategory:
+      type: string
+      enum: [ONIVORO, VEGANO, VEGETARIANO, PESCETARIANO, OUTRO, PREFIRO_NAO_RESPONDER]
+    DisableBy:
+      type: string
+      enum: [DESLIGAMENTO_ABC, FALECIMENTO, TEMPO_CONTRATO_FINALIZADO, SOLICITACAO_RESCISAO_CONTRATUAL]
+    CategorySupplier:
+      type: string
+      enum:
+        [AGUA, ALIMENTACAO, AR_CONDICIONADO, ASSESSORIA, AUDITORIA_EXTERNA, BUFFET,
+         COMPRAS_E_SUPRIMENTOS, CONSULTORIA, CONTABEIS, DEDETIZACAO, ELETRICO,
+         EMISSAO_DE_PASSAGEM, ENERGIA, ENTREGA, ESGOTO, GRAFICA, HIDRAULICO,
+         INFORMATICA, INTERNET, JURIDICO, LAVAGEM, LIMPEZA, LOCATICIOS, MANUTENCAO,
+         MARCENARIA, MATERIAL_DE_CONSUMO, MATERIAL_DE_INFORMATICA, MATERIAL_DE_LIMPEZA,
+         MATERIAL_EXPEDIENTE, OBRAS, ONGANIZACAO_DE_EVENTOS, PINTURA, PRODUCAO,
+         RESERVA_DE_HOSPEDAGEM, SEGURANCA, SERVICOS_ADMINISTRATIVOS, TRASPORTE,
+         VIDRACARIA, BANCO]
+    PixTypes:
+      type: string
+      enum: [CPF, CNPJ, EMAIL, CELLPHONE, ALEATORY_KEY]
+      nullable: true
+    BudgetPlanStatus:
+      type: string
+      enum: [APROVADO, EM_CALIBRACAO, RASCUNHO]
+    CostCenterType:
+      type: string
+      enum: ['A PAGAR', 'A RECEBER']
+    SubCategoryType:
+      type: string
+      enum: [INSTITUCIONAL, REDE]
+    SubCategoryReleaseType:
+      type: string
+      enum: [IPCA, CAED, DESPESAS_PESSOAIS, DESPESAS_LOGISTICAS]
+    ReportType:
+      type: string
+      enum: [RECEIVABLE, PAYABLE]
+    ReportStatus:
+      type: string
+      description: União de PayableStatus + ReceivableStatus usada nos filtros de relatório.
+      enum: ['PENDENTE', 'EM APROVAÇÃO', 'LANÇADO', 'NÃO EFETIVADO', 'EFETIVADO', 'ATRASADO', 'CONCLUIDO', 'APROVADO', 'RECEBIDO']
+    GeneralReportColumn:
+      type: string
+      enum: [NUMERO_CONTRATO, TIPO, CODE, VENCIMENTO, PARCELA, APONTAMENTO, FORNECEDOR, FINANCIADOR, COLABORADOR, CENTRO_CUSTO, CATEGORIA, SUB_CATEGORIA, PIX, BANCARY]
+
+    # ---------- Colaboradores ----------
+    Collaborator:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string, format: email }
+        cpf: { type: string, minLength: 11, maxLength: 11 }
+        rg: { type: string, nullable: true }
+        occupationArea: { $ref: '#/components/schemas/OccupationArea' }
+        role: { type: string, nullable: true }
+        startOfContract: { type: string, format: date-time }
+        dateOfBirth: { type: string, format: date-time, nullable: true }
+        employmentRelationship: { $ref: '#/components/schemas/EmploymentRelationship' }
+        genderIdentity: { $ref: '#/components/schemas/GenderIdentity' }
+        race: { $ref: '#/components/schemas/Race' }
+        education: { $ref: '#/components/schemas/Education' }
+        foodCategory: { $ref: '#/components/schemas/FoodCategory' }
+        foodCategoryDescription: { type: string, nullable: true }
+        disableBy: { $ref: '#/components/schemas/DisableBy' }
+        status: { $ref: '#/components/schemas/RegistrationStatus' }
+        biography: { type: string, nullable: true }
+        completeAddress: { type: string, nullable: true }
+        allergies: { type: string, nullable: true }
+        telephone: { type: string, nullable: true }
+        emergencyContactName: { type: string, nullable: true }
+        emergencyContactTelephone: { type: string, nullable: true }
+        experienceInThePublicSector: { type: boolean, nullable: true }
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, name, email, cpf, occupationArea, startOfContract, employmentRelationship, status, active]
+    CreateCollaborator:
+      type: object
+      required: [name, email, cpf, occupationArea, role, startOfContract, employmentRelationship]
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        cpf: { type: string, minLength: 11, maxLength: 11, description: 'Apenas dígitos (sanitizado).' }
+        occupationArea: { $ref: '#/components/schemas/OccupationArea' }
+        role: { type: string }
+        startOfContract: { type: string, format: date, description: ISO date. }
+        employmentRelationship: { $ref: '#/components/schemas/EmploymentRelationship' }
+    UpdateCollaborator:
+      allOf:
+        - $ref: '#/components/schemas/CreateCollaborator'
+        - type: object
+          description: Campos cadastrais completos (mesmos do create, todos editáveis).
+    CompleteRegistrationCollaborator:
+      type: object
+      description: Payload de auto-cadastro (campos pessoais completos).
+      additionalProperties: true
+      properties:
+        rg: { type: string }
+        dateOfBirth: { type: string, format: date }
+        genderIdentity: { $ref: '#/components/schemas/GenderIdentity' }
+        race: { $ref: '#/components/schemas/Race' }
+        education: { $ref: '#/components/schemas/Education' }
+        foodCategory: { $ref: '#/components/schemas/FoodCategory' }
+        completeAddress: { type: string }
+        telephone: { type: string }
+        emergencyContactName: { type: string }
+        emergencyContactTelephone: { type: string }
+        allergies: { type: string }
+        biography: { type: string }
+        experienceInThePublicSector: { type: boolean }
+    PaginatedCollaborators:
+      allOf:
+        - $ref: '#/components/schemas/PaginatedEnvelope'
+        - type: object
+          properties:
+            items: { type: array, items: { $ref: '#/components/schemas/Collaborator' } }
+    ImportResult:
+      type: object
+      properties:
+        success: { type: boolean }
+        imported: { type: integer }
+        message: { type: string }
+        isPartialImport: { type: boolean }
+        errors:
+          type: array
+          items:
+            type: object
+            properties:
+              line: { type: integer }
+              message: { type: string }
+              rowData: { type: object, additionalProperties: true }
+
+    # ---------- Financiadores ----------
+    Financier:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        corporateName: { type: string }
+        legalRepresentative: { type: string }
+        cnpj: { type: string, minLength: 14, maxLength: 14 }
+        telephone: { type: string }
+        address: { type: string }
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, name, corporateName, legalRepresentative, cnpj, telephone, address, active]
+    CreateFinancier:
+      type: object
+      required: [name, corporateName, legalRepresentative, cnpj, telephone, address]
+      properties:
+        name: { type: string }
+        corporateName: { type: string }
+        legalRepresentative: { type: string }
+        cnpj: { type: string, minLength: 14, maxLength: 14 }
+        telephone: { type: string }
+        address: { type: string }
+
+    # ---------- Fornecedores ----------
+    Supplier:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string, format: email }
+        cnpj: { type: string, minLength: 14, maxLength: 14 }
+        corporateName: { type: string }
+        fantasyName: { type: string }
+        serviceCategory: { $ref: '#/components/schemas/CategorySupplier' }
+        serviceEvaluation: { type: integer, nullable: true }
+        commentEvaluation: { type: string, nullable: true }
+        bancaryInfo: { $ref: '#/components/schemas/BancaryInfo' }
+        pixInfo: { $ref: '#/components/schemas/PixInfo' }
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, name, email, cnpj, corporateName, fantasyName, serviceCategory, active]
+    CreateSupplier:
+      type: object
+      required: [name, email, cnpj, corporateName, fantasyName, serviceCategory]
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        cnpj: { type: string, minLength: 14, maxLength: 14 }
+        corporateName: { type: string }
+        fantasyName: { type: string }
+        serviceCategory: { $ref: '#/components/schemas/CategorySupplier' }
+        serviceEvaluation: { type: integer, nullable: true }
+        commentEvaluation: { type: string, nullable: true }
+        bancaryInfo: { $ref: '#/components/schemas/BancaryInfo' }
+        pixInfo: { $ref: '#/components/schemas/PixInfo' }
+    UpdateSupplier:
+      type: object
+      description: PartialType de CreateSupplier — todos opcionais. Para (B) info de pagamento envie bancaryInfo OU pixInfo.
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        cnpj: { type: string }
+        corporateName: { type: string }
+        fantasyName: { type: string }
+        serviceCategory: { $ref: '#/components/schemas/CategorySupplier' }
+        serviceEvaluation: { type: integer, nullable: true }
+        commentEvaluation: { type: string, nullable: true }
+        bancaryInfo: { $ref: '#/components/schemas/BancaryInfo' }
+        pixInfo: { $ref: '#/components/schemas/PixInfo' }
+        updatedBy: { type: integer }
+
+    # ---------- Estados / Municípios ----------
+    PartnerState:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        abbreviation: { type: string, maxLength: 2 }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, name, abbreviation]
+    CreatePartnerState:
+      type: object
+      required: [name, abbreviation]
+      properties:
+        name: { type: string }
+        abbreviation: { type: string, maxLength: 2 }
+    PartnerMunicipality:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        uf: { type: string, maxLength: 2 }
+        cod: { type: string, description: Código IBGE. }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, name, uf, cod]
+    CreatePartnerMunicipality:
+      type: object
+      required: [name, uf, cod]
+      properties:
+        name: { type: string }
+        uf: { type: string, maxLength: 2 }
+        cod: { type: string }
+
+    # ---------- Programas ----------
+    Program:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        abbreviation: { type: string }
+        director: { type: string }
+        description: { type: string }
+        logo: { type: string, nullable: true }
+        active: { type: boolean }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, name, abbreviation, director, description, active]
+    CreateProgramMultipart:
+      type: object
+      required: [abbreviation, director, description]
+      properties:
+        name: { type: string }
+        abbreviation: { type: string }
+        director: { type: string }
+        description: { type: string }
+        file: { type: string, format: binary, description: 'Logo (.png/.jpeg/.jpg).' }
+
+    # ---------- Usuários ----------
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        email: { type: string, format: email }
+        cpf: { type: string, minLength: 11, maxLength: 11 }
+        telephone: { type: string }
+        imageUrl: { type: string, nullable: true }
+        active: { type: boolean }
+        massApprovalPermission: { type: boolean }
+        collaboratorId: { type: integer, nullable: true }
+        token: { type: string, description: 'Presente em respostas de auth; pode não vir em listagens.' }
+      required: [id, name, email, cpf, telephone]
+    CreateUserMultipart:
+      type: object
+      required: [name, email, cpf, telephone, massApprovalPermission]
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        cpf: { type: string, minLength: 11, maxLength: 11 }
+        telephone: { type: string }
+        massApprovalPermission: { type: boolean }
+        collaboratorId: { type: integer, nullable: true }
+        file: { type: string, format: binary, description: 'Avatar (.png/.jpeg/.jpg).' }
+    ChangePassword:
+      type: object
+      required: [password, currentPassword]
+      properties:
+        password: { type: string, description: Nova senha. }
+        currentPassword: { type: string }
+
+    # ---------- Planos Orçamentários ----------
+    BudgetPlan:
+      type: object
+      properties:
+        id: { type: integer }
+        year: { type: integer }
+        scenarioName: { type: string, nullable: true }
+        version: { type: number }
+        totalInCents: { type: integer, format: int64 }
+        status: { $ref: '#/components/schemas/BudgetPlanStatus' }
+        programId: { type: integer }
+        updatedById: { type: integer }
+        parentId: { type: integer, nullable: true }
+        program: { $ref: '#/components/schemas/Program' }
+        updatedBy: { $ref: '#/components/schemas/User' }
+        costCenters: { type: array, items: { $ref: '#/components/schemas/CostCenter' } }
+        budgets: { type: array, items: { $ref: '#/components/schemas/Budget' } }
+        parent: { $ref: '#/components/schemas/BudgetPlan' }
+        children: { type: array, items: { $ref: '#/components/schemas/BudgetPlan' } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, year, version, status, programId]
+    BudgetPlanListItem:
+      type: object
+      properties:
+        id: { type: integer }
+        year: { type: integer }
+        version: { type: number }
+        scenarioName: { type: string, nullable: true }
+        status: { $ref: '#/components/schemas/BudgetPlanStatus' }
+        totalInCents: { type: integer, format: int64 }
+        program: { type: object, properties: { name: { type: string } } }
+        countPartnerMunicipalities: { type: integer }
+        countPartnerStates: { type: integer }
+        updatedAt: { type: string, format: date-time }
+        updatedBy: { type: object, properties: { name: { type: string } } }
+        children: { type: array, items: { $ref: '#/components/schemas/BudgetPlanListItem' } }
+    CreateBudgetPlan:
+      type: object
+      required: [year, programId]
+      properties:
+        year: { type: integer }
+        programId: { type: integer, description: '⚠️ Obrigatório no backend.' }
+        yearForImport: { type: integer, nullable: true }
+        scenarioName: { type: string }
+    CreateScenery:
+      type: object
+      required: [name, budgetPlanId]
+      properties:
+        name: { type: string }
+        budgetPlanId: { type: integer }
+    Insight:
+      type: object
+      properties:
+        id: { type: integer }
+        year: { type: integer }
+        totalInCents: { type: integer, format: int64 }
+        differenceValueInPercentage: { type: number }
+        countPartnerMunicipalities: { type: integer }
+        countPartnerStates: { type: integer }
+        medInCentsForPartners: { type: integer, format: int64 }
+        type: { type: string }
+    ConsolidatedResult:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            costCenters:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: integer }
+                  name: { type: string }
+                  valueInCents: { type: integer, format: int64 }
+                  categories:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: integer }
+                        name: { type: string }
+                        valueInCents: { type: integer, format: int64 }
+                        months:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              month: { type: integer, minimum: 1, maximum: 12 }
+                              valueInCents: { type: integer, format: int64 }
+
+    # ---------- Orçamentos ----------
+    Budget:
+      type: object
+      properties:
+        id: { type: integer }
+        valueInCents: { type: integer, format: int64 }
+        budgetPlanId: { type: integer }
+        partnerStateId: { type: integer, nullable: true }
+        partnerMunicipalityId: { type: integer, nullable: true }
+        partnerState: { $ref: '#/components/schemas/PartnerState' }
+        partnerMunicipality: { $ref: '#/components/schemas/PartnerMunicipality' }
+        budgetResults: { type: array, items: { $ref: '#/components/schemas/BudgetResult' } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+      required: [id, budgetPlanId]
+    CreateBudget:
+      type: object
+      required: [budgetPlanId]
+      properties:
+        budgetPlanId: { type: integer }
+        partnerStateId: { type: integer, nullable: true }
+        partnerMunicipalityId: { type: integer, nullable: true }
+    BudgetResult:
+      type: object
+      properties:
+        id: { type: integer }
+        month: { type: integer, minimum: 1, maximum: 12 }
+        valueInCents: { type: integer, format: int64 }
+        budgetId: { type: integer }
+        costCenterSubCategoryId: { type: integer }
+        costCenterCategoryId: { type: integer }
+        data: { type: object, additionalProperties: true, description: 'Memória de cálculo bruta (JSON) do lançamento.' }
+
+    # ---------- Resultados (memória de cálculo) ----------
+    BudgetResultRootBase:
+      type: object
+      required: [budgetId, costCenterSubCategoryId, months]
+      properties:
+        budgetId: { type: integer }
+        costCenterSubCategoryId: { type: integer }
+    CreateBudgetResultIPCA:
+      allOf:
+        - $ref: '#/components/schemas/BudgetResultRootBase'
+        - type: object
+          properties:
+            months:
+              type: array
+              minItems: 1
+              maxItems: 12
+              items:
+                type: object
+                required: [month, baseValueInCents, ipca]
+                properties:
+                  month: { type: integer, minimum: 1, maximum: 12 }
+                  baseValueInCents: { type: integer, format: int64 }
+                  ipca: { type: number }
+                  justification: { type: string, nullable: true }
+    CreateBudgetResultCAED:
+      allOf:
+        - $ref: '#/components/schemas/BudgetResultRootBase'
+        - type: object
+          properties:
+            months:
+              type: array
+              minItems: 1
+              maxItems: 12
+              items:
+                type: object
+                required: [month, baseValueInCents, numberOfEnrollments]
+                properties:
+                  month: { type: integer, minimum: 1, maximum: 12 }
+                  baseValueInCents: { type: integer, format: int64 }
+                  numberOfEnrollments: { type: integer }
+    CreateBudgetResultPersonal:
+      allOf:
+        - $ref: '#/components/schemas/BudgetResultRootBase'
+        - type: object
+          properties:
+            months:
+              type: array
+              minItems: 1
+              maxItems: 12
+              items:
+                type: object
+                required: [month, education, employmentRelationship]
+                properties:
+                  month: { type: integer, minimum: 1, maximum: 12 }
+                  education: { $ref: '#/components/schemas/Education' }
+                  employmentRelationship: { $ref: '#/components/schemas/EmploymentRelationship' }
+                  numberOfFinancialDirectors: { type: number }
+                  salaryInCents: { type: integer, format: int64 }
+                  salaryAdjustment: { type: number }
+                  inssEmployer: { type: number }
+                  inss: { type: number }
+                  fgtsCharges: { type: number }
+                  pisCharges: { type: number }
+                  transportationVouchersInCents: { type: integer, format: int64 }
+                  foodVoucherInCents: { type: integer, format: int64 }
+                  healthInsuranceInCents: { type: integer, format: int64 }
+                  lifeInsuranceInCents: { type: integer, format: int64 }
+                  holidaysAndChargesInCents: { type: integer, format: int64 }
+                  allowanceInCents: { type: integer, format: int64 }
+                  thirteenthInCents: { type: integer, format: int64 }
+                  fgtsInCents: { type: integer, format: int64 }
+    CreateBudgetResultLogistics:
+      allOf:
+        - $ref: '#/components/schemas/BudgetResultRootBase'
+        - type: object
+          properties:
+            months:
+              type: array
+              minItems: 1
+              maxItems: 12
+              items:
+                type: object
+                required: [month]
+                properties:
+                  month: { type: integer, minimum: 1, maximum: 12 }
+                  accommodationInCents: { type: integer, format: int64 }
+                  foodInCents: { type: integer, format: int64 }
+                  transportInCents: { type: integer, format: int64 }
+                  carAndFuelInCents: { type: integer, format: int64 }
+                  airfareInCents: { type: integer, format: int64 }
+                  numberOfPeople: { type: number }
+                  dailyAccommodation: { type: number }
+                  dailyFood: { type: number }
+                  dailyTransport: { type: number }
+                  dailyCarAndFuel: { type: number }
+                  totalTrips: { type: number }
+
+    # ---------- Centros de custo ----------
+    CostCenter:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        type: { $ref: '#/components/schemas/CostCenterType' }
+        active: { type: boolean }
+        budgetPlanId: { type: integer }
+        categories: { type: array, items: { $ref: '#/components/schemas/CostCenterCategory' } }
+      required: [id, name, type, budgetPlanId]
+    CreateCostCenter:
+      type: object
+      required: [name, type, budgetPlanId]
+      properties:
+        name: { type: string }
+        type: { $ref: '#/components/schemas/CostCenterType' }
+        budgetPlanId: { type: integer }
+    CostCenterCategory:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        costCenterId: { type: integer }
+        active: { type: boolean }
+        subCategories: { type: array, items: { $ref: '#/components/schemas/CostCenterSubCategory' } }
+      required: [id, name, costCenterId, active]
+    CreateCostCenterCategory:
+      type: object
+      required: [name, costCenterId]
+      properties:
+        name: { type: string }
+        costCenterId: { type: integer }
+        subCategories:
+          type: array
+          items: { $ref: '#/components/schemas/CreateCostCenterSubCategory' }
+    CostCenterSubCategory:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        type: { $ref: '#/components/schemas/SubCategoryType' }
+        releaseType: { $ref: '#/components/schemas/SubCategoryReleaseType' }
+        active: { type: boolean }
+        costCenterCategoryId: { type: integer }
+      required: [id, name, type, releaseType, costCenterCategoryId]
+    CreateCostCenterSubCategory:
+      type: object
+      required: [name, type, releaseType, costCenterCategoryId]
+      properties:
+        name: { type: string }
+        type: { $ref: '#/components/schemas/SubCategoryType' }
+        releaseType: { $ref: '#/components/schemas/SubCategoryReleaseType' }
+        costCenterCategoryId: { type: integer }
+
+    # ---------- Compartilhamento ----------
+    ShareBudgetPlan:
+      type: object
+      required: [budgetPlanId, emails]
+      properties:
+        budgetPlanId: { type: integer }
+        emails: { type: array, minItems: 1, items: { type: string, format: email } }
+    ShareConsolidatedResult:
+      type: object
+      required: [budgetPlanIds, emails]
+      properties:
+        budgetPlanIds: { type: array, minItems: 1, items: { type: integer } }
+        emails: { type: array, minItems: 1, items: { type: string, format: email } }
+    ValidateShareCredentials:
+      type: object
+      required: [username, password]
+      properties:
+        username: { type: string }
+        password: { type: string }
+
+    # ---------- Relatórios ----------
+    DueBetween:
+      type: object
+      properties:
+        start: { type: string, format: date }
+        end: { type: string, format: date }
+    ReportFilters:
+      type: object
+      description: |
+        Base de filtros de relatório. Enviado achatado: `dueBetween.start`, `dueBetween.end`, etc.
+      properties:
+        page: { type: integer }
+        limit: { type: integer }
+        search: { type: string, nullable: true }
+        active: { type: integer, enum: [0, 1], nullable: true }
+        order: { type: string, enum: [ASC, DESC] }
+        budgetPlanId: { type: integer, nullable: true }
+        dueBetween: { $ref: '#/components/schemas/DueBetween' }
+        accountId: { type: integer, nullable: true }
+        costCenterId: { type: integer, nullable: true }
+        categoryId: { type: integer, nullable: true }
+        subCategoryId: { type: integer, nullable: true }
+        programId: { type: integer, nullable: true }
+        entityId: { type: integer, nullable: true }
+        status: { $ref: '#/components/schemas/ReportStatus' }
+    CashflowRow:
+      type: object
+      properties:
+        Category_id: { type: integer }
+        Category_name: { type: string }
+        SubCategory_id: { type: integer }
+        SubCategory_name: { type: string }
+        REALIZED: { type: number }
+        EXPECTED: { type: number }
+    PositionReport:
+      type: object
+      properties:
+        itens:
+          type: array
+          items:
+            type: object
+            properties:
+              costCenter:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    category: { type: array, items: { type: object, additionalProperties: true } }
+              totalPendente: { type: number }
+              totalPago: { type: number }
+              totalAtrasado: { type: number }
+    NoContractRow:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        total: { type: number }
+        budgetPlan:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              name: { type: string }
+              total: { type: number }
+    AnalysisReport:
+      type: object
+      properties:
+        totalValueOfPeriod: { type: number }
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              name: { type: string }
+              total: { type: number }
+              itens:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    monthYear: { type: string }
+                    total: { type: number }
+              CostCenter: { type: array, items: { type: object, additionalProperties: true } }
+    RealizedReport:
+      type: object
+      properties:
+        totalExpected: { type: number }
+        totalRealized: { type: number }
+        totalProvisioned: { type: number }
+        costCenters:
+          type: array
+          items:
+            type: object
+            properties:
+              id: { type: integer }
+              name: { type: string }
+              budgetPlanId: { type: integer }
+              totalExpected: { type: number }
+              totalRealized: { type: number }
+              totalProvisioned: { type: number }
+              categories:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: { type: integer }
+                    name: { type: string }
+                    totalExpected: { type: number }
+                    totalRealized: { type: number }
+                    totalProvisioned: { type: number }
+                    months:
+                      type: array
+                      items: { $ref: '#/components/schemas/RealizedMonth' }
+                    subCategories:
+                      type: array
+                      items:
+                        type: object
+                        properties:
+                          id: { type: integer }
+                          name: { type: string }
+                          totalExpected: { type: number }
+                          totalRealized: { type: number }
+                          totalProvisioned: { type: number }
+                          months:
+                            type: array
+                            items: { $ref: '#/components/schemas/RealizedMonth' }
+    RealizedMonth:
+      type: object
+      properties:
+        month: { type: integer, minimum: 1, maximum: 12 }
+        expected: { type: number }
+        realized: { type: number }
+        provisioned: { type: number }
+
+    # ---------- Estatísticas ----------
+    DashboardStatistics:
+      type: object
+      properties:
+        totalExpenses: { type: number }
+        expensesVariation: { type: string }
+        expensesVariationSignal: { type: string, enum: ['+', '-'] }
+        totalRevenue: { type: number }
+        revenueVariation: { type: string }
+        revenueVariationSignal: { type: string, enum: ['+', '-'] }
+        nameTopFinancier: { type: string }
+        totalTopFinanciers: { type: string }
+        topFinanciersVariation: { type: string }
+        topFinanciersVariationSignal: { type: string, enum: ['+', '-'] }
+        nameTopCostCenter: { type: string }
+        totalTopCostCentersExpenses: { type: number }
+        topCostCentersVariation: { type: string }
+        topCostCentersVariationExpensesSignal: { type: string, enum: ['+', '-'] }
+        barChartCostCenterPayment:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              percentage: { type: number }
+        noContractSuppliers:
+          type: array
+          items: { $ref: '#/components/schemas/NoContractRow' }
+        lastPayments:
+          type: array
+          items:
+            type: object
+            properties:
+              name: { type: string }
+              dueDate: { type: string }
+              backAccount: { type: string }
+              value: { type: number }
+        chartRealized:
+          type: array
+          items:
+            type: object
+            properties:
+              month: { type: string }
+              expected: { type: number }
+              realized: { type: number }
+
+    # ---------- Arquivos ----------
+    CreateFilesMultipart:
+      type: object
+      required: [files]
+      properties:
+        files:
+          type: array
+          items: { type: string, format: binary }
+        payableId: { type: integer, nullable: true }
+        receivableId: { type: integer, nullable: true }
+        contractId: { type: integer, nullable: true }
+        userId: { type: integer, nullable: true }
+    UpdateFilesMultipart:
+      allOf:
+        - $ref: '#/components/schemas/CreateFilesMultipart'
+        - type: object
+          properties:
+            currentFiles:
+              type: array
+              description: 'Itens já existentes (cada um JSON.stringify de { id, fileUrl }).'
+              items:
+                type: string

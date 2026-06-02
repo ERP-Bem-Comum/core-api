@@ -116,6 +116,9 @@ Um **ADR (Architecture Decision Record)** é um documento curto que captura uma 
 | [0026](./0026-mysql-read-write-split-connection.md) | Read/Write Split de Conexão MySQL (writer/reader pools — Master-Slave ready) | Accepted | 2026-05-27 |
 | [0027](./0027-zod-openapi-contract-first-http-edge.md) | Zod + zod-openapi como contract-first da borda HTTP (validação de I/O + OpenAPI 3.1.1) | Accepted | 2026-05-27 |
 | [0028](./0028-http-edge-shell-location.md) | Localização do shell HTTP de borda (`src/shared/http/`) e do composition root (`src/server.ts`) — verticalidade por feature | Accepted | 2026-05-28 |
+| [0029](./0029-pnpm-11-supply-chain-defaults.md) | pnpm 11.x com defaults de supply-chain (supersedes 0012) | Accepted | 2026-05-30 |
+| [0030](./0030-valkey-shared-store-deferred.md) | Store compartilhado (Valkey via ioredis) — adiado até multi-instância | **Proposed** | 2026-05-30 |
+| [0031](./0031-partners-registry-module.md) | Módulo `partners` — fronteira de Cadastros/Counterparties (supplier, financier, collaborator) migrada do legado | Accepted | 2026-06-01 |
 
 ---
 

@@ -10,21 +10,27 @@ dist/
 coverage/
 .tsbuildinfo
 
+# Dados brutos temporários (ex.: dump IBGE baixado por scripts/data/fetch-*)
+.tmp/
+
 # Configs locais de ferramentas auxiliares (Gemini CLI, MCP, etc — específicas da máquina)
 .gemini/
 
 # Claude Code settings locais — permissions allowlist específica da máquina
 # (versão versionada do projeto é .claude/settings.json se existir)
 .claude/settings.local.json
+.agents/settings.local.json
 
 # Claude Code worktrees — sessões paralelas isoladas via `claude --worktree`
 # Conteúdo gerado automaticamente; doc: handbook/reference/claude-code/worktrees.md
 # Lista de arquivos a copiar para cada worktree novo: .worktreeinclude (versionado)
 .claude/worktrees/
+.agents/worktrees/
 
 # Memória local de sub-agentes — notas geradas por agents durante a sessão
 # (efêmero, específico da máquina; não é fonte de verdade do projeto)
 .claude/agent-memory/
+.agents/agent-memory/
 
 # Guidelines locais — material de referência com copyright/restrição de terceiros
 # (PDFs do Bradesco, guias internos não-distribuíveis). Visível para IAs CLI via

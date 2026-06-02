@@ -30,7 +30,8 @@
     "tests/**/*",
     "scripts/**/*",
     "drizzle.config.ts",
-    "drizzle.config.auth.ts"
+    "drizzle.config.auth.ts",
+    "drizzle.config.partners.ts"
   ],
   "exclude": ["node_modules", "dist"]
 }
