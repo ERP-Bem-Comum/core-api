@@ -16,7 +16,8 @@ ETL one-shot legado → core-api (módulo `partners`), fatiado em 5 slices. Bran
 | pré | `PARTNERS-DISABLE-REASON-LEGACY-MARKER` (XS) | ✅ closed-green · commit `8d46e20` |
 | 1 | `PARTNERS-ETL-CORE` (M) | ✅ closed-green · commit `7c36509` |
 | 2 | `PARTNERS-ETL-READER` (M) | ✅ closed-green · commit `5389615` · integração verificada com Docker |
-| 3 | **`PARTNERS-ETL-WRITER`** (M) | ⬜ **PRÓXIMO** |
+| 3a | **`AUTH-ETL-USER-PROVISIONING`** (M) | ✅ **closed-green** (2026-06-02) — auth: `legacy_id` em `auth_user` + port `buildAuthEtlPort` na public-api. W0→W3 verdes; integração 32/32 no home (:3307). NÃO commitado ainda. |
+| 3b | **`PARTNERS-ETL-WRITER`** (M) | ⬜ **PRÓXIMO** — writer partners + orquestrador, consome `buildAuthEtlPort` do auth (ver §9) |
 | 4 | `PARTNERS-ETL-RESET-TOKENS` (P4a, S) | ⬜ |
 | 5 | `PARTNERS-ETL-RESET-DISPATCH` (P4b, S) | ⬜ |
 
@@ -119,3 +120,58 @@ Escopo proposto (`PARTNERS-ETL-WRITER`, M). Abrir ticket com `pnpm run pipeline:
 - **Docker Desktop ligado** nesta sessão (para a verificação do READER). Pode estar rodando ainda (~2 GB RAM).
 - Working tree limpo (tudo commitado). 3 commits ahead de `origin/dev` (não pushados).
 - Container efêmero `etl-legacy-mysql` foi removido (teardown). Archive de teste em `scripts/etl/archive/` (gitignored).
+
+---
+
+## 8. Decisões da sessão 2026-06-02 (design do WRITER) — D14–D17 + decomposição
+
+Investigação read-only (4 Explore + `security-backend-expert` + `mysql-database-expert`) consolidou o design do WRITER e expôs trabalho de produção no módulo `auth`. O dono decidiu cada ponto via AskUserQuestion. Prior art citado: Django *unusable password*, Kimball *audit dimension* / Data Vault `record_source`.
+
+- **D14 — Fronteira auth (cross-módulo):** a ETL **não** acessa os repos internos do auth direto. Decisão do dono: **estender a `public-api` do auth** com um port dedicado de provisionamento ETL. (A `public-api/http.ts` atual só expõe plumbing HTTP — não serve.)
+- **D15 — Role para `mass-approve`:** **Role compartilhado** `etl:mass-approver` (exatamente **1** permission: `contract:mass-approve`), atribuído só aos users com `massApprove=true`; users sem a flag nascem **sem role** (fail-closed, correto). Idempotente por `auth_role.name` UNIQUE (SELECT-by-name → reuse; capturar `ER_DUP_ENTRY` como already-exists). Recomendação do `security-backend-expert` (least-privilege, revogação atômica, auditabilidade O(1), evita role explosion). Invariante: role com `permissions.length === 1`.
+- **D16 — User sem senha:** **hash argon2 REAL de um segredo random descartado** (`PasswordHasher.hash(randomBytes)`, segredo nunca logado/persistido). `authenticateUser` roda o `verify` normal → falha sempre → timing equalizado **naturalmente**, **zero mudança no domínio User / no fluxo de login**. (Alternativa Django `'!'+random` rejeitada: exigiria mexer no caminho crítico de auth.) Login só após reset (P4a, D6).
+- **D17 — Proveniência:** `legacy_id INT NULL UNIQUE` em **`auth_user`** (simetria com `par_*`; dá correlação ao ID legado + idempotência + proveniência). **Não** marcar no `password_hash` (veredito formal do mysql-expert: column overloading, quebra auditoria). **Não** auditar via JOIN `auth_user × par_user_profiles` (viola ADR-0014). Adição via `ALGORITHM=INSTANT` + índice `INPLACE/LOCK=NONE`.
+
+### Decomposição do WRITER (isolamento de módulo — anti-padrão #4)
+
+O WRITER original (M) virou trabalho em `auth_*` **e** `par_*`/scripts. Separado em:
+
+- **3a · `AUTH-ETL-USER-PROVISIONING`** (M, módulo `auth`): coluna `auth_user.legacy_id` + migration; port na `public-api` do auth que provisiona user legado — cria `auth.User` com hash argon2 de random + `legacy_id`, **idempotente skip-by-legacy_id** (NUNCA UPDATE — re-run não pode sobrescrever senha já resetada), cria/reusa Role `etl:mass-approver` e o atribui quando `massApprove`. Inclui gate de integração auth (`MYSQL_INTEGRATION=1`, ver [[project-test-integration-auth-gap]] — risco de falso-verde no W3).
+- **3b · `PARTNERS-ETL-WRITER`** (M, `partners`/`scripts`): writer de suppliers/financiers/collaborators/user_profiles via repos Drizzle + orquestrador `scripts/etl/` (`--dry-run`, `--dump`) + quarentena dupla (D12) + reconciliação (read = migrated + quarantined + alreadyExists). Consome o port do auth (3a) para os users.
+
+**Ordem:** 3a antes de 3b (3b depende do port). Uma sessão por módulo.
+
+### Achado lateral (registrar/escalar — política de regressão zero)
+
+`src/modules/auth/adapters/persistence/mappers/user.mapper.ts:152` faz `rawHash = userRow.passwordHash ?? ''` → `PasswordHash.fromString('')` retorna `err('password-hash-empty')`. **Bug latente** para users OIDC reais com `password_hash = NULL` no banco (não introduzido pela ETL). Não bloqueia 3a/3b (provisionamos hash não-vazio), mas deve virar ticket próprio no auth.
+
+---
+
+## 9. API do auth para o 3b (entregue por AUTH-ETL-USER-PROVISIONING)
+
+O slice 3b (`PARTNERS-ETL-WRITER`) consome o auth EXCLUSIVAMENTE por:
+
+```ts
+import { buildAuthEtlPort } from '#src/modules/auth/public-api/etl.ts';
+// tipos tambem exportados de la: ProvisionLegacyUserInput/Output/Error
+
+const portR = await buildAuthEtlPort({ connectionString }); // Result<AuthEtlPort, AuthMysqlDriverError>; aplica migrations
+if (!portR.ok) { /* quarentena/abort */ }
+const { provisionLegacyUser, close } = portR.value;
+
+// Por usuario legado (apos resolver collaboratorRef etc. no 3b):
+const r = await provisionLegacyUser({
+  legacyId,                 // number — users.id do legado
+  email,                    // Email VO (parsear via #src/modules/auth/domain/identity/email.ts)
+  massApprove,              // boolean — flag massApprovalPermission do legado
+});
+// r: Result<{ userRef: UserId; outcome: 'created' | 'already-exists' }, ProvisionLegacyUserError>
+// userRef -> usar como UserProfile.userRef no par_user_profiles (3b).
+
+await close(); // ao fim do lote
+```
+
+- **Idempotente:** re-run com mesmo `legacyId` → `already-exists` + mesmo `userRef`, sem sobrescrever (seguro re-rodar a ETL inteira).
+- **Ordem no 3b:** suppliers → financiers → collaborators → **users**. Para cada user: `provisionLegacyUser(...)` → pega `userRef` → cria `UserProfile.rehydrate({ userRef, name, cpf, telephone, avatarUrl, collaboratorRef })` → `userProfileRepo.save`. O `collaboratorRef` vem do map `legacyCollaboratorId → CollaboratorId` montado ao migrar collaborators.
+- **Senha/reset:** o user nasce sem senha utilizável; o token de reset é o slice 4 (P4a), não o 3b.
+- O 3b abre DOIS handles na mesma connection-string: este (auth) + `openPartnersMysql` (par_*). Mesmo DB `core`, prefixos isolados.

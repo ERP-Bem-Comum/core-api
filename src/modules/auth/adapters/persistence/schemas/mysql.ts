@@ -111,6 +111,9 @@ export const authUser = mysqlTable(
     disabledAt: datetime('disabled_at', { mode: 'date', fsp: 3 }),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
+    // Proveniência de migração ETL (AUTH-ETL-USER-PROVISIONING): NULL = nativo;
+    // não-NULL = id do usuário no sistema legado. UNIQUE (idempotência do bootstrap one-shot).
+    legacyId: int('legacy_id'),
   },
   (t) => [
     // CHECK: status restrito ao enum do domínio (Decisão 1 do blueprint).
@@ -127,6 +130,9 @@ export const authUser = mysqlTable(
     // Índice no email já coberto pela UNIQUE constraint (cria índice implícito no InnoDB).
     // Declaramos explicitamente para auditoria e para o teste CA3.
     uniqueIndex('auth_user_email_idx').on(t.email),
+
+    // Idempotência da ETL: UNIQUE em legacy_id (múltiplos NULL permitidos no InnoDB).
+    uniqueIndex('auth_user_legacy_id_idx').on(t.legacyId),
   ],
 );
 
