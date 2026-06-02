@@ -10,7 +10,16 @@
 - **D4 → VOs `Cpf`/`Cnpj`/`Email` promovidos ao `src/shared/kernel/`** (evolui `isValidCnpj` → VO; `auth.Email` migra depois).
 - **D5 → agregado de perfil de usuário separado**, referencia `auth.User` por ID via public-api; `massApprovalPermission` vira `Permission` do RBAC.
 
-Pendentes (não bloqueiam bootstrap/Fase 1-4): D3 (regra "cadastro completo" — P.O.), D6 (senha legada), D7 (geografia seed vs gerenciada), D8 (migrar inativos), D9 (hard vs soft delete).
+## Decisões do dono (2026-06-02) — destravam a ETL
+
+- **D6 → reset por e-mail.** NÃO migra o hash legado; cada usuário migrado nasce sem senha utilizável e
+  recebe link de definição via EmailPort (ADR-0010). Mais seguro (não carrega hash de custo desconhecido).
+- **D7 → seed estático no código, geografia FORA da ETL.** `state`/`municipality` permanecem dados
+  embutidos read-only (`geography/*.data.ts`); a ETL não toca geografia (é referência IBGE, não dado do legado).
+- **D8 → migrar todos, mapeando o flag.** Ativos e inativos; `active=false` → estado Inactive/Disabled
+  (com `disableBy`/`deactivatedAt` quando houver). Preserva histórico completo.
+
+Pendentes restantes: D3 (regra "cadastro completo" — P.O.), D9 (hard vs soft delete — lookup).
 
 ---
 
@@ -115,9 +124,9 @@ Eventos (EN passado): `SupplierRegistered`, `SupplierDeactivated`, `SupplierBank
 | **D3** | Definição de "CADASTRO_COMPLETO": quais campos exatos exige a transição PRE_CADASTRO→COMPLETO? Schema legado é quase todo nullable — regra é de negócio. | P.O. precisa declarar. | Modelagem do estado refinado `CompleteCollaborator`, use case |
 | **D4** | VOs `Cpf`/`Cnpj`/`Email` no shared-kernel ou dentro de `partners`? `auth` já tem `Email` isolado; kernel já tem `isValidCnpj` (predicado, sem VO). | Promover ao kernel (genuinamente cross-BC); auth migra depois. | Domínio, refactor cross-módulo |
 | **D5** | Perfil de `/users` (name/cpf/telephone/avatar/`massApprovalPermission`/collaboratorId): estende agregado `auth.User` ou agregado separado? `massApprovalPermission` vira `Permission` RBAC? | Agregado de perfil separado referenciando `auth/public-api`; massApprovalPermission → Permission RBAC. | Fase 5, fronteira auth |
-| **D6** | Senha legada (`users.password`, provável bcrypt): migrar hash ou forçar reset por email? | Decisão de segurança do dono. | ETL de users |
-| **D7** | Geografias: seed estático (27 UF + 5570 municípios IBGE) ou tabela gerenciada (CRUD)? Prefixo `par_*` vs `ref_*`/`geo_*`? | Seed estático read-only; prefixo neutro por não ter dono de domínio. | Schema, ETL |
-| **D8** | `active=false` no legado: migrar inativos também (histórico completo) ou só ativos? | Migrar todos com mapeamento do flag. | ETL |
+| **D6** ✅ | Senha legada (`users.password`, provável bcrypt): migrar hash ou forçar reset por email? | **RESOLVIDA (2026-06-02): reset por e-mail** — não migra hash. | ETL de users |
+| **D7** ✅ | Geografias: seed estático (27 UF + 5570 municípios IBGE) ou tabela gerenciada (CRUD)? Prefixo `par_*` vs `ref_*`/`geo_*`? | **RESOLVIDA (2026-06-02): seed estático no código, fora da ETL.** | Schema, ETL |
+| **D8** ✅ | `active=false` no legado: migrar inativos também (histórico completo) ou só ativos? | **RESOLVIDA (2026-06-02): migrar todos com mapeamento do flag.** | ETL |
 | **D9** | Hard delete (partner-states/municipalities usam DELETE físico no legado) vs padronizar soft-delete? | Padronizar soft-delete salvo integridade exigir hard. | Domínio lookup |
 
 ### Decisões NÃO-bloqueantes (registrar e seguir)
