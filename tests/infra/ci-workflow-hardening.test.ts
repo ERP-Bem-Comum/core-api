@@ -24,8 +24,8 @@ test('todas as actions remotas estão pinadas por SHA de 40 hex', async () => {
     if (ref.startsWith('./') || ref.startsWith('docker://')) continue; // local/docker
     assert.match(
       ref,
-      /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}(\s+#.*)?$/,
-      `action não pinada por SHA: ${ref}`,
+      /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}\s+#\s*v.+$/,
+      `action não pinada por SHA + comentário de versão: ${ref}`,
     );
   }
 });
