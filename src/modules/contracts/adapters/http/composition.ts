@@ -38,6 +38,7 @@ import { getContractTimeline } from '../../application/use-cases/get-contract-ti
 import { createContract } from '../../application/use-cases/create-contract.ts';
 import { createPendingContract } from '../../application/use-cases/create-pending-contract.ts';
 import { activateContract } from '../../application/use-cases/activate-contract.ts';
+import { endContract } from '../../application/use-cases/end-contract.ts';
 import { createAmendment } from '../../application/use-cases/create-amendment.ts';
 import { homologateAmendment } from '../../application/use-cases/homologate-amendment.ts';
 import { uploadDocument } from '../../application/use-cases/upload-document.ts';
@@ -106,6 +107,7 @@ export type ContractsHttpDeps = Readonly<{
   createContract: ReturnType<typeof createContract>;
   createPendingContract: ReturnType<typeof createPendingContract>;
   activateContract: ReturnType<typeof activateContract>;
+  endContract: ReturnType<typeof endContract>;
   createAmendment: ReturnType<typeof createAmendment>;
   homologateAmendment: ReturnType<typeof homologateAmendment>;
   uploadDocument: ReturnType<typeof uploadDocument>;
@@ -226,6 +228,7 @@ const makeDeps = (
       contractRepo: pools.contractWriterRepo,
       documentRepo: pools.documentRepo,
     }),
+    endContract: endContract({ contractRepo: pools.contractWriterRepo, clock }),
     createAmendment: createAmendment({
       contractRepo: pools.contractWriterRepo,
       amendmentRepo: pools.amendmentRepo,
