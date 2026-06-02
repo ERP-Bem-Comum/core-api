@@ -4,6 +4,20 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-02 — 🐳 ADR-0033 (imagem-base Debian glibc) + DevOps hardening
+
+> Tickets `CTR-DEVOPS-HARDENING` + `CTR-TEST-MYSQL-PORT-CONFIGURABLE`.
+
+### ADR-0033 — Imagem-base do container: Debian `bookworm-slim` (glibc) sobre Alpine (musl)
+
+Formaliza a troca de base já aplicada no `Dockerfile`. Causa: o tsgo (`@typescript/native-preview`, roadmap TS 7 do **ADR-0009**) só publica binários **glibc**; em Alpine/musl o `pnpm install` quebra (`ERR_PNPM_NO_RESOLUTION_MATCHED`). Decisão: `node:24.16-bookworm-slim` pinado por digest multi-arch (preserva **ADR-0011**). Custo (imagem maior) mitigado pelo estágio `deps-prod` do `CTR-DEVOPS-HARDENING`. Alternativas rejeitadas: Alpine+gcompat, distroless, abandonar tsgo.
+
+### DevOps hardening (`CTR-DEVOPS-HARDENING`)
+
+CI de qualidade criado (`.github/workflows/test-and-quality.yml`); MinIO via `secrets` no compose; imagens `mc`/`minio` pinadas por digest; Dockerfile com estágio `deps-prod` + `--enable-source-maps`; shutdown idempotente (`makeShutdownOnce`) e stack trace completo em `uncaughtException`; `.env.example`. Conn string de integração agora configurável via `MYSQL_PORT` (`CTR-TEST-MYSQL-PORT-CONFIGURABLE`).
+
+---
+
 ## 2026-06-02 — 📨 Feedback da P.O. (nova seção) + ADR-0032 (composição transitória na borda)
 
 > Branch `docs/po-feedback`.
