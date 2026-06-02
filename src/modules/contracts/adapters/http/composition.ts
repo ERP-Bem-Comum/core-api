@@ -45,6 +45,7 @@ import { homologateAmendment } from '../../application/use-cases/homologate-amen
 import { uploadDocument } from '../../application/use-cases/upload-document.ts';
 import { attachSignedDocument } from '../../application/use-cases/attach-signed-document.ts';
 import { supersedeDocument } from '../../application/use-cases/supersede-document.ts';
+import { deleteDocument } from '../../application/use-cases/delete-document.ts';
 
 import * as AmendmentId from '../../domain/shared/amendment-id.ts';
 import type { AmendmentIdError } from '../../domain/shared/amendment-id.ts';
@@ -117,6 +118,7 @@ export type ContractsHttpDeps = Readonly<{
   uploadDocument: ReturnType<typeof uploadDocument>;
   attachSignedDocument: ReturnType<typeof attachSignedDocument>;
   supersedeDocument: ReturnType<typeof supersedeDocument>;
+  deleteDocument: ReturnType<typeof deleteDocument>;
   getAmendment: GetAmendment;
   getDocument: GetDocument;
   documentBucket: string;
@@ -263,6 +265,7 @@ const makeDeps = (
       documentRepo: pools.documentRepo,
     }),
     supersedeDocument: supersedeDocument({ clock, documentRepo: pools.documentRepo }),
+    deleteDocument: deleteDocument({ clock, documentRepo: pools.documentRepo }),
     getAmendment: async (amendmentId) => {
       const idR = AmendmentId.rehydrate(amendmentId);
       if (!idR.ok) return idR;
