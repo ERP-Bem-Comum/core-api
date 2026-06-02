@@ -9,9 +9,9 @@
 
 ## Índice
 
-| ID | Data | Módulo | Título | Status | Encaminhamento |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| [0001](./0001-gap-api-v2-contracts.md) | 2026-06-02 | contracts | Gap: API v2 Contracts vs. funcionalidades v1 | 🟡 Em triagem | Triagem inicial registrada (§Encaminhamento) — aguarda decisão arquitetural |
+| ID                                     | Data       | Módulo    | Título                                       | Status         | Encaminhamento                                                                                                                                   |
+| :------------------------------------- | :--------- | :-------- | :------------------------------------------- | :------------- | :----------------------------------------------------------------------------------------------------------------------------------------------- |
+| [0001](./0001-gap-api-v2-contracts.md) | 2026-06-02 | contracts | Gap: API v2 Contracts vs. funcionalidades v1 | 🟢 Em correção | [ADR-0032](../architecture/adr/0032-transient-http-composition-read-until-bff.md) decidiu a composição; restam tickets de borda + read Parceiros |
 
 ---
 
@@ -36,5 +36,5 @@
 
 Um retorno da P.O. **nunca é silenciosamente "implementado"**. Cada divergência é triada em uma de três
 naturezas: (a) **gap real de borda** — o domínio já tem, falta expor/ajustar na API; (b) **trabalho novo**
-— precisa de ticket; (c) **divergência de modelo** — o `core-api` modelou diferente *de propósito* (DDD,
+— precisa de ticket; (c) **divergência de modelo** — o `core-api` modelou diferente _de propósito_ (DDD,
 imutabilidade, fronteira de módulo), e o ajuste exige decisão arquitetural (ADR / discussão), não código direto.

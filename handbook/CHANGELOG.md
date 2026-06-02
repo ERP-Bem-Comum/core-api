@@ -4,6 +4,20 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-02 — 📨 Feedback da P.O. (nova seção) + ADR-0032 (composição transitória na borda)
+
+> Branch `docs/po-feedback`.
+
+### Nova seção `handbook/po-feedback/`
+
+Registro dos retornos da P.O./Arquitetura Frontend v2 sobre divergências de API/comportamento (README-índice + 1 arquivo por retorno; status acompanha a resolução). Primeira entrada **`0001`** = relatório de gap _API v2 Contracts vs. v1_ na íntegra + **triagem** cruzando cada item com o código real: **7 itens já atendidos**, **5 gaps de borda HTTP** (viram tickets), **~8 divergências de modelo** (decisão arquitetural).
+
+### ADR-0032 — Composição de leitura transitória no adapter HTTP
+
+Decisão que originou da triagem do `0001`: a visão rica que o frontend pede é **composta no adapter HTTP** (rota gorda **transitória** com header `Sunset`, RFC 8594) até o **BFF v2** assumir. **Domínio e use cases intocados** (núcleo DDD-puro); cross-módulo (contratado/bancário de Parceiros) **só via public-api** (ADR-0006/0014), nunca SELECT em `par_*`. Atributos **próprios** do contrato (`classification`, `contractModel`, `contractType`, `categorizacao`, `centroDeCusto`, `observations`) **entram no agregado quando necessário** (modelagem legítima, não corrupção). Cria a necessidade de um _read_ na public-api de Parceiros (hoje só write/ETL).
+
+---
+
 ## 2026-06-02 — 🔁 ETL Parceiros (PARTNERS-ETL-BOOTSTRAP) — CORE + READER (em andamento)
 
 > Branch `feat/partners-etl-bootstrap` (commits locais). Handoff completo em `.claude/.pipeline/PARTNERS-ETL-BOOTSTRAP/HANDOFF.md`.
@@ -131,12 +145,12 @@ partindo de ~1266 no início da sessão (**+104 testes**). `src/modules/auth`: *
 
 ### Entregue (código — 14 tickets `closed-green`)
 
-| Fase | Tickets |
-| :-- | :-- |
-| **D — domínio** | `AUTH-VO-EMAIL`, `AUTH-VO-PERMISSION`, `AUTH-VO-PASSWORD` (Password+PasswordHash), `AUTH-AGG-ROLE`, `AUTH-AGG-USER` (+`authorize`), `AUTH-AGG-SESSION` (RefreshToken) |
-| **A — repos** | `AUTH-REPO-USER` (write/read split), `AUTH-REPO-ROLE`, `AUTH-REPO-SESSION` — port no domínio + contract-suite + InMemory |
-| **A — use cases** | `AUTH-USECASE-REGISTER-USER`, `AUTH-USECASE-AUTHENTICATE` (access), `AUTH-USECASE-AUTHENTICATE-REFRESH` (refresh) |
-| **X — cripto/token** | `AUTH-ADAPTER-ARGON2-HASHER` (argon2id), `AUTH-ADAPTER-JWT-ISSUER` (ES256), `RefreshTokenMinter` |
+| Fase                 | Tickets                                                                                                                                                               |
+| :------------------- | :-------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **D — domínio**      | `AUTH-VO-EMAIL`, `AUTH-VO-PERMISSION`, `AUTH-VO-PASSWORD` (Password+PasswordHash), `AUTH-AGG-ROLE`, `AUTH-AGG-USER` (+`authorize`), `AUTH-AGG-SESSION` (RefreshToken) |
+| **A — repos**        | `AUTH-REPO-USER` (write/read split), `AUTH-REPO-ROLE`, `AUTH-REPO-SESSION` — port no domínio + contract-suite + InMemory                                              |
+| **A — use cases**    | `AUTH-USECASE-REGISTER-USER`, `AUTH-USECASE-AUTHENTICATE` (access), `AUTH-USECASE-AUTHENTICATE-REFRESH` (refresh)                                                     |
+| **X — cripto/token** | `AUTH-ADAPTER-ARGON2-HASHER` (argon2id), `AUTH-ADAPTER-JWT-ISSUER` (ES256), `RefreshTokenMinter`                                                                      |
 
 **Fluxo funcional:** `registerUser` (argon2id, sem persistir senha em claro) + `authenticateUser`
 (credencial → access JWT ES256 + refresh opaco persistido). Tudo com adapter `InMemory`/fake; MySQL e
@@ -379,6 +393,7 @@ A entrevista [`0001-functional-ddd-domain-refresh`](./interviews/0001-functional
 ### Tickets que isto habilita (21 coordenados — ordem por leverage do PhD)
 
 **Top-3 (maior leverage):**
+
 1. `CTR-DOMAIN-STATE-MACHINE-CONTRACT` + `CTR-DOMAIN-STATE-MACHINE-AMENDMENT`.
 2. `CTR-SHARED-VO-CANONICAL` + `CTR-SHARED-BRAND-UNIQUE-SYMBOL` + `CTR-SHARED-IMMUTABLE`.
 3. `CTR-SHARED-RESULT-COMBINATORS` + `CTR-DOMAIN-COMPOSE-REFACTOR`.
@@ -403,7 +418,7 @@ Outbox MySQL + Event sourcing puro vs `{ entity, event }` (E1 reaberto) + Observ
 
 ### Contexto
 
-O [ADR-0019](./architecture/adr/0019-document-storage-s3-with-minio-dev.md) (emitido nesta mesma data, mais cedo) materializou Docker Compose como infraestrutura local oficial do projeto, com `compose.yaml` na raiz do `core-api` provisionando MinIO (ADR-0019) e MySQL 8.4 (opt-in via profile `db`). A premissa central do [ADR-0018](./architecture/adr/0018-persistence-dual-dialect-drizzle.md) — *"rodar Docker MySQL localmente cria fricção para devs"* — deixou de ser verdade. Com isso, manter SQLite como dialeto paralelo deixou de ter benefício e passou a ser ônus líquido (manter 2 schemas, mappers ramificados, lista normativa de paridade, toolchain C++ no Docker build, suite de testes duplicada).
+O [ADR-0019](./architecture/adr/0019-document-storage-s3-with-minio-dev.md) (emitido nesta mesma data, mais cedo) materializou Docker Compose como infraestrutura local oficial do projeto, com `compose.yaml` na raiz do `core-api` provisionando MinIO (ADR-0019) e MySQL 8.4 (opt-in via profile `db`). A premissa central do [ADR-0018](./architecture/adr/0018-persistence-dual-dialect-drizzle.md) — _"rodar Docker MySQL localmente cria fricção para devs"_ — deixou de ser verdade. Com isso, manter SQLite como dialeto paralelo deixou de ter benefício e passou a ser ônus líquido (manter 2 schemas, mappers ramificados, lista normativa de paridade, toolchain C++ no Docker build, suite de testes duplicada).
 
 ### Adicionado
 
@@ -450,7 +465,7 @@ O ticket `CTR-ADAPTER-DRIZZLE-DUAL` entregou o adapter Drizzle/SQLite mas só er
 - **3 drivers**: `cli/drivers/{memory,sqlite,mysql}.ts`. Memory preserva backward compat (default + state file JSON); SQLite usa `openSqlite()` com `shutdown` fechando a conexão; MySQL é stub que retorna `cli-mysql-driver-not-wired` com exit 70.
 - **Parser de flags**: `cli/parse-driver-flags.ts` separa extração sintática (`extractFlags`) de validação semântica (`buildXxxDriver`) — 17 unit tests cobrindo defaults, conflitos cruzados e missing-value.
 - **Suite E2E paralela**: `tests/cli/contracts.cli.sqlite.test.ts` roda os mesmos cenários BDD com `--driver sqlite --db <tempfile>`. Paridade real entre InMemory e Drizzle/SQLite forçada pela igualdade de output.
-- **7 erros PT-BR** novos no `formatters/error.ts` (cli-driver-*, sqlite-driver-*, cli-mysql-driver-not-wired).
+- **7 erros PT-BR** novos no `formatters/error.ts` (cli-driver-_, sqlite-driver-_, cli-mysql-driver-not-wired).
 - **6 comandos refatorados** (mecânica `ctx.xxxHandle.repo` → `ctx.xxx`; `ctx.persist()` virou `await`).
 
 ### Backward compat
@@ -498,19 +513,19 @@ A pergunta arquitetural: **como adicionar persistência real sem violar o ADR-00
 
 ### Lista normativa de features SQL (resumo)
 
-| ✅ Permitidas | ❌ Proibidas |
-| :--- | :--- |
+| ✅ Permitidas                                                                                               | ❌ Proibidas                                                                                                                                                                                       |
+| :---------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | DML básico, WHERE/ORDER/LIMIT, INNER/LEFT JOIN, COUNT/SUM/MAX, UNIQUE/INDEX, FKs, transações, CHECK simples | Colunas JSON nativas, `ON DUPLICATE KEY UPDATE`, FULLTEXT, stored procedures, triggers, window functions, CTEs recursivas, ENUM nativo, tipos espaciais, AUTO_INCREMENT, isolation level explícito |
 
 ### Mapeamentos canônicos por dialeto
 
-| Tipo de domínio | SQLite | MySQL |
-| :--- | :--- | :--- |
-| `Money` (cents) | `integer` | `bigint` |
-| `Date` (timestamp) | `integer` unix-ms | `datetime(3)` |
-| `Period` (Fixed \| Indefinite) | 3 colunas: `period_kind` + `period_start` + `period_end` | Mesma decomposição com `varchar(16)` + `datetime(3)` |
-| `AmendmentKind` / `AmendmentStatus` | `text` + CHECK | `varchar(16)` + CHECK |
-| `homologatedAmendmentIds` (array) | Tabela de junção | Mesma |
+| Tipo de domínio                     | SQLite                                                   | MySQL                                                |
+| :---------------------------------- | :------------------------------------------------------- | :--------------------------------------------------- |
+| `Money` (cents)                     | `integer`                                                | `bigint`                                             |
+| `Date` (timestamp)                  | `integer` unix-ms                                        | `datetime(3)`                                        |
+| `Period` (Fixed \| Indefinite)      | 3 colunas: `period_kind` + `period_start` + `period_end` | Mesma decomposição com `varchar(16)` + `datetime(3)` |
+| `AmendmentKind` / `AmendmentStatus` | `text` + CHECK                                           | `varchar(16)` + CHECK                                |
+| `homologatedAmendmentIds` (array)   | Tabela de junção                                         | Mesma                                                |
 
 ### Atualizado
 
@@ -518,11 +533,11 @@ A pergunta arquitetural: **como adicionar persistência real sem violar o ADR-00
 
 ### Relação com decisões anteriores
 
-| ADR | Relação |
-| :--- | :--- |
-| [ADR-0013](./architecture/adr/0013-mysql-database-engine.md) | **Preservado.** MySQL continua sendo o engine de produção. ADR-0018 apenas adiciona SQLite como ambiente paralelo para dev/CI. |
-| [ADR-0006](./architecture/adr/0006-modular-monolith-core-api.md) | **Honrado.** A estratégia dual-dialect só é viável porque ports & adapters já isolam domínio do mecanismo de persistência. |
-| [ADR-0015](./architecture/adr/0015-mysql-outbox-pattern.md) | **Não afetado.** Outbox vive em MySQL quando a infra subir; SQLite não exercita outbox no dev. |
+| ADR                                                              | Relação                                                                                                                        |
+| :--------------------------------------------------------------- | :----------------------------------------------------------------------------------------------------------------------------- |
+| [ADR-0013](./architecture/adr/0013-mysql-database-engine.md)     | **Preservado.** MySQL continua sendo o engine de produção. ADR-0018 apenas adiciona SQLite como ambiente paralelo para dev/CI. |
+| [ADR-0006](./architecture/adr/0006-modular-monolith-core-api.md) | **Honrado.** A estratégia dual-dialect só é viável porque ports & adapters já isolam domínio do mecanismo de persistência.     |
+| [ADR-0015](./architecture/adr/0015-mysql-outbox-pattern.md)      | **Não afetado.** Outbox vive em MySQL quando a infra subir; SQLite não exercita outbox no dev.                                 |
 
 ### Quando re-avaliar
 
@@ -560,12 +575,12 @@ A análise sistemática das **32 tabelas** revelou discrepâncias estruturais en
 
 ### Confirmações empíricas
 
-| # | Premissa anterior | Realidade no dump |
-| :-- | :--- | :--- |
-| C1 | Engine real = MySQL 8 ([Inquiry-0010](./inquiries/0010-mysql-engine-correction.md)) | ✅ MySQL **8.4.7-google** (Cloud SQL) — confirma legado em GCP |
-| C2 | Charset `utf8mb4` + `utf8mb4_unicode_ci` ou `utf8mb4_0900_ai_ci` | ✅ Real: **`utf8mb4_0900_ai_ci`** |
-| C3 | Backend NestJS 10 + TypeORM 0.3 + `mysql2` ([Inquiry-0010](./inquiries/0010-mysql-engine-correction.md)) | ✅ Confirmado via assinatura no schema (FK_hash, tabelas `migrations`, `query-result-cache`) |
-| C4 | "Uma linha no main.ts para Hipótese A" ([Inquiry-0012 §6.1](./inquiries/0012-bff-managed-api-gateway-vs-fastify.md)) | ✅ Literal — `app.setGlobalPrefix('api/v1')` no NestJS resolve |
+| #   | Premissa anterior                                                                                                    | Realidade no dump                                                                            |
+| :-- | :------------------------------------------------------------------------------------------------------------------- | :------------------------------------------------------------------------------------------- |
+| C1  | Engine real = MySQL 8 ([Inquiry-0010](./inquiries/0010-mysql-engine-correction.md))                                  | ✅ MySQL **8.4.7-google** (Cloud SQL) — confirma legado em GCP                               |
+| C2  | Charset `utf8mb4` + `utf8mb4_unicode_ci` ou `utf8mb4_0900_ai_ci`                                                     | ✅ Real: **`utf8mb4_0900_ai_ci`**                                                            |
+| C3  | Backend NestJS 10 + TypeORM 0.3 + `mysql2` ([Inquiry-0010](./inquiries/0010-mysql-engine-correction.md))             | ✅ Confirmado via assinatura no schema (FK_hash, tabelas `migrations`, `query-result-cache`) |
+| C4  | "Uma linha no main.ts para Hipótese A" ([Inquiry-0012 §6.1](./inquiries/0012-bff-managed-api-gateway-vs-fastify.md)) | ✅ Literal — `app.setGlobalPrefix('api/v1')` no NestJS resolve                               |
 
 ### Achados que mudam o handbook
 
@@ -585,6 +600,7 @@ A análise sistemática das **32 tabelas** revelou discrepâncias estruturais en
 ### Lição metodológica
 
 A análise de schema **antes** de iniciar a implementação permitiu detectar:
+
 - Confirmações silenciosas de premissas (engine, charset, ORM) — economia de retrabalho.
 - Gaps de modelagem do handbook (BC Planejamento Orçamentário) — visíveis só no schema, não nas conversas com P.O.
 - Premissas empíricas frágeis em deliberação em curso (Inquiry-0011 §7.3) — corrigidas antes de virar ADR aceito.
@@ -633,6 +649,7 @@ Valente §8.4.5 (PT-BR) endossa explicitamente combinar estratégias de particio
 ### Lição metodológica
 
 Esta inquiry consolidou um padrão de trabalho separando explicitamente:
+
 - **Decisões técnicas/arquiteturais** — buscadas no corpus canônico via MCP `acdg-skills` com regra de citação literal de ≥4 linhas.
 - **Decisões fiscais/de negócio** — validadas fora do corpus, diretamente com contabilidade ou especialistas em ERPs de mercado.
 
@@ -713,6 +730,7 @@ A decisão consciente foi **manter MySQL** em ambos legado e core-api novo (não
 ### Justificativa central
 
 Manter MySQL é a decisão certa porque:
+
 1. **ADR-0001 (Strangler Fig)** alerta contra batalhas simultâneas. Trocar engine no meio da migração é exatamente esse tipo de risco.
 2. Não há requisito de domínio que MySQL 8 não atenda.
 3. Conversão MySQL → PostgreSQL adiciona projeto à parte com risco de bugs sutis em queries financeiras.
@@ -734,6 +752,7 @@ Validar premissas técnicas fundamentais com o **código real** logo no início 
 ### Adicionado
 
 #### Pasta `inquiries/` — log de chamadas, dúvidas e decisões
+
 - README explicando uso da nova pasta como trilha de auditoria do raciocínio.
 - `_template.md` para padronizar registro.
 - `INDEX.md` com status de todas as inquiries (filtros por status e tema).
@@ -749,6 +768,7 @@ Validar premissas técnicas fundamentais com o **código real** logo no início 
   - [Inquiry-0009](./inquiries/0009-email-strategy-nodemailer-with-adapter.md): Email — Nodemailer + Adapter.
 
 #### 6 ADRs novos
+
 - [ADR-0007](./architecture/adr/0007-multi-cloud-aws-gcp.md): Topologia multi-cloud AWS + GCP (status **Proposed**, aguarda Codebit).
 - [ADR-0008](./architecture/adr/0008-bradesco-integration-architecture.md): Arquitetura da integração Bradesco (REST + VAN/STCPCLT).
 - [ADR-0009](./architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md): Node 24 LTS + TypeScript 6 com plano para 7.0 (`supersedes` parcial do ADR-0002).
@@ -776,9 +796,11 @@ Validar premissas técnicas fundamentais com o **código real** logo no início 
 ## 2026-04-27 — Atualização
 
 ### Adicionado
+
 - [ADR-0006](./architecture/adr/0006-modular-monolith-core-api.md): Modular Monolith para o `core-api` (granularidade de serviço). Decisão tomada após análise convergente entre revisão própria do handbook e validação cruzada com fonte externa de literatura arquitetural. Os 4 BCs do handbook (Documentos, Títulos, Bradesco, OCR) ficam como módulos internos em um único deployable (`apps/core-api/src/contexts/`), com fronteiras lógicas garantidas via ESLint + ports/adapters + eventos in-process.
 
 ### Justificativa central
+
 - Invariantes cross-BC do handbook (R3 Sincronia, R3 Reabertura, R8 Integridade de Imposto, Auditoria Shared Kernel, Time Travel cross-BC) tornam a separação física entre BCs operacionalmente cara sem benefício proporcional.
 - Tamanho do time, volume de dados e ausência de SRE dedicado não justificam a complexidade de microservices.
 - Caminho de extração futuro preservado: se sinais aparecerem (event loop starvation no OCR, escala assimétrica, time crescer para 10+ devs com squads dedicadas), extrair `bank-ocr-api` é movimento de dias, não meses.
@@ -788,6 +810,7 @@ Validar premissas técnicas fundamentais com o **código real** logo no início 
 ## 2026-04-27 — Estrutura inicial
 
 ### Adicionado
+
 - Estrutura inicial do handbook em pastas: `domain/`, `architecture/`, `architecture/adr/`, `infrastructure/`, `operations/`.
 - README mestre na raiz como ponto de entrada único de toda a documentação.
 - Seção `architecture/` com 5 documentos descrevendo **como** o sistema é construído.
@@ -797,10 +820,12 @@ Validar premissas técnicas fundamentais com o **código real** logo no início 
 - Este `CHANGELOG.md`.
 
 ### Movido
+
 - Documentos de domínio (`01-introduction.md` a `09-status-maquina-estados.md`, `DOCUMENTO_MESTRE.md`) movidos da raiz do handbook para `domain/`.
 - `00-README.md` antigo renomeado para `domain/README.md` (índice da seção de domínio).
 
 ### ADRs registrados
+
 - [ADR-0001](./architecture/adr/0001-strangler-fig-over-rewrite.md): Estratégia Strangler Fig sobre rewrite ou refactor in-place.
 - [ADR-0002](./architecture/adr/0002-keep-nodejs-runtime.md): Manutenção do runtime Node.js nesta fase de migração.
 - [ADR-0003](./architecture/adr/0003-shared-db-isolated-schemas.md): Banco compartilhado com schemas isolados.
