@@ -1,30 +1,47 @@
 name: Test and Quality
 
 # Disparado em push na main e pull requests contra main.
-# Espelha o padrão do deploy-docs.yml — setup corepack, cache pnpm store.
-# Ver handbook/reference/pnpm/continuous-integration.md.
+# Hardening (CTR-CI-HARDENING / ADR-0011): permissions mínimas, actions pinadas
+# por SHA, concurrency cancel-in-progress, actionlint. Ver
+# handbook/reference/pnpm/continuous-integration.md.
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
 
+# Least-privilege: o GITHUB_TOKEN só lê o conteúdo do repo.
+permissions:
+  contents: read
+
+# PRs não empilham runs: um novo push cancela o anterior do mesmo ref.
+concurrency:
+  group: test-and-quality-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  actionlint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: actionlint
+        uses: reviewdog/action-actionlint@a5524e1c19e62881d79c1f1b9b6f09f16356e281 # v1.65.2
+        with:
+          reporter: github-check
+
   test-and-quality:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
 
-      # Setup Node 24 + corepack (referência handbook/reference/pnpm/continuous-integration.md)
       - name: Setup Node 24 e corepack
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@39370e3970a6d050c480ffad4ff0ed4d3fdee5af # v4.1.0
         with:
           node-version: '24'
       - run: corepack enable
 
-      # Cache do pnpm store (usando hash de pnpm-lock.yaml)
       - name: Cache pnpm store
-        uses: actions/cache@v4
+        uses: actions/cache@1bd1e32a3bdc45362d1e726936510720a7c30a57 # v4.2.0
         with:
           path: |
             ~/.pnpm-store
@@ -33,22 +50,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-pnpm-
 
-      # Install com frozen-lockfile (ADR-0011 + handbook CI)
       - name: Instala dependências (frozen lockfile)
         run: pnpm install --frozen-lockfile
 
-      # Gates de qualidade na ordem correta
-      - name: typecheck
-        run: pnpm run typecheck
-
-      - name: format:check
-        run: pnpm run format:check
-
-      - name: lint
-        run: pnpm run lint
-
-      - name: audit
-        run: pnpm run audit
-
-      - name: test
-        run: pnpm test
+      - run: pnpm run typecheck
+      - run: pnpm run format:check
+      - run: pnpm run lint
+      - run: pnpm run audit
+      - run: pnpm test
