@@ -116,6 +116,7 @@ Carrega **um único** agente por turno.
 | Docker / Compose / Dockerfile / BuildKit                                   | [`docker-compose-expert`](./.claude/agents/docker-compose-expert.md)           |
 | pnpm / lockfile / supply-chain / corepack                                  | [`pnpm-workspace-expert`](./.claude/agents/pnpm-workspace-expert.md)           |
 | Fastify (HTTP — **reservado, Fase 2+, exige ADR**)                         | [`fastify-server-expert`](./.claude/agents/fastify-server-expert.md)           |
+| Caddy (edge/reverse-proxy — **reservado, Fase 2+, exige ADR**)             | [`caddy-server-expert`](./.claude/agents/caddy-server-expert.md)               |
 | Nodemailer (adapter SMTP — **ativo** desde `CTR-EMAIL-ADAPTER-NODEMAILER`) | [`nodemailer-email-expert`](./.claude/agents/nodemailer-email-expert.md)       |
 | Segurança backend web (Node/TS/Fastify/pnpm/Magalu)                        | [`security-backend-expert`](./.claude/agents/security-backend-expert.md)       |
 | Segurança frontend web (TanStack Start/React)                              | [`security-frontend-expert`](./.claude/agents/security-frontend-expert.md)     |
