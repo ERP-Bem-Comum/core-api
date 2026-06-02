@@ -15,7 +15,15 @@
 // **RESPONSABILIDADE DO PRÓXIMO DEV**: ao rodar `pnpm db:generate:partners`, editar o
 // SQL gerado com ENGINE/charset e `COLLATE utf8mb4_bin` em novas colunas UUID/CNPJ.
 
-import { boolean, check, datetime, mysqlTable, uniqueIndex, varchar } from 'drizzle-orm/mysql-core';
+import {
+  boolean,
+  check,
+  datetime,
+  int,
+  mysqlTable,
+  uniqueIndex,
+  varchar,
+} from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
 
 // ─── par_financiers ─────────────────────────────────────────────────────────
@@ -38,6 +46,9 @@ export const parFinanciers = mysqlTable(
     deactivatedAt: datetime('deactivated_at', { mode: 'date', fsp: 3 }),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
+    // Correlação ETL (P2): id de origem no legado (int AUTO_INCREMENT). NULL = registro
+    // nativo do core-api; não-NULL = registro migrado. UNIQUE garante idempotência.
+    legacyId: int('legacy_id'),
   },
   (t) => [
     // CHECK: active=false ⟺ deactivated_at preenchido (coerência do soft-delete).
@@ -47,6 +58,8 @@ export const parFinanciers = mysqlTable(
     ),
     // UNIQUE(cnpj) — legado `financiers.cnpj` UNIQUE.
     uniqueIndex('par_financiers_cnpj_idx').on(t.cnpj),
+    // UNIQUE(legacy_id) — idempotência da ETL (múltiplos NULL convivem no InnoDB).
+    uniqueIndex('par_financiers_legacy_id_idx').on(t.legacyId),
   ],
 );
 
@@ -82,6 +95,8 @@ export const parSuppliers = mysqlTable(
     pixKey: varchar('pix_key', { length: 255 }),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
+    // Correlação ETL (P2): id de origem no legado. NULL = nativo; não-NULL = migrado.
+    legacyId: int('legacy_id'),
   },
   (t) => [
     // (a) soft-delete: active=false ⟺ deactivated_at preenchido.
@@ -104,6 +119,8 @@ export const parSuppliers = mysqlTable(
     // (c) coerência do bloco pix (pix_key_type ⟺ pix_key).
     check('par_suppliers_pix_block_chk', sql`(${t.pixKeyType} IS NULL) = (${t.pixKey} IS NULL)`),
     uniqueIndex('par_suppliers_cnpj_idx').on(t.cnpj),
+    // UNIQUE(legacy_id) — idempotência da ETL (múltiplos NULL convivem no InnoDB).
+    uniqueIndex('par_suppliers_legacy_id_idx').on(t.legacyId),
   ],
 );
 
@@ -152,6 +169,8 @@ export const parCollaborators = mysqlTable(
     deactivatedAt: datetime('deactivated_at', { mode: 'date', fsp: 3 }),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
+    // Correlação ETL (P2): id de origem no legado. NULL = nativo; não-NULL = migrado.
+    legacyId: int('legacy_id'),
   },
   (t) => [
     // soft-delete: active=false ⟺ deactivated_at preenchido ⟺ disable_by preenchido
@@ -164,6 +183,8 @@ export const parCollaborators = mysqlTable(
     // UNIQUE(cpf) e UNIQUE(email) — legado `collaborators`.
     uniqueIndex('par_collaborators_cpf_idx').on(t.cpf),
     uniqueIndex('par_collaborators_email_idx').on(t.email),
+    // UNIQUE(legacy_id) — idempotência da ETL (múltiplos NULL convivem no InnoDB).
+    uniqueIndex('par_collaborators_legacy_id_idx').on(t.legacyId),
   ],
 );
 
@@ -189,8 +210,14 @@ export const parUserProfiles = mysqlTable(
     collaboratorRef: varchar('collaborator_ref', { length: 36 }),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
+    // Correlação ETL (P2): id de origem no legado (`users.id`). NULL = nativo; não-NULL = migrado.
+    legacyId: int('legacy_id'),
   },
-  (t) => [uniqueIndex('par_user_profiles_cpf_idx').on(t.cpf)],
+  (t) => [
+    uniqueIndex('par_user_profiles_cpf_idx').on(t.cpf),
+    // UNIQUE(legacy_id) — idempotência da ETL (múltiplos NULL convivem no InnoDB).
+    uniqueIndex('par_user_profiles_legacy_id_idx').on(t.legacyId),
+  ],
 );
 
 export type UserProfileRow = typeof parUserProfiles.$inferSelect;

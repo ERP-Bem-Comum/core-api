@@ -92,6 +92,7 @@ describe('supplier.mapper — supplierFromRow', () => {
     pixKey: null,
     createdAt: NOW,
     updatedAt: NOW,
+    legacyId: null,
   };
 
   it('reconstrói Active com bankAccount', () => {

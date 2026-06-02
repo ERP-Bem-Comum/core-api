@@ -119,6 +119,7 @@ describe('collaborator.mapper — collaboratorFromRow', () => {
     deactivatedAt: null,
     createdAt: NOW,
     updatedAt: NOW,
+    legacyId: null,
   };
 
   it('reconstrói Active + PreRegistration', () => {

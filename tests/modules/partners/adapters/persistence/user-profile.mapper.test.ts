@@ -58,6 +58,7 @@ describe('user-profile.mapper — userProfileFromRow', () => {
     collaboratorRef: null,
     createdAt: NOW,
     updatedAt: NOW,
+    legacyId: null,
   };
 
   it('reconstrói sem collaboratorRef', () => {
