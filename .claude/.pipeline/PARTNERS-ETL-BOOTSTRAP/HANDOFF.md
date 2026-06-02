@@ -225,17 +225,25 @@ adversarial (mysql-database-expert + mysql2-driver-expert + drizzle-orm-expert +
   comentário documentando o invariante. **Hardening:** teste 1 agora asserta `quarantined === 0`
   por entidade (contrato "fixture 100% migrável" explícito; pega fixture-suja cedo).
 
-### Achado 1 — RISCO DE PRODUÇÃO (escalar ao dono antes do go-live)
-O dump legado **não tem** `UNIQUE(cnpj)`. Se houver 2+ registros com mesmo CNPJ/CPF/email em
-produção, a ETL **quarentena os duplicados** (não merge), e a **ordem de PK decide qual sobrevive**.
-Rodar no dump legado, ANTES da migração real, e levar duplicatas para decisão de negócio:
-```sql
-SELECT cnpj, COUNT(*) qty, GROUP_CONCAT(id ORDER BY id) ids FROM suppliers   GROUP BY cnpj  HAVING qty>1;
-SELECT cnpj, COUNT(*) qty, GROUP_CONCAT(id ORDER BY id) ids FROM financiers GROUP BY cnpj  HAVING qty>1;
-SELECT cpf,  COUNT(*) qty, GROUP_CONCAT(id ORDER BY id) ids FROM collaborators GROUP BY cpf HAVING qty>1;
-SELECT email,COUNT(*) qty, GROUP_CONCAT(id ORDER BY id) ids FROM collaborators GROUP BY email HAVING qty>1;
-SELECT cpf,  COUNT(*) qty, GROUP_CONCAT(id ORDER BY id) ids FROM users        GROUP BY cpf  HAVING qty>1;
-```
+### Achado 1 — duplicatas de chave UNIQUE no dump ✅ INVESTIGADO (2026-06-02): RISCO ZERO
+O dump legado **não tem** `UNIQUE(cnpj/cpf/email)`. Se houvesse 2+ registros com a mesma chave, a ETL
+quarentenaria os duplicados (`integrity-violation`), com a ordem de PK decidindo qual sobrevive.
+**Investigado contra o dump de produção real** via `pnpm run etl:check-duplicates`
+(`scripts/etl/diagnostics/check-duplicates.ts`, saída agregada PII-free):
+
+| Chave UNIQUE do destino | Volume | Grupos duplicados |
+| :--- | ---: | ---: |
+| `par_suppliers.cnpj` | 100 | **0** |
+| `par_financiers.cnpj` | 0 (vazia) | 0 |
+| `par_collaborators.cpf` | 91 | **0** |
+| `par_collaborators.email` | 91 | **0** |
+| `par_user_profiles.cpf` | 14 | **0** |
+| `auth_user.email` | 14 | **0** |
+
+**Resultado: 0/6 chaves com duplicata.** Normalização igual à do destino (só dígitos p/ cnpj/cpf;
+lower+trim p/ email). **Nenhuma decisão de negócio pendente** — a migração real não quarentenará
+nenhum registro por colisão de chave UNIQUE. Re-rodar o diagnóstico se o dump for atualizado antes
+do go-live.
 
 ### Achado 2 — BUG DE OBSERVABILIDADE no adapter (ticket follow-up · módulo partners)
 Em `src/modules/partners/adapters/persistence/repos/partners-etl-store.drizzle.ts`:
