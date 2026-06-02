@@ -17,7 +17,8 @@ ETL one-shot legado → core-api (módulo `partners`), fatiado em 5 slices. Bran
 | 1 | `PARTNERS-ETL-CORE` (M) | ✅ closed-green · commit `7c36509` |
 | 2 | `PARTNERS-ETL-READER` (M) | ✅ closed-green · commit `5389615` · integração verificada com Docker |
 | 3a | **`AUTH-ETL-USER-PROVISIONING`** (M) | ✅ **closed-green** (2026-06-02) — auth: `legacy_id` em `auth_user` + port `buildAuthEtlPort` na public-api. W0→W3 verdes; integração 32/32 no home (:3307). NÃO commitado ainda. |
-| 3b | **`PARTNERS-ETL-WRITER`** (M) | ⬜ **PRÓXIMO** — writer partners + orquestrador, consome `buildAuthEtlPort` do auth (ver §9) |
+| 3b-i | **`PARTNERS-ETL-WRITE-PORT`** (M) | ✅ **closed-green** (2026-06-02) — `buildPartnersEtlPort` na public-api de partners (4 entidades, idempotente por `legacy_id`). W0→W3 verdes; integração 23/23 no home. commit `e31d93a`. NÃO pushado. |
+| 3b-ii | **`PARTNERS-ETL-ORCHESTRATOR`** (M/L) | ⬜ **PRÓXIMO** — writer/orquestrador em `scripts/etl/` (consome auth+partners ports) + quarentena dupla + reconciliação + integração 2-DB (ver §10) |
 | 4 | `PARTNERS-ETL-RESET-TOKENS` (P4a, S) | ⬜ |
 | 5 | `PARTNERS-ETL-RESET-DISPATCH` (P4b, S) | ⬜ |
 
@@ -175,3 +176,34 @@ await close(); // ao fim do lote
 - **Ordem no 3b:** suppliers → financiers → collaborators → **users**. Para cada user: `provisionLegacyUser(...)` → pega `userRef` → cria `UserProfile.rehydrate({ userRef, name, cpf, telephone, avatarUrl, collaboratorRef })` → `userProfileRepo.save`. O `collaboratorRef` vem do map `legacyCollaboratorId → CollaboratorId` montado ao migrar collaborators.
 - **Senha/reset:** o user nasce sem senha utilizável; o token de reset é o slice 4 (P4a), não o 3b.
 - O 3b abre DOIS handles na mesma connection-string: este (auth) + `openPartnersMysql` (par_*). Mesmo DB `core`, prefixos isolados.
+
+---
+
+## 10. API do partners para o 3b-ii (entregue por PARTNERS-ETL-WRITE-PORT)
+
+```ts
+import { buildPartnersEtlPort } from '#src/modules/partners/public-api/etl.ts';
+// tipos: PartnersEtlPort, LegacyEntityStore, PartnersEtlStoreError, ProvisionOutcome
+
+const portR = await buildPartnersEtlPort({ connectionString }); // Result<PartnersEtlPort, PartnersMysqlDriverError>
+if (!portR.ok) { /* abort */ }
+const port = portR.value;
+
+// Por entidade (agregado JÁ construído pelos mappers do CORE):
+const r = await port.suppliers.provision(supplier, legacyId);   // Result<'created'|'already-exists', E>
+// idem: port.financiers / port.collaborators / port.userProfiles
+const refR = await port.collaborators.findByLegacyId(legacyId); // Result<CollaboratorId | null, E> — p/ montar o map legacyId→ref
+await port.close();
+```
+
+- **Idempotente por `legacy_id`:** re-run → `already-exists`, sem sobrescrever.
+- O `provision` recebe o **agregado pronto** (os mappers `scripts/etl/mappers/*` do CORE já fazem `rehydrate`).
+
+### Escopo do 3b-ii (`PARTNERS-ETL-ORCHESTRATOR`, scripts/etl/)
+
+1. **Orquestrador** `scripts/etl/main.ts` (ou `orchestrate.ts`): `withLegacyMysql(dump, async () => { read → map → write → reconcile })`. Flags `--dry-run` / `--dump <path>`. Abre `buildAuthEtlPort` + `buildPartnersEtlPort` (connection-string do core-api de destino).
+2. **Ordem (FK/refs):** suppliers → financiers → collaborators → **users**. Ao migrar collaborators, montar `Map<legacyCollaboratorId, CollaboratorId>` (via `provision` retorna outcome; usar `findByLegacyId` p/ obter a ref). Para cada user legado: `buildAuthEtlPort.provisionLegacyUser({legacyId, email, massApprove})` → `userRef` → `UserProfile.rehydrate({ userRef, name, cpf, telephone, avatarUrl, collaboratorRef })` → `port.userProfiles.provision(profile, legacyUserId)`.
+3. **Quarentena dupla (D12):** resumo `{legacy_id, table, reason}` versionável + detalhe c/ PII fora do git. Recebe `failures` do reader + erros dos mappers + erros de `provision`.
+4. **Reconciliação:** usar `reconcile.ts` (CORE). `read = migrated + quarantined + alreadyExists` por entidade. Reportar inativos com `LEGACY_MIGRATION` (D10).
+5. **Teste integração gated** (`PARTNERS_ETL_INTEGRATION=1`): DOIS DBs — legado efêmero (leitura, `compose.etl.yaml` :3309) + core-api efêmero (escrita). Verificar idempotência (rodar 2× não duplica) + reconciliação. **Lembrar `MYSQL_PORT=3307`** se 3306 ocupada pelo ambiente `bemcomum-*`.
+6. Cleanup/SIGTERM (CTR-NODE-LAST-RESORT-HANDLERS). Lint estrito em `scripts/`.
