@@ -1,0 +1,47 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# MySQL 8.4 EFÊMERO para o ETL (PARTNERS-ETL-READER). Restaura o dump legado em
+# RAM (`tmpfs`), é lido via `mysql2` e é 100% descartável (`down -v` + tmpfs).
+#
+# Uso (via scripts/etl/legacy/restore.ts ou pnpm run test:integration:etl):
+#   docker compose -f compose.etl.yaml up -d --wait
+#   ...restore + read...
+#   docker compose -f compose.etl.yaml down -v
+#
+# Segurança: porta exposta SÓ em 127.0.0.1 (localhost) numa porta ALTERNATIVA
+# (3309 por default) — não conflita com a 3306 do stack de dev e não escuta na
+# rede. Senha root é constante LOCAL-ONLY (container descartável, sem persistência).
+# Para o dump de PRODUÇÃO, os dados vivem só em RAM e somem no teardown.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  mysql-legacy:
+    # Mesmo digest pin do compose.yaml (ADR-0011 §"Pin de versões").
+    image: mysql:8.4@sha256:c36050afdca850f23cef85703f84c7531a5ae155a11b5ee1c60acb09937c4084
+    container_name: etl-legacy-mysql
+    restart: 'no'
+    # Reabilita mysql_native_password (desabilitado por default no 8.4) — o user
+    # SELECT-only `etl_ro` usa native auth, evitando o handshake caching_sha2 sem
+    # TLS no mysql2 (allowPublicKeyRetrieval). Container local efêmero.
+    command: ['--mysql-native-password=ON']
+    ports:
+      - '127.0.0.1:${ETL_MYSQL_PORT:-3309}:3306'
+    environment:
+      MYSQL_ROOT_PASSWORD: etl-ephemeral-local-only
+      MYSQL_DATABASE: legacy
+    # /var/lib/mysql em RAM — nada toca o disco; some quando o container para.
+    tmpfs:
+      - /var/lib/mysql
+    healthcheck:
+      # Login TCP real (não `mysqladmin ping`) — `--wait` só retorna quando o
+      # listener TCP aceita SELECT, evitando 1ª conexão prematura do mysql2.
+      test:
+        - CMD-SHELL
+        - >-
+          mysql --protocol=tcp -h 127.0.0.1 -uroot
+          -p"etl-ephemeral-local-only" --execute="SELECT 1" legacy
+      interval: 3s
+      timeout: 5s
+      retries: 20
+      start_period: 20s
+    security_opt:
+      - no-new-privileges:true
