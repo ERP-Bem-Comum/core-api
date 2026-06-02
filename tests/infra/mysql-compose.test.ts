@@ -5,9 +5,14 @@
  * canônica do compose+conf.d+initdb.d+secrets descrita no ADR-0020.
  *
  * Esta suite é descoberta automaticamente por `pnpm test` (pattern `tests/**`/*.test.ts`).
- * É gateada por skip-guard (FIN-TEST-INFRA-SKIP-GUARD): sem o plugin `docker compose`
- * a suite de sintaxe é pulada (skipped); sem o daemon vivo o bootstrap é pulado.
- * Em ambiente sem Docker, `pnpm test` sai 0 com a suite marcada `skipped`, nunca `failed`.
+ * Skip-guard em DOIS níveis (FIN-TEST-INFRA-SKIP-GUARD + opt-in explícito):
+ *   - Sintaxe (CA-1): pulada sem o plugin `docker compose` no PATH.
+ *   - Bootstrap (CA-2..19): exige opt-in `COMPOSE_INTEGRATION=1` E daemon vivo. Sem o opt-in,
+ *     `pnpm test` marca a suite `skipped` — NUNCA `failed`, mesmo com o daemon ligado e a porta
+ *     3306 ocupada pelo stack de dev (a razão das falhas antes do gate por env var).
+ * O bootstrap roda via `pnpm run test:integration:infra` (seta `COMPOSE_INTEGRATION=1`). Como o
+ * `composeUp` aplica o override `compose.ci.yaml` (`ports: !reset null`) e todas as queries usam
+ * `docker exec` (não a porta do host), a suite coexiste com o stack de dev sem conflito de porta.
  *
  * Convenção:
  *   - Testes de sintaxe (CA-1) podem rodar sem subir container.
@@ -72,11 +77,16 @@ const dockerDaemonAvailable = (): boolean =>
   dockerCliAvailable() && sh('docker info', { timeoutMs: 5_000 }).code === 0;
 
 // Avaliados uma única vez no carregamento do módulo (evita ~30 spawns repetidos).
-// Sintaxe (CA-1) só exige o CLI; bootstrap (CA-2..19) exige o daemon vivo.
+// Sintaxe (CA-1) só exige o CLI; bootstrap (CA-2..19) exige opt-in explícito + daemon vivo.
+// O opt-in segue a convenção do repo (MYSQL_INTEGRATION/STORAGE_INTEGRATION/...): integração
+// nunca roda em `pnpm test` puro — só nos scripts `test:integration:*` que setam a env var.
+const composeIntegration = process.env['COMPOSE_INTEGRATION'] === '1';
 const skipSyntax = dockerCliAvailable() ? false : 'Docker CLI (plugin compose) ausente no PATH';
-const skipBootstrap = dockerDaemonAvailable()
-  ? false
-  : 'Docker daemon offline (ou plugin compose ausente)';
+const skipBootstrap = !composeIntegration
+  ? 'COMPOSE_INTEGRATION!=1 — rode `pnpm run test:integration:infra`'
+  : dockerDaemonAvailable()
+    ? false
+    : 'Docker daemon offline (ou plugin compose ausente)';
 
 const writeSecrets = (): void => {
   mkdirSync(SECRETS_DIR, { recursive: true });
@@ -102,7 +112,10 @@ const removeSecrets = (): void => {
   }
 };
 
-const composeUp = (): ExecOk => sh('docker compose up -d mysql', { timeoutMs: 120_000 });
+// Override CI (`compose.ci.yaml`: `ports: !reset null`) remove o bind do host → sem conflito
+// com a 3306 do stack de dev. Todas as queries usam `docker exec`, nunca a porta do host.
+const composeUp = (): ExecOk =>
+  sh('docker compose -f compose.yaml -f compose.ci.yaml up -d mysql', { timeoutMs: 120_000 });
 const composeDown = (volumes = false): ExecOk =>
   sh(`docker compose down ${volumes ? '-v' : ''}`, { timeoutMs: 60_000 });
 
