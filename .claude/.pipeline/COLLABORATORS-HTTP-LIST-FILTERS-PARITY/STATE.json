@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "COLLABORATORS-HTTP-LIST-FILTERS-PARITY",
+  "size": "M",
+  "createdAt": "2026-06-03T22:27:21.576Z",
+  "closedAt": "2026-06-03T22:36:07.687Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-06-03T22:27:22.163Z",
+      "finishedAt": "2026-06-03T22:29:51.779Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "ports-and-adapters",
+      "startedAt": "2026-06-03T22:29:52.346Z",
+      "finishedAt": "2026-06-03T22:34:06.430Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-06-03T22:34:06.994Z",
+      "finishedAt": "2026-06-03T22:34:48.908Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-06-03T22:34:49.465Z",
+      "finishedAt": "2026-06-03T22:36:07.130Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

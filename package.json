@@ -45,6 +45,7 @@
     "serve": "node --experimental-strip-types --enable-source-maps --no-warnings src/server.ts",
     "test:e2e:auth": "bash scripts/e2e-auth.sh",
     "test:e2e:contracts": "bash scripts/e2e-contracts.sh",
+    "test:e2e:collaborators": "bash scripts/e2e-collaborators.sh",
     "db:generate": "drizzle-kit generate",
     "db:generate:auth": "drizzle-kit generate --config drizzle.config.auth.ts",
     "db:generate:partners": "drizzle-kit generate --config drizzle.config.partners.ts"

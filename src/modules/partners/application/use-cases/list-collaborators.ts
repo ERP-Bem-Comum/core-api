@@ -14,6 +14,10 @@ import type { Collaborator } from '#src/modules/partners/domain/collaborator/typ
 import type { RegistrationStatus } from '#src/modules/partners/domain/collaborator/types.ts';
 import type { OccupationArea } from '#src/modules/partners/domain/collaborator/occupation-area.ts';
 import type { EmploymentRelationship } from '#src/modules/partners/domain/collaborator/employment-relationship.ts';
+import type { GenderIdentity } from '#src/modules/partners/domain/collaborator/gender-identity.ts';
+import type { Race } from '#src/modules/partners/domain/collaborator/race.ts';
+import type { Education } from '#src/modules/partners/domain/collaborator/education.ts';
+import type { DisableReason } from '#src/modules/partners/domain/collaborator/disable-reason.ts';
 import type {
   CollaboratorRepository,
   CollaboratorRepositoryError,
@@ -25,6 +29,13 @@ export type CollaboratorListFilter = Readonly<{
   registrationStatuses?: readonly RegistrationStatus[];
   occupationAreas?: readonly OccupationArea[];
   employmentRelationships?: readonly EmploymentRelationship[];
+  // P1c — paridade legado (age adiado: depende de data de referência).
+  genderIdentities?: readonly GenderIdentity[];
+  races?: readonly Race[];
+  educations?: readonly Education[];
+  disableReasons?: readonly DisableReason[];
+  roles?: readonly string[];
+  yearOfContract?: number;
 }>;
 
 // `search` casa name (substring case-insensitive) OU cpf (só dígitos do termo). Termo
@@ -41,6 +52,13 @@ const matchesSearch = (c: Collaborator, search: string | undefined): boolean => 
 const matchesIn = <T>(value: T, allowed: readonly T[] | undefined): boolean =>
   allowed === undefined || allowed.length === 0 || allowed.includes(value);
 
+// Variante p/ campos nullable (pessoais/soft-delete): `null` nunca casa um filtro presente.
+const matchesInNullable = <T>(value: T | null, allowed: readonly T[] | undefined): boolean =>
+  allowed === undefined || allowed.length === 0 || (value !== null && allowed.includes(value));
+
+const matchesYear = (startOfContract: Date, year: number | undefined): boolean =>
+  year === undefined || startOfContract.getFullYear() === year;
+
 export const collaboratorMatchesFilter = (
   c: Collaborator,
   filter: CollaboratorListFilter,
@@ -49,7 +67,13 @@ export const collaboratorMatchesFilter = (
   matchesIn(c.status, filter.statuses) &&
   matchesIn(c.registrationStatus, filter.registrationStatuses) &&
   matchesIn(c.occupationArea, filter.occupationAreas) &&
-  matchesIn(c.employmentRelationship, filter.employmentRelationships);
+  matchesIn(c.employmentRelationship, filter.employmentRelationships) &&
+  matchesInNullable(c.genderIdentity, filter.genderIdentities) &&
+  matchesInNullable(c.race, filter.races) &&
+  matchesInNullable(c.education, filter.educations) &&
+  matchesInNullable(c.status === 'Inactive' ? c.disableBy : null, filter.disableReasons) &&
+  matchesIn(c.role, filter.roles) &&
+  matchesYear(c.startOfContract, filter.yearOfContract);
 
 type Deps = Readonly<{ collaboratorRepo: CollaboratorRepository }>;
 

@@ -45,12 +45,23 @@ export type FastifyAppWithZod = FastifyInstance<
   FastifyZodOpenApiTypeProvider
 >;
 
+/**
+ * Registro de rota: plugin direto (forma legada → default /api/v2) OU `{ plugin, prefix }`
+ * com prefixo explícito (ADR-0033 — `/api/v1` espelha o legado). Uniao retrocompativel:
+ * call-sites antigos (auth/contracts) seguem passando o plugin direto.
+ */
+export type RouteRegistration =
+  | FastifyPluginAsync
+  | Readonly<{ plugin: FastifyPluginAsync; prefix?: string }>;
+
 export type BuildAppOptions = Readonly<{
-  /** Plugins de rotas de negocio; registrados sob /api/v2. Default: []. */
-  routes?: readonly FastifyPluginAsync[];
+  /** Plugins de rotas de negocio. Plugin direto → /api/v2; `{plugin, prefix}` → prefixo dado. Default: []. */
+  routes?: readonly RouteRegistration[];
   /** Config HTTP (cors origins, rate-limit). Default: readHttpConfig({}) - origin: false, 200/min. */
   config?: HttpConfig;
 }>;
+
+const DEFAULT_API_PREFIX = '/api/v2';
 
 /**
  * Opções do logger Pino com redact de credenciais (BE-050 — web-security-backend).
@@ -150,9 +161,12 @@ export const buildApp = async (opts: BuildAppOptions = {}): Promise<FastifyAppWi
     runWithCorrelation(req.id, done as () => void);
   });
 
-  // --- Hook onSend: no-store em rotas de negocio /api/v2 (dado sensivel; sem cache em proxy/browser) ---
+  // --- Hook onSend: no-store em rotas de negocio /api/* (dado sensivel; sem cache em proxy/browser) ---
+  // Cobre v1 (espelho legado, ADR-0033) e v2 (modelo novo) — toda rota de negocio e sensivel.
   app.addHook('onSend', (req, reply, payload, done) => {
-    if (req.url.startsWith('/api/v2')) reply.header('cache-control', 'no-store');
+    if (req.url.startsWith('/api/v1') || req.url.startsWith('/api/v2')) {
+      reply.header('cache-control', 'no-store');
+    }
     done(null, payload);
   });
 
@@ -162,10 +176,12 @@ export const buildApp = async (opts: BuildAppOptions = {}): Promise<FastifyAppWi
   // --- Rota de infra: /health (CA1) ---
   app.get('/health', () => ({ status: 'ok' }));
 
-  // --- Rotas de negocio sob /api/v2 (ADR-0025:35) ---
+  // --- Rotas de negocio: prefixo por plugin (ADR-0025:35, ADR-0033) ---
+  // Plugin direto → default /api/v2; `{plugin, prefix}` → prefixo explicito (ex.: /api/v1).
   const routes = opts.routes ?? [];
-  for (const plugin of routes) {
-    await app.register(plugin, { prefix: '/api/v2' });
+  for (const entry of routes) {
+    const reg = typeof entry === 'function' ? { plugin: entry } : entry;
+    await app.register(reg.plugin, { prefix: reg.prefix ?? DEFAULT_API_PREFIX });
   }
 
   return app;

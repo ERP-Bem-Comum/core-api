@@ -4,6 +4,30 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-03 — 🔢 ADR-0033 (versionamento de API: `/api/v1` espelha o legado) + EPIC-COLLABORATORS-HTTP-V1
+
+> Borda HTTP de Colaboradores. Design do épico em `.claude/.planning/EPIC-COLLABORATORS-HTTP-V1.md`.
+
+### EPIC-COLLABORATORS-HTTP-V1 — CRUD de Colaboradores no `/api/v1` (6 fatias closed-green)
+
+Borda HTTP completa de Colaboradores sob `/api/v1` (módulo `partners`), espelhando o contrato legado
+(`handbook/legacy_docs/openapi.yaml`): **P0** bootstrap do plugin v1 + lista; **P1a** detalhe enriquecido
+(read-model com `legacyId`/timestamps); **P1b** lista paginada (`PaginatedCollaborators`) + 5 filtros;
+**P1c** +6 filtros (paridade, `age` adiado); **P2** `POST` cadastro (201+Location) + `PATCH`
+complete-registration (autenticado); **P3** `POST` deactivate/reactivate (dois endpoints). Pendentes:
+**P4-EDIT** (edição cadastral — exige operação de domínio nova + RBAC elevado p/ campos vitais) e
+**P4-SMOKE** (E2E opcional). Suite: 2027 testes verdes.
+
+### ADR-0033 — Versionamento de API HTTP (v1 = espelho do legado, v2 = modelo novo)
+
+Convenção de versionamento por **recurso/módulo**: recursos que **espelham o legado** (Strangler Fig,
+ADR-0001) entram em **`/api/v1`** com contrato herdado e **congelado**; recursos **greenfield** (`auth`,
+`contracts`) seguem em **`/api/v2`**. O `buildApp()` (`src/shared/http/app.ts`) deixa de hardcodar o
+prefixo: `routes` passa a `ReadonlyArray<{ plugin, prefix? }>` (default `/api/v2`, retrocompatível). Não
+superseda ADR-0025/0027/0028 — os cumpre. Estreia com **Colaboradores** (módulo `partners`, ADR-0031).
+
+---
+
 ## 2026-06-02 — 📨 Feedback da P.O. (nova seção) + ADR-0032 (composição transitória na borda)
 
 > Branch `docs/po-feedback`.

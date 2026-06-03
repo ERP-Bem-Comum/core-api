@@ -23,6 +23,10 @@ import {
   contractsHttpPlugin,
   buildContractsHttpDeps,
 } from '#src/modules/contracts/public-api/http.ts';
+import {
+  collaboratorsHttpPlugin,
+  buildPartnersHttpDeps,
+} from '#src/modules/partners/public-api/http.ts';
 
 const main = async (): Promise<void> => {
   const config = readHttpConfig(process.env);
@@ -64,13 +68,36 @@ const main = async (): Promise<void> => {
       : { driver: 'memory' },
   );
 
+  // RW split (ADR-0026) do módulo partners: PARTNERS_DATABASE_URL = writer; PARTNERS_READER_URL
+  // = réplica (ausente → reusa o writer). Reads (lista de colaboradores) roteiam ao reader.
+  const partnersWriterUrl = process.env['PARTNERS_DATABASE_URL'];
+  const partnersReaderUrl = process.env['PARTNERS_READER_URL'];
+  const partnersDeps = await buildPartnersHttpDeps(
+    process.env['PARTNERS_DRIVER'] === 'mysql'
+      ? {
+          driver: 'mysql',
+          ...(partnersWriterUrl !== undefined ? { writerUrl: partnersWriterUrl } : {}),
+          ...(partnersReaderUrl !== undefined ? { readerUrl: partnersReaderUrl } : {}),
+        }
+      : { driver: 'memory' },
+  );
+
   // requireAuth do auth (cross-módulo via public-api, ADR-0006/0024) protege as rotas de contracts.
   const requireAuth = makeRequireAuth(authDeps.verifyAccessToken);
 
   const app = await buildApp({
     routes: [
+      // Modelo novo (greenfield) → /api/v2 (plugin direto, forma legada do buildApp).
       authHttpPlugin(authDeps),
       contractsHttpPlugin(contractsDeps, { requireAuth, authorize: authDeps.authorize }),
+      // Espelho do legado (ADR-0033) → /api/v1.
+      {
+        plugin: collaboratorsHttpPlugin(partnersDeps, {
+          requireAuth,
+          authorize: authDeps.authorize,
+        }),
+        prefix: '/api/v1',
+      },
     ],
     config,
   });
@@ -81,6 +108,7 @@ const main = async (): Promise<void> => {
     await app.close();
     await authDeps.shutdown();
     await contractsDeps.shutdown();
+    await partnersDeps.shutdown();
     app.log.info('Servidor encerrado.');
   };
 
