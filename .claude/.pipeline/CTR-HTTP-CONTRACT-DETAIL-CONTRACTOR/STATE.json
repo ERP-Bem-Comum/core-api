@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "CTR-HTTP-CONTRACT-DETAIL-CONTRACTOR",
+  "size": "M",
+  "createdAt": "2026-06-02T17:44:01.934Z",
+  "closedAt": null,
+  "currentWave": "W0",
+  "status": "in-progress",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "in-progress",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-06-02T19:56:30.719Z",
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W1",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W2",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W3",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "W0 started (tdd-strategist)"
+}
