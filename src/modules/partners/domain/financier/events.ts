@@ -10,4 +10,5 @@ export type FinancierEvent = Readonly<
   | { type: 'FinancierRegistered'; financierId: FinancierId; cnpj: Cnpj; occurredAt: Date }
   | { type: 'FinancierDeactivated'; financierId: FinancierId; occurredAt: Date }
   | { type: 'FinancierReactivated'; financierId: FinancierId; occurredAt: Date }
+  | { type: 'FinancierEdited'; financierId: FinancierId; occurredAt: Date }
 >;

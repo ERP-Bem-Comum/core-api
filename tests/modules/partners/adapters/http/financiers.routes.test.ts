@@ -81,6 +81,7 @@ const makeApp = async (financiers: readonly FinancierReadRecord[] = []) => {
         plugin: financiersHttpPlugin(partnersDeps, {
           requireAuth,
           authorize: authDeps.authorize,
+          hasPermission: authDeps.hasPermission,
         }),
         prefix: '/api/v1',
       },

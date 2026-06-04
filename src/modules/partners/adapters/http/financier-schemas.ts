@@ -67,3 +67,8 @@ export const createFinancierBodySchema = z.object({
 });
 
 export type CreateFinancierBody = z.infer<typeof createFinancierBodySchema>;
+
+/** Body do PUT /financiers/:id — substituição total (= create). Espelha `UpdateFinancier` legado. */
+export const updateFinancierBodySchema = createFinancierBodySchema;
+
+export type UpdateFinancierBody = z.infer<typeof updateFinancierBodySchema>;

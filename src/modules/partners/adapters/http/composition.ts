@@ -40,6 +40,7 @@ import type { SupplierRepository } from '../../domain/supplier/repository.ts';
 import { registerFinancier } from '../../application/use-cases/register-financier.ts';
 import { deactivateFinancier } from '../../application/use-cases/deactivate-financier.ts';
 import { reactivateFinancier } from '../../application/use-cases/reactivate-financier.ts';
+import { editFinancier } from '../../application/use-cases/edit-financier.ts';
 import type { FinancierRepository } from '../../domain/financier/repository.ts';
 import type {
   FinancierReader,
@@ -113,6 +114,7 @@ export type PartnersHttpDeps = Readonly<{
   registerFinancier: ReturnType<typeof registerFinancier>;
   deactivateFinancier: ReturnType<typeof deactivateFinancier>;
   reactivateFinancier: ReturnType<typeof reactivateFinancier>;
+  editFinancier: ReturnType<typeof editFinancier>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -226,6 +228,7 @@ const makeDeps = (pools: Pools): PartnersHttpDeps => {
     registerFinancier: registerFinancier({ financierRepo: pools.financierWriterRepo, clock }),
     deactivateFinancier: deactivateFinancier({ financierRepo: pools.financierWriterRepo, clock }),
     reactivateFinancier: reactivateFinancier({ financierRepo: pools.financierWriterRepo, clock }),
+    editFinancier: editFinancier({ financierRepo: pools.financierWriterRepo, clock }),
     shutdown: pools.shutdown,
   };
 };

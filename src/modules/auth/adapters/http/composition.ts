@@ -59,7 +59,7 @@ import { makeEmailPasswordResetMailer } from '../notifications/password-reset-ma
 import type { Clock } from '#src/shared/ports/clock.ts';
 
 // Seed RBAC (CONTRACTS-HTTP-READS C1, D4): bootstrap de permissões para dev/test.
-import type { preHandlerAsyncHookHandler } from 'fastify';
+import type { FastifyRequest, preHandlerAsyncHookHandler } from 'fastify';
 import * as Email from '../../domain/identity/email.ts';
 import * as Password from '../../domain/credential/password-policy.ts';
 import * as UserId from '../../domain/identity/user-id.ts';
@@ -67,7 +67,7 @@ import * as RoleId from '../../domain/authorization/role-id.ts';
 import * as Permission from '../../domain/authorization/permission.ts';
 import * as Role from '../../domain/authorization/role.ts';
 import * as User from '../../domain/identity/user/user.ts';
-import { makeAuthorize } from './auth-hook.ts';
+import { makeAuthorize, makeHasPermission } from './auth-hook.ts';
 
 export type AuthDriver = 'memory' | 'mysql';
 
@@ -117,6 +117,11 @@ export type AuthHttpDeps = Readonly<{
    * `Permission`) para não vazar `auth/domain` a outros módulos (ADR-0006); valida internamente.
    */
   authorize: (permissionName: string) => preHandlerAsyncHookHandler;
+  /**
+   * Checagem CONSULTÁVEL de permissão (não-preHandler): `(req, permissionName) => Promise<boolean>`.
+   * Para autorização condicional no handler (ex.: editar campo vital). Nega por padrão em falha.
+   */
+  hasPermission: (req: FastifyRequest, permissionName: string) => Promise<boolean>;
   /** Config do rate-limit dedicado das rotas sensíveis (login/refresh) — BE-REC-001. */
   sensitiveRateLimit: Readonly<{ max: number; timeWindow: string }>;
   /** Use case do fluxo de reset (BE-REC-003), consumido pela rota /forgot-password. */
@@ -377,6 +382,7 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
       }
       return makeAuthorize(stores.userReader)(parsed.value);
     },
+    hasPermission: makeHasPermission(stores.userReader),
     shutdown: stores.shutdown,
   };
 };

@@ -12,7 +12,7 @@
 
 export { authHttpPlugin } from '../adapters/http/plugin.ts';
 export { buildAuthHttpDeps } from '../adapters/http/composition.ts';
-export { makeRequireAuth, makeAuthorize } from '../adapters/http/auth-hook.ts';
+export { makeRequireAuth, makeAuthorize, makeHasPermission } from '../adapters/http/auth-hook.ts';
 export { parseE2eAuthSeed } from '../adapters/http/e2e-seed.ts';
 export type {
   AuthHttpDeps,

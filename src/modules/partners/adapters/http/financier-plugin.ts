@@ -4,7 +4,12 @@
  * cadastro+deactivate/reactivate.
  */
 
-import type { FastifyPluginAsync, FastifyReply, preHandlerAsyncHookHandler } from 'fastify';
+import type {
+  FastifyPluginAsync,
+  FastifyReply,
+  FastifyRequest,
+  preHandlerAsyncHookHandler,
+} from 'fastify';
 import type {
   FastifyPluginAsyncZodOpenApi,
   FastifyZodOpenApiSchema,
@@ -25,32 +30,42 @@ import {
   financierDetailSchema,
   financierIdParamSchema,
   createFinancierBodySchema,
+  updateFinancierBodySchema,
 } from './financier-schemas.ts';
 import { FINANCIER_PERMISSION } from '../../public-api/permissions.ts';
 
 export type FinanciersHttpHooks = Readonly<{
   requireAuth: preHandlerAsyncHookHandler;
   authorize: (permissionName: string) => preHandlerAsyncHookHandler;
+  /** Checagem consultável de permissão (RBAC condicional do campo vital — edição). */
+  hasPermission: (req: FastifyRequest, permissionName: string) => Promise<boolean>;
 }>;
+
+const SENSITIVE_PERMISSION = 'financier:edit-sensitive';
 
 const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'register-financier-cnpj-duplicate',
   'financier-cnpj-duplicate',
+  'edit-financier-cnpj-duplicate',
   'financier-already-inactive',
   'financier-already-active',
 ]);
 const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
   'deactivate-financier-not-found',
   'reactivate-financier-not-found',
+  'edit-financier-not-found',
 ]);
 const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
   'deactivate-financier-invalid-id',
   'reactivate-financier-invalid-id',
+  'edit-financier-invalid-id',
 ]);
+const FORBIDDEN_CODES: ReadonlySet<string> = new Set(['edit-financier-sensitive-forbidden']);
 const REPO_UNAVAILABLE_CODES: ReadonlySet<string> = new Set(['financier-repo-unavailable']);
 
 // Erro de escrita → status. Default 422 (invariante de domínio: campos obrigatórios, CNPJ).
 const writeErrorStatus = (code: string): number => {
+  if (FORBIDDEN_CODES.has(code)) return 403;
   if (CONFLICT_CODES.has(code)) return 409;
   if (NOT_FOUND_CODES.has(code)) return 404;
   if (BAD_REQUEST_CODES.has(code)) return 400;
@@ -157,6 +172,28 @@ const financiersRoutes =
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
         const result = await deps.reactivateFinancier({ financierId: req.params.id });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return reply.code(200).send() as unknown as Promise<void>;
+      },
+    });
+
+    // Edição (PUT total). `financier:write` edita campos não-vitais; mudar o CNPJ (vital) exige
+    // `financier:edit-sensitive` — a regra do vital é aplicada no use case (canEditSensitive).
+    scope.route({
+      method: 'PUT',
+      url: '/financiers/:id',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIER_PERMISSION.write)],
+      schema: {
+        params: financierIdParamSchema,
+        body: updateFinancierBodySchema,
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const canEditSensitive = await hooks.hasPermission(req, SENSITIVE_PERMISSION);
+        const result = await deps.editFinancier({
+          financierId: req.params.id,
+          canEditSensitive,
+          ...req.body,
+        });
         if (!result.ok) return sendWriteError(reply, result.error);
         return reply.code(200).send() as unknown as Promise<void>;
       },

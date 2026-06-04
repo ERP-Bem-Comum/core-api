@@ -4,6 +4,17 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-04 — ✏️ EPIC-PARTNERS-HTTP-EDIT — edição cadastral (PUT) com RBAC elevado (piloto Financier)
+
+Estreia a **edição cadastral** na borda `/api/v1` e o **RBAC condicional para campos vitais**.
+`PUT /api/v1/financiers/:id` (substituição total, fiel ao legado `UpdateFinancier`): quem tem
+`financier:write` edita campos não-vitais; mudar o **CNPJ** (vital) exige `financier:edit-sensitive`
+(síncrono) — senão **403**. Modela a 1ª operação de edição de domínio (`Financier.edit` + evento
+`FinancierEdited`); a regra do vital vive no use case `editFinancier` (`canEditSensitive` + re-checagem de
+unicidade). **Novo no módulo auth (reusável):** `makeHasPermission(userReader)` — checagem **consultável**
+de permissão (boolean, nega por padrão), exposta via `auth/public-api/http.ts`, para autorização condicional
+dentro do handler. Piloto; replicar para Supplier (vital=cnpj) e Collaborator (vital=cpf). Suite: 2065 testes verdes.
+
 ## 2026-06-04 — 🏦 EPIC-FINANCIERS-HTTP-V1 — CRUD de Financiadores no `/api/v1` (fatia única)
 
 Borda HTTP de Financiadores sob `/api/v1/financiers` (módulo `partners`), espelhando o legado

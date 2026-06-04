@@ -32,6 +32,16 @@ export type InactiveFinancier = FinancierCore &
 
 export type Financier = ActiveFinancier | InactiveFinancier;
 
+/** Payload de edição (PUT total): os 6 campos cadastrais. `id`/estado preservados pela operação. */
+export type EditFinancierInput = Readonly<{
+  name: string;
+  corporateName: string;
+  legalRepresentative: string;
+  cnpj: string;
+  telephone: string;
+  address: string;
+}>;
+
 export type RegisterFinancierInput = Readonly<{
   id: FinancierId;
   name: string;

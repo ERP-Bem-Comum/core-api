@@ -14,7 +14,10 @@ import { toErrorEnvelope } from '#src/shared/http/errors.ts';
 
 import type { TokenIssuer } from '../../application/ports/token-issuer.ts';
 import type { UserReader } from '../../domain/identity/user/repository.ts';
-import type { Permission } from '../../domain/authorization/permission.ts';
+import {
+  type Permission,
+  parse as parsePermission,
+} from '../../domain/authorization/permission.ts';
 import { authorize } from '../../domain/authorization/authorize.ts';
 import * as UserId from '../../domain/identity/user-id.ts';
 import * as User from '../../domain/identity/user/user.ts';
@@ -64,4 +67,28 @@ export const makeAuthorize =
 
     if (!authorize(active.value, required).ok) return sendForbidden(req, reply);
     return undefined;
+  };
+
+/**
+ * Checagem CONSULTÁVEL de permissão (não-preHandler): retorna boolean em vez de 401/403.
+ * Para autorização condicional DENTRO do handler (ex.: editar campo vital exige permissão
+ * elevada só quando o campo muda). Usa `req.userId` (populado por `requireAuth`). Qualquer
+ * falha (sem userId, user inexistente/inativo, permissão inválida) → `false` (nega por padrão).
+ */
+export const makeHasPermission =
+  (userReader: UserReader) =>
+  async (req: FastifyRequest, permissionName: string): Promise<boolean> => {
+    const required = parsePermission(permissionName);
+    if (!required.ok) return false;
+
+    const idR = UserId.rehydrate(req.userId);
+    if (!idR.ok) return false;
+
+    const found = await userReader.findById(idR.value);
+    if (!found.ok || found.value === null) return false;
+
+    const active = User.parseActive(found.value);
+    if (!active.ok) return false;
+
+    return authorize(active.value, required.value).ok;
   };

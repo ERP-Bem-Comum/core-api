@@ -17,6 +17,7 @@ import { immutable } from '#src/shared/primitives/immutable.ts';
 import * as Cnpj from '#src/shared/kernel/cnpj.ts';
 import type {
   ActiveFinancier,
+  EditFinancierInput,
   Financier,
   InactiveFinancier,
   RegisterFinancierInput,
@@ -58,6 +59,46 @@ export const register = (
   };
 
   return ok({ financier, event });
+};
+
+/**
+ * Edição cadastral (PUT total): revalida os 6 campos + CNPJ e reconstrói o agregado,
+ * preservando `id` e o estado de soft-delete (Active/Inactive + deactivatedAt). RBAC do
+ * campo vital (CNPJ) é decidido fora (use case/borda). Emite `FinancierEdited`.
+ */
+export const edit = (
+  financier: Financier,
+  input: EditFinancierInput,
+  at: Date,
+): Result<{ financier: Financier; event: FinancierEvent }, FinancierError> => {
+  if (isBlank(input.name)) return err('financier-name-required');
+  if (isBlank(input.corporateName)) return err('financier-corporate-name-required');
+  if (isBlank(input.legalRepresentative)) return err('financier-legal-representative-required');
+  if (isBlank(input.telephone)) return err('financier-telephone-required');
+  if (isBlank(input.address)) return err('financier-address-required');
+
+  const cnpj = Cnpj.parse(input.cnpj);
+  if (!cnpj.ok) return err('invalid-cnpj');
+
+  const core = {
+    id: financier.id,
+    name: input.name.trim(),
+    corporateName: input.corporateName.trim(),
+    legalRepresentative: input.legalRepresentative.trim(),
+    cnpj: cnpj.value,
+    telephone: input.telephone.trim(),
+    address: input.address.trim(),
+  };
+
+  const edited: Financier =
+    financier.status === 'Active'
+      ? immutable({ ...core, status: 'Active' })
+      : immutable({ ...core, status: 'Inactive', deactivatedAt: financier.deactivatedAt });
+
+  return ok({
+    financier: edited,
+    event: { type: 'FinancierEdited', financierId: financier.id, occurredAt: at },
+  });
 };
 
 export const deactivate = (
