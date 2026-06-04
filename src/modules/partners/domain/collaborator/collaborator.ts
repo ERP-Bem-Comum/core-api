@@ -24,6 +24,7 @@ import type {
   ActiveCollaborator,
   Collaborator,
   CompleteRegistrationInput,
+  EditCollaboratorInput,
   RegisterCollaboratorInput,
   RehydrateCollaboratorInput,
 } from './types.ts';
@@ -82,6 +83,48 @@ export const register = (
       collaboratorId: collaborator.id,
       occurredAt: input.registeredAt,
     },
+  });
+};
+
+/**
+ * Edição cadastral (PUT total): revalida os 7 campos cadastrais e os sobrescreve, **preservando**
+ * via spread os campos pessoais, o `registrationStatus` e o estado de soft-delete (status/disableBy/
+ * deactivatedAt). RBAC do campo vital (CPF) é decidido fora (use case/borda). Emite `CollaboratorEdited`.
+ */
+export const edit = (
+  collaborator: Collaborator,
+  input: EditCollaboratorInput,
+  at: Date,
+): Result<{ collaborator: Collaborator; event: CollaboratorEvent }, CollaboratorError> => {
+  if (isBlank(input.name)) return err('collaborator-name-required');
+  if (isBlank(input.email)) return err('collaborator-email-required');
+  if (!EMAIL_RE.test(input.email.trim())) return err('collaborator-email-invalid');
+  if (isBlank(input.role)) return err('collaborator-role-required');
+
+  const cpf = Cpf.parse(input.cpf);
+  if (!cpf.ok) return err('invalid-cpf');
+
+  const occupationArea = OccupationArea.parse(input.occupationArea);
+  if (!occupationArea.ok) return occupationArea;
+
+  const employmentRelationship = EmploymentRelationship.parse(input.employmentRelationship);
+  if (!employmentRelationship.ok) return employmentRelationship;
+
+  // Spread preserva pessoais + registrationStatus + estado (Active/Inactive + disableBy/deactivatedAt).
+  const edited: Collaborator = immutable({
+    ...collaborator,
+    name: input.name.trim(),
+    email: input.email.trim(),
+    cpf: cpf.value,
+    occupationArea: occupationArea.value,
+    role: input.role.trim(),
+    startOfContract: input.startOfContract,
+    employmentRelationship: employmentRelationship.value,
+  });
+
+  return ok({
+    collaborator: edited,
+    event: { type: 'CollaboratorEdited', collaboratorId: collaborator.id, occurredAt: at },
   });
 };
 

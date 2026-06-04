@@ -163,6 +163,11 @@ export const createCollaboratorBodySchema = z.object({
 
 export type CreateCollaboratorBody = z.infer<typeof createCollaboratorBodySchema>;
 
+/** Body do PUT /collaborators/:id — substituição total dos cadastrais (= create). Pessoais não entram aqui. */
+export const updateCollaboratorBodySchema = createCollaboratorBodySchema;
+
+export type UpdateCollaboratorBody = z.infer<typeof updateCollaboratorBodySchema>;
+
 /**
  * Body do PATCH /:id/complete-registration. Campos pessoais — todos nullable, default null
  * (ausente = não informado). Enums validados no domínio (string aqui). Espelha

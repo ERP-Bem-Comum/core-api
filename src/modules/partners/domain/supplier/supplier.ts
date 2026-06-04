@@ -15,6 +15,7 @@ import * as PaymentTarget from './payment-target.ts';
 import type { BankAccount, PixKey } from './payment-target.ts';
 import type {
   ActiveSupplier,
+  EditSupplierInput,
   InactiveSupplier,
   RegisterSupplierInput,
   RehydrateSupplierInput,
@@ -81,6 +82,67 @@ export const register = (
       cnpj: supplier.cnpj,
       occurredAt: input.registeredAt,
     },
+  });
+};
+
+/**
+ * Edição cadastral (PUT total): revalida campos/email/CNPJ/categoria + invariante de payment
+ * target, reconstrói o agregado preservando `id` e o estado (Active/Inactive + deactivatedAt).
+ * RBAC do campo vital (CNPJ) é decidido fora (use case/borda). Emite `SupplierEdited`.
+ */
+export const edit = (
+  supplier: Supplier,
+  input: EditSupplierInput,
+  at: Date,
+): Result<{ supplier: Supplier; event: SupplierEvent }, SupplierError> => {
+  if (isBlank(input.name)) return err('supplier-name-required');
+  if (isBlank(input.email)) return err('supplier-email-required');
+  if (!EMAIL_RE.test(input.email.trim())) return err('supplier-email-invalid');
+  if (isBlank(input.corporateName)) return err('supplier-corporate-name-required');
+  if (isBlank(input.fantasyName)) return err('supplier-fantasy-name-required');
+
+  const cnpj = Cnpj.parse(input.cnpj);
+  if (!cnpj.ok) return err('invalid-cnpj');
+
+  const category = ServiceCategory.parse(input.serviceCategory);
+  if (!category.ok) return err('invalid-service-category');
+
+  let bankAccount: BankAccount | null = null;
+  if (input.bankAccount !== null) {
+    const r = PaymentTarget.createBankAccount(input.bankAccount);
+    if (!r.ok) return err(r.error);
+    bankAccount = r.value;
+  }
+
+  let pixKey: PixKey | null = null;
+  if (input.pixKey !== null) {
+    const r = PaymentTarget.createPixKey(input.pixKey);
+    if (!r.ok) return err(r.error);
+    pixKey = r.value;
+  }
+
+  if (bankAccount === null && pixKey === null) return err('supplier-payment-target-required');
+
+  const core = {
+    id: supplier.id,
+    name: input.name.trim(),
+    email: input.email.trim(),
+    cnpj: cnpj.value,
+    corporateName: input.corporateName.trim(),
+    fantasyName: input.fantasyName.trim(),
+    serviceCategory: category.value,
+    bankAccount,
+    pixKey,
+  };
+
+  const edited: Supplier =
+    supplier.status === 'Active'
+      ? immutable({ ...core, status: 'Active' })
+      : immutable({ ...core, status: 'Inactive', deactivatedAt: supplier.deactivatedAt });
+
+  return ok({
+    supplier: edited,
+    event: { type: 'SupplierEdited', supplierId: supplier.id, occurredAt: at },
   });
 };
 

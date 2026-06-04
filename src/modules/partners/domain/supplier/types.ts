@@ -45,6 +45,18 @@ export type RegisterSupplierInput = Readonly<{
   registeredAt: Date;
 }>;
 
+/** Payload de edição (PUT total): campos cadastrais + payment target. `id`/estado preservados. */
+export type EditSupplierInput = Readonly<{
+  name: string;
+  email: string;
+  cnpj: string;
+  corporateName: string;
+  fantasyName: string;
+  serviceCategory: string;
+  bankAccount: BankAccountInput | null;
+  pixKey: PixKeyInput | null;
+}>;
+
 // Reidratação pela borda (mapper): `id`/`cnpj`/`serviceCategory`/payment target já
 // chegam tipados (revalidados no mapper). `rehydrate` só reconstrói o estado e
 // reaplica as invariantes (destino de pagamento; Inactive exige deactivatedAt).

@@ -36,6 +36,7 @@ import {
 import { registerSupplier } from '../../application/use-cases/register-supplier.ts';
 import { deactivateSupplier } from '../../application/use-cases/deactivate-supplier.ts';
 import { reactivateSupplier } from '../../application/use-cases/reactivate-supplier.ts';
+import { editSupplier } from '../../application/use-cases/edit-supplier.ts';
 import type { SupplierRepository } from '../../domain/supplier/repository.ts';
 import { registerFinancier } from '../../application/use-cases/register-financier.ts';
 import { deactivateFinancier } from '../../application/use-cases/deactivate-financier.ts';
@@ -52,6 +53,7 @@ import { registerCollaborator } from '../../application/use-cases/register-colla
 import { completeCollaboratorRegistration } from '../../application/use-cases/complete-collaborator-registration.ts';
 import { deactivateCollaborator } from '../../application/use-cases/deactivate-collaborator.ts';
 import { reactivateCollaborator } from '../../application/use-cases/reactivate-collaborator.ts';
+import { editCollaborator } from '../../application/use-cases/edit-collaborator.ts';
 import type { CollaboratorRepository } from '../../domain/collaborator/repository.ts';
 import type {
   CollaboratorReader,
@@ -99,6 +101,7 @@ export type PartnersHttpDeps = Readonly<{
   /** Soft-delete (writer pool, P3). */
   deactivateCollaborator: ReturnType<typeof deactivateCollaborator>;
   reactivateCollaborator: ReturnType<typeof reactivateCollaborator>;
+  editCollaborator: ReturnType<typeof editCollaborator>;
   /** Fornecedores — leitura (reader pool, S1). */
   getSupplierById: (id: string) => Promise<Result<SupplierReadRecord | null, SupplierReaderError>>;
   listSupplierRecords: () => Promise<Result<readonly SupplierReadRecord[], SupplierReaderError>>;
@@ -106,6 +109,7 @@ export type PartnersHttpDeps = Readonly<{
   registerSupplier: ReturnType<typeof registerSupplier>;
   deactivateSupplier: ReturnType<typeof deactivateSupplier>;
   reactivateSupplier: ReturnType<typeof reactivateSupplier>;
+  editSupplier: ReturnType<typeof editSupplier>;
   /** Financiadores — leitura + escrita (FINANCIERS-HTTP-V1). */
   getFinancierById: (
     id: string,
@@ -210,6 +214,7 @@ const makeDeps = (pools: Pools): PartnersHttpDeps => {
       collaboratorRepo: pools.collaboratorWriterRepo,
       clock,
     }),
+    editCollaborator: editCollaborator({ collaboratorRepo: pools.collaboratorWriterRepo, clock }),
     getSupplierById: async (rawId) => {
       const idR = SupplierId.rehydrate(rawId);
       if (!idR.ok) return ok(null);
@@ -219,6 +224,7 @@ const makeDeps = (pools: Pools): PartnersHttpDeps => {
     registerSupplier: registerSupplier({ supplierRepo: pools.supplierWriterRepo, clock }),
     deactivateSupplier: deactivateSupplier({ supplierRepo: pools.supplierWriterRepo, clock }),
     reactivateSupplier: reactivateSupplier({ supplierRepo: pools.supplierWriterRepo, clock }),
+    editSupplier: editSupplier({ supplierRepo: pools.supplierWriterRepo, clock }),
     getFinancierById: async (rawId) => {
       const idR = FinancierId.rehydrate(rawId);
       if (!idR.ok) return ok(null);

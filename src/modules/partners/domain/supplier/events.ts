@@ -7,4 +7,5 @@ export type SupplierEvent = Readonly<
   | { type: 'SupplierRegistered'; supplierId: SupplierId; cnpj: Cnpj; occurredAt: Date }
   | { type: 'SupplierDeactivated'; supplierId: SupplierId; occurredAt: Date }
   | { type: 'SupplierReactivated'; supplierId: SupplierId; occurredAt: Date }
+  | { type: 'SupplierEdited'; supplierId: SupplierId; occurredAt: Date }
 >;

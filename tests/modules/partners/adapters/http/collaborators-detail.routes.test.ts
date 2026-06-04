@@ -83,6 +83,7 @@ const makeApp = async (seedRecords: readonly CollaboratorReadRecord[]) => {
         plugin: collaboratorsHttpPlugin(partnersDeps, {
           requireAuth,
           authorize: authDeps.authorize,
+          hasPermission: authDeps.hasPermission,
         }),
         prefix: '/api/v1',
       },

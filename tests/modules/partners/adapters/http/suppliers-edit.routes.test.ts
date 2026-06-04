@@ -1,11 +1,9 @@
 /**
- * SUPPLIERS-HTTP-LIFECYCLE (S3) — W0 (RED) — deactivate + reactivate de fornecedor.
+ * SUPPLIERS-HTTP-EDIT — W0 (RED) — PUT /api/v1/suppliers/:id com RBAC elevado p/ campo vital.
  *
- * DEVE FALHAR: as rotas POST /:id/deactivate e /:id/reactivate e os use cases no composition
- * ainda nao existem. GREEN quando o W1 entregar as duas rotas (writer; deactivate sem body —
- * supplier nao tem disableBy).
- *
- * Fluxo no mesmo writer repo: POST cadastro -> deactivate -> reactivate.
+ * DEVE FALHAR: PUT, `editSupplier` no composition, `hasPermission` no SuppliersHttpHooks e
+ * `updateSupplierBodySchema` ainda não existem. GREEN no W1. Vital = cnpj; payment-target é
+ * editável via `supplier:write` (não-vital). POST→PUT no mesmo writer (memory).
  */
 
 import { describe, it } from 'node:test';
@@ -25,25 +23,36 @@ import { SUPPLIER_PERMISSION } from '#src/modules/partners/public-api/permission
 
 const STRONG = 'Str0ng-Passphrase-2026!';
 const WRITER_EMAIL = 'compras.editor@example.com';
+const DIRECTOR_EMAIL = 'compras.diretor@example.com';
 const NOPERM_EMAIL = 'sem.permissao@example.com';
 const UUID_INEXISTENTE = '00000000-0000-4000-8000-000000000000';
+const CNPJ_A = '11222333000181';
+const CNPJ_B = '11444777000161';
 
-const VALID_BODY = {
+const body = (over: Record<string, unknown> = {}) => ({
   name: 'Fornecedor X',
   email: 'contato@fornecedor.com.br',
-  cnpj: '11222333000181',
+  cnpj: CNPJ_A,
   corporateName: 'Fornecedor X LTDA',
   fantasyName: 'FX',
   serviceCategory: 'INFORMATICA',
   bankAccount: { bank: '001', agency: '0001-2', accountNumber: '123456', checkDigit: '7' },
   pixKey: null,
-};
+  ...over,
+});
 
 const makeApp = async () => {
   const authDeps = await buildAuthHttpDeps({
     driver: 'memory',
     seed: {
-      users: [{ email: WRITER_EMAIL, password: STRONG, permissions: [SUPPLIER_PERMISSION.write] }],
+      users: [
+        { email: WRITER_EMAIL, password: STRONG, permissions: [SUPPLIER_PERMISSION.write] },
+        {
+          email: DIRECTOR_EMAIL,
+          password: STRONG,
+          permissions: [SUPPLIER_PERMISSION.write, 'supplier:edit-sensitive'],
+        },
+      ],
     },
   });
   const partnersDeps = await buildPartnersHttpDeps({ driver: 'memory' });
@@ -90,97 +99,115 @@ const registerAndLogin = async (
   return login(app, email);
 };
 
-const createOne = async (
+const create = async (
   app: Awaited<ReturnType<typeof buildApp>>,
   token: string,
+  cnpj: string,
 ): Promise<string> => {
   const res = await app.inject({
     method: 'POST',
     url: '/api/v1/suppliers',
     headers: { authorization: `Bearer ${token}` },
-    payload: VALID_BODY,
+    payload: body({ cnpj, email: `c${cnpj}@fornecedor.com.br` }),
   });
   return (res.headers['location'] ?? '').slice('/api/v1/suppliers/'.length);
 };
 
-const deactivate = async (app: Awaited<ReturnType<typeof buildApp>>, token: string, id: string) => {
-  const res = await app.inject({
-    method: 'POST',
-    url: `/api/v1/suppliers/${id}/deactivate`,
+const put = (
+  app: Awaited<ReturnType<typeof buildApp>>,
+  token: string,
+  id: string,
+  payload: Record<string, unknown>,
+) =>
+  app.inject({
+    method: 'PUT',
+    url: `/api/v1/suppliers/${id}`,
     headers: { authorization: `Bearer ${token}` },
-    payload: {},
+    payload,
   });
-  return res;
-};
 
-const reactivate = async (app: Awaited<ReturnType<typeof buildApp>>, token: string, id: string) => {
-  const res = await app.inject({
-    method: 'POST',
-    url: `/api/v1/suppliers/${id}/reactivate`,
-    headers: { authorization: `Bearer ${token}` },
-    payload: {},
-  });
-  return res;
-};
-
-describe('SUPPLIERS-HTTP-LIFECYCLE (S3) — deactivate', () => {
+describe('SUPPLIERS-HTTP-EDIT — PUT /api/v1/suppliers/:id', () => {
   it('CA: sem Authorization -> 401', async () => {
     const { app, teardown } = await makeApp();
-    const res = await app.inject({
-      method: 'POST',
-      url: `/api/v1/suppliers/${UUID_INEXISTENTE}/deactivate`,
-      payload: {},
-    });
-    assert.equal(res.statusCode, 401);
+    assert.equal(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: `/api/v1/suppliers/${UUID_INEXISTENTE}`,
+          payload: body(),
+        })
+      ).statusCode,
+      401,
+    );
     await teardown();
   });
 
   it('CA: sem supplier:write -> 403', async () => {
     const { app, teardown } = await makeApp();
     const token = await registerAndLogin(app, NOPERM_EMAIL);
-    assert.equal((await deactivate(app, token, UUID_INEXISTENTE)).statusCode, 403);
+    assert.equal((await put(app, token, UUID_INEXISTENTE, body())).statusCode, 403);
     await teardown();
   });
 
-  it('CA: :id não-UUID -> 400', async () => {
+  it('CA: :id não-UUID -> 400; inexistente -> 404', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, WRITER_EMAIL);
-    assert.equal((await deactivate(app, token, 'nao-uuid')).statusCode, 400);
+    assert.equal((await put(app, token, 'nao-uuid', body())).statusCode, 400);
+    assert.equal((await put(app, token, UUID_INEXISTENTE, body())).statusCode, 404);
     await teardown();
   });
 
-  it('CA: id inexistente -> 404', async () => {
+  it('CA: write, sem mudar cnpj (muda name + troca payment p/ pix) -> 200', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, WRITER_EMAIL);
-    assert.equal((await deactivate(app, token, UUID_INEXISTENTE)).statusCode, 404);
+    const id = await create(app, token, CNPJ_A);
+    const res = await put(
+      app,
+      token,
+      id,
+      body({
+        name: 'Fornecedor X Renomeado',
+        bankAccount: null,
+        pixKey: { keyType: 'email', key: 'pix@fornecedor.com.br' },
+      }),
+    );
+    assert.equal(res.statusCode, 200);
     await teardown();
   });
 
-  it('CA: ativo -> 200; segunda vez -> 409 (already-inactive)', async () => {
+  it('CA: write, mudando cnpj -> 403 (sensitive-forbidden)', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, WRITER_EMAIL);
-    const id = await createOne(app, token);
-    assert.equal((await deactivate(app, token, id)).statusCode, 200);
-    assert.equal((await deactivate(app, token, id)).statusCode, 409);
-    await teardown();
-  });
-});
-
-describe('SUPPLIERS-HTTP-LIFECYCLE (S3) — reactivate', () => {
-  it('CA: inativo -> 200; ativo -> 409 (already-active)', async () => {
-    const { app, teardown } = await makeApp();
-    const token = await login(app, WRITER_EMAIL);
-    const id = await createOne(app, token);
-    await deactivate(app, token, id);
-    assert.equal((await reactivate(app, token, id)).statusCode, 200);
-    assert.equal((await reactivate(app, token, id)).statusCode, 409);
+    const id = await create(app, token, CNPJ_A);
+    assert.equal(await put(app, token, id, body({ cnpj: CNPJ_B })).then((r) => r.statusCode), 403);
     await teardown();
   });
 
-  it('CA: id inexistente -> 404', async () => {
+  it('CA: director, mudando cnpj -> 200; cnpj novo já usado -> 409', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app, DIRECTOR_EMAIL);
+    const id = await create(app, token, CNPJ_A);
+    assert.equal(await put(app, token, id, body({ cnpj: CNPJ_B })).then((r) => r.statusCode), 200);
+    const other = await create(app, token, CNPJ_A); // CNPJ_A livre de novo (id mudou p/ B)
+    assert.equal(
+      await put(app, token, other, body({ cnpj: CNPJ_B })).then((r) => r.statusCode),
+      409,
+    );
+    await teardown();
+  });
+
+  it('CA: sem payment target -> 422; email inválido -> 422; cnpj curto -> 400', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, WRITER_EMAIL);
-    assert.equal((await reactivate(app, token, UUID_INEXISTENTE)).statusCode, 404);
+    const id = await create(app, token, CNPJ_A);
+    assert.equal(
+      await put(app, token, id, body({ bankAccount: null, pixKey: null })).then(
+        (r) => r.statusCode,
+      ),
+      422,
+    );
+    assert.equal(await put(app, token, id, body({ email: 'nope' })).then((r) => r.statusCode), 422);
+    assert.equal(await put(app, token, id, body({ cnpj: '123' })).then((r) => r.statusCode), 400);
     await teardown();
   });
 });

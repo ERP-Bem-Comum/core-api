@@ -11,7 +11,12 @@
  * (ADR-0027). Mapeamento erro→HTTP: 503 repo indisponível (demais não ocorrem na leitura).
  */
 
-import type { FastifyPluginAsync, FastifyReply, preHandlerAsyncHookHandler } from 'fastify';
+import type {
+  FastifyPluginAsync,
+  FastifyReply,
+  FastifyRequest,
+  preHandlerAsyncHookHandler,
+} from 'fastify';
 import type {
   FastifyPluginAsyncZodOpenApi,
   FastifyZodOpenApiSchema,
@@ -34,6 +39,7 @@ import {
   createCollaboratorBodySchema,
   completeRegistrationBodySchema,
   deactivateCollaboratorBodySchema,
+  updateCollaboratorBodySchema,
 } from './schemas.ts';
 import { COLLABORATOR_PERMISSION } from '../../public-api/permissions.ts';
 
@@ -41,7 +47,11 @@ export type CollaboratorsHttpHooks = Readonly<{
   requireAuth: preHandlerAsyncHookHandler;
   /** Fábrica de preHandler RBAC por nome de permissão (auth/public-api). */
   authorize: (permissionName: string) => preHandlerAsyncHookHandler;
+  /** Checagem consultável de permissão (RBAC condicional do campo vital — edição). */
+  hasPermission: (req: FastifyRequest, permissionName: string) => Promise<boolean>;
 }>;
+
+const SENSITIVE_PERMISSION = 'collaborator:edit-sensitive';
 
 // Conflito de estado/unicidade → 409.
 const CONFLICT_CODES: ReadonlySet<string> = new Set([
@@ -49,6 +59,8 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'register-collaborator-email-duplicate',
   'collaborator-cpf-duplicate',
   'collaborator-email-duplicate',
+  'edit-collaborator-cpf-duplicate',
+  'edit-collaborator-email-duplicate',
   'collaborator-already-complete',
   'collaborator-already-inactive',
   'collaborator-already-active',
@@ -57,16 +69,20 @@ const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
   'complete-collaborator-registration-not-found',
   'deactivate-collaborator-not-found',
   'reactivate-collaborator-not-found',
+  'edit-collaborator-not-found',
 ]);
 const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
   'complete-collaborator-registration-invalid-id',
   'deactivate-collaborator-invalid-id',
   'reactivate-collaborator-invalid-id',
+  'edit-collaborator-invalid-id',
 ]);
+const FORBIDDEN_CODES: ReadonlySet<string> = new Set(['edit-collaborator-sensitive-forbidden']);
 const REPO_UNAVAILABLE_CODES: ReadonlySet<string> = new Set(['collaborator-repo-unavailable']);
 
 // Erro de escrita → status. Default 422 (invariante de domínio: nome/email/cpf/enum inválidos).
 const writeErrorStatus = (code: string): number => {
+  if (FORBIDDEN_CODES.has(code)) return 403;
   if (CONFLICT_CODES.has(code)) return 409;
   if (NOT_FOUND_CODES.has(code)) return 404;
   if (BAD_REQUEST_CODES.has(code)) return 400;
@@ -203,6 +219,28 @@ const collaboratorsRoutes =
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
         const result = await deps.reactivateCollaborator({ collaboratorId: req.params.id });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return reply.code(200).send() as unknown as Promise<void>;
+      },
+    });
+
+    // Edição cadastral (PUT total dos 7 campos; pessoais/estado preservados). `collaborator:write`
+    // edita não-vitais; mudar o CPF (vital) exige `collaborator:edit-sensitive` (regra no use case).
+    scope.route({
+      method: 'PUT',
+      url: '/collaborators/:id',
+      preHandler: [hooks.requireAuth, hooks.authorize(COLLABORATOR_PERMISSION.write)],
+      schema: {
+        params: collaboratorIdParamSchema,
+        body: updateCollaboratorBodySchema,
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const canEditSensitive = await hooks.hasPermission(req, SENSITIVE_PERMISSION);
+        const result = await deps.editCollaborator({
+          collaboratorId: req.params.id,
+          canEditSensitive,
+          ...req.body,
+        });
         if (!result.ok) return sendWriteError(reply, result.error);
         return reply.code(200).send() as unknown as Promise<void>;
       },

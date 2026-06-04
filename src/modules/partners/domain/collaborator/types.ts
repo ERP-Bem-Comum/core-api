@@ -72,6 +72,17 @@ export type RegisterCollaboratorInput = Readonly<{
   registeredAt: Date;
 }>;
 
+/** Payload de edição cadastral (PUT total): os 7 campos cadastrais. Pessoais/estado preservados. */
+export type EditCollaboratorInput = Readonly<{
+  name: string;
+  email: string;
+  cpf: string;
+  occupationArea: string;
+  role: string;
+  startOfContract: Date;
+  employmentRelationship: string;
+}>;
+
 // Payload de auto-cadastro (campos pessoais; enums como string, validados no domínio).
 export type CompleteRegistrationInput = Readonly<{
   rg: string | null;

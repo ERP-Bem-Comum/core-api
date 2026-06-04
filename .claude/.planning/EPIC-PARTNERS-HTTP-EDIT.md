@@ -32,4 +32,4 @@
 ## Fatias
 
 - **FINANCIERS-HTTP-EDIT** (piloto) — ✅ closed-green (2026-06-04).
-- Depois: `SUPPLIERS-HTTP-EDIT` (vital=cnpj; payment-target editável via write), `COLLABORATORS-HTTP-EDIT` (vital=cpf; campos pessoais + cadastrais).
+- ✅ `SUPPLIERS-HTTP-EDIT` (closed-green 2026-06-04) (vital=cnpj; payment-target editável via write), `COLLABORATORS-HTTP-EDIT` (vital=cpf) — ✅ closed-green (2026-06-04).

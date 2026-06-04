@@ -4,6 +4,18 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-04 — ✏️ EPIC-PARTNERS-HTTP-EDIT — edição (PUT) completa: Supplier + Collaborator (épico fechado)
+
+Replica o piloto Financier para os outros dois counterparties, fechando o épico de edição.
+`PUT /api/v1/suppliers/:id` e `PUT /api/v1/collaborators/:id` (substituição total, fiel ao legado).
+Vital por recurso: Supplier=`cnpj`, Collaborator=`cpf` — alterar exige `<recurso>:edit-sensitive`
+(síncrono) → 403 sem ela. Operações de domínio novas (`Supplier.edit`, `Collaborator.edit` — esta
+preserva campos pessoais + estado via spread; PUT cobre só os cadastrais, pessoais via
+complete-registration) + eventos `SupplierEdited`/`CollaboratorEdited`. Use cases `editSupplier`/
+`editCollaborator` com a regra do vital + re-checagem de unicidade (cnpj/cpf; email do colaborador é
+não-vital mas único → 409). Reusa `makeHasPermission` (auth). Os três cadastros de partners agora têm
+CRUD + edição. Suite: 2079 testes verdes.
+
 ## 2026-06-04 — ✏️ EPIC-PARTNERS-HTTP-EDIT — edição cadastral (PUT) com RBAC elevado (piloto Financier)
 
 Estreia a **edição cadastral** na borda `/api/v1` e o **RBAC condicional para campos vitais**.

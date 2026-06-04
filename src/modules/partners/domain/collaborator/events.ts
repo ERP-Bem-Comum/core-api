@@ -13,4 +13,5 @@ export type CollaboratorEvent = Readonly<
       occurredAt: Date;
     }
   | { type: 'CollaboratorReactivated'; collaboratorId: CollaboratorId; occurredAt: Date }
+  | { type: 'CollaboratorEdited'; collaboratorId: CollaboratorId; occurredAt: Date }
 >;

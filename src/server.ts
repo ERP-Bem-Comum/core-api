@@ -97,6 +97,7 @@ const main = async (): Promise<void> => {
         plugin: collaboratorsHttpPlugin(partnersDeps, {
           requireAuth,
           authorize: authDeps.authorize,
+          hasPermission: authDeps.hasPermission,
         }),
         prefix: '/api/v1',
       },
@@ -104,6 +105,7 @@ const main = async (): Promise<void> => {
         plugin: suppliersHttpPlugin(partnersDeps, {
           requireAuth,
           authorize: authDeps.authorize,
+          hasPermission: authDeps.hasPermission,
         }),
         prefix: '/api/v1',
       },

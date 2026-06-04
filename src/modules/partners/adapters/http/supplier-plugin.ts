@@ -5,7 +5,12 @@
  * S1 (reads): `GET /suppliers` (lista paginada + filtros) e `GET /:id` (detalhe), `supplier:read`.
  */
 
-import type { FastifyPluginAsync, FastifyReply, preHandlerAsyncHookHandler } from 'fastify';
+import type {
+  FastifyPluginAsync,
+  FastifyReply,
+  FastifyRequest,
+  preHandlerAsyncHookHandler,
+} from 'fastify';
 import type {
   FastifyPluginAsyncZodOpenApi,
   FastifyZodOpenApiSchema,
@@ -26,33 +31,43 @@ import {
   supplierDetailSchema,
   supplierIdParamSchema,
   createSupplierBodySchema,
+  updateSupplierBodySchema,
 } from './supplier-schemas.ts';
 import { SUPPLIER_PERMISSION } from '../../public-api/permissions.ts';
 
 export type SuppliersHttpHooks = Readonly<{
   requireAuth: preHandlerAsyncHookHandler;
   authorize: (permissionName: string) => preHandlerAsyncHookHandler;
+  /** Checagem consultável de permissão (RBAC condicional do campo vital — edição). */
+  hasPermission: (req: FastifyRequest, permissionName: string) => Promise<boolean>;
 }>;
+
+const SENSITIVE_PERMISSION = 'supplier:edit-sensitive';
 
 // Conflito de estado/unicidade → 409.
 const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'register-supplier-cnpj-duplicate',
   'supplier-cnpj-duplicate',
+  'edit-supplier-cnpj-duplicate',
   'supplier-already-inactive',
   'supplier-already-active',
 ]);
 const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
   'deactivate-supplier-not-found',
   'reactivate-supplier-not-found',
+  'edit-supplier-not-found',
 ]);
 const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
   'deactivate-supplier-invalid-id',
   'reactivate-supplier-invalid-id',
+  'edit-supplier-invalid-id',
 ]);
+const FORBIDDEN_CODES: ReadonlySet<string> = new Set(['edit-supplier-sensitive-forbidden']);
 const REPO_UNAVAILABLE_CODES: ReadonlySet<string> = new Set(['supplier-repo-unavailable']);
 
 // Erro de escrita → status. Default 422 (invariante de domínio: email/cnpj/categoria/payment-target).
 const writeErrorStatus = (code: string): number => {
+  if (FORBIDDEN_CODES.has(code)) return 403;
   if (CONFLICT_CODES.has(code)) return 409;
   if (NOT_FOUND_CODES.has(code)) return 404;
   if (BAD_REQUEST_CODES.has(code)) return 400;
@@ -162,6 +177,28 @@ const suppliersRoutes =
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
         const result = await deps.reactivateSupplier({ supplierId: req.params.id });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return reply.code(200).send() as unknown as Promise<void>;
+      },
+    });
+
+    // Edição (PUT total). `supplier:write` edita campos não-vitais (incl. payment target);
+    // mudar o CNPJ (vital) exige `supplier:edit-sensitive` (regra no use case).
+    scope.route({
+      method: 'PUT',
+      url: '/suppliers/:id',
+      preHandler: [hooks.requireAuth, hooks.authorize(SUPPLIER_PERMISSION.write)],
+      schema: {
+        params: supplierIdParamSchema,
+        body: updateSupplierBodySchema,
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const canEditSensitive = await hooks.hasPermission(req, SENSITIVE_PERMISSION);
+        const result = await deps.editSupplier({
+          supplierId: req.params.id,
+          canEditSensitive,
+          ...req.body,
+        });
         if (!result.ok) return sendWriteError(reply, result.error);
         return reply.code(200).send() as unknown as Promise<void>;
       },

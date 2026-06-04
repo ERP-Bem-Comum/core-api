@@ -1,11 +1,9 @@
 /**
- * COLLABORATORS-HTTP-LIFECYCLE (P3) — W0 (RED) — deactivate + reactivate.
+ * COLLABORATORS-HTTP-EDIT — W0 (RED) — PUT /api/v1/collaborators/:id com RBAC elevado.
  *
- * DEVE FALHAR: as rotas POST /:id/deactivate e /:id/reactivate não existem; o composition
- * não expõe `deactivateCollaborator`/`reactivateCollaborator`. GREEN quando o W1 entregar
- * as duas rotas (writer pool) + body schema do `disableBy` + mapeamento erro→HTTP.
- *
- * Fluxo no mesmo writer repo: POST cadastro → deactivate → reactivate.
+ * DEVE FALHAR: PUT, `editCollaborator` no composition, `hasPermission` no CollaboratorsHttpHooks e
+ * `updateCollaboratorBodySchema` ainda não existem. GREEN no W1. Vital = cpf; email não-vital (único →
+ * 409). PUT edita os 7 cadastrais (pessoais preservados). POST→PUT no mesmo writer (memory).
  */
 
 import { describe, it } from 'node:test';
@@ -25,18 +23,22 @@ import { COLLABORATOR_PERMISSION } from '#src/modules/partners/public-api/permis
 
 const STRONG = 'Str0ng-Passphrase-2026!';
 const WRITER_EMAIL = 'rh.editor@example.com';
+const DIRECTOR_EMAIL = 'rh.diretor@example.com';
 const NOPERM_EMAIL = 'sem.permissao@example.com';
 const UUID_INEXISTENTE = '00000000-0000-4000-8000-000000000000';
+const CPF_A = '11144477735';
+const CPF_B = '52998224725';
 
-const VALID_BODY = {
+const body = (over: Record<string, unknown> = {}) => ({
   name: 'Maria Silva',
   email: 'maria@bemcomum.org',
-  cpf: '11144477735',
+  cpf: CPF_A,
   occupationArea: 'PARC',
   role: 'Analista',
   startOfContract: '2026-01-10',
   employmentRelationship: 'CLT',
-};
+  ...over,
+});
 
 const makeApp = async () => {
   const authDeps = await buildAuthHttpDeps({
@@ -44,6 +46,11 @@ const makeApp = async () => {
     seed: {
       users: [
         { email: WRITER_EMAIL, password: STRONG, permissions: [COLLABORATOR_PERMISSION.write] },
+        {
+          email: DIRECTOR_EMAIL,
+          password: STRONG,
+          permissions: [COLLABORATOR_PERMISSION.write, 'collaborator:edit-sensitive'],
+        },
       ],
     },
   });
@@ -91,115 +98,111 @@ const registerAndLogin = async (
   return login(app, email);
 };
 
-const createOne = async (
+const create = async (
   app: Awaited<ReturnType<typeof buildApp>>,
   token: string,
+  over: Record<string, unknown>,
 ): Promise<string> => {
   const res = await app.inject({
     method: 'POST',
     url: '/api/v1/collaborators',
     headers: { authorization: `Bearer ${token}` },
-    payload: VALID_BODY,
+    payload: body(over),
   });
-  return res.headers['location']!.slice('/api/v1/collaborators/'.length);
+  return (res.headers['location'] ?? '').slice('/api/v1/collaborators/'.length);
 };
 
-const deactivate = async (
+const put = (
   app: Awaited<ReturnType<typeof buildApp>>,
   token: string,
   id: string,
-  body: Record<string, unknown> = { disableBy: 'SOLICITACAO_RESCISAO_CONTRATUAL' },
-) => {
-  const res = await app.inject({
-    method: 'POST',
-    url: `/api/v1/collaborators/${id}/deactivate`,
+  payload: Record<string, unknown>,
+) =>
+  app.inject({
+    method: 'PUT',
+    url: `/api/v1/collaborators/${id}`,
     headers: { authorization: `Bearer ${token}` },
-    payload: body,
+    payload,
   });
-  return res;
-};
 
-const reactivate = async (app: Awaited<ReturnType<typeof buildApp>>, token: string, id: string) => {
-  const res = await app.inject({
-    method: 'POST',
-    url: `/api/v1/collaborators/${id}/reactivate`,
-    headers: { authorization: `Bearer ${token}` },
-    payload: {},
-  });
-  return res;
-};
-
-describe('COLLABORATORS-HTTP-LIFECYCLE (P3) — deactivate', () => {
-  it('CA: sem Authorization -> 401', async () => {
+describe('COLLABORATORS-HTTP-EDIT — PUT /api/v1/collaborators/:id', () => {
+  it('CA: sem Authorization -> 401; sem write -> 403', async () => {
     const { app, teardown } = await makeApp();
-    const res = await app.inject({
-      method: 'POST',
-      url: `/api/v1/collaborators/${UUID_INEXISTENTE}/deactivate`,
-      payload: { disableBy: 'FALECIMENTO' },
-    });
-    assert.equal(res.statusCode, 401);
-    await teardown();
-  });
-
-  it('CA: sem collaborator:write -> 403', async () => {
-    const { app, teardown } = await makeApp();
+    assert.equal(
+      (
+        await app.inject({
+          method: 'PUT',
+          url: `/api/v1/collaborators/${UUID_INEXISTENTE}`,
+          payload: body(),
+        })
+      ).statusCode,
+      401,
+    );
     const token = await registerAndLogin(app, NOPERM_EMAIL);
-    const res = await deactivate(app, token, UUID_INEXISTENTE);
-    assert.equal(res.statusCode, 403);
+    assert.equal((await put(app, token, UUID_INEXISTENTE, body())).statusCode, 403);
     await teardown();
   });
 
-  it('CA: :id não-UUID -> 400', async () => {
+  it('CA: :id não-UUID -> 400; inexistente -> 404', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, WRITER_EMAIL);
-    const res = await deactivate(app, token, 'nao-uuid');
-    assert.equal(res.statusCode, 400);
+    assert.equal((await put(app, token, 'nao-uuid', body())).statusCode, 400);
+    assert.equal((await put(app, token, UUID_INEXISTENTE, body())).statusCode, 404);
     await teardown();
   });
 
-  it('CA: disableBy inválido -> 400 (Zod)', async () => {
+  it('CA: write, sem mudar cpf (muda name) -> 200', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, WRITER_EMAIL);
-    const id = await createOne(app, token);
-    const res = await deactivate(app, token, id, { disableBy: 'MOTIVO_INEXISTENTE' });
-    assert.equal(res.statusCode, 400);
+    const id = await create(app, token, {});
+    assert.equal(
+      await put(app, token, id, body({ name: 'Maria S. Renomeada' })).then((r) => r.statusCode),
+      200,
+    );
     await teardown();
   });
 
-  it('CA: id inexistente -> 404', async () => {
+  it('CA: write, mudando cpf -> 403 (sensitive-forbidden)', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, WRITER_EMAIL);
-    const res = await deactivate(app, token, UUID_INEXISTENTE);
-    assert.equal(res.statusCode, 404);
+    const id = await create(app, token, {});
+    assert.equal(await put(app, token, id, body({ cpf: CPF_B })).then((r) => r.statusCode), 403);
     await teardown();
   });
 
-  it('CA: ativo -> 200; segunda vez -> 409 (already-inactive)', async () => {
+  it('CA: director, mudando cpf -> 200; cpf novo já usado -> 409', async () => {
     const { app, teardown } = await makeApp();
-    const token = await login(app, WRITER_EMAIL);
-    const id = await createOne(app, token);
-    assert.equal((await deactivate(app, token, id)).statusCode, 200);
-    assert.equal((await deactivate(app, token, id)).statusCode, 409);
-    await teardown();
-  });
-});
-
-describe('COLLABORATORS-HTTP-LIFECYCLE (P3) — reactivate', () => {
-  it('CA: inativo -> 200; ativo -> 409 (already-active)', async () => {
-    const { app, teardown } = await makeApp();
-    const token = await login(app, WRITER_EMAIL);
-    const id = await createOne(app, token);
-    await deactivate(app, token, id);
-    assert.equal((await reactivate(app, token, id)).statusCode, 200);
-    assert.equal((await reactivate(app, token, id)).statusCode, 409);
+    const token = await login(app, DIRECTOR_EMAIL);
+    const id = await create(app, token, {});
+    assert.equal(await put(app, token, id, body({ cpf: CPF_B })).then((r) => r.statusCode), 200);
+    const other = await create(app, token, { email: 'outro@bemcomum.org', cpf: CPF_A });
+    assert.equal(
+      await put(app, token, other, body({ email: 'outro@bemcomum.org', cpf: CPF_B })).then(
+        (r) => r.statusCode,
+      ),
+      409,
+    );
     await teardown();
   });
 
-  it('CA: id inexistente -> 404', async () => {
+  it('CA: write, email já usado por outro -> 409 (não-vital)', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, WRITER_EMAIL);
-    const res = await reactivate(app, token, UUID_INEXISTENTE);
-    assert.equal(res.statusCode, 404);
+    const id = await create(app, token, {});
+    await create(app, token, { email: 'ocupado@bemcomum.org', cpf: CPF_B });
+    assert.equal(
+      await put(app, token, id, body({ email: 'ocupado@bemcomum.org' })).then((r) => r.statusCode),
+      409,
+    );
+    await teardown();
+  });
+
+  it('CA: name vazio -> 422; cpf curto -> 400', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const id = await create(app, token, {});
+    assert.equal(await put(app, token, id, body({ name: '   ' })).then((r) => r.statusCode), 422);
+    assert.equal(await put(app, token, id, body({ cpf: '123' })).then((r) => r.statusCode), 400);
     await teardown();
   });
 });

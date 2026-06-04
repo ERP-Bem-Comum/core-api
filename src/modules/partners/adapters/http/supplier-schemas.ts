@@ -109,3 +109,8 @@ export const createSupplierBodySchema = z.object({
 });
 
 export type CreateSupplierBody = z.infer<typeof createSupplierBodySchema>;
+
+/** Body do PUT /suppliers/:id — substituição total (= create). Espelha `UpdateSupplier` legado. */
+export const updateSupplierBodySchema = createSupplierBodySchema;
+
+export type UpdateSupplierBody = z.infer<typeof updateSupplierBodySchema>;

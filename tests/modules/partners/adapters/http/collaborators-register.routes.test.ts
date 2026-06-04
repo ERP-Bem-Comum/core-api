@@ -57,6 +57,7 @@ const makeApp = async () => {
         plugin: collaboratorsHttpPlugin(partnersDeps, {
           requireAuth,
           authorize: authDeps.authorize,
+          hasPermission: authDeps.hasPermission,
         }),
         prefix: '/api/v1',
       },
