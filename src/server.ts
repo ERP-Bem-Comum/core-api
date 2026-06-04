@@ -25,6 +25,7 @@ import {
 } from '#src/modules/contracts/public-api/http.ts';
 import {
   collaboratorsHttpPlugin,
+  suppliersHttpPlugin,
   buildPartnersHttpDeps,
 } from '#src/modules/partners/public-api/http.ts';
 
@@ -93,6 +94,13 @@ const main = async (): Promise<void> => {
       // Espelho do legado (ADR-0033) → /api/v1.
       {
         plugin: collaboratorsHttpPlugin(partnersDeps, {
+          requireAuth,
+          authorize: authDeps.authorize,
+        }),
+        prefix: '/api/v1',
+      },
+      {
+        plugin: suppliersHttpPlugin(partnersDeps, {
           requireAuth,
           authorize: authDeps.authorize,
         }),

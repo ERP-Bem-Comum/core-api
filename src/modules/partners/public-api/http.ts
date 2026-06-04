@@ -13,11 +13,13 @@
 
 export { collaboratorsHttpPlugin } from '../adapters/http/plugin.ts';
 export type { CollaboratorsHttpHooks } from '../adapters/http/plugin.ts';
+export { suppliersHttpPlugin } from '../adapters/http/supplier-plugin.ts';
+export type { SuppliersHttpHooks } from '../adapters/http/supplier-plugin.ts';
 export { buildPartnersHttpDeps } from '../adapters/http/composition.ts';
 export type {
   PartnersHttpDeps,
   PartnersCompositionConfig,
   PartnersDriver,
 } from '../adapters/http/composition.ts';
-export { COLLABORATOR_PERMISSION } from './permissions.ts';
-export type { CollaboratorPermission } from './permissions.ts';
+export { COLLABORATOR_PERMISSION, SUPPLIER_PERMISSION } from './permissions.ts';
+export type { CollaboratorPermission, SupplierPermission } from './permissions.ts';

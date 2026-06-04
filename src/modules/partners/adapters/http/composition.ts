@@ -13,16 +13,25 @@
 import { ok, type Result } from '#src/shared/primitives/result.ts';
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import * as CollaboratorId from '#src/modules/partners/domain/collaborator/collaborator-id.ts';
+import * as SupplierId from '#src/modules/partners/domain/supplier/supplier-id.ts';
 
 import { makeInMemoryCollaboratorStore } from '../persistence/repos/collaborator-repository.in-memory.ts';
 import { createDrizzleCollaboratorStore } from '../persistence/repos/collaborator-repository.drizzle.ts';
 import { makeInMemoryCollaboratorReader } from '../persistence/repos/collaborator-reader.in-memory.ts';
 import { createDrizzleCollaboratorReader } from '../persistence/repos/collaborator-reader.drizzle.ts';
+import { makeInMemorySupplierReader } from '../persistence/repos/supplier-reader.in-memory.ts';
+import { createDrizzleSupplierReader } from '../persistence/repos/supplier-reader.drizzle.ts';
+import { makeInMemorySupplierStore } from '../persistence/repos/supplier-repository.in-memory.ts';
+import { createDrizzleSupplierStore } from '../persistence/repos/supplier-repository.drizzle.ts';
 import {
   openPartnersMysql,
   type PartnersMysqlHandle,
 } from '../persistence/drivers/mysql-driver.ts';
 
+import { registerSupplier } from '../../application/use-cases/register-supplier.ts';
+import { deactivateSupplier } from '../../application/use-cases/deactivate-supplier.ts';
+import { reactivateSupplier } from '../../application/use-cases/reactivate-supplier.ts';
+import type { SupplierRepository } from '../../domain/supplier/repository.ts';
 import { listCollaborators } from '../../application/use-cases/list-collaborators.ts';
 import { registerCollaborator } from '../../application/use-cases/register-collaborator.ts';
 import { completeCollaboratorRegistration } from '../../application/use-cases/complete-collaborator-registration.ts';
@@ -34,12 +43,18 @@ import type {
   CollaboratorReadRecord,
   CollaboratorReaderError,
 } from '../../application/ports/collaborator-reader.ts';
+import type {
+  SupplierReader,
+  SupplierReadRecord,
+  SupplierReaderError,
+} from '../../application/ports/supplier-reader.ts';
 
 export type PartnersDriver = 'memory' | 'mysql';
 
-/** Seed dev/test (driver memory). Popula o reader com read-records. Ignorado em mysql. */
+/** Seed dev/test (driver memory). Popula os readers com read-records. Ignorado em mysql. */
 export type PartnersSeed = Readonly<{
   collaborators?: readonly CollaboratorReadRecord[];
+  suppliers?: readonly SupplierReadRecord[];
 }>;
 
 export type PartnersCompositionConfig = Readonly<{
@@ -68,6 +83,13 @@ export type PartnersHttpDeps = Readonly<{
   /** Soft-delete (writer pool, P3). */
   deactivateCollaborator: ReturnType<typeof deactivateCollaborator>;
   reactivateCollaborator: ReturnType<typeof reactivateCollaborator>;
+  /** Fornecedores — leitura (reader pool, S1). */
+  getSupplierById: (id: string) => Promise<Result<SupplierReadRecord | null, SupplierReaderError>>;
+  listSupplierRecords: () => Promise<Result<readonly SupplierReadRecord[], SupplierReaderError>>;
+  /** Fornecedores — escrita (writer pool, S2/S3). */
+  registerSupplier: ReturnType<typeof registerSupplier>;
+  deactivateSupplier: ReturnType<typeof deactivateSupplier>;
+  reactivateSupplier: ReturnType<typeof reactivateSupplier>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -75,6 +97,8 @@ type Pools = Readonly<{
   collaboratorReaderRepo: CollaboratorRepository;
   collaboratorWriterRepo: CollaboratorRepository;
   collaboratorReader: CollaboratorReader;
+  supplierReader: SupplierReader;
+  supplierWriterRepo: SupplierRepository;
   shutdown: () => Promise<void>;
 }>;
 
@@ -85,6 +109,8 @@ const buildMemoryPools = (config: PartnersCompositionConfig): Pools => {
     collaboratorReaderRepo: repository,
     collaboratorWriterRepo: repository,
     collaboratorReader: makeInMemoryCollaboratorReader(config.seed?.collaborators ?? []),
+    supplierReader: makeInMemorySupplierReader(config.seed?.suppliers ?? []),
+    supplierWriterRepo: makeInMemorySupplierStore().repository,
     shutdown: () => Promise.resolve(),
   };
 };
@@ -117,6 +143,8 @@ const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools
     collaboratorReaderRepo: createDrizzleCollaboratorStore(readerHandle, clock),
     collaboratorWriterRepo: createDrizzleCollaboratorStore(writerHandle, clock),
     collaboratorReader: createDrizzleCollaboratorReader(readerHandle),
+    supplierReader: createDrizzleSupplierReader(readerHandle),
+    supplierWriterRepo: createDrizzleSupplierStore(writerHandle, clock),
     shutdown: async () => {
       await writerHandle.close();
       if (readerHandle !== writerHandle) await readerHandle.close();
@@ -151,6 +179,15 @@ const makeDeps = (pools: Pools): PartnersHttpDeps => {
       collaboratorRepo: pools.collaboratorWriterRepo,
       clock,
     }),
+    getSupplierById: async (rawId) => {
+      const idR = SupplierId.rehydrate(rawId);
+      if (!idR.ok) return ok(null);
+      return pools.supplierReader.getById(idR.value);
+    },
+    listSupplierRecords: pools.supplierReader.list,
+    registerSupplier: registerSupplier({ supplierRepo: pools.supplierWriterRepo, clock }),
+    deactivateSupplier: deactivateSupplier({ supplierRepo: pools.supplierWriterRepo, clock }),
+    reactivateSupplier: reactivateSupplier({ supplierRepo: pools.supplierWriterRepo, clock }),
     shutdown: pools.shutdown,
   };
 };

@@ -14,3 +14,10 @@ export const COLLABORATOR_PERMISSION = {
 
 export type CollaboratorPermission =
   (typeof COLLABORATOR_PERMISSION)[keyof typeof COLLABORATOR_PERMISSION];
+
+export const SUPPLIER_PERMISSION = {
+  read: 'supplier:read',
+  write: 'supplier:write',
+} as const;
+
+export type SupplierPermission = (typeof SUPPLIER_PERMISSION)[keyof typeof SUPPLIER_PERMISSION];

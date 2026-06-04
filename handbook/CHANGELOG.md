@@ -4,6 +4,17 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-04 — 🏭 EPIC-SUPPLIERS-HTTP-V1 — CRUD de Fornecedores no `/api/v1` (3 fatias closed-green)
+
+Borda HTTP de Fornecedores sob `/api/v1/suppliers` (módulo `partners`), espelhando o legado
+(`handbook/legacy_docs/openapi.yaml:545`) e reaproveitando toda a infra do EPIC-COLLABORATORS-HTTP-V1
+(buildApp prefixo por plugin, composition partners RW split, read-model enriquecido): **S1** reads
+(`SupplierReader`, `GET /suppliers` paginado + filtros search/active/categories, `GET /:id`); **S2**
+cadastro (`POST` 201+Location, invariante de payment target → 422); **S3** lifecycle (`POST`
+deactivate/reactivate, sem `disableBy`). Permissões `supplier:read`/`supplier:write`. Design em
+`.claude/.planning/EPIC-SUPPLIERS-HTTP-V1.md`. Pendentes: S-EDIT (`PUT` — exige `Supplier.edit`, gap de
+domínio) e extras (`/options`,`/csv`,`/nameOrCNPJ`). Suite: 2048 testes verdes.
+
 ## 2026-06-03 — 🔢 ADR-0033 (versionamento de API: `/api/v1` espelha o legado) + EPIC-COLLABORATORS-HTTP-V1
 
 > Borda HTTP de Colaboradores. Design do épico em `.claude/.planning/EPIC-COLLABORATORS-HTTP-V1.md`.
