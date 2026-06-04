@@ -21,3 +21,10 @@ export const SUPPLIER_PERMISSION = {
 } as const;
 
 export type SupplierPermission = (typeof SUPPLIER_PERMISSION)[keyof typeof SUPPLIER_PERMISSION];
+
+export const FINANCIER_PERMISSION = {
+  read: 'financier:read',
+  write: 'financier:write',
+} as const;
+
+export type FinancierPermission = (typeof FINANCIER_PERMISSION)[keyof typeof FINANCIER_PERMISSION];

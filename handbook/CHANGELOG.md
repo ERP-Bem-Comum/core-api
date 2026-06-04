@@ -4,6 +4,16 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-04 — 🏦 EPIC-FINANCIERS-HTTP-V1 — CRUD de Financiadores no `/api/v1` (fatia única)
+
+Borda HTTP de Financiadores sob `/api/v1/financiers` (módulo `partners`), espelhando o legado
+(`handbook/legacy_docs/openapi.yaml:443`) e reaproveitando toda a infra dos épicos anteriores. Recurso
+mais simples (PJ/CNPJ, 6 campos: name/corporateName/legalRepresentative/cnpj/telephone/address; sem
+payment-target/categoria/email). Fatia única (decisão do dono): `GET /financiers` (paginado + filtros
+search/active), `GET /:id`, `POST` (201+Location), `POST /:id/deactivate` (sem body) + `/reactivate`.
+Permissões `financier:read`/`financier:write`. `FinancierReader` + `financierMatchesFilter` + plugin.
+Pendentes: edição (`PUT` — gap de domínio `Financier.edit`) e extras (`/options`,`/nameOrCNPJ`). Suite: 2056 testes verdes.
+
 ## 2026-06-04 — 🏭 EPIC-SUPPLIERS-HTTP-V1 — CRUD de Fornecedores no `/api/v1` (3 fatias closed-green)
 
 Borda HTTP de Fornecedores sob `/api/v1/suppliers` (módulo `partners`), espelhando o legado

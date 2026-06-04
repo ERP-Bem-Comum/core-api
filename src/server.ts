@@ -26,6 +26,7 @@ import {
 import {
   collaboratorsHttpPlugin,
   suppliersHttpPlugin,
+  financiersHttpPlugin,
   buildPartnersHttpDeps,
 } from '#src/modules/partners/public-api/http.ts';
 
@@ -101,6 +102,13 @@ const main = async (): Promise<void> => {
       },
       {
         plugin: suppliersHttpPlugin(partnersDeps, {
+          requireAuth,
+          authorize: authDeps.authorize,
+        }),
+        prefix: '/api/v1',
+      },
+      {
+        plugin: financiersHttpPlugin(partnersDeps, {
           requireAuth,
           authorize: authDeps.authorize,
         }),

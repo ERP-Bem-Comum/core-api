@@ -14,6 +14,7 @@ import { ok, type Result } from '#src/shared/primitives/result.ts';
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import * as CollaboratorId from '#src/modules/partners/domain/collaborator/collaborator-id.ts';
 import * as SupplierId from '#src/modules/partners/domain/supplier/supplier-id.ts';
+import * as FinancierId from '#src/modules/partners/domain/financier/financier-id.ts';
 
 import { makeInMemoryCollaboratorStore } from '../persistence/repos/collaborator-repository.in-memory.ts';
 import { createDrizzleCollaboratorStore } from '../persistence/repos/collaborator-repository.drizzle.ts';
@@ -23,6 +24,10 @@ import { makeInMemorySupplierReader } from '../persistence/repos/supplier-reader
 import { createDrizzleSupplierReader } from '../persistence/repos/supplier-reader.drizzle.ts';
 import { makeInMemorySupplierStore } from '../persistence/repos/supplier-repository.in-memory.ts';
 import { createDrizzleSupplierStore } from '../persistence/repos/supplier-repository.drizzle.ts';
+import { makeInMemoryFinancierReader } from '../persistence/repos/financier-reader.in-memory.ts';
+import { createDrizzleFinancierReader } from '../persistence/repos/financier-reader.drizzle.ts';
+import { makeInMemoryFinancierStore } from '../persistence/repos/financier-repository.in-memory.ts';
+import { createDrizzleFinancierStore } from '../persistence/repos/financier-repository.drizzle.ts';
 import {
   openPartnersMysql,
   type PartnersMysqlHandle,
@@ -32,6 +37,15 @@ import { registerSupplier } from '../../application/use-cases/register-supplier.
 import { deactivateSupplier } from '../../application/use-cases/deactivate-supplier.ts';
 import { reactivateSupplier } from '../../application/use-cases/reactivate-supplier.ts';
 import type { SupplierRepository } from '../../domain/supplier/repository.ts';
+import { registerFinancier } from '../../application/use-cases/register-financier.ts';
+import { deactivateFinancier } from '../../application/use-cases/deactivate-financier.ts';
+import { reactivateFinancier } from '../../application/use-cases/reactivate-financier.ts';
+import type { FinancierRepository } from '../../domain/financier/repository.ts';
+import type {
+  FinancierReader,
+  FinancierReadRecord,
+  FinancierReaderError,
+} from '../../application/ports/financier-reader.ts';
 import { listCollaborators } from '../../application/use-cases/list-collaborators.ts';
 import { registerCollaborator } from '../../application/use-cases/register-collaborator.ts';
 import { completeCollaboratorRegistration } from '../../application/use-cases/complete-collaborator-registration.ts';
@@ -55,6 +69,7 @@ export type PartnersDriver = 'memory' | 'mysql';
 export type PartnersSeed = Readonly<{
   collaborators?: readonly CollaboratorReadRecord[];
   suppliers?: readonly SupplierReadRecord[];
+  financiers?: readonly FinancierReadRecord[];
 }>;
 
 export type PartnersCompositionConfig = Readonly<{
@@ -90,6 +105,14 @@ export type PartnersHttpDeps = Readonly<{
   registerSupplier: ReturnType<typeof registerSupplier>;
   deactivateSupplier: ReturnType<typeof deactivateSupplier>;
   reactivateSupplier: ReturnType<typeof reactivateSupplier>;
+  /** Financiadores — leitura + escrita (FINANCIERS-HTTP-V1). */
+  getFinancierById: (
+    id: string,
+  ) => Promise<Result<FinancierReadRecord | null, FinancierReaderError>>;
+  listFinancierRecords: () => Promise<Result<readonly FinancierReadRecord[], FinancierReaderError>>;
+  registerFinancier: ReturnType<typeof registerFinancier>;
+  deactivateFinancier: ReturnType<typeof deactivateFinancier>;
+  reactivateFinancier: ReturnType<typeof reactivateFinancier>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -99,6 +122,8 @@ type Pools = Readonly<{
   collaboratorReader: CollaboratorReader;
   supplierReader: SupplierReader;
   supplierWriterRepo: SupplierRepository;
+  financierReader: FinancierReader;
+  financierWriterRepo: FinancierRepository;
   shutdown: () => Promise<void>;
 }>;
 
@@ -111,6 +136,8 @@ const buildMemoryPools = (config: PartnersCompositionConfig): Pools => {
     collaboratorReader: makeInMemoryCollaboratorReader(config.seed?.collaborators ?? []),
     supplierReader: makeInMemorySupplierReader(config.seed?.suppliers ?? []),
     supplierWriterRepo: makeInMemorySupplierStore().repository,
+    financierReader: makeInMemoryFinancierReader(config.seed?.financiers ?? []),
+    financierWriterRepo: makeInMemoryFinancierStore().repository,
     shutdown: () => Promise.resolve(),
   };
 };
@@ -145,6 +172,8 @@ const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools
     collaboratorReader: createDrizzleCollaboratorReader(readerHandle),
     supplierReader: createDrizzleSupplierReader(readerHandle),
     supplierWriterRepo: createDrizzleSupplierStore(writerHandle, clock),
+    financierReader: createDrizzleFinancierReader(readerHandle),
+    financierWriterRepo: createDrizzleFinancierStore(writerHandle, clock),
     shutdown: async () => {
       await writerHandle.close();
       if (readerHandle !== writerHandle) await readerHandle.close();
@@ -188,6 +217,15 @@ const makeDeps = (pools: Pools): PartnersHttpDeps => {
     registerSupplier: registerSupplier({ supplierRepo: pools.supplierWriterRepo, clock }),
     deactivateSupplier: deactivateSupplier({ supplierRepo: pools.supplierWriterRepo, clock }),
     reactivateSupplier: reactivateSupplier({ supplierRepo: pools.supplierWriterRepo, clock }),
+    getFinancierById: async (rawId) => {
+      const idR = FinancierId.rehydrate(rawId);
+      if (!idR.ok) return ok(null);
+      return pools.financierReader.getById(idR.value);
+    },
+    listFinancierRecords: pools.financierReader.list,
+    registerFinancier: registerFinancier({ financierRepo: pools.financierWriterRepo, clock }),
+    deactivateFinancier: deactivateFinancier({ financierRepo: pools.financierWriterRepo, clock }),
+    reactivateFinancier: reactivateFinancier({ financierRepo: pools.financierWriterRepo, clock }),
     shutdown: pools.shutdown,
   };
 };
