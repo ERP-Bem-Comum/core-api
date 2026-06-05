@@ -123,6 +123,11 @@ Carrega **um único** agente por turno.
 
 ### Skills (técnicas/disciplinas aplicadas)
 
+> **Discovery de skills (Kimi Code):** as skills vivem em `.claude/skills/`; o Kimi (Node) as descobre
+> via o **symlink versionado `.agents/skills → ../.claude/skills`** (não auto-descobre `.claude/skills/`
+> direto). Se as skills `/skill:*` não aparecerem, confira o symlink `.agents/skills` ou adicione
+> `extra_skill_dirs = [".claude/skills"]` no seu `~/.kimi-code/config.toml`. No Claude Code, são nativas.
+
 | Atividade                                                | Skill                                                                                                                                                                                                                          |
 | -------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | Modelar agregado/VO/evento de domínio                    | [`ts-domain-modeler`](./.claude/skills/ts-domain-modeler/SKILL.md)                                                                                                                                                             |
