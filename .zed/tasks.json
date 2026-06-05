@@ -1,0 +1,70 @@
+// Tasks do Zed — core-api (backend, Modular Monolith, Node 24 + pnpm 11, CLI-first)
+// Rode com Cmd+Shift+R (task: spawn). cwd = raiz deste worktree (ERP-CONTRACTS).
+// Qualidade = Biome (format/lint) + tsc + Vitest. Scripts: ver package.json.
+[
+  {
+    "label": "core-api: typecheck",
+    "command": "pnpm",
+    "args": ["typecheck"],
+    "cwd": "$ZED_WORKTREE_ROOT"
+  },
+  {
+    "label": "core-api: lint (Biome)",
+    "command": "pnpm",
+    "args": ["lint"],
+    "cwd": "$ZED_WORKTREE_ROOT"
+  },
+  {
+    "label": "core-api: lint:fix",
+    "command": "pnpm",
+    "args": ["lint:fix"],
+    "cwd": "$ZED_WORKTREE_ROOT"
+  },
+  {
+    "label": "core-api: format",
+    "command": "pnpm",
+    "args": ["format"],
+    "cwd": "$ZED_WORKTREE_ROOT"
+  },
+  {
+    "label": "core-api: test (unit)",
+    "command": "pnpm",
+    "args": ["test"],
+    "cwd": "$ZED_WORKTREE_ROOT"
+  },
+  {
+    "label": "core-api: test:integration (sobe infra de dados)",
+    "command": "pnpm",
+    "args": ["test:integration"],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": true
+  },
+  {
+    "label": "core-api: serve (HTTP dev)",
+    "command": "pnpm",
+    "args": ["serve"],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": true,
+    "reveal": "always"
+  },
+  {
+    "label": "core-api: CLI contracts",
+    "command": "pnpm",
+    "args": ["cli:contracts"],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "use_new_terminal": true
+  },
+  {
+    "label": "core-api: pipeline status",
+    "command": "pnpm",
+    "args": ["pipeline:status"],
+    "cwd": "$ZED_WORKTREE_ROOT"
+  },
+  {
+    "label": "core-api: test arquivo atual (node:test)",
+    "command": "node",
+    "args": ["--experimental-strip-types", "--test", "$ZED_FILE"],
+    "cwd": "$ZED_WORKTREE_ROOT",
+    "tags": ["ts-test"]
+  }
+]
