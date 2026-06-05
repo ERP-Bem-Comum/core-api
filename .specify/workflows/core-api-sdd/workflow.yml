@@ -1,0 +1,196 @@
+schema_version: "1.0"
+workflow:
+  id: "core-api-sdd"
+  name: "core-api SDD (RED→YELLOW→GREEN, máximo rigor)"
+  version: "2.0.0"
+  author: "bem-comum"
+  description: >
+    Pipeline spec-driven da core-api: descoberta → SPEC → domínio/BCs → ADRs →
+    métricas → plano → BDD → TDD (RED) → implementação (YELLOW) → review → gate W3
+    (GREEN). Máximo rigor: cada fase consulta a persona-consultora ACDG (prompts MCP
+    /acdg-skills:*) e decisões-chave (DDD, ADR, TDD, review) exigem citação canônica
+    literal (≥4 linhas) via as tools skills_buscar/skills_citar.
+
+requires:
+  speckit_version: ">=0.8.5"
+  integrations:
+    any:
+      - "claude"
+
+inputs:
+  spec:
+    type: string
+    required: true
+    prompt: "Descreva a feature da core-api (domínio, CLI, contrato, migration…)"
+  integration:
+    type: string
+    default: "auto"
+    prompt: "Integração (auto usa a configurada: claude)"
+  scope:
+    type: string
+    default: "contracts-only"
+    enum: ["contracts-only", "full"]
+
+# ── Pré-requisito: o MCP acdg-skills precisa estar conectado (core-api/.mcp.json) ──
+# As personas são consultadas como prompts: /acdg-skills:<persona>. A citação canônica
+# obrigatória sai das tools skills_buscar / skills_citar.
+#
+# ── Templates por fase (em .specify/templates/) ──
+#   0 discovery → discovery-template.md      1 spec → spec-template.md
+#   2 domain    → domain-template.md         3 adr  → adr-template.md
+#   4 metrics   → metrics-template.md        5 plan → plan-template.md
+#   6 bdd       → bdd-template.md            7 tdd  → tdd-template.md
+#   9 review    → review-template.md         (checklists → checklist-template.md)
+# Cada gate abaixo deve preencher o artefato a partir do template correspondente.
+
+steps:
+  # ── 0. DESCOBERTA ──────────────────────────────────────────────────────────
+  - id: discovery
+    type: gate
+    message: >
+      FASE 0 — DESCOBERTA. Consulte /acdg-skills:requirements-engineer. Elicite a feature
+      (INVEST, stakeholders, escopo, restrições) e grave specs/<feature>/discovery.md.
+      Aprovar quando a descoberta estiver registrada.
+    options: [approve, reject]
+    on_reject: abort
+
+  # ── 1. SPEC ────────────────────────────────────────────────────────────────
+  - id: specify
+    command: speckit.specify
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.spec }}"
+
+  - id: clarify
+    command: speckit.clarify
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.spec }}"
+
+  - id: review-spec
+    type: gate
+    message: >
+      FASE 1 — SPEC. Revise spec.md (com /acdg-skills:requirements-engineer): histórias INVEST,
+      critérios de aceitação, seção "Impacto Arquitetural (core-api)". Aprovar para modelar o domínio.
+    options: [approve, reject]
+    on_reject: abort
+
+  # ── 2. DOMÍNIO / BOUNDED CONTEXTS (citação obrigatória) ────────────────────
+  - id: domain
+    type: gate
+    message: >
+      FASE 2 — DOMÍNIO/BCs (RIGOR: citação obrigatória). Consulte /acdg-skills:ddd-architect.
+      Defina bounded contexts, agregados, value objects, eventos e linguagem ubíqua; grave
+      specs/<feature>/domain.md. CADA decisão de fronteira/agregado exige citação literal
+      (≥4 linhas) via skills_citar (Evans/Vernon). Aprovar só com as citações registradas.
+    options: [approve, reject]
+    on_reject: abort
+
+  # ── 3. ADRs (citação obrigatória) ──────────────────────────────────────────
+  - id: adr
+    type: gate
+    message: >
+      FASE 3 — ADRs (RIGOR: citação obrigatória). Consulte /acdg-skills:software-architect.
+      Para cada decisão arquitetural relevante, escreva specs/<feature>/adr/NNNN-*.md (contexto,
+      decisão, consequências, alternativas) com citação canônica (skills_citar). Não contrarie
+      ADR aceito do handbook — crie novo que `supersedes`. Aprovar com ADR(s) + citações.
+    options: [approve, reject]
+    on_reject: abort
+
+  # ── 4. MÉTRICAS / NFRs (citação obrigatória) ───────────────────────────────
+  - id: metrics
+    type: gate
+    message: >
+      FASE 4 — MÉTRICAS/NFRs (RIGOR). Consulte /acdg-skills:software-architect e
+      /acdg-skills:requirements-engineer. Defina métricas funcionais, não-funcionais e de
+      performance (mensuráveis) em specs/<feature>/metrics.md; ancore os NFRs com citação
+      (skills_citar). Aprovar quando as métricas estiverem mensuráveis e citadas.
+    options: [approve, reject]
+    on_reject: abort
+
+  # ── 5. PLANO ───────────────────────────────────────────────────────────────
+  - id: plan
+    command: speckit.plan
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.spec }}"
+
+  - id: review-plan
+    type: gate
+    message: >
+      FASE 5 — PLANO. Constitution Check (princípios I–IX). Para schema/persistência consulte
+      /acdg-skills:database-engineer (citação Ramakrishnan/MySQL). Confira "Migrations Drizzle"
+      e "Estimativa W0 (S/M/L)" no plan.md. Aprovar para gerar BDD/tasks.
+    options: [approve, reject]
+    on_reject: abort
+
+  # ── 6. BDD ─────────────────────────────────────────────────────────────────
+  - id: bdd
+    type: gate
+    message: >
+      FASE 6 — BDD. Consulte /acdg-skills:requirements-engineer e /acdg-skills:tdd-strategist.
+      Escreva os cenários Given-When-Then em specs/<feature>/bdd/*.feature, derivados dos
+      critérios de aceitação. Aprovar quando os cenários cobrirem as histórias P1.
+    options: [approve, reject]
+    on_reject: abort
+
+  - id: tasks
+    command: speckit.tasks
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.spec }}"
+
+  # ── 7. TDD — RED (citação obrigatória) ─────────────────────────────────────
+  - id: tdd-red
+    type: gate
+    message: >
+      FASE 7 — TDD/RED 🔴 (RIGOR). Consulte /acdg-skills:tdd-strategist (citação Kent Beck).
+      Abra o ticket (pnpm run pipeline:state init <ticket> --size <S|M|L>) e escreva os testes
+      W0 a partir do BDD — eles DEVEM falhar por inexistência da API. Rode `pnpm test` e
+      confirme 🔴 RED. Aprovar SOMENTE com os testes vermelhos pelo motivo certo.
+    options: [approve, reject]
+    on_reject: abort
+
+  # ── 8. IMPLEMENTAÇÃO — YELLOW ──────────────────────────────────────────────
+  - id: implement
+    command: speckit.implement
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.spec }}"
+
+  - id: yellow
+    type: gate
+    message: >
+      FASE 8 — YELLOW 🟡. A implementação mínima (W1) deve fazer os testes passarem.
+      Rode `pnpm test` e confirme verde funcional. Estado YELLOW = testes passam, mas
+      review/qualidade/citações ainda pendentes. Aprovar para o review.
+    options: [approve, reject]
+    on_reject: abort
+
+  # ── 9. REVIEW W2 (citação obrigatória) ─────────────────────────────────────
+  - id: review-w2
+    type: gate
+    message: >
+      FASE 9 — REVIEW/W2 (RIGOR). Consulte /acdg-skills:clean-code-reviewer e, se houver
+      superfície sensível, /acdg-skills:security-reviewer. Audit read-only; grave
+      specs/<feature>/review.md (APPROVED/REJECTED + issues) com citação (Uncle Bob/OWASP).
+      Máx. 3 rounds. Aprovar quando o review estiver APPROVED.
+    options: [approve, reject]
+    on_reject: abort
+
+  # ── 10. ANALYZE (consistência cross-artefato) ──────────────────────────────
+  - id: analyze
+    command: speckit.analyze
+    integration: "{{ inputs.integration }}"
+    input:
+      args: "{{ inputs.spec }}"
+
+  # ── 11. GATE W3 — GREEN ────────────────────────────────────────────────────
+  - id: green
+    type: gate
+    message: >
+      FASE 10 — GREEN 🟢 (regressão zero). Rode /speckit-verify (W3): typecheck + format:check +
+      lint + test (e test:integration se tocou persistência). GREEN = testes + review W2 + gate W3
+      + todas as citações das decisões-chave registradas. Aprovar SÓ com tudo verde e citado.
+    options: [approve, reject]
+    on_reject: abort

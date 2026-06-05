@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "workflows": {
+    "speckit": {
+      "name": "Full SDD Cycle",
+      "version": "1.0.0",
+      "description": "Runs specify \u2192 plan \u2192 tasks \u2192 implement with review gates",
+      "source": "bundled",
+      "installed_at": "2026-06-05T17:45:31.086375+00:00",
+      "updated_at": "2026-06-05T17:45:31.086380+00:00"
+    },
+    "core-api-sdd": {
+      "name": "core-api SDD (W0\u2192W3 aware)",
+      "version": "1.0.0",
+      "description": "Ciclo spec-driven da core-api: specify \u2192 clarify \u2192 plan \u2192 tasks \u2192 implement \u2192 analyze, com review gates e gate final de qualidade W3 (regress\u00e3o zero).",
+      "source": "/tmp/core-api-sdd.workflow.yml",
+      "installed_at": "2026-06-05T17:58:49.968469+00:00",
+      "updated_at": "2026-06-05T17:58:49.968588+00:00"
+    }
+  }
+}

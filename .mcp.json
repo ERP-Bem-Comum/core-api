@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "acdg-skills": {
+      "command": "docker",
+      "args": ["run", "--rm", "-i", "acdg-skills-mcp:0.1.0"]
+    }
+  }
+}
