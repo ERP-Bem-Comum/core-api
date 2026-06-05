@@ -1,0 +1,13 @@
+C4Context
+  title Diagrama de Contexto (C4 nível 1) — core-api (Backend ERP Bem Comum)
+
+  Person(user, "Operador / Dev", "Usa a CLI e os endpoints HTTP do core-api")
+  System(coreapi, "core-api", "Modular Monolith (Node 24, TS, Drizzle). Domínio puro + HTTP (Fastify) + CLI-first")
+  System_Ext(mysql, "MySQL 8", "Persistência relacional via Drizzle ORM")
+  System_Ext(minio, "MinIO / S3", "Object storage S3-compatível (Magalu Cloud em prod)")
+  System_Ext(frontend, "Frontend (web + BFF)", "Repo-irmão; consome o core-api só via server functions")
+
+  Rel(user, coreapi, "usa", "CLI / HTTP")
+  Rel(coreapi, mysql, "lê e escreve", "SQL / Drizzle")
+  Rel(coreapi, minio, "armazena objetos", "S3 API")
+  Rel(frontend, coreapi, "consome", "HTTP (server-side / BFF)")
