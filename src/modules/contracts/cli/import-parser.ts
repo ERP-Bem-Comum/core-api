@@ -9,6 +9,7 @@
  */
 
 import { type Result, ok, err } from '../../../shared/primitives/result.ts';
+import { tokenizeCsv } from '../../../shared/utils/csv.ts';
 import type { ImportContractRow } from '../application/use-cases/import-contracts.ts';
 
 export type ImportParseError =
@@ -29,54 +30,9 @@ const REQUIRED: readonly string[] = [
   'inicio',
 ];
 
-// ─── CSV tokenizer (subset RFC-4180) ────────────────────────────────────────
-
-const tokenizeCsv = (content: string): string[][] => {
-  const records: string[][] = [];
-  let field = '';
-  let record: string[] = [];
-  let inQuotes = false;
-
-  for (let i = 0; i < content.length; i++) {
-    const ch = content.charAt(i);
-
-    if (inQuotes) {
-      if (ch === '"') {
-        if (content.charAt(i + 1) === '"') {
-          field += '"';
-          i++;
-        } else {
-          inQuotes = false;
-        }
-      } else {
-        field += ch;
-      }
-      continue;
-    }
-
-    if (ch === '"') {
-      inQuotes = true;
-    } else if (ch === ',') {
-      record.push(field);
-      field = '';
-    } else if (ch === '\r') {
-      // ignora CR — quebra de linha tratada no \n (CRLF/LF)
-    } else if (ch === '\n') {
-      record.push(field);
-      records.push(record);
-      field = '';
-      record = [];
-    } else {
-      field += ch;
-    }
-  }
-
-  if (field !== '' || record.length > 0) {
-    record.push(field);
-    records.push(record);
-  }
-  return records;
-};
+// CSV tokenizer: agora consome o util compartilhado `shared/utils/csv.ts` (tokenizeCsv),
+// promovido em CORE-CSV-PARSE-UTIL (ADR-0002). A validação de colunas/mapeamento é específica
+// deste módulo e permanece aqui.
 
 // ─── Mapeamento record → ImportContractRow ──────────────────────────────────
 

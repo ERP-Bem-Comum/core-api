@@ -30,7 +30,9 @@ Escolhida: **{opção}**, porque {justificativa}.
 ## Prós e contras das opções
 
 ### Opção A
-- 🟢 {…}  🔴 {…}
+
+- 🟢 {…} 🔴 {…}
 
 ### Opção B
-- 🟢 {…}  🔴 {…}
+
+- 🟢 {…} 🔴 {…}
