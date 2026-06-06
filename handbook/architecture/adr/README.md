@@ -126,6 +126,7 @@ Um **ADR (Architecture Decision Record)** é um documento curto que captura uma 
 | [0031](./0031-partners-registry-module.md)                     | Módulo `partners` — fronteira de Cadastros/Counterparties (supplier, financier, collaborator) migrada do legado                          | Accepted                              | 2026-06-01 |
 | [0032](./0032-transient-http-composition-read-until-bff.md)    | Composição de leitura transitória no adapter HTTP (rota gorda com `Sunset`) até o BFF v2 — domínio intocado, cross-módulo via public-api | Accepted                              | 2026-06-02 |
 | [0033](./0033-api-versioning-v1-legacy-mirror.md)              | Versionamento de API: `/api/v1` espelha o legado (Strangler Fig), `/api/v2` é o modelo novo; `buildApp` com prefixo por plugin           | Accepted                              | 2026-06-03 |
+| [0034](./0034-ocr-port-adapter.md)                             | OCR como Port/Adapter Pattern — Tesseract vs AWS Textract isolados do domínio                                                            | Accepted                              | 2026-06-06 |
 
 ---
 

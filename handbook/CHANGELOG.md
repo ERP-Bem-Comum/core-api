@@ -4,6 +4,12 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-06 — 🔍 ADR-0034: OCR como Port/Adapter Pattern
+
+Aceito ADR-0034 no handbook. Define `OcrPort` como `type Readonly<{}>` com adapters factory functions
+(`createOcrMockAdapter`, `createTesseractOcrAdapter`, `createAwsTextractAdapter`). Isola tecnologia OCR
+do domínio, alinhado com ADR-0006 (Modular Monolith) e ADR-0019 (S3/MinIO para PDFs).
+
 ## 2026-06-04 — ✏️ EPIC-PARTNERS-HTTP-EDIT — edição (PUT) completa: Supplier + Collaborator (épico fechado)
 
 Replica o piloto Financier para os outros dois counterparties, fechando o épico de edição.

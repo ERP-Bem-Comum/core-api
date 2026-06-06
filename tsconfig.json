@@ -29,6 +29,7 @@
     "src/**/*",
     "tests/**/*",
     "scripts/**/*",
+    "specs/**/*",
     "drizzle.config.ts",
     "drizzle.config.auth.ts",
     "drizzle.config.partners.ts"

@@ -29,7 +29,14 @@ const read = (relPath: string): string => readFileSync(join(PROJECT_ROOT, relPat
 
 // ─── CA-1..4 — CLAUDE.md ────────────────────────────────────────────────────
 describe('CTR-DOCS-UPDATE — CA-1..4: CLAUDE.md', () => {
-  const claudeMd = (): string => read('CLAUDE.md');
+  const claudeMd = (): string => {
+    const stub = read('CLAUDE.md');
+    // Se CLAUDE.md é um stub que importa AGENTS.md, resolve o conteúdo canônico
+    if (stub.includes('Este arquivo é um **stub**') && stub.includes('@AGENTS.md')) {
+      return read('AGENTS.md');
+    }
+    return stub;
+  };
 
   it('CA-1: CLAUDE.md sem strings operacionais SQLite (flags CLI, scripts, paths)', () => {
     const content = claudeMd();
