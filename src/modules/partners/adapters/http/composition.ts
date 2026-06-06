@@ -50,6 +50,7 @@ import type {
 } from '../../application/ports/financier-reader.ts';
 import { listCollaborators } from '../../application/use-cases/list-collaborators.ts';
 import { registerCollaborator } from '../../application/use-cases/register-collaborator.ts';
+import { importCollaborators } from '../../application/use-cases/import-collaborators.ts';
 import { completeCollaboratorRegistration } from '../../application/use-cases/complete-collaborator-registration.ts';
 import { deactivateCollaborator } from '../../application/use-cases/deactivate-collaborator.ts';
 import { reactivateCollaborator } from '../../application/use-cases/reactivate-collaborator.ts';
@@ -97,6 +98,8 @@ export type PartnersHttpDeps = Readonly<{
   >;
   /** Escrita (writer pool, P2): cadastro e complementação. */
   registerCollaborator: ReturnType<typeof registerCollaborator>;
+  /** Import em lote (writer pool, US-001): reusa registerCollaborator por linha. */
+  importCollaborators: ReturnType<typeof importCollaborators>;
   completeCollaboratorRegistration: ReturnType<typeof completeCollaboratorRegistration>;
   /** Soft-delete (writer pool, P3). */
   deactivateCollaborator: ReturnType<typeof deactivateCollaborator>;
@@ -215,6 +218,10 @@ const makeDeps = (pools: Pools): PartnersHttpDeps => {
       clock,
     }),
     editCollaborator: editCollaborator({ collaboratorRepo: pools.collaboratorWriterRepo, clock }),
+    importCollaborators: importCollaborators({
+      collaboratorRepo: pools.collaboratorWriterRepo,
+      clock,
+    }),
     getSupplierById: async (rawId) => {
       const idR = SupplierId.rehydrate(rawId);
       if (!idR.ok) return ok(null);

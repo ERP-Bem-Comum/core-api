@@ -16,9 +16,11 @@
 
 | Server fn (BFF)       | Método/Rota                         | Input                        | Output                                           | Permissão            |
 | --------------------- | ----------------------------------- | ---------------------------- | ------------------------------------------------ | -------------------- |
-| `importCollaborators` | `POST /api/v1/collaborators/import` | multipart `file` (CSV UTF-8) | `{ created: number, failed: [{ line, error }] }` | `collaborator:write` |
+| `importCollaborators` | `POST /api/v1/collaborators/import` | corpo `text/csv` cru (UTF-8) | `{ created: number, failed: [{ line, error }] }` | `collaborator:write` |
 
-- Borda: multipart → texto → `parseCsv` (util) → cada record → `RegisterCollaboratorCommand` (Zod) → `importCollaborators` → adapta `{importedCount, failed:[{index,error}]}` → `{created, failed:[{line,error}]}` (`index+2`→`line`, considerando header).
+> **Decisão (ticket #2):** corpo `text/csv` cru, **não** multipart — o consumidor é o BFF (não browser), evitando `@fastify/multipart` (dependências mínimas / ADR-0002). O BFF traduz o multipart do browser → raw. `bodyLimit` (2 MiB) cobre o DoS.
+
+- Borda: `text/csv` → `parseCsv` (util) → cada record → `RegisterCollaboratorCommand` → `importCollaborators` → adapta `{importedCount, failed:[{index,error}]}` → `{created, failed:[{line,error}]}` (`index`→`line` via `lineOf`, header = linha 1). Vazio → `{created:0,failed:[]}`; malformado → 400.
 - Erros: arquivo vazio → `{created:0, failed:[]}`; malformado → 400 `csv-malformed`.
 
 ## US-003 — Export de fornecedores

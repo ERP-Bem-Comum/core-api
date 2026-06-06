@@ -30,6 +30,7 @@ import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
 
 import type { PartnersHttpDeps } from './composition.ts';
 import { collaboratorToDetailDto } from './collaborator-dto.ts';
+import { parseCollaboratorImportCsv } from './collaborator-import-dto.ts';
 import { queryToFilter, paginateRecords } from './collaborator-list-query.ts';
 import {
   collaboratorListQuerySchema,
@@ -97,9 +98,24 @@ const sendWriteError = (reply: FastifyReply, code: string): Promise<void> => {
     .send(toErrorEnvelope(code, code, requestId)) as unknown as Promise<void>;
 };
 
+// Teto do corpo do import CSV (US-001): controla DoS por conteúdo grande (resource exhaustion —
+// o use-case importa linha a linha, sequencial). `bodyLimit` por parser preserva o global nas
+// demais rotas. ~2 MiB cobre o volume real (≤ alguns milhares de linhas).
+const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
+
 const collaboratorsRoutes =
   (deps: PartnersHttpDeps, hooks: CollaboratorsHttpHooks): FastifyPluginAsyncZodOpenApi =>
   async (scope) => {
+    // Import de colaboradores (US-001): corpo `text/csv` cru → string (sem @fastify/multipart;
+    // o BFF traduz multipart→raw — ADR-0002 / dependências mínimas). `bodyLimit` por parser.
+    scope.addContentTypeParser(
+      'text/csv',
+      { parseAs: 'string', bodyLimit: MAX_IMPORT_BYTES },
+      (_req, body, done) => {
+        done(null, body);
+      },
+    );
+
     // Lista paginada + multifiltro (P1b): item = detalhe completo (schema legado). Filtro e
     // paginação compostos na borda (ADR-0032) sobre os read-records do reader.
     scope.route({
@@ -243,6 +259,49 @@ const collaboratorsRoutes =
         });
         if (!result.ok) return sendWriteError(reply, result.error);
         return reply.code(200).send() as unknown as Promise<void>;
+      },
+    });
+
+    // Import em lote (US-001): corpo `text/csv`. Sempre 200 com relatório `{ created, failed }`
+    // (import parcial: válidas entram, inválidas viram `failed`). Exceções: corpo vazio → 200
+    // created:0; CSV malformado → 400.
+    scope.route({
+      method: 'POST',
+      url: '/collaborators/import',
+      preHandler: [hooks.requireAuth, hooks.authorize(COLLABORATOR_PERMISSION.write)],
+      handler: async (req, reply) => {
+        const content = req.body as unknown as string;
+        const parsed = parseCollaboratorImportCsv(content);
+        if (!parsed.ok) {
+          if (parsed.error === 'csv-empty') {
+            return reply.code(200).send({ created: 0, failed: [] }) as unknown as Promise<void>;
+          }
+          const requestId = currentCorrelationId() ?? reply.request.id;
+          return reply
+            .code(400)
+            .send(
+              toErrorEnvelope(
+                'collaborator-import-malformed',
+                'collaborator-import-malformed',
+                requestId,
+              ),
+            ) as unknown as Promise<void>;
+        }
+
+        const { commands, lineOf, mappingFailures } = parsed.value;
+        const result = await deps.importCollaborators({ rows: commands });
+        // `importCollaborators` é `Result<_, never>` (nunca falha global); narrowing explícito
+        // para o type-checker liberar `result.value`.
+        if (!result.ok) return sendWriteError(reply, 'collaborator-import-failed');
+        const out = result.value;
+        const domainFailures = out.failed.map((f) => ({
+          line: lineOf[f.index] ?? -1,
+          error: typeof f.error === 'string' ? f.error : 'register-collaborator-failed',
+        }));
+        const failed = [...mappingFailures, ...domainFailures].sort((a, b) => a.line - b.line);
+        return reply
+          .code(200)
+          .send({ created: out.importedCount, failed }) as unknown as Promise<void>;
       },
     });
   };
