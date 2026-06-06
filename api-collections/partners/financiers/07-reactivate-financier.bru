@@ -1,0 +1,22 @@
+meta {
+  name: reactivate financier
+  type: http
+  seq: 26
+}
+
+post {
+  url: {{baseUrl}}/api/v1/financiers/{{financierCreatedId}}/reactivate
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operatorToken}}
+}
+
+tests {
+  // A borda responde 200 sem corpo (reply.code(200).send()); a transicao e validada pelo status.
+  test("CA4 — POST /financiers/:id/reactivate retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

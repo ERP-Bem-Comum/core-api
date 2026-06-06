@@ -1,0 +1,22 @@
+meta {
+  name: reactivate supplier
+  type: http
+  seq: 16
+}
+
+post {
+  url: {{baseUrl}}/api/v1/suppliers/{{supplierCreatedId}}/reactivate
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operatorToken}}
+}
+
+tests {
+  // A borda responde 200 sem corpo (reply.code(200).send()); a transicao e validada pelo status.
+  test("CA4 — POST /suppliers/:id/reactivate retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

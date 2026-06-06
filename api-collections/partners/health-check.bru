@@ -1,0 +1,16 @@
+meta {
+  name: health check
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/health
+  auth: none
+}
+
+tests {
+  test("CA1 — server esta no ar (200)", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}
