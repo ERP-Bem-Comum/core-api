@@ -14,6 +14,7 @@ import type { Contract } from '../../domain/contract/types.ts';
 import type { ContractDetail } from '../../application/use-cases/get-contract-detail.ts';
 import { amendmentToDto } from './amendment-dto.ts';
 import { documentToDto } from './document-dto.ts';
+import type { ContractorBlock } from './contractor-composition.ts';
 import type { ContractDetailDto, ContractListItemDto } from './schemas.ts';
 
 type PeriodDto =
@@ -76,12 +77,19 @@ export const contractToListItem = (c: Contract): ContractListItemDto => {
  * é de LEITURA na borda — os mappers de filho (`amendmentToDto`, `documentToDto`) já
  * fazem o switch exaustivo sobre os discriminated unions do domínio.
  */
-export const contractToDetailDto = (detail: ContractDetail): ContractDetailDto => {
+export const contractToDetailDto = (
+  detail: ContractDetail,
+  contractor: ContractorBlock,
+): ContractDetailDto => {
   const amendments = [...detail.amendments]
     .sort((a, b) => a.amendmentNumber.localeCompare(b.amendmentNumber))
     .map(amendmentToDto);
   return {
     ...contractToListItem(detail.contract),
+    contractor,
+    observations: detail.contract.observations,
+    email: detail.contract.email,
+    telephone: detail.contract.telephone,
     amendments,
     documents: detail.documents.map(documentToDto),
   };

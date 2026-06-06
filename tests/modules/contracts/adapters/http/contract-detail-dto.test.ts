@@ -37,6 +37,13 @@ import { buildContract, buildAmendment } from '../persistence/fixtures.ts';
 
 const CONTRACT_ID = '11111111-1111-4111-8111-111111111111';
 
+// Bloco do contratado composto na borda — neste mapper unit, snapshot já resolvido.
+const CONTRACTOR_BLOCK = {
+  type: 'supplier' as const,
+  id: '55555555-5555-4555-8555-555555555555',
+  snapshot: null,
+};
+
 const unwrap = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }): T => {
   if (!r.ok) throw new Error(`fixture broken: ${JSON.stringify(r.error)}`);
   return r.value;
@@ -76,7 +83,7 @@ describe('contractToDetailDto — cabeçalho do contrato', () => {
       amendments: [],
       documents: [],
     };
-    const dto = contractToDetailDto(detail);
+    const dto = contractToDetailDto(detail, CONTRACTOR_BLOCK);
     assert.equal(dto.id, CONTRACT_ID);
     assert.equal(dto.status, 'Active');
     assert.deepEqual(dto.originalValue, { cents: 10_000_000 });
@@ -92,7 +99,7 @@ describe('contractToDetailDto — amendments[] (4 kinds + ordenação)', () => {
       amendments: [buildAmendment({ kind: 'Addition', impactValueCents: 500_000 })],
       documents: [],
     };
-    const dto = contractToDetailDto(detail);
+    const dto = contractToDetailDto(detail, CONTRACTOR_BLOCK);
     assert.equal(dto.amendments.length, 1);
     const a = dto.amendments[0]!;
     assert.equal(a.kind, 'Addition');
@@ -112,7 +119,7 @@ describe('contractToDetailDto — amendments[] (4 kinds + ordenação)', () => {
       ],
       documents: [],
     };
-    const dto = contractToDetailDto(detail);
+    const dto = contractToDetailDto(detail, CONTRACTOR_BLOCK);
     assert.equal(dto.amendments[0]!.kind, 'Suppression');
     assert.equal((dto.amendments[0] as { impactValueCents: number }).impactValueCents, 200_000);
   });
@@ -129,7 +136,7 @@ describe('contractToDetailDto — amendments[] (4 kinds + ordenação)', () => {
       ],
       documents: [],
     };
-    const dto = contractToDetailDto(detail);
+    const dto = contractToDetailDto(detail, CONTRACTOR_BLOCK);
     assert.equal(dto.amendments[0]!.kind, 'TermChange');
     assert.equal((dto.amendments[0] as { newEndDate: string }).newEndDate, '2027-12-31');
   });
@@ -140,7 +147,7 @@ describe('contractToDetailDto — amendments[] (4 kinds + ordenação)', () => {
       amendments: [buildAmendment({ id: '22222222-2222-4222-8222-222222222225', kind: 'Misc' })],
       documents: [],
     };
-    const dto = contractToDetailDto(detail);
+    const dto = contractToDetailDto(detail, CONTRACTOR_BLOCK);
     assert.equal(dto.amendments[0]!.kind, 'Misc');
     assert.equal('impactValueCents' in dto.amendments[0]!, false);
     assert.equal('newEndDate' in dto.amendments[0]!, false);
@@ -163,7 +170,7 @@ describe('contractToDetailDto — amendments[] (4 kinds + ordenação)', () => {
       ],
       documents: [],
     };
-    const dto = contractToDetailDto(detail);
+    const dto = contractToDetailDto(detail, CONTRACTOR_BLOCK);
     assert.deepEqual(
       dto.amendments.map((a) => a.amendmentNumber),
       ['AD 01-001/2026', 'AD 02-001/2026'],
@@ -178,7 +185,7 @@ describe('contractToDetailDto — documents[] (3 estados, campo status)', () => 
       amendments: [],
       documents: [buildActiveDoc({ fileName: 'contrato.pdf' })],
     };
-    const dto = contractToDetailDto(detail);
+    const dto = contractToDetailDto(detail, CONTRACTOR_BLOCK);
     assert.equal(dto.documents.length, 1);
     const d = dto.documents[0]!;
     assert.equal(d.status, 'Active');
@@ -205,7 +212,7 @@ describe('contractToDetailDto — documents[] (3 estados, campo status)', () => 
       amendments: [],
       documents: [superseded],
     };
-    const dto = contractToDetailDto(detail);
+    const dto = contractToDetailDto(detail, CONTRACTOR_BLOCK);
     assert.equal(dto.documents[0]!.status, 'Superseded');
   });
 
@@ -224,7 +231,7 @@ describe('contractToDetailDto — documents[] (3 estados, campo status)', () => 
       amendments: [],
       documents: [deleted],
     };
-    const dto = contractToDetailDto(detail);
+    const dto = contractToDetailDto(detail, CONTRACTOR_BLOCK);
     assert.equal(dto.documents[0]!.status, 'LogicallyDeleted');
   });
 });

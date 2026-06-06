@@ -229,7 +229,12 @@ const contractsRoutes =
             },
           });
         }
-        return sendResult(reply, ok(contractToDetailDto(result.value)), { ok: 200 });
+        // ADR-0032: rota gorda transitória — compõe o contratado na borda e declara
+        // a transitoriedade via Deprecation/Sunset (RFC 8594). Sai quando o BFF v2 assumir.
+        const contractor = await deps.getContractorBlock(result.value.contract.contractor);
+        reply.header('Deprecation', 'true');
+        reply.header('Sunset', 'quando o BFF v2 assumir a composição do contratado');
+        return sendResult(reply, ok(contractToDetailDto(result.value, contractor)), { ok: 200 });
       },
     });
 

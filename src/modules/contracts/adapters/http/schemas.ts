@@ -298,12 +298,48 @@ const childrenShape = {
   documents: z.array(documentSchema),
 };
 
+// Bloco do contratado composto na borda (rota gorda transitória — ADR-0032).
+// `snapshot` lido da public-api de Parceiros; `null` em degradação (FR-006).
+const bankAccountSchema = z.object({
+  bank: z.string(),
+  agency: z.string(),
+  accountNumber: z.string(),
+  checkDigit: z.string(),
+});
+const pixKeySchema = z.object({ keyType: z.string(), key: z.string() });
+const contractorSnapshotSchema = z.object({
+  name: z.string(),
+  document: z.string(),
+  updatedAt: z.string(),
+  bankAccount: bankAccountSchema.nullable().optional(),
+  pixKey: pixKeySchema.nullable().optional(),
+});
+const contractorBlockSchema = z.object({
+  type: z.enum(['supplier', 'financier', 'collaborator', 'act']),
+  id: z.string(),
+  snapshot: contractorSnapshotSchema.nullable(),
+});
+
+// Metadados de cadastro + contratado — só no detalhe (não no list-item).
+const contractorDetailShape = {
+  contractor: contractorBlockSchema,
+  observations: z.string().nullable(),
+  email: z.string().nullable(),
+  telephone: z.string().nullable(),
+};
+
 export const contractFullDetailSchema = z.discriminatedUnion('status', [
-  z.object({ ...registrationShape, status: z.literal('Pending'), ...childrenShape }),
+  z.object({
+    ...registrationShape,
+    status: z.literal('Pending'),
+    ...contractorDetailShape,
+    ...childrenShape,
+  }),
   z.object({
     ...registrationShape,
     ...effectiveShape,
     status: z.literal('Active'),
+    ...contractorDetailShape,
     ...childrenShape,
   }),
   z.object({
@@ -311,6 +347,7 @@ export const contractFullDetailSchema = z.discriminatedUnion('status', [
     ...effectiveShape,
     status: z.literal('Expired'),
     endedAt: z.string(),
+    ...contractorDetailShape,
     ...childrenShape,
   }),
   z.object({
@@ -318,6 +355,7 @@ export const contractFullDetailSchema = z.discriminatedUnion('status', [
     ...effectiveShape,
     status: z.literal('Terminated'),
     endedAt: z.string(),
+    ...contractorDetailShape,
     ...childrenShape,
   }),
 ]);
