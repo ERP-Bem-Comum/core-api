@@ -156,7 +156,7 @@ Prefixo `par_*` (convenção de `ctr_*`/`fin_*`/`auth_*`), respeitando [ADR-0014
 - **D6** — senha legada (`users.password`): migrar hash bcrypt ou forçar reset via EmailPort.
 - **D7** — geografias como seed estático vs tabela gerenciada; prefixo `par_*` vs `ref_*`/`geo_*`.
 - **D8** — migrar registros inativos (`active=false`) ou só ativos.
-- **D9** — partner-states/municipalities: hard delete (legado) vs soft-delete padronizado.
+- ~~**D9** — partner-states/municipalities: hard delete (legado) vs soft-delete padronizado.~~ → **RESOLVIDA** pelo [ADR-0035](./0035-partner-territory-soft-delete.md): Entity persistida com **soft-delete** (`active` + `deactivated_at` + CHECK), espelhando o padrão dos demais `par_*`.
 
 ---
 

@@ -1,6 +1,8 @@
 # ADR-0001 (feature): Parceria territorial como Entity persistida com soft-delete (resolve D9 do ADR-0031)
 
-**Feature**: `specs/001-partners-http-gaps/` · **Status**: Proposto
+> **Promovido** ao handbook como [ADR-0035](../../../handbook/architecture/adr/0035-partner-territory-soft-delete.md) (Accepted, 2026-06-06) — a decisão da feature virou norma do projeto e fechou a D9 do ADR-0031.
+
+**Feature**: `specs/001-partners-http-gaps/` · **Status**: Accepted (promovido — ver ADR-0035 do handbook)
 **Data**: 2026-06-06 · **Consultor**: `/acdg-skills:software-architect` + `/acdg-skills:ddd-architect`
 **Relacionado**: ADR-0031 (módulo `partners`, **questão aberta D9**), ADR-0014 (isolamento `par_*`), ADR-0020 (MySQL/Drizzle), ADR-0033 (`/api/v1` espelho legado)
 
