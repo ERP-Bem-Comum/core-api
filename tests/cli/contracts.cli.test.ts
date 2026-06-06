@@ -45,6 +45,10 @@ const criarContrato = (
     overrides.valorCentavos ?? '10000000',
     '--inicio',
     overrides.inicio ?? '2026-02-01',
+    '--contratado-tipo',
+    'supplier',
+    '--contratado-id',
+    '55555555-5555-4555-8555-555555555555',
   ];
   if (overrides.fim !== null && overrides.fim !== undefined) {
     args.push('--fim', overrides.fim);
@@ -312,6 +316,10 @@ describe('CLI E2E — side-effects de --state / --no-state', () => {
       '100000',
       '--inicio',
       '2026-01-01',
+      '--contratado-tipo',
+      'supplier',
+      '--contratado-id',
+      '55555555-5555-4555-8555-555555555555',
     ]);
     assert.equal(r.exitCode, 0, `stderr: ${r.stderr}`);
     assert.match(r.stdout, /✅ Contrato criado\./);

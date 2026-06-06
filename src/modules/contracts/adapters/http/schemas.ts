@@ -133,6 +133,11 @@ const contractWriteShape = {
   originalValueCents: z.number().int(),
   periodStart: z.string(),
   periodEnd: z.string().nullable(),
+  // Contratado obrigatório (FR-001). `type` enum fechado; `id` UUID v4.
+  contractor: z.object({
+    type: z.enum(['supplier', 'financier', 'collaborator', 'act']),
+    id: z.uuid(),
+  }),
 };
 
 /** Body `POST /contracts` — discrimina cadastro (`Pending`) vs cadastro+assinatura (`Active`). */

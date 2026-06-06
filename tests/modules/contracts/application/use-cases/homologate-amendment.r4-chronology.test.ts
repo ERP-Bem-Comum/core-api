@@ -9,6 +9,7 @@ import * as Period from '#src/shared/kernel/period.ts';
 import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import * as AmendmentId from '#src/modules/contracts/domain/shared/amendment-id.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
+import * as ContractorRef from '#src/modules/contracts/domain/shared/contractor.ts';
 import * as DocumentId from '#src/modules/contracts/domain/shared/document-id.ts';
 import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
 import { Amendment } from '#src/modules/contracts/domain/amendment/amendment.ts';
@@ -48,6 +49,12 @@ const fixedPeriod = (startISO: string, endISO: string) => {
   return r.value;
 };
 
+const someContractor = (() => {
+  const r = ContractorRef.make('supplier', '55555555-5555-4555-8555-555555555555');
+  if (!r.ok) throw new Error('fixture broken: contractor');
+  return r.value;
+})();
+
 const setupWorld = async (opts: {
   contractSignedAt: string;
   amendmentCreatedAt: string;
@@ -66,6 +73,7 @@ const setupWorld = async (opts: {
     signedAt: D(opts.contractSignedAt),
     originalValue: money(10000000),
     originalPeriod: fixedPeriod(opts.contractSignedAt, '2027-12-31'),
+    contractor: someContractor,
   });
   if (!contractCreate.ok)
     throw new Error(`fixture broken: ${JSON.stringify(contractCreate.error)}`);

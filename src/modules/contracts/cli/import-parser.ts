@@ -64,6 +64,11 @@ const recordToRow = (
     valorCentavos: asString(rec['valor_centavos']),
     inicio: asString(rec['inicio']),
     fim: asNullableString(rec['fim']),
+    // Contratado (FR-001) — ausência vira '' → ContractorRef.make falha → linha
+    // reportada como falha (modelo row-level D3). Mapeamento do contratado legado
+    // v1 (contractType + supplierId/...) é escopo do ticket de import.
+    contractorType: asString(rec['contratado_tipo']),
+    contractorId: asString(rec['contratado_id']),
   };
 
   const cnpj = asNullableString(rec['cnpj']);

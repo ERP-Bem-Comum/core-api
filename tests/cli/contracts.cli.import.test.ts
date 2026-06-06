@@ -12,7 +12,9 @@ import { newStateFile, removeStateFile } from './helpers/temp-state.ts';
 // Sintaxe: importar-contratos --arquivo <path> [--formato csv|json] [--confirmar] --state <path>
 // dry-run é o default; --confirmar persiste.
 
-const HEADER = 'numero,titulo,objetivo,assinado_em,valor_centavos,inicio,fim';
+const HEADER =
+  'numero,titulo,objetivo,assinado_em,valor_centavos,inicio,fim,contratado_tipo,contratado_id';
+const CT = '55555555-5555-4555-8555-555555555555';
 
 const tmpFile = (content: string, ext: string): string => {
   const path = join(tmpdir(), `ctr-import-${randomUUID()}.${ext}`);
@@ -21,8 +23,8 @@ const tmpFile = (content: string, ext: string): string => {
 };
 
 const validCsv = `${HEADER}
-700/2026,Contrato A,Objeto A,2026-01-01,10000000,2026-01-01,2026-12-31
-701/2026,Contrato B,Objeto B,2026-02-01,5000000,2026-02-01,`;
+700/2026,Contrato A,Objeto A,2026-01-01,10000000,2026-01-01,2026-12-31,supplier,${CT}
+701/2026,Contrato B,Objeto B,2026-02-01,5000000,2026-02-01,,supplier,${CT}`;
 
 describe('CLI E2E — importar-contratos (UC-11 passada 2)', () => {
   const created: string[] = [];
@@ -77,6 +79,8 @@ describe('CLI E2E — importar-contratos (UC-11 passada 2)', () => {
           valor_centavos: 10000000,
           inicio: '2026-01-01',
           fim: '2026-12-31',
+          contratado_tipo: 'supplier',
+          contratado_id: CT,
         },
       ]);
       const file = mk(json, 'json');

@@ -294,6 +294,10 @@ describe('REGR #3 — saveState concorrente preserva ambos contratos OU falha ex
       '1000',
       '--inicio',
       '2026-02-01',
+      '--contratado-tipo',
+      'supplier',
+      '--contratado-id',
+      '55555555-5555-4555-8555-555555555555',
       '--sem-fim',
     ];
 
@@ -370,6 +374,10 @@ describe('REGR #4 — formatter sanitiza chars de controle no título', () => {
       '1000',
       '--inicio',
       '2026-02-01',
+      '--contratado-tipo',
+      'supplier',
+      '--contratado-id',
+      '55555555-5555-4555-8555-555555555555',
       '--sem-fim',
     ]);
     assert.equal(create.exitCode, 0, `criar-contrato falhou: ${create.stderr}`);
@@ -457,6 +465,8 @@ describe('REGR #7 — createAmendment rejeita Suppression que excede currentValu
       originalValueCents: 100_000, // R$ 1.000,00
       originalPeriodStart: '2026-01-01',
       originalPeriodEnd: '2026-12-31',
+      contractorType: 'supplier',
+      contractorId: '55555555-5555-4555-8555-555555555555',
     });
     if (!created.ok) throw new Error(`fixture broken: ${JSON.stringify(created.error)}`);
 
@@ -559,6 +569,10 @@ describe('REGR #9 — flag duplicada não é aceita silenciosamente', () => {
       '1000',
       '--inicio',
       '2026-02-01',
+      '--contratado-tipo',
+      'supplier',
+      '--contratado-id',
+      '55555555-5555-4555-8555-555555555555',
       '--sem-fim',
     ]);
 

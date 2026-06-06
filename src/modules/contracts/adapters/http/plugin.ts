@@ -279,6 +279,8 @@ const contractsRoutes =
             originalValueCents: body.originalValueCents,
             periodStart: body.periodStart,
             periodEnd: body.periodEnd,
+            contractorType: body.contractor.type,
+            contractorId: body.contractor.id,
           });
           if (!result.ok) return sendDomainError(reply, result.error);
           return sendResult(reply, ok(contractToListItem(result.value.contract)), { ok: 201 });
@@ -293,6 +295,8 @@ const contractsRoutes =
           originalValueCents: body.originalValueCents,
           originalPeriodStart: body.periodStart,
           originalPeriodEnd: body.periodEnd,
+          contractorType: body.contractor.type,
+          contractorId: body.contractor.id,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(reply, ok(contractToListItem(result.value.contract)), { ok: 201 });

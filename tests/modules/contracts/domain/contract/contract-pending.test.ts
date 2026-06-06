@@ -19,6 +19,7 @@ import * as Money from '#src/shared/kernel/money.ts';
 import * as Period from '#src/shared/kernel/period.ts';
 import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
+import * as ContractorRef from '#src/modules/contracts/domain/shared/contractor.ts';
 import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
 import type { CreatePendingContractInput } from '#src/modules/contracts/domain/contract/types.ts';
 
@@ -43,6 +44,12 @@ const fixedPeriod = (startISO: string, endISO: string) => {
   return r.value;
 };
 
+const someContractor = (() => {
+  const r = ContractorRef.make('supplier', '55555555-5555-4555-8555-555555555555');
+  if (!r.ok) throw new Error('test fixture broken: contractor');
+  return r.value;
+})();
+
 // Input de criação SEM `signedAt` — carrega `createdAt` para o timestamp do evento.
 const validPendingInput = (
   overrides: Partial<CreatePendingContractInput> = {},
@@ -53,6 +60,7 @@ const validPendingInput = (
   objective: 'Aquisição de notebooks e periféricos',
   originalValue: money(10000000),
   originalPeriod: fixedPeriod('2026-01-01', '2026-12-31'),
+  contractor: someContractor,
   createdAt: D('2026-01-01'),
   ...overrides,
 });
@@ -155,6 +163,7 @@ describe('Contract.create — Active preservado (regressão CA3)', () => {
       signedAt: D('2026-01-01'),
       originalValue: money(5000000),
       originalPeriod: fixedPeriod('2026-01-01', '2026-12-31'),
+      contractor: someContractor,
     });
     assert.equal(isOk(r), true);
     if (!r.ok) return;

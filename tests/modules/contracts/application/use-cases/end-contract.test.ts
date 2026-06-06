@@ -7,6 +7,7 @@ import * as Money from '#src/shared/kernel/money.ts';
 import * as Period from '#src/shared/kernel/period.ts';
 import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
+import * as ContractorRef from '#src/modules/contracts/domain/shared/contractor.ts';
 import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
 import type { Contract as ContractEntity } from '#src/modules/contracts/domain/contract/types.ts';
 import { InMemoryContractRepository } from '#src/modules/contracts/adapters/persistence/repos/contract-repository.in-memory.ts';
@@ -37,6 +38,12 @@ const fixedPeriod = (startISO: string, endISO: string) => {
 };
 
 const indefinitePeriod = (startISO: string) => Period.createIndefinite(pd(startISO));
+
+const someContractor = (() => {
+  const r = ContractorRef.make('supplier', '55555555-5555-4555-8555-555555555555');
+  if (!r.ok) throw new Error('fixture broken: contractor');
+  return r.value;
+})();
 
 // ============================================================================
 // Test harness — mundo com um contrato Active (ou pré-encerrado) persistido
@@ -69,6 +76,7 @@ const setupWorld = async (
     signedAt: D('2026-01-01'),
     originalValue: money(opts.valueCents ?? 10000000),
     originalPeriod: period,
+    contractor: someContractor,
   });
   if (!created.ok) throw new Error(`fixture broken: ${JSON.stringify(created.error)}`);
 

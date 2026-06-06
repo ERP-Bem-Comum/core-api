@@ -1,6 +1,7 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
 import * as ContractId from '../../domain/shared/contract-id.ts';
+import * as ContractorRef from '../../domain/shared/contractor.ts';
 import {
   parseOriginalValueAndPeriod,
   type ContractInputParseError,
@@ -25,10 +26,13 @@ export type CreatePendingContractCommand = Readonly<{
   originalValueCents: number;
   periodStart: string;
   periodEnd: string | null;
+  contractorType: string;
+  contractorId: string;
 }>;
 
 export type CreatePendingContractError =
   | ContractInputParseError
+  | ContractorRef.ContractorRefError
   | 'contract-sequential-number-duplicated'
   | ContractError
   | ContractRepositoryError;
@@ -55,6 +59,9 @@ export const createPendingContract =
     });
     if (!parsed.ok) return parsed;
 
+    const contractor = ContractorRef.make(cmd.contractorType, cmd.contractorId);
+    if (!contractor.ok) return contractor;
+
     // Unicidade de sequentialNumber (R4) — antes do save (UNIQUE INDEX é a rede).
     const existing = await deps.contractRepo.findBySequentialNumber(cmd.sequentialNumber);
     if (!existing.ok) return existing;
@@ -67,6 +74,7 @@ export const createPendingContract =
       objective: cmd.objective,
       originalValue: parsed.value.originalValue,
       originalPeriod: parsed.value.originalPeriod,
+      contractor: contractor.value,
       createdAt: deps.clock.now(),
     });
     if (!created.ok) return created;

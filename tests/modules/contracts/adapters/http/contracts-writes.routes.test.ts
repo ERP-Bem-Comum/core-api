@@ -147,6 +147,11 @@ const registerAndLogin = async (app: App, email: string): Promise<string> => {
 
 const bearer = (token: string): Record<string, string> => ({ authorization: `Bearer ${token}` });
 
+const CONTRACTOR_BODY = {
+  type: 'supplier',
+  id: '55555555-5555-4555-8555-555555555555',
+};
+
 const activeBody = (overrides: Record<string, unknown> = {}) => ({
   mode: 'Active',
   sequentialNumber: '500/2026',
@@ -156,6 +161,7 @@ const activeBody = (overrides: Record<string, unknown> = {}) => ({
   originalValueCents: 10_000_000,
   periodStart: '2026-02-01',
   periodEnd: '2026-12-31',
+  contractor: CONTRACTOR_BODY,
   ...overrides,
 });
 
@@ -167,6 +173,7 @@ const pendingBody = (overrides: Record<string, unknown> = {}) => ({
   originalValueCents: 10_000_000,
   periodStart: '2026-02-01',
   periodEnd: '2026-12-31',
+  contractor: CONTRACTOR_BODY,
   ...overrides,
 });
 
