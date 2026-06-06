@@ -15,13 +15,17 @@ import {
   supplierToView,
   financierToView,
   collaboratorToView,
+  actToView,
 } from '#src/modules/partners/public-api/contractor-view.mapper.ts';
+import type { ContractorView } from '#src/modules/partners/public-api/contractor-view.mapper.ts';
 import * as Supplier from '#src/modules/partners/domain/supplier/supplier.ts';
 import * as SupplierId from '#src/modules/partners/domain/supplier/supplier-id.ts';
 import * as Financier from '#src/modules/partners/domain/financier/financier.ts';
 import * as FinancierId from '#src/modules/partners/domain/financier/financier-id.ts';
 import * as Collaborator from '#src/modules/partners/domain/collaborator/collaborator.ts';
 import * as CollaboratorId from '#src/modules/partners/domain/collaborator/collaborator-id.ts';
+import * as Act from '#src/modules/partners/domain/act/act.ts';
+import * as ActId from '#src/modules/partners/domain/act/act-id.ts';
 
 const UPDATED_AT = new Date('2026-05-30T09:30:00.000Z');
 
@@ -71,6 +75,22 @@ const aCollaborator = () => {
   });
   if (!r.ok) throw new Error(`fixture collaborator: ${r.error}`);
   return r.value.collaborator;
+};
+
+const anAct = () => {
+  const r = Act.register({
+    id: ActId.generate(),
+    name: 'Ana Ato',
+    email: 'ana@bemcomum.org',
+    cpf: '111.444.777-35',
+    occupationArea: 'PARC',
+    role: 'Voluntária',
+    startOfContract: new Date('2025-02-01T00:00:00.000Z'),
+    employmentRelationship: 'CLT',
+    registeredAt: new Date('2025-01-01T00:00:00.000Z'),
+  });
+  if (!r.ok) throw new Error(`fixture act: ${r.error}`);
+  return r.value.act;
 };
 
 describe('supplierToView', () => {
@@ -151,5 +171,28 @@ describe('collaboratorToView', () => {
     assert.equal(view.role, 'Educador');
     assert.equal(view.occupationArea, 'PARC');
     assert.deepEqual(view.updatedAt, UPDATED_AT);
+  });
+});
+
+describe('actToView (paridade 4/4 — FR-005)', () => {
+  it('projeta nome, documento (cpf), email, papel, área + updatedAt (espelha Collaborator)', () => {
+    const a = anAct();
+    const view = actToView(a, UPDATED_AT);
+
+    assert.equal(view.type, 'act');
+    assert.equal(view.id, a.id as unknown as string);
+    assert.equal(view.name, 'Ana Ato');
+    assert.equal(view.email, 'ana@bemcomum.org');
+    assert.equal(view.document, a.cpf as unknown as string);
+    assert.equal(view.role, 'Voluntária');
+    assert.equal(view.occupationArea, 'PARC');
+    assert.deepEqual(view.updatedAt, UPDATED_AT);
+  });
+
+  it('é membro da união ContractorView (discriminado por type)', () => {
+    const view = actToView(anAct(), UPDATED_AT);
+    // Narrowing pelo discriminante prova que ActView entrou na união ContractorView.
+    const contractor: ContractorView = view;
+    assert.equal(contractor.type === 'act' ? contractor.occupationArea : null, 'PARC');
   });
 });

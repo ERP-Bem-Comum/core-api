@@ -24,6 +24,7 @@ export type {
   SupplierView,
   FinancierView,
   CollaboratorView,
+  ActView,
   ContractorView,
 } from './contractor-view.mapper.ts';
 

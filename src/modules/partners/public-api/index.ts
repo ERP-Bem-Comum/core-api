@@ -19,5 +19,6 @@ export type {
   SupplierView,
   FinancierView,
   CollaboratorView,
+  ActView,
   ContractorView,
 } from './read.ts';
