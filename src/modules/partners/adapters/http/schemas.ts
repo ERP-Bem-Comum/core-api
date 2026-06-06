@@ -16,7 +16,12 @@ const toArray = (v: unknown): unknown => (v === undefined ? undefined : Array.is
 
 /**
  * Query do GET /api/v1/collaborators (subconjunto legado — P1b). `status` = RegistrationStatus;
- * `active` (0|1) é o soft-delete. Demais filtros legados (age, breeds, …) entram na P1c.
+ * `active` (0|1) é o soft-delete.
+ *
+ * FR-012 (épico partners-http-gaps): os filtros `programa` e `idade` são DESCARTADOS (fora de
+ * escopo) — `programa` não é conceito do BC do colaborador; `idade` é derivável de `birthDate` no
+ * client. O contrato NÃO os anuncia; chaves desconhecidas são removidas (strip) por este `z.object`.
+ * Guarda: `tests/modules/partners/adapters/http/collaborator-list-filters-contract.test.ts`.
  */
 export const collaboratorListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -27,7 +32,6 @@ export const collaboratorListQuerySchema = z.object({
   status: z.preprocess(toArray, z.array(z.enum(['PreRegistration', 'Complete'])).optional()),
   occupationAreas: z.preprocess(toArray, z.array(z.enum(['PARC', 'DDI', 'DCE', 'EPV'])).optional()),
   employmentRelationships: z.preprocess(toArray, z.array(z.enum(['CLT', 'PJ'])).optional()),
-  // P1c — paridade legado (age adiado).
   genderIdentities: z.preprocess(
     toArray,
     z
