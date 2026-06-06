@@ -28,6 +28,7 @@ import {
   suppliersHttpPlugin,
   financiersHttpPlugin,
   partnerGeographyHttpPlugin,
+  actHttpPlugin,
   buildPartnersHttpDeps,
 } from '#src/modules/partners/public-api/http.ts';
 
@@ -120,6 +121,13 @@ const main = async (): Promise<void> => {
       },
       {
         plugin: partnerGeographyHttpPlugin(partnersDeps, {
+          requireAuth,
+          authorize: authDeps.authorize,
+        }),
+        prefix: '/api/v1',
+      },
+      {
+        plugin: actHttpPlugin(partnersDeps, {
           requireAuth,
           authorize: authDeps.authorize,
         }),

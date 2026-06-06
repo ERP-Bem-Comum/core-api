@@ -15,6 +15,7 @@ import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import * as CollaboratorId from '#src/modules/partners/domain/collaborator/collaborator-id.ts';
 import * as SupplierId from '#src/modules/partners/domain/supplier/supplier-id.ts';
 import * as FinancierId from '#src/modules/partners/domain/financier/financier-id.ts';
+import * as ActId from '#src/modules/partners/domain/act/act-id.ts';
 
 import { makeInMemoryCollaboratorStore } from '../persistence/repos/collaborator-repository.in-memory.ts';
 import { createDrizzleCollaboratorStore } from '../persistence/repos/collaborator-repository.drizzle.ts';
@@ -30,6 +31,13 @@ import { makeInMemoryFinancierStore } from '../persistence/repos/financier-repos
 import { createDrizzleFinancierStore } from '../persistence/repos/financier-repository.drizzle.ts';
 import { makeInMemoryPartnerGeographyStore } from '../persistence/repos/partner-geography-repository.in-memory.ts';
 import { createDrizzlePartnerGeographyStore } from '../persistence/repos/partner-geography-repository.drizzle.ts';
+import { makeInMemoryActStore } from '../persistence/repos/act-repository.in-memory.ts';
+import { createDrizzleActStore } from '../persistence/repos/act-repository.drizzle.ts';
+import {
+  makeInMemoryActReader,
+  makeActReaderFromRepository,
+} from '../persistence/repos/act-reader.in-memory.ts';
+import { createDrizzleActReader } from '../persistence/repos/act-reader.drizzle.ts';
 import {
   openPartnersMysql,
   type PartnersMysqlHandle,
@@ -73,6 +81,16 @@ import { listPartnerStates } from '../../application/use-cases/list-partner-stat
 import { listPartnerMunicipalities } from '../../application/use-cases/list-partner-municipalities.ts';
 import { togglePartnerState } from '../../application/use-cases/toggle-partner-state.ts';
 import { togglePartnerMunicipality } from '../../application/use-cases/toggle-partner-municipality.ts';
+import { registerAct } from '../../application/use-cases/register-act.ts';
+import { deactivateAct } from '../../application/use-cases/deactivate-act.ts';
+import { reactivateAct } from '../../application/use-cases/reactivate-act.ts';
+import { editAct } from '../../application/use-cases/edit-act.ts';
+import type { ActRepository } from '../../domain/act/repository.ts';
+import type {
+  ActReader,
+  ActReadRecord,
+  ActReaderError,
+} from '../../application/ports/act-reader.ts';
 
 export type PartnersDriver = 'memory' | 'mysql';
 
@@ -81,6 +99,7 @@ export type PartnersSeed = Readonly<{
   collaborators?: readonly CollaboratorReadRecord[];
   suppliers?: readonly SupplierReadRecord[];
   financiers?: readonly FinancierReadRecord[];
+  acts?: readonly ActReadRecord[];
 }>;
 
 export type PartnersCompositionConfig = Readonly<{
@@ -134,6 +153,14 @@ export type PartnersHttpDeps = Readonly<{
   listPartnerMunicipalities: ReturnType<typeof listPartnerMunicipalities>;
   togglePartnerState: ReturnType<typeof togglePartnerState>;
   togglePartnerMunicipality: ReturnType<typeof togglePartnerMunicipality>;
+  /** Acts — leitura (reader pool). */
+  getActById: (id: string) => Promise<Result<ActReadRecord | null, ActReaderError>>;
+  listActRecords: () => Promise<Result<readonly ActReadRecord[], ActReaderError>>;
+  /** Acts — escrita (writer pool). */
+  registerAct: ReturnType<typeof registerAct>;
+  deactivateAct: ReturnType<typeof deactivateAct>;
+  reactivateAct: ReturnType<typeof reactivateAct>;
+  editAct: ReturnType<typeof editAct>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -146,12 +173,21 @@ type Pools = Readonly<{
   financierReader: FinancierReader;
   financierWriterRepo: FinancierRepository;
   geographyRepo: PartnerGeographyRepository;
+  actWriterRepo: ActRepository;
+  actReader: ActReader;
   shutdown: () => Promise<void>;
 }>;
 
 const buildMemoryPools = (config: PartnersCompositionConfig): Pools => {
   // RW split sem efeito físico em memory: reader = writer = mesmo store de agregados.
   const { repository } = makeInMemoryCollaboratorStore();
+  const { repository: actRepository } = makeInMemoryActStore();
+  // ActReader in-memory: usa seed explícito se fornecido, caso contrário deriva do repositório
+  // writer (RW split em memória — sem reader pool separado, conforme padrão do colaborador).
+  const actReader =
+    config.seed?.acts !== undefined && config.seed.acts.length > 0
+      ? makeInMemoryActReader(config.seed.acts)
+      : makeActReaderFromRepository(actRepository);
   return {
     collaboratorReaderRepo: repository,
     collaboratorWriterRepo: repository,
@@ -161,6 +197,8 @@ const buildMemoryPools = (config: PartnersCompositionConfig): Pools => {
     financierReader: makeInMemoryFinancierReader(config.seed?.financiers ?? []),
     financierWriterRepo: makeInMemoryFinancierStore().repository,
     geographyRepo: makeInMemoryPartnerGeographyStore().repository,
+    actWriterRepo: actRepository,
+    actReader,
     shutdown: () => Promise.resolve(),
   };
 };
@@ -199,6 +237,8 @@ const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools
     financierWriterRepo: createDrizzleFinancierStore(writerHandle, clock),
     // Geography usa writer para writes; reads são leves (catálogo estático + par_states/par_municipalities).
     geographyRepo: createDrizzlePartnerGeographyStore(writerHandle, clock),
+    actWriterRepo: createDrizzleActStore(writerHandle, clock),
+    actReader: createDrizzleActReader(readerHandle),
     shutdown: async () => {
       await writerHandle.close();
       if (readerHandle !== writerHandle) await readerHandle.close();
@@ -265,6 +305,16 @@ const makeDeps = (pools: Pools): PartnersHttpDeps => {
       geographyRepo: pools.geographyRepo,
       clock,
     }),
+    getActById: async (rawId) => {
+      const idR = ActId.rehydrate(rawId);
+      if (!idR.ok) return ok(null);
+      return pools.actReader.getById(idR.value);
+    },
+    listActRecords: pools.actReader.list,
+    registerAct: registerAct({ actRepo: pools.actWriterRepo, clock }),
+    deactivateAct: deactivateAct({ actRepo: pools.actWriterRepo, clock }),
+    reactivateAct: reactivateAct({ actRepo: pools.actWriterRepo, clock }),
+    editAct: editAct({ actRepo: pools.actWriterRepo, clock }),
     shutdown: pools.shutdown,
   };
 };

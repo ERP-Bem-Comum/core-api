@@ -35,3 +35,10 @@ export const GEOGRAPHY_PERMISSION = {
 } as const;
 
 export type GeographyPermission = (typeof GEOGRAPHY_PERMISSION)[keyof typeof GEOGRAPHY_PERMISSION];
+
+export const ACT_PERMISSION = {
+  read: 'act:read',
+  write: 'act:write',
+} as const;
+
+export type ActPermission = (typeof ACT_PERMISSION)[keyof typeof ACT_PERMISSION];
