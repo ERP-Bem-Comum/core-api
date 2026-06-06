@@ -155,6 +155,10 @@ describe('CT-104: POST /partner-states/:uf ativa parceria → 200; GET reflete i
       headers: { authorization: `Bearer ${writerToken}` },
     });
     assert.equal(postRes.statusCode, 200);
+    // o toggle retorna o DTO confirmando o estado (contrato do BFF — SC-005)
+    const toggleBody = postRes.json() as { uf: string; isPartner: boolean };
+    assert.equal(toggleBody.uf, 'SP');
+    assert.equal(toggleBody.isPartner, true);
 
     const getRes = await app.inject({
       method: 'GET',
@@ -300,6 +304,16 @@ describe('CT-108: POST /partner-municipalities/:ibgeCode → 200; GET reflete is
       headers: { authorization: `Bearer ${writerToken}` },
     });
     assert.equal(postRes.statusCode, 200);
+    // toggle retorna o DTO completo (com name do catálogo) confirmando o estado
+    const toggleBody = postRes.json() as {
+      ibgeCode: string;
+      uf: string;
+      name: string;
+      isPartner: boolean;
+    };
+    assert.equal(toggleBody.ibgeCode, SP_IBGE);
+    assert.equal(toggleBody.isPartner, true);
+    assert.ok(toggleBody.name.length > 0);
 
     const getRes = await app.inject({
       method: 'GET',

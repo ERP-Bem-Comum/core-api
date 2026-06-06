@@ -36,9 +36,12 @@ import {
   partnerMunicipalitiesQuerySchema,
   partnerStatesListSchema,
   partnerMunicipalitiesListSchema,
+  partnerStateDtoSchema,
+  partnerMunicipalityDtoSchema,
   type PartnerStateDto,
   type PartnerMunicipalityDto,
 } from './partner-geography-schemas.ts';
+import * as Municipality from '../../domain/geography/municipality.ts';
 import { GEOGRAPHY_PERMISSION } from '../../public-api/permissions.ts';
 
 export type PartnerGeographyHttpHooks = Readonly<{
@@ -70,6 +73,22 @@ const sendGeoWriteError = (
   return reply
     .code(geoWriteStatus(code, map))
     .send(toErrorEnvelope(code, code, requestId)) as unknown as Promise<void>;
+};
+
+// Enriquece a view do toggle de município com o `name` do catálogo (read-only). O ibgeCode já foi
+// validado pelo use-case; se não constar (não deveria), name vazio.
+const municipalityToggleDto = (view: {
+  ibgeCode: string;
+  uf: string;
+  isPartner: boolean;
+}): PartnerMunicipalityDto => {
+  const found = Municipality.findMunicipalityByCod(view.ibgeCode);
+  return {
+    ibgeCode: view.ibgeCode,
+    uf: view.uf,
+    name: found.ok ? found.value.name : '',
+    isPartner: view.isPartner,
+  };
 };
 
 const partnerGeographyRoutes =
@@ -107,11 +126,16 @@ const partnerGeographyRoutes =
       preHandler: [hooks.requireAuth, hooks.authorize(GEOGRAPHY_PERMISSION.write)],
       schema: {
         params: ufParamSchema,
+        response: { 200: partnerStateDtoSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
         const result = await deps.togglePartnerState({ rawUf: req.params.uf, action: 'activate' });
         if (!result.ok) return sendGeoWriteError(reply, result.error, GEO_STATE_WRITE_STATUS);
-        return reply.code(200).send() as unknown as Promise<void>;
+        const dto: PartnerStateDto = {
+          uf: result.value.uf as unknown as string,
+          isPartner: result.value.isPartner,
+        };
+        return sendResult(reply, ok(dto), { ok: 200 });
       },
     });
 
@@ -122,6 +146,7 @@ const partnerGeographyRoutes =
       preHandler: [hooks.requireAuth, hooks.authorize(GEOGRAPHY_PERMISSION.write)],
       schema: {
         params: ufParamSchema,
+        response: { 200: partnerStateDtoSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
         const result = await deps.togglePartnerState({
@@ -129,7 +154,11 @@ const partnerGeographyRoutes =
           action: 'deactivate',
         });
         if (!result.ok) return sendGeoWriteError(reply, result.error, GEO_STATE_WRITE_STATUS);
-        return reply.code(200).send() as unknown as Promise<void>;
+        const dto: PartnerStateDto = {
+          uf: result.value.uf as unknown as string,
+          isPartner: result.value.isPartner,
+        };
+        return sendResult(reply, ok(dto), { ok: 200 });
       },
     });
 
@@ -171,6 +200,7 @@ const partnerGeographyRoutes =
       preHandler: [hooks.requireAuth, hooks.authorize(GEOGRAPHY_PERMISSION.write)],
       schema: {
         params: ibgeCodeParamSchema,
+        response: { 200: partnerMunicipalityDtoSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
         const result = await deps.togglePartnerMunicipality({
@@ -178,7 +208,17 @@ const partnerGeographyRoutes =
           action: 'activate',
         });
         if (!result.ok) return sendGeoWriteError(reply, result.error, GEO_MUN_WRITE_STATUS);
-        return reply.code(200).send() as unknown as Promise<void>;
+        return sendResult(
+          reply,
+          ok(
+            municipalityToggleDto({
+              ibgeCode: result.value.ibgeCode as unknown as string,
+              uf: result.value.uf as unknown as string,
+              isPartner: result.value.isPartner,
+            }),
+          ),
+          { ok: 200 },
+        );
       },
     });
 
@@ -189,6 +229,7 @@ const partnerGeographyRoutes =
       preHandler: [hooks.requireAuth, hooks.authorize(GEOGRAPHY_PERMISSION.write)],
       schema: {
         params: ibgeCodeParamSchema,
+        response: { 200: partnerMunicipalityDtoSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
         const result = await deps.togglePartnerMunicipality({
@@ -196,7 +237,17 @@ const partnerGeographyRoutes =
           action: 'deactivate',
         });
         if (!result.ok) return sendGeoWriteError(reply, result.error, GEO_MUN_WRITE_STATUS);
-        return reply.code(200).send() as unknown as Promise<void>;
+        return sendResult(
+          reply,
+          ok(
+            municipalityToggleDto({
+              ibgeCode: result.value.ibgeCode as unknown as string,
+              uf: result.value.uf as unknown as string,
+              isPartner: result.value.isPartner,
+            }),
+          ),
+          { ok: 200 },
+        );
       },
     });
   };

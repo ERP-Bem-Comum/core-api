@@ -44,7 +44,7 @@
 | `listMunicipalitiesByUf`    | `GET /api/v1/partner-municipalities?uf=`                                                     | `query.uf`        | `PartnerMunicipalityDto[]`                 | `geography:read`  |
 | `togglePartnerMunicipality` | `POST/DELETE /api/v1/partner-municipalities/:ibgeCode`                                       | `params.ibgeCode` | `PartnerMunicipalityDto`                   | `geography:write` |
 
-- Toggle idempotente (marcar já-ativa = 200 no-op). UF/IBGE inválido (fora do catálogo) → 400/404.
+- Toggle idempotente (marcar já-ativa = 200 no-op) e **retorna o DTO** (`{uf, isPartner}` / `{ibgeCode, uf, name, isPartner}`) confirmando o estado — o BFF usa para atualização otimista (SC-005). UF/IBGE inválido (fora do catálogo) → 400 com envelope `{error:{code,requestId}}`.
 - Cross-state: a listagem de **parceiros** não filtra por UF; `?uf=` filtra o catálogo de candidatos.
 
 ## US-005 — Filtros descartados

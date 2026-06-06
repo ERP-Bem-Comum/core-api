@@ -19,4 +19,9 @@ tests {
   test("US-002 — POST /partner-municipalities/:ibgeCode (ativar) retorna 200", function () {
     expect(res.getStatus()).to.equal(200);
   });
+  // toggle retorna o DTO completo (com name do catálogo) — contrato do BFF (SC-005)
+  test("retorna PartnerMunicipalityDto { ibgeCode, uf, name, isPartner: true }", function () {
+    expect(res.getBody().isPartner).to.equal(true);
+    expect(res.getBody().name).to.be.a("string");
+  });
 }
