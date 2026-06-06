@@ -1,0 +1,22 @@
+meta {
+  name: toggle partner state activate
+  type: http
+  seq: 53
+}
+
+post {
+  url: {{baseUrl}}/api/v1/partner-states/SP
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operatorToken}}
+}
+
+tests {
+  // POST idempotente: 200 mesmo se SP já estava ativa.
+  test("US-002 — POST /partner-states/SP (ativar) retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

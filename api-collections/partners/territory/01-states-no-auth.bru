@@ -1,0 +1,16 @@
+meta {
+  name: partner states no auth
+  type: http
+  seq: 50
+}
+
+get {
+  url: {{baseUrl}}/api/v1/partner-states
+  auth: none
+}
+
+tests {
+  test("US-002 — GET /partner-states sem token retorna 401", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}

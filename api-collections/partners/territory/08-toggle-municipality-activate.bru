@@ -1,0 +1,22 @@
+meta {
+  name: toggle partner municipality activate
+  type: http
+  seq: 57
+}
+
+post {
+  url: {{baseUrl}}/api/v1/partner-municipalities/{{sampleIbgeCode}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operatorToken}}
+}
+
+tests {
+  // POST idempotente: 200 mesmo se o municipio ja estava ativo.
+  test("US-002 — POST /partner-municipalities/:ibgeCode (ativar) retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

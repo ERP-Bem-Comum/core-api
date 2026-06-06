@@ -1,6 +1,11 @@
 #!/usr/bin/env bash
 # scripts/e2e-collaborators.sh — orquestra o smoke E2E da borda /api/v1/collaborators (P4-SMOKE).
 #
+# [DEPRECATED] A cobertura de collaborators foi migrada para a colecao Bruno em
+# api-collections/partners/collaborators/ (ADR-0034). Use:
+#   pnpm run test:e2e:bruno:partners
+# Este script sera removido apos validacao em ambiente de CI. Nao adicionar novos cenarios aqui.
+#
 # Sobe MySQL (Docker), inicia o servidor real com partners em MySQL (RW split: writer=root,
 # reader=readonly_bi) e roda o smoke (tests/e2e/collaborators-smoke.e2e.ts) via Node + fetch.
 # auth/contracts ficam em memory (nao participam do fluxo) — foco no partners MySQL. O operador

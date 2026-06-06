@@ -1,10 +1,16 @@
 #!/usr/bin/env bash
-# scripts/e2e-bruno-partners.sh — smoke E2E HTTP via Bruno (.bru) para /api/v1/suppliers e /api/v1/financiers.
+# scripts/e2e-bruno-partners.sh — smoke E2E HTTP via Bruno (.bru) para toda a borda /api/v1 do modulo partners.
 #
-# Espelha scripts/e2e-collaborators.sh (mesmo trap/cleanup, secrets efemeros, MYSQL_PORT, compose --wait,
-# server em background, seed RBAC) — mas em vez de `node --test` roda a colecao Bruno via `bru run`.
+# Cobertura: suppliers (CRUD + export CSV + service-categories), financiers (CRUD),
+#            collaborators (CRUD + complete-registration + import CSV),
+#            territory (partner-states + partner-municipalities).
+# Subtitui: scripts/e2e-collaborators.sh (cobertura de collaborators migrada para a colecao Bruno).
+#
+# Espelha o padrao de scripts/e2e-collaborators.sh (mesmo trap/cleanup, secrets efemeros, MYSQL_PORT,
+# compose --wait, server em background, seed RBAC) — mas roda a colecao Bruno via `bru run`.
 # auth/contracts ficam em memory; partners=mysql (RW split: writer=root, reader=readonly_bi, banco `core`).
-# O operador com supplier:read+write E financier:read+write vem do seed RBAC via AUTH_SEED_JSON.
+# O operador tem supplier:read+write, financier:read+write, collaborator:read+write,
+# geography:read+write (seed RBAC via AUTH_SEED_JSON).
 #
 # PRE-REQUISITO: `bru` CLI disponivel — NAO usar npm (ADR-0012).
 #   Verificacao: bru --version
@@ -61,12 +67,12 @@ export MYSQL_PORT
 docker compose up -d mysql --wait || exit 1
 
 # Servidor real em background. partners=mysql aplica migrations par_* no boot; auth=memory semeia o
-# operador RBAC com supplier:read+write E financier:read+write. contracts=memory (default).
+# operador RBAC com todas as permissoes necessarias para a colecao completa. contracts=memory (default).
 PARTNERS_DRIVER=mysql \
   PARTNERS_DATABASE_URL="mysql://root:rootpw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core" \
   PARTNERS_READER_URL="mysql://readonly_bi:ropw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core" \
   CORE_API_E2E=1 \
-  AUTH_SEED_JSON='{"users":[{"email":"e2e-partners@example.com","password":"Str0ng-Passphrase-2026!","permissions":["supplier:read","supplier:write","financier:read","financier:write"]},{"email":"e2e-bare@example.com","password":"Str0ng-Passphrase-2026!","permissions":[]}]}' \
+  AUTH_SEED_JSON='{"users":[{"email":"e2e-partners@example.com","password":"Str0ng-Passphrase-2026!","permissions":["supplier:read","supplier:write","financier:read","financier:write","collaborator:read","collaborator:write","geography:read","geography:write"]},{"email":"e2e-bare@example.com","password":"Str0ng-Passphrase-2026!","permissions":[]}]}' \
   PORT=3100 \
   LOG_LEVEL=warn \
   node --experimental-strip-types --enable-source-maps --no-warnings src/server.ts &
@@ -95,6 +101,10 @@ export E2E_SEED_PASSWORD="Str0ng-Passphrase-2026!"
 # "You can run only at the root of a collection". Por isso entramos na colecao via subshell.
 # --env local: usa environments/local.bru (baseUrl + emails). -r: recursivo (auth/, suppliers/, financiers/).
 COLLECTION_DIR="api-collections/partners"
+# -r: recursivo (auth/, suppliers/, financiers/, collaborators/, territory/).
+# A ordem de execucao segue os numeros seq dentro de cada pasta; as pastas rodam na ordem
+# em que o bru as descobre (alfabetica). auth/ tem seq 1-4, financiers/ 20-27,
+# collaborators/ 30-42, territory/ 50-59.
 BRU_ARGS=(run . --env local -r)
 
 # Flags de reporte JUnit opcionais (E2E_JUNIT_REPORT=1) — caminho ABSOLUTO (cwd muda no subshell).

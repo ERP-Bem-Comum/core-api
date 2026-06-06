@@ -1,0 +1,32 @@
+meta {
+  name: list service categories
+  type: http
+  seq: 19
+}
+
+get {
+  url: {{baseUrl}}/api/v1/suppliers/service-categories
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operatorToken}}
+}
+
+tests {
+  test("US-004 — GET /suppliers/service-categories retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("US-004 — retorna array de strings", function () {
+    const body = res.getBody();
+    expect(body).to.be.an("array");
+    body.forEach(function (cat) {
+      expect(cat).to.be.a("string");
+    });
+  });
+
+  test("US-004 — catalogo tem 39 itens", function () {
+    expect(res.getBody().length).to.equal(39);
+  });
+}
