@@ -7,6 +7,7 @@ import * as Period from '#src/shared/kernel/period.ts';
 import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import * as AmendmentId from '#src/modules/contracts/domain/shared/amendment-id.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
+import * as ContractorRef from '#src/modules/contracts/domain/shared/contractor.ts';
 import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
 import { Amendment } from '#src/modules/contracts/domain/amendment/amendment.ts';
 import {
@@ -24,6 +25,12 @@ const pd = (iso: string): PlainDate.PlainDate => {
   if (!r.ok) throw new Error('fixture broken');
   return r.value;
 };
+
+const someContractor = (() => {
+  const r = ContractorRef.make('supplier', '55555555-5555-4555-8555-555555555555');
+  if (!r.ok) throw new Error('fixture broken');
+  return r.value;
+})();
 
 const money = (cents: number) => {
   const r = Money.fromCents(cents);
@@ -136,6 +143,7 @@ describe('formatContract / formatAmendment — real newlines (Defeito #2)', () =
       signedAt: new Date('2026-01-01'),
       originalValue: money(10000000),
       originalPeriod: buildPeriod(),
+      contractor: someContractor,
     });
     if (!created.ok) throw new Error('fixture broken');
     const result = formatContract(created.value.contract);
@@ -155,6 +163,7 @@ describe('formatContract / formatAmendment — real newlines (Defeito #2)', () =
       signedAt: new Date('2026-01-01'),
       originalValue: money(10000000),
       originalPeriod: buildPeriod(),
+      contractor: someContractor,
     });
     if (!c.ok) throw new Error('fixture broken');
     const created = Amendment.create({

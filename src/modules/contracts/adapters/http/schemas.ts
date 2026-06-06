@@ -133,6 +133,11 @@ const contractWriteShape = {
   originalValueCents: z.number().int(),
   periodStart: z.string(),
   periodEnd: z.string().nullable(),
+  // Contratado obrigatório (FR-001). `type` enum fechado; `id` UUID v4.
+  contractor: z.object({
+    type: z.enum(['supplier', 'financier', 'collaborator', 'act']),
+    id: z.uuid(),
+  }),
 };
 
 /** Body `POST /contracts` — discrimina cadastro (`Pending`) vs cadastro+assinatura (`Active`). */
@@ -140,6 +145,24 @@ export const createContractBodySchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('Pending'), ...contractWriteShape }),
   z.object({ mode: z.literal('Active'), ...contractWriteShape, signedAt: z.string() }),
 ]);
+
+/**
+ * Body `PATCH /contracts/:id` — só metadados de cadastro (US-002). `.strict()` rejeita
+ * chaves não declaradas (incl. campos imutáveis como `originalValue` → 400 na borda, não
+ * 422); `.refine` exige ≥1 campo (corpo vazio → 400). `title`/`objective` `min(1)`.
+ */
+export const patchContractMetadataBodySchema = z
+  .object({
+    title: z.string().min(1).optional(),
+    objective: z.string().min(1).optional(),
+    observations: z.string().max(1000).nullable().optional(),
+    email: z.email().nullable().optional(),
+    telephone: z.string().max(32).nullable().optional(),
+  })
+  .strict()
+  .refine((b) => Object.keys(b).length > 0, {
+    message: 'pelo menos um campo deve ser informado',
+  });
 
 /** Body `POST /contracts/:id/activate`. */
 export const activateContractBodySchema = z.object({ signedAt: z.string() });
@@ -293,12 +316,48 @@ const childrenShape = {
   documents: z.array(documentSchema),
 };
 
+// Bloco do contratado composto na borda (rota gorda transitória — ADR-0032).
+// `snapshot` lido da public-api de Parceiros; `null` em degradação (FR-006).
+const bankAccountSchema = z.object({
+  bank: z.string(),
+  agency: z.string(),
+  accountNumber: z.string(),
+  checkDigit: z.string(),
+});
+const pixKeySchema = z.object({ keyType: z.string(), key: z.string() });
+const contractorSnapshotSchema = z.object({
+  name: z.string(),
+  document: z.string(),
+  updatedAt: z.string(),
+  bankAccount: bankAccountSchema.nullable().optional(),
+  pixKey: pixKeySchema.nullable().optional(),
+});
+const contractorBlockSchema = z.object({
+  type: z.enum(['supplier', 'financier', 'collaborator', 'act']),
+  id: z.string(),
+  snapshot: contractorSnapshotSchema.nullable(),
+});
+
+// Metadados de cadastro + contratado — só no detalhe (não no list-item).
+const contractorDetailShape = {
+  contractor: contractorBlockSchema,
+  observations: z.string().nullable(),
+  email: z.string().nullable(),
+  telephone: z.string().nullable(),
+};
+
 export const contractFullDetailSchema = z.discriminatedUnion('status', [
-  z.object({ ...registrationShape, status: z.literal('Pending'), ...childrenShape }),
+  z.object({
+    ...registrationShape,
+    status: z.literal('Pending'),
+    ...contractorDetailShape,
+    ...childrenShape,
+  }),
   z.object({
     ...registrationShape,
     ...effectiveShape,
     status: z.literal('Active'),
+    ...contractorDetailShape,
     ...childrenShape,
   }),
   z.object({
@@ -306,6 +365,7 @@ export const contractFullDetailSchema = z.discriminatedUnion('status', [
     ...effectiveShape,
     status: z.literal('Expired'),
     endedAt: z.string(),
+    ...contractorDetailShape,
     ...childrenShape,
   }),
   z.object({
@@ -313,6 +373,7 @@ export const contractFullDetailSchema = z.discriminatedUnion('status', [
     ...effectiveShape,
     status: z.literal('Terminated'),
     endedAt: z.string(),
+    ...contractorDetailShape,
     ...childrenShape,
   }),
 ]);

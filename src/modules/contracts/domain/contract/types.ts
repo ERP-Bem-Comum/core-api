@@ -1,4 +1,5 @@
 import type { AmendmentId, ContractId } from '../shared/ids.ts';
+import type { ContractorRef } from '../shared/contractor.ts';
 import type { Money } from '../../../../shared/kernel/money.ts';
 import type { Period } from '../../../../shared/kernel/period.ts';
 import type { PlainDate } from '../../../../shared/kernel/plain-date.ts';
@@ -22,6 +23,13 @@ type ContractRegistration = Readonly<{
   objective: string;
   originalValue: Money;
   originalPeriod: Period;
+  // Contratado (referência leve a Parceiros) — atributo próprio do contrato,
+  // obrigatório desde o registro (ADR-0032; FR-001/002).
+  contractor: ContractorRef;
+  // Metadados de cadastro editáveis via PATCH (FR-007/009) — `null` quando ausentes.
+  observations: string | null;
+  email: string | null;
+  telephone: string | null;
 }>;
 
 /**
@@ -118,11 +126,10 @@ export type ContractStatus = Contract['status'];
 type ContractImmutableField =
   | 'id'
   | 'sequentialNumber'
-  | 'title'
-  | 'objective'
   | 'signedAt'
   | 'originalValue'
-  | 'originalPeriod';
+  | 'originalPeriod'
+  | 'contractor';
 
 /**
  * Patch parcial aceito por `updateContract`.
@@ -165,6 +172,7 @@ export type CreateContractInput = Readonly<{
   signedAt: Date;
   originalValue: Money;
   originalPeriod: Period;
+  contractor: ContractorRef;
 }>;
 
 /**
@@ -180,5 +188,6 @@ export type CreatePendingContractInput = Readonly<{
   objective: string;
   originalValue: Money;
   originalPeriod: Period;
+  contractor: ContractorRef;
   createdAt: Date;
 }>;

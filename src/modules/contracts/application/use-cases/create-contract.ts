@@ -2,6 +2,7 @@ import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import { isValidDate } from '../../../../shared/utils/date.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
 import * as ContractId from '../../domain/shared/contract-id.ts';
+import * as ContractorRef from '../../domain/shared/contractor.ts';
 import type { MoneyError } from '#src/shared/kernel/money.ts';
 import type { PeriodError } from '#src/shared/kernel/period.ts';
 import { parseOriginalValueAndPeriod } from './contract-input-parse.ts';
@@ -27,6 +28,8 @@ export type CreateContractCommand = Readonly<{
   originalValueCents: number;
   originalPeriodStart: string;
   originalPeriodEnd: string | null;
+  contractorType: string;
+  contractorId: string;
 }>;
 
 // Erros da construção PURA (validação + Contract.create), sem IO. Reusados pelo
@@ -35,6 +38,7 @@ export type BuildContractError =
   | 'create-contract-invalid-signed-at'
   | 'create-contract-invalid-period-start'
   | 'create-contract-invalid-period-end'
+  | ContractorRef.ContractorRefError
   | MoneyError
   | PeriodError
   | ContractError;
@@ -73,6 +77,9 @@ export const buildContract = (
   });
   if (!parsed.ok) return parsed;
 
+  const contractor = ContractorRef.make(cmd.contractorType, cmd.contractorId);
+  if (!contractor.ok) return contractor;
+
   const created = Contract.create({
     id: ContractId.generate(),
     sequentialNumber: cmd.sequentialNumber,
@@ -81,6 +88,7 @@ export const buildContract = (
     signedAt,
     originalValue: parsed.value.originalValue,
     originalPeriod: parsed.value.originalPeriod,
+    contractor: contractor.value,
   });
   if (!created.ok) return created;
 

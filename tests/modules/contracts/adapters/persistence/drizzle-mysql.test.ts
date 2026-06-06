@@ -116,6 +116,8 @@ if (integrationEnabled()) {
             currentPeriodKind: 'Fixed',
             currentPeriodStart: new Date('2026-01-01'),
             currentPeriodEnd: new Date('2026-12-31'),
+            contractorType: 'supplier',
+            contractorId: '55555555-5555-4555-8555-555555555555',
             status: 'Active',
             endedAt: null,
           });

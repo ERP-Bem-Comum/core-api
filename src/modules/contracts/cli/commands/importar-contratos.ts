@@ -30,7 +30,8 @@ Flags opcionais:
   --confirmar          persiste de fato (sem esta flag, roda em dry-run)
 
 Schema (CSV header / JSON keys): numero, titulo, objetivo, assinado_em,
-valor_centavos, inicio [, fim, cnpj]. Colunas extras são ignoradas.`;
+valor_centavos, inicio, contratado_tipo, contratado_id [, fim, cnpj].
+Colunas extras são ignoradas.`;
 
 const readFileUtf8 = async (path: string): Promise<Result<string, 'read-failed'>> => {
   try {

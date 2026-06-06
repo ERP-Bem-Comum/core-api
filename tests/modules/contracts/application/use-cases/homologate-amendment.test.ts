@@ -9,6 +9,7 @@ import * as Period from '#src/shared/kernel/period.ts';
 import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import * as AmendmentId from '#src/modules/contracts/domain/shared/amendment-id.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
+import * as ContractorRef from '#src/modules/contracts/domain/shared/contractor.ts';
 import * as DocumentId from '#src/modules/contracts/domain/shared/document-id.ts';
 import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
@@ -46,6 +47,12 @@ const nonZeroMoney = (cents: number) => {
   return r.value;
 };
 
+const someContractor = (() => {
+  const r = ContractorRef.make('supplier', '55555555-5555-4555-8555-555555555555');
+  if (!r.ok) throw new Error('fixture broken: contractor');
+  return r.value;
+})();
+
 const fixedPeriod = (startISO: string, endISO: string) => {
   const r = Period.create(pd(startISO), pd(endISO));
   if (!r.ok) throw new Error(`fixture broken: ${r.error}`);
@@ -77,6 +84,7 @@ const setupWorld = async (
     signedAt: D('2026-01-01'),
     originalValue: money(overrides.contractValueCents ?? 10000000),
     originalPeriod: fixedPeriod('2026-01-01', '2026-12-31'),
+    contractor: someContractor,
   });
   if (!contractCreate.ok)
     throw new Error(`fixture broken: ${JSON.stringify(contractCreate.error)}`);
@@ -304,6 +312,7 @@ describe('homologateAmendment — mismatch', () => {
       signedAt: D('2026-01-01'),
       originalValue: money(5000000),
       originalPeriod: fixedPeriod('2026-01-01', '2026-12-31'),
+      contractor: someContractor,
     });
     if (!otherContract.ok) throw new Error('fixture broken');
     await world.contractRepo.repo.save(otherContract.value.contract, []);
@@ -463,6 +472,7 @@ describe('InMemoryContractRepository', () => {
       signedAt: D('2026-01-01'),
       originalValue: money(100),
       originalPeriod: fixedPeriod('2026-01-01', '2026-12-31'),
+      contractor: someContractor,
     });
     if (!created.ok) throw new Error('fixture broken');
 

@@ -38,6 +38,7 @@ import { getContractDetail } from '../../application/use-cases/get-contract-deta
 import { getContractTimeline } from '../../application/use-cases/get-contract-timeline.ts';
 import { createContract } from '../../application/use-cases/create-contract.ts';
 import { createPendingContract } from '../../application/use-cases/create-pending-contract.ts';
+import { updateContractMetadata } from '../../application/use-cases/update-contract-metadata.ts';
 import { activateContract } from '../../application/use-cases/activate-contract.ts';
 import { endContract } from '../../application/use-cases/end-contract.ts';
 import { createAmendment } from '../../application/use-cases/create-amendment.ts';
@@ -47,8 +48,15 @@ import { attachSignedDocument } from '../../application/use-cases/attach-signed-
 import { supersedeDocument } from '../../application/use-cases/supersede-document.ts';
 import { deleteDocument } from '../../application/use-cases/delete-document.ts';
 
+import { composeContractor, type ContractorBlock } from './contractor-composition.ts';
+import {
+  buildPartnersReadPort,
+  type ContractorReadPort,
+} from '#src/modules/partners/public-api/index.ts';
+
 import * as AmendmentId from '../../domain/shared/amendment-id.ts';
 import type { AmendmentIdError } from '../../domain/shared/amendment-id.ts';
+import type { ContractorRef } from '../../domain/shared/contractor.ts';
 import * as DocumentId from '../../domain/shared/document-id.ts';
 import type { DocumentIdError } from '../../domain/shared/document-id.ts';
 import type { ContractRepository } from '../../domain/contract/repository.ts';
@@ -90,6 +98,12 @@ export type ContractsCompositionConfig = Readonly<{
   documentBucket?: string;
   /** Prefixo de storage key. Default `contracts`. */
   documentKeyPrefix?: string;
+  /**
+   * Read port do contratado (public-api de Parceiros, ADR-0032). Injetável em testes
+   * (memory). Em mysql, se ausente, é construído via `buildPartnersReadPort(writerUrl)`.
+   * Ausente em memory → composição degrada (`snapshot: null`).
+   */
+  contractorReadPort?: ContractorReadPort;
 }>;
 
 /** Reader leve de aditivo — usado pela borda p/ checagem de ownership (IDOR), não muta estado. */
@@ -108,9 +122,12 @@ export type ContractsHttpDeps = Readonly<{
   listAllContracts: ContractRepository['list'];
   getContract: ReturnType<typeof getContract>;
   getContractDetail: ReturnType<typeof getContractDetail>;
+  /** Composição transitória do contratado na borda (ADR-0032). Degrada p/ snapshot null. */
+  getContractorBlock: (ref: ContractorRef) => Promise<ContractorBlock>;
   getContractTimeline: ReturnType<typeof getContractTimeline>;
   createContract: ReturnType<typeof createContract>;
   createPendingContract: ReturnType<typeof createPendingContract>;
+  updateContractMetadata: ReturnType<typeof updateContractMetadata>;
   activateContract: ReturnType<typeof activateContract>;
   endContract: ReturnType<typeof endContract>;
   createAmendment: ReturnType<typeof createAmendment>;
@@ -133,6 +150,7 @@ type Pools = Readonly<{
   documentRepo: DocumentRepository;
   documentStorage: DocumentStorage;
   documentBucket: string;
+  contractorReadPort: ContractorReadPort | null;
   shutdown: () => Promise<void>;
 }>;
 
@@ -169,6 +187,8 @@ const buildMemoryPools = async (config: ContractsCompositionConfig): Promise<Poo
     documentRepo,
     documentStorage: createInMemoryDocumentStorage(),
     documentBucket: config.documentBucket ?? DEFAULT_DOCUMENT_BUCKET,
+    // Memory não tem Parceiros real: usa o port injetado (testes) ou null (degrada).
+    contractorReadPort: config.contractorReadPort ?? null,
     shutdown: () => Promise.resolve(),
   };
   if (config.seed !== undefined) await applyMemorySeed(config.seed, pools);
@@ -202,6 +222,22 @@ const buildMysqlPools = async (config: ContractsCompositionConfig): Promise<Pool
     throw new Error(`contracts-composition: storage S3 mal configurado (${s3R.error.tag})`);
   }
 
+  // Contratado (ADR-0032): read port da public-api de Parceiros. Reusa o servidor MySQL
+  // do writer (lê `par_*`, ADR-0014). Port injetado tem precedência (testes); o construído
+  // abre pool próprio e é fechado no shutdown.
+  let contractorReadPort: ContractorReadPort | null = config.contractorReadPort ?? null;
+  let closeContractorPort: () => Promise<void> = () => Promise.resolve();
+  if (contractorReadPort === null) {
+    const portR = await buildPartnersReadPort({ connectionString: writerUrl });
+    if (!portR.ok) {
+      await writerHandle.close();
+      if (readerHandle !== writerHandle) await readerHandle.close();
+      throw new Error(`contracts-composition: falha ao abrir partners read port (${portR.error})`);
+    }
+    contractorReadPort = portR.value;
+    closeContractorPort = portR.value.close;
+  }
+
   return {
     contractReaderRepo: createDrizzleContractRepository(readerHandle),
     contractWriterRepo: createDrizzleContractRepository(writerHandle),
@@ -209,7 +245,9 @@ const buildMysqlPools = async (config: ContractsCompositionConfig): Promise<Pool
     documentRepo: DocumentRepositoryDrizzle(writerHandle.db),
     documentStorage: createS3DocumentStorage(s3R.value),
     documentBucket: String(s3R.value.bucket),
+    contractorReadPort,
     shutdown: async () => {
+      await closeContractorPort();
       await writerHandle.close();
       if (readerHandle !== writerHandle) await readerHandle.close();
     },
@@ -234,9 +272,12 @@ const makeDeps = (
       documentRepo: pools.documentRepo,
     }),
     getContractTimeline: getContractTimeline({ timelineRepo }),
+    // Composição do contratado na borda (ADR-0032) — degrada p/ snapshot null.
+    getContractorBlock: (ref) => composeContractor(pools.contractorReadPort, ref),
     // Writes → writer pool.
     createContract: createContract({ contractRepo: pools.contractWriterRepo, clock }),
     createPendingContract: createPendingContract({ contractRepo: pools.contractWriterRepo, clock }),
+    updateContractMetadata: updateContractMetadata({ contractRepo: pools.contractWriterRepo }),
     activateContract: activateContract({
       contractRepo: pools.contractWriterRepo,
       documentRepo: pools.documentRepo,

@@ -32,6 +32,10 @@ const criarPendente = (statePath: string, numero = '700/2026') =>
     '2026-02-01',
     '--fim',
     '2026-12-31',
+    '--contratado-tipo',
+    'supplier',
+    '--contratado-id',
+    '55555555-5555-4555-8555-555555555555',
     // SEM --assinado-em → caminho Pending
   ]);
 

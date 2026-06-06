@@ -453,6 +453,7 @@ describe('CONTRACTS-HTTP-DOCUMENTS (C3) — CA5 fluxo real (sem seed)', () => {
         originalValueCents: 10_000_000,
         periodStart: '2026-02-01',
         periodEnd: '2026-12-31',
+        contractor: { type: 'supplier', id: '55555555-5555-4555-8555-555555555555' },
       },
     });
     assert.equal(created.statusCode, 201);
@@ -499,6 +500,7 @@ describe('CONTRACTS-HTTP-DOCUMENTS (C3) — CA5 fluxo real (sem seed)', () => {
         originalValueCents: 10_000_000,
         periodStart: '2026-02-01',
         periodEnd: '2026-12-31',
+        contractor: { type: 'supplier', id: '55555555-5555-4555-8555-555555555555' },
       },
     });
     assert.equal(created.statusCode, 201);
@@ -574,6 +576,7 @@ describe('CONTRACTS-HTTP-DOCUMENTS (C3) — OpenAPI + bodyLimit', () => {
         originalValueCents: 10_000_000,
         periodStart: '2026-02-01',
         periodEnd: '2026-12-31',
+        contractor: { type: 'supplier', id: '55555555-5555-4555-8555-555555555555' },
       },
     });
     assert.equal(res.statusCode, 413);

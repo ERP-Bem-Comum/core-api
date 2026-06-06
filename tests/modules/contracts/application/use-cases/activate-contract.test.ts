@@ -16,6 +16,7 @@ import * as Money from '#src/shared/kernel/money.ts';
 import * as Period from '#src/shared/kernel/period.ts';
 import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
+import * as ContractorRef from '#src/modules/contracts/domain/shared/contractor.ts';
 import * as DocumentId from '#src/modules/contracts/domain/shared/document-id.ts';
 import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
@@ -38,6 +39,10 @@ const fromOk = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }, la
 
 const money = (cents: number) => fromOk(Money.fromCents(cents), 'money');
 const pd = (iso: string) => fromOk(PlainDate.from(iso.slice(0, 10)), 'pd');
+const someContractor = fromOk(
+  ContractorRef.make('supplier', '55555555-5555-4555-8555-555555555555'),
+  'contractor',
+);
 const fixedPeriod = (s: string, e: string) => fromOk(Period.create(pd(s), pd(e)), 'period');
 
 const signedContractDoc = (contractId: string) =>
@@ -77,6 +82,7 @@ const seedPending = () => {
     objective: 'Aguardando assinatura',
     originalValue: money(10_000_000),
     originalPeriod: fixedPeriod('2026-02-01', '2026-12-31'),
+    contractor: someContractor,
     createdAt: new Date('2026-01-10T00:00:00.000Z'),
   });
   return fromOk(r, 'createPending').contract;
@@ -124,6 +130,7 @@ describe('activateContract — Pending → Active (RN-CV-02)', () => {
         signedAt: new Date('2026-01-15'),
         originalValue: money(5_000_000),
         originalPeriod: fixedPeriod('2026-02-01', '2026-12-31'),
+        contractor: someContractor,
       }),
       'create',
     ).contract;

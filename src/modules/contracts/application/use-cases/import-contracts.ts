@@ -23,6 +23,11 @@ export type ImportContractRow = Readonly<{
   inicio: string;
   fim: string | null;
   cnpj?: string;
+  // Contratado (FR-001) — obrigatório por linha. Ausência → falha de DADO na linha
+  // (modelo row-level D3). O mapeamento do contratado a partir do legado v1
+  // (contractType + supplierId/financierId/collaboratorId) é escopo do ticket de import.
+  contractorType?: string;
+  contractorId?: string;
 }>;
 
 export type ImportRowError =
@@ -62,6 +67,9 @@ const toCreateCommand = (row: ImportContractRow): CreateContractCommand => ({
   originalValueCents: Number(row.valorCentavos),
   originalPeriodStart: row.inicio,
   originalPeriodEnd: row.fim,
+  // Ausente → string vazia → ContractorRef.make falha → linha vira falha (D3).
+  contractorType: row.contractorType ?? '',
+  contractorId: row.contractorId ?? '',
 });
 
 export const importContracts =

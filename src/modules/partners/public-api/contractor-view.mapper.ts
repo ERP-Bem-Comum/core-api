@@ -14,6 +14,7 @@
 import type { Supplier } from '../domain/supplier/types.ts';
 import type { Financier } from '../domain/financier/types.ts';
 import type { Collaborator } from '../domain/collaborator/types.ts';
+import type { Act } from '../domain/act/types.ts';
 import type { BankAccount, PixKey } from '../domain/supplier/payment-target.ts';
 import type { ServiceCategory } from '../domain/supplier/service-category.ts';
 
@@ -52,8 +53,21 @@ export type CollaboratorView = Readonly<{
   updatedAt: Date;
 }>;
 
+// `Act` é placeholder (ADR-0036), clone enxuto de Collaborator — a View espelha
+// `CollaboratorView` (mesmos campos de pré-cadastro) até o BC de Act ganhar forma própria.
+export type ActView = Readonly<{
+  type: 'act';
+  id: string;
+  name: string;
+  email: string;
+  document: string;
+  role: string;
+  occupationArea: string;
+  updatedAt: Date;
+}>;
+
 /** União discriminada por `type` — útil para a borda tratar contratados uniformemente. */
-export type ContractorView = SupplierView | FinancierView | CollaboratorView;
+export type ContractorView = SupplierView | FinancierView | CollaboratorView | ActView;
 
 export const supplierToView = (supplier: Supplier, updatedAt: Date): SupplierView => ({
   type: 'supplier',
@@ -90,5 +104,16 @@ export const collaboratorToView = (
   document: collaborator.cpf as unknown as string,
   role: collaborator.role,
   occupationArea: collaborator.occupationArea,
+  updatedAt,
+});
+
+export const actToView = (act: Act, updatedAt: Date): ActView => ({
+  type: 'act',
+  id: act.id as unknown as string,
+  name: act.name,
+  email: act.email,
+  document: act.cpf as unknown as string,
+  role: act.role,
+  occupationArea: act.occupationArea as unknown as string,
   updatedAt,
 });

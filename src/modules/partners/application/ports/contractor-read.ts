@@ -12,6 +12,7 @@ import type {
   SupplierView,
   FinancierView,
   CollaboratorView,
+  ActView,
 } from '#src/modules/partners/public-api/contractor-view.mapper.ts';
 
 export type ContractorReadError = 'contractor-read-unavailable';
@@ -22,4 +23,5 @@ export type ContractorReadPort = Readonly<{
   getCollaboratorView: (
     id: string,
   ) => Promise<Result<CollaboratorView | null, ContractorReadError>>;
+  getActView: (id: string) => Promise<Result<ActView | null, ContractorReadError>>;
 }>;

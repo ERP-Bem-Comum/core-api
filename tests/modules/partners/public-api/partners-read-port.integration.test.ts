@@ -21,6 +21,7 @@ import {
 import { createDrizzleSupplierStore } from '#src/modules/partners/adapters/persistence/repos/supplier-repository.drizzle.ts';
 import { createDrizzleFinancierStore } from '#src/modules/partners/adapters/persistence/repos/financier-repository.drizzle.ts';
 import { createDrizzleCollaboratorStore } from '#src/modules/partners/adapters/persistence/repos/collaborator-repository.drizzle.ts';
+import { createDrizzleActStore } from '#src/modules/partners/adapters/persistence/repos/act-repository.drizzle.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import * as Supplier from '#src/modules/partners/domain/supplier/supplier.ts';
 import * as SupplierId from '#src/modules/partners/domain/supplier/supplier-id.ts';
@@ -28,6 +29,8 @@ import * as Financier from '#src/modules/partners/domain/financier/financier.ts'
 import * as FinancierId from '#src/modules/partners/domain/financier/financier-id.ts';
 import * as Collaborator from '#src/modules/partners/domain/collaborator/collaborator.ts';
 import * as CollaboratorId from '#src/modules/partners/domain/collaborator/collaborator-id.ts';
+import * as Act from '#src/modules/partners/domain/act/act.ts';
+import * as ActId from '#src/modules/partners/domain/act/act-id.ts';
 
 const VALID_CONN = `mysql://root:rootpw-migration-test-only@127.0.0.1:${process.env['MYSQL_PORT'] ?? '3306'}/core`;
 const integrationEnabled = (): boolean => process.env['MYSQL_INTEGRATION'] === '1';
@@ -81,6 +84,22 @@ const aCollaborator = () => {
   return r.value.collaborator;
 };
 
+const anAct = () => {
+  const r = Act.register({
+    id: ActId.generate(),
+    name: 'Ana Ato',
+    email: 'ana@bemcomum.org',
+    cpf: '111.444.777-35',
+    occupationArea: 'PARC',
+    role: 'Voluntária',
+    startOfContract: new Date('2025-02-01T00:00:00.000Z'),
+    employmentRelationship: 'CLT',
+    registeredAt: clock.now(),
+  });
+  if (!r.ok) throw new Error(`fixture act: ${r.error}`);
+  return r.value.act;
+};
+
 if (integrationEnabled()) {
   let handle: PartnersMysqlHandle | null = null;
   let port: PartnersReadPort | null = null;
@@ -106,6 +125,7 @@ if (integrationEnabled()) {
     await handle.db.delete(handle.schema.parSuppliers);
     await handle.db.delete(handle.schema.parFinanciers);
     await handle.db.delete(handle.schema.parCollaborators);
+    await handle.db.delete(handle.schema.parActs);
   });
 
   describe('buildPartnersReadPort (integração)', () => {
@@ -167,7 +187,25 @@ if (integrationEnabled()) {
       }
     });
 
-    it('id inexistente → ok(null) nas três views', async () => {
+    it('getActView: round-trip read (paridade 4/4)', async () => {
+      if (handle === null || port === null) return;
+      const a = anAct();
+      await createDrizzleActStore(handle, clock).save(a);
+
+      const got = await port.getActView(a.id as unknown as string);
+      assert.equal(got.ok, true);
+      if (got.ok && got.value !== null) {
+        assert.equal(got.value.type, 'act');
+        assert.equal(got.value.name, 'Ana Ato');
+        assert.equal(got.value.email, 'ana@bemcomum.org');
+        assert.equal(got.value.occupationArea, 'PARC');
+        assert.ok(got.value.updatedAt instanceof Date);
+      } else {
+        assert.fail('esperava ActView, veio null/err');
+      }
+    });
+
+    it('id inexistente → ok(null) nas quatro views', async () => {
       if (port === null) return;
       const missing = '00000000-0000-4000-8000-000000000000';
 
@@ -177,6 +215,8 @@ if (integrationEnabled()) {
       assert.equal(f.ok && f.value === null, true);
       const c = await port.getCollaboratorView(missing);
       assert.equal(c.ok && c.value === null, true);
+      const a = await port.getActView(missing);
+      assert.equal(a.ok && a.value === null, true);
     });
   });
 }

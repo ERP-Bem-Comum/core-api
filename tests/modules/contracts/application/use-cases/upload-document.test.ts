@@ -37,6 +37,7 @@ import type { ContractDocument } from '#src/modules/contracts/domain/document/ty
 import type { ContractsModuleEvent } from '#src/modules/contracts/application/ports/event-bus.ts';
 import { ok, err } from '#src/shared/primitives/result.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
+import * as ContractorRef from '#src/modules/contracts/domain/shared/contractor.ts';
 import * as DocumentId from '#src/modules/contracts/domain/shared/document-id.ts';
 import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
 import * as Money from '#src/shared/kernel/money.ts';
@@ -77,6 +78,10 @@ const setupWorld = async (overrides?: {
     signedAt: new Date('2026-01-01T00:00:00.000Z'),
     originalValue: moneyR.value,
     originalPeriod: periodR.value,
+    contractor: fromOk(
+      ContractorRef.make('supplier', '55555555-5555-4555-8555-555555555555'),
+      'contractor',
+    ),
   });
   if (!created.ok) throw new Error('fixture contract create');
   await contractRepo.repo.save(created.value.contract, []);

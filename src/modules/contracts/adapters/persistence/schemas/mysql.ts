@@ -75,12 +75,23 @@ export const contracts = mysqlTable(
     currentPeriodEnd: date('current_period_end', { mode: 'date' }),
     status: varchar('status', { length: 16 }).notNull(),
     endedAt: datetime('ended_at', { mode: 'date', fsp: 3 }),
+    // Contratado (referência cross-módulo a Parceiros) — sem FK física (cross-db, ADR-0014).
+    contractorType: varchar('contractor_type', { length: 16 }).notNull(),
+    contractorId: varchar('contractor_id', { length: 36 }).notNull(),
+    // Metadados de cadastro editáveis (FR-009) — nullable.
+    observations: varchar('observations', { length: 1000 }),
+    email: varchar('email', { length: 255 }),
+    telephone: varchar('telephone', { length: 32 }),
   },
   (t) => [
     // CHECKs de domínio (enums via varchar+CHECK — ADR-0018 §"Features proibidas" baniu ENUM nativo)
     check(
       'ctr_contracts_original_period_kind_chk',
       sql`${t.originalPeriodKind} IN ('Fixed','Indefinite')`,
+    ),
+    check(
+      'ctr_contracts_contractor_type_chk',
+      sql`${t.contractorType} IN ('supplier','financier','collaborator','act')`,
     ),
     check(
       'ctr_contracts_current_period_kind_chk',

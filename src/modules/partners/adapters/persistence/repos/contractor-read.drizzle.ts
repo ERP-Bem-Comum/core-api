@@ -20,13 +20,16 @@ import {
   supplierToView,
   financierToView,
   collaboratorToView,
+  actToView,
   type SupplierView,
   type FinancierView,
   type CollaboratorView,
+  type ActView,
 } from '#src/modules/partners/public-api/contractor-view.mapper.ts';
 import { supplierFromRow } from '../mappers/supplier.mapper.ts';
 import { financierFromRow } from '../mappers/financier.mapper.ts';
 import { collaboratorFromRow } from '../mappers/collaborator.mapper.ts';
+import { actFromRow } from '../mappers/act.mapper.ts';
 import type { PartnersMysqlHandle } from '../drivers/mysql-driver.ts';
 
 const logRead = (scope: string, cause: unknown): void => {
@@ -107,5 +110,22 @@ export const createDrizzleContractorReadStore = (
     }
   };
 
-  return { getSupplierView, getFinancierView, getCollaboratorView };
+  const getActView = async (id: string): Promise<Result<ActView | null, ContractorReadError>> => {
+    try {
+      const rows = await db.select().from(schema.parActs).where(eq(schema.parActs.id, id)).limit(1);
+      const row = rows[0];
+      if (row === undefined) return ok(null);
+      const mapped = actFromRow(row);
+      if (!mapped.ok) {
+        logRead('act-mapper', mapped.error);
+        return err('contractor-read-unavailable');
+      }
+      return ok(actToView(mapped.value, row.updatedAt));
+    } catch (cause) {
+      logRead('getActView', cause);
+      return err('contractor-read-unavailable');
+    }
+  };
+
+  return { getSupplierView, getFinancierView, getCollaboratorView, getActView };
 };

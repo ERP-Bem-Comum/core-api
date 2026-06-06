@@ -36,6 +36,10 @@ const criarContrato = (
     overrides.inicio ?? '2026-02-01',
     '--fim',
     overrides.fim ?? '2026-12-31',
+    '--contratado-tipo',
+    'supplier',
+    '--contratado-id',
+    '55555555-5555-4555-8555-555555555555',
   ]);
 
 describe('CLI E2E — encerrar-contrato (UC-07)', () => {
