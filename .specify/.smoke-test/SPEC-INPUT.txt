@@ -1,0 +1,27 @@
+Listar contratos a vencer em N dias.
+
+Adicionar a capacidade de listar os contratos cuja vigência vigente está a vencer
+dentro de uma janela de N dias, para a P.O. acompanhar renovações.
+
+Na CLI (UX primária da core-api):
+  pnpm run cli:contracts -- listar-contratos --vence-em <dias>
+
+Comportamento esperado:
+- <dias> é um inteiro positivo (janela em dias corridos a partir de hoje).
+- Retorna os contratos ATIVOS cujo fim da vigência vigente (currentPeriod.end —
+  derivado de originalPeriod + Σ aditivos homologados, RN-06/RN-07) cai no
+  intervalo [hoje, hoje + <dias>] inclusive.
+- Contratos encerrados (Ended) ou sem vigência definida NÃO entram.
+- Combina com os filtros e a paginação já existentes de listar-contratos
+  (CTR-HTTP-CONTRACT-LIST-FILTERS) — é um filtro adicional, não um comando novo.
+- Ordenar o resultado por data de vencimento ascendente (o que vence primeiro no topo).
+
+Restrições de projeto:
+- Contracts-only, CLI-first. Pode validar com adapter InMemory; o filtro real
+  vive no repositório (ContractRepository.listPaged / ListContractsQuery).
+- Idioma: flag e saída ao humano em PT (via cli/formatters/); código (tipos,
+  funções, arquivos) em EN. Datas comparadas via o VO/abstração de tempo já usada
+  no domínio (sem new Date() solto — usar Clock/PlainDate conforme o handbook).
+- Não contrariar ADR aceito; se precisar de decisão arquitetural, abrir ADR novo.
+
+Ticket sugerido: CTR-LIST-EXPIRING-SOON (size S).

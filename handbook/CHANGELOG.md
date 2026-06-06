@@ -4,6 +4,19 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-06 — 🌎 ADR-0035 — parceria territorial (estados/municípios) com soft-delete (resolve D9 do ADR-0031)
+
+Épico `specs/001-partners-http-gaps/` (gaps de borda HTTP do módulo `partners`, originado do
+`api-readiness-report.md` do frontend). Novo [ADR-0035](./architecture/adr/0035-partner-territory-soft-delete.md)
+**fecha a questão aberta D9** do ADR-0031: `PartnerState`/`PartnerMunicipality` são **Entity persistida com
+soft-delete** (`active` + `deactivated_at` + CHECK), espelhando o padrão dos demais `par_*` — não hard delete.
+Promove o ADR de feature `specs/001-partners-http-gaps/adr/0001`. O épico também entregou (via pipeline
+`core-api-sdd`, 6 tickets W0→W3): import de colaboradores (`POST /collaborators/import`, text/csv), export de
+fornecedores (`GET /suppliers/export`), catálogo de categorias (`GET /suppliers/service-categories`, resolve
+FR-017 com 39 categorias canônicas), parceria territorial (`/partner-states`, `/partner-municipalities`) e o
+descarte formal dos filtros `programa`/`idade` (FR-012). `parseCsv`/`tokenizeCsv` promovidos a
+`shared/utils/csv.ts` (ADR-0002 da feature: CSV é borda, não porta genérica). Suite: 2144 testes verdes.
+
 ## 2026-06-04 — ✏️ EPIC-PARTNERS-HTTP-EDIT — edição (PUT) completa: Supplier + Collaborator (épico fechado)
 
 Replica o piloto Financier para os outros dois counterparties, fechando o épico de edição.

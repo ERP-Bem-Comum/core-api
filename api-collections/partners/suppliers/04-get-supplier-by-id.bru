@@ -1,0 +1,42 @@
+meta {
+  name: get supplier by id
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/api/v1/suppliers/{{supplierCreatedId}}
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operatorToken}}
+}
+
+tests {
+  test("CA3 — GET /suppliers/:id retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("CA3 — id bate com o criado", function () {
+    expect(res.getBody().id).to.equal(bru.getVar("supplierCreatedId"));
+  });
+
+  test("CA3 — cnpj esta correto", function () {
+    expect(res.getBody().cnpj).to.equal("11222333000181");
+  });
+
+  test("CA3 — supplier esta ativo apos criacao", function () {
+    expect(res.getBody().active).to.equal(true);
+  });
+
+  test("CA3 — campos obrigatorios presentes", function () {
+    const body = res.getBody();
+    expect(body).to.have.property("id");
+    expect(body).to.have.property("name");
+    expect(body).to.have.property("email");
+    expect(body).to.have.property("corporateName");
+    expect(body).to.have.property("fantasyName");
+    expect(body).to.have.property("serviceCategory");
+  });
+}

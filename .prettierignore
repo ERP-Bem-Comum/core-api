@@ -9,6 +9,9 @@ cli-state.json
 # Documentação organizacional fica fora — mantemos formatação manual
 .claude/
 .pipeline/
+# Tooling do spec-kit (templates com placeholders, workflows YAML, extensions) — formatação própria,
+# mesma categoria do .claude/. Os artefatos de feature gerados ficam em specs/ (esses SÃO formatados).
+.specify/
 # Handbook (copiado do monorepo pai; preserva formatação original)
 handbook/
 

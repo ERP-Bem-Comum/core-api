@@ -1,0 +1,40 @@
+meta {
+  name: update supplier
+  type: http
+  seq: 17
+}
+
+put {
+  url: {{baseUrl}}/api/v1/suppliers/{{supplierCreatedId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operatorToken}}
+}
+
+body:json {
+  {
+    "name": "Forn E2E Bruno Atualizado",
+    "email": "forn-e2e-bruno-updated@example.com",
+    "cnpj": "11222333000181",
+    "corporateName": "Forn E2E Bruno LTDA Atualizado",
+    "fantasyName": "Forn E2E Updated",
+    "serviceCategory": "CONSULTORIA",
+    "bankAccount": {
+      "bank": "001",
+      "agency": "1234",
+      "accountNumber": "567890",
+      "checkDigit": "1"
+    },
+    "pixKey": null
+  }
+}
+
+tests {
+  // PUT total responde 200 sem corpo (reply.code(200).send()); a edicao e validada pelo status.
+  test("CA4 opcional — PUT /suppliers/:id retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

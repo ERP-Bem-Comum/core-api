@@ -1,0 +1,33 @@
+meta {
+  name: suppliers list contains created
+  type: http
+  seq: 14
+}
+
+get {
+  url: {{baseUrl}}/api/v1/suppliers
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operatorToken}}
+}
+
+tests {
+  test("CA3 — GET /suppliers retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("CA3 — resposta tem items e meta", function () {
+    const body = res.getBody();
+    expect(body).to.have.property("items");
+    expect(body).to.have.property("meta");
+    expect(body.items).to.be.an("array");
+  });
+
+  test("CA3 — lista contem o supplier criado", function () {
+    const items = res.getBody().items;
+    const found = items.find(function (s) { return s.id === bru.getVar("supplierCreatedId"); });
+    expect(found).to.exist;
+  });
+}

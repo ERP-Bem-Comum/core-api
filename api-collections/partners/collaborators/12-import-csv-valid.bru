@@ -1,0 +1,47 @@
+meta {
+  name: import collaborators csv valid
+  type: http
+  seq: 41
+}
+
+post {
+  url: {{baseUrl}}/api/v1/collaborators/import
+  body: text
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operatorToken}}
+}
+
+headers {
+  content-type: text/csv
+}
+
+body:text {
+name,email,cpf,occupationArea,role,startOfContract,employmentRelationship
+Importado E2E Um,importado-e2e-1@example.com,98765432100,PARC,Assistente,2024-03-01,CLT
+Importado E2E Dois,importado-e2e-2@example.com,11122233344,DDI,Coordenador,2024-03-01,PJ
+}
+
+tests {
+  test("US-001 — import CSV valido retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("US-001 — import parcial: created >= 1", function () {
+    expect(res.getBody().created).to.be.at.least(1);
+  });
+
+  test("US-001 — resposta tem campo failed (array)", function () {
+    expect(res.getBody().failed).to.be.an("array");
+  });
+
+  test("US-001 — falhas tem shape {line, error}", function () {
+    const failed = res.getBody().failed;
+    failed.forEach(function (f) {
+      expect(f).to.have.property("line");
+      expect(f).to.have.property("error");
+    });
+  });
+}

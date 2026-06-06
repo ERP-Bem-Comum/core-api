@@ -25,6 +25,20 @@ export const supplierListQuerySchema = z.object({
 
 export type SupplierListQuery = z.infer<typeof supplierListQuerySchema>;
 
+/** Query do GET /api/v1/suppliers/export — filtros sem paginação (exporta tudo que casa). */
+export const supplierExportQuerySchema = z.object({
+  search: z.string().min(1).optional(),
+  active: z.coerce.number().int().min(0).max(1).optional(),
+  categories: z.preprocess(toArray, z.array(z.string()).optional()),
+});
+
+export type SupplierExportQuery = z.infer<typeof supplierExportQuerySchema>;
+
+/** Resposta do GET /api/v1/suppliers/service-categories — catálogo canônico (códigos legados). */
+export const serviceCategoriesSchema = z
+  .array(z.string())
+  .meta({ description: 'Categorias de serviço canônicas (códigos legados, FR-017)' });
+
 /** Param `:id` — UUID do fornecedor (core-api). Formato inválido → 400. */
 export const supplierIdParamSchema = z.object({
   id: z.uuid().meta({ description: 'UUID do fornecedor (core-api)' }),

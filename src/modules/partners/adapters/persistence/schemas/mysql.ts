@@ -222,3 +222,108 @@ export const parUserProfiles = mysqlTable(
 
 export type UserProfileRow = typeof parUserProfiles.$inferSelect;
 export type NewUserProfileRow = typeof parUserProfiles.$inferInsert;
+
+// ─── par_states ─────────────────────────────────────────────────────────────
+// Parceria territorial por UF (US-002 — ADR-0001 da feature). PK natural: `uf` varchar(2).
+// Sem FK para catálogo (seed estático — ADR-0031 §3). Soft-delete idêntico ao padrão do módulo.
+export const parStates = mysqlTable(
+  'par_states',
+  {
+    // Sigla da UF (2 chars, ex.: 'SP'). PK natural — não é UUID.
+    uf: varchar('uf', { length: 2 }).primaryKey().notNull(),
+    active: boolean('active').notNull().default(true),
+    // Preenchido sse inativo (coerência garantida pelo CHECK abaixo).
+    deactivatedAt: datetime('deactivated_at', { mode: 'date', fsp: 3 }),
+    createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
+    updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
+  },
+  (t) => [
+    // CHECK: active=false ⟺ deactivated_at preenchido.
+    check(
+      'par_states_active_consistency_chk',
+      sql`(${t.active} = FALSE) = (${t.deactivatedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export type StateRow = typeof parStates.$inferSelect;
+export type NewStateRow = typeof parStates.$inferInsert;
+
+// ─── par_municipalities ─────────────────────────────────────────────────────
+// Parceria territorial por município (US-002 — ADR-0001 da feature). PK: `ibge_code` varchar(7).
+// `uf` varchar(2) — atributo de organização (cross-state). Sem FK (ADR-0031 §3).
+// Soft-delete idêntico ao padrão do módulo.
+export const parMunicipalities = mysqlTable(
+  'par_municipalities',
+  {
+    // Código IBGE de 7 dígitos. PK natural.
+    ibgeCode: varchar('ibge_code', { length: 7 }).primaryKey().notNull(),
+    // UF do município (derivado do catálogo na escrita).
+    uf: varchar('uf', { length: 2 }).notNull(),
+    active: boolean('active').notNull().default(true),
+    // Preenchido sse inativo (coerência garantida pelo CHECK abaixo).
+    deactivatedAt: datetime('deactivated_at', { mode: 'date', fsp: 3 }),
+    createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
+    updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
+  },
+  (t) => [
+    // CHECK: active=false ⟺ deactivated_at preenchido.
+    check(
+      'par_municipalities_active_consistency_chk',
+      sql`(${t.active} = FALSE) = (${t.deactivatedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export type MunicipalityRow = typeof parMunicipalities.$inferSelect;
+export type NewMunicipalityRow = typeof parMunicipalities.$inferInsert;
+
+// ─── par_acts ───────────────────────────────────────────────────────────────
+// Agente Comunitário de Saúde (placeholder ADR-0036). Clone enxuto do núcleo do
+// Collaborator: 7 campos de pré-cadastro + status duplo ortogonal:
+//   - `registration_status` varchar — PreRegistration | Complete (sem CHECK de enum, igual collaborators).
+//   - `active` / `deactivated_at` — soft-delete simples (sem disableBy obrigatório).
+// `cpf` UNIQUE + `email` UNIQUE (espelha collaborators). Enums (occupation_area,
+// employment_relationship) são varchar (ADR-0020 — sem ENUM nativo).
+// COLLATE utf8mb4_bin em `id`/`cpf` (aplicar no SQL manual — limitação Drizzle 0.45.x).
+export const parActs = mysqlTable(
+  'par_acts',
+  {
+    // UUID v4 gerado no domínio. COLLATE utf8mb4_bin no SQL manual.
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    name: varchar('name', { length: 255 }).notNull(),
+    email: varchar('email', { length: 255 }).notNull(),
+    // 11 dígitos (sem máscara). UNIQUE + COLLATE utf8mb4_bin no SQL manual.
+    cpf: varchar('cpf', { length: 11 }).notNull(),
+    // Literal legado (ex.: PARC). varchar, NÃO ENUM (ADR-0020).
+    occupationArea: varchar('occupation_area', { length: 10 }).notNull(),
+    role: varchar('role', { length: 255 }).notNull(),
+    startOfContract: datetime('start_of_contract', { mode: 'date', fsp: 3 }).notNull(),
+    // Literal legado (ex.: CLT). varchar, NÃO ENUM (ADR-0020).
+    employmentRelationship: varchar('employment_relationship', { length: 5 }).notNull(),
+    // Status de registro: PreRegistration | Complete. varchar livre, sem CHECK de enum.
+    registrationStatus: varchar('registration_status', { length: 20 }).notNull(),
+    // Soft-delete simples: active=false ⟺ deactivated_at preenchido (sem disableBy).
+    active: boolean('active').notNull().default(true),
+    deactivatedAt: datetime('deactivated_at', { mode: 'date', fsp: 3 }),
+    createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
+    updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
+    // Correlação ETL (P2): id de origem no legado. NULL = nativo; não-NULL = migrado.
+    legacyId: int('legacy_id'),
+  },
+  (t) => [
+    // CHECK: active=false ⟺ deactivated_at preenchido (coerência do soft-delete simples).
+    check(
+      'par_acts_active_consistency_chk',
+      sql`(${t.active} = FALSE) = (${t.deactivatedAt} IS NOT NULL)`,
+    ),
+    // UNIQUE(cpf) e UNIQUE(email) — espelha par_collaborators.
+    uniqueIndex('par_acts_cpf_idx').on(t.cpf),
+    uniqueIndex('par_acts_email_idx').on(t.email),
+    // UNIQUE(legacy_id) — idempotência da ETL (múltiplos NULL convivem no InnoDB).
+    uniqueIndex('par_acts_legacy_id_idx').on(t.legacyId),
+  ],
+);
+
+export type ActRow = typeof parActs.$inferSelect;
+export type NewActRow = typeof parActs.$inferInsert;

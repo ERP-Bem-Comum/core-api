@@ -1,0 +1,52 @@
+meta {
+  name: list partner municipalities
+  type: http
+  seq: 56
+}
+
+get {
+  url: {{baseUrl}}/api/v1/partner-municipalities?uf=SP
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operatorToken}}
+}
+
+tests {
+  test("US-002 — GET /partner-municipalities?uf=SP retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("US-002 — retorna array nao-vazio de municipios", function () {
+    const body = res.getBody();
+    expect(body).to.be.an("array");
+    expect(body.length).to.be.at.least(1);
+  });
+
+  test("US-002 — cada municipio tem ibgeCode, uf, name, isPartner", function () {
+    const body = res.getBody();
+    body.slice(0, 3).forEach(function (item) {
+      expect(item).to.have.property("ibgeCode");
+      expect(item).to.have.property("uf");
+      expect(item).to.have.property("name");
+      expect(item).to.have.property("isPartner");
+      expect(item.ibgeCode).to.be.a("string");
+      expect(item.uf).to.equal("SP");
+      expect(item.isPartner).to.be.a("boolean");
+    });
+  });
+
+  test("US-002 — ibgeCode tem 7 digitos", function () {
+    const body = res.getBody();
+    expect(body[0].ibgeCode).to.match(/^\d{7}$/);
+  });
+}
+
+script:post-response {
+  // Captura o ibgeCode do primeiro municipio para os requests de toggle.
+  const body = res.body;
+  if (Array.isArray(body) && body.length > 0) {
+    bru.setVar("sampleIbgeCode", body[0].ibgeCode);
+  }
+}

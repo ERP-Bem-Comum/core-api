@@ -24,9 +24,13 @@ import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
 
 import type { PartnersHttpDeps } from './composition.ts';
 import { supplierToDetailDto } from './supplier-dto.ts';
-import { queryToFilter, paginateRecords } from './supplier-list-query.ts';
+import { queryToFilter, paginateRecords, suppliersForExport } from './supplier-list-query.ts';
+import { suppliersToCsv } from '../export/supplier-csv.ts';
+import { listServiceCategories } from '../../domain/supplier/service-category.ts';
 import {
   supplierListQuerySchema,
+  supplierExportQuerySchema,
+  serviceCategoriesSchema,
   supplierPaginatedSchema,
   supplierDetailSchema,
   supplierIdParamSchema,
@@ -106,6 +110,44 @@ const suppliersRoutes =
           ok({ items: page.items.map(supplierToDetailDto), meta: page.meta }),
           { ok: 200 },
         );
+      },
+    });
+
+    // Catálogo de categorias (US-004 / FR-017): conjunto fechado read-only, do domínio. `supplier:read`.
+    scope.route({
+      method: 'GET',
+      url: '/suppliers/service-categories',
+      preHandler: [hooks.requireAuth, hooks.authorize(SUPPLIER_PERMISSION.read)],
+      schema: {
+        response: { 200: serviceCategoriesSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) =>
+        sendResult(reply, ok([...listServiceCategories()]), { ok: 200 }),
+    });
+
+    // Export CSV (US-003): filtra (search/active/categories) e serializa via util compartilhado
+    // (escape anti-fórmula). Rota estática tem precedência sobre `/:id` no Fastify. `supplier:read`.
+    scope.route({
+      method: 'GET',
+      url: '/suppliers/export',
+      preHandler: [hooks.requireAuth, hooks.authorize(SUPPLIER_PERMISSION.read)],
+      schema: {
+        querystring: supplierExportQuerySchema,
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.listSupplierRecords();
+        if (!result.ok) {
+          return sendResult(reply, err(result.error), {
+            errors: { 'supplier-read-unavailable': 503 },
+          });
+        }
+        const csv = suppliersToCsv(suppliersForExport(result.value, queryToFilter(req.query)));
+        return reply
+          .code(200)
+          .header('content-type', 'text/csv; charset=utf-8')
+          .header('content-disposition', 'attachment; filename="suppliers.csv"')
+          .header('x-content-type-options', 'nosniff')
+          .send(csv) as unknown as Promise<void>;
       },
     });
 

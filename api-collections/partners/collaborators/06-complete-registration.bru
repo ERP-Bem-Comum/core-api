@@ -1,0 +1,41 @@
+meta {
+  name: complete registration
+  type: http
+  seq: 35
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/collaborators/{{collaboratorCreatedId}}/complete-registration
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operatorToken}}
+}
+
+body:json {
+  {
+    "rg": "123456789",
+    "dateOfBirth": "1990-05-20",
+    "genderIdentity": "HOMEM_CIS",
+    "race": "PARDO",
+    "education": "ENSINO_SUPERIOR",
+    "foodCategory": null,
+    "foodCategoryDescription": null,
+    "completeAddress": "Rua E2E, 42, Sao Paulo",
+    "telephone": "11999990001",
+    "emergencyContactName": "Contato E2E",
+    "emergencyContactTelephone": "11999990002",
+    "allergies": null,
+    "biography": "Colaborador criado pelo smoke E2E Bruno.",
+    "experienceInThePublicSector": false
+  }
+}
+
+tests {
+  // PATCH complete-registration responde 200 sem corpo; a transicao é validada pelo status.
+  test("P2 — PATCH /:id/complete-registration retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

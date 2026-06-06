@@ -36,6 +36,20 @@
       "when": 1780377920244,
       "tag": "0004_secret_wendell_vaughn",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1780721583736,
+      "tag": "0005_tiny_pride",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1780725496730,
+      "tag": "0006_blue_gideon",
+      "breakpoints": true
     }
   ]
 }
