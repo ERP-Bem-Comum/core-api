@@ -34,6 +34,11 @@ export const supplierExportQuerySchema = z.object({
 
 export type SupplierExportQuery = z.infer<typeof supplierExportQuerySchema>;
 
+/** Resposta do GET /api/v1/suppliers/service-categories — catálogo canônico (códigos legados). */
+export const serviceCategoriesSchema = z
+  .array(z.string())
+  .meta({ description: 'Categorias de serviço canônicas (códigos legados, FR-017)' });
+
 /** Param `:id` — UUID do fornecedor (core-api). Formato inválido → 400. */
 export const supplierIdParamSchema = z.object({
   id: z.uuid().meta({ description: 'UUID do fornecedor (core-api)' }),

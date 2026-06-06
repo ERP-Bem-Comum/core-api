@@ -26,9 +26,11 @@ import type { PartnersHttpDeps } from './composition.ts';
 import { supplierToDetailDto } from './supplier-dto.ts';
 import { queryToFilter, paginateRecords, suppliersForExport } from './supplier-list-query.ts';
 import { suppliersToCsv } from '../export/supplier-csv.ts';
+import { listServiceCategories } from '../../domain/supplier/service-category.ts';
 import {
   supplierListQuerySchema,
   supplierExportQuerySchema,
+  serviceCategoriesSchema,
   supplierPaginatedSchema,
   supplierDetailSchema,
   supplierIdParamSchema,
@@ -109,6 +111,18 @@ const suppliersRoutes =
           { ok: 200 },
         );
       },
+    });
+
+    // Catálogo de categorias (US-004 / FR-017): conjunto fechado read-only, do domínio. `supplier:read`.
+    scope.route({
+      method: 'GET',
+      url: '/suppliers/service-categories',
+      preHandler: [hooks.requireAuth, hooks.authorize(SUPPLIER_PERMISSION.read)],
+      schema: {
+        response: { 200: serviceCategoriesSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) =>
+        sendResult(reply, ok([...listServiceCategories()]), { ok: 200 }),
     });
 
     // Export CSV (US-003): filtra (search/active/categories) e serializa via util compartilhado

@@ -92,3 +92,7 @@ const CATEGORIES: ReadonlySet<string> = new Set<ServiceCategory>([
 
 export const parse = (raw: string): Result<ServiceCategory, ServiceCategoryError> =>
   CATEGORIES.has(raw) ? ok(raw as ServiceCategory) : err('invalid-service-category');
+
+/** Catálogo canônico (read-only) das categorias legadas, na ordem de definição. */
+export const listServiceCategories = (): readonly ServiceCategory[] =>
+  [...CATEGORIES] as readonly ServiceCategory[];
