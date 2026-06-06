@@ -26,6 +26,7 @@ import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
 
 import type { ContractsHttpDeps } from './composition.ts';
 import { contractToListItem, contractToDetailDto } from './contract-dto.ts';
+import type { ContractMetadataPatch } from '../../application/use-cases/update-contract-metadata.ts';
 import { timelineEntryToDto } from './timeline-dto.ts';
 import { amendmentToDto } from './amendment-dto.ts';
 import { documentToDto } from './document-dto.ts';
@@ -36,6 +37,7 @@ import {
   contractListQuerySchema,
   contractDetailSchema,
   contractFullDetailSchema,
+  patchContractMetadataBodySchema,
   contractIdParamSchema,
   timelineSchema,
   createContractBodySchema,
@@ -236,6 +238,68 @@ const contractsRoutes =
         reply.header('Sunset', 'quando o BFF v2 assumir a composição do contratado');
         return sendResult(reply, ok(contractToDetailDto(result.value, contractor)), { ok: 200 });
       },
+    });
+
+    // US-002: PATCH de metadados de cadastro (title/objective/observations/email/telephone).
+    // Valor/período/datas/sequentialNumber são imutáveis → barrados pelo body `.strict()` (400),
+    // nunca chegam ao domínio. Modelo RBAC puro: inexistente → 404 (sem ownership por tenant).
+    // Resposta = detalhe composto (mesma forma do GET), refletindo os metadados atualizados.
+    scope.route({
+      method: 'PATCH',
+      url: '/contracts/:id',
+      preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
+      schema: {
+        params: contractIdParamSchema,
+        body: patchContractMetadataBodySchema,
+        response: { 200: contractFullDetailSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const updated = await deps.updateContractMetadata({
+          contractId: req.params.id,
+          // Zod `.optional()` infere `string | undefined`, mas chaves ausentes são OMITIDAS
+          // no parse (JSON não carrega `undefined`); `exactOptionalPropertyTypes` exige a
+          // ponte na borda. `null` em observations/email/telephone é intencional (limpa o campo).
+          patch: req.body as ContractMetadataPatch,
+        });
+        if (!updated.ok) {
+          return sendResult(reply, err(toErrorCode(updated.error)), {
+            errors: {
+              'contract-not-found': 404,
+              'contract-repo-unavailable': 503,
+            },
+          });
+        }
+        // Recompõe o detalhe (children + contratado) para refletir o estado pós-patch.
+        const detail = await deps.getContractDetail({ contractId: req.params.id });
+        if (!detail.ok) {
+          return sendResult(reply, err(toErrorCode(detail.error)), {
+            errors: {
+              'contract-not-found': 404,
+              'contract-repo-unavailable': 503,
+              'amendment-repo-unavailable': 503,
+              'document-repository-unavailable': 503,
+            },
+          });
+        }
+        const contractor = await deps.getContractorBlock(detail.value.contract.contractor);
+        reply.header('Deprecation', 'true');
+        reply.header('Sunset', 'quando o BFF v2 assumir a composição do contratado');
+        return sendResult(reply, ok(contractToDetailDto(detail.value, contractor)), { ok: 200 });
+      },
+    });
+
+    // US-002: DELETE de contrato é RECUSADO (imutabilidade — exclusão física proibida,
+    // princípio #14). `requireAuth` precede a política (não vaza existência da rota a
+    // não-autenticado). 405 com envelope `contract-delete-forbidden`.
+    scope.route({
+      method: 'DELETE',
+      url: '/contracts/:id',
+      preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
+      schema: { params: contractIdParamSchema } satisfies FastifyZodOpenApiSchema,
+      handler: (_req, reply) =>
+        sendResult(reply, err('contract-delete-forbidden'), {
+          errors: { 'contract-delete-forbidden': 405 },
+        }),
     });
 
     scope.route({

@@ -146,6 +146,24 @@ export const createContractBodySchema = z.discriminatedUnion('mode', [
   z.object({ mode: z.literal('Active'), ...contractWriteShape, signedAt: z.string() }),
 ]);
 
+/**
+ * Body `PATCH /contracts/:id` — só metadados de cadastro (US-002). `.strict()` rejeita
+ * chaves não declaradas (incl. campos imutáveis como `originalValue` → 400 na borda, não
+ * 422); `.refine` exige ≥1 campo (corpo vazio → 400). `title`/`objective` `min(1)`.
+ */
+export const patchContractMetadataBodySchema = z
+  .object({
+    title: z.string().min(1).optional(),
+    objective: z.string().min(1).optional(),
+    observations: z.string().max(1000).nullable().optional(),
+    email: z.email().nullable().optional(),
+    telephone: z.string().max(32).nullable().optional(),
+  })
+  .strict()
+  .refine((b) => Object.keys(b).length > 0, {
+    message: 'pelo menos um campo deve ser informado',
+  });
+
 /** Body `POST /contracts/:id/activate`. */
 export const activateContractBodySchema = z.object({ signedAt: z.string() });
 

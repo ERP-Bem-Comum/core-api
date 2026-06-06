@@ -38,6 +38,7 @@ import { getContractDetail } from '../../application/use-cases/get-contract-deta
 import { getContractTimeline } from '../../application/use-cases/get-contract-timeline.ts';
 import { createContract } from '../../application/use-cases/create-contract.ts';
 import { createPendingContract } from '../../application/use-cases/create-pending-contract.ts';
+import { updateContractMetadata } from '../../application/use-cases/update-contract-metadata.ts';
 import { activateContract } from '../../application/use-cases/activate-contract.ts';
 import { endContract } from '../../application/use-cases/end-contract.ts';
 import { createAmendment } from '../../application/use-cases/create-amendment.ts';
@@ -126,6 +127,7 @@ export type ContractsHttpDeps = Readonly<{
   getContractTimeline: ReturnType<typeof getContractTimeline>;
   createContract: ReturnType<typeof createContract>;
   createPendingContract: ReturnType<typeof createPendingContract>;
+  updateContractMetadata: ReturnType<typeof updateContractMetadata>;
   activateContract: ReturnType<typeof activateContract>;
   endContract: ReturnType<typeof endContract>;
   createAmendment: ReturnType<typeof createAmendment>;
@@ -275,6 +277,7 @@ const makeDeps = (
     // Writes → writer pool.
     createContract: createContract({ contractRepo: pools.contractWriterRepo, clock }),
     createPendingContract: createPendingContract({ contractRepo: pools.contractWriterRepo, clock }),
+    updateContractMetadata: updateContractMetadata({ contractRepo: pools.contractWriterRepo }),
     activateContract: activateContract({
       contractRepo: pools.contractWriterRepo,
       documentRepo: pools.documentRepo,
