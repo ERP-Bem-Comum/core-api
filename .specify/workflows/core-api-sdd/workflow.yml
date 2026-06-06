@@ -1,9 +1,9 @@
-schema_version: "1.0"
+schema_version: '1.0'
 workflow:
-  id: "core-api-sdd"
-  name: "core-api SDD (RED→YELLOW→GREEN, máximo rigor)"
-  version: "2.0.0"
-  author: "bem-comum"
+  id: 'core-api-sdd'
+  name: 'core-api SDD (RED→YELLOW→GREEN, máximo rigor)'
+  version: '2.1.0' # 2.1.0: + step `recon` (achado #6) + scaffold antes do step 0 (achado #4)
+  author: 'bem-comum'
   description: >
     Pipeline spec-driven da core-api: descoberta → SPEC → domínio/BCs → ADRs →
     métricas → plano → BDD → TDD (RED) → implementação (YELLOW) → review → gate W3
@@ -12,28 +12,40 @@ workflow:
     literal (≥4 linhas) via as tools skills_buscar/skills_citar.
 
 requires:
-  speckit_version: ">=0.8.5"
+  speckit_version: '>=0.8.5'
   integrations:
     any:
-      - "claude"
+      - 'claude'
 
 inputs:
   spec:
     type: string
     required: true
-    prompt: "Descreva a feature da core-api (domínio, CLI, contrato, migration…)"
+    prompt: 'Descreva a feature da core-api (domínio, CLI, contrato, migration…)'
   integration:
     type: string
-    default: "auto"
-    prompt: "Integração (auto usa a configurada: claude)"
+    default: 'auto'
+    prompt: 'Integração (auto usa a configurada: claude)'
   scope:
     type: string
-    default: "contracts-only"
-    enum: ["contracts-only", "full"]
+    default: 'contracts-only'
+    enum: ['contracts-only', 'full']
 
 # ── Pré-requisito: o MCP acdg-skills precisa estar conectado (core-api/.mcp.json) ──
 # As personas são consultadas como prompts: /acdg-skills:<persona>. A citação canônica
 # obrigatória sai das tools skills_buscar / skills_citar.
+#
+# ── Modelo de orquestração (DECISÃO — achados #2/#3) ──
+# Este arquivo é a RECEITA dos 17 steps, NÃO o runtime. O Claude orquestra in-session:
+# `command: speckit.*` → invoca a Skill /speckit-* nesta sessão; `type: gate` → AskUserQuestion;
+# citação → skills_buscar/citar (acdg-skills MCP). NÃO usar `specify workflow run` como executor
+# (gate é TTY-only e command spawna `claude -p` headless sem o MCP). Detalhe em RUNBOOK §1.
+#
+# ── Protocolo de gate (apresentação dos `type: gate`) ──
+# Todo step `type: gate` é apresentado ao humano como TEXTO PURO em markdown (cabeçalho +
+# resumo do artefato + "Próximo se aprovar"), e o humano responde digitando approve/reject/
+# ajustar. NÃO usar o widget AskUserQuestion (trava no terminal Warp). Spec canônica em
+# .specify/.smoke-test/RUNBOOK.md §6.
 #
 # ── Templates por fase (em .specify/templates/) ──
 #   0 discovery → discovery-template.md      1 spec → spec-template.md
@@ -43,13 +55,21 @@ inputs:
 #   9 review    → review-template.md         (checklists → checklist-template.md)
 # Cada gate abaixo deve preencher o artefato a partir do template correspondente.
 
+# ── Passo de SCAFFOLD (correção achado #4) ──
+# ANTES da discovery, criar a branch + a pasta da feature, porque o step 0 (discovery)
+# já grava specs/<feature>/discovery.md. Sob Option 2 o Claude roda no início:
+#   bash .specify/scripts/bash/create-new-feature.sh --json --short-name "<slug>" "<desc>"
+# Consequência: o hook `before_specify: git.feature` deve rodar com allow-existing (ou ser
+# pulado) — por isso ele está `optional: true` no extensions.yml. NÃO criar uma 2ª feature.
+
 steps:
   # ── 0. DESCOBERTA ──────────────────────────────────────────────────────────
   - id: discovery
     type: gate
     message: >
       FASE 0 — DESCOBERTA. Consulte /acdg-skills:requirements-engineer. Elicite a feature
-      (INVEST, stakeholders, escopo, restrições) e grave specs/<feature>/discovery.md.
+      (INVEST, stakeholders, escopo, restrições) e grave specs/<feature>/discovery.md
+      (a branch/pasta já foi criada no scaffold — não criar outra).
       Aprovar quando a descoberta estiver registrada.
     options: [approve, reject]
     on_reject: abort
@@ -57,15 +77,15 @@ steps:
   # ── 1. SPEC ────────────────────────────────────────────────────────────────
   - id: specify
     command: speckit.specify
-    integration: "{{ inputs.integration }}"
+    integration: '{{ inputs.integration }}'
     input:
-      args: "{{ inputs.spec }}"
+      args: '{{ inputs.spec }}'
 
   - id: clarify
     command: speckit.clarify
-    integration: "{{ inputs.integration }}"
+    integration: '{{ inputs.integration }}'
     input:
-      args: "{{ inputs.spec }}"
+      args: '{{ inputs.spec }}'
 
   - id: review-spec
     type: gate
@@ -75,11 +95,27 @@ steps:
     options: [approve, reject]
     on_reject: abort
 
+  # ── 1.5 RECON do código existente (correção achado #6 — só p/ EXTENSÃO) ─────
+  # Para features que ESTENDEM código (não greenfield), modelar domínio/ADR no vácuo
+  # diverge do padrão real (ex.: inventar VO quando a query usa primitivo na borda).
+  # Este gate força ler o módulo-alvo ANTES do domain. GREENFIELD: aprovar com "N/A".
+  - id: recon
+    type: gate
+    message: >
+      FASE 1.5 — RECON. A feature estende código existente? Se SIM, leia o módulo-alvo
+      (tipos, ports, padrões — ex.: ListContractsQuery, ContractRepository, Clock/Period)
+      e grave specs/<feature>/recon.md com os padrões a REUSAR e o que NÃO reinventar.
+      Se a feature for greenfield, aprovar com "N/A — greenfield". Aprovar para modelar o domínio
+      já ancorado no código real.
+    options: [approve, reject]
+    on_reject: abort
+
   # ── 2. DOMÍNIO / BOUNDED CONTEXTS (citação obrigatória) ────────────────────
   - id: domain
     type: gate
     message: >
       FASE 2 — DOMÍNIO/BCs (RIGOR: citação obrigatória). Consulte /acdg-skills:ddd-architect.
+      (Se houve RECON, ancore o modelo nos padrões reais já levantados.)
       Defina bounded contexts, agregados, value objects, eventos e linguagem ubíqua; grave
       specs/<feature>/domain.md. CADA decisão de fronteira/agregado exige citação literal
       (≥4 linhas) via skills_citar (Evans/Vernon). Aprovar só com as citações registradas.
@@ -111,9 +147,9 @@ steps:
   # ── 5. PLANO ───────────────────────────────────────────────────────────────
   - id: plan
     command: speckit.plan
-    integration: "{{ inputs.integration }}"
+    integration: '{{ inputs.integration }}'
     input:
-      args: "{{ inputs.spec }}"
+      args: '{{ inputs.spec }}'
 
   - id: review-plan
     type: gate
@@ -136,9 +172,9 @@ steps:
 
   - id: tasks
     command: speckit.tasks
-    integration: "{{ inputs.integration }}"
+    integration: '{{ inputs.integration }}'
     input:
-      args: "{{ inputs.spec }}"
+      args: '{{ inputs.spec }}'
 
   # ── 7. TDD — RED (citação obrigatória) ─────────────────────────────────────
   - id: tdd-red
@@ -154,9 +190,9 @@ steps:
   # ── 8. IMPLEMENTAÇÃO — YELLOW ──────────────────────────────────────────────
   - id: implement
     command: speckit.implement
-    integration: "{{ inputs.integration }}"
+    integration: '{{ inputs.integration }}'
     input:
-      args: "{{ inputs.spec }}"
+      args: '{{ inputs.spec }}'
 
   - id: yellow
     type: gate
@@ -181,9 +217,9 @@ steps:
   # ── 10. ANALYZE (consistência cross-artefato) ──────────────────────────────
   - id: analyze
     command: speckit.analyze
-    integration: "{{ inputs.integration }}"
+    integration: '{{ inputs.integration }}'
     input:
-      args: "{{ inputs.spec }}"
+      args: '{{ inputs.spec }}'
 
   # ── 11. GATE W3 — GREEN ────────────────────────────────────────────────────
   - id: green
