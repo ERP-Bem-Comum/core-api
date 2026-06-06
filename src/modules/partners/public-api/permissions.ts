@@ -28,3 +28,10 @@ export const FINANCIER_PERMISSION = {
 } as const;
 
 export type FinancierPermission = (typeof FINANCIER_PERMISSION)[keyof typeof FINANCIER_PERMISSION];
+
+export const GEOGRAPHY_PERMISSION = {
+  read: 'geography:read',
+  write: 'geography:write',
+} as const;
+
+export type GeographyPermission = (typeof GEOGRAPHY_PERMISSION)[keyof typeof GEOGRAPHY_PERMISSION];

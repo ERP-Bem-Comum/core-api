@@ -17,6 +17,8 @@ export { suppliersHttpPlugin } from '../adapters/http/supplier-plugin.ts';
 export type { SuppliersHttpHooks } from '../adapters/http/supplier-plugin.ts';
 export { financiersHttpPlugin } from '../adapters/http/financier-plugin.ts';
 export type { FinanciersHttpHooks } from '../adapters/http/financier-plugin.ts';
+export { partnerGeographyHttpPlugin } from '../adapters/http/partner-geography-plugin.ts';
+export type { PartnerGeographyHttpHooks } from '../adapters/http/partner-geography-plugin.ts';
 export { buildPartnersHttpDeps } from '../adapters/http/composition.ts';
 export type {
   PartnersHttpDeps,
@@ -27,9 +29,11 @@ export {
   COLLABORATOR_PERMISSION,
   SUPPLIER_PERMISSION,
   FINANCIER_PERMISSION,
+  GEOGRAPHY_PERMISSION,
 } from './permissions.ts';
 export type {
   CollaboratorPermission,
   SupplierPermission,
   FinancierPermission,
+  GeographyPermission,
 } from './permissions.ts';

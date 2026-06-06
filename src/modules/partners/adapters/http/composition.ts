@@ -28,6 +28,8 @@ import { makeInMemoryFinancierReader } from '../persistence/repos/financier-read
 import { createDrizzleFinancierReader } from '../persistence/repos/financier-reader.drizzle.ts';
 import { makeInMemoryFinancierStore } from '../persistence/repos/financier-repository.in-memory.ts';
 import { createDrizzleFinancierStore } from '../persistence/repos/financier-repository.drizzle.ts';
+import { makeInMemoryPartnerGeographyStore } from '../persistence/repos/partner-geography-repository.in-memory.ts';
+import { createDrizzlePartnerGeographyStore } from '../persistence/repos/partner-geography-repository.drizzle.ts';
 import {
   openPartnersMysql,
   type PartnersMysqlHandle,
@@ -66,6 +68,11 @@ import type {
   SupplierReadRecord,
   SupplierReaderError,
 } from '../../application/ports/supplier-reader.ts';
+import type { PartnerGeographyRepository } from '../../application/ports/partner-geography-repository.ts';
+import { listPartnerStates } from '../../application/use-cases/list-partner-states.ts';
+import { listPartnerMunicipalities } from '../../application/use-cases/list-partner-municipalities.ts';
+import { togglePartnerState } from '../../application/use-cases/toggle-partner-state.ts';
+import { togglePartnerMunicipality } from '../../application/use-cases/toggle-partner-municipality.ts';
 
 export type PartnersDriver = 'memory' | 'mysql';
 
@@ -122,6 +129,11 @@ export type PartnersHttpDeps = Readonly<{
   deactivateFinancier: ReturnType<typeof deactivateFinancier>;
   reactivateFinancier: ReturnType<typeof reactivateFinancier>;
   editFinancier: ReturnType<typeof editFinancier>;
+  /** Parceria territorial — leitura + toggle (US-002). */
+  listPartnerStates: ReturnType<typeof listPartnerStates>;
+  listPartnerMunicipalities: ReturnType<typeof listPartnerMunicipalities>;
+  togglePartnerState: ReturnType<typeof togglePartnerState>;
+  togglePartnerMunicipality: ReturnType<typeof togglePartnerMunicipality>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -133,6 +145,7 @@ type Pools = Readonly<{
   supplierWriterRepo: SupplierRepository;
   financierReader: FinancierReader;
   financierWriterRepo: FinancierRepository;
+  geographyRepo: PartnerGeographyRepository;
   shutdown: () => Promise<void>;
 }>;
 
@@ -147,6 +160,7 @@ const buildMemoryPools = (config: PartnersCompositionConfig): Pools => {
     supplierWriterRepo: makeInMemorySupplierStore().repository,
     financierReader: makeInMemoryFinancierReader(config.seed?.financiers ?? []),
     financierWriterRepo: makeInMemoryFinancierStore().repository,
+    geographyRepo: makeInMemoryPartnerGeographyStore().repository,
     shutdown: () => Promise.resolve(),
   };
 };
@@ -183,6 +197,8 @@ const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools
     supplierWriterRepo: createDrizzleSupplierStore(writerHandle, clock),
     financierReader: createDrizzleFinancierReader(readerHandle),
     financierWriterRepo: createDrizzleFinancierStore(writerHandle, clock),
+    // Geography usa writer para writes; reads são leves (catálogo estático + par_states/par_municipalities).
+    geographyRepo: createDrizzlePartnerGeographyStore(writerHandle, clock),
     shutdown: async () => {
       await writerHandle.close();
       if (readerHandle !== writerHandle) await readerHandle.close();
@@ -242,6 +258,13 @@ const makeDeps = (pools: Pools): PartnersHttpDeps => {
     deactivateFinancier: deactivateFinancier({ financierRepo: pools.financierWriterRepo, clock }),
     reactivateFinancier: reactivateFinancier({ financierRepo: pools.financierWriterRepo, clock }),
     editFinancier: editFinancier({ financierRepo: pools.financierWriterRepo, clock }),
+    listPartnerStates: listPartnerStates({ geographyRepo: pools.geographyRepo }),
+    listPartnerMunicipalities: listPartnerMunicipalities({ geographyRepo: pools.geographyRepo }),
+    togglePartnerState: togglePartnerState({ geographyRepo: pools.geographyRepo, clock }),
+    togglePartnerMunicipality: togglePartnerMunicipality({
+      geographyRepo: pools.geographyRepo,
+      clock,
+    }),
     shutdown: pools.shutdown,
   };
 };

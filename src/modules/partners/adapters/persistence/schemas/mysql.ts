@@ -222,3 +222,58 @@ export const parUserProfiles = mysqlTable(
 
 export type UserProfileRow = typeof parUserProfiles.$inferSelect;
 export type NewUserProfileRow = typeof parUserProfiles.$inferInsert;
+
+// ─── par_states ─────────────────────────────────────────────────────────────
+// Parceria territorial por UF (US-002 — ADR-0001 da feature). PK natural: `uf` varchar(2).
+// Sem FK para catálogo (seed estático — ADR-0031 §3). Soft-delete idêntico ao padrão do módulo.
+export const parStates = mysqlTable(
+  'par_states',
+  {
+    // Sigla da UF (2 chars, ex.: 'SP'). PK natural — não é UUID.
+    uf: varchar('uf', { length: 2 }).primaryKey().notNull(),
+    active: boolean('active').notNull().default(true),
+    // Preenchido sse inativo (coerência garantida pelo CHECK abaixo).
+    deactivatedAt: datetime('deactivated_at', { mode: 'date', fsp: 3 }),
+    createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
+    updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
+  },
+  (t) => [
+    // CHECK: active=false ⟺ deactivated_at preenchido.
+    check(
+      'par_states_active_consistency_chk',
+      sql`(${t.active} = FALSE) = (${t.deactivatedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export type StateRow = typeof parStates.$inferSelect;
+export type NewStateRow = typeof parStates.$inferInsert;
+
+// ─── par_municipalities ─────────────────────────────────────────────────────
+// Parceria territorial por município (US-002 — ADR-0001 da feature). PK: `ibge_code` varchar(7).
+// `uf` varchar(2) — atributo de organização (cross-state). Sem FK (ADR-0031 §3).
+// Soft-delete idêntico ao padrão do módulo.
+export const parMunicipalities = mysqlTable(
+  'par_municipalities',
+  {
+    // Código IBGE de 7 dígitos. PK natural.
+    ibgeCode: varchar('ibge_code', { length: 7 }).primaryKey().notNull(),
+    // UF do município (derivado do catálogo na escrita).
+    uf: varchar('uf', { length: 2 }).notNull(),
+    active: boolean('active').notNull().default(true),
+    // Preenchido sse inativo (coerência garantida pelo CHECK abaixo).
+    deactivatedAt: datetime('deactivated_at', { mode: 'date', fsp: 3 }),
+    createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
+    updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
+  },
+  (t) => [
+    // CHECK: active=false ⟺ deactivated_at preenchido.
+    check(
+      'par_municipalities_active_consistency_chk',
+      sql`(${t.active} = FALSE) = (${t.deactivatedAt} IS NOT NULL)`,
+    ),
+  ],
+);
+
+export type MunicipalityRow = typeof parMunicipalities.$inferSelect;
+export type NewMunicipalityRow = typeof parMunicipalities.$inferInsert;
