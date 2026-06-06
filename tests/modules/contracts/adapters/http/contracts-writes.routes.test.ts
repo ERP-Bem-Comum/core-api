@@ -245,6 +245,32 @@ describe('CONTRACTS-HTTP-WRITES-CORE (C2) — POST /contracts', () => {
     await teardown();
   });
 
+  it('CA2: body sem contractor -> 400 (Zod) — contratado obrigatório (FR-001)', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/contracts',
+      headers: bearer(token),
+      payload: activeBody({ contractor: undefined }),
+    });
+    assert.equal(res.statusCode, 400);
+    await teardown();
+  });
+
+  it('CA2: contractor.id não-UUID -> 400 (Zod)', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/contracts',
+      headers: bearer(token),
+      payload: activeBody({ contractor: { type: 'supplier', id: 'not-a-uuid' } }),
+    });
+    assert.equal(res.statusCode, 400);
+    await teardown();
+  });
+
   it('CA2: sequentialNumber duplicado -> 409', async () => {
     const { app, teardown } = await makeApp();
     const token = await loginSeeded(app, WRITER_EMAIL);
