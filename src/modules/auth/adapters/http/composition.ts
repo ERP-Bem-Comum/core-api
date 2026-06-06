@@ -37,6 +37,7 @@ import {
   revokeAllSessionsForUser,
 } from '../../application/use-cases/revoke-session.ts';
 import { changePassword } from '../../application/use-cases/change-password.ts';
+import { listUserPermissions } from '../../application/use-cases/list-user-permissions.ts';
 import { requestPasswordReset } from '../../application/use-cases/request-password-reset.ts';
 import { confirmPasswordReset } from '../../application/use-cases/confirm-password-reset.ts';
 
@@ -109,6 +110,8 @@ export type AuthHttpDeps = Readonly<{
   refreshAccessToken: ReturnType<typeof refreshAccessToken>;
   revokeSession: ReturnType<typeof revokeSession>;
   changePassword: ReturnType<typeof changePassword>;
+  /** Permissões efetivas do usuário (GET /me → `can()` do front). */
+  listUserPermissions: ReturnType<typeof listUserPermissions>;
   revokeAllSessionsForUser: ReturnType<typeof revokeAllSessionsForUser>;
   /** Verificador de access JWT — consumido pelo preHandler `requireAuth`. */
   verifyAccessToken: TokenIssuer['verifyAccessToken'];
@@ -344,6 +347,7 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
       refreshTokenRepo: stores.refreshTokenRepo,
       clock,
     }),
+    listUserPermissions: listUserPermissions({ userReader: stores.userReader }),
     changePassword: changePassword({
       userReader: stores.userReader,
       userRepo: stores.userRepo,

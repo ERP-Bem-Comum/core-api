@@ -39,6 +39,8 @@ export const logoutBodySchema = z.object({
 
 export const meResponseSchema = z.object({
   userId: z.string(),
+  // Permissões efetivas (RBAC) do usuário — o front usa para `can()` (mostrar/ocultar ações).
+  permissions: z.array(z.string()),
 });
 
 // BE-REC-004: troca de senha autenticada. O userId vem do access JWT (requireAuth), nunca do body.

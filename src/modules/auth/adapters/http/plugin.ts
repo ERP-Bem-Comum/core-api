@@ -131,7 +131,10 @@ const authRoutes =
       url: '/me',
       preHandler: requireAuth,
       schema: { response: { 200: meResponseSchema } } satisfies FastifyZodOpenApiSchema,
-      handler: (req) => ({ userId: req.userId }),
+      handler: async (req) => {
+        const permissions = await deps.listUserPermissions(req.userId);
+        return { userId: req.userId, permissions: permissions.ok ? [...permissions.value] : [] };
+      },
     });
 
     // BE-REC-004: troca de senha autenticada. userId vem do JWT (requireAuth), nunca do body.
