@@ -7,7 +7,7 @@
 
 <!-- SPECKIT START -->
 
-Plano corrente: `specs/002-contracts-http-gaps/plan.md` (épico — gaps de borda HTTP do módulo `contracts`).
+Plano corrente: `specs/003-partners-aggregator-export/plan.md` (épico — agregador `/partners` + paridade de export CSV, `/api/v1`).
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan.
 
