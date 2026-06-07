@@ -1,8 +1,9 @@
 /**
- * W0 (RED) - AUTH-GET-USER: GET /api/v1/users/:id (detalhe + RBAC).
+ * W0 (RED) - AUTH-HTTP-CREATE-USER: POST /api/v1/users (criar + convite + RBAC).
  *
- * DEVE FALHAR em W0 - a rota /api/v1/users/:id ainda nao existe.
- * Driver memory; fastify.inject. CA6..CA8 (rota). ASCII puro.
+ * DEVE FALHAR em W0 - a rota POST /api/v1/users ainda nao existe (deps.createUserByAdmin).
+ * Driver memory; inviteMailer = no-op (convite nao enviado de verdade, mas o use case completa).
+ * fastify.inject. ASCII puro.
  */
 
 import { describe, it, before, after } from 'node:test';
@@ -17,8 +18,8 @@ import {
 } from '#src/modules/auth/public-api/http.ts';
 
 const STRONG = 'Str0ng-Passphrase-2026!';
-const ADMIN = 'admin.detail@example.com';
-const NOPERM = 'noperm.detail@example.com';
+const ADMIN = 'admin.create@example.com';
+const NOPERM = 'noperm.create@example.com';
 
 type AppHandle = Awaited<ReturnType<typeof buildApp>>;
 
@@ -27,7 +28,7 @@ const makeApp = async (): Promise<{ app: AppHandle; teardown: () => Promise<void
     driver: 'memory',
     seed: {
       users: [
-        { email: ADMIN, password: STRONG, permissions: ['user:read'] },
+        { email: ADMIN, password: STRONG, permissions: ['user:create'] },
         { email: NOPERM, password: STRONG, permissions: [] },
       ],
     },
@@ -66,71 +67,80 @@ const login = async (app: AppHandle, email: string): Promise<string> => {
   return (res.json() as { accessToken: string }).accessToken;
 };
 
-const register = async (app: AppHandle, email: string): Promise<string> => {
-  const res = await app.inject({
-    method: 'POST',
-    url: '/api/v2/auth/register',
-    payload: { email, password: STRONG },
-  });
-  assert.equal(res.statusCode, 201, `register ${email}: ${res.statusCode}`);
-  return (res.json() as { userId: string }).userId;
-};
+const validBody = () => ({
+  name: 'Amanda Manoel',
+  cpf: '52998224725',
+  email: 'amanda.nova@example.com',
+  telephone: '15997133502',
+});
 
-describe('AUTH-GET-USER — GET /api/v1/users/:id', () => {
+describe('AUTH-HTTP-CREATE-USER — POST /api/v1/users', () => {
   let app: AppHandle;
   let teardown: () => Promise<void>;
   let adminToken: string;
-  let targetId: string;
 
   before(async () => {
     ({ app, teardown } = await makeApp());
     adminToken = await login(app, ADMIN);
-    targetId = await register(app, 'alvo@example.com');
   });
 
   after(async () => {
     await teardown();
   });
 
-  it('CA6a: 401 sem token', async () => {
-    const res = await app.inject({ method: 'GET', url: `/api/v1/users/${targetId}` });
+  it('CA1: 401 sem token', async () => {
+    const res = await app.inject({ method: 'POST', url: '/api/v1/users', payload: validBody() });
     assert.equal(res.statusCode, 401);
   });
 
-  it('CA6b: 403 sem permissao user:read', async () => {
+  it('CA2: 403 sem permissao user:create', async () => {
     const token = await login(app, NOPERM);
     const res = await app.inject({
-      method: 'GET',
-      url: `/api/v1/users/${targetId}`,
+      method: 'POST',
+      url: '/api/v1/users',
       headers: { authorization: `Bearer ${token}` },
+      payload: validBody(),
     });
     assert.equal(res.statusCode, 403);
   });
 
-  it('CA7: 200 com o shape do detalhe', async () => {
+  it('CA3: 201 cria usuario valido (retorna id)', async () => {
     const res = await app.inject({
-      method: 'GET',
-      url: `/api/v1/users/${targetId}`,
+      method: 'POST',
+      url: '/api/v1/users',
       headers: { authorization: `Bearer ${adminToken}` },
+      payload: validBody(),
     });
-    assert.equal(res.statusCode, 200);
-    const body = res.json() as Record<string, unknown>;
-    assert.equal(body['id'], targetId);
-    assert.equal(body['email'], 'alvo@example.com');
-    assert.equal(body['active'], true);
-    assert.equal(typeof body['massApprovalPermission'], 'boolean');
-    assert.ok(
-      'cpf' in body && 'telephone' in body && 'imageUrl' in body && 'collaboratorId' in body,
-    );
+    assert.equal(res.statusCode, 201);
+    const body = res.json() as { id: string };
+    assert.ok(typeof body.id === 'string' && body.id.length > 0);
   });
 
-  it('CA8: 404 id inexistente (valido)', async () => {
-    // UUID v4 valido mas inexistente
-    const res = await app.inject({
-      method: 'GET',
-      url: '/api/v1/users/00000000-0000-4000-8000-000000000000',
+  it('CA4: 409 email duplicado', async () => {
+    const dup = { ...validBody(), email: 'dup@example.com' };
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/users',
       headers: { authorization: `Bearer ${adminToken}` },
+      payload: dup,
     });
-    assert.equal(res.statusCode, 404);
+    assert.equal(first.statusCode, 201);
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/v1/users',
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: dup,
+    });
+    assert.equal(second.statusCode, 409);
+  });
+
+  it('CA5: 422 cpf invalido', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/users',
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { ...validBody(), email: 'outro@example.com', cpf: '11111111111' },
+    });
+    assert.equal(res.statusCode, 422);
   });
 });

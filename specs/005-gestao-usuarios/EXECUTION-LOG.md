@@ -43,9 +43,10 @@
 - [x] `AUTH-GET-USER` — use case `get-user` (perfil + mass-approve read-only das roles) **+** rota `GET /api/v1/users/:id` (combinados; reusa `UserReader.findById`, sem Drizzle novo) (T024/T025/T026) ✅ closed-green · 9 testes (use case + inject)
   - [ ] coleção Bruno `users/detail/` (T027, pendência Docker)
 
-### Fase 3 — US3 Criar + convite (P2) 🔄
+### Fase 3 — US3 Criar + convite (P2) ✅
 
-- [x] `AUTH-USECASE-CREATE-USER` — domínio (`UserCreated` + `User.create`) + port `InviteMailer` + use case `create-user-by-admin` (T028/T029) ✅ closed-green · 8 testes de **segurança** (design do `security-backend-expert`: placeholder não-autenticável, convite fail-closed, anti host-injection). **Pendente:** adapter email + wiring + rota `POST /users` (`AUTH-HTTP-CREATE-USER`, T030–T032).
+- [x] `AUTH-USECASE-CREATE-USER` — domínio (`UserCreated` + `User.create`) + port `InviteMailer` + use case `create-user-by-admin` (T028/T029) ✅ closed-green · 8 testes de **segurança** (`security-backend-expert`).
+- [x] `AUTH-HTTP-CREATE-USER` — adapter `invite-mailer.email` (`nodemailer-email-expert`) + wiring (reusa `dummyPasswordHash` como `unusablePasswordHash`) + rota `POST /api/v1/users` (`user:create`, 201/409/422) (T030/T031/T032) ✅ closed-green · 5 testes inject. **US3 entregue end-to-end.** Pendência: Bruno `users/create/` + email real (SMTP/Docker).
 
 #### (planejamento original)
 
@@ -92,3 +93,4 @@
 - **2026-06-07** — `AUTH-USECASE-LIST-USERS` closed-green (port `UserQuery` + use case `list-users` + adapter in-memory; 12 testes; gate 2313 pass). Fase 1 parte 1/2. Próximo: `AUTH-HTTP-LIST-USERS`.
 - **2026-06-07** — `AUTH-HTTP-LIST-USERS` closed-green. Rota `GET /api/v1/users` (plugin Zod/OpenAPI + RBAC `user:list`) + adapter Drizzle `UserQuery` + índice `auth_user_name_idx` (migration 0005) + wiring (composition/public-api/server.ts). Testada via `fastify.inject` (8 CAs); gate 2321 pass. **Designs consultados com `drizzle-orm-expert` e `fastify-server-expert`** (ancorados no handbook). **US1 (listar) entregue na borda HTTP.** Pendências: coleção Bruno (T023) + `test:integration:auth` (Docker). Próximo: **US2** (`AUTH-USECASE-GET-USER` → `AUTH-HTTP-GET-USER`).
 - **2026-06-07** — `AUTH-GET-USER` closed-green (US2 combinada: use case + rota num ticket). `getUser` reusa `UserReader.findById` (sem Drizzle novo); `massApprovalPermission` das roles; rota `GET /api/v1/users/:id` (`user:read`, 400/404). 9 testes (5 use case + 4 inject); gate **2330 pass**. **US2 (detalhe) entregue.** Pendência: Bruno `users/detail/`. Próximo: **US3** (criar + convite por email).
+- **2026-06-07** — `AUTH-USECASE-CREATE-USER` + `AUTH-HTTP-CREATE-USER` closed-green. **US3 (criar + convite) entregue end-to-end.** Consultoria de 2 especialistas: `security-backend-expert` (fluxo seguro: `unusablePasswordHash` placeholder, convite fail-closed, anti host-injection, `UserCreated` sem PII) e `nodemailer-email-expert` (adapter `invite-mailer.email`). Wiring reusa o `dummyPasswordHash` existente. Rota `POST /api/v1/users` (`user:create`). 13 testes (8 segurança + 5 inject); gate **2343 pass**. Próximo: **US4** (editar perfil) — `AUTH-USECASE-UPDATE-PROFILE` + `PUT /users/:id`.

@@ -42,6 +42,7 @@ import { changePassword } from '../../application/use-cases/change-password.ts';
 import { listUserPermissions } from '../../application/use-cases/list-user-permissions.ts';
 import { listUsers } from '../../application/use-cases/list-users.ts';
 import { getUser } from '../../application/use-cases/get-user.ts';
+import { createUserByAdmin } from '../../application/use-cases/create-user-by-admin.ts';
 import { requestPasswordReset } from '../../application/use-cases/request-password-reset.ts';
 import { confirmPasswordReset } from '../../application/use-cases/confirm-password-reset.ts';
 
@@ -55,6 +56,7 @@ import type { PasswordResetTokenRepository } from '../../domain/session/password
 import type { PasswordResetMailer } from '../../application/ports/password-reset-mailer.ts';
 import type { LoginLockoutStore } from '../../application/ports/login-lockout-store.ts';
 import type { UserQuery } from '../../application/ports/user-query.ts';
+import type { InviteMailer } from '../../application/ports/invite-mailer.ts';
 import { ok } from '#src/shared/primitives/result.ts';
 import {
   parseSmtpConfig,
@@ -62,6 +64,7 @@ import {
   parseEmailAddress,
 } from '#src/modules/notifications/public-api/index.ts';
 import { makeEmailPasswordResetMailer } from '../notifications/password-reset-mailer.email.ts';
+import { makeEmailInviteMailer } from '../notifications/invite-mailer.email.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
 
 // Seed RBAC (CONTRACTS-HTTP-READS C1, D4): bootstrap de permissões para dev/test.
@@ -107,6 +110,10 @@ export type AuthCompositionConfig = Readonly<{
   resetBaseUrl?: string;
   /** TTL do token de reset em segundos (BE-REC-003). Default: 900 (15min). */
   resetTtlSeconds?: number;
+  /** Origem confiável do link de ativação (spec 005 US3). Nunca derivada do header Host. */
+  activationBaseUrl?: string;
+  /** TTL do token de ativação em segundos (spec 005 US3). Default: 604800 (7 dias). */
+  inviteTtlSeconds?: number;
 }>;
 
 export type AuthHttpDeps = Readonly<{
@@ -140,6 +147,8 @@ export type AuthHttpDeps = Readonly<{
   listUsers: ReturnType<typeof listUsers>;
   /** Detalhe administrativo de usuário (spec 005 US2) — consumido por GET /api/v1/users/:id. */
   getUser: ReturnType<typeof getUser>;
+  /** Criação administrativa de usuário + convite (spec 005 US3) — consumido por POST /api/v1/users. */
+  createUserByAdmin: ReturnType<typeof createUserByAdmin>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -153,6 +162,8 @@ const DEFAULT_LOCKOUT_POLICY: LockoutPolicy = { threshold: 5, stepsMinutes: [1, 
 // BE-REC-003: TTL curto do token de reset + origem default (dev). Prod sobrepõe via config/env.
 const DEFAULT_RESET_TTL = 900; // 15 min
 const DEFAULT_RESET_BASE_URL = 'http://localhost:3000/reset-password';
+const DEFAULT_INVITE_TTL = 604_800; // 7 dias (convite mais generoso que reset)
+const DEFAULT_ACTIVATION_BASE_URL = 'http://localhost:3000/activate';
 
 type Stores = Readonly<{
   userReader: UserReader;
@@ -286,6 +297,23 @@ const buildResetMailer = (env: Readonly<NodeJS.ProcessEnv>): PasswordResetMailer
   return { sendResetLink: async () => ok(undefined) };
 };
 
+// Convite de ativacao (spec 005 US3). Mesma logica do reset: SMTP + remetente -> Nodemailer real;
+// senao -> no-op SEGURO. Reusa AUTH_RESET_FROM como remetente se AUTH_INVITE_FROM nao for definido.
+const buildInviteMailer = (env: Readonly<NodeJS.ProcessEnv>): InviteMailer => {
+  const smtp = parseSmtpConfig(env);
+  const fromRaw = env['AUTH_INVITE_FROM'] ?? env['AUTH_RESET_FROM'];
+  if (smtp.ok && fromRaw !== undefined && fromRaw.length > 0) {
+    const from = parseEmailAddress(fromRaw);
+    if (from.ok) {
+      return makeEmailInviteMailer({
+        emailSender: createNodemailerEmailSender(smtp.value),
+        from: from.value,
+      });
+    }
+  }
+  return { sendInvite: async () => ok(undefined) };
+};
+
 export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<AuthHttpDeps> => {
   const issuer = config.issuer ?? DEFAULT_ISSUER;
   const accessTtlSeconds = config.accessTtlSeconds ?? DEFAULT_ACCESS_TTL;
@@ -317,6 +345,12 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
   const resetMailer = buildResetMailer(process.env);
   const resetBaseUrl = config.resetBaseUrl ?? DEFAULT_RESET_BASE_URL;
   const resetTtlSeconds = config.resetTtlSeconds ?? DEFAULT_RESET_TTL;
+
+  // Convite de ativacao (spec 005 US3). Reusa o dummyPasswordHash como placeholder unusable
+  // (mesma tecnica: hash de bytes aleatorios; o plaintext nunca e conhecido -> nunca autentica).
+  const inviteMailer = buildInviteMailer(process.env);
+  const activationBaseUrl = config.activationBaseUrl ?? DEFAULT_ACTIVATION_BASE_URL;
+  const inviteTtlSeconds = config.inviteTtlSeconds ?? DEFAULT_INVITE_TTL;
 
   if (config.seed !== undefined) {
     await applyRbacSeed(config.seed, {
@@ -391,6 +425,17 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
     }),
     listUsers: listUsers({ userQuery: stores.userQuery }),
     getUser: getUser({ userReader: stores.userReader }),
+    createUserByAdmin: createUserByAdmin({
+      userReader: stores.userReader,
+      userRepo: stores.userRepo,
+      resetTokenRepo: stores.resetTokenRepo,
+      minter: resetMinter,
+      inviteMailer,
+      clock,
+      unusablePasswordHash: dummyPasswordHash,
+      inviteTtlSeconds,
+      activationBaseUrl,
+    }),
     verifyAccessToken: tokenIssuer.verifyAccessToken,
     sensitiveRateLimit: config.sensitiveRateLimit ?? DEFAULT_SENSITIVE_RATE_LIMIT,
     authorize: (permissionName: string): preHandlerAsyncHookHandler => {

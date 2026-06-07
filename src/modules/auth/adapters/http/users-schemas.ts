@@ -69,3 +69,16 @@ export const userDetailResponseSchema = z.object({
 });
 
 export type UserDetailResponse = z.infer<typeof userDetailResponseSchema>;
+
+/** Body do POST /api/v1/users (criar). Formato de cpf/email/telefone validado no use case (VOs). */
+export const createUserBodySchema = z.object({
+  name: z.string().min(1),
+  cpf: z.string().min(1),
+  email: z.string().min(1),
+  telephone: z.string().min(1),
+});
+
+export type CreateUserBody = z.infer<typeof createUserBodySchema>;
+
+/** Response 201 do POST /api/v1/users. */
+export const createUserResponseSchema = z.object({ id: z.string() });

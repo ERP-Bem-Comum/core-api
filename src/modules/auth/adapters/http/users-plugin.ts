@@ -19,23 +19,28 @@ import type {
   FastifyZodOpenApiTypeProvider,
 } from 'fastify-zod-openapi';
 
-import { ok } from '#src/shared/primitives/result.ts';
+import { ok, err } from '#src/shared/primitives/result.ts';
 import { sendResult } from '#src/shared/http/reply.ts';
 
+import * as UserId from '../../domain/identity/user-id.ts';
 import type { listUsers } from '../../application/use-cases/list-users.ts';
 import type { getUser } from '../../application/use-cases/get-user.ts';
+import type { createUserByAdmin } from '../../application/use-cases/create-user-by-admin.ts';
 import type { UserStatusFilter } from '../../application/ports/user-query.ts';
 import {
   userListQuerySchema,
   userListResponseSchema,
   userIdParamSchema,
   userDetailResponseSchema,
+  createUserBodySchema,
+  createUserResponseSchema,
 } from './users-schemas.ts';
 
 export type UsersHttpDeps = Readonly<{
   /** Use cases ja instanciados pela composition — nao re-instanciar aqui. */
   listUsers: ReturnType<typeof listUsers>;
   getUser: ReturnType<typeof getUser>;
+  createUserByAdmin: ReturnType<typeof createUserByAdmin>;
 }>;
 
 export type UsersHttpHooks = Readonly<{
@@ -49,6 +54,7 @@ const toStatusFilter = (httpStatus: 'active' | 'inactive' | 'all'): UserStatusFi
 
 const USER_LIST_PERMISSION = 'user:list';
 const USER_READ_PERMISSION = 'user:read';
+const USER_CREATE_PERMISSION = 'user:create';
 
 const usersRoutes =
   (deps: UsersHttpDeps, hooks: UsersHttpHooks): FastifyPluginAsyncZodOpenApi =>
@@ -102,6 +108,53 @@ const usersRoutes =
           ok: 200,
           errors: { 'user-id-invalid': 400, 'user-not-found': 404 },
         });
+      },
+    });
+
+    // US3: POST /users — criar (admin) + convite por email.
+    scope.route({
+      method: 'POST',
+      url: '/users',
+      preHandler: [hooks.requireAuth, hooks.authorize(USER_CREATE_PERMISSION)],
+      schema: {
+        body: createUserBodySchema,
+        response: { 201: createUserResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        // adminId vem do JWT (requireAuth), NUNCA do body.
+        const adminId = UserId.rehydrate(req.userId);
+        if (!adminId.ok) {
+          return sendResult(reply, err('user-id-invalid' as const), {
+            errors: { 'user-id-invalid': 401 },
+          });
+        }
+        const result = await deps.createUserByAdmin({
+          adminId: adminId.value,
+          name: req.body.name,
+          cpf: req.body.cpf,
+          email: req.body.email,
+          telephone: req.body.telephone,
+        });
+        if (!result.ok) {
+          return sendResult(reply, result, {
+            errors: {
+              'name-required': 422,
+              'email-empty': 422,
+              'email-invalid-format': 422,
+              'email-too-long': 422,
+              'cpf-empty': 422,
+              'cpf-invalid-length': 422,
+              'cpf-invalid-checksum': 422,
+              'telephone-empty': 422,
+              'telephone-invalid': 422,
+              'email-already-registered': 409,
+              'user-repo-unavailable': 503,
+              'password-reset-token-repo-unavailable': 503,
+              'invite-mail-failed': 502,
+            },
+          });
+        }
+        return sendResult(reply, ok({ id: String(result.value.user.id) }), { ok: 201 });
       },
     });
   };

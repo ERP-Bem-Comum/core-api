@@ -49,7 +49,11 @@ const makeApp = async (): Promise<{ app: AppHandle; teardown: () => Promise<void
       authHttpPlugin(authDeps),
       {
         plugin: usersHttpPlugin(
-          { listUsers: authDeps.listUsers, getUser: authDeps.getUser },
+          {
+            listUsers: authDeps.listUsers,
+            getUser: authDeps.getUser,
+            createUserByAdmin: authDeps.createUserByAdmin,
+          },
           { requireAuth, authorize: authDeps.authorize },
         ),
         prefix: '/api/v1',
