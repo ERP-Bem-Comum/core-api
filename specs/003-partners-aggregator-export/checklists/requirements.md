@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain
+- [x] No [NEEDS CLARIFICATION] markers remain
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -31,7 +31,7 @@
 
 ## Notes
 
-- **1 `[NEEDS CLARIFICATION]` aberto** (US-001 / FR-001-002): estratégia de paginação/ordenação da lista
-  heterogênea de 4 fontes (merge in-memory + paginação global vs. cotas por-tipo; default de ordenação).
-  Resolver no `/speckit-clarify` antes do `/speckit-plan`.
-- Permissão do agregador (Assumptions) é decisão de plan — não bloqueia a spec.
+- ✅ `/speckit-clarify` (2026-06-06) resolveu as 2 decisões abertas (especialistas mysql + security):
+  - **Paginação**: merge in-memory + ordenação `(name, type, id)` + cap `MAX_TOTAL=10_000` (503).
+  - **Permissão do agregador**: AND das 4 reads (`supplier`/`financier`/`collaborator`/`act:read`).
+- Spec sem `[NEEDS CLARIFICATION]` — pronta para `/speckit-plan`.

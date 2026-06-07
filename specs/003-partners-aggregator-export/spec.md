@@ -29,7 +29,8 @@
 
 ### Session 2026-06-06
 
-- Q: Como paginar/ordenar a lista heterogênea de 4 fontes no agregador (`GET /partners`)? → A: [NEEDS CLARIFICATION: estratégia de paginação/ordenação] — merge in-memory dos 4 readers + ordenação global + paginação após o merge, OU paginação por-tipo (cotas). Default de ordenação (`name` asc?).
+- Q: Como paginar/ordenar a lista heterogênea de 4 fontes no agregador (`GET /partners`)? → A: **Merge in-memory** — carrega os 4 readers em paralelo (`Promise.all`), projeta para `PartnerListItem`, aplica `search`/`type`, faz merge, **ordena por `(name ASC, type ASC, id ASC)`** (tie-break determinístico) e pagina **após** o merge. Consistente com o padrão já existente do partners (rotas por-tipo já paginam in-memory). **Safety cap** `MAX_TOTAL = 10_000`: se a soma dos 4 readers exceder, responde **503** (sem refatorar readers; paginação no DB fica para quando o volume/SLO exigir). _(parecer mysql-database-expert)_
+- Q: Como autorizar `GET /partners` (cruza os 4 tipos)? → A: **AND das 4 permissões de leitura** — `supplier:read` **E** `financier:read` **E** `collaborator:read` **E** `act:read`. Quem consome o seletor (cria contrato de qualquer tipo) deve ler os 4; least-privilege sem criar permissão nova, simples de auditar. Se surgir perfil que contrata só um subconjunto de tipos, abre-se ADR para filtro dinâmico por permissão. _(parecer security-backend-expert)_
 
 ## User Scenarios & Testing _(mandatory)_
 
@@ -79,6 +80,7 @@ filtros e validar que o CSV contém os registros que casam os filtros — sem de
 - **Agregador** com 0 parceiros → `{ items: [], meta: { page, limit, total: 0, totalPages: 0 } }` (não erro).
 - **Agregador** com `type` inválido (fora dos 4) → erro de validação (envelope), não 500.
 - **Agregador** `page` além do total → `items: []` com `meta` coerente.
+- **Agregador** com soma dos 4 readers > `MAX_TOTAL` (10.000) → **503** (`partners-aggregate-too-large`), não OOM.
 - **Export** de tipo com 0 registros → CSV só com cabeçalho.
 - Qualquer rota nova sem sessão → 401; sem permissão → 403 (envelope com `requestId`).
 
@@ -87,13 +89,13 @@ filtros e validar que o CSV contém os registros que casam os filtros — sem de
 ### Functional Requirements
 
 - **FR-001**: O sistema MUST expor `GET /api/v1/partners` que retorna parceiros dos 4 tipos numa **projeção plana** `{ type, id, name, document, active }`, paginada com `meta: { page, limit, total, totalPages }`.
-- **FR-002**: O agregador MUST aceitar `type` (um dos 4 tipos ou ausente=todos), `search` (casa `name`/`document` case-insensitive), `page` e `limit`.
-- **FR-003**: O agregador MUST **compor na borda** lendo os 4 readers existentes (`supplier-reader`/`financier-reader`/`collaborator-reader`/`act-reader`) — read-only, sem tabela nova, sem expor o agregado interno.
+- **FR-002**: O agregador MUST aceitar `type` (um dos 4 tipos ou ausente=todos), `search` (casa `name`/`document` case-insensitive), `page` e `limit`. A ordenação MUST ser `(name ASC, type ASC, id ASC)` (tie-break determinístico).
+- **FR-003**: O agregador MUST **compor na borda** lendo os 4 readers existentes em paralelo (`Promise.all`), projetando para `PartnerListItem`, filtrando, fazendo merge e paginando **após** o merge (in-memory) — read-only, sem tabela nova, sem expor o agregado interno. MUST impor `MAX_TOTAL = 10_000` (soma dos 4 readers): se exceder, responde **503** (`code: 'partners-aggregate-too-large'`) — safety cap até a paginação no DB ser justificada por volume/SLO.
 - **FR-004**: O sistema MUST expor `GET /api/v1/collaborators/export` (CSV) reusando o serializer `collaborator-csv.ts` existente, respeitando os filtros da listagem de colaboradores.
 - **FR-005**: O sistema MUST expor `GET /api/v1/financiers/export` (CSV), com um serializer novo espelhando o padrão de `supplier-csv.ts`.
 - **FR-006**: O sistema MUST expor `GET /api/v1/acts/export` (CSV), com um serializer novo espelhando o padrão de `supplier-csv.ts`.
 - **FR-007**: Toda serialização CSV MUST usar o util compartilhado `src/shared/utils/csv.ts` (escape anti-CSV-injection + RFC 4180); respostas de export MUST ter `Content-Type: text/csv`, `Content-Disposition: attachment` e `X-Content-Type-Options: nosniff`.
-- **FR-008**: Toda rota nova MUST exigir `requireAuth` + `authorize(<permissão>)` (agregador: ver Assumptions; exports: `<tipo>:read`) e usar o envelope de erro `{ error: { code, message, requestId } }`, com contrato Zod na borda.
+- **FR-008**: Toda rota nova MUST exigir `requireAuth` + `authorize(...)` e usar o envelope de erro `{ error: { code, message, requestId } }`, com contrato Zod na borda. O **agregador** exige as **4 permissões de leitura** (`supplier:read` + `financier:read` + `collaborator:read` + `act:read`); cada **export** exige `<tipo>:read`.
 - **FR-009**: As capacidades MUST permanecer sob `/api/v1` (ADR-0033, espelho legado); nenhuma migra para `/api/v2`.
 
 ### Key Entities
@@ -125,7 +127,8 @@ filtros e validar que o CSV contém os registros que casam os filtros — sem de
 
 - Os 4 readers (`supplier`/`financier`/`collaborator`/`act-reader`) já expõem listagem com filtro `search`/`active` suficiente para o agregador e para os exports — o trabalho é de **borda** (rota + composição + projeção), salvo ajuste mínimo revelado no planejamento.
 - O serializer `collaborator-csv.ts` está correto e só falta a rota; `financier-csv.ts`/`act-csv.ts` serão criados espelhando `supplier-csv.ts`.
-- **Permissão do agregador**: como cruza os 4 tipos, assume-se uma permissão dedicada (ex.: `partner:read`) ou exigir a leitura de cada tipo presente no resultado — a fixar no clarify/plan.
+- **Permissão do agregador**: **decidida** (Clarifications) — AND das 4 reads (`supplier`/`financier`/`collaborator`/`act:read`). Sem permissão nova; filtro dinâmico por permissão fica como ADR futuro se surgir perfil de subconjunto.
+- **Estratégia de paginação**: **decidida** (Clarifications) — merge in-memory + ordenação `(name, type, id)` + cap `MAX_TOTAL=10_000` (503). Migração para paginação no DB é trabalho futuro disparado por volume/SLO.
 - Espelho do legado (ADR-0033): shapes/códigos preservados; o agregador é conveniência nova sob `/api/v1`, não redesenha os endpoints por-tipo.
 - O catálogo/identidade de cada tipo é suficiente para a projeção plana (`name`/`document` existem nos 4).
 - A variante PF de Financiador e itens fora dos ITENs 3/4 do front permanecem **fora** deste épico.
