@@ -68,6 +68,21 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          # Manifesto simples (single-arch) — sem provenance/attestation, que
-          # criariam índice multi-parte e atrapalhariam o pull do Watchtower.
+          # Manifesto simples (single-arch) — sem provenance/attestation.
           provenance: false
+
+  deploy:
+    needs: build-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy QA via SSH (forced command na VPS)
+        env:
+          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh && chmod 700 ~/.ssh
+          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          # A chave está travada (forced command) p/ rodar só /opt/erp-qa/deploy.sh.
+          # Se um container não ficar healthy, deploy.sh sai != 0 e este job fica vermelho.
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
+            ubuntu@201.23.88.83 deploy
