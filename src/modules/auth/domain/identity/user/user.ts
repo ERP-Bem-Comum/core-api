@@ -172,9 +172,11 @@ export const assignRole = (
 // ─── Perfil administrativo (spec 005) ──────────────────────────────────────────
 
 // Patch parcial de perfil: campo `undefined` mantem o valor atual; presente (inclusive
-// null em collaboratorId) sobrescreve. name/cpf/telephone ja chegam como VO/string validados.
+// null em collaboratorId) sobrescreve. name/email/cpf/telephone ja chegam como VO/string
+// validados (a unicidade de email e checada no use case, nao aqui).
 export type UpdateProfileInput = Readonly<{
   name?: string;
+  email?: Email;
   cpf?: Cpf;
   telephone?: Telephone;
   collaboratorId?: string | null;
@@ -193,6 +195,7 @@ export const updateProfile = (
 ): Readonly<{ user: User; event: UserProfileUpdated }> => {
   const fields = {
     ...(patch.name !== undefined ? { name: patch.name } : {}),
+    ...(patch.email !== undefined ? { email: patch.email } : {}),
     ...(patch.cpf !== undefined ? { cpf: patch.cpf } : {}),
     ...(patch.telephone !== undefined ? { telephone: patch.telephone } : {}),
     ...(patch.collaboratorId !== undefined ? { collaboratorId: patch.collaboratorId } : {}),
