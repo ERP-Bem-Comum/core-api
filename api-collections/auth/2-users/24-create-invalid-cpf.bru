@@ -1,0 +1,30 @@
+meta {
+  name: US3 create cpf invalido
+  type: http
+  seq: 24
+}
+
+post {
+  url: {{baseUrl}}/api/v1/users
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "Cpf Ruim",
+    "cpf": "11111111111",
+    "email": "cpf-ruim-e2e@example.com",
+    "telephone": "15997133502"
+  }
+}
+
+tests {
+  test("CA — cpf invalido (checksum) -> 422", function () {
+    expect(res.getStatus()).to.equal(422);
+  });
+}

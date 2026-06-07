@@ -18,6 +18,9 @@ import * as PasswordHash from '../../../domain/credential/password-hash.ts';
 import * as RoleId from '../../../domain/authorization/role-id.ts';
 import * as Permission from '../../../domain/authorization/permission.ts';
 import * as Role from '../../../domain/authorization/role.ts';
+import * as Cpf from '../../../domain/identity/cpf.ts';
+import * as Telephone from '../../../domain/identity/telephone.ts';
+import * as ProfilePhotoRef from '../../../domain/identity/profile-photo-ref.ts';
 import type { User, ActiveUser, DisabledUser } from '../../../domain/identity/user/types.ts';
 import type { UserRow, NewUserRow, UserRoleRow, RoleRow, PermissionRow } from '../schemas/mysql.ts';
 
@@ -62,6 +65,12 @@ export type UserMapperMissingDisabledAt = Readonly<{
 
 // ─── Union ────────────────────────────────────────────────────────────────────
 
+export type UserMapperInvalidProfile = Readonly<{
+  tag: 'UserMapperInvalidProfile';
+  field: string;
+  reason: string;
+}>;
+
 export type UserMapperError =
   | UserMapperInvalidUserId
   | UserMapperInvalidEmail
@@ -69,7 +78,8 @@ export type UserMapperError =
   | UserMapperInvalidStatus
   | UserMapperInvalidRole
   | UserMapperInvalidPermission
-  | UserMapperMissingDisabledAt;
+  | UserMapperMissingDisabledAt
+  | UserMapperInvalidProfile;
 
 // ─── Case constructors ────────────────────────────────────────────────────────
 
@@ -109,6 +119,24 @@ const missingDisabledAt = (userId: string): UserMapperMissingDisabledAt => ({
   tag: 'UserMapperMissingDisabledAt',
   userId,
 });
+
+const invalidProfile = (field: string, reason: string): UserMapperInvalidProfile => ({
+  tag: 'UserMapperInvalidProfile',
+  field,
+  reason,
+});
+
+// Reidrata um campo de perfil opcional via smart constructor do VO. NULL no DB -> null no
+// dominio. Valor presente invalido -> erro de mapper (dominio rejeita estado corrompido).
+const rehydrateProfile = <T>(
+  raw: string | null,
+  parse: (s: string) => { ok: true; value: T } | { ok: false; error: string },
+  field: string,
+): { ok: true; value: T | null } | { ok: false; error: UserMapperInvalidProfile } => {
+  if (raw === null) return { ok: true, value: null };
+  const r = parse(raw);
+  return r.ok ? { ok: true, value: r.value } : { ok: false, error: invalidProfile(field, r.error) };
+};
 
 // ─── Tipos de input das queries Q2 e Q3 ──────────────────────────────────────
 //
@@ -180,6 +208,21 @@ export const userFromRows = (
     roles.push(roleR.value);
   }
 
+  // Reidratar perfil administrativo (spec 005). Campos nullable; valor presente invalido -> erro.
+  const cpfR = rehydrateProfile(userRow.cpf, Cpf.parse, 'cpf');
+  if (!cpfR.ok) return err(cpfR.error);
+  const telR = rehydrateProfile(userRow.telephone, Telephone.parse, 'telephone');
+  if (!telR.ok) return err(telR.error);
+  const photoR = rehydrateProfile(userRow.imageUrl, ProfilePhotoRef.parse, 'imageUrl');
+  if (!photoR.ok) return err(photoR.error);
+  const profile = {
+    name: userRow.name,
+    cpf: cpfR.value,
+    telephone: telR.value,
+    photo: photoR.value,
+    collaboratorId: userRow.collaboratorId,
+  };
+
   // Dispatcher por status -> ActiveUser | DisabledUser (blueprint §5 + types.ts)
   const status = userRow.status;
   if (status === 'active') {
@@ -188,6 +231,7 @@ export const userFromRows = (
       email: emailR.value,
       passwordHash: hashR.value,
       roles,
+      ...profile,
       status: 'active' as const,
     };
     return ok(user);
@@ -200,6 +244,7 @@ export const userFromRows = (
       email: emailR.value,
       passwordHash: hashR.value,
       roles,
+      ...profile,
       status: 'disabled' as const,
       disabledAt: userRow.disabledAt,
     };
@@ -217,6 +262,15 @@ export const userFromRows = (
 // password_hash: null para usuarios OIDC (PasswordHash opaco, nunca vazio no dominio local).
 
 export const userToInsert = (user: User, now: Date): NewUserRow => {
+  // Perfil administrativo (spec 005). Branded VOs sao strings em runtime; null permanece null.
+  const profileRow = {
+    name: user.name,
+    cpf: user.cpf as unknown as string | null,
+    telephone: user.telephone as unknown as string | null,
+    imageUrl: user.photo as unknown as string | null,
+    collaboratorId: user.collaboratorId,
+  };
+
   if (user.status === 'active') {
     return {
       id: user.id as unknown as string,
@@ -226,6 +280,7 @@ export const userToInsert = (user: User, now: Date): NewUserRow => {
       disabledAt: null,
       createdAt: now,
       updatedAt: now,
+      ...profileRow,
     };
   }
 
@@ -238,5 +293,6 @@ export const userToInsert = (user: User, now: Date): NewUserRow => {
     disabledAt: user.disabledAt,
     createdAt: now,
     updatedAt: now,
+    ...profileRow,
   };
 };

@@ -18,6 +18,8 @@ import {
   buildAuthHttpDeps,
   makeRequireAuth,
   parseE2eAuthSeed,
+  usersHttpPlugin,
+  meHttpPlugin,
 } from '#src/modules/auth/public-api/http.ts';
 import {
   contractsHttpPlugin,
@@ -140,6 +142,35 @@ const main = async (): Promise<void> => {
           authorize: authDeps.authorize,
           hasPermission: authDeps.hasPermission,
         }),
+        prefix: '/api/v1',
+      },
+      // Gestão de usuários (spec 005 US1/US2/US3/US4/US5, ADR-0037) → /api/v1/users[/:id][/...].
+      {
+        plugin: usersHttpPlugin(
+          {
+            listUsers: authDeps.listUsers,
+            getUser: authDeps.getUser,
+            createUserByAdmin: authDeps.createUserByAdmin,
+            updateUserProfile: authDeps.updateUserProfile,
+            activateUser: authDeps.activateUser,
+            deactivateUser: authDeps.deactivateUser,
+            setProfilePhoto: authDeps.setProfilePhoto,
+            removeProfilePhoto: authDeps.removeProfilePhoto,
+          },
+          { requireAuth, authorize: authDeps.authorize },
+        ),
+        prefix: '/api/v1',
+      },
+      // Minha Conta (spec 005 US7) → /api/v1/me[/password-reset]. Self por construção (req.userId).
+      {
+        plugin: meHttpPlugin(
+          {
+            getUser: authDeps.getUser,
+            updateUserProfile: authDeps.updateUserProfile,
+            requestPasswordReset: authDeps.requestPasswordReset,
+          },
+          { requireAuth },
+        ),
         prefix: '/api/v1',
       },
     ],

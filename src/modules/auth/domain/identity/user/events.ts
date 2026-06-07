@@ -36,4 +36,37 @@ export type UserDisabled = Readonly<{
   occurredAt: Date;
 }>;
 
-export type UserEvent = UserRegistered | PasswordChanged | RoleAssigned | UserDisabled;
+// Reativacao (par do UserDisabled). Spec 005 US5. Payload so metadados.
+export type UserEnabled = Readonly<{
+  type: 'UserEnabled';
+  userId: UserId;
+  occurredAt: Date;
+}>;
+
+// Edicao de perfil administrativo (spec 005). Payload so metadados - NUNCA os valores
+// editados (name/cpf/telephone sao dados pessoais; o evento carrega apenas userId).
+export type UserProfileUpdated = Readonly<{
+  type: 'UserProfileUpdated';
+  userId: UserId;
+  occurredAt: Date;
+}>;
+
+// Criacao por administrador (spec 005, FR-016). Gatilho do convite de ativacao.
+// Distinto de UserRegistered (auto-registro/OIDC). `createdByAdminId` p/ auditoria.
+// Payload so metadados (DD-USER-05) - NUNCA hash/senha/token.
+export type UserCreated = Readonly<{
+  type: 'UserCreated';
+  userId: UserId;
+  email: Email;
+  createdByAdminId: UserId;
+  occurredAt: Date;
+}>;
+
+export type UserEvent =
+  | UserRegistered
+  | UserCreated
+  | PasswordChanged
+  | RoleAssigned
+  | UserDisabled
+  | UserEnabled
+  | UserProfileUpdated;

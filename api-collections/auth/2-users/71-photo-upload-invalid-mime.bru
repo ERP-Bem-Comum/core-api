@@ -1,0 +1,26 @@
+meta {
+  name: US6 upload foto mime invalido (422)
+  type: http
+  seq: 71
+}
+
+put {
+  url: {{baseUrl}}/api/v1/users/{{userId}}/photo?mimeType=application/pdf
+  body: file
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  Content-Type: application/octet-stream
+}
+
+body:file {
+  file: @file(assets/sample.jpg) @contentType(application/octet-stream)
+}
+
+tests {
+  test("CA — mime nao suportado -> 422", function () {
+    expect(res.getStatus()).to.equal(422);
+  });
+}

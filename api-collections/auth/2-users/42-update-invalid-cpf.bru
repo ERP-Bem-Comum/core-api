@@ -1,0 +1,27 @@
+meta {
+  name: US4 update cpf invalido
+  type: http
+  seq: 42
+}
+
+put {
+  url: {{baseUrl}}/api/v1/users/{{userId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+body:json {
+  {
+    "cpf": "11111111111"
+  }
+}
+
+tests {
+  test("CA — cpf invalido -> 422 (nada persiste)", function () {
+    expect(res.getStatus()).to.equal(422);
+  });
+}

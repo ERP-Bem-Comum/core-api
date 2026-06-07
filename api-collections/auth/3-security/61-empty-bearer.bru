@@ -1,0 +1,20 @@
+meta {
+  name: SEC bearer vazio
+  type: http
+  seq: 61
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users
+  auth: none
+}
+
+headers {
+  Authorization: Bearer
+}
+
+tests {
+  test("SEC — header Authorization sem token -> 401", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}

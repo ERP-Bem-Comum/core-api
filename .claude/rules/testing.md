@@ -22,6 +22,7 @@ node --test --experimental-strip-types --no-warnings <path>                     
 node --test --experimental-strip-types --no-warnings --test-name-pattern="..."  # filtro por nome
 ```
 
-## Skill canônica
+## Skills canônicas
 
-`tdd-strategist` para red-green-refactor aplicado ([`SKILL.md`](../skills/tdd-strategist/SKILL.md)).
+- `tdd-strategist` — red-green-refactor aplicado, qual o **próximo** teste ([`SKILL.md`](../skills/tdd-strategist/SKILL.md)).
+- `test-pyramid-engineer` — **arquitetura** da suíte: em que camada (unit/integration/contract/e2e) o teste vive, política de test doubles (fakes, não mocks), o que falta cobrir, duplicação entre camadas e gating por velocidade ([`SKILL.md`](../skills/test-pyramid-engineer/SKILL.md)).

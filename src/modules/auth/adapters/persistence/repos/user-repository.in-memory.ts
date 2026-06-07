@@ -15,6 +15,8 @@ export type InMemoryUserStore = Readonly<{
   repository: UserRepository;
   reader: UserReader;
   clear: () => void;
+  /** Snapshot da coleção — para wiring do UserQuery in-memory sem expor o Map. */
+  snapshot: () => readonly User[];
 }>;
 
 export const makeInMemoryUserStore = (): InMemoryUserStore => {
@@ -45,5 +47,6 @@ export const makeInMemoryUserStore = (): InMemoryUserStore => {
     clear: () => {
       map.clear();
     },
+    snapshot: () => [...map.values()],
   };
 };
