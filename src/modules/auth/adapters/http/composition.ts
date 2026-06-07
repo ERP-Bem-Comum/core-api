@@ -44,6 +44,10 @@ import { listUsers } from '../../application/use-cases/list-users.ts';
 import { getUser } from '../../application/use-cases/get-user.ts';
 import { createUserByAdmin } from '../../application/use-cases/create-user-by-admin.ts';
 import { updateUserProfile } from '../../application/use-cases/update-user-profile.ts';
+import {
+  activateUser,
+  deactivateUser,
+} from '../../application/use-cases/activate-deactivate-user.ts';
 import { requestPasswordReset } from '../../application/use-cases/request-password-reset.ts';
 import { confirmPasswordReset } from '../../application/use-cases/confirm-password-reset.ts';
 
@@ -152,6 +156,10 @@ export type AuthHttpDeps = Readonly<{
   createUserByAdmin: ReturnType<typeof createUserByAdmin>;
   /** Edição administrativa de perfil (spec 005 US4) — consumido por PUT /api/v1/users/:id. */
   updateUserProfile: ReturnType<typeof updateUserProfile>;
+  /** Reativação de usuário (spec 005 US5) — consumido por PATCH /api/v1/users/:id/activate. */
+  activateUser: ReturnType<typeof activateUser>;
+  /** Desativação de usuário (spec 005 US5) — consumido por PATCH /api/v1/users/:id/deactivate. */
+  deactivateUser: ReturnType<typeof deactivateUser>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -440,6 +448,16 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
       activationBaseUrl,
     }),
     updateUserProfile: updateUserProfile({
+      userReader: stores.userReader,
+      userRepo: stores.userRepo,
+      clock,
+    }),
+    activateUser: activateUser({
+      userReader: stores.userReader,
+      userRepo: stores.userRepo,
+      clock,
+    }),
+    deactivateUser: deactivateUser({
       userReader: stores.userReader,
       userRepo: stores.userRepo,
       clock,

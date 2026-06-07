@@ -168,12 +168,12 @@
 
 ### Tests RED
 
-- [ ] T037 [P] [US5] Suíte RED em `tests/modules/auth/application/use-cases/activate-deactivate-user.test.ts` (idempotência; `status`/`disabled_at`; auto-desativação bloqueada).
+- [x] T037 [P] [US5] Suíte RED em `tests/modules/auth/application/use-cases/activate-deactivate-user.test.ts` (idempotência; `status`/`disabled_at`; auto-desativação bloqueada). ✅ AUTH-USECASE-ACTIVATE-DEACTIVATE
 
 ### Implementação
 
-- [ ] T038 [US5] Use cases `activate-user` / `deactivate-user` em `src/modules/auth/application/use-cases/`. (depende de Phase 2)
-- [ ] T039 [US5] Rotas `PATCH /api/v1/users/:id/activate` e `.../deactivate` (idempotentes). (depende de T038)
+- [x] T038 [US5] Use cases `activate-user` / `deactivate-user` em `src/modules/auth/application/use-cases/activate-deactivate-user.ts` (idempotentes; `cannot-deactivate-self`). (depende de Phase 2) ✅
+- [x] T039 [US5] Rotas `PATCH /api/v1/users/:id/activate` e `.../deactivate` (idempotentes; `actorId` do JWT); testadas via `fastify.inject` (7 CAs). (depende de T038) ✅ AUTH-HTTP-STATUS
 - [ ] T040 [P] [US5] Requests Bruno `api-collections/users/status/` — `PATCH /api/v1/users/:id/activate` e `.../deactivate` (idempotência; 422 auto-desativação). (depende de T039)
 
 **Checkpoint**: US1–US5 funcionais.

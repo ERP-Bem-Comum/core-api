@@ -27,6 +27,10 @@ import type { listUsers } from '../../application/use-cases/list-users.ts';
 import type { getUser } from '../../application/use-cases/get-user.ts';
 import type { createUserByAdmin } from '../../application/use-cases/create-user-by-admin.ts';
 import type { updateUserProfile } from '../../application/use-cases/update-user-profile.ts';
+import type {
+  activateUser,
+  deactivateUser,
+} from '../../application/use-cases/activate-deactivate-user.ts';
 import type { UserStatusFilter } from '../../application/ports/user-query.ts';
 import {
   userListQuerySchema,
@@ -44,6 +48,8 @@ export type UsersHttpDeps = Readonly<{
   getUser: ReturnType<typeof getUser>;
   createUserByAdmin: ReturnType<typeof createUserByAdmin>;
   updateUserProfile: ReturnType<typeof updateUserProfile>;
+  activateUser: ReturnType<typeof activateUser>;
+  deactivateUser: ReturnType<typeof deactivateUser>;
 }>;
 
 export type UsersHttpHooks = Readonly<{
@@ -59,6 +65,8 @@ const USER_LIST_PERMISSION = 'user:list';
 const USER_READ_PERMISSION = 'user:read';
 const USER_CREATE_PERMISSION = 'user:create';
 const USER_UPDATE_PERMISSION = 'user:update';
+const USER_ACTIVATE_PERMISSION = 'user:activate';
+const USER_DEACTIVATE_PERMISSION = 'user:deactivate';
 
 // Erros de validacao de campo (VOs) -> 422; compartilhado por POST e PUT.
 const FIELD_VALIDATION_STATUS = {
@@ -200,6 +208,64 @@ const usersRoutes =
           });
         }
         // Detalhe atualizado com a mesma shape do GET /:id (massApprovalPermission etc.).
+        const detail = await deps.getUser(req.params.id);
+        return sendResult(reply, detail, {
+          ok: 200,
+          errors: { 'user-id-invalid': 400, 'user-not-found': 404 },
+        });
+      },
+    });
+
+    // US5: PATCH /users/:id/deactivate — desativar (idempotente; anti auto-lockout).
+    scope.route({
+      method: 'PATCH',
+      url: '/users/:id/deactivate',
+      preHandler: [hooks.requireAuth, hooks.authorize(USER_DEACTIVATE_PERMISSION)],
+      schema: {
+        params: userIdParamSchema,
+        response: { 200: userDetailResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        // actorId do JWT (requireAuth), NUNCA do body — alimenta cannot-deactivate-self.
+        const result = await deps.deactivateUser({ actorId: req.userId, targetId: req.params.id });
+        if (!result.ok) {
+          return sendResult(reply, result, {
+            errors: {
+              'user-id-invalid': 400,
+              'user-not-found': 404,
+              'cannot-deactivate-self': 422,
+              'user-repo-unavailable': 503,
+            },
+          });
+        }
+        const detail = await deps.getUser(req.params.id);
+        return sendResult(reply, detail, {
+          ok: 200,
+          errors: { 'user-id-invalid': 400, 'user-not-found': 404 },
+        });
+      },
+    });
+
+    // US5: PATCH /users/:id/activate — reativar (idempotente).
+    scope.route({
+      method: 'PATCH',
+      url: '/users/:id/activate',
+      preHandler: [hooks.requireAuth, hooks.authorize(USER_ACTIVATE_PERMISSION)],
+      schema: {
+        params: userIdParamSchema,
+        response: { 200: userDetailResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.activateUser({ targetId: req.params.id });
+        if (!result.ok) {
+          return sendResult(reply, result, {
+            errors: {
+              'user-id-invalid': 400,
+              'user-not-found': 404,
+              'user-repo-unavailable': 503,
+            },
+          });
+        }
         const detail = await deps.getUser(req.params.id);
         return sendResult(reply, detail, {
           ok: 200,
