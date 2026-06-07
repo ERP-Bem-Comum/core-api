@@ -141,24 +141,28 @@ export const buildApp = async (opts: BuildAppOptions = {}): Promise<FastifyAppWi
     },
   });
 
-  // --- OpenAPI 3.1.1 (ADR-0027, CA6) ---
-  await app.register(swagger, {
-    openapi: {
-      openapi: '3.1.1',
-      info: {
-        title: 'core-api',
-        description: 'ERP Bem Comum — core-api HTTP',
-        version: '0.1.0',
+  // --- OpenAPI 3.1.1 (ADR-0027, CA6) — DEV-ONLY ---
+  // A doc (/docs, /docs/json) expoe o mapa completo da API; mantida em dev/homolog (utilidade),
+  // mas NUNCA em producao (nao entregar superficie de ataque). Gate por NODE_ENV (F1, security audit).
+  if (process.env['NODE_ENV'] !== 'production') {
+    await app.register(swagger, {
+      openapi: {
+        openapi: '3.1.1',
+        info: {
+          title: 'core-api',
+          description: 'ERP Bem Comum — core-api HTTP',
+          version: '0.1.0',
+        },
       },
-    },
-    transform: fastifyZodOpenApiTransformers.transform,
-    transformObject: fastifyZodOpenApiTransformers.transformObject,
-  });
+      transform: fastifyZodOpenApiTransformers.transform,
+      transformObject: fastifyZodOpenApiTransformers.transformObject,
+    });
 
-  // swagger-ui serve /docs e /docs/json (CA6)
-  await app.register(swaggerUi, {
-    routePrefix: '/docs',
-  });
+    // swagger-ui serve /docs e /docs/json (CA6)
+    await app.register(swaggerUi, {
+      routePrefix: '/docs',
+    });
+  }
 
   // --- Hook onRequest: request-id → AsyncLocalStorage (ADR-0025:38) ---
   app.addHook('onRequest', (req, _reply, done) => {
