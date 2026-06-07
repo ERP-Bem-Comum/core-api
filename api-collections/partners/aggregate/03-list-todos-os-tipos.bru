@@ -1,0 +1,51 @@
+meta {
+  name: partners aggregate lista todos os tipos
+  type: http
+  seq: 72
+}
+
+get {
+  url: {{baseUrl}}/api/v1/partners
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operatorToken}}
+}
+
+params:query {
+  page: 1
+  limit: 20
+}
+
+tests {
+  test("US-001 — GET /partners retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("US-001 — body tem campo items (array)", function () {
+    const body = res.getBody();
+    expect(body).to.have.property("items");
+    expect(body.items).to.be.an("array");
+  });
+
+  test("US-001 — body tem campo meta com paginacao", function () {
+    const meta = res.getBody().meta;
+    expect(meta).to.have.property("itemCount");
+    expect(meta).to.have.property("totalItems");
+    expect(meta).to.have.property("itemsPerPage");
+    expect(meta).to.have.property("totalPages");
+    expect(meta).to.have.property("currentPage");
+  });
+
+  test("US-001 — cada item tem type, id, name, document e active", function () {
+    const items = res.getBody().items;
+    items.forEach(function (item) {
+      expect(item).to.have.property("type");
+      expect(item).to.have.property("id");
+      expect(item).to.have.property("name");
+      expect(item).to.have.property("document");
+      expect(item).to.have.property("active");
+    });
+  });
+}

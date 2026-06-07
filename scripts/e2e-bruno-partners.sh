@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 # scripts/e2e-bruno-partners.sh — smoke E2E HTTP via Bruno (.bru) para toda a borda /api/v1 do modulo partners.
 #
-# Cobertura: suppliers (CRUD + export CSV + service-categories), financiers (CRUD),
-#            collaborators (CRUD + complete-registration + import CSV),
-#            territory (partner-states + partner-municipalities).
+# Cobertura: suppliers (CRUD + export CSV + service-categories), financiers (CRUD + export CSV),
+#            collaborators (CRUD + complete-registration + import CSV + export CSV),
+#            acts (export CSV), territory (partner-states + partner-municipalities),
+#            aggregate (GET /partners paginado com AND-4-reads).
 # Subtitui: scripts/e2e-collaborators.sh (cobertura de collaborators migrada para a colecao Bruno).
 #
 # Espelha o padrao de scripts/e2e-collaborators.sh (mesmo trap/cleanup, secrets efemeros, MYSQL_PORT,
 # compose --wait, server em background, seed RBAC) — mas roda a colecao Bruno via `bru run`.
 # auth/contracts ficam em memory; partners=mysql (RW split: writer=root, reader=readonly_bi, banco `core`).
-# O operador tem supplier:read+write, financier:read+write, collaborator:read+write,
+# O operador tem supplier:read+write, financier:read+write, collaborator:read+write, act:read+write,
 # geography:read+write (seed RBAC via AUTH_SEED_JSON).
+# As 4 reads (supplier+financier+collaborator+act) sao necessarias para o agregador GET /partners.
 #
 # PRE-REQUISITO: `bru` CLI disponivel — NAO usar npm (ADR-0012).
 #   Verificacao: bru --version
@@ -72,7 +74,7 @@ PARTNERS_DRIVER=mysql \
   PARTNERS_DATABASE_URL="mysql://root:rootpw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core" \
   PARTNERS_READER_URL="mysql://readonly_bi:ropw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core" \
   CORE_API_E2E=1 \
-  AUTH_SEED_JSON='{"users":[{"email":"e2e-partners@example.com","password":"Str0ng-Passphrase-2026!","permissions":["supplier:read","supplier:write","financier:read","financier:write","collaborator:read","collaborator:write","geography:read","geography:write"]},{"email":"e2e-bare@example.com","password":"Str0ng-Passphrase-2026!","permissions":[]}]}' \
+  AUTH_SEED_JSON='{"users":[{"email":"e2e-partners@example.com","password":"Str0ng-Passphrase-2026!","permissions":["supplier:read","supplier:write","financier:read","financier:write","collaborator:read","collaborator:write","act:read","act:write","geography:read","geography:write"]},{"email":"e2e-bare@example.com","password":"Str0ng-Passphrase-2026!","permissions":[]}]}' \
   PORT=3100 \
   LOG_LEVEL=warn \
   node --experimental-strip-types --enable-source-maps --no-warnings src/server.ts &
@@ -99,21 +101,34 @@ export E2E_SEED_PASSWORD="Str0ng-Passphrase-2026!"
 # Monta o comando bru run.
 # O `bru` exige cwd = raiz da colecao (onde esta o bruno.json); `bru run <subpath>` falha com
 # "You can run only at the root of a collection". Por isso entramos na colecao via subshell.
-# --env local: usa environments/local.bru (baseUrl + emails). -r: recursivo (auth/, suppliers/, financiers/).
+# --env local: usa environments/local.bru (baseUrl + emails).
+#
+# ORDEM DAS PASTAS: o Bruno com -r descobre pastas em ordem alfabetica. Com as novas subpastas
+# acts/ e aggregate/ (letras 'a'), elas rodariam ANTES de auth/, e os tokens nao estariam
+# disponíveis. Para garantir que auth/ rode primeiro (e o token fique em bru.vars), as pastas
+# sao executadas explicitamente em sequencia correta usando `bru run <pasta>` individual.
+# Pastas executadas:
+#   auth/        (seq 1-4)   — semeia bareUserToken + operatorToken
+#   suppliers/   (seq 10-19) — CRUD + export + categories
+#   financiers/  (seq 20-29) — CRUD + export
+#   collaborators/ (seq 30-44) — CRUD + complete + import + export
+#   territory/   (seq 50-59) — states + municipalities
+#   acts/        (seq 60-61) — export
+#   aggregate/   (seq 70-77) — GET /partners agregador
 COLLECTION_DIR="api-collections/partners"
-# -r: recursivo (auth/, suppliers/, financiers/, collaborators/, territory/).
-# A ordem de execucao segue os numeros seq dentro de cada pasta; as pastas rodam na ordem
-# em que o bru as descobre (alfabetica). auth/ tem seq 1-4, financiers/ 20-27,
-# collaborators/ 30-42, territory/ 50-59.
-BRU_ARGS=(run . --env local -r)
+FOLDERS=(auth suppliers financiers collaborators territory acts aggregate)
 
 # Flags de reporte JUnit opcionais (E2E_JUNIT_REPORT=1) — caminho ABSOLUTO (cwd muda no subshell).
+JUNIT_ARGS=()
 if [ "${E2E_JUNIT_REPORT:-0}" = "1" ]; then
   REPORT_DIR="$(pwd)/test-results"
   mkdir -p "$REPORT_DIR"
-  BRU_ARGS+=(--reporter-junit "$REPORT_DIR/bruno-partners.xml")
+  JUNIT_ARGS=(--reporter-junit "$REPORT_DIR/bruno-partners.xml")
   echo "[e2e-bruno-partners] Reporter JUnit ativo: $REPORT_DIR/bruno-partners.xml"
 fi
 
-echo "[e2e-bruno-partners] Executando: (cd $COLLECTION_DIR && bru ${BRU_ARGS[*]})"
-( cd "$COLLECTION_DIR" && bru "${BRU_ARGS[@]}" )
+echo "[e2e-bruno-partners] Executando colecao em ${#FOLDERS[@]} pastas (ordem: ${FOLDERS[*]})"
+for folder in "${FOLDERS[@]}"; do
+  echo "[e2e-bruno-partners] --- Pasta: $folder/"
+  ( cd "$COLLECTION_DIR" && bru run "$folder" --env local "${JUNIT_ARGS[@]}" )
+done

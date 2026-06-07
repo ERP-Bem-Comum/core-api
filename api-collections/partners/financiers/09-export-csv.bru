@@ -1,0 +1,35 @@
+meta {
+  name: export financiers csv
+  type: http
+  seq: 28
+}
+
+get {
+  url: {{baseUrl}}/api/v1/financiers/export
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operatorToken}}
+}
+
+tests {
+  test("US-002 — GET /financiers/export retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("US-002 — content-type eh text/csv", function () {
+    const ct = res.getHeader("content-type");
+    expect(ct).to.include("text/csv");
+  });
+
+  test("US-002 — header content-disposition eh attachment", function () {
+    const cd = res.getHeader("content-disposition");
+    expect(cd).to.include("attachment");
+    expect(cd).to.include(".csv");
+  });
+
+  test("US-002 — header x-content-type-options presente", function () {
+    expect(res.getHeader("x-content-type-options")).to.equal("nosniff");
+  });
+}
