@@ -3,9 +3,9 @@
   "ticket": "CTR-HTTP-CONTRACT-DETAIL-CONTRACTOR",
   "size": "M",
   "createdAt": "2026-06-02T17:44:01.934Z",
-  "closedAt": null,
-  "currentWave": "W0",
-  "status": "in-progress",
+  "closedAt": "2026-06-07T02:26:20.068Z",
+  "currentWave": null,
+  "status": "superseded",
   "waves": [
     {
       "id": "W0",
@@ -49,5 +49,6 @@
     }
   ],
   "blockers": [],
-  "lastEvent": "W0 started (tdd-strategist)"
+  "lastEvent": "superseded by CONTRACTS-DETAIL-COMPOSITION-HTTP",
+  "supersededBy": "CONTRACTS-DETAIL-COMPOSITION-HTTP"
 }

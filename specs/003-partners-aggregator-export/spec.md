@@ -10,8 +10,9 @@
 
 > **Épico (melhorias, não-bloqueador).** Continuação da família partners `/api/v1` — a spec `001` entregou
 > import/territorial/export-suppliers/categorias/filtros; a spec `002` (contracts) entregou o vínculo de
-> contratado que **consome** o agregador desta spec. Aqui fechamos os ITENs 3 e 4 do `po-feedback`/ticket do
-> front. **Estende** o módulo `partners` (borda já habilitada por ADR-0025/0033); não inaugura HTTP. Não altera
+> contratado que **consome** o agregador desta spec. Aqui fechamos gaps de partners `/api/v1` do
+> `web-app/specs/008-partners/api-readiness-report.md` (mesmo report da spec `001`; ITENs 3 e 4 do ticket do
+> front). **Estende** o módulo `partners` (borda já habilitada por ADR-0025/0033); não inaugura HTTP. Não altera
 > o frontend — entrega a superfície que o BFF/cliente consome.
 
 ## Glossário / Linguagem ubíqua

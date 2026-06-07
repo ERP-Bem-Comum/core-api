@@ -5,7 +5,7 @@
 **Input**: Feature specification from `specs/003-partners-aggregator-export/spec.md`
 
 > Plano do épico (melhorias P2/P3). Consolida `spec.md` (com as 2 decisões travadas no `/speckit-clarify`),
-> o `po-feedback/0001` (ITENs 3/4) e o recon do módulo `partners`. Constitution Check (I–IX). **Fatia em
+> o `api-readiness-report` do front (`web-app/specs/008-partners/`, ITENs 3/4) e o recon do módulo `partners`. Constitution Check (I–IX). **Fatia em
 > tickets W0→W3.**
 
 ## Summary
