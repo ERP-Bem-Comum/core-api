@@ -29,7 +29,7 @@
 
 - [ ] T005 [US1] W1: `src/modules/partners/adapters/http/partner-aggregate-query.ts` — projeção + filtro + merge (`Promise.all` dos 4 readers) + sort `(name,type,id)` + paginate + cap `MAX_TOTAL=10_000` (`Result`), funções puras (espelha `paginateRecords`)
 - [ ] T006 [US1] W1: `src/modules/partners/adapters/http/partners-schemas.ts` — Zod query `{ search?, type? (enum), page, limit (max 100) }` + response `PartnersPage`
-- [ ] T007 [US1] W1: `src/modules/partners/adapters/http/partners-plugin.ts` — rota `GET /partners`; `requireAuth` + `authorize` **AND** das 4 reads (`supplier`/`financier`/`collaborator`/`act:read`); mapeia cap→503; envelope
+- [ ] T007 [US1] W1: `src/modules/partners/adapters/http/partners-plugin.ts` — rota `GET /partners`; **AND das 4 reads via preHandlers encadeados** (`authorize` é single-perm — achado I1): `preHandler: [requireAuth, authorize('supplier:read'), authorize('financier:read'), authorize('collaborator:read'), authorize('act:read')]` (1º 403 corta); mapeia cap→503; envelope
 - [ ] T008 [US1] W1: wiring dos 4 readers no agregador em `src/modules/partners/adapters/http/composition.ts` + registro `{plugin, prefix:'/api/v1'}` em `src/server.ts`
 - [ ] T009 [US1] W2: review (security: AND-perms, sem vazamento; ddd: composição read-side ADR/Vernon; clean-code) + W3 gate verde + `pipeline:state close PARTNERS-AGGREGATOR-HTTP`
 
@@ -48,13 +48,16 @@
 - [ ] T012 [P] [US2] W0: `tests/modules/partners/adapters/export/act-csv.test.ts` — idem para `Act` (RED)
 - [ ] T013 [P] [US2] W0: `tests/modules/partners/adapters/http/partners-export-parity.routes.test.ts` — `GET /collaborators|financiers|acts/export` via `fastify.inject`: 200 text/csv + `Content-Disposition` + `nosniff`; respeita filtros; 403 sem `<tipo>:read`; 401 sem sessão (RED)
 
+> ⚠️ **Achado U1 do `/speckit-analyze`**: só `supplier-list-query.ts` tem `*ForExport`. `financier`/`collaborator` têm `queryToFilter` (aplicar à lista para o export); **`act` não tem `act-list-query.ts`** (criar filtro mínimo). Refletido em T014a/T016–T018.
+
 ### W1 (impl)
 
 - [ ] T014 [P] [US2] W1: `src/modules/partners/adapters/export/financier-csv.ts` — serializer espelhando `supplier-csv.ts` (`toCsv` + HEADER fixo)
 - [ ] T015 [P] [US2] W1: `src/modules/partners/adapters/export/act-csv.ts` — idem para `Act`
-- [ ] T016 [US2] W1: rota `GET /collaborators/export` (reusa `collaborator-csv.ts`) em `plugin.ts`; `authorize('collaborator:read')` + headers CSV
-- [ ] T017 [US2] W1: rota `GET /financiers/export` em `financier-plugin.ts`; `authorize('financier:read')` + headers CSV
-- [ ] T018 [US2] W1: rota `GET /acts/export` em `act-plugin.ts`; `authorize('act:read')` + headers CSV
+- [ ] T014a [P] [US2] W1: criar `act-list-query.ts` (`queryToFilter` + filtro mínimo p/ export, espelhando os demais `*-list-query.ts`); financier/collaborator REUSAM o `queryToFilter` existente (aplicar à lista — não há `*ForExport` pré-pronto)
+- [ ] T016 [US2] W1: rota `GET /collaborators/export` em `plugin.ts` — `queryToFilter` (collaborator-list-query) → lista filtrada → `collaborator-csv.ts` (já existe); `authorize('collaborator:read')` + headers CSV
+- [ ] T017 [US2] W1: rota `GET /financiers/export` em `financier-plugin.ts` — `queryToFilter` (financier-list-query) → `financier-csv.ts`; `authorize('financier:read')` + headers CSV
+- [ ] T018 [US2] W1: rota `GET /acts/export` em `act-plugin.ts` — filtro de `act-list-query.ts` (T014a) → `act-csv.ts`; `authorize('act:read')` + headers CSV
 - [ ] T019 [US2] W2: review (security: exposição de dado/PII no export, escape; clean-code: DRY dos serializers) + W3 gate verde + `pipeline:state close PARTNERS-EXPORT-PARITY-HTTP`
 
 **Checkpoint**: US2 completa — 4/4 tipos têm export CSV.
