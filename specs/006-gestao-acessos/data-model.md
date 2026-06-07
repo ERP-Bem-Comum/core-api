@@ -6,19 +6,24 @@ Estende `auth/domain/authorization`. Tudo em `auth_*` (ADR-0014). Reusa `Permiss
 
 ## Agregado: `Role` (estendido)
 
-| Campo         | Tipo (domínio)                | Persistência                     | Regra / Invariante                           |
-| ------------- | ----------------------------- | -------------------------------- | -------------------------------------------- |
-| `id`          | `RoleId` (branded, já existe) | `auth_roles.id varchar(36)` PK   | UUID v4.                                     |
-| `name`        | `RoleName` (VO novo)          | `auth_roles.name varchar UNIQUE` | Único, normalizado (trim/case).              |
-| `permissions` | `readonly Permission[]`       | junção `auth_role_permissions`   | Cada item deve existir no **catálogo fixo**. |
-| `active`      | `boolean` (novo)              | `auth_roles.active tinyint(1)`   | Inativo ⇒ não-atribuível.                    |
+> **Tabelas já existem** (`mysql.ts`): `auth_role` (:75), `auth_role_permission` (:143), `auth_user_role`
+> (:181), `auth_permission` (:50). Esta feature **estende** `auth_role` (adiciona status) e adiciona
+> operações ao agregado — não cria tabelas.
+
+| Campo         | Tipo (domínio)                      | Persistência (`auth_role`)                   | Regra / Invariante                               |
+| ------------- | ----------------------------------- | -------------------------------------------- | ------------------------------------------------ |
+| `id`          | `RoleId` (branded, já existe)       | `id varchar(36)` PK (existe)                 | UUID v4.                                         |
+| `name`        | `RoleName` (VO novo)                | `name varchar(64)` UNIQUE (existe)           | Único (`auth_role_name_idx`), normalizado.       |
+| `description` | `string \| null` (já existe)        | `description varchar(255)` (existe)          | Opcional.                                        |
+| `permissions` | `readonly Permission[]`             | junção `auth_role_permission` (existe)       | Cada item deve existir no catálogo (FK).         |
+| `status`      | `'active' \| 'archived'` (**novo**) | `status varchar(16)` + CHECK (**migration**) | `archived` ⇒ não-atribuível. Padrão `auth_user`. |
 
 ### Operações (puras → `Result<Role, RoleError>`)
 
-- `Role.create(name, permissions)` → valida nome único (no use case) + permissões ⊆ catálogo; `RoleCreated`.
-- `Role.rename(role, name)` → `RolePermissionsChanged`? não — renomeação; valida unicidade.
+- `Role.create(name, permissions)` → valida nome único (no use case) + permissões ⊆ catálogo; nasce `active`; `RoleCreated`.
+- `Role.rename(role, name)` → renomeação; valida unicidade (no use case); `RoleRenamed`.
 - `Role.setPermissions(role, perms)` → substitui o conjunto (perms ⊆ catálogo); `RolePermissionsChanged`.
-- `Role.deactivate(role, isInUse)` → se `isInUse` ⇒ erro `role-in-use` (bloqueia, FR-012); senão `active=false` + `RoleDeactivated`.
+- `Role.archive(role, isInUse)` → se `isInUse` ⇒ erro `role-in-use` (bloqueia, FR-012); senão `status='archived'` + `RoleArchived`. (verbo de negócio: "desativar")
 
 ---
 
@@ -53,12 +58,13 @@ User ──< auth_user_roles >── Role ──< auth_role_permissions >── 
 
 ## Eventos de domínio (outbox — ADR-0015)
 
-| Evento                     | Quando                           |
-| -------------------------- | -------------------------------- |
-| `RoleCreated`              | criação de papel                 |
-| `RolePermissionsChanged`   | edição do conjunto de permissões |
-| `RoleDeactivated`          | desativação de papel             |
-| `RoleAssigned` (já existe) | atribuição a usuário             |
-| `RoleRevokedFromUser`      | revogação de papel de usuário    |
+| Evento                     | Quando                                |
+| -------------------------- | ------------------------------------- |
+| `RoleCreated`              | criação de papel                      |
+| `RoleRenamed`              | renomeação de papel                   |
+| `RolePermissionsChanged`   | edição do conjunto de permissões      |
+| `RoleArchived`             | arquivamento ("desativação") de papel |
+| `RoleAssigned` (já existe) | atribuição a usuário                  |
+| `RoleRevokedFromUser`      | revogação de papel de usuário         |
 
 Consumidor provável: AuditLog (diferido até identidade/RBAC — agora habilitado, ADR-0024/0022).

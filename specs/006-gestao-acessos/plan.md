@@ -84,11 +84,17 @@ tests/modules/auth/
 
 ## Migrations Drizzle (core-api)
 
-- **Mudanças de schema**: [x] tabelas (`auth_roles` se ainda não existir; junções `auth_role_permissions`, `auth_user_roles`) · [x] coluna `active` em `auth_roles` · [x] índices (nome único de papel; lookups de junção) · [x] FKs internas ao `auth_*`
+> **⚠️ Tabelas RBAC já existem** em `src/modules/auth/adapters/persistence/schemas/mysql.ts`:
+> `auth_permission` (:50), `auth_role` (:75), `auth_role_permission` (:143), `auth_user_role` (:181),
+> com unicidade de nome e CHECK de formato. `role-repository.drizzle.ts` já implementa o repositório.
+> **Esta feature NÃO cria essas tabelas** — reusa e estende.
+
+- **Mudanças de schema**: [x] **única**: adicionar status de ciclo de vida a `auth_role` (hoje só tem `id, name, description, created_at, updated_at` — sem `active`). Seguir o padrão do `auth_user`: **`status varchar(16)` + CHECK `IN ('active','archived')`**, não boolean (ADR-0020, consistência com `auth_user_status_chk`). · [ ] tabelas novas (nenhuma) · [ ] junções novas (já existem)
 - **Prefixo de isolamento correto?** `auth_*` — ADR-0014: **sim**
-- **Outbox**: novos eventos (`RoleCreated`, `RolePermissionsChanged`, `RoleDeactivated`, `RoleRevokedFromUser`) → `INSERT` em `core.outbox`: **sim**
+- **Outbox**: novos eventos (`RoleCreated`, `RolePermissionsChanged`, `RoleDeactivated`, `RoleRevokedFromUser`) → `INSERT` em `core.outbox`: **sim** (hoje os use cases do auth retornam evento no output, sem publicar — confirmar wiring de outbox no W1).
+- **Catálogo de permissões**: a tabela `auth_permission` é o **espelho persistido** (necessária para a FK de `auth_role_permission`); a **fonte** é o código (`permission-catalog.ts`), seedado/upserted na tabela. Não há CRUD de permissão em runtime (FR-011).
 - **Comando**: `pnpm run db:generate` após editar `schema.ts`; conferir CHARSET/COLLATE e FKs à mão (ADR-0020).
-- **Restrições MySQL 8** (ADR-0020): permissões de papel como linhas de junção (`varchar resource:action`), **não** JSON/ENUM; `active` como `tinyint`.
+- **Restrições MySQL 8** (ADR-0020): permissões de papel como linhas de junção (já modeladas), **não** JSON/ENUM; status como `varchar`+CHECK (não ENUM nativo).
 
 ## Contrato HTTP (Fase 2+ — ativo via ADR-0025)
 
