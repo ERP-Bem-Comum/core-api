@@ -1,0 +1,21 @@
+meta {
+  name: US5 deactivate sem permissao (bare)
+  type: http
+  seq: 55
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/users/{{userId}}/deactivate
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{bareToken}}
+}
+
+tests {
+  test("SEC — sem user:deactivate -> 403 (fail-closed; simetria RBAC US5)", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}

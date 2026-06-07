@@ -1,0 +1,16 @@
+meta {
+  name: US1 list sem token
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users
+  auth: none
+}
+
+tests {
+  test("SEC — sem sessao -> 401 (fail-closed)", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}

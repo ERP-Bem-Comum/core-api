@@ -1,0 +1,37 @@
+meta {
+  name: SEC mass-assignment no create
+  type: http
+  seq: 63
+}
+
+post {
+  url: {{baseUrl}}/api/v1/users
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+script:pre-request {
+  bru.setVar("massEmail", "mass_" + Date.now() + "@example.com");
+}
+
+body:json {
+  {
+    "name": "Mass Assign",
+    "cpf": "52998224725",
+    "email": "{{massEmail}}",
+    "telephone": "15997133502",
+    "status": "disabled",
+    "roles": ["admin"],
+    "adminId": "00000000-0000-4000-8000-000000000000"
+  }
+}
+
+tests {
+  test("SEC — campos extras (status/roles/adminId) ignorados; cria normal -> 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+}

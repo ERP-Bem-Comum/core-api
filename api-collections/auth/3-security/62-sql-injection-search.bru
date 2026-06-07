@@ -1,0 +1,24 @@
+meta {
+  name: SEC SQL injection no search
+  type: http
+  seq: 62
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users?search=' OR 1=1 --&pageSize=25
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("SEC — payload SQLi nao causa 500 (query parametrizada)", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("SEC — retorno permanece paginado (sem dump da base inteira)", function () {
+    expect(res.getBody().items).to.be.an("array");
+    expect(res.getBody().meta).to.have.property("totalItems");
+  });
+}

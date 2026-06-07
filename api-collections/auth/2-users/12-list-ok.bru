@@ -1,0 +1,29 @@
+meta {
+  name: US1 list admin
+  type: http
+  seq: 12
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users?pageSize=5
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("CA — 200 com items e meta", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().items).to.be.an("array");
+    expect(res.getBody().meta).to.have.property("currentPage");
+    expect(res.getBody().meta).to.have.property("totalItems");
+  });
+  test("SEC — item de lista nao expoe cpf/telephone/passwordHash", function () {
+    const item = res.getBody().items[0] || {};
+    expect(item).to.not.have.property("cpf");
+    expect(item).to.not.have.property("telephone");
+    expect(item).to.not.have.property("passwordHash");
+  });
+}

@@ -1,0 +1,30 @@
+meta {
+  name: US3 create email invalido
+  type: http
+  seq: 25
+}
+
+post {
+  url: {{baseUrl}}/api/v1/users
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "Email Ruim",
+    "cpf": "52998224725",
+    "email": "nao-eh-email",
+    "telephone": "15997133502"
+  }
+}
+
+tests {
+  test("CA — email mal formado -> 422", function () {
+    expect(res.getStatus()).to.equal(422);
+  });
+}

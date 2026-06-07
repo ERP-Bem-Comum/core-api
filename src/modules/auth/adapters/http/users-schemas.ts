@@ -22,7 +22,7 @@ export const userListQuerySchema = z.object({
       message: 'pageSize deve ser 5, 10 ou 25',
     })
     .default(5),
-  search: z.string().min(1).optional(),
+  search: z.string().min(1).max(128).optional(),
   status: userStatusQuerySchema,
 });
 

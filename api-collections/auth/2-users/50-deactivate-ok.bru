@@ -1,0 +1,22 @@
+meta {
+  name: US5 deactivate
+  type: http
+  seq: 50
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/users/{{userId}}/deactivate
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("CA — desativa -> 200 e detalhe active=false", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().active).to.equal(false);
+  });
+}
