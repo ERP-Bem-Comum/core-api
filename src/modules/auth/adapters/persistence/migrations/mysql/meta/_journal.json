@@ -43,6 +43,13 @@
       "when": 1780826474694,
       "tag": "0005_old_black_panther",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1780848120912,
+      "tag": "0006_outstanding_xavin",
+      "breakpoints": true
     }
   ]
 }

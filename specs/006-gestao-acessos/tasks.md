@@ -45,7 +45,7 @@
 - [x] T007 [P] VO `RoleName` em `src/modules/auth/domain/authorization/role-name.ts` (branded + smart constructor `Result`). ✅ `AUTH-ROLE-NAME-VO`
 - [ ] T008 Estender o agregado em `src/modules/auth/domain/authorization/role.ts`: campo `status` (`active`/`archived`); funções `create`, `rename`, `setPermissions` (⊆ catálogo), `archive(isInUse)`. (depende de T006, T007)
 - [ ] T009 Eventos em `src/modules/auth/domain/authorization/events.ts`: `RoleCreated`, `RoleRenamed`, `RolePermissionsChanged`, `RoleArchived`, `RoleRevokedFromUser`. (depende de T008)
-- [ ] T010 Migration: adicionar `status varchar(16)` + CHECK `IN ('active','archived')` em `auth_role` (schema + `pnpm run db:generate`); seed/upsert do catálogo em `auth_permission`. (depende de T008)
+- [~] T010 Migration: adicionar `status varchar(16)` + CHECK `IN ('active','archived')` em `auth_role` (schema + `pnpm run db:generate:auth`); ~~seed/upsert do catálogo em `auth_permission`~~. (depende de T008) — DDL ✅ `AUTH-ROLE-SCHEMA-STATUS` (migration `0006`, validada em MySQL real). **Seed deferido a T048** (DML, polish).
 - [ ] T011 Estender `role-repository` (`.drizzle.ts` + `.in-memory.ts`) com `create`/`update`/`archive`/`listAll` e checagem "papel em uso" (junção `auth_user_role`). (depende de T008, T010)
 
 **Checkpoint**: catálogo, VO, status e agregado prontos.
