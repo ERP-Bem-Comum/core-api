@@ -38,10 +38,10 @@
     8. Coleção Bruno `api-collections/users/list/*.bru` (`bru run` = pendência Docker).
     - **Templates exatos a espelhar:** `partners/adapters/http/supplier-plugin.ts` (rota), `supplier-list-query.ts` (parse query→filtro+paginação), e o registro em `src/server.ts:100-143`.
 
-### Fase 2 — US2 Detalhe (P1)
+### Fase 2 — US2 Detalhe (P1) ✅
 
-- [ ] `AUTH-USECASE-GET-USER` — use case `get-user` (perfil + mass-approve read-only) (T024–T025)
-- [ ] `AUTH-HTTP-GET-USER` — rota `GET /api/v1/users/:id` + Bruno `users/detail/` (T026–T027)
+- [x] `AUTH-GET-USER` — use case `get-user` (perfil + mass-approve read-only das roles) **+** rota `GET /api/v1/users/:id` (combinados; reusa `UserReader.findById`, sem Drizzle novo) (T024/T025/T026) ✅ closed-green · 9 testes (use case + inject)
+  - [ ] coleção Bruno `users/detail/` (T027, pendência Docker)
 
 ### Fase 3 — US3 Criar + convite (P2)
 
@@ -87,3 +87,4 @@
 - **2026-06-07** — Fase 0 concluída (ADR-0037 + 4 tickets Foundational closed-green). Roadmap criado. Iniciando Fase 1 (US1).
 - **2026-06-07** — `AUTH-USECASE-LIST-USERS` closed-green (port `UserQuery` + use case `list-users` + adapter in-memory; 12 testes; gate 2313 pass). Fase 1 parte 1/2. Próximo: `AUTH-HTTP-LIST-USERS`.
 - **2026-06-07** — `AUTH-HTTP-LIST-USERS` closed-green. Rota `GET /api/v1/users` (plugin Zod/OpenAPI + RBAC `user:list`) + adapter Drizzle `UserQuery` + índice `auth_user_name_idx` (migration 0005) + wiring (composition/public-api/server.ts). Testada via `fastify.inject` (8 CAs); gate 2321 pass. **Designs consultados com `drizzle-orm-expert` e `fastify-server-expert`** (ancorados no handbook). **US1 (listar) entregue na borda HTTP.** Pendências: coleção Bruno (T023) + `test:integration:auth` (Docker). Próximo: **US2** (`AUTH-USECASE-GET-USER` → `AUTH-HTTP-GET-USER`).
+- **2026-06-07** — `AUTH-GET-USER` closed-green (US2 combinada: use case + rota num ticket). `getUser` reusa `UserReader.findById` (sem Drizzle novo); `massApprovalPermission` das roles; rota `GET /api/v1/users/:id` (`user:read`, 400/404). 9 testes (5 use case + 4 inject); gate **2330 pass**. **US2 (detalhe) entregue.** Pendência: Bruno `users/detail/`. Próximo: **US3** (criar + convite por email).

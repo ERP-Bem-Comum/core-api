@@ -51,3 +51,21 @@ export const userListResponseSchema = z.object({
 });
 
 export type UserListResponse = z.infer<typeof userListResponseSchema>;
+
+/** Param do GET /api/v1/users/:id. */
+export const userIdParamSchema = z.object({ id: z.string().min(1) });
+
+/** Response 200 do GET /api/v1/users/:id (detalhe — spec 005 US2). */
+export const userDetailResponseSchema = z.object({
+  id: z.string(),
+  name: z.string().nullable(),
+  email: z.string(),
+  cpf: z.string().nullable(),
+  telephone: z.string().nullable(),
+  imageUrl: z.string().nullable(),
+  active: z.boolean(),
+  massApprovalPermission: z.boolean(),
+  collaboratorId: z.string().nullable(),
+});
+
+export type UserDetailResponse = z.infer<typeof userDetailResponseSchema>;

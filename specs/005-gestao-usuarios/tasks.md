@@ -101,12 +101,12 @@
 
 ### Tests RED
 
-- [ ] T024 [P] [US2] Suíte RED em `tests/modules/auth/application/use-cases/get-user.test.ts` (achado; não encontrado; inclui flag mass-approve lida do RBAC).
+- [x] T024 [P] [US2] Suíte RED em `tests/modules/auth/application/use-cases/get-user.test.ts` (achado; não encontrado; inclui flag mass-approve lida do RBAC).
 
 ### Implementação
 
-- [ ] T025 [US2] Use case em `src/modules/auth/application/use-cases/get-user.ts` (compõe perfil + permissão efetiva `contract:mass-approve` read-only). (depende de Phase 2)
-- [ ] T026 [US2] Rota `GET /api/v1/users/:id` em `src/modules/auth/adapters/http/` (404 sem vazar). (depende de T025)
+- [x] T025 [US2] Use case em `src/modules/auth/application/use-cases/get-user.ts` (compõe perfil + permissão efetiva `contract:mass-approve` read-only). (depende de Phase 2)
+- [x] T026 [US2] Rota `GET /api/v1/users/:id` em `src/modules/auth/adapters/http/` (404 sem vazar). (depende de T025)
 - [ ] T027 [P] [US2] Requests Bruno `api-collections/users/detail/` — `GET /api/v1/users/:id` (200 com todos os campos; 404 sem vazar). (depende de T026)
 
 **Checkpoint**: US1 + US2 funcionais.

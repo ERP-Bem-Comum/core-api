@@ -23,12 +23,19 @@ import { ok } from '#src/shared/primitives/result.ts';
 import { sendResult } from '#src/shared/http/reply.ts';
 
 import type { listUsers } from '../../application/use-cases/list-users.ts';
+import type { getUser } from '../../application/use-cases/get-user.ts';
 import type { UserStatusFilter } from '../../application/ports/user-query.ts';
-import { userListQuerySchema, userListResponseSchema } from './users-schemas.ts';
+import {
+  userListQuerySchema,
+  userListResponseSchema,
+  userIdParamSchema,
+  userDetailResponseSchema,
+} from './users-schemas.ts';
 
 export type UsersHttpDeps = Readonly<{
-  /** Use case ja instanciado pela composition — nao re-instanciar aqui. */
+  /** Use cases ja instanciados pela composition — nao re-instanciar aqui. */
   listUsers: ReturnType<typeof listUsers>;
+  getUser: ReturnType<typeof getUser>;
 }>;
 
 export type UsersHttpHooks = Readonly<{
@@ -41,10 +48,12 @@ const toStatusFilter = (httpStatus: 'active' | 'inactive' | 'all'): UserStatusFi
   httpStatus === 'inactive' ? 'disabled' : httpStatus;
 
 const USER_LIST_PERMISSION = 'user:list';
+const USER_READ_PERMISSION = 'user:read';
 
 const usersRoutes =
   (deps: UsersHttpDeps, hooks: UsersHttpHooks): FastifyPluginAsyncZodOpenApi =>
   async (scope) => {
+    // US1: GET /users — listagem paginada.
     scope.route({
       method: 'GET',
       url: '/users',
@@ -75,6 +84,24 @@ const usersRoutes =
         }
 
         return sendResult(reply, ok(result.value), { ok: 200 });
+      },
+    });
+
+    // US2: GET /users/:id — detalhe.
+    scope.route({
+      method: 'GET',
+      url: '/users/:id',
+      preHandler: [hooks.requireAuth, hooks.authorize(USER_READ_PERMISSION)],
+      schema: {
+        params: userIdParamSchema,
+        response: { 200: userDetailResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.getUser(req.params.id);
+        return sendResult(reply, result, {
+          ok: 200,
+          errors: { 'user-id-invalid': 400, 'user-not-found': 404 },
+        });
       },
     });
   };

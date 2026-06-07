@@ -41,6 +41,7 @@ import {
 import { changePassword } from '../../application/use-cases/change-password.ts';
 import { listUserPermissions } from '../../application/use-cases/list-user-permissions.ts';
 import { listUsers } from '../../application/use-cases/list-users.ts';
+import { getUser } from '../../application/use-cases/get-user.ts';
 import { requestPasswordReset } from '../../application/use-cases/request-password-reset.ts';
 import { confirmPasswordReset } from '../../application/use-cases/confirm-password-reset.ts';
 
@@ -137,6 +138,8 @@ export type AuthHttpDeps = Readonly<{
   confirmPasswordReset: ReturnType<typeof confirmPasswordReset>;
   /** Listagem administrativa de usuários (spec 005 US1, ADR-0037) — consumido por GET /api/v1/users. */
   listUsers: ReturnType<typeof listUsers>;
+  /** Detalhe administrativo de usuário (spec 005 US2) — consumido por GET /api/v1/users/:id. */
+  getUser: ReturnType<typeof getUser>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -387,6 +390,7 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
       clock,
     }),
     listUsers: listUsers({ userQuery: stores.userQuery }),
+    getUser: getUser({ userReader: stores.userReader }),
     verifyAccessToken: tokenIssuer.verifyAccessToken,
     sensitiveRateLimit: config.sensitiveRateLimit ?? DEFAULT_SENSITIVE_RATE_LIMIT,
     authorize: (permissionName: string): preHandlerAsyncHookHandler => {

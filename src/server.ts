@@ -143,10 +143,10 @@ const main = async (): Promise<void> => {
         }),
         prefix: '/api/v1',
       },
-      // Gestão de usuários (spec 005 US1, ADR-0037) → /api/v1/users.
+      // Gestão de usuários (spec 005 US1/US2, ADR-0037) → /api/v1/users[/:id].
       {
         plugin: usersHttpPlugin(
-          { listUsers: authDeps.listUsers },
+          { listUsers: authDeps.listUsers, getUser: authDeps.getUser },
           { requireAuth, authorize: authDeps.authorize },
         ),
         prefix: '/api/v1',
