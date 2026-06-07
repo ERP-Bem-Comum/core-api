@@ -36,4 +36,25 @@ export type UserDisabled = Readonly<{
   occurredAt: Date;
 }>;
 
-export type UserEvent = UserRegistered | PasswordChanged | RoleAssigned | UserDisabled;
+// Reativacao (par do UserDisabled). Spec 005 US5. Payload so metadados.
+export type UserEnabled = Readonly<{
+  type: 'UserEnabled';
+  userId: UserId;
+  occurredAt: Date;
+}>;
+
+// Edicao de perfil administrativo (spec 005). Payload so metadados - NUNCA os valores
+// editados (name/cpf/telephone sao dados pessoais; o evento carrega apenas userId).
+export type UserProfileUpdated = Readonly<{
+  type: 'UserProfileUpdated';
+  userId: UserId;
+  occurredAt: Date;
+}>;
+
+export type UserEvent =
+  | UserRegistered
+  | PasswordChanged
+  | RoleAssigned
+  | UserDisabled
+  | UserEnabled
+  | UserProfileUpdated;

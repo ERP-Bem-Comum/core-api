@@ -114,6 +114,13 @@ export const authUser = mysqlTable(
     // Proveniência de migração ETL (AUTH-ETL-USER-PROVISIONING): NULL = nativo;
     // não-NULL = id do usuário no sistema legado. UNIQUE (idempotência do bootstrap one-shot).
     legacyId: int('legacy_id'),
+    // Perfil administrativo (spec 005, AUTH-USER-PROFILE-AGG). Todos NULLABLE: register-user/OIDC
+    // criam sem perfil; create-user-by-admin preenche. CPF/telefone normalizados (so digitos).
+    name: varchar('name', { length: 128 }),
+    cpf: varchar('cpf', { length: 11 }),
+    telephone: varchar('telephone', { length: 13 }),
+    imageUrl: varchar('image_url', { length: 1024 }),
+    collaboratorId: varchar('collaborator_id', { length: 64 }),
   },
   (t) => [
     // CHECK: status restrito ao enum do domínio (Decisão 1 do blueprint).

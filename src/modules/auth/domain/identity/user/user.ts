@@ -13,18 +13,30 @@ import type { UserId } from '../user-id.ts';
 import type { Email } from '../email.ts';
 import type { PasswordHash } from '../../credential/password-hash.ts';
 import type { Role } from '../../authorization/role.ts';
+import type { Cpf } from '../cpf.ts';
+import type { Telephone } from '../telephone.ts';
+import type { ProfilePhotoRef } from '../profile-photo-ref.ts';
 import type { ActiveUser, DisabledUser, User } from './types.ts';
 import type { UserError } from './errors.ts';
-import type { UserRegistered, PasswordChanged, RoleAssigned, UserDisabled } from './events.ts';
+import type {
+  UserRegistered,
+  PasswordChanged,
+  RoleAssigned,
+  UserDisabled,
+  UserEnabled,
+  UserProfileUpdated,
+} from './events.ts';
 
 // Reexporta os tipos do agregado para consumo via namespace (`import * as User`).
-export type { ActiveUser, DisabledUser, User } from './types.ts';
+export type { ActiveUser, DisabledUser, User, UserProfile } from './types.ts';
 export type { UserError } from './errors.ts';
 export type {
   UserRegistered,
   PasswordChanged,
   RoleAssigned,
   UserDisabled,
+  UserEnabled,
+  UserProfileUpdated,
   UserEvent,
 } from './events.ts';
 
@@ -48,6 +60,12 @@ export const register = (
     email: input.email,
     passwordHash: input.passwordHash,
     roles: dedupeRoles(input.roles),
+    // Perfil vazio na criacao base (self-register/OIDC). create-user-by-admin preenche depois.
+    name: null,
+    cpf: null,
+    telephone: null,
+    photo: null,
+    collaboratorId: null,
     status: 'active' as const,
   });
   const event: UserRegistered = immutable({
@@ -102,6 +120,76 @@ export const assignRole = (
     type: 'RoleAssigned' as const,
     userId: user.id,
     roleId: role.id,
+    occurredAt: at,
+  });
+  return { user: next, event };
+};
+
+// ─── Perfil administrativo (spec 005) ──────────────────────────────────────────
+
+// Patch parcial de perfil: campo `undefined` mantem o valor atual; presente (inclusive
+// null em collaboratorId) sobrescreve. name/cpf/telephone ja chegam como VO/string validados.
+export type UpdateProfileInput = Readonly<{
+  name?: string;
+  cpf?: Cpf;
+  telephone?: Telephone;
+  collaboratorId?: string | null;
+}>;
+
+const profileEvent = (userId: UserId, at: Date): UserProfileUpdated =>
+  immutable({ type: 'UserProfileUpdated' as const, userId, occurredAt: at });
+
+// Aceita User (active ou disabled): admin pode editar o perfil de um usuario inativo.
+// Patch parcial: so as chaves presentes (!== undefined) sobrescrevem; null em collaboratorId
+// limpa o vinculo. Preserva o estado (status/disabledAt) via narrowing por discriminante.
+export const updateProfile = (
+  user: User,
+  patch: UpdateProfileInput,
+  at: Date,
+): Readonly<{ user: User; event: UserProfileUpdated }> => {
+  const fields = {
+    ...(patch.name !== undefined ? { name: patch.name } : {}),
+    ...(patch.cpf !== undefined ? { cpf: patch.cpf } : {}),
+    ...(patch.telephone !== undefined ? { telephone: patch.telephone } : {}),
+    ...(patch.collaboratorId !== undefined ? { collaboratorId: patch.collaboratorId } : {}),
+  };
+  const next: User =
+    user.status === 'active'
+      ? immutable({ ...user, ...fields })
+      : immutable({ ...user, ...fields });
+  return { user: next, event: profileEvent(user.id, at) };
+};
+
+export const setPhoto = (
+  user: User,
+  photo: ProfilePhotoRef | null,
+  at: Date,
+): Readonly<{ user: User; event: UserProfileUpdated }> => {
+  const next: User =
+    user.status === 'active' ? immutable({ ...user, photo }) : immutable({ ...user, photo });
+  return { user: next, event: profileEvent(user.id, at) };
+};
+
+// Reativacao: DisabledUser -> ActiveUser (par do `disable`). Idempotente no use case.
+export const enable = (
+  user: DisabledUser,
+  at: Date,
+): Readonly<{ user: ActiveUser; event: UserEnabled }> => {
+  const next: ActiveUser = immutable({
+    id: user.id,
+    email: user.email,
+    passwordHash: user.passwordHash,
+    roles: user.roles,
+    name: user.name,
+    cpf: user.cpf,
+    telephone: user.telephone,
+    photo: user.photo,
+    collaboratorId: user.collaboratorId,
+    status: 'active' as const,
+  });
+  const event: UserEnabled = immutable({
+    type: 'UserEnabled' as const,
+    userId: user.id,
     occurredAt: at,
   });
   return { user: next, event };
