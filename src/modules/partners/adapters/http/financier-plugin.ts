@@ -23,7 +23,8 @@ import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
 
 import type { PartnersHttpDeps } from './composition.ts';
 import { financierToDetailDto } from './financier-dto.ts';
-import { queryToFilter, paginateRecords } from './financier-list-query.ts';
+import { queryToFilter, paginateRecords, financiersForExport } from './financier-list-query.ts';
+import { financiersToCsv } from '../export/financier-csv.ts';
 import {
   financierListQuerySchema,
   financierPaginatedSchema,
@@ -104,6 +105,32 @@ const financiersRoutes =
           ok({ items: page.items.map(financierToDetailDto), meta: page.meta }),
           { ok: 200 },
         );
+      },
+    });
+
+    // Export CSV (US-002 / spec 003): filtra (search/active) e serializa via util compartilhado.
+    // Rota estática tem precedência sobre `/:id`. `financier:read`.
+    scope.route({
+      method: 'GET',
+      url: '/financiers/export',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIER_PERMISSION.read)],
+      schema: {
+        querystring: financierListQuerySchema,
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.listFinancierRecords();
+        if (!result.ok) {
+          return sendResult(reply, err(result.error), {
+            errors: { 'financier-read-unavailable': 503 },
+          });
+        }
+        const csv = financiersToCsv(financiersForExport(result.value, queryToFilter(req.query)));
+        return reply
+          .code(200)
+          .header('content-type', 'text/csv; charset=utf-8')
+          .header('content-disposition', 'attachment; filename="financiers.csv"')
+          .header('x-content-type-options', 'nosniff')
+          .send(csv) as unknown as Promise<void>;
       },
     });
 
