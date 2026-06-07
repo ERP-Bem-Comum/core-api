@@ -81,7 +81,7 @@
 - [x] `quickstart.md` reescrito e alinhado à implementação real (coleção `auth/`, runner, integração). (T051 ✅)
 - [x] Gate W3 final: typecheck + format + lint + `pnpm test` (**2400 pass / 0 fail / 18 skipped**).
 - [ ] Alinhar permissions `user:*` com spec 006 (T048 — quando a 006 existir).
-- [ ] Abrir PR da 005 (T052) — aguardando decisão do humano (sem `origin` oficial; só remote `backup`).
+- [x] Abrir PR da 005 (T052) — ✅ **PR #23 mergeado em `dev`** (`cee5acf Merge pull request #23 from ERP-Bem-Comum/005-gestao-usuarios`). Fluxo do repo: feature → PR → `dev`; `dev → main` é release à parte. Toda a 005 está em `origin/dev`.
 
 ### Fase 9 — Spec 006 (Acessos) — depois da 005
 
