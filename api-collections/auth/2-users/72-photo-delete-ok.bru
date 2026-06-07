@@ -1,0 +1,22 @@
+meta {
+  name: US6 delete foto (ok)
+  type: http
+  seq: 72
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/users/{{userId}}/photo
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("CA — 200 e imageUrl nula apos delete", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().imageUrl).to.be.null;
+  });
+}

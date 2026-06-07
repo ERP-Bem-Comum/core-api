@@ -1,0 +1,36 @@
+meta {
+  name: US7 PUT /me (atualiza minha conta)
+  type: http
+  seq: 81
+}
+
+put {
+  url: {{baseUrl}}/api/v1/me
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "Admin E2E",
+    "telephone": "15991110000"
+  }
+}
+
+tests {
+  test("CA — 200 e dados atualizados refletidos", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().name).to.equal("Admin E2E");
+    expect(res.getBody().telephone).to.equal("15991110000");
+  });
+  test("CA — email preservado (patch semantico)", function () {
+    expect(res.getBody().email).to.equal("admin.e2e@bemcomum.dev");
+  });
+  test("SEC — nao expoe passwordHash", function () {
+    expect(JSON.stringify(res.getBody())).to.not.contain("passwordHash");
+  });
+}
