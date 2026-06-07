@@ -104,8 +104,8 @@
 ## Phase 5 — Polish & Cross-Cutting
 
 - [x] T044 [P] Marcar no `po-feedback/0001-gap-api-v2-contracts.md` os itens fechados (Bucket B/D: #2 children/files→contractor; #3 PATCH) referenciando este épico
-- [x] T045 [P] Atualizar OpenAPI/doc do `/api/v2`: `contractor` obrigatório no POST (breaking documentado), bloco `contractor` no detalhe com `Sunset`, PATCH/DELETE
-- [x] T046 [P] Coleção Bruno de smoke e2e das rotas (POST c/ contractor, GET detalhe, PATCH, DELETE recusado) em `api-collections/` (reusa padrão existente)
+- [x] T045 [P] Atualizar OpenAPI/doc do `/api/v2`: `contractor` obrigatório no POST (breaking documentado), bloco `contractor` no detalhe com `Sunset`, PATCH/DELETE — entrada no `handbook/CHANGELOG.md` (OpenAPI é gerado do Zod, ADR-0027)
+- [x] T046 [P] Coleção Bruno de smoke e2e das rotas (POST c/ contractor, GET detalhe, PATCH, DELETE recusado) em `api-collections/contracts/` (espelha padrão partners)
 
 ---
 

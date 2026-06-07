@@ -1,0 +1,29 @@
+meta {
+  name: login bare user
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v2/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{bareUserEmail}}",
+    "password": "{{process.env.E2E_SEED_PASSWORD}}"
+  }
+}
+
+script:post-response {
+  bru.setVar("bareUserToken", res.body.accessToken);
+}
+
+tests {
+  test("CA2 — login do usuario pelado retorna 200 e accessToken", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().accessToken).to.be.a("string");
+  });
+}

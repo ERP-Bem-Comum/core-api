@@ -1,0 +1,48 @@
+meta {
+  name: get contrato por id com contractor e headers Deprecation/Sunset
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/api/v2/contracts/{{contractCreatedId}}
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operatorToken}}
+}
+
+tests {
+  test("US1-3 — GET /contracts/:id retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("US1-3 — id bate com o criado", function () {
+    expect(res.getBody().id).to.equal(bru.getVar("contractCreatedId"));
+  });
+
+  test("US1-3 — bloco contractor presente com type e id", function () {
+    const body = res.getBody();
+    expect(body).to.have.property("contractor");
+    expect(body.contractor).to.have.property("type");
+    expect(body.contractor).to.have.property("id");
+    expect(body.contractor.type).to.equal("supplier");
+    expect(body.contractor.id).to.equal(bru.getVar("contractorSupplierId"));
+  });
+
+  test("US1-3 — bloco contractor tem campo snapshot (pode ser null em ambiente sem parceiro real)", function () {
+    const body = res.getBody();
+    expect(body.contractor).to.have.property("snapshot");
+    // snapshot pode ser null se o parceiro nao existir no ambiente (degradacao gracosa FR-006)
+    const snapshot = body.contractor.snapshot;
+    expect(snapshot === null || typeof snapshot === "object").to.be.true;
+  });
+
+  test("US1-3 — header Sunset presente (rota gorda transitoria ADR-0032)", function () {
+    // Sunset OU Deprecation deve estar presente na rota composta
+    const sunset = res.getHeader("sunset");
+    const deprecation = res.getHeader("deprecation");
+    expect(sunset !== undefined || deprecation !== undefined).to.be.true;
+  });
+}

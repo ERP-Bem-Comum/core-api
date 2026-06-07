@@ -20,6 +20,23 @@ Fecha os ITENs 3 e 4 do [`po-feedback/0001`](./po-feedback/0001-gap-api-v2-contr
 
 ---
 
+## 2026-06-06 — 🔗 Épico `002-contracts-http-gaps` — vínculo de contratado + PATCH de metadados (`/api/v2`)
+
+Épico [`specs/002-contracts-http-gaps/`](../specs/002-contracts-http-gaps/) (PR #18 → `dev`), originado do
+[`po-feedback/0001`](./po-feedback/0001-gap-api-v2-contracts.md) + [ADR-0032](./architecture/adr/0032-transient-http-composition-read-until-bff.md).
+Fecha os ITENs 1 e 2 do retorno do front (Bucket B/D). Entregue via pipeline `core-api-sdd` (5 tickets W0→W3).
+
+**Mudanças na borda `/api/v2` de contratos:**
+
+- **`POST /api/v2/contracts`** — passa a exigir `contractor: { type, id }` (`type ∈ supplier|financier|collaborator|act`, `id` UUID). **⚠️ Breaking** para clientes que criavam contrato sem contratado. Body sem `contractor` → `400`.
+- **`GET /api/v2/contracts/:id`** — o detalhe ganha o bloco `contractor: { type, id, snapshot | null }` composto na borda via public-api de Parceiros (rota gorda **transitória**, ADR-0032). Resposta declara `Deprecation: true` + `Sunset` (RFC 8594) — sai quando o BFF v2 assumir. `snapshot` traz `name`/`document`/`updatedAt` (+ `bankAccount`/`pixKey` só para supplier); `null` em degradação graciosa (contratado ausente/IO/timeout — resposta idêntica, anti-oráculo). O detalhe também expõe `observations`/`email`/`telephone`.
+- **`PATCH /api/v2/contracts/:id`** (novo) — edita **só** metadados de cadastro (`title?`, `objective?`, `observations?`, `email?`, `telephone?`). Body `.strict()`: campo imutável (`originalValue`, período, datas, `sequentialNumber`) ou chave desconhecida → `400`; corpo vazio `{}` → `400`. Contrato inexistente → `404` (RBAC puro — `contracts` não tem ownership por tenant). Valor/período seguem mutáveis **só por aditivo homologado**.
+- **`DELETE /api/v2/contracts/:id`** (novo) — **recusado** com `405` (`code: contract-delete-forbidden`), imutabilidade (princípio #14). `requireAuth` precede a política.
+
+**Domínio/persistência:** agregado `Contract` ganhou `contractor` (referência leve por identidade — Vernon/ADR-0032) + metadados; `ctr_contracts` ganhou 5 colunas (migration `0007`, `contractor_*` NOT NULL + CHECK, `contractor_id` `COLLATE utf8mb4_bin`). Núcleo permanece sem conhecer Parceiros (cross-BC só via public-api — ADR-0006/0014). Paridade 4/4 do `ContractorReadPort` (`ActView`). OpenAPI é gerado do Zod (`fastify-zod-openapi`, ADR-0027) — reflete automaticamente os novos shapes.
+
+---
+
 ## 2026-06-06 — 🌎 ADR-0035 — parceria territorial (estados/municípios) com soft-delete (resolve D9 do ADR-0031)
 
 Épico `specs/001-partners-http-gaps/` (gaps de borda HTTP do módulo `partners`, originado do
