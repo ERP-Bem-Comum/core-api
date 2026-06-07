@@ -90,8 +90,12 @@ export const buildApp = async (opts: BuildAppOptions = {}): Promise<FastifyAppWi
   const app = Fastify({
     logger: { level: loggerOptions.level, redact: [...loggerOptions.redact] },
     genReqId: (req): string => {
+      // Aceita x-request-id do cliente apenas se for seguro (rastreabilidade legitima do BFF/proxy):
+      // alfanumerico + `-_`, ate 128 chars. Bloqueia log/header injection (newline) e payloads gigantes.
       const incomingId = req.headers['x-request-id'];
-      if (typeof incomingId === 'string' && incomingId.length > 0) return incomingId;
+      if (typeof incomingId === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(incomingId)) {
+        return incomingId;
+      }
       return randomUUID();
     },
     bodyLimit: 1_048_576, // 1 MiB

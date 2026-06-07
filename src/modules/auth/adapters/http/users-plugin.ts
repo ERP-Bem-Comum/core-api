@@ -68,6 +68,10 @@ const USER_UPDATE_PERMISSION = 'user:update';
 const USER_ACTIVATE_PERMISSION = 'user:activate';
 const USER_DEACTIVATE_PERMISSION = 'user:deactivate';
 
+// Limite dedicado das rotas de ESCRITA (POST/PUT/PATCH), separado do teto global (200/min). O token
+// ja e exigido, mas evita abuso autenticado (ex.: convites em massa). Reads ficam no teto global.
+const WRITE_RATE_LIMIT = { max: 30, timeWindow: '1 minute' } as const;
+
 // Erros de validacao de campo (VOs) -> 422; compartilhado por POST e PUT.
 const FIELD_VALIDATION_STATUS = {
   'name-required': 422,
@@ -141,6 +145,7 @@ const usersRoutes =
       method: 'POST',
       url: '/users',
       preHandler: [hooks.requireAuth, hooks.authorize(USER_CREATE_PERMISSION)],
+      config: { rateLimit: WRITE_RATE_LIMIT },
       schema: {
         body: createUserBodySchema,
         response: { 201: createUserResponseSchema },
@@ -180,6 +185,7 @@ const usersRoutes =
       method: 'PUT',
       url: '/users/:id',
       preHandler: [hooks.requireAuth, hooks.authorize(USER_UPDATE_PERMISSION)],
+      config: { rateLimit: WRITE_RATE_LIMIT },
       schema: {
         params: userIdParamSchema,
         body: updateUserBodySchema,
@@ -221,6 +227,7 @@ const usersRoutes =
       method: 'PATCH',
       url: '/users/:id/deactivate',
       preHandler: [hooks.requireAuth, hooks.authorize(USER_DEACTIVATE_PERMISSION)],
+      config: { rateLimit: WRITE_RATE_LIMIT },
       schema: {
         params: userIdParamSchema,
         response: { 200: userDetailResponseSchema },
@@ -251,6 +258,7 @@ const usersRoutes =
       method: 'PATCH',
       url: '/users/:id/activate',
       preHandler: [hooks.requireAuth, hooks.authorize(USER_ACTIVATE_PERMISSION)],
+      config: { rateLimit: WRITE_RATE_LIMIT },
       schema: {
         params: userIdParamSchema,
         response: { 200: userDetailResponseSchema },
