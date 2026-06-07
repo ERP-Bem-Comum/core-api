@@ -1,0 +1,21 @@
+meta {
+  name: US5 auto-desativacao (lockout)
+  type: http
+  seq: 53
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/users/{{adminId}}/deactivate
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("SEC — admin nao pode desativar a propria conta -> 422 (anti-lockout)", function () {
+    expect(res.getStatus()).to.equal(422);
+  });
+}

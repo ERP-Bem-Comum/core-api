@@ -32,6 +32,18 @@ export const sendResult = <T, E extends string>(
   const status = opts.errors?.[errorCode] ?? 500;
   const requestId = currentCorrelationId() ?? reply.request.id;
 
+  // 5xx nao revela o componente interno (ex.: 'invite-mail-failed', 'user-query-unavailable'):
+  // envelope generico ao cliente, code real apenas no log do servidor (correlacao por requestId).
+  // 4xx mantem o code (erro do cliente, informativo e seguro). Alinha com o handler central (errors.ts).
+  if (status >= 500) {
+    reply.request.log.error({ errorCode, status, requestId }, 'sendResult-server-error');
+    return reply
+      .code(status)
+      .send(
+        toErrorEnvelope('internal', 'An internal error occurred', requestId),
+      ) as unknown as Promise<void>;
+  }
+
   return reply
     .code(status)
     .send(toErrorEnvelope(errorCode, errorCode, requestId)) as unknown as Promise<void>;

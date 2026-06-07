@@ -4,6 +4,27 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-07 — 🌐 ADR-0037: HTTP-first; aposentadoria da CLI embutida
+
+Novo [ADR-0037](./architecture/adr/0037-http-first-retire-embedded-cli.md) (**Accepted**) formaliza a
+inversão de prioridade **CLI → HTTP** já consumada pelos ADRs 0025/0027/0028/0032/0033/0034:
+
+- **HTTP/HTTPS é a UX primária** do core-api (`/api/v1`, Fastify + Zod/OpenAPI). **Supersede parcial** do
+  **Princípio VII** da constituição ("CLI-first; HTTP é Fase 2+"), reescrito para **"HTTP-first"**
+  (constituição bumpada **1.1.0 → 1.2.0**).
+- **CLI embutida no core-api aposentada**: sem novos subcomandos `cli:*`; remoção faseada de
+  `src/modules/*/cli/`. A skill `application-cli-builder` deixa de ser caminho para features do core-api;
+  o agente `fastify-server-expert` deixa de ser "reservado".
+- **Validação de regras de negócio** migra da CLI para **testes de integração REAIS via HTTP** — coleções
+  **Bruno** (ADR-0034) + `fastify.inject`. Fidelidade de produção (autorização, contratos, versionamento).
+- **CLI do domínio** migra para o pacote irmão **`cli/`** (binário `bc`, Bun) — aplicação à parte que
+  integra IAs e consome a borda HTTP como cliente (já sinalizado no `AGENTS.md` raiz do mono_repo).
+- **Citação canônica** (Princípio IX): Roy T. Fielding, *Architectural Styles…* (REST), p. 96.
+- **Impacto nas specs em voo** (`005-gestao-usuarios`, `006-gestao-acessos`): o item "paridade CLI" sai das
+  user stories; entrega passa a ser via HTTP + Bruno. Domínio/agregados/migrations **inalterados**.
+
+---
+
 ## 2026-06-06 — 🔎 Épico `003-partners-aggregator-export` — agregador `/partners` + paridade de export CSV (`/api/v1`)
 
 Épico [`specs/003-partners-aggregator-export/`](../specs/003-partners-aggregator-export/), originado dos

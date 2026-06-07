@@ -1,0 +1,24 @@
+meta {
+  name: login email inexistente
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v2/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "naoexiste-e2e@example.com",
+    "password": "{{password}}"
+  }
+}
+
+tests {
+  test("SEC — email inexistente -> 401 (sem enumeracao)", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}

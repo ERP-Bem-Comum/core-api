@@ -1,0 +1,46 @@
+meta {
+  name: US3 create admin
+  type: http
+  seq: 22
+}
+
+post {
+  url: {{baseUrl}}/api/v1/users
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+script:pre-request {
+  // Email unico por execucao -> colecao re-rodavel contra MySQL persistente.
+  bru.setVar("newEmail", "e2e_" + Date.now() + "@example.com");
+}
+
+body:json {
+  {
+    "name": "Amanda Manoel",
+    "cpf": "52998224725",
+    "email": "{{newEmail}}",
+    "telephone": "15997133502"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setVar("userId", res.getBody().id);
+  }
+}
+
+tests {
+  test("CA — 201 criado, retorna id", function () {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.getBody().id).to.be.a("string");
+  });
+  test("SEC — resposta minima (so id), sem PII/hash", function () {
+    expect(JSON.stringify(res.getBody())).to.not.contain("passwordHash");
+    expect(res.getBody()).to.not.have.property("cpf");
+  });
+}

@@ -1,0 +1,20 @@
+meta {
+  name: US2 detail sem permissao (bare)
+  type: http
+  seq: 32
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/{{userId}}
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{bareToken}}
+}
+
+tests {
+  test("SEC — sem user:read -> 403 (IDOR bloqueado por RBAC)", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}
