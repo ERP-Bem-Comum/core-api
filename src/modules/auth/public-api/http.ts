@@ -16,6 +16,8 @@ export { makeRequireAuth, makeAuthorize, makeHasPermission } from '../adapters/h
 export { parseE2eAuthSeed } from '../adapters/http/e2e-seed.ts';
 export { usersHttpPlugin } from '../adapters/http/users-plugin.ts';
 export type { UsersHttpDeps, UsersHttpHooks } from '../adapters/http/users-plugin.ts';
+export { meHttpPlugin } from '../adapters/http/me-plugin.ts';
+export type { MeHttpDeps, MeHttpHooks } from '../adapters/http/me-plugin.ts';
 export type {
   AuthHttpDeps,
   AuthCompositionConfig,

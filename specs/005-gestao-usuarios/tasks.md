@@ -216,8 +216,8 @@
 
 ### Implementação
 
-- [ ] T046 [US7] Rotas `GET /api/v1/me` e `PUT /api/v1/me` (autorização self) em `src/modules/auth/adapters/http/`. (depende de US4)
-- [ ] T047 [US7] Rota `POST /api/v1/me/password-reset` reusando `request-password-reset`. (depende de Phase 1)
+- [x] T046 [US7] Rotas `GET /api/v1/me` e `PUT /api/v1/me` (self via `req.userId`; PUT name/telephone) em `me-plugin.ts`; testadas via `fastify.inject` (6 CAs). (depende de US4) ✅ AUTH-HTTP-ME
+- [x] T047 [US7] Rota `POST /api/v1/me/password-reset` reusando `request-password-reset` (202). (depende de Phase 1) ✅ · Bruno `users/me/` pendente
 
 **Checkpoint**: todas as stories funcionais.
 

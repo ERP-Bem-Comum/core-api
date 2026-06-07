@@ -108,3 +108,14 @@ export const uploadPhotoQuerySchema = z.object({
 });
 
 export type UploadPhotoQuery = z.infer<typeof uploadPhotoQuerySchema>;
+
+/**
+ * Body do PUT /api/v1/me (autosserviço — spec 005 US7). Restrito a `name`/`telephone`: o usuário
+ * comum NÃO altera `collaboratorId` (vínculo administrativo) nem status/roles. Patch parcial.
+ */
+export const meUpdateBodySchema = z.object({
+  name: z.string().min(1).optional(),
+  telephone: z.string().min(1).optional(),
+});
+
+export type MeUpdateBody = z.infer<typeof meUpdateBodySchema>;

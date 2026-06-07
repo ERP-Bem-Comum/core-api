@@ -19,6 +19,7 @@ import {
   makeRequireAuth,
   parseE2eAuthSeed,
   usersHttpPlugin,
+  meHttpPlugin,
 } from '#src/modules/auth/public-api/http.ts';
 import {
   contractsHttpPlugin,
@@ -157,6 +158,18 @@ const main = async (): Promise<void> => {
             removeProfilePhoto: authDeps.removeProfilePhoto,
           },
           { requireAuth, authorize: authDeps.authorize },
+        ),
+        prefix: '/api/v1',
+      },
+      // Minha Conta (spec 005 US7) → /api/v1/me[/password-reset]. Self por construção (req.userId).
+      {
+        plugin: meHttpPlugin(
+          {
+            getUser: authDeps.getUser,
+            updateUserProfile: authDeps.updateUserProfile,
+            requestPasswordReset: authDeps.requestPasswordReset,
+          },
+          { requireAuth },
         ),
         prefix: '/api/v1',
       },
