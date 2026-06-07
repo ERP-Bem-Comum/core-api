@@ -36,13 +36,13 @@
 ### Tests RED
 
 - [ ] T003 [P] Suíte RED do catálogo em `tests/modules/auth/domain/authorization/permission-catalog.test.ts` (conjunto canônico não-vazio, sem duplicatas, todas no formato `resource:action`).
-- [ ] T004 [P] Suíte RED de `RoleName` em `tests/modules/auth/domain/authorization/role-name.test.ts` (normaliza/trim; não-vazio; comprimento).
+- [x] T004 [P] Suíte RED de `RoleName` em `tests/modules/auth/domain/authorization/role-name.test.ts` (normaliza/trim; não-vazio; comprimento). ✅ `AUTH-ROLE-NAME-VO`
 - [ ] T005 Suíte RED do ciclo de vida em `tests/modules/auth/domain/authorization/role-lifecycle.test.ts` (`create` nasce `active`; `setPermissions` rejeita permissão fora do catálogo; `archive` bloqueia se em uso).
 
 ### Implementação
 
 - [ ] T006 [P] Catálogo fixo `permission-catalog.ts` em `src/modules/auth/domain/authorization/` (fonte das permissions `user:*`, `role:*`, `contract:mass-approve`). **Coordena com a `005` (T048) — catálogo único.**
-- [ ] T007 [P] VO `RoleName` em `src/modules/auth/domain/authorization/role-name.ts` (branded + smart constructor `Result`).
+- [x] T007 [P] VO `RoleName` em `src/modules/auth/domain/authorization/role-name.ts` (branded + smart constructor `Result`). ✅ `AUTH-ROLE-NAME-VO`
 - [ ] T008 Estender o agregado em `src/modules/auth/domain/authorization/role.ts`: campo `status` (`active`/`archived`); funções `create`, `rename`, `setPermissions` (⊆ catálogo), `archive(isInUse)`. (depende de T006, T007)
 - [ ] T009 Eventos em `src/modules/auth/domain/authorization/events.ts`: `RoleCreated`, `RoleRenamed`, `RolePermissionsChanged`, `RoleArchived`, `RoleRevokedFromUser`. (depende de T008)
 - [ ] T010 Migration: adicionar `status varchar(16)` + CHECK `IN ('active','archived')` em `auth_role` (schema + `pnpm run db:generate`); seed/upsert do catálogo em `auth_permission`. (depende de T008)
