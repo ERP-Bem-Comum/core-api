@@ -48,6 +48,13 @@ import {
   activateUser,
   deactivateUser,
 } from '../../application/use-cases/activate-deactivate-user.ts';
+import {
+  setProfilePhoto,
+  removeProfilePhoto,
+} from '../../application/use-cases/set-profile-photo.ts';
+import { makeInMemoryProfilePhotoStorage } from '../storage/profile-photo-storage.in-memory.ts';
+import { createS3ProfilePhotoStorage } from '../storage/profile-photo-storage.s3.ts';
+import type { ProfilePhotoStorage } from '../../application/ports/profile-photo-storage.ts';
 import { requestPasswordReset } from '../../application/use-cases/request-password-reset.ts';
 import { confirmPasswordReset } from '../../application/use-cases/confirm-password-reset.ts';
 
@@ -160,6 +167,10 @@ export type AuthHttpDeps = Readonly<{
   activateUser: ReturnType<typeof activateUser>;
   /** Desativação de usuário (spec 005 US5) — consumido por PATCH /api/v1/users/:id/deactivate. */
   deactivateUser: ReturnType<typeof deactivateUser>;
+  /** Upload de foto de perfil (spec 005 US6) — consumido por PUT /api/v1/users/:id/photo. */
+  setProfilePhoto: ReturnType<typeof setProfilePhoto>;
+  /** Remoção de foto de perfil (spec 005 US6) — consumido por DELETE /api/v1/users/:id/photo. */
+  removeProfilePhoto: ReturnType<typeof removeProfilePhoto>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -184,8 +195,38 @@ type Stores = Readonly<{
   lockoutStore: LoginLockoutStore;
   roleRepo: RoleRepository;
   userQuery: UserQuery;
+  profilePhotoStorage: ProfilePhotoStorage;
   shutdown: () => Promise<void>;
 }>;
+
+// Storage da foto (spec 005 US6): S3/MinIO se as env S3_* estiverem completas; senao in-memory
+// (fallback SEGURO p/ dev/test sem storage — espelha o no-op do mailer). ADR-0019.
+const buildProfilePhotoStorage = (env: Readonly<NodeJS.ProcessEnv>): ProfilePhotoStorage => {
+  const endpoint = env['S3_ENDPOINT'];
+  const region = env['S3_REGION'];
+  const accessKeyId = env['S3_ACCESS_KEY_ID'];
+  const secretAccessKey = env['S3_SECRET_ACCESS_KEY'];
+  const bucket = env['S3_BUCKET'];
+  if (
+    endpoint !== undefined &&
+    region !== undefined &&
+    accessKeyId !== undefined &&
+    secretAccessKey !== undefined &&
+    bucket !== undefined &&
+    endpoint.length > 0 &&
+    bucket.length > 0
+  ) {
+    return createS3ProfilePhotoStorage({
+      endpoint,
+      region,
+      accessKeyId,
+      secretAccessKey,
+      bucket,
+      forcePathStyle: env['S3_FORCE_PATH_STYLE'] !== 'false',
+    });
+  }
+  return makeInMemoryProfilePhotoStorage();
+};
 
 const loadOrGenerateKeys = async (
   env: Readonly<Record<string, string | undefined>>,
@@ -214,6 +255,7 @@ const buildStores = async (config: AuthCompositionConfig): Promise<Stores> => {
       lockoutStore: makeInMemoryLoginLockoutStore(),
       roleRepo: roleStore.repository,
       userQuery: inMemoryUserQuery(userStore.snapshot),
+      profilePhotoStorage: makeInMemoryProfilePhotoStorage(),
       shutdown: () => Promise.resolve(),
     };
   }
@@ -239,6 +281,7 @@ const buildStores = async (config: AuthCompositionConfig): Promise<Stores> => {
     lockoutStore: createDrizzleLoginLockoutStore(handle).repository,
     roleRepo: roleStore.repository,
     userQuery: createDrizzleUserQuery(handle),
+    profilePhotoStorage: buildProfilePhotoStorage(process.env),
     shutdown: handle.close,
   };
 };
@@ -460,6 +503,18 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
     deactivateUser: deactivateUser({
       userReader: stores.userReader,
       userRepo: stores.userRepo,
+      clock,
+    }),
+    setProfilePhoto: setProfilePhoto({
+      userReader: stores.userReader,
+      userRepo: stores.userRepo,
+      storage: stores.profilePhotoStorage,
+      clock,
+    }),
+    removeProfilePhoto: removeProfilePhoto({
+      userReader: stores.userReader,
+      userRepo: stores.userRepo,
+      storage: stores.profilePhotoStorage,
       clock,
     }),
     verifyAccessToken: tokenIssuer.verifyAccessToken,

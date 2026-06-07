@@ -97,3 +97,14 @@ export const updateUserBodySchema = z.object({
 });
 
 export type UpdateUserBody = z.infer<typeof updateUserBodySchema>;
+
+/**
+ * Query do PUT /api/v1/users/:id/photo (spec 005 US6).
+ * `mimeType` validado no use case (allowlist image/jpeg|png|webp → 422), não por enum Zod, para
+ * o erro de tipo sair como 422 (regra de negócio) e não 400 (shape). Body é binário (octet-stream).
+ */
+export const uploadPhotoQuerySchema = z.object({
+  mimeType: z.string().min(1),
+});
+
+export type UploadPhotoQuery = z.infer<typeof uploadPhotoQuerySchema>;

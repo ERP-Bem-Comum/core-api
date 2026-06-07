@@ -1,8 +1,8 @@
 /**
- * W0 (RED) - AUTH-HTTP-UPDATE-USER: PUT /api/v1/users/:id (editar perfil + RBAC).
+ * W0 (RED) - AUTH-HTTP-PHOTO: PUT/DELETE /api/v1/users/:id/photo (US6).
  *
- * DEVE FALHAR em W0 - a rota PUT /api/v1/users/:id ainda nao existe (deps.updateUserProfile).
- * Driver memory. Cria usuarios via POST /users (user:create) e edita via PUT. fastify.inject.
+ * DEVE FALHAR em W0 - as rotas de foto ainda nao existem (deps.setProfilePhoto/removeProfilePhoto).
+ * Driver memory (in-memory storage). Upload binario (octet-stream) + mimeType na query. fastify.inject.
  * ASCII puro.
  */
 
@@ -18,8 +18,11 @@ import {
 } from '#src/modules/auth/public-api/http.ts';
 
 const STRONG = 'Str0ng-Passphrase-2026!';
-const ADMIN = 'admin.update@example.com';
-const NOPERM = 'noperm.update@example.com';
+const ADMIN = 'admin.photo@example.com';
+const NOPERM = 'noperm.photo@example.com';
+
+const JPEG = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 0x00, 0x10, 0x4a, 0x46, 0x49, 0x46]);
+const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00]);
 
 type AppHandle = Awaited<ReturnType<typeof buildApp>>;
 
@@ -76,28 +79,33 @@ const login = async (app: AppHandle, email: string): Promise<string> => {
   return (res.json() as { accessToken: string }).accessToken;
 };
 
-const createUser = async (
-  app: AppHandle,
-  token: string,
-  overrides: Partial<{ name: string; cpf: string; email: string; telephone: string }> = {},
-): Promise<string> => {
+let seq = 0;
+const createUser = async (app: AppHandle, token: string): Promise<string> => {
+  seq += 1;
   const res = await app.inject({
     method: 'POST',
     url: '/api/v1/users',
     headers: { authorization: `Bearer ${token}` },
     payload: {
-      name: 'Amanda Manoel',
+      name: 'Foto User',
       cpf: '52998224725',
-      email: 'amanda.upd@example.com',
+      email: `foto${seq}@example.com`,
       telephone: '15997133502',
-      ...overrides,
     },
   });
   assert.equal(res.statusCode, 201);
   return (res.json() as { id: string }).id;
 };
 
-describe('AUTH-HTTP-UPDATE-USER — PUT /api/v1/users/:id', () => {
+const putPhoto = (app: AppHandle, token: string, id: string, mimeType: string, body: Buffer) =>
+  app.inject({
+    method: 'PUT',
+    url: `/api/v1/users/${id}/photo?mimeType=${encodeURIComponent(mimeType)}`,
+    headers: { authorization: `Bearer ${token}`, 'content-type': 'application/octet-stream' },
+    payload: body,
+  });
+
+describe('AUTH-HTTP-PHOTO — PUT/DELETE /api/v1/users/:id/photo', () => {
   let app: AppHandle;
   let teardown: () => Promise<void>;
   let adminToken: string;
@@ -114,73 +122,61 @@ describe('AUTH-HTTP-UPDATE-USER — PUT /api/v1/users/:id', () => {
   it('CA1: 401 sem token', async () => {
     const res = await app.inject({
       method: 'PUT',
-      url: '/api/v1/users/qualquer-id',
-      payload: { name: 'Novo' },
+      url: '/api/v1/users/x/photo?mimeType=image/jpeg',
+      headers: { 'content-type': 'application/octet-stream' },
+      payload: JPEG,
     });
     assert.equal(res.statusCode, 401);
   });
 
-  it('CA2: 403 sem permissao user:update', async () => {
+  it('CA2: 403 sem user:update', async () => {
     const token = await login(app, NOPERM);
-    const id = await createUser(app, adminToken, {
-      email: 'ca2.upd@example.com',
-    });
-    const res = await app.inject({
-      method: 'PUT',
-      url: `/api/v1/users/${id}`,
-      headers: { authorization: `Bearer ${token}` },
-      payload: { name: 'Novo' },
-    });
+    const id = await createUser(app, adminToken);
+    const res = await putPhoto(app, token, id, 'image/jpeg', JPEG);
     assert.equal(res.statusCode, 403);
   });
 
-  it('CA3: 200 edita nome/telefone; detalhe reflete; demais preservados', async () => {
-    const id = await createUser(app, adminToken, { email: 'ca3.upd@example.com' });
-    const res = await app.inject({
-      method: 'PUT',
-      url: `/api/v1/users/${id}`,
-      headers: { authorization: `Bearer ${adminToken}` },
-      payload: { name: 'Amanda Souza', telephone: '15991111111' },
-    });
+  it('CA3: 200 upload JPEG valido; detalhe com imageUrl', async () => {
+    const id = await createUser(app, adminToken);
+    const res = await putPhoto(app, adminToken, id, 'image/jpeg', JPEG);
     assert.equal(res.statusCode, 200);
-    const body = res.json() as { name: string; telephone: string; cpf: string; email: string };
-    assert.equal(body.name, 'Amanda Souza');
-    assert.equal(body.telephone, '15991111111');
-    assert.equal(body.cpf, '52998224725');
-    assert.equal(body.email, 'ca3.upd@example.com');
+    const body = res.json() as { imageUrl: string | null };
+    assert.notEqual(body.imageUrl, null);
   });
 
-  it('CA4: 409 ao trocar email para o de outro usuario', async () => {
-    const ocupado = 'ocupado.upd@example.com';
-    await createUser(app, adminToken, { email: ocupado });
-    const id = await createUser(app, adminToken, { email: 'ca4.upd@example.com' });
-    const res = await app.inject({
-      method: 'PUT',
-      url: `/api/v1/users/${id}`,
-      headers: { authorization: `Bearer ${adminToken}` },
-      payload: { email: ocupado },
-    });
-    assert.equal(res.statusCode, 409);
-  });
-
-  it('CA5: 422 com cpf invalido', async () => {
-    const id = await createUser(app, adminToken, { email: 'ca5.upd@example.com' });
-    const res = await app.inject({
-      method: 'PUT',
-      url: `/api/v1/users/${id}`,
-      headers: { authorization: `Bearer ${adminToken}` },
-      payload: { cpf: '11111111111' },
-    });
+  it('CA4: 422 mimeType nao suportado', async () => {
+    const id = await createUser(app, adminToken);
+    const res = await putPhoto(app, adminToken, id, 'application/pdf', JPEG);
     assert.equal(res.statusCode, 422);
   });
 
-  it('CA6: 404 para id inexistente', async () => {
+  it('CA5: 422 magic bytes divergentes do mimeType', async () => {
+    const id = await createUser(app, adminToken);
+    // declara png mas envia bytes jpeg
+    const res = await putPhoto(app, adminToken, id, 'image/png', JPEG);
+    assert.equal(res.statusCode, 422);
+  });
+
+  it('CA6: DELETE photo -> 200 e imageUrl null', async () => {
+    const id = await createUser(app, adminToken);
+    await putPhoto(app, adminToken, id, 'image/png', PNG);
     const res = await app.inject({
-      method: 'PUT',
-      url: '/api/v1/users/00000000-0000-4000-8000-000000000000',
+      method: 'DELETE',
+      url: `/api/v1/users/${id}/photo`,
       headers: { authorization: `Bearer ${adminToken}` },
-      payload: { name: 'Fantasma' },
     });
+    assert.equal(res.statusCode, 200);
+    assert.equal((res.json() as { imageUrl: string | null }).imageUrl, null);
+  });
+
+  it('CA7: 404 id inexistente', async () => {
+    const res = await putPhoto(
+      app,
+      adminToken,
+      '00000000-0000-4000-8000-000000000000',
+      'image/jpeg',
+      JPEG,
+    );
     assert.equal(res.statusCode, 404);
   });
 });

@@ -190,13 +190,13 @@
 
 ### Tests RED
 
-- [ ] T041 [P] [US6] Suíte RED em `tests/modules/auth/application/use-cases/set-profile-photo.test.ts` (valida tipo/tamanho; usa `StoragePort` fake).
+- [x] T041 [P] [US6] Suíte RED em `tests/modules/auth/application/use-cases/set-profile-photo.test.ts` (valida tipo/tamanho; usa `ProfilePhotoStorage` fake). ✅ AUTH-USECASE-SET-PHOTO
 
 ### Implementação
 
-- [ ] T042 [US6] Use case `set-profile-photo` (+ remoção) em `src/modules/auth/application/use-cases/set-profile-photo.ts` (valida `image/jpeg|png|webp`, limite de tamanho). (depende de Phase 2)
-- [ ] T043 [US6] Rotas `PUT /api/v1/users/:id/photo` e `DELETE .../photo`. (depende de T042)
-- [ ] T044 [P] [US6] Requests Bruno `api-collections/users/photo/` — `PUT/DELETE /api/v1/users/:id/photo` (multipart; 422 tipo/tamanho). Integração (storage real) atrás de opt-in. (depende de T043)
+- [x] T042 [US6] Use cases `setProfilePhoto`/`removeProfilePhoto` em `src/modules/auth/application/use-cases/set-profile-photo.ts` (valida `image/jpeg|png|webp`, ≤5 MiB) + port `ProfilePhotoStorage` + adapter in-memory. (depende de Phase 2) ✅
+- [x] T043 [US6] Rotas `PUT /api/v1/users/:id/photo` e `DELETE .../photo` (`user:update`; octet-stream + magic bytes) + adapter S3/MinIO; testadas via `fastify.inject` (7 CAs). (depende de T042) ✅ AUTH-HTTP-PHOTO
+- [ ] T044 [P] [US6] Requests Bruno `api-collections/auth/` — foto (multipart; 422 tipo/tamanho) + integração MinIO real (opt-in). **Pendente:** exige asset JPEG versionado + validação `body:file`. (depende de T043)
 
 **Checkpoint**: US1–US6 funcionais.
 

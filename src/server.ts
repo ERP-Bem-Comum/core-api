@@ -153,6 +153,8 @@ const main = async (): Promise<void> => {
             updateUserProfile: authDeps.updateUserProfile,
             activateUser: authDeps.activateUser,
             deactivateUser: authDeps.deactivateUser,
+            setProfilePhoto: authDeps.setProfilePhoto,
+            removeProfilePhoto: authDeps.removeProfilePhoto,
           },
           { requireAuth, authorize: authDeps.authorize },
         ),

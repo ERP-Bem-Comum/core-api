@@ -31,6 +31,10 @@ import type {
   activateUser,
   deactivateUser,
 } from '../../application/use-cases/activate-deactivate-user.ts';
+import type {
+  setProfilePhoto,
+  removeProfilePhoto,
+} from '../../application/use-cases/set-profile-photo.ts';
 import type { UserStatusFilter } from '../../application/ports/user-query.ts';
 import {
   userListQuerySchema,
@@ -40,6 +44,7 @@ import {
   createUserBodySchema,
   createUserResponseSchema,
   updateUserBodySchema,
+  uploadPhotoQuerySchema,
 } from './users-schemas.ts';
 
 export type UsersHttpDeps = Readonly<{
@@ -50,6 +55,8 @@ export type UsersHttpDeps = Readonly<{
   updateUserProfile: ReturnType<typeof updateUserProfile>;
   activateUser: ReturnType<typeof activateUser>;
   deactivateUser: ReturnType<typeof deactivateUser>;
+  setProfilePhoto: ReturnType<typeof setProfilePhoto>;
+  removeProfilePhoto: ReturnType<typeof removeProfilePhoto>;
 }>;
 
 export type UsersHttpHooks = Readonly<{
@@ -72,6 +79,31 @@ const USER_DEACTIVATE_PERMISSION = 'user:deactivate';
 // ja e exigido, mas evita abuso autenticado (ex.: convites em massa). Reads ficam no teto global.
 const WRITE_RATE_LIMIT = { max: 30, timeWindow: '1 minute' } as const;
 
+// Upload de foto: body binario ate 6 MiB no parser (use case corta em 5 MiB -> 422; acima -> 413).
+const PHOTO_BODY_LIMIT = 6 * 1024 * 1024;
+
+// Magic bytes (defesa em profundidade contra content-type spoofing). Confere a assinatura do arquivo
+// contra o mimeType declarado na query. MIME fora da allowlist e tratado pelo use case (422).
+const startsWith = (bytes: Buffer, sig: readonly number[]): boolean =>
+  sig.every((b, i) => bytes[i] === b);
+
+const magicBytesMatch = (mimeType: string, bytes: Buffer): boolean => {
+  switch (mimeType) {
+    case 'image/jpeg':
+      return startsWith(bytes, [0xff, 0xd8, 0xff]);
+    case 'image/png':
+      return startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    case 'image/webp':
+      // RIFF....WEBP
+      return (
+        startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && bytes.subarray(8, 12).toString() === 'WEBP'
+      );
+    default:
+      // MIME nao suportado: deixa o use case decidir (photo-type-unsupported -> 422).
+      return true;
+  }
+};
+
 // Erros de validacao de campo (VOs) -> 422; compartilhado por POST e PUT.
 const FIELD_VALIDATION_STATUS = {
   'name-required': 422,
@@ -88,6 +120,17 @@ const FIELD_VALIDATION_STATUS = {
 const usersRoutes =
   (deps: UsersHttpDeps, hooks: UsersHttpHooks): FastifyPluginAsyncZodOpenApi =>
   async (scope) => {
+    // US6: parser binario para upload de foto (octet-stream -> Buffer, ate 6 MiB). Escopo do plugin
+    // (nao afeta as rotas JSON globais). bodyLimit aqui > limite do use case (5 MiB) para o excesso
+    // virar 422 (regra) e nao 413; acima de 6 MiB o Fastify corta com 413 (protecao).
+    scope.addContentTypeParser(
+      'application/octet-stream',
+      { parseAs: 'buffer', bodyLimit: PHOTO_BODY_LIMIT },
+      (_req, body, done) => {
+        done(null, body);
+      },
+    );
+
     // US1: GET /users — listagem paginada.
     scope.route({
       method: 'GET',
@@ -270,6 +313,85 @@ const usersRoutes =
             errors: {
               'user-id-invalid': 400,
               'user-not-found': 404,
+              'user-repo-unavailable': 503,
+            },
+          });
+        }
+        const detail = await deps.getUser(req.params.id);
+        return sendResult(reply, detail, {
+          ok: 200,
+          errors: { 'user-id-invalid': 400, 'user-not-found': 404 },
+        });
+      },
+    });
+
+    // US6: PUT /users/:id/photo — upload de foto (binario octet-stream + mimeType na query).
+    scope.route({
+      method: 'PUT',
+      url: '/users/:id/photo',
+      preHandler: [hooks.requireAuth, hooks.authorize(USER_UPDATE_PERMISSION)],
+      config: { rateLimit: WRITE_RATE_LIMIT },
+      schema: {
+        params: userIdParamSchema,
+        querystring: uploadPhotoQuerySchema,
+        response: { 200: userDetailResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const bytes = req.body as Buffer;
+        const { mimeType } = req.query;
+        // Defesa em profundidade: assinatura do arquivo deve casar com o mimeType declarado.
+        if (bytes.length > 0 && !magicBytesMatch(mimeType, bytes)) {
+          return sendResult(reply, err('photo-content-mismatch' as const), {
+            errors: { 'photo-content-mismatch': 422 },
+          });
+        }
+        const result = await deps.setProfilePhoto({
+          targetId: req.params.id,
+          bytes: new Uint8Array(bytes),
+          mimeType,
+        });
+        if (!result.ok) {
+          return sendResult(reply, result, {
+            errors: {
+              'user-id-invalid': 400,
+              'user-not-found': 404,
+              'photo-type-unsupported': 422,
+              'photo-empty': 422,
+              'photo-too-large': 422,
+              'photo-ref-empty': 422,
+              'photo-ref-too-long': 422,
+              'photo-ref-invalid': 422,
+              'photo-storage-unavailable': 503,
+              'user-repo-unavailable': 503,
+            },
+          });
+        }
+        const detail = await deps.getUser(req.params.id);
+        return sendResult(reply, detail, {
+          ok: 200,
+          errors: { 'user-id-invalid': 400, 'user-not-found': 404 },
+        });
+      },
+    });
+
+    // US6: DELETE /users/:id/photo — remover foto.
+    scope.route({
+      method: 'DELETE',
+      url: '/users/:id/photo',
+      preHandler: [hooks.requireAuth, hooks.authorize(USER_UPDATE_PERMISSION)],
+      config: { rateLimit: WRITE_RATE_LIMIT },
+      schema: {
+        params: userIdParamSchema,
+        response: { 200: userDetailResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.removeProfilePhoto({ targetId: req.params.id });
+        if (!result.ok) {
+          return sendResult(reply, result, {
+            errors: {
+              'user-id-invalid': 400,
+              'user-not-found': 404,
+              'photo-storage-unavailable': 503,
               'user-repo-unavailable': 503,
             },
           });
