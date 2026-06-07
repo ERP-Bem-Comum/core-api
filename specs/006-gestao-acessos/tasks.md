@@ -46,7 +46,7 @@
 - [x] T008 Estender o agregado em `src/modules/auth/domain/authorization/role.ts`: campo `status` (`active`/`archived`); funções `create`, `rehydrate`, `rename`, `setPermissions` (⊆ catálogo), `archive(isInUse)`. (depende de T006, T007) ✅ `AUTH-ROLE-LIFECYCLE-AGG`
 - [ ] T009 Eventos em `src/modules/auth/domain/authorization/events.ts`: `RoleCreated`, `RoleRenamed`, `RolePermissionsChanged`, `RoleArchived`, `RoleRevokedFromUser`. (depende de T008) — **deferido** (YAGNI: sem consumidor; "para AuditLog/futuro"; wiring outbox é T049).
 - [~] T010 Migration: adicionar `status varchar(16)` + CHECK `IN ('active','archived')` em `auth_role` (schema + `pnpm run db:generate:auth`); ~~seed/upsert do catálogo em `auth_permission`~~. (depende de T008) — DDL ✅ `AUTH-ROLE-SCHEMA-STATUS` (migration `0006`, validada em MySQL real). **Seed deferido a T048** (DML, polish).
-- [ ] T011 Estender `role-repository` (`.drizzle.ts` + `.in-memory.ts`) com `create`/`update`/`archive`/`listAll` e checagem "papel em uso" (junção `auth_user_role`). (depende de T008, T010) — ticket irmão **`AUTH-ROLE-REPO-CRUD`** (fecha a Foundational).
+- [x] T011 Estender `role-repository` (`.drizzle.ts` + `.in-memory.ts`) com `isInUse` (junção `auth_user_role`) + `save` grava `status`; `create`/`update`/`archive`/`listAll` reusam `save`/`list` (YAGNI). (depende de T008, T010) ✅ `AUTH-ROLE-REPO-CRUD` — **fecha a Foundational**.
 
 **Checkpoint**: catálogo, VO, status e agregado prontos.
 
