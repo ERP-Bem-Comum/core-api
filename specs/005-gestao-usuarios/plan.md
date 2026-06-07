@@ -102,11 +102,14 @@ tests/modules/auth/
 
 ## Migrations Drizzle (core-api)
 
-- **Mudanças de schema**: [x] colunas (em `auth_users`: `cpf`, `telephone`, `image_url`, e confirmação de `active`) · [x] índices (busca por nome; unicidade de email já existente) · [ ] tabelas novas · [ ] FKs novas (`collaborator_id` permanece coluna opaca, **sem** FK cross-módulo)
+> **⚠️ `auth_user` já existe** (`mysql.ts:98`) com `id, email, password_hash, status ('active'|'disabled' +
+CHECK), disabled_at, name, legacy_id`. **Status já é varchar+CHECK** — reusar, **não** criar boolean.
+
+- **Mudanças de schema**: [x] colunas **novas** em `auth_user`: `cpf varchar(11)`, `telephone varchar(13)`, `image_url varchar null`, `collaborator_id varchar null` · [x] índice para busca por nome (novo) · [ ] tabelas novas (nenhuma) · [ ] FK nova (`collaborator_id` é coluna **opaca**, **sem** FK cross-módulo). Status `active`/`disabled` **já existe** — activate/deactivate reusa, sem nova coluna.
 - **Prefixo de isolamento correto?** `auth_*` — ADR-0014: **sim**
-- **Outbox**: novos eventos (`UserCreated`, `UserProfileUpdated`, `UserActivated`, `UserDeactivated`) exigem `INSERT` em `core.outbox`: **sim**
+- **Outbox**: novos eventos (`UserCreated`, `UserProfileUpdated`, `UserActivated`, `UserDeactivated`) exigem `INSERT` em `core.outbox`: **sim** (hoje os use cases do `auth` retornam evento no output sem publicar — confirmar wiring de outbox no W1).
 - **Comando**: após editar `schema.ts`, rodar `pnpm run db:generate` e versionar a migration. CHARSET/COLLATE e índices conferidos à mão (ADR-0020).
-- **Restrições MySQL 8** (ADR-0020): CPF/telefone como `varchar` normalizado (não JSON/ENUM); status `active` como `boolean`/`tinyint`, não ENUM nativo.
+- **Restrições MySQL 8** (ADR-0020): CPF/telefone como `varchar` normalizado (não JSON/ENUM); status permanece `varchar`+CHECK existente (`auth_user_status_chk`), **nunca** ENUM nativo nem boolean novo.
 
 ## Contrato HTTP (Fase 2+ — ativo via ADR-0025)
 
