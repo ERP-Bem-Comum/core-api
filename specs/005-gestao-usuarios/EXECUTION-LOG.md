@@ -43,7 +43,11 @@
 - [x] `AUTH-GET-USER` — use case `get-user` (perfil + mass-approve read-only das roles) **+** rota `GET /api/v1/users/:id` (combinados; reusa `UserReader.findById`, sem Drizzle novo) (T024/T025/T026) ✅ closed-green · 9 testes (use case + inject)
   - [ ] coleção Bruno `users/detail/` (T027, pendência Docker)
 
-### Fase 3 — US3 Criar + convite (P2)
+### Fase 3 — US3 Criar + convite (P2) 🔄
+
+- [x] `AUTH-USECASE-CREATE-USER` — domínio (`UserCreated` + `User.create`) + port `InviteMailer` + use case `create-user-by-admin` (T028/T029) ✅ closed-green · 8 testes de **segurança** (design do `security-backend-expert`: placeholder não-autenticável, convite fail-closed, anti host-injection). **Pendente:** adapter email + wiring + rota `POST /users` (`AUTH-HTTP-CREATE-USER`, T030–T032).
+
+#### (planejamento original)
 
 - [ ] `AUTH-USECASE-CREATE-USER` — `create-user-by-admin` (ativo, sem senha, `UserCreated`) (T028–T029)
 - [ ] `AUTH-INVITE-ON-CREATE` — convite de ativação por email a partir de `UserCreated` (EmailPort/reset) (T030)

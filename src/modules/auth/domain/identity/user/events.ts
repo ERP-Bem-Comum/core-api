@@ -51,8 +51,20 @@ export type UserProfileUpdated = Readonly<{
   occurredAt: Date;
 }>;
 
+// Criacao por administrador (spec 005, FR-016). Gatilho do convite de ativacao.
+// Distinto de UserRegistered (auto-registro/OIDC). `createdByAdminId` p/ auditoria.
+// Payload so metadados (DD-USER-05) - NUNCA hash/senha/token.
+export type UserCreated = Readonly<{
+  type: 'UserCreated';
+  userId: UserId;
+  email: Email;
+  createdByAdminId: UserId;
+  occurredAt: Date;
+}>;
+
 export type UserEvent =
   | UserRegistered
+  | UserCreated
   | PasswordChanged
   | RoleAssigned
   | UserDisabled

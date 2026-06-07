@@ -123,11 +123,11 @@
 
 ### Tests RED
 
-- [ ] T028 [P] [US3] Suíte RED em `tests/modules/auth/application/use-cases/create-user-by-admin.test.ts` (cria `active` sem senha; emite `UserCreated`; recusa email duplicado; valida CPF/email/telefone).
+- [x] T028 [P] [US3] Suíte RED em `tests/modules/auth/application/use-cases/create-user-by-admin.test.ts` (cria `active` sem senha; emite `UserCreated`; recusa email duplicado; valida CPF/email/telefone).
 
 ### Implementação
 
-- [ ] T029 [US3] Use case `create-user-by-admin` em `src/modules/auth/application/use-cases/create-user-by-admin.ts` — **distinto** do `register-user` (sem senha + convite). (depende de Phase 2)
+- [x] T029 [US3] Use case `create-user-by-admin` em `src/modules/auth/application/use-cases/create-user-by-admin.ts` — **distinto** do `register-user` (sem senha + convite). (depende de Phase 2)
 - [ ] T030 [US3] Disparar o convite de ativação reusando `request-password-reset`/EmailPort a partir de `UserCreated` (wiring no composition root / consumidor do evento). (depende de T029)
 - [ ] T031 [US3] Rota `POST /api/v1/users` (multipart/ref para foto opcional) conforme contrato. (depende de T029)
 - [ ] T032 [P] [US3] Requests Bruno `api-collections/users/create/` — `POST /api/v1/users` (201 + convite; 409 email duplicado; 422 validação por campo). (depende de T031)

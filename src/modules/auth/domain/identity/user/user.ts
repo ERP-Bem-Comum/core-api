@@ -20,6 +20,7 @@ import type { ActiveUser, DisabledUser, User } from './types.ts';
 import type { UserError } from './errors.ts';
 import type {
   UserRegistered,
+  UserCreated,
   PasswordChanged,
   RoleAssigned,
   UserDisabled,
@@ -32,6 +33,7 @@ export type { ActiveUser, DisabledUser, User, UserProfile } from './types.ts';
 export type { UserError } from './errors.ts';
 export type {
   UserRegistered,
+  UserCreated,
   PasswordChanged,
   RoleAssigned,
   UserDisabled,
@@ -45,6 +47,20 @@ export type RegisterInput = Readonly<{
   email: Email;
   passwordHash: PasswordHash;
   roles: readonly Role[];
+}>;
+
+// Criacao administrativa (spec 005, US3): perfil completo + hash placeholder (sem senha real).
+// O `unusablePasswordHash` (gerado no composition root, argon2 de bytes aleatorios descartados)
+// NUNCA autentica. roles=[] (concessao e operacao separada). status='active' (FR-005).
+export type CreateByAdminInput = Readonly<{
+  id: UserId;
+  email: Email;
+  unusablePasswordHash: PasswordHash;
+  name: string;
+  cpf: Cpf;
+  telephone: Telephone;
+  photo?: ProfilePhotoRef | null;
+  createdByAdminId: UserId;
 }>;
 
 const dedupeRoles = (roles: readonly Role[]): readonly Role[] => [
@@ -72,6 +88,34 @@ export const register = (
     type: 'UserRegistered' as const,
     userId: input.id,
     email: input.email,
+    occurredAt: at,
+  });
+  return { user, event };
+};
+
+// Criacao administrativa (spec 005, US3): ActiveUser com perfil completo e hash PLACEHOLDER.
+// O `unusablePasswordHash` nunca autentica (ver create-user-by-admin / security design).
+export const create = (
+  input: CreateByAdminInput,
+  at: Date,
+): Readonly<{ user: ActiveUser; event: UserCreated }> => {
+  const user: ActiveUser = immutable({
+    id: input.id,
+    email: input.email,
+    passwordHash: input.unusablePasswordHash,
+    roles: [],
+    name: input.name,
+    cpf: input.cpf,
+    telephone: input.telephone,
+    photo: input.photo ?? null,
+    collaboratorId: null,
+    status: 'active' as const,
+  });
+  const event: UserCreated = immutable({
+    type: 'UserCreated' as const,
+    userId: input.id,
+    email: input.email,
+    createdByAdminId: input.createdByAdminId,
     occurredAt: at,
   });
   return { user, event };
