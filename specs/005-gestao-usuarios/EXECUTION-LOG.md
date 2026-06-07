@@ -21,6 +21,12 @@
 
 - [x] `AUTH-USECASE-LIST-USERS` — port `UserQuery` (read model) + use case + adapter in-memory (T016/T018/T019/T020) ✅ closed-green
 - [ ] `AUTH-HTTP-LIST-USERS` — adapter Drizzle `UserQuery` + contract suite param + rota `GET /api/v1/users` + coleção Bruno `users/list/` (T017/T021/T022/T023)
+  - **📌 Notas de preparação (achados do estudo da borda HTTP):**
+    - A rota `GET /api/v1/users` **espelha o padrão `/api/v1` do módulo `partners`** (`src/modules/partners/adapters/http/supplier-plugin.ts` + `supplier-list-query.ts` + `partners-schemas.ts`) — listagem paginada Zod/OpenAPI — **não** o padrão `auth` (`/api/v2/auth`, registro de credencial).
+    - Registro no **edge shell** `src/server.ts` sob `/api/v1` (ADR-0028 localização da borda, ADR-0033 versionamento v1).
+    - Decisão a confirmar no W1: novo plugin `auth/adapters/http/users-plugin.ts` (User vive no `auth`, mas roteia como `partners`); ou avaliar um sub-escopo HTTP. Handler usa `sendResult` + mapeia `ListUsersError` → status (`invalid-page`/`invalid-page-size` → 422; `user-query-unavailable` → 503).
+    - Adapter Drizzle `UserQuery`: SELECT com `LIKE` CI no nome + filtro status + `LIMIT/OFFSET` + `COUNT` (espelhar query paginada de `partners`); índice de busca por nome. Validação real só com Docker (`test:integration:auth`).
+    - Validação sem Docker: rota via `fastify.inject` injetando o adapter **in-memory**. Drizzle real + `bru run` = pendência pré-merge.
 
 ### Fase 2 — US2 Detalhe (P1)
 
