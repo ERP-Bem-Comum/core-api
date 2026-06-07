@@ -66,9 +66,9 @@ specs/005-gestao-usuarios/
 ```text
 src/modules/auth/
 ├── domain/identity/
-│   ├── user/                      # agregado User — ESTENDIDO (perfil: cpf, telephone, photo, status)
-│   │   ├── user.ts                # +funções: updateProfile, activate, deactivate, attachPhoto
-│   │   └── events.ts              # +UserCreated, UserProfileUpdated, UserActivated, UserDeactivated
+│   ├── user/                      # agregado User — ESTENDIDO (perfil nullable: name, cpf, telephone, photo, collaboratorId)
+│   │   ├── user.ts                # +funções: updateProfile, setPhoto, enable (disable ja existe)
+│   │   └── events.ts              # +UserCreated, UserProfileUpdated, UserEnabled (UserDisabled ja existe)
 │   ├── cpf.ts                     # NOVO VO (branded, normalizado, dígitos verificadores)
 │   ├── telephone.ts               # NOVO VO (branded, normalizado)
 │   └── profile-photo-ref.ts       # NOVO VO (referência a objeto S3)
@@ -107,7 +107,7 @@ CHECK), disabled_at, name, legacy_id`. **Status já é varchar+CHECK** — reusa
 
 - **Mudanças de schema**: [x] colunas **novas** em `auth_user`: `cpf varchar(11)`, `telephone varchar(13)`, `image_url varchar null`, `collaborator_id varchar null` · [x] índice para busca por nome (novo) · [ ] tabelas novas (nenhuma) · [ ] FK nova (`collaborator_id` é coluna **opaca**, **sem** FK cross-módulo). Status `active`/`disabled` **já existe** — activate/deactivate reusa, sem nova coluna.
 - **Prefixo de isolamento correto?** `auth_*` — ADR-0014: **sim**
-- **Outbox**: novos eventos (`UserCreated`, `UserProfileUpdated`, `UserActivated`, `UserDeactivated`) exigem `INSERT` em `core.outbox`: **sim** (hoje os use cases do `auth` retornam evento no output sem publicar — confirmar wiring de outbox no W1).
+- **Outbox**: novos eventos (`UserCreated`, `UserProfileUpdated`, `UserEnabled`; `UserDisabled` já existe) exigem `INSERT` em `core.outbox`: **sim** (hoje os use cases do `auth` retornam evento no output sem publicar — confirmar wiring de outbox no W1).
 - **Comando**: após editar `schema.ts`, rodar `pnpm run db:generate` e versionar a migration. CHARSET/COLLATE e índices conferidos à mão (ADR-0020).
 - **Restrições MySQL 8** (ADR-0020): CPF/telefone como `varchar` normalizado (não JSON/ENUM); status permanece `varchar`+CHECK existente (`auth_user_status_chk`), **nunca** ENUM nativo nem boolean novo.
 

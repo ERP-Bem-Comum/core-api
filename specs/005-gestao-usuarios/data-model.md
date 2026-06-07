@@ -9,48 +9,56 @@ Estende o agregado `User` do BC `auth` (não cria agregado novo). Tudo em `auth_
 Identidade já existente (`UserId`, `Email`, credencial, papéis, **status**). Esta feature adiciona a
 **faceta de perfil administrativo** (cpf, telephone, foto, collaboratorId).
 
-> **⚠️ Alinhamento com o schema real** (`mysql.ts:98`): `auth_user` já tem `id`, `email`, `password_hash`
-> (nullable, OIDC-ready), **`status varchar(16)` com CHECK `IN ('active','disabled')`** + `disabled_at`
-> bicondicional (CHECK `(status='disabled') = (disabled_at IS NOT NULL)`), `name`, `legacy_id`. **NÃO há
-> boolean `active`** — o status é string. Colunas **novas** desta feature: `cpf`, `telephone`, `image_url`,
-> `collaborator_id`.
+> **⚠️ Alinhamento com o schema real** (`mysql.ts:98`): `auth_user` hoje tem **apenas** `id`, `email`,
+> `password_hash` (nullable, OIDC-ready), **`status varchar(16)` com CHECK `IN ('active','disabled')`** +
+> `disabled_at` bicondicional, `created_at`, `updated_at`, `legacy_id`. **NÃO há boolean `active`** (status
+> é string) **NEM `name`** — o `name` NÃO existe nem na tabela nem no agregado `UserCore`. Colunas **novas**
+> desta feature: **`name`**, `cpf`, `telephone`, `image_url`, `collaborator_id` (todas nullable para não
+> quebrar `register-user`/OIDC, que não as fornecem). O agregado `User` é uma **discriminated union**
+> `ActiveUser | DisabledUser` sobre `UserCore { id, email, passwordHash, roles }` — `disable` existe, mas
+> **não há `enable`** (reativação) nem campos de perfil; ambos entram nesta feature.
 
-| Campo                    | Tipo (domínio)                           | Persistência (`auth_user`)                            | Regra / Invariante                                           |
-| ------------------------ | ---------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------ |
-| `id`                     | `UserId` (branded)                       | `id varchar(36)` PK (existe)                          | UUID v4 (ADR-0018).                                          |
-| `name`                   | `string` (já existe)                     | `name varchar(128)` (existe)                          | Obrigatório; saneamento de capitalização só na apresentação. |
-| `email`                  | `Email` (VO, já existe)                  | `email varchar(254)` UNIQUE (existe)                  | Único entre usuários (FR-007).                               |
-| `status`                 | `'active' \| 'disabled'` (**já existe**) | `status varchar(16)` + CHECK (existe) + `disabled_at` | Governa acesso; bicondicional com `disabled_at`.             |
-| `cpf`                    | `Cpf` (VO novo)                          | `cpf varchar(11)` (**migration**)                     | Só dígitos; dígitos verificadores válidos.                   |
-| `telephone`              | `Telephone` (VO novo)                    | `telephone varchar(13)` (**migration**)               | Só dígitos; forma BR válida.                                 |
-| `photo`                  | `ProfilePhotoRef \| null` (VO novo)      | `image_url varchar null` (**migration**)              | Chave de objeto S3; nullable.                                |
-| `collaboratorId`         | `string \| null` (opaco)                 | `collaborator_id varchar null` (**migration**)        | **Read-only**, sem FK cross-módulo (FR-017).                 |
-| `massApprovalPermission` | derivado (RBAC)                          | — (não persistido aqui)                               | Apenas **lido** do RBAC para exibição (FR-015).              |
+| Campo                    | Tipo (domínio)                           | Persistência (`auth_user`)                            | Regra / Invariante                                                                       |
+| ------------------------ | ---------------------------------------- | ----------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `id`                     | `UserId` (branded)                       | `id varchar(36)` PK (existe)                          | UUID v4 (ADR-0018).                                                                      |
+| `name`                   | `string \| null` (**novo**)              | `name varchar(128) null` (**migration**)              | Obrigatório na criação **admin** (use case); nullable no agregado p/ self-register/OIDC. |
+| `email`                  | `Email` (VO, já existe)                  | `email varchar(254)` UNIQUE (existe)                  | Único entre usuários (FR-007).                                                           |
+| `status`                 | `'active' \| 'disabled'` (**já existe**) | `status varchar(16)` + CHECK (existe) + `disabled_at` | Governa acesso; bicondicional com `disabled_at`.                                         |
+| `cpf`                    | `Cpf` (VO novo)                          | `cpf varchar(11)` (**migration**)                     | Só dígitos; dígitos verificadores válidos.                                               |
+| `telephone`              | `Telephone` (VO novo)                    | `telephone varchar(13)` (**migration**)               | Só dígitos; forma BR válida.                                                             |
+| `photo`                  | `ProfilePhotoRef \| null` (VO novo)      | `image_url varchar null` (**migration**)              | Chave de objeto S3; nullable.                                                            |
+| `collaboratorId`         | `string \| null` (opaco)                 | `collaborator_id varchar null` (**migration**)        | **Read-only**, sem FK cross-módulo (FR-017).                                             |
+| `massApprovalPermission` | derivado (RBAC)                          | — (não persistido aqui)                               | Apenas **lido** do RBAC para exibição (FR-015).                                          |
 
 ### Transições de estado (status `'active' | 'disabled'`)
 
 ```
-            activate                  (status='active',  disabled_at=NULL)
+            enable (novo)             (status='active',  disabled_at=NULL)
  [disabled] ─────────▶ [active]
      ▲                    │
-     └──────── deactivate ┘           (status='disabled', disabled_at=now())
+     └──────── disable ───┘           (status='disabled', disabled_at=now())  [JA EXISTE]
                                       (ambas idempotentes em relação ao alvo)
 ```
 
-> Linguagem de negócio (spec/UI) usa "ativo/inativo"; o status técnico persistido é **`active`/`disabled`**
-> (já existente no `auth`). Ativar/desativar **reusa/estende** a transição de status existente, mantendo o
-> CHECK bicondicional `disabled_at` — não introduz um campo booleano novo.
+> **Reuso de vocabulário** (decisão de modelagem): "ativar/desativar" da spec mapeiam para as transições do
+> agregado `enable`/`disable`. O `disable` (evento `UserDisabled`) **já existe** em `user.ts`; esta feature
+> adiciona o **`enable`** (evento `UserEnabled`), par que faltava. Não se introduz `UserActivated`/
+> `UserDeactivated` — seria vocabulário duplicado para a mesma transição. Status técnico permanece
+> `active`/`disabled` (varchar+CHECK existente), sem boolean novo.
 
-- `activate(user)` → se já `active`, no-op (idempotente); senão `status='active'`, `disabled_at=NULL` + `UserActivated`.
-- `deactivate(user, actor)` → se já `disabled`, no-op; senão `status='disabled'`, `disabled_at=now()` + `UserDeactivated`.
-  - Invariante: ator **não** pode desativar a própria conta na mesma sessão (proteção de lockout).
+- `enable(user)` (**novo**) → `DisabledUser → ActiveUser` (`status='active'`, `disabled_at=NULL`) + `UserEnabled`. Idempotente (no-op se já `active`).
+- `disable(user, at)` (**já existe**) → `ActiveUser → DisabledUser` + `UserDisabled`. Idempotente.
+  - Invariante (no use case `deactivate-user`): ator **não** pode desativar a própria conta na mesma sessão (proteção de lockout).
 
 ### Operações do agregado (funções puras → `Result<User, UserError>`)
 
-- `User.create(props)` → cria **ativo**, sem senha; produz `UserCreated` (gatilho do convite).
-- `User.updateProfile(user, patch)` → atualiza name/cpf/telephone; atômico; `UserProfileUpdated`.
-- `User.attachPhoto(user, ref)` / `User.removePhoto(user)` → gerencia `photo`.
-- `User.activate` / `User.deactivate` → ver transições.
+- `register(input, at)` (**já existe**) → cria `ActiveUser` com perfil **vazio** (campos de perfil `null`). Inalterado em assinatura; passa a preencher os campos novos como `null`.
+- `updateProfile(user, patch, at)` (**novo**) → atualiza `name`/`cpf`/`telephone`/`collaboratorId`; atômico; `UserProfileUpdated`.
+- `setPhoto(user, ref \| null, at)` (**novo**) → define/remove `photo`; `UserProfileUpdated`.
+- `enable(user, at)` (**novo**) / `disable(user, at)` (**já existe**) → ver transições.
+
+> Campos de perfil são **nullable** no `UserCore` — `register`/`register-user`/OIDC criam sem perfil. A
+> obrigatoriedade de `name`/`cpf`/`telephone` é validada no use case `create-user-by-admin` (US3), não no agregado.
 
 > **Relação com use cases existentes do `auth`** (evitar duplicação):
 >
@@ -85,12 +93,12 @@ Identidade já existente (`UserId`, `Email`, credencial, papéis, **status**). E
 
 ## Eventos de domínio (outbox — ADR-0015)
 
-| Evento               | Quando             | Consumidores prováveis                         |
-| -------------------- | ------------------ | ---------------------------------------------- |
-| `UserCreated`        | criação de usuário | Notifications (convite de ativação por email). |
-| `UserProfileUpdated` | edição de perfil   | AuditLog (futuro).                             |
-| `UserActivated`      | ativação           | AuditLog; revisão de acesso.                   |
-| `UserDeactivated`    | desativação        | AuditLog; revogação de sessões (auth).         |
+| Evento                     | Quando             | Consumidores prováveis                         |
+| -------------------------- | ------------------ | ---------------------------------------------- |
+| `UserCreated`              | criação de usuário | Notifications (convite de ativação por email). |
+| `UserProfileUpdated`       | edição de perfil   | AuditLog (futuro).                             |
+| `UserEnabled` (novo)       | reativação         | AuditLog; revisão de acesso.                   |
+| `UserDisabled` (já existe) | desativação        | AuditLog; revogação de sessões (auth).         |
 
 Nomes em **EN passado** (convenção). Contrato registrado em `handbook/architecture/`.
 
