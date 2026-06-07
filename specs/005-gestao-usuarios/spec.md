@@ -183,11 +183,11 @@ O usuário autenticado edita o próprio perfil e redefine a própria senha, sem 
 - **Bounded Contexts afetados**: [x] Auth (`auth_*`) — reuso da identidade existente · possível novo BC `users_*` (decisão no plano) · [ ] Parceiros (`partners_*`) — **fora de escopo** (`collaboratorId` é opaco read-only, FR-017).
   - ⚠️ `collaboratorId` é persistido como referência opaca — **nenhuma** leitura cruzada de tabelas nem chamada a `partners` nesta feature (ADR-0006/0014).
 - **Novos agregados / Value Objects?**: candidatos a VO — `Cpf`, `Telephone`, `ProfilePhotoRef`; o agregado `User` provavelmente é **estendido**, não recriado (a confirmar no plano com DDD).
-- **Novos eventos de domínio (outbox)?**: candidatos — `UserCreated`, `UserProfileUpdated`, `UserActivated`, `UserDeactivated` (nomes a confirmar; contrato em `handbook/architecture/`). `UserCreated` é o gatilho do convite de ativação (FR-016).
-- **Novos subcomandos de CLI?**: desejável paridade CLI para listar/criar/ativar/desativar (UX primária da Fase 1), além da borda HTTP.
-- **Borda HTTP envolvida?**: SIM — HTTP já é oficial (ADR-0025/0027/0028); rotas sob `adapters/http` com Zod/OpenAPI.
+- **Novos eventos de domínio (outbox)?**: `UserCreated`, `UserProfileUpdated`, `UserEnabled` (par do `UserDisabled` existente — ver `data-model.md`). `UserCreated` é o gatilho do convite de ativação (FR-016).
+- **Validação E2E (ADR-0037)**: por **coleção Bruno** (`api-collections/users/`, ADR-0034) contra a borda HTTP real + `fastify.inject` — **não** há paridade CLI (CLI embutida aposentada).
+- **Borda HTTP envolvida?**: SIM, é a UX primária (ADR-0037) — HTTP oficial (ADR-0025/0027/0028); rotas sob `adapters/http` com Zod/OpenAPI.
 - **Dependências de infra**: storage S3/MinIO para foto (ADR-0019); **EmailPort** para o convite de ativação (ADR-0010) — reuso do canal de `request/confirm-password-reset` do `auth`.
-- **Possíveis violações da constituição (I–IX)?**: o Princípio VII (CLI-first) está superado pelos ADRs de HTTP; foto (S3) e email (EmailPort) são permitidos. Se o plano propuser **novo módulo** `users`, isso adiciona um 6º BC — justificar em "Complexity Tracking" do plano.
+- **Possíveis violações da constituição (I–IX)?**: o Princípio VII passou a **HTTP-first** (ADR-0037); foto (S3) e email (EmailPort) são permitidos. Se o plano propuser **novo módulo** `users`, isso adiciona um 6º BC — justificar em "Complexity Tracking" do plano.
 
 ## Assumptions
 

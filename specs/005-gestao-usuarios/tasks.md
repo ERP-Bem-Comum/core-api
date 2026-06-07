@@ -8,6 +8,14 @@
 
 **Organization**: agrupado por user story (P1→P3). Cada story estende o módulo `auth` (decisão DDD, `research.md` D1) e mapeia a um ou mais tickets de pipeline `.claude/.pipeline/<TICKET>/`.
 
+> **⚠️ ADR-0037 (HTTP-first):** a UX primária é HTTP. **Não há paridade CLI** — a validação ponta-a-ponta
+> de cada story é feita por **coleção Bruno** (`api-collections/users/`, ADR-0034) contra a borda HTTP real
+> mais testes `fastify.inject`, não por subcomando CLI. As tasks CLI foram convertidas em tasks Bruno.
+>
+> **Progresso:** Foundational concluída — `AUTH-USER-VO-CPF`, `AUTH-USER-VO-TELEPHONE`,
+> `AUTH-USER-VO-PROFILE-PHOTO-REF`, `AUTH-USER-PROFILE-AGG` (inclui schema+mapper+migration 0004) já
+> **closed-green**. Próximo: `AUTH-USECASE-LIST-USERS` (US1, MVP).
+
 ## Format: `[ID] [P?] [Story] Description`
 
 - **[P]**: paralelizável (arquivos diferentes, sem dependência pendente)
@@ -77,7 +85,7 @@
 - [ ] T020 [P] [US1] Adapter in-memory do `UserQuery` em `src/modules/auth/adapters/persistence/repos/user-query.in-memory.ts`. (depende de T018)
 - [ ] T021 [US1] Adapter Drizzle do `UserQuery` em `src/modules/auth/adapters/persistence/repos/user-query.drizzle.ts` (offset + LIKE CI + filtro status; índice de nome). (depende de T018)
 - [ ] T022 [US1] Rota `GET /api/v1/users` em `src/modules/auth/adapters/http/` (Zod query + paginação) conforme `contracts/http-users.md`. (depende de T019)
-- [ ] T023 [P] [US1] Subcomando CLI `listar-usuarios` (`--page/--page-size/--status/--search`) conforme `contracts/cli-users.md`. (depende de T019)
+- [ ] T023 [P] [US1] Coleção Bruno `api-collections/users/list/` — requests `.bru` para `GET /api/v1/users` (paginação 5/10/25, `search`, `status`) com asserções de status/shape/meta (ADR-0034). (depende de T022)
 
 **Checkpoint**: US1 funcional e testável de forma independente (MVP).
 
@@ -99,7 +107,7 @@
 
 - [ ] T025 [US2] Use case em `src/modules/auth/application/use-cases/get-user.ts` (compõe perfil + permissão efetiva `contract:mass-approve` read-only). (depende de Phase 2)
 - [ ] T026 [US2] Rota `GET /api/v1/users/:id` em `src/modules/auth/adapters/http/` (404 sem vazar). (depende de T025)
-- [ ] T027 [P] [US2] Subcomando CLI `ver-usuario --id`. (depende de T025)
+- [ ] T027 [P] [US2] Requests Bruno `api-collections/users/detail/` — `GET /api/v1/users/:id` (200 com todos os campos; 404 sem vazar). (depende de T026)
 
 **Checkpoint**: US1 + US2 funcionais.
 
@@ -122,7 +130,7 @@
 - [ ] T029 [US3] Use case `create-user-by-admin` em `src/modules/auth/application/use-cases/create-user-by-admin.ts` — **distinto** do `register-user` (sem senha + convite). (depende de Phase 2)
 - [ ] T030 [US3] Disparar o convite de ativação reusando `request-password-reset`/EmailPort a partir de `UserCreated` (wiring no composition root / consumidor do evento). (depende de T029)
 - [ ] T031 [US3] Rota `POST /api/v1/users` (multipart/ref para foto opcional) conforme contrato. (depende de T029)
-- [ ] T032 [P] [US3] Subcomando CLI `criar-usuario`. (depende de T029)
+- [ ] T032 [P] [US3] Requests Bruno `api-collections/users/create/` — `POST /api/v1/users` (201 + convite; 409 email duplicado; 422 validação por campo). (depende de T031)
 
 **Checkpoint**: US1–US3 funcionais.
 
@@ -144,7 +152,7 @@
 
 - [ ] T034 [US4] Use case `update-user-profile` em `src/modules/auth/application/use-cases/update-user-profile.ts`. (depende de Phase 2)
 - [ ] T035 [US4] Rota `PUT /api/v1/users/:id`. (depende de T034)
-- [ ] T036 [P] [US4] Subcomando CLI `editar-usuario`. (depende de T034)
+- [ ] T036 [P] [US4] Requests Bruno `api-collections/users/update/` — `PUT /api/v1/users/:id` (200 atômico; 409 conflito; 422 validação). (depende de T035)
 
 **Checkpoint**: US1–US4 funcionais.
 
@@ -166,7 +174,7 @@
 
 - [ ] T038 [US5] Use cases `activate-user` / `deactivate-user` em `src/modules/auth/application/use-cases/`. (depende de Phase 2)
 - [ ] T039 [US5] Rotas `PATCH /api/v1/users/:id/activate` e `.../deactivate` (idempotentes). (depende de T038)
-- [ ] T040 [P] [US5] Subcomandos CLI `ativar-usuario` / `desativar-usuario`. (depende de T038)
+- [ ] T040 [P] [US5] Requests Bruno `api-collections/users/status/` — `PATCH /api/v1/users/:id/activate` e `.../deactivate` (idempotência; 422 auto-desativação). (depende de T039)
 
 **Checkpoint**: US1–US5 funcionais.
 
@@ -188,7 +196,7 @@
 
 - [ ] T042 [US6] Use case `set-profile-photo` (+ remoção) em `src/modules/auth/application/use-cases/set-profile-photo.ts` (valida `image/jpeg|png|webp`, limite de tamanho). (depende de Phase 2)
 - [ ] T043 [US6] Rotas `PUT /api/v1/users/:id/photo` e `DELETE .../photo`. (depende de T042)
-- [ ] T044 [P] [US6] Subcomando CLI `definir-foto-usuario --file`. (depende de T042)
+- [ ] T044 [P] [US6] Requests Bruno `api-collections/users/photo/` — `PUT/DELETE /api/v1/users/:id/photo` (multipart; 422 tipo/tamanho). Integração (storage real) atrás de opt-in. (depende de T043)
 
 **Checkpoint**: US1–US6 funcionais.
 
@@ -218,7 +226,7 @@
 ## Phase 10: Polish & Cross-Cutting Concerns
 
 - [ ] T048 [P] Autorização fail-closed em todas as rotas administrativas (permissions `user:*`); alinhar nomes com `006-gestao-acessos`.
-- [ ] T049 E2E da CLI real em `tests/cli/` (listar→criar→ativar) seguindo o padrão `contracts.cli.test.ts`.
+- [ ] T049 E2E via Bruno run (`bru run api-collections/users --env local`) contra a borda HTTP real (listar→criar→ativar), reproduzível em CI/PR (ADR-0034); + smoke `fastify.inject` em `tests/modules/auth/adapters/http/`.
 - [ ] T050 Integração MySQL + MinIO (`pnpm run test:integration`) para `user-query.drizzle` e foto — atrás de `*_INTEGRATION=1`.
 - [ ] T051 [P] Rodar `quickstart.md` ponta a ponta e ajustar divergências.
 - [ ] T052 Gate W3 final por ticket: `pnpm run typecheck && pnpm run format:check && pnpm run lint && pnpm test`.
@@ -244,7 +252,7 @@
 
 - T004–T006 (suítes RED dos VOs) e T008–T010 (impl dos VOs) em paralelo.
 - Após Phase 2, cada user story pode ser tocada por um dev distinto (um ticket cada).
-- Dentro de uma story: suíte RED [P] → use case → rota/CLI [P].
+- Dentro de uma story: suíte RED [P] → use case → rota HTTP → coleção Bruno [P].
 
 ---
 
@@ -264,7 +272,7 @@ T008 cpf.ts · T009 telephone.ts · T010 profile-photo-ref.ts
 ### MVP First (US1)
 
 1. Phase 1 (Setup) → Phase 2 (Foundational, CRÍTICO) → Phase 3 (US1).
-2. **PARAR e VALIDAR**: listar/buscar/filtrar via CLI `memory` + contract suite.
+2. **PARAR e VALIDAR**: listar/buscar/filtrar via coleção Bruno contra a borda HTTP + contract suite.
 3. Demonstrar à P.O.
 
 ### Incremental (um ticket de pipeline por slice)
@@ -281,6 +289,6 @@ T008 cpf.ts · T009 telephone.ts · T010 profile-photo-ref.ts
 
 - **Tests RED são pré-condição** (W0) — não há implementação sem suíte vermelha antes (Princípio I).
 - Cada story ≈ um ticket `.claude/.pipeline/<TICKET>/`; abrir com `pnpm run pipeline:state init <ticket> --size <S|M>`.
-- Idioma: código EN; mensagens CLI em PT (`cli/formatters/`); erros internos kebab-case EN.
+- Idioma: código EN; mensagens ao humano (erros HTTP formatados) em PT; erros internos kebab-case EN.
 - Reuso, não reescrita: `register-user`, `request/confirm-password-reset`, `StoragePort`, `EmailPort`, schema `auth_user` (status existente).
 - `006-gestao-acessos` consome os nomes de permission `user:*` definidos no T048.

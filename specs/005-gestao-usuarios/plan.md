@@ -20,29 +20,29 @@ Adicionar o **lado administrativo/CRUD de usuários** ao core-api: listar (pagin
 
 **Target Platform**: Servidor Linux (container), processo único (modular monolith)
 
-**Project Type**: Web service (backend) — borda HTTP + paridade CLI
+**Project Type**: Web service (backend) — borda HTTP-first (ADR-0037; sem paridade CLI)
 
 **Performance Goals**: Listagem perceptivelmente instantânea para milhares de usuários (SC-003); paginação por offset
 
 **Constraints**: Domínio puro (`Result<T,E>`, sem throw/classes); idioma EN no código / PT nas mensagens; fail-closed na autorização (FR-014)
 
-**Scale/Scope**: ~7 use cases novos, 2-3 VOs novos (`Cpf`, `Telephone`, `ProfilePhotoRef`), extensão do agregado `User`, extensão do schema `auth_users`, ~8 endpoints HTTP + subcomandos CLI
+**Scale/Scope**: ~7 use cases novos, 2-3 VOs novos (`Cpf`, `Telephone`, `ProfilePhotoRef`), extensão do agregado `User`, extensão do schema `auth_users`, ~8 endpoints HTTP + coleção Bruno de validação E2E
 
 ## Constitution Check
 
 _GATE: Must pass before Phase 0 research. Re-check after Phase 1 design._
 
-| Princípio                         | Status | Nota                                                                                               |
-| --------------------------------- | ------ | -------------------------------------------------------------------------------------------------- |
-| I. TDD W0→W3 fail-first           | ✅     | Cada use case abre ticket; W0 RED antes de `src/`.                                                 |
-| II. Regressão zero                | ✅     | Gate W3 completo antes de fechar.                                                                  |
-| III. pnpm único                   | ✅     | Sem npm.                                                                                           |
-| IV. Modular monolith / isolamento | ✅     | **Estende `auth`**, não cria 6º BC. `collaboratorId` opaco — **sem** acesso a `partners` (FR-017). |
-| V. Domínio puro                   | ✅     | `Cpf`/`Telephone`/`ProfilePhotoRef` = VOs com smart constructor + branded + `Result`.              |
-| VI. MySQL 8 + Drizzle migrations  | ✅     | Colunas novas em `auth_users` via `pnpm run db:generate`. Sem JSON/ENUM nativos.                   |
-| VII. CLI-first / HTTP             | ✅     | HTTP já oficial (ADR-0025+). Paridade CLI planejada.                                               |
-| VIII. TS strict + idioma          | ✅     | `import type`, `.ts`, `#src/*`, EN no código.                                                      |
-| IX. Consultoria ACDG + citação    | ✅     | Decisão de fronteira de BC citada (Evans, `research.md`).                                          |
+| Princípio                         | Status | Nota                                                                                                  |
+| --------------------------------- | ------ | ----------------------------------------------------------------------------------------------------- |
+| I. TDD W0→W3 fail-first           | ✅     | Cada use case abre ticket; W0 RED antes de `src/`.                                                    |
+| II. Regressão zero                | ✅     | Gate W3 completo antes de fechar.                                                                     |
+| III. pnpm único                   | ✅     | Sem npm.                                                                                              |
+| IV. Modular monolith / isolamento | ✅     | **Estende `auth`**, não cria 6º BC. `collaboratorId` opaco — **sem** acesso a `partners` (FR-017).    |
+| V. Domínio puro                   | ✅     | `Cpf`/`Telephone`/`ProfilePhotoRef` = VOs com smart constructor + branded + `Result`.                 |
+| VI. MySQL 8 + Drizzle migrations  | ✅     | Colunas novas em `auth_users` via `pnpm run db:generate`. Sem JSON/ENUM nativos.                      |
+| VII. HTTP-first (ADR-0037)        | ✅     | HTTP é a UX primária; CLI embutida aposentada. Validação E2E via Bruno (ADR-0034) + `fastify.inject`. |
+| VIII. TS strict + idioma          | ✅     | `import type`, `.ts`, `#src/*`, EN no código.                                                         |
+| IX. Consultoria ACDG + citação    | ✅     | Decisão de fronteira de BC citada (Evans, `research.md`).                                             |
 
 **Resultado do gate**: PASS — nenhuma violação. `Complexity Tracking` não se aplica (não há 6º módulo nem desvio de princípio).
 
@@ -56,8 +56,8 @@ specs/005-gestao-usuarios/
 ├── spec.md              # Spec (clarificada)
 ├── research.md          # Fase 0 — decisão de fronteira de BC (DDD) + resoluções
 ├── data-model.md        # Fase 1 — agregado User estendido + VOs
-├── quickstart.md        # Fase 1 — como exercitar via CLI/HTTP
-├── contracts/           # Fase 1 — contratos HTTP (OpenAPI/Zod) + CLI
+├── quickstart.md        # Fase 1 — como exercitar via HTTP/Bruno
+├── contracts/           # Fase 1 — http-users.md (OpenAPI/Zod) + bruno-users.md (coleção E2E)
 └── checklists/requirements.md
 ```
 
