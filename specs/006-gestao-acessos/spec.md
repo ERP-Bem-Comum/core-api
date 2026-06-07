@@ -171,8 +171,8 @@ O administrador retira um papel de circulação sem necessariamente removê-lo d
 - **Bounded Contexts afetados**: [x] Auth (`auth_*`) — **estende** o RBAC existente. Sem novo BC.
 - **Novos agregados / Value Objects?**: `Role` já é agregado; candidatos a operação nova — `Role.create/rename/setPermissions/deactivate`. `Permission` já é VO. Possível `RoleName` como VO (unicidade/normalização).
 - **Novos eventos de domínio (outbox)?**: candidatos — `RoleCreated`, `RolePermissionsChanged`, `RoleDeactivated`, `RoleRevokedFromUser` (já há `RoleAssigned`). Para AuditLog/futuro.
-- **Novos subcomandos de CLI?**: paridade CLI para listar/criar/editar papéis e atribuir/revogar.
-- **Borda HTTP envolvida?**: SIM — rotas sob `auth/adapters/http` (Zod/OpenAPI, ADR-0025/0027/0028).
+- **Novos subcomandos de CLI?**: NÃO — CLI embutida aposentada (ADR-0037). A capacidade é exposta apenas pela borda HTTP; validação E2E por coleção Bruno (ADR-0034) + `fastify.inject`.
+- **Borda HTTP envolvida?**: SIM — UX primária (ADR-0037). Rotas sob `auth/adapters/http` (Zod/OpenAPI, ADR-0025/0027/0028).
 - **Possíveis violações da constituição (I–IX)?**: nenhuma prevista; reuso do RBAC existente. Decisão de fronteira já citada na `005` (estender `auth`).
 
 ## Assumptions

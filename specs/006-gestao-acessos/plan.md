@@ -20,7 +20,7 @@ Adicionar o **lado administrativo do RBAC** ao módulo `auth`: catálogo de perm
 
 **Target Platform**: Servidor Linux (container), processo único
 
-**Project Type**: Web service (backend) — borda HTTP + paridade CLI
+**Project Type**: Web service (backend) — borda HTTP como UX primária (ADR-0037; sem CLI embutida)
 
 **Performance Goals**: Consulta de permissões efetivas e catálogo instantâneas (poucos papéis/permissões)
 
@@ -32,14 +32,14 @@ Adicionar o **lado administrativo do RBAC** ao módulo `auth`: catálogo de perm
 
 _GATE: Must pass before Phase 0 research. Re-check after Phase 1 design._
 
-| Princípio                 | Status | Nota                                                                                                                                           |
-| ------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------- |
-| I–III, VIII               | ✅     | TDD W0→W3, regressão zero, pnpm, TS strict.                                                                                                    |
-| IV. Isolamento            | ✅     | **Estende `auth`** (sem novo BC); reuso do RBAC (ADR-0024).                                                                                    |
-| V. Domínio puro           | ✅     | `Role.create/rename/setPermissions/deactivate` puros → `Result`; `RoleName` VO.                                                                |
-| VI. MySQL + Drizzle       | ✅     | `auth_roles` + junções via `db:generate`; sem JSON/ENUM nativos.                                                                               |
-| VII. CLI-first / HTTP     | ✅     | HTTP oficial (ADR-0025+); paridade CLI.                                                                                                        |
-| IX. Consultoria + citação | ✅     | Decisão de fronteira (estender `auth`) citada em `005/research.md` (Evans, p.211) — mesma fronteira, reaproveitada aqui; ver `research.md` D1. |
+| Princípio                  | Status | Nota                                                                                                                                                        |
+| -------------------------- | ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| I–III, VIII                | ✅     | TDD W0→W3, regressão zero, pnpm, TS strict.                                                                                                                 |
+| IV. Isolamento             | ✅     | **Estende `auth`** (sem novo BC); reuso do RBAC (ADR-0024).                                                                                                 |
+| V. Domínio puro            | ✅     | `Role.create/rename/setPermissions/deactivate` puros → `Result`; `RoleName` VO.                                                                             |
+| VI. MySQL + Drizzle        | ✅     | `auth_roles` + junções via `db:generate`; sem JSON/ENUM nativos.                                                                                            |
+| VII. HTTP-first (ADR-0037) | ✅     | **ADR-0037 supersede o Princípio VII** ("CLI-first"): HTTP é a UX primária; CLI embutida aposentada. Validação E2E via Bruno (ADR-0034) + `fastify.inject`. |
+| IX. Consultoria + citação  | ✅     | Decisão de fronteira (estender `auth`) citada em `005/research.md` (Evans, p.211) — mesma fronteira, reaproveitada aqui; ver `research.md` D1.              |
 
 **Resultado do gate**: PASS — sem violações. `Complexity Tracking` N/A.
 
