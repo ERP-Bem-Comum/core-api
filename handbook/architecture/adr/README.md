@@ -129,6 +129,7 @@ Um **ADR (Architecture Decision Record)** é um documento curto que captura uma 
 | [0034](./0034-adopt-bruno-api-client-cli.md)                   | Adoção do Bruno (API client Git-friendly) como ferramenta de smoke e2e da borda HTTP; coleções `.bru` em `api-collections/`, `bru` CLI   | Accepted                              | 2026-06-04 |
 | [0035](./0035-partner-territory-soft-delete.md)                | Parceria territorial (estados/municípios) — Entity persistida com soft-delete (`active`+`deactivated_at`+CHECK); resolve D9 do ADR-0031   | Accepted                              | 2026-06-06 |
 | [0036](./0036-act-partner-placeholder.md)                      | `Act` — novo tipo de parceiro PLACEHOLDER (clone enxuto do núcleo do Collaborator); provisório, regras de negócio pendentes              | Accepted (provisório)                 | 2026-06-06 |
+| [0037](./0037-http-first-retire-embedded-cli.md)               | HTTP-first — aposenta a CLI embutida no core-api; validação E2E via Bruno (ADR-0034); CLI do domínio migra para `cli/` (binário `bc`). Supersede parcial do Princípio VII | Accepted | 2026-06-07 |
 
 ---
 

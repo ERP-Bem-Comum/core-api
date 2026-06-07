@@ -47,10 +47,14 @@ gerar migration com `pnpm run db:generate` (nunca SQL à mão). Proibidos: JSON 
 triggers, stored procs, ENUM nativo. Cliente de storage único: `@aws-sdk/client-s3`
 (ADR-0019). *(ADR-0013, 0015, 0020)*
 
-### VII. CLI-first; HTTP é Fase 2+ (exige ADR)
-A UX primária da Fase 1 é a CLI (`pnpm run cli:contracts -- <subcomando>`). Servidor
-HTTP (Fastify) é reservado para Fase 2+ e só ativa via novo ADR. Application orquestra;
-o domínio ignora o transporte. *(AGENTS.md; ADR-0025 reservado)*
+### VII. HTTP-first; CLI embutida aposentada (ADR-0037)
+A UX primária do core-api é a **borda HTTP** (`/api/v1`, Fastify + Zod/OpenAPI — ADR-0025/
+0027/0033). A **CLI embutida** no core-api está **aposentada** (ADR-0037): não se criam novos
+subcomandos `cli:*`; a validação de regras de negócio que a CLI servia passa a **testes de
+integração REAIS via HTTP** (coleções Bruno — ADR-0034 — + `fastify.inject`). A CLI do domínio
+migra para o pacote irmão `cli/` (binário `bc`), aplicação à parte que integra IAs e consome a
+borda HTTP como cliente. Application orquestra; o domínio ignora o transporte (ports & adapters,
+ADR-0006). *(supersede o "CLI-first" original; ver ADR-0037)*
 
 ### VIII. TypeScript strict + ESM + idioma por camada
 `strict` completo (`noUncheckedIndexedAccess`, `verbatimModuleSyntax`, etc.),
@@ -102,4 +106,4 @@ violação só é aceitável com justificativa explícita na seção "Complexity
 O "Constitution Check" do `/speckit-plan` verifica os princípios I–IX.
 Alterações de stack ou de princípio exigem ADR novo (com `supersedes`), não edição aqui.
 
-**Version**: 1.1.0 | **Ratified**: 2026-06-05 | **Last Amended**: 2026-06-05
+**Version**: 1.2.0 | **Ratified**: 2026-06-05 | **Last Amended**: 2026-06-07 (Princípio VII → HTTP-first, ADR-0037)
