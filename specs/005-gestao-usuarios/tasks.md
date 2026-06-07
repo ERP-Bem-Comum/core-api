@@ -196,7 +196,7 @@
 
 - [x] T042 [US6] Use cases `setProfilePhoto`/`removeProfilePhoto` em `src/modules/auth/application/use-cases/set-profile-photo.ts` (valida `image/jpeg|png|webp`, ≤5 MiB) + port `ProfilePhotoStorage` + adapter in-memory. (depende de Phase 2) ✅
 - [x] T043 [US6] Rotas `PUT /api/v1/users/:id/photo` e `DELETE .../photo` (`user:update`; octet-stream + magic bytes) + adapter S3/MinIO; testadas via `fastify.inject` (7 CAs). (depende de T042) ✅ AUTH-HTTP-PHOTO
-- [ ] T044 [P] [US6] Requests Bruno `api-collections/auth/` — foto (multipart; 422 tipo/tamanho) + integração MinIO real (opt-in). **Pendente:** exige asset JPEG versionado + validação `body:file`. (depende de T043)
+- [x] T044 [P] [US6] Requests Bruno `api-collections/auth/2-users/70–72` — foto (octet-stream via `body:file`+`@file`/`@contentType`; 200 / 422) + integração MinIO real (`pnpm run test:integration:photo`, 3/3). (depende de T043) ✅
 
 **Checkpoint**: US1–US6 funcionais.
 
@@ -226,9 +226,9 @@
 ## Phase 10: Polish & Cross-Cutting Concerns
 
 - [ ] T048 [P] Autorização fail-closed em todas as rotas administrativas (permissions `user:*`); alinhar nomes com `006-gestao-acessos`.
-- [ ] T049 E2E via Bruno run (`bru run api-collections/users --env local`) contra a borda HTTP real (listar→criar→ativar), reproduzível em CI/PR (ADR-0034); + smoke `fastify.inject` em `tests/modules/auth/adapters/http/`.
+- [x] T049 (coleção Bruno auth completa, 45 req/59 testes; `pnpm run test:e2e:bruno:auth`) E2E via Bruno run (`bru run api-collections/users --env local`) contra a borda HTTP real (listar→criar→ativar), reproduzível em CI/PR (ADR-0034); + smoke `fastify.inject` em `tests/modules/auth/adapters/http/`.
 - [x] T050 Integração MySQL (`MYSQL_PORT=3307 pnpm run test:integration:auth`) — 38/38 verde contra MySQL 8.4: migrations 0004/0005 aplicadas, mappers (roundtrip) e `user-query.drizzle` (LIKE CI, filtro status, OFFSET, COUNT) validados. **Foto/MinIO real** (storage S3) permanece pendente (opt-in).
-- [ ] T051 [P] Rodar `quickstart.md` ponta a ponta e ajustar divergências.
+- [x] T051 (quickstart.md reescrito e alinhado) Rodar `quickstart.md` ponta a ponta e ajustar divergências.
 - [ ] T052 Gate W3 final por ticket: `pnpm run typecheck && pnpm run format:check && pnpm run lint && pnpm test`.
 
 ---

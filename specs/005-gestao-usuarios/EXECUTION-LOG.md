@@ -75,11 +75,13 @@
 
 ### Fase 8 — Fechamento 005 🔄
 
-- [x] Coleção Bruno `api-collections/auth/` (US1–US5 + segurança) + `pnpm run test:e2e:bruno:auth` reproduzível (49 testes verdes). **Pendente:** requests de foto (asset binário) + `/me` (T049 parcial).
-- [x] Integração auth (`MYSQL_PORT=3307 pnpm run test:integration:auth`, Docker) — **38/38 verde**; valida migrations 0004/0005 + mappers + `user-query.drizzle` (listagem real). MinIO/foto S3 = opt-in pendente (T050 parcial).
-- [x] Gate W3 final: typecheck + format + lint + `pnpm test` (**2400 pass / 0 fail**).
-- [ ] `quickstart.md` ponta a ponta (T051) + alinhar permissions `user:*` com spec 006 (T048, quando a 006 existir).
-- [ ] Abrir PR da 005 (T052) — aguardando decisão do humano (push outward-facing).
+- [x] Coleção Bruno `api-collections/auth/` **completa** (US1–US7 + segurança) + `pnpm run test:e2e:bruno:auth` reproduzível — **45 requests / 59 testes verdes** (foto via `body:file`+`@file`/`@contentType` com asset `assets/sample.jpg`; `/me` em `4-me/`). (T049 ✅, T044 ✅ Bruno-side, T047 ✅ Bruno-side)
+- [x] Integração auth MySQL (`MYSQL_PORT=3307 pnpm run test:integration:auth`, Docker) — **38/38 verde**; migrations 0004/0005 + mappers + `user-query.drizzle`. (T050 ✅ MySQL)
+- [x] Integração foto MinIO (`pnpm run test:integration:photo`, `STORAGE_INTEGRATION=1`) — **3/3 verde**; adapter S3 (upload/remove) contra MinIO real. (T050 ✅ MinIO)
+- [x] `quickstart.md` reescrito e alinhado à implementação real (coleção `auth/`, runner, integração). (T051 ✅)
+- [x] Gate W3 final: typecheck + format + lint + `pnpm test` (**2400 pass / 0 fail / 18 skipped**).
+- [ ] Alinhar permissions `user:*` com spec 006 (T048 — quando a 006 existir).
+- [ ] Abrir PR da 005 (T052) — aguardando decisão do humano (sem `origin` oficial; só remote `backup`).
 
 ### Fase 9 — Spec 006 (Acessos) — depois da 005
 
