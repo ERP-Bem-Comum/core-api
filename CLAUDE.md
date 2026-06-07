@@ -7,7 +7,7 @@
 
 <!-- SPECKIT START -->
 
-Plano corrente: `specs/003-partners-aggregator-export/plan.md` (épico — agregador `/partners` + paridade de export CSV, `/api/v1`).
+Plano corrente: `specs/005-gestao-usuarios/plan.md` (gestão administrativa de usuários — estende o módulo `auth`; spec irmã `006-gestao-acessos`).
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan.
 
