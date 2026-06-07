@@ -21,6 +21,8 @@ export { partnerGeographyHttpPlugin } from '../adapters/http/partner-geography-p
 export type { PartnerGeographyHttpHooks } from '../adapters/http/partner-geography-plugin.ts';
 export { actHttpPlugin } from '../adapters/http/act-plugin.ts';
 export type { ActsHttpHooks } from '../adapters/http/act-plugin.ts';
+export { partnersHttpPlugin } from '../adapters/http/partners-plugin.ts';
+export type { PartnersHttpHooks } from '../adapters/http/partners-plugin.ts';
 export { buildPartnersHttpDeps } from '../adapters/http/composition.ts';
 export type {
   PartnersHttpDeps,

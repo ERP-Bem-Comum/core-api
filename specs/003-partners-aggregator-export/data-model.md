@@ -30,17 +30,19 @@ export type PartnerListItem = Readonly<{
 ## DTO — `PartnersPage` (resposta do agregador)
 
 ```ts
+// Shape canônico do PaginationMeta do partners (supplier-list-query.ts) —
+// consistência com as listas por-tipo que o front já consome.
 export type PartnersPageMeta = Readonly<{
-  page: number;
-  limit: number;
-  total: number;
-  totalPages: number;
+  itemCount: number; // itens nesta página
+  totalItems: number; // após filtro (search/type), antes da fatia
+  itemsPerPage: number; // = limit
+  totalPages: number; // ceil(totalItems / itemsPerPage); 0 se vazio
+  currentPage: number; // = page
 }>;
 export type PartnersPage = Readonly<{ items: readonly PartnerListItem[]; meta: PartnersPageMeta }>;
 ```
 
-- `total` = nº de itens **após** filtro (`search`/`type`), antes da fatia de página.
-- `totalPages = ceil(total / limit)`; `page` além do total → `items: []`.
+- `totalItems` = nº de itens **após** filtro (`search`/`type`); `totalPages = ceil(totalItems / itemsPerPage)`; `currentPage` além do total → `items: []`.
 
 ## Algoritmo de composição (borda) — `partner-aggregate-query.ts`
 

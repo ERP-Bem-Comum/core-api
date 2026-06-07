@@ -42,11 +42,13 @@ const PartnerListItem = z.object({
 });
 const PartnersPage = z.object({
   items: z.array(PartnerListItem),
+  // shape canônico do PaginationMeta do partners (consistência com as listas por-tipo)
   meta: z.object({
-    page: z.number().int(),
-    limit: z.number().int(),
-    total: z.number().int(),
+    itemCount: z.number().int(),
+    totalItems: z.number().int(),
+    itemsPerPage: z.number().int(),
     totalPages: z.number().int(),
+    currentPage: z.number().int(),
   }),
 });
 ```
@@ -56,7 +58,7 @@ const PartnersPage = z.object({
 - Ordenação `(name ASC, type ASC, id ASC)`; paginação **após** merge in-memory dos 4 readers.
 - `type` filtra um tipo; ausente → 4 tipos. `search` casa `name`/`document`.
 - Σ dos 4 readers > `MAX_TOTAL` (10.000) → **503** (`code: 'partners-aggregate-too-large'`).
-- `page` além do total → `items: []` com `meta` coerente (`totalPages = ceil(total/limit)`).
+- `page` além do total → `items: []` com `meta` coerente (`totalPages = ceil(totalItems/itemsPerPage)`).
 
 ---
 

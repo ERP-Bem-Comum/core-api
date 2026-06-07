@@ -48,7 +48,7 @@ o vínculo de contratado (feature 002) precisa de um seletor único de contratad
 
 **Acceptance Scenarios**:
 
-1. **Given** parceiros dos 4 tipos cadastrados, **When** chamo `GET /api/v1/partners` sem `type`, **Then** recebo `{ items: [{ type, id, name, document, active }], meta: { page, limit, total, totalPages } }` com itens dos 4 tipos.
+1. **Given** parceiros dos 4 tipos cadastrados, **When** chamo `GET /api/v1/partners` sem `type`, **Then** recebo `{ items: [{ type, id, name, document, active }], meta: { itemCount, totalItems, itemsPerPage, totalPages, currentPage } }` com itens dos 4 tipos.
 2. **Given** `type=supplier`, **When** chamo o agregador, **Then** recebo só fornecedores (mesma projeção plana).
 3. **Given** `search=<termo>`, **When** busco, **Then** os itens casam o termo em `name` **ou** `document` (case-insensitive), em todos os tipos não filtrados.
 4. **Given** `page`/`limit`, **When** pagino, **Then** `meta` reflete `page`, `limit`, `total`, `totalPages` e `items` traz a fatia correta (estratégia conforme decisão registrada em Clarifications).
@@ -77,7 +77,7 @@ filtros e validar que o CSV contém os registros que casam os filtros — sem de
 
 ### Edge Cases
 
-- **Agregador** com 0 parceiros → `{ items: [], meta: { page, limit, total: 0, totalPages: 0 } }` (não erro).
+- **Agregador** com 0 parceiros → `{ items: [], meta: { itemCount: 0, totalItems: 0, itemsPerPage, totalPages: 0, currentPage } }` (não erro).
 - **Agregador** com `type` inválido (fora dos 4) → erro de validação (envelope), não 500.
 - **Agregador** `page` além do total → `items: []` com `meta` coerente.
 - **Agregador** com soma dos 4 readers > `MAX_TOTAL` (10.000) → **503** (`partners-aggregate-too-large`), não OOM.
@@ -88,7 +88,7 @@ filtros e validar que o CSV contém os registros que casam os filtros — sem de
 
 ### Functional Requirements
 
-- **FR-001**: O sistema MUST expor `GET /api/v1/partners` que retorna parceiros dos 4 tipos numa **projeção plana** `{ type, id, name, document, active }`, paginada com `meta: { page, limit, total, totalPages }`.
+- **FR-001**: O sistema MUST expor `GET /api/v1/partners` que retorna parceiros dos 4 tipos numa **projeção plana** `{ type, id, name, document, active }`, paginada com `meta: { itemCount, totalItems, itemsPerPage, totalPages, currentPage }`.
 - **FR-002**: O agregador MUST aceitar `type` (um dos 4 tipos ou ausente=todos), `search` (casa `name`/`document` case-insensitive), `page` e `limit`. A ordenação MUST ser `(name ASC, type ASC, id ASC)` (tie-break determinístico).
 - **FR-003**: O agregador MUST **compor na borda** lendo os 4 readers existentes em paralelo (`Promise.all`), projetando para `PartnerListItem`, filtrando, fazendo merge e paginando **após** o merge (in-memory) — read-only, sem tabela nova, sem expor o agregado interno. MUST impor `MAX_TOTAL = 10_000` (soma dos 4 readers): se exceder, responde **503** (`code: 'partners-aggregate-too-large'`) — safety cap até a paginação no DB ser justificada por volume/SLO.
 - **FR-004**: O sistema MUST expor `GET /api/v1/collaborators/export` (CSV) reusando o serializer `collaborator-csv.ts` existente, respeitando os filtros da listagem de colaboradores.
@@ -101,7 +101,7 @@ filtros e validar que o CSV contém os registros que casam os filtros — sem de
 ### Key Entities
 
 - **PartnerListItem**: projeção plana do agregador — `type` (`supplier|financier|collaborator|act`), `id`, `name`, `document`, `active`. Não persiste; é junção de leitura na borda.
-- **PartnersPage**: envelope paginado do agregador — `{ items: PartnerListItem[], meta: { page, limit, total, totalPages } }`.
+- **PartnersPage**: envelope paginado do agregador — `{ items: PartnerListItem[], meta: { itemCount, totalItems, itemsPerPage, totalPages, currentPage } }`.
 - **PartnerExport**: representação tabular (CSV) da listagem filtrada de um tipo de parceiro.
 
 ## Success Criteria _(mandatory)_
@@ -109,7 +109,7 @@ filtros e validar que o CSV contém os registros que casam os filtros — sem de
 ### Measurable Outcomes
 
 - **SC-001**: O front consegue trocar o fan-out de 4 GETs por **1 chamada** ao agregador para popular o seletor de contratado, sem montar a junção no cliente.
-- **SC-002**: O agregador devolve resultados dos 4 tipos com `meta` de paginação correta (`totalPages = ceil(total/limit)`).
+- **SC-002**: O agregador devolve resultados dos 4 tipos com `meta` de paginação correta (`totalPages = ceil(totalItems/itemsPerPage)`).
 - **SC-003**: 100% dos 4 tipos de parceiro têm `GET /<tipo>/export` (paridade completa).
 - **SC-004**: Todo export escapa CSV-injection (campos `=`/`+`/`-`/`@`) — 0 fórmulas ativas no arquivo gerado.
 - **SC-005**: Toda rota nova rejeita acesso sem sessão (401) e sem permissão (403), 100% das vezes, com envelope contendo `requestId`.
