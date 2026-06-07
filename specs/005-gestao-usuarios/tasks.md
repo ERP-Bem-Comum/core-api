@@ -75,14 +75,14 @@
 
 ### Tests RED
 
-- [ ] T016 [P] [US1] Suíte RED do use case em `tests/modules/auth/application/use-cases/list-users.test.ts` (paginação/busca/filtro com repo fake; meta correta; busca vazia → zero itens).
+- [x] T016 [P] [US1] Suíte RED do use case em `tests/modules/auth/application/use-cases/list-users.test.ts` (paginação/busca/filtro com repo fake; meta correta; busca vazia → zero itens). ✅ AUTH-USECASE-LIST-USERS
 - [ ] T017 [US1] Contract suite RED do read model em `tests/modules/auth/adapters/persistence/user-query.suite.ts` (consumida por in-memory e Drizzle/MySQL).
 
 ### Implementação
 
-- [ ] T018 [P] [US1] Definir port `UserQuery` em `src/modules/auth/application/ports/user-query.ts` (`list({page,pageSize,search?,status})` → `{items, meta}`).
-- [ ] T019 [US1] Implementar use case em `src/modules/auth/application/use-cases/list-users.ts` (`Result`; valida pageSize ∈ {5,10,25}). (depende de T018)
-- [ ] T020 [P] [US1] Adapter in-memory do `UserQuery` em `src/modules/auth/adapters/persistence/repos/user-query.in-memory.ts`. (depende de T018)
+- [x] T018 [P] [US1] Definir port `UserQuery` em `src/modules/auth/application/ports/user-query.ts` (`list({page,pageSize,search?,status})` → `{items, meta}`). ✅
+- [x] T019 [US1] Implementar use case em `src/modules/auth/application/use-cases/list-users.ts` (`Result`; valida pageSize ∈ {5,10,25}). (depende de T018) ✅
+- [x] T020 [P] [US1] Adapter in-memory do `UserQuery` em `src/modules/auth/adapters/persistence/repos/user-query.in-memory.ts` (+ suíte direta de paginação/busca/filtro/ordenação). (depende de T018) ✅
 - [ ] T021 [US1] Adapter Drizzle do `UserQuery` em `src/modules/auth/adapters/persistence/repos/user-query.drizzle.ts` (offset + LIKE CI + filtro status; índice de nome). (depende de T018)
 - [ ] T022 [US1] Rota `GET /api/v1/users` em `src/modules/auth/adapters/http/` (Zod query + paginação) conforme `contracts/http-users.md`. (depende de T019)
 - [ ] T023 [P] [US1] Coleção Bruno `api-collections/users/list/` — requests `.bru` para `GET /api/v1/users` (paginação 5/10/25, `search`, `status`) com asserções de status/shape/meta (ADR-0034). (depende de T022)

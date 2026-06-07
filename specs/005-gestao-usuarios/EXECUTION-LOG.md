@@ -19,8 +19,8 @@
 
 ### Fase 1 — US1 Listar/buscar/filtrar (P1, MVP) 🔄
 
-- [ ] `AUTH-USECASE-LIST-USERS` — port `UserQuery` (read model) + use case + adapter in-memory + contract suite (tasks T016–T020)
-- [ ] `AUTH-HTTP-LIST-USERS` — adapter Drizzle `UserQuery` + rota `GET /api/v1/users` + coleção Bruno `users/list/` (tasks T021–T023)
+- [x] `AUTH-USECASE-LIST-USERS` — port `UserQuery` (read model) + use case + adapter in-memory (T016/T018/T019/T020) ✅ closed-green
+- [ ] `AUTH-HTTP-LIST-USERS` — adapter Drizzle `UserQuery` + contract suite param + rota `GET /api/v1/users` + coleção Bruno `users/list/` (T017/T021/T022/T023)
 
 ### Fase 2 — US2 Detalhe (P1)
 
@@ -69,3 +69,4 @@
 ## Log cronológico
 
 - **2026-06-07** — Fase 0 concluída (ADR-0037 + 4 tickets Foundational closed-green). Roadmap criado. Iniciando Fase 1 (US1).
+- **2026-06-07** — `AUTH-USECASE-LIST-USERS` closed-green (port `UserQuery` + use case `list-users` + adapter in-memory; 12 testes; gate 2313 pass). Fase 1 parte 1/2. Próximo: `AUTH-HTTP-LIST-USERS`.
