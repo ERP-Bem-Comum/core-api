@@ -31,7 +31,12 @@ import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
 import type { PartnersHttpDeps } from './composition.ts';
 import { collaboratorToDetailDto } from './collaborator-dto.ts';
 import { parseCollaboratorImportCsv } from './collaborator-import-dto.ts';
-import { queryToFilter, paginateRecords } from './collaborator-list-query.ts';
+import {
+  queryToFilter,
+  paginateRecords,
+  collaboratorsForExport,
+} from './collaborator-list-query.ts';
+import { collaboratorsToCsv } from '../export/collaborator-csv.ts';
 import {
   collaboratorListQuerySchema,
   collaboratorPaginatedSchema,
@@ -139,6 +144,34 @@ const collaboratorsRoutes =
           ok({ items: page.items.map(collaboratorToDetailDto), meta: page.meta }),
           { ok: 200 },
         );
+      },
+    });
+
+    // Export CSV (US-002 / spec 003): filtra (search/active/…) e serializa via util compartilhado
+    // (escape anti-fórmula). Rota estática tem precedência sobre `/:id`. `collaborator:read`.
+    scope.route({
+      method: 'GET',
+      url: '/collaborators/export',
+      preHandler: [hooks.requireAuth, hooks.authorize(COLLABORATOR_PERMISSION.read)],
+      schema: {
+        querystring: collaboratorListQuerySchema,
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.listCollaboratorRecords();
+        if (!result.ok) {
+          return sendResult(reply, err(result.error), {
+            errors: { 'collaborator-read-unavailable': 503 },
+          });
+        }
+        const csv = collaboratorsToCsv(
+          collaboratorsForExport(result.value, queryToFilter(req.query)),
+        );
+        return reply
+          .code(200)
+          .header('content-type', 'text/csv; charset=utf-8')
+          .header('content-disposition', 'attachment; filename="collaborators.csv"')
+          .header('x-content-type-options', 'nosniff')
+          .send(csv) as unknown as Promise<void>;
       },
     });
 

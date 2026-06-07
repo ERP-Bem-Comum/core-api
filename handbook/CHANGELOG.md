@@ -4,6 +4,22 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-06 — 🔎 Épico `003-partners-aggregator-export` — agregador `/partners` + paridade de export CSV (`/api/v1`)
+
+Épico [`specs/003-partners-aggregator-export/`](../specs/003-partners-aggregator-export/), originado dos
+**ITENs 3 e 4** do retorno do front (gaps restantes de `partners` `/api/v1`, fora do escopo da spec `001`).
+Entregue via pipeline `core-api-sdd` (2 tickets W0→W3 closed-green). **Sem schema/migration** — leitura e
+serialização na borda; cross-BC inexistente (só o módulo `partners`).
+
+**Novas capacidades na borda `/api/v1` de parceiros:**
+
+- **`GET /api/v1/partners`** (novo, ITEM 3) — **agregador de busca** dos 4 tipos (supplier/financier/collaborator/act) numa projeção plana paginada `{ items: [{ type, id, name, document, active }], meta: { itemCount, totalItems, itemsPerPage, totalPages, currentPage } }`. Substitui o fan-out de 4 GETs no front (alimenta o seletor de contratado da feature 002). Query `search` (casa name/document), `type` (filtra um dos 4), `page`/`limit`. Composição **read-side na borda** lendo os 4 readers (CQRS — Vernon p.193; não cria tabela, não expõe o agregado interno — ADR-0014). Ordenação `(name, type, id)`; **safety cap** `MAX_TOTAL=10_000` → `503` (`partners-aggregate-too-large`). Autorização = **AND das 4 permissões de leitura** (`supplier:read` + `financier:read` + `collaborator:read` + `act:read`) via preHandlers encadeados.
+- **`GET /api/v1/collaborators/export`**, **`/financiers/export`**, **`/acts/export`** (novos, ITEM 4) — **paridade de export CSV** com `/suppliers/export` (que já existia). Serializers `financier-csv`/`act-csv` espelham `supplier-csv` (`act` = placeholder enxuto, ADR-0036); `collaborators` reusa o serializer existente. Respeitam os filtros da listagem do tipo; headers `text/csv; charset=utf-8` + `Content-Disposition: attachment` + `X-Content-Type-Options: nosniff`; escape anti-CSV-injection + RFC 4180 via util compartilhado `shared/utils/csv.ts`; RBAC `<tipo>:read`.
+
+Fecha os ITENs 3 e 4 do [`po-feedback/0001`](./po-feedback/0001-gap-api-v2-contracts.md) (família partners `/api/v1`). OpenAPI gerado do Zod (`fastify-zod-openapi`, ADR-0027) reflete os novos shapes automaticamente.
+
+---
+
 ## 2026-06-06 — 🔗 Épico `002-contracts-http-gaps` — vínculo de contratado + PATCH de metadados (`/api/v2`)
 
 Épico [`specs/002-contracts-http-gaps/`](../specs/002-contracts-http-gaps/) (PR #18 → `dev`), originado do

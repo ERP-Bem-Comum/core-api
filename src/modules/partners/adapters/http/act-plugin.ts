@@ -33,6 +33,8 @@ import {
   createActBodySchema,
   updateActBodySchema,
 } from './act-schemas.ts';
+import { queryToFilter as actQueryToFilter, actsForExport } from './act-list-query.ts';
+import { actsToCsv } from '../export/act-csv.ts';
 import { ACT_PERMISSION } from '../../public-api/permissions.ts';
 
 export type ActsHttpHooks = Readonly<{
@@ -134,6 +136,32 @@ const actsRoutes =
           }),
           { ok: 200 },
         );
+      },
+    });
+
+    // Export CSV (US-002 / spec 003): filtra (search/active) e serializa via util compartilhado.
+    // Rota estática tem precedência sobre `/:id`. `act:read`.
+    scope.route({
+      method: 'GET',
+      url: '/acts/export',
+      preHandler: [hooks.requireAuth, hooks.authorize(ACT_PERMISSION.read)],
+      schema: {
+        querystring: actListQuerySchema,
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.listActRecords();
+        if (!result.ok) {
+          return sendResult(reply, err(result.error), {
+            errors: { 'act-read-unavailable': 503 },
+          });
+        }
+        const csv = actsToCsv(actsForExport(result.value, actQueryToFilter(req.query)));
+        return reply
+          .code(200)
+          .header('content-type', 'text/csv; charset=utf-8')
+          .header('content-disposition', 'attachment; filename="acts.csv"')
+          .header('x-content-type-options', 'nosniff')
+          .send(csv) as unknown as Promise<void>;
       },
     });
 

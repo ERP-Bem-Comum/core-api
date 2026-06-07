@@ -10,11 +10,22 @@
  */
 
 import type { CollaboratorReadRecord } from '#src/modules/partners/application/ports/collaborator-reader.ts';
+import type { Collaborator } from '#src/modules/partners/domain/collaborator/types.ts';
 import {
   collaboratorMatchesFilter,
   type CollaboratorListFilter,
 } from '#src/modules/partners/application/use-cases/list-collaborators.ts';
 import type { CollaboratorListQuery } from './schemas.ts';
+
+/** Export: filtra (sem paginar) e ordena por nome; devolve os agregados p/ `collaboratorsToCsv`. */
+export const collaboratorsForExport = (
+  records: readonly CollaboratorReadRecord[],
+  filter: CollaboratorListFilter,
+): readonly Collaborator[] =>
+  records
+    .filter((r) => collaboratorMatchesFilter(r.collaborator, filter))
+    .sort((a, b) => a.collaborator.name.localeCompare(b.collaborator.name))
+    .map((r) => r.collaborator);
 
 export const queryToFilter = (q: CollaboratorListQuery): CollaboratorListFilter => ({
   ...(q.search !== undefined ? { search: q.search } : {}),

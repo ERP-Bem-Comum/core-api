@@ -29,6 +29,7 @@ import {
   financiersHttpPlugin,
   partnerGeographyHttpPlugin,
   actHttpPlugin,
+  partnersHttpPlugin,
   buildPartnersHttpDeps,
 } from '#src/modules/partners/public-api/http.ts';
 
@@ -130,6 +131,14 @@ const main = async (): Promise<void> => {
         plugin: actHttpPlugin(partnersDeps, {
           requireAuth,
           authorize: authDeps.authorize,
+        }),
+        prefix: '/api/v1',
+      },
+      {
+        plugin: partnersHttpPlugin(partnersDeps, {
+          requireAuth,
+          authorize: authDeps.authorize,
+          hasPermission: authDeps.hasPermission,
         }),
         prefix: '/api/v1',
       },

@@ -1,0 +1,33 @@
+meta {
+  name: partners aggregate filtrado por type supplier
+  type: http
+  seq: 73
+}
+
+get {
+  url: {{baseUrl}}/api/v1/partners
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{operatorToken}}
+}
+
+params:query {
+  type: supplier
+  page: 1
+  limit: 20
+}
+
+tests {
+  test("US-001 — GET /partners?type=supplier retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("US-001 — todos os items retornados sao do tipo supplier", function () {
+    const items = res.getBody().items;
+    items.forEach(function (item) {
+      expect(item.type).to.equal("supplier");
+    });
+  });
+}
