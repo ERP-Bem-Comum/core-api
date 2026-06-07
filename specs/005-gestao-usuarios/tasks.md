@@ -227,7 +227,7 @@
 
 - [ ] T048 [P] Autorização fail-closed em todas as rotas administrativas (permissions `user:*`); alinhar nomes com `006-gestao-acessos`.
 - [ ] T049 E2E via Bruno run (`bru run api-collections/users --env local`) contra a borda HTTP real (listar→criar→ativar), reproduzível em CI/PR (ADR-0034); + smoke `fastify.inject` em `tests/modules/auth/adapters/http/`.
-- [ ] T050 Integração MySQL + MinIO (`pnpm run test:integration`) para `user-query.drizzle` e foto — atrás de `*_INTEGRATION=1`.
+- [x] T050 Integração MySQL (`MYSQL_PORT=3307 pnpm run test:integration:auth`) — 38/38 verde contra MySQL 8.4: migrations 0004/0005 aplicadas, mappers (roundtrip) e `user-query.drizzle` (LIKE CI, filtro status, OFFSET, COUNT) validados. **Foto/MinIO real** (storage S3) permanece pendente (opt-in).
 - [ ] T051 [P] Rodar `quickstart.md` ponta a ponta e ajustar divergências.
 - [ ] T052 Gate W3 final por ticket: `pnpm run typecheck && pnpm run format:check && pnpm run lint && pnpm test`.
 

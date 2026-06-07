@@ -73,11 +73,13 @@
 
 - [x] `AUTH-HTTP-ME` — plugin `meHttpPlugin`: `GET|PUT /api/v1/me` (self por construção via `req.userId`; PUT restrito a name/telephone) + `POST /me/password-reset` (202, reusa `requestPasswordReset`) (T045–T047) ✅ closed-green · 6 testes inject. **US7 entregue end-to-end.** Pendência: Bruno `users/me/` (T047).
 
-### Fase 8 — Fechamento 005
+### Fase 8 — Fechamento 005 🔄
 
-- [ ] Coleção Bruno completa + `bru run` reproduzível (T048–T049)
-- [ ] Integração auth (`pnpm run test:integration:auth`, Docker) — valida migration 0004 + mapper (T050)
-- [ ] Gate W3 final + abrir PR da 005 (T051–T052)
+- [x] Coleção Bruno `api-collections/auth/` (US1–US5 + segurança) + `pnpm run test:e2e:bruno:auth` reproduzível (49 testes verdes). **Pendente:** requests de foto (asset binário) + `/me` (T049 parcial).
+- [x] Integração auth (`MYSQL_PORT=3307 pnpm run test:integration:auth`, Docker) — **38/38 verde**; valida migrations 0004/0005 + mappers + `user-query.drizzle` (listagem real). MinIO/foto S3 = opt-in pendente (T050 parcial).
+- [x] Gate W3 final: typecheck + format + lint + `pnpm test` (**2400 pass / 0 fail**).
+- [ ] `quickstart.md` ponta a ponta (T051) + alinhar permissions `user:*` com spec 006 (T048, quando a 006 existir).
+- [ ] Abrir PR da 005 (T052) — aguardando decisão do humano (push outward-facing).
 
 ### Fase 9 — Spec 006 (Acessos) — depois da 005
 
