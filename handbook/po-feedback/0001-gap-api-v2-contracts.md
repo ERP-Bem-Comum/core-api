@@ -7,7 +7,7 @@
 | **Data do retorno** | 2026-06-02                                                                                                                                                                                                                          |
 | **Módulo**          | contracts                                                                                                                                                                                                                           |
 | **Origem**          | Relatório de gap (frontend v2 TanStack Start vs. OpenAPI v2)                                                                                                                                                                        |
-| **Status**          | 🟢 Em correção — decisão-mãe tomada ([ADR-0032](../architecture/adr/0032-transient-http-composition-read-until-bff.md)): composição transitória na borda. Restam tickets do Bucket B (borda HTTP) + read na public-api de Parceiros |
+| **Status**          | 🟢 Bucket B/D entregue pelo épico [`002-contracts-http-gaps`](../../specs/002-contracts-http-gaps/) (PR #18 → `dev`): contratado vinculado + composto no detalhe (rota gorda [ADR-0032](../architecture/adr/0032-transient-http-composition-read-until-bff.md)), PATCH de metadados, DELETE recusado. Restam apenas itens bloqueados por BC inexistente (`program`/`budgetPlan` — Inquiry-0014) |
 
 > O conteúdo da seção **A** é o relatório recebido **na íntegra** (registro do retorno da P.O.). A seção
 > **B — Encaminhamento do backend** é a triagem inicial, cruzando cada item com o estado real do código.
@@ -185,3 +185,23 @@ paginação, R1–R4, tipos de aditivo (`distrato`), `DELETE` documento, estimat
 3. **Read na public-api de Parceiros** (ticket próprio): a rota composta precisa ler o contratado/bancário de Parceiros pela public-api (hoje só há write port de ETL).
 4. **Vocabulário** (status PT, "distrato"→`terminate`, `derivedStatus`): mapeamento na camada de composição/BFF — sem tocar o domínio.
 5. **Escalar** o BC de **Planejamento Orçamentário** ausente (program/budgetPlan) — bloqueado por BC inexistente (Inquiry-0014).
+
+---
+
+## C. Fechamento — épico `002-contracts-http-gaps` (2026-06-06, PR #18 → `dev`)
+
+A spec [`002-contracts-http-gaps`](../../specs/002-contracts-http-gaps/) entregou os itens de borda HTTP de
+contratos. Mapa do que foi fechado:
+
+| Item do relatório | Status | Onde |
+| :--- | :--- | :--- |
+| #1 `contractType` + contratado aninhado (R4) | ✅ Fechado | `contractor` (referência leve `{type,id}`) no agregado + `contractor` obrigatório no `POST`; composto no `GET /contracts/:id` via public-api de Parceiros (rota gorda ADR-0032, `Sunset`). 4 tipos (supplier/financier/collaborator/act) |
+| #11 `bancaryInfo`/`pixInfo` read-only (R5) | ✅ Fechado | `snapshot` do contratado no detalhe (bancário/PIX só para supplier); degradação graciosa quando ausente |
+| #3 `PUT`/`PATCH /contracts/{id}` (Bucket D) | ✅ Fechado (fatia segura) | `PATCH` só de metadados (`title`/`objective`/`observations`/`email`/`telephone`); campo imutável → 400; valor/período seguem por aditivo |
+| `DELETE /contracts/{id}` | ✅ Recusado por princípio | `405 contract-delete-forbidden` (imutabilidade #14) |
+| metadados próprios (`observations`/`email`/`telephone`) | ✅ Entraram no agregado | modelagem legítima (ADR-0032) |
+| #10 `program`/`budgetPlan` · R1 teto OS · `classification`/`contractModel` | ⛔ Fora de escopo | bloqueados por BC de Planejamento Orçamentário inexistente (Inquiry-0014) / decisão de produto futura |
+
+Itens dos Buckets B (children/files no detalhe, DELETE documento, filtros+paginação) já haviam sido
+entregues por tickets anteriores (`CTR-HTTP-*`). A composição do contratado fechou o read na public-api de
+Parceiros que faltava (`PARTNERS-CONTRACTOR-READ-PORT` + `ActView` 4/4).
