@@ -4,7 +4,7 @@
 
 **Created**: 2026-06-06
 
-**Status**: Draft
+**Status**: Planejado — não-prioritário (no board `.claude/.planning/HTTP-FACADE-CONTROLLERS.md`; sem `/speckit-plan` até repriorização)
 
 **Input**: User description: "Adotar o padrão objeto-fachada de arrow-functions em toda a borda HTTP (auth + contracts + partners), dando aparência de controller OO mantendo 100% da semântica funcional. Restrito a `adapters/http/` + composition root. Sem mudança de comportamento."
 
