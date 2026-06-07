@@ -66,7 +66,7 @@
 
 ## Phase 4 — Polish & Cross-Cutting
 
-- [x] T020 [P] Atualizar `handbook/CHANGELOG.md`: agregador `/partners` + paridade de export (fecha ITENs 3/4 do `po-feedback/0001`).
+- [x] T020 [P] Atualizar `handbook/CHANGELOG.md`: agregador `/partners` + paridade de export (fecha gaps de partners `/api/v1` do `api-readiness-report` do front; ITENs 3/4 do ticket).
 - [x] T021 [P] Coleção Bruno de smoke e2e das 4 rotas novas em `api-collections/partners/` (agregador + 3 exports), espelhando o padrão existente.
 
 ## Dependencies

@@ -1,6 +1,6 @@
 # Estado do Ticket CTR-HTTP-CONTRACT-DETAIL-CONTRACTOR
 
-> **Size:** M · **Status:** in-progress · **Created:** 2026-06-02T17:44:01.934Z
+> **Size:** M · **Status:** superseded · **Created:** 2026-06-02T17:44:01.934Z · **Closed:** 2026-06-07T02:26:20.068Z · **Superseded by:** CONTRACTS-DETAIL-COMPOSITION-HTTP
 
 | Wave | Status | Skill | REPORT | Última atualização |
 | :--- | :--- | :--- | :--- | :--- |
@@ -11,4 +11,4 @@
 
 ## Último evento
 
-W0 started (tdd-strategist)
+superseded by CONTRACTS-DETAIL-COMPOSITION-HTTP
