@@ -29,6 +29,9 @@ permissions:
 
 env:
   IMAGE: ghcr.io/erp-bem-comum/core-api
+  # Opta pelo Node 24 nas JS actions (metadata-action@v5 ainda roda em Node 20,
+  # deprecado a partir de set/2026). Silencia o aviso de deprecação.
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
 
 jobs:
   build-push:
