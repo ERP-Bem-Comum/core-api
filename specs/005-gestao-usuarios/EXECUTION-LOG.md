@@ -27,6 +27,16 @@
     - Decisão a confirmar no W1: novo plugin `auth/adapters/http/users-plugin.ts` (User vive no `auth`, mas roteia como `partners`); ou avaliar um sub-escopo HTTP. Handler usa `sendResult` + mapeia `ListUsersError` → status (`invalid-page`/`invalid-page-size` → 422; `user-query-unavailable` → 503).
     - Adapter Drizzle `UserQuery`: SELECT com `LIKE` CI no nome + filtro status + `LIMIT/OFFSET` + `COUNT` (espelhar query paginada de `partners`); índice de busca por nome. Validação real só com Docker (`test:integration:auth`).
     - Validação sem Docker: rota via `fastify.inject` injetando o adapter **in-memory**. Drizzle real + `bru run` = pendência pré-merge.
+  - **🗺️ Plano de implementação (arquivos, na ordem):**
+    1. `auth/adapters/http/users-schemas.ts` — Zod querystring (`page`,`limit`,`search?`,`status?`) + response paginado (espelha `partners/adapters/http/partners-schemas.ts`).
+    2. Adapter Drizzle `auth/adapters/persistence/repos/user-query.drizzle.ts` — `SELECT … LIKE` CI + filtro status + `LIMIT/OFFSET` + `COUNT`; índice de nome no schema (nova migration).
+    3. `auth/adapters/http/users-plugin.ts` — `usersHttpPlugin(deps, {requireAuth, authorize}) => FastifyPluginAsyncZodOpenApi`; rota `GET /users`; handler chama `listUsers` use case, `sendResult` (mapeia `invalid-page*`→422, `user-query-unavailable`→503); preHandler `authorize('user:list')`.
+    4. `auth/adapters/http/composition.ts` — adicionar `userQuery` (Drizzle) e `listUsers` a `AuthHttpDeps`/`buildAuthHttpDeps`.
+    5. `auth/public-api/http.ts` — exportar `usersHttpPlugin`.
+    6. `src/server.ts` — registrar `{ plugin: usersHttpPlugin(authDeps, {requireAuth, authorize}), prefix: '/api/v1' }` (padrão dos partners, linhas ~100-143).
+    7. W0: `tests/modules/auth/adapters/http/users-list.route.test.ts` via `fastify.inject` com adapter in-memory (RED).
+    8. Coleção Bruno `api-collections/users/list/*.bru` (`bru run` = pendência Docker).
+    - **Templates exatos a espelhar:** `partners/adapters/http/supplier-plugin.ts` (rota), `supplier-list-query.ts` (parse query→filtro+paginação), e o registro em `src/server.ts:100-143`.
 
 ### Fase 2 — US2 Detalhe (P1)
 
