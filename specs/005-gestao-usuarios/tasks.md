@@ -83,8 +83,8 @@
 - [x] T018 [P] [US1] Definir port `UserQuery` em `src/modules/auth/application/ports/user-query.ts` (`list({page,pageSize,search?,status})` → `{items, meta}`). ✅
 - [x] T019 [US1] Implementar use case em `src/modules/auth/application/use-cases/list-users.ts` (`Result`; valida pageSize ∈ {5,10,25}). (depende de T018) ✅
 - [x] T020 [P] [US1] Adapter in-memory do `UserQuery` em `src/modules/auth/adapters/persistence/repos/user-query.in-memory.ts` (+ suíte direta de paginação/busca/filtro/ordenação). (depende de T018) ✅
-- [ ] T021 [US1] Adapter Drizzle do `UserQuery` em `src/modules/auth/adapters/persistence/repos/user-query.drizzle.ts` (offset + LIKE CI + filtro status; índice de nome). (depende de T018)
-- [ ] T022 [US1] Rota `GET /api/v1/users` em `src/modules/auth/adapters/http/` (Zod query + paginação) conforme `contracts/http-users.md`. (depende de T019)
+- [x] T021 [US1] Adapter Drizzle do `UserQuery` em `src/modules/auth/adapters/persistence/repos/user-query.drizzle.ts` (offset + LIKE CI + filtro status; índice `auth_user_name_idx` + migration 0005). (depende de T018) ✅ AUTH-HTTP-LIST-USERS · validação real = pendência Docker
+- [x] T022 [US1] Rota `GET /api/v1/users` em `src/modules/auth/adapters/http/` (Zod query + paginação) conforme `contracts/http-users.md`; testada via `fastify.inject` (8 CAs). (depende de T019) ✅
 - [ ] T023 [P] [US1] Coleção Bruno `api-collections/users/list/` — requests `.bru` para `GET /api/v1/users` (paginação 5/10/25, `search`, `status`) com asserções de status/shape/meta (ADR-0034). (depende de T022)
 
 **Checkpoint**: US1 funcional e testável de forma independente (MVP).

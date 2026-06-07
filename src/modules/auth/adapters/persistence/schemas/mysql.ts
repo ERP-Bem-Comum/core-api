@@ -140,6 +140,11 @@ export const authUser = mysqlTable(
 
     // Idempotência da ETL: UNIQUE em legacy_id (múltiplos NULL permitidos no InnoDB).
     uniqueIndex('auth_user_legacy_id_idx').on(t.legacyId),
+
+    // Índice em name: cobre ORDER BY name ASC da listagem paginada (UserQuery.list, spec 005 US1).
+    // leading-% LIKE não usa B-Tree para range scan; benefício é evitar filesort no ORDER BY.
+    // name herda utf8mb4_unicode_ci da tabela — LIKE é case-insensitive.
+    index('auth_user_name_idx').on(t.name),
   ],
 );
 

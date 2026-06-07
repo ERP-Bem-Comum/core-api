@@ -18,6 +18,7 @@ import {
   buildAuthHttpDeps,
   makeRequireAuth,
   parseE2eAuthSeed,
+  usersHttpPlugin,
 } from '#src/modules/auth/public-api/http.ts';
 import {
   contractsHttpPlugin,
@@ -140,6 +141,14 @@ const main = async (): Promise<void> => {
           authorize: authDeps.authorize,
           hasPermission: authDeps.hasPermission,
         }),
+        prefix: '/api/v1',
+      },
+      // Gestão de usuários (spec 005 US1, ADR-0037) → /api/v1/users.
+      {
+        plugin: usersHttpPlugin(
+          { listUsers: authDeps.listUsers },
+          { requireAuth, authorize: authDeps.authorize },
+        ),
         prefix: '/api/v1',
       },
     ],

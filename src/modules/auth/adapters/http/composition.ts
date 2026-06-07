@@ -14,6 +14,8 @@ import { generateKeyPair, importPKCS8, importSPKI } from 'jose';
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 
 import { makeInMemoryUserStore } from '../persistence/repos/user-repository.in-memory.ts';
+import { inMemoryUserQuery } from '../persistence/repos/user-query.in-memory.ts';
+import { createDrizzleUserQuery } from '../persistence/repos/user-query.drizzle.ts';
 import { makeInMemoryRefreshTokenStore } from '../persistence/repos/refresh-token-repository.in-memory.ts';
 import { makeInMemoryRoleStore } from '../persistence/repos/role-repository.in-memory.ts';
 import { createDrizzleUserStore } from '../persistence/repos/user-repository.drizzle.ts';
@@ -38,6 +40,7 @@ import {
 } from '../../application/use-cases/revoke-session.ts';
 import { changePassword } from '../../application/use-cases/change-password.ts';
 import { listUserPermissions } from '../../application/use-cases/list-user-permissions.ts';
+import { listUsers } from '../../application/use-cases/list-users.ts';
 import { requestPasswordReset } from '../../application/use-cases/request-password-reset.ts';
 import { confirmPasswordReset } from '../../application/use-cases/confirm-password-reset.ts';
 
@@ -50,6 +53,7 @@ import type { LockoutPolicy } from '../../domain/session/account-lockout.ts';
 import type { PasswordResetTokenRepository } from '../../domain/session/password-reset-token-repository.ts';
 import type { PasswordResetMailer } from '../../application/ports/password-reset-mailer.ts';
 import type { LoginLockoutStore } from '../../application/ports/login-lockout-store.ts';
+import type { UserQuery } from '../../application/ports/user-query.ts';
 import { ok } from '#src/shared/primitives/result.ts';
 import {
   parseSmtpConfig,
@@ -131,6 +135,8 @@ export type AuthHttpDeps = Readonly<{
   requestPasswordReset: ReturnType<typeof requestPasswordReset>;
   /** Confirma o reset (BE-REC-003), consumido pela rota /reset-password. */
   confirmPasswordReset: ReturnType<typeof confirmPasswordReset>;
+  /** Listagem administrativa de usuários (spec 005 US1, ADR-0037) — consumido por GET /api/v1/users. */
+  listUsers: ReturnType<typeof listUsers>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -152,6 +158,7 @@ type Stores = Readonly<{
   resetTokenRepo: PasswordResetTokenRepository;
   lockoutStore: LoginLockoutStore;
   roleRepo: RoleRepository;
+  userQuery: UserQuery;
   shutdown: () => Promise<void>;
 }>;
 
@@ -181,6 +188,7 @@ const buildStores = async (config: AuthCompositionConfig): Promise<Stores> => {
       resetTokenRepo: makeInMemoryPasswordResetTokenStore().repository,
       lockoutStore: makeInMemoryLoginLockoutStore(),
       roleRepo: roleStore.repository,
+      userQuery: inMemoryUserQuery(userStore.snapshot),
       shutdown: () => Promise.resolve(),
     };
   }
@@ -205,6 +213,7 @@ const buildStores = async (config: AuthCompositionConfig): Promise<Stores> => {
     resetTokenRepo: createDrizzlePasswordResetTokenStore(handle).repository,
     lockoutStore: createDrizzleLoginLockoutStore(handle).repository,
     roleRepo: roleStore.repository,
+    userQuery: createDrizzleUserQuery(handle),
     shutdown: handle.close,
   };
 };
@@ -377,6 +386,7 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
       refreshTokenRepo: stores.refreshTokenRepo,
       clock,
     }),
+    listUsers: listUsers({ userQuery: stores.userQuery }),
     verifyAccessToken: tokenIssuer.verifyAccessToken,
     sensitiveRateLimit: config.sensitiveRateLimit ?? DEFAULT_SENSITIVE_RATE_LIMIT,
     authorize: (permissionName: string): preHandlerAsyncHookHandler => {

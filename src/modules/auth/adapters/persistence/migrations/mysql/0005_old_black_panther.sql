@@ -1,0 +1,1 @@
+CREATE INDEX `auth_user_name_idx` ON `auth_user` (`name`);

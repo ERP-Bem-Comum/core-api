@@ -20,7 +20,7 @@
 ### Fase 1 — US1 Listar/buscar/filtrar (P1, MVP) 🔄
 
 - [x] `AUTH-USECASE-LIST-USERS` — port `UserQuery` (read model) + use case + adapter in-memory (T016/T018/T019/T020) ✅ closed-green
-- [ ] `AUTH-HTTP-LIST-USERS` — adapter Drizzle `UserQuery` + contract suite param + rota `GET /api/v1/users` + coleção Bruno `users/list/` (T017/T021/T022/T023)
+- [x] `AUTH-HTTP-LIST-USERS` — adapter Drizzle `UserQuery` + rota `GET /api/v1/users` (T021/T022) ✅ closed-green (rota testada via `fastify.inject`, 8 CAs; designs consultados com `drizzle-orm-expert` + `fastify-server-expert`). **Pendentes:** coleção Bruno `users/list/` (T023, com `bruno-api-client-expert` + Docker) e integração real (`test:integration:auth`).
   - **📌 Notas de preparação (achados do estudo da borda HTTP):**
     - A rota `GET /api/v1/users` **espelha o padrão `/api/v1` do módulo `partners`** (`src/modules/partners/adapters/http/supplier-plugin.ts` + `supplier-list-query.ts` + `partners-schemas.ts`) — listagem paginada Zod/OpenAPI — **não** o padrão `auth` (`/api/v2/auth`, registro de credencial).
     - Registro no **edge shell** `src/server.ts` sob `/api/v1` (ADR-0028 localização da borda, ADR-0033 versionamento v1).
@@ -86,3 +86,4 @@
 
 - **2026-06-07** — Fase 0 concluída (ADR-0037 + 4 tickets Foundational closed-green). Roadmap criado. Iniciando Fase 1 (US1).
 - **2026-06-07** — `AUTH-USECASE-LIST-USERS` closed-green (port `UserQuery` + use case `list-users` + adapter in-memory; 12 testes; gate 2313 pass). Fase 1 parte 1/2. Próximo: `AUTH-HTTP-LIST-USERS`.
+- **2026-06-07** — `AUTH-HTTP-LIST-USERS` closed-green. Rota `GET /api/v1/users` (plugin Zod/OpenAPI + RBAC `user:list`) + adapter Drizzle `UserQuery` + índice `auth_user_name_idx` (migration 0005) + wiring (composition/public-api/server.ts). Testada via `fastify.inject` (8 CAs); gate 2321 pass. **Designs consultados com `drizzle-orm-expert` e `fastify-server-expert`** (ancorados no handbook). **US1 (listar) entregue na borda HTTP.** Pendências: coleção Bruno (T023) + `test:integration:auth` (Docker). Próximo: **US2** (`AUTH-USECASE-GET-USER` → `AUTH-HTTP-GET-USER`).
