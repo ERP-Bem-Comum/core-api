@@ -26,6 +26,7 @@ import * as UserId from '../../domain/identity/user-id.ts';
 import type { listUsers } from '../../application/use-cases/list-users.ts';
 import type { getUser } from '../../application/use-cases/get-user.ts';
 import type { createUserByAdmin } from '../../application/use-cases/create-user-by-admin.ts';
+import type { updateUserProfile } from '../../application/use-cases/update-user-profile.ts';
 import type { UserStatusFilter } from '../../application/ports/user-query.ts';
 import {
   userListQuerySchema,
@@ -34,6 +35,7 @@ import {
   userDetailResponseSchema,
   createUserBodySchema,
   createUserResponseSchema,
+  updateUserBodySchema,
 } from './users-schemas.ts';
 
 export type UsersHttpDeps = Readonly<{
@@ -41,6 +43,7 @@ export type UsersHttpDeps = Readonly<{
   listUsers: ReturnType<typeof listUsers>;
   getUser: ReturnType<typeof getUser>;
   createUserByAdmin: ReturnType<typeof createUserByAdmin>;
+  updateUserProfile: ReturnType<typeof updateUserProfile>;
 }>;
 
 export type UsersHttpHooks = Readonly<{
@@ -55,6 +58,20 @@ const toStatusFilter = (httpStatus: 'active' | 'inactive' | 'all'): UserStatusFi
 const USER_LIST_PERMISSION = 'user:list';
 const USER_READ_PERMISSION = 'user:read';
 const USER_CREATE_PERMISSION = 'user:create';
+const USER_UPDATE_PERMISSION = 'user:update';
+
+// Erros de validacao de campo (VOs) -> 422; compartilhado por POST e PUT.
+const FIELD_VALIDATION_STATUS = {
+  'name-required': 422,
+  'email-empty': 422,
+  'email-invalid-format': 422,
+  'email-too-long': 422,
+  'cpf-empty': 422,
+  'cpf-invalid-length': 422,
+  'cpf-invalid-checksum': 422,
+  'telephone-empty': 422,
+  'telephone-invalid': 422,
+} as const;
 
 const usersRoutes =
   (deps: UsersHttpDeps, hooks: UsersHttpHooks): FastifyPluginAsyncZodOpenApi =>
@@ -138,15 +155,7 @@ const usersRoutes =
         if (!result.ok) {
           return sendResult(reply, result, {
             errors: {
-              'name-required': 422,
-              'email-empty': 422,
-              'email-invalid-format': 422,
-              'email-too-long': 422,
-              'cpf-empty': 422,
-              'cpf-invalid-length': 422,
-              'cpf-invalid-checksum': 422,
-              'telephone-empty': 422,
-              'telephone-invalid': 422,
+              ...FIELD_VALIDATION_STATUS,
               'email-already-registered': 409,
               'user-repo-unavailable': 503,
               'password-reset-token-repo-unavailable': 503,
@@ -155,6 +164,47 @@ const usersRoutes =
           });
         }
         return sendResult(reply, ok({ id: String(result.value.user.id) }), { ok: 201 });
+      },
+    });
+
+    // US4: PUT /users/:id — editar perfil (atomico). Resposta = detalhe atualizado (reusa getUser).
+    scope.route({
+      method: 'PUT',
+      url: '/users/:id',
+      preHandler: [hooks.requireAuth, hooks.authorize(USER_UPDATE_PERMISSION)],
+      schema: {
+        params: userIdParamSchema,
+        body: updateUserBodySchema,
+        response: { 200: userDetailResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const { name, email, cpf, telephone, collaboratorId } = req.body;
+        // exactOptionalPropertyTypes: omitir chaves ausentes (nao passar undefined).
+        const updated = await deps.updateUserProfile({
+          id: req.params.id,
+          ...(name !== undefined ? { name } : {}),
+          ...(email !== undefined ? { email } : {}),
+          ...(cpf !== undefined ? { cpf } : {}),
+          ...(telephone !== undefined ? { telephone } : {}),
+          ...(collaboratorId !== undefined ? { collaboratorId } : {}),
+        });
+        if (!updated.ok) {
+          return sendResult(reply, updated, {
+            errors: {
+              ...FIELD_VALIDATION_STATUS,
+              'user-id-invalid': 400,
+              'user-not-found': 404,
+              'email-already-registered': 409,
+              'user-repo-unavailable': 503,
+            },
+          });
+        }
+        // Detalhe atualizado com a mesma shape do GET /:id (massApprovalPermission etc.).
+        const detail = await deps.getUser(req.params.id);
+        return sendResult(reply, detail, {
+          ok: 200,
+          errors: { 'user-id-invalid': 400, 'user-not-found': 404 },
+        });
       },
     });
   };

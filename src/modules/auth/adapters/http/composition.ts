@@ -43,6 +43,7 @@ import { listUserPermissions } from '../../application/use-cases/list-user-permi
 import { listUsers } from '../../application/use-cases/list-users.ts';
 import { getUser } from '../../application/use-cases/get-user.ts';
 import { createUserByAdmin } from '../../application/use-cases/create-user-by-admin.ts';
+import { updateUserProfile } from '../../application/use-cases/update-user-profile.ts';
 import { requestPasswordReset } from '../../application/use-cases/request-password-reset.ts';
 import { confirmPasswordReset } from '../../application/use-cases/confirm-password-reset.ts';
 
@@ -149,6 +150,8 @@ export type AuthHttpDeps = Readonly<{
   getUser: ReturnType<typeof getUser>;
   /** Criação administrativa de usuário + convite (spec 005 US3) — consumido por POST /api/v1/users. */
   createUserByAdmin: ReturnType<typeof createUserByAdmin>;
+  /** Edição administrativa de perfil (spec 005 US4) — consumido por PUT /api/v1/users/:id. */
+  updateUserProfile: ReturnType<typeof updateUserProfile>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -435,6 +438,11 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
       unusablePasswordHash: dummyPasswordHash,
       inviteTtlSeconds,
       activationBaseUrl,
+    }),
+    updateUserProfile: updateUserProfile({
+      userReader: stores.userReader,
+      userRepo: stores.userRepo,
+      clock,
     }),
     verifyAccessToken: tokenIssuer.verifyAccessToken,
     sensitiveRateLimit: config.sensitiveRateLimit ?? DEFAULT_SENSITIVE_RATE_LIMIT,

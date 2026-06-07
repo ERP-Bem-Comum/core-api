@@ -82,3 +82,18 @@ export type CreateUserBody = z.infer<typeof createUserBodySchema>;
 
 /** Response 201 do POST /api/v1/users. */
 export const createUserResponseSchema = z.object({ id: z.string() });
+
+/**
+ * Body do PUT /api/v1/users/:id (editar perfil — spec 005 US4).
+ * Patch parcial: todos os campos opcionais; ausente preserva o atual. Formato de cpf/email/telefone
+ * validado no use case (VOs). `collaboratorId` aceita null para limpar o vinculo.
+ */
+export const updateUserBodySchema = z.object({
+  name: z.string().min(1).optional(),
+  email: z.string().min(1).optional(),
+  cpf: z.string().min(1).optional(),
+  telephone: z.string().min(1).optional(),
+  collaboratorId: z.string().nullable().optional(),
+});
+
+export type UpdateUserBody = z.infer<typeof updateUserBodySchema>;

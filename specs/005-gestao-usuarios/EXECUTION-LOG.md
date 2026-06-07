@@ -54,10 +54,10 @@
 - [ ] `AUTH-INVITE-ON-CREATE` — convite de ativação por email a partir de `UserCreated` (EmailPort/reset) (T030)
 - [ ] `AUTH-HTTP-CREATE-USER` — rota `POST /api/v1/users` + Bruno `users/create/` (T031–T032)
 
-### Fase 4 — US4 Editar (P2)
+### Fase 4 — US4 Editar (P2) ✅
 
-- [ ] `AUTH-USECASE-UPDATE-PROFILE` — use case `update-user-profile` (atômico) (T033–T034)
-- [ ] `AUTH-HTTP-UPDATE-USER` — rota `PUT /api/v1/users/:id` + Bruno `users/update/` (T035–T036)
+- [x] `AUTH-USECASE-UPDATE-PROFILE` — estende `User.updateProfile` (email opcional) + use case `update-user-profile` (atômico; unicidade de email → 409; patch parcial) (T033–T034) ✅ closed-green · 7 testes
+- [x] `AUTH-HTTP-UPDATE-USER` — rota `PUT /api/v1/users/:id` (`user:update`, 200/404/409/422) + wiring (composition/server) + `FIELD_VALIDATION_STATUS` compartilhado com POST (T035) ✅ closed-green · 6 testes inject. **US4 entregue end-to-end.** Pendência: Bruno `users/update/` (T036).
 
 ### Fase 5 — US5 Ativar/Desativar (P2)
 
@@ -94,3 +94,4 @@
 - **2026-06-07** — `AUTH-HTTP-LIST-USERS` closed-green. Rota `GET /api/v1/users` (plugin Zod/OpenAPI + RBAC `user:list`) + adapter Drizzle `UserQuery` + índice `auth_user_name_idx` (migration 0005) + wiring (composition/public-api/server.ts). Testada via `fastify.inject` (8 CAs); gate 2321 pass. **Designs consultados com `drizzle-orm-expert` e `fastify-server-expert`** (ancorados no handbook). **US1 (listar) entregue na borda HTTP.** Pendências: coleção Bruno (T023) + `test:integration:auth` (Docker). Próximo: **US2** (`AUTH-USECASE-GET-USER` → `AUTH-HTTP-GET-USER`).
 - **2026-06-07** — `AUTH-GET-USER` closed-green (US2 combinada: use case + rota num ticket). `getUser` reusa `UserReader.findById` (sem Drizzle novo); `massApprovalPermission` das roles; rota `GET /api/v1/users/:id` (`user:read`, 400/404). 9 testes (5 use case + 4 inject); gate **2330 pass**. **US2 (detalhe) entregue.** Pendência: Bruno `users/detail/`. Próximo: **US3** (criar + convite por email).
 - **2026-06-07** — `AUTH-USECASE-CREATE-USER` + `AUTH-HTTP-CREATE-USER` closed-green. **US3 (criar + convite) entregue end-to-end.** Consultoria de 2 especialistas: `security-backend-expert` (fluxo seguro: `unusablePasswordHash` placeholder, convite fail-closed, anti host-injection, `UserCreated` sem PII) e `nodemailer-email-expert` (adapter `invite-mailer.email`). Wiring reusa o `dummyPasswordHash` existente. Rota `POST /api/v1/users` (`user:create`). 13 testes (8 segurança + 5 inject); gate **2343 pass**. Próximo: **US4** (editar perfil) — `AUTH-USECASE-UPDATE-PROFILE` + `PUT /users/:id`.
+- **2026-06-07** — `AUTH-USECASE-UPDATE-PROFILE` + `AUTH-HTTP-UPDATE-USER` closed-green. **US4 (editar perfil) entregue end-to-end.** Domínio: `User.updateProfile` ganha `email?` (patch parcial). Use case `update-user-profile`: validar → fetch (404) → VOs → unicidade de email (SELECT-then-UPDATE; próprio = no-op, outro = 409) → domain → save; edição atômica (FR-009). Rota `PUT /api/v1/users/:id` (`user:update`); resposta 200 reusa `getUser` (shape do GET /:id); `FIELD_VALIDATION_STATUS` extraída e compartilhada com POST. 13 testes (7 use case + 6 inject); gate **2356 pass**. Próximo: **US5** (ativar/desativar) — `AUTH-USECASE-ACTIVATE-DEACTIVATE` + `PATCH .../activate|deactivate`.

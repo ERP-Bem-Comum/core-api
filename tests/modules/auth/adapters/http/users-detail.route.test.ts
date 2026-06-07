@@ -42,6 +42,7 @@ const makeApp = async (): Promise<{ app: AppHandle; teardown: () => Promise<void
             listUsers: authDeps.listUsers,
             getUser: authDeps.getUser,
             createUserByAdmin: authDeps.createUserByAdmin,
+            updateUserProfile: authDeps.updateUserProfile,
           },
           { requireAuth, authorize: authDeps.authorize },
         ),

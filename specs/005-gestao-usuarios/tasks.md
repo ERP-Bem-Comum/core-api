@@ -146,12 +146,12 @@
 
 ### Tests RED
 
-- [ ] T033 [P] [US4] Suíte RED em `tests/modules/auth/application/use-cases/update-user-profile.test.ts` (atomicidade; conflito de email; validação por campo).
+- [x] T033 [P] [US4] Suíte RED em `tests/modules/auth/application/use-cases/update-user-profile.test.ts` (atomicidade; conflito de email; validação por campo). ✅ AUTH-USECASE-UPDATE-PROFILE
 
 ### Implementação
 
-- [ ] T034 [US4] Use case `update-user-profile` em `src/modules/auth/application/use-cases/update-user-profile.ts`. (depende de Phase 2)
-- [ ] T035 [US4] Rota `PUT /api/v1/users/:id`. (depende de T034)
+- [x] T034 [US4] Use case `update-user-profile` em `src/modules/auth/application/use-cases/update-user-profile.ts` (+ `User.updateProfile` ganha `email?`). (depende de Phase 2) ✅
+- [x] T035 [US4] Rota `PUT /api/v1/users/:id` (`user:update`, 200/404/409/422); testada via `fastify.inject` (6 CAs). (depende de T034) ✅ AUTH-HTTP-UPDATE-USER
 - [ ] T036 [P] [US4] Requests Bruno `api-collections/users/update/` — `PUT /api/v1/users/:id` (200 atômico; 409 conflito; 422 validação). (depende de T035)
 
 **Checkpoint**: US1–US4 funcionais.
