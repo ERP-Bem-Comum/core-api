@@ -60,3 +60,6 @@ tests/reports/e2e-scratch/
 
 # ETL — cold storage (collaborator_history) e dumps locais (PII; nunca versionar)
 scripts/etl/archive/
+
+# Artefatos do reporter Bruno (E2E_JSON_REPORT) — contêm tokens efêmeros, não versionar
+test-results/
