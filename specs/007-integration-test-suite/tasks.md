@@ -52,8 +52,8 @@
 
 **Especialistas obrigatórios**: `drizzle-orm-expert` + `test-pyramid-engineer`.
 
-- [ ] T008 [US2] W0 RED: criar `tests/modules/auth/adapters/persistence/role-repository.suite.ts` exportando `roleRepositoryContract(makeRepo, label)` (save novo/update, findById hit/miss, list vazio/povoado, isInUse true/false) e consumi-la em `role-repository.inmemory.test.ts` (sem guard) e `role-repository.drizzle.test.ts` (guard `MYSQL_INTEGRATION=1`). Deve falhar antes da suíte existir.
-- [ ] T009 [US2] W1→W3: tornar a suíte verde nos dois adapters; rodar `pnpm test` + `pnpm run test:integration:auth` (Docker). Consultar `drizzle-orm-expert` para o caso `isInUse` (junção `auth_user_role`). Fecha **T023** (e parte de T051) da 006.
+- [x] T008 [US2] W0 RED: criar `tests/modules/auth/adapters/persistence/role-repository.suite.ts` exportando `roleRepositoryContract(makeRepo, label)` (save novo/update, findById hit/miss, list vazio/povoado, isInUse true/false) e consumi-la em `role-repository.inmemory.test.ts` (sem guard) e `role-repository.drizzle.test.ts` (guard `MYSQL_INTEGRATION=1`). Deve falhar antes da suíte existir.
+- [x] T009 [US2] W1→W3: tornar a suíte verde nos dois adapters; rodar `pnpm test` + `pnpm run test:integration:auth` (Docker). Consultar `drizzle-orm-expert` para o caso `isInUse` (junção `auth_user_role`). Fecha **T023** (e parte de T051) da 006.
 
 **Checkpoint**: paridade de contrato do RoleRepository comprovada.
 
