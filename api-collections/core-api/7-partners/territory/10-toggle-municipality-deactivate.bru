@@ -1,0 +1,21 @@
+meta {
+  name: toggle partner municipality deactivate
+  type: http
+  seq: 10
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/partner-municipalities/{{sampleIbgeCode}}
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{partnersOperatorToken}}
+}
+
+tests {
+  // DELETE idempotente: 200 mesmo se o municipio ja estava inativo.
+  test("US-002 — DELETE /partner-municipalities/:ibgeCode (desativar) retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

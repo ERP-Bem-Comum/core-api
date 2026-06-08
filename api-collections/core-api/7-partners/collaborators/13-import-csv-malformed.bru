@@ -1,0 +1,36 @@
+meta {
+  name: import collaborators csv malformed
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/api/v1/collaborators/import
+  body: text
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{partnersOperatorToken}}
+}
+
+headers {
+  content-type: text/csv
+}
+
+body:text {
+"campo sem fechar
+dado,corrompido,"campo truncado
+}
+
+tests {
+  test("US-001 — import CSV malformado retorna 400", function () {
+    expect(res.getStatus()).to.equal(400);
+  });
+
+  test("US-001 — envelope de erro tem campo error", function () {
+    expect(res.getBody()).to.have.property("error");
+    expect(res.getBody().error).to.have.property("code");
+    expect(res.getBody().error).to.have.property("requestId");
+  });
+}

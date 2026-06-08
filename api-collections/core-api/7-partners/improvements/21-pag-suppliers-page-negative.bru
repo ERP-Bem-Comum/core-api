@@ -1,0 +1,28 @@
+meta {
+  name: PAG-6b GET /suppliers?page=-1 boundary
+  type: http
+  seq: 21
+}
+
+get {
+  url: {{baseUrl}}/api/v1/suppliers?page=-1
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{partnersOperatorToken}}
+}
+
+tests {
+  // PAG-6 variacao page=-1 de failures-pagination-boundary.md
+  test("PAG-6b — page=-1 retorna 422 ou 200 (clamp); nunca 500", function () {
+    expect(res.getStatus()).to.not.equal(500);
+    expect([422, 200]).to.include(res.getStatus());
+  });
+  test("PAG-6b — se 200: meta coerente (currentPage e totalItems presentes)", function () {
+    if (res.getStatus() === 200) {
+      expect(res.getBody().meta).to.have.property("currentPage");
+      expect(res.getBody().meta).to.have.property("totalItems");
+    }
+  });
+}

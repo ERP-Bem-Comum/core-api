@@ -1,0 +1,30 @@
+meta {
+  name: PAG-5c contracts pageSize=99999 boundary
+  type: http
+  seq: 22
+}
+
+get {
+  url: {{baseUrl}}/api/v2/contracts?pageSize=99999
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{readerToken}}
+}
+
+tests {
+  // PAG-5 (variacao pageSize=99999) de failures-pagination-boundary.md
+  test("PAG-5c — contracts pageSize=99999 retorna 422 ou 200 (clamp); nunca 500", function () {
+    expect(res.getStatus()).to.not.equal(500);
+    expect([422, 200]).to.include(res.getStatus());
+  });
+
+  test("PAG-5c — se 200: items.length nao excede maximo documentado", function () {
+    if (res.getStatus() === 200) {
+      // pageSize clamped ao maximo (ex.: 100) — nunca retorna 99999 itens reais
+      expect(res.getBody().items).to.be.an("array");
+      expect(res.getBody().items.length).to.be.at.most(100);
+    }
+  });
+}

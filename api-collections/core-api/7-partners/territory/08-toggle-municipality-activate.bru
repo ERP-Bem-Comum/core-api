@@ -1,0 +1,27 @@
+meta {
+  name: toggle partner municipality activate
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/v1/partner-municipalities/{{sampleIbgeCode}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{partnersOperatorToken}}
+}
+
+tests {
+  // POST idempotente: 200 mesmo se o municipio ja estava ativo.
+  test("US-002 — POST /partner-municipalities/:ibgeCode (ativar) retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  // toggle retorna o DTO completo (com name do catalogo) — contrato do BFF (SC-005)
+  test("retorna PartnerMunicipalityDto { ibgeCode, uf, name, isPartner: true }", function () {
+    expect(res.getBody().isPartner).to.equal(true);
+    expect(res.getBody().name).to.be.a("string");
+  });
+}

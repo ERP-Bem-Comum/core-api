@@ -1,0 +1,51 @@
+meta {
+  name: get collaborator by id
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/collaborators/{{collaboratorCreatedId}}
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{partnersOperatorToken}}
+}
+
+tests {
+  test("P1a — GET /collaborators/:id retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("P1a — id bate com o criado", function () {
+    expect(res.getBody().id).to.equal(bru.getVar("collaboratorCreatedId"));
+  });
+
+  test("P1a — cpf esta correto", function () {
+    expect(res.getBody().cpf).to.equal("12345678901");
+  });
+
+  test("P1a — colaborador esta ativo apos criacao", function () {
+    expect(res.getBody().active).to.equal(true);
+  });
+
+  test("P1a — status eh PreRegistration apos pre-cadastro", function () {
+    expect(res.getBody().status).to.equal("PreRegistration");
+  });
+
+  test("P1a — campos obrigatorios presentes", function () {
+    const body = res.getBody();
+    expect(body).to.have.property("id");
+    expect(body).to.have.property("name");
+    expect(body).to.have.property("email");
+    expect(body).to.have.property("cpf");
+    expect(body).to.have.property("occupationArea");
+    expect(body).to.have.property("role");
+    expect(body).to.have.property("employmentRelationship");
+    expect(body).to.have.property("status");
+    expect(body).to.have.property("active");
+    expect(body).to.have.property("createdAt");
+    expect(body).to.have.property("updatedAt");
+  });
+}

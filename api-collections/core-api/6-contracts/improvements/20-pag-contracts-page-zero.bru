@@ -1,0 +1,28 @@
+meta {
+  name: PAG-5a contracts page=0 boundary
+  type: http
+  seq: 20
+}
+
+get {
+  url: {{baseUrl}}/api/v2/contracts?page=0
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{readerToken}}
+}
+
+tests {
+  // PAG-5 (variacao page=0) de failures-pagination-boundary.md
+  test("PAG-5a — contracts page=0 retorna 422 ou 200 (clamp); nunca 500", function () {
+    expect(res.getStatus()).to.not.equal(500);
+    expect([422, 200]).to.include(res.getStatus());
+  });
+
+  test("PAG-5a — se 200: meta coerente", function () {
+    if (res.getStatus() === 200) {
+      expect(res.getBody()).to.have.property("meta");
+    }
+  });
+}
