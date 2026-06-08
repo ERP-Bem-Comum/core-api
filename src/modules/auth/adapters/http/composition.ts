@@ -317,6 +317,7 @@ const buildStores = async (config: AuthCompositionConfig): Promise<Stores> => {
 // `throw` aqui é erro de configuração no boot (dev/test), convertido pelo last-resort handler do server.
 type SeedDeps = Readonly<{
   userRepo: UserRepository;
+  userReader: UserReader;
   roleRepo: RoleRepository;
   passwordHasher: PasswordHasher;
   clock: Clock;
@@ -326,6 +327,18 @@ const applyRbacSeed = async (seed: AuthSeed, deps: SeedDeps): Promise<void> => {
   for (const u of seed.users) {
     const email = Email.parse(u.email);
     if (!email.ok) throw new Error(`auth-seed: email invalido (${u.email}): ${email.error}`);
+
+    const existingUser = await deps.userReader.findByEmail(email.value);
+    if (!existingUser.ok) {
+      throw new Error(
+        `auth-seed: falha ao buscar usuario por email (${u.email}): ${existingUser.error}`,
+      );
+    }
+    if (existingUser.value !== null) {
+      // Usuario ja existe no banco, pula o seed para este usuario
+      continue;
+    }
+
     const password = Password.parse(u.password);
     if (!password.ok) {
       throw new Error(`auth-seed: senha invalida p/ ${u.email}: ${password.error}`);
@@ -433,6 +446,7 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
   if (config.seed !== undefined) {
     await applyRbacSeed(config.seed, {
       userRepo: stores.userRepo,
+      userReader: stores.userReader,
       roleRepo: stores.roleRepo,
       passwordHasher,
       clock,
