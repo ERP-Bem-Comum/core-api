@@ -24,6 +24,8 @@ import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import type {
   DocumentStorage,
   DocumentStorageError,
+  StorageContent,
+  StorageObjectId,
   UploadInput,
 } from '../../application/ports/document-storage.ts';
 import type {
@@ -96,6 +98,15 @@ export const createInMemoryDocumentStorage = (): InMemoryDocumentStorage => {
     return ok(store.has(composeKey(ref.bucket, ref.key)));
   };
 
+  const getContent = async (
+    id: StorageObjectId,
+  ): Promise<Result<StorageContent, DocumentStorageError>> => {
+    await Promise.resolve();
+    const blob = store.get(composeKey(id.bucket, id.key));
+    if (blob === undefined) return err('storage-not-found');
+    return ok({ bytes: Buffer.from(blob.bytes.slice()), contentType: blob.mimeType });
+  };
+
   const signedUrl = async (
     ref: StorageRef,
     ttlSeconds: number,
@@ -114,6 +125,7 @@ export const createInMemoryDocumentStorage = (): InMemoryDocumentStorage => {
     upload,
     download,
     exists,
+    getContent,
     signedUrl,
     size: () => store.size,
     clear: () => {

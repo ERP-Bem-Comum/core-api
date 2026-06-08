@@ -399,6 +399,59 @@ describe('createInMemoryDocumentStorage', () => {
     assert.equal(typeof port.upload, 'function');
     assert.equal(typeof port.download, 'function');
     assert.equal(typeof port.exists, 'function');
+    assert.equal(typeof port.getContent, 'function');
     assert.equal(typeof port.signedUrl, 'function');
+  });
+
+  // ─── getContent (CTR-HTTP-DOCUMENT-CONTENT) ─────────────────────────────────
+
+  it('CA-T14: getContent apos upload retorna ok({ bytes, contentType })', async () => {
+    // Arrange
+    const storage = createInMemoryDocumentStorage();
+    const bucket = makeBucket();
+    const key = makeKey();
+    const bytes = helloBytes();
+    await storage.upload({ bucket, key, bytes, mimeType: 'application/pdf' });
+
+    // Act
+    const r = await storage.getContent({ bucket, key });
+
+    // Assert
+    assert.equal(r.ok, true);
+    if (r.ok) {
+      assert.equal(Buffer.isBuffer(r.value.bytes), true);
+      assert.deepEqual(r.value.bytes, Buffer.from(bytes));
+      assert.equal(r.value.contentType, 'application/pdf');
+    }
+  });
+
+  it('CA-T15: getContent de chave inexistente retorna storage-not-found', async () => {
+    // Arrange
+    const storage = createInMemoryDocumentStorage();
+
+    // Act
+    const r = await storage.getContent({ bucket: makeBucket(), key: makeKey('ausente.pdf') });
+
+    // Assert
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'storage-not-found');
+  });
+
+  it('CA-T16: bytes devolvidos por getContent mutados NAO afetam o blob armazenado', async () => {
+    // Arrange
+    const storage = createInMemoryDocumentStorage();
+    const bucket = makeBucket();
+    const key = makeKey();
+    await storage.upload({ bucket, key, bytes: helloBytes(), mimeType: 'application/pdf' });
+
+    // Act — muta a cópia retornada
+    const first = await storage.getContent({ bucket, key });
+    assert.equal(first.ok, true);
+    if (first.ok) first.value.bytes[0] = 0x00;
+
+    // Assert — segunda leitura mantém os bytes originais
+    const second = await storage.getContent({ bucket, key });
+    assert.equal(second.ok, true);
+    if (second.ok) assert.deepEqual(second.value.bytes, Buffer.from(helloBytes()));
   });
 });

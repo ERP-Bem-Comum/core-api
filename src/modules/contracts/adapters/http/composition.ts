@@ -47,6 +47,7 @@ import { uploadDocument } from '../../application/use-cases/upload-document.ts';
 import { attachSignedDocument } from '../../application/use-cases/attach-signed-document.ts';
 import { supersedeDocument } from '../../application/use-cases/supersede-document.ts';
 import { deleteDocument } from '../../application/use-cases/delete-document.ts';
+import { getDocumentContent } from '../../application/use-cases/get-document-content.ts';
 
 import { composeContractor, type ContractorBlock } from './contractor-composition.ts';
 import {
@@ -136,6 +137,7 @@ export type ContractsHttpDeps = Readonly<{
   attachSignedDocument: ReturnType<typeof attachSignedDocument>;
   supersedeDocument: ReturnType<typeof supersedeDocument>;
   deleteDocument: ReturnType<typeof deleteDocument>;
+  getDocumentContent: ReturnType<typeof getDocumentContent>;
   getAmendment: GetAmendment;
   getDocument: GetDocument;
   documentBucket: string;
@@ -307,6 +309,13 @@ const makeDeps = (
     }),
     supersedeDocument: supersedeDocument({ clock, documentRepo: pools.documentRepo }),
     deleteDocument: deleteDocument({ clock, documentRepo: pools.documentRepo }),
+    // Conteúdo de documento (CTR-HTTP-DOCUMENT-CONTENT): ownership via documentRepo +
+    // amendmentRepo; bytes via storage. Read-only — sem clock/event.
+    getDocumentContent: getDocumentContent({
+      documentRepo: pools.documentRepo,
+      amendmentRepo: pools.amendmentRepo,
+      storage: pools.documentStorage,
+    }),
     getAmendment: async (amendmentId) => {
       const idR = AmendmentId.rehydrate(amendmentId);
       if (!idR.ok) return idR;

@@ -32,6 +32,8 @@ import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import type {
   DocumentStorage,
   DocumentStorageError,
+  StorageContent,
+  StorageObjectId,
   UploadInput,
 } from '../../application/ports/document-storage.ts';
 import type { StorageRef } from '../../application/ports/document-storage.types.ts';
@@ -108,6 +110,29 @@ export const createS3DocumentStorage = (config: S3StorageConfig): DocumentStorag
     }
   };
 
+  const getContent = async (
+    id: StorageObjectId,
+  ): Promise<Result<StorageContent, DocumentStorageError>> => {
+    try {
+      const out = await client.send(
+        new GetObjectCommand({
+          Bucket: String(id.bucket),
+          Key: String(id.key),
+        }),
+      );
+      if (out.Body === undefined) {
+        return err('storage-not-found');
+      }
+      const bytes = await out.Body.transformToByteArray();
+      // S3 devolve `ContentType` quando o objeto foi gravado com ele (upload o
+      // grava). Fallback para octet-stream se ausente — defensivo.
+      const contentType = out.ContentType ?? 'application/octet-stream';
+      return ok({ bytes: Buffer.from(bytes), contentType });
+    } catch (caught) {
+      return err(mapS3Error(caught));
+    }
+  };
+
   const exists = async (ref: StorageRef): Promise<Result<boolean, DocumentStorageError>> => {
     try {
       await client.send(
@@ -143,5 +168,5 @@ export const createS3DocumentStorage = (config: S3StorageConfig): DocumentStorag
     }
   };
 
-  return { upload, download, exists, signedUrl };
+  return { upload, download, exists, getContent, signedUrl };
 };
