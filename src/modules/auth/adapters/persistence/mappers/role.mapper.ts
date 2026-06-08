@@ -91,8 +91,10 @@ export const roleFromRows = (
     permissions.push(permR.value);
   }
 
-  // Role.create valida name (nao-vazio) e deduplicacao
-  const roleR = Role.create({ id: idR.value, name: roleRow.name, permissions });
+  // Role.rehydrate reconstroi do banco com status; nao revalida o catalogo (banco e a fonte).
+  // status do CHECK constraint auth_role_status_chk: 'archived' explicito, senao 'active'.
+  const status = roleRow.status === 'archived' ? 'archived' : 'active';
+  const roleR = Role.rehydrate({ id: idR.value, name: roleRow.name, permissions, status });
   if (!roleR.ok) return err(invalidRole(roleRow.id, roleR.error));
 
   return ok(roleR.value);
@@ -108,6 +110,7 @@ export const roleToInsert = (role: Role.Role, now: Date): NewRoleRow => ({
   id: role.id as unknown as string,
   name: role.name,
   description: null,
+  status: role.status,
   createdAt: now,
   updatedAt: now,
 });

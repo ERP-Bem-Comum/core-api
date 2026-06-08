@@ -81,12 +81,17 @@ export const authRole = mysqlTable(
     name: varchar('name', { length: 64 }).notNull(),
     // Descrição opcional (OIDC-ready: pode ser null em roles externas).
     description: varchar('description', { length: 255 }),
+    // 'active' | 'archived' — VARCHAR+CHECK (ADR-0020, sem ENUM nativo). Espelha auth_user.status.
+    // 'archived' ⇒ papel não-atribuível (ciclo de vida, FR-012). Default 'active' p/ linhas existentes.
+    status: varchar('status', { length: 16 }).notNull().default('active'),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
   },
   (t) => [
     // CHECK: nome não-vazio (CHAR_LENGTH para segurança multi-byte).
     check('auth_role_name_nonempty_chk', sql`CHAR_LENGTH(${t.name}) > 0`),
+    // CHECK: status restrito ao enum do domínio (active/archived).
+    check('auth_role_status_chk', sql`${t.status} IN ('active','archived')`),
     // Unicidade nomeada (sem `.unique()` na coluna — convenção `_idx`, evita drift).
     uniqueIndex('auth_role_name_idx').on(t.name),
   ],

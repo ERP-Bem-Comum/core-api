@@ -48,14 +48,14 @@ describe('Role.create', () => {
     }
   });
 
-  it('CA5: name vazio retorna err role-name-empty', () => {
-    // Act
+  it('CA5: name vazio retorna err role-name-invalid', () => {
+    // Act — desde AUTH-ROLE-LIFECYCLE-AGG o nome e validado via RoleName (role-name-invalid).
     const r = Role.create({ id: RoleId.generate(), name: '   ', permissions: [] });
 
     // Assert
     assert.equal(r.ok, false);
     if (!r.ok) {
-      assert.equal(r.error, 'role-name-empty');
+      assert.equal(r.error, 'role-name-invalid');
     }
   });
 

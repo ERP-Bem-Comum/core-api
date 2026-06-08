@@ -264,7 +264,12 @@ export const createDrizzleRoleStore = (
           // ER_DUP_ENTRY -> capturado abaixo como role-repo-unavailable (Decisao 2 do 000-request).
           await tx
             .update(schema.authRole)
-            .set({ name: row.name, description: row.description, updatedAt: row.updatedAt })
+            .set({
+              name: row.name,
+              description: row.description,
+              status: row.status,
+              updatedAt: row.updatedAt,
+            })
             .where(eq(schema.authRole.id, row.id));
         } else {
           await tx.insert(schema.authRole).values(row);
@@ -305,7 +310,19 @@ export const createDrizzleRoleStore = (
     }
   };
 
-  const repository: RoleRepository = { save, findById, list };
+  // isInUse: EXISTS na juncao auth_user_role por role_id (usa auth_urt_role_idx).
+  // LIMIT 1 — basta uma atribuicao para o papel estar "em uso" (FR-012, archive).
+  const isInUse = async (id: RoleId): Promise<Result<boolean, RoleRepositoryError>> =>
+    safe('isInUse', async () => {
+      const rows = await db
+        .select({ roleId: schema.authUserRole.roleId })
+        .from(schema.authUserRole)
+        .where(eq(schema.authUserRole.roleId, id as unknown as string))
+        .limit(1);
+      return rows.length > 0;
+    });
+
+  const repository: RoleRepository = { save, findById, list, isInUse };
 
   return { repository };
 };

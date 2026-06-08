@@ -83,5 +83,28 @@ export const runRoleRepositoryContract = (label: string, factory: RoleRepoFactor
       if (all.ok) assert.equal(all.value.length, 2);
       await cleanup();
     });
+
+    it('CA5: save persiste o status (archived sobrevive ao round-trip)', async () => {
+      const role = buildRole('Arquivavel', [perm('contract:delete')]);
+      await repository.save(role);
+      const archived = Role.archive(role, false);
+      assert.equal(archived.ok, true);
+      if (archived.ok) {
+        await repository.save(archived.value);
+        const found = await repository.findById(role.id);
+        assert.equal(found.ok, true);
+        if (found.ok) assert.equal(found.value?.status, 'archived');
+      }
+      await cleanup();
+    });
+
+    it('CA6: isInUse retorna false para role recem-salvo (sem atribuicao)', async () => {
+      const role = buildRole('SemUso', [perm('contract:delete')]);
+      await repository.save(role);
+      const inUse = await repository.isInUse(role.id);
+      assert.equal(inUse.ok, true);
+      if (inUse.ok) assert.equal(inUse.value, false);
+      await cleanup();
+    });
   });
 };

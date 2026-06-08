@@ -1,0 +1,2 @@
+ALTER TABLE `auth_role` ADD `status` varchar(16) DEFAULT 'active' NOT NULL;--> statement-breakpoint
+ALTER TABLE `auth_role` ADD CONSTRAINT `auth_role_status_chk` CHECK (`auth_role`.`status` IN ('active','archived'));

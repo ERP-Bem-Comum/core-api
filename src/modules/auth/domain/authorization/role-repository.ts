@@ -15,4 +15,6 @@ export type RoleRepository = Readonly<{
   save: (role: Role) => Promise<Result<void, RoleRepositoryError>>;
   findById: (id: RoleId) => Promise<Result<Role | null, RoleRepositoryError>>;
   list: () => Promise<Result<readonly Role[], RoleRepositoryError>>;
+  /** True se o papel está atribuído a ao menos um usuário (junção auth_user_role). Para archive (FR-012). */
+  isInUse: (id: RoleId) => Promise<Result<boolean, RoleRepositoryError>>;
 }>;

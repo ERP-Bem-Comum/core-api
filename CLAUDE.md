@@ -7,7 +7,7 @@
 
 <!-- SPECKIT START -->
 
-Plano corrente: `specs/005-gestao-usuarios/plan.md` (gestão administrativa de usuários — estende o módulo `auth`; spec irmã `006-gestao-acessos`).
+Plano corrente: `specs/006-gestao-acessos/plan.md` (RBAC administrativo — estende `auth`; spec irmã `005-gestao-usuarios`).
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan.
 

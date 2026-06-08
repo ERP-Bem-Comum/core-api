@@ -14,9 +14,9 @@ on:
   push:
     branches: [dev]
     paths-ignore:
-      - "**/*.md"
-      - "handbook/**"
-      - "docs/**"
+      - '**/*.md'
+      - 'handbook/**'
+      - 'docs/**'
   workflow_dispatch:
 
 concurrency:
