@@ -44,3 +44,9 @@ datas em UTC (off-by-one); grid enriquece `children`/`currentPeriod`. Sem teste 
 - Subtipo de aditivo (escopo/outro/distrato colapsam em `Misc`).
 - Metadados do contrato (programa, categoria, centro de custo, plano orçamentário, classificação CT/OS).
 - Ações do grid (Excluir contrato Pendente; Histórico Financeiro; Termo de Quitação).
+
+## Nota T014 — cobertura na coleção unificada
+- z-pending-fixes/ criada com 15 expected-fail (catalog 5 + distrato 5 + document-content 5).
+- **DIST-3** (documento signed_termination vinculado no detalhe) e **DOC-3** (documento de aditivo)
+  OMITIDOS na coleção `.bru` por exigirem setup multi-recurso desproporcional para placeholder de
+  expected-fail. Permanecem na rede BDD/TDD (cobertura documentada) e nos CAs dos tickets.

@@ -1,0 +1,34 @@
+# GUARDA DE REGRESSÃO — ticket CTR-HTTP-DISTRATO-DOCUMENTO
+# DIST-6: readerToken (contract:read, sem contract:write) → 403.
+# Estado atual: JA PASSA hoje (a rota já exige authorize(contract:write)).
+# Mantido como guarda para garantir que o fix não quebre a verificação de permissão.
+
+meta {
+  name: DIST-6 readerToken sem contract:write retorna 403
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v2/contracts/{{pendingContractId}}/end
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{readerToken}}
+}
+
+body:json {
+  {
+    "kind": "Terminate",
+    "terminatedAt": "2026-06-01",
+    "reason": "Tentativa sem permissao de escrita"
+  }
+}
+
+tests {
+  test("DIST-6 — status 403", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}

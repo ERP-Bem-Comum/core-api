@@ -1,0 +1,21 @@
+meta {
+  name: document-content
+  type: folder
+}
+
+# EXPECTED-FAIL — ticket CTR-HTTP-DOCUMENT-CONTENT
+#
+# Feature pendente: nenhuma rota devolve bytes ou URL do documento.
+# GET /contracts/:id/documents/:documentId/content → hoje 404 (rota inexistente).
+#
+# Setup: 00-setup-upload-doc.bru faz POST /contracts/:id/documents (octet-stream)
+# usando o pendingContractId do distrato ou contractCreatedId se disponível,
+# capturando documentId para os casos DOC-1..6.
+#
+# DOC-3 (documento de aditivo acessível): omitido nesta pasta.
+# Motivo: requer aditivo homologado com documento assinado — setup de 3 passos
+# (criar aditivo + upload + homologar) que introduz complexidade desproporcional
+# para um placeholder de expected-fail. O caso será adicionado quando
+# CTR-HTTP-DOCUMENT-CONTENT entrar em implementação. Registrado como TODO.
+#
+# Critério de correção: após CTR-HTTP-DOCUMENT-CONTENT, DOC-1..2/DOC-4..6 passam.

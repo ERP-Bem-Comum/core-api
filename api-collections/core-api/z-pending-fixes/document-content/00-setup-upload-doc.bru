@@ -1,0 +1,50 @@
+# Setup: faz upload de um PDF no contrato para obter documentId.
+# Reusa pendingContractId se disponível (criado em z-pending-fixes/distrato/setup).
+# Caso contrário, reusa contractCreatedId da pasta 6-contracts.
+# Captura documentId para uso nos casos DOC-1..6.
+#
+# O arquivo assets/sample.pdf (magic bytes %PDF) é o payload mínimo aceitável.
+
+meta {
+  name: setup upload documento para document-content
+  type: http
+  seq: 0
+}
+
+post {
+  url: {{baseUrl}}/api/v2/contracts/{{pendingContractId}}/documents?categoria=signed_contract&fileName=sample.pdf&mimeType=application/pdf&signedElectronically=true
+  body: file
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+headers {
+  Content-Type: application/octet-stream
+}
+
+body:file {
+  file: @file(../../assets/sample.pdf) @contentType(application/octet-stream)
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    const doc = res.getBody();
+    bru.setVar("documentId", doc.id);
+    // Garante que contractIdForDoc aponte para o mesmo contrato do upload.
+    const existing = bru.getVar("pendingContractId");
+    if (existing) {
+      bru.setVar("contractIdForDoc", existing);
+    }
+  }
+}
+
+tests {
+  test("SETUP — upload de documento (201) ou tolerado (40x se contrato inexistente)", function () {
+    // 201: documento criado — documentId capturado para DOC-1..6.
+    // 404/422: contrato não existe no ambiente — casos DOC usarão id placeholder e obterão 404 por rota inexistente.
+    expect([201, 400, 404, 422]).to.include(res.getStatus());
+  });
+}

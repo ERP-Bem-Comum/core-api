@@ -1,0 +1,28 @@
+# EXPECTED-FAIL até CTR-HTTP-DOCUMENT-CONTENT
+# DOC-1: GET .../content com contractsOperatorToken → 200, content-type application/pdf.
+# Estado atual: REPROVA — rota inexistente (404).
+
+meta {
+  name: DOC-1 conteudo do documento retorna 200 application/pdf
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v2/contracts/{{contractIdForDoc}}/documents/{{documentId}}/content
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+tests {
+  test("DOC-1 — status 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("DOC-1 — content-type contem application/pdf", function () {
+    const ct = res.getHeader("content-type") ?? "";
+    expect(ct).to.include("application/pdf");
+  });
+}

@@ -1,0 +1,50 @@
+# EXPECTED-FAIL até CTR-HTTP-DISTRATO-DOCUMENTO
+# DIST-2: campo de encerramento (endedAt) deve refletir terminatedAt informado, não now.
+# Estado atual: REPROVA — terminatedAt não existe no schema; endedAt = clock now.
+#
+# Nota: depende do contrato ainda estar Active (o DIST-1 acima tenta distratar o mesmo
+# contrato; nesta sequência o setup deve criar um contrato fresco por execução).
+# Em execução sequencial de bru run, este contrato já foi distratado pelo DIST-1.
+# O comportamento esperado é idempotente (201 → 200) ou o campo endedAt já está correto.
+# Como DIST-1 REPROVA hoje (schema rejeita terminatedAt), DIST-2 também reprovará por
+# dependência — status 422 impede verificar endedAt.
+
+meta {
+  name: DIST-2 endedAt igual ao terminatedAt informado
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v2/contracts/{{pendingContractId}}/end
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+body:json {
+  {
+    "kind": "Terminate",
+    "terminatedAt": "2026-06-01",
+    "reason": "Distrato por acordo entre as partes — teste e2e"
+  }
+}
+
+tests {
+  test("DIST-2 — status 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("DIST-2 — body.status === Terminated", function () {
+    expect(res.getBody().status).to.equal("Terminated");
+  });
+  test("DIST-2 — campo de encerramento (endedAt) === data informada", function () {
+    // O campo pode se chamar endedAt ou terminatedAt na resposta — ajustar quando o
+    // backend definir o nome canônico (binding-map §3 do ticket CTR-HTTP-DISTRATO-DOCUMENTO).
+    const body = res.getBody();
+    const endedAt = body.endedAt ?? body.terminatedAt;
+    expect(endedAt).to.include("2026-06-01");
+  });
+}

@@ -1,0 +1,33 @@
+# Setup: ativa o contrato criado em 00-setup-create-contract.bru.
+# Requer pendingContractId capturado no step anterior.
+# Um contrato precisa estar Active para ser distratado.
+
+meta {
+  name: setup ativar contrato para distrato
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v2/contracts/{{pendingContractId}}/activate
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+body:json {
+  {
+    "signedAt": "2026-01-01"
+  }
+}
+
+tests {
+  test("SETUP — contrato ativado (200) ou nao encontrado (404 tolerado se criacao falhou)", function () {
+    // 200: contrato ativado — pré-condição dos casos DIST satisfeita.
+    // 404: contrato não foi criado no step anterior (setup parcial).
+    expect([200, 404]).to.include(res.getStatus());
+  });
+}

@@ -1,0 +1,35 @@
+# EXPECTED-FAIL até AUTH-PERMISSION-CATALOG-PARTNERS
+# CAT-REG-1: catálogo inclui supplier:read e supplier:write.
+# Estado atual: REPROVA — permission-catalog.ts não lista supplier:*.
+
+meta {
+  name: CAT-REG-1 catalogo inclui supplier
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/permissions
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("CAT-REG-1 — status 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("CAT-REG-1 — items e array", function () {
+    expect(res.getBody().items).to.be.an("array");
+  });
+  test("CAT-REG-1 — catalogo inclui supplier:read", function () {
+    const ids = res.getBody().items.map((i) => i.id);
+    expect(ids).to.include("supplier:read");
+  });
+  test("CAT-REG-1 — catalogo inclui supplier:write", function () {
+    const ids = res.getBody().items.map((i) => i.id);
+    expect(ids).to.include("supplier:write");
+  });
+}

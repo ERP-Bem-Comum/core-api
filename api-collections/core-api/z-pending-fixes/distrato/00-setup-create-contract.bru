@@ -1,0 +1,69 @@
+# Setup autossuficiente para a sub-suíte distrato.
+# Cria um supplier dedicado, cria um contrato e o ativa.
+# Captura pendingContractId para uso nos casos DIST-1..6.
+#
+# Decisão de design: setup próprio (não reutiliza contractCreatedId da pasta 6-contracts)
+# porque z-pending-fixes roda em execução separada e vars de outras pastas podem não
+# estar disponíveis. Idempotência: supplier com CNPJ fixo pode resultar em 409 se o
+# ambiente já tiver o dado — nesse caso o script captura o id do header Location quando
+# disponível ou mantém o ultimo valor válido.
+
+meta {
+  name: setup criar e ativar contrato para distrato
+  type: http
+  seq: 0
+}
+
+post {
+  url: {{baseUrl}}/api/v2/contracts
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+script:pre-request {
+  // Garante que supplierIdForDistrato esteja preenchido.
+  // Se a pasta 7-partners já rodou, supplierCreatedId pode estar disponível como fallback.
+  const existing = bru.getVar("supplierCreatedId");
+  if (existing) {
+    bru.setVar("supplierIdForDistrato", existing);
+  } else {
+    // UUID fixo do seed para ambiente local — ajustar se o seed usar outro id.
+    bru.setVar("supplierIdForDistrato", "00000000-0000-0000-0000-000000000001");
+  }
+}
+
+body:json {
+  {
+    "title": "Contrato E2E Distrato",
+    "objective": "Contrato para testes de distrato pendente",
+    "originalValue": { "cents": 50000 },
+    "startDate": "2026-01-01",
+    "endDate": "2026-12-31",
+    "contractor": {
+      "type": "supplier",
+      "id": "{{supplierIdForDistrato}}"
+    }
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    const location = res.headers["location"];
+    if (location) {
+      const parts = location.split("/");
+      bru.setVar("pendingContractId", parts[parts.length - 1]);
+    }
+  }
+}
+
+tests {
+  test("SETUP — contrato criado (201) ou contractor invalido (400 tolerado no ambiente sem seed de parceiro)", function () {
+    // 201: contrato criado com sucesso.
+    // 400: contractor inexistente no ambiente — setup parcial, os casos DIST usarão id placeholder.
+    expect([201, 400]).to.include(res.getStatus());
+  });
+}

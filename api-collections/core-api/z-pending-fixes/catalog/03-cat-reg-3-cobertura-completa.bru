@@ -1,0 +1,31 @@
+# EXPECTED-FAIL até AUTH-PERMISSION-CATALOG-PARTNERS
+# CAT-REG-3: catálogo cobre todas as permissões de produção — mínimo 28, sem duplicatas.
+# Estado atual: REPROVA — length === 18 (faltam as 10 de partners).
+
+meta {
+  name: CAT-REG-3 catalogo cobre todas as permissoes (min 28 sem duplicatas)
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/permissions
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("CAT-REG-3 — status 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("CAT-REG-3 — items.length >= 28", function () {
+    expect(res.getBody().items.length).to.be.at.least(28);
+  });
+  test("CAT-REG-3 — sem ids duplicados (Set === length)", function () {
+    const ids = res.getBody().items.map((i) => i.id);
+    expect(new Set(ids).size).to.equal(ids.length);
+  });
+}

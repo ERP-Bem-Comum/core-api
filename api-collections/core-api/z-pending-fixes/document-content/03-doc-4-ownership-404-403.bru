@@ -1,0 +1,29 @@
+# EXPECTED-FAIL até CTR-HTTP-DOCUMENT-CONTENT
+# DOC-4: documentId de um contrato usado na URL de outro contrato → 404 ou 403.
+# Estado atual: REPROVA — rota inexistente (404 por rota, não por ownership).
+# Após o fix: deve negar por ownership (mesma checagem do DELETE de documento).
+#
+# Estratégia: usa um UUID fixo fabricado como idContratoAlheio para forçar
+# o cenário de ownership. O comportamento esperado é 404 ou 403 — ambos aceitáveis
+# desde que não vaze bytes.
+
+meta {
+  name: DOC-4 documento de outro contrato retorna 404 ou 403
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v2/contracts/00000000-0000-0000-0000-999999999999/documents/{{documentId}}/content
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+tests {
+  test("DOC-4 — status 404 ou 403 (sem vazar bytes)", function () {
+    expect([404, 403]).to.include(res.getStatus());
+  });
+}

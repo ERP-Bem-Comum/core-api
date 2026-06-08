@@ -1,0 +1,21 @@
+meta {
+  name: distrato
+  type: folder
+}
+
+# EXPECTED-FAIL — ticket CTR-HTTP-DISTRATO-DOCUMENTO
+#
+# Feature pendente: POST /api/v2/contracts/:id/end não aceita terminatedAt nem reason.
+# Schema atual: { kind: 'Expire' | 'Terminate' } apenas.
+# Schema esperado: { kind: 'Terminate', terminatedAt: string, reason: string }.
+#
+# Setup local: 00-setup-create-contract.bru cria e ativa um contrato
+# capturando pendingContractId. Os casos DIST-1..6 usam esse id.
+#
+# DIST-3 (documento de distrato vinculado e visível): omitido nesta pasta.
+# Motivo: requer upload categoria=signed_termination + GET com verificação de
+# documento na timeline — dependência de dois recursos (upload + rota de conteúdo)
+# que pertencem a tickets distintos. Registrado como TODO em pending-backend-traceability.md.
+#
+# Critério de correção: após CTR-HTTP-DISTRATO-DOCUMENTO, DIST-1..5 passam.
+# DIST-6 já passa hoje e serve como guarda de regressão.
