@@ -161,7 +161,23 @@ const usersRoutes =
           });
         }
 
-        return sendResult(reply, ok(result.value), { ok: 200 });
+        // HTTP-PAGINATION-HARMONIZE: mapeia o meta do read model (pageSize) para o
+        // shape canonico da borda (itemsPerPage + itemCount), espelhando partners.
+        const meta = result.value.meta;
+        return sendResult(
+          reply,
+          ok({
+            items: result.value.items,
+            meta: {
+              currentPage: meta.currentPage,
+              itemsPerPage: meta.pageSize,
+              itemCount: result.value.items.length,
+              totalItems: meta.totalItems,
+              totalPages: meta.totalPages,
+            },
+          }),
+          { ok: 200 },
+        );
       },
     });
 
@@ -219,7 +235,11 @@ const usersRoutes =
             },
           });
         }
-        return sendResult(reply, ok({ id: String(result.value.user.id) }), { ok: 201 });
+        // Location no 201 (RFC 7231 6.3.2): aponta para o recurso recem-criado. O body
+        // { id } e preservado para compat com o front atual.
+        const id = String(result.value.user.id);
+        reply.header('location', `/api/v1/users/${id}`);
+        return sendResult(reply, ok({ id }), { ok: 201 });
       },
     });
 

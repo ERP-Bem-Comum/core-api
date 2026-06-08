@@ -46,6 +46,7 @@ import {
 
 const STRONG = 'Str0ng-Passphrase-2026!';
 const WRITER_EMAIL = 'writer@example.com'; // seed RBAC: tem 'contract:write'
+const READER_EMAIL = 'reader@example.com'; // seed RBAC: tem 'contract:read' (DIST-3 lê o detalhe)
 const PLAIN_EMAIL = 'plain@example.com'; // register normal: roles:[] (sem permissão)
 const HOMOLOGATED_BY = '44444444-4444-4444-8444-444444444444';
 
@@ -58,6 +59,9 @@ const AMEND_HOMOLOG_ID = '22222222-2222-4222-8222-222222222222';
 const AMEND_MISMATCH_ID = '23232323-2323-4232-8232-232323232323';
 const MISSING_CONTRACT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const MISSING_AMEND_ID = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+// Distrato (CTR-HTTP-DISTRATO-DOCUMENTO): Active COM doc `signed_termination` (200) e SEM doc (422).
+const TERM_WITHDOC_ID = '13131313-1313-4131-8131-131313131313';
+const TERM_NODOC_ID = '14141414-1414-4141-8141-141414141414';
 
 const fromOk = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }, label: string): T => {
   if (!r.ok) throw new Error(`fixture ${label}: ${JSON.stringify(r.error)}`);
@@ -87,10 +91,38 @@ const signedContractDoc = (contractId: string) =>
     'document',
   ).document;
 
+// Documento `signed_termination` Active vinculado a um contrato (distrato — CTR-HTTP-DISTRATO-DOCUMENTO).
+const signedTerminationDoc = (contractId: string) =>
+  fromOk(
+    Document.create({
+      id: DocumentId.generate(),
+      parentType: 'Contract',
+      parentId: fromOk(ContractId.rehydrate(contractId), 'contractId'),
+      categoria: 'signed_termination',
+      fileName: 'distrato-assinado.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: 5,
+      hashSha256: 'b'.repeat(64),
+      bucket: fromOk(createBucketName('contracts-documents'), 'bucket'),
+      storageKey: fromOk(createStorageKey('contracts/2026/distrato-001.pdf'), 'key'),
+      signedElectronically: true,
+      version: 1,
+      uploadedAt: new Date('2026-03-01T00:00:00.000Z'),
+      uploadedBy: fromOk(UserRef.rehydrate(HOMOLOGATED_BY), 'userRef'),
+      retentionUntil: null,
+    }),
+    'document',
+  ).document;
+
 const makeApp = async () => {
   const authDeps = await buildAuthHttpDeps({
     driver: 'memory',
-    seed: { users: [{ email: WRITER_EMAIL, password: STRONG, permissions: ['contract:write'] }] },
+    seed: {
+      users: [
+        { email: WRITER_EMAIL, password: STRONG, permissions: ['contract:write'] },
+        { email: READER_EMAIL, password: STRONG, permissions: ['contract:read'] },
+      ],
+    },
   });
   const contractsDeps = await buildContractsHttpDeps({
     driver: 'memory',
@@ -98,6 +130,8 @@ const makeApp = async () => {
       contracts: [
         buildContract({ id: ACTIVE_ID, sequentialNumber: '001/2026' }),
         buildContract({ id: ACTIVE2_ID, sequentialNumber: '002/2026' }),
+        buildContract({ id: TERM_WITHDOC_ID, sequentialNumber: '003/2026' }),
+        buildContract({ id: TERM_NODOC_ID, sequentialNumber: '004/2026' }),
         buildPendingContract({ id: PENDING_WITHDOC_ID, sequentialNumber: '900/2026' }),
         buildPendingContract({ id: PENDING_NODOC_ID, sequentialNumber: '901/2026' }),
       ],
@@ -105,7 +139,7 @@ const makeApp = async () => {
         buildPendingAmendmentWithDoc({ id: AMEND_HOMOLOG_ID, contractId: ACTIVE_ID }),
         buildPendingAmendmentWithDoc({ id: AMEND_MISMATCH_ID, contractId: ACTIVE2_ID }),
       ],
-      documents: [signedContractDoc(PENDING_WITHDOC_ID)],
+      documents: [signedContractDoc(PENDING_WITHDOC_ID), signedTerminationDoc(TERM_WITHDOC_ID)],
     },
   });
   const app = await buildApp({
@@ -215,6 +249,9 @@ describe('CONTRACTS-HTTP-WRITES-CORE (C2) — POST /contracts', () => {
     });
     assert.equal(res.statusCode, 201);
     assert.equal((res.json() as { status: string }).status, 'Active');
+    // HTTP-LOCATION-HEADER-201: 201 traz Location apontando para o recurso criado.
+    const id = (res.json() as { id: string }).id;
+    assert.equal(res.headers.location, `/api/v2/contracts/${id}`);
     await teardown();
   });
 
@@ -229,6 +266,9 @@ describe('CONTRACTS-HTTP-WRITES-CORE (C2) — POST /contracts', () => {
     });
     assert.equal(res.statusCode, 201);
     assert.equal((res.json() as { status: string }).status, 'Pending');
+    // HTTP-LOCATION-HEADER-201: 201 traz Location apontando para o recurso criado.
+    const id = (res.json() as { id: string }).id;
+    assert.equal(res.headers.location, `/api/v2/contracts/${id}`);
     await teardown();
   });
 
@@ -388,6 +428,120 @@ describe('CONTRACTS-HTTP-WRITES-CORE (C2) — POST /contracts/:id/activate', () 
       payload: { signedAt: 'not-a-date' },
     });
     assert.equal(res.statusCode, 422);
+    await teardown();
+  });
+});
+
+// ─── E2b: POST /contracts/:id/end (distrato) — CTR-HTTP-DISTRATO-DOCUMENTO ─────
+
+describe('CONTRACTS-HTTP-DISTRATO-DOCUMENTO — POST /contracts/:id/end (Terminate)', () => {
+  const terminateBody = (overrides: Record<string, unknown> = {}) => ({
+    kind: 'Terminate',
+    terminatedAt: '2026-06-01',
+    reason: 'Distrato por acordo entre as partes — teste',
+    ...overrides,
+  });
+
+  it('DIST-6: token sem contract:write -> 403', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await registerAndLogin(app, PLAIN_EMAIL);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v2/contracts/${TERM_WITHDOC_ID}/end`,
+      headers: bearer(token),
+      payload: terminateBody(),
+    });
+    assert.equal(res.statusCode, 403);
+    await teardown();
+  });
+
+  it('DIST-1: Terminate com doc + data + motivo -> 200 + status Terminated', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v2/contracts/${TERM_WITHDOC_ID}/end`,
+      headers: bearer(token),
+      payload: terminateBody(),
+    });
+    assert.equal(res.statusCode, 200);
+    assert.equal((res.json() as { status: string }).status, 'Terminated');
+    await teardown();
+  });
+
+  it('DIST-2: endedAt === terminatedAt informado (não o clock now)', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v2/contracts/${TERM_WITHDOC_ID}/end`,
+      headers: bearer(token),
+      payload: terminateBody(),
+    });
+    assert.equal(res.statusCode, 200);
+    const endedAt = (res.json() as { endedAt?: string }).endedAt;
+    assert.ok(endedAt?.includes('2026-06-01'), `endedAt=${String(endedAt)}`);
+    await teardown();
+  });
+
+  it('DIST-4: Terminate sem documento signed_termination -> 422 terminate-no-signed-document', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v2/contracts/${TERM_NODOC_ID}/end`,
+      headers: bearer(token),
+      payload: terminateBody(),
+    });
+    assert.equal(res.statusCode, 422);
+    assert.equal(
+      (res.json() as { error: { code: string } }).error.code,
+      'terminate-no-signed-document',
+    );
+    await teardown();
+  });
+
+  it('DIST-5: terminatedAt futuro -> 422 terminate-invalid-date', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v2/contracts/${TERM_WITHDOC_ID}/end`,
+      headers: bearer(token),
+      payload: terminateBody({ terminatedAt: '2099-01-01' }),
+    });
+    assert.equal(res.statusCode, 422);
+    assert.equal((res.json() as { error: { code: string } }).error.code, 'terminate-invalid-date');
+    await teardown();
+  });
+
+  it('DIST: Terminate sem terminatedAt -> 400 (Zod)', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, WRITER_EMAIL);
+    const res = await app.inject({
+      method: 'POST',
+      url: `/api/v2/contracts/${TERM_WITHDOC_ID}/end`,
+      headers: bearer(token),
+      payload: { kind: 'Terminate', reason: 'sem data' },
+    });
+    assert.equal(res.statusCode, 400);
+    await teardown();
+  });
+
+  it('DIST-3: doc signed_termination aparece no detalhe GET /contracts/:id', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await loginSeeded(app, READER_EMAIL);
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v2/contracts/${TERM_WITHDOC_ID}`,
+      headers: bearer(token),
+    });
+    assert.equal(res.statusCode, 200);
+    const docs = (res.json() as { documents: { categoria: string }[] }).documents;
+    assert.ok(
+      docs.some((d) => d.categoria === 'signed_termination'),
+      'esperado documento signed_termination no detalhe',
+    );
     await teardown();
   });
 });

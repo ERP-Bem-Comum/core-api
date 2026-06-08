@@ -43,3 +43,5 @@ Todas as rotas em `roles-plugin.ts` (criado na US1, estendido incrementalmente);
 ## Próximo
 
 PR `feat/006-rbac → dev` quando aprovado pelo dono. `dev` permanece intacta até lá.
+
+- **2026-06-08** — **T023/T051 reconciliadas (via spec 007).** A contract suite compartilhada do `RoleRepository` (`role-repository.contract.ts`, `runRoleRepositoryContract` CA1-CA6) já existia desde `AUTH-ROLE-REPO-CRUD`, consumida por in-memory (7/7) e Drizzle/MySQL (verde em `test:integration:auth`, 40/40). O `tasks.md` é que não fora marcado. Fechadas no ticket `AUTH-ROLE-REPO-CONTRACT-SUITE` (US2 da 007).

@@ -1,0 +1,32 @@
+meta {
+  name: DIST-1 distrato com terminatedAt e reason retorna 200 Terminated
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v2/contracts/{{contractIdA}}/end
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+body:json {
+  {
+    "kind": "Terminate",
+    "terminatedAt": "2026-06-01",
+    "reason": "Distrato por acordo entre as partes — teste e2e"
+  }
+}
+
+tests {
+  test("DIST-1 — status 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("DIST-1 — body.status === Terminated", function () {
+    expect(res.getBody().status).to.equal("Terminated");
+  });
+}

@@ -1,0 +1,28 @@
+meta {
+  name: PAG-6c GET /suppliers?pageSize=99999 boundary
+  type: http
+  seq: 22
+}
+
+get {
+  url: {{baseUrl}}/api/v1/suppliers?pageSize=99999
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{partnersOperatorToken}}
+}
+
+tests {
+  // PAG-6 variacao pageSize=99999 de failures-pagination-boundary.md
+  test("PAG-6c — pageSize=99999 retorna 422 ou 200 (clamp); nunca 500", function () {
+    expect(res.getStatus()).to.not.equal(500);
+    expect([422, 200]).to.include(res.getStatus());
+  });
+  test("PAG-6c — se 200: items.length nao excede o maximo documentado (clamp efetivo)", function () {
+    if (res.getStatus() === 200) {
+      // maximo documentado da borda (tipicamente 100 ou configuravel)
+      expect(res.getBody().items.length).to.be.at.most(100);
+    }
+  });
+}

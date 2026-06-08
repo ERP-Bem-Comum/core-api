@@ -18,11 +18,13 @@ import type { BucketName, StorageKey } from '../../application/ports/document-st
 import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
 
 // ─── DocumentCategory ──────────────────────────────────────────────────────
-// Spec §4.3: 8 categorias canônicas em snake_case PT-BR.
+// Spec §4.3: categorias canônicas em snake_case PT-BR. `signed_termination`
+// adicionada em CTR-HTTP-DISTRATO-DOCUMENTO (distrato assinado, pré-requisito do /end).
 
 export type DocumentCategory =
   | 'signed_contract'
   | 'signed_amendment'
+  | 'signed_termination'
   | 'opinion'
   | 'certificate'
   | 'justification'

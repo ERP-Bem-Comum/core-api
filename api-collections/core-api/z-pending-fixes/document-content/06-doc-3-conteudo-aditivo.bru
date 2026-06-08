@@ -1,0 +1,30 @@
+meta {
+  name: DOC-3 conteudo do documento de aditivo retorna 200 PDF
+  type: http
+  seq: 7
+}
+
+script:pre-request {
+  // Prefere o doc de aditivo, se disponivel; senao usa o doc de contrato do setup.
+  const amendmentDocId = bru.getVar("amendmentDocumentId");
+  bru.setVar("docContentTargetId", amendmentDocId ?? bru.getVar("documentId"));
+}
+
+get {
+  url: {{baseUrl}}/api/v2/contracts/{{contractIdForDoc}}/documents/{{docContentTargetId}}/content
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+tests {
+  test("DOC-3 — status 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("DOC-3 — content-type contem application/pdf", function () {
+    const ct = res.getHeader("content-type") ?? "";
+    expect(ct).to.include("application/pdf");
+  });
+}

@@ -1,0 +1,16 @@
+meta {
+  name: DOC-6 sem Authorization retorna 401
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/v2/contracts/{{contractIdForDoc}}/documents/{{documentId}}/content
+  auth: none
+}
+
+tests {
+  test("DOC-6 — status 401", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}

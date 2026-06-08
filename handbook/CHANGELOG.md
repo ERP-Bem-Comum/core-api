@@ -4,6 +4,19 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-08 — 🧪 ADR-0038: Coleções Bruno obrigatoriamente executadas via CLI
+
+Novo [ADR-0038](./architecture/adr/0038-bruno-cli-mandatory-and-bru-authoring.md) (**Accepted**). Motivado
+pela spec 007: ao rodar o runner único pela 1ª vez, **24 de 26 falhas eram `.bru` que nunca tinham sido
+executados via Bruno CLI** (ex.: `api-collections/contracts` sem runner — body desalinhado do schema real).
+
+- **Todo `.bru` criado/alterado DEVE ser executado** via `bru run` contra o server real e passar (ou
+  reprovar conscientemente como expected-fail isolado). Escrever sem rodar = cobertura ilusória, proibido.
+- **Diretrizes de autoria normativas**: sem `#` no topo (parser); body alinhado ao schema Zod
+  (`discriminatedUnion` exige discriminador); dados válidos (CPF/CNPJ módulo 11, UUID v4); login
+  compartilhado; asserções tolerantes ao código real com invariante "nunca 500"; expected-fail isolado.
+- Regra path-scoped: `.claude/rules/api-collections.md` (carrega ao tocar `api-collections/`).
+
 ## 2026-06-07 — 🌐 ADR-0037: HTTP-first; aposentadoria da CLI embutida
 
 Novo [ADR-0037](./architecture/adr/0037-http-first-retire-embedded-cli.md) (**Accepted**) formaliza a

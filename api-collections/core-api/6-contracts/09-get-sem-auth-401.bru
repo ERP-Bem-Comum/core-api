@@ -1,0 +1,21 @@
+meta {
+  name: get contrato sem Authorization retorna 401
+  type: http
+  seq: 9
+}
+
+get {
+  url: {{baseUrl}}/api/v2/contracts/{{contractCreatedId}}
+  auth: none
+}
+
+tests {
+  test("US1-7 — GET /contracts/:id sem token retorna 401", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+
+  test("US1-7 — envelope de erro tem requestId", function () {
+    expect(res.getBody()).to.have.property("error");
+    expect(res.getBody().error).to.have.property("requestId");
+  });
+}

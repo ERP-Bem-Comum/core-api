@@ -57,7 +57,7 @@ describe('listContracts', () => {
     assert.equal(isOk(r), true);
     if (r.ok) {
       assert.equal(r.value.items.length, 3);
-      assert.equal(r.value.meta.total, 3);
+      assert.equal(r.value.meta.totalItems, 3);
     }
   });
 });

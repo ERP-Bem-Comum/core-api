@@ -1,0 +1,37 @@
+meta {
+  name: setup upload documento signed_contract para document-content
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v2/contracts/{{contractIdForDoc}}/documents?categoria=signed_contract&fileName=sample.pdf&mimeType=application/pdf&signedElectronically=true
+  body: file
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+headers {
+  Content-Type: application/octet-stream
+}
+
+body:file {
+  file: @file(assets/sample.pdf) @contentType(application/octet-stream)
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    const doc = res.getBody();
+    bru.setVar("documentId", doc.id);
+  }
+}
+
+tests {
+  test("SETUP — upload documento retorna 201 e captura documentId", function () {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.getBody().id).to.be.a("string");
+  });
+}

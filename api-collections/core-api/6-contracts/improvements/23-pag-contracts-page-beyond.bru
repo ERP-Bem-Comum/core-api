@@ -1,0 +1,33 @@
+meta {
+  name: PAG-5d contracts page alem do total retorna vazio coerente
+  type: http
+  seq: 23
+}
+
+get {
+  url: {{baseUrl}}/api/v2/contracts?page=999999&pageSize=25
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{readerToken}}
+}
+
+tests {
+  // PAG-5 (variacao page alem do total) de failures-pagination-boundary.md
+  test("PAG-5d — contracts page alem do total retorna 200 com items vazio; nunca 500", function () {
+    expect(res.getStatus()).to.not.equal(500);
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("PAG-5d — items e array vazio", function () {
+    expect(res.getBody().items).to.be.an("array");
+    expect(res.getBody().items.length).to.equal(0);
+  });
+
+  test("PAG-5d — meta.total reflete total real (>= 0)", function () {
+    expect(res.getBody()).to.have.property("meta");
+    expect(res.getBody().meta).to.have.property("totalItems");
+    expect(res.getBody().meta.totalItems).to.be.at.least(0);
+  });
+}

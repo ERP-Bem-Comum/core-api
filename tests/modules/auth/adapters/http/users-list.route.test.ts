@@ -29,7 +29,13 @@ type AppHandle = Awaited<ReturnType<typeof buildApp>>;
 
 interface UserListBody {
   items: readonly { id: string; name: string | null; email: string; status: string }[];
-  meta: { currentPage: number; pageSize: number; totalItems: number; totalPages: number };
+  meta: {
+    currentPage: number;
+    itemsPerPage: number;
+    itemCount: number;
+    totalItems: number;
+    totalPages: number;
+  };
 }
 
 const makeApp = async (): Promise<{ app: AppHandle; teardown: () => Promise<void> }> => {
@@ -130,7 +136,8 @@ describe('AUTH-HTTP-LIST-USERS — GET /api/v1/users', () => {
     assert.equal(res.statusCode, 200);
     const body = res.json() as UserListBody;
     assert.equal(body.meta.currentPage, 1);
-    assert.equal(body.meta.pageSize, 5);
+    assert.equal(body.meta.itemsPerPage, 5);
+    assert.equal(body.meta.itemCount, 5);
     assert.equal(body.meta.totalItems, 5);
     assert.equal(body.items.length, 5);
   });
@@ -142,7 +149,7 @@ describe('AUTH-HTTP-LIST-USERS — GET /api/v1/users', () => {
       headers: { authorization: `Bearer ${adminToken}` },
     });
     assert.equal(res.statusCode, 200);
-    assert.equal((res.json() as UserListBody).meta.pageSize, 10);
+    assert.equal((res.json() as UserListBody).meta.itemsPerPage, 10);
   });
 
   it('CA5: 400 pageSize invalido (7) — validacao de querystring (padrao do projeto)', async () => {
@@ -187,6 +194,7 @@ describe('AUTH-HTTP-LIST-USERS — GET /api/v1/users', () => {
     assert.equal(res.statusCode, 200);
     const body = res.json() as UserListBody;
     assert.equal(body.meta.currentPage, 2);
+    assert.equal(body.meta.itemCount, 0);
     assert.equal(body.items.length, 0);
   });
 });

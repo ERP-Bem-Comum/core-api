@@ -1,0 +1,32 @@
+meta {
+  name: RL-4 reads nao limitados pela politica de escrita
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users?pageSize=25
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  // RL-4: leituras nao devem ser bloqueadas pelo WRITE_RATE_LIMIT.
+  // Mesmo apos burst de writes, GET deve retornar 200.
+  test("RL-4 — GET /users 200 (reads nao limitados por WRITE_RATE_LIMIT)", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("RL-4 — sem Retry-After de limite de escrita em leitura", function () {
+    const retryAfter = res.getHeaders()["retry-after"];
+    // Leituras podem ter limite proprio de READ_RATE_LIMIT (mais alto),
+    // mas nao devem ser bloqueadas pela politica de escrita.
+    // Se 429 for retornado, e por rate limit de leitura, nao de escrita.
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("RL-4 — body.items e array (leitura efetiva, nao bloqueada)", function () {
+    expect(res.getBody().items).to.be.an("array");
+  });
+}

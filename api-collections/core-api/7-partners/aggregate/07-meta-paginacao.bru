@@ -1,0 +1,35 @@
+meta {
+  name: partners aggregate paginacao meta correta
+  type: http
+  seq: 7
+}
+
+get {
+  url: {{baseUrl}}/api/v1/partners?page=1&limit=5
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{partnersOperatorToken}}
+}
+
+tests {
+  test("US-001 — GET /partners paginado retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("US-001 — meta.itemsPerPage respeita o limit solicitado", function () {
+    const meta = res.getBody().meta;
+    expect(meta.itemsPerPage).to.equal(5);
+  });
+
+  test("US-001 — meta.currentPage respeita o page solicitado", function () {
+    const meta = res.getBody().meta;
+    expect(meta.currentPage).to.equal(1);
+  });
+
+  test("US-001 — items nao ultrapassa o limit", function () {
+    const items = res.getBody().items;
+    expect(items.length).to.be.at.most(5);
+  });
+}

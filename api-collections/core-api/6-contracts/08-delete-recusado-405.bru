@@ -1,0 +1,27 @@
+meta {
+  name: delete contrato retorna 405 (contract-delete-forbidden)
+  type: http
+  seq: 8
+}
+
+delete {
+  url: {{baseUrl}}/api/v2/contracts/{{contractCreatedId}}
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+tests {
+  test("US2-4 — DELETE /contracts/:id retorna 405", function () {
+    expect(res.getStatus()).to.equal(405);
+  });
+
+  test("US2-4 — error.code eh contract-delete-forbidden", function () {
+    expect(res.getBody()).to.have.property("error");
+    expect(res.getBody().error.code).to.equal("contract-delete-forbidden");
+    expect(res.getBody().error).to.have.property("requestId");
+  });
+}

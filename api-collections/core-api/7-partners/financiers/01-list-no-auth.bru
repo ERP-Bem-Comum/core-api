@@ -1,0 +1,16 @@
+meta {
+  name: financiers list no auth
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/financiers
+  auth: none
+}
+
+tests {
+  test("CA2 — GET /financiers sem token retorna 401", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}

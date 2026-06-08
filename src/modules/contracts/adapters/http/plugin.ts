@@ -91,6 +91,8 @@ const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
   'document-not-found',
   'supersede-target-not-found',
   'storage-not-found',
+  // Ownership: documento de outro contrato → 404 fail-closed (não vaza existência).
+  'document-not-owned',
 ]);
 const REPO_UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   'contract-repo-unavailable',
@@ -123,6 +125,16 @@ const PDF_MAGIC = Buffer.from('%PDF');
 const magicBytesMatch = (mimeType: string, bytes: Buffer): boolean => {
   if (mimeType === 'application/pdf') return bytes.subarray(0, 4).equals(PDF_MAGIC);
   return true; // mimeTypes fora da allowlist já são barrados pelo Zod (400) antes daqui
+};
+
+// Sanitiza o nome do arquivo para o header `Content-Disposition`: remove aspas e
+// caracteres de controle (CR/LF) que permitiriam header injection / quebra do
+// header. Mantém o restante do nome original (UX: download com nome reconhecível).
+// eslint-disable-next-line no-control-regex
+const FILENAME_UNSAFE = /["\\\r\n\x00-\x1F\x7F]/g;
+const sanitizeFilename = (name: string): string => {
+  const cleaned = name.replace(FILENAME_UNSAFE, '_').trim();
+  return cleaned.length > 0 ? cleaned : 'document.pdf';
 };
 
 const sendDomainError = (
@@ -352,6 +364,9 @@ const contractsRoutes =
             contractorId: body.contractor.id,
           });
           if (!result.ok) return sendDomainError(reply, result.error);
+          // Location no 201 (RFC 7231 §6.3.2): aponta para o recurso recém-criado. O body
+          // `{id,...}` (list-item) é preservado para compat com o front atual.
+          reply.header('location', `/api/v2/contracts/${String(result.value.contract.id)}`);
           return sendResult(reply, ok(contractToListItem(result.value.contract)), { ok: 201 });
         }
         // O body usa `periodStart`/`periodEnd` (API uniforme entre Pending|Active); o
@@ -368,6 +383,9 @@ const contractsRoutes =
           contractorId: body.contractor.id,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
+        // Location no 201 (RFC 7231 §6.3.2): aponta para o recurso recém-criado. O body
+        // `{id,...}` (list-item) é preservado para compat com o front atual.
+        reply.header('location', `/api/v2/contracts/${String(result.value.contract.id)}`);
         return sendResult(reply, ok(contractToListItem(result.value.contract)), { ok: 201 });
       },
     });
@@ -402,10 +420,18 @@ const contractsRoutes =
         response: { 200: contractDetailSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
-        const result = await deps.endContract({
-          contractId: req.params.id,
-          kind: req.body.kind,
-        });
+        // Body discriminado por `kind`: `Terminate` (distrato) carrega data efetiva + motivo.
+        const body = req.body;
+        const command =
+          body.kind === 'Terminate'
+            ? {
+                contractId: req.params.id,
+                kind: body.kind,
+                terminatedAt: body.terminatedAt,
+                reason: body.reason,
+              }
+            : { contractId: req.params.id, kind: body.kind };
+        const result = await deps.endContract(command);
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(reply, ok(contractToListItem(result.value.contract)), { ok: 200 });
       },
@@ -628,6 +654,34 @@ const contractsRoutes =
             'document-repository-unavailable': 503,
           },
         });
+      },
+    });
+
+    // E5: conteúdo (bytes) do documento — preview/download via BFF (CTR-HTTP-DOCUMENT-CONTENT).
+    // Read (C1): `authorize('contract:read')`. Ownership (documento ↔ contrato, direto ou via
+    // aditivo) é resolvido DENTRO do use case (validar → fetch → ownership → storage). Sucesso:
+    // stream `application/pdf` + `Content-Disposition: attachment; filename="<original>"`.
+    // Sem `response` schema (corpo binário, não-JSON — mesma convenção do CSV/204).
+    scope.route({
+      method: 'GET',
+      url: '/contracts/:id/documents/:documentId/content',
+      preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.read)],
+      schema: {
+        params: documentParamSchema,
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.getDocumentContent({
+          contractId: req.params.id,
+          documentId: req.params.documentId,
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        // `content-type` do documento (metadados); `attachment` permite download com o nome
+        // original e, em PDFs, o browser ainda renderiza inline no modal de preview.
+        const { bytes, fileName, contentType } = result.value;
+        return reply
+          .header('content-type', contentType)
+          .header('content-disposition', `attachment; filename="${sanitizeFilename(fileName)}"`)
+          .send(bytes);
       },
     });
   };

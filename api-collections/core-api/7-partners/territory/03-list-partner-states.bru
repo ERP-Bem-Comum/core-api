@@ -1,0 +1,36 @@
+meta {
+  name: list partner states
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v1/partner-states
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{partnersOperatorToken}}
+}
+
+tests {
+  test("US-002 — GET /partner-states retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("US-002 — retorna array de 27 UFs", function () {
+    const body = res.getBody();
+    expect(body).to.be.an("array");
+    expect(body.length).to.equal(27);
+  });
+
+  test("US-002 — cada item tem uf e isPartner", function () {
+    const body = res.getBody();
+    body.forEach(function (item) {
+      expect(item).to.have.property("uf");
+      expect(item).to.have.property("isPartner");
+      expect(item.uf).to.be.a("string");
+      expect(item.isPartner).to.be.a("boolean");
+    });
+  });
+}

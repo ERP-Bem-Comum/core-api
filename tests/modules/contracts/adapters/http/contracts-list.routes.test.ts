@@ -89,9 +89,9 @@ describe('CONTRACTS-HTTP (C0) — GET /api/v2/contracts', () => {
     });
     assert.equal(res.statusCode, 200);
     // CTR-HTTP-CONTRACT-LIST-FILTERS — response paginado: { items: [], meta }.
-    const body = res.json() as { items: unknown[]; meta: { total: number } };
+    const body = res.json() as { items: unknown[]; meta: { totalItems: number } };
     assert.ok(Array.isArray(body.items));
-    assert.equal(body.meta.total, 0);
+    assert.equal(body.meta.totalItems, 0);
     await teardown();
   });
 

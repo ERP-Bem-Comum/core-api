@@ -1,0 +1,21 @@
+meta {
+  name: toggle partner state deactivate
+  type: http
+  seq: 6
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/partner-states/SP
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{partnersOperatorToken}}
+}
+
+tests {
+  // DELETE idempotente: 200 mesmo se SP ja estava inativa.
+  test("US-002 — DELETE /partner-states/SP (desativar) retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

@@ -150,6 +150,8 @@ describe('uploadDocument', () => {
       // eslint-disable-next-line @typescript-eslint/require-await
       exists: async (_ref: StorageRef) => ok(false),
       // eslint-disable-next-line @typescript-eslint/require-await
+      getContent: async () => err('storage-not-found'),
+      // eslint-disable-next-line @typescript-eslint/require-await
       signedUrl: async (_ref: StorageRef, _ttl: number) => err('storage-unavailable'),
     };
     const { deps } = await setupWorld({ storage: failingStorage });
@@ -190,6 +192,8 @@ describe('uploadDocument', () => {
       download: async () => err('storage-not-found'),
       // eslint-disable-next-line @typescript-eslint/require-await
       exists: async () => ok(false),
+      // eslint-disable-next-line @typescript-eslint/require-await
+      getContent: async () => err('storage-not-found'),
       // eslint-disable-next-line @typescript-eslint/require-await
       signedUrl: async () => err('storage-unavailable'),
     };

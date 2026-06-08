@@ -1,0 +1,28 @@
+meta {
+  name: DIST-2 endedAt igual ao terminatedAt informado
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v2/contracts/{{contractIdA}}
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+tests {
+  test("DIST-2 — status 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("DIST-2 — body.status === Terminated", function () {
+    expect(res.getBody().status).to.equal("Terminated");
+  });
+  test("DIST-2 — campo endedAt contem a data informada no distrato", function () {
+    const body = res.getBody();
+    expect(body.endedAt).to.be.a("string");
+    expect(body.endedAt).to.include("2026-06-01");
+  });
+}

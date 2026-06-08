@@ -1,0 +1,27 @@
+meta {
+  name: DIST-3 documento de distrato vinculado e visivel no detalhe
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/api/v2/contracts/{{contractIdA}}
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+tests {
+  test("DIST-3 — status 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("DIST-3 — detalhe contem documento de distrato (signed_termination)", function () {
+    const body = res.getBody() ?? {};
+    const docs = body.documents ?? [];
+    const hasTermination = Array.isArray(docs)
+      && docs.some((d) => d.categoria === "signed_termination");
+    expect(hasTermination, "esperado documento signed_termination vinculado no detalhe").to.equal(true);
+  });
+}

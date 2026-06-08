@@ -1,0 +1,32 @@
+meta {
+  name: login contracts operator (contract:write)
+  type: http
+  seq: 6
+}
+
+post {
+  url: {{baseUrl}}/api/v2/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{contractsOperatorEmail}}",
+    "password": "{{process.env.E2E_SEED_PASSWORD}}"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    bru.setVar("contractsOperatorToken", res.getBody().accessToken);
+  }
+}
+
+tests {
+  test("CA — login contracts operator 200 + accessToken JWT", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().accessToken).to.be.a("string");
+    expect(res.getBody().accessToken.length).to.be.above(20);
+  });
+}

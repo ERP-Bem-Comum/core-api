@@ -1,0 +1,28 @@
+meta {
+  name: PAG-2 GET /users?page=-1 boundary
+  type: http
+  seq: 21
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users?page=-1
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  // PAG-2 de failures-pagination-boundary.md
+  test("PAG-2 — page=-1 retorna 400/422/200 (validacao Zod ou clamp); nunca 500", function () {
+    expect(res.getStatus()).to.not.equal(500);
+    expect([400, 422, 200]).to.include(res.getStatus());
+  });
+  test("PAG-2 — se 200: meta coerente (currentPage/totalItems)", function () {
+    if (res.getStatus() === 200) {
+      expect(res.getBody().meta).to.have.property("currentPage");
+      expect(res.getBody().meta).to.have.property("totalItems");
+    }
+  });
+}

@@ -11,7 +11,16 @@ import * as ContractorRef from '#src/modules/contracts/domain/shared/contractor.
 import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
 import type { Contract as ContractEntity } from '#src/modules/contracts/domain/contract/types.ts';
 import { InMemoryContractRepository } from '#src/modules/contracts/adapters/persistence/repos/contract-repository.in-memory.ts';
+import { InMemoryDocumentRepository } from '#src/modules/contracts/adapters/persistence/repos/document-repository.in-memory.ts';
 import { InMemoryOutbox } from '#src/modules/contracts/adapters/outbox/outbox.in-memory.ts';
+import * as Document from '#src/modules/contracts/domain/document/document.ts';
+import * as DocumentId from '#src/modules/contracts/domain/shared/document-id.ts';
+import {
+  createBucketName,
+  createStorageKey,
+} from '#src/modules/contracts/application/ports/document-storage.types.ts';
+import * as UserRef from '#src/shared/kernel/user-ref.ts';
+import type { DocumentCategory } from '#src/modules/contracts/domain/document/types.ts';
 import { endContract } from '#src/modules/contracts/application/use-cases/end-contract.ts';
 
 // W0 RED — CTR-USECASE-END-CONTRACT (UC-07).
@@ -49,6 +58,42 @@ const someContractor = (() => {
 // Test harness — mundo com um contrato Active (ou pré-encerrado) persistido
 // ============================================================================
 
+// Documento `signed_termination` Active vinculado ao contrato — pré-requisito do
+// distrato (CTR-HTTP-DISTRATO-DOCUMENTO; espelha o `signed_contract` da ativação).
+const signedTerminationDoc = (contractId: ContractId.ContractId) => {
+  const r = Document.create({
+    id: DocumentId.generate(),
+    parentType: 'Contract',
+    parentId: contractId,
+    categoria: 'signed_termination' as DocumentCategory,
+    fileName: 'distrato-assinado.pdf',
+    mimeType: 'application/pdf',
+    sizeBytes: 5,
+    hashSha256: 'a'.repeat(64),
+    bucket: (() => {
+      const b = createBucketName('contracts-documents');
+      if (!b.ok) throw new Error('fixture broken: bucket');
+      return b.value;
+    })(),
+    storageKey: (() => {
+      const k = createStorageKey('contracts/2026/distrato-001.pdf');
+      if (!k.ok) throw new Error('fixture broken: key');
+      return k.value;
+    })(),
+    signedElectronically: true,
+    version: 1,
+    uploadedAt: new Date('2026-03-01T00:00:00.000Z'),
+    uploadedBy: (() => {
+      const u = UserRef.rehydrate('44444444-4444-4444-8444-444444444444');
+      if (!u.ok) throw new Error('fixture broken: userRef');
+      return u.value;
+    })(),
+    retentionUntil: null,
+  });
+  if (!r.ok) throw new Error(`fixture broken: ${JSON.stringify(r.error)}`);
+  return r.value.document;
+};
+
 const setupWorld = async (
   opts: {
     clockAt?: string;
@@ -56,10 +101,13 @@ const setupWorld = async (
     periodEnd?: string | null; // null = Indefinite
     valueCents?: number;
     startStatus?: 'Active' | 'Expired' | 'Terminated';
+    // default true — distrato exige documento `signed_termination` vinculado.
+    withSignedTermination?: boolean;
   } = {},
 ) => {
   const outbox = InMemoryOutbox();
   const contractRepo = InMemoryContractRepository(outbox.port);
+  const documentRepo = InMemoryDocumentRepository(outbox.port);
   const clock = ClockFixed(D(opts.clockAt ?? '2027-01-01'));
 
   const periodEnd = opts.periodEnd === undefined ? '2026-12-31' : opts.periodEnd;
@@ -92,13 +140,19 @@ const setupWorld = async (
   }
 
   await contractRepo.repo.save(contract, []);
+
+  // Distrato exige documento assinado vinculado — seed por default (desliga via opt).
+  if (opts.withSignedTermination !== false) {
+    await documentRepo.repo.save(signedTerminationDoc(created.value.contract.id), []);
+  }
   outbox.clear();
 
-  return { contract, contractRepo, outbox, clock };
+  return { contract, contractRepo, documentRepo, outbox, clock };
 };
 
 const deps = (world: Awaited<ReturnType<typeof setupWorld>>) => ({
   contractRepo: world.contractRepo.repo,
+  documentRepo: world.documentRepo.repo,
   clock: world.clock,
 });
 
@@ -107,13 +161,17 @@ const deps = (world: Awaited<ReturnType<typeof setupWorld>>) => ({
 // ============================================================================
 
 describe('endContract — Terminate (distrato)', () => {
-  it('CA-1: encerra contrato Active como Terminated com endedAt = clock.now()', async () => {
-    const world = await setupWorld({ clockAt: '2026-06-01' });
+  it('CA-1: encerra contrato Active como Terminated com endedAt = terminatedAt informado', async () => {
+    // clock 2026-08-01 > terminatedAt 2026-06-01 (passado): endedAt usa a data informada,
+    // NÃO o clock now (CTR-HTTP-DISTRATO-DOCUMENTO, DIST-2).
+    const world = await setupWorld({ clockAt: '2026-08-01' });
     const useCase = endContract(deps(world));
 
     const r = await useCase({
       contractId: world.contract.id as unknown as string,
       kind: 'Terminate',
+      terminatedAt: '2026-06-01',
+      reason: 'Distrato por acordo entre as partes',
     });
 
     assert.equal(isOk(r), true);
@@ -129,10 +187,15 @@ describe('endContract — Terminate (distrato)', () => {
   });
 
   it('CA-1: publica ContractEnded no outbox e persiste o novo estado', async () => {
-    const world = await setupWorld({ clockAt: '2026-06-01' });
+    const world = await setupWorld({ clockAt: '2026-08-01' });
     const useCase = endContract(deps(world));
 
-    await useCase({ contractId: world.contract.id as unknown as string, kind: 'Terminate' });
+    await useCase({
+      contractId: world.contract.id as unknown as string,
+      kind: 'Terminate',
+      terminatedAt: '2026-06-01',
+      reason: 'Distrato por acordo',
+    });
 
     assert.equal(world.outbox.all().length, 1);
     assert.equal(world.outbox.all()[0]?.eventType, 'ContractEnded');
@@ -140,6 +203,56 @@ describe('endContract — Terminate (distrato)', () => {
     const persisted = await world.contractRepo.repo.findById(world.contract.id);
     if (!persisted.ok || persisted.value === null) throw new Error('contrato não persistido');
     assert.equal(persisted.value.status, 'Terminated');
+  });
+
+  it('DIST-5: terminatedAt futuro -> terminate-invalid-date, sem efeito colateral', async () => {
+    const world = await setupWorld({ clockAt: '2026-08-01' });
+    const useCase = endContract(deps(world));
+
+    const r = await useCase({
+      contractId: world.contract.id as unknown as string,
+      kind: 'Terminate',
+      terminatedAt: '2099-01-01',
+      reason: 'Data futura — deve rejeitar',
+    });
+
+    assert.equal(isErr(r), true);
+    if (!r.ok) assert.equal(r.error, 'terminate-invalid-date');
+    assert.equal(world.outbox.all().length, 0);
+    const persisted = await world.contractRepo.repo.findById(world.contract.id);
+    if (!persisted.ok || persisted.value === null) throw new Error('contrato sumiu');
+    assert.equal(persisted.value.status, 'Active');
+  });
+
+  it('DIST-5: terminatedAt malformado -> terminate-invalid-date', async () => {
+    const world = await setupWorld({ clockAt: '2026-08-01' });
+    const useCase = endContract(deps(world));
+
+    const r = await useCase({
+      contractId: world.contract.id as unknown as string,
+      kind: 'Terminate',
+      terminatedAt: 'not-a-date',
+      reason: 'Data malformada',
+    });
+
+    assert.equal(isErr(r), true);
+    if (!r.ok) assert.equal(r.error, 'terminate-invalid-date');
+  });
+
+  it('DIST-4: sem documento signed_termination -> terminate-no-signed-document', async () => {
+    const world = await setupWorld({ clockAt: '2026-08-01', withSignedTermination: false });
+    const useCase = endContract(deps(world));
+
+    const r = await useCase({
+      contractId: world.contract.id as unknown as string,
+      kind: 'Terminate',
+      terminatedAt: '2026-06-01',
+      reason: 'Sem documento — deve rejeitar',
+    });
+
+    assert.equal(isErr(r), true);
+    if (!r.ok) assert.equal(r.error, 'terminate-no-signed-document');
+    assert.equal(world.outbox.all().length, 0);
   });
 });
 
@@ -221,6 +334,8 @@ describe('endContract — contrato já encerrado', () => {
     const r = await useCase({
       contractId: world.contract.id as unknown as string,
       kind: 'Terminate',
+      terminatedAt: '2026-06-01',
+      reason: 'Distrato',
     });
 
     assert.equal(isErr(r), true);
@@ -255,7 +370,12 @@ describe('endContract — input validation e not found', () => {
     const world = await setupWorld();
     const useCase = endContract(deps(world));
 
-    const r = await useCase({ contractId: 'not-a-uuid', kind: 'Terminate' });
+    const r = await useCase({
+      contractId: 'not-a-uuid',
+      kind: 'Terminate',
+      terminatedAt: '2026-06-01',
+      reason: 'Distrato',
+    });
 
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'contract-id-invalid');
@@ -268,6 +388,8 @@ describe('endContract — input validation e not found', () => {
     const r = await useCase({
       contractId: ContractId.generate() as unknown as string,
       kind: 'Terminate',
+      terminatedAt: '2026-06-01',
+      reason: 'Distrato',
     });
 
     assert.equal(isErr(r), true);

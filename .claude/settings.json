@@ -1,10 +1,10 @@
 {
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
-  "outputStyle": "erp-contracts",
-  "statusLine": {
-    "type": "command",
-    "command": "${CLAUDE_PROJECT_DIR}/.claude/statusline.sh",
-    "padding": 1
+  "env": {
+    "BASH_DEFAULT_TIMEOUT_MS": "300000"
+  },
+  "attribution": {
+    "commit": ""
   },
   "permissions": {
     "deny": [
@@ -17,12 +17,6 @@
       "Skill(maestro:*)",
       "mcp__plugin_maestro_maestro__*"
     ]
-  },
-  "env": {
-    "BASH_DEFAULT_TIMEOUT_MS": "300000"
-  },
-  "attribution": {
-    "commit": ""
   },
   "hooks": {
     "UserPromptSubmit": [
@@ -43,8 +37,8 @@
         "hooks": [
           {
             "type": "command",
-            "if": "Bash(npm *)",
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-npm.sh",
+            "if": "Bash(npm *)",
             "statusMessage": "Verificando comando npm (proibido)..."
           },
           {
@@ -76,8 +70,8 @@
             "type": "command",
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/stop-typecheck.sh",
             "timeout": 90,
-            "async": true,
-            "statusMessage": "Rodando typecheck em background..."
+            "statusMessage": "Rodando typecheck em background...",
+            "async": true
           }
         ]
       }
@@ -107,5 +101,14 @@
         ]
       }
     ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "${CLAUDE_PROJECT_DIR}/.claude/statusline.sh",
+    "padding": 1
+  },
+  "outputStyle": "erp-contracts",
+  "enabledPlugins": {
+    "chrome-devtools-mcp@claude-plugins-official": true
   }
 }

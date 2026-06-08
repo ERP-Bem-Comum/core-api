@@ -53,6 +53,19 @@ describe('CLI E2E — encerrar-contrato (UC-07)', () => {
     assert.equal(created.exitCode, 0, `criar-contrato falhou: ${created.stderr}`);
     const id = requireUuid(created.stdout, 'ID:', 'criar-contrato');
 
+    const doc = runCli([
+      'subir-documento',
+      '--state',
+      state,
+      '--parent-id',
+      id,
+      '--parent-tipo',
+      'Contract',
+      '--categoria',
+      'signed_termination',
+    ]);
+    assert.equal(doc.exitCode, 0, `subir-documento falhou: ${doc.stderr}`);
+
     const r = runCli([
       'encerrar-contrato',
       '--state',
@@ -61,6 +74,10 @@ describe('CLI E2E — encerrar-contrato (UC-07)', () => {
       id,
       '--motivo',
       'distrato',
+      '--data',
+      '2026-06-01',
+      '--justificativa',
+      'Rescisão consensual E2E',
     ]);
     assert.equal(r.exitCode, 0, `stderr: ${r.stderr}`);
     assert.match(r.stdout, /Distratado/);
@@ -132,6 +149,10 @@ describe('CLI E2E — encerrar-contrato (UC-07)', () => {
         '7f3a1234-5678-4abc-9def-fedcba987654',
         '--motivo',
         'distrato',
+        '--data',
+        '2026-06-01',
+        '--justificativa',
+        'Rescisão consensual E2E',
       ]);
       assert.equal(r.exitCode, 1, `stdout: ${r.stdout} / stderr: ${r.stderr}`);
       assert.match(r.stderr, /não encontrado/i);

@@ -1,0 +1,35 @@
+meta {
+  name: INJ-5 SQLi no filtro de suppliers tratado como literal
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/v1/suppliers?search=' OR 1=1--
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{partnersOperatorToken}}
+}
+
+tests {
+  // INJ-5 de security-injection.md — borda parametriza a query; payload SQLi deve ser
+  // tratado como literal de busca (nao gera dump nem 500).
+  test("INJ-5 — SQLi no search de /suppliers nao causa 500", function () {
+    expect(res.getStatus()).to.not.equal(500);
+    expect([200, 422]).to.include(res.getStatus());
+  });
+  test("INJ-5 — se 200: body paginado coerente (items e array)", function () {
+    if (res.getStatus() === 200) {
+      expect(res.getBody()).to.have.property("items");
+      expect(res.getBody().items).to.be.an("array");
+    }
+  });
+  test("INJ-5 — se 200: sem dump da base (items.length dentro do limit)", function () {
+    if (res.getStatus() === 200) {
+      // sem limit explicito, borda usa o default (tipicamente <= 100)
+      expect(res.getBody().items.length).to.be.at.most(100);
+    }
+  });
+}

@@ -1,0 +1,39 @@
+meta {
+  name: PAGE-HARM-3 GET suppliers meta canonico JA PASSA (guarda nao-regressao)
+  type: http
+  seq: 3
+  docs: Guarda de nao-regressao HTTP-PAGINATION-HARMONIZE — partners ja retorna o shape canonico completo { currentPage, itemsPerPage, itemCount, totalItems, totalPages }. Deve continuar PASSANDO. Se reprovar, indica regressao no modulo partners.
+}
+
+get {
+  url: {{baseUrl}}/api/v1/suppliers?page=1&limit=5
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{partnersOperatorToken}}
+}
+
+tests {
+  test("PAGE-HARM-3 — status 200 (guarda)", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("PAGE-HARM-3 — body.meta existe", function () {
+    expect(res.getBody().meta).to.be.an("object");
+  });
+  test("PAGE-HARM-3 — meta.currentPage presente (partners ja conforme)", function () {
+    expect(res.getBody().meta).to.have.property("currentPage");
+  });
+  test("PAGE-HARM-3 — meta.itemsPerPage presente (partners ja conforme)", function () {
+    expect(res.getBody().meta).to.have.property("itemsPerPage");
+  });
+  test("PAGE-HARM-3 — meta.itemCount presente (partners ja conforme)", function () {
+    expect(res.getBody().meta).to.have.property("itemCount");
+  });
+  test("PAGE-HARM-3 — meta.totalItems presente (partners ja conforme)", function () {
+    expect(res.getBody().meta).to.have.property("totalItems");
+  });
+  test("PAGE-HARM-3 — meta.totalPages presente (partners ja conforme)", function () {
+    expect(res.getBody().meta).to.have.property("totalPages");
+  });
+}

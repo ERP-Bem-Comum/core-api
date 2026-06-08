@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "AUTH-ROLE-REPO-CONTRACT-SUITE",
+  "size": "M",
+  "createdAt": "2026-06-08T18:09:49.826Z",
+  "closedAt": null,
+  "currentWave": null,
+  "status": "open",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W1",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W2",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W3",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "init"
+}

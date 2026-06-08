@@ -119,6 +119,8 @@ describe('AUTH-HTTP-CREATE-USER — POST /api/v1/users', () => {
     assert.equal(res.statusCode, 201);
     const body = res.json() as { id: string };
     assert.ok(typeof body.id === 'string' && body.id.length > 0);
+    // HTTP-LOCATION-HEADER-201: 201 traz Location apontando para o recurso criado.
+    assert.equal(res.headers.location, `/api/v1/users/${body.id}`);
   });
 
   it('CA4: 409 email duplicado', async () => {

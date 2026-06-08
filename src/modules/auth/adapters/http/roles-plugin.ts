@@ -163,6 +163,9 @@ const rolesRoutes =
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
         const result = await deps.createRole(req.body);
+        // Location no 201 (RFC 7231 6.3.2): aponta para o recurso recem-criado. O body
+        // { id } e preservado para compat com o front atual.
+        if (result.ok) reply.header('location', `/api/v1/roles/${result.value.id}`);
         return sendResult(reply, result, {
           ok: 201,
           errors: {

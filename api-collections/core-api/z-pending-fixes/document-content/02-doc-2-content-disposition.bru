@@ -1,0 +1,25 @@
+meta {
+  name: DOC-2 content-disposition presente na resposta
+  type: http
+  seq: 3
+}
+
+get {
+  url: {{baseUrl}}/api/v2/contracts/{{contractIdForDoc}}/documents/{{documentId}}/content
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+tests {
+  test("DOC-2 — status 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("DOC-2 — header content-disposition presente", function () {
+    const cd = res.getHeader("content-disposition");
+    expect(cd).to.be.a("string");
+    expect(cd.length).to.be.above(0);
+  });
+}

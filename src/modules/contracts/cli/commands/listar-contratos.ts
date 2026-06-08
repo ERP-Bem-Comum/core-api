@@ -40,7 +40,7 @@ export const run = async (ctx: CliContext, argv: readonly string[]): Promise<num
     return 0;
   }
 
-  process.stdout.write(`${r.value.meta.total} contrato(s):\n`);
+  process.stdout.write(`${r.value.meta.totalItems} contrato(s):\n`);
   for (const contract of r.value.items) {
     process.stdout.write(`  - ${formatContractSummary(contract)}\n`);
     process.stdout.write(`      ID: ${contract.id as unknown as string}\n`);

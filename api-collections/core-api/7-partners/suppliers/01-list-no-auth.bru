@@ -1,0 +1,16 @@
+meta {
+  name: suppliers list no auth
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/suppliers
+  auth: none
+}
+
+tests {
+  test("CA2 — GET /suppliers sem token retorna 401", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}

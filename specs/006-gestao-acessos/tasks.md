@@ -109,7 +109,7 @@
 ### Tests RED
 
 - [x] T022 [P] [US3] Suíte RED em `tests/modules/auth/application/use-cases/list-roles.test.ts`.
-- [ ] T023 [US3] Contract suite RED do repo em `tests/modules/auth/adapters/persistence/role-repository.suite.ts` (in-memory + Drizzle/MySQL).
+- [x] T023 [US3] Contract suite RED do repo em `tests/modules/auth/adapters/persistence/role-repository.suite.ts` (in-memory + Drizzle/MySQL).
 - [x] T024 [P] [US3] Suíte RED de borda em `tests/modules/auth/adapters/http/list-roles.route.test.ts` via `fastify.inject` (200 papéis com permissões; 403 sem `role:read`).
 
 ### Implementação
@@ -219,7 +219,7 @@
 - [x] T048 [P] Autorização fail-closed em todas as rotas (`role:read|create|update|assign|revoke`); seed das permissions de gestão no catálogo (`permission-catalog.ts` + `auth_permission`).
 - [ ] T049 Wiring de outbox para os eventos `Role*` (hoje use cases retornam evento no output — confirmar publicação via ADR-0015).
 - [x] T050 Coleção Bruno `api-collections/auth/` consolidada (US1–US7) + runner `pnpm run test:e2e:bruno:auth` (`scripts/e2e-bruno-auth.sh`, espelhar `e2e-bruno-partners.sh`); **estende** a coleção `auth/` criada na `005`. Substitui o antigo E2E de CLI (ADR-0037 §3).
-- [ ] T051 Integração MySQL (`pnpm run test:integration:auth`, atrás de `*_INTEGRATION=1`) para `role-repository.drizzle` e junções (`auth_role`/`auth_role_permission`/`auth_user_role`).
+- [x] T051 Integração MySQL (`pnpm run test:integration:auth`, atrás de `*_INTEGRATION=1`) para `role-repository.drizzle` e junções (`auth_role`/`auth_role_permission`/`auth_user_role`).
 - [ ] T052 [P] Rodar `quickstart.md` ponta a ponta (via HTTP/Bruno, sem CLI).
 - [x] T053 Gate W3 final por ticket: `pnpm run typecheck && pnpm run format:check && pnpm run lint && pnpm test`.
 

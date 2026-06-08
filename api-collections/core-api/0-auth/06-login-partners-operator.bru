@@ -1,0 +1,32 @@
+meta {
+  name: login partners operator (partner:write)
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v2/auth/login
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{partnersOperatorEmail}}",
+    "password": "{{process.env.E2E_SEED_PASSWORD}}"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    bru.setVar("partnersOperatorToken", res.getBody().accessToken);
+  }
+}
+
+tests {
+  test("CA — login partners operator 200 + accessToken JWT", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().accessToken).to.be.a("string");
+    expect(res.getBody().accessToken.length).to.be.above(20);
+  });
+}

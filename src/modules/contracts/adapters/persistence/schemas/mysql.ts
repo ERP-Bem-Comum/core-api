@@ -356,7 +356,7 @@ export const ctrDocuments = mysqlTable(
     ),
     check(
       'ctr_documents_categoria_chk',
-      sql`${t.categoria} IN ('signed_contract','signed_amendment','opinion','certificate','justification','technical_attachment','publication','other')`,
+      sql`${t.categoria} IN ('signed_contract','signed_amendment','signed_termination','opinion','certificate','justification','technical_attachment','publication','other')`,
     ),
     check('ctr_documents_size_chk', sql`${t.sizeBytes} >= 0`),
     check('ctr_documents_version_chk', sql`${t.version} >= 1`),

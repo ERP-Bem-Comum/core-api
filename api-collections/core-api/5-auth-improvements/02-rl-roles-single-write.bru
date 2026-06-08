@@ -1,0 +1,42 @@
+meta {
+  name: RL-2 escrita POST /roles (disparo unico)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v1/roles
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+script:pre-request {
+  // Nome unico por execucao para evitar 409 de nome duplicado.
+  bru.setVar("rlRoleName", "RlRole_" + Date.now());
+}
+
+body:json {
+  {
+    "name": "{{rlRoleName}}",
+    "permissions": ["user:read"]
+  }
+}
+
+tests {
+  // Disparo unico: deve ser 201. Para exercitar 429 rodar 35+ vezes na mesma janela.
+  // RL-2 de security-rate-limit.md.
+  test("RL-2 — single write nao recebe 500", function () {
+    expect(res.getStatus()).to.not.equal(500);
+    expect([201, 429]).to.include(res.getStatus());
+  });
+  test("RL-2 — se 429: Retry-After presente", function () {
+    if (res.getStatus() === 429) {
+      const retryAfter = res.getHeaders()["retry-after"];
+      expect(retryAfter).to.not.be.undefined;
+    }
+  });
+}

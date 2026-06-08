@@ -1,0 +1,27 @@
+meta {
+  name: capture adminId via me (pre-deactivate-self)
+  type: http
+  seq: 49
+}
+
+get {
+  url: {{baseUrl}}/api/v2/auth/me
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    bru.setVar("adminId", res.getBody().userId);
+  }
+}
+
+tests {
+  test("CA — me 200, adminId capturado para deactivate-self", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().userId).to.be.a("string");
+  });
+}
