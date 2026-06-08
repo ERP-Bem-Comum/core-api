@@ -46,3 +46,18 @@ export const roleListResponseSchema = z.object({
 });
 
 export type RoleListResponse = z.infer<typeof roleListResponseSchema>;
+
+/** Body do POST /api/v1/users/:id/roles (US4): papel a atribuir. */
+export const assignRoleBodySchema = z.object({ roleId: z.string().min(1) });
+
+/** Param do DELETE /api/v1/users/:id/roles/:roleId (US4): usuario + papel. */
+export const userRoleParamSchema = z.object({
+  id: z.string().min(1),
+  roleId: z.string().min(1),
+});
+
+/** Response 200 do POST /api/v1/users/:id/roles (US4) — idempotente. */
+export const assignRoleResponseSchema = z.object({ assigned: z.boolean() });
+
+/** Response 200 do DELETE /api/v1/users/:id/roles/:roleId (US4) — idempotente. */
+export const revokeRoleResponseSchema = z.object({ revoked: z.boolean() });

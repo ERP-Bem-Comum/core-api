@@ -10,6 +10,7 @@
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
 import { immutable } from '../../../../../shared/primitives/immutable.ts';
 import type { UserId } from '../user-id.ts';
+import type { RoleId } from '../../authorization/role-id.ts';
 import type { Email } from '../email.ts';
 import type { PasswordHash } from '../../credential/password-hash.ts';
 import type { Role } from '../../authorization/role.ts';
@@ -23,6 +24,7 @@ import type {
   UserCreated,
   PasswordChanged,
   RoleAssigned,
+  RoleRevoked,
   UserDisabled,
   UserEnabled,
   UserProfileUpdated,
@@ -36,6 +38,7 @@ export type {
   UserCreated,
   PasswordChanged,
   RoleAssigned,
+  RoleRevoked,
   UserDisabled,
   UserEnabled,
   UserProfileUpdated,
@@ -164,6 +167,26 @@ export const assignRole = (
     type: 'RoleAssigned' as const,
     userId: user.id,
     roleId: role.id,
+    occurredAt: at,
+  });
+  return { user: next, event };
+};
+
+// Revoga um papel (spec 006 US4, par do assignRole). Idempotente: se o usuario NAO
+// possui o roleId, devolve { user, event: null } (sem copia). Se possui, devolve novo
+// user com o role filtrado + RoleRevoked.
+export const revokeRole = (
+  user: ActiveUser,
+  roleId: RoleId,
+  at: Date,
+): Readonly<{ user: ActiveUser; event: RoleRevoked | null }> => {
+  if (!user.roles.some((r) => r.id === roleId)) return { user, event: null };
+  const roles: readonly Role[] = user.roles.filter((r) => r.id !== roleId);
+  const next: ActiveUser = immutable({ ...user, roles });
+  const event: RoleRevoked = immutable({
+    type: 'RoleRevoked' as const,
+    userId: user.id,
+    roleId,
     occurredAt: at,
   });
   return { user: next, event };

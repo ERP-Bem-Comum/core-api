@@ -19,14 +19,22 @@ import type {
 import { ok } from '#src/shared/primitives/result.ts';
 import { sendResult } from '#src/shared/http/reply.ts';
 
+import * as UserId from '../../domain/identity/user-id.ts';
+import * as RoleId from '../../domain/authorization/role-id.ts';
 import type { getUserPermissions } from '../../application/use-cases/get-user-permissions.ts';
 import type { listPermissionCatalog } from '../../application/use-cases/list-permission-catalog.ts';
 import type { listRoles } from '../../application/use-cases/list-roles.ts';
+import type { assignRole } from '../../application/use-cases/assign-role.ts';
+import type { revokeRole } from '../../application/use-cases/revoke-role.ts';
 import {
+  assignRoleBodySchema,
+  assignRoleResponseSchema,
   permissionCatalogResponseSchema,
+  revokeRoleResponseSchema,
   roleListResponseSchema,
   userPermissionsParamSchema,
   userPermissionsResponseSchema,
+  userRoleParamSchema,
 } from './roles-schemas.ts';
 
 export type RolesHttpDeps = Readonly<{
@@ -36,6 +44,10 @@ export type RolesHttpDeps = Readonly<{
   listPermissionCatalog: ReturnType<typeof listPermissionCatalog>;
   /** Listagem de papeis com suas permissoes (spec 006 US3) — consumido por GET /api/v1/roles. */
   listRoles: ReturnType<typeof listRoles>;
+  /** Atribuicao de papel a usuario (spec 006 US4) — consumido por POST /users/:id/roles. */
+  assignRole: ReturnType<typeof assignRole>;
+  /** Revogacao de papel de usuario (spec 006 US4) — consumido por DELETE /users/:id/roles/:roleId. */
+  revokeRole: ReturnType<typeof revokeRole>;
 }>;
 
 export type RolesHttpHooks = Readonly<{
@@ -44,6 +56,10 @@ export type RolesHttpHooks = Readonly<{
 }>;
 
 const ROLE_READ_PERMISSION = 'role:read';
+
+// Limite dedicado das rotas de ESCRITA (POST/DELETE), separado do teto global (200/min). O token
+// ja e exigido, mas evita abuso autenticado (ex.: atribuicoes em massa). Espelha users-plugin.ts.
+const WRITE_RATE_LIMIT = { max: 30, timeWindow: '1 minute' } as const;
 
 const rolesRoutes =
   (deps: RolesHttpDeps, hooks: RolesHttpHooks): FastifyPluginAsyncZodOpenApi =>
@@ -112,6 +128,97 @@ const rolesRoutes =
         return sendResult(reply, shaped, {
           ok: 200,
           errors: { 'role-repo-unavailable': 503 },
+        });
+      },
+    });
+
+    // US4: POST /users/:id/roles — atribui um papel a um usuario (idempotente). SEM hooks.authorize:
+    // o use case autoriza o ator (user:assign-role, DD-USER-07). actorId vem do JWT (req.userId),
+    // NUNCA do body. Parse dos IDs para os branded antes de chamar o use case.
+    scope.route({
+      method: 'POST',
+      url: '/users/:id/roles',
+      preHandler: [hooks.requireAuth],
+      config: { rateLimit: WRITE_RATE_LIMIT },
+      schema: {
+        params: userPermissionsParamSchema,
+        body: assignRoleBodySchema,
+        response: { 200: assignRoleResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const actorId = UserId.rehydrate(req.userId);
+        if (!actorId.ok) {
+          return sendResult(reply, actorId, { errors: { 'user-id-invalid': 400 } });
+        }
+        const targetUserId = UserId.rehydrate(req.params.id);
+        if (!targetUserId.ok) {
+          return sendResult(reply, targetUserId, { errors: { 'user-id-invalid': 400 } });
+        }
+        const roleId = RoleId.rehydrate(req.body.roleId);
+        if (!roleId.ok) {
+          return sendResult(reply, roleId, { errors: { 'role-id-invalid': 400 } });
+        }
+        const result = await deps.assignRole({
+          actorId: actorId.value,
+          targetUserId: targetUserId.value,
+          roleId: roleId.value,
+        });
+        const shaped = result.ok ? ok({ assigned: true }) : result;
+        return sendResult(reply, shaped, {
+          ok: 200,
+          errors: {
+            forbidden: 403,
+            'user-not-found': 404,
+            'role-not-found': 404,
+            'user-disabled': 422,
+            'user-repo-unavailable': 503,
+            'role-repo-unavailable': 503,
+          },
+        });
+      },
+    });
+
+    // US4: DELETE /users/:id/roles/:roleId — revoga um papel (idempotente). SEM hooks.authorize:
+    // o use case autoriza (user:assign-role) e protege o auto-lockout (cannot-self-lockout -> 422,
+    // FR-010). actorId vem do JWT, NUNCA do body.
+    scope.route({
+      method: 'DELETE',
+      url: '/users/:id/roles/:roleId',
+      preHandler: [hooks.requireAuth],
+      config: { rateLimit: WRITE_RATE_LIMIT },
+      schema: {
+        params: userRoleParamSchema,
+        response: { 200: revokeRoleResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const actorId = UserId.rehydrate(req.userId);
+        if (!actorId.ok) {
+          return sendResult(reply, actorId, { errors: { 'user-id-invalid': 400 } });
+        }
+        const targetUserId = UserId.rehydrate(req.params.id);
+        if (!targetUserId.ok) {
+          return sendResult(reply, targetUserId, { errors: { 'user-id-invalid': 400 } });
+        }
+        const roleId = RoleId.rehydrate(req.params.roleId);
+        if (!roleId.ok) {
+          return sendResult(reply, roleId, { errors: { 'role-id-invalid': 400 } });
+        }
+        const result = await deps.revokeRole({
+          actorId: actorId.value,
+          targetUserId: targetUserId.value,
+          roleId: roleId.value,
+        });
+        const shaped = result.ok ? ok({ revoked: true }) : result;
+        return sendResult(reply, shaped, {
+          ok: 200,
+          errors: {
+            forbidden: 403,
+            'user-not-found': 404,
+            'user-disabled': 422,
+            'cannot-self-lockout': 422,
+            'user-repo-unavailable': 503,
+            'role-repo-unavailable': 503,
+          },
         });
       },
     });
