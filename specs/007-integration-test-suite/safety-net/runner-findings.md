@@ -70,6 +70,7 @@ fazia com `assets/sample.jpg`). Alinhamento de teste.
 **24/26 são alinhamento de teste** (`.bru` desatualizado); **2 (E) são suspeitos de bug real** do aggregate.
 
 ## Resolução (W1 INT-RUNNER-ALL) — PRINCIPAL VERDE ✅
+
 Todas as 26 alinhadas (server estava correto em todas). Fixes: contracts `mode:'Pending'` + campos reais
 (`originalValueCents`/`periodStart`/`periodEnd`/`sequentialNumber` formato `NNN/AAAA`) + captura do id no
 **body** (não Location); collaborator CPF válido + PUT com o MESMO cpf (campo sensível, não-editável);
@@ -77,6 +78,7 @@ PAG aceita 400; `meta.total`; `?type=invalido` na URL; `adminUserId` via getEnvV
 com `bru.getEnvVar`. **Resultado: 172/172 requests, 295/295 testes — exit 0.**
 
 ### Achados laterais (candidatos a ticket — NÃO bloqueiam)
+
 - **POST /contracts não retorna header `Location`** (201 com `{id}` só no body). Boa prática REST sugere
   `Location: /api/v2/contracts/:id`. Melhoria de produto (ticket próprio).
 - **Naming de paginação divergente**: contracts `meta.total`; users `meta.totalItems`; partners

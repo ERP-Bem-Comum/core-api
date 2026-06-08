@@ -99,8 +99,8 @@
 
 **Independent Test**: nenhuma coleção `.bru` fora de `core-api/` nem scripts `test:e2e:*`/`test:integration:*` por módulo; runner único continua verde.
 
-- [ ] T018 [US5] Remover `api-collections/{auth,contracts,partners}/` e os 14 scripts `test:e2e:*`/`test:integration:*` por módulo do `package.json` (manter `test:integration:all` + os de infra genéricos não-substituídos, ex.: `test:integration:infra`). (depende de T017 verde)
-- [ ] T019 [US5] Rodar `pnpm run test:integration:all` de novo: continua verde (a remoção não tirou cobertura). Atualizar referências em docs/README/scripts e2e citados. (depende de T018)
+- [x] T018 [US5] Remover `api-collections/{auth,contracts,partners}/` e os 14 scripts `test:e2e:*`/`test:integration:*` por módulo do `package.json` (manter `test:integration:all` + os de infra genéricos não-substituídos, ex.: `test:integration:infra`). (depende de T017 verde)
+- [x] T019 [US5] Rodar `pnpm run test:integration:all` de novo: continua verde (a remoção não tirou cobertura). Atualizar referências em docs/README/scripts e2e citados. (depende de T018)
 
 **Checkpoint**: fonte única de verdade estabelecida.
 

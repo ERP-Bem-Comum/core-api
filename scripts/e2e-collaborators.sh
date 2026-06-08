@@ -2,7 +2,7 @@
 # scripts/e2e-collaborators.sh — orquestra o smoke E2E da borda /api/v1/collaborators (P4-SMOKE).
 #
 # [DEPRECATED] A cobertura de collaborators foi migrada para a colecao Bruno em
-# api-collections/partners/collaborators/ (ADR-0034). Use:
+# api-collections/core-api/7-partners/collaborators/ (ADR-0034). Use:
 #   pnpm run test:e2e:bruno:partners
 # Este script sera removido apos validacao em ambiente de CI. Nao adicionar novos cenarios aqui.
 #

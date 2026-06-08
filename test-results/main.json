@@ -3917,10 +3917,7 @@
                 "id": "33bbdda4-9e8a-4540-ba38-587d20e165c3",
                 "name": "seed:e2e-contracts@example.com",
                 "active": true,
-                "permissions": [
-                  "contract:write",
-                  "contract:read"
-                ]
+                "permissions": ["contract:write", "contract:read"]
               },
               {
                 "id": "43630747-cda5-4cac-acca-922045fc98f6",
@@ -3943,9 +3940,7 @@
                 "id": "c066b3e9-d7ab-40e5-bc8c-bcfbcc642a8d",
                 "name": "seed:e2e-reader@example.com",
                 "active": true,
-                "permissions": [
-                  "contract:read"
-                ]
+                "permissions": ["contract:read"]
               }
             ]
           },
@@ -5105,10 +5100,7 @@
             "id": "83a071bf-2034-497b-b04c-f8848f445bab",
             "name": "Gerente E2E Renomeado",
             "active": true,
-            "permissions": [
-              "user:list",
-              "user:read"
-            ]
+            "permissions": ["user:list", "user:read"]
           },
           "url": "http://127.0.0.1/api/v1/roles/83a071bf-2034-497b-b04c-f8848f445bab",
           "responseTime": 14,
@@ -5185,9 +5177,7 @@
             "id": "83a071bf-2034-497b-b04c-f8848f445bab",
             "name": "Gerente E2E Renomeado",
             "active": true,
-            "permissions": [
-              "user:read"
-            ]
+            "permissions": ["user:read"]
           },
           "url": "http://127.0.0.1/api/v1/roles/83a071bf-2034-497b-b04c-f8848f445bab",
           "responseTime": 33,
@@ -5529,9 +5519,7 @@
             "id": "83a071bf-2034-497b-b04c-f8848f445bab",
             "name": "Gerente E2E Renomeado",
             "active": false,
-            "permissions": [
-              "user:read"
-            ]
+            "permissions": ["user:read"]
           },
           "url": "http://127.0.0.1/api/v1/roles/83a071bf-2034-497b-b04c-f8848f445bab/deactivate",
           "responseTime": 10,
