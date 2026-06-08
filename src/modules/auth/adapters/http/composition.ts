@@ -45,6 +45,7 @@ import { listPermissionCatalog } from '../../application/use-cases/list-permissi
 import { listRoles } from '../../application/use-cases/list-roles.ts';
 import { createRole } from '../../application/use-cases/create-role.ts';
 import { updateRole } from '../../application/use-cases/update-role.ts';
+import { archiveRole } from '../../application/use-cases/archive-role.ts';
 import { assignRole } from '../../application/use-cases/assign-role.ts';
 import { revokeRole } from '../../application/use-cases/revoke-role.ts';
 import { listUsers } from '../../application/use-cases/list-users.ts';
@@ -153,6 +154,8 @@ export type AuthHttpDeps = Readonly<{
   createRole: ReturnType<typeof createRole>;
   /** Edição de papel (spec 006 US6) — consumido por PUT /api/v1/roles/:id. */
   updateRole: ReturnType<typeof updateRole>;
+  /** Desativação de papel (spec 006 US7) — consumido por PATCH /api/v1/roles/:id/deactivate. */
+  archiveRole: ReturnType<typeof archiveRole>;
   /** Atribuição de papel a usuário (spec 006 US4) — consumido por POST /api/v1/users/:id/roles. */
   assignRole: ReturnType<typeof assignRole>;
   /** Revogação de papel de usuário (spec 006 US4) — consumido por DELETE /api/v1/users/:id/roles/:roleId. */
@@ -474,6 +477,7 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
     listRoles: listRoles({ roleRepository: stores.roleRepo }),
     createRole: createRole({ roleRepository: stores.roleRepo }),
     updateRole: updateRole({ roleRepository: stores.roleRepo }),
+    archiveRole: archiveRole({ roleRepository: stores.roleRepo }),
     assignRole: assignRole({
       userReader: stores.userReader,
       userRepo: stores.userRepo,

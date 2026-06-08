@@ -26,6 +26,7 @@ import type { listPermissionCatalog } from '../../application/use-cases/list-per
 import type { listRoles } from '../../application/use-cases/list-roles.ts';
 import type { createRole } from '../../application/use-cases/create-role.ts';
 import type { updateRole } from '../../application/use-cases/update-role.ts';
+import type { archiveRole } from '../../application/use-cases/archive-role.ts';
 import type { assignRole } from '../../application/use-cases/assign-role.ts';
 import type { revokeRole } from '../../application/use-cases/revoke-role.ts';
 import {
@@ -36,6 +37,7 @@ import {
   permissionCatalogResponseSchema,
   revokeRoleResponseSchema,
   roleIdParamSchema,
+  roleListItemSchema,
   roleListResponseSchema,
   updateRoleBodySchema,
   updateRoleResponseSchema,
@@ -55,6 +57,8 @@ export type RolesHttpDeps = Readonly<{
   createRole: ReturnType<typeof createRole>;
   /** Edicao de papel (spec 006 US6) — consumido por PUT /api/v1/roles/:id. */
   updateRole: ReturnType<typeof updateRole>;
+  /** Desativacao de papel (spec 006 US7) — consumido por PATCH /api/v1/roles/:id/deactivate. */
+  archiveRole: ReturnType<typeof archiveRole>;
   /** Atribuicao de papel a usuario (spec 006 US4) — consumido por POST /users/:id/roles. */
   assignRole: ReturnType<typeof assignRole>;
   /** Revogacao de papel de usuario (spec 006 US4) — consumido por DELETE /users/:id/roles/:roleId. */
@@ -209,6 +213,42 @@ const rolesRoutes =
             'role-name-duplicate': 409,
             'role-name-invalid': 422,
             'role-permission-not-in-catalog': 422,
+            'role-repo-unavailable': 503,
+          },
+        });
+      },
+    });
+
+    // US7: PATCH /roles/:id/deactivate — desativa (arquiva) um papel, tornando-o nao-atribuivel.
+    // Permission role:update (hook authorize, fail-closed). Bloqueado se o papel ainda estiver
+    // atribuido a usuarios (role-in-use -> 409, FR-012 — a mensagem orienta revogar antes). O use
+    // case devolve o Role do dominio (status archived); a borda mapeia p/ o DTO { id, name, active,
+    // permissions } (active=false apos arquivar) e -> 200/400/404/409/503.
+    scope.route({
+      method: 'PATCH',
+      url: '/roles/:id/deactivate',
+      preHandler: [hooks.requireAuth, hooks.authorize(ROLE_UPDATE_PERMISSION)],
+      config: { rateLimit: WRITE_RATE_LIMIT },
+      schema: {
+        params: roleIdParamSchema,
+        response: { 200: roleListItemSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.archiveRole(req.params.id);
+        const shaped = result.ok
+          ? ok({
+              id: String(result.value.id),
+              name: String(result.value.name),
+              active: result.value.status === 'active',
+              permissions: result.value.permissions.map(String),
+            })
+          : result;
+        return sendResult(reply, shaped, {
+          ok: 200,
+          errors: {
+            'role-id-invalid': 400,
+            'role-not-found': 404,
+            'role-in-use': 409,
             'role-repo-unavailable': 503,
           },
         });
