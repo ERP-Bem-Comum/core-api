@@ -42,3 +42,14 @@ Abrir `specs/007-integration-test-suite/safety-net/traceability.md`: todas as li
 ## Smoke de regressão do gate (SC-006)
 
 Introduza uma falha proposital num request (ex.: trocar o status esperado) e rode `pnpm run test:integration:all` — deve retornar exit ≠ 0 identificando o caso. Reverter depois.
+
+## Estado final (US4 entregue)
+
+- **Comando único:** `pnpm run test:integration:all` (`scripts/e2e-bruno-all.sh`).
+- **Suíte PRINCIPAL: 172 requests / 295 testes — verde** (exit 0). Determina o gate.
+- **Sub-suíte `z-pending-fixes/`:** 22 expected-fail que **reprovam por design** até 5 tickets de fix
+  (catálogo, distrato, document-content, location header, paginação) — rodam à parte, não bloqueiam.
+- **SC-006 (regressão detectável):** a própria `z-pending-fixes` é a prova viva — testes que descrevem o
+  estado correto reprovam, e o runner os reporta. Quebrar um teste da PRINCIPAL faz `RC_MAIN != 0` → exit ≠ 0.
+- **Rede de cobertura:** `safety-net/` (BDD/TDD 1:1, traceability, findings). Diagnóstico em `runner-findings.md`.
+- **Inspeção de body real:** `E2E_JSON_REPORT=1 pnpm run test:integration:all` → `test-results/main.json`.

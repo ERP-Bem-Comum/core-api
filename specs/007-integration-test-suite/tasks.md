@@ -17,7 +17,7 @@
 ## Phase 1: Setup (Shared Infrastructure)
 
 - [x] T001 Criar a estrutura da rede em `specs/007-integration-test-suite/safety-net/` (`bdd/`, `tdd/`, `traceability.md` com cabeçalho da tabela 1:1).
-- [ ] T002 [P] Criar o esqueleto da coleção unificada em `api-collections/core-api/` (`bruno.json` name="core-api", `environments/local.bru` com baseUrl/e-mails de seed; pasta `0-auth/` vazia).
+- [x] T002 [P] Criar o esqueleto da coleção unificada em `api-collections/core-api/` (`bruno.json` name="core-api", `environments/local.bru` com baseUrl/e-mails de seed; pasta `0-auth/` vazia).
 
 ---
 
@@ -108,10 +108,10 @@
 
 ## Phase 8: Polish & Cross-Cutting
 
-- [ ] T020 [P] Marcar **T023** e **T051** da spec 006 como fechadas (cross-ref no `specs/006-gestao-acessos/tasks.md` + EXECUTION-LOG).
-- [ ] T021 Gate W3 final: `pnpm run typecheck && pnpm run format:check && pnpm run lint && pnpm test`. (após cada ticket)
-- [ ] T022 [P] Smoke de regressão (SC-006): introduzir falha proposital num request, confirmar exit ≠ 0 do `test:integration:all`, reverter.
-- [ ] T023 [P] Atualizar `quickstart.md`/docs com o comando único e a localização da rede de rastreabilidade.
+- [x] T020 [P] Marcar **T023** e **T051** da spec 006 como fechadas (cross-ref no `specs/006-gestao-acessos/tasks.md` + EXECUTION-LOG).
+- [x] T021 Gate W3 final: `pnpm run typecheck && pnpm run format:check && pnpm run lint && pnpm test`. (após cada ticket)
+- [x] T022 [P] Smoke de regressão (SC-006): introduzir falha proposital num request, confirmar exit ≠ 0 do `test:integration:all`, reverter.
+- [x] T023 [P] Atualizar `quickstart.md`/docs com o comando único e a localização da rede de rastreabilidade.
 
 ---
 
