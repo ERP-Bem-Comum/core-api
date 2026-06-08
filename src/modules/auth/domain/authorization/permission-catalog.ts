@@ -18,6 +18,12 @@ import * as Permission from './permission.ts';
 // Strings canonicas auditadas. Espelham as permissions ja usadas em src/ + as role:*
 // novas desta spec (gestao de acessos). Manter ordenado por resource para leitura.
 const CATALOG_RAW = [
+  // act:* (modulo partners - atos)
+  'act:read',
+  'act:write',
+  // collaborator:* (modulo partners - colaboradores)
+  'collaborator:read',
+  'collaborator:write',
   // contract:* (modulo contracts)
   'contract:delete',
   'contract:mass-approve',
@@ -25,12 +31,21 @@ const CATALOG_RAW = [
   'contract:write',
   // etl:* (ingestao partners)
   'etl:mass-approver',
+  // financier:* (modulo partners - financiadores)
+  'financier:read',
+  'financier:write',
+  // geography:* (modulo partners - territorio)
+  'geography:read',
+  'geography:write',
   // role:* (gestao de acessos - spec 006, novas)
   'role:assign',
   'role:create',
   'role:read',
   'role:revoke',
   'role:update',
+  // supplier:* (modulo partners - fornecedores)
+  'supplier:read',
+  'supplier:write',
   // user:* (gestao de usuarios - spec 005)
   'user:activate',
   'user:assign-role',
