@@ -352,6 +352,9 @@ const contractsRoutes =
             contractorId: body.contractor.id,
           });
           if (!result.ok) return sendDomainError(reply, result.error);
+          // Location no 201 (RFC 7231 §6.3.2): aponta para o recurso recém-criado. O body
+          // `{id,...}` (list-item) é preservado para compat com o front atual.
+          reply.header('location', `/api/v2/contracts/${String(result.value.contract.id)}`);
           return sendResult(reply, ok(contractToListItem(result.value.contract)), { ok: 201 });
         }
         // O body usa `periodStart`/`periodEnd` (API uniforme entre Pending|Active); o
@@ -368,6 +371,9 @@ const contractsRoutes =
           contractorId: body.contractor.id,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
+        // Location no 201 (RFC 7231 §6.3.2): aponta para o recurso recém-criado. O body
+        // `{id,...}` (list-item) é preservado para compat com o front atual.
+        reply.header('location', `/api/v2/contracts/${String(result.value.contract.id)}`);
         return sendResult(reply, ok(contractToListItem(result.value.contract)), { ok: 201 });
       },
     });

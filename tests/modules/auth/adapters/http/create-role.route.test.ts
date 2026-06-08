@@ -117,6 +117,8 @@ describe('AUTH-CREATE-ROLE — POST /api/v1/roles', () => {
     const body = res.json() as { id: string };
     assert.equal(typeof body.id, 'string');
     assert.ok(body.id.length > 0);
+    // HTTP-LOCATION-HEADER-201: 201 traz Location apontando para o recurso criado.
+    assert.equal(res.headers.location, `/api/v1/roles/${body.id}`);
   });
 
   it('409 nome duplicado', async () => {

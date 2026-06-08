@@ -215,6 +215,9 @@ describe('CONTRACTS-HTTP-WRITES-CORE (C2) — POST /contracts', () => {
     });
     assert.equal(res.statusCode, 201);
     assert.equal((res.json() as { status: string }).status, 'Active');
+    // HTTP-LOCATION-HEADER-201: 201 traz Location apontando para o recurso criado.
+    const id = (res.json() as { id: string }).id;
+    assert.equal(res.headers.location, `/api/v2/contracts/${id}`);
     await teardown();
   });
 
@@ -229,6 +232,9 @@ describe('CONTRACTS-HTTP-WRITES-CORE (C2) — POST /contracts', () => {
     });
     assert.equal(res.statusCode, 201);
     assert.equal((res.json() as { status: string }).status, 'Pending');
+    // HTTP-LOCATION-HEADER-201: 201 traz Location apontando para o recurso criado.
+    const id = (res.json() as { id: string }).id;
+    assert.equal(res.headers.location, `/api/v2/contracts/${id}`);
     await teardown();
   });
 

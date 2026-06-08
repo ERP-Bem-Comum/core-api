@@ -219,7 +219,11 @@ const usersRoutes =
             },
           });
         }
-        return sendResult(reply, ok({ id: String(result.value.user.id) }), { ok: 201 });
+        // Location no 201 (RFC 7231 6.3.2): aponta para o recurso recem-criado. O body
+        // { id } e preservado para compat com o front atual.
+        const id = String(result.value.user.id);
+        reply.header('location', `/api/v1/users/${id}`);
+        return sendResult(reply, ok({ id }), { ok: 201 });
       },
     });
 
