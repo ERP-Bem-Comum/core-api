@@ -47,7 +47,7 @@ Introduza uma falha proposital num request (ex.: trocar o status esperado) e rod
 
 - **Comando único:** `pnpm run test:integration:all` (`scripts/e2e-bruno-all.sh`).
 - **Suíte PRINCIPAL: 172 requests / 295 testes — verde** (exit 0). Determina o gate.
-- **Sub-suíte `z-pending-fixes/`:** 22 expected-fail que **reprovam por design** até 5 tickets de fix
+- **Sub-suíte `z-pending-fixes/`:** 85 testes de regressão que **passam** (5 tickets de fix implementados)
   (catálogo, distrato, document-content, location header, paginação) — rodam à parte, não bloqueiam.
 - **SC-006 (regressão detectável):** a própria `z-pending-fixes` é a prova viva — testes que descrevem o
   estado correto reprovam, e o runner os reporta. Quebrar um teste da PRINCIPAL faz `RC_MAIN != 0` → exit ≠ 0.

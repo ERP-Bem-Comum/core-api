@@ -60,3 +60,21 @@ LOC-4 permanece verde (guarda de não-regressão do módulo partners).
 (`page→currentPage`, `limit→itemsPerPage`, `total→totalItems`, + `itemCount`) e em
 `userPaginationMetaSchema` (`pageSize→itemsPerPage`, + `itemCount`), os casos PAGE-HARM-1/2 passam.
 PAGE-HARM-3 permanece verde (guarda de não-regressão do módulo partners).
+
+---
+
+## ✅ FECHAMENTO — todos os 5 tickets implementados (z-pending TODA verde)
+
+Os 5 tickets de fix disparados pela 007 foram **implementados** e os testes de regressão **passam**:
+
+| Ticket                             | Casos          | Estado                                                                            |
+| ---------------------------------- | -------------- | --------------------------------------------------------------------------------- |
+| `AUTH-PERMISSION-CATALOG-PARTNERS` | CAT-REG-1..5   | ✅ catálogo 18→28 (10 permissões partners)                                        |
+| `HTTP-LOCATION-HEADER-201`         | LOC-1..4       | ✅ Location em contracts+auth (partners já tinha)                                 |
+| `HTTP-PAGINATION-HARMONIZE`        | PAGE-HARM-1..3 | ✅ meta canônico único (currentPage/itemsPerPage/itemCount/totalItems/totalPages) |
+| `CTR-HTTP-DOCUMENT-CONTENT`        | DOC-1..6       | ✅ GET .../documents/:id/content (stream PDF + ownership)                         |
+| `CTR-HTTP-DISTRATO-DOCUMENTO`      | DIST-1..6      | ✅ /end com terminatedAt+reason+signed_termination                                |
+
+**Runner final:** PRINCIPAL 172/172 + REGRESSÃO 85/85 — gate exige **ambas verdes** (a `z-pending-fixes`
+deixou de ser expected-fail; os guards LOC-4/PAGE-HARM-3 seguem protegendo o módulo partners). Gate W3:
+2562 testes, 0 fail.
