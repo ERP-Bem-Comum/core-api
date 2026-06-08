@@ -1,0 +1,20 @@
+meta {
+  name: US1 user permissions inexistente
+  type: http
+  seq: 96
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/00000000-0000-4000-a000-000000000000/permissions
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("CA — 404 usuario inexistente", function () {
+    expect(res.getStatus()).to.equal(404);
+  });
+}

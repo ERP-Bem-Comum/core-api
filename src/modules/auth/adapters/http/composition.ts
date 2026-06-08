@@ -40,6 +40,14 @@ import {
 } from '../../application/use-cases/revoke-session.ts';
 import { changePassword } from '../../application/use-cases/change-password.ts';
 import { listUserPermissions } from '../../application/use-cases/list-user-permissions.ts';
+import { getUserPermissions } from '../../application/use-cases/get-user-permissions.ts';
+import { listPermissionCatalog } from '../../application/use-cases/list-permission-catalog.ts';
+import { listRoles } from '../../application/use-cases/list-roles.ts';
+import { createRole } from '../../application/use-cases/create-role.ts';
+import { updateRole } from '../../application/use-cases/update-role.ts';
+import { archiveRole } from '../../application/use-cases/archive-role.ts';
+import { assignRole } from '../../application/use-cases/assign-role.ts';
+import { revokeRole } from '../../application/use-cases/revoke-role.ts';
 import { listUsers } from '../../application/use-cases/list-users.ts';
 import { getUser } from '../../application/use-cases/get-user.ts';
 import { createUserByAdmin } from '../../application/use-cases/create-user-by-admin.ts';
@@ -136,6 +144,22 @@ export type AuthHttpDeps = Readonly<{
   changePassword: ReturnType<typeof changePassword>;
   /** Permissões efetivas do usuário (GET /me → `can()` do front). */
   listUserPermissions: ReturnType<typeof listUserPermissions>;
+  /** Permissões efetivas de um usuário (spec 006 US1) — consumido por GET /api/v1/users/:id/permissions. */
+  getUserPermissions: ReturnType<typeof getUserPermissions>;
+  /** Catálogo fixo de permissões (spec 006 US2) — consumido por GET /api/v1/permissions. */
+  listPermissionCatalog: ReturnType<typeof listPermissionCatalog>;
+  /** Listagem de papéis com suas permissões (spec 006 US3) — consumido por GET /api/v1/roles. */
+  listRoles: ReturnType<typeof listRoles>;
+  /** Criação de papel (spec 006 US5) — consumido por POST /api/v1/roles. */
+  createRole: ReturnType<typeof createRole>;
+  /** Edição de papel (spec 006 US6) — consumido por PUT /api/v1/roles/:id. */
+  updateRole: ReturnType<typeof updateRole>;
+  /** Desativação de papel (spec 006 US7) — consumido por PATCH /api/v1/roles/:id/deactivate. */
+  archiveRole: ReturnType<typeof archiveRole>;
+  /** Atribuição de papel a usuário (spec 006 US4) — consumido por POST /api/v1/users/:id/roles. */
+  assignRole: ReturnType<typeof assignRole>;
+  /** Revogação de papel de usuário (spec 006 US4) — consumido por DELETE /api/v1/users/:id/roles/:roleId. */
+  revokeRole: ReturnType<typeof revokeRole>;
   revokeAllSessionsForUser: ReturnType<typeof revokeAllSessionsForUser>;
   /** Verificador de access JWT — consumido pelo preHandler `requireAuth`. */
   verifyAccessToken: TokenIssuer['verifyAccessToken'];
@@ -448,6 +472,24 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
       clock,
     }),
     listUserPermissions: listUserPermissions({ userReader: stores.userReader }),
+    getUserPermissions: getUserPermissions({ userReader: stores.userReader }),
+    listPermissionCatalog: listPermissionCatalog(),
+    listRoles: listRoles({ roleRepository: stores.roleRepo }),
+    createRole: createRole({ roleRepository: stores.roleRepo }),
+    updateRole: updateRole({ roleRepository: stores.roleRepo }),
+    archiveRole: archiveRole({ roleRepository: stores.roleRepo }),
+    assignRole: assignRole({
+      userReader: stores.userReader,
+      userRepo: stores.userRepo,
+      roleRepo: stores.roleRepo,
+      clock,
+    }),
+    revokeRole: revokeRole({
+      userReader: stores.userReader,
+      userRepo: stores.userRepo,
+      roleRepo: stores.roleRepo,
+      clock,
+    }),
     changePassword: changePassword({
       userReader: stores.userReader,
       userRepo: stores.userRepo,

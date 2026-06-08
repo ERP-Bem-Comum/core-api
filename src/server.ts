@@ -19,6 +19,7 @@ import {
   makeRequireAuth,
   parseE2eAuthSeed,
   usersHttpPlugin,
+  rolesHttpPlugin,
   meHttpPlugin,
 } from '#src/modules/auth/public-api/http.ts';
 import {
@@ -156,6 +157,23 @@ const main = async (): Promise<void> => {
             deactivateUser: authDeps.deactivateUser,
             setProfilePhoto: authDeps.setProfilePhoto,
             removeProfilePhoto: authDeps.removeProfilePhoto,
+          },
+          { requireAuth, authorize: authDeps.authorize },
+        ),
+        prefix: '/api/v1',
+      },
+      // Gestão de acessos (spec 006 US1) → /api/v1/users/:id/permissions. RBAC administrativo.
+      {
+        plugin: rolesHttpPlugin(
+          {
+            getUserPermissions: authDeps.getUserPermissions,
+            listPermissionCatalog: authDeps.listPermissionCatalog,
+            listRoles: authDeps.listRoles,
+            createRole: authDeps.createRole,
+            updateRole: authDeps.updateRole,
+            archiveRole: authDeps.archiveRole,
+            assignRole: authDeps.assignRole,
+            revokeRole: authDeps.revokeRole,
           },
           { requireAuth, authorize: authDeps.authorize },
         ),

@@ -1,0 +1,20 @@
+meta {
+  name: US1 user permissions bare (sem role:read)
+  type: http
+  seq: 97
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users/{{adminUserId}}/permissions
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{bareToken}}
+}
+
+tests {
+  test("SEC — 403 sem permission role:read", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}

@@ -30,6 +30,14 @@ export type RoleAssigned = Readonly<{
   occurredAt: Date;
 }>;
 
+// Revogacao de papel (spec 006 US4, par do RoleAssigned). Payload so metadados.
+export type RoleRevoked = Readonly<{
+  type: 'RoleRevoked';
+  userId: UserId;
+  roleId: RoleId;
+  occurredAt: Date;
+}>;
+
 export type UserDisabled = Readonly<{
   type: 'UserDisabled';
   userId: UserId;
@@ -67,6 +75,7 @@ export type UserEvent =
   | UserCreated
   | PasswordChanged
   | RoleAssigned
+  | RoleRevoked
   | UserDisabled
   | UserEnabled
   | UserProfileUpdated;

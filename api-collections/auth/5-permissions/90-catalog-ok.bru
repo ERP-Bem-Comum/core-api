@@ -1,0 +1,38 @@
+meta {
+  name: US2 catalog admin
+  type: http
+  seq: 90
+}
+
+get {
+  url: {{baseUrl}}/api/v1/permissions
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("CA — 200 com items array nao-vazio", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().items).to.be.an("array");
+    expect(res.getBody().items.length).to.be.above(0);
+  });
+  test("CA — cada item tem id/resource/action", function () {
+    for (const item of res.getBody().items) {
+      expect(item).to.have.property("id");
+      expect(item).to.have.property("resource");
+      expect(item).to.have.property("action");
+    }
+  });
+  test("CA — catalogo sem duplicatas de id", function () {
+    const ids = res.getBody().items.map((i) => i.id);
+    expect(new Set(ids).size).to.equal(ids.length);
+  });
+  test("CA — inclui ancoras role:read e user:list", function () {
+    const ids = res.getBody().items.map((i) => i.id);
+    expect(ids).to.include("role:read");
+    expect(ids).to.include("user:list");
+  });
+}
