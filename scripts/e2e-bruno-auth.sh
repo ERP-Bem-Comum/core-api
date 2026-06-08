@@ -47,7 +47,7 @@ docker compose up -d mysql --wait || exit 1
 AUTH_DRIVER=mysql \
   AUTH_DATABASE_URL="mysql://root:rootpw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core" \
   CORE_API_E2E=1 \
-  AUTH_SEED_JSON='{"users":[{"email":"admin.e2e@bemcomum.dev","password":"Str0ng-Passphrase-2026!","permissions":["user:list","user:read","user:create","user:update","user:activate","user:deactivate"]},{"email":"bare.e2e@bemcomum.dev","password":"Str0ng-Passphrase-2026!","permissions":[]}]}' \
+  AUTH_SEED_JSON='{"users":[{"email":"admin.e2e@bemcomum.dev","password":"Str0ng-Passphrase-2026!","permissions":["user:list","user:read","user:create","user:update","user:activate","user:deactivate","role:read","user:assign-role"]},{"email":"bare.e2e@bemcomum.dev","password":"Str0ng-Passphrase-2026!","permissions":[]}]}' \
   PORT=3100 \
   LOG_LEVEL=warn \
   node --experimental-strip-types --enable-source-maps --no-warnings src/server.ts &

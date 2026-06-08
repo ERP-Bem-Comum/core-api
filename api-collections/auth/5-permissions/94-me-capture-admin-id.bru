@@ -1,0 +1,27 @@
+meta {
+  name: US1 me admin (captura adminUserId)
+  type: http
+  seq: 94
+}
+
+get {
+  url: {{baseUrl}}/api/v2/auth/me
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    bru.setVar("adminUserId", res.getBody().userId);
+  }
+}
+
+tests {
+  test("CA — me 200 captura adminUserId", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().userId).to.be.a("string");
+  });
+}

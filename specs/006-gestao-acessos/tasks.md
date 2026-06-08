@@ -69,7 +69,7 @@
 
 - [x] T014 [US1] Confirmar/estender `list-user-permissions` em `src/modules/auth/application/use-cases/list-user-permissions.ts` (reuso). (depende de Phase 2)
 - [x] T015 [US1] Rota `GET /api/v1/users/:id/permissions` em `src/modules/auth/adapters/http/roles-plugin.ts` (`role:read`; `sendResult`) + wiring (`composition.ts`/`public-api/http.ts`/`src/server.ts`). (depende de T014)
-- [ ] T016 [P] [US1] Coleção Bruno `api-collections/auth/permissions/user-permissions/*.bru` (200 união; 404; 403). (depende de T015)
+- [x] T016 [P] [US1] Coleção Bruno `api-collections/auth/permissions/user-permissions/*.bru` (200 união; 404; 403). (depende de T015)
 
 **Checkpoint**: US1 (MVP — base da auditoria de acesso).
 
@@ -92,7 +92,7 @@
 
 - [x] T019 [US2] Confirmar/estender `list-permissions` para ler do `permission-catalog.ts`. (depende de Phase 2)
 - [x] T020 [US2] Rota `GET /api/v1/permissions` (read-only, `role:read`) em `roles-plugin.ts` + wiring. (depende de T019)
-- [ ] T021 [P] [US2] Coleção Bruno `api-collections/auth/permissions/catalog/*.bru` (200 sem duplicatas; 403; ausência de POST/PUT/DELETE). (depende de T020)
+- [x] T021 [P] [US2] Coleção Bruno `api-collections/auth/permissions/catalog/*.bru` (200 sem duplicatas; 403; ausência de POST/PUT/DELETE). (depende de T020)
 
 **Checkpoint**: US1 + US2.
 
@@ -116,7 +116,7 @@
 
 - [x] T025 [US3] Use case `list-roles` em `src/modules/auth/application/use-cases/list-roles.ts`. (depende de Phase 2)
 - [x] T026 [US3] Rota `GET /api/v1/roles` (`role:read`) em `roles-plugin.ts` + wiring. (depende de T025)
-- [ ] T027 [P] [US3] Coleção Bruno `api-collections/auth/roles/list/*.bru` (200 com permissões; 403). (depende de T026)
+- [x] T027 [P] [US3] Coleção Bruno `api-collections/auth/roles/list/*.bru` (200 com permissões; 403). (depende de T026)
 
 **Checkpoint**: US1–US3 (leitura completa de acessos).
 
@@ -139,7 +139,7 @@
 
 - [x] T030 [US4] Use case `revoke-role` em `src/modules/auth/application/use-cases/revoke-role.ts` (par do `assign-role`; protege lockout, FR-010). (depende de Phase 2)
 - [x] T031 [US4] Rotas `POST /api/v1/users/:id/roles` (reuso assign, `role:assign`) e `DELETE .../roles/:roleId` (revoke, `role:revoke`) em `roles-plugin.ts` + wiring. (depende de T030)
-- [ ] T032 [P] [US4] Coleção Bruno `api-collections/auth/roles/assign-revoke/*.bru` (atribuir→permissões sobem; revogar→revertem; idempotência; 422 lockout; 403). (depende de T031)
+- [x] T032 [P] [US4] Coleção Bruno `api-collections/auth/roles/assign-revoke/*.bru` (atribuir→permissões sobem; revogar→revertem; idempotência; 422 lockout; 403). (depende de T031)
 
 **Checkpoint**: US1–US4 (distribuição de acesso operacional).
 
