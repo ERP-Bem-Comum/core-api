@@ -16,14 +16,14 @@
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Criar a estrutura da rede em `specs/007-integration-test-suite/safety-net/` (`bdd/`, `tdd/`, `traceability.md` com cabeçalho da tabela 1:1).
+- [x] T001 Criar a estrutura da rede em `specs/007-integration-test-suite/safety-net/` (`bdd/`, `tdd/`, `traceability.md` com cabeçalho da tabela 1:1).
 - [ ] T002 [P] Criar o esqueleto da coleção unificada em `api-collections/core-api/` (`bruno.json` name="core-api", `environments/local.bru` com baseUrl/e-mails de seed; pasta `0-auth/` vazia).
 
 ---
 
 ## Phase 2: Foundational (Blocking Prerequisites)
 
-- [ ] T003 Inventariar os ~180 `.bru` das 3 coleções (`api-collections/{auth,contracts,partners}`) num índice canônico (request → módulo → método/rota → asserções → seedNeeds) em `safety-net/inventory.md`. É a base do mapeamento 1:1; nenhuma rede pode começar sem ele.
+- [x] T003 Inventariar os ~180 `.bru` das 3 coleções (`api-collections/{auth,contracts,partners}`) num índice canônico (request → módulo → método/rota → asserções → seedNeeds) em `safety-net/inventory.md`. É a base do mapeamento 1:1; nenhuma rede pode começar sem ele.
 
 ---
 
