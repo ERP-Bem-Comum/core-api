@@ -1,11 +1,11 @@
 meta {
   name: DIST-5 terminatedAt futuro retorna 422 terminate-invalid-date
   type: http
-  seq: 5
+  seq: 11
 }
 
 post {
-  url: {{baseUrl}}/api/v2/contracts/{{pendingContractId}}/end
+  url: {{baseUrl}}/api/v2/contracts/{{contractIdC}}/end
   body: json
   auth: bearer
 }
@@ -18,7 +18,7 @@ body:json {
   {
     "kind": "Terminate",
     "terminatedAt": "2099-01-01",
-    "reason": "Data futura — deve rejeitar"
+    "reason": "Data futura — deve rejeitar com 422"
   }
 }
 

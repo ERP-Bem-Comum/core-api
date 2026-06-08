@@ -1,11 +1,11 @@
 meta {
   name: DIST-6 readerToken sem contract:write retorna 403
   type: http
-  seq: 6
+  seq: 12
 }
 
 post {
-  url: {{baseUrl}}/api/v2/contracts/{{pendingContractId}}/end
+  url: {{baseUrl}}/api/v2/contracts/{{contractIdA}}/end
   body: json
   auth: bearer
 }
@@ -18,7 +18,7 @@ body:json {
   {
     "kind": "Terminate",
     "terminatedAt": "2026-06-01",
-    "reason": "Tentativa sem permissao de escrita"
+    "reason": "Tentativa sem permissao de escrita — deve retornar 403"
   }
 }
 

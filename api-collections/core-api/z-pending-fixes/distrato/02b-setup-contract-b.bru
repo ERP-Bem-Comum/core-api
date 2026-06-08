@@ -1,7 +1,7 @@
 meta {
-  name: setup criar contrato e upload documento para document-content
+  name: setup criar contrato B para DIST-4 (sem signed_termination)
   type: http
-  seq: 0
+  seq: 5
 }
 
 post {
@@ -16,11 +16,12 @@ auth:bearer {
 
 body:json {
   {
-    "mode": "Pending",
-    "sequentialNumber": "200/2026",
-    "title": "Contrato E2E Document Content",
-    "objective": "Contrato para testes de download de conteudo de documento",
-    "originalValueCents": 100000,
+    "mode": "Active",
+    "signedAt": "2026-01-15",
+    "sequentialNumber": "101/2026",
+    "title": "Contrato E2E Distrato B",
+    "objective": "Contrato para teste DIST-4 (sem documento signed_termination)",
+    "originalValueCents": 50000,
     "periodStart": "2026-01-01",
     "periodEnd": "2026-12-31",
     "contractor": {
@@ -33,12 +34,12 @@ body:json {
 script:post-response {
   if (res.getStatus() === 201) {
     const id = res.getBody().id;
-    bru.setVar("contractIdForDoc", id);
+    bru.setVar("contractIdB", id);
   }
 }
 
 tests {
-  test("SETUP — contrato criado (201)", function () {
+  test("SETUP — contrato B criado (201)", function () {
     expect(res.getStatus()).to.equal(201);
     expect(res.getBody().id).to.be.a("string");
   });

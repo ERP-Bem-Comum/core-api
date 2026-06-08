@@ -1,11 +1,11 @@
 meta {
   name: DIST-4 distrato sem documento assinado retorna 422
   type: http
-  seq: 4
+  seq: 7
 }
 
 post {
-  url: {{baseUrl}}/api/v2/contracts/{{pendingContractId}}/end
+  url: {{baseUrl}}/api/v2/contracts/{{contractIdB}}/end
   body: json
   auth: bearer
 }
@@ -18,7 +18,7 @@ body:json {
   {
     "kind": "Terminate",
     "terminatedAt": "2026-06-01",
-    "reason": "Sem documento — deve rejeitar"
+    "reason": "Sem documento — deve rejeitar com 422"
   }
 }
 

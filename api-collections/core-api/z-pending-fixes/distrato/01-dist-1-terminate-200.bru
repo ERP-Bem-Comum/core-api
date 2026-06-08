@@ -1,11 +1,11 @@
 meta {
   name: DIST-1 distrato com terminatedAt e reason retorna 200 Terminated
   type: http
-  seq: 2
+  seq: 3
 }
 
 post {
-  url: {{baseUrl}}/api/v2/contracts/{{pendingContractId}}/end
+  url: {{baseUrl}}/api/v2/contracts/{{contractIdA}}/end
   body: json
   auth: bearer
 }

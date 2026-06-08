@@ -89,6 +89,7 @@ const isSnapshot = (
 export const DOCUMENT_CATEGORIES: ReadonlySet<DocumentCategory> = new Set([
   'signed_contract',
   'signed_amendment',
+  'signed_termination',
   'opinion',
   'certificate',
   'justification',

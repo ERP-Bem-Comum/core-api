@@ -1,5 +1,5 @@
 meta {
-  name: setup criar e ativar contrato para distrato
+  name: setup criar contrato A para distrato (DIST-1/2/3)
   type: http
   seq: 0
 }
@@ -14,46 +14,33 @@ auth:bearer {
   token: {{contractsOperatorToken}}
 }
 
-script:pre-request {
-  // Garante que supplierIdForDistrato esteja preenchido.
-  // Se a pasta 7-partners já rodou, supplierCreatedId pode estar disponível como fallback.
-  const existing = bru.getVar("supplierCreatedId");
-  if (existing) {
-    bru.setVar("supplierIdForDistrato", existing);
-  } else {
-    // UUID fixo do seed para ambiente local — ajustar se o seed usar outro id.
-    bru.setVar("supplierIdForDistrato", "00000000-0000-0000-0000-000000000001");
-  }
-}
-
 body:json {
   {
-    "title": "Contrato E2E Distrato",
-    "objective": "Contrato para testes de distrato pendente",
-    "originalValue": { "cents": 50000 },
-    "startDate": "2026-01-01",
-    "endDate": "2026-12-31",
+    "mode": "Active",
+    "signedAt": "2026-01-15",
+    "sequentialNumber": "100/2026",
+    "title": "Contrato E2E Distrato A",
+    "objective": "Contrato para testes DIST-1, DIST-2 e DIST-3",
+    "originalValueCents": 50000,
+    "periodStart": "2026-01-01",
+    "periodEnd": "2026-12-31",
     "contractor": {
       "type": "supplier",
-      "id": "{{supplierIdForDistrato}}"
+      "id": "{{contractorSupplierId}}"
     }
   }
 }
 
 script:post-response {
   if (res.getStatus() === 201) {
-    const location = res.headers["location"];
-    if (location) {
-      const parts = location.split("/");
-      bru.setVar("pendingContractId", parts[parts.length - 1]);
-    }
+    const id = res.getBody().id;
+    bru.setVar("contractIdA", id);
   }
 }
 
 tests {
-  test("SETUP — contrato criado (201) ou contractor invalido (400 tolerado no ambiente sem seed de parceiro)", function () {
-    // 201: contrato criado com sucesso.
-    // 400: contractor inexistente no ambiente — setup parcial, os casos DIST usarão id placeholder.
-    expect([201, 400]).to.include(res.getStatus());
+  test("SETUP — contrato A criado (201)", function () {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.getBody().id).to.be.a("string");
   });
 }

@@ -87,16 +87,16 @@ echo "[e2e-all] === Suíte PRINCIPAL (${MAIN_FOLDERS[*]}) ==="
 ( cd api-collections/core-api && bru run "${MAIN_FOLDERS[@]}" --env local -r "${JSON_MAIN[@]}" )
 RC_MAIN=$?
 
-# ─── EXPECTED-FAIL: z-pending-fixes (reprova até os fixes; NÃO bloqueia) ─────────────
-echo "[e2e-all] === Suíte EXPECTED-FAIL (z-pending-fixes — reprova por design) ==="
-( cd api-collections/core-api && bru run 0-auth z-pending-fixes --env local -r )
+# ─── REGRESSÃO DE FIX: z-pending-fixes (os 5 tickets foram implementados → DEVE passar) ──
+echo "[e2e-all] === Suíte REGRESSÃO (z-pending-fixes — deve PASSAR após os 5 fixes) ==="
+JSON_PEND=(); [ "${E2E_JSON_REPORT:-0}" = "1" ] && JSON_PEND=(--reporter-json "$(pwd)/test-results/pending.json"); ( cd api-collections/core-api && bru run 0-auth z-pending-fixes --env local -r "${JSON_PEND[@]}" )
 RC_PENDING=$?
 
 echo
 echo "[e2e-all] ===================== RESUMO ====================="
-echo "[e2e-all] PRINCIPAL: rc=$RC_MAIN  $([ $RC_MAIN -eq 0 ] && echo 'VERDE ✓' || echo 'VERMELHO ✗ (regressão a corrigir)')"
-echo "[e2e-all] PENDING:   rc=$RC_PENDING (esperado != 0 até os fixes AUTH-PERMISSION-CATALOG-PARTNERS / CTR-HTTP-DISTRATO-DOCUMENTO / CTR-HTTP-DOCUMENT-CONTENT / HTTP-LOCATION-HEADER-201 / HTTP-PAGINATION-HARMONIZE)"
+echo "[e2e-all] PRINCIPAL:  rc=$RC_MAIN  $([ $RC_MAIN -eq 0 ] && echo 'VERDE ✓' || echo 'VERMELHO ✗ (regressão a corrigir)')"
+echo "[e2e-all] REGRESSÃO:  rc=$RC_PENDING  $([ $RC_PENDING -eq 0 ] && echo 'VERDE ✓' || echo 'VERMELHO ✗ (fix quebrado)')"
 echo "[e2e-all] =================================================="
 
-# O gate (FR-008) é determinado pela suíte PRINCIPAL; a expected-fail é informativa.
-exit $RC_MAIN
+# Gate: AMBAS as suítes devem passar (os 5 tickets de fix já estão implementados).
+[ $RC_MAIN -eq 0 ] && [ $RC_PENDING -eq 0 ]; exit $?
