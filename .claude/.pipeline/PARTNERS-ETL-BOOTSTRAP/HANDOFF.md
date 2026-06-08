@@ -266,9 +266,11 @@ O hardening `quarantined === 0` expôs um 2º registro mascarado: collaborator l
 - **Fix:** fixture agora dá `role='Auxiliar Operacional'` ao collaborator id=2 (caminho feliz
   100% migrável). O caminho inativo/D10 continua exercido.
 
-### D18 — `role=NULL` na ETL real → quarentena (decisão a confirmar pelo dono)
+### D18 — `role=NULL` na ETL real → quarentena ✅ APROVADA pelo dono (2026-06-02)
 Recomendação unânime dos 4 especialistas: se aparecer `role=NULL` num colaborador legado na
 migração real, **quarentena** (revisão manual), **NÃO backfill** — `role` é cargo de pessoa real,
 diferente de `disableBy` (estado de sistema, backfill D10). Mudar o domínio para `role` nullable
 foi avaliado e rejeitado (sem necessidade: produção não tem NULL; blast-radius toca a camada de
-domínio). Status: **comportamento já implementado (quarentena); decisão pendente de aval formal.**
+domínio). **Status: APROVADA formalmente pelo dono (Gabriel Aderaldo, 2026-06-02)** — comportamento
+já implementado (quarentena); colaborador sem cargo não migra, vai para a DLQ `.jsonl` para o cargo
+ser preenchido e re-rodado (nenhum dado perdido nem inventado).
