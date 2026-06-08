@@ -165,7 +165,10 @@ const main = async (): Promise<void> => {
       // Gestão de acessos (spec 006 US1) → /api/v1/users/:id/permissions. RBAC administrativo.
       {
         plugin: rolesHttpPlugin(
-          { getUserPermissions: authDeps.getUserPermissions },
+          {
+            getUserPermissions: authDeps.getUserPermissions,
+            listPermissionCatalog: authDeps.listPermissionCatalog,
+          },
           { requireAuth, authorize: authDeps.authorize },
         ),
         prefix: '/api/v1',

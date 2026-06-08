@@ -1,8 +1,9 @@
 /**
- * W0 (RED) - AUTH-GET-USER-PERMISSIONS: GET /api/v1/users/:id/permissions (US1 da spec 006).
+ * W0 (RED) - AUTH-PERMISSIONS-CATALOG: GET /api/v1/permissions (US2 da spec 006).
  *
- * DEVE FALHAR em W0 - a rota /api/v1/users/:id/permissions ainda nao existe.
- * Driver memory; fastify.inject. Permission role:read (fail-closed). ASCII puro.
+ * DEVE FALHAR em W0 - a rota /api/v1/permissions ainda nao existe.
+ * Driver memory; fastify.inject. Permission role:read (fail-closed). Catalogo read-only:
+ * sem rotas de escrita (FR-011). Espelha user-permissions.route.test.ts (US1). ASCII puro.
  */
 
 import { describe, it, before, after } from 'node:test';
@@ -15,10 +16,11 @@ import {
   makeRequireAuth,
   rolesHttpPlugin,
 } from '#src/modules/auth/public-api/http.ts';
+import * as PermissionCatalog from '#src/modules/auth/domain/authorization/permission-catalog.ts';
 
 const STRONG = 'Str0ng-Passphrase-2026!';
-const ADMIN = 'admin.perms@example.com';
-const NOPERM = 'noperm.perms@example.com';
+const ADMIN = 'admin.catalog@example.com';
+const NOPERM = 'noperm.catalog@example.com';
 
 type AppHandle = Awaited<ReturnType<typeof buildApp>>;
 
@@ -65,23 +67,14 @@ const login = async (app: AppHandle, email: string): Promise<string> => {
   return (res.json() as { accessToken: string }).accessToken;
 };
 
-describe('AUTH-GET-USER-PERMISSIONS — GET /api/v1/users/:id/permissions', () => {
+describe('AUTH-PERMISSIONS-CATALOG — GET /api/v1/permissions', () => {
   let app: AppHandle;
   let teardown: () => Promise<void>;
   let adminToken: string;
-  let targetId: string;
 
   before(async () => {
     ({ app, teardown } = await makeApp());
     adminToken = await login(app, ADMIN);
-    // O proprio admin (seed role:read) serve de alvo com permissoes conhecidas.
-    const me = await app.inject({
-      method: 'GET',
-      url: '/api/v2/auth/me',
-      headers: { authorization: `Bearer ${adminToken}` },
-    });
-    assert.equal(me.statusCode, 200);
-    targetId = (me.json() as { userId: string }).userId;
   });
 
   after(async () => {
@@ -89,10 +82,7 @@ describe('AUTH-GET-USER-PERMISSIONS — GET /api/v1/users/:id/permissions', () =
   });
 
   it('401 sem token', async () => {
-    const res = await app.inject({
-      method: 'GET',
-      url: `/api/v1/users/${targetId}/permissions`,
-    });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/permissions' });
     assert.equal(res.statusCode, 401);
   });
 
@@ -100,29 +90,39 @@ describe('AUTH-GET-USER-PERMISSIONS — GET /api/v1/users/:id/permissions', () =
     const token = await login(app, NOPERM);
     const res = await app.inject({
       method: 'GET',
-      url: `/api/v1/users/${targetId}/permissions`,
+      url: '/api/v1/permissions',
       headers: { authorization: `Bearer ${token}` },
     });
     assert.equal(res.statusCode, 403);
   });
 
-  it('200 com { permissions: [...] }', async () => {
+  it('200 com { items: [...] } catalogo completo', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: `/api/v1/users/${targetId}/permissions`,
+      url: '/api/v1/permissions',
       headers: { authorization: `Bearer ${adminToken}` },
     });
     assert.equal(res.statusCode, 200);
-    const body = res.json() as { permissions: string[] };
-    assert.ok(Array.isArray(body.permissions));
-    assert.ok(body.permissions.includes('role:read'));
+    const body = res.json() as {
+      items: { id: string; resource: string; action: string }[];
+    };
+    assert.ok(Array.isArray(body.items));
+    assert.equal(body.items.length, PermissionCatalog.all.length);
+    const ids = body.items.map((item) => item.id);
+    assert.equal(new Set(ids).size, ids.length);
+    assert.ok(ids.includes('role:read'));
+    assert.ok(ids.includes('user:list'));
+    for (const item of body.items) {
+      assert.equal(item.id, `${item.resource}:${item.action}`);
+    }
   });
 
-  it('404 usuario inexistente (valido)', async () => {
+  it('404 em POST /api/v1/permissions (catalogo read-only, sem escrita)', async () => {
     const res = await app.inject({
-      method: 'GET',
-      url: '/api/v1/users/00000000-0000-4000-8000-000000000000/permissions',
+      method: 'POST',
+      url: '/api/v1/permissions',
       headers: { authorization: `Bearer ${adminToken}` },
+      payload: { id: 'role:read' },
     });
     assert.equal(res.statusCode, 404);
   });

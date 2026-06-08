@@ -20,11 +20,18 @@ import { ok } from '#src/shared/primitives/result.ts';
 import { sendResult } from '#src/shared/http/reply.ts';
 
 import type { getUserPermissions } from '../../application/use-cases/get-user-permissions.ts';
-import { userPermissionsParamSchema, userPermissionsResponseSchema } from './roles-schemas.ts';
+import type { listPermissionCatalog } from '../../application/use-cases/list-permission-catalog.ts';
+import {
+  permissionCatalogResponseSchema,
+  userPermissionsParamSchema,
+  userPermissionsResponseSchema,
+} from './roles-schemas.ts';
 
 export type RolesHttpDeps = Readonly<{
   /** Use cases ja instanciados pela composition — nao re-instanciar aqui. */
   getUserPermissions: ReturnType<typeof getUserPermissions>;
+  /** Catalogo fixo de permissoes (spec 006 US2) — consumido por GET /api/v1/permissions. */
+  listPermissionCatalog: ReturnType<typeof listPermissionCatalog>;
 }>;
 
 export type RolesHttpHooks = Readonly<{
@@ -55,6 +62,24 @@ const rolesRoutes =
           ok: 200,
           errors: { 'user-id-invalid': 400, 'user-not-found': 404 },
         });
+      },
+    });
+
+    // US2: GET /permissions — catalogo fixo de permissoes (read-only, FR-011). Sem rotas de
+    // escrita: o catalogo e imutavel em runtime (POST/PUT/DELETE retornam 404 por inexistencia).
+    scope.route({
+      method: 'GET',
+      url: '/permissions',
+      preHandler: [hooks.requireAuth, hooks.authorize(ROLE_READ_PERMISSION)],
+      schema: {
+        response: { 200: permissionCatalogResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) => {
+        const result = await deps.listPermissionCatalog();
+        // Borda -> contrato: o use case devolve `readonly Item[]`; o schema 200 exige
+        // `{ items: [...] }`. Envelopa o ok (o use case nunca falha — sem mapa de erros).
+        const shaped = result.ok ? ok({ items: [...result.value] }) : result;
+        return sendResult(reply, shaped, { ok: 200 });
       },
     });
   };

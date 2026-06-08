@@ -17,3 +17,17 @@ export const userPermissionsResponseSchema = z.object({
 });
 
 export type UserPermissionsResponse = z.infer<typeof userPermissionsResponseSchema>;
+
+/** Item do catalogo fixo de permissoes (US2): resource:action decomposto. */
+export const permissionCatalogItemSchema = z.object({
+  id: z.string(),
+  resource: z.string(),
+  action: z.string(),
+});
+
+/** Response 200 do GET /api/v1/permissions (catalogo completo, sem duplicatas). */
+export const permissionCatalogResponseSchema = z.object({
+  items: z.array(permissionCatalogItemSchema),
+});
+
+export type PermissionCatalogResponse = z.infer<typeof permissionCatalogResponseSchema>;
