@@ -46,7 +46,11 @@ datas em UTC (off-by-one); grid enriquece `children`/`currentPeriod`. Sem teste 
 - Ações do grid (Excluir contrato Pendente; Histórico Financeiro; Termo de Quitação).
 
 ## Nota T014 — cobertura na coleção unificada
-- z-pending-fixes/ criada com 15 expected-fail (catalog 5 + distrato 5 + document-content 5).
+
+- z-pending-fixes/ com **17 expected-fail** (catalog 5 + distrato 6 + document-content 6).
 - **DIST-3** (documento signed_termination vinculado no detalhe) e **DOC-3** (documento de aditivo)
-  OMITIDOS na coleção `.bru` por exigirem setup multi-recurso desproporcional para placeholder de
-  expected-fail. Permanecem na rede BDD/TDD (cobertura documentada) e nos CAs dos tickets.
+  agora **INCLUÍDOS** na bateria `.bru` (`06-dist-3-documento-vinculado.bru`, `06-doc-3-conteudo-aditivo.bru`).
+  DOC-3 traz nota de setup: idealmente usa documentId de aditivo homologado; sem o setup de aditivo
+  dedicado, reusa o doc do contrato (a rota inexistente reprova igual — valida o gap). Completar o
+  setup de aditivo quando o fix CTR-HTTP-DOCUMENT-CONTENT for implementado.
+- **Cobertura pending-backend: 12/12 na rede == 12/12 na bateria executável.**

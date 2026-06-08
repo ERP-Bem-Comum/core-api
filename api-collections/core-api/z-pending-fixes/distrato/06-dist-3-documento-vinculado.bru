@@ -1,0 +1,32 @@
+# EXPECTED-FAIL até CTR-HTTP-DISTRATO-DOCUMENTO
+# DIST-3: documento de distrato (categoria signed_termination) vinculado e visivel no detalhe.
+# Estado atual: REPROVA — nao existe categoria signed_termination nem vinculo de documento de distrato
+# (depende do distrato rico: upload do documento assinado + vinculo ao encerramento).
+
+meta {
+  name: DIST-3 documento de distrato vinculado e visivel no detalhe
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/v2/contracts/{{pendingContractId}}
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+tests {
+  test("DIST-3 — status 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("DIST-3 — detalhe contem documento de distrato (signed_termination)", function () {
+    const body = res.getBody() ?? {};
+    const docs = body.documents ?? body.files ?? [];
+    const hasTermination = Array.isArray(docs)
+      && docs.some((d) => (d.categoria ?? d.category) === "signed_termination");
+    expect(hasTermination, "esperado documento de distrato (signed_termination) vinculado no detalhe").to.equal(true);
+  });
+}

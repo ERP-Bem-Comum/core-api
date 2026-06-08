@@ -1,0 +1,38 @@
+# EXPECTED-FAIL até CTR-HTTP-DOCUMENT-CONTENT
+# DOC-3: conteudo do documento de um ADITIVO deve ser acessivel (200 PDF).
+# Estado atual: REPROVA — rota de content inexistente (404).
+# Nota de setup: o caso ideal usa um documentId de aditivo homologado. Sem setup de aditivo dedicado
+# (criar aditivo + upload + homologar = 3 requests), reusa-se {{amendmentDocumentId}} se a pasta
+# 6-contracts o tiver capturado; caindo em {{documentId}} do contrato. A rota inexistente reprova
+# igualmente — o que valida o gap. Quando o fix existir, completar o setup de aditivo (ver folder.bru).
+
+meta {
+  name: DOC-3 conteudo do documento de aditivo retorna 200 PDF
+  type: http
+  seq: 6
+}
+
+script:pre-request {
+  // Prefere o doc de aditivo, se disponivel; senao usa o doc de contrato do setup.
+  const amendmentDocId = bru.getVar("amendmentDocumentId");
+  bru.setVar("docContentTargetId", amendmentDocId ?? bru.getVar("documentId"));
+}
+
+get {
+  url: {{baseUrl}}/api/v2/contracts/{{contractIdForDoc}}/documents/{{docContentTargetId}}/content
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+tests {
+  test("DOC-3 — status 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("DOC-3 — content-type contem application/pdf", function () {
+    const ct = res.getHeader("content-type") ?? "";
+    expect(ct).to.include("application/pdf");
+  });
+}
