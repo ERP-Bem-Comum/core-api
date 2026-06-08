@@ -82,8 +82,9 @@ export E2E_SEED_PASSWORD="Str0ng-Passphrase-2026!"
 
 # ─── PRINCIPAL: pastas em UM unico `bru run` (token de 0-auth persiste) ──────────────
 MAIN_FOLDERS=(0-auth 1-users 2-me 3-roles-permissions 4-auth-security 5-auth-improvements 6-contracts 7-partners)
+JSON_MAIN=(); [ "${E2E_JSON_REPORT:-0}" = "1" ] && { mkdir -p "$(pwd)/test-results"; JSON_MAIN=(--reporter-json "$(pwd)/test-results/main.json"); }
 echo "[e2e-all] === Suíte PRINCIPAL (${MAIN_FOLDERS[*]}) ==="
-( cd api-collections/core-api && bru run "${MAIN_FOLDERS[@]}" --env local -r )
+( cd api-collections/core-api && bru run "${MAIN_FOLDERS[@]}" --env local -r "${JSON_MAIN[@]}" )
 RC_MAIN=$?
 
 # ─── EXPECTED-FAIL: z-pending-fixes (reprova até os fixes; NÃO bloqueia) ─────────────
