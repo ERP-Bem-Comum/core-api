@@ -35,10 +35,10 @@
 
 **Especialistas obrigatórios**: `requirements-engineer` (cenários BDD/Gherkin) + `tdd-strategist` (asserções TDD).
 
-- [ ] T004 [P] [US1] Gerar BDD (`.feature`) + TDD (`.md`) para os 94 `.bru` de **auth** em `safety-net/{bdd,tdd}/auth/` (1:1) + linhas em `traceability.md`. Consultar `requirements-engineer` + `tdd-strategist`.
-- [ ] T005 [P] [US1] Idem para os 19 `.bru` de **contracts** em `safety-net/{bdd,tdd}/contracts/`.
-- [ ] T006 [P] [US1] Idem para os 67 `.bru` de **partners** em `safety-net/{bdd,tdd}/partners/`.
-- [ ] T007 [US1] Validar 1:1: script/checagem que confirma `count(bdd)==count(tdd)==count(.bru)` e que toda asserção do request original aparece no TDD (ou `smoke-only`). Revisão final por especialista. (depende de T004–T006)
+- [x] T004 [P] [US1] Gerar BDD (`.feature`) + TDD (`.md`) para os 94 `.bru` de **auth** em `safety-net/{bdd,tdd}/auth/` (1:1) + linhas em `traceability.md`. Consultar `requirements-engineer` + `tdd-strategist`.
+- [x] T005 [P] [US1] Idem para os 19 `.bru` de **contracts** em `safety-net/{bdd,tdd}/contracts/`.
+- [x] T006 [P] [US1] Idem para os 67 `.bru` de **partners** em `safety-net/{bdd,tdd}/partners/`.
+- [x] T007 [US1] Validar 1:1: script/checagem que confirma `count(bdd)==count(tdd)==count(.bru)` e que toda asserção do request original aparece no TDD (ou `smoke-only`). Revisão final por especialista. (depende de T004–T006)
 
 **Checkpoint**: rede completa e auditável → US3 liberada.
 
