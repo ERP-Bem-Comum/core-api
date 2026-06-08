@@ -62,13 +62,13 @@
 
 ### Tests RED
 
-- [ ] T012 [P] [US1] Suíte RED em `tests/modules/auth/application/use-cases/list-user-permissions.test.ts` (união; vazio; inclui `contract:mass-approve` quando presente).
-- [ ] T013 [P] [US1] Suíte RED de borda em `tests/modules/auth/adapters/http/user-permissions.route.test.ts` via `fastify.inject` (200 com união; 404 usuário inexistente; 403 fail-closed sem `role:read`).
+- [x] T012 [P] [US1] Suíte RED em `tests/modules/auth/application/use-cases/list-user-permissions.test.ts` (união; vazio; inclui `contract:mass-approve` quando presente).
+- [x] T013 [P] [US1] Suíte RED de borda em `tests/modules/auth/adapters/http/user-permissions.route.test.ts` via `fastify.inject` (200 com união; 404 usuário inexistente; 403 fail-closed sem `role:read`).
 
 ### Implementação
 
-- [ ] T014 [US1] Confirmar/estender `list-user-permissions` em `src/modules/auth/application/use-cases/list-user-permissions.ts` (reuso). (depende de Phase 2)
-- [ ] T015 [US1] Rota `GET /api/v1/users/:id/permissions` em `src/modules/auth/adapters/http/roles-plugin.ts` (`role:read`; `sendResult`) + wiring (`composition.ts`/`public-api/http.ts`/`src/server.ts`). (depende de T014)
+- [x] T014 [US1] Confirmar/estender `list-user-permissions` em `src/modules/auth/application/use-cases/list-user-permissions.ts` (reuso). (depende de Phase 2)
+- [x] T015 [US1] Rota `GET /api/v1/users/:id/permissions` em `src/modules/auth/adapters/http/roles-plugin.ts` (`role:read`; `sendResult`) + wiring (`composition.ts`/`public-api/http.ts`/`src/server.ts`). (depende de T014)
 - [ ] T016 [P] [US1] Coleção Bruno `api-collections/auth/permissions/user-permissions/*.bru` (200 união; 404; 403). (depende de T015)
 
 **Checkpoint**: US1 (MVP — base da auditoria de acesso).
@@ -85,13 +85,13 @@
 
 ### Tests RED
 
-- [ ] T017 [P] [US2] Suíte RED em `tests/modules/auth/application/use-cases/list-permissions.test.ts` (catálogo do código; sem duplicatas).
-- [ ] T018 [P] [US2] Suíte RED de borda em `tests/modules/auth/adapters/http/permissions-catalog.route.test.ts` via `fastify.inject` (200 catálogo completo; 403 sem `role:read`; sem rotas de escrita — FR-011).
+- [x] T017 [P] [US2] Suíte RED em `tests/modules/auth/application/use-cases/list-permissions.test.ts` (catálogo do código; sem duplicatas).
+- [x] T018 [P] [US2] Suíte RED de borda em `tests/modules/auth/adapters/http/permissions-catalog.route.test.ts` via `fastify.inject` (200 catálogo completo; 403 sem `role:read`; sem rotas de escrita — FR-011).
 
 ### Implementação
 
-- [ ] T019 [US2] Confirmar/estender `list-permissions` para ler do `permission-catalog.ts`. (depende de Phase 2)
-- [ ] T020 [US2] Rota `GET /api/v1/permissions` (read-only, `role:read`) em `roles-plugin.ts` + wiring. (depende de T019)
+- [x] T019 [US2] Confirmar/estender `list-permissions` para ler do `permission-catalog.ts`. (depende de Phase 2)
+- [x] T020 [US2] Rota `GET /api/v1/permissions` (read-only, `role:read`) em `roles-plugin.ts` + wiring. (depende de T019)
 - [ ] T021 [P] [US2] Coleção Bruno `api-collections/auth/permissions/catalog/*.bru` (200 sem duplicatas; 403; ausência de POST/PUT/DELETE). (depende de T020)
 
 **Checkpoint**: US1 + US2.
@@ -108,14 +108,14 @@
 
 ### Tests RED
 
-- [ ] T022 [P] [US3] Suíte RED em `tests/modules/auth/application/use-cases/list-roles.test.ts`.
+- [x] T022 [P] [US3] Suíte RED em `tests/modules/auth/application/use-cases/list-roles.test.ts`.
 - [ ] T023 [US3] Contract suite RED do repo em `tests/modules/auth/adapters/persistence/role-repository.suite.ts` (in-memory + Drizzle/MySQL).
-- [ ] T024 [P] [US3] Suíte RED de borda em `tests/modules/auth/adapters/http/list-roles.route.test.ts` via `fastify.inject` (200 papéis com permissões; 403 sem `role:read`).
+- [x] T024 [P] [US3] Suíte RED de borda em `tests/modules/auth/adapters/http/list-roles.route.test.ts` via `fastify.inject` (200 papéis com permissões; 403 sem `role:read`).
 
 ### Implementação
 
-- [ ] T025 [US3] Use case `list-roles` em `src/modules/auth/application/use-cases/list-roles.ts`. (depende de Phase 2)
-- [ ] T026 [US3] Rota `GET /api/v1/roles` (`role:read`) em `roles-plugin.ts` + wiring. (depende de T025)
+- [x] T025 [US3] Use case `list-roles` em `src/modules/auth/application/use-cases/list-roles.ts`. (depende de Phase 2)
+- [x] T026 [US3] Rota `GET /api/v1/roles` (`role:read`) em `roles-plugin.ts` + wiring. (depende de T025)
 - [ ] T027 [P] [US3] Coleção Bruno `api-collections/auth/roles/list/*.bru` (200 com permissões; 403). (depende de T026)
 
 **Checkpoint**: US1–US3 (leitura completa de acessos).
@@ -132,13 +132,13 @@
 
 ### Tests RED
 
-- [ ] T028 [P] [US4] Suíte RED em `tests/modules/auth/application/use-cases/revoke-role.test.ts` (idempotência; fail-closed; bloqueio de auto-rebaixamento, FR-010).
-- [ ] T029 [P] [US4] Suíte RED de borda em `tests/modules/auth/adapters/http/assign-revoke.route.test.ts` via `fastify.inject` (POST idempotente 200/201; DELETE idempotente 200/204; 422 auto-rebaixamento; 403 fail-closed).
+- [x] T028 [P] [US4] Suíte RED em `tests/modules/auth/application/use-cases/revoke-role.test.ts` (idempotência; fail-closed; bloqueio de auto-rebaixamento, FR-010).
+- [x] T029 [P] [US4] Suíte RED de borda em `tests/modules/auth/adapters/http/assign-revoke.route.test.ts` via `fastify.inject` (POST idempotente 200/201; DELETE idempotente 200/204; 422 auto-rebaixamento; 403 fail-closed).
 
 ### Implementação
 
-- [ ] T030 [US4] Use case `revoke-role` em `src/modules/auth/application/use-cases/revoke-role.ts` (par do `assign-role`; protege lockout, FR-010). (depende de Phase 2)
-- [ ] T031 [US4] Rotas `POST /api/v1/users/:id/roles` (reuso assign, `role:assign`) e `DELETE .../roles/:roleId` (revoke, `role:revoke`) em `roles-plugin.ts` + wiring. (depende de T030)
+- [x] T030 [US4] Use case `revoke-role` em `src/modules/auth/application/use-cases/revoke-role.ts` (par do `assign-role`; protege lockout, FR-010). (depende de Phase 2)
+- [x] T031 [US4] Rotas `POST /api/v1/users/:id/roles` (reuso assign, `role:assign`) e `DELETE .../roles/:roleId` (revoke, `role:revoke`) em `roles-plugin.ts` + wiring. (depende de T030)
 - [ ] T032 [P] [US4] Coleção Bruno `api-collections/auth/roles/assign-revoke/*.bru` (atribuir→permissões sobem; revogar→revertem; idempotência; 422 lockout; 403). (depende de T031)
 
 **Checkpoint**: US1–US4 (distribuição de acesso operacional).
