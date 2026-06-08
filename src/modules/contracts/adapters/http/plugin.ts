@@ -420,10 +420,18 @@ const contractsRoutes =
         response: { 200: contractDetailSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
-        const result = await deps.endContract({
-          contractId: req.params.id,
-          kind: req.body.kind,
-        });
+        // Body discriminado por `kind`: `Terminate` (distrato) carrega data efetiva + motivo.
+        const body = req.body;
+        const command =
+          body.kind === 'Terminate'
+            ? {
+                contractId: req.params.id,
+                kind: body.kind,
+                terminatedAt: body.terminatedAt,
+                reason: body.reason,
+              }
+            : { contractId: req.params.id, kind: body.kind };
+        const result = await deps.endContract(command);
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(reply, ok(contractToListItem(result.value.contract)), { ok: 200 });
       },

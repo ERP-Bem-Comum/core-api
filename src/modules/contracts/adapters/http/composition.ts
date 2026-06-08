@@ -284,7 +284,11 @@ const makeDeps = (
       contractRepo: pools.contractWriterRepo,
       documentRepo: pools.documentRepo,
     }),
-    endContract: endContract({ contractRepo: pools.contractWriterRepo, clock }),
+    endContract: endContract({
+      contractRepo: pools.contractWriterRepo,
+      documentRepo: pools.documentRepo,
+      clock,
+    }),
     createAmendment: createAmendment({
       contractRepo: pools.contractWriterRepo,
       amendmentRepo: pools.amendmentRepo,

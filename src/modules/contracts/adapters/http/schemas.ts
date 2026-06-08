@@ -176,8 +176,26 @@ export const patchContractMetadataBodySchema = z
 /** Body `POST /contracts/:id/activate`. */
 export const activateContractBodySchema = z.object({ signedAt: z.string() });
 
-/** Body `POST /contracts/:id/end` — `Expire` (chegada da data fim) ou `Terminate` (distrato). */
-export const endContractBodySchema = z.object({ kind: z.enum(['Expire', 'Terminate']) });
+/**
+ * Body `POST /contracts/:id/end` — `Expire` (chegada da data fim) ou `Terminate` (distrato).
+ *
+ * Distrato (`Terminate`) captura a **data efetiva** (`terminatedAt`, obrigatória) e o
+ * **motivo** (`reason`, obrigatório) — CTR-HTTP-DISTRATO-DOCUMENTO. A validação de data
+ * não-futura é do use case (comparada ao clock) → 422 `terminate-invalid-date`; a exigência
+ * de documento `signed_termination` vinculado também → 422 `terminate-no-signed-document`.
+ * `Expire` permanece sem campos extras (encerramento por chegada da data fim).
+ */
+export const endContractBodySchema = z.discriminatedUnion('kind', [
+  z.object({
+    kind: z.literal('Terminate'),
+    terminatedAt: z
+      .string()
+      .min(1)
+      .meta({ description: 'Data efetiva do distrato (ISO 8601, não-futura)' }),
+    reason: z.string().min(1).meta({ description: 'Motivo/justificativa do distrato' }),
+  }),
+  z.object({ kind: z.literal('Expire') }),
+]);
 
 const amendmentWriteShape = {
   amendmentNumber: z.string(),
@@ -245,6 +263,8 @@ export type AmendmentDto = z.infer<typeof amendmentSchema>;
 const DOCUMENT_CATEGORIES = [
   'signed_contract',
   'signed_amendment',
+  // Distrato assinado (CTR-HTTP-DISTRATO-DOCUMENTO) — pré-requisito do `/end` Terminate.
+  'signed_termination',
   'opinion',
   'certificate',
   'justification',

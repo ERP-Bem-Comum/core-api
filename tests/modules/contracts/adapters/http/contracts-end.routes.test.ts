@@ -29,6 +29,15 @@ import {
   buildContractsHttpDeps,
 } from '#src/modules/contracts/public-api/http.ts';
 
+import * as Document from '#src/modules/contracts/domain/document/document.ts';
+import * as DocumentId from '#src/modules/contracts/domain/shared/document-id.ts';
+import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
+import * as UserRef from '#src/shared/kernel/user-ref.ts';
+import {
+  createBucketName,
+  createStorageKey,
+} from '#src/modules/contracts/application/ports/document-storage.types.ts';
+
 import { buildContract, buildPendingContract } from '../persistence/fixtures.ts';
 
 const STRONG = 'Str0ng-Passphrase-2026!';
@@ -41,6 +50,43 @@ const ACTIVE_FUTURE_ID = '12121212-1212-4121-8121-121212121212'; // data fim no 
 const ACTIVE_TERMINATE_ID = '13131313-1313-4131-8131-131313131313'; // distrato
 const PENDING_ID = '99999999-9999-4999-8999-999999999999'; // não-Active → 409
 const MISSING_CONTRACT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const HOMOLOGATED_BY = '44444444-4444-4444-8444-444444444444';
+
+// CTR-HTTP-DISTRATO-DOCUMENTO: Terminate exige `terminatedAt` (passado) + `reason`.
+const terminateBody = (overrides: Record<string, unknown> = {}) => ({
+  kind: 'Terminate',
+  terminatedAt: '2026-06-01',
+  reason: 'Distrato por acordo entre as partes — teste',
+  ...overrides,
+});
+
+const fromOk = <T>(r: { ok: true; value: T } | { ok: false; error: unknown }, label: string): T => {
+  if (!r.ok) throw new Error(`fixture ${label}: ${JSON.stringify(r.error)}`);
+  return r.value;
+};
+
+// Documento `signed_termination` Active vinculado — pré-requisito do distrato.
+const signedTerminationDoc = (contractId: string) =>
+  fromOk(
+    Document.create({
+      id: DocumentId.generate(),
+      parentType: 'Contract',
+      parentId: fromOk(ContractId.rehydrate(contractId), 'contractId'),
+      categoria: 'signed_termination',
+      fileName: 'distrato-assinado.pdf',
+      mimeType: 'application/pdf',
+      sizeBytes: 5,
+      hashSha256: 'b'.repeat(64),
+      bucket: fromOk(createBucketName('contracts-documents'), 'bucket'),
+      storageKey: fromOk(createStorageKey('contracts/2026/distrato-001.pdf'), 'key'),
+      signedElectronically: true,
+      version: 1,
+      uploadedAt: new Date('2026-03-01T00:00:00.000Z'),
+      uploadedBy: fromOk(UserRef.rehydrate(HOMOLOGATED_BY), 'userRef'),
+      retentionUntil: null,
+    }),
+    'document',
+  ).document;
 
 const makeApp = async () => {
   const authDeps = await buildAuthHttpDeps({
@@ -66,6 +112,7 @@ const makeApp = async () => {
         buildContract({ id: ACTIVE_TERMINATE_ID, sequentialNumber: '003/2026' }),
         buildPendingContract({ id: PENDING_ID, sequentialNumber: '900/2026' }),
       ],
+      documents: [signedTerminationDoc(ACTIVE_TERMINATE_ID)],
     },
   });
   const app = await buildApp({
@@ -115,7 +162,7 @@ describe('CONTRACTS-HTTP-END (C2) — POST /contracts/:id/end', () => {
     const res = await app.inject({
       method: 'POST',
       url: endUrl(ACTIVE_TERMINATE_ID),
-      payload: { kind: 'Terminate' },
+      payload: terminateBody(),
     });
     assert.equal(res.statusCode, 401);
     await teardown();
@@ -128,7 +175,7 @@ describe('CONTRACTS-HTTP-END (C2) — POST /contracts/:id/end', () => {
       method: 'POST',
       url: endUrl(ACTIVE_TERMINATE_ID),
       headers: bearer(token),
-      payload: { kind: 'Terminate' },
+      payload: terminateBody(),
     });
     assert.equal(res.statusCode, 403);
     await teardown();
@@ -141,7 +188,7 @@ describe('CONTRACTS-HTTP-END (C2) — POST /contracts/:id/end', () => {
       method: 'POST',
       url: endUrl(ACTIVE_TERMINATE_ID),
       headers: bearer(token),
-      payload: { kind: 'Terminate' },
+      payload: terminateBody(),
     });
     assert.equal(res.statusCode, 200);
     assert.equal((res.json() as { status: string }).status, 'Terminated');
@@ -195,7 +242,7 @@ describe('CONTRACTS-HTTP-END (C2) — POST /contracts/:id/end', () => {
       method: 'POST',
       url: endUrl(MISSING_CONTRACT_ID),
       headers: bearer(token),
-      payload: { kind: 'Terminate' },
+      payload: terminateBody(),
     });
     assert.equal(res.statusCode, 404);
     await teardown();
@@ -208,7 +255,7 @@ describe('CONTRACTS-HTTP-END (C2) — POST /contracts/:id/end', () => {
       method: 'POST',
       url: endUrl(PENDING_ID),
       headers: bearer(token),
-      payload: { kind: 'Terminate' },
+      payload: terminateBody(),
     });
     assert.equal(res.statusCode, 409);
     await teardown();

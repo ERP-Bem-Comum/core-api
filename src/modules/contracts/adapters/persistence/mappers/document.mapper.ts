@@ -40,6 +40,7 @@ const fail = (field: string, cause: string): DocumentMapperError => ({
 const VALID_CATEGORIES: ReadonlySet<DocumentCategory> = new Set<DocumentCategory>([
   'signed_contract',
   'signed_amendment',
+  'signed_termination',
   'opinion',
   'certificate',
   'justification',
