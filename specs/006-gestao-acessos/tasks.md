@@ -24,8 +24,8 @@
 
 ## Phase 1: Setup (Shared Infrastructure)
 
-- [ ] T001 Mapear o RBAC atual em `src/modules/auth/domain/authorization/` (`role.ts`, `permission.ts`, `role-repository.ts`, `authorize.ts`) e os use cases `assign-role`/`list-permissions`/`list-user-permissions`; anotar assinaturas para reuso.
-- [ ] T002 [P] Confirmar as tabelas existentes em `src/modules/auth/adapters/persistence/schemas/mysql.ts` (`auth_permission`, `auth_role`, `auth_role_permission`, `auth_user_role`) e o `role-repository.drizzle.ts`.
+- [x] T001 Mapear o RBAC atual em `src/modules/auth/domain/authorization/` (`role.ts`, `permission.ts`, `role-repository.ts`, `authorize.ts`) e os use cases `assign-role`/`list-permissions`/`list-user-permissions`; anotar assinaturas para reuso.
+- [x] T002 [P] Confirmar as tabelas existentes em `src/modules/auth/adapters/persistence/schemas/mysql.ts` (`auth_permission`, `auth_role`, `auth_role_permission`, `auth_user_role`) e o `role-repository.drizzle.ts`.
 
 ---
 
@@ -208,7 +208,7 @@
 
 - [x] T045 [US7] Use case `archive-role` em `src/modules/auth/application/use-cases/archive-role.ts` (checa junção `auth_user_role`). (depende de Phase 2)
 - [x] T046 [US7] Rota `PATCH /api/v1/roles/:id/deactivate` (`role:update`; 200/409 se em uso) em `roles-plugin.ts` + wiring. (depende de T045)
-- [ ] T047 [P] [US7] Coleção Bruno `api-collections/auth/roles/deactivate/*.bru` (200 sem uso; 409 em uso; 403). (depende de T046)
+- [x] T047 [P] [US7] Coleção Bruno `api-collections/auth/roles/deactivate/*.bru` (200 sem uso; 409 em uso; 403). (depende de T046)
 
 **Checkpoint**: todas as stories funcionais.
 
@@ -216,12 +216,12 @@
 
 ## Phase 10: Polish & Cross-Cutting Concerns
 
-- [ ] T048 [P] Autorização fail-closed em todas as rotas (`role:read|create|update|assign|revoke`); seed das permissions de gestão no catálogo (`permission-catalog.ts` + `auth_permission`).
+- [x] T048 [P] Autorização fail-closed em todas as rotas (`role:read|create|update|assign|revoke`); seed das permissions de gestão no catálogo (`permission-catalog.ts` + `auth_permission`).
 - [ ] T049 Wiring de outbox para os eventos `Role*` (hoje use cases retornam evento no output — confirmar publicação via ADR-0015).
-- [ ] T050 Coleção Bruno `api-collections/auth/` consolidada (US1–US7) + runner `pnpm run test:e2e:bruno:auth` (`scripts/e2e-bruno-auth.sh`, espelhar `e2e-bruno-partners.sh`); **estende** a coleção `auth/` criada na `005`. Substitui o antigo E2E de CLI (ADR-0037 §3).
+- [x] T050 Coleção Bruno `api-collections/auth/` consolidada (US1–US7) + runner `pnpm run test:e2e:bruno:auth` (`scripts/e2e-bruno-auth.sh`, espelhar `e2e-bruno-partners.sh`); **estende** a coleção `auth/` criada na `005`. Substitui o antigo E2E de CLI (ADR-0037 §3).
 - [ ] T051 Integração MySQL (`pnpm run test:integration:auth`, atrás de `*_INTEGRATION=1`) para `role-repository.drizzle` e junções (`auth_role`/`auth_role_permission`/`auth_user_role`).
 - [ ] T052 [P] Rodar `quickstart.md` ponta a ponta (via HTTP/Bruno, sem CLI).
-- [ ] T053 Gate W3 final por ticket: `pnpm run typecheck && pnpm run format:check && pnpm run lint && pnpm test`.
+- [x] T053 Gate W3 final por ticket: `pnpm run typecheck && pnpm run format:check && pnpm run lint && pnpm test`.
 
 ---
 
