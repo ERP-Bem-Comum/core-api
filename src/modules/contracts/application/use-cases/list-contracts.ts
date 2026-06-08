@@ -9,11 +9,15 @@ import type {
 
 type Deps = Readonly<{ contractRepo: ContractRepository }>;
 
-/** Metadados de paginação devolvidos ao chamador (borda HTTP / CLI). */
+/**
+ * Metadados de paginação devolvidos ao chamador (borda HTTP / CLI).
+ * Shape canônico harmonizado (HTTP-PAGINATION-HARMONIZE) — espelha partners.
+ */
 export type ListContractsMeta = Readonly<{
-  page: number;
-  limit: number;
-  total: number;
+  currentPage: number;
+  itemsPerPage: number;
+  itemCount: number;
+  totalItems: number;
   totalPages: number;
 }>;
 
@@ -35,6 +39,12 @@ export const listContracts =
     const totalPages = r.value.total === 0 ? 0 : Math.ceil(r.value.total / query.limit);
     return ok({
       items: r.value.items,
-      meta: { page: query.page, limit: query.limit, total: r.value.total, totalPages },
+      meta: {
+        currentPage: query.page,
+        itemsPerPage: query.limit,
+        itemCount: r.value.items.length,
+        totalItems: r.value.total,
+        totalPages,
+      },
     });
   };

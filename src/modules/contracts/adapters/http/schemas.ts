@@ -72,12 +72,21 @@ export const contractListQuerySchema = z.object({
 
 export type ContractListQuery = z.infer<typeof contractListQuerySchema>;
 
-/** Meta de paginação devolvida no envelope `{ items, meta }`. */
+/**
+ * Meta de paginação devolvida no envelope `{ items, meta }`.
+ * Shape canônico harmonizado (HTTP-PAGINATION-HARMONIZE) — espelha partners:
+ * `currentPage`, `itemsPerPage`, `itemCount`, `totalItems`, `totalPages`.
+ */
 const contractListMetaSchema = z.object({
-  page: z.number().int().meta({ description: 'Página atual (1-based)' }),
-  limit: z.number().int().meta({ description: 'Tamanho da página' }),
-  total: z.number().int().nonnegative().meta({ description: 'Total de itens (todos os filtros)' }),
-  totalPages: z.number().int().nonnegative().meta({ description: 'ceil(total/limit)' }),
+  currentPage: z.number().int().meta({ description: 'Página atual (1-based)' }),
+  itemsPerPage: z.number().int().meta({ description: 'Tamanho da página (limit)' }),
+  itemCount: z.number().int().nonnegative().meta({ description: 'Nº de itens nesta página' }),
+  totalItems: z
+    .number()
+    .int()
+    .nonnegative()
+    .meta({ description: 'Total de itens (todos os filtros)' }),
+  totalPages: z.number().int().nonnegative().meta({ description: 'ceil(totalItems/itemsPerPage)' }),
 });
 
 /** Response paginado do GET /contracts (CTR-HTTP-CONTRACT-LIST-FILTERS). */

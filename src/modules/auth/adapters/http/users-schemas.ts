@@ -36,10 +36,14 @@ export const userListItemSchema = z.object({
   status: z.enum(['active', 'disabled']),
 });
 
-/** Meta de paginacao (shape do use case — nao usa o legado partners). */
+/**
+ * Meta de paginacao (shape canonico harmonizado — HTTP-PAGINATION-HARMONIZE).
+ * Espelha partners: currentPage, itemsPerPage, itemCount, totalItems, totalPages.
+ */
 export const userPaginationMetaSchema = z.object({
   currentPage: z.number().int(),
-  pageSize: z.number().int(),
+  itemsPerPage: z.number().int(),
+  itemCount: z.number().int().nonnegative(),
   totalItems: z.number().int().nonnegative(),
   totalPages: z.number().int().nonnegative(),
 });

@@ -94,7 +94,13 @@ const bearer = (token: string): Record<string, string> => ({ authorization: `Bea
 
 interface PagedBody {
   items: readonly { sequentialNumber: string; status: string }[];
-  meta: { page: number; limit: number; total: number; totalPages: number };
+  meta: {
+    currentPage: number;
+    itemsPerPage: number;
+    itemCount: number;
+    totalItems: number;
+    totalPages: number;
+  };
 }
 
 describe('CTR-HTTP-CONTRACT-LIST-FILTERS — GET /api/v2/contracts (paginado)', () => {
@@ -109,8 +115,8 @@ describe('CTR-HTTP-CONTRACT-LIST-FILTERS — GET /api/v2/contracts (paginado)', 
     assert.equal(res.statusCode, 200);
     const body = res.json() as PagedBody;
     assert.ok(Array.isArray(body.items), 'items deve ser array');
-    assert.equal(body.meta.total, 4);
-    assert.equal(body.meta.page, 1);
+    assert.equal(body.meta.totalItems, 4);
+    assert.equal(body.meta.currentPage, 1);
     assert.equal(body.items.length, 4);
     await teardown();
   });
@@ -126,7 +132,13 @@ describe('CTR-HTTP-CONTRACT-LIST-FILTERS — GET /api/v2/contracts (paginado)', 
     assert.equal(res.statusCode, 200);
     const body = res.json() as PagedBody;
     assert.equal(body.items.length, 2);
-    assert.deepEqual(body.meta, { page: 1, limit: 2, total: 4, totalPages: 2 });
+    assert.deepEqual(body.meta, {
+      currentPage: 1,
+      itemsPerPage: 2,
+      itemCount: 2,
+      totalItems: 4,
+      totalPages: 2,
+    });
     await teardown();
   });
 
@@ -140,7 +152,7 @@ describe('CTR-HTTP-CONTRACT-LIST-FILTERS — GET /api/v2/contracts (paginado)', 
     });
     assert.equal(res.statusCode, 200);
     const body = res.json() as PagedBody;
-    assert.equal(body.meta.total, 1);
+    assert.equal(body.meta.totalItems, 1);
     assert.equal(body.items[0]?.sequentialNumber, '001/2026');
     await teardown();
   });
@@ -155,7 +167,7 @@ describe('CTR-HTTP-CONTRACT-LIST-FILTERS — GET /api/v2/contracts (paginado)', 
     });
     assert.equal(res.statusCode, 200);
     const body = res.json() as PagedBody;
-    assert.equal(body.meta.total, 1);
+    assert.equal(body.meta.totalItems, 1);
     assert.equal(body.items[0]?.status, 'Expired');
     await teardown();
   });

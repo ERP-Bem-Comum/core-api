@@ -161,7 +161,23 @@ const usersRoutes =
           });
         }
 
-        return sendResult(reply, ok(result.value), { ok: 200 });
+        // HTTP-PAGINATION-HARMONIZE: mapeia o meta do read model (pageSize) para o
+        // shape canonico da borda (itemsPerPage + itemCount), espelhando partners.
+        const meta = result.value.meta;
+        return sendResult(
+          reply,
+          ok({
+            items: result.value.items,
+            meta: {
+              currentPage: meta.currentPage,
+              itemsPerPage: meta.pageSize,
+              itemCount: result.value.items.length,
+              totalItems: meta.totalItems,
+              totalPages: meta.totalPages,
+            },
+          }),
+          { ok: 200 },
+        );
       },
     });
 

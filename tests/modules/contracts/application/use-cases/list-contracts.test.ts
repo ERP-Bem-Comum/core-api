@@ -45,7 +45,13 @@ describe('listContracts (paginado) — CTR-HTTP-CONTRACT-LIST-FILTERS', () => {
     assert.equal(r.ok, true);
     if (!r.ok) return;
     assert.equal(r.value.items.length, 2);
-    assert.deepEqual(r.value.meta, { page: 1, limit: 2, total: 5, totalPages: 3 });
+    assert.deepEqual(r.value.meta, {
+      currentPage: 1,
+      itemsPerPage: 2,
+      itemCount: 2,
+      totalItems: 5,
+      totalPages: 3,
+    });
   });
 
   it('meta reflete a página solicitada mesmo se vazia', async () => {
@@ -55,7 +61,13 @@ describe('listContracts (paginado) — CTR-HTTP-CONTRACT-LIST-FILTERS', () => {
     assert.ok(r.ok);
     if (!r.ok) return;
     assert.equal(r.value.items.length, 0);
-    assert.deepEqual(r.value.meta, { page: 5, limit: 10, total: 3, totalPages: 1 });
+    assert.deepEqual(r.value.meta, {
+      currentPage: 5,
+      itemsPerPage: 10,
+      itemCount: 0,
+      totalItems: 3,
+      totalPages: 1,
+    });
   });
 
   it('repo vazio → totalPages 0', async () => {
@@ -63,7 +75,13 @@ describe('listContracts (paginado) — CTR-HTTP-CONTRACT-LIST-FILTERS', () => {
     const r = await useCase({ page: 1, limit: 20, order: 'ASC' });
     assert.ok(r.ok);
     if (!r.ok) return;
-    assert.deepEqual(r.value.meta, { page: 1, limit: 20, total: 0, totalPages: 0 });
+    assert.deepEqual(r.value.meta, {
+      currentPage: 1,
+      itemsPerPage: 20,
+      itemCount: 0,
+      totalItems: 0,
+      totalPages: 0,
+    });
   });
 
   it('propaga erro do repositório', async () => {
