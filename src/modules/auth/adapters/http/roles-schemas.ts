@@ -65,6 +65,21 @@ export const createRoleBodySchema = z.object({
 /** Response 201 do POST /api/v1/roles (US5): id do papel criado. */
 export const createRoleResponseSchema = z.object({ id: z.string() });
 
+/** Param do PUT /api/v1/roles/:id (US6): id do papel a editar. */
+export const roleIdParamSchema = z.object({ id: z.string().min(1) });
+
+/**
+ * Body do PUT /api/v1/roles/:id (US6): patch parcial. `name` renomeia; `permissions` substitui o
+ * conjunto inteiro. Ambos opcionais (ao menos um esperado; ausencia de ambos e no-op valido).
+ */
+export const updateRoleBodySchema = z.object({
+  name: z.string().min(1).optional(),
+  permissions: z.array(z.string()).optional(),
+});
+
+/** Response 200 do PUT /api/v1/roles/:id (US6): o papel atualizado (mesmo DTO da listagem). */
+export const updateRoleResponseSchema = roleListItemSchema;
+
 /** Response 200 do POST /api/v1/users/:id/roles (US4) — idempotente. */
 export const assignRoleResponseSchema = z.object({ assigned: z.boolean() });
 

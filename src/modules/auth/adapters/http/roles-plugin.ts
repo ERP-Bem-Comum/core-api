@@ -25,6 +25,7 @@ import type { getUserPermissions } from '../../application/use-cases/get-user-pe
 import type { listPermissionCatalog } from '../../application/use-cases/list-permission-catalog.ts';
 import type { listRoles } from '../../application/use-cases/list-roles.ts';
 import type { createRole } from '../../application/use-cases/create-role.ts';
+import type { updateRole } from '../../application/use-cases/update-role.ts';
 import type { assignRole } from '../../application/use-cases/assign-role.ts';
 import type { revokeRole } from '../../application/use-cases/revoke-role.ts';
 import {
@@ -34,7 +35,10 @@ import {
   createRoleResponseSchema,
   permissionCatalogResponseSchema,
   revokeRoleResponseSchema,
+  roleIdParamSchema,
   roleListResponseSchema,
+  updateRoleBodySchema,
+  updateRoleResponseSchema,
   userPermissionsParamSchema,
   userPermissionsResponseSchema,
   userRoleParamSchema,
@@ -49,6 +53,8 @@ export type RolesHttpDeps = Readonly<{
   listRoles: ReturnType<typeof listRoles>;
   /** Criacao de papel (spec 006 US5) — consumido por POST /api/v1/roles. */
   createRole: ReturnType<typeof createRole>;
+  /** Edicao de papel (spec 006 US6) — consumido por PUT /api/v1/roles/:id. */
+  updateRole: ReturnType<typeof updateRole>;
   /** Atribuicao de papel a usuario (spec 006 US4) — consumido por POST /users/:id/roles. */
   assignRole: ReturnType<typeof assignRole>;
   /** Revogacao de papel de usuario (spec 006 US4) — consumido por DELETE /users/:id/roles/:roleId. */
@@ -62,6 +68,7 @@ export type RolesHttpHooks = Readonly<{
 
 const ROLE_READ_PERMISSION = 'role:read';
 const ROLE_CREATE_PERMISSION = 'role:create';
+const ROLE_UPDATE_PERMISSION = 'role:update';
 
 // Limite dedicado das rotas de ESCRITA (POST/DELETE), separado do teto global (200/min). O token
 // ja e exigido, mas evita abuso autenticado (ex.: atribuicoes em massa). Espelha users-plugin.ts.
@@ -155,6 +162,50 @@ const rolesRoutes =
         return sendResult(reply, result, {
           ok: 201,
           errors: {
+            'role-name-duplicate': 409,
+            'role-name-invalid': 422,
+            'role-permission-not-in-catalog': 422,
+            'role-repo-unavailable': 503,
+          },
+        });
+      },
+    });
+
+    // US6: PUT /roles/:id — edita um papel (patch parcial: renomeia e/ou substitui permissions ⊆
+    // catalogo). Permission role:update (hook authorize, fail-closed). A propagacao as permissoes
+    // efetivas dos usuarios (FR-007) e automatica via juncao auth_user_role. O use case devolve o
+    // Role do dominio; a borda mapeia p/ o DTO { id, name, active, permissions } e -> 200/409/422/503.
+    scope.route({
+      method: 'PUT',
+      url: '/roles/:id',
+      preHandler: [hooks.requireAuth, hooks.authorize(ROLE_UPDATE_PERMISSION)],
+      config: { rateLimit: WRITE_RATE_LIMIT },
+      schema: {
+        params: roleIdParamSchema,
+        body: updateRoleBodySchema,
+        response: { 200: updateRoleResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        // exactOptionalPropertyTypes: monta o command incluindo cada chave so quando presente
+        // (espalhar req.body alargaria os tipos para `| undefined`, proibido pelo target).
+        const result = await deps.updateRole({
+          id: req.params.id,
+          ...(req.body.name !== undefined ? { name: req.body.name } : {}),
+          ...(req.body.permissions !== undefined ? { permissions: req.body.permissions } : {}),
+        });
+        const shaped = result.ok
+          ? ok({
+              id: String(result.value.id),
+              name: String(result.value.name),
+              active: result.value.status === 'active',
+              permissions: result.value.permissions.map(String),
+            })
+          : result;
+        return sendResult(reply, shaped, {
+          ok: 200,
+          errors: {
+            'role-id-invalid': 400,
+            'role-not-found': 404,
             'role-name-duplicate': 409,
             'role-name-invalid': 422,
             'role-permission-not-in-catalog': 422,

@@ -170,6 +170,7 @@ const main = async (): Promise<void> => {
             listPermissionCatalog: authDeps.listPermissionCatalog,
             listRoles: authDeps.listRoles,
             createRole: authDeps.createRole,
+            updateRole: authDeps.updateRole,
             assignRole: authDeps.assignRole,
             revokeRole: authDeps.revokeRole,
           },

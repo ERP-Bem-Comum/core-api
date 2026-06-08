@@ -1,9 +1,10 @@
 /**
- * W0 (RED) - AUTH-CREATE-ROLE: POST /api/v1/roles (US5 spec 006).
+ * W0 (RED) - AUTH-UPDATE-ROLE: PUT /api/v1/roles/:id (US6 spec 006).
  *
- * DEVE FALHAR em W0 - a rota de criacao ainda nao existe. Driver memory; fastify.inject.
- * Permission de hook: role:create. Cobre 201 { id }, 409 (nome duplicado), 422 (permissao fora
- * do catalogo / nome vazio), 403 (sem role:create) e 401 (sem token). ASCII puro.
+ * DEVE FALHAR em W0 - a rota de edicao ainda nao existe. Driver memory; fastify.inject.
+ * Permission de hook: role:update. Cobre 200 (papel atualizado: name + permissions),
+ * 409 (nome duplicado), 422 (permissao fora do catalogo), 403 (sem role:update), 401 (sem
+ * token) e 404 (id inexistente). ASCII puro.
  */
 
 import { describe, it, before, after } from 'node:test';
@@ -18,8 +19,8 @@ import {
 } from '#src/modules/auth/public-api/http.ts';
 
 const STRONG = 'Str0ng-Passphrase-2026!';
-const ADMIN = 'admin.create-role@example.com';
-const NOPERM = 'noperm.create-role@example.com';
+const ADMIN = 'admin.update-role@example.com';
+const NOPERM = 'noperm.update-role@example.com';
 
 type AppHandle = Awaited<ReturnType<typeof buildApp>>;
 
@@ -28,7 +29,11 @@ const makeApp = async (): Promise<{ app: AppHandle; teardown: () => Promise<void
     driver: 'memory',
     seed: {
       users: [
-        { email: ADMIN, password: STRONG, permissions: ['role:create', 'role:read'] },
+        {
+          email: ADMIN,
+          password: STRONG,
+          permissions: ['role:create', 'role:read', 'role:update'],
+        },
         { email: NOPERM, password: STRONG, permissions: ['role:read'] },
       ],
     },
@@ -71,7 +76,23 @@ const login = async (app: AppHandle, email: string): Promise<string> => {
   return (res.json() as { accessToken: string }).accessToken;
 };
 
-describe('AUTH-CREATE-ROLE — POST /api/v1/roles', () => {
+const createRole = async (
+  app: AppHandle,
+  token: string,
+  name: string,
+  permissions: readonly string[],
+): Promise<string> => {
+  const res = await app.inject({
+    method: 'POST',
+    url: '/api/v1/roles',
+    headers: { authorization: `Bearer ${token}` },
+    payload: { name, permissions },
+  });
+  assert.equal(res.statusCode, 201);
+  return (res.json() as { id: string }).id;
+};
+
+describe('AUTH-UPDATE-ROLE — PUT /api/v1/roles/:id', () => {
   let app: AppHandle;
   let teardown: () => Promise<void>;
   let adminToken: string;
@@ -87,72 +108,76 @@ describe('AUTH-CREATE-ROLE — POST /api/v1/roles', () => {
 
   it('401 sem token', async () => {
     const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/roles',
-      payload: { name: 'auditor', permissions: ['role:read'] },
+      method: 'PUT',
+      url: '/api/v1/roles/00000000-0000-4000-8000-000000000000',
+      payload: { name: 'qualquer' },
     });
     assert.equal(res.statusCode, 401);
   });
 
-  it('403 sem role:create', async () => {
+  it('403 sem role:update', async () => {
+    const id = await createRole(app, adminToken, 'editavel-403', ['role:read']);
     const token = await login(app, NOPERM);
     const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/roles',
+      method: 'PUT',
+      url: `/api/v1/roles/${id}`,
       headers: { authorization: `Bearer ${token}` },
-      payload: { name: 'auditor', permissions: ['role:read'] },
+      payload: { name: 'novo-nome-403' },
     });
     assert.equal(res.statusCode, 403);
   });
 
-  it('201 cria papel com { id }', async () => {
+  it('200 atualiza papel (name + permissions)', async () => {
+    const id = await createRole(app, adminToken, 'editavel-200', ['role:read']);
     const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/roles',
+      method: 'PUT',
+      url: `/api/v1/roles/${id}`,
       headers: { authorization: `Bearer ${adminToken}` },
-      payload: { name: 'gerente-de-acessos', permissions: ['role:read', 'user:list'] },
+      payload: { name: 'editado-200', permissions: ['role:read', 'user:list'] },
     });
-    assert.equal(res.statusCode, 201);
-    const body = res.json() as { id: string };
-    assert.equal(typeof body.id, 'string');
-    assert.ok(body.id.length > 0);
+    assert.equal(res.statusCode, 200);
+    const body = res.json() as {
+      id: string;
+      name: string;
+      active: boolean;
+      permissions: string[];
+    };
+    assert.equal(body.id, id);
+    assert.equal(body.name, 'editado-200');
+    assert.equal(body.active, true);
+    assert.deepEqual([...body.permissions].sort(), ['role:read', 'user:list']);
   });
 
-  it('409 nome duplicado', async () => {
-    const first = await app.inject({
-      method: 'POST',
-      url: '/api/v1/roles',
+  it('409 nome duplicado (de outro papel)', async () => {
+    await createRole(app, adminToken, 'ocupado-409', ['role:read']);
+    const id = await createRole(app, adminToken, 'origem-409', ['role:read']);
+    const res = await app.inject({
+      method: 'PUT',
+      url: `/api/v1/roles/${id}`,
       headers: { authorization: `Bearer ${adminToken}` },
-      payload: { name: 'supervisor', permissions: ['role:read'] },
+      payload: { name: 'ocupado-409' },
     });
-    assert.equal(first.statusCode, 201);
-
-    const second = await app.inject({
-      method: 'POST',
-      url: '/api/v1/roles',
-      headers: { authorization: `Bearer ${adminToken}` },
-      payload: { name: 'supervisor', permissions: ['user:list'] },
-    });
-    assert.equal(second.statusCode, 409);
+    assert.equal(res.statusCode, 409);
   });
 
   it('422 permissao fora do catalogo', async () => {
+    const id = await createRole(app, adminToken, 'editavel-422', ['role:read']);
     const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/roles',
+      method: 'PUT',
+      url: `/api/v1/roles/${id}`,
       headers: { authorization: `Bearer ${adminToken}` },
-      payload: { name: 'estranho', permissions: ['nonexistent:permission'] },
+      payload: { permissions: ['nonexistent:permission'] },
     });
     assert.equal(res.statusCode, 422);
   });
 
-  it('422 nome vazio', async () => {
+  it('404 id inexistente', async () => {
     const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/roles',
+      method: 'PUT',
+      url: '/api/v1/roles/00000000-0000-4000-8000-000000000000',
       headers: { authorization: `Bearer ${adminToken}` },
-      payload: { name: '   ', permissions: ['role:read'] },
+      payload: { name: 'fantasma' },
     });
-    assert.equal(res.statusCode, 422);
+    assert.equal(res.statusCode, 404);
   });
 });

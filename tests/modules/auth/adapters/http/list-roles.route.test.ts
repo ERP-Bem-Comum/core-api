@@ -48,6 +48,7 @@ const makeApp = async (): Promise<{ app: AppHandle; teardown: () => Promise<void
             assignRole: authDeps.assignRole,
             revokeRole: authDeps.revokeRole,
             createRole: authDeps.createRole,
+            updateRole: authDeps.updateRole,
           },
           { requireAuth, authorize: authDeps.authorize },
         ),
