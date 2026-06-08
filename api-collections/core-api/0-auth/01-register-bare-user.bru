@@ -1,0 +1,25 @@
+meta {
+  name: register bare user
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v2/auth/register
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "email": "{{bareUserEmail}}",
+    "password": "{{process.env.E2E_SEED_PASSWORD}}"
+  }
+}
+
+tests {
+  test("CA — register cria usuario sem permissoes (201 ou 409 se ja existe)", function () {
+    const s = res.getStatus();
+    expect(s === 201 || s === 409).to.be.true;
+  });
+}
