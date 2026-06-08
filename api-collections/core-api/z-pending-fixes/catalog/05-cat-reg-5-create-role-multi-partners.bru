@@ -1,9 +1,3 @@
-# EXPECTED-FAIL até AUTH-PERMISSION-CATALOG-PARTNERS
-# CAT-REG-5: POST /roles com múltiplas permissões de partners (supplier:read + geography:write) → 201.
-# Estado atual: REPROVA — retorna 422 role-permission-not-in-catalog.
-#
-# Nome único: sufixo timestamp gerado em script:pre-request para evitar conflito 409.
-
 meta {
   name: CAT-REG-5 criar role com multiplas permissoes de partners retorna 201
   type: http

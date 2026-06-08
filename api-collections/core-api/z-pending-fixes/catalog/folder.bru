@@ -3,12 +3,3 @@ meta {
   type: folder
 }
 
-# EXPECTED-FAIL — ticket AUTH-PERMISSION-CATALOG-PARTNERS
-#
-# Bug: permission-catalog.ts lista 18 de 28 permissões — faltam as 10 de partners
-# (supplier:*, financier:*, collaborator:*, act:*, geography:*).
-# GET /api/v1/permissions devolve catálogo incompleto.
-# POST /api/v1/roles rejeita permissões de partners com 422 role-permission-not-in-catalog.
-#
-# Critério de correção: adicionar as 10 permissões ao permission-catalog.ts.
-# Após o fix, todos os 5 casos (CAT-REG-1..5) passam.

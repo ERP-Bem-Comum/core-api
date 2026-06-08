@@ -3,20 +3,3 @@ meta {
   type: folder
 }
 
-# EXPECTED-FAIL por design — esta pasta contém testes que REPROVAM intencionalmente.
-#
-# Propósito: regressão de fix e feature pendente de backend.
-# São o W0 RED documentado em formato .bru: cada caso DEVE reprovar até o ticket
-# correspondente ser implementado. Quando o fix chegar, os casos passam e o ticket
-# pode ser fechado.
-#
-# Tickets pendentes:
-#   AUTH-PERMISSION-CATALOG-PARTNERS  → subpasta catalog/
-#   CTR-HTTP-DISTRATO-DOCUMENTO        → subpasta distrato/
-#   CTR-HTTP-DOCUMENT-CONTENT          → subpasta document-content/
-#
-# Convenção de execução:
-#   - Roda por último (prefixo z-) para não bloquear as coleções principais.
-#   - Em CI, rodar separado e reportar à parte:
-#       bru run api-collections/core-api/z-pending-fixes --env local --reporter-junit pending-fixes.xml
-#   - Falhas aqui são ESPERADAS. Sucesso aqui indica que o fix foi entregue.

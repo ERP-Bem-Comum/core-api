@@ -1,13 +1,3 @@
-# Setup autossuficiente para a sub-suíte distrato.
-# Cria um supplier dedicado, cria um contrato e o ativa.
-# Captura pendingContractId para uso nos casos DIST-1..6.
-#
-# Decisão de design: setup próprio (não reutiliza contractCreatedId da pasta 6-contracts)
-# porque z-pending-fixes roda em execução separada e vars de outras pastas podem não
-# estar disponíveis. Idempotência: supplier com CNPJ fixo pode resultar em 409 se o
-# ambiente já tiver o dado — nesse caso o script captura o id do header Location quando
-# disponível ou mantém o ultimo valor válido.
-
 meta {
   name: setup criar e ativar contrato para distrato
   type: http

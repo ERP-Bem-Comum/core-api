@@ -1,11 +1,3 @@
-# EXPECTED-FAIL até CTR-HTTP-DOCUMENT-CONTENT
-# DOC-3: conteudo do documento de um ADITIVO deve ser acessivel (200 PDF).
-# Estado atual: REPROVA — rota de content inexistente (404).
-# Nota de setup: o caso ideal usa um documentId de aditivo homologado. Sem setup de aditivo dedicado
-# (criar aditivo + upload + homologar = 3 requests), reusa-se {{amendmentDocumentId}} se a pasta
-# 6-contracts o tiver capturado; caindo em {{documentId}} do contrato. A rota inexistente reprova
-# igualmente — o que valida o gap. Quando o fix existir, completar o setup de aditivo (ver folder.bru).
-
 meta {
   name: DOC-3 conteudo do documento de aditivo retorna 200 PDF
   type: http

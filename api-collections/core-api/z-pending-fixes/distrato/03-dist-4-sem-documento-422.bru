@@ -1,10 +1,3 @@
-# EXPECTED-FAIL até CTR-HTTP-DISTRATO-DOCUMENTO
-# DIST-4: distrato sem documento assinado → 422 terminate-no-signed-document.
-# Estado atual: REPROVA — endpoint aceita sem documento e retorna 200 (ou 422 por schema,
-# pois terminatedAt não existe — a falha hoje é de schema, não de regra de negócio).
-#
-# Após o fix: o backend deve exigir upload prévio de signed_termination; sem ele → 422.
-
 meta {
   name: DIST-4 distrato sem documento assinado retorna 422
   type: http

@@ -1,14 +1,3 @@
-# EXPECTED-FAIL até CTR-HTTP-DISTRATO-DOCUMENTO
-# DIST-2: campo de encerramento (endedAt) deve refletir terminatedAt informado, não now.
-# Estado atual: REPROVA — terminatedAt não existe no schema; endedAt = clock now.
-#
-# Nota: depende do contrato ainda estar Active (o DIST-1 acima tenta distratar o mesmo
-# contrato; nesta sequência o setup deve criar um contrato fresco por execução).
-# Em execução sequencial de bru run, este contrato já foi distratado pelo DIST-1.
-# O comportamento esperado é idempotente (201 → 200) ou o campo endedAt já está correto.
-# Como DIST-1 REPROVA hoje (schema rejeita terminatedAt), DIST-2 também reprovará por
-# dependência — status 422 impede verificar endedAt.
-
 meta {
   name: DIST-2 endedAt igual ao terminatedAt informado
   type: http
