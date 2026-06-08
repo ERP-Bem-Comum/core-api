@@ -12,9 +12,11 @@
 > de cada story é feita por **coleção Bruno** (`api-collections/users/`, ADR-0034) contra a borda HTTP real
 > mais testes `fastify.inject`, não por subcomando CLI. As tasks CLI foram convertidas em tasks Bruno.
 >
-> **Progresso:** Foundational concluída — `AUTH-USER-VO-CPF`, `AUTH-USER-VO-TELEPHONE`,
-> `AUTH-USER-VO-PROFILE-PHOTO-REF`, `AUTH-USER-PROFILE-AGG` (inclui schema+mapper+migration 0004) já
-> **closed-green**. Próximo: `AUTH-USECASE-LIST-USERS` (US1, MVP).
+> **Progresso:** ✅ **Concluída (2026-06-08).** Todas as 7 user stories (US1→US7) entregues end-to-end
+> na borda HTTP e mergeadas em `dev`. Tasks reconciliadas com os tickets `.claude/.pipeline/AUTH-*`
+> (o trabalho rodou pela pipeline W0→W3, não marcando estes checkboxes em tempo real). Validação de
+> fechamento verde: gate W3 unit (2454 testes, 0 fail), `test:integration:auth` (40/40) e
+> `test:e2e:bruno:auth` (45 req / 59 testes). Ver `EXECUTION-LOG.md`.
 
 ## Format: `[ID] [P?] [Story] Description`
 
@@ -33,9 +35,9 @@
 
 **Purpose**: confirmar pré-condições; nenhum projeto novo (o módulo `auth` já existe).
 
-- [ ] T001 Confirmar que `StoragePort` (S3/MinIO, ADR-0019) e `EmailPort` (ADR-0010) já estão disponíveis para reuso em `src/modules/auth/application/ports/` e `src/shared/ports/`; anotar os símbolos exatos.
-- [ ] T002 [P] Confirmar fluxos de senha reusáveis (`request-password-reset`, `confirm-password-reset`) em `src/modules/auth/application/use-cases/` e o canal de email que disparam.
-- [ ] T003 [P] Mapear o agregado `User` atual em `src/modules/auth/domain/identity/user/` (campos, `ActiveUser`, eventos existentes) para a extensão da Phase 2.
+- [x] T001 Confirmar que `StoragePort` (S3/MinIO, ADR-0019) e `EmailPort` (ADR-0010) já estão disponíveis para reuso em `src/modules/auth/application/ports/` e `src/shared/ports/`; anotar os símbolos exatos.
+- [x] T002 [P] Confirmar fluxos de senha reusáveis (`request-password-reset`, `confirm-password-reset`) em `src/modules/auth/application/use-cases/` e o canal de email que disparam.
+- [x] T003 [P] Mapear o agregado `User` atual em `src/modules/auth/domain/identity/user/` (campos, `ActiveUser`, eventos existentes) para a extensão da Phase 2.
 
 ---
 
@@ -45,21 +47,21 @@
 
 ### Tests RED (escrever e ver falhar primeiro)
 
-- [ ] T004 [P] Suíte RED de `Cpf` em `tests/modules/auth/domain/identity/cpf.test.ts` (normaliza dígitos; valida dígitos verificadores; rejeita inválido).
-- [ ] T005 [P] Suíte RED de `Telephone` em `tests/modules/auth/domain/identity/telephone.test.ts` (normaliza; forma BR; rejeita inválido).
-- [ ] T006 [P] Suíte RED de `ProfilePhotoRef` em `tests/modules/auth/domain/identity/profile-photo-ref.test.ts` (chave válida; rejeita vazia).
-- [ ] T007 Suíte RED da extensão do agregado em `tests/modules/auth/domain/identity/user/profile.test.ts` (`updateProfile` atômico; `attachPhoto`/`removePhoto`; `activate`/`deactivate` idempotentes mapeando `status` `active`/`disabled` + `disabledAt`; invariante de auto-desativação).
+- [x] T004 [P] Suíte RED de `Cpf` em `tests/modules/auth/domain/identity/cpf.test.ts` (normaliza dígitos; valida dígitos verificadores; rejeita inválido).
+- [x] T005 [P] Suíte RED de `Telephone` em `tests/modules/auth/domain/identity/telephone.test.ts` (normaliza; forma BR; rejeita inválido).
+- [x] T006 [P] Suíte RED de `ProfilePhotoRef` em `tests/modules/auth/domain/identity/profile-photo-ref.test.ts` (chave válida; rejeita vazia).
+- [x] T007 Suíte RED da extensão do agregado em `tests/modules/auth/domain/identity/user/profile.test.ts` (`updateProfile` atômico; `attachPhoto`/`removePhoto`; `activate`/`deactivate` idempotentes mapeando `status` `active`/`disabled` + `disabledAt`; invariante de auto-desativação).
 
 ### Implementação
 
-- [ ] T008 [P] Implementar VO `Cpf` em `src/modules/auth/domain/identity/cpf.ts` (branded + smart constructor `Result`).
-- [ ] T009 [P] Implementar VO `Telephone` em `src/modules/auth/domain/identity/telephone.ts`.
-- [ ] T010 [P] Implementar VO `ProfilePhotoRef` em `src/modules/auth/domain/identity/profile-photo-ref.ts`.
-- [ ] T011 Estender o agregado em `src/modules/auth/domain/identity/user/user.ts`: campos `cpf`, `telephone`, `photo`, `collaboratorId`; funções `updateProfile`, `attachPhoto`, `removePhoto`; ajustar `activate`/`deactivate` ao `status` existente (`active`/`disabled` + `disabledAt` bicondicional). (depende de T008–T010)
-- [ ] T012 Adicionar eventos em `src/modules/auth/domain/identity/user/events.ts`: `UserCreated`, `UserProfileUpdated`, `UserActivated`, `UserDeactivated` (EN passado). (depende de T011)
-- [ ] T013 Estender o schema em `src/modules/auth/adapters/persistence/schemas/mysql.ts`: colunas novas em `auth_user` (`cpf varchar(11)`, `telephone varchar(13)`, `image_url varchar null`, `collaborator_id varchar null`) + índice de busca por nome. **Não** criar boolean de status (reusar `status`/`disabled_at`). (depende de T011)
-- [ ] T014 Gerar a migration com `pnpm run db:generate` e conferir à mão CHARSET/COLLATE e CHECKs (ADR-0020); versionar em `.../migrations/mysql/`. (depende de T013)
-- [ ] T015 Atualizar o mapper row↔domínio (`Result`) em `src/modules/auth/adapters/persistence/repos/user-repository.drizzle.ts` (+ `.in-memory.ts`) para os campos de perfil. (depende de T011, T013)
+- [x] T008 [P] Implementar VO `Cpf` em `src/modules/auth/domain/identity/cpf.ts` (branded + smart constructor `Result`).
+- [x] T009 [P] Implementar VO `Telephone` em `src/modules/auth/domain/identity/telephone.ts`.
+- [x] T010 [P] Implementar VO `ProfilePhotoRef` em `src/modules/auth/domain/identity/profile-photo-ref.ts`.
+- [x] T011 Estender o agregado em `src/modules/auth/domain/identity/user/user.ts`: campos `cpf`, `telephone`, `photo`, `collaboratorId`; funções `updateProfile`, `attachPhoto`, `removePhoto`; ajustar `activate`/`deactivate` ao `status` existente (`active`/`disabled` + `disabledAt` bicondicional). (depende de T008–T010)
+- [x] T012 Adicionar eventos em `src/modules/auth/domain/identity/user/events.ts`: `UserCreated`, `UserProfileUpdated`, `UserActivated`, `UserDeactivated` (EN passado). (depende de T011)
+- [x] T013 Estender o schema em `src/modules/auth/adapters/persistence/schemas/mysql.ts`: colunas novas em `auth_user` (`cpf varchar(11)`, `telephone varchar(13)`, `image_url varchar null`, `collaborator_id varchar null`) + índice de busca por nome. **Não** criar boolean de status (reusar `status`/`disabled_at`). (depende de T011)
+- [x] T014 Gerar a migration com `pnpm run db:generate` e conferir à mão CHARSET/COLLATE e CHECKs (ADR-0020); versionar em `.../migrations/mysql/`. (depende de T013)
+- [x] T015 Atualizar o mapper row↔domínio (`Result`) em `src/modules/auth/adapters/persistence/repos/user-repository.drizzle.ts` (+ `.in-memory.ts`) para os campos de perfil. (depende de T011, T013)
 
 **Checkpoint**: VOs, agregado estendido, migration e mapper prontos — user stories podem começar.
 
@@ -76,7 +78,7 @@
 ### Tests RED
 
 - [x] T016 [P] [US1] Suíte RED do use case em `tests/modules/auth/application/use-cases/list-users.test.ts` (paginação/busca/filtro com repo fake; meta correta; busca vazia → zero itens). ✅ AUTH-USECASE-LIST-USERS
-- [ ] T017 [US1] Contract suite RED do read model em `tests/modules/auth/adapters/persistence/user-query.suite.ts` (consumida por in-memory e Drizzle/MySQL).
+- [x] T017 [US1] Contract suite RED do read model em `tests/modules/auth/adapters/persistence/user-query.suite.ts` (consumida por in-memory e Drizzle/MySQL).
 
 ### Implementação
 
@@ -85,7 +87,7 @@
 - [x] T020 [P] [US1] Adapter in-memory do `UserQuery` em `src/modules/auth/adapters/persistence/repos/user-query.in-memory.ts` (+ suíte direta de paginação/busca/filtro/ordenação). (depende de T018) ✅
 - [x] T021 [US1] Adapter Drizzle do `UserQuery` em `src/modules/auth/adapters/persistence/repos/user-query.drizzle.ts` (offset + LIKE CI + filtro status; índice `auth_user_name_idx` + migration 0005). (depende de T018) ✅ AUTH-HTTP-LIST-USERS · validação real = pendência Docker
 - [x] T022 [US1] Rota `GET /api/v1/users` em `src/modules/auth/adapters/http/` (Zod query + paginação) conforme `contracts/http-users.md`; testada via `fastify.inject` (8 CAs). (depende de T019) ✅
-- [ ] T023 [P] [US1] Coleção Bruno `api-collections/users/list/` — requests `.bru` para `GET /api/v1/users` (paginação 5/10/25, `search`, `status`) com asserções de status/shape/meta (ADR-0034). (depende de T022)
+- [x] T023 [P] [US1] Coleção Bruno `api-collections/users/list/` — requests `.bru` para `GET /api/v1/users` (paginação 5/10/25, `search`, `status`) com asserções de status/shape/meta (ADR-0034). (depende de T022)
 
 **Checkpoint**: US1 funcional e testável de forma independente (MVP).
 
@@ -107,7 +109,7 @@
 
 - [x] T025 [US2] Use case em `src/modules/auth/application/use-cases/get-user.ts` (compõe perfil + permissão efetiva `contract:mass-approve` read-only). (depende de Phase 2)
 - [x] T026 [US2] Rota `GET /api/v1/users/:id` em `src/modules/auth/adapters/http/` (404 sem vazar). (depende de T025)
-- [ ] T027 [P] [US2] Requests Bruno `api-collections/users/detail/` — `GET /api/v1/users/:id` (200 com todos os campos; 404 sem vazar). (depende de T026)
+- [x] T027 [P] [US2] Requests Bruno `api-collections/users/detail/` — `GET /api/v1/users/:id` (200 com todos os campos; 404 sem vazar). (depende de T026)
 
 **Checkpoint**: US1 + US2 funcionais.
 
@@ -152,7 +154,7 @@
 
 - [x] T034 [US4] Use case `update-user-profile` em `src/modules/auth/application/use-cases/update-user-profile.ts` (+ `User.updateProfile` ganha `email?`). (depende de Phase 2) ✅
 - [x] T035 [US4] Rota `PUT /api/v1/users/:id` (`user:update`, 200/404/409/422); testada via `fastify.inject` (6 CAs). (depende de T034) ✅ AUTH-HTTP-UPDATE-USER
-- [ ] T036 [P] [US4] Requests Bruno `api-collections/users/update/` — `PUT /api/v1/users/:id` (200 atômico; 409 conflito; 422 validação). (depende de T035)
+- [x] T036 [P] [US4] Requests Bruno `api-collections/users/update/` — `PUT /api/v1/users/:id` (200 atômico; 409 conflito; 422 validação). (depende de T035)
 
 **Checkpoint**: US1–US4 funcionais.
 
@@ -174,7 +176,7 @@
 
 - [x] T038 [US5] Use cases `activate-user` / `deactivate-user` em `src/modules/auth/application/use-cases/activate-deactivate-user.ts` (idempotentes; `cannot-deactivate-self`). (depende de Phase 2) ✅
 - [x] T039 [US5] Rotas `PATCH /api/v1/users/:id/activate` e `.../deactivate` (idempotentes; `actorId` do JWT); testadas via `fastify.inject` (7 CAs). (depende de T038) ✅ AUTH-HTTP-STATUS
-- [ ] T040 [P] [US5] Requests Bruno `api-collections/users/status/` — `PATCH /api/v1/users/:id/activate` e `.../deactivate` (idempotência; 422 auto-desativação). (depende de T039)
+- [x] T040 [P] [US5] Requests Bruno `api-collections/users/status/` — `PATCH /api/v1/users/:id/activate` e `.../deactivate` (idempotência; 422 auto-desativação). (depende de T039)
 
 **Checkpoint**: US1–US5 funcionais.
 
@@ -212,7 +214,7 @@
 
 ### Tests RED
 
-- [ ] T045 [P] [US7] Suíte RED em `tests/modules/auth/adapters/http/me.test.ts` (self edita; terceiros → 403; password-reset reusa fluxo).
+- [x] T045 [P] [US7] Suíte RED em `tests/modules/auth/adapters/http/me.test.ts` (self edita; terceiros → 403; password-reset reusa fluxo).
 
 ### Implementação
 
@@ -225,11 +227,11 @@
 
 ## Phase 10: Polish & Cross-Cutting Concerns
 
-- [ ] T048 [P] Autorização fail-closed em todas as rotas administrativas (permissions `user:*`); alinhar nomes com `006-gestao-acessos`.
+- [x] T048 [P] Autorização fail-closed em todas as rotas administrativas (permissions `user:*`); alinhar nomes com `006-gestao-acessos`.
 - [x] T049 (coleção Bruno auth completa, 45 req/59 testes; `pnpm run test:e2e:bruno:auth`) E2E via Bruno run (`bru run api-collections/users --env local`) contra a borda HTTP real (listar→criar→ativar), reproduzível em CI/PR (ADR-0034); + smoke `fastify.inject` em `tests/modules/auth/adapters/http/`.
 - [x] T050 Integração MySQL (`MYSQL_PORT=3307 pnpm run test:integration:auth`) — 38/38 verde contra MySQL 8.4: migrations 0004/0005 aplicadas, mappers (roundtrip) e `user-query.drizzle` (LIKE CI, filtro status, OFFSET, COUNT) validados. **Foto/MinIO real** (storage S3) permanece pendente (opt-in).
 - [x] T051 (quickstart.md reescrito e alinhado) Rodar `quickstart.md` ponta a ponta e ajustar divergências.
-- [ ] T052 Gate W3 final por ticket: `pnpm run typecheck && pnpm run format:check && pnpm run lint && pnpm test`.
+- [x] T052 Gate W3 final por ticket: `pnpm run typecheck && pnpm run format:check && pnpm run lint && pnpm test`.
 
 ---
 

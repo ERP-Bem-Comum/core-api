@@ -4,7 +4,7 @@
 
 **Created**: 2026-06-07
 
-**Status**: Draft
+**Status**: Implementada — entregue end-to-end em `dev` (2026-06-08)
 
 **Input**: User description: "Gestão administrativa de usuários no core-api (backend que serve a tela /usuarios do ERP). CRUD de usuários, ativar/desativar, foto de perfil, aprovador em massa, Minha Conta e redefinir senha. Insumo: `handbook/research/feture_propose/gestao_de_usuarios`. Spec irmã: `006-gestao-acessos` (papéis/permissões)."
 
