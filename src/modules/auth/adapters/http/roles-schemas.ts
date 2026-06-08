@@ -56,6 +56,15 @@ export const userRoleParamSchema = z.object({
   roleId: z.string().min(1),
 });
 
+/** Body do POST /api/v1/roles (US5): nome + conjunto de permissions (resource:action). */
+export const createRoleBodySchema = z.object({
+  name: z.string().min(1),
+  permissions: z.array(z.string()),
+});
+
+/** Response 201 do POST /api/v1/roles (US5): id do papel criado. */
+export const createRoleResponseSchema = z.object({ id: z.string() });
+
 /** Response 200 do POST /api/v1/users/:id/roles (US4) — idempotente. */
 export const assignRoleResponseSchema = z.object({ assigned: z.boolean() });
 

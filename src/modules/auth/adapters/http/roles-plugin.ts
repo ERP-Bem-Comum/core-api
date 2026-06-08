@@ -24,11 +24,14 @@ import * as RoleId from '../../domain/authorization/role-id.ts';
 import type { getUserPermissions } from '../../application/use-cases/get-user-permissions.ts';
 import type { listPermissionCatalog } from '../../application/use-cases/list-permission-catalog.ts';
 import type { listRoles } from '../../application/use-cases/list-roles.ts';
+import type { createRole } from '../../application/use-cases/create-role.ts';
 import type { assignRole } from '../../application/use-cases/assign-role.ts';
 import type { revokeRole } from '../../application/use-cases/revoke-role.ts';
 import {
   assignRoleBodySchema,
   assignRoleResponseSchema,
+  createRoleBodySchema,
+  createRoleResponseSchema,
   permissionCatalogResponseSchema,
   revokeRoleResponseSchema,
   roleListResponseSchema,
@@ -44,6 +47,8 @@ export type RolesHttpDeps = Readonly<{
   listPermissionCatalog: ReturnType<typeof listPermissionCatalog>;
   /** Listagem de papeis com suas permissoes (spec 006 US3) — consumido por GET /api/v1/roles. */
   listRoles: ReturnType<typeof listRoles>;
+  /** Criacao de papel (spec 006 US5) — consumido por POST /api/v1/roles. */
+  createRole: ReturnType<typeof createRole>;
   /** Atribuicao de papel a usuario (spec 006 US4) — consumido por POST /users/:id/roles. */
   assignRole: ReturnType<typeof assignRole>;
   /** Revogacao de papel de usuario (spec 006 US4) — consumido por DELETE /users/:id/roles/:roleId. */
@@ -56,6 +61,7 @@ export type RolesHttpHooks = Readonly<{
 }>;
 
 const ROLE_READ_PERMISSION = 'role:read';
+const ROLE_CREATE_PERMISSION = 'role:create';
 
 // Limite dedicado das rotas de ESCRITA (POST/DELETE), separado do teto global (200/min). O token
 // ja e exigido, mas evita abuso autenticado (ex.: atribuicoes em massa). Espelha users-plugin.ts.
@@ -128,6 +134,32 @@ const rolesRoutes =
         return sendResult(reply, shaped, {
           ok: 200,
           errors: { 'role-repo-unavailable': 503 },
+        });
+      },
+    });
+
+    // US5: POST /roles — cria um papel novo (nome unico + permissions ⊆ catalogo). Permission
+    // role:create (hook authorize, fail-closed). O use case valida nome/permissions/unicidade;
+    // a borda mapeia o Result -> 201/409/422/503. Rate-limit de escrita (espelha US4).
+    scope.route({
+      method: 'POST',
+      url: '/roles',
+      preHandler: [hooks.requireAuth, hooks.authorize(ROLE_CREATE_PERMISSION)],
+      config: { rateLimit: WRITE_RATE_LIMIT },
+      schema: {
+        body: createRoleBodySchema,
+        response: { 201: createRoleResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.createRole(req.body);
+        return sendResult(reply, result, {
+          ok: 201,
+          errors: {
+            'role-name-duplicate': 409,
+            'role-name-invalid': 422,
+            'role-permission-not-in-catalog': 422,
+            'role-repo-unavailable': 503,
+          },
         });
       },
     });

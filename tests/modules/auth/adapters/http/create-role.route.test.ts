@@ -1,8 +1,9 @@
 /**
- * W0 (RED) - AUTH-GET-USER-PERMISSIONS: GET /api/v1/users/:id/permissions (US1 da spec 006).
+ * W0 (RED) - AUTH-CREATE-ROLE: POST /api/v1/roles (US5 spec 006).
  *
- * DEVE FALHAR em W0 - a rota /api/v1/users/:id/permissions ainda nao existe.
- * Driver memory; fastify.inject. Permission role:read (fail-closed). ASCII puro.
+ * DEVE FALHAR em W0 - a rota de criacao ainda nao existe. Driver memory; fastify.inject.
+ * Permission de hook: role:create. Cobre 201 { id }, 409 (nome duplicado), 422 (permissao fora
+ * do catalogo / nome vazio), 403 (sem role:create) e 401 (sem token). ASCII puro.
  */
 
 import { describe, it, before, after } from 'node:test';
@@ -17,8 +18,8 @@ import {
 } from '#src/modules/auth/public-api/http.ts';
 
 const STRONG = 'Str0ng-Passphrase-2026!';
-const ADMIN = 'admin.perms@example.com';
-const NOPERM = 'noperm.perms@example.com';
+const ADMIN = 'admin.create-role@example.com';
+const NOPERM = 'noperm.create-role@example.com';
 
 type AppHandle = Awaited<ReturnType<typeof buildApp>>;
 
@@ -27,8 +28,8 @@ const makeApp = async (): Promise<{ app: AppHandle; teardown: () => Promise<void
     driver: 'memory',
     seed: {
       users: [
-        { email: ADMIN, password: STRONG, permissions: ['role:read'] },
-        { email: NOPERM, password: STRONG, permissions: [] },
+        { email: ADMIN, password: STRONG, permissions: ['role:create', 'role:read'] },
+        { email: NOPERM, password: STRONG, permissions: ['role:read'] },
       ],
     },
   });
@@ -69,23 +70,14 @@ const login = async (app: AppHandle, email: string): Promise<string> => {
   return (res.json() as { accessToken: string }).accessToken;
 };
 
-describe('AUTH-GET-USER-PERMISSIONS — GET /api/v1/users/:id/permissions', () => {
+describe('AUTH-CREATE-ROLE — POST /api/v1/roles', () => {
   let app: AppHandle;
   let teardown: () => Promise<void>;
   let adminToken: string;
-  let targetId: string;
 
   before(async () => {
     ({ app, teardown } = await makeApp());
     adminToken = await login(app, ADMIN);
-    // O proprio admin (seed role:read) serve de alvo com permissoes conhecidas.
-    const me = await app.inject({
-      method: 'GET',
-      url: '/api/v2/auth/me',
-      headers: { authorization: `Bearer ${adminToken}` },
-    });
-    assert.equal(me.statusCode, 200);
-    targetId = (me.json() as { userId: string }).userId;
   });
 
   after(async () => {
@@ -94,40 +86,72 @@ describe('AUTH-GET-USER-PERMISSIONS — GET /api/v1/users/:id/permissions', () =
 
   it('401 sem token', async () => {
     const res = await app.inject({
-      method: 'GET',
-      url: `/api/v1/users/${targetId}/permissions`,
+      method: 'POST',
+      url: '/api/v1/roles',
+      payload: { name: 'auditor', permissions: ['role:read'] },
     });
     assert.equal(res.statusCode, 401);
   });
 
-  it('403 sem permissao role:read', async () => {
+  it('403 sem role:create', async () => {
     const token = await login(app, NOPERM);
     const res = await app.inject({
-      method: 'GET',
-      url: `/api/v1/users/${targetId}/permissions`,
+      method: 'POST',
+      url: '/api/v1/roles',
       headers: { authorization: `Bearer ${token}` },
+      payload: { name: 'auditor', permissions: ['role:read'] },
     });
     assert.equal(res.statusCode, 403);
   });
 
-  it('200 com { permissions: [...] }', async () => {
+  it('201 cria papel com { id }', async () => {
     const res = await app.inject({
-      method: 'GET',
-      url: `/api/v1/users/${targetId}/permissions`,
+      method: 'POST',
+      url: '/api/v1/roles',
       headers: { authorization: `Bearer ${adminToken}` },
+      payload: { name: 'gerente-de-acessos', permissions: ['role:read', 'user:list'] },
     });
-    assert.equal(res.statusCode, 200);
-    const body = res.json() as { permissions: string[] };
-    assert.ok(Array.isArray(body.permissions));
-    assert.ok(body.permissions.includes('role:read'));
+    assert.equal(res.statusCode, 201);
+    const body = res.json() as { id: string };
+    assert.equal(typeof body.id, 'string');
+    assert.ok(body.id.length > 0);
   });
 
-  it('404 usuario inexistente (valido)', async () => {
-    const res = await app.inject({
-      method: 'GET',
-      url: '/api/v1/users/00000000-0000-4000-8000-000000000000/permissions',
+  it('409 nome duplicado', async () => {
+    const first = await app.inject({
+      method: 'POST',
+      url: '/api/v1/roles',
       headers: { authorization: `Bearer ${adminToken}` },
+      payload: { name: 'supervisor', permissions: ['role:read'] },
     });
-    assert.equal(res.statusCode, 404);
+    assert.equal(first.statusCode, 201);
+
+    const second = await app.inject({
+      method: 'POST',
+      url: '/api/v1/roles',
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { name: 'supervisor', permissions: ['user:list'] },
+    });
+    assert.equal(second.statusCode, 409);
+  });
+
+  it('422 permissao fora do catalogo', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/roles',
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { name: 'estranho', permissions: ['nonexistent:permission'] },
+    });
+    assert.equal(res.statusCode, 422);
+  });
+
+  it('422 nome vazio', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/roles',
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { name: '   ', permissions: ['role:read'] },
+    });
+    assert.equal(res.statusCode, 422);
   });
 });
