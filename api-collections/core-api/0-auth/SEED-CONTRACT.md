@@ -9,20 +9,32 @@
 
 ## Usuários e permissões requeridos
 
-| email                       | var do token             | permissões                                                                                                                  | módulo(s)          |
-| --------------------------- | ------------------------ | --------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| `admin.e2e@bemcomum.dev`    | `adminToken`             | `user:read`, `user:create`, `user:update`, `user:deactivate`, `role:read`, `user:assign-role`, `role:create`, `role:update` | auth               |
-| `bare.e2e@bemcomum.dev`     | `bareToken`              | nenhuma                                                                                                                     | auth               |
-| `e2e-reader@example.com`    | `readerToken`            | `contract:read`                                                                                                             | contracts          |
-| `e2e-contracts@example.com` | `contractsOperatorToken` | `contract:read`, `contract:write`                                                                                           | contracts          |
-| `e2e-partners@example.com`  | `partnersOperatorToken`  | `partner:read`, `partner:write`                                                                                             | partners           |
-| `e2e-bare@example.com`      | `bareUserToken`          | nenhuma (criado via `POST /api/v2/auth/register` no request `01-register-bare-user.bru`)                                    | contracts/partners |
+| email                       | var do token             | permissões                                                                                                                                                                      | módulo(s)          |
+| --------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `admin.e2e@bemcomum.dev`    | `adminToken`             | `user:read`, `user:create`, `user:update`, `user:deactivate`, `role:read`, `user:assign-role`, `role:create`, `role:update`                                                     | auth               |
+| `bare.e2e@bemcomum.dev`     | `bareToken`              | nenhuma                                                                                                                                                                         | auth               |
+| `e2e-reader@example.com`    | `readerToken`            | `contract:read`                                                                                                                                                                 | contracts          |
+| `e2e-contracts@example.com` | `contractsOperatorToken` | `contract:read`, `contract:write`                                                                                                                                               | contracts          |
+| `e2e-partners@example.com`  | `partnersOperatorToken`  | `supplier:read`, `supplier:write`, `financier:read`, `financier:write`, `collaborator:read`, `collaborator:write`, `act:read`, `act:write`, `geography:read`, `geography:write` | partners           |
+| `e2e-bare@example.com`      | `bareUserToken`          | nenhuma (criado via `POST /api/v2/auth/register` no request `01-register-bare-user.bru`)                                                                                        | contracts/partners |
 
 > **Nota sobre `bareUserEmail` (`e2e-bare@example.com`):** este usuário é registrado
 > pelo próprio request `01-register-bare-user.bru` via `POST /api/v2/auth/register`.
 > O endpoint aceita `201` na primeira execução e `409` nas seguintes (idempotente).
 > O seed NÃO precisa criá-lo — mas deve garantir que o endpoint de registro esteja
 > funcional e que o banco não bloqueie o e-mail.
+
+> **⚠️ Permissões de partners NÃO estão no catálogo (bug de produção — fora do escopo da 007).**
+> As 10 permissões granulares de partners (`supplier:*`, `financier:*`, `collaborator:*`,
+> `act:*`, `geography:*`) são exigidas pelas rotas (`authorize(...)`) e definidas em
+> `src/modules/partners/public-api/permissions.ts`, mas **não constam** em
+> `src/modules/auth/domain/authorization/permission-catalog.ts` (que só tem `contract:*`,
+> `etl:*`, `role:*`, `user:*`). O seed **funciona** porque `Role.create` (usado por
+> `applyRbacSeed`) não valida contra o catálogo e `authorize()` só checa a lista de permissões
+> do usuário. Consequências reais: (a) `GET /api/v1/permissions` retorna catálogo incompleto
+> (18 de 28); (b) `POST /api/v1/roles` com permissão de partners → 422 (`role-permission-not-in-catalog`),
+> ou seja, um admin **não consegue criar role de partners pela API**. Registrado para um ticket
+> próprio (`AUTH-PERMISSION-CATALOG-PARTNERS`) — não bloqueia a 007.
 
 ---
 
