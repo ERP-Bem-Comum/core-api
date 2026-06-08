@@ -25,9 +25,9 @@ tests {
     expect(res.getBody().items.length).to.equal(0);
   });
 
-  test("PAG-5d — meta.totalItems reflete total real (>= 0)", function () {
+  test("PAG-5d — meta.total reflete total real (>= 0)", function () {
     expect(res.getBody()).to.have.property("meta");
-    expect(res.getBody().meta).to.have.property("totalItems");
-    expect(res.getBody().meta.totalItems).to.be.at.least(0);
+    expect(res.getBody().meta).to.have.property("total");
+    expect(res.getBody().meta.total).to.be.at.least(0);
   });
 }

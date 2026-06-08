@@ -16,11 +16,13 @@ auth:bearer {
 
 body:json {
   {
+    "mode": "Pending",
+    "sequentialNumber": "001/2026",
     "title": "Contrato E2E Bruno",
     "objective": "Objetivo do contrato de smoke test",
-    "originalValue": { "cents": 100000 },
-    "startDate": "2026-01-01",
-    "endDate": "2026-12-31",
+    "originalValueCents": 100000,
+    "periodStart": "2026-01-01",
+    "periodEnd": "2026-12-31",
     "contractor": {
       "type": "supplier",
       "id": "{{contractorSupplierId}}"
@@ -29,10 +31,12 @@ body:json {
 }
 
 script:post-response {
+  // O server retorna o id no BODY (nao via header Location). Captura do body; fallback no Location.
   const location = res.headers["location"];
-  if (location) {
-    const parts = location.split("/");
-    bru.setVar("contractCreatedId", parts[parts.length - 1]);
+  const idFromBody = res.getBody() && res.getBody().id;
+  const id = idFromBody || (location ? location.split("/").pop() : undefined);
+  if (id) {
+    bru.setVar("contractCreatedId", id);
   }
 }
 
@@ -41,8 +45,7 @@ tests {
     expect(res.getStatus()).to.equal(201);
   });
 
-  test("US1-1 — header Location presente apos criacao", function () {
-    expect(res.getHeader("location")).to.be.a("string");
-    expect(res.getHeader("location")).to.contain("/api/v2/contracts/");
+  test("US1-1 — resposta tem id do contrato criado", function () {
+    expect(res.getBody().id).to.be.a("string");
   });
 }

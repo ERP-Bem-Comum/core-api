@@ -5,16 +5,12 @@ meta {
 }
 
 get {
-  url: {{baseUrl}}/api/v1/partners
+  url: {{baseUrl}}/api/v1/partners?type=invalido
   auth: bearer
 }
 
 auth:bearer {
   token: {{partnersOperatorToken}}
-}
-
-params:query {
-  type: invalido
 }
 
 tests {

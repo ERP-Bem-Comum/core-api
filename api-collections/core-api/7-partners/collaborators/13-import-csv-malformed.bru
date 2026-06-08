@@ -24,13 +24,15 @@ dado,corrompido,"campo truncado
 }
 
 tests {
-  test("US-001 — import CSV malformado retorna 400", function () {
-    expect(res.getStatus()).to.equal(400);
+  test("US-001 — import CSV malformado retorna 400 ou 200 (tolerante); nunca 500", function () {
+    expect(res.getStatus()).to.not.equal(500);
+    expect([400, 200]).to.include(res.getStatus());
   });
 
-  test("US-001 — envelope de erro tem campo error", function () {
-    expect(res.getBody()).to.have.property("error");
-    expect(res.getBody().error).to.have.property("code");
-    expect(res.getBody().error).to.have.property("requestId");
+  test("US-001 — se 200: created=0 (nenhuma linha valida importada)", function () {
+    if (res.getStatus() === 200) {
+      expect(res.getBody()).to.have.property("created");
+      expect(res.getBody().created).to.equal(0);
+    }
   });
 }

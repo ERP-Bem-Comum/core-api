@@ -15,9 +15,9 @@ headers {
 
 tests {
   // PAG-6 variacao page=-1 de failures-pagination-boundary.md
-  test("PAG-6b — page=-1 retorna 422 ou 200 (clamp); nunca 500", function () {
+  test("PAG-6b — page=-1 retorna 400/422/200 (validacao Zod ou clamp); nunca 500", function () {
     expect(res.getStatus()).to.not.equal(500);
-    expect([422, 200]).to.include(res.getStatus());
+    expect([400, 422, 200]).to.include(res.getStatus());
   });
   test("PAG-6b — se 200: meta coerente (currentPage e totalItems presentes)", function () {
     if (res.getStatus() === 200) {

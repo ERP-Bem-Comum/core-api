@@ -28,7 +28,7 @@ tests {
     expect(body.contractor).to.have.property("type");
     expect(body.contractor).to.have.property("id");
     expect(body.contractor.type).to.equal("supplier");
-    expect(body.contractor.id).to.equal(bru.getVar("contractorSupplierId"));
+    expect(body.contractor.id).to.equal(bru.getEnvVar("contractorSupplierId"));
   });
 
   test("US1-3 — bloco contractor tem campo snapshot (pode ser null em ambiente sem parceiro real)", function () {

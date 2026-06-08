@@ -5,17 +5,12 @@ meta {
 }
 
 get {
-  url: {{baseUrl}}/api/v1/partners
+  url: {{baseUrl}}/api/v1/partners?page=1&limit=5
   auth: bearer
 }
 
 auth:bearer {
   token: {{partnersOperatorToken}}
-}
-
-params:query {
-  page: 1
-  limit: 5
 }
 
 tests {

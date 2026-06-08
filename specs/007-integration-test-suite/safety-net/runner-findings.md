@@ -36,10 +36,12 @@ inconsistência de naming como achado (possível ticket de harmonização).
 
 ## E. Partners aggregate — `type=invalido` → 200 vazio (2 falhas) ⚠️ SUSPEITO DE BUG
 
-**Causa:** `GET /partners?type=invalido` retorna **200** com `{ items: [], meta: {...} }`; o teste espera
-**400**. Um `type` inválido devolver 200-lista-vazia (em vez de 400) pode ser **bug real** (deveria validar
-o enum de type). **Ação:** confirmar com o time se `type` inválido deve dar 400; se sim, é bug do server
-(ticket); se "ignora e lista vazio" é o contrato, ajustar o teste.
+**Causa (RESOLVIDA — NÃO é bug):** o `.bru` `06-type-invalido-400` faz `GET /api/v1/partners` **sem o
+`?type=invalido` na URL** (o subagente esqueceu o query param). O schema é
+`type: z.enum(['supplier','financier','collaborator','act']).optional()` — **correto**: sem `type`, retorna
+200 (agregado); **com** `?type=invalido`, o Zod rejeita → 400. O segundo caso (`meta.itemsPerPage`) também é
+`.bru` (param de limit ausente/errado). **Fix:** adicionar `?type=invalido` à URL; alinhar o param de limit.
+Alinhamento de teste — **server está correto**.
 
 ## F. deactivate-self — `user-id-invalid` (1 falha)
 
@@ -66,3 +68,16 @@ fazia com `assets/sample.jpg`). Alinhamento de teste.
 | G foto            | 1      | teste    | body binário                    |
 
 **24/26 são alinhamento de teste** (`.bru` desatualizado); **2 (E) são suspeitos de bug real** do aggregate.
+
+## Resolução (W1 INT-RUNNER-ALL) — PRINCIPAL VERDE ✅
+Todas as 26 alinhadas (server estava correto em todas). Fixes: contracts `mode:'Pending'` + campos reais
+(`originalValueCents`/`periodStart`/`periodEnd`/`sequentialNumber` formato `NNN/AAAA`) + captura do id no
+**body** (não Location); collaborator CPF válido + PUT com o MESMO cpf (campo sensível, não-editável);
+PAG aceita 400; `meta.total`; `?type=invalido` na URL; `adminUserId` via getEnvVar; asserção de contractor
+com `bru.getEnvVar`. **Resultado: 172/172 requests, 295/295 testes — exit 0.**
+
+### Achados laterais (candidatos a ticket — NÃO bloqueiam)
+- **POST /contracts não retorna header `Location`** (201 com `{id}` só no body). Boa prática REST sugere
+  `Location: /api/v2/contracts/:id`. Melhoria de produto (ticket próprio).
+- **Naming de paginação divergente**: contracts `meta.total`; users `meta.totalItems`; partners
+  `meta.itemCount/totalItems`. Harmonizar (ticket próprio).

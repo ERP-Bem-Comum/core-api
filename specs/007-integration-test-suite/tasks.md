@@ -85,9 +85,9 @@
 
 **Especialistas obrigatórios**: `bruno-api-client-expert` + `docker-compose-expert`.
 
-- [ ] T015 [US4] Investigar seeds/drivers de **contracts** e **partners** no boot (D5): mapear como recebem seed/driver hoje (`scripts/e2e-*.sh`) e definir o conjunto de env de boot que semeia os 3 módulos idempotentemente. Registrar achados; se exigir ajuste mínimo de composition (fora do domínio), abrir sub-task. (depende de T014)
-- [ ] T016 [US4] Implementar `scripts/e2e-bruno-all.sh` (compose up mysql+minio --wait → secrets efêmeros → boot server todos-os-módulos+seeds → wait /health → `bru run api-collections/core-api -r --env local` → `trap EXIT` down -v + limpa secrets → propaga exit code) e o script `test:integration:all` no `package.json`. (depende de T015)
-- [ ] T017 [US4] Rodar `pnpm run test:integration:all` até verde (toda a coleção) com teardown comprovado (sem containers/volumes órfãos). Marcar linhas do `traceability` → `verde`. (depende de T016)
+- [x] T015 [US4] Investigar seeds/drivers de **contracts** e **partners** no boot (D5): mapear como recebem seed/driver hoje (`scripts/e2e-*.sh`) e definir o conjunto de env de boot que semeia os 3 módulos idempotentemente. Registrar achados; se exigir ajuste mínimo de composition (fora do domínio), abrir sub-task. (depende de T014)
+- [x] T016 [US4] Implementar `scripts/e2e-bruno-all.sh` (compose up mysql+minio --wait → secrets efêmeros → boot server todos-os-módulos+seeds → wait /health → `bru run api-collections/core-api -r --env local` → `trap EXIT` down -v + limpa secrets → propaga exit code) e o script `test:integration:all` no `package.json`. (depende de T015)
+- [x] T017 [US4] Rodar `pnpm run test:integration:all` até verde (toda a coleção) com teardown comprovado (sem containers/volumes órfãos). Marcar linhas do `traceability` → `verde`. (depende de T016)
 
 **Checkpoint**: gate único verde cobrindo a borda inteira.
 
