@@ -155,14 +155,14 @@
 
 ### Tests RED
 
-- [ ] T033 [P] [US5] Suíte RED em `tests/modules/auth/application/use-cases/create-role.test.ts` (nome único; permissões ⊆ catálogo).
-- [ ] T034 [P] [US5] Suíte RED de borda em `tests/modules/auth/adapters/http/create-role.route.test.ts` via `fastify.inject` (201 `{ id }`; 409 nome duplicado; 422 permissão fora do catálogo; 403 sem `role:create`).
+- [x] T033 [P] [US5] Suíte RED em `tests/modules/auth/application/use-cases/create-role.test.ts` (nome único; permissões ⊆ catálogo).
+- [x] T034 [P] [US5] Suíte RED de borda em `tests/modules/auth/adapters/http/create-role.route.test.ts` via `fastify.inject` (201 `{ id }`; 409 nome duplicado; 422 permissão fora do catálogo; 403 sem `role:create`).
 
 ### Implementação
 
-- [ ] T035 [US5] Use case `create-role` em `src/modules/auth/application/use-cases/create-role.ts`. (depende de Phase 2)
-- [ ] T036 [US5] Rota `POST /api/v1/roles` (`role:create`; 201/409/422) em `roles-plugin.ts` + wiring. (depende de T035)
-- [ ] T037 [P] [US5] Coleção Bruno `api-collections/auth/roles/create/*.bru` (201; 409; 422; 403). (depende de T036)
+- [x] T035 [US5] Use case `create-role` em `src/modules/auth/application/use-cases/create-role.ts`. (depende de Phase 2)
+- [x] T036 [US5] Rota `POST /api/v1/roles` (`role:create`; 201/409/422) em `roles-plugin.ts` + wiring. (depende de T035)
+- [x] T037 [P] [US5] Coleção Bruno `api-collections/auth/roles/create/*.bru` (201; 409; 422; 403). (depende de T036)
 
 **Checkpoint**: US1–US5.
 
@@ -178,14 +178,14 @@
 
 ### Tests RED
 
-- [ ] T038 [P] [US6] Suíte RED em `tests/modules/auth/application/use-cases/update-role.test.ts` (propagação por referência; nome duplicado; permissão fora do catálogo).
-- [ ] T039 [P] [US6] Suíte RED de borda em `tests/modules/auth/adapters/http/update-role.route.test.ts` via `fastify.inject` (200 papel atualizado; 409 nome duplicado; 422 permissão fora do catálogo; 403 sem `role:update`).
+- [x] T038 [P] [US6] Suíte RED em `tests/modules/auth/application/use-cases/update-role.test.ts` (propagação por referência; nome duplicado; permissão fora do catálogo).
+- [x] T039 [P] [US6] Suíte RED de borda em `tests/modules/auth/adapters/http/update-role.route.test.ts` via `fastify.inject` (200 papel atualizado; 409 nome duplicado; 422 permissão fora do catálogo; 403 sem `role:update`).
 
 ### Implementação
 
-- [ ] T040 [US6] Use case `update-role` (rename + setPermissions) em `src/modules/auth/application/use-cases/update-role.ts`. (depende de Phase 2)
-- [ ] T041 [US6] Rota `PUT /api/v1/roles/:id` (`role:update`; 200/409/422) em `roles-plugin.ts` + wiring. (depende de T040)
-- [ ] T042 [P] [US6] Coleção Bruno `api-collections/auth/roles/update/*.bru` (200; propagação às permissões efetivas; 409; 422; 403). (depende de T041)
+- [x] T040 [US6] Use case `update-role` (rename + setPermissions) em `src/modules/auth/application/use-cases/update-role.ts`. (depende de Phase 2)
+- [x] T041 [US6] Rota `PUT /api/v1/roles/:id` (`role:update`; 200/409/422) em `roles-plugin.ts` + wiring. (depende de T040)
+- [x] T042 [P] [US6] Coleção Bruno `api-collections/auth/roles/update/*.bru` (200; propagação às permissões efetivas; 409; 422; 403). (depende de T041)
 
 **Checkpoint**: US1–US6.
 
@@ -201,13 +201,13 @@
 
 ### Tests RED
 
-- [ ] T043 [P] [US7] Suíte RED em `tests/modules/auth/application/use-cases/archive-role.test.ts` (sem uso → arquiva; em uso → `role-in-use`).
-- [ ] T044 [P] [US7] Suíte RED de borda em `tests/modules/auth/adapters/http/archive-role.route.test.ts` via `fastify.inject` (200 desativado; 409 papel ainda atribuído; 403 sem `role:update`).
+- [x] T043 [P] [US7] Suíte RED em `tests/modules/auth/application/use-cases/archive-role.test.ts` (sem uso → arquiva; em uso → `role-in-use`).
+- [x] T044 [P] [US7] Suíte RED de borda em `tests/modules/auth/adapters/http/archive-role.route.test.ts` via `fastify.inject` (200 desativado; 409 papel ainda atribuído; 403 sem `role:update`).
 
 ### Implementação
 
-- [ ] T045 [US7] Use case `archive-role` em `src/modules/auth/application/use-cases/archive-role.ts` (checa junção `auth_user_role`). (depende de Phase 2)
-- [ ] T046 [US7] Rota `PATCH /api/v1/roles/:id/deactivate` (`role:update`; 200/409 se em uso) em `roles-plugin.ts` + wiring. (depende de T045)
+- [x] T045 [US7] Use case `archive-role` em `src/modules/auth/application/use-cases/archive-role.ts` (checa junção `auth_user_role`). (depende de Phase 2)
+- [x] T046 [US7] Rota `PATCH /api/v1/roles/:id/deactivate` (`role:update`; 200/409 se em uso) em `roles-plugin.ts` + wiring. (depende de T045)
 - [ ] T047 [P] [US7] Coleção Bruno `api-collections/auth/roles/deactivate/*.bru` (200 sem uso; 409 em uso; 403). (depende de T046)
 
 **Checkpoint**: todas as stories funcionais.

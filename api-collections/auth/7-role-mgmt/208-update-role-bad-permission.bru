@@ -1,0 +1,29 @@
+meta {
+  name: US6 editar papel permissao fora do catalogo (422)
+  type: http
+  seq: 208
+}
+
+put {
+  url: {{baseUrl}}/api/v1/roles/{{newRoleId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "Gerente E2E Renomeado",
+    "permissions": ["nao:existe"]
+  }
+}
+
+tests {
+  // nome igual ao proprio papel e permitido; o 422 vem das permissions fora do catalogo.
+  test("US6 — 422 permissao fora do catalogo", function () {
+    expect(res.getStatus()).to.equal(422);
+  });
+}

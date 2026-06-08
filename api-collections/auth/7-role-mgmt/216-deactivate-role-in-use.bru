@@ -1,0 +1,23 @@
+meta {
+  name: US7 desativar papel em uso (409 role-in-use)
+  type: http
+  seq: 216
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/roles/{{inUseRoleId}}/deactivate
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  // FR-012: papel ainda atribuido a um usuario (junção auth_user_role) -> 409. Caso so validado
+  // pelo MySQL real (isInUse). Revogar antes de arquivar (proximo request faz a higiene).
+  test("US7 — 409 papel em uso", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+}

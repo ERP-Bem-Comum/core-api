@@ -1,0 +1,35 @@
+meta {
+  name: US7 criar papel para uso (captura inUseRoleId)
+  type: http
+  seq: 214
+}
+
+post {
+  url: {{baseUrl}}/api/v1/roles
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "Em Uso E2E",
+    "permissions": ["user:read"]
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setVar("inUseRoleId", res.getBody().id);
+  }
+}
+
+tests {
+  test("US7 — 201 papel em uso criado", function () {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.getBody().id).to.be.a("string");
+  });
+}

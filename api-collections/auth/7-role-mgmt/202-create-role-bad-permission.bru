@@ -1,0 +1,28 @@
+meta {
+  name: US5 criar papel permissao fora do catalogo (422)
+  type: http
+  seq: 202
+}
+
+post {
+  url: {{baseUrl}}/api/v1/roles
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "Bad Perms E2E",
+    "permissions": ["nao:existe"]
+  }
+}
+
+tests {
+  test("US5 — 422 permissao fora do catalogo", function () {
+    expect(res.getStatus()).to.equal(422);
+  });
+}
