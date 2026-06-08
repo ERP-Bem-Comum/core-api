@@ -31,3 +31,18 @@ export const permissionCatalogResponseSchema = z.object({
 });
 
 export type PermissionCatalogResponse = z.infer<typeof permissionCatalogResponseSchema>;
+
+/** Item da listagem de papeis (US3): `active` = (status === 'active'); permissions como strings. */
+export const roleListItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  active: z.boolean(),
+  permissions: z.array(z.string()),
+});
+
+/** Response 200 do GET /api/v1/roles (todos os papeis com suas permissoes). */
+export const roleListResponseSchema = z.object({
+  items: z.array(roleListItemSchema),
+});
+
+export type RoleListResponse = z.infer<typeof roleListResponseSchema>;

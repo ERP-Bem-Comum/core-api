@@ -1,9 +1,11 @@
 /**
- * W0 (RED) - AUTH-PERMISSIONS-CATALOG: GET /api/v1/permissions (US2 da spec 006).
+ * W0 (RED) - AUTH-LIST-ROLES: GET /api/v1/roles (US3 da spec 006).
  *
- * DEVE FALHAR em W0 - a rota /api/v1/permissions ainda nao existe.
- * Driver memory; fastify.inject. Permission role:read (fail-closed). Catalogo read-only:
- * sem rotas de escrita (FR-011). Espelha user-permissions.route.test.ts (US1). ASCII puro.
+ * DEVE FALHAR em W0 - a rota /api/v1/roles ainda nao existe.
+ * Driver memory; fastify.inject. Permission role:read (fail-closed). Espelha
+ * permissions-catalog.route.test.ts (US2). O seed RBAC cria um Role `seed:<email>` por
+ * usuario semeado com as permissions inline; o admin (role:read) gera um Role ativo
+ * consultavel pela rota. ASCII puro.
  */
 
 import { describe, it, before, after } from 'node:test';
@@ -16,11 +18,10 @@ import {
   makeRequireAuth,
   rolesHttpPlugin,
 } from '#src/modules/auth/public-api/http.ts';
-import * as PermissionCatalog from '#src/modules/auth/domain/authorization/permission-catalog.ts';
 
 const STRONG = 'Str0ng-Passphrase-2026!';
-const ADMIN = 'admin.catalog@example.com';
-const NOPERM = 'noperm.catalog@example.com';
+const ADMIN = 'admin.roles@example.com';
+const NOPERM = 'noperm.roles@example.com';
 
 type AppHandle = Awaited<ReturnType<typeof buildApp>>;
 
@@ -29,7 +30,7 @@ const makeApp = async (): Promise<{ app: AppHandle; teardown: () => Promise<void
     driver: 'memory',
     seed: {
       users: [
-        { email: ADMIN, password: STRONG, permissions: ['role:read'] },
+        { email: ADMIN, password: STRONG, permissions: ['role:read', 'user:list'] },
         { email: NOPERM, password: STRONG, permissions: [] },
       ],
     },
@@ -68,7 +69,14 @@ const login = async (app: AppHandle, email: string): Promise<string> => {
   return (res.json() as { accessToken: string }).accessToken;
 };
 
-describe('AUTH-PERMISSIONS-CATALOG — GET /api/v1/permissions', () => {
+interface RoleListItem {
+  id: string;
+  name: string;
+  active: boolean;
+  permissions: string[];
+}
+
+describe('AUTH-LIST-ROLES — GET /api/v1/roles', () => {
   let app: AppHandle;
   let teardown: () => Promise<void>;
   let adminToken: string;
@@ -83,7 +91,7 @@ describe('AUTH-PERMISSIONS-CATALOG — GET /api/v1/permissions', () => {
   });
 
   it('401 sem token', async () => {
-    const res = await app.inject({ method: 'GET', url: '/api/v1/permissions' });
+    const res = await app.inject({ method: 'GET', url: '/api/v1/roles' });
     assert.equal(res.statusCode, 401);
   });
 
@@ -91,40 +99,29 @@ describe('AUTH-PERMISSIONS-CATALOG — GET /api/v1/permissions', () => {
     const token = await login(app, NOPERM);
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/permissions',
+      url: '/api/v1/roles',
       headers: { authorization: `Bearer ${token}` },
     });
     assert.equal(res.statusCode, 403);
   });
 
-  it('200 com { items: [...] } catalogo completo', async () => {
+  it('200 com { items: [...] } incluindo um role ativo com permissoes', async () => {
     const res = await app.inject({
       method: 'GET',
-      url: '/api/v1/permissions',
+      url: '/api/v1/roles',
       headers: { authorization: `Bearer ${adminToken}` },
     });
     assert.equal(res.statusCode, 200);
-    const body = res.json() as {
-      items: { id: string; resource: string; action: string }[];
-    };
+    const body = res.json() as { items: RoleListItem[] };
     assert.ok(Array.isArray(body.items));
-    assert.equal(body.items.length, PermissionCatalog.all.length);
-    const ids = body.items.map((item) => item.id);
-    assert.equal(new Set(ids).size, ids.length);
-    assert.ok(ids.includes('role:read'));
-    assert.ok(ids.includes('user:list'));
-    for (const item of body.items) {
-      assert.equal(item.id, `${item.resource}:${item.action}`);
-    }
-  });
-
-  it('404 em POST /api/v1/permissions (catalogo read-only, sem escrita)', async () => {
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v1/permissions',
-      headers: { authorization: `Bearer ${adminToken}` },
-      payload: { id: 'role:read' },
-    });
-    assert.equal(res.statusCode, 404);
+    assert.ok(body.items.length >= 1);
+    // O Role semeado p/ o admin carrega role:read + user:list e nasce ativo.
+    const adminRole = body.items.find((r) => r.permissions.includes('role:read'));
+    assert.ok(adminRole, 'esperava um role com role:read');
+    assert.equal(adminRole.active, true);
+    assert.ok(adminRole.permissions.includes('user:list'));
+    assert.equal(typeof adminRole.id, 'string');
+    assert.ok(adminRole.id.length > 0);
+    assert.equal(typeof adminRole.name, 'string');
   });
 });

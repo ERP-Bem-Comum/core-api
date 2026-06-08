@@ -42,6 +42,7 @@ import { changePassword } from '../../application/use-cases/change-password.ts';
 import { listUserPermissions } from '../../application/use-cases/list-user-permissions.ts';
 import { getUserPermissions } from '../../application/use-cases/get-user-permissions.ts';
 import { listPermissionCatalog } from '../../application/use-cases/list-permission-catalog.ts';
+import { listRoles } from '../../application/use-cases/list-roles.ts';
 import { listUsers } from '../../application/use-cases/list-users.ts';
 import { getUser } from '../../application/use-cases/get-user.ts';
 import { createUserByAdmin } from '../../application/use-cases/create-user-by-admin.ts';
@@ -142,6 +143,8 @@ export type AuthHttpDeps = Readonly<{
   getUserPermissions: ReturnType<typeof getUserPermissions>;
   /** Catálogo fixo de permissões (spec 006 US2) — consumido por GET /api/v1/permissions. */
   listPermissionCatalog: ReturnType<typeof listPermissionCatalog>;
+  /** Listagem de papéis com suas permissões (spec 006 US3) — consumido por GET /api/v1/roles. */
+  listRoles: ReturnType<typeof listRoles>;
   revokeAllSessionsForUser: ReturnType<typeof revokeAllSessionsForUser>;
   /** Verificador de access JWT — consumido pelo preHandler `requireAuth`. */
   verifyAccessToken: TokenIssuer['verifyAccessToken'];
@@ -456,6 +459,7 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
     listUserPermissions: listUserPermissions({ userReader: stores.userReader }),
     getUserPermissions: getUserPermissions({ userReader: stores.userReader }),
     listPermissionCatalog: listPermissionCatalog(),
+    listRoles: listRoles({ roleRepository: stores.roleRepo }),
     changePassword: changePassword({
       userReader: stores.userReader,
       userRepo: stores.userRepo,

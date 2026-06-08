@@ -21,8 +21,10 @@ import { sendResult } from '#src/shared/http/reply.ts';
 
 import type { getUserPermissions } from '../../application/use-cases/get-user-permissions.ts';
 import type { listPermissionCatalog } from '../../application/use-cases/list-permission-catalog.ts';
+import type { listRoles } from '../../application/use-cases/list-roles.ts';
 import {
   permissionCatalogResponseSchema,
+  roleListResponseSchema,
   userPermissionsParamSchema,
   userPermissionsResponseSchema,
 } from './roles-schemas.ts';
@@ -32,6 +34,8 @@ export type RolesHttpDeps = Readonly<{
   getUserPermissions: ReturnType<typeof getUserPermissions>;
   /** Catalogo fixo de permissoes (spec 006 US2) — consumido por GET /api/v1/permissions. */
   listPermissionCatalog: ReturnType<typeof listPermissionCatalog>;
+  /** Listagem de papeis com suas permissoes (spec 006 US3) — consumido por GET /api/v1/roles. */
+  listRoles: ReturnType<typeof listRoles>;
 }>;
 
 export type RolesHttpHooks = Readonly<{
@@ -80,6 +84,35 @@ const rolesRoutes =
         // `{ items: [...] }`. Envelopa o ok (o use case nunca falha — sem mapa de erros).
         const shaped = result.ok ? ok({ items: [...result.value] }) : result;
         return sendResult(reply, shaped, { ok: 200 });
+      },
+    });
+
+    // US3: GET /roles — todos os papeis com suas permissoes. O use case devolve o agregado
+    // de dominio cru (Role[]); a borda mapeia p/ o DTO { id, name, active, permissions }
+    // (`active` = status === 'active'). Permission role:read.
+    scope.route({
+      method: 'GET',
+      url: '/roles',
+      preHandler: [hooks.requireAuth, hooks.authorize(ROLE_READ_PERMISSION)],
+      schema: {
+        response: { 200: roleListResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) => {
+        const result = await deps.listRoles();
+        const shaped = result.ok
+          ? ok({
+              items: result.value.map((role) => ({
+                id: String(role.id),
+                name: String(role.name),
+                active: role.status === 'active',
+                permissions: role.permissions.map(String),
+              })),
+            })
+          : result;
+        return sendResult(reply, shaped, {
+          ok: 200,
+          errors: { 'role-repo-unavailable': 503 },
+        });
       },
     });
   };
