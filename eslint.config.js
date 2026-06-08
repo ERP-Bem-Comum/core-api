@@ -19,6 +19,9 @@ export default tseslint.config(
       // Portal de docs (Docusaurus) — projeto isolado com toolchain própria
       // (lint/tsconfig próprios). Não é código do core-api.
       'website/**',
+      // specs/ guarda artefatos spec-kit (SDD). Os contracts/*.ts são esboços
+      // de ports para documentar design — não entram em nenhum tsconfig.
+      'specs/**',
     ],
   },
 

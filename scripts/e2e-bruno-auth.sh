@@ -68,9 +68,8 @@ done
 export E2E_SEED_PASSWORD="Str0ng-Passphrase-2026!"
 
 COLLECTION_DIR="api-collections/auth"
-FOLDERS=(1-auth 2-users 3-security)
-echo "[e2e-bruno-auth] Executando colecao (ordem: ${FOLDERS[*]})"
-for folder in "${FOLDERS[@]}"; do
-  echo "[e2e-bruno-auth] --- Pasta: $folder/"
-  ( cd "$COLLECTION_DIR" && bru run "$folder" --env local )
-done
+# Run unico recursivo: o accessToken capturado no login (1-auth) persiste como
+# runtime var para 2-users/3-security. Rodar pasta-por-pasta em processos `bru run`
+# separados perde o token entre pastas -> 401 em todo request autenticado.
+echo "[e2e-bruno-auth] Executando colecao inteira (recursivo, ordem por prefixo numerico)"
+( cd "$COLLECTION_DIR" && bru run . -r --env local )
