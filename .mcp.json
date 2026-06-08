@@ -1,8 +1,11 @@
 {
   "mcpServers": {
     "acdg-skills": {
-      "command": "docker",
-      "args": ["run", "--rm", "-i", "acdg-skills-mcp:0.1.0"]
+      "type": "http",
+      "url": "https://mcp.caninhagames.fortal.br/mcp",
+      "headers": {
+        "Authorization": "Bearer 254cc40bdfeb536c6c7da25badc959a91475a96da28c3f40133f8f9abc60deaa"
+      }
     }
   }
 }

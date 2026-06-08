@@ -1,0 +1,66 @@
+meta {
+  name: LOC-4 POST suppliers Location JA PASSA (guarda nao-regressao)
+  type: http
+  seq: 4
+  docs: Guarda de nao-regressao HTTP-LOCATION-HEADER-201 — partners ja retorna header Location conforme RFC 7231. Deve continuar PASSANDO. Se reprovar, indica regressao no modulo partners.
+}
+
+post {
+  url: {{baseUrl}}/api/v1/suppliers
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{partnersOperatorToken}}
+}
+
+script:pre-request {
+  // CNPJ fixo valido (modulo 11) — mesmo valor do 03-create-supplier.bru principal.
+  // Email e nome com timestamp para evitar conflito de unicidade em re-execucoes.
+  const ts = Date.now();
+  bru.setVar("locSupplierEmail", "loc-guard-" + ts + "@example.com");
+  bru.setVar("locSupplierName", "LOC Guard Fornecedor " + ts);
+}
+
+body:json {
+  {
+    "name": "{{locSupplierName}}",
+    "email": "{{locSupplierEmail}}",
+    "cnpj": "22333444000181",
+    "corporateName": "LOC Guard LTDA",
+    "fantasyName": "LOC Guard",
+    "serviceCategory": "INFORMATICA",
+    "bankAccount": {
+      "bank": "001",
+      "agency": "1234",
+      "accountNumber": "567890",
+      "checkDigit": "1"
+    },
+    "pixKey": null
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    const loc = res.getHeader("location");
+    if (loc) {
+      const parts = loc.split("/");
+      bru.setVar("locSupplierGuardId", parts[parts.length - 1]);
+    }
+  }
+}
+
+tests {
+  test("LOC-4 — status 201 (guarda)", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+  test("LOC-4 — header Location presente (partners ja conforme; nao deve regredir)", function () {
+    const loc = res.getHeader("location");
+    expect(loc).to.be.a("string");
+  });
+  test("LOC-4 — Location contem /api/v1/suppliers/", function () {
+    const loc = res.getHeader("location");
+    expect(loc).to.include("/api/v1/suppliers/");
+  });
+}

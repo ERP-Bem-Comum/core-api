@@ -1,0 +1,56 @@
+meta {
+  name: LOC-1 POST contracts retorna Location (REPROVA ate fix)
+  type: http
+  seq: 1
+  docs: Regressao HTTP-LOCATION-HEADER-201 — contracts nao retorna header Location no 201. Reprova ate o fix adicionar .header('location', ...) ao handler.
+}
+
+post {
+  url: {{baseUrl}}/api/v2/contracts
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+body:json {
+  {
+    "mode": "Pending",
+    "sequentialNumber": "002/2026",
+    "title": "Contrato LOC Regressao",
+    "objective": "Objetivo LOC regressao header",
+    "originalValueCents": 50000,
+    "periodStart": "2026-01-01",
+    "periodEnd": "2026-12-31",
+    "contractor": {
+      "type": "supplier",
+      "id": "{{contractorSupplierId}}"
+    }
+  }
+}
+
+script:post-response {
+  // Captura o id para uso eventual em requests subsequentes.
+  if (res.getStatus() === 201) {
+    const loc = res.getHeader("location");
+    const idFromBody = res.getBody() && res.getBody().id;
+    const id = loc ? loc.split("/").pop() : idFromBody;
+    if (id) bru.setVar("locContractId", id);
+  }
+}
+
+tests {
+  test("LOC-1 — status 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+  test("LOC-1 — header Location presente (REPROVA ate fix)", function () {
+    const loc = res.getHeader("location");
+    expect(loc).to.be.a("string");
+  });
+  test("LOC-1 — Location contem /contracts/ (REPROVA ate fix)", function () {
+    const loc = res.getHeader("location");
+    expect(loc).to.include("/contracts/");
+  });
+}

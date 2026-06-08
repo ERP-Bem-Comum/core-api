@@ -95,7 +95,7 @@ RC_PENDING=$?
 echo
 echo "[e2e-all] ===================== RESUMO ====================="
 echo "[e2e-all] PRINCIPAL: rc=$RC_MAIN  $([ $RC_MAIN -eq 0 ] && echo 'VERDE ✓' || echo 'VERMELHO ✗ (regressão a corrigir)')"
-echo "[e2e-all] PENDING:   rc=$RC_PENDING (esperado != 0 até os fixes AUTH-PERMISSION-CATALOG-PARTNERS / CTR-HTTP-DISTRATO-DOCUMENTO / CTR-HTTP-DOCUMENT-CONTENT)"
+echo "[e2e-all] PENDING:   rc=$RC_PENDING (esperado != 0 até os fixes AUTH-PERMISSION-CATALOG-PARTNERS / CTR-HTTP-DISTRATO-DOCUMENTO / CTR-HTTP-DOCUMENT-CONTENT / HTTP-LOCATION-HEADER-201 / HTTP-PAGINATION-HARMONIZE)"
 echo "[e2e-all] =================================================="
 
 # O gate (FR-008) é determinado pela suíte PRINCIPAL; a expected-fail é informativa.
