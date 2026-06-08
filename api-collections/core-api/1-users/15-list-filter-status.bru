@@ -1,0 +1,26 @@
+meta {
+  name: US1 list filtro status
+  type: http
+  seq: 15
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users?status=active&pageSize=10
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("CA — filtro status=active -> 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("CA — todos os itens retornados sao active", function () {
+    const items = res.getBody().items || [];
+    items.forEach(function (u) {
+      expect(u.status).to.equal("active");
+    });
+  });
+}

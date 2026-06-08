@@ -1,0 +1,20 @@
+meta {
+  name: US4 auto-lockout (422 cannot-self-lockout)
+  type: http
+  seq: 120
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/users/{{adminUserId}}/roles/{{adminRoleId}}
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("FR-010 — 422 ator nao se auto-bloqueia", function () {
+    expect(res.getStatus()).to.equal(422);
+  });
+}

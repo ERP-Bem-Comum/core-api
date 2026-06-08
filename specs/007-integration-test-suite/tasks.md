@@ -68,7 +68,7 @@
 **Especialista obrigatório**: `bruno-api-client-expert`.
 
 - [x] T010 [US3] Implementar `0-auth/` (login admin + bare compartilhados; `setVar` de tokens de coleção) em `api-collections/core-api/0-auth/`. (depende de T002)
-- [ ] T011 [P] [US3] Reescrever os requests de **auth** em `api-collections/core-api/auth/` a partir de `safety-net/{bdd,tdd}/auth/`; marcar `traceability` → `reescrito`. (depende de T007, T010)
+- [x] T011 [P] [US3] Reescrever os requests de **auth** em `api-collections/core-api/auth/` a partir de `safety-net/{bdd,tdd}/auth/`; marcar `traceability` → `reescrito`. (depende de T007, T010)
 - [ ] T012 [P] [US3] Reescrever **contracts** em `api-collections/core-api/contracts/` a partir da rede. (depende de T007, T010)
 - [ ] T013 [P] [US3] Reescrever **partners** em `api-collections/core-api/partners/` a partir da rede. (depende de T007, T010)
 - [ ] T014 [US3] Conferir cobertura: toda linha de `traceability.md` tem `request_unificado`; cobertura ≥ original. (depende de T011–T013)

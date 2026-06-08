@@ -1,0 +1,23 @@
+meta {
+  name: US6 editar papel sem token (401)
+  type: http
+  seq: 210
+}
+
+put {
+  url: {{baseUrl}}/api/v1/roles/{{newRoleId}}
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "Sem Token"
+  }
+}
+
+tests {
+  test("US6 — 401 sem Authorization", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}

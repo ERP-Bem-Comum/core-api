@@ -1,0 +1,27 @@
+meta {
+  name: US4 update id inexistente
+  type: http
+  seq: 43
+}
+
+put {
+  url: {{baseUrl}}/api/v1/users/00000000-0000-4000-8000-000000000000
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "Fantasma"
+  }
+}
+
+tests {
+  test("CA — id inexistente -> 404", function () {
+    expect(res.getStatus()).to.equal(404);
+  });
+}

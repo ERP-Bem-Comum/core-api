@@ -1,0 +1,26 @@
+meta {
+  name: US3 create sem token
+  type: http
+  seq: 20
+}
+
+post {
+  url: {{baseUrl}}/api/v1/users
+  body: json
+  auth: none
+}
+
+body:json {
+  {
+    "name": "Sem Token",
+    "cpf": "52998224725",
+    "email": "sem-token-e2e@example.com",
+    "telephone": "15997133502"
+  }
+}
+
+tests {
+  test("SEC — criar sem sessao -> 401", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}

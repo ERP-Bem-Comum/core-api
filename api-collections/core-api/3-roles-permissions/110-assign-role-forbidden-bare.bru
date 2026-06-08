@@ -1,0 +1,27 @@
+meta {
+  name: US4 assign role bare (sem user:assign-role)
+  type: http
+  seq: 110
+}
+
+post {
+  url: {{baseUrl}}/api/v1/users/{{bareUserId}}/roles
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{bareToken}}
+}
+
+body:json {
+  {
+    "roleId": "{{assignableRoleId}}"
+  }
+}
+
+tests {
+  test("SEC — 403 ator sem user:assign-role", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}

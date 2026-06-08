@@ -1,0 +1,41 @@
+meta {
+  name: RL-3 setup cria usuario alvo para assign-role
+  type: http
+  seq: 3
+}
+
+post {
+  url: {{baseUrl}}/api/v1/users
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+script:pre-request {
+  bru.setVar("rlTargetEmail", "rl_target_" + Date.now() + "@example.com");
+}
+
+body:json {
+  {
+    "name": "RL Alvo",
+    "cpf": "52998224725",
+    "email": "{{rlTargetEmail}}",
+    "telephone": "15997133502"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setVar("rlTargetUserId", res.getBody().id);
+  }
+}
+
+tests {
+  test("RL-3 setup — usuario alvo criado para assign-role", function () {
+    expect(res.getStatus()).to.equal(201);
+    expect(res.getBody().id).to.be.a("string");
+  });
+}

@@ -1,0 +1,33 @@
+meta {
+  name: US6 editar papel renomear (200)
+  type: http
+  seq: 206
+}
+
+put {
+  url: {{baseUrl}}/api/v1/roles/{{newRoleId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "Gerente E2E Renomeado"
+  }
+}
+
+tests {
+  test("US6 — 200 renomeado", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("US6 — body.name atualizado", function () {
+    expect(res.getBody().name).to.equal("Gerente E2E Renomeado");
+  });
+  test("US6 — body.active permanece true", function () {
+    expect(res.getBody().active).to.equal(true);
+  });
+}

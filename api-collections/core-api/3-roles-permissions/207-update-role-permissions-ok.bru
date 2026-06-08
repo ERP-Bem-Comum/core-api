@@ -1,0 +1,31 @@
+meta {
+  name: US6 editar papel substituir permissions (200)
+  type: http
+  seq: 207
+}
+
+put {
+  url: {{baseUrl}}/api/v1/roles/{{newRoleId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+body:json {
+  {
+    "permissions": ["user:read"]
+  }
+}
+
+tests {
+  test("US6 — 200 permissions substituidas", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("US6 — body.permissions contem user:read", function () {
+    expect(res.getBody().permissions).to.be.an("array");
+    expect(res.getBody().permissions).to.include("user:read");
+  });
+}

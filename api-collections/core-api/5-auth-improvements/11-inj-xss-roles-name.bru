@@ -1,0 +1,41 @@
+meta {
+  name: INJ-2 XSS em name de POST /roles escapado ou 422
+  type: http
+  seq: 11
+}
+
+post {
+  url: {{baseUrl}}/api/v1/roles
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+body:json {
+  {
+    "name": "<script>alert(1)</script>",
+    "permissions": ["user:read"]
+  }
+}
+
+tests {
+  // INJ-2 de security-injection.md
+  test("INJ-2 — XSS em name aceito (201) ou rejeitado (422); nunca 500", function () {
+    expect(res.getStatus()).to.not.equal(500);
+    expect([201, 422]).to.include(res.getStatus());
+  });
+  test("INJ-2 — se 201: name nao reflete payload executavel cruo", function () {
+    if (res.getStatus() === 201) {
+      // O valor pode ser armazenado como texto, mas nao deve ser refletido como HTML executavel.
+      // Verificamos que a resposta JSON nao contem a tag script crua (caso o serializer escape).
+      const body = JSON.stringify(res.getBody());
+      // Aceita "<script>" como texto escaped em JSON (< etc.) mas nao como tag crua executavel.
+      // Verifica apenas que nao houve reflexao sem escape no campo name retornado.
+      const name = res.getBody().name || "";
+      expect(name).to.not.equal("<script>alert(1)</script>");
+    }
+  });
+}

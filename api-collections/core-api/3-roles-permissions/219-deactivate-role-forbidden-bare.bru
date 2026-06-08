@@ -1,0 +1,21 @@
+meta {
+  name: US7 desativar papel sem role:update (403)
+  type: http
+  seq: 219
+}
+
+patch {
+  url: {{baseUrl}}/api/v1/roles/{{inUseRoleId}}/deactivate
+  body: none
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{bareToken}}
+}
+
+tests {
+  test("US7 — 403 bare sem role:update", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}

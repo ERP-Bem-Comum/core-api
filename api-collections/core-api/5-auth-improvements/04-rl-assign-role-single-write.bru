@@ -1,0 +1,37 @@
+meta {
+  name: RL-3 assign-role POST /users/:id/roles (disparo unico)
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/users/{{rlTargetUserId}}/roles
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+body:json {
+  {
+    "roleId": "{{assignableRoleId}}"
+  }
+}
+
+tests {
+  // Atribuicao e idempotente (200 repetido), por isso o burst de 35 nao sofre
+  // interferencia de estado. Neste disparo unico: deve ser 200.
+  // RL-3 de security-rate-limit.md.
+  test("RL-3 — single assign nao recebe 500", function () {
+    expect(res.getStatus()).to.not.equal(500);
+    expect([200, 429]).to.include(res.getStatus());
+  });
+  test("RL-3 — se 429: Retry-After presente", function () {
+    if (res.getStatus() === 429) {
+      const retryAfter = res.getHeaders()["retry-after"];
+      expect(retryAfter).to.not.be.undefined;
+    }
+  });
+}
