@@ -52,7 +52,8 @@
     "test:integration:photo": "docker compose up -d minio --wait && STORAGE_INTEGRATION=1 node --test --experimental-strip-types --enable-source-maps --no-warnings 'tests/modules/auth/adapters/storage/profile-photo-storage.s3.integration.test.ts'; rc=$?; docker compose down -v >/dev/null; exit $rc",
     "db:generate": "drizzle-kit generate",
     "db:generate:auth": "drizzle-kit generate --config drizzle.config.auth.ts",
-    "db:generate:partners": "drizzle-kit generate --config drizzle.config.partners.ts"
+    "db:generate:partners": "drizzle-kit generate --config drizzle.config.partners.ts",
+    "db:seed:partners": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/seed-partners.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
