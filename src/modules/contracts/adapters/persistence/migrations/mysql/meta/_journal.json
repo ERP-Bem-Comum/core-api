@@ -64,6 +64,13 @@
       "when": 1780956235069,
       "tag": "0008_striped_sleeper",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1781041358460,
+      "tag": "0009_rich_darwin",
+      "breakpoints": true
     }
   ]
 }

@@ -93,7 +93,13 @@ describe('TimelineProjectionDelivery', () => {
     const contractId = ContractId.generate();
 
     await projector.deliver(
-      envelope({ type: 'ContractEnded', contractId, occurredAt: D('2026-12-31'), kind: 'Expired' }),
+      envelope({
+        type: 'ContractEnded',
+        contractId,
+        occurredAt: D('2026-12-31'),
+        kind: 'Expired',
+        terminationReason: null,
+      }),
     );
     await projector.deliver(
       envelope({ type: 'ContractCreated', contractId, occurredAt: D('2026-01-01') }),

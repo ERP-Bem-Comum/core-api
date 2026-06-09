@@ -67,6 +67,7 @@ const applyTransition = (
   active: ActiveContract,
   kind: EndContractKind,
   at: Date,
+  reason?: string,
 ): Result<
   { contract: ExpiredContract | TerminatedContract; event: ContractEvent },
   ContractError
@@ -75,7 +76,7 @@ const applyTransition = (
     case 'Expire':
       return Contract.expire(active, at);
     case 'Terminate':
-      return Contract.terminate(active, at);
+      return Contract.terminate(active, at, reason);
   }
 };
 
@@ -113,7 +114,12 @@ export const endContract =
       at = terminatedAt;
     }
 
-    const ended = applyTransition(active.value, cmd.kind, at);
+    const ended = applyTransition(
+      active.value,
+      cmd.kind,
+      at,
+      cmd.kind === 'Terminate' ? cmd.reason : undefined,
+    );
     if (!ended.ok) return ended;
 
     // Evento passado no 2º argumento de save — persiste state + outbox atomicamente (ADR-0015).

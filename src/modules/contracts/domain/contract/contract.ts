@@ -225,6 +225,8 @@ const expire = (
     contractId: contract.id,
     occurredAt: at,
     kind: 'Expired',
+    // Expiração por chegada da data fim não tem motivo de negócio.
+    terminationReason: null,
   };
 
   return ok({ contract: next, event });
@@ -238,14 +240,19 @@ const expire = (
 const terminate = (
   contract: ActiveContract,
   at: Date,
+  reason?: string,
 ): Result<{ contract: TerminatedContract; event: ContractEvent }, ContractError.ContractError> => {
   const atCheck = assertValidEventDate(at);
   if (!atCheck.ok) return atCheck;
+
+  // Motivo trim; vazio/ausente → null (Terminated legado pode não ter).
+  const terminationReason = reason !== undefined && reason.trim().length > 0 ? reason.trim() : null;
 
   const next: TerminatedContract = immutable({
     ...contract,
     status: 'Terminated' as const,
     endedAt: at,
+    terminationReason,
   });
 
   const event: ContractEvent = {
@@ -253,6 +260,7 @@ const terminate = (
     contractId: contract.id,
     occurredAt: at,
     kind: 'Terminated',
+    terminationReason,
   };
 
   return ok({ contract: next, event });

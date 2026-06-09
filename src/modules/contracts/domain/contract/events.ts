@@ -21,5 +21,8 @@ export type ContractEvent = Readonly<
       contractId: ContractId;
       occurredAt: Date;
       kind: 'Expired' | 'Terminated';
+      // Motivo do distrato (Vernon, IDDD cap.8 — o evento carrega o "porquê"). `null`
+      // para `Expired` (sem motivo) e para distratos legados sem o campo.
+      terminationReason: string | null;
     }
 >;

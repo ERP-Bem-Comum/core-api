@@ -38,6 +38,7 @@ import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 // ─── Helpers de fixture de row ────────────────────────────────────────────────
 
 const BASE_ROW: Omit<ContractRow, 'status' | 'endedAt'> = {
+  terminationReason: null,
   id: '11111111-1111-4111-8111-111111111111',
   sequentialNumber: '001/2026',
   title: 'Contrato mapper test',

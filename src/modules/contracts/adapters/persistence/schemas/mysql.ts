@@ -75,6 +75,8 @@ export const contracts = mysqlTable(
     currentPeriodEnd: date('current_period_end', { mode: 'date' }),
     status: varchar('status', { length: 16 }).notNull(),
     endedAt: datetime('ended_at', { mode: 'date', fsp: 3 }),
+    // Motivo do distrato (CTR-HTTP-DISTRATO-DOCUMENTO). Só preenchido em Terminated.
+    terminationReason: varchar('termination_reason', { length: 1000 }),
     // Contratado (referência cross-módulo a Parceiros) — sem FK física (cross-db, ADR-0014).
     contractorType: varchar('contractor_type', { length: 16 }).notNull(),
     contractorId: varchar('contractor_id', { length: 36 }).notNull(),
@@ -123,6 +125,13 @@ export const contracts = mysqlTable(
     check(
       'ctr_contracts_ended_at_consistency_chk',
       sql`(${t.endedAt} IS NOT NULL) = (${t.status} IN ('Expired','Terminated'))`,
+    ),
+
+    // Motivo só existe em distrato. Lenient (não bicondicional): Terminated legado pode
+    // ter motivo null (a feature é nova); Expired/Active/Pending nunca têm motivo.
+    check(
+      'ctr_contracts_termination_reason_chk',
+      sql`${t.terminationReason} IS NULL OR ${t.status} = 'Terminated'`,
     ),
 
     // Índices (F-M2 do DB audit): suporta dashboards de "contratos ativos" e

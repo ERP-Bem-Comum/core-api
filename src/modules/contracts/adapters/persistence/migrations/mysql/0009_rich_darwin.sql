@@ -1,0 +1,2 @@
+ALTER TABLE `ctr_contracts` ADD `termination_reason` varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;--> statement-breakpoint
+ALTER TABLE `ctr_contracts` ADD CONSTRAINT `ctr_contracts_termination_reason_chk` CHECK (`ctr_contracts`.`termination_reason` IS NULL OR `ctr_contracts`.`status` = 'Terminated');

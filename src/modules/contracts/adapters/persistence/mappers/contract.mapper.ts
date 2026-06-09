@@ -224,6 +224,8 @@ export const contractToInsert = (
       // `endedAt` só existe em ExpiredContract / TerminatedContract (DO C§29).
       // ActiveContract não tem o campo — usa null para a coluna MySQL.
       endedAt: c.status === 'Active' ? null : c.endedAt,
+      // Motivo só existe em TerminatedContract; demais estados → null (CHECK no schema).
+      terminationReason: c.status === 'Terminated' ? c.terminationReason : null,
       contractorType: c.contractor.type,
       contractorId: c.contractor.id as unknown as string,
       observations: c.observations,
@@ -349,6 +351,8 @@ export const contractFromRow = (
         ...core,
         status: 'Terminated',
         endedAt: row.endedAt,
+        // Terminated legado (pré-feature) pode ter motivo null.
+        terminationReason: row.terminationReason ?? null,
       };
       return ok(contract);
     }

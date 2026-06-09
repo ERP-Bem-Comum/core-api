@@ -83,7 +83,13 @@ export type ExpiredContract = EffectiveContractCore &
  * Assim como `ExpiredContract`, carrega `endedAt: Date` obrigatório.
  */
 export type TerminatedContract = EffectiveContractCore &
-  Readonly<{ status: 'Terminated'; endedAt: Date }>;
+  Readonly<{
+    status: 'Terminated';
+    endedAt: Date;
+    // Motivo do distrato (CTR-HTTP-DISTRATO-DOCUMENTO). `null` apenas para Terminated
+    // legados anteriores à feature; novos distratos sempre carregam o motivo.
+    terminationReason: string | null;
+  }>;
 
 /**
  * Union discriminada do agregado `Contract` (o tipo público).

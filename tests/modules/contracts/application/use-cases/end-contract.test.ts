@@ -179,10 +179,14 @@ describe('endContract — Terminate (distrato)', () => {
     assert.equal(r.value.contract.status, 'Terminated');
     if (r.value.contract.status === 'Terminated') {
       assert.equal(r.value.contract.endedAt.getTime(), D('2026-06-01').getTime());
+      // CTR-HTTP-DISTRATO-DOCUMENTO: o motivo é persistido no agregado (opção c).
+      assert.equal(r.value.contract.terminationReason, 'Distrato por acordo entre as partes');
     }
     assert.equal(r.value.event.type, 'ContractEnded');
     if (r.value.event.type === 'ContractEnded') {
       assert.equal(r.value.event.kind, 'Terminated');
+      // O evento carrega o "porquê" (Vernon, IDDD cap.8) — timeline/auditoria.
+      assert.equal(r.value.event.terminationReason, 'Distrato por acordo entre as partes');
     }
   });
 
@@ -203,6 +207,9 @@ describe('endContract — Terminate (distrato)', () => {
     const persisted = await world.contractRepo.repo.findById(world.contract.id);
     if (!persisted.ok || persisted.value === null) throw new Error('contrato não persistido');
     assert.equal(persisted.value.status, 'Terminated');
+    if (persisted.value.status === 'Terminated') {
+      assert.equal(persisted.value.terminationReason, 'Distrato por acordo');
+    }
   });
 
   it('DIST-5: terminatedAt futuro -> terminate-invalid-date, sem efeito colateral', async () => {

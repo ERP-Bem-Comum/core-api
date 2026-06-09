@@ -64,6 +64,7 @@ export const contractToListItem = (c: Contract): ContractListItemDto => {
         currentValue: { cents: c.currentValue.cents },
         currentPeriod: periodToDto(c.currentPeriod),
         endedAt: c.endedAt.toISOString(),
+        terminationReason: c.terminationReason,
       };
   }
 };

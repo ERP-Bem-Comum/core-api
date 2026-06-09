@@ -118,6 +118,9 @@ type ContractEndedPayload = Readonly<{
   contractId: string;
   occurredAt: string;
   kind: 'Expired' | 'Terminated';
+  // Motivo do distrato. Eventos v1 (pré-CTR-HTTP-DISTRATO-DOCUMENTO) não têm o campo;
+  // a desserialização defaulta para null (retrocompat).
+  terminationReason: string | null;
 }>;
 
 type AmendmentCreatedPayload = Readonly<{
@@ -243,6 +246,7 @@ const serializeEvent = (event: ContractsModuleEvent): unknown => {
         contractId: event.contractId as unknown as string,
         occurredAt: event.occurredAt.toISOString(),
         kind: event.kind,
+        terminationReason: event.terminationReason,
       } satisfies ContractEndedPayload;
 
     case 'AmendmentCreated':
@@ -462,7 +466,16 @@ const deserializeEvent = (
       }
       const r = ContractId.rehydrate(p['contractId']);
       if (!r.ok) return err(outboxMapperInvalidPayload(`ContractEnded-contractId: ${r.error}`));
-      return ok({ type: 'ContractEnded', contractId: r.value, occurredAt, kind: p['kind'] });
+      // Retrocompat: payload v1 sem `terminationReason` → null.
+      const terminationReason =
+        typeof p['terminationReason'] === 'string' ? p['terminationReason'] : null;
+      return ok({
+        type: 'ContractEnded',
+        contractId: r.value,
+        occurredAt,
+        kind: p['kind'],
+        terminationReason,
+      });
     }
 
     case 'AmendmentCreated': {

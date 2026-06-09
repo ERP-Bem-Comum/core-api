@@ -28,6 +28,9 @@ export const formatContract = (c: Contract): string => {
   if (c.status !== 'Active') {
     lines.push(`  Encerrado em: ${formatDate(c.endedAt)}`);
   }
+  if (c.status === 'Terminated') {
+    lines.push(`  Motivo do distrato: ${c.terminationReason ?? '(não informado)'}`);
+  }
   return lines.join('\n');
 };
 

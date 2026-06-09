@@ -60,6 +60,7 @@ describe('toTimelineEntry — mapeamento por evento (CA-1)', () => {
       contractId,
       occurredAt: D('2026-12-31'),
       kind: 'Terminated',
+      terminationReason: null,
     };
     const entry = toTimelineEntry(event, 'evt-2', contractId);
     assert.equal(entry.kind, 'ContractEnded');

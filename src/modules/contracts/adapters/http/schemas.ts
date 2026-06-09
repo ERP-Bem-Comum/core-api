@@ -48,6 +48,8 @@ export const contractListItemSchema = z.discriminatedUnion('status', [
     ...effectiveShape,
     status: z.literal('Terminated'),
     endedAt: z.string(),
+    // Motivo do distrato (CTR-HTTP-DISTRATO-DOCUMENTO). `null` em distratos legados.
+    terminationReason: z.string().nullable(),
   }),
 ]);
 
