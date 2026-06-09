@@ -37,6 +37,10 @@ const CATALOG_RAW = [
   // geography:* (modulo partners - territorio)
   'geography:read',
   'geography:write',
+  // program:* (modulo programs - gestao de programas)
+  'program:deactivate',
+  'program:read',
+  'program:write',
   // role:* (gestao de acessos - spec 006, novas)
   'role:assign',
   'role:create',

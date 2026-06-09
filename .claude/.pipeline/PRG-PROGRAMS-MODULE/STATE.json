@@ -3,9 +3,9 @@
   "ticket": "PRG-PROGRAMS-MODULE",
   "size": "L",
   "createdAt": "2026-06-09T18:12:14.269Z",
-  "closedAt": null,
-  "currentWave": "W1",
-  "status": "in-progress",
+  "closedAt": "2026-06-09T19:49:05.534Z",
+  "currentWave": null,
+  "status": "closed-green",
   "waves": [
     {
       "id": "W0",
@@ -19,35 +19,35 @@
     },
     {
       "id": "W1",
-      "status": "in-progress",
+      "status": "done",
       "agent": "ts-domain-modeler",
       "startedAt": "2026-06-09T18:18:12.766Z",
-      "finishedAt": null,
+      "finishedAt": "2026-06-09T19:46:38.201Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
     },
     {
       "id": "W2",
-      "status": "pending",
-      "agent": null,
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-06-09T19:47:44.884Z",
+      "finishedAt": "2026-06-09T19:48:31.984Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
     },
     {
       "id": "W3",
-      "status": "pending",
-      "agent": null,
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-06-09T19:48:38.158Z",
+      "finishedAt": "2026-06-09T19:49:05.003Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
     }
   ],
   "blockers": [],
-  "lastEvent": "W1 started (ts-domain-modeler)"
+  "lastEvent": "closed-green"
 }

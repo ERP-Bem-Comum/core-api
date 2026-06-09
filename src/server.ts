@@ -35,6 +35,41 @@ import {
   partnersHttpPlugin,
   buildPartnersHttpDeps,
 } from '#src/modules/partners/public-api/http.ts';
+import {
+  programsHttpPlugin,
+  buildProgramsHttpDeps,
+  type ProgramsCompositionConfig,
+} from '#src/modules/programs/public-api/http.ts';
+import type { LogoS3Config } from '#src/modules/programs/adapters/storage/logo-storage.s3.ts';
+
+// Config S3/MinIO do logo de programa (ADR-0019). Só retorna config quando todas as envs
+// obrigatórias estão presentes; ausência de qualquer uma → undefined (storage in-memory).
+const readProgramsLogoConfig = (
+  env: Readonly<Record<string, string | undefined>>,
+): LogoS3Config | undefined => {
+  const endpoint = env['PROGRAMS_LOGO_S3_ENDPOINT'];
+  const region = env['PROGRAMS_LOGO_S3_REGION'];
+  const accessKeyId = env['PROGRAMS_LOGO_S3_ACCESS_KEY_ID'];
+  const secretAccessKey = env['PROGRAMS_LOGO_S3_SECRET_ACCESS_KEY'];
+  const bucket = env['PROGRAMS_LOGO_S3_BUCKET'];
+  if (
+    endpoint === undefined ||
+    region === undefined ||
+    accessKeyId === undefined ||
+    secretAccessKey === undefined ||
+    bucket === undefined
+  ) {
+    return undefined;
+  }
+  return {
+    endpoint,
+    region,
+    accessKeyId,
+    secretAccessKey,
+    bucket,
+    forcePathStyle: env['PROGRAMS_LOGO_S3_FORCE_PATH_STYLE'] !== 'false',
+  };
+};
 
 const main = async (): Promise<void> => {
   const config = readHttpConfig(process.env);
@@ -90,6 +125,23 @@ const main = async (): Promise<void> => {
       : { driver: 'memory' },
   );
 
+  // Módulo programs (spec 008, ADR-0033) → /api/v1/programs. Logo storage S3/MinIO (ADR-0019)
+  // só quando todas as envs PROGRAMS_LOGO_* presentes; ausente → storage in-memory (degradado).
+  const programsWriterUrl = process.env['PROGRAMS_DATABASE_URL'];
+  const programsLogo = readProgramsLogoConfig(process.env);
+  const programsDeps = await buildProgramsHttpDeps(
+    process.env['PROGRAMS_DRIVER'] === 'mysql'
+      ? ({
+          driver: 'mysql',
+          ...(programsWriterUrl !== undefined ? { writerUrl: programsWriterUrl } : {}),
+          ...(programsLogo !== undefined ? { logo: programsLogo } : {}),
+        } satisfies ProgramsCompositionConfig)
+      : ({
+          driver: 'memory',
+          ...(programsLogo !== undefined ? { logo: programsLogo } : {}),
+        } satisfies ProgramsCompositionConfig),
+  );
+
   // requireAuth do auth (cross-módulo via public-api, ADR-0006/0024) protege as rotas de contracts.
   const requireAuth = makeRequireAuth(authDeps.verifyAccessToken);
 
@@ -142,6 +194,14 @@ const main = async (): Promise<void> => {
           requireAuth,
           authorize: authDeps.authorize,
           hasPermission: authDeps.hasPermission,
+        }),
+        prefix: '/api/v1',
+      },
+      // Gestão de programas (spec 008, ADR-0033) → /api/v1/programs[/:id][/...].
+      {
+        plugin: programsHttpPlugin(programsDeps, {
+          requireAuth,
+          authorize: authDeps.authorize,
         }),
         prefix: '/api/v1',
       },
@@ -202,6 +262,7 @@ const main = async (): Promise<void> => {
     await authDeps.shutdown();
     await contractsDeps.shutdown();
     await partnersDeps.shutdown();
+    await programsDeps.shutdown();
     app.log.info('Servidor encerrado.');
   };
 
