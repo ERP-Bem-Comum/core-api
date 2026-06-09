@@ -132,3 +132,19 @@ describe('Program.reactivate', () => {
     assert.equal(r.error, 'program-not-inactive');
   });
 });
+
+describe('Program.setLogo', () => {
+  it('define logoKey, incrementa version, ProgramUpdated', () => {
+    const r = Program.setLogo(makeProgram(), 'programs/x/logo', NOW);
+    assert.ok(isOk(r));
+    assert.equal(r.value.program.logoKey, 'programs/x/logo');
+    assert.equal(r.value.program.version, 2);
+    assert.equal(r.value.event.type, 'ProgramUpdated');
+  });
+
+  it('aceita null (remove logo)', () => {
+    const r = Program.setLogo(makeProgram(), null, NOW);
+    assert.ok(isOk(r));
+    assert.equal(r.value.program.logoKey, null);
+  });
+});

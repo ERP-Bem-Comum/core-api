@@ -114,5 +114,20 @@ const reactivate = (program: ProgramEntity, now: Date): Outcome => {
   });
 };
 
+// Troca apenas a referência do logo (sem revalidar nome/sigla). Usado pelo upload
+// de logo (a validação de imagem mime/tamanho ocorre na application/borda).
+const setLogo = (program: ProgramEntity, logoKey: string | null, now: Date): Outcome => {
+  const next: ProgramEntity = {
+    ...program,
+    logoKey,
+    version: program.version + 1,
+    updatedAt: now,
+  };
+  return ok({
+    program: next,
+    event: { type: 'ProgramUpdated', programId: next.id, occurredAt: now },
+  });
+};
+
 // Agregado exportado como namespace-objeto (sem Brand na casca) — padrao Contract.
-export const Program = { create, update, deactivate, reactivate };
+export const Program = { create, update, deactivate, reactivate, setLogo };
