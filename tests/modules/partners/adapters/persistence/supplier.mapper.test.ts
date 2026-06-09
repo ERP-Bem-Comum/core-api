@@ -90,6 +90,8 @@ describe('supplier.mapper — supplierFromRow', () => {
     bankAccountCheckDigit: '7',
     pixKeyType: null,
     pixKey: null,
+    serviceRating: null,
+    ratingComment: null,
     createdAt: NOW,
     updatedAt: NOW,
     legacyId: null,

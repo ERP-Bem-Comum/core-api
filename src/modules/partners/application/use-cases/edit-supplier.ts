@@ -31,6 +31,8 @@ export type EditSupplierCommand = Readonly<{
   serviceCategory: string;
   bankAccount: BankAccountInput | null;
   pixKey: PixKeyInput | null;
+  serviceRating?: string | null;
+  ratingComment?: string | null;
 }>;
 
 export type EditSupplierError =
@@ -70,6 +72,8 @@ export const editSupplier =
         serviceCategory: cmd.serviceCategory,
         bankAccount: cmd.bankAccount,
         pixKey: cmd.pixKey,
+        serviceRating: cmd.serviceRating ?? null,
+        ratingComment: cmd.ratingComment ?? null,
       },
       deps.clock.now(),
     );

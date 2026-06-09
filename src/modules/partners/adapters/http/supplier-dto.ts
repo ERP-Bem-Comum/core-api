@@ -19,6 +19,8 @@ export const supplierToDetailDto = (record: SupplierReadRecord): SupplierDetailD
     serviceCategory: s.serviceCategory,
     bankAccount: s.bankAccount,
     pixKey: s.pixKey,
+    serviceRating: s.serviceRating,
+    ratingComment: s.ratingComment,
     active: s.status === 'Active',
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),

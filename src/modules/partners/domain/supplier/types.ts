@@ -12,6 +12,7 @@
 import type { Cnpj } from '#src/shared/kernel/cnpj.ts';
 import type { SupplierId } from './supplier-id.ts';
 import type { ServiceCategory } from './service-category.ts';
+import type { ServiceRating } from './service-rating.ts';
 import type { BankAccount, PixKey, BankAccountInput, PixKeyInput } from './payment-target.ts';
 
 type SupplierCore = Readonly<{
@@ -24,6 +25,10 @@ type SupplierCore = Readonly<{
   serviceCategory: ServiceCategory;
   bankAccount: BankAccount | null;
   pixKey: PixKey | null;
+  // Avaliação do prestador (opcional, independente do cadastro). `serviceRating` é Standard
+  // Type (VO); `ratingComment` é texto livre. Ambos `null` quando não avaliado.
+  serviceRating: ServiceRating | null;
+  ratingComment: string | null;
 }>;
 
 export type ActiveSupplier = SupplierCore & Readonly<{ status: 'Active' }>;
@@ -42,6 +47,8 @@ export type RegisterSupplierInput = Readonly<{
   serviceCategory: string;
   bankAccount: BankAccountInput | null;
   pixKey: PixKeyInput | null;
+  serviceRating?: string | null;
+  ratingComment?: string | null;
   registeredAt: Date;
 }>;
 
@@ -55,6 +62,8 @@ export type EditSupplierInput = Readonly<{
   serviceCategory: string;
   bankAccount: BankAccountInput | null;
   pixKey: PixKeyInput | null;
+  serviceRating?: string | null;
+  ratingComment?: string | null;
 }>;
 
 // Reidratação pela borda (mapper): `id`/`cnpj`/`serviceCategory`/payment target já
@@ -70,6 +79,8 @@ export type RehydrateSupplierInput = Readonly<{
   serviceCategory: ServiceCategory;
   bankAccount: BankAccount | null;
   pixKey: PixKey | null;
+  serviceRating: ServiceRating | null;
+  ratingComment: string | null;
   status: 'Active' | 'Inactive';
   deactivatedAt: Date | null;
 }>;

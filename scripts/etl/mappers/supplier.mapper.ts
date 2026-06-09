@@ -110,6 +110,9 @@ export const mapLegacySupplierRow = (row: LegacySupplierRow): MapperResult<Suppl
     serviceCategory,
     bankAccount: targets.value.bankAccount,
     pixKey: targets.value.pixKey,
+    // Legado não possui avaliação de prestador (campo nativo do core-api).
+    serviceRating: null,
+    ratingComment: null,
     status,
     deactivatedAt,
   });

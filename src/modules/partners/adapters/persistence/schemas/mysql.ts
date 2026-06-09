@@ -93,6 +93,9 @@ export const parSuppliers = mysqlTable(
     // Destino de pagamento — bloco pix (juntos NULL ou juntos preenchidos).
     pixKeyType: varchar('pix_key_type', { length: 20 }),
     pixKey: varchar('pix_key', { length: 255 }),
+    // Avaliação do prestador (opcional). Standard Type literal, varchar + CHECK (NÃO ENUM — ADR-0020).
+    serviceRating: varchar('service_rating', { length: 16 }),
+    ratingComment: varchar('rating_comment', { length: 1000 }),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
     // Correlação ETL (P2): id de origem no legado. NULL = nativo; não-NULL = migrado.
@@ -118,6 +121,11 @@ export const parSuppliers = mysqlTable(
     ),
     // (c) coerência do bloco pix (pix_key_type ⟺ pix_key).
     check('par_suppliers_pix_block_chk', sql`(${t.pixKeyType} IS NULL) = (${t.pixKey} IS NULL)`),
+    // (d) avaliação: conjunto fechado (NULL = não avaliado).
+    check(
+      'par_suppliers_service_rating_chk',
+      sql`${t.serviceRating} IS NULL OR ${t.serviceRating} IN ('RUIM','REGULAR','BOM','OTIMO')`,
+    ),
     uniqueIndex('par_suppliers_cnpj_idx').on(t.cnpj),
     // UNIQUE(legacy_id) — idempotência da ETL (múltiplos NULL convivem no InnoDB).
     uniqueIndex('par_suppliers_legacy_id_idx').on(t.legacyId),

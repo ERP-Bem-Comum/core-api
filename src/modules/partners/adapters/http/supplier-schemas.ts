@@ -39,6 +39,11 @@ export const serviceCategoriesSchema = z
   .array(z.string())
   .meta({ description: 'Categorias de serviço canônicas (códigos legados, FR-017)' });
 
+/** Resposta do GET /api/v1/suppliers/service-ratings — catálogo de níveis de avaliação. */
+export const serviceRatingsSchema = z
+  .array(z.string())
+  .meta({ description: 'Níveis de avaliação canônicos (RUIM/REGULAR/BOM/OTIMO)' });
+
 /** Param `:id` — UUID do fornecedor (core-api). Formato inválido → 400. */
 export const supplierIdParamSchema = z.object({
   id: z.uuid().meta({ description: 'UUID do fornecedor (core-api)' }),
@@ -68,6 +73,8 @@ export const supplierDetailSchema = z.object({
   serviceCategory: z.string(),
   bankAccount: bankAccountSchema.nullable(),
   pixKey: pixKeySchema.nullable(),
+  serviceRating: z.string().nullable(),
+  ratingComment: z.string().nullable(),
   active: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -120,6 +127,9 @@ export const createSupplierBodySchema = z.object({
   serviceCategory: z.string().min(1),
   bankAccount: bankAccountInputSchema.nullable().default(null),
   pixKey: pixKeyInputSchema.nullable().default(null),
+  // Avaliação opcional. Domínio é autoridade do conjunto (rating inválido → 422).
+  serviceRating: z.string().nullable().default(null),
+  ratingComment: z.string().nullable().default(null),
 });
 
 export type CreateSupplierBody = z.infer<typeof createSupplierBodySchema>;
