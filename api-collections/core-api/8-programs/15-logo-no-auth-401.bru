@@ -1,0 +1,21 @@
+meta {
+  name: logo upload no auth 401
+  type: http
+  seq: 15
+}
+
+post {
+  url: {{baseUrl}}/api/v1/programs/{{programCreatedId}}/logo
+  body: none
+  auth: none
+}
+
+headers {
+  Content-Type: image/png
+}
+
+tests {
+  test("PRG — POST /programs/:id/logo sem token retorna 401", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}

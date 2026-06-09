@@ -1,0 +1,42 @@
+meta {
+  name: programs list contains created
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/v1/programs
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{programsOperatorToken}}
+}
+
+tests {
+  test("PRG — GET /programs retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("PRG — resposta tem items e meta", function () {
+    const body = res.getBody();
+    expect(body).to.have.property("items");
+    expect(body).to.have.property("meta");
+    expect(body.items).to.be.an("array");
+  });
+
+  test("PRG — meta tem campos de paginacao", function () {
+    const meta = res.getBody().meta;
+    expect(meta).to.have.property("currentPage");
+    expect(meta).to.have.property("itemsPerPage");
+    expect(meta).to.have.property("itemCount");
+    expect(meta).to.have.property("totalItems");
+    expect(meta).to.have.property("totalPages");
+  });
+
+  test("PRG — lista contem o programa criado", function () {
+    const items = res.getBody().items;
+    const found = items.find(function (p) { return p.id === bru.getVar("programCreatedId"); });
+    expect(found).to.exist;
+  });
+}

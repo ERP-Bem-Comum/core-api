@@ -1,0 +1,20 @@
+meta {
+  name: programs list bare user 403
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/programs
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{bareUserToken}}
+}
+
+tests {
+  test("PRG — GET /programs com usuario sem program:read retorna 403", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}

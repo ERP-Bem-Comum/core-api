@@ -47,15 +47,17 @@ SEED_JSON='{"users":[
   {"email":"bare.e2e@bemcomum.dev","password":"Str0ng-Passphrase-2026!","permissions":[]},
   {"email":"e2e-reader@example.com","password":"Str0ng-Passphrase-2026!","permissions":["contract:read"]},
   {"email":"e2e-contracts@example.com","password":"Str0ng-Passphrase-2026!","permissions":["contract:read","contract:write"]},
-  {"email":"e2e-partners@example.com","password":"Str0ng-Passphrase-2026!","permissions":["supplier:read","supplier:write","financier:read","financier:write","collaborator:read","collaborator:write","act:read","act:write","geography:read","geography:write"]}
+  {"email":"e2e-partners@example.com","password":"Str0ng-Passphrase-2026!","permissions":["supplier:read","supplier:write","financier:read","financier:write","collaborator:read","collaborator:write","act:read","act:write","geography:read","geography:write"]},
+  {"email":"e2e-programs@example.com","password":"Str0ng-Passphrase-2026!","permissions":["program:read","program:write","program:deactivate"]}
 ]}'
 
-echo "[e2e-all] Bootando server (auth/contracts/partners = mysql)..."
+echo "[e2e-all] Bootando server (auth/contracts/partners/programs = mysql)..."
 DB="mysql://root:rootpw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core"
 RO="mysql://readonly_bi:ropw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core"
 AUTH_DRIVER=mysql AUTH_DATABASE_URL="$DB" \
   CONTRACTS_DRIVER=mysql CONTRACTS_DATABASE_URL="$DB" CONTRACTS_READER_URL="$RO" \
   PARTNERS_DRIVER=mysql PARTNERS_DATABASE_URL="$DB" PARTNERS_READER_URL="$RO" \
+  PROGRAMS_DRIVER=mysql PROGRAMS_DATABASE_URL="$DB" \
   S3_ENDPOINT="http://127.0.0.1:${MINIO_API_PORT:-9000}" \
   S3_REGION=us-east-1 \
   S3_BUCKET=contracts-documents \
@@ -81,7 +83,7 @@ done
 export E2E_SEED_PASSWORD="Str0ng-Passphrase-2026!"
 
 # ─── PRINCIPAL: pastas em UM unico `bru run` (token de 0-auth persiste) ──────────────
-MAIN_FOLDERS=(0-auth 1-users 2-me 3-roles-permissions 4-auth-security 5-auth-improvements 6-contracts 7-partners)
+MAIN_FOLDERS=(0-auth 1-users 2-me 3-roles-permissions 4-auth-security 5-auth-improvements 6-contracts 7-partners 8-programs)
 JSON_MAIN=(); [ "${E2E_JSON_REPORT:-0}" = "1" ] && { mkdir -p "$(pwd)/test-results"; JSON_MAIN=(--reporter-json "$(pwd)/test-results/main.json"); }
 echo "[e2e-all] === Suíte PRINCIPAL (${MAIN_FOLDERS[*]}) ==="
 ( cd api-collections/core-api && bru run "${MAIN_FOLDERS[@]}" --env local -r "${JSON_MAIN[@]}" )

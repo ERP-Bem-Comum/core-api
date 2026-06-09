@@ -1,0 +1,44 @@
+meta {
+  name: get program by id
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v1/programs/{{programCreatedId}}
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{programsOperatorToken}}
+}
+
+tests {
+  test("PRG — GET /programs/:id retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("PRG — id bate com o criado", function () {
+    expect(res.getBody().id).to.equal(bru.getVar("programCreatedId"));
+  });
+
+  test("PRG — sigla correta", function () {
+    expect(res.getBody().sigla).to.equal("PRG01");
+  });
+
+  test("PRG — status ATIVO apos criacao", function () {
+    expect(res.getBody().status).to.equal("ATIVO");
+  });
+
+  test("PRG — campos obrigatorios presentes", function () {
+    const body = res.getBody();
+    expect(body).to.have.property("id");
+    expect(body).to.have.property("name");
+    expect(body).to.have.property("sigla");
+    expect(body).to.have.property("status");
+    expect(body).to.have.property("version");
+    expect(body).to.have.property("programNumber");
+    expect(body).to.have.property("createdAt");
+    expect(body).to.have.property("updatedAt");
+  });
+}
