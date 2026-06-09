@@ -1,0 +1,5 @@
+meta {
+  name: 8-programs
+  type: folder
+  docs: Coleção E2E do módulo Programs (spec 008, ADR-0038). Cobre as 7 rotas /api/v1/programs (lista, criar, detalhe, editar com optimistic-lock, desativar, reativar, logo). Logo: cenários 401/403/415 (não dependem de body binário); o 200 do upload é coberto pelos testes fastify.inject (tests/modules/programs/adapters/http/programs-logo.routes.test.ts). Siglas distintas por cenário (PRG01 criação, PRG02 duplicada, PRG03 nome inválido, PRG04 sigla inválida) para evitar colisão de unicidade.
+}

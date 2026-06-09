@@ -18,7 +18,7 @@ Gate W3 verde (2631 pass · `test:integration:programs` 8 pass). Resta apenas a 
 
 | Task | Item | Entregável |
 | --- | --- | --- |
-| **T058** | Coleção Bruno (ADR-0034) | `<dir de coleções>/programs/` exercitando `/api/v1/programs`: criar → listar → detalhar → editar → desativar → reativar (+ logo). Integração HTTP real, rodável no CI (`bru run --reporter junit`). |
+| **T058** | Coleção Bruno (ADR-0034 adoção · **ADR-0038** execução obrigatória) | `api-collections/core-api/8-programs/` exercitando `/api/v1/programs`: criar → listar → detalhar → editar → desativar → reativar (+ logo). **Deve ser executada** via `bru run` (`pnpm run test:integration:all`) e passar — `.bru` não-rodado é cobertura ilusória (rule `api-collections.md`, Invariante #1). |
 | **T060** | Quickstart manual | Executar `specs/008-gestao-programas/quickstart.md` (curls contra servidor + MySQL real) e registrar a saída observada. |
 | **T061** | Rastreabilidade (Princípio IX) | Registrar no ticket as citações das decisões-chave: Evans/Vernon (BC/agregado), Ramakrishnan (identidade/chaves), Beck (TDD). Fonte: `specs/008-gestao-programas/research.md`. |
 

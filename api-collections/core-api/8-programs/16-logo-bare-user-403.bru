@@ -1,0 +1,25 @@
+meta {
+  name: logo upload bare user 403
+  type: http
+  seq: 16
+}
+
+post {
+  url: {{baseUrl}}/api/v1/programs/{{programCreatedId}}/logo
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{bareUserToken}}
+}
+
+headers {
+  Content-Type: image/png
+}
+
+tests {
+  test("PRG — POST /programs/:id/logo sem program:write retorna 403", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}
