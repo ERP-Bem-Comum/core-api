@@ -30,3 +30,9 @@ export type { SmtpConfig, SmtpConfigError } from '../adapters/email/nodemailer-c
 export { parseSmtpConfig } from '../adapters/email/nodemailer-config.ts';
 
 export { createNodemailerEmailSender } from '../adapters/email/nodemailer.ts';
+
+// Production adapter (Resend - HTTP API)
+export type { ResendConfig, ResendConfigError } from '../adapters/email/resend-config.ts';
+export { parseResendConfig } from '../adapters/email/resend-config.ts';
+
+export { createResendEmailSender } from '../adapters/email/resend.ts';
