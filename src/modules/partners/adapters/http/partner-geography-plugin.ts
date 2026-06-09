@@ -38,6 +38,8 @@ import {
   partnerMunicipalitiesListSchema,
   partnerStateDtoSchema,
   partnerMunicipalityDtoSchema,
+  addedMunicipalitiesQuerySchema,
+  addedMunicipalitiesPagedSchema,
   type PartnerStateDto,
   type PartnerMunicipalityDto,
 } from './partner-geography-schemas.ts';
@@ -163,6 +165,54 @@ const partnerGeographyRoutes =
     });
 
     // ── Municipalities ────────────────────────────────────────────────────────
+
+    // GET /partner-municipalities/added — municípios parceiros de TODAS as UFs (cross-state).
+    // Path estático: precede a rota raiz no roteador. Busca por nome + paginação na borda.
+    scope.route({
+      method: 'GET',
+      url: '/partner-municipalities/added',
+      preHandler: [hooks.requireAuth, hooks.authorize(GEOGRAPHY_PERMISSION.read)],
+      schema: {
+        querystring: addedMunicipalitiesQuerySchema,
+        response: { 200: addedMunicipalitiesPagedSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.listAddedPartnerMunicipalities();
+        if (!result.ok) {
+          return sendResult(reply, err(result.error), {
+            errors: { 'geography-repo-unavailable': 503 },
+          });
+        }
+        const q = req.query;
+        const term = q.search?.toLowerCase();
+        const filtered =
+          term !== undefined
+            ? result.value.filter((m) => m.name.toLowerCase().includes(term))
+            : result.value;
+        const totalItems = filtered.length;
+        const offset = (q.page - 1) * q.limit;
+        const items = filtered.slice(offset, offset + q.limit).map((m) => ({
+          ibgeCode: m.ibgeCode as unknown as string,
+          uf: m.uf as unknown as string,
+          name: m.name,
+        }));
+        const totalPages = totalItems === 0 ? 0 : Math.ceil(totalItems / q.limit);
+        return sendResult(
+          reply,
+          ok({
+            items,
+            meta: {
+              currentPage: q.page,
+              itemsPerPage: q.limit,
+              itemCount: items.length,
+              totalItems,
+              totalPages,
+            },
+          }),
+          { ok: 200 },
+        );
+      },
+    });
 
     // GET /partner-municipalities?uf= — lista municípios da UF com flag isPartner
     scope.route({

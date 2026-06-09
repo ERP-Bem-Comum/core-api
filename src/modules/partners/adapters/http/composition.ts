@@ -79,6 +79,7 @@ import type {
 import type { PartnerGeographyRepository } from '../../application/ports/partner-geography-repository.ts';
 import { listPartnerStates } from '../../application/use-cases/list-partner-states.ts';
 import { listPartnerMunicipalities } from '../../application/use-cases/list-partner-municipalities.ts';
+import { listAddedPartnerMunicipalities } from '../../application/use-cases/list-added-partner-municipalities.ts';
 import { togglePartnerState } from '../../application/use-cases/toggle-partner-state.ts';
 import { togglePartnerMunicipality } from '../../application/use-cases/toggle-partner-municipality.ts';
 import { registerAct } from '../../application/use-cases/register-act.ts';
@@ -151,6 +152,8 @@ export type PartnersHttpDeps = Readonly<{
   /** Parceria territorial — leitura + toggle (US-002). */
   listPartnerStates: ReturnType<typeof listPartnerStates>;
   listPartnerMunicipalities: ReturnType<typeof listPartnerMunicipalities>;
+  /** Municípios parceiros de TODAS as UFs (painel "Adicionados", cross-state). */
+  listAddedPartnerMunicipalities: ReturnType<typeof listAddedPartnerMunicipalities>;
   togglePartnerState: ReturnType<typeof togglePartnerState>;
   togglePartnerMunicipality: ReturnType<typeof togglePartnerMunicipality>;
   /** Acts — leitura (reader pool). */
@@ -300,6 +303,9 @@ const makeDeps = (pools: Pools): PartnersHttpDeps => {
     editFinancier: editFinancier({ financierRepo: pools.financierWriterRepo, clock }),
     listPartnerStates: listPartnerStates({ geographyRepo: pools.geographyRepo }),
     listPartnerMunicipalities: listPartnerMunicipalities({ geographyRepo: pools.geographyRepo }),
+    listAddedPartnerMunicipalities: listAddedPartnerMunicipalities({
+      geographyRepo: pools.geographyRepo,
+    }),
     togglePartnerState: togglePartnerState({ geographyRepo: pools.geographyRepo, clock }),
     togglePartnerMunicipality: togglePartnerMunicipality({
       geographyRepo: pools.geographyRepo,
