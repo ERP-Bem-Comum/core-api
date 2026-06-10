@@ -1,6 +1,7 @@
 # EPIC-PAR-ACT-ACORDO — Reformular ACT: pessoa-física → Acordo de Cooperação Técnica
 
-> **Status:** Aberto (design) — 2026-06-10. Origem: `handbook/tickets/todo/PAR-ACT-ACORDO.md` (handoff
+> **Status:** Aberto — **decisões D1–D4 resolvidas** (2026-06-10), pronto para implementar A1. Origem:
+> `handbook/tickets/todo/PAR-ACT-ACORDO.md` (handoff
 > front, **prioridade alta** — maior gap de backend da rodada). Módulo `partners` (`par_*`, ADR-0014).
 > Decompõe o ticket L em fatias W0→W3 verticais por capacidade. Cada fatia abre seu próprio ticket de
 > pipeline em `.claude/.pipeline/<ID>/` na hora de implementar.
@@ -21,14 +22,14 @@ ainda exige os campos de pessoa-física. Este épico reescreve o agregado e prop
 | --- | --- |
 | `cpf` (`shared/kernel/cpf.ts`) | **REMOVER** → dá lugar a `cnpj` institucional |
 | `employmentRelationship` (enum collaborator) | **REMOVER** |
-| `startOfContract` (YYYY-MM-DD) | **REMOVER** (vigência vira `initialValidityMonths`) |
+| `startOfContract` (YYYY-MM-DD) | **REMOVER** (vigência vira `validity: Period` — D2) |
 | `registrationStatus` (PreRegistration/...) | **REMOVER** (conceito de Colaborador, não de Acordo) |
 | `name` | **MANTER** (reconceituar como "título/objeto do acordo") |
 | `email` | **MANTER** (e-mail de contato) |
 | `occupationArea` (`PARC\|DDI\|DCE\|EPV`) | **MANTER** (área de atuação) |
 | `role` | **MANTER** (reconceituar como `legalRepresentative` / ponto de contato) |
-| — | **NOVO** `actNumber: string` (nº do instrumento, único) |
-| — | **NOVO** `initialValidityMonths: number` (inteiro ≥ 1) |
+| — | **NOVO** `actNumber: string` (nº do instrumento, **único** — D1) |
+| — | **NOVO** `validity: Period` (`startDate` + `endDate`) — **D2** |
 | — | **NOVO** `cnpj` (`shared/kernel/cnpj.ts` — já existe) |
 | — | **NOVO** `corporateName: string` (razão social) |
 | — | **NOVO** `fantasyName: string` (nome fantasia/sigla) |
@@ -47,19 +48,24 @@ criar por ora.
 - `BankAccount` / `PixKey` / `createBankAccount` / `createPixKey` — `src/modules/partners/domain/supplier/payment-target.ts`.
 - `OccupationArea` — mantém o VO atual do ACT.
 
-## 4. ⚠️ Decisões a resolver antes de A1 (P.O. / tech lead)
+## 4. ✅ Decisões resolvidas (P.O., 2026-06-10)
 
-| # | Decisão | Recomendação (default proposto) |
+| # | Decisão | **Resolução** |
 | --- | --- | --- |
-| **D1** | `actNumber`: gerado pelo backend ou fornecido? formato? unicidade? | **Fornecido pelo operador** (é o nº do instrumento jurídico real), `string` obrigatória, **única** (unique index). NÃO gerar como em contrato. |
-| **D2** | Vigência: "meses" basta ou precisa data início/fim derivada? | `initialValidityMonths: number` (inteiro ≥ 1) como o front pede. Datas derivadas = follow-up. |
-| **D3** | CPF→CNPJ: destino do `cpf` atual + migração dos ACTs existentes | **Drop `cpf`.** Se os ACTs atuais são dados de teste → migração descontinua (recria); se há reais → mapear caso a caso. **Confirmar com P.O.** |
-| **D4** | `registrationStatus` sai do agregado/list do ACT? | **Sim** — remover (não se aplica a Acordo). |
+| **D1** | `actNumber`: gerado ou fornecido? unicidade? | **Fornecido pelo operador** (nº do instrumento jurídico), `string` obrigatória, **única** (unique index). NÃO gerar pelo backend. |
+| **D2** | Vigência: meses ou data início/fim? | **Período explícito** — `validity: Period` (`startDate` + `endDate`). ⚠️ Diverge do front (que coleta "meses") — ver nota abaixo. |
+| **D3** | Destino do `cpf` + migração | **Drop `cpf` + recriar.** Os ACTs atuais são só seed de teste (sem produção) → migração descontinua os dados e o `seed-partners.ts` é reescrito para acordos. |
+| **D4** | `registrationStatus` sai do ACT? | **Sim** — remover do agregado, schema e list item (conceito de Colaborador, não de Acordo). |
+
+> **⚠️ Handoff reverso ao front (D2):** o form atual coleta **"Vigência Inicial (Meses)"**, mas o backend
+> passará a modelar `validity` como **período (início + fim)**. O front precisará coletar/derivar as duas
+> datas (ou o BFF converte meses → `startDate`+`endDate`). Registrar como item de handoff core-api → front
+> ao concluir A4 (HTTP). Reusar o VO `Period` se já houver kernel compartilhado; senão, criar em `partners`.
 
 ## 5. Fatiamento (W0→W3 por fatia — ordem = dependência)
 
 ### A1 — `PAR-ACT-DOMAIN` (size M)
-Reescreve o agregado puro. Novos VOs (`actNumber`, `initialValidityMonths`), reusa `Cnpj`/`PaymentTarget`,
+Reescreve o agregado puro. Novos VOs (`actNumber` único, `validity: Period`), reusa `Cnpj`/`PaymentTarget`,
 remove `cpf`/`employmentRelationship`/`startOfContract`/`registrationStatus`. Smart constructors
 `register`/`edit` com a **regra de repasse**. Eventos `ActRegistered`/`ActEdited` refletindo os campos novos.
 **Arquivos:** `domain/act/{act.ts,act-id.ts,errors.ts,events.ts,types.ts}` (+ novos VOs do acordo).
@@ -106,6 +112,6 @@ do "definition of done" de A2 — não deixar para depois.
 
 ## 8. Sequência sugerida
 
-`D1–D4 (decisões)` → **A1** → **A2** (+contractor-view) → **A3** → **A4** → **A5**. A1 e A2 são o núcleo
+`D1–D4 (✅ resolvidas)` → **A1** → **A2** (+contractor-view) → **A3** → **A4** (+handoff vigência ao front) → **A5**. A1 e A2 são o núcleo
 (reescrita do agregado + persistência/migração); A3–A5 propagam até a borda. Estimativa: ~5 tickets de
 pipeline (2× M no núcleo, 1× S/M, 1× M, 1× S).
