@@ -1,5 +1,6 @@
 /**
- * Testes do InMemory ActRepository — guarda duplicidade de CPF/email e CRUD básico.
+ * Testes do InMemory ActRepository (Acordo de Cooperação Técnica) — guarda
+ * duplicidade de `actNumber` e CRUD básico.
  */
 
 import { describe, it } from 'node:test';
@@ -9,16 +10,22 @@ import { makeInMemoryActStore } from '#src/modules/partners/adapters/persistence
 import * as Act from '#src/modules/partners/domain/act/act.ts';
 import * as ActId from '#src/modules/partners/domain/act/act-id.ts';
 
-const buildAct = (cpf: string, email: string) => {
+const buildAct = (actNumber: string, cnpj = '11.222.333/0001-81') => {
   const r = Act.register({
     id: ActId.generate(),
-    name: 'Maria Silva',
-    email,
-    cpf,
+    actNumber,
+    name: 'Acordo de Cooperação X',
+    email: 'contato@instituicao.org',
+    cnpj,
+    corporateName: 'Instituição Parceira LTDA',
+    fantasyName: 'IP',
     occupationArea: 'PARC',
-    role: 'Analista',
-    startOfContract: new Date('2026-01-10'),
-    employmentRelationship: 'CLT',
+    legalRepresentative: 'João Diretor',
+    startDate: '2026-01-01',
+    endDate: '2026-12-31',
+    hasFinancialTransfer: false,
+    bankAccount: null,
+    pixKey: null,
     registeredAt: new Date('2026-01-01'),
   });
   if (!r.ok) throw new Error(`fixture act: ${r.error}`);
@@ -28,7 +35,7 @@ const buildAct = (cpf: string, email: string) => {
 describe('makeInMemoryActStore', () => {
   it('save e findById retornam o mesmo agregado', async () => {
     const { repository } = makeInMemoryActStore();
-    const act = buildAct('11144477735', 'maria@example.com');
+    const act = buildAct('ACT-2026-001');
     const saved = await repository.save(act);
     assert.equal(saved.ok, true);
 
@@ -47,34 +54,21 @@ describe('makeInMemoryActStore', () => {
     assert.equal(found.value, null);
   });
 
-  it('findByCpf retorna o act correspondente', async () => {
+  it('findByActNumber retorna o act correspondente', async () => {
     const { repository } = makeInMemoryActStore();
-    const act = buildAct('11144477735', 'cpf@example.com');
+    const act = buildAct('ACT-2026-007');
     await repository.save(act);
 
-    const found = await repository.findByCpf(act.cpf);
+    const found = await repository.findByActNumber(act.actNumber);
     assert.equal(found.ok, true);
     if (!found.ok) return;
-    assert.equal(String(found.value?.cpf), String(act.cpf));
-  });
-
-  it('findByEmail retorna o act correspondente', async () => {
-    const { repository } = makeInMemoryActStore();
-    const act = buildAct('11144477735', 'unique@example.com');
-    await repository.save(act);
-
-    const found = await repository.findByEmail(act.email);
-    assert.equal(found.ok, true);
-    if (!found.ok) return;
-    assert.equal(found.value?.email, act.email);
+    assert.equal(String(found.value?.actNumber), String(act.actNumber));
   });
 
   it('list retorna todos os acts salvos', async () => {
     const { repository } = makeInMemoryActStore();
-    const a = buildAct('11144477735', 'a@example.com');
-    const b = buildAct('52998224725', 'b@example.com');
-    await repository.save(a);
-    await repository.save(b);
+    await repository.save(buildAct('ACT-2026-001'));
+    await repository.save(buildAct('ACT-2026-002'));
 
     const list = await repository.list();
     assert.equal(list.ok, true);
@@ -82,31 +76,25 @@ describe('makeInMemoryActStore', () => {
     assert.equal(list.value.length, 2);
   });
 
-  it('save com CPF duplicado de id diferente → act-cpf-duplicate', async () => {
+  it('save com actNumber duplicado de id diferente → act-number-duplicate', async () => {
     const { repository } = makeInMemoryActStore();
-    const a = buildAct('11144477735', 'a@example.com');
-    const b = buildAct('11144477735', 'b@example.com');
-    await repository.save(a);
-    const dup = await repository.save(b);
+    await repository.save(buildAct('ACT-2026-001'));
+    const dup = await repository.save(buildAct('ACT-2026-001'));
     assert.equal(dup.ok, false);
     if (dup.ok) return;
-    assert.equal(dup.error, 'act-cpf-duplicate');
+    assert.equal(dup.error, 'act-number-duplicate');
   });
 
-  it('save com email duplicado de id diferente → act-email-duplicate', async () => {
+  it('mesmo CNPJ em acts diferentes é permitido (instituição com vários acordos)', async () => {
     const { repository } = makeInMemoryActStore();
-    const a = buildAct('11144477735', 'dup@example.com');
-    const b = buildAct('52998224725', 'dup@example.com');
-    await repository.save(a);
-    const dup = await repository.save(b);
-    assert.equal(dup.ok, false);
-    if (dup.ok) return;
-    assert.equal(dup.error, 'act-email-duplicate');
+    await repository.save(buildAct('ACT-2026-001', '11.222.333/0001-81'));
+    const ok2 = await repository.save(buildAct('ACT-2026-002', '11.222.333/0001-81'));
+    assert.equal(ok2.ok, true);
   });
 
   it('save do mesmo id (update) não falha por duplicidade', async () => {
     const { repository } = makeInMemoryActStore();
-    const act = buildAct('11144477735', 'upd@example.com');
+    const act = buildAct('ACT-2026-001');
     await repository.save(act);
     const again = await repository.save(act);
     assert.equal(again.ok, true);
@@ -114,7 +102,7 @@ describe('makeInMemoryActStore', () => {
 
   it('clear remove todos os acts', async () => {
     const { repository, clear } = makeInMemoryActStore();
-    await repository.save(buildAct('11144477735', 'c@example.com'));
+    await repository.save(buildAct('ACT-2026-001'));
     clear();
     const list = await repository.list();
     assert.equal(list.ok, true);

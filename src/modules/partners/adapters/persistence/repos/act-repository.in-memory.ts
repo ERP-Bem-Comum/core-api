@@ -1,8 +1,8 @@
 /**
- * Adapter InMemory do `ActRepository` (módulo partners). Para teste/CLI.
+ * Adapter InMemory do `ActRepository` (Acordo de Cooperação Técnica). Para teste/CLI.
  *
- * `Map<ActId, Act>`. `save` recusa CPF e email duplicados com id diferente
- * (espelha os UNIQUE de `par_acts.cpf`/`.email`).
+ * `Map<ActId, Act>`. `save` recusa `actNumber` duplicado com id diferente
+ * (espelha o UNIQUE de `par_acts.act_number`).
  */
 
 import { ok, err } from '#src/shared/primitives/result.ts';
@@ -20,14 +20,13 @@ export const makeInMemoryActStore = (): InMemoryActStore => {
 
   const repository: ActRepository = {
     findById: async (id) => ok(map.get(id) ?? null),
-    findByCpf: async (cpf) => ok([...map.values()].find((a) => a.cpf === cpf) ?? null),
-    findByEmail: async (email) => ok([...map.values()].find((a) => a.email === email) ?? null),
+    findByActNumber: async (actNumber) =>
+      ok([...map.values()].find((a) => a.actNumber === actNumber) ?? null),
     list: async () => ok([...map.values()]),
     save: async (act) => {
       for (const existing of map.values()) {
         if (existing.id === act.id) continue;
-        if (existing.cpf === act.cpf) return err('act-cpf-duplicate');
-        if (existing.email === act.email) return err('act-email-duplicate');
+        if (existing.actNumber === act.actNumber) return err('act-number-duplicate');
       }
       map.set(act.id, act);
       return ok(undefined);

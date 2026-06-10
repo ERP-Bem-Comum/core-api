@@ -1,9 +1,8 @@
-// Adapter Drizzle de ActRepository (módulo partners).
+// Adapter Drizzle de ActRepository (Acordo de Cooperação Técnica, módulo partners).
 //
-//   - findById/findByCpf/findByEmail/list: SELECT + mapper.
+//   - findById/findByActNumber/list: SELECT + mapper.
 //   - save: SELECT-then-UPDATE-or-INSERT (ADR-0020 — sem ON DUPLICATE KEY).
-//     UNIQUE `par_acts_cpf_idx` → act-cpf-duplicate;
-//     UNIQUE `par_acts_email_idx` → act-email-duplicate.
+//     UNIQUE `par_acts_act_number_idx` → act-number-duplicate.
 //
 // ADR-0020: sem ODKU. ADR-0014: só par_*. Boundary: try/catch → Result (zero throw).
 
@@ -12,13 +11,13 @@ import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
-import type { Cpf } from '#src/shared/kernel/cpf.ts';
 import type {
   ActRepository,
   ActRepositoryError,
 } from '#src/modules/partners/domain/act/repository.ts';
 import type { Act } from '#src/modules/partners/domain/act/types.ts';
 import type { ActId } from '#src/modules/partners/domain/act/act-id.ts';
+import type { ActNumber } from '#src/modules/partners/domain/act/act-number.ts';
 import type { PartnersMysqlHandle } from '../drivers/mysql-driver.ts';
 import { actToInsert, actFromRow, type ActMapperError } from '../mappers/act.mapper.ts';
 import type { ActRow } from '../schemas/mysql.ts';
@@ -31,8 +30,7 @@ const dupEntryIndex = (e: unknown): string | null => {
     if (typeof c === 'object' && c !== null) {
       const obj = c as Record<string, unknown>;
       if (obj['errno'] === 1062 && typeof obj['sqlMessage'] === 'string') {
-        if (obj['sqlMessage'].includes('par_acts_cpf_idx')) return 'cpf';
-        if (obj['sqlMessage'].includes('par_acts_email_idx')) return 'email';
+        if (obj['sqlMessage'].includes('par_acts_act_number_idx')) return 'act-number';
       }
     }
   }
@@ -74,28 +72,17 @@ export const createDrizzleActStore = (
       }
     },
 
-    findByCpf: async (cpf: Cpf) => {
+    findByActNumber: async (actNumber: ActNumber) => {
       try {
         const rows = await db
           .select()
           .from(table)
-          .where(eq(table.cpf, cpf as unknown as string))
+          .where(eq(table.actNumber, actNumber as unknown as string))
           .limit(1);
         const row = rows[0];
         return row === undefined ? ok(null) : reconstruct(row);
       } catch (cause) {
-        logRepo('findByCpf', cause);
-        return err('act-repo-unavailable');
-      }
-    },
-
-    findByEmail: async (email: string) => {
-      try {
-        const rows = await db.select().from(table).where(eq(table.email, email)).limit(1);
-        const row = rows[0];
-        return row === undefined ? ok(null) : reconstruct(row);
-      } catch (cause) {
-        logRepo('findByEmail', cause);
+        logRepo('findByActNumber', cause);
         return err('act-repo-unavailable');
       }
     },
@@ -138,8 +125,7 @@ export const createDrizzleActStore = (
         return ok(undefined);
       } catch (cause) {
         const dup = dupEntryIndex(cause);
-        if (dup === 'cpf') return err('act-cpf-duplicate');
-        if (dup === 'email') return err('act-email-duplicate');
+        if (dup === 'act-number') return err('act-number-duplicate');
         logRepo('save', cause);
         return err('act-repo-unavailable');
       }
