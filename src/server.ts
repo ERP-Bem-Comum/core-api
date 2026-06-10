@@ -272,6 +272,8 @@ const main = async (): Promise<void> => {
             getUser: authDeps.getUser,
             updateUserProfile: authDeps.updateUserProfile,
             requestPasswordReset: authDeps.requestPasswordReset,
+            setProfilePhoto: authDeps.setProfilePhoto,
+            removeProfilePhoto: authDeps.removeProfilePhoto,
           },
           { requireAuth },
         ),

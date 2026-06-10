@@ -88,9 +88,9 @@
 > autosserviço (só admin via `PUT /users/:id`) — front mantém CPF read-only, libera o e-mail. (closed-green
 > 2026-06-10)
 
-**[USR-ME-PHOTO](./USR-ME-PHOTO.md) — Foto de perfil.** Não há `/api/v1/me/photo` (só `/users/:id/photo`,
-admin) e o `POST /users` não recebe imagem. *Bloqueia no front:* "Alterar Imagem" e "Foto de Perfil"
-ficam **gated** (avatar usa as iniciais).
+> **✅ Entregue:** [USR-ME-PHOTO](../done/USR-ME-PHOTO.md) — `PUT`/`DELETE /api/v1/me/photo` (autosserviço,
+> self por construção, sem `user:update`), espelhando as rotas admin. Helper de upload extraído (DRY).
+> (closed-green 2026-06-10). *Nota:* foto no `POST /users` (create) segue fora de escopo — fluxo create → PUT.
 
 > **✅ Entregue:** [USR-PASSWORD-POLICY](../done/USR-PASSWORD-POLICY.md) — política alinhada ao **OWASP
 > 2025/NIST 800-63B** (decisão via `security-backend-expert`): **mínimo 8 → 12**, máx 128, **sem
