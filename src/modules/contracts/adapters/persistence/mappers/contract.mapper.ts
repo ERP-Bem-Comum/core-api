@@ -38,6 +38,12 @@ export type ContractMapperInvalidStatus = Readonly<{
   attemptedValue: string;
 }>;
 
+// CTR-NUMBER-PROGRAM: classificação corrompida no banco (fora de CT|OS).
+export type ContractMapperInvalidClassification = Readonly<{
+  tag: 'ContractMapperInvalidClassification';
+  attemptedValue: string;
+}>;
+
 export type ContractMapperInvalidMoney = Readonly<{
   tag: 'ContractMapperInvalidMoney';
   field: 'originalValueCents' | 'currentValueCents';
@@ -81,6 +87,7 @@ export type ContractMapperInvalidContractor = Readonly<{
 export type ContractMapperError =
   | ContractMapperInvalidId
   | ContractMapperInvalidStatus
+  | ContractMapperInvalidClassification
   | ContractMapperInvalidMoney
   | ContractMapperInvalidPeriod
   | ContractMapperInvalidAmendmentId
@@ -102,6 +109,13 @@ export const contractMapperInvalidStatus = (
   attemptedValue: string,
 ): ContractMapperInvalidStatus => ({
   tag: 'ContractMapperInvalidStatus',
+  attemptedValue,
+});
+
+export const contractMapperInvalidClassification = (
+  attemptedValue: string,
+): ContractMapperInvalidClassification => ({
+  tag: 'ContractMapperInvalidClassification',
   attemptedValue,
 });
 
@@ -197,6 +211,11 @@ export const contractToInsert = (
         endedAt: c.status === 'Cancelled' ? c.endedAt : null,
         contractorType: c.contractor.type,
         contractorId: c.contractor.id as unknown as string,
+        classification: c.classification,
+        programId: c.programId,
+        budgetPlanId: c.budgetPlanId,
+        categorizacao: c.categorizacao,
+        centroDeCusto: c.centroDeCusto,
         observations: c.observations,
         email: c.email,
         telephone: c.telephone,
@@ -230,6 +249,11 @@ export const contractToInsert = (
       terminationReason: c.status === 'Terminated' ? c.terminationReason : null,
       contractorType: c.contractor.type,
       contractorId: c.contractor.id as unknown as string,
+      classification: c.classification,
+      programId: c.programId,
+      budgetPlanId: c.budgetPlanId,
+      categorizacao: c.categorizacao,
+      centroDeCusto: c.centroDeCusto,
       observations: c.observations,
       email: c.email,
       telephone: c.telephone,
@@ -266,6 +290,11 @@ export const contractFromRow = (
   if (!contractorR.ok)
     return err(contractMapperInvalidContractor(row.contractorType, row.contractorId));
 
+  // CTR-NUMBER-PROGRAM: classificação restrita a CT|OS (CHECK garante; defesa em profundidade).
+  if (row.classification !== 'CT' && row.classification !== 'OS') {
+    return err(contractMapperInvalidClassification(row.classification));
+  }
+
   // Campos de cadastro — comuns a todos os estados (inclusive Pending).
   const registration = {
     id: idR.value,
@@ -275,6 +304,11 @@ export const contractFromRow = (
     originalValue: origValue.value,
     originalPeriod: origPeriod.value,
     contractor: contractorR.value,
+    classification: row.classification,
+    programId: row.programId,
+    budgetPlanId: row.budgetPlanId,
+    categorizacao: row.categorizacao,
+    centroDeCusto: row.centroDeCusto,
     observations: row.observations,
     email: row.email,
     telephone: row.telephone,

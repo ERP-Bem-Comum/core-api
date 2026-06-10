@@ -7,7 +7,7 @@ import {
   type ContractInputParseError,
 } from './contract-input-parse.ts';
 import { Contract } from '../../domain/contract/contract.ts';
-import type { PendingContract } from '../../domain/contract/types.ts';
+import type { PendingContract, ContractClassification } from '../../domain/contract/types.ts';
 import type { ContractEvent } from '../../domain/contract/events.ts';
 import type { ContractError } from '../../domain/contract/errors.ts';
 import type {
@@ -30,6 +30,12 @@ export type CreatePendingContractCommand = Readonly<{
   periodEnd: string | null;
   contractorType: string;
   contractorId: string;
+  // CTR-NUMBER-PROGRAM: classificação (default CT) + metadados de cadastro (opcionais).
+  classification?: ContractClassification;
+  programId?: string | null;
+  budgetPlanId?: string | null;
+  categorizacao?: string | null;
+  centroDeCusto?: string | null;
 }>;
 
 export type CreatePendingContractError =
@@ -88,6 +94,12 @@ export const createPendingContract =
       originalPeriod: parsed.value.originalPeriod,
       contractor: contractor.value,
       createdAt: deps.clock.now(),
+      // CTR-NUMBER-PROGRAM: classification omitida quando ausente (default CT); metadados repassados.
+      ...(cmd.classification !== undefined ? { classification: cmd.classification } : {}),
+      programId: cmd.programId ?? null,
+      budgetPlanId: cmd.budgetPlanId ?? null,
+      categorizacao: cmd.categorizacao ?? null,
+      centroDeCusto: cmd.centroDeCusto ?? null,
     });
     if (!created.ok) return created;
 

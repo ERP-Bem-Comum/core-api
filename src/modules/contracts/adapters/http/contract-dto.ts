@@ -15,6 +15,7 @@ import type { ContractDetail } from '../../application/use-cases/get-contract-de
 import { amendmentToDto } from './amendment-dto.ts';
 import { documentToDto } from './document-dto.ts';
 import type { ContractorBlock } from './contractor-composition.ts';
+import type { ProgramBlock } from './program-composition.ts';
 import type { ContractDetailDto, ContractListItemDto } from './schemas.ts';
 
 type PeriodDto =
@@ -26,7 +27,17 @@ const periodToDto = (p: Period): PeriodDto =>
     ? { kind: 'Fixed', start: PlainDate.toISOString(p.start), end: PlainDate.toISOString(p.end) }
     : { kind: 'Indefinite', start: PlainDate.toISOString(p.start) };
 
-export const contractToListItem = (c: Contract): ContractListItemDto => {
+/**
+ * `program` (CTR-NUMBER-PROGRAM) é o bloco composto na borda a partir de `programId`
+ * (espelha o `contractor` do detalhe). Default `null` — chamadas sem composição (CSV,
+ * respostas de escrita sem programs) serializam `program: null`; a listagem (batch) e o
+ * detalhe (single) passam o bloco resolvido. Os 5 campos crus (classification + metadados)
+ * vêm direto do agregado e aparecem em todas as variantes.
+ */
+export const contractToListItem = (
+  c: Contract,
+  program: ProgramBlock = null,
+): ContractListItemDto => {
   const registration = {
     id: c.id,
     sequentialNumber: c.sequentialNumber,
@@ -34,6 +45,12 @@ export const contractToListItem = (c: Contract): ContractListItemDto => {
     objective: c.objective,
     originalValue: { cents: c.originalValue.cents },
     originalPeriod: periodToDto(c.originalPeriod),
+    classification: c.classification,
+    programId: c.programId,
+    budgetPlanId: c.budgetPlanId,
+    categorizacao: c.categorizacao,
+    centroDeCusto: c.centroDeCusto,
+    program,
   };
 
   switch (c.status) {
@@ -84,12 +101,13 @@ export const contractToListItem = (c: Contract): ContractListItemDto => {
 export const contractToDetailDto = (
   detail: ContractDetail,
   contractor: ContractorBlock,
+  program: ProgramBlock = null,
 ): ContractDetailDto => {
   const amendments = [...detail.amendments]
     .sort((a, b) => a.amendmentNumber.localeCompare(b.amendmentNumber))
     .map(amendmentToDto);
   return {
-    ...contractToListItem(detail.contract),
+    ...contractToListItem(detail.contract, program),
     contractor,
     observations: detail.contract.observations,
     email: detail.contract.email,

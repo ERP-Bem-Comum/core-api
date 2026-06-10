@@ -7,7 +7,7 @@ import type { MoneyError } from '#src/shared/kernel/money.ts';
 import type { PeriodError } from '#src/shared/kernel/period.ts';
 import { parseOriginalValueAndPeriod } from './contract-input-parse.ts';
 import { Contract } from '../../domain/contract/contract.ts';
-import type { ActiveContract } from '../../domain/contract/types.ts';
+import type { ActiveContract, ContractClassification } from '../../domain/contract/types.ts';
 import type { ContractEvent } from '../../domain/contract/events.ts';
 import type { ContractError } from '../../domain/contract/errors.ts';
 import type {
@@ -32,6 +32,12 @@ export type CreateContractCommand = Readonly<{
   originalPeriodEnd: string | null;
   contractorType: string;
   contractorId: string;
+  // CTR-NUMBER-PROGRAM: classificação (default CT) + metadados de cadastro (opcionais).
+  classification?: ContractClassification;
+  programId?: string | null;
+  budgetPlanId?: string | null;
+  categorizacao?: string | null;
+  centroDeCusto?: string | null;
 }>;
 
 // Input do builder puro: o número sequencial JÁ resolvido (gerado ou preservado).
@@ -96,6 +102,13 @@ export const buildContract = (
     originalValue: parsed.value.originalValue,
     originalPeriod: parsed.value.originalPeriod,
     contractor: contractor.value,
+    // CTR-NUMBER-PROGRAM: classification omitida quando ausente (default CT no domínio,
+    // exactOptionalPropertyTypes); metadados nuláveis repassados.
+    ...(cmd.classification !== undefined ? { classification: cmd.classification } : {}),
+    programId: cmd.programId ?? null,
+    budgetPlanId: cmd.budgetPlanId ?? null,
+    categorizacao: cmd.categorizacao ?? null,
+    centroDeCusto: cmd.centroDeCusto ?? null,
   });
   if (!created.ok) return created;
 

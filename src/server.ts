@@ -40,6 +40,10 @@ import {
   buildProgramsHttpDeps,
   type ProgramsCompositionConfig,
 } from '#src/modules/programs/public-api/http.ts';
+import {
+  buildProgramsReadPort,
+  type ProgramsReadPort,
+} from '#src/modules/programs/public-api/index.ts';
 import type { LogoS3Config } from '#src/modules/programs/adapters/storage/logo-storage.s3.ts';
 
 // Config S3/MinIO do logo de programa (ADR-0019). Só retorna config quando todas as envs
@@ -97,6 +101,24 @@ const main = async (): Promise<void> => {
     ...(resetBaseUrl !== undefined && resetBaseUrl.length > 0 ? { resetBaseUrl } : {}),
   });
 
+  // CTR-NUMBER-PROGRAM: read port de programs (ADR-0006/0014) p/ contracts compor o bloco
+  // `program`. Só em mysql + PROGRAMS_DATABASE_URL; falha de abertura DEGRADA (não derruba o
+  // boot — a composição do programa é opcional, ADR-0032). Fechado no graceful shutdown.
+  const programsWriterUrl = process.env['PROGRAMS_DATABASE_URL'];
+  let programsReadPort: ProgramsReadPort | undefined = undefined;
+  if (
+    process.env['PROGRAMS_DRIVER'] === 'mysql' &&
+    programsWriterUrl !== undefined &&
+    programsWriterUrl.length > 0
+  ) {
+    const portR = await buildProgramsReadPort({ connectionString: programsWriterUrl });
+    if (portR.ok) programsReadPort = portR.value;
+    else
+      process.stderr.write(
+        `server: programs read port indisponível (${portR.error}) — bloco program degradado\n`,
+      );
+  }
+
   // RW split (ADR-0026): CONTRACTS_DATABASE_URL = writer; CONTRACTS_READER_URL = réplica
   // (ausente → reusa o writer, single-node). Reads roteiam ao reader.
   const contractsWriterUrl = process.env['CONTRACTS_DATABASE_URL'];
@@ -107,8 +129,12 @@ const main = async (): Promise<void> => {
           driver: 'mysql',
           ...(contractsWriterUrl !== undefined ? { writerUrl: contractsWriterUrl } : {}),
           ...(contractsReaderUrl !== undefined ? { readerUrl: contractsReaderUrl } : {}),
+          ...(programsReadPort !== undefined ? { programReadPort: programsReadPort } : {}),
         }
-      : { driver: 'memory' },
+      : {
+          driver: 'memory',
+          ...(programsReadPort !== undefined ? { programReadPort: programsReadPort } : {}),
+        },
   );
 
   // RW split (ADR-0026) do módulo partners: PARTNERS_DATABASE_URL = writer; PARTNERS_READER_URL
@@ -127,7 +153,7 @@ const main = async (): Promise<void> => {
 
   // Módulo programs (spec 008, ADR-0033) → /api/v1/programs. Logo storage S3/MinIO (ADR-0019)
   // só quando todas as envs PROGRAMS_LOGO_* presentes; ausente → storage in-memory (degradado).
-  const programsWriterUrl = process.env['PROGRAMS_DATABASE_URL'];
+  // `programsWriterUrl` já lido acima (read port de contracts). Reusa a mesma connection string.
   const programsLogo = readProgramsLogoConfig(process.env);
   const programsDeps = await buildProgramsHttpDeps(
     process.env['PROGRAMS_DRIVER'] === 'mysql'
@@ -263,6 +289,8 @@ const main = async (): Promise<void> => {
     await contractsDeps.shutdown();
     await partnersDeps.shutdown();
     await programsDeps.shutdown();
+    // CTR-NUMBER-PROGRAM: fecha o pool do read port de programs injetado em contracts.
+    if (programsReadPort !== undefined) await programsReadPort.close();
     app.log.info('Servidor encerrado.');
   };
 

@@ -19,6 +19,7 @@ import type {
   ExpiredContract,
   TerminatedContract,
   CancelledContract,
+  ContractClassification,
 } from '#src/modules/contracts/domain/contract/types.ts';
 import type {
   PendingWithoutDocumentAmendment,
@@ -73,7 +74,24 @@ export type ContractOverrides = Partial<{
   periodKind: 'Fixed' | 'Indefinite';
   periodStartISO: string;
   periodEndISO: string;
+  // CTR-NUMBER-PROGRAM: classificação (default CT no domínio) + metadados de cadastro.
+  classification: ContractClassification;
+  programId: string | null;
+  budgetPlanId: string | null;
+  categorizacao: string | null;
+  centroDeCusto: string | null;
 }>;
+
+// Spread condicional dos metadados de cadastro (CTR-NUMBER-PROGRAM) — `classification`
+// é omitida quando ausente (default CT no domínio); `exactOptionalPropertyTypes` proíbe
+// passar `undefined` explícito em campo opcional sem `undefined` no domínio.
+const registrationMeta = (o: ContractOverrides) => ({
+  ...(o.classification !== undefined ? { classification: o.classification } : {}),
+  ...(o.programId !== undefined ? { programId: o.programId } : {}),
+  ...(o.budgetPlanId !== undefined ? { budgetPlanId: o.budgetPlanId } : {}),
+  ...(o.categorizacao !== undefined ? { categorizacao: o.categorizacao } : {}),
+  ...(o.centroDeCusto !== undefined ? { centroDeCusto: o.centroDeCusto } : {}),
+});
 
 export const buildContract = (overrides: ContractOverrides = {}): ActiveContract => {
   const id = unwrap(
@@ -96,6 +114,7 @@ export const buildContract = (overrides: ContractOverrides = {}): ActiveContract
     originalValue: someMoney(overrides.originalValueCents ?? 10_000_000),
     originalPeriod: period,
     contractor: someContractor(),
+    ...registrationMeta(overrides),
   });
   return unwrap('Contract.create', r).contract;
 };
@@ -122,6 +141,7 @@ export const buildPendingContract = (overrides: ContractOverrides = {}): Pending
     originalPeriod: period,
     contractor: someContractor(),
     createdAt: new Date('2026-01-10T00:00:00.000Z'),
+    ...registrationMeta(overrides),
   });
   return unwrap('Contract.createPending', r).contract;
 };

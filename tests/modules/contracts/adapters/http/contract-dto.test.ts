@@ -33,10 +33,48 @@ describe('contractToListItem — mapper agregado -> DTO', () => {
       status: 'Active',
       originalValue: { cents: 10_000_000 },
       originalPeriod: { kind: 'Fixed', start: '2026-02-01', end: '2026-12-31' },
+      // CTR-NUMBER-PROGRAM: classificação default CT + metadados nulos + bloco program null.
+      classification: 'CT',
+      programId: null,
+      budgetPlanId: null,
+      categorizacao: null,
+      centroDeCusto: null,
+      program: null,
       signedAt: '2026-01-15T00:00:00.000Z',
       currentValue: { cents: 10_000_000 },
       currentPeriod: { kind: 'Fixed', start: '2026-02-01', end: '2026-12-31' },
     });
+  });
+
+  it('CTR-NUMBER-PROGRAM: serializa classification OS + metadados de cadastro crus', () => {
+    const dto = contractToListItem(
+      buildContract({
+        classification: 'OS',
+        programId: '77777777-7777-4777-8777-777777777777',
+        budgetPlanId: '66666666-6666-4666-8666-666666666666',
+        categorizacao: 'Custeio',
+        centroDeCusto: 'CC-042',
+      }),
+    );
+    assert.equal(dto.classification, 'OS');
+    assert.equal(dto.programId, '77777777-7777-4777-8777-777777777777');
+    assert.equal(dto.budgetPlanId, '66666666-6666-4666-8666-666666666666');
+    assert.equal(dto.categorizacao, 'Custeio');
+    assert.equal(dto.centroDeCusto, 'CC-042');
+  });
+
+  it('CTR-NUMBER-PROGRAM: bloco program (2º arg) é serializado no list-item', () => {
+    const program = {
+      id: '77777777-7777-4777-8777-777777777777',
+      snapshot: { name: 'Programa Mãe Atende', sigla: 'PMA', programNumber: 1 },
+    };
+    const dto = contractToListItem(buildContract(), program);
+    assert.deepEqual(dto.program, program);
+  });
+
+  it('CTR-NUMBER-PROGRAM: program ausente (sem 2º arg) → null', () => {
+    const dto = contractToListItem(buildContract());
+    assert.equal(dto.program, null);
   });
 
   it('Pending: sem signedAt/currentValue/currentPeriod (campos do estado efetivo ausentes)', () => {

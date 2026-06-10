@@ -12,6 +12,8 @@ import type {
   TerminatedContract,
   CancelledContract,
   ContractAdjustment,
+  ContractClassification,
+  ContractRegistrationMetaInput,
   CreateContractInput,
   CreatePendingContractInput,
 } from './types.ts';
@@ -62,6 +64,35 @@ const validateRegistration = (
   return ok(null);
 };
 
+// CTR-NUMBER-PROGRAM: resolve os metadados de cadastro. `classification` defaulta para 'CT' e
+// só aceita 'CT'|'OS'; os demais são refs/rótulos opcionais → `null` quando ausentes.
+type ResolvedMeta = Readonly<{
+  classification: ContractClassification;
+  programId: string | null;
+  budgetPlanId: string | null;
+  categorizacao: string | null;
+  centroDeCusto: string | null;
+}>;
+
+const CONTRACT_CLASSIFICATIONS: readonly ContractClassification[] = ['CT', 'OS'];
+
+const resolveMeta = (
+  input: ContractRegistrationMetaInput,
+): Result<ResolvedMeta, ContractError.ContractError> => {
+  const classification = input.classification ?? 'CT';
+  // Validação runtime defensiva (a borda Zod já garante o enum; protege contra bypass de tipo).
+  if (!CONTRACT_CLASSIFICATIONS.includes(classification)) {
+    return err(ContractError.contractClassificationInvalid(String(input.classification)));
+  }
+  return ok({
+    classification,
+    programId: input.programId ?? null,
+    budgetPlanId: input.budgetPlanId ?? null,
+    categorizacao: input.categorizacao ?? null,
+    centroDeCusto: input.centroDeCusto ?? null,
+  });
+};
+
 // ─── Operações do agregado ────────────────────────────────────────────────────
 
 /**
@@ -77,6 +108,8 @@ const createPending = (
   if (!reg.ok) return reg;
   // Defeito #9: contrato com valor original zero não tem propósito de negócio.
   if (input.originalValue.cents === 0) return err(ContractError.contractOriginalValueZero());
+  const meta = resolveMeta(input);
+  if (!meta.ok) return meta;
 
   const contract: PendingContract = immutable({
     id: input.id,
@@ -86,6 +119,7 @@ const createPending = (
     originalValue: input.originalValue,
     originalPeriod: input.originalPeriod,
     contractor: input.contractor,
+    ...meta.value,
     observations: null,
     email: null,
     telephone: null,
@@ -147,6 +181,8 @@ const create = (
   if (!isValidDate(input.signedAt)) return err(ContractError.contractInvalidSignedAt());
   // Defeito #9: contrato com valor original zero não tem propósito de negócio.
   if (input.originalValue.cents === 0) return err(ContractError.contractOriginalValueZero());
+  const meta = resolveMeta(input);
+  if (!meta.ok) return meta;
 
   // ActiveContract não tem `endedAt` — o campo simplesmente está ausente.
   // `'Active' as const` garante o narrowing do discriminador (DO D§20).
@@ -159,6 +195,7 @@ const create = (
     originalValue: input.originalValue,
     originalPeriod: input.originalPeriod,
     contractor: input.contractor,
+    ...meta.value,
     observations: null,
     email: null,
     telephone: null,

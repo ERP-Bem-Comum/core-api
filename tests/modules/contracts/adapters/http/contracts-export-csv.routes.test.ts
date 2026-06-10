@@ -32,7 +32,10 @@ const PLAIN_EMAIL = 'plain@example.com'; // register normal: roles:[]
 const EXPORT_URL = '/api/v2/contracts/export.csv';
 const HEADER_ROW =
   'id,sequentialNumber,title,objective,status,originalValueCents,originalPeriodStart,' +
-  'originalPeriodEnd,signedAt,currentValueCents,currentPeriodStart,currentPeriodEnd,endedAt';
+  'originalPeriodEnd,signedAt,currentValueCents,currentPeriodStart,currentPeriodEnd,endedAt,' +
+  // CTR-NUMBER-PROGRAM: classificação + metadados de cadastro crus (append no fim — colunas
+  // existentes preservam posição).
+  'classification,programId,budgetPlanId,categorizacao,centroDeCusto';
 const BOM = '﻿';
 
 const makeApp = async (seedContracts: readonly Contract[]) => {
@@ -152,6 +155,35 @@ describe('CONTRACTS-HTTP-EXPORT-CSV (C4) — GET /contracts/export.csv', () => {
     assert.ok(
       res.body.includes("'=SOMA(A1:A9)"),
       'célula de fórmula deve ser prefixada com aspa simples',
+    );
+    await teardown();
+  });
+
+  it('CTR-NUMBER-PROGRAM: classificação + metadados crus aparecem nas células de dados', async () => {
+    const { app, teardown } = await makeApp([
+      buildContract({
+        id: '11111111-1111-4111-8111-111111111111',
+        classification: 'OS',
+        programId: '77777777-7777-4777-8777-777777777777',
+        budgetPlanId: '66666666-6666-4666-8666-666666666666',
+        categorizacao: 'Custeio',
+        centroDeCusto: 'CC-042',
+      }),
+    ]);
+    const token = await loginSeeded(app, READER_EMAIL);
+    const res = await app.inject({ method: 'GET', url: EXPORT_URL, headers: bearer(token) });
+    assert.equal(res.statusCode, 200);
+    const dataLine = res.body
+      .slice(BOM.length)
+      .split('\r\n')
+      .filter((l) => l.length > 0)[1];
+    assert.ok(dataLine !== undefined);
+    assert.ok(
+      dataLine.endsWith(
+        'OS,77777777-7777-4777-8777-777777777777,' +
+          '66666666-6666-4666-8666-666666666666,Custeio,CC-042',
+      ),
+      `linha de dados deve terminar com classificação + metadados: ${dataLine}`,
     );
     await teardown();
   });

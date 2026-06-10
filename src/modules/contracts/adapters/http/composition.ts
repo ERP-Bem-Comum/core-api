@@ -52,9 +52,16 @@ import { getDocumentContent } from '../../application/use-cases/get-document-con
 
 import { composeContractor, type ContractorBlock } from './contractor-composition.ts';
 import {
+  composeProgramBlock,
+  composeProgramBlocks,
+  type ProgramBlock,
+  type ProgramSnapshot,
+} from './program-composition.ts';
+import {
   buildPartnersReadPort,
   type ContractorReadPort,
 } from '#src/modules/partners/public-api/index.ts';
+import type { ProgramReadPort } from '#src/modules/programs/public-api/index.ts';
 
 import * as AmendmentId from '../../domain/shared/amendment-id.ts';
 import type { AmendmentIdError } from '../../domain/shared/amendment-id.ts';
@@ -106,6 +113,13 @@ export type ContractsCompositionConfig = Readonly<{
    * Ausente em memory → composição degrada (`snapshot: null`).
    */
   contractorReadPort?: ContractorReadPort;
+  /**
+   * Read port do programa (public-api de programs, CTR-NUMBER-PROGRAM / ADR-0006/0014).
+   * Injetável (testes memory + server.ts via `PROGRAMS_DATABASE_URL`). Diferente do
+   * contratado, NÃO é construído aqui — a connection de programs é do server. Ausente →
+   * composição degrada (`program.snapshot: null`).
+   */
+  programReadPort?: ProgramReadPort;
 }>;
 
 /** Reader leve de aditivo — usado pela borda p/ checagem de ownership (IDOR), não muta estado. */
@@ -126,6 +140,12 @@ export type ContractsHttpDeps = Readonly<{
   getContractDetail: ReturnType<typeof getContractDetail>;
   /** Composição transitória do contratado na borda (ADR-0032). Degrada p/ snapshot null. */
   getContractorBlock: (ref: ContractorRef) => Promise<ContractorBlock>;
+  /** Bloco `program` de UM contrato (detalhe + escrita). Degrada p/ snapshot null. */
+  getProgramBlock: (programId: string | null) => Promise<ProgramBlock>;
+  /** Snapshots de VÁRIOS programas (listagem) numa única chamada — batch, sem N+1. */
+  getProgramSnapshots: (
+    programIds: readonly (string | null)[],
+  ) => Promise<ReadonlyMap<string, ProgramSnapshot | null>>;
   getContractTimeline: ReturnType<typeof getContractTimeline>;
   createContract: ReturnType<typeof createContract>;
   createPendingContract: ReturnType<typeof createPendingContract>;
@@ -155,6 +175,7 @@ type Pools = Readonly<{
   documentStorage: DocumentStorage;
   documentBucket: string;
   contractorReadPort: ContractorReadPort | null;
+  programReadPort: ProgramReadPort | null;
   shutdown: () => Promise<void>;
 }>;
 
@@ -193,6 +214,8 @@ const buildMemoryPools = async (config: ContractsCompositionConfig): Promise<Poo
     documentBucket: config.documentBucket ?? DEFAULT_DOCUMENT_BUCKET,
     // Memory não tem Parceiros real: usa o port injetado (testes) ou null (degrada).
     contractorReadPort: config.contractorReadPort ?? null,
+    // CTR-NUMBER-PROGRAM: idem para programs — port injetado (testes) ou null (degrada).
+    programReadPort: config.programReadPort ?? null,
     shutdown: () => Promise.resolve(),
   };
   if (config.seed !== undefined) await applyMemorySeed(config.seed, pools);
@@ -250,6 +273,9 @@ const buildMysqlPools = async (config: ContractsCompositionConfig): Promise<Pool
     documentStorage: createS3DocumentStorage(s3R.value),
     documentBucket: String(s3R.value.bucket),
     contractorReadPort,
+    // CTR-NUMBER-PROGRAM: o read port de programs é injetado pelo server (constrói com
+    // `PROGRAMS_DATABASE_URL`); ausente → degrada (`program.snapshot: null`). Não é aberto aqui.
+    programReadPort: config.programReadPort ?? null,
     shutdown: async () => {
       await closeContractorPort();
       await writerHandle.close();
@@ -278,6 +304,9 @@ const makeDeps = (
     getContractTimeline: getContractTimeline({ timelineRepo }),
     // Composição do contratado na borda (ADR-0032) — degrada p/ snapshot null.
     getContractorBlock: (ref) => composeContractor(pools.contractorReadPort, ref),
+    // Composição do programa na borda (CTR-NUMBER-PROGRAM) — single (detalhe/escrita) + batch (lista).
+    getProgramBlock: (programId) => composeProgramBlock(pools.programReadPort, programId),
+    getProgramSnapshots: (programIds) => composeProgramBlocks(pools.programReadPort, programIds),
     // Writes → writer pool.
     createContract: createContract({ contractRepo: pools.contractWriterRepo, clock }),
     createPendingContract: createPendingContract({ contractRepo: pools.contractWriterRepo, clock }),

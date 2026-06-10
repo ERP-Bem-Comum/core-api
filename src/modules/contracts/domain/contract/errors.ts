@@ -51,6 +51,12 @@ export type ContractInvalidSignedAt = Readonly<{ tag: 'ContractInvalidSignedAt' 
 
 export type ContractOriginalValueZero = Readonly<{ tag: 'ContractOriginalValueZero' }>;
 
+// CTR-NUMBER-PROGRAM: classificação fora de CT|OS.
+export type ContractClassificationInvalid = Readonly<{
+  tag: 'ContractClassificationInvalid';
+  attempted: string;
+}>;
+
 export type ContractInvalidEventDate = Readonly<{ tag: 'ContractInvalidEventDate' }>;
 
 export type ContractNotActive = Readonly<{
@@ -104,6 +110,7 @@ export type ContractError =
   | ContractObjectiveRequired
   | ContractInvalidSignedAt
   | ContractOriginalValueZero
+  | ContractClassificationInvalid
   | ContractInvalidEventDate
   | ContractNotActive
   | ContractNotPending
@@ -146,6 +153,13 @@ export const contractInvalidSignedAt = (): ContractInvalidSignedAt => ({
 
 export const contractOriginalValueZero = (): ContractOriginalValueZero => ({
   tag: 'ContractOriginalValueZero',
+});
+
+export const contractClassificationInvalid = (
+  attempted: string,
+): ContractClassificationInvalid => ({
+  tag: 'ContractClassificationInvalid',
+  attempted,
 });
 
 export const contractInvalidEventDate = (): ContractInvalidEventDate => ({

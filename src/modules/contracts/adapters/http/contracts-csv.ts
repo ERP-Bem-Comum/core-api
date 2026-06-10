@@ -23,33 +23,29 @@ const HEADER: readonly string[] = [
   'currentPeriodStart',
   'currentPeriodEnd',
   'endedAt',
+  // CTR-NUMBER-PROGRAM: classificação + metadados de cadastro crus (append no fim — as colunas
+  // existentes preservam posição). O bloco `program` composto NÃO entra no CSV (é só leitura web).
+  'classification',
+  'programId',
+  'budgetPlanId',
+  'categorizacao',
+  'centroDeCusto',
 ];
 
 type PeriodDto = ContractListItemDto['originalPeriod'];
 const periodEnd = (p: PeriodDto): string => (p.kind === 'Fixed' ? p.end : '');
 
-// Achata o DTO discriminado em 13 células (ordem do HEADER). Switch exaustivo por `status`:
-// campos de estado efetivo só existem em Active/Expired/Terminated; `endedAt` só nos terminais.
-const cellsFor = (dto: ContractListItemDto): readonly string[] => {
-  const registration = [
-    dto.id,
-    dto.sequentialNumber,
-    dto.title,
-    dto.objective,
-    dto.status,
-    String(dto.originalValue.cents),
-    dto.originalPeriod.start,
-    periodEnd(dto.originalPeriod),
-  ];
+// Células de estado efetivo (signedAt..endedAt). Switch exaustivo por `status`: campos de estado
+// só existem em Active/Expired/Terminated; `endedAt` só nos terminais (incl. Cancelled).
+const effectiveCells = (dto: ContractListItemDto): readonly string[] => {
   switch (dto.status) {
     case 'Pending':
-      return [...registration, '', '', '', '', ''];
+      return ['', '', '', '', ''];
     case 'Cancelled':
       // ADR-0039: sem vigência efetiva; só `endedAt` (data do cancelamento).
-      return [...registration, '', '', '', '', dto.endedAt];
+      return ['', '', '', '', dto.endedAt];
     case 'Active':
       return [
-        ...registration,
         dto.signedAt,
         String(dto.currentValue.cents),
         dto.currentPeriod.start,
@@ -59,7 +55,6 @@ const cellsFor = (dto: ContractListItemDto): readonly string[] => {
     case 'Expired':
     case 'Terminated':
       return [
-        ...registration,
         dto.signedAt,
         String(dto.currentValue.cents),
         dto.currentPeriod.start,
@@ -68,6 +63,25 @@ const cellsFor = (dto: ContractListItemDto): readonly string[] => {
       ];
   }
 };
+
+// Achata o DTO discriminado em 18 células (ordem do HEADER): cadastro + estado efetivo +
+// classificação/metadados crus (CTR-NUMBER-PROGRAM). Refs/rótulos nulos viram célula vazia.
+const cellsFor = (dto: ContractListItemDto): readonly string[] => [
+  dto.id,
+  dto.sequentialNumber,
+  dto.title,
+  dto.objective,
+  dto.status,
+  String(dto.originalValue.cents),
+  dto.originalPeriod.start,
+  periodEnd(dto.originalPeriod),
+  ...effectiveCells(dto),
+  dto.classification,
+  dto.programId ?? '',
+  dto.budgetPlanId ?? '',
+  dto.categorizacao ?? '',
+  dto.centroDeCusto ?? '',
+];
 
 export const contractsToCsv = (contracts: readonly Contract[]): string =>
   toCsv(

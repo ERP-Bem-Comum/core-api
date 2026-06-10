@@ -81,6 +81,14 @@ export const contracts = mysqlTable(
     // Contratado (referência cross-módulo a Parceiros) — sem FK física (cross-db, ADR-0014).
     contractorType: varchar('contractor_type', { length: 16 }).notNull(),
     contractorId: varchar('contractor_id', { length: 36 }).notNull(),
+    // CTR-NUMBER-PROGRAM: classificação (CT/OS) + metadados de cadastro. `program_id`/`budget_plan_id`
+    // são refs leves (UUID) cross-módulo/cross-BC — sem FK física (ADR-0014). `categorizacao`/
+    // `centro_de_custo` são rótulos livres. classification NOT NULL DEFAULT 'CT' (legado vira CT).
+    classification: varchar('classification', { length: 8 }).notNull().default('CT'),
+    programId: varchar('program_id', { length: 36 }),
+    budgetPlanId: varchar('budget_plan_id', { length: 36 }),
+    categorizacao: varchar('categorizacao', { length: 255 }),
+    centroDeCusto: varchar('centro_de_custo', { length: 255 }),
     // Metadados de cadastro editáveis (FR-009) — nullable.
     observations: varchar('observations', { length: 1000 }),
     email: varchar('email', { length: 255 }),
@@ -104,6 +112,9 @@ export const contracts = mysqlTable(
       'ctr_contracts_status_chk',
       sql`${t.status} IN ('Pending','Active','Expired','Terminated','Cancelled')`,
     ),
+
+    // CTR-NUMBER-PROGRAM: classificação restrita a CT|OS (enum via varchar+CHECK — ADR-0020).
+    check('ctr_contracts_classification_chk', sql`${t.classification} IN ('CT','OS')`),
 
     // ADR-0023/0039: bicondicional `sem vigência efetiva ⟺ Pending OU Cancelled`.
     // `Pending` e `Cancelled` (rascunho cancelado) têm assinatura/vigência NULL; os

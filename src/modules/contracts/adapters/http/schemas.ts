@@ -19,6 +19,18 @@ const periodSchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('Indefinite'), start: z.string() }),
 ]);
 
+// CTR-NUMBER-PROGRAM: bloco `program` composto na borda a partir de `programId`
+// (ProgramReadPort, ADR-0006/0014). `snapshot` é `null` em degradação (port ausente,
+// not-found, IO/timeout); o bloco inteiro é `null` quando o contrato não referencia programa.
+const programSnapshotSchema = z.object({
+  name: z.string(),
+  sigla: z.string().meta({ description: 'Sigla do programa (popula a coluna Programa do grid)' }),
+  programNumber: z.number().int().meta({ description: 'Número sequencial do programa' }),
+});
+const programBlockSchema = z
+  .object({ id: z.string(), snapshot: programSnapshotSchema.nullable() })
+  .nullable();
+
 const registrationShape = {
   id: z.string(),
   sequentialNumber: z.string(),
@@ -26,6 +38,15 @@ const registrationShape = {
   objective: z.string(),
   originalValue: moneySchema,
   originalPeriod: periodSchema,
+  // CTR-NUMBER-PROGRAM: classificação (prefixo CT/OS aplicado pelo front) + metadados de
+  // cadastro. `programId`/`budgetPlanId` são referências leves (UUID); `categorizacao`/
+  // `centroDeCusto` rótulos livres. `program` é o bloco composto (sigla → coluna do grid).
+  classification: z.enum(['CT', 'OS']),
+  programId: z.string().nullable(),
+  budgetPlanId: z.string().nullable(),
+  categorizacao: z.string().nullable(),
+  centroDeCusto: z.string().nullable(),
+  program: programBlockSchema,
 };
 
 const effectiveShape = {
@@ -152,6 +173,14 @@ const contractWriteShape = {
     type: z.enum(['supplier', 'financier', 'collaborator', 'act']),
     id: z.uuid(),
   }),
+  // CTR-NUMBER-PROGRAM: classificação (ausente → default CT no domínio) + metadados de
+  // cadastro opcionais. `programId`/`budgetPlanId` são referências UUID (validadas na borda);
+  // `categorizacao`/`centroDeCusto` rótulos livres. `null` limpa o campo.
+  classification: z.enum(['CT', 'OS']).optional(),
+  programId: z.uuid().nullable().optional(),
+  budgetPlanId: z.uuid().nullable().optional(),
+  categorizacao: z.string().min(1).max(255).nullable().optional(),
+  centroDeCusto: z.string().min(1).max(255).nullable().optional(),
 };
 
 /** Body `POST /contracts` — discrimina cadastro (`Pending`) vs cadastro+assinatura (`Active`). */
