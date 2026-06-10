@@ -18,6 +18,7 @@ import type {
   PendingContract,
   ExpiredContract,
   TerminatedContract,
+  CancelledContract,
 } from '#src/modules/contracts/domain/contract/types.ts';
 import type {
   PendingWithoutDocumentAmendment,
@@ -150,6 +151,16 @@ export const buildTerminatedContract = (
   return unwrap('Contract.terminate', r).contract;
 };
 
+// ADR-0039: rascunho `Pending` cancelado → `CancelledContract` (registration-only + endedAt).
+export const buildCancelledContract = (
+  overrides: ContractOverrides & Partial<{ endedAtISO: string }> = {},
+): CancelledContract => {
+  const pending = buildPendingContract(overrides);
+  const endedAt = new Date(overrides.endedAtISO ?? '2026-03-20T12:00:00.000Z');
+  const r = Contract.cancel(pending, endedAt);
+  return unwrap('Contract.cancel', r).contract;
+};
+
 export type AmendmentOverrides = Partial<{
   id: string;
   contractId: string;
@@ -210,7 +221,7 @@ export const buildHomologatedAmendment = (
   );
   const attached = unwrap(
     'attachSignedDocument',
-    Amendment.attachSignedDocument(pending, docId),
+    Amendment.attachSignedDocument(pending, docId, new Date('2026-02-15')),
   ).amendment;
   const ref = unwrap(
     'UserRef',
@@ -245,7 +256,7 @@ export const buildPendingAmendmentWithDoc = (
   );
   const attached = unwrap(
     'attachSignedDocument',
-    Amendment.attachSignedDocument(pending, docId),
+    Amendment.attachSignedDocument(pending, docId, new Date('2026-02-15')),
   ).amendment;
   // attachSignedDocument retorna PendingWithDocumentAmendment após W1 —
   // o tipo flui naturalmente sem cast inseguro.

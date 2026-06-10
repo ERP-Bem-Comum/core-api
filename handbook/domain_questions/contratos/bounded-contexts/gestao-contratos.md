@@ -1,6 +1,8 @@
 # 🧩 Bounded Context: Gestão de Contratos
 
 > **Revisão 2026-05-27 ([ADR-0023](../../../architecture/adr/0023-contract-lifecycle-pending-state.md), decide [Inquiry-0021](../../../inquiries/0021-contract-status-lifecycle-http.md)):** o ciclo de vida passou de 3 para **4 estados** — o contrato pode nascer `Pendente` (cadastrado sem documento assinado, sem efetividade) e é **ativado** ao anexar o documento assinado + data de assinatura. Termos canônicos alinhados à P.O.
+>
+> **Revisão 2026-06-09 ([ADR-0039](../../../architecture/adr/0039-contract-cancelled-state.md)):** 5º estado `Cancelado` — um rascunho `Pendente` pode ser **cancelado** (soft-delete) via `DELETE /contracts/:id`; contratos efetivados (`Em Andamento`/`Finalizado`/`Distrato`) permanecem imutáveis.
 
 ## 1. Papel do Contexto no Mapa
 Este é o **Core Domain** principal. Ele é o guardião da definição do **Contrato Mãe** e o responsável por expor o **Estado Contratual Vigente** (o valor e o prazo que valem "hoje"). Ele não processa aditivos, mas reage à homologação deles para atualizar seus próprios indicadores.
@@ -36,7 +38,7 @@ interface Contrato {
 
 ## 4. Value Objects e Enums
 
-* **StatusContrato** (4 estados): `Pendente`, `Em Andamento`, `Finalizado`, `Distrato`.
+* **StatusContrato** (5 estados): `Pendente`, `Em Andamento`, `Finalizado`, `Distrato`, `Cancelado`.
 
   Mapeamento canônico (código em EN; termos de UI/ACL em PT, conforme P.O.):
 
@@ -46,8 +48,9 @@ interface Contrato {
   | `Active` | `Em Andamento` | `Vigente` |
   | `Expired` | `Finalizado` | `Encerrado` |
   | `Terminated` | `Distrato` | `Distratado` |
+  | `Cancelled` | `Cancelado` | — (novo, [ADR-0039](../../../architecture/adr/0039-contract-cancelled-state.md)) |
 
-  > `Assinado` e `Em Andamento` são o **mesmo** estado (vigente). `Pendente` **não tem efetividade**: não inicia vigência, não aceita aditivos, sem vínculo financeiro.
+  > `Assinado` e `Em Andamento` são o **mesmo** estado (vigente). `Pendente` **não tem efetividade**: não inicia vigência, não aceita aditivos, sem vínculo financeiro. `Cancelado` (ADR-0039) é o **terminal de um rascunho `Pendente` descartado** — também sem vigência efetiva, mas com data de cancelamento (`endedAt`).
 * **Moeda**: Objeto que garante a precisão decimal (2 casas) e evita erros de arredondamento.
 * **Período**: Contém `dataInicio` e `dataFim`, com regras de validação cronológica.
 
@@ -95,11 +98,13 @@ stateDiagram-v2
     [*] --> Pendente: Criar (sem documento assinado)
     [*] --> EmAndamento: Criar (com documento assinado + data)
     Pendente --> EmAndamento: Ativar (upload doc assinado + data de assinatura)
+    Pendente --> Cancelado: Cancelar (rascunho descartado — ADR-0039)
     EmAndamento --> EmAndamento: Atualizar Estado (Aditivo homologado)
     EmAndamento --> Finalizado: Chegada da Data Fim
     EmAndamento --> Distrato: Rescisão Antecipada
     Finalizado --> [*]
     Distrato --> [*]
+    Cancelado --> [*]
 ```
 
 ## 8. Invariantes e Regras de Negócio
@@ -109,6 +114,7 @@ stateDiagram-v2
 * **R3 (Status)**: Um contrato `Finalizado` ou `Distrato` não pode receber novos aditivos de acréscimo ou supressão.
 * **RN-CV-01 (Pendente sem efetividade)**: um contrato `Pendente` **não aceita aditivos** (criar/anexar/homologar) — apenas `Em Andamento` aceita. Estende R3 para o estado inicial.
 * **RN-CV-02 (Ativação por assinatura)**: a transição `Pendente → Em Andamento` **exige** a referência do documento assinado **+** a data de assinatura. Sem ambos, o contrato permanece `Pendente`. Espelha a RN-12 do agregado Aditivo (homologação exige documento assinado).
+* **RN-CV-03 (Cancelamento de rascunho — [ADR-0039](../../../architecture/adr/0039-contract-cancelled-state.md))**: apenas um contrato `Pendente` pode ser **cancelado** (`Pendente → Cancelado`, soft-delete via `DELETE /contracts/:id`). Estados efetivos (`Em Andamento`/`Finalizado`/`Distrato`) e o próprio `Cancelado` **não** são canceláveis (409). Exclusão **física** permanece proibida — o cancelamento é transição de estado, com `endedAt` registrando o instante.
 
 ## 9. Fluxo Exemplar ("Filminho")
 

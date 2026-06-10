@@ -64,7 +64,7 @@ const createAddition = (impactCents = 500000) => {
 
 const createPendingWithDoc = () => {
   const a = createAddition();
-  const r = Amendment.attachSignedDocument(a, DocumentId.generate());
+  const r = Amendment.attachSignedDocument(a, DocumentId.generate(), new Date('2026-02-15'));
   if (!r.ok) throw new Error(`fixture broken: ${JSON.stringify(r.error)}`);
   return r.value.amendment;
 };
@@ -215,7 +215,7 @@ describe('Amendment.attachSignedDocument', () => {
   it('attaches doc to Pending amendment without doc', () => {
     const a = createAddition();
     const docId = DocumentId.generate();
-    const r = Amendment.attachSignedDocument(a, docId);
+    const r = Amendment.attachSignedDocument(a, docId, new Date('2026-02-15'));
     assert.equal(isOk(r), true);
     if (!r.ok) return;
     assert.equal(r.value.amendment.signedDocumentRef, docId);
@@ -368,7 +368,7 @@ describe('Amendment — invariants', () => {
     assert.equal(p1.signedDocumentRef, null);
 
     const docId = DocumentId.generate();
-    const p2 = Amendment.attachSignedDocument(p1, docId);
+    const p2 = Amendment.attachSignedDocument(p1, docId, new Date('2026-02-15'));
     if (!p2.ok) throw new Error('fixture broken');
     assert.equal(p2.value.amendment.status, 'Pending');
     assert.equal(p2.value.amendment.signedDocumentRef, docId);
@@ -636,7 +636,7 @@ describe('Amendment — traves estáticas de tipo (CA3)', () => {
     // createHomologated() retorna HomologatedAmendment após W1.
     const a = createHomologated();
     // @ts-expect-error — HomologatedAmendment não é atribuível a PendingWithoutDocumentAmendment
-    Amendment.attachSignedDocument(a, DocumentId.generate());
+    Amendment.attachSignedDocument(a, DocumentId.generate(), new Date('2026-02-15'));
   });
 });
 

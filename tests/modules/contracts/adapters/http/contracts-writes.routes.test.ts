@@ -186,9 +186,9 @@ const CONTRACTOR_BODY = {
   id: '55555555-5555-4555-8555-555555555555',
 };
 
+// CTR-CONTRACT-SEQUENTIAL-NUMBER: o body NÃO carrega sequentialNumber — o backend gera.
 const activeBody = (overrides: Record<string, unknown> = {}) => ({
   mode: 'Active',
-  sequentialNumber: '500/2026',
   title: 'Novo contrato',
   objective: 'Objetivo',
   signedAt: '2026-01-15',
@@ -201,7 +201,6 @@ const activeBody = (overrides: Record<string, unknown> = {}) => ({
 
 const pendingBody = (overrides: Record<string, unknown> = {}) => ({
   mode: 'Pending',
-  sequentialNumber: '501/2026',
   title: 'Contrato pendente',
   objective: 'Objetivo',
   originalValueCents: 10_000_000,
@@ -311,18 +310,9 @@ describe('CONTRACTS-HTTP-WRITES-CORE (C2) — POST /contracts', () => {
     await teardown();
   });
 
-  it('CA2: sequentialNumber duplicado -> 409', async () => {
-    const { app, teardown } = await makeApp();
-    const token = await loginSeeded(app, WRITER_EMAIL);
-    const res = await app.inject({
-      method: 'POST',
-      url: '/api/v2/contracts',
-      headers: bearer(token),
-      payload: activeBody({ sequentialNumber: '001/2026' }), // já existe no seed
-    });
-    assert.equal(res.statusCode, 409);
-    await teardown();
-  });
+  // CTR-CONTRACT-SEQUENTIAL-NUMBER: o cenário "sequentialNumber duplicado -> 409" via POST
+  // deixou de existir — o cliente não fornece o número (o backend gera, sempre único por ano).
+  // O check de unicidade segue como rede de segurança (import legado + UNIQUE no schema).
 
   it('CA2: período inválido (end < start) -> 422 (invariante de domínio, passa no Zod)', async () => {
     const { app, teardown } = await makeApp();

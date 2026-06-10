@@ -45,6 +45,7 @@ export type ContractsModuleEvent = ContractEvent | AmendmentEvent | DocumentEven
 const KNOWN_EVENT_TYPES: ReadonlySet<string> = new Set([
   'ContractCreated',
   'ContractActivated',
+  'ContractCancelled',
   'ContractStateUpdated',
   'ContractEnded',
   'AmendmentCreated',

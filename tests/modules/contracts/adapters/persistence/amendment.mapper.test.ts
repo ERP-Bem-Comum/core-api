@@ -31,7 +31,7 @@ import {
 
 const AMENDMENT_BASE_ROW: Omit<
   AmendmentRow,
-  'status' | 'signedDocumentRef' | 'homologatedAt' | 'homologatedBy'
+  'status' | 'signedDocumentRef' | 'signedAt' | 'homologatedAt' | 'homologatedBy'
 > = {
   id: '22222222-2222-4222-8222-222222222222',
   contractId: '11111111-1111-4111-8111-111111111111',
@@ -51,6 +51,7 @@ const pendingWithoutDocRow = (): AmendmentRow => ({
   ...AMENDMENT_BASE_ROW,
   status: 'Pending',
   signedDocumentRef: null,
+  signedAt: null,
   homologatedAt: null,
   homologatedBy: null,
 });
@@ -60,6 +61,7 @@ const pendingWithDocRow = (): AmendmentRow => ({
   ...AMENDMENT_BASE_ROW,
   status: 'Pending',
   signedDocumentRef: VALID_DOC_ID,
+  signedAt: new Date('2026-02-15T00:00:00.000Z'),
   homologatedAt: null,
   homologatedBy: null,
 });
@@ -69,6 +71,7 @@ const homologatedRow = (): AmendmentRow => ({
   ...AMENDMENT_BASE_ROW,
   status: 'Homologated',
   signedDocumentRef: VALID_DOC_ID,
+  signedAt: new Date('2026-02-15T00:00:00.000Z'),
   homologatedAt: new Date('2026-03-20T00:00:00.000Z'),
   homologatedBy: VALID_USER_REF,
 });
@@ -78,6 +81,7 @@ const pendingWithHomologatedAtRow = (): AmendmentRow => ({
   ...AMENDMENT_BASE_ROW,
   status: 'Pending',
   signedDocumentRef: null,
+  signedAt: null,
   homologatedAt: new Date('2026-03-20T00:00:00.000Z'),
   homologatedBy: null,
 });
@@ -87,6 +91,7 @@ const pendingWithHomologatedByRow = (): AmendmentRow => ({
   ...AMENDMENT_BASE_ROW,
   status: 'Pending',
   signedDocumentRef: null,
+  signedAt: null,
   homologatedAt: null,
   homologatedBy: VALID_USER_REF,
 });
@@ -96,6 +101,7 @@ const homologatedWithoutDocRow = (): AmendmentRow => ({
   ...AMENDMENT_BASE_ROW,
   status: 'Homologated',
   signedDocumentRef: null,
+  signedAt: null,
   homologatedAt: new Date('2026-03-20T00:00:00.000Z'),
   homologatedBy: VALID_USER_REF,
 });
@@ -105,6 +111,7 @@ const homologatedWithoutAtRow = (): AmendmentRow => ({
   ...AMENDMENT_BASE_ROW,
   status: 'Homologated',
   signedDocumentRef: VALID_DOC_ID,
+  signedAt: new Date('2026-02-15T00:00:00.000Z'),
   homologatedAt: null,
   homologatedBy: VALID_USER_REF,
 });
@@ -114,6 +121,7 @@ const homologatedWithoutByRow = (): AmendmentRow => ({
   ...AMENDMENT_BASE_ROW,
   status: 'Homologated',
   signedDocumentRef: VALID_DOC_ID,
+  signedAt: new Date('2026-02-15T00:00:00.000Z'),
   homologatedAt: new Date('2026-03-20T00:00:00.000Z'),
   homologatedBy: null,
 });
@@ -294,6 +302,7 @@ describe('amendmentFromRow — CA7 + CA6: impactValueCents = 0 rejeitado com tag
       impactValueCents: 0, // ← valor impossível para Addition após W1
       status: 'Pending',
       signedDocumentRef: null,
+      signedAt: null,
       homologatedAt: null,
       homologatedBy: null,
     };
@@ -324,6 +333,7 @@ describe('amendmentFromRow — CA7 + CA6: impactValueCents = 0 rejeitado com tag
       impactValueCents: 0, // ← valor impossível para Suppression após W1
       status: 'Pending',
       signedDocumentRef: null,
+      signedAt: null,
       homologatedAt: null,
       homologatedBy: null,
     };
@@ -361,6 +371,7 @@ describe('amendmentFromRow — DB corrompido: kind inválido (CA6 — tagged pay
       kind: BAD_KIND,
       status: 'Pending',
       signedDocumentRef: null,
+      signedAt: null,
       homologatedAt: null,
       homologatedBy: null,
     } as unknown as AmendmentRow;
@@ -391,6 +402,7 @@ describe('amendmentFromRow — DB corrompido: kind inválido (CA6 — tagged pay
       id: BAD_ID,
       status: 'Pending',
       signedDocumentRef: null,
+      signedAt: null,
       homologatedAt: null,
       homologatedBy: null,
     } as unknown as AmendmentRow;

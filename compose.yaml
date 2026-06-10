@@ -137,14 +137,12 @@ services:
 
   # ──────────────────────────────────────────────────────────────────────────
   # Aplicação core-api (opt-in via profile `app`).
-  # Por padrão você roda a CLI local via `pnpm cli:contracts`. Este serviço
-  # serve para validar o build da imagem e exercitar smoke end-to-end contra
-  # o MySQL na mesma network — fluxo coberto pelo ticket #7
-  # (CTR-CLI-MYSQL-SMOKE).
+  # CLI-RETIRE-EMBEDDED (ADR-0037): a CLI embutida foi removida. O ENTRYPOINT da imagem
+  # é o servidor HTTP (`src/server.ts`). Este serviço valida o build da imagem e que o
+  # servidor sobe. Sem `command:` override → usa o ENTRYPOINT (HTTP).
   #
-  # Convenção: a CLI consome a conexão via flag `--connection-string`. Não há
-  # leitura de env vars MYSQL_*/S3_* — quando vier o wiring HTTP/storage real,
-  # esse contrato é revisitado.
+  # Sem env vars `*_DATABASE_URL`, o server sobe em modo memory (drivers default). O wiring
+  # HTTP→MySQL real (CONTRACTS_DATABASE_URL etc.) é configuração de deploy, fora deste smoke.
   # ──────────────────────────────────────────────────────────────────────────
   app:
     build:
@@ -154,24 +152,8 @@ services:
         - core-api:dev
     image: core-api:dev
     container_name: core-api-app
-    depends_on:
-      minio:
-        condition: service_healthy
-      mysql:
-        condition: service_healthy
-    # CLI single-shot: o command override do profile passa a connection string
-    # explícita. A senha sai do secret file via $(cat). Stdin/stdout do
-    # subcomando vão para os logs do compose.
-    command:
-      - 'listar-contratos'
-      - '--driver'
-      - 'mysql'
-      - '--connection-string'
-      - 'mysql://core_app:$$(cat /run/secrets/mysql_app_password)@mysql:3306/core'
     environment:
       NODE_ENV: development
-    secrets:
-      - mysql_app_password
     security_opt:
       - no-new-privileges:true
     networks:

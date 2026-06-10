@@ -51,6 +51,8 @@ export const contractListItemSchema = z.discriminatedUnion('status', [
     // Motivo do distrato (CTR-HTTP-DISTRATO-DOCUMENTO). `null` em distratos legados.
     terminationReason: z.string().nullable(),
   }),
+  // ADR-0039: rascunho cancelado — só cadastro + endedAt (sem vigência efetiva).
+  z.object({ ...registrationShape, status: z.literal('Cancelled'), endedAt: z.string() }),
 ]);
 
 export const contractListSchema = z.array(contractListItemSchema);
@@ -69,7 +71,7 @@ export const contractListQuerySchema = z.object({
   limit: z.coerce.number().int().min(1).max(LIST_LIMIT_MAX).default(LIST_LIMIT_DEFAULT),
   order: z.enum(['ASC', 'DESC']).default('ASC'),
   search: z.string().min(1).optional(),
-  status: z.enum(['Pending', 'Active', 'Expired', 'Terminated']).optional(),
+  status: z.enum(['Pending', 'Active', 'Expired', 'Terminated', 'Cancelled']).optional(),
 });
 
 export type ContractListQuery = z.infer<typeof contractListQuerySchema>;
@@ -137,8 +139,9 @@ export type TimelineEntryDto = z.infer<typeof timelineEntrySchema>;
 // domínio (smart constructor) — data malformada vira 422 (invariante), não 400 (Zod).
 // Valor em centavos também não trava sinal no Zod; `Money` rejeita → 422.
 
+// CTR-CONTRACT-SEQUENTIAL-NUMBER: `sequentialNumber` NÃO entra no body — o backend
+// gera `NNNN/YYYY` por ano. O número gerado volta na resposta (via `registrationShape`).
 const contractWriteShape = {
-  sequentialNumber: z.string(),
   title: z.string(),
   objective: z.string(),
   originalValueCents: z.number().int(),
@@ -199,8 +202,9 @@ export const endContractBodySchema = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('Expire') }),
 ]);
 
+// G3 (CTR-AMENDMENT-SIGNEDAT-AND-NUMBER): `amendmentNumber` NÃO entra no body — gerado pelo
+// backend por contrato. Volta na resposta (via `amendmentDtoShape`).
 const amendmentWriteShape = {
-  amendmentNumber: z.string(),
   description: z.string(),
 };
 
@@ -236,6 +240,8 @@ const amendmentDtoShape = {
   description: z.string(),
   status: z.string(),
   createdAt: z.string().meta({ description: 'Data/hora de criação (ISO 8601)' }),
+  // G2: data de assinatura — `null` enquanto o aditivo não tem documento assinado.
+  signedAt: z.string().nullable().meta({ description: 'Data de assinatura do aditivo (ISO 8601)' }),
 };
 
 /** Resposta de `POST /contracts/:id/amendments` — aditivo recém-criado (Pending). */
@@ -290,6 +296,15 @@ export const uploadDocumentQuerySchema = z.object({
   // Query chega como string; mapeia 'true'/'false' → boolean (z.coerce.boolean trataria
   // 'false' como true — por isso o enum+transform explícito).
   signedElectronically: z.enum(['true', 'false']).transform((s) => s === 'true'),
+});
+
+/**
+ * Query do upload+attach de documento ASSINADO ao aditivo (G2). Estende a query de upload
+ * com `signedAt` (data de assinatura do aditivo), capturado no mesmo passo do attach. A
+ * validade da data é do domínio (`Amendment.attachSignedDocument`) → 422; aqui só exige presença.
+ */
+export const amendmentDocumentUploadQuerySchema = uploadDocumentQuerySchema.extend({
+  signedAt: z.string().min(1).meta({ description: 'Data de assinatura do aditivo (ISO 8601)' }),
 });
 
 /** Body de `POST …/documents/:documentId/supersede` (E3). */
@@ -403,6 +418,14 @@ export const contractFullDetailSchema = z.discriminatedUnion('status', [
     ...registrationShape,
     ...effectiveShape,
     status: z.literal('Terminated'),
+    endedAt: z.string(),
+    ...contractorDetailShape,
+    ...childrenShape,
+  }),
+  // ADR-0039: rascunho cancelado no detalhe — cadastro + endedAt + contratado + filhos.
+  z.object({
+    ...registrationShape,
+    status: z.literal('Cancelled'),
     endedAt: z.string(),
     ...contractorDetailShape,
     ...childrenShape,

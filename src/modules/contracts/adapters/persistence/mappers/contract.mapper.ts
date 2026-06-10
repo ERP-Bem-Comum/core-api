@@ -8,6 +8,7 @@ import type {
   ActiveContract,
   ExpiredContract,
   TerminatedContract,
+  CancelledContract,
   ContractStatus,
 } from '../../../domain/contract/types.ts';
 import * as AmendmentId from '../../../domain/shared/amendment-id.ts';
@@ -158,7 +159,7 @@ export const contractMapperInvalidContractor = (
 
 // ─── Helpers internos ────────────────────────────────────────────────────────
 
-const KNOWN_STATUSES = ['Pending', 'Active', 'Expired', 'Terminated'] as const;
+const KNOWN_STATUSES = ['Pending', 'Active', 'Expired', 'Terminated', 'Cancelled'] as const;
 const isStatus = (v: string): v is (typeof KNOWN_STATUSES)[number] =>
   (KNOWN_STATUSES as readonly string[]).includes(v);
 
@@ -174,8 +175,9 @@ export const contractToInsert = (
 ): { row: ContractInsert; homologatedAmendmentIds: readonly string[] } => {
   const orig = periodToColumns(c.originalPeriod);
 
-  // ADR-0023: `Pending` não tem assinatura nem vigência efetiva — colunas NULL.
-  if (c.status === 'Pending') {
+  // ADR-0023/0039: `Pending` e `Cancelled` não têm assinatura nem vigência efetiva
+  // (colunas NULL). `Cancelled` (terminal) carrega `endedAt`; `Pending` não.
+  if (c.status === 'Pending' || c.status === 'Cancelled') {
     return {
       row: {
         id: c.id as unknown as string,
@@ -191,8 +193,8 @@ export const contractToInsert = (
         currentPeriodKind: null,
         currentPeriodStart: null,
         currentPeriodEnd: null,
-        status: 'Pending',
-        endedAt: null,
+        status: c.status,
+        endedAt: c.status === 'Cancelled' ? c.endedAt : null,
         contractorType: c.contractor.type,
         contractorId: c.contractor.id as unknown as string,
         observations: c.observations,
@@ -287,6 +289,22 @@ export const contractFromRow = (
     }
     const pending: PendingContract = { ...registration, status: 'Pending' };
     return ok(pending);
+  }
+
+  // ADR-0039: `Cancelled` é terminal mas registration-only (signed/current NULL) —
+  // como Pending, mas com `endedAt` preenchido. Defesa em profundidade contra shape
+  // corrompido (CHECKs `pending_consistency` + `ended_at_consistency` garantem na gravação).
+  if (row.status === 'Cancelled') {
+    if (row.signedAt !== null || row.currentValueCents !== null || row.currentPeriodKind !== null) {
+      return err(contractMapperInvalidPendingShape('Cancelled', true));
+    }
+    if (row.endedAt === null) return err(contractMapperInvalidEndedAt('Cancelled', false));
+    const cancelled: CancelledContract = {
+      ...registration,
+      status: 'Cancelled',
+      endedAt: row.endedAt,
+    };
+    return ok(cancelled);
   }
 
   // Estados efetivos (Active | Expired | Terminated) — exigem vigência + assinatura

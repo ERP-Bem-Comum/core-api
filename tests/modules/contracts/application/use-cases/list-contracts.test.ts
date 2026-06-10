@@ -88,6 +88,7 @@ describe('listContracts (paginado) — CTR-HTTP-CONTRACT-LIST-FILTERS', () => {
     const failing: ContractRepository = {
       findById: () => Promise.resolve({ ok: true, value: null }),
       findBySequentialNumber: () => Promise.resolve({ ok: true, value: null }),
+      nextSequentialNumber: () => Promise.resolve({ ok: true, value: '0001/2026' }),
       list: () => Promise.resolve({ ok: true, value: [] }),
       listPaged: () => Promise.resolve({ ok: false, error: 'contract-repo-unavailable' }),
       save: () => Promise.resolve({ ok: true, value: undefined }),

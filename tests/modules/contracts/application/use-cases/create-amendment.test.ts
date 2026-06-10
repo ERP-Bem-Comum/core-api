@@ -59,7 +59,6 @@ describe('createAmendment — happy path (Addition)', () => {
     const w = await setupWithContract();
     const r = await createAmendment(w.deps)({
       contractId: w.contract.id as unknown as string,
-      amendmentNumber: 'AD 01-001/2026',
       description: 'Ampliação',
       kind: 'Addition',
       impactValueCents: 500000,
@@ -86,7 +85,6 @@ describe('createAmendment — happy path (TermChange)', () => {
     const w = await setupWithContract();
     const r = await createAmendment(w.deps)({
       contractId: w.contract.id as unknown as string,
-      amendmentNumber: 'AD 02-001/2026',
       description: 'Prazo',
       kind: 'TermChange',
       newEndDate: '2027-06-30',
@@ -102,7 +100,6 @@ describe('createAmendment — happy path (Misc)', () => {
     const w = await setupWithContract();
     const r = await createAmendment(w.deps)({
       contractId: w.contract.id as unknown as string,
-      amendmentNumber: 'AD 03-001/2026',
       description: 'Cláusula adicional',
       kind: 'Misc',
     });
@@ -117,7 +114,6 @@ describe('createAmendment — validations', () => {
     const w = await setupWithContract();
     const r = await createAmendment(w.deps)({
       contractId: 'not-a-uuid',
-      amendmentNumber: 'AD 01-001/2026',
       description: 'X',
       kind: 'Misc',
     });
@@ -129,7 +125,6 @@ describe('createAmendment — validations', () => {
     const w = await setupWithContract();
     const r = await createAmendment(w.deps)({
       contractId: ContractId.generate() as unknown as string,
-      amendmentNumber: 'AD 01-001/2026',
       description: 'X',
       kind: 'Misc',
     });
@@ -141,7 +136,6 @@ describe('createAmendment — validations', () => {
     const w = await setupWithContract();
     const r = await createAmendment(w.deps)({
       contractId: w.contract.id as unknown as string,
-      amendmentNumber: 'AD 02-001/2026',
       description: 'X',
       kind: 'TermChange',
       newEndDate: 'not-a-date',
@@ -156,7 +150,6 @@ describe('createAmendment — validations', () => {
     const w = await setupWithContract();
     const r = await createAmendment(w.deps)({
       contractId: w.contract.id as unknown as string,
-      amendmentNumber: 'AD 01-001/2026',
       description: 'X',
       kind: 'Addition',
       impactValueCents: 0,
@@ -172,10 +165,10 @@ describe('createAmendment — validations', () => {
 describe('createAmendment — side effects on error', () => {
   it('does not persist amendment or append to outbox on error', async () => {
     const w = await setupWithContract();
+    // G3: o número é gerado (nunca vazio) — força o erro via `description` em branco.
     await createAmendment(w.deps)({
       contractId: w.contract.id as unknown as string,
-      amendmentNumber: '',
-      description: 'X',
+      description: '',
       kind: 'Misc',
     });
     assert.equal(w.amendmentRepo.store().length, 0);
@@ -191,7 +184,6 @@ describe('createAmendment — TermChange fail-fast (Defeito #11)', () => {
     // currentPeriod do contrato setup: 2026-01-01 a 2026-12-31
     const r = await createAmendment(w.deps)({
       contractId: w.contract.id as unknown as string,
-      amendmentNumber: 'AD 04-001/2026',
       description: 'Prazo retroativo',
       kind: 'TermChange',
       newEndDate: '2026-06-15', // antes do end atual
@@ -205,7 +197,6 @@ describe('createAmendment — TermChange fail-fast (Defeito #11)', () => {
     const w = await setupWithContract();
     const r = await createAmendment(w.deps)({
       contractId: w.contract.id as unknown as string,
-      amendmentNumber: 'AD 04-001/2026',
       description: 'Mesmo prazo',
       kind: 'TermChange',
       newEndDate: '2026-12-31',
@@ -218,7 +209,6 @@ describe('createAmendment — TermChange fail-fast (Defeito #11)', () => {
     const w = await setupWithContract();
     const r = await createAmendment(w.deps)({
       contractId: w.contract.id as unknown as string,
-      amendmentNumber: 'AD 04-001/2026',
       description: 'Prazo estendido',
       kind: 'TermChange',
       newEndDate: '2027-06-30',

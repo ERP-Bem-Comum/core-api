@@ -8,6 +8,7 @@ import type {
 import type { OutboxPort } from '../../../application/ports/outbox.ts';
 import type { ContractsModuleEvent } from '../../../application/ports/event-bus.ts';
 import { InMemoryOutbox } from '../../outbox/outbox.in-memory.ts';
+import { formatSequentialNumber } from '../../../domain/contract/sequential-number.ts';
 
 // CA-4 (CTR-OUTBOX-INTEGRATION-IN-REPOS): InMemoryContractRepository recebe
 // OutboxPort como dependência opcional. Default = InMemoryOutbox().port (isolado).
@@ -41,11 +42,20 @@ export const InMemoryContractRepository = (
   outbox: OutboxPort = InMemoryOutbox().port,
 ): InMemoryContractRepositoryHandle => {
   const map = new Map<ContractId, Contract>();
+  // CTR-CONTRACT-SEQUENTIAL-NUMBER: contador por ano, espelha a tabela
+  // `ctr_contract_seq` do adapter Drizzle. Mesma semântica de sequência: gaps
+  // são aceitáveis (incrementa por chamada, independente do save subsequente).
+  const seqByYear = new Map<number, number>();
 
   const repo: ContractRepository = {
     findById: async (id) => ok(map.get(id) ?? null),
     findBySequentialNumber: async (sequentialNumber) =>
       ok([...map.values()].find((c) => c.sequentialNumber === sequentialNumber) ?? null),
+    nextSequentialNumber: async (year) => {
+      const next = (seqByYear.get(year) ?? 0) + 1;
+      seqByYear.set(year, next);
+      return ok(formatSequentialNumber(next, year));
+    },
     list: async () => ok([...map.values()]),
     listPaged: async (query) => {
       const filtered = [...map.values()]

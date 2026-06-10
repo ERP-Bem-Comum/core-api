@@ -15,6 +15,14 @@ export type AmendmentRepositoryError =
 
 export type AmendmentRepository = Readonly<{
   findById: (id: AmendmentId) => Promise<Result<Amendment | null, AmendmentRepositoryError>>;
+  // CTR-AMENDMENT-SIGNEDAT-AND-NUMBER (G3): gera o próximo número do aditivo no formato
+  // `NN/AAAA`, por ORDEM DE CRIAÇÃO dentro do contrato (escopo per-contract). Transacional
+  // no adapter real (tabela `ctr_amendment_seq`, SELECT ... FOR UPDATE); InMemory usa contador
+  // por contrato. Monotônico por contrato; gaps aceitáveis (semântica de sequência).
+  nextAmendmentNumber: (
+    contractId: ContractId,
+    year: number,
+  ) => Promise<Result<string, AmendmentRepositoryError>>;
   // Leitura agregada (CTR-HTTP-CONTRACT-DETAIL-CHILDREN-FILES): todos os aditivos de um
   // contrato, ordenados por `amendmentNumber` asc. Read-only; não toca o agregado nem o
   // ciclo de escrita. Usado pela composição de detalhe na borda HTTP (ADR-0032).

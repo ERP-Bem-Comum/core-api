@@ -48,6 +48,7 @@ import {
   amendmentParamSchema,
   amendmentSchema,
   uploadDocumentQuerySchema,
+  amendmentDocumentUploadQuerySchema,
   supersedeDocumentBodySchema,
   deleteDocumentBodySchema,
   documentParamSchema,
@@ -75,6 +76,8 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'activate-contract-no-signed-document',
   'amendment-retroactive-to-contract-start',
   'ContractNotActive',
+  // ADR-0039: cancelar contrato não-Pendente → 409 (tag do ContractError).
+  'ContractNotPending',
   'contract-repo-conflict',
   'amendment-repo-conflict',
   // C3 — documentos
@@ -300,18 +303,22 @@ const contractsRoutes =
       },
     });
 
-    // US-002: DELETE de contrato é RECUSADO (imutabilidade — exclusão física proibida,
-    // princípio #14). `requireAuth` precede a política (não vaza existência da rota a
-    // não-autenticado). 405 com envelope `contract-delete-forbidden`.
+    // CTR-HTTP-CANCEL-PENDING (ADR-0039): DELETE cancela (soft-delete) um contrato `Pending`.
+    // Pendente → 200 (contrato Cancelled); não-Pendente → 409 `ContractNotPending`; inexistente
+    // → 404. Exclusão FÍSICA permanece proibida — a rota faz transição de estado, não apaga a row.
     scope.route({
       method: 'DELETE',
       url: '/contracts/:id',
       preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
-      schema: { params: contractIdParamSchema } satisfies FastifyZodOpenApiSchema,
-      handler: (_req, reply) =>
-        sendResult(reply, err('contract-delete-forbidden'), {
-          errors: { 'contract-delete-forbidden': 405 },
-        }),
+      schema: {
+        params: contractIdParamSchema,
+        response: { 200: contractDetailSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.cancelContract({ contractId: req.params.id });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(contractToListItem(result.value.contract)), { ok: 200 });
+      },
     });
 
     scope.route({
@@ -354,7 +361,6 @@ const contractsRoutes =
         const body = req.body;
         if (body.mode === 'Pending') {
           const result = await deps.createPendingContract({
-            sequentialNumber: body.sequentialNumber,
             title: body.title,
             objective: body.objective,
             originalValueCents: body.originalValueCents,
@@ -372,7 +378,6 @@ const contractsRoutes =
         // O body usa `periodStart`/`periodEnd` (API uniforme entre Pending|Active); o
         // `CreateContractCommand` os nomeia `originalPeriodStart`/`originalPeriodEnd`.
         const result = await deps.createContract({
-          sequentialNumber: body.sequentialNumber,
           title: body.title,
           objective: body.objective,
           signedAt: body.signedAt,
@@ -448,9 +453,9 @@ const contractsRoutes =
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
         const body = req.body;
+        // G3: `amendmentNumber` não vem do body — gerado pelo backend por contrato.
         const base = {
           contractId: req.params.id,
-          amendmentNumber: body.amendmentNumber,
           description: body.description,
         };
         const command =
@@ -531,7 +536,7 @@ const contractsRoutes =
       preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
       schema: {
         params: amendmentParamSchema,
-        querystring: uploadDocumentQuerySchema,
+        querystring: amendmentDocumentUploadQuerySchema,
         body: octetStreamUploadBody(),
         response: { 201: documentSchema },
       } satisfies FastifyZodOpenApiSchema,
@@ -565,6 +570,7 @@ const contractsRoutes =
         const attached = await deps.attachSignedDocument({
           amendmentId: req.params.amendmentId,
           signedDocumentRef: uploaded.value.document.id,
+          signedAt: q.signedAt,
         });
         if (!attached.ok) return sendDomainError(reply, attached.error);
         return sendResult(reply, ok(documentToDto(uploaded.value.document)), { ok: 201 });

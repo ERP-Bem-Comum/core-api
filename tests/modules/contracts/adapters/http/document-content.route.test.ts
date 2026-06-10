@@ -107,7 +107,8 @@ const bearer = (t: string): Record<string, string> => ({ authorization: `Bearer 
 
 const uploadQuery = (fileName: string): string =>
   `?categoria=signed_contract&fileName=${encodeURIComponent(fileName)}` +
-  `&mimeType=${encodeURIComponent('application/pdf')}&signedElectronically=true`;
+  // G2: signedAt exigido no upload+attach de aditivo; inofensivo (stripped) no de contrato.
+  `&mimeType=${encodeURIComponent('application/pdf')}&signedElectronically=true&signedAt=2026-02-15`;
 
 /** Faz upload de um documento ao contrato e devolve o `documentId` criado. */
 const uploadContractDoc = async (

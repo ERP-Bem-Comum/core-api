@@ -89,7 +89,6 @@ const setupWithAmendment = async () => {
     clock,
   })({
     contractId: contract.value.contract.id as unknown as string,
-    amendmentNumber: 'AD 01-001/2026',
     description: 'X',
     kind: 'Addition',
     impactValueCents: 500000,
@@ -124,6 +123,7 @@ describe('attachSignedDocument — happy path', () => {
     const r = await attachSignedDocument(w.deps)({
       amendmentId: w.amendment.id as unknown as string,
       signedDocumentRef: w.fixtureDoc.id as unknown as string,
+      signedAt: '2026-02-15',
     });
 
     assert.equal(isOk(r), true);
@@ -148,6 +148,7 @@ describe('attachSignedDocument — document existence (CTR-AMENDMENT-DOCUMENT-LI
     const r = await attachSignedDocument(w.deps)({
       amendmentId: w.amendment.id as unknown as string,
       signedDocumentRef: phantomDocId as unknown as string,
+      signedAt: '2026-02-15',
     });
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'signed-document-not-found');
@@ -170,6 +171,7 @@ describe('attachSignedDocument — document existence (CTR-AMENDMENT-DOCUMENT-LI
     })({
       amendmentId: w.amendment.id as unknown as string,
       signedDocumentRef: w.fixtureDoc.id as unknown as string,
+      signedAt: '2026-02-15',
     });
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'document-repository-unavailable');
@@ -182,6 +184,7 @@ describe('attachSignedDocument — validations', () => {
     const r = await attachSignedDocument(w.deps)({
       amendmentId: 'not-a-uuid',
       signedDocumentRef: DocumentId.generate() as unknown as string,
+      signedAt: '2026-02-15',
     });
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'amendment-id-invalid');
@@ -192,6 +195,7 @@ describe('attachSignedDocument — validations', () => {
     const r = await attachSignedDocument(w.deps)({
       amendmentId: w.amendment.id as unknown as string,
       signedDocumentRef: 'not-a-uuid',
+      signedAt: '2026-02-15',
     });
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'document-id-invalid');
@@ -202,6 +206,7 @@ describe('attachSignedDocument — validations', () => {
     const r = await attachSignedDocument(w.deps)({
       amendmentId: AmendmentId.generate() as unknown as string,
       signedDocumentRef: DocumentId.generate() as unknown as string,
+      signedAt: '2026-02-15',
     });
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'amendment-not-found');
@@ -213,6 +218,7 @@ describe('attachSignedDocument — validations', () => {
     await attachSignedDocument(w.deps)({
       amendmentId: w.amendment.id as unknown as string,
       signedDocumentRef: w.fixtureDoc.id as unknown as string,
+      signedAt: '2026-02-15',
     });
     // 2º attach: cria segundo documento fixture e tenta de novo no mesmo amendment
     const doc2 = buildFixtureDocument(w.amendment.id as unknown as string, 'Amendment');
@@ -220,6 +226,7 @@ describe('attachSignedDocument — validations', () => {
     const r = await attachSignedDocument(w.deps)({
       amendmentId: w.amendment.id as unknown as string,
       signedDocumentRef: doc2.id as unknown as string,
+      signedAt: '2026-02-15',
     });
     assert.equal(isErr(r), true);
     // CTR-DOMAIN-TAGGED-ERRORS — `AmendmentError` virou tagged record (D22).

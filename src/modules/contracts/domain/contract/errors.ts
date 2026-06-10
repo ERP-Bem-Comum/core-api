@@ -58,6 +58,12 @@ export type ContractNotActive = Readonly<{
   currentStatus: ContractStatus;
 }>;
 
+// ADR-0039: só `Pending` é cancelável. Carrega o estado atual como evidência (D23).
+export type ContractNotPending = Readonly<{
+  tag: 'ContractNotPending';
+  currentStatus: ContractStatus;
+}>;
+
 export type ContractCannotExpireYet = Readonly<{
   tag: 'ContractCannotExpireYet';
   currentEnd: PlainDate;
@@ -100,6 +106,7 @@ export type ContractError =
   | ContractOriginalValueZero
   | ContractInvalidEventDate
   | ContractNotActive
+  | ContractNotPending
   | ContractCannotExpireYet
   | ContractCannotExpireIndefinitePeriod
   | ContractCannotExtendIndefinitePeriod
@@ -147,6 +154,11 @@ export const contractInvalidEventDate = (): ContractInvalidEventDate => ({
 
 export const contractNotActive = (currentStatus: ContractStatus): ContractNotActive => ({
   tag: 'ContractNotActive',
+  currentStatus,
+});
+
+export const contractNotPending = (currentStatus: ContractStatus): ContractNotPending => ({
+  tag: 'ContractNotPending',
   currentStatus,
 });
 

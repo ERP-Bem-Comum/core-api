@@ -115,14 +115,15 @@ USER app:app
 # Sinal de parada limpa. Node 24 responde a SIGTERM via `process.on('SIGTERM')`.
 STOPSIGNAL SIGTERM
 
-# CLI ainda não expõe HTTP — sem healthcheck por enquanto. Quando o adapter
-# HTTP entrar, descomentar abaixo:
+# HTTP-first (ADR-0037): a borda primária é o servidor HTTP (`src/server.ts`). Healthcheck
+# pode ser habilitado quando o endpoint /health for confirmado:
 # HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
 #   CMD wget -q --spider http://localhost:8080/health || exit 1
 
-# `tini` como PID 1, depois `node` com flags. ENTRYPOINT é o binário Node
-# direto (sem shell) — encaminha sinais corretamente sem precisar de shell-trap.
-ENTRYPOINT ["tini", "--", "node", "src/modules/contracts/cli/main.ts"]
-
-# Default: lista contratos. Override com `docker run <image> <subcomando> ...`.
-CMD ["listar-contratos"]
+# `tini` como PID 1, depois `node` com flags (NODE_OPTIONS habilita strip-types). ENTRYPOINT
+# é o binário Node direto (sem shell) — encaminha sinais corretamente sem shell-trap.
+#
+# CLI-RETIRE-EMBEDDED (ADR-0037): a CLI embutida foi removida; o entrypoint é o servidor HTTP.
+# O worker de outbox roda em processo dedicado: `node src/modules/contracts/worker/run.ts`
+# (override do command no orquestrador / `pnpm run worker:outbox`).
+ENTRYPOINT ["tini", "--", "node", "src/server.ts"]

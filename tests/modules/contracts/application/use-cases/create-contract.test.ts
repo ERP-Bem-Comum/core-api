@@ -133,14 +133,15 @@ describe('createContract — domain error propagation', () => {
     if (!r.ok) assert.equal(r.error, 'period-end-before-start');
   });
 
-  it('propagates contract-sequential-number-required', async () => {
+  // CTR-CONTRACT-SEQUENTIAL-NUMBER: o número vazio/ausente deixa de ser erro — o backend
+  // gera `NNNN/YYYY` pelo ano do clock. O ano exato (TZ-seguro) é coberto no W0
+  // (`contract-sequential-number.test.ts`); aqui basta confirmar que o vazio passou a gerar.
+  it('generates sequentialNumber when empty', async () => {
     const { deps } = setup();
     const r = await createContract(deps)({ ...validCommand, sequentialNumber: '' });
-    assert.equal(isErr(r), true);
-    // CTR-DOMAIN-TAGGED-ERRORS — `ContractError` virou tagged record (D22).
-    if (!r.ok && typeof r.error === 'object' && 'tag' in r.error) {
-      assert.equal(r.error.tag, 'ContractSequentialNumberRequired');
-    }
+    assert.equal(isOk(r), true);
+    if (!r.ok) return;
+    assert.match(r.value.contract.sequentialNumber, /^\d{4}\/\d{4}$/);
   });
 });
 

@@ -44,6 +44,9 @@ const cellsFor = (dto: ContractListItemDto): readonly string[] => {
   switch (dto.status) {
     case 'Pending':
       return [...registration, '', '', '', '', ''];
+    case 'Cancelled':
+      // ADR-0039: sem vigência efetiva; só `endedAt` (data do cancelamento).
+      return [...registration, '', '', '', '', dto.endedAt];
     case 'Active':
       return [
         ...registration,

@@ -164,17 +164,10 @@ describe('CTR-CLEANUP-SQLITE — CA-9..13: mappers/repos MySQL renomeados para c
 
 // ─── CA-14..17 — CLI/Config ────────────────────────────────────────────────
 describe('CTR-CLEANUP-SQLITE — CA-14..17: CLI/Config', () => {
-  it('CA-14: parse-driver-flags.ts aceita só memory|mysql (sem sqlite)', () => {
+  it('CA-14: parse-driver-flags.ts removido com a CLI embutida (CLI-RETIRE-EMBEDDED)', () => {
+    // A CLI (e seus driver-flags) foi removida — sqlite trivialmente ausente lá.
     const file = src('modules/contracts/cli/parse-driver-flags.ts');
-    const content = readFileSync(file, 'utf-8');
-    // DriverKind sem 'sqlite'
-    assert.doesNotMatch(content, /'sqlite'|"sqlite"/);
-    // Flags exclusivas do SQLite removidas
-    assert.doesNotMatch(content, /--in-memory|--db\b/i);
-    assert.doesNotMatch(content, /dbPath|inMemory/);
-    // memory + mysql ainda presentes
-    assert.match(content, /['"]memory['"]/);
-    assert.match(content, /['"]mysql['"]/);
+    assert.equal(existsSync(file), false);
   });
 
   it('CA-15: package.json sem better-sqlite3 e sem @types/better-sqlite3', () => {

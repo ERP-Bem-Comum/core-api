@@ -169,6 +169,9 @@ export const amendmentToInsert = (a: Amendment): AmendmentInsert => {
     status: a.status,
     signedDocumentRef:
       a.signedDocumentRef === null ? null : (a.signedDocumentRef as unknown as string),
+    // G2: signed_at acompanha signed_document_ref (bicondicional). Narrowing por
+    // `signedDocumentRef === null` separa PendingWithoutDocument (sem signedAt) dos demais.
+    signedAt: a.signedDocumentRef === null ? null : a.signedAt,
     homologatedAt: a.homologatedAt,
     homologatedBy: a.homologatedBy === null ? null : (a.homologatedBy as unknown as string),
   };
@@ -294,7 +297,11 @@ export const amendmentFromRow = (
         return err(amendmentMapperImpossibleShape('pending-with-homologated-fields-populated'));
       }
       if (row.signedDocumentRef === null) {
-        // Estado 1: PendingWithoutDocumentAmendment
+        // Estado 1: PendingWithoutDocumentAmendment. G2: sem documento ⟹ sem signedAt
+        // (CHECK `signed_at_consistency` garante; defesa em profundidade rejeita shape corrompido).
+        if (row.signedAt !== null) {
+          return err(amendmentMapperImpossibleShape('pending-without-document-with-signed-at'));
+        }
         return ok({
           ...coreBase,
           ...variantPart,
@@ -304,14 +311,18 @@ export const amendmentFromRow = (
           homologatedBy: null,
         } as unknown as PendingWithoutDocumentAmendment);
       }
-      // Estado 2: PendingWithDocumentAmendment
+      // Estado 2: PendingWithDocumentAmendment. G2: com documento ⟹ signedAt obrigatório.
       const docR = DocumentId.rehydrate(row.signedDocumentRef);
       if (!docR.ok) return err(amendmentMapperInvalidDocumentId(row.signedDocumentRef));
+      if (row.signedAt === null) {
+        return err(amendmentMapperImpossibleShape('pending-with-document-missing-signed-at'));
+      }
       return ok({
         ...coreBase,
         ...variantPart,
         status: 'Pending' as const,
         signedDocumentRef: docR.value,
+        signedAt: row.signedAt,
         homologatedAt: null,
         homologatedBy: null,
       } as unknown as PendingWithDocumentAmendment);
@@ -321,7 +332,9 @@ export const amendmentFromRow = (
       if (
         row.signedDocumentRef === null ||
         row.homologatedAt === null ||
-        row.homologatedBy === null
+        row.homologatedBy === null ||
+        // G2: Homologated tem documento ⟹ signedAt obrigatório.
+        row.signedAt === null
       ) {
         return err(amendmentMapperImpossibleShape('homologated-with-terminal-fields-missing'));
       }
@@ -334,6 +347,7 @@ export const amendmentFromRow = (
         ...variantPart,
         status: 'Homologated' as const,
         signedDocumentRef: docR.value,
+        signedAt: row.signedAt,
         homologatedAt: row.homologatedAt,
         homologatedBy: userR.value,
       } as unknown as HomologatedAmendment);

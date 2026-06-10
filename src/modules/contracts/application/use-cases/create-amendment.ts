@@ -30,9 +30,10 @@ import type {
 //   - eventBus removido de Deps.
 //   - Evento passado como 2º argumento de amendmentRepo.save.
 
+// G3 (CTR-AMENDMENT-SIGNEDAT-AND-NUMBER): `amendmentNumber` NÃO vem do cliente — o backend
+// gera `NN/AAAA` por contrato (ordem de criação). Removido de CommonFields.
 type CommonFields = Readonly<{
   contractId: string;
-  amendmentNumber: string;
   description: string;
 }>;
 
@@ -72,12 +73,13 @@ type Deps = Readonly<{
 const buildDomainInput = (
   cmd: CreateAmendmentCommand,
   contractId: ContractId.ContractId,
+  amendmentNumber: string,
   createdAt: Date,
 ): Result<CreateAmendmentInput, CreateAmendmentError> => {
   const baseFields = {
     id: AmendmentId.generate(),
     contractId,
-    amendmentNumber: cmd.amendmentNumber,
+    amendmentNumber,
     description: cmd.description,
     createdAt,
   };
@@ -123,7 +125,15 @@ export const createAmendment =
     const active = Contract.parseActive(contractLoad.value);
     if (!active.ok) return active;
 
-    const domainInput = buildDomainInput(cmd, contractIdResult.value, deps.clock.now());
+    // G3: número gerado por contrato (ordem de criação; ano do clock). Transacional no adapter.
+    const now = deps.clock.now();
+    const number = await deps.amendmentRepo.nextAmendmentNumber(
+      contractIdResult.value,
+      now.getFullYear(),
+    );
+    if (!number.ok) return number;
+
+    const domainInput = buildDomainInput(cmd, contractIdResult.value, number.value, now);
     if (!domainInput.ok) return domainInput;
 
     // Defeito #11: fail-fast em TermChange retroativo.

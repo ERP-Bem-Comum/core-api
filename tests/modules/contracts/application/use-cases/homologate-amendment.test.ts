@@ -115,6 +115,7 @@ const setupWorld = async (
   const attached = Amendment.attachSignedDocument(
     amendmentCreate.value.amendment,
     DocumentId.generate(),
+    new Date('2026-02-15'),
   );
   if (!attached.ok) throw new Error(`fixture broken: ${JSON.stringify(attached.error)}`);
   const amendment = attached.value.amendment;
@@ -202,7 +203,9 @@ describe('homologateAmendment — happy path (Addition)', () => {
       throw new Error('contract not persisted');
     }
     const persisted = persistedContract.value;
-    if (persisted.status === 'Pending') throw new Error('expected effective contract');
+    if (persisted.status === 'Pending' || persisted.status === 'Cancelled') {
+      throw new Error('expected effective contract');
+    }
     assert.equal(persisted.currentValue.cents, 10500000);
   });
 
@@ -399,6 +402,7 @@ describe('homologateAmendment — domain rule propagation', () => {
     const attached = Amendment.attachSignedDocument(
       suppression.value.amendment,
       DocumentId.generate(),
+      new Date('2026-02-15'),
     );
     if (!attached.ok) throw new Error('fixture broken');
     await world.amendmentRepo.repo.save(attached.value.amendment, []);

@@ -39,6 +39,9 @@ export const contractToListItem = (c: Contract): ContractListItemDto => {
   switch (c.status) {
     case 'Pending':
       return { ...registration, status: 'Pending' };
+    case 'Cancelled':
+      // ADR-0039: rascunho cancelado — só cadastro + endedAt (sem vigência efetiva).
+      return { ...registration, status: 'Cancelled', endedAt: c.endedAt.toISOString() };
     case 'Active':
       return {
         ...registration,

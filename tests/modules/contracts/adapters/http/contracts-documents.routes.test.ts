@@ -155,7 +155,8 @@ const uploadUrl = (
   q: Readonly<{ categoria: string; fileName: string; mimeType: string }>,
 ): string =>
   `${base}?categoria=${q.categoria}&fileName=${encodeURIComponent(q.fileName)}` +
-  `&mimeType=${encodeURIComponent(q.mimeType)}&signedElectronically=true`;
+  // G2: signedAt exigido no upload+attach de aditivo; inofensivo (stripped) no de contrato.
+  `&mimeType=${encodeURIComponent(q.mimeType)}&signedElectronically=true&signedAt=2026-02-15`;
 
 const octet = (token: string): Record<string, string> => ({
   'content-type': 'application/octet-stream',
@@ -447,7 +448,6 @@ describe('CONTRACTS-HTTP-DOCUMENTS (C3) — CA5 fluxo real (sem seed)', () => {
       headers: auth,
       payload: {
         mode: 'Pending',
-        sequentialNumber: '700/2026',
         title: 'Contrato',
         objective: 'Obj',
         originalValueCents: 10_000_000,
@@ -493,7 +493,6 @@ describe('CONTRACTS-HTTP-DOCUMENTS (C3) — CA5 fluxo real (sem seed)', () => {
       headers: auth,
       payload: {
         mode: 'Active',
-        sequentialNumber: '701/2026',
         title: 'Contrato',
         objective: 'Obj',
         signedAt: '2026-01-15',
@@ -569,7 +568,6 @@ describe('CONTRACTS-HTTP-DOCUMENTS (C3) — OpenAPI + bodyLimit', () => {
       headers: { authorization: `Bearer ${token}` },
       payload: {
         mode: 'Active',
-        sequentialNumber: '999/2026',
         title: huge,
         objective: 'Obj',
         signedAt: '2026-01-15',

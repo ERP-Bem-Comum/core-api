@@ -2,9 +2,11 @@ import { ok, err } from '../../../../../shared/primitives/result.ts';
 import type { AmendmentId } from '../../../domain/shared/ids.ts';
 import type { Amendment } from '../../../domain/amendment/types.ts';
 import type { AmendmentRepository } from '../../../domain/amendment/repository.ts';
+import type { ContractId } from '../../../domain/shared/ids.ts';
 import type { OutboxPort } from '../../../application/ports/outbox.ts';
 import type { ContractsModuleEvent } from '../../../application/ports/event-bus.ts';
 import { InMemoryOutbox } from '../../outbox/outbox.in-memory.ts';
+import { formatAmendmentNumber } from '../../../domain/amendment/amendment-number.ts';
 
 // CA-4 (CTR-OUTBOX-INTEGRATION-IN-REPOS): InMemoryAmendmentRepository recebe
 // OutboxPort como dependência opcional. Default = InMemoryOutbox().port (isolado).
@@ -19,9 +21,17 @@ export const InMemoryAmendmentRepository = (
   outbox: OutboxPort = InMemoryOutbox().port,
 ): InMemoryAmendmentRepositoryHandle => {
   const map = new Map<AmendmentId, Amendment>();
+  // CTR-AMENDMENT-SIGNEDAT-AND-NUMBER (G3): contador por contrato, espelha a tabela
+  // `ctr_amendment_seq` do adapter Drizzle. Mesma semântica (incrementa por chamada; gaps ok).
+  const seqByContract = new Map<ContractId, number>();
 
   const repo: AmendmentRepository = {
     findById: async (id) => ok(map.get(id) ?? null),
+    nextAmendmentNumber: async (contractId, year) => {
+      const next = (seqByContract.get(contractId) ?? 0) + 1;
+      seqByContract.set(contractId, next);
+      return ok(formatAmendmentNumber(next, year));
+    },
     // Leitura agregada: aditivos do contrato ordenados por `amendmentNumber` asc
     // (determinismo + paridade com o adapter Drizzle).
     findByContractId: async (contractId) => {

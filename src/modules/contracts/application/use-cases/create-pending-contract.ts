@@ -20,7 +20,9 @@ import type {
 // do evento `ContractCreated` é injetado via `clock` (não há `signedAt` aqui).
 
 export type CreatePendingContractCommand = Readonly<{
-  sequentialNumber: string;
+  // CTR-CONTRACT-SEQUENTIAL-NUMBER: opcional — gerado pelo backend (ano do clock)
+  // quando ausente. Espelha `createContract` (POST /contracts modo Pending).
+  sequentialNumber?: string;
   title: string;
   objective: string;
   originalValueCents: number;
@@ -62,14 +64,24 @@ export const createPendingContract =
     const contractor = ContractorRef.make(cmd.contractorType, cmd.contractorId);
     if (!contractor.ok) return contractor;
 
+    // CTR-CONTRACT-SEQUENTIAL-NUMBER: gera por ano quando ausente; preserva se fornecido.
+    let sequentialNumber = cmd.sequentialNumber;
+    if (sequentialNumber === undefined || sequentialNumber === '') {
+      const generated = await deps.contractRepo.nextSequentialNumber(
+        deps.clock.now().getFullYear(),
+      );
+      if (!generated.ok) return generated;
+      sequentialNumber = generated.value;
+    }
+
     // Unicidade de sequentialNumber (R4) — antes do save (UNIQUE INDEX é a rede).
-    const existing = await deps.contractRepo.findBySequentialNumber(cmd.sequentialNumber);
+    const existing = await deps.contractRepo.findBySequentialNumber(sequentialNumber);
     if (!existing.ok) return existing;
     if (existing.value !== null) return err('contract-sequential-number-duplicated');
 
     const created = Contract.createPending({
       id: ContractId.generate(),
-      sequentialNumber: cmd.sequentialNumber,
+      sequentialNumber,
       title: cmd.title,
       objective: cmd.objective,
       originalValue: parsed.value.originalValue,

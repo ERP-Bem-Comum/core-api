@@ -22,6 +22,7 @@ export const TimelineProjectionDelivery = (repo: TimelineRepository): EventDeliv
     switch (event.type) {
       case 'ContractCreated':
       case 'ContractActivated':
+      case 'ContractCancelled':
       case 'ContractStateUpdated':
       case 'ContractEnded':
       case 'AmendmentCreated':

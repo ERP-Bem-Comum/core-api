@@ -92,12 +92,30 @@ export type TerminatedContract = EffectiveContractCore &
   }>;
 
 /**
+ * Tipo refinado: contrato `Cancelado` (estado terminal — ADR-0039).
+ *
+ * Nasce de um `PendingContract` (rascunho descartado antes de vigorar). Por isso
+ * carrega apenas os campos de cadastro (`ContractRegistration`) + `endedAt`
+ * (instante do cancelamento) — NÃO tem vigência efetiva (`signedAt`/`currentValue`/
+ * `currentPeriod`/`homologatedAmendmentIds`), ao contrário de `Expired`/`Terminated`.
+ * É essa a distinção estrutural: terminais-com-vigência estendem `EffectiveContractCore`;
+ * `Cancelled` estende só `ContractRegistration`.
+ */
+export type CancelledContract = ContractRegistration &
+  Readonly<{ status: 'Cancelled'; endedAt: Date }>;
+
+/**
  * Union discriminada do agregado `Contract` (o tipo público).
  *
  * O discriminador `status` permite narrowing automático pelo compilador:
  * dentro de `if (c.status === 'Active')`, TS sabe que `c` é `ActiveContract`.
  */
-export type Contract = PendingContract | ActiveContract | ExpiredContract | TerminatedContract;
+export type Contract =
+  | PendingContract
+  | ActiveContract
+  | ExpiredContract
+  | TerminatedContract
+  | CancelledContract;
 
 /**
  * Estados COM vigência efetiva — todos exceto `Pending`.
@@ -115,10 +133,12 @@ export type EffectiveContract = ActiveContract | ExpiredContract | TerminatedCon
  * `errors.ts` (payload de `ContractNotActive`) e formatters CLI.
  *
  * Transições válidas:
+ *   - `Pending`    → `Cancelled`  (via `Contract.cancel` — ADR-0039)
  *   - `Active`     → `Expired`    (via `Contract.expire`)
  *   - `Active`     → `Terminated` (via `Contract.terminate`)
  *   - `Expired`    → terminal
  *   - `Terminated` → terminal
+ *   - `Cancelled`  → terminal
  */
 export type ContractStatus = Contract['status'];
 

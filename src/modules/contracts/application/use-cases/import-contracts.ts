@@ -2,7 +2,7 @@ import { type Result, ok } from '../../../../shared/primitives/result.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
 import { isValidCnpj } from '#src/shared/kernel/cnpj.ts';
 import { buildContract } from './create-contract.ts';
-import type { BuildContractError, CreateContractCommand } from './create-contract.ts';
+import type { BuildContractError, BuildContractInput } from './create-contract.ts';
 import type {
   ContractRepository,
   ContractRepositoryError,
@@ -59,7 +59,9 @@ type Deps = Readonly<{
   clock: Clock;
 }>;
 
-const toCreateCommand = (row: ImportContractRow): CreateContractCommand => ({
+// Import PRESERVA o número legado (`row.numero`) — `BuildContractInput` exige o número
+// já resolvido (o import nunca gera; só `createContract` gera quando ausente).
+const toCreateCommand = (row: ImportContractRow): BuildContractInput => ({
   sequentialNumber: row.numero,
   title: row.titulo,
   objective: row.objetivo,

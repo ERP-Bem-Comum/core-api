@@ -10,6 +10,7 @@ import type {
   PendingContract,
   ExpiredContract,
   TerminatedContract,
+  CancelledContract,
   ContractAdjustment,
   CreateContractInput,
   CreatePendingContractInput,
@@ -36,8 +37,10 @@ const stateUpdatedEvent = (
   newCurrentPeriod: contract.currentPeriod,
 });
 
-// Defeito #6: formato canônico XXX/AAAA (3 dígitos, barra, 4 dígitos)
-const SEQUENTIAL_NUMBER_FORMAT = /^\d{3}\/\d{4}$/;
+// Defeito #6: formato canônico NNN/AAAA ou NNNN/AAAA (3 ou 4 dígitos, barra, 4 dígitos).
+// 4 dígitos cobre a numeração GERADA pelo backend (CTR-CONTRACT-SEQUENTIAL-NUMBER,
+// `LPAD(seq,4,'0')/year`); 3 dígitos preserva o legado já cadastrado.
+const SEQUENTIAL_NUMBER_FORMAT = /^\d{3,4}\/\d{4}$/;
 
 /**
  * Validações de **cadastro** comuns a todo nascimento de contrato (`create` e
@@ -267,6 +270,49 @@ const terminate = (
 };
 
 /**
+ * Refinement constructor para o estado `Pending` (ADR-0039) — espelha `parseActive`.
+ *
+ * "Parse, don't validate" (DO D§21): retorna o subtipo refinado `PendingContract` dentro
+ * de `ok(...)`; chamadores passam o resultado direto à transição `cancel`. Estados não-Pending
+ * recebem `ContractNotPending` carregando o `currentStatus` como evidência (D23).
+ */
+const parsePending = (
+  contract: ContractEntity,
+): Result<PendingContract, ContractError.ContractNotPending> =>
+  contract.status === 'Pending'
+    ? ok(contract) // narrowing automático: status === 'Pending' => PendingContract
+    : err(ContractError.contractNotPending(contract.status));
+
+/**
+ * Transição `Pending → Cancelled` (ADR-0039 — rascunho descartado antes de vigorar).
+ *
+ * Recebe `PendingContract` — o compilador rejeita estados efetivos/terminais em compile
+ * time (espelha `activate`). `Cancelled` é terminal e carrega só `endedAt` sobre o cadastro;
+ * não há vigência efetiva (o contrato nunca foi assinado).
+ */
+const cancel = (
+  contract: PendingContract,
+  at: Date,
+): Result<{ contract: CancelledContract; event: ContractEvent }, ContractError.ContractError> => {
+  const atCheck = assertValidEventDate(at);
+  if (!atCheck.ok) return atCheck;
+
+  const next: CancelledContract = immutable({
+    ...contract,
+    status: 'Cancelled' as const,
+    endedAt: at,
+  });
+
+  const event: ContractEvent = {
+    type: 'ContractCancelled',
+    contractId: contract.id,
+    occurredAt: at,
+  };
+
+  return ok({ contract: next, event });
+};
+
+/**
  * Aplica um ajuste homologado ao contrato — mantém o contrato `Active`.
  *
  * Aditivos só se aplicam a contratos ativos (DO D§20): o tipo do parâmetro
@@ -362,6 +408,8 @@ export const Contract = {
   createPending,
   activate,
   parseActive,
+  parsePending,
+  cancel,
   expire,
   terminate,
   applyHomologatedAdjustment,
