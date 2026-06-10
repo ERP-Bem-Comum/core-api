@@ -1,6 +1,6 @@
 /**
- * Use case `editAct` — edição cadastral (PUT total dos 7 campos).
- * rehydrate id → findById → Act.edit → guard unicidades (CPF/email) → save.
+ * Use case `editAct` — edição cadastral do Acordo (PUT total dos campos).
+ * rehydrate id → findById → Act.edit → guard `actNumber` duplicado → save.
  */
 
 import { type Result, ok, err } from '#src/shared/index.ts';
@@ -13,23 +13,32 @@ import type {
   ActRepository,
   ActRepositoryError,
 } from '#src/modules/partners/domain/act/repository.ts';
+import type {
+  BankAccountInput,
+  PixKeyInput,
+} from '#src/modules/partners/domain/supplier/payment-target.ts';
 
 export type EditActCommand = Readonly<{
   actId: string;
+  actNumber: string;
   name: string;
   email: string;
-  cpf: string;
+  cnpj: string;
+  corporateName: string;
+  fantasyName: string;
   occupationArea: string;
-  role: string;
-  startOfContract: Date;
-  employmentRelationship: string;
+  legalRepresentative: string;
+  startDate: string;
+  endDate: string;
+  hasFinancialTransfer: boolean;
+  bankAccount: BankAccountInput | null;
+  pixKey: PixKeyInput | null;
 }>;
 
 export type EditActError =
   | 'edit-act-invalid-id'
   | 'edit-act-not-found'
-  | 'edit-act-cpf-duplicate'
-  | 'edit-act-email-duplicate'
+  | 'edit-act-number-duplicate'
   | ActError
   | ActRepositoryError;
 
@@ -48,31 +57,33 @@ export const editAct =
     if (fetched.value === null) return err('edit-act-not-found');
     const current = fetched.value;
 
-    const edited = Act.edit(current, {
-      name: cmd.name,
-      email: cmd.email,
-      cpf: cmd.cpf,
-      occupationArea: cmd.occupationArea,
-      role: cmd.role,
-      startOfContract: cmd.startOfContract,
-      employmentRelationship: cmd.employmentRelationship,
-    });
+    const edited = Act.edit(
+      current,
+      {
+        actNumber: cmd.actNumber,
+        name: cmd.name,
+        email: cmd.email,
+        cnpj: cmd.cnpj,
+        corporateName: cmd.corporateName,
+        fantasyName: cmd.fantasyName,
+        occupationArea: cmd.occupationArea,
+        legalRepresentative: cmd.legalRepresentative,
+        startDate: cmd.startDate,
+        endDate: cmd.endDate,
+        hasFinancialTransfer: cmd.hasFinancialTransfer,
+        bankAccount: cmd.bankAccount,
+        pixKey: cmd.pixKey,
+      },
+      deps.clock.now(),
+    );
     if (!edited.ok) return edited;
     const next = edited.value.act;
 
-    if (String(current.cpf) !== String(next.cpf)) {
-      const byCpf = await deps.actRepo.findByCpf(next.cpf);
-      if (!byCpf.ok) return byCpf;
-      if (byCpf.value !== null && String(byCpf.value.id) !== String(id.value)) {
-        return err('edit-act-cpf-duplicate');
-      }
-    }
-
-    if (current.email !== next.email) {
-      const byEmail = await deps.actRepo.findByEmail(next.email);
-      if (!byEmail.ok) return byEmail;
-      if (byEmail.value !== null && String(byEmail.value.id) !== String(id.value)) {
-        return err('edit-act-email-duplicate');
+    if (String(current.actNumber) !== String(next.actNumber)) {
+      const byActNumber = await deps.actRepo.findByActNumber(next.actNumber);
+      if (!byActNumber.ok) return byActNumber;
+      if (byActNumber.value !== null && String(byActNumber.value.id) !== String(id.value)) {
+        return err('edit-act-number-duplicate');
       }
     }
 

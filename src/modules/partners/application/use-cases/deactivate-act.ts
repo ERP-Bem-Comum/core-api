@@ -36,12 +36,11 @@ export const deactivateAct =
     if (!fetched.ok) return fetched;
     if (fetched.value === null) return err('deactivate-act-not-found');
 
-    if (fetched.value.status === 'Inactive') return err('act-already-inactive');
+    const deactivated = Act.deactivate(fetched.value, deps.clock.now());
+    if (!deactivated.ok) return deactivated;
 
-    const inactive = Act.deactivate(fetched.value, deps.clock.now());
-
-    const saved = await deps.actRepo.save(inactive);
+    const saved = await deps.actRepo.save(deactivated.value.act);
     if (!saved.ok) return saved;
 
-    return ok({ act: inactive });
+    return ok({ act: deactivated.value.act });
   };

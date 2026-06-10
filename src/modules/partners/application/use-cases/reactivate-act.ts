@@ -36,12 +36,11 @@ export const reactivateAct =
     if (!fetched.ok) return fetched;
     if (fetched.value === null) return err('reactivate-act-not-found');
 
-    if (fetched.value.status === 'Active') return err('act-already-active');
+    const reactivated = Act.reactivate(fetched.value, deps.clock.now());
+    if (!reactivated.ok) return reactivated;
 
-    const active = Act.reactivate(fetched.value);
-
-    const saved = await deps.actRepo.save(active);
+    const saved = await deps.actRepo.save(reactivated.value.act);
     if (!saved.ok) return saved;
 
-    return ok({ act: active });
+    return ok({ act: reactivated.value.act });
   };
