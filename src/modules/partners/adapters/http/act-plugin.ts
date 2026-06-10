@@ -33,11 +33,8 @@ import {
   createActBodySchema,
   updateActBodySchema,
 } from './act-schemas.ts';
-import {
-  queryToFilter as actQueryToFilter,
-  actsForExport,
-  matchesFilter as actMatchesFilter,
-} from './act-list-query.ts';
+import { queryToFilter as actQueryToFilter, actsForExport } from './act-list-query.ts';
+import { actMatchesFilter } from '../../application/use-cases/list-acts.ts';
 import { actsToCsv } from '../export/act-csv.ts';
 import { ACT_PERMISSION } from '../../public-api/permissions.ts';
 

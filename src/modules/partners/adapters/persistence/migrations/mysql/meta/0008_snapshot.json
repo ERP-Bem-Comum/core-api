@@ -173,16 +173,12 @@
       "indexes": {
         "par_acts_act_number_idx": {
           "name": "par_acts_act_number_idx",
-          "columns": [
-            "act_number"
-          ],
+          "columns": ["act_number"],
           "isUnique": true
         },
         "par_acts_legacy_id_idx": {
           "name": "par_acts_legacy_id_idx",
-          "columns": [
-            "legacy_id"
-          ],
+          "columns": ["legacy_id"],
           "isUnique": true
         }
       },
@@ -190,9 +186,7 @@
       "compositePrimaryKeys": {
         "par_acts_id": {
           "name": "par_acts_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -426,23 +420,17 @@
       "indexes": {
         "par_collaborators_cpf_idx": {
           "name": "par_collaborators_cpf_idx",
-          "columns": [
-            "cpf"
-          ],
+          "columns": ["cpf"],
           "isUnique": true
         },
         "par_collaborators_email_idx": {
           "name": "par_collaborators_email_idx",
-          "columns": [
-            "email"
-          ],
+          "columns": ["email"],
           "isUnique": true
         },
         "par_collaborators_legacy_id_idx": {
           "name": "par_collaborators_legacy_id_idx",
-          "columns": [
-            "legacy_id"
-          ],
+          "columns": ["legacy_id"],
           "isUnique": true
         }
       },
@@ -450,9 +438,7 @@
       "compositePrimaryKeys": {
         "par_collaborators_id": {
           "name": "par_collaborators_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -555,16 +541,12 @@
       "indexes": {
         "par_financiers_cnpj_idx": {
           "name": "par_financiers_cnpj_idx",
-          "columns": [
-            "cnpj"
-          ],
+          "columns": ["cnpj"],
           "isUnique": true
         },
         "par_financiers_legacy_id_idx": {
           "name": "par_financiers_legacy_id_idx",
-          "columns": [
-            "legacy_id"
-          ],
+          "columns": ["legacy_id"],
           "isUnique": true
         }
       },
@@ -572,9 +554,7 @@
       "compositePrimaryKeys": {
         "par_financiers_id": {
           "name": "par_financiers_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -637,9 +617,7 @@
       "compositePrimaryKeys": {
         "par_municipalities_ibge_code": {
           "name": "par_municipalities_ibge_code",
-          "columns": [
-            "ibge_code"
-          ]
+          "columns": ["ibge_code"]
         }
       },
       "uniqueConstraints": {},
@@ -695,9 +673,7 @@
       "compositePrimaryKeys": {
         "par_states_uf": {
           "name": "par_states_uf",
-          "columns": [
-            "uf"
-          ]
+          "columns": ["uf"]
         }
       },
       "uniqueConstraints": {},
@@ -856,16 +832,12 @@
       "indexes": {
         "par_suppliers_cnpj_idx": {
           "name": "par_suppliers_cnpj_idx",
-          "columns": [
-            "cnpj"
-          ],
+          "columns": ["cnpj"],
           "isUnique": true
         },
         "par_suppliers_legacy_id_idx": {
           "name": "par_suppliers_legacy_id_idx",
-          "columns": [
-            "legacy_id"
-          ],
+          "columns": ["legacy_id"],
           "isUnique": true
         }
       },
@@ -873,9 +845,7 @@
       "compositePrimaryKeys": {
         "par_suppliers_id": {
           "name": "par_suppliers_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -972,16 +942,12 @@
       "indexes": {
         "par_user_profiles_cpf_idx": {
           "name": "par_user_profiles_cpf_idx",
-          "columns": [
-            "cpf"
-          ],
+          "columns": ["cpf"],
           "isUnique": true
         },
         "par_user_profiles_legacy_id_idx": {
           "name": "par_user_profiles_legacy_id_idx",
-          "columns": [
-            "legacy_id"
-          ],
+          "columns": ["legacy_id"],
           "isUnique": true
         }
       },
@@ -989,9 +955,7 @@
       "compositePrimaryKeys": {
         "par_user_profiles_user_ref": {
           "name": "par_user_profiles_user_ref",
-          "columns": [
-            "user_ref"
-          ]
+          "columns": ["user_ref"]
         }
       },
       "uniqueConstraints": {},
