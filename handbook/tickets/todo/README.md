@@ -79,9 +79,9 @@
 
 ## 🟥 Pendências de BACKEND (core-api)
 
-**[USR-SEED-PERMISSIONS](./USR-SEED-PERMISSIONS.md) — Seed: permissões.** O admin de dev está sem `user:*`
-(e `program:*`), então o grid e as ações de Usuários retornam **403** (idem `/programs`). *Bloqueia no
-front:* grid/detalhe de Usuários mostram 403 (a Minha Conta funciona, é `/me`).
+> **✅ Entregue:** [USR-SEED-PERMISSIONS](../done/USR-SEED-PERMISSIONS.md) — preset canônico
+> `adminDevPermissions` (derivado do catálogo, inclui `user:*` + `program:*`) + helper `buildAdminDevSeedUser`
+> em `src/modules/auth/adapters/http/dev-seed.ts`. Quickstart 005 atualizado. (closed-green 2026-06-10)
 
 **[USR-ME-PROFILE-FIELDS](./USR-ME-PROFILE-FIELDS.md) — Minha Conta: campos.** O `PUT /api/v1/me` só aceita
 `name` + `telephone` (não cpf/email). *Bloqueia no front:* CPF e E-mail ficam **read-only** no modal
