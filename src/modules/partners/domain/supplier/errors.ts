@@ -11,6 +11,7 @@ export type SupplierError =
   | 'supplier-fantasy-name-required'
   | 'invalid-cnpj'
   | 'invalid-service-category'
+  | 'invalid-service-rating'
   | 'supplier-payment-target-required'
   | PaymentTargetError
   | 'supplier-already-inactive'

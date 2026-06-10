@@ -26,6 +26,7 @@ import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
 
 import type { ContractsHttpDeps } from './composition.ts';
 import { contractToListItem, contractToDetailDto } from './contract-dto.ts';
+import { programBlockFromSnapshots } from './program-composition.ts';
 import type { ContractMetadataPatch } from '../../application/use-cases/update-contract-metadata.ts';
 import { timelineEntryToDto } from './timeline-dto.ts';
 import { amendmentToDto } from './amendment-dto.ts';
@@ -48,6 +49,7 @@ import {
   amendmentParamSchema,
   amendmentSchema,
   uploadDocumentQuerySchema,
+  amendmentDocumentUploadQuerySchema,
   supersedeDocumentBodySchema,
   deleteDocumentBodySchema,
   documentParamSchema,
@@ -75,6 +77,8 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'activate-contract-no-signed-document',
   'amendment-retroactive-to-contract-start',
   'ContractNotActive',
+  // ADR-0039: cancelar contrato não-Pendente → 409 (tag do ContractError).
+  'ContractNotPending',
   'contract-repo-conflict',
   'amendment-repo-conflict',
   // C3 — documentos
@@ -161,6 +165,13 @@ const contractsRoutes =
       },
     );
 
+    // CTR-NUMBER-PROGRAM: list-item com o bloco `program` composto na borda (single). Usado
+    // pelas respostas de escrita (POST/activate/end/homologate/cancel) — a listagem usa o batch.
+    const listItemWithProgram = async (
+      contract: Parameters<typeof contractToListItem>[0],
+    ): Promise<ReturnType<typeof contractToListItem>> =>
+      contractToListItem(contract, await deps.getProgramBlock(contract.programId));
+
     // ─── Reads (C0/C1) ───────────────────────────────────────────────────────
     scope.route({
       method: 'GET',
@@ -185,10 +196,16 @@ const contractsRoutes =
             errors: { 'contract-repo-unavailable': 503 },
           });
         }
+        // CTR-NUMBER-PROGRAM: compõe o bloco `program` de cada item em BATCH (uma chamada ao
+        // ProgramReadPort por página, sem N+1). `programId` null/programa indisponível → snapshot null.
+        const { items } = result.value;
+        const snapshots = await deps.getProgramSnapshots(items.map((c) => c.programId));
         return sendResult(
           reply,
           ok({
-            items: result.value.items.map(contractToListItem),
+            items: items.map((c) =>
+              contractToListItem(c, programBlockFromSnapshots(c.programId, snapshots)),
+            ),
             meta: result.value.meta,
           }),
           { ok: 200 },
@@ -246,9 +263,12 @@ const contractsRoutes =
         // ADR-0032: rota gorda transitória — compõe o contratado na borda e declara
         // a transitoriedade via Deprecation/Sunset (RFC 8594). Sai quando o BFF v2 assumir.
         const contractor = await deps.getContractorBlock(result.value.contract.contractor);
+        const program = await deps.getProgramBlock(result.value.contract.programId);
         reply.header('Deprecation', 'true');
         reply.header('Sunset', 'quando o BFF v2 assumir a composição do contratado');
-        return sendResult(reply, ok(contractToDetailDto(result.value, contractor)), { ok: 200 });
+        return sendResult(reply, ok(contractToDetailDto(result.value, contractor, program)), {
+          ok: 200,
+        });
       },
     });
 
@@ -294,24 +314,31 @@ const contractsRoutes =
           });
         }
         const contractor = await deps.getContractorBlock(detail.value.contract.contractor);
+        const program = await deps.getProgramBlock(detail.value.contract.programId);
         reply.header('Deprecation', 'true');
         reply.header('Sunset', 'quando o BFF v2 assumir a composição do contratado');
-        return sendResult(reply, ok(contractToDetailDto(detail.value, contractor)), { ok: 200 });
+        return sendResult(reply, ok(contractToDetailDto(detail.value, contractor, program)), {
+          ok: 200,
+        });
       },
     });
 
-    // US-002: DELETE de contrato é RECUSADO (imutabilidade — exclusão física proibida,
-    // princípio #14). `requireAuth` precede a política (não vaza existência da rota a
-    // não-autenticado). 405 com envelope `contract-delete-forbidden`.
+    // CTR-HTTP-CANCEL-PENDING (ADR-0039): DELETE cancela (soft-delete) um contrato `Pending`.
+    // Pendente → 200 (contrato Cancelled); não-Pendente → 409 `ContractNotPending`; inexistente
+    // → 404. Exclusão FÍSICA permanece proibida — a rota faz transição de estado, não apaga a row.
     scope.route({
       method: 'DELETE',
       url: '/contracts/:id',
       preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
-      schema: { params: contractIdParamSchema } satisfies FastifyZodOpenApiSchema,
-      handler: (_req, reply) =>
-        sendResult(reply, err('contract-delete-forbidden'), {
-          errors: { 'contract-delete-forbidden': 405 },
-        }),
+      schema: {
+        params: contractIdParamSchema,
+        response: { 200: contractDetailSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.cancelContract({ contractId: req.params.id });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(await listItemWithProgram(result.value.contract)), { ok: 200 });
+      },
     });
 
     scope.route({
@@ -354,7 +381,6 @@ const contractsRoutes =
         const body = req.body;
         if (body.mode === 'Pending') {
           const result = await deps.createPendingContract({
-            sequentialNumber: body.sequentialNumber,
             title: body.title,
             objective: body.objective,
             originalValueCents: body.originalValueCents,
@@ -362,17 +388,25 @@ const contractsRoutes =
             periodEnd: body.periodEnd,
             contractorType: body.contractor.type,
             contractorId: body.contractor.id,
+            // CTR-NUMBER-PROGRAM: classification omitida quando ausente (default CT no domínio,
+            // `exactOptionalPropertyTypes`); metadados nuláveis repassados.
+            ...(body.classification !== undefined ? { classification: body.classification } : {}),
+            programId: body.programId ?? null,
+            budgetPlanId: body.budgetPlanId ?? null,
+            categorizacao: body.categorizacao ?? null,
+            centroDeCusto: body.centroDeCusto ?? null,
           });
           if (!result.ok) return sendDomainError(reply, result.error);
           // Location no 201 (RFC 7231 §6.3.2): aponta para o recurso recém-criado. O body
           // `{id,...}` (list-item) é preservado para compat com o front atual.
           reply.header('location', `/api/v2/contracts/${String(result.value.contract.id)}`);
-          return sendResult(reply, ok(contractToListItem(result.value.contract)), { ok: 201 });
+          return sendResult(reply, ok(await listItemWithProgram(result.value.contract)), {
+            ok: 201,
+          });
         }
         // O body usa `periodStart`/`periodEnd` (API uniforme entre Pending|Active); o
         // `CreateContractCommand` os nomeia `originalPeriodStart`/`originalPeriodEnd`.
         const result = await deps.createContract({
-          sequentialNumber: body.sequentialNumber,
           title: body.title,
           objective: body.objective,
           signedAt: body.signedAt,
@@ -381,12 +415,19 @@ const contractsRoutes =
           originalPeriodEnd: body.periodEnd,
           contractorType: body.contractor.type,
           contractorId: body.contractor.id,
+          // CTR-NUMBER-PROGRAM: classification omitida quando ausente (default CT no domínio,
+          // `exactOptionalPropertyTypes`); metadados nuláveis repassados.
+          ...(body.classification !== undefined ? { classification: body.classification } : {}),
+          programId: body.programId ?? null,
+          budgetPlanId: body.budgetPlanId ?? null,
+          categorizacao: body.categorizacao ?? null,
+          centroDeCusto: body.centroDeCusto ?? null,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         // Location no 201 (RFC 7231 §6.3.2): aponta para o recurso recém-criado. O body
         // `{id,...}` (list-item) é preservado para compat com o front atual.
         reply.header('location', `/api/v2/contracts/${String(result.value.contract.id)}`);
-        return sendResult(reply, ok(contractToListItem(result.value.contract)), { ok: 201 });
+        return sendResult(reply, ok(await listItemWithProgram(result.value.contract)), { ok: 201 });
       },
     });
 
@@ -405,7 +446,7 @@ const contractsRoutes =
           signedAt: req.body.signedAt,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
-        return sendResult(reply, ok(contractToListItem(result.value.contract)), { ok: 200 });
+        return sendResult(reply, ok(await listItemWithProgram(result.value.contract)), { ok: 200 });
       },
     });
 
@@ -433,7 +474,7 @@ const contractsRoutes =
             : { contractId: req.params.id, kind: body.kind };
         const result = await deps.endContract(command);
         if (!result.ok) return sendDomainError(reply, result.error);
-        return sendResult(reply, ok(contractToListItem(result.value.contract)), { ok: 200 });
+        return sendResult(reply, ok(await listItemWithProgram(result.value.contract)), { ok: 200 });
       },
     });
 
@@ -448,9 +489,9 @@ const contractsRoutes =
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
         const body = req.body;
+        // G3: `amendmentNumber` não vem do body — gerado pelo backend por contrato.
         const base = {
           contractId: req.params.id,
-          amendmentNumber: body.amendmentNumber,
           description: body.description,
         };
         const command =
@@ -481,7 +522,7 @@ const contractsRoutes =
           homologatedBy: req.body.homologatedBy,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
-        return sendResult(reply, ok(contractToListItem(result.value.contract)), { ok: 200 });
+        return sendResult(reply, ok(await listItemWithProgram(result.value.contract)), { ok: 200 });
       },
     });
 
@@ -531,7 +572,7 @@ const contractsRoutes =
       preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
       schema: {
         params: amendmentParamSchema,
-        querystring: uploadDocumentQuerySchema,
+        querystring: amendmentDocumentUploadQuerySchema,
         body: octetStreamUploadBody(),
         response: { 201: documentSchema },
       } satisfies FastifyZodOpenApiSchema,
@@ -565,6 +606,7 @@ const contractsRoutes =
         const attached = await deps.attachSignedDocument({
           amendmentId: req.params.amendmentId,
           signedDocumentRef: uploaded.value.document.id,
+          signedAt: q.signedAt,
         });
         if (!attached.ok) return sendDomainError(reply, attached.error);
         return sendResult(reply, ok(documentToDto(uploaded.value.document)), { ok: 201 });

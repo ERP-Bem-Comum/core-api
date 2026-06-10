@@ -42,6 +42,11 @@ export type ContractRepository = Readonly<{
   findBySequentialNumber: (
     sequentialNumber: string,
   ) => Promise<Result<Contract | null, ContractRepositoryError>>;
+  // CTR-CONTRACT-SEQUENTIAL-NUMBER: gera o próximo número sequencial do ano no formato
+  // `NNNN/YYYY`. A geração é transacional no adapter real (tabela `ctr_contract_seq`,
+  // SELECT ... FOR UPDATE — Refman §17.7.2.4); o InMemory usa um contador por ano.
+  // Números são monotônicos por ano; gaps são aceitáveis (semântica de sequência).
+  nextSequentialNumber: (year: number) => Promise<Result<string, ContractRepositoryError>>;
   list: () => Promise<Result<readonly Contract[], ContractRepositoryError>>;
   // CTR-HTTP-CONTRACT-LIST-FILTERS — leitura filtrada/paginada no banco
   // (WHERE/ORDER BY/LIMIT/OFFSET + COUNT). InMemory replica em memória.

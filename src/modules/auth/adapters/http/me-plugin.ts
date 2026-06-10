@@ -14,24 +14,43 @@ import type {
   FastifyZodOpenApiTypeProvider,
 } from 'fastify-zod-openapi';
 
-import { ok } from '#src/shared/primitives/result.ts';
+import { ok, err } from '#src/shared/primitives/result.ts';
 import { sendResult } from '#src/shared/http/reply.ts';
 
 import type { getUser } from '../../application/use-cases/get-user.ts';
 import type { updateUserProfile } from '../../application/use-cases/update-user-profile.ts';
 import type { requestPasswordReset } from '../../application/use-cases/request-password-reset.ts';
-import { userDetailResponseSchema, meUpdateBodySchema } from './users-schemas.ts';
+import type {
+  setProfilePhoto,
+  removeProfilePhoto,
+} from '../../application/use-cases/set-profile-photo.ts';
+import {
+  userDetailResponseSchema,
+  meUpdateBodySchema,
+  uploadPhotoQuerySchema,
+} from './users-schemas.ts';
+import {
+  magicBytesMatch,
+  PHOTO_BODY_LIMIT,
+  PHOTO_SET_ERROR_STATUS,
+  PHOTO_REMOVE_ERROR_STATUS,
+} from './photo-upload.ts';
 
 export type MeHttpDeps = Readonly<{
   getUser: ReturnType<typeof getUser>;
   updateUserProfile: ReturnType<typeof updateUserProfile>;
   requestPasswordReset: ReturnType<typeof requestPasswordReset>;
+  setProfilePhoto: ReturnType<typeof setProfilePhoto>;
+  removeProfilePhoto: ReturnType<typeof removeProfilePhoto>;
 }>;
 
 export type MeHttpHooks = Readonly<{ requireAuth: preHandlerAsyncHookHandler }>;
 
 const PROFILE_VALIDATION_STATUS = {
   'name-required': 422,
+  'email-empty': 422,
+  'email-invalid-format': 422,
+  'email-too-long': 422,
   'telephone-empty': 422,
   'telephone-invalid': 422,
 } as const;
@@ -39,6 +58,16 @@ const PROFILE_VALIDATION_STATUS = {
 const meRoutes =
   (deps: MeHttpDeps, hooks: MeHttpHooks): FastifyPluginAsyncZodOpenApi =>
   async (scope) => {
+    // USR-ME-PHOTO: parser binario p/ upload de foto (octet-stream -> Buffer). Escopo do plugin (não
+    // afeta as rotas JSON). PHOTO_BODY_LIMIT compartilhado com o plugin admin via `photo-upload.ts`.
+    scope.addContentTypeParser(
+      'application/octet-stream',
+      { parseAs: 'buffer', bodyLimit: PHOTO_BODY_LIMIT },
+      (_req, body, done) => {
+        done(null, body);
+      },
+    );
+
     // GET /me — o proprio perfil.
     scope.route({
       method: 'GET',
@@ -66,10 +95,11 @@ const meRoutes =
         response: { 200: userDetailResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
-        const { name, telephone } = req.body;
+        const { name, email, telephone } = req.body;
         const updated = await deps.updateUserProfile({
           id: req.userId,
           ...(name !== undefined ? { name } : {}),
+          ...(email !== undefined ? { email } : {}),
           ...(telephone !== undefined ? { telephone } : {}),
         });
         if (!updated.ok) {
@@ -82,6 +112,62 @@ const meRoutes =
               'user-repo-unavailable': 503,
             },
           });
+        }
+        const detail = await deps.getUser(req.userId);
+        return sendResult(reply, detail, {
+          ok: 200,
+          errors: { 'user-id-invalid': 400, 'user-not-found': 404 },
+        });
+      },
+    });
+
+    // PUT /me/photo — troca a propria foto (octet-stream + ?mimeType=). Self por construcao (req.userId);
+    // NAO exige `user:update` (so requireAuth), ao contrario do PUT /users/:id/photo (admin).
+    scope.route({
+      method: 'PUT',
+      url: '/me/photo',
+      preHandler: [hooks.requireAuth],
+      schema: {
+        querystring: uploadPhotoQuerySchema,
+        response: { 200: userDetailResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const bytes = req.body as Buffer;
+        const { mimeType } = req.query;
+        // Defesa em profundidade: a assinatura do arquivo deve casar com o mimeType declarado.
+        if (bytes.length > 0 && !magicBytesMatch(mimeType, bytes)) {
+          return sendResult(reply, err('photo-content-mismatch' as const), {
+            errors: { 'photo-content-mismatch': 422 },
+          });
+        }
+        const result = await deps.setProfilePhoto({
+          targetId: req.userId,
+          bytes: new Uint8Array(bytes),
+          mimeType,
+        });
+        if (!result.ok) {
+          return sendResult(reply, result, { errors: PHOTO_SET_ERROR_STATUS });
+        }
+        const detail = await deps.getUser(req.userId);
+        return sendResult(reply, detail, {
+          ok: 200,
+          errors: { 'user-id-invalid': 400, 'user-not-found': 404 },
+        });
+      },
+    });
+
+    // DELETE /me/photo — remove a propria foto. Self por construcao (req.userId).
+    scope.route({
+      method: 'DELETE',
+      url: '/me/photo',
+      preHandler: [hooks.requireAuth],
+      schema: {
+        response: { 200: userDetailResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.removeProfilePhoto({ targetId: req.userId });
+        if (!result.ok) {
+          return sendResult(reply, result, { errors: PHOTO_REMOVE_ERROR_STATUS });
         }
         const detail = await deps.getUser(req.userId);
         return sendResult(reply, detail, {

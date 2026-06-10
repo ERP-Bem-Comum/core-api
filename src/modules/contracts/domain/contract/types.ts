@@ -16,6 +16,9 @@ import { immutable } from '../../../../shared/primitives/immutable.ts';
  * DO C§29: estados eliminam null; campos optional-as-state viram propriedade
  * do tipo refinado).
  */
+/** Classificação do contrato (CTR-NUMBER-PROGRAM): Contrato (CT) × Ordem de Serviço (OS). */
+export type ContractClassification = 'CT' | 'OS';
+
 type ContractRegistration = Readonly<{
   id: ContractId;
   sequentialNumber: string;
@@ -26,6 +29,14 @@ type ContractRegistration = Readonly<{
   // Contratado (referência leve a Parceiros) — atributo próprio do contrato,
   // obrigatório desde o registro (ADR-0032; FR-001/002).
   contractor: ContractorRef;
+  // CTR-NUMBER-PROGRAM: classificação (prefixo CT/OS do número) + metadados de cadastro.
+  // `programId`/`budgetPlanId` são referências leves (UUID) cross-módulo/cross-BC; `categorizacao`/
+  // `centroDeCusto` são rótulos livres. Todos opcionais → `null` quando ausentes.
+  classification: ContractClassification;
+  programId: string | null;
+  budgetPlanId: string | null;
+  categorizacao: string | null;
+  centroDeCusto: string | null;
   // Metadados de cadastro editáveis via PATCH (FR-007/009) — `null` quando ausentes.
   observations: string | null;
   email: string | null;
@@ -83,7 +94,26 @@ export type ExpiredContract = EffectiveContractCore &
  * Assim como `ExpiredContract`, carrega `endedAt: Date` obrigatório.
  */
 export type TerminatedContract = EffectiveContractCore &
-  Readonly<{ status: 'Terminated'; endedAt: Date }>;
+  Readonly<{
+    status: 'Terminated';
+    endedAt: Date;
+    // Motivo do distrato (CTR-HTTP-DISTRATO-DOCUMENTO). `null` apenas para Terminated
+    // legados anteriores à feature; novos distratos sempre carregam o motivo.
+    terminationReason: string | null;
+  }>;
+
+/**
+ * Tipo refinado: contrato `Cancelado` (estado terminal — ADR-0039).
+ *
+ * Nasce de um `PendingContract` (rascunho descartado antes de vigorar). Por isso
+ * carrega apenas os campos de cadastro (`ContractRegistration`) + `endedAt`
+ * (instante do cancelamento) — NÃO tem vigência efetiva (`signedAt`/`currentValue`/
+ * `currentPeriod`/`homologatedAmendmentIds`), ao contrário de `Expired`/`Terminated`.
+ * É essa a distinção estrutural: terminais-com-vigência estendem `EffectiveContractCore`;
+ * `Cancelled` estende só `ContractRegistration`.
+ */
+export type CancelledContract = ContractRegistration &
+  Readonly<{ status: 'Cancelled'; endedAt: Date }>;
 
 /**
  * Union discriminada do agregado `Contract` (o tipo público).
@@ -91,7 +121,12 @@ export type TerminatedContract = EffectiveContractCore &
  * O discriminador `status` permite narrowing automático pelo compilador:
  * dentro de `if (c.status === 'Active')`, TS sabe que `c` é `ActiveContract`.
  */
-export type Contract = PendingContract | ActiveContract | ExpiredContract | TerminatedContract;
+export type Contract =
+  | PendingContract
+  | ActiveContract
+  | ExpiredContract
+  | TerminatedContract
+  | CancelledContract;
 
 /**
  * Estados COM vigência efetiva — todos exceto `Pending`.
@@ -109,10 +144,12 @@ export type EffectiveContract = ActiveContract | ExpiredContract | TerminatedCon
  * `errors.ts` (payload de `ContractNotActive`) e formatters CLI.
  *
  * Transições válidas:
+ *   - `Pending`    → `Cancelled`  (via `Contract.cancel` — ADR-0039)
  *   - `Active`     → `Expired`    (via `Contract.expire`)
  *   - `Active`     → `Terminated` (via `Contract.terminate`)
  *   - `Expired`    → terminal
  *   - `Terminated` → terminal
+ *   - `Cancelled`  → terminal
  */
 export type ContractStatus = Contract['status'];
 
@@ -164,6 +201,18 @@ export type ContractAdjustment = Readonly<
   | { kind: 'Acknowledgment'; amendmentId: AmendmentId }
 >;
 
+/**
+ * Metadados de cadastro opcionais (CTR-NUMBER-PROGRAM) — comuns a `create` e `createPending`.
+ * Ausentes → `classification` defaulta para `'CT'`; os demais para `null`.
+ */
+export type ContractRegistrationMetaInput = Readonly<{
+  classification?: ContractClassification;
+  programId?: string | null;
+  budgetPlanId?: string | null;
+  categorizacao?: string | null;
+  centroDeCusto?: string | null;
+}>;
+
 export type CreateContractInput = Readonly<{
   id: ContractId;
   sequentialNumber: string;
@@ -173,7 +222,8 @@ export type CreateContractInput = Readonly<{
   originalValue: Money;
   originalPeriod: Period;
   contractor: ContractorRef;
-}>;
+}> &
+  ContractRegistrationMetaInput;
 
 /**
  * Input de criação de contrato `Pendente` (ADR-0023) — SEM `signedAt`.
@@ -190,4 +240,5 @@ export type CreatePendingContractInput = Readonly<{
   originalPeriod: Period;
   contractor: ContractorRef;
   createdAt: Date;
-}>;
+}> &
+  ContractRegistrationMetaInput;

@@ -1,37 +1,45 @@
 /**
- * Serialização CSV da listagem de Atos (placeholder ADR-0036, clone enxuto de Collaborator).
- * Achata o agregado `Act` (discriminado por `status`) nos campos do core do placeholder; formato
- * (escape RFC 4180, anti-fórmula, BOM) vem do util compartilhado. Espelha `supplier-csv.ts`.
+ * Serialização CSV da listagem de Acordos de Cooperação Técnica. Achata o agregado `Act`
+ * (discriminado por `status`) nos campos do acordo; formato (escape RFC 4180, anti-fórmula,
+ * BOM) vem do util compartilhado. Espelha `supplier-csv.ts`.
  */
 
 import { toCsv } from '#src/shared/utils/csv.ts';
+import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import type { Act } from '../../domain/act/types.ts';
 
 const HEADER: readonly string[] = [
   'id',
+  'actNumber',
   'name',
   'email',
-  'cpf',
+  'cnpj',
+  'corporateName',
+  'fantasyName',
   'occupationArea',
-  'role',
-  'startOfContract',
-  'employmentRelationship',
-  'registrationStatus',
+  'legalRepresentative',
+  'startDate',
+  'endDate',
+  'hasFinancialTransfer',
   'status',
   'deactivatedAt',
 ];
 
 const actToCells = (a: Act): readonly string[] => {
+  const validityEnd = a.validity.kind === 'Fixed' ? a.validity.end : a.validity.start;
   const identity = [
-    a.id,
+    String(a.id),
+    String(a.actNumber),
     a.name,
     a.email,
-    String(a.cpf),
+    String(a.cnpj),
+    a.corporateName,
+    a.fantasyName,
     a.occupationArea,
-    a.role,
-    a.startOfContract.toISOString(),
-    a.employmentRelationship,
-    a.registrationStatus,
+    a.legalRepresentative,
+    PlainDate.toISOString(a.validity.start),
+    PlainDate.toISOString(validityEnd),
+    a.hasFinancialTransfer ? 'true' : 'false',
     a.status,
   ];
   switch (a.status) {

@@ -147,7 +147,7 @@ describe('confirmPasswordReset (BE-REC-003)', () => {
     await resetStore.repository.save(
       issueResetToken(reg.value.user.id, AT, new Date(AT.getTime() + 900_000)),
     );
-    const r = await confirm({ token: TOKEN, newPassword: 'password123' });
+    const r = await confirm({ token: TOKEN, newPassword: 'administrator' });
     assert.equal(r.ok, false);
     if (!r.ok) assert.equal(r.error, 'password-too-common');
 

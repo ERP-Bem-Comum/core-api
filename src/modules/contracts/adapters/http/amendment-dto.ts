@@ -19,6 +19,8 @@ export const amendmentToDto = (a: Amendment): AmendmentDto => {
     description: a.description,
     status: a.status,
     createdAt: a.createdAt.toISOString(),
+    // G2: signedAt só existe a partir de PendingWithDocument (narrowing por signedDocumentRef).
+    signedAt: a.signedDocumentRef === null ? null : a.signedAt.toISOString(),
   };
 
   switch (a.kind) {

@@ -27,10 +27,12 @@ import { supplierToDetailDto } from './supplier-dto.ts';
 import { queryToFilter, paginateRecords, suppliersForExport } from './supplier-list-query.ts';
 import { suppliersToCsv } from '../export/supplier-csv.ts';
 import { listServiceCategories } from '../../domain/supplier/service-category.ts';
+import { listServiceRatings } from '../../domain/supplier/service-rating.ts';
 import {
   supplierListQuerySchema,
   supplierExportQuerySchema,
   serviceCategoriesSchema,
+  serviceRatingsSchema,
   supplierPaginatedSchema,
   supplierDetailSchema,
   supplierIdParamSchema,
@@ -123,6 +125,17 @@ const suppliersRoutes =
       } satisfies FastifyZodOpenApiSchema,
       handler: async (_req, reply) =>
         sendResult(reply, ok([...listServiceCategories()]), { ok: 200 }),
+    });
+
+    // Catálogo de avaliações (CA2): conjunto fechado read-only para popular o select. `supplier:read`.
+    scope.route({
+      method: 'GET',
+      url: '/suppliers/service-ratings',
+      preHandler: [hooks.requireAuth, hooks.authorize(SUPPLIER_PERMISSION.read)],
+      schema: {
+        response: { 200: serviceRatingsSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) => sendResult(reply, ok([...listServiceRatings()]), { ok: 200 }),
     });
 
     // Export CSV (US-003): filtra (search/active/categories) e serializa via util compartilhado

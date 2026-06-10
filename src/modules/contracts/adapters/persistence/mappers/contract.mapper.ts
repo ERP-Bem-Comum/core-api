@@ -8,6 +8,7 @@ import type {
   ActiveContract,
   ExpiredContract,
   TerminatedContract,
+  CancelledContract,
   ContractStatus,
 } from '../../../domain/contract/types.ts';
 import * as AmendmentId from '../../../domain/shared/amendment-id.ts';
@@ -34,6 +35,12 @@ export type ContractMapperInvalidId = Readonly<{
 
 export type ContractMapperInvalidStatus = Readonly<{
   tag: 'ContractMapperInvalidStatus';
+  attemptedValue: string;
+}>;
+
+// CTR-NUMBER-PROGRAM: classificação corrompida no banco (fora de CT|OS).
+export type ContractMapperInvalidClassification = Readonly<{
+  tag: 'ContractMapperInvalidClassification';
   attemptedValue: string;
 }>;
 
@@ -80,6 +87,7 @@ export type ContractMapperInvalidContractor = Readonly<{
 export type ContractMapperError =
   | ContractMapperInvalidId
   | ContractMapperInvalidStatus
+  | ContractMapperInvalidClassification
   | ContractMapperInvalidMoney
   | ContractMapperInvalidPeriod
   | ContractMapperInvalidAmendmentId
@@ -101,6 +109,13 @@ export const contractMapperInvalidStatus = (
   attemptedValue: string,
 ): ContractMapperInvalidStatus => ({
   tag: 'ContractMapperInvalidStatus',
+  attemptedValue,
+});
+
+export const contractMapperInvalidClassification = (
+  attemptedValue: string,
+): ContractMapperInvalidClassification => ({
+  tag: 'ContractMapperInvalidClassification',
   attemptedValue,
 });
 
@@ -158,7 +173,7 @@ export const contractMapperInvalidContractor = (
 
 // ─── Helpers internos ────────────────────────────────────────────────────────
 
-const KNOWN_STATUSES = ['Pending', 'Active', 'Expired', 'Terminated'] as const;
+const KNOWN_STATUSES = ['Pending', 'Active', 'Expired', 'Terminated', 'Cancelled'] as const;
 const isStatus = (v: string): v is (typeof KNOWN_STATUSES)[number] =>
   (KNOWN_STATUSES as readonly string[]).includes(v);
 
@@ -174,8 +189,9 @@ export const contractToInsert = (
 ): { row: ContractInsert; homologatedAmendmentIds: readonly string[] } => {
   const orig = periodToColumns(c.originalPeriod);
 
-  // ADR-0023: `Pending` não tem assinatura nem vigência efetiva — colunas NULL.
-  if (c.status === 'Pending') {
+  // ADR-0023/0039: `Pending` e `Cancelled` não têm assinatura nem vigência efetiva
+  // (colunas NULL). `Cancelled` (terminal) carrega `endedAt`; `Pending` não.
+  if (c.status === 'Pending' || c.status === 'Cancelled') {
     return {
       row: {
         id: c.id as unknown as string,
@@ -191,10 +207,15 @@ export const contractToInsert = (
         currentPeriodKind: null,
         currentPeriodStart: null,
         currentPeriodEnd: null,
-        status: 'Pending',
-        endedAt: null,
+        status: c.status,
+        endedAt: c.status === 'Cancelled' ? c.endedAt : null,
         contractorType: c.contractor.type,
         contractorId: c.contractor.id as unknown as string,
+        classification: c.classification,
+        programId: c.programId,
+        budgetPlanId: c.budgetPlanId,
+        categorizacao: c.categorizacao,
+        centroDeCusto: c.centroDeCusto,
         observations: c.observations,
         email: c.email,
         telephone: c.telephone,
@@ -224,8 +245,15 @@ export const contractToInsert = (
       // `endedAt` só existe em ExpiredContract / TerminatedContract (DO C§29).
       // ActiveContract não tem o campo — usa null para a coluna MySQL.
       endedAt: c.status === 'Active' ? null : c.endedAt,
+      // Motivo só existe em TerminatedContract; demais estados → null (CHECK no schema).
+      terminationReason: c.status === 'Terminated' ? c.terminationReason : null,
       contractorType: c.contractor.type,
       contractorId: c.contractor.id as unknown as string,
+      classification: c.classification,
+      programId: c.programId,
+      budgetPlanId: c.budgetPlanId,
+      categorizacao: c.categorizacao,
+      centroDeCusto: c.centroDeCusto,
       observations: c.observations,
       email: c.email,
       telephone: c.telephone,
@@ -262,6 +290,11 @@ export const contractFromRow = (
   if (!contractorR.ok)
     return err(contractMapperInvalidContractor(row.contractorType, row.contractorId));
 
+  // CTR-NUMBER-PROGRAM: classificação restrita a CT|OS (CHECK garante; defesa em profundidade).
+  if (row.classification !== 'CT' && row.classification !== 'OS') {
+    return err(contractMapperInvalidClassification(row.classification));
+  }
+
   // Campos de cadastro — comuns a todos os estados (inclusive Pending).
   const registration = {
     id: idR.value,
@@ -271,6 +304,11 @@ export const contractFromRow = (
     originalValue: origValue.value,
     originalPeriod: origPeriod.value,
     contractor: contractorR.value,
+    classification: row.classification,
+    programId: row.programId,
+    budgetPlanId: row.budgetPlanId,
+    categorizacao: row.categorizacao,
+    centroDeCusto: row.centroDeCusto,
     observations: row.observations,
     email: row.email,
     telephone: row.telephone,
@@ -285,6 +323,22 @@ export const contractFromRow = (
     }
     const pending: PendingContract = { ...registration, status: 'Pending' };
     return ok(pending);
+  }
+
+  // ADR-0039: `Cancelled` é terminal mas registration-only (signed/current NULL) —
+  // como Pending, mas com `endedAt` preenchido. Defesa em profundidade contra shape
+  // corrompido (CHECKs `pending_consistency` + `ended_at_consistency` garantem na gravação).
+  if (row.status === 'Cancelled') {
+    if (row.signedAt !== null || row.currentValueCents !== null || row.currentPeriodKind !== null) {
+      return err(contractMapperInvalidPendingShape('Cancelled', true));
+    }
+    if (row.endedAt === null) return err(contractMapperInvalidEndedAt('Cancelled', false));
+    const cancelled: CancelledContract = {
+      ...registration,
+      status: 'Cancelled',
+      endedAt: row.endedAt,
+    };
+    return ok(cancelled);
   }
 
   // Estados efetivos (Active | Expired | Terminated) — exigem vigência + assinatura
@@ -349,6 +403,8 @@ export const contractFromRow = (
         ...core,
         status: 'Terminated',
         endedAt: row.endedAt,
+        // Terminated legado (pré-feature) pode ter motivo null.
+        terminationReason: row.terminationReason ?? null,
       };
       return ok(contract);
     }

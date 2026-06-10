@@ -106,6 +106,12 @@ type ContractActivatedPayload = Readonly<{
   occurredAt: string;
 }>;
 
+// ADR-0039: cancelamento de rascunho — mesmo shape (contractId + occurredAt).
+type ContractCancelledPayload = Readonly<{
+  contractId: string;
+  occurredAt: string;
+}>;
+
 type ContractStateUpdatedPayload = Readonly<{
   contractId: string;
   amendmentId: string;
@@ -118,6 +124,9 @@ type ContractEndedPayload = Readonly<{
   contractId: string;
   occurredAt: string;
   kind: 'Expired' | 'Terminated';
+  // Motivo do distrato. Eventos v1 (pré-CTR-HTTP-DISTRATO-DOCUMENTO) não têm o campo;
+  // a desserialização defaulta para null (retrocompat).
+  terminationReason: string | null;
 }>;
 
 type AmendmentCreatedPayload = Readonly<{
@@ -182,6 +191,7 @@ const extractAggregateInfo = (
   switch (event.type) {
     case 'ContractCreated':
     case 'ContractActivated':
+    case 'ContractCancelled':
     case 'ContractStateUpdated':
     case 'ContractEnded':
       return { id: event.contractId as unknown as string, type: 'Contract' };
@@ -229,6 +239,12 @@ const serializeEvent = (event: ContractsModuleEvent): unknown => {
         occurredAt: event.occurredAt.toISOString(),
       } satisfies ContractActivatedPayload;
 
+    case 'ContractCancelled':
+      return {
+        contractId: event.contractId as unknown as string,
+        occurredAt: event.occurredAt.toISOString(),
+      } satisfies ContractCancelledPayload;
+
     case 'ContractStateUpdated':
       return {
         contractId: event.contractId as unknown as string,
@@ -243,6 +259,7 @@ const serializeEvent = (event: ContractsModuleEvent): unknown => {
         contractId: event.contractId as unknown as string,
         occurredAt: event.occurredAt.toISOString(),
         kind: event.kind,
+        terminationReason: event.terminationReason,
       } satisfies ContractEndedPayload;
 
     case 'AmendmentCreated':
@@ -416,6 +433,15 @@ const deserializeEvent = (
       return ok({ type: 'ContractActivated', contractId: r.value, occurredAt });
     }
 
+    case 'ContractCancelled': {
+      if (typeof p['contractId'] !== 'string') {
+        return err(outboxMapperInvalidPayload('ContractCancelled-missing-contractId'));
+      }
+      const r = ContractId.rehydrate(p['contractId']);
+      if (!r.ok) return err(outboxMapperInvalidPayload(`ContractCancelled-contractId: ${r.error}`));
+      return ok({ type: 'ContractCancelled', contractId: r.value, occurredAt });
+    }
+
     case 'ContractStateUpdated': {
       if (typeof p['contractId'] !== 'string') {
         return err(outboxMapperInvalidPayload('ContractStateUpdated-missing-contractId'));
@@ -462,7 +488,16 @@ const deserializeEvent = (
       }
       const r = ContractId.rehydrate(p['contractId']);
       if (!r.ok) return err(outboxMapperInvalidPayload(`ContractEnded-contractId: ${r.error}`));
-      return ok({ type: 'ContractEnded', contractId: r.value, occurredAt, kind: p['kind'] });
+      // Retrocompat: payload v1 sem `terminationReason` → null.
+      const terminationReason =
+        typeof p['terminationReason'] === 'string' ? p['terminationReason'] : null;
+      return ok({
+        type: 'ContractEnded',
+        contractId: r.value,
+        occurredAt,
+        kind: p['kind'],
+        terminationReason,
+      });
     }
 
     case 'AmendmentCreated': {

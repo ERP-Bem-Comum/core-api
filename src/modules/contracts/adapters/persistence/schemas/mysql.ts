@@ -48,6 +48,7 @@ import {
   datetime,
   foreignKey,
   index,
+  int,
   mysqlTable,
   primaryKey,
   smallint,
@@ -75,9 +76,19 @@ export const contracts = mysqlTable(
     currentPeriodEnd: date('current_period_end', { mode: 'date' }),
     status: varchar('status', { length: 16 }).notNull(),
     endedAt: datetime('ended_at', { mode: 'date', fsp: 3 }),
+    // Motivo do distrato (CTR-HTTP-DISTRATO-DOCUMENTO). Só preenchido em Terminated.
+    terminationReason: varchar('termination_reason', { length: 1000 }),
     // Contratado (referência cross-módulo a Parceiros) — sem FK física (cross-db, ADR-0014).
     contractorType: varchar('contractor_type', { length: 16 }).notNull(),
     contractorId: varchar('contractor_id', { length: 36 }).notNull(),
+    // CTR-NUMBER-PROGRAM: classificação (CT/OS) + metadados de cadastro. `program_id`/`budget_plan_id`
+    // são refs leves (UUID) cross-módulo/cross-BC — sem FK física (ADR-0014). `categorizacao`/
+    // `centro_de_custo` são rótulos livres. classification NOT NULL DEFAULT 'CT' (legado vira CT).
+    classification: varchar('classification', { length: 8 }).notNull().default('CT'),
+    programId: varchar('program_id', { length: 36 }),
+    budgetPlanId: varchar('budget_plan_id', { length: 36 }),
+    categorizacao: varchar('categorizacao', { length: 255 }),
+    centroDeCusto: varchar('centro_de_custo', { length: 255 }),
     // Metadados de cadastro editáveis (FR-009) — nullable.
     observations: varchar('observations', { length: 1000 }),
     email: varchar('email', { length: 255 }),
@@ -99,15 +110,18 @@ export const contracts = mysqlTable(
     ),
     check(
       'ctr_contracts_status_chk',
-      sql`${t.status} IN ('Pending','Active','Expired','Terminated')`,
+      sql`${t.status} IN ('Pending','Active','Expired','Terminated','Cancelled')`,
     ),
 
-    // ADR-0023: bicondicional `Pending ⟺ sem vigência efetiva`. Pendente tem
-    // assinatura e estado vigente NULL; os demais estados têm ambos preenchidos.
-    // Espelha o CHECK F-L1 de `ended_at` (`=` entre booleans = bicondicional).
+    // CTR-NUMBER-PROGRAM: classificação restrita a CT|OS (enum via varchar+CHECK — ADR-0020).
+    check('ctr_contracts_classification_chk', sql`${t.classification} IN ('CT','OS')`),
+
+    // ADR-0023/0039: bicondicional `sem vigência efetiva ⟺ Pending OU Cancelled`.
+    // `Pending` e `Cancelled` (rascunho cancelado) têm assinatura/vigência NULL; os
+    // demais estados têm ambos preenchidos. Espelha o CHECK F-L1 de `ended_at`.
     check(
       'ctr_contracts_pending_consistency_chk',
-      sql`(${t.status} = 'Pending') = (${t.signedAt} IS NULL AND ${t.currentValueCents} IS NULL AND ${t.currentPeriodKind} IS NULL AND ${t.currentPeriodStart} IS NULL)`,
+      sql`(${t.status} IN ('Pending','Cancelled')) = (${t.signedAt} IS NULL AND ${t.currentValueCents} IS NULL AND ${t.currentPeriodKind} IS NULL AND ${t.currentPeriodStart} IS NULL)`,
     ),
 
     // F-L1: bicondicional entre status terminado e endedAt populado.
@@ -122,7 +136,14 @@ export const contracts = mysqlTable(
     // MySQL-idiomático (= entre booleans = bicondicional).
     check(
       'ctr_contracts_ended_at_consistency_chk',
-      sql`(${t.endedAt} IS NOT NULL) = (${t.status} IN ('Expired','Terminated'))`,
+      sql`(${t.endedAt} IS NOT NULL) = (${t.status} IN ('Expired','Terminated','Cancelled'))`,
+    ),
+
+    // Motivo só existe em distrato. Lenient (não bicondicional): Terminated legado pode
+    // ter motivo null (a feature é nova); Expired/Active/Pending nunca têm motivo.
+    check(
+      'ctr_contracts_termination_reason_chk',
+      sql`${t.terminationReason} IS NULL OR ${t.status} = 'Terminated'`,
     ),
 
     // Índices (F-M2 do DB audit): suporta dashboards de "contratos ativos" e
@@ -131,6 +152,40 @@ export const contracts = mysqlTable(
     index('ctr_contracts_signed_at_idx').on(t.signedAt),
   ],
 );
+
+// ─── ctr_contract_seq — contador de numeração sequencial por ano ──────────────
+//
+// CTR-CONTRACT-SEQUENTIAL-NUMBER (opção C): tabela de sequência dedicada, padrão
+// CHILD_CODES do Refman 8.4 §17.7.2.4. O adapter lê `last_seq` com FOR UPDATE e
+// incrementa na mesma transação — uniformidade e monotonicidade por ano sem
+// AUTO_INCREMENT (ADR-0020 §"proibido"). `ctr_contracts.sequential_number`
+// permanece `varchar` (rótulo exibível, heterogêneo para legado); o dump legado
+// reconcilia `last_seq` via batch no ETL, nunca em produção.
+//
+// CHARSET/COLLATE: tabela sem colunas textuais — apenas numéricas; mesmo assim a
+// migration aplica `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+// por consistência (ver §"CHARSET/COLLATE" do cabeçalho).
+export const ctrContractSeq = mysqlTable('ctr_contract_seq', {
+  // Ano da sequência (PK). SMALLINT UNSIGNED cobre 0..65535 anos.
+  year: smallint('year', { unsigned: true }).primaryKey().notNull(),
+  // Último número emitido no ano; o próximo é `last_seq + 1`.
+  lastSeq: int('last_seq', { unsigned: true }).notNull().default(0),
+});
+
+// ─── ctr_amendment_seq — contador de numeração sequencial do aditivo POR CONTRATO ──
+//
+// CTR-AMENDMENT-SIGNEDAT-AND-NUMBER (G3): tabela de sequência dedicada, padrão CHILD_CODES
+// do Refman 8.4 §17.7.2.4 (mesma abordagem de `ctr_contract_seq`, mas keyed por contrato).
+// O adapter lê `last_seq` com FOR UPDATE e incrementa na mesma transação — número único e
+// monotônico POR CONTRATO sem AUTO_INCREMENT (ADR-0020 §"proibido"). `ctr_amendments.
+// amendment_number` permanece `varchar` (rótulo `NN/AAAA`).
+//
+// CHARSET/COLLATE: `contract_id` é UUID → `COLLATE utf8mb4_bin` na migration (header §CHARSET).
+// Sem FK (espelha `ctr_contract_seq`): contador interno; contratos são imutáveis (nunca apagados).
+export const ctrAmendmentSeq = mysqlTable('ctr_amendment_seq', {
+  contractId: varchar('contract_id', { length: 36 }).primaryKey().notNull(),
+  lastSeq: int('last_seq', { unsigned: true }).notNull().default(0),
+});
 
 export const amendments = mysqlTable(
   'ctr_amendments',
@@ -147,6 +202,10 @@ export const amendments = mysqlTable(
     newEndDate: date('new_end_date', { mode: 'date' }),
     status: varchar('status', { length: 16 }).notNull(),
     signedDocumentRef: varchar('signed_document_ref', { length: 36 }),
+    // CTR-AMENDMENT-SIGNEDAT-AND-NUMBER (G2): data de assinatura do aditivo, capturada
+    // junto com o documento assinado. NULL em PendingWithoutDocument; preenchida a partir
+    // de PendingWithDocument (bicondicional com signed_document_ref no CHECK abaixo).
+    signedAt: datetime('signed_at', { mode: 'date', fsp: 3 }),
     homologatedAt: datetime('homologated_at', { mode: 'date', fsp: 3 }),
     homologatedBy: varchar('homologated_by', { length: 36 }),
   },
@@ -157,6 +216,12 @@ export const amendments = mysqlTable(
       sql`${t.kind} IN ('Addition','Suppression','TermChange','Misc')`,
     ),
     check('ctr_amendments_status_chk', sql`${t.status} IN ('Pending','Homologated')`),
+
+    // G2: signed_at e signed_document_ref entram JUNTOS no attach — bicondicional.
+    check(
+      'ctr_amendments_signed_at_consistency_chk',
+      sql`(${t.signedAt} IS NOT NULL) = (${t.signedDocumentRef} IS NOT NULL)`,
+    ),
 
     // F-L2: implicação homologation completeness.
     // `status='Homologated' ⟹ (homologatedAt AND homologatedBy AND signedDocumentRef)`

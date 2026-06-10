@@ -12,6 +12,7 @@ import type { ContractsModuleEvent } from '../../../application/ports/event-bus.
 import type { MysqlHandle } from '../drivers/mysql-driver.ts';
 import { contractFromRow, contractToInsert, type ContractRow } from '../mappers/contract.mapper.ts';
 import { appendOutboxInTx } from './outbox-repository.drizzle.ts';
+import { formatSequentialNumber } from '../../../domain/contract/sequential-number.ts';
 import process from 'node:process';
 
 // Boundary: try/catch que converte para Result. mysql2/Drizzle lança em erros
@@ -173,6 +174,39 @@ export const createDrizzleContractRepository = (
         if (!inner.ok) throw new Error(JSON.stringify(inner.error));
         return inner.value;
       }),
+
+    // CTR-CONTRACT-SEQUENTIAL-NUMBER: gera o próximo número do ano de forma transacional.
+    // Padrão CHILD_CODES (Refman 8.4 §17.7.2.4): nunca consistent/shared read — o
+    // `.for('update')` adquire o lock exclusivo da linha do ano, serializando geradores
+    // concorrentes e eliminando a janela de corrida (duas tx lendo o mesmo last_seq).
+    //   (1) INSERT ... ON DUPLICATE KEY UPDATE garante a linha do ano (a PK `year` é a
+    //       ÚNICA UNIQUE da tabela — ODKU é dirigível à PK aqui, ao contrário de
+    //       `ctr_contracts`; ADR-0020 permite ON DUPLICATE KEY UPDATE).
+    //   (2) SELECT last_seq ... FOR UPDATE bloqueia + lê o valor atual.
+    //   (3) UPDATE last_seq + 1 grava o próximo.
+    nextSequentialNumber: async (year: number) =>
+      safe('nextSequentialNumber', async () =>
+        db.transaction(async (tx) => {
+          await tx
+            .insert(schema.ctrContractSeq)
+            .values({ year, lastSeq: 0 })
+            .onDuplicateKeyUpdate({ set: { year } });
+
+          const rows = await tx
+            .select({ lastSeq: schema.ctrContractSeq.lastSeq })
+            .from(schema.ctrContractSeq)
+            .where(eq(schema.ctrContractSeq.year, year))
+            .for('update');
+
+          const nextSeq = (rows[0]?.lastSeq ?? 0) + 1;
+          await tx
+            .update(schema.ctrContractSeq)
+            .set({ lastSeq: nextSeq })
+            .where(eq(schema.ctrContractSeq.year, year));
+
+          return formatSequentialNumber(nextSeq, year);
+        }),
+      ),
 
     list: async () =>
       safe('list', async () => {

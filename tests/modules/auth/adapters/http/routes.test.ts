@@ -222,7 +222,7 @@ describe('AUTH-HTTP-ROUTES — change-password + revoke-all (BE-REC-004)', () =>
       method: 'POST',
       url: '/api/v2/auth/change-password',
       headers: { authorization: `Bearer ${accessToken}` },
-      payload: { currentPassword: STRONG, newPassword: 'password123' },
+      payload: { currentPassword: STRONG, newPassword: 'administrator' },
     });
     assert.equal(res.statusCode, 422);
     assert.equal((res.json() as { error: { code: string } }).error.code, 'password-too-common');

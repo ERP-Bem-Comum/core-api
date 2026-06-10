@@ -6,6 +6,9 @@ export type ContractEvent = Readonly<
   | { type: 'ContractCreated'; contractId: ContractId; occurredAt: Date }
   // ADR-0023: transição Pending → Active (contrato passa a vigorar na assinatura).
   | { type: 'ContractActivated'; contractId: ContractId; occurredAt: Date }
+  // ADR-0039: transição Pending → Cancelled (rascunho descartado). Distinto de
+  // ContractEnded — um rascunho cancelado nunca vigorou.
+  | { type: 'ContractCancelled'; contractId: ContractId; occurredAt: Date }
   | {
       type: 'ContractStateUpdated';
       contractId: ContractId;
@@ -21,5 +24,8 @@ export type ContractEvent = Readonly<
       contractId: ContractId;
       occurredAt: Date;
       kind: 'Expired' | 'Terminated';
+      // Motivo do distrato (Vernon, IDDD cap.8 — o evento carrega o "porquê"). `null`
+      // para `Expired` (sem motivo) e para distratos legados sem o campo.
+      terminationReason: string | null;
     }
 >;

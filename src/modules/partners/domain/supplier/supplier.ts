@@ -11,8 +11,10 @@ import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import { immutable } from '#src/shared/primitives/immutable.ts';
 import * as Cnpj from '#src/shared/kernel/cnpj.ts';
 import * as ServiceCategory from './service-category.ts';
+import * as ServiceRating from './service-rating.ts';
 import * as PaymentTarget from './payment-target.ts';
 import type { BankAccount, PixKey } from './payment-target.ts';
+import type { ServiceRating as ServiceRatingValue } from './service-rating.ts';
 import type {
   ActiveSupplier,
   EditSupplierInput,
@@ -29,6 +31,20 @@ import type { SupplierError } from './errors.ts';
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const isBlank = (s: string): boolean => s.trim().length === 0;
+
+// Avaliação opcional. `null` → não avaliado. String → parseia via VO (Standard Type).
+const parseRating = (raw: string | null): Result<ServiceRatingValue | null, SupplierError> => {
+  if (raw === null) return ok(null);
+  const r = ServiceRating.parse(raw);
+  return r.ok ? ok(r.value) : err('invalid-service-rating');
+};
+
+// Comentário livre: trim; vazio/whitespace → null (sem ruído no banco).
+const normalizeComment = (raw: string | null): string | null => {
+  if (raw === null) return null;
+  const trimmed = raw.trim();
+  return trimmed.length === 0 ? null : trimmed;
+};
 
 export const register = (
   input: RegisterSupplierInput,
@@ -61,6 +77,9 @@ export const register = (
 
   if (bankAccount === null && pixKey === null) return err('supplier-payment-target-required');
 
+  const rating = parseRating(input.serviceRating ?? null);
+  if (!rating.ok) return rating;
+
   const supplier: ActiveSupplier = immutable({
     id: input.id,
     name: input.name.trim(),
@@ -71,6 +90,8 @@ export const register = (
     serviceCategory: category.value,
     bankAccount,
     pixKey,
+    serviceRating: rating.value,
+    ratingComment: normalizeComment(input.ratingComment ?? null),
     status: 'Active',
   });
 
@@ -123,6 +144,9 @@ export const edit = (
 
   if (bankAccount === null && pixKey === null) return err('supplier-payment-target-required');
 
+  const rating = parseRating(input.serviceRating ?? null);
+  if (!rating.ok) return rating;
+
   const core = {
     id: supplier.id,
     name: input.name.trim(),
@@ -133,6 +157,8 @@ export const edit = (
     serviceCategory: category.value,
     bankAccount,
     pixKey,
+    serviceRating: rating.value,
+    ratingComment: normalizeComment(input.ratingComment ?? null),
   };
 
   const edited: Supplier =
@@ -192,6 +218,8 @@ export const rehydrate = (input: RehydrateSupplierInput): Result<Supplier, Suppl
     serviceCategory: input.serviceCategory,
     bankAccount: input.bankAccount,
     pixKey: input.pixKey,
+    serviceRating: input.serviceRating,
+    ratingComment: input.ratingComment,
   };
 
   if (input.status === 'Active') {

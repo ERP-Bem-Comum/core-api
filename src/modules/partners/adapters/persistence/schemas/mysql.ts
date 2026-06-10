@@ -18,6 +18,7 @@
 import {
   boolean,
   check,
+  date,
   datetime,
   int,
   mysqlTable,
@@ -93,6 +94,9 @@ export const parSuppliers = mysqlTable(
     // Destino de pagamento — bloco pix (juntos NULL ou juntos preenchidos).
     pixKeyType: varchar('pix_key_type', { length: 20 }),
     pixKey: varchar('pix_key', { length: 255 }),
+    // Avaliação do prestador (opcional). Standard Type literal, varchar + CHECK (NÃO ENUM — ADR-0020).
+    serviceRating: varchar('service_rating', { length: 16 }),
+    ratingComment: varchar('rating_comment', { length: 1000 }),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
     // Correlação ETL (P2): id de origem no legado. NULL = nativo; não-NULL = migrado.
@@ -118,6 +122,11 @@ export const parSuppliers = mysqlTable(
     ),
     // (c) coerência do bloco pix (pix_key_type ⟺ pix_key).
     check('par_suppliers_pix_block_chk', sql`(${t.pixKeyType} IS NULL) = (${t.pixKey} IS NULL)`),
+    // (d) avaliação: conjunto fechado (NULL = não avaliado).
+    check(
+      'par_suppliers_service_rating_chk',
+      sql`${t.serviceRating} IS NULL OR ${t.serviceRating} IN ('RUIM','REGULAR','BOM','OTIMO')`,
+    ),
     uniqueIndex('par_suppliers_cnpj_idx').on(t.cnpj),
     // UNIQUE(legacy_id) — idempotência da ETL (múltiplos NULL convivem no InnoDB).
     uniqueIndex('par_suppliers_legacy_id_idx').on(t.legacyId),
@@ -279,30 +288,43 @@ export type MunicipalityRow = typeof parMunicipalities.$inferSelect;
 export type NewMunicipalityRow = typeof parMunicipalities.$inferInsert;
 
 // ─── par_acts ───────────────────────────────────────────────────────────────
-// Agente Comunitário de Saúde (placeholder ADR-0036). Clone enxuto do núcleo do
-// Collaborator: 7 campos de pré-cadastro + status duplo ortogonal:
-//   - `registration_status` varchar — PreRegistration | Complete (sem CHECK de enum, igual collaborators).
-//   - `active` / `deactivated_at` — soft-delete simples (sem disableBy obrigatório).
-// `cpf` UNIQUE + `email` UNIQUE (espelha collaborators). Enums (occupation_area,
-// employment_relationship) são varchar (ADR-0020 — sem ENUM nativo).
-// COLLATE utf8mb4_bin em `id`/`cpf` (aplicar no SQL manual — limitação Drizzle 0.45.x).
+// Acordo de Cooperação Técnica (EPIC-PAR-ACT-ACORDO) — firmado com instituição
+// parceira (CNPJ). `act_number` UNIQUE (nº do instrumento jurídico, D1). Vigência
+// (`validity`) decomposta em duas colunas `date` (PlainDate, inquiry 0020). Repasse
+// CONDICIONAL: `has_financial_transfer = TRUE` ⇒ ao menos um destino de pagamento.
+// Destino achatado em colunas (ADR-0020 — sem JSON). Enums (occupation_area) são
+// varchar (ADR-0020 — sem ENUM nativo). Soft-delete via `active`/`deactivated_at`.
+// COLLATE utf8mb4_bin em `id`/`cnpj` (aplicar no SQL manual — limitação Drizzle 0.45.x).
 export const parActs = mysqlTable(
   'par_acts',
   {
     // UUID v4 gerado no domínio. COLLATE utf8mb4_bin no SQL manual.
     id: varchar('id', { length: 36 }).primaryKey().notNull(),
-    name: varchar('name', { length: 255 }).notNull(),
-    email: varchar('email', { length: 255 }).notNull(),
-    // 11 dígitos (sem máscara). UNIQUE + COLLATE utf8mb4_bin no SQL manual.
-    cpf: varchar('cpf', { length: 11 }).notNull(),
+    // Nº do instrumento jurídico, fornecido pelo operador (D1). UNIQUE.
+    actNumber: varchar('act_number', { length: 60 }).notNull(),
+    name: varchar('name', { length: 255 }).notNull(), // objeto/título do acordo
+    email: varchar('email', { length: 255 }).notNull(), // contato
+    // 14 dígitos (sem máscara). NÃO UNIQUE (uma instituição pode firmar vários acordos).
+    // COLLATE utf8mb4_bin no SQL manual.
+    cnpj: varchar('cnpj', { length: 14 }).notNull(),
+    corporateName: varchar('corporate_name', { length: 255 }).notNull(), // razão social
+    fantasyName: varchar('fantasy_name', { length: 255 }).notNull(), // nome fantasia/sigla
     // Literal legado (ex.: PARC). varchar, NÃO ENUM (ADR-0020).
     occupationArea: varchar('occupation_area', { length: 10 }).notNull(),
-    role: varchar('role', { length: 255 }).notNull(),
-    startOfContract: datetime('start_of_contract', { mode: 'date', fsp: 3 }).notNull(),
-    // Literal legado (ex.: CLT). varchar, NÃO ENUM (ADR-0020).
-    employmentRelationship: varchar('employment_relationship', { length: 5 }).notNull(),
-    // Status de registro: PreRegistration | Complete. varchar livre, sem CHECK de enum.
-    registrationStatus: varchar('registration_status', { length: 20 }).notNull(),
+    // Representante legal / ponto de contato (ex-`role`).
+    legalRepresentative: varchar('legal_representative', { length: 255 }).notNull(),
+    // Vigência (Period kind Fixed) decomposta — PlainDate em coluna `date` (inquiry 0020).
+    validityStart: date('validity_start', { mode: 'date' }).notNull(),
+    validityEnd: date('validity_end', { mode: 'date' }).notNull(),
+    hasFinancialTransfer: boolean('has_financial_transfer').notNull(),
+    // Destino de pagamento — bloco bancário (juntos NULL ou juntos preenchidos).
+    bankAccountBank: varchar('bank_account_bank', { length: 50 }),
+    bankAccountAgency: varchar('bank_account_agency', { length: 20 }),
+    bankAccountNumber: varchar('bank_account_number', { length: 30 }),
+    bankAccountCheckDigit: varchar('bank_account_check_digit', { length: 5 }),
+    // Destino de pagamento — bloco pix (juntos NULL ou juntos preenchidos).
+    pixKeyType: varchar('pix_key_type', { length: 20 }),
+    pixKey: varchar('pix_key', { length: 255 }),
     // Soft-delete simples: active=false ⟺ deactivated_at preenchido (sem disableBy).
     active: boolean('active').notNull().default(true),
     deactivatedAt: datetime('deactivated_at', { mode: 'date', fsp: 3 }),
@@ -312,14 +334,27 @@ export const parActs = mysqlTable(
     legacyId: int('legacy_id'),
   },
   (t) => [
-    // CHECK: active=false ⟺ deactivated_at preenchido (coerência do soft-delete simples).
+    // (a) soft-delete: active=false ⟺ deactivated_at preenchido.
     check(
       'par_acts_active_consistency_chk',
       sql`(${t.active} = FALSE) = (${t.deactivatedAt} IS NOT NULL)`,
     ),
-    // UNIQUE(cpf) e UNIQUE(email) — espelha par_collaborators.
-    uniqueIndex('par_acts_cpf_idx').on(t.cpf),
-    uniqueIndex('par_acts_email_idx').on(t.email),
+    // (b) repasse condicional: só exige destino quando há transferência financeira.
+    check(
+      'par_acts_payment_target_chk',
+      sql`(${t.hasFinancialTransfer} = FALSE) OR (${t.bankAccountBank} IS NOT NULL) OR (${t.pixKey} IS NOT NULL)`,
+    ),
+    // (c) coerência do bloco bancário (4 colunas juntas NULL ou juntas preenchidas).
+    check(
+      'par_acts_bank_block_chk',
+      sql`(${t.bankAccountBank} IS NULL) = (${t.bankAccountAgency} IS NULL)
+        AND (${t.bankAccountBank} IS NULL) = (${t.bankAccountNumber} IS NULL)
+        AND (${t.bankAccountBank} IS NULL) = (${t.bankAccountCheckDigit} IS NULL)`,
+    ),
+    // (c) coerência do bloco pix (pix_key_type ⟺ pix_key).
+    check('par_acts_pix_block_chk', sql`(${t.pixKeyType} IS NULL) = (${t.pixKey} IS NULL)`),
+    // UNIQUE(act_number) — nº do instrumento jurídico (D1).
+    uniqueIndex('par_acts_act_number_idx').on(t.actNumber),
     // UNIQUE(legacy_id) — idempotência da ETL (múltiplos NULL convivem no InnoDB).
     uniqueIndex('par_acts_legacy_id_idx').on(t.legacyId),
   ],

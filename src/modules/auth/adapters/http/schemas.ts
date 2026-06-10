@@ -59,3 +59,10 @@ export const resetPasswordBodySchema = z.object({
   token: z.string().meta({ description: 'Token de reset recebido por e-mail (one-time)' }),
   newPassword: z.string().meta({ description: 'Nova senha (validada pela policy do domínio)' }),
 });
+
+// USR-PASSWORD-POLICY: política consumível pelo front (fonte única dos comprimentos). Expõe APENAS os
+// limites — NUNCA a blocklist (revelá-la permitiria contorná-la). Endpoint público, sem autenticação.
+export const passwordPolicyResponseSchema = z.object({
+  minLength: z.number().int().meta({ description: 'Comprimento mínimo da senha', example: 12 }),
+  maxLength: z.number().int().meta({ description: 'Comprimento máximo da senha', example: 128 }),
+});

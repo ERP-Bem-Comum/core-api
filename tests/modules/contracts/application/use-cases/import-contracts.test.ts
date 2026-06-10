@@ -219,6 +219,7 @@ describe('importContracts — falha de infra aborta', () => {
     const failingRepo: ContractRepository = {
       findById: fail,
       findBySequentialNumber: fail,
+      nextSequentialNumber: fail,
       list: fail,
       listPaged: fail,
       save: fail,

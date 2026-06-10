@@ -20,7 +20,13 @@ describe('getContractTimeline (UC-08)', () => {
 
     const events: readonly ContractsModuleEvent[] = [
       { type: 'ContractCreated', contractId, occurredAt: D('2026-01-01') },
-      { type: 'ContractEnded', contractId, occurredAt: D('2026-12-31'), kind: 'Expired' },
+      {
+        type: 'ContractEnded',
+        contractId,
+        occurredAt: D('2026-12-31'),
+        kind: 'Expired',
+        terminationReason: null,
+      },
     ];
     let i = 0;
     for (const event of events) {

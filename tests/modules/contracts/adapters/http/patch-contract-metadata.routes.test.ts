@@ -3,8 +3,8 @@
  *
  * PATCH /api/v2/contracts/:id: body `.strict()` só metadados (title/objective/observations/
  * email/telephone); campo imutável/chave extra → 400; corpo vazio → 400 (`.refine`);
- * title vazio → 400; inexistente → 404 (RBAC puro). DELETE /api/v2/contracts/:id → 405
- * (`contract-delete-forbidden`); sem sessão → 401 (não vaza rota).
+ * title vazio → 400; inexistente → 404 (RBAC puro). DELETE /api/v2/contracts/:id (ADR-0039):
+ * contrato Active (efetivado) → 409 não-cancelável; sem sessão → 401 (não vaza rota).
  *
  * RED: rotas PATCH/DELETE de contrato não existem; `buildContractsHttpDeps` não expõe
  * `updateContractMetadata`.
@@ -171,8 +171,11 @@ describe('CONTRACTS-PATCH-METADATA-HTTP — PATCH /contracts/:id', () => {
   });
 });
 
-describe('CONTRACTS-PATCH-METADATA-HTTP — DELETE /contracts/:id recusado', () => {
-  it('CA8: DELETE -> 405 contract-delete-forbidden (imutabilidade #14)', async () => {
+describe('CONTRACTS-PATCH-METADATA-HTTP — DELETE /contracts/:id (efetivado não-cancelável)', () => {
+  // ADR-0039: DELETE cancela contrato Pendente. CONTRACT_ID é Active (efetivado) →
+  // não-cancelável → 409 (imutabilidade dos efetivados preservada). O caminho 200
+  // (Pendente → Cancelled) é coberto em `contracts-cancel.routes.test.ts`.
+  it('CA8: DELETE de contrato Active (efetivado) -> 409 não-cancelável', async () => {
     const { app, teardown } = await makeApp();
     try {
       const token = await login(app, WRITER_EMAIL);
@@ -181,11 +184,7 @@ describe('CONTRACTS-PATCH-METADATA-HTTP — DELETE /contracts/:id recusado', () 
         url: `/api/v2/contracts/${CONTRACT_ID}`,
         headers: bearer(token),
       });
-      assert.equal(res.statusCode, 405);
-      assert.equal(
-        (res.json() as { error: { code: string } }).error.code,
-        'contract-delete-forbidden',
-      );
+      assert.equal(res.statusCode, 409);
     } finally {
       await teardown();
     }

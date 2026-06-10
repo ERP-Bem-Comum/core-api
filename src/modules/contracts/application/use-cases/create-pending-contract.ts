@@ -7,7 +7,7 @@ import {
   type ContractInputParseError,
 } from './contract-input-parse.ts';
 import { Contract } from '../../domain/contract/contract.ts';
-import type { PendingContract } from '../../domain/contract/types.ts';
+import type { PendingContract, ContractClassification } from '../../domain/contract/types.ts';
 import type { ContractEvent } from '../../domain/contract/events.ts';
 import type { ContractError } from '../../domain/contract/errors.ts';
 import type {
@@ -20,7 +20,9 @@ import type {
 // do evento `ContractCreated` é injetado via `clock` (não há `signedAt` aqui).
 
 export type CreatePendingContractCommand = Readonly<{
-  sequentialNumber: string;
+  // CTR-CONTRACT-SEQUENTIAL-NUMBER: opcional — gerado pelo backend (ano do clock)
+  // quando ausente. Espelha `createContract` (POST /contracts modo Pending).
+  sequentialNumber?: string;
   title: string;
   objective: string;
   originalValueCents: number;
@@ -28,6 +30,12 @@ export type CreatePendingContractCommand = Readonly<{
   periodEnd: string | null;
   contractorType: string;
   contractorId: string;
+  // CTR-NUMBER-PROGRAM: classificação (default CT) + metadados de cadastro (opcionais).
+  classification?: ContractClassification;
+  programId?: string | null;
+  budgetPlanId?: string | null;
+  categorizacao?: string | null;
+  centroDeCusto?: string | null;
 }>;
 
 export type CreatePendingContractError =
@@ -62,20 +70,36 @@ export const createPendingContract =
     const contractor = ContractorRef.make(cmd.contractorType, cmd.contractorId);
     if (!contractor.ok) return contractor;
 
+    // CTR-CONTRACT-SEQUENTIAL-NUMBER: gera por ano quando ausente; preserva se fornecido.
+    let sequentialNumber = cmd.sequentialNumber;
+    if (sequentialNumber === undefined || sequentialNumber === '') {
+      const generated = await deps.contractRepo.nextSequentialNumber(
+        deps.clock.now().getFullYear(),
+      );
+      if (!generated.ok) return generated;
+      sequentialNumber = generated.value;
+    }
+
     // Unicidade de sequentialNumber (R4) — antes do save (UNIQUE INDEX é a rede).
-    const existing = await deps.contractRepo.findBySequentialNumber(cmd.sequentialNumber);
+    const existing = await deps.contractRepo.findBySequentialNumber(sequentialNumber);
     if (!existing.ok) return existing;
     if (existing.value !== null) return err('contract-sequential-number-duplicated');
 
     const created = Contract.createPending({
       id: ContractId.generate(),
-      sequentialNumber: cmd.sequentialNumber,
+      sequentialNumber,
       title: cmd.title,
       objective: cmd.objective,
       originalValue: parsed.value.originalValue,
       originalPeriod: parsed.value.originalPeriod,
       contractor: contractor.value,
       createdAt: deps.clock.now(),
+      // CTR-NUMBER-PROGRAM: classification omitida quando ausente (default CT); metadados repassados.
+      ...(cmd.classification !== undefined ? { classification: cmd.classification } : {}),
+      programId: cmd.programId ?? null,
+      budgetPlanId: cmd.budgetPlanId ?? null,
+      categorizacao: cmd.categorizacao ?? null,
+      centroDeCusto: cmd.centroDeCusto ?? null,
     });
     if (!created.ok) return created;
 

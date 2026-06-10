@@ -46,6 +46,12 @@ import {
   updateUserBodySchema,
   uploadPhotoQuerySchema,
 } from './users-schemas.ts';
+import {
+  magicBytesMatch,
+  PHOTO_BODY_LIMIT,
+  PHOTO_SET_ERROR_STATUS,
+  PHOTO_REMOVE_ERROR_STATUS,
+} from './photo-upload.ts';
 
 export type UsersHttpDeps = Readonly<{
   /** Use cases ja instanciados pela composition — nao re-instanciar aqui. */
@@ -78,31 +84,6 @@ const USER_DEACTIVATE_PERMISSION = 'user:deactivate';
 // Limite dedicado das rotas de ESCRITA (POST/PUT/PATCH), separado do teto global (200/min). O token
 // ja e exigido, mas evita abuso autenticado (ex.: convites em massa). Reads ficam no teto global.
 const WRITE_RATE_LIMIT = { max: 30, timeWindow: '1 minute' } as const;
-
-// Upload de foto: body binario ate 6 MiB no parser (use case corta em 5 MiB -> 422; acima -> 413).
-const PHOTO_BODY_LIMIT = 6 * 1024 * 1024;
-
-// Magic bytes (defesa em profundidade contra content-type spoofing). Confere a assinatura do arquivo
-// contra o mimeType declarado na query. MIME fora da allowlist e tratado pelo use case (422).
-const startsWith = (bytes: Buffer, sig: readonly number[]): boolean =>
-  sig.every((b, i) => bytes[i] === b);
-
-const magicBytesMatch = (mimeType: string, bytes: Buffer): boolean => {
-  switch (mimeType) {
-    case 'image/jpeg':
-      return startsWith(bytes, [0xff, 0xd8, 0xff]);
-    case 'image/png':
-      return startsWith(bytes, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
-    case 'image/webp':
-      // RIFF....WEBP
-      return (
-        startsWith(bytes, [0x52, 0x49, 0x46, 0x46]) && bytes.subarray(8, 12).toString() === 'WEBP'
-      );
-    default:
-      // MIME nao suportado: deixa o use case decidir (photo-type-unsupported -> 422).
-      return true;
-  }
-};
 
 // Erros de validacao de campo (VOs) -> 422; compartilhado por POST e PUT.
 const FIELD_VALIDATION_STATUS = {
@@ -371,20 +352,7 @@ const usersRoutes =
           mimeType,
         });
         if (!result.ok) {
-          return sendResult(reply, result, {
-            errors: {
-              'user-id-invalid': 400,
-              'user-not-found': 404,
-              'photo-type-unsupported': 422,
-              'photo-empty': 422,
-              'photo-too-large': 422,
-              'photo-ref-empty': 422,
-              'photo-ref-too-long': 422,
-              'photo-ref-invalid': 422,
-              'photo-storage-unavailable': 503,
-              'user-repo-unavailable': 503,
-            },
-          });
+          return sendResult(reply, result, { errors: PHOTO_SET_ERROR_STATUS });
         }
         const detail = await deps.getUser(req.params.id);
         return sendResult(reply, detail, {
@@ -407,14 +375,7 @@ const usersRoutes =
       handler: async (req, reply) => {
         const result = await deps.removeProfilePhoto({ targetId: req.params.id });
         if (!result.ok) {
-          return sendResult(reply, result, {
-            errors: {
-              'user-id-invalid': 400,
-              'user-not-found': 404,
-              'photo-storage-unavailable': 503,
-              'user-repo-unavailable': 503,
-            },
-          });
+          return sendResult(reply, result, { errors: PHOTO_REMOVE_ERROR_STATUS });
         }
         const detail = await deps.getUser(req.params.id);
         return sendResult(reply, detail, {

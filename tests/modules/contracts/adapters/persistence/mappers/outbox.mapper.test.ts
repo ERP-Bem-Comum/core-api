@@ -199,6 +199,7 @@ describe('outbox.mapper — round-trip dos 6 event types', () => {
         contractId,
         occurredAt: NOW,
         kind: 'Expired',
+        terminationReason: null,
       };
 
       const { rehydrated } = roundTrip(event);
@@ -218,6 +219,7 @@ describe('outbox.mapper — round-trip dos 6 event types', () => {
         contractId,
         occurredAt: NOW,
         kind: 'Terminated',
+        terminationReason: 'Distrato por acordo entre as partes',
       };
 
       const { rehydrated } = roundTrip(event);
@@ -226,6 +228,32 @@ describe('outbox.mapper — round-trip dos 6 event types', () => {
       if (!rehydrated.ok) return;
       if (rehydrated.value.type === 'ContractEnded') {
         assert.equal(rehydrated.value.kind, 'Terminated');
+        // CTR-HTTP-DISTRATO-DOCUMENTO: o motivo sobrevive ao round-trip (serial/deserial).
+        assert.equal(rehydrated.value.terminationReason, 'Distrato por acordo entre as partes');
+      }
+    });
+
+    it('retrocompat: payload v1 sem terminationReason desserializa como null', () => {
+      const contractId = ContractId.generate();
+      const insert = eventToOutboxInsert(
+        {
+          type: 'ContractEnded',
+          contractId,
+          occurredAt: NOW,
+          kind: 'Terminated',
+          terminationReason: 'motivo qualquer',
+        },
+        NOW,
+      );
+      // Simula evento gravado antes da feature: remove o campo do payload JSON.
+      const payloadV1 = JSON.parse(insert.payload) as Record<string, unknown>;
+      delete payloadV1['terminationReason'];
+      const rowV1 = insertToRow({ ...insert, payload: JSON.stringify(payloadV1) });
+
+      const rehydrated = outboxRowToEvent(rowV1);
+      assert.equal(isOk(rehydrated), true);
+      if (rehydrated.ok && rehydrated.value.type === 'ContractEnded') {
+        assert.equal(rehydrated.value.terminationReason, null);
       }
     });
   });

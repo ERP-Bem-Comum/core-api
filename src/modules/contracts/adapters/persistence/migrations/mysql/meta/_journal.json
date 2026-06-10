@@ -64,6 +64,41 @@
       "when": 1780956235069,
       "tag": "0008_striped_sleeper",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1781041358460,
+      "tag": "0009_rich_darwin",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1781045823540,
+      "tag": "0010_busy_mordo",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "5",
+      "when": 1781049083315,
+      "tag": "0011_kind_tigra",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "5",
+      "when": 1781065579394,
+      "tag": "0012_concerned_nick_fury",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "5",
+      "when": 1781075657565,
+      "tag": "0013_yielding_adam_warlock",
+      "breakpoints": true
     }
   ]
 }

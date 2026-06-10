@@ -51,10 +51,22 @@ export type ContractInvalidSignedAt = Readonly<{ tag: 'ContractInvalidSignedAt' 
 
 export type ContractOriginalValueZero = Readonly<{ tag: 'ContractOriginalValueZero' }>;
 
+// CTR-NUMBER-PROGRAM: classificação fora de CT|OS.
+export type ContractClassificationInvalid = Readonly<{
+  tag: 'ContractClassificationInvalid';
+  attempted: string;
+}>;
+
 export type ContractInvalidEventDate = Readonly<{ tag: 'ContractInvalidEventDate' }>;
 
 export type ContractNotActive = Readonly<{
   tag: 'ContractNotActive';
+  currentStatus: ContractStatus;
+}>;
+
+// ADR-0039: só `Pending` é cancelável. Carrega o estado atual como evidência (D23).
+export type ContractNotPending = Readonly<{
+  tag: 'ContractNotPending';
   currentStatus: ContractStatus;
 }>;
 
@@ -98,8 +110,10 @@ export type ContractError =
   | ContractObjectiveRequired
   | ContractInvalidSignedAt
   | ContractOriginalValueZero
+  | ContractClassificationInvalid
   | ContractInvalidEventDate
   | ContractNotActive
+  | ContractNotPending
   | ContractCannotExpireYet
   | ContractCannotExpireIndefinitePeriod
   | ContractCannotExtendIndefinitePeriod
@@ -141,12 +155,24 @@ export const contractOriginalValueZero = (): ContractOriginalValueZero => ({
   tag: 'ContractOriginalValueZero',
 });
 
+export const contractClassificationInvalid = (
+  attempted: string,
+): ContractClassificationInvalid => ({
+  tag: 'ContractClassificationInvalid',
+  attempted,
+});
+
 export const contractInvalidEventDate = (): ContractInvalidEventDate => ({
   tag: 'ContractInvalidEventDate',
 });
 
 export const contractNotActive = (currentStatus: ContractStatus): ContractNotActive => ({
   tag: 'ContractNotActive',
+  currentStatus,
+});
+
+export const contractNotPending = (currentStatus: ContractStatus): ContractNotPending => ({
+  tag: 'ContractNotPending',
   currentStatus,
 });
 

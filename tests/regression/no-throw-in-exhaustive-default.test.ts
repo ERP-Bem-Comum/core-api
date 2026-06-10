@@ -34,7 +34,7 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const repoRoot = resolve(__dirname, '..', '..');
 
 const WATCHED_FILES: readonly string[] = [
-  'src/modules/contracts/cli/formatters/period.ts',
+  // (cli/formatters/period.ts removido com a CLI embutida — CLI-RETIRE-EMBEDDED.)
   'src/modules/contracts/application/use-cases/homologate-amendment.ts',
 ];
 

@@ -62,3 +62,33 @@ export type PartnerMunicipalityDto = z.infer<typeof partnerMunicipalityDtoSchema
 
 /** Resposta do GET /partner-municipalities */
 export const partnerMunicipalitiesListSchema = z.array(partnerMunicipalityDtoSchema);
+
+// ─── Added (cross-state) ──────────────────────────────────────────────────────
+
+/** Query do GET /partner-municipalities/added — busca por nome + paginação. */
+export const addedMunicipalitiesQuerySchema = z.object({
+  search: z.string().min(1).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(100).default(25),
+});
+
+export type AddedMunicipalitiesQuery = z.infer<typeof addedMunicipalitiesQuerySchema>;
+
+/** DTO de um município parceiro (sem flag — todos no painel são parceiros). */
+export const addedMunicipalityDtoSchema = z.object({
+  ibgeCode: z.string().meta({ description: 'Código IBGE (7 dígitos)' }),
+  uf: z.string().meta({ description: 'Sigla da UF' }),
+  name: z.string().meta({ description: 'Nome do município' }),
+});
+
+/** Resposta paginada do GET /partner-municipalities/added (meta harmonizada). */
+export const addedMunicipalitiesPagedSchema = z.object({
+  items: z.array(addedMunicipalityDtoSchema),
+  meta: z.object({
+    currentPage: z.number().int(),
+    itemsPerPage: z.number().int(),
+    itemCount: z.number().int().nonnegative(),
+    totalItems: z.number().int().nonnegative(),
+    totalPages: z.number().int().nonnegative(),
+  }),
+});

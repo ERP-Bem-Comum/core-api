@@ -18,6 +18,8 @@ import type {
   PendingContract,
   ExpiredContract,
   TerminatedContract,
+  CancelledContract,
+  ContractClassification,
 } from '#src/modules/contracts/domain/contract/types.ts';
 import type {
   PendingWithoutDocumentAmendment,
@@ -72,7 +74,24 @@ export type ContractOverrides = Partial<{
   periodKind: 'Fixed' | 'Indefinite';
   periodStartISO: string;
   periodEndISO: string;
+  // CTR-NUMBER-PROGRAM: classificação (default CT no domínio) + metadados de cadastro.
+  classification: ContractClassification;
+  programId: string | null;
+  budgetPlanId: string | null;
+  categorizacao: string | null;
+  centroDeCusto: string | null;
 }>;
+
+// Spread condicional dos metadados de cadastro (CTR-NUMBER-PROGRAM) — `classification`
+// é omitida quando ausente (default CT no domínio); `exactOptionalPropertyTypes` proíbe
+// passar `undefined` explícito em campo opcional sem `undefined` no domínio.
+const registrationMeta = (o: ContractOverrides) => ({
+  ...(o.classification !== undefined ? { classification: o.classification } : {}),
+  ...(o.programId !== undefined ? { programId: o.programId } : {}),
+  ...(o.budgetPlanId !== undefined ? { budgetPlanId: o.budgetPlanId } : {}),
+  ...(o.categorizacao !== undefined ? { categorizacao: o.categorizacao } : {}),
+  ...(o.centroDeCusto !== undefined ? { centroDeCusto: o.centroDeCusto } : {}),
+});
 
 export const buildContract = (overrides: ContractOverrides = {}): ActiveContract => {
   const id = unwrap(
@@ -95,6 +114,7 @@ export const buildContract = (overrides: ContractOverrides = {}): ActiveContract
     originalValue: someMoney(overrides.originalValueCents ?? 10_000_000),
     originalPeriod: period,
     contractor: someContractor(),
+    ...registrationMeta(overrides),
   });
   return unwrap('Contract.create', r).contract;
 };
@@ -121,6 +141,7 @@ export const buildPendingContract = (overrides: ContractOverrides = {}): Pending
     originalPeriod: period,
     contractor: someContractor(),
     createdAt: new Date('2026-01-10T00:00:00.000Z'),
+    ...registrationMeta(overrides),
   });
   return unwrap('Contract.createPending', r).contract;
 };
@@ -148,6 +169,16 @@ export const buildTerminatedContract = (
   const endedAt = new Date(overrides.endedAtISO ?? '2026-06-15T00:00:00.000Z');
   const r = Contract.terminate(active, endedAt);
   return unwrap('Contract.terminate', r).contract;
+};
+
+// ADR-0039: rascunho `Pending` cancelado → `CancelledContract` (registration-only + endedAt).
+export const buildCancelledContract = (
+  overrides: ContractOverrides & Partial<{ endedAtISO: string }> = {},
+): CancelledContract => {
+  const pending = buildPendingContract(overrides);
+  const endedAt = new Date(overrides.endedAtISO ?? '2026-03-20T12:00:00.000Z');
+  const r = Contract.cancel(pending, endedAt);
+  return unwrap('Contract.cancel', r).contract;
 };
 
 export type AmendmentOverrides = Partial<{
@@ -210,7 +241,7 @@ export const buildHomologatedAmendment = (
   );
   const attached = unwrap(
     'attachSignedDocument',
-    Amendment.attachSignedDocument(pending, docId),
+    Amendment.attachSignedDocument(pending, docId, new Date('2026-02-15')),
   ).amendment;
   const ref = unwrap(
     'UserRef',
@@ -245,7 +276,7 @@ export const buildPendingAmendmentWithDoc = (
   );
   const attached = unwrap(
     'attachSignedDocument',
-    Amendment.attachSignedDocument(pending, docId),
+    Amendment.attachSignedDocument(pending, docId, new Date('2026-02-15')),
   ).amendment;
   // attachSignedDocument retorna PendingWithDocumentAmendment após W1 —
   // o tipo flui naturalmente sem cast inseguro.

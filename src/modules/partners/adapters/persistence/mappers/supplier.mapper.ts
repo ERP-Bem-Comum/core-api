@@ -12,6 +12,7 @@ import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import * as Cnpj from '#src/shared/kernel/cnpj.ts';
 import * as SupplierId from '#src/modules/partners/domain/supplier/supplier-id.ts';
 import * as ServiceCategory from '#src/modules/partners/domain/supplier/service-category.ts';
+import * as ServiceRating from '#src/modules/partners/domain/supplier/service-rating.ts';
 import * as PaymentTarget from '#src/modules/partners/domain/supplier/payment-target.ts';
 import * as Supplier from '#src/modules/partners/domain/supplier/supplier.ts';
 import type { BankAccount, PixKey } from '#src/modules/partners/domain/supplier/payment-target.ts';
@@ -22,6 +23,7 @@ export type SupplierMapperError =
   | 'supplier-mapper-invalid-id'
   | 'supplier-mapper-invalid-cnpj'
   | 'supplier-mapper-invalid-service-category'
+  | 'supplier-mapper-invalid-service-rating'
   | 'supplier-mapper-invalid-payment-target'
   | 'supplier-mapper-invalid-state';
 
@@ -44,6 +46,8 @@ export const supplierToInsert = (supplier: SupplierEntity, now: Date): NewSuppli
     bankAccountCheckDigit: bank?.checkDigit ?? null,
     pixKeyType: pix?.keyType ?? null,
     pixKey: pix?.key ?? null,
+    serviceRating: supplier.serviceRating,
+    ratingComment: supplier.ratingComment,
     createdAt: now,
     updatedAt: now,
   };
@@ -89,6 +93,13 @@ export const supplierFromRow = (
   const pix = pixFromRow(row);
   if (!pix.ok) return pix;
 
+  let serviceRating: ServiceRating.ServiceRating | null = null;
+  if (row.serviceRating !== null) {
+    const r = ServiceRating.parse(row.serviceRating);
+    if (!r.ok) return err('supplier-mapper-invalid-service-rating');
+    serviceRating = r.value;
+  }
+
   const rehydrated = Supplier.rehydrate({
     id: id.value,
     name: row.name,
@@ -99,6 +110,8 @@ export const supplierFromRow = (
     serviceCategory: category.value,
     bankAccount: bank.value,
     pixKey: pix.value,
+    serviceRating,
+    ratingComment: row.ratingComment,
     status: row.active ? 'Active' : 'Inactive',
     deactivatedAt: row.deactivatedAt,
   });

@@ -94,6 +94,7 @@ const setupWorld = async (opts: {
   const attached = Amendment.attachSignedDocument(
     amendmentCreate.value.amendment,
     DocumentId.generate(),
+    new Date('2026-02-15'),
   );
   if (!attached.ok) throw new Error(`fixture broken: ${JSON.stringify(attached.error)}`);
   const amendment = attached.value.amendment;

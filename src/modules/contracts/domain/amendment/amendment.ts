@@ -164,14 +164,24 @@ const create = (
 const attachSignedDocument = (
   amendment: PendingWithoutDocumentAmendment,
   signedDocumentRef: DocumentId,
+  signedAt: Date,
 ): Result<
   { amendment: PendingWithDocumentAmendment; event: AmendmentEvent },
   AmendmentError.AmendmentError
 > => {
+  // CTR-AMENDMENT-SIGNEDAT-AND-NUMBER (G2): `signedAt` é data de negócio fornecida
+  // pelo operador no attach. Rejeita data inválida (espelha as transições de Contract).
+  const atCheck = assertValidEventDate(signedAt);
+  if (!atCheck.ok) return atCheck;
+
   // Cast estreito: spread sobre PendingWithoutDocumentAmendment perde o literal
-  // `null` de `signedDocumentRef`. O campo substituído é `signedDocumentRef: DocumentId`,
-  // construindo estruturalmente um `PendingWithDocumentAmendment`.
-  const next = immutable({ ...amendment, signedDocumentRef }) as PendingWithDocumentAmendment;
+  // `null` de `signedDocumentRef`. Os campos substituídos (`signedDocumentRef: DocumentId`
+  // + `signedAt: Date`) constroem estruturalmente um `PendingWithDocumentAmendment`.
+  const next = immutable({
+    ...amendment,
+    signedDocumentRef,
+    signedAt,
+  }) as PendingWithDocumentAmendment;
 
   const event: AmendmentEvent = {
     type: 'AmendmentDocumentAttached',

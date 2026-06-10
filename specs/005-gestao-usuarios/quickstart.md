@@ -18,8 +18,10 @@ pnpm run test:e2e:bruno:auth        # 45 requests / 59 testes
 
 ```bash
 # 1. Subir a borda HTTP local (driver memory; ou auth=mysql apontando para o Docker)
+# As permissões do admin de dev seguem o preset canônico `adminDevPermissions`
+# (src/modules/auth/adapters/http/dev-seed.ts) — derivado do catálogo, inclui user:* + program:*.
 AUTH_DRIVER=memory CORE_API_E2E=1 \
-  AUTH_SEED_JSON='{"users":[{"email":"admin@bemcomum.dev","password":"Str0ng-Passphrase-2026!","permissions":["user:list","user:read","user:create","user:update","user:activate","user:deactivate"]}]}' \
+  AUTH_SEED_JSON='{"users":[{"email":"admin@bemcomum.dev","password":"Str0ng-Passphrase-2026!","permissions":["user:list","user:read","user:create","user:register","user:update","user:activate","user:deactivate","user:assign-role","program:read","program:write","program:deactivate"]}]}' \
   PORT=3100 pnpm run serve
 
 # 2. Rodar a coleção Bruno (fora da árvore por causa do guard trustPolicy=no-downgrade, ADR-0011/0029)

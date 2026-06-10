@@ -1,5 +1,10 @@
 # Request — CTR-CONTRACT-METADATA-E-ADITIVOS
 
+> **Status (2026-06-10):** G2 (`signedAt` por aditivo) + G3 (numeração gerada por contrato) ENTREGUES
+> via ticket `CTR-AMENDMENT-SIGNEDAT-AND-NUMBER` (closed-green, ADR — sem ADR novo; ver pipeline).
+> **Resta G1** (metadados de categorização do contrato — programa/categoria/centro de custo/plano
+> orçamentário/classificação). Este card permanece em `todo/` apenas por G1.
+
 > Handoff do **front (web-app v2)** para o **core-api**. Padrão `000-request.md`.
 > Registro formal das **pendências de backend conhecidas que estavam SEM ticket** no README deste kanban
 > (seção "ainda SEM ticket"). Origem: detalhe do contrato + tabela de aditivos. Verificado em 2026-06-09.

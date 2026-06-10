@@ -241,7 +241,13 @@ describe('ContractsModuleEvent — smoke type-level', () => {
         newCurrentValue: { cents: 100 } as never,
         newCurrentPeriod: {} as never,
       },
-      { type: 'ContractEnded', contractId: 'id' as never, occurredAt: NOW, kind: 'Expired' },
+      {
+        type: 'ContractEnded',
+        contractId: 'id' as never,
+        occurredAt: NOW,
+        kind: 'Expired',
+        terminationReason: null,
+      },
       {
         type: 'AmendmentCreated',
         amendmentId: 'id' as never,

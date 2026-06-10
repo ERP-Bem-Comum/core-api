@@ -10,7 +10,10 @@ import type {
   PendingContract,
   ExpiredContract,
   TerminatedContract,
+  CancelledContract,
   ContractAdjustment,
+  ContractClassification,
+  ContractRegistrationMetaInput,
   CreateContractInput,
   CreatePendingContractInput,
 } from './types.ts';
@@ -36,8 +39,10 @@ const stateUpdatedEvent = (
   newCurrentPeriod: contract.currentPeriod,
 });
 
-// Defeito #6: formato canônico XXX/AAAA (3 dígitos, barra, 4 dígitos)
-const SEQUENTIAL_NUMBER_FORMAT = /^\d{3}\/\d{4}$/;
+// Defeito #6: formato canônico NNN/AAAA ou NNNN/AAAA (3 ou 4 dígitos, barra, 4 dígitos).
+// 4 dígitos cobre a numeração GERADA pelo backend (CTR-CONTRACT-SEQUENTIAL-NUMBER,
+// `LPAD(seq,4,'0')/year`); 3 dígitos preserva o legado já cadastrado.
+const SEQUENTIAL_NUMBER_FORMAT = /^\d{3,4}\/\d{4}$/;
 
 /**
  * Validações de **cadastro** comuns a todo nascimento de contrato (`create` e
@@ -59,6 +64,35 @@ const validateRegistration = (
   return ok(null);
 };
 
+// CTR-NUMBER-PROGRAM: resolve os metadados de cadastro. `classification` defaulta para 'CT' e
+// só aceita 'CT'|'OS'; os demais são refs/rótulos opcionais → `null` quando ausentes.
+type ResolvedMeta = Readonly<{
+  classification: ContractClassification;
+  programId: string | null;
+  budgetPlanId: string | null;
+  categorizacao: string | null;
+  centroDeCusto: string | null;
+}>;
+
+const CONTRACT_CLASSIFICATIONS: readonly ContractClassification[] = ['CT', 'OS'];
+
+const resolveMeta = (
+  input: ContractRegistrationMetaInput,
+): Result<ResolvedMeta, ContractError.ContractError> => {
+  const classification = input.classification ?? 'CT';
+  // Validação runtime defensiva (a borda Zod já garante o enum; protege contra bypass de tipo).
+  if (!CONTRACT_CLASSIFICATIONS.includes(classification)) {
+    return err(ContractError.contractClassificationInvalid(String(input.classification)));
+  }
+  return ok({
+    classification,
+    programId: input.programId ?? null,
+    budgetPlanId: input.budgetPlanId ?? null,
+    categorizacao: input.categorizacao ?? null,
+    centroDeCusto: input.centroDeCusto ?? null,
+  });
+};
+
 // ─── Operações do agregado ────────────────────────────────────────────────────
 
 /**
@@ -74,6 +108,8 @@ const createPending = (
   if (!reg.ok) return reg;
   // Defeito #9: contrato com valor original zero não tem propósito de negócio.
   if (input.originalValue.cents === 0) return err(ContractError.contractOriginalValueZero());
+  const meta = resolveMeta(input);
+  if (!meta.ok) return meta;
 
   const contract: PendingContract = immutable({
     id: input.id,
@@ -83,6 +119,7 @@ const createPending = (
     originalValue: input.originalValue,
     originalPeriod: input.originalPeriod,
     contractor: input.contractor,
+    ...meta.value,
     observations: null,
     email: null,
     telephone: null,
@@ -144,6 +181,8 @@ const create = (
   if (!isValidDate(input.signedAt)) return err(ContractError.contractInvalidSignedAt());
   // Defeito #9: contrato com valor original zero não tem propósito de negócio.
   if (input.originalValue.cents === 0) return err(ContractError.contractOriginalValueZero());
+  const meta = resolveMeta(input);
+  if (!meta.ok) return meta;
 
   // ActiveContract não tem `endedAt` — o campo simplesmente está ausente.
   // `'Active' as const` garante o narrowing do discriminador (DO D§20).
@@ -156,6 +195,7 @@ const create = (
     originalValue: input.originalValue,
     originalPeriod: input.originalPeriod,
     contractor: input.contractor,
+    ...meta.value,
     observations: null,
     email: null,
     telephone: null,
@@ -225,6 +265,8 @@ const expire = (
     contractId: contract.id,
     occurredAt: at,
     kind: 'Expired',
+    // Expiração por chegada da data fim não tem motivo de negócio.
+    terminationReason: null,
   };
 
   return ok({ contract: next, event });
@@ -238,14 +280,19 @@ const expire = (
 const terminate = (
   contract: ActiveContract,
   at: Date,
+  reason?: string,
 ): Result<{ contract: TerminatedContract; event: ContractEvent }, ContractError.ContractError> => {
   const atCheck = assertValidEventDate(at);
   if (!atCheck.ok) return atCheck;
+
+  // Motivo trim; vazio/ausente → null (Terminated legado pode não ter).
+  const terminationReason = reason !== undefined && reason.trim().length > 0 ? reason.trim() : null;
 
   const next: TerminatedContract = immutable({
     ...contract,
     status: 'Terminated' as const,
     endedAt: at,
+    terminationReason,
   });
 
   const event: ContractEvent = {
@@ -253,6 +300,50 @@ const terminate = (
     contractId: contract.id,
     occurredAt: at,
     kind: 'Terminated',
+    terminationReason,
+  };
+
+  return ok({ contract: next, event });
+};
+
+/**
+ * Refinement constructor para o estado `Pending` (ADR-0039) — espelha `parseActive`.
+ *
+ * "Parse, don't validate" (DO D§21): retorna o subtipo refinado `PendingContract` dentro
+ * de `ok(...)`; chamadores passam o resultado direto à transição `cancel`. Estados não-Pending
+ * recebem `ContractNotPending` carregando o `currentStatus` como evidência (D23).
+ */
+const parsePending = (
+  contract: ContractEntity,
+): Result<PendingContract, ContractError.ContractNotPending> =>
+  contract.status === 'Pending'
+    ? ok(contract) // narrowing automático: status === 'Pending' => PendingContract
+    : err(ContractError.contractNotPending(contract.status));
+
+/**
+ * Transição `Pending → Cancelled` (ADR-0039 — rascunho descartado antes de vigorar).
+ *
+ * Recebe `PendingContract` — o compilador rejeita estados efetivos/terminais em compile
+ * time (espelha `activate`). `Cancelled` é terminal e carrega só `endedAt` sobre o cadastro;
+ * não há vigência efetiva (o contrato nunca foi assinado).
+ */
+const cancel = (
+  contract: PendingContract,
+  at: Date,
+): Result<{ contract: CancelledContract; event: ContractEvent }, ContractError.ContractError> => {
+  const atCheck = assertValidEventDate(at);
+  if (!atCheck.ok) return atCheck;
+
+  const next: CancelledContract = immutable({
+    ...contract,
+    status: 'Cancelled' as const,
+    endedAt: at,
+  });
+
+  const event: ContractEvent = {
+    type: 'ContractCancelled',
+    contractId: contract.id,
+    occurredAt: at,
   };
 
   return ok({ contract: next, event });
@@ -354,6 +445,8 @@ export const Contract = {
   createPending,
   activate,
   parseActive,
+  parsePending,
+  cancel,
   expire,
   terminate,
   applyHomologatedAdjustment,

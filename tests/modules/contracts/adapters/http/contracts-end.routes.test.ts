@@ -191,7 +191,10 @@ describe('CONTRACTS-HTTP-END (C2) — POST /contracts/:id/end', () => {
       payload: terminateBody(),
     });
     assert.equal(res.statusCode, 200);
-    assert.equal((res.json() as { status: string }).status, 'Terminated');
+    const body = res.json() as { status: string; terminationReason?: string | null };
+    assert.equal(body.status, 'Terminated');
+    // CA3: o motivo é consultável no detalhe retornado pelo distrato.
+    assert.equal(body.terminationReason, 'Distrato por acordo entre as partes — teste');
     await teardown();
   });
 

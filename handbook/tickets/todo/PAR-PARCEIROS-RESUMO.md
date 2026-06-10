@@ -31,8 +31,8 @@
 | # | Ticket | Prioridade | Resumo | Impacto no front (hoje) |
 |---|---|---|---|---|
 | 1 | [PAR-ACT-ACORDO](./PAR-ACT-ACORDO.md) | 🔴 Alta | Reformular o agregado **ACT** (pessoa-física → **Acordo institucional**): `actNumber`, `initialValidityMonths`, `hasFinancialTransfer`, `bankAccount`/`pixKey`, `cnpj`, `corporateName`, `fantasyName`; reaproveitar name(título)/occupationArea(área)/role(representante)/email; **remover CPF/vínculo/início**; list item com `actNumber`+`corporateName`; filtros `tipo(repasse)`+`área`; migração. | **Criar ACT não salva**; campos novos são placeholders *gated*; grid Nº/Parceiro = `—`; filtros Tipo/Área desabilitados |
-| 2 | [PAR-GEO-ADDED-MUNICIPALITIES](./PAR-GEO-ADDED-MUNICIPALITIES.md) | 🟧 Média | Endpoint p/ listar **municípios parceiros de todos os estados** (`GET /partner-municipalities` exige UF). | Painel "Municípios Parceiros Adicionados" é **placeholder** |
-| 3 | [PAR-SUPPLIER-AVALIACAO](./PAR-SUPPLIER-AVALIACAO.md) | 🟨 Baixa | Fornecedor: `serviceRating` (definir escala/enum) + `ratingComment`. | 2 campos *gated* no form/detalhe |
+| 2 | [PAR-GEO-ADDED-MUNICIPALITIES](../done/PAR-GEO-ADDED-MUNICIPALITIES.md) | ✅ Entregue | Endpoint p/ listar **municípios parceiros de todos os estados** (`GET /partner-municipalities` exige UF). | Painel "Municípios Parceiros Adicionados" é **placeholder** |
+| 3 | [PAR-SUPPLIER-AVALIACAO](../done/PAR-SUPPLIER-AVALIACAO.md) | ✅ Entregue | Fornecedor: `serviceRating` (definir escala/enum) + `ratingComment`. | 2 campos *gated* no form/detalhe |
 | 4 | [PAR-GRID-FILTROS-EXPORT](./PAR-GRID-FILTROS-EXPORT.md) | 🟨 Baixa | Filtros (Fornecedor "Status de contrato"; ACT "Tipo/Área"), coluna **Contratos/Aditivos** (contagem) e **export CSV** dos 4 submódulos. | Filtros *gated*; coluna `—`; "Exportar" sem wiring |
 | 5 | [PAR-COLLABORATOR-GRID-GAPS](./PAR-COLLABORATOR-GRID-GAPS.md) | 🟨 Baixa | Colaborador: filtros do painel + coluna Contratos/Aditivos + import/export. | Filtros *gated*; coluna `—` |
 

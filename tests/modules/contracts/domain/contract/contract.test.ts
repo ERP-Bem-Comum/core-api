@@ -157,15 +157,11 @@ describe('Contract.create — validation', () => {
     }
   });
 
-  it('rejects sequentialNumber with 4-digit prefix (0001/2026)', () => {
+  // CTR-CONTRACT-SEQUENTIAL-NUMBER: o backend passou a GERAR `NNNN/YYYY` (4 dígitos).
+  // O formato canônico agora aceita 3-ou-4 dígitos (legado + gerado).
+  it('accepts 4-digit prefix (0001/2026) — numeração gerada pelo backend', () => {
     const r = Contract.create(validInput({ sequentialNumber: '0001/2026' }));
-    assert.equal(isErr(r), true);
-    if (!r.ok) {
-      assert.equal(r.error.tag, 'ContractSequentialNumberInvalidFormat');
-      if (r.error.tag === 'ContractSequentialNumberInvalidFormat') {
-        assert.equal(r.error.attempted, '0001/2026');
-      }
-    }
+    assert.equal(isOk(r), true);
   });
 
   it('accepts canonical format 001/2026', () => {

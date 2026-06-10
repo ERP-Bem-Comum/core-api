@@ -11,6 +11,7 @@ import type { ContractsModuleEvent } from '../../../application/ports/event-bus.
 import type { MysqlHandle } from '../drivers/mysql-driver.ts';
 import { amendmentFromRow, amendmentToInsert } from '../mappers/amendment.mapper.ts';
 import { appendOutboxInTx } from './outbox-repository.drizzle.ts';
+import { formatAmendmentNumber } from '../../../domain/amendment/amendment-number.ts';
 import process from 'node:process';
 
 // W2 NOTE 1: erro original registrado via stderr antes de ser substituído
@@ -35,6 +36,35 @@ export const createDrizzleAmendmentRepository = (
   const { db, schema } = handle;
 
   return {
+    // CTR-AMENDMENT-SIGNEDAT-AND-NUMBER (G3): gera o próximo número do aditivo por contrato.
+    // Padrão CHILD_CODES (Refman 8.4 §17.7.2.4): INSERT...ODKU garante a linha do contrato (a PK
+    // `contract_id` é a única UNIQUE — ODKU dirigível) → SELECT last_seq FOR UPDATE (lock exclusivo,
+    // serializa geradores concorrentes) → UPDATE +1 → formata `NN/AAAA`.
+    nextAmendmentNumber: async (contractId: ContractId, year: number) =>
+      safe('nextAmendmentNumber', async () =>
+        db.transaction(async (tx) => {
+          const cid = contractId as unknown as string;
+          await tx
+            .insert(schema.ctrAmendmentSeq)
+            .values({ contractId: cid, lastSeq: 0 })
+            .onDuplicateKeyUpdate({ set: { contractId: cid } });
+
+          const rows = await tx
+            .select({ lastSeq: schema.ctrAmendmentSeq.lastSeq })
+            .from(schema.ctrAmendmentSeq)
+            .where(eq(schema.ctrAmendmentSeq.contractId, cid))
+            .for('update');
+
+          const nextSeq = (rows[0]?.lastSeq ?? 0) + 1;
+          await tx
+            .update(schema.ctrAmendmentSeq)
+            .set({ lastSeq: nextSeq })
+            .where(eq(schema.ctrAmendmentSeq.contractId, cid));
+
+          return formatAmendmentNumber(nextSeq, year);
+        }),
+      ),
+
     findById: async (id: AmendmentId) =>
       safe('findById', async () => {
         const rows = await db

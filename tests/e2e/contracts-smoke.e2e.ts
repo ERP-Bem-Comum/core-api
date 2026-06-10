@@ -94,14 +94,13 @@ describe('CONTRACTS-HTTP-E2E-SMOKE — borda contracts (server real + MySQL dual
   it('CA4: operador seedado -> POST /contracts 201 -> GET /:id 200 (reader) -> export.csv 200', async () => {
     const token = await login(SEED_EMAIL, SEED_PASSWORD);
 
-    // Formato exigido pelo domínio: NNN/AAAA (/^\d{3}\/\d{4}$/). MySQL é limpo a cada run (down -v),
-    // então um NNN derivado do tempo basta para unicidade dentro da execução.
-    const seq = `${String(Date.now() % 1000).padStart(3, '0')}/2026`;
+    // CTR-CONTRACT-SEQUENTIAL-NUMBER: o body NÃO envia sequentialNumber — o backend gera
+    // `NNNN/YYYY` por ano via `ctr_contract_seq` (FOR UPDATE). Este smoke exercita a geração
+    // ponta-a-ponta contra o MySQL real. MySQL é limpo a cada run (down -v).
     const created = await post(
       '/api/v2/contracts',
       {
         mode: 'Active',
-        sequentialNumber: seq,
         title: 'Contrato E2E',
         objective: 'Smoke ponta-a-ponta',
         signedAt: '2026-01-15',

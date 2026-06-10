@@ -74,6 +74,10 @@ export type PendingWithDocumentAmendment = AmendmentCore &
   Readonly<{
     status: 'Pending';
     signedDocumentRef: DocumentId;
+    // CTR-AMENDMENT-SIGNEDAT-AND-NUMBER (G2): data de assinatura do aditivo, capturada
+    // junto com o documento assinado. Presente a partir deste estado (e em Homologated);
+    // AUSENTE em PendingWithoutDocument (espelha `signedDocumentRef`).
+    signedAt: Date;
     homologatedAt: null;
     homologatedBy: null;
   }>;
@@ -86,6 +90,8 @@ export type HomologatedAmendment = AmendmentCore &
   Readonly<{
     status: 'Homologated';
     signedDocumentRef: DocumentId;
+    // CTR-AMENDMENT-SIGNEDAT-AND-NUMBER (G2): herdado de PendingWithDocument na homologação.
+    signedAt: Date;
     homologatedAt: Date;
     homologatedBy: UserRef;
   }>;

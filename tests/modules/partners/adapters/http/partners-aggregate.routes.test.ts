@@ -96,13 +96,19 @@ const seed = () => {
   const act = u(
     Act.register({
       id: ActId.generate(),
+      actNumber: 'ACT-2026-010',
       name: 'Delta',
       email: 'delta@a.org',
-      cpf: '111.444.777-35',
+      cnpj: '11.222.333/0001-81',
+      corporateName: 'Delta Instituição LTDA',
+      fantasyName: 'Delta',
       occupationArea: 'PARC',
-      role: 'Voluntário',
-      startOfContract: NOW,
-      employmentRelationship: 'CLT',
+      legalRepresentative: 'Representante Legal',
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+      hasFinancialTransfer: false,
+      bankAccount: null,
+      pixKey: null,
       registeredAt: NOW,
     }),
   ).act;

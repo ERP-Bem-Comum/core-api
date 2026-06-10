@@ -4,6 +4,38 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-10 — 🧹 CLI-RETIRE-EMBEDDED: CLI embutida removida (executa ADR-0037)
+
+Execução da remoção faseada que o [ADR-0037](./architecture/adr/0037-http-first-retire-embedded-cli.md)
+previu. A **CLI embutida** do core-api (`src/modules/{contracts,financial}/cli/`, scripts `cli:*`,
+`tests/cli/` + `tests/modules/*/cli/`) foi **arrancada**. Domínio/application/persistência/HTTP intactos
+(a CLI era adapter de entrada — ADR-0006).
+
+- **Worker de outbox** (ADR-0015) extraído para entrypoint standalone `src/modules/contracts/worker/run.ts`
+  (+ `worker/config.ts`, config por env `CONTRACTS_DATABASE_URL` + `OUTBOX_*`), **zero dependência de
+  CLI**. Script `pnpm run worker:outbox`.
+- **Docker**: `ENTRYPOINT` repontado da CLI para o **servidor HTTP** (`node src/server.ts`); `compose`
+  serviço `app` sem o override de `command` (usa o entrypoint HTTP).
+- **Import legado (ETL)**: comando CLI removido; use case `importContracts` permanece em application/
+  para futura rota HTTP.
+- Validação E2E segue por Bruno (ADR-0034) + `fastify.inject`. Skill `application-cli-builder` aposentada
+  para o core-api. `.claude/rules/adapters.md` atualizado (driver por env, não mais por flag de CLI).
+
+## 2026-06-09 — 🗂️ ADR-0039: estado terminal `Cancelled` do Contrato (5 estados)
+
+Novo [ADR-0039](./architecture/adr/0039-contract-cancelled-state.md) (**Accepted**), **estende** o
+[ADR-0023](./architecture/adr/0023-contract-lifecycle-pending-state.md) (não supersede). Motivado pelo
+ticket CTR-HTTP-CANCEL-PENDING (ação "Excluir" do front): um contrato **Pendente** (rascunho não
+vigorado) passa a ser **cancelável** via `DELETE /contracts/:id`; efetivados seguem imutáveis.
+
+- 5º estado **`Cancelled`** (`Cancelado` na borda), terminal, alcançável só de `Pending`. Tipo refinado
+  `CancelledContract` = `ContractRegistration` + `endedAt` (sem vigência efetiva). Transição
+  `Contract.cancel` (parâmetro `PendingContract` garante a regra em compile time).
+- Evento próprio **`ContractCancelled`** (não reusa `ContractEnded`) — timeline/auditoria corretos.
+- `DELETE /contracts/:id`: Pending → 200; não-Pending → 409 `contract-not-pending`; inexistente → 404.
+  Soft-delete (transição de estado) — exclusão física segue proibida.
+- CHECKs do schema revisados (`status`, `ended_at`, `pending_consistency` incluem `Cancelled`).
+
 ## 2026-06-08 — 🧪 ADR-0038: Coleções Bruno obrigatoriamente executadas via CLI
 
 Novo [ADR-0038](./architecture/adr/0038-bruno-cli-mandatory-and-bru-authoring.md) (**Accepted**). Motivado

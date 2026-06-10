@@ -26,6 +26,9 @@ import type {
 export type AttachSignedDocumentCommand = Readonly<{
   amendmentId: string;
   signedDocumentRef: string;
+  // G2 (CTR-AMENDMENT-SIGNEDAT-AND-NUMBER): data de assinatura do aditivo (ISO). A validade
+  // é do domínio (`Amendment.attachSignedDocument` rejeita data inválida → AmendmentError).
+  signedAt: string;
 }>;
 
 export type AttachSignedDocumentError =
@@ -72,7 +75,11 @@ export const attachSignedDocument =
     const pendingWithoutDoc = Amendment.parsePendingWithoutDocument(load.value);
     if (!pendingWithoutDoc.ok) return pendingWithoutDoc;
 
-    const attached = Amendment.attachSignedDocument(pendingWithoutDoc.value, docIdResult.value);
+    const attached = Amendment.attachSignedDocument(
+      pendingWithoutDoc.value,
+      docIdResult.value,
+      new Date(cmd.signedAt),
+    );
     if (!attached.ok) return attached;
 
     // CA-5: evento passado diretamente no save — persiste state + outbox atomicamente.

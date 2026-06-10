@@ -1,8 +1,8 @@
 /**
- * Use case `registerAct` — cria um Act (nasce Active + PreRegistration).
+ * Use case `registerAct` — cria um Acordo de Cooperação Técnica (nasce Active).
  *
- * Sequência: `Act.register` → guard CPF duplicado → guard email duplicado → `save`.
- * Tempo injetado via `Clock`. Curried `(deps) => (cmd)`.
+ * Sequência: `Act.register` → guard `actNumber` duplicado → `save`. Tempo injetado
+ * via `Clock`. Curried `(deps) => (cmd)`.
  */
 
 import { type Result, ok, err } from '#src/shared/index.ts';
@@ -15,22 +15,28 @@ import type {
   ActRepository,
   ActRepositoryError,
 } from '#src/modules/partners/domain/act/repository.ts';
+import type {
+  BankAccountInput,
+  PixKeyInput,
+} from '#src/modules/partners/domain/supplier/payment-target.ts';
 
 export type RegisterActCommand = Readonly<{
+  actNumber: string;
   name: string;
   email: string;
-  cpf: string;
+  cnpj: string;
+  corporateName: string;
+  fantasyName: string;
   occupationArea: string;
-  role: string;
-  startOfContract: Date;
-  employmentRelationship: string;
+  legalRepresentative: string;
+  startDate: string;
+  endDate: string;
+  hasFinancialTransfer: boolean;
+  bankAccount: BankAccountInput | null;
+  pixKey: PixKeyInput | null;
 }>;
 
-export type RegisterActError =
-  | 'register-act-cpf-duplicate'
-  | 'register-act-email-duplicate'
-  | ActError
-  | ActRepositoryError;
+export type RegisterActError = 'register-act-number-duplicate' | ActError | ActRepositoryError;
 
 export type RegisterActOutput = Readonly<{ act: ActiveAct }>;
 
@@ -41,24 +47,26 @@ export const registerAct =
   async (cmd: RegisterActCommand): Promise<Result<RegisterActOutput, RegisterActError>> => {
     const registered = Act.register({
       id: ActId.generate(),
+      actNumber: cmd.actNumber,
       name: cmd.name,
       email: cmd.email,
-      cpf: cmd.cpf,
+      cnpj: cmd.cnpj,
+      corporateName: cmd.corporateName,
+      fantasyName: cmd.fantasyName,
       occupationArea: cmd.occupationArea,
-      role: cmd.role,
-      startOfContract: cmd.startOfContract,
-      employmentRelationship: cmd.employmentRelationship,
+      legalRepresentative: cmd.legalRepresentative,
+      startDate: cmd.startDate,
+      endDate: cmd.endDate,
+      hasFinancialTransfer: cmd.hasFinancialTransfer,
+      bankAccount: cmd.bankAccount,
+      pixKey: cmd.pixKey,
       registeredAt: deps.clock.now(),
     });
     if (!registered.ok) return registered;
 
-    const byCpf = await deps.actRepo.findByCpf(registered.value.act.cpf);
-    if (!byCpf.ok) return byCpf;
-    if (byCpf.value !== null) return err('register-act-cpf-duplicate');
-
-    const byEmail = await deps.actRepo.findByEmail(registered.value.act.email);
-    if (!byEmail.ok) return byEmail;
-    if (byEmail.value !== null) return err('register-act-email-duplicate');
+    const byActNumber = await deps.actRepo.findByActNumber(registered.value.act.actNumber);
+    if (!byActNumber.ok) return byActNumber;
+    if (byActNumber.value !== null) return err('register-act-number-duplicate');
 
     const saved = await deps.actRepo.save(registered.value.act);
     if (!saved.ok) return saved;

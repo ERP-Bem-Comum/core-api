@@ -1,8 +1,6 @@
 /**
- * PARTNERS-EXPORT-PARITY-HTTP — W0 (RED) — serializer CSV de Atos (placeholder ADR-0036).
- *
- * RED por inexistência: `actsToCsv` (`act-csv.ts`) ainda não existe. Act é clone enxuto de
- * Collaborator — o CSV cobre só os campos do core do placeholder (sem os campos pessoais ricos).
+ * Serializer CSV de Acordos de Cooperação Técnica (`act-csv.ts`). Cobre header, lista vazia,
+ * células (Active/Inactive) e anti-CSV-injection. Espelha `supplier-csv.test.ts`.
  */
 
 import { describe, it } from 'node:test';
@@ -19,27 +17,36 @@ const DEACTIVATED_AT = new Date('2026-06-02T15:30:00.000Z');
 
 const EXPECTED_HEADER = [
   'id',
+  'actNumber',
   'name',
   'email',
-  'cpf',
+  'cnpj',
+  'corporateName',
+  'fantasyName',
   'occupationArea',
-  'role',
-  'startOfContract',
-  'employmentRelationship',
-  'registrationStatus',
+  'legalRepresentative',
+  'startDate',
+  'endDate',
+  'hasFinancialTransfer',
   'status',
   'deactivatedAt',
 ].join(',');
 
 const baseInput = () => ({
   id: ActId.generate(),
-  name: 'Ato X',
-  email: 'ato@org.org',
-  cpf: '111.444.777-35',
+  actNumber: 'ACT-2026-001',
+  name: 'Acordo X',
+  email: 'contato@org.org',
+  cnpj: '11.222.333/0001-81',
+  corporateName: 'Instituição Parceira LTDA',
+  fantasyName: 'IP',
   occupationArea: 'PARC',
-  role: 'Voluntário',
-  startOfContract: NOW,
-  employmentRelationship: 'CLT',
+  legalRepresentative: 'João Diretor',
+  startDate: '2026-01-01',
+  endDate: '2026-12-31',
+  hasFinancialTransfer: false,
+  bankAccount: null,
+  pixKey: null,
   registeredAt: NOW,
 });
 
@@ -49,9 +56,12 @@ const makeActive = (over: Partial<ReturnType<typeof baseInput>> = {}): ActType =
   return r.value.act;
 };
 
-// `Act.deactivate` retorna o agregado direto (não Result) — diferente de Supplier/Financier.
-const makeInactive = (over: Partial<ReturnType<typeof baseInput>> = {}): ActType =>
-  Act.deactivate(makeActive(over), DEACTIVATED_AT);
+const makeInactive = (over: Partial<ReturnType<typeof baseInput>> = {}): ActType => {
+  const d = Act.deactivate(makeActive(over), DEACTIVATED_AT);
+  assert.ok(d.ok);
+  if (!d.ok) throw new Error('fixture inactive');
+  return d.value.act;
+};
 
 const dataLines = (csv: string): readonly string[] =>
   csv
@@ -66,19 +76,23 @@ describe('actsToCsv — header e vazio', () => {
 });
 
 describe('actsToCsv — células', () => {
-  it('Active: status=Active, deactivatedAt vazio, cpf normalizado', () => {
+  it('Active: status=Active, deactivatedAt vazio, cnpj normalizado', () => {
     const a = makeActive();
     const cells = dataLines(actsToCsv([a]))[0]?.split(',') ?? [];
-    assert.equal(cells[3], String(a.cpf));
-    assert.equal(cells[9], 'Active');
-    assert.equal(cells[10], '');
+    assert.equal(cells[1], 'ACT-2026-001');
+    assert.equal(cells[4], String(a.cnpj));
+    assert.equal(cells[9], '2026-01-01');
+    assert.equal(cells[10], '2026-12-31');
+    assert.equal(cells[11], 'false');
+    assert.equal(cells[12], 'Active');
+    assert.equal(cells[13], '');
   });
 
   it('Inactive: status=Inactive + deactivatedAt ISO', () => {
     const a = makeInactive();
     const cells = dataLines(actsToCsv([a]))[0]?.split(',') ?? [];
-    assert.equal(cells[9], 'Inactive');
-    assert.equal(cells[10], DEACTIVATED_AT.toISOString());
+    assert.equal(cells[12], 'Inactive');
+    assert.equal(cells[13], DEACTIVATED_AT.toISOString());
   });
 });
 

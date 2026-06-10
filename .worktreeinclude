@@ -10,9 +10,5 @@ secrets/*.txt
 .env.local
 .env.*.local
 
-# Estado local do CLI (driver in-memory persiste sessão entre execuções)
-cli-state.json
-*.state.json
-
 # Configs locais de outras ferramentas (Gemini CLI, etc.)
 .gemini/
