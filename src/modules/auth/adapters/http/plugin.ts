@@ -19,6 +19,7 @@ import { ok, err } from '#src/shared/primitives/result.ts';
 import { sendResult } from '#src/shared/http/reply.ts';
 
 import * as UserId from '../../domain/identity/user-id.ts';
+import * as Password from '../../domain/credential/password-policy.ts';
 import type { AuthHttpDeps } from './composition.ts';
 import { makeRequireAuth } from './auth-hook.ts';
 import {
@@ -33,6 +34,7 @@ import {
   changePasswordBodySchema,
   forgotPasswordBodySchema,
   resetPasswordBodySchema,
+  passwordPolicyResponseSchema,
 } from './schemas.ts';
 
 const authRoutes =
@@ -69,6 +71,21 @@ const authRoutes =
           },
         });
       },
+    });
+
+    // USR-PASSWORD-POLICY: política consumível pelo front (fonte única). Pública (sem requireAuth):
+    // os comprimentos são informação não-sensível (análogo a `minlength` de um <input>). NUNCA expõe
+    // a blocklist.
+    scope.route({
+      method: 'GET',
+      url: '/password-policy',
+      schema: {
+        response: { 200: passwordPolicyResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) =>
+        sendResult(reply, ok({ minLength: Password.minLength, maxLength: Password.maxLength }), {
+          ok: 200,
+        }),
     });
 
     scope.route({

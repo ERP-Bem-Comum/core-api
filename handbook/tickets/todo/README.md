@@ -92,9 +92,11 @@
 admin) e o `POST /users` não recebe imagem. *Bloqueia no front:* "Alterar Imagem" e "Foto de Perfil"
 ficam **gated** (avatar usa as iniciais).
 
-**[USR-PASSWORD-POLICY](./USR-PASSWORD-POLICY.md) — Política de senha.** O checklist do design (máx 15 +
-complexidade) é mais rígido que o backend (máx 128, sem complexidade, com blocklist). *Bloqueia no front:*
-nada — validado no client; senha comum cai em `password-weak`.
+> **✅ Entregue:** [USR-PASSWORD-POLICY](../done/USR-PASSWORD-POLICY.md) — política alinhada ao **OWASP
+> 2025/NIST 800-63B** (decisão via `security-backend-expert`): **mínimo 8 → 12**, máx 128, **sem
+> complexidade** (proposta do legado de máx 15 + complexidade **rejeitada**), blocklist mantida. Novo
+> **`GET /api/v2/auth/password-policy`** (`{ minLength, maxLength }`, sem auth) p/ o front sincronizar o
+> checklist — **o front segue o backend, não o contrário**. (closed-green 2026-06-10)
 
 ## ℹ️ Notas de modelagem (tech lead + P.O.)
 - **"Aprovador em Massa"** = `massApprovalPermission`, **read-only** (derivado dos papéis no backend). Não é

@@ -1,18 +1,18 @@
 /**
- * W0 (RED) - Tests para Password (politica de forca) do modulo auth.
+ * Tests para Password (politica de forca) do modulo auth.
  *
- * Ticket: AUTH-VO-PASSWORD.
+ * Ticket original: AUTH-VO-PASSWORD. Atualizado por USR-PASSWORD-POLICY (min 8 -> 12).
  *
- * Politica: comprimento em [8, 128]. NAO normaliza (senha preserva caixa + espacos).
- * Regras de composicao NAO sao impostas (NIST 800-63B: comprimento > complexidade).
+ * Politica: comprimento em [12, 128] (OWASP Auth Cheat Sheet 2025: sem MFA, min >= 12; NIST 800-63B:
+ * comprimento + blocklist > complexidade). NAO normaliza (preserva caixa + espacos). SEM composicao.
  *
- * Cobre CA1..CA3 + CA6:
- *   - CA1: senha valida [8,128] retorna ok, valor preservado (sem normalizacao)
- *   - CA2: < 8 chars retorna err('password-too-short')
+ *   - CA1: senha valida [12,128] retorna ok, valor preservado
+ *   - CA2: < 12 chars retorna err('password-too-short')  <-- mudou de 8 para 12 (USR-PASSWORD-POLICY)
  *   - CA3: > 128 chars retorna err('password-too-long')
+ *   - CA3b: ordem comprimento>blocklist — comum com <12 chars cai em too-short antes de too-common
  *   - CA6: parse nunca lanca
  *
- * DEVEM FALHAR em W0 - password-policy.ts ainda nao existe. ASCII puro.
+ * ASCII puro.
  */
 
 import { describe, it } from 'node:test';
@@ -22,10 +22,7 @@ import * as Password from '#src/modules/auth/domain/credential/password-policy.t
 
 describe('Password.parse', () => {
   it('CA1: senha valida retorna ok com valor preservado', () => {
-    // Act
     const r = Password.parse('super-secret-123');
-
-    // Assert
     assert.equal(r.ok, true);
     if (r.ok) {
       assert.equal(r.value, 'super-secret-123');
@@ -33,51 +30,34 @@ describe('Password.parse', () => {
   });
 
   it('CA1: NAO normaliza - preserva caixa e espacos', () => {
-    // Arrange - espacos nas bordas + maiusculas devem permanecer
-    const raw = '  AbCdEfg  ';
-
-    // Act
+    const raw = '  AbCdEfghi  '; // 13 chars (>= 12)
     const r = Password.parse(raw);
-
-    // Assert
     assert.equal(r.ok, true);
     if (r.ok) {
       assert.equal(r.value, raw);
     }
   });
 
-  it('CA1: boundary - exatamente 8 chars retorna ok', () => {
-    // Act
-    const r = Password.parse('a'.repeat(8));
-
-    // Assert
+  it('CA1: boundary - exatamente 12 chars retorna ok', () => {
+    const r = Password.parse('a'.repeat(12));
     assert.equal(r.ok, true);
   });
 
   it('CA1: boundary - exatamente 128 chars retorna ok', () => {
-    // Act
     const r = Password.parse('a'.repeat(128));
-
-    // Assert
     assert.equal(r.ok, true);
   });
 
   it('CA2: string vazia retorna err password-too-short', () => {
-    // Act
     const r = Password.parse('');
-
-    // Assert
     assert.equal(r.ok, false);
     if (!r.ok) {
       assert.equal(r.error, 'password-too-short');
     }
   });
 
-  it('CA2: 7 chars retorna err password-too-short', () => {
-    // Act
-    const r = Password.parse('short12');
-
-    // Assert
+  it('CA2: boundary - exatamente 11 chars retorna err password-too-short', () => {
+    const r = Password.parse('a'.repeat(11));
     assert.equal(r.ok, false);
     if (!r.ok) {
       assert.equal(r.error, 'password-too-short');
@@ -85,10 +65,7 @@ describe('Password.parse', () => {
   });
 
   it('CA3: 129 chars retorna err password-too-long', () => {
-    // Act
     const r = Password.parse('a'.repeat(129));
-
-    // Assert
     assert.equal(r.ok, false);
     if (!r.ok) {
       assert.equal(r.error, 'password-too-long');
@@ -96,18 +73,22 @@ describe('Password.parse', () => {
   });
 
   // BE-REC-005: blocklist de senhas vazadas/comuns (OWASP WSTG-ATHN-07, NIST 800-63B).
-  it('BE-REC-005: senha comum no comprimento valido retorna err password-too-common', () => {
-    for (const common of ['password123', 'senha123', '12345678', 'qwerty123']) {
-      const r = Password.parse(common);
-      assert.equal(r.ok, false, `esperava bloquear "${common}"`);
-      if (!r.ok) assert.equal(r.error, 'password-too-common');
-    }
+  it('BE-REC-005: senha comum (>= 12 chars) no comprimento valido retorna err password-too-common', () => {
+    const r = Password.parse('administrator'); // 13 chars, na blocklist
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'password-too-common');
   });
 
   it('BE-REC-005: blocklist e case-insensitive', () => {
-    const r = Password.parse('PASSWORD123');
+    const r = Password.parse('ADMINISTRATOR');
     assert.equal(r.ok, false);
     if (!r.ok) assert.equal(r.error, 'password-too-common');
+  });
+
+  it('CA3b: comum com < 12 chars cai em too-short (comprimento vence a blocklist)', () => {
+    const r = Password.parse('senha123'); // 8 chars, na blocklist, mas < 12
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'password-too-short');
   });
 
   it('BE-REC-005: senha forte fora da blocklist passa', () => {
