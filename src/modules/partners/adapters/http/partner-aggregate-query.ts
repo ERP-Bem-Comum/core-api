@@ -83,7 +83,7 @@ const actItem = (r: ActReadRecord): PartnerListItem => ({
   type: 'act',
   id: r.act.id as unknown as string,
   name: r.act.name,
-  document: r.act.cpf as unknown as string,
+  document: r.act.cnpj as unknown as string,
   active: r.act.status === 'Active',
 });
 

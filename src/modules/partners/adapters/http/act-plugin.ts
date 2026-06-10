@@ -33,7 +33,11 @@ import {
   createActBodySchema,
   updateActBodySchema,
 } from './act-schemas.ts';
-import { queryToFilter as actQueryToFilter, actsForExport } from './act-list-query.ts';
+import {
+  queryToFilter as actQueryToFilter,
+  actsForExport,
+  matchesFilter as actMatchesFilter,
+} from './act-list-query.ts';
 import { actsToCsv } from '../export/act-csv.ts';
 import { ACT_PERMISSION } from '../../public-api/permissions.ts';
 
@@ -45,12 +49,9 @@ export type ActsHttpHooks = Readonly<{
 
 // Conflito de estado/unicidade → 409.
 const CONFLICT_CODES: ReadonlySet<string> = new Set([
-  'register-act-cpf-duplicate',
-  'register-act-email-duplicate',
-  'act-cpf-duplicate',
-  'act-email-duplicate',
-  'edit-act-cpf-duplicate',
-  'edit-act-email-duplicate',
+  'register-act-number-duplicate',
+  'edit-act-number-duplicate',
+  'act-number-duplicate',
   'act-already-inactive',
   'act-already-active',
 ]);
@@ -66,7 +67,7 @@ const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
 ]);
 const REPO_UNAVAILABLE_CODES: ReadonlySet<string> = new Set(['act-repo-unavailable']);
 
-// Erro de escrita → status. Default 422 (invariante de domínio: nome/email/cpf/enum inválidos).
+// Erro de escrita → status. Default 422 (invariante de domínio: cnpj/repasse/vigência/enum inválidos).
 const writeErrorStatus = (code: string): number => {
   if (CONFLICT_CODES.has(code)) return 409;
   if (NOT_FOUND_CODES.has(code)) return 404;
@@ -102,20 +103,8 @@ const actsRoutes =
           });
         }
         const q = req.query;
-        let filtered = [...result.value];
-        if (q.search !== undefined) {
-          const needle = q.search.toLowerCase();
-          filtered = filtered.filter(
-            (r) =>
-              r.act.name.toLowerCase().includes(needle) ||
-              r.act.email.toLowerCase().includes(needle) ||
-              String(r.act.cpf).includes(needle),
-          );
-        }
-        if (q.active !== undefined) {
-          const isActive = q.active === 1;
-          filtered = filtered.filter((r) => (r.act.status === 'Active') === isActive);
-        }
+        const filter = actQueryToFilter(q);
+        const filtered = result.value.filter((r) => actMatchesFilter(r.act, filter));
         const direction = q.order === 'DESC' ? -1 : 1;
         filtered.sort((a, b) => a.act.name.localeCompare(b.act.name) * direction);
         const totalItems = filtered.length;

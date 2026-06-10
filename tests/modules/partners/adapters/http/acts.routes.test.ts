@@ -27,13 +27,19 @@ const NOPERM_EMAIL = 'sem.permissao@example.com';
 const UUID_INEXISTENTE = '00000000-0000-4000-8000-000000000000';
 
 const VALID_BODY = {
-  name: 'Maria Silva',
-  email: 'maria@bemcomum.org',
-  cpf: '11144477735',
+  actNumber: 'ACT-2026-001',
+  name: 'Acordo de Cooperação Técnica X',
+  email: 'contato@instituicao.org',
+  cnpj: '11222333000181',
+  corporateName: 'Instituição Parceira LTDA',
+  fantasyName: 'IP',
   occupationArea: 'PARC',
-  role: 'Analista',
-  startOfContract: '2026-01-10',
-  employmentRelationship: 'CLT',
+  legalRepresentative: 'João Diretor',
+  startDate: '2026-01-01',
+  endDate: '2026-12-31',
+  hasFinancialTransfer: false,
+  bankAccount: null,
+  pixKey: null,
 };
 
 const makeApp = async () => {
@@ -147,7 +153,7 @@ describe('ACTS-HTTP — POST /api/v1/acts', () => {
     await teardown();
   });
 
-  it('CPF duplicado -> 409', async () => {
+  it('actNumber duplicado -> 409', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, WRITER_EMAIL);
     const hdr = { authorization: `Bearer ${token}` };
@@ -156,33 +162,59 @@ describe('ACTS-HTTP — POST /api/v1/acts', () => {
       method: 'POST',
       url: '/api/v1/acts',
       headers: hdr,
-      payload: { ...VALID_BODY, email: 'outro@bemcomum.org' },
+      payload: { ...VALID_BODY, corporateName: 'Outra Instituição LTDA' },
     });
     assert.equal(dup.statusCode, 409);
     await teardown();
   });
 
-  it('body fora do shape (cpf curto) -> 400 (Zod)', async () => {
+  it('body fora do shape (cnpj com tamanho != 14) -> 400 (Zod)', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, WRITER_EMAIL);
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/acts',
       headers: { authorization: `Bearer ${token}` },
-      payload: { ...VALID_BODY, cpf: '123' },
+      payload: { ...VALID_BODY, cnpj: '123' },
     });
     assert.equal(res.statusCode, 400);
     await teardown();
   });
 
-  it('CPF com DV inválido (11 dígitos) -> 422 (domínio)', async () => {
+  it('CNPJ com DV inválido -> 422 (domínio)', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, WRITER_EMAIL);
     const res = await app.inject({
       method: 'POST',
       url: '/api/v1/acts',
       headers: { authorization: `Bearer ${token}` },
-      payload: { ...VALID_BODY, cpf: '11111111111' },
+      payload: { ...VALID_BODY, cnpj: '11111111111111' },
+    });
+    assert.equal(res.statusCode, 422);
+    await teardown();
+  });
+
+  it('repasse=true sem payment target -> 422 (domínio)', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/acts',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { ...VALID_BODY, hasFinancialTransfer: true, bankAccount: null, pixKey: null },
+    });
+    assert.equal(res.statusCode, 422);
+    await teardown();
+  });
+
+  it('vigência invertida (endDate < startDate) -> 422 (domínio)', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/acts',
+      headers: { authorization: `Bearer ${token}` },
+      payload: { ...VALID_BODY, startDate: '2026-12-31', endDate: '2026-01-01' },
     });
     assert.equal(res.statusCode, 422);
     await teardown();
@@ -285,7 +317,11 @@ describe('ACTS-HTTP — GET /api/v1/acts/:id', () => {
     assert.equal(body['id'], id);
     assert.equal(body['active'], true);
     assert.equal(typeof body['name'], 'string');
-    assert.equal(typeof body['cpf'], 'string');
+    assert.equal(body['actNumber'], 'ACT-2026-001');
+    assert.equal(body['cnpj'], '11222333000181');
+    assert.equal(body['startDate'], '2026-01-01');
+    assert.equal(body['endDate'], '2026-12-31');
+    assert.equal(body['hasFinancialTransfer'], false);
     await teardown();
   });
 });
