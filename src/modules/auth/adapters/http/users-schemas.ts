@@ -114,11 +114,13 @@ export const uploadPhotoQuerySchema = z.object({
 export type UploadPhotoQuery = z.infer<typeof uploadPhotoQuerySchema>;
 
 /**
- * Body do PUT /api/v1/me (autosserviço — spec 005 US7). Restrito a `name`/`telephone`: o usuário
- * comum NÃO altera `collaboratorId` (vínculo administrativo) nem status/roles. Patch parcial.
+ * Body do PUT /api/v1/me (autosserviço — spec 005 US7). `name`/`email`/`telephone` editáveis; `cpf` é
+ * imutável no autosserviço (decisão USR-ME-PROFILE-FIELDS: identidade fiscal, só admin via PUT /users/:id)
+ * e o usuário comum NÃO altera `collaboratorId`/status/roles. Patch parcial — campo ausente preserva.
  */
 export const meUpdateBodySchema = z.object({
   name: z.string().min(1).optional(),
+  email: z.string().min(1).optional(),
   telephone: z.string().min(1).optional(),
 });
 

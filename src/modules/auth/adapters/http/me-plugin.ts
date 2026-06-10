@@ -32,6 +32,9 @@ export type MeHttpHooks = Readonly<{ requireAuth: preHandlerAsyncHookHandler }>;
 
 const PROFILE_VALIDATION_STATUS = {
   'name-required': 422,
+  'email-empty': 422,
+  'email-invalid-format': 422,
+  'email-too-long': 422,
   'telephone-empty': 422,
   'telephone-invalid': 422,
 } as const;
@@ -66,10 +69,11 @@ const meRoutes =
         response: { 200: userDetailResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
-        const { name, telephone } = req.body;
+        const { name, email, telephone } = req.body;
         const updated = await deps.updateUserProfile({
           id: req.userId,
           ...(name !== undefined ? { name } : {}),
+          ...(email !== undefined ? { email } : {}),
           ...(telephone !== undefined ? { telephone } : {}),
         });
         if (!updated.ok) {

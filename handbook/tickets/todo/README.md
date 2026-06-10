@@ -83,9 +83,10 @@
 > `adminDevPermissions` (derivado do catálogo, inclui `user:*` + `program:*`) + helper `buildAdminDevSeedUser`
 > em `src/modules/auth/adapters/http/dev-seed.ts`. Quickstart 005 atualizado. (closed-green 2026-06-10)
 
-**[USR-ME-PROFILE-FIELDS](./USR-ME-PROFILE-FIELDS.md) — Minha Conta: campos.** O `PUT /api/v1/me` só aceita
-`name` + `telephone` (não cpf/email). *Bloqueia no front:* CPF e E-mail ficam **read-only** no modal
-Editar Perfil.
+> **✅ Entregue:** [USR-ME-PROFILE-FIELDS](../done/USR-ME-PROFILE-FIELDS.md) — `PUT /api/v1/me` passa a
+> aceitar **e-mail** (validação VO 422 + unicidade 409). **Decisão de produto:** CPF é **imutável** no
+> autosserviço (só admin via `PUT /users/:id`) — front mantém CPF read-only, libera o e-mail. (closed-green
+> 2026-06-10)
 
 **[USR-ME-PHOTO](./USR-ME-PHOTO.md) — Foto de perfil.** Não há `/api/v1/me/photo` (só `/users/:id/photo`,
 admin) e o `POST /users` não recebe imagem. *Bloqueia no front:* "Alterar Imagem" e "Foto de Perfil"
