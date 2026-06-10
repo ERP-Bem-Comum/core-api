@@ -46,8 +46,8 @@ de contrato (aditivos, distrato, documentos) e **o que precisa ser alinhado/impl
 
 | # | Tema | O que falta | Ticket |
 |---|------|-------------|--------|
-| 1 | **Distrato rico** | `/end` deve aceitar **data efetiva** + **documento assinado** + **motivo** (hoje encerra com `endedAt = now`, sem doc/data). E ter um **`kind` distrato** (hoje colapsa em `Misc` → o front usa gambiarra de marcador). | [CTR-HTTP-DISTRATO-DOCUMENTO](./CTR-HTTP-DISTRATO-DOCUMENTO.md) |
-| 2 | **Conteúdo do documento** | Não há rota que devolva os **bytes/URL** do documento → **preview e download** ficam desabilitados (mesmo em aditivos homologados, que têm doc). Detalhe não associa **documento ↔ aditivo**. | [CTR-HTTP-DOCUMENT-CONTENT](./CTR-HTTP-DOCUMENT-CONTENT.md) |
+| 1 | **Distrato rico** ✅ | `/end` deve aceitar **data efetiva** + **documento assinado** + **motivo** (hoje encerra com `endedAt = now`, sem doc/data). E ter um **`kind` distrato** (hoje colapsa em `Misc` → o front usa gambiarra de marcador). | [CTR-HTTP-DISTRATO-DOCUMENTO](../done/CTR-HTTP-DISTRATO-DOCUMENTO.md) |
+| 2 | **Conteúdo do documento** ✅ | Não há rota que devolva os **bytes/URL** do documento → **preview e download** ficam desabilitados (mesmo em aditivos homologados, que têm doc). Detalhe não associa **documento ↔ aditivo**. | [CTR-HTTP-DOCUMENT-CONTENT](../done/CTR-HTTP-DOCUMENT-CONTENT.md) |
 | 3 | **`signed_at` do aditivo** | `ctr_amendments` não persiste data de assinatura → coluna "Assinatura" da tabela fica vazia. | (incluir no ticket de aditivos) |
 | 4 | **Subtipos de aditivo** | escopo/outro/distrato colapsam em `Misc` → na releitura perde-se o subtipo (distrato só funciona via gambiarra). | (CTR-HTTP-DISTRATO-DOCUMENTO) |
 | 5 | **Metadados do contrato** | programa, categoria, centro de custo, plano orçamentário, classificação (CT/OS) não são persistidos → aparecem como "—". | (a abrir) |

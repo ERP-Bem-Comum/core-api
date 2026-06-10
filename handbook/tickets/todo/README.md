@@ -10,16 +10,13 @@
 
 | Ticket | Tema | Resumo | Bloqueia no front |
 |---|---|---|---|
-| [CTR-HTTP-DISTRATO-DOCUMENTO](./CTR-HTTP-DISTRATO-DOCUMENTO.md) + [binding-map](./CTR-HTTP-DISTRATO-DOCUMENTO.binding-map.md) | Distrato rico | O distrato existe (`POST /contracts/:id/end` `{kind:Terminate}`) mas é "cru": não recebe **documento assinado**, **data efetiva** nem **motivo**. Religação do front ao `/end` fica com o tech lead. | Distrato efetiva de verdade (hoje a UI coleta os campos; submit ainda usa stand-in) |
-| [CTR-HTTP-DOCUMENT-CONTENT](./CTR-HTTP-DOCUMENT-CONTENT.md) | Conteúdo do documento | Não há rota que devolva **bytes/URL** do documento (só upload/supersede/delete). Detalhe não associa **documento ↔ aditivo**. | Preview e **download** (seta desabilitada mesmo em aditivos Homologado, que têm doc) |
-| [CTR-NUMBER-PROGRAM](./CTR-NUMBER-PROGRAM.md) | Numeração + metadados | `sequentialNumber` não é sequencial (BFF gera aleatório); **classificação CT/OS** e **programa/plano/categorização/centro de custo** não são persistidos nem retornados. | Número sempre **CT** (front padroniza `CT 0001/2026`); coluna **Programa** = `—` |
-| [CTR-DELETE-CANCEL](./CTR-DELETE-CANCEL.md) | Excluir/cancelar contrato | `DELETE /contracts/:id` é recusado por design (**405** `contract-delete-forbidden`); não há cancelar/soft-delete de rascunho/pendente. | Ação **Excluir** abre modal, mas **Confirmar desabilitado** (aguardando backend) |
+| [CTR-CONTRACT-METADATA-E-ADITIVOS](./CTR-CONTRACT-METADATA-E-ADITIVOS.md) | Metadados (G1 parcial) | Restam **categoria**, **centro de custo** e **plano orçamentário** no contrato (referências a outros BCs). **Programa** e **classificação CT/OS** já entregues via `CTR-NUMBER-PROGRAM`. | Detalhe exibe `—` nessas 3 dimensões |
 
-### Pendências de backend conhecidas, ainda SEM ticket (alinhamento P.O./tech lead)
-- **Persistência de metadados do contrato**: programa, categoria, centro de custo, plano orçamentário,
-  classificação (CT/OS) — não há colunas; hoje exibidos como "—" no detalhe.
-- **`signedAt` por aditivo** — o aditivo não expõe data de assinatura própria (coluna "Assinatura" fica "—").
-- **Numeração sequencial de aditivo** no backend (hoje o front exibe `AD NN-XXXX/ANO` derivado por ordem de criação).
+> **✅ Entregues nesta rodada** (movidos para [`../done/`](../done/)): `CTR-HTTP-DISTRATO-DOCUMENTO`
+> (+ binding-map), `CTR-HTTP-DOCUMENT-CONTENT`, `CTR-NUMBER-PROGRAM` (numeração CT/OS sequencial +
+> classificação + bloco programa), `CTR-HTTP-CANCEL-PENDING` (cancelar/soft-delete de pendente —
+> supersede o antigo `CTR-DELETE-CANCEL`) e os gaps de aditivo `signedAt` + numeração (G2/G3 via
+> `CTR-AMENDMENT-SIGNEDAT-AND-NUMBER`).
 
 ## 🟩 Achados RESOLVIDOS no FRONT (sem ação de backend — registro)
 
@@ -51,10 +48,11 @@
 | Ticket | Tema | Resumo | Bloqueia no front |
 |---|---|---|---|
 | [PAR-ACT-ACORDO](./PAR-ACT-ACORDO.md) | **ACT → Acordo** | Reformular o agregado ACT de pessoa-física para **Acordo de Cooperação Técnica** (Nº instrumento, vigência, instituição parceira c/ CNPJ/razão social/nome fantasia, repasse + banco/PIX; remover CPF/vínculo/início). | **Criar ACT não salva**; campos novos são placeholders gated; grid Nº/Parceiro = `—` |
-| [PAR-SUPPLIER-AVALIACAO](./PAR-SUPPLIER-AVALIACAO.md) | Fornecedor: avaliação | `serviceRating` + `ratingComment` não existem no agregado. | 2 campos gated no form/detalhe |
 | [PAR-GRID-FILTROS-EXPORT](./PAR-GRID-FILTROS-EXPORT.md) | Filtros / contagem / export | Filtros (Status de contrato; ACT Tipo/Área), coluna **Contratos/Aditivos** (contagem) e **export CSV**. | Filtros gated; coluna `—`; botão Exportar sem wiring |
 | [PAR-COLLABORATOR-GRID-GAPS](./PAR-COLLABORATOR-GRID-GAPS.md) | Colaborador: grid | Filtros do painel + coluna Contratos/Aditivos + import/export. | Filtros gated; coluna `—` |
-| [PAR-GEO-ADDED-MUNICIPALITIES](./PAR-GEO-ADDED-MUNICIPALITIES.md) | Geografia: municípios | Listar municípios parceiros de **todos os estados** (o GET exige UF). | Painel "Municípios Parceiros Adicionados" é placeholder |
+
+> **✅ Entregues nesta rodada** (movidos para [`../done/`](../done/)): `PAR-SUPPLIER-AVALIACAO`
+> (serviceRating + ratingComment) e `PAR-GEO-ADDED-MUNICIPALITIES` (municípios parceiros de todos os estados).
 
 ## 🟩 Achados RESOLVIDOS / em aberto no FRONT (sem ação de backend obrigatória — registro)
 
