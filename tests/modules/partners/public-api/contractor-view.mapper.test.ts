@@ -80,13 +80,19 @@ const aCollaborator = () => {
 const anAct = () => {
   const r = Act.register({
     id: ActId.generate(),
-    name: 'Ana Ato',
+    actNumber: 'ACT-2026-001',
+    name: 'Acordo Ana',
     email: 'ana@bemcomum.org',
-    cpf: '111.444.777-35',
+    cnpj: '11.222.333/0001-81',
+    corporateName: 'Instituição Ana LTDA',
+    fantasyName: 'Ana',
     occupationArea: 'PARC',
-    role: 'Voluntária',
-    startOfContract: new Date('2025-02-01T00:00:00.000Z'),
-    employmentRelationship: 'CLT',
+    legalRepresentative: 'Ana Representante',
+    startDate: '2026-01-01',
+    endDate: '2026-12-31',
+    hasFinancialTransfer: false,
+    bankAccount: null,
+    pixKey: null,
     registeredAt: new Date('2025-01-01T00:00:00.000Z'),
   });
   if (!r.ok) throw new Error(`fixture act: ${r.error}`);
@@ -175,16 +181,16 @@ describe('collaboratorToView', () => {
 });
 
 describe('actToView (paridade 4/4 — FR-005)', () => {
-  it('projeta nome, documento (cpf), email, papel, área + updatedAt (espelha Collaborator)', () => {
+  it('projeta nome, documento (CNPJ), email, representante legal, área + updatedAt', () => {
     const a = anAct();
     const view = actToView(a, UPDATED_AT);
 
     assert.equal(view.type, 'act');
     assert.equal(view.id, a.id as unknown as string);
-    assert.equal(view.name, 'Ana Ato');
+    assert.equal(view.name, 'Acordo Ana');
     assert.equal(view.email, 'ana@bemcomum.org');
-    assert.equal(view.document, a.cpf as unknown as string);
-    assert.equal(view.role, 'Voluntária');
+    assert.equal(view.document, a.cnpj as unknown as string);
+    assert.equal(view.role, 'Ana Representante');
     assert.equal(view.occupationArea, 'PARC');
     assert.deepEqual(view.updatedAt, UPDATED_AT);
   });

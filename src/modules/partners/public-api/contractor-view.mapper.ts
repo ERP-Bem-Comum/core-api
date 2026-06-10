@@ -53,8 +53,9 @@ export type CollaboratorView = Readonly<{
   updatedAt: Date;
 }>;
 
-// `Act` é placeholder (ADR-0036), clone enxuto de Collaborator — a View espelha
-// `CollaboratorView` (mesmos campos de pré-cadastro) até o BC de Act ganhar forma própria.
+// `Act` é o Acordo de Cooperação Técnica (instituição parceira). A View mantém o shape
+// estável do contrato cross-módulo (ADR-0006): `document` = **CNPJ** (não mais CPF) e `role`
+// carrega o `legalRepresentative` (representante legal / ponto de contato).
 export type ActView = Readonly<{
   type: 'act';
   id: string;
@@ -112,8 +113,8 @@ export const actToView = (act: Act, updatedAt: Date): ActView => ({
   id: act.id as unknown as string,
   name: act.name,
   email: act.email,
-  document: act.cpf as unknown as string,
-  role: act.role,
+  document: act.cnpj as unknown as string,
+  role: act.legalRepresentative,
   occupationArea: act.occupationArea as unknown as string,
   updatedAt,
 });

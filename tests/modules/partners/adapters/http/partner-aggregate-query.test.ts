@@ -74,17 +74,23 @@ const aCollaborator = (name: string, cpf: string) =>
     }),
   ).collaborator;
 
-const anAct = (name: string, cpf: string) =>
+const anAct = (name: string, actNumber: string) =>
   unwrap(
     Act.register({
       id: ActId.generate(),
+      actNumber,
       name,
       email: `${name.toLowerCase()}@a.org`,
-      cpf,
+      cnpj: '11.222.333/0001-81',
+      corporateName: `${name} Instituição LTDA`,
+      fantasyName: name,
       occupationArea: 'PARC',
-      role: 'Voluntário',
-      startOfContract: NOW,
-      employmentRelationship: 'CLT',
+      legalRepresentative: 'Representante Legal',
+      startDate: '2026-01-01',
+      endDate: '2026-12-31',
+      hasFinancialTransfer: false,
+      bankAccount: null,
+      pixKey: null,
       registeredAt: NOW,
     }),
   ).act;
@@ -121,7 +127,7 @@ const seed = () => ({
       updatedAt: NOW,
     },
   ],
-  acts: [{ act: anAct('Delta', '111.444.777-35'), legacyId: null, createdAt: NOW, updatedAt: NOW }],
+  acts: [{ act: anAct('Delta', 'ACT-2026-010'), legacyId: null, createdAt: NOW, updatedAt: NOW }],
 });
 
 const DEFAULT_QUERY = { page: 1, limit: 20 } as const;

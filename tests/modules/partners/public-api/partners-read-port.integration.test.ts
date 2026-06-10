@@ -87,13 +87,19 @@ const aCollaborator = () => {
 const anAct = () => {
   const r = Act.register({
     id: ActId.generate(),
-    name: 'Ana Ato',
+    actNumber: 'ACT-2026-001',
+    name: 'Acordo Ana',
     email: 'ana@bemcomum.org',
-    cpf: '111.444.777-35',
+    cnpj: '11.222.333/0001-81',
+    corporateName: 'Instituição Ana LTDA',
+    fantasyName: 'Ana',
     occupationArea: 'PARC',
-    role: 'Voluntária',
-    startOfContract: new Date('2025-02-01T00:00:00.000Z'),
-    employmentRelationship: 'CLT',
+    legalRepresentative: 'Ana Representante',
+    startDate: '2026-01-01',
+    endDate: '2026-12-31',
+    hasFinancialTransfer: false,
+    bankAccount: null,
+    pixKey: null,
     registeredAt: clock.now(),
   });
   if (!r.ok) throw new Error(`fixture act: ${r.error}`);
@@ -196,7 +202,7 @@ if (integrationEnabled()) {
       assert.equal(got.ok, true);
       if (got.ok && got.value !== null) {
         assert.equal(got.value.type, 'act');
-        assert.equal(got.value.name, 'Ana Ato');
+        assert.equal(got.value.name, 'Acordo Ana');
         assert.equal(got.value.email, 'ana@bemcomum.org');
         assert.equal(got.value.occupationArea, 'PARC');
         assert.ok(got.value.updatedAt instanceof Date);
