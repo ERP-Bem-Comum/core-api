@@ -1,10 +1,14 @@
 # EPIC-PAR-ACT-ACORDO — Reformular ACT: pessoa-física → Acordo de Cooperação Técnica
 
-> **Status:** Aberto — **decisões D1–D4 resolvidas** (2026-06-10), pronto para implementar A1. Origem:
-> `handbook/tickets/todo/PAR-ACT-ACORDO.md` (handoff
+> **Status:** ✅ **CONCLUÍDO** (2026-06-10) — entregue como **vertical única** no ticket
+> `.claude/.pipeline/PAR-ACT-ACORDO/` (closed-green). As fatias A1–A5 viraram etapas internas
+> (commits por camada `2967dc0`→`81f389d` + W2 `dcd16c7`); gate W3 global verde no fechamento.
+> Decisão de estratégia (P.O., 2026-06-10): a reescrita de forma quebra o typecheck global se
+> fatiada por camada, então foi conduzida como uma branch única. Handoff ao front registrado em
+> `.claude/.pipeline/PAR-ACT-ACORDO/006-handoff/HANDOFF.md`.
+>
+> _Histórico de planejamento abaixo._ Origem: `handbook/tickets/todo/PAR-ACT-ACORDO.md` (handoff
 > front, **prioridade alta** — maior gap de backend da rodada). Módulo `partners` (`par_*`, ADR-0014).
-> Decompõe o ticket L em fatias W0→W3 verticais por capacidade. Cada fatia abre seu próprio ticket de
-> pipeline em `.claude/.pipeline/<ID>/` na hora de implementar.
 
 ---
 
