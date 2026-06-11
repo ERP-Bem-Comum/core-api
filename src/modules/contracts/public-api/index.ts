@@ -30,6 +30,20 @@ export type {
 export { CONTRACT_PERMISSION } from './permissions.ts';
 export type { ContractPermission } from './permissions.ts';
 
+// ─── Contagem de contratos/aditivos por contratado (010 — consumido por partners) ──
+export {
+  buildContractCountReadPort,
+  makeInMemoryContractCountReadPort,
+} from './contract-count-read.ts';
+export type {
+  ContractCountReadPort,
+  ContractCountReadError,
+  ContractCountReadHandle,
+  ContractorCount,
+  ContractorType,
+  InMemoryContractCountRow,
+} from './contract-count-read.ts';
+
 // ─── Storage (DocumentStorage port + S3-compatible adapter) ─────────────────
 // ADR-0019. InMemory NAO e exposto (adapter de teste interno).
 // awsS3Config + parseAwsS3Env: builder/parser de config AWS S3.
