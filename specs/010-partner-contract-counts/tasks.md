@@ -14,13 +14,13 @@ Duas fatias independentes: **A** (contagem cross-módulo + filtro fornecedor) ·
 
 ## Phase 2 — Fatia A: read port de contagem (núcleo, R1) + filtro fornecedor (R2)
 
-- [ ] T002 [P] [A] W0 RED: `tests/modules/contracts/public-api/contract-count-read.in-memory.test.ts` —
+- [x] T002 [P] [A] W0 RED: `tests/modules/contracts/public-api/contract-count-read.in-memory.test.ts` —
       `countByContractor(type, ids)` agrupa contratos+aditivos; id sem contrato → {0,0}; sem vazamento type/id;
       `contractorIdsWithContractStatus`/`...AnyContract`.
-- [ ] T003 [A] Definir o port + tipos em `src/modules/contracts/public-api/contract-count-read.ts`
+- [x] T003 [A] Definir o port + tipos em `src/modules/contracts/public-api/contract-count-read.ts`
       (`ContractCountReadPort`, `ContractorCount`, erro) + reexport em `public-api/index.ts`.
-- [ ] T004 [A] Implementar `contract-count-read.in-memory.ts` (conta sobre store injetável; default vazio).
-- [ ] T005 [A] Implementar `contract-count-read.drizzle.ts` (2 GROUP BY + sets por status; `IN (...)`) +
+- [x] T004 [A] Implementar `contract-count-read.in-memory.ts` (conta sobre store injetável; default vazio).
+- [x] T005 [A] Implementar `contract-count-read.drizzle.ts` (2 GROUP BY + sets por status; `IN (...)`) +
       `buildContractCountReadPort` (pool próprio, falha DEGRADA — espelha `buildProgramsReadPort`).
 - [ ] T006 [P] [A] W0 RED: `tests/modules/partners/adapters/http/collaborators-list.routes.test.ts` (e
       análogos supplier/act) — item de lista traz `contractsCount`/`amendmentsCount` reais (port in-memory
