@@ -1,6 +1,7 @@
 import { ok, err } from '../../../../../shared/primitives/result.ts';
+import * as PlainDate from '../../../../../shared/kernel/plain-date.ts';
 import type { ContractId } from '../../../domain/shared/ids.ts';
-import type { Contract } from '../../../domain/contract/types.ts';
+import type { ActiveContract, Contract } from '../../../domain/contract/types.ts';
 import type {
   ContractRepository,
   ListContractsQuery,
@@ -57,6 +58,15 @@ export const InMemoryContractRepository = (
       return ok(formatSequentialNumber(next, year));
     },
     list: async () => ok([...map.values()]),
+    findExpirable: async (cutoff) =>
+      ok(
+        [...map.values()].filter(
+          (c): c is ActiveContract =>
+            c.status === 'Active' &&
+            c.currentPeriod.kind === 'Fixed' &&
+            PlainDate.isBefore(c.currentPeriod.end, cutoff),
+        ),
+      ),
     listPaged: async (query) => {
       const filtered = [...map.values()]
         .filter((c) => matchesQuery(c, query))

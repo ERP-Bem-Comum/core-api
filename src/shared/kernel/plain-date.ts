@@ -56,6 +56,14 @@ export const fromDate = (d: Date): PlainDate =>
     day: d.getUTCDate(),
   }) as PlainDate;
 
+/**
+ * Data-calendário de um instante vista num fuso de **offset fixo** (em minutos).
+ * Ex.: Brasília (UTC-3, sem DST desde 2019) → `offsetMinutes = -180`. Desloca o instante
+ * pelo offset e extrai a data-calendário UTC resultante — i.e., a data local naquele fuso.
+ */
+export const fromDateAtOffsetMinutes = (d: Date, offsetMinutes: number): PlainDate =>
+  fromDate(new Date(d.getTime() + offsetMinutes * 60_000));
+
 /** Espelha `Temporal.PlainDate.compare` (estático): -1 antes, 0 igual, 1 depois. */
 export const compare = (a: PlainDate, b: PlainDate): -1 | 0 | 1 => {
   if (a.year !== b.year) return a.year < b.year ? -1 : 1;

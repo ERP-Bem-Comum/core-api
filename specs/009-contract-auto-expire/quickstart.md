@@ -23,7 +23,7 @@ devolver `Finalizado` assim que o sweep roda.
    `GET /api/v2/contracts/<id>` retorna `status: "Expired"`.
 2. **Borda D+1**: um contrato com `end = hoje (BRT)` permanece `Active` hoje; finaliza amanhã.
 3. **Não-elegíveis**: contratos `Pending`/`Terminated`/`Cancelled` e os de vigência `Indefinite` não mudam.
-4. **Evento**: a finalização automática insere `ContractExpired` no outbox (entregue como no encerramento
+4. **Evento**: a finalização automática insere `ContractEnded (kind 'Expired')` no outbox (entregue como no encerramento
    manual).
 5. **Idempotência**: rodar o sweep 2× seguidas não re-expira nem duplica eventos.
 

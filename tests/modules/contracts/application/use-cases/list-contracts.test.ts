@@ -91,6 +91,7 @@ describe('listContracts (paginado) — CTR-HTTP-CONTRACT-LIST-FILTERS', () => {
       nextSequentialNumber: () => Promise.resolve({ ok: true, value: '0001/2026' }),
       list: () => Promise.resolve({ ok: true, value: [] }),
       listPaged: () => Promise.resolve({ ok: false, error: 'contract-repo-unavailable' }),
+      findExpirable: () => Promise.resolve({ ok: true, value: [] }),
       save: () => Promise.resolve({ ok: true, value: undefined }),
     };
     const useCase = listContracts({ contractRepo: failing });

@@ -163,7 +163,7 @@ seriam finalizados um dia cedo demais (no próprio dia em que ainda valem).
 - **Novos agregados / Value Objects?**: Nenhum agregado novo. Reusa a transição `Contract.expire` (domínio
   existente) e os VOs `Period`/`PlainDate`. Provável **novo use case de aplicação** (varredura/expiração em
   lote) — orquestração, não regra nova.
-- **Novos eventos de domínio (outbox)?**: Nenhum novo — reaproveita `ContractExpired` (já emitido pelo
+- **Novos eventos de domínio (outbox)?**: Nenhum novo — reaproveita `ContractEnded (kind 'Expired')` (já emitido pelo
   encerramento por expiração). Entrega via outbox (ADR-0015).
 - **Novos subcomandos de CLI?**: N/A (CLI embutida removida — ADR-0037). O processo automático é hospedado
   fora da borda HTTP.

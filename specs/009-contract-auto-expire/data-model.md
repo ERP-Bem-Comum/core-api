@@ -1,7 +1,7 @@
 # Phase 1 — Data Model: Expiração automática de contratos
 
 **Sem entidades novas e sem mudança de schema.** Reaproveita o agregado `Contract` e o evento
-`ContractExpired` existentes. Esta seção documenta o **predicado de elegibilidade** e os estados.
+`ContractEnded (kind 'Expired')` existentes. Esta seção documenta o **predicado de elegibilidade** e os estados.
 
 ## Entidades (existentes)
 
@@ -20,7 +20,7 @@ Campos relevantes a esta feature (já existentes):
 **Transição de estado** (já existente, reusada):
 
 ```
-Active --(Contract.expire(active, at), at-as-instant)--> Expired   [emite ContractExpired; popula endedAt]
+Active --(Contract.expire(active, at), at-as-instant)--> Expired   [emite ContractEnded (kind 'Expired'); popula endedAt]
 ```
 
 Estados **não-elegíveis**: `Pending`, `Terminated`, `Cancelled`, e `Active` com `currentPeriod.kind =
@@ -44,7 +44,7 @@ elegível(contract) ⟺
 
 ## Evento de domínio (existente)
 
-`ContractExpired` — já emitido pelo encerramento manual por expiração. Entregue via outbox (`save(contract,
+`ContractEnded (kind 'Expired')` — já emitido pelo encerramento manual por expiração. Entregue via outbox (`save(contract,
 [event])`). **Nenhum evento novo.**
 
 ## Read-model / leitura

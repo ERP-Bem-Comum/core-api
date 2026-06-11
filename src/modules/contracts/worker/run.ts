@@ -11,8 +11,11 @@ import process from 'node:process';
 import { ClockReal } from '../../../shared/adapters/clock-real.ts';
 import { openMysql } from '../adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleOutboxRepository } from '../adapters/persistence/repos/outbox-repository.drizzle.ts';
+import { createDrizzleContractRepository } from '../adapters/persistence/repos/contract-repository.drizzle.ts';
 import { LoggerEventDelivery } from '../adapters/event-delivery/event-delivery.logger.ts';
+import { expireDueContracts } from '../application/use-cases/expire-due-contracts.ts';
 import { runLoop } from './outbox-worker.ts';
+import { runExpireScheduler } from './expire-scheduler.ts';
 import { readWorkerConfig } from './config.ts';
 
 const EX_CONFIG = 78; // sysexits.h — erro de configuração.
@@ -36,6 +39,9 @@ const main = async (): Promise<number> => {
   const handle = handleR.value;
   const outbox = createDrizzleOutboxRepository(handle);
   const delivery = LoggerEventDelivery(config.consumerId, config.logFile);
+  // 009-contract-auto-expire: sweep de expiração sobre o MESMO pool, em paralelo ao loop de outbox.
+  const contractRepo = createDrizzleContractRepository(handle);
+  const expire = expireDueContracts({ contractRepo, clock: ClockReal() });
 
   // Graceful shutdown: SIGTERM/SIGINT abortam o loop; runLoop retorna no fim da iteração.
   const controller = new AbortController();
@@ -49,14 +55,25 @@ const main = async (): Promise<number> => {
   process.stderr.write(
     `[outbox-worker] iniciando — batch=${config.loop.batchSize} maxAttempts=${config.loop.maxAttempts} ` +
       `pollMs=${config.loop.pollIntervalMs} idleMs=${config.loop.idleSleepMs ?? config.loop.pollIntervalMs} ` +
-      `consumer=${config.consumerId}\n`,
+      `consumer=${config.consumerId} expireSweepMs=${config.expireSweepMs}\n`,
   );
 
   try {
-    const stats = await runLoop(
-      { outbox, delivery, clock: ClockReal(), abortSignal: controller.signal },
-      config.loop,
-    );
+    // Outbox loop + sweep de expiração rodam concorrentes; ambos param no mesmo AbortSignal.
+    const [stats] = await Promise.all([
+      runLoop(
+        { outbox, delivery, clock: ClockReal(), abortSignal: controller.signal },
+        config.loop,
+      ),
+      runExpireScheduler(
+        {
+          expire,
+          abortSignal: controller.signal,
+          log: (m) => process.stderr.write(`${m}\n`),
+        },
+        config.expireSweepMs,
+      ),
+    ]);
     process.stderr.write(`[outbox-worker] shutdown limpo — stats: ${JSON.stringify(stats)}\n`);
     return 0;
   } catch (cause) {

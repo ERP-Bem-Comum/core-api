@@ -1,6 +1,7 @@
 import type { Result } from '../../../../shared/primitives/result.ts';
+import type { PlainDate } from '../../../../shared/kernel/plain-date.ts';
 import type { ContractId } from '../shared/ids.ts';
-import type { Contract, ContractStatus } from './types.ts';
+import type { ActiveContract, Contract, ContractStatus } from './types.ts';
 import type { OutboxAppendError } from '../../application/ports/outbox.ts';
 import type { ContractsModuleEvent } from '../../application/ports/event-bus.ts';
 
@@ -48,6 +49,12 @@ export type ContractRepository = Readonly<{
   // Números são monotônicos por ano; gaps são aceitáveis (semântica de sequência).
   nextSequentialNumber: (year: number) => Promise<Result<string, ContractRepositoryError>>;
   list: () => Promise<Result<readonly Contract[], ContractRepositoryError>>;
+  // 009-contract-auto-expire: contratos elegíveis a expiração automática — Active, vigência
+  // `Fixed`, `current_period_end < cutoff` (cutoff = data-corrente no fuso de operação, BRT).
+  // Drizzle filtra no SQL (indexável); InMemory replica o predicado.
+  findExpirable: (
+    cutoff: PlainDate,
+  ) => Promise<Result<readonly ActiveContract[], ContractRepositoryError>>;
   // CTR-HTTP-CONTRACT-LIST-FILTERS — leitura filtrada/paginada no banco
   // (WHERE/ORDER BY/LIMIT/OFFSET + COUNT). InMemory replica em memória.
   listPaged: (query: ListContractsQuery) => Promise<Result<ContractPage, ContractRepositoryError>>;

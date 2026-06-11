@@ -1,12 +1,13 @@
-import { and, asc, desc, eq, inArray, like, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, like, lt, or, sql, type SQL } from 'drizzle-orm';
 
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
+import type { PlainDate } from '../../../../../shared/kernel/plain-date.ts';
 import type {
   ContractRepository,
   ContractRepositoryError,
   ListContractsQuery,
 } from '../../../domain/contract/repository.ts';
-import type { Contract } from '../../../domain/contract/types.ts';
+import type { ActiveContract, Contract } from '../../../domain/contract/types.ts';
 import type { ContractId } from '../../../domain/shared/ids.ts';
 import type { ContractsModuleEvent } from '../../../application/ports/event-bus.ts';
 import type { MysqlHandle } from '../drivers/mysql-driver.ts';
@@ -246,6 +247,55 @@ export const createDrizzleContractRepository = (
           results.push(r.value);
         }
         return results as readonly Contract[];
+      }),
+
+    // 009-contract-auto-expire — contratos elegíveis a expiração automática.
+    //   SELECT ... WHERE status='Active' AND current_period_kind='Fixed'
+    //               AND current_period_end < :cutoff
+    // + junction (homologated amendments) por IN, reconstrói os agregados. Volume modesto
+    // (contratos vencendo por dia) → sem paginação; índice (status,current_period_end) opcional.
+    findExpirable: async (cutoff: PlainDate) =>
+      safe('findExpirable', async () => {
+        const cutoffDate = new Date(Date.UTC(cutoff.year, cutoff.month - 1, cutoff.day));
+        const rows = await db
+          .select()
+          .from(schema.contracts)
+          .where(
+            and(
+              eq(schema.contracts.status, 'Active'),
+              eq(schema.contracts.currentPeriodKind, 'Fixed'),
+              lt(schema.contracts.currentPeriodEnd, cutoffDate),
+            ),
+          );
+        if (rows.length === 0) return [] as readonly ActiveContract[];
+
+        const ids = rows.map((r) => r.id);
+        const links = await db
+          .select({
+            contractId: schema.contractHomologatedAmendments.contractId,
+            amendmentId: schema.contractHomologatedAmendments.amendmentId,
+          })
+          .from(schema.contractHomologatedAmendments)
+          .where(inArray(schema.contractHomologatedAmendments.contractId, ids));
+
+        const byContract = new Map<string, string[]>();
+        for (const link of links) {
+          const arr = byContract.get(link.contractId) ?? [];
+          arr.push(link.amendmentId);
+          byContract.set(link.contractId, arr);
+        }
+
+        const out: ActiveContract[] = [];
+        for (const row of rows) {
+          const homologatedIds = (byContract.get(row.id) ?? []).map((amendmentId) => ({
+            amendmentId,
+          }));
+          const r = buildContract(row, homologatedIds);
+          if (!r.ok) throw new Error(JSON.stringify(r.error));
+          // O WHERE garante status='Active'; o narrowing satisfaz o tipo do port.
+          if (r.value.status === 'Active') out.push(r.value);
+        }
+        return out as readonly ActiveContract[];
       }),
 
     // CTR-HTTP-CONTRACT-LIST-FILTERS — listagem filtrada/paginada NO BANCO.

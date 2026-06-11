@@ -5,7 +5,7 @@ aqui ficam consolidadas no formato Decisão/Rationale/Alternativas.
 
 ## D1 — Sweep agendado vs. status derivado na leitura
 
-- **Decisão**: **Sweep agendado** que persiste `Expired` e emite `ContractExpired`.
+- **Decisão**: **Sweep agendado** que persiste `Expired` e emite `ContractEnded (kind 'Expired')`.
 - **Rationale**: mantém o estado real no banco e dispara o evento (paridade com o encerramento manual,
   ADR-0015). Operações que guardam por status (ex.: criar aditivo) passam a ver o estado correto.
 - **Alternativas**: _derivação por data só na leitura_ — rejeitada: gera **estado divergente** (banco
@@ -16,7 +16,7 @@ aqui ficam consolidadas no formato Decisão/Rationale/Alternativas.
 - **Decisão**: reusar **`Contract.expire(active, at)`** (já existente, `domain/contract/contract.ts:239`),
   via um novo use case de aplicação que itera os elegíveis.
 - **Rationale**: não duplica regra (V — domínio puro); `expire` já constrói `ExpiredContract`, popula
-  `endedAt` e emite `ContractExpired`. O use case só orquestra (validar→fetch→transição→save).
+  `endedAt` e emite `ContractEnded (kind 'Expired')`. O use case só orquestra (validar→fetch→transição→save).
 - **Alternativas**: lógica nova de expiração no use case/adapter — rejeitada (duplicação + risco de
   divergência de invariante).
 

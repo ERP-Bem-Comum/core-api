@@ -135,6 +135,9 @@ AUTH_SEED_JSON={"users":[{"email":"admin@bemcomum.dev","password":"Str0ng-Passph
 # Reusa CONTRACTS_DATABASE_URL. Defaults seguros; ajuste se quiser:
 # OUTBOX_POLL_MS=1000
 # OUTBOX_BATCH_SIZE=10
+# Expiração automática de contratos (spec 009): intervalo do sweep que finaliza
+# contratos vencidos (Active → Expired, borda D+1 em UTC-3). Default 1 h.
+# CONTRACTS_EXPIRE_SWEEP_MS=3600000
 ```
 
 > **Como preencher a senha:** `cat secrets/mysql_app_password.txt` e cole no lugar de

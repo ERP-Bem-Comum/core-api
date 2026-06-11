@@ -14,6 +14,8 @@ export type WorkerRuntimeConfig = Readonly<{
   logFile: string | undefined;
   /** Parâmetros do loop (batch, retries, backoff). */
   loop: WorkerConfig;
+  /** 009-contract-auto-expire: intervalo (ms) entre varreduras de expiração. Default 1 h. */
+  expireSweepMs: number;
 }>;
 
 export type WorkerConfigError =
@@ -21,7 +23,8 @@ export type WorkerConfigError =
   | 'worker-invalid-batch-size'
   | 'worker-invalid-max-attempts'
   | 'worker-invalid-poll-ms'
-  | 'worker-invalid-idle-sleep-ms';
+  | 'worker-invalid-idle-sleep-ms'
+  | 'worker-invalid-expire-sweep-ms';
 
 const positiveIntOr = (raw: string | undefined, fallback: number): number | null => {
   if (raw === undefined || raw === '') return fallback;
@@ -49,6 +52,8 @@ export const readWorkerConfig = (
   if (pollIntervalMs === null) return err('worker-invalid-poll-ms');
   const idleSleepMs = positiveIntOr(env['OUTBOX_IDLE_SLEEP_MS'], 500);
   if (idleSleepMs === null) return err('worker-invalid-idle-sleep-ms');
+  const expireSweepMs = positiveIntOr(env['CONTRACTS_EXPIRE_SWEEP_MS'], 3_600_000);
+  if (expireSweepMs === null) return err('worker-invalid-expire-sweep-ms');
 
   const consumerId =
     env['OUTBOX_CONSUMER_ID'] !== undefined && env['OUTBOX_CONSUMER_ID'] !== ''
@@ -64,5 +69,6 @@ export const readWorkerConfig = (
     consumerId,
     logFile,
     loop: { batchSize, maxAttempts, pollIntervalMs, idleSleepMs },
+    expireSweepMs,
   });
 };

@@ -9,7 +9,7 @@
 Operacionalizar a transição **Active → Expired** que hoje só dispara manualmente. Abordagem: um **sweep
 agendado** hospedado no **worker de outbox existente** (`worker/run.ts`) que, em cada tick, busca os
 contratos elegíveis (Active, vigência `Fixed`, `current_period_end < hoje_BRT`) e aplica a transição de
-domínio **`Contract.expire`** já existente, persistindo o estado **e** o evento `ContractExpired` na mesma
+domínio **`Contract.expire`** já existente, persistindo o estado **e** o evento `ContractEnded (kind 'Expired')` na mesma
 transação (via `contractRepo.save(contract, [event])` — ADR-0015). Borda D+1 calculada no fuso de Brasília
 (UTC-3 fixo). Sem novo agregado, sem novo evento, sem mudança no fluxo manual `/end {Expire}`.
 
@@ -109,7 +109,7 @@ um `ContractRepository` Drizzle (além do outbox repo) sobre o **mesmo pool**, p
   existentes). Índice de performance `(status, current_period_end)` é **opcional** — se adotado, vira
   migration via `pnpm run db:generate` e decisão em `tasks.md` (não bloqueia correção).
 - **Prefixo de isolamento**: `ctr_*` — OK (ADR-0014).
-- **Outbox**: **não** há evento novo — reaproveita `ContractExpired`, já inserido em `core.outbox` pelo
+- **Outbox**: **não** há evento novo — reaproveita `ContractEnded (kind 'Expired')`, já inserido em `core.outbox` pelo
   `save(contract, [event])` existente.
 - **Restrições MySQL 8 (ADR-0020)**: respeitadas (sem JSON/trigger/proc/ENUM).
 
