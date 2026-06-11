@@ -7,7 +7,7 @@
 
 <!-- SPECKIT START -->
 
-Plano corrente: `specs/009-contract-auto-expire/plan.md` (expiração automática de contratos: sweep no worker de outbox que aplica `Contract.expire` aos contratos vencidos — Active+Fixed, `current_period_end < hoje_BRT`; borda D+1 em UTC-3; reusa evento `ContractExpired`; sem schema/HTTP novos; ver `research.md`, `data-model.md`, `contracts/internal-contracts.md`).
+Plano corrente: `specs/010-partner-contract-counts/plan.md` (contagem de contratos/aditivos por parceiro nos grids: novo read port `ContractCountReadPort` em `contracts/public-api` — contagem em lote por contratado, consumido por partners na borda HTTP; + vínculo Colaborador↔Programa por ID com migration `par_collaborators.program_id`; + filtros `contractStatus` (Fornecedor) e `programIds` (Colaborador). Feature L, 3 BCs. Ver `research.md`, `data-model.md`, `contracts/internal-contracts.md`).
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan.
 
