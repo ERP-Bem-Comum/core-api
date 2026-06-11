@@ -11,6 +11,17 @@ permanece "Em Andamento" (Active) indefinidamente; a transição para "Finalizad
 é acionada manualmente. Caso observado: **CT 0776/2026** (`fim de vigência = 2026-06-10`), exibido como
 "Em Andamento" no dia 10/06 e nos dias seguintes.
 
+## Clarifications
+
+### Session 2026-06-11
+
+- Q: Escopo da borda D+1 — só na expiração automática ou também na guarda do encerramento manual? → A:
+  **Só no sweep automático.** A guarda do domínio do encerramento manual (`/end {Expire}`) fica inalterada
+  (continua permitindo finalizar no próprio dia da data-fim).
+- Q: Qual fuso define o "hoje" do corte D+1? → A: **Persistência/instantes em UTC**, mas a **lógica do corte
+  converte para o fuso de Brasília (UTC-3 fixo)** — o job calcula a data-corrente em America/Sao_Paulo
+  (offset fixo `-03:00`, sem DST desde 2019) e aplica o D+1 sobre ela.
+
 ## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Contrato vencido aparece como Finalizado sem ação manual (Priority: P1)
@@ -90,8 +101,8 @@ seriam finalizados um dia cedo demais (no próprio dia em que ainda valem).
   duplicados.
 - **Falha individual**: se a finalização de um contrato falhar (ex.: indisponibilidade momentânea), os
   demais contratos elegíveis ainda devem ser finalizados; a falha é registrada para nova tentativa.
-- **Data de referência**: o "hoje" que define o corte é uma data-calendário (sem hora/fuso ambíguo) — ver
-  Assumptions.
+- **Data de referência (fuso)**: o "hoje" que define o corte é a data-calendário no fuso de **Brasília
+  (UTC-3 fixo)**, embora instantes sejam persistidos em UTC — ver Clarifications/Assumptions.
 - **Contrato com aditivos**: a vigência considerada é a **vigência efetiva atual** (após aditivos
   homologados), não a original.
 
@@ -107,7 +118,11 @@ seriam finalizados um dia cedo demais (no próprio dia em que ainda valem).
 - **FR-003**: O sistema MUST NÃO afetar contratos em "Rascunho", "Distratado" ou "Cancelado", nem contratos
   com vigência indefinida (sem data-fim).
 - **FR-004**: A borda da data-fim MUST seguir a convenção "válido até o fim do último dia": um contrato só é
-  finalizado a partir do dia seguinte ao fim da vigência (D+1).
+  finalizado a partir do dia seguinte ao fim da vigência (D+1). A **data corrente** que define o corte MUST
+  ser a data-calendário no fuso de **Brasília (UTC-3 fixo, sem DST)** — um contrato é elegível quando seu fim
+  de vigência é **estritamente anterior** ao "hoje em Brasília" (instantes seguem sendo persistidos em UTC).
+  Esta borda D+1 aplica-se **apenas à finalização automática**; a guarda do encerramento **manual**
+  (`/end {Expire}`) permanece inalterada (permite finalizar no próprio dia da data-fim).
 - **FR-005**: O processo de expiração automática MUST ser idempotente — execuções repetidas não produzem
   erros nem eventos/efeitos duplicados.
 - **FR-006**: Após a finalização automática, as leituras de lista e de detalhe do contrato MUST refletir o
@@ -165,12 +180,11 @@ seriam finalizados um dia cedo demais (no próprio dia em que ainda valem).
 - **Abordagem**: **sweep agendado** (varre e finaliza, persistindo o estado e emitindo o evento), e **não**
   derivação de status por data apenas na leitura — esta última geraria estado divergente (banco continua
   "Em Andamento", evento nunca dispara) e foi descartada no ticket.
-- **Data de referência (fuso) do corte D+1**: usa data-calendário em **UTC** (consistente com o tratamento
-  de datas-calendário do sistema). Caso a operação seja referenciada ao fuso de Brasília, ajustar — item a
-  validar no `/speckit-clarify`.
-- **Escopo da borda D+1**: aplica-se à **finalização automática** (corte do sweep em D+1). Se o D+1 deve
-  também alterar a guarda do encerramento **manual** por expiração (que hoje permite finalizar no próprio
-  dia da data-fim), é decisão de produto a validar no `/speckit-clarify` — assumido aqui como **apenas o
-  automático**, sem mudar o fluxo manual.
+- **Data de referência (fuso) do corte D+1** _(resolvido — Clarifications 2026-06-11)_: instantes/persistência
+  seguem **UTC**, mas o cálculo do corte converte o "hoje" para o **fuso de Brasília (UTC-3 fixo, `-03:00`,
+  sem DST desde 2019)**. O job determina a data-corrente em America/Sao_Paulo e aplica o D+1 sobre ela.
+- **Escopo da borda D+1** _(resolvido — Clarifications 2026-06-11)_: aplica-se **apenas à finalização
+  automática**; a guarda do encerramento **manual** por expiração permanece como está (permite finalizar no
+  próprio dia). Sem mudança no fluxo `/end {Expire}`.
 - **Front**: nenhuma mudança — a UI reflete fielmente o status do backend; ao receber "Finalizado", atualiza
   sozinha.

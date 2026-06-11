@@ -35,9 +35,10 @@
 
 ## Notes
 
-- **2 pontos para o `/speckit-clarify` formalizarem** (já assumidos como default, não bloqueantes):
-  1. **Fuso da data de referência** do corte D+1 (UTC assumido vs. America/Sao_Paulo).
-  2. **Escopo do D+1**: só na finalização automática (assumido) ou também na guarda do encerramento
-     **manual** por expiração.
-- Demais decisões (sweep vs. derivação-na-leitura; cadência no worker de outbox) já resolvidas no ticket e
-  registradas em `Assumptions`.
+- ✅ **Clarifications resolvidas (Session 2026-06-11):**
+  1. **Fuso da data de referência**: instantes em UTC, mas o corte D+1 é calculado no fuso de Brasília
+     (UTC-3 fixo, `-03:00`). → encodado em FR-004 + Clarifications.
+  2. **Escopo do D+1**: apenas a finalização automática; guarda do encerramento manual inalterada. →
+     encodado em FR-004 + Clarifications.
+- Demais decisões (sweep vs. derivação-na-leitura; cadência no worker de outbox) resolvidas no ticket e
+  registradas em `Assumptions`. **Cadência** (intervalo exato do tick) fica para o `/speckit-plan`.
