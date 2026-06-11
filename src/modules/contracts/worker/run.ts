@@ -69,7 +69,9 @@ const main = async (): Promise<number> => {
         {
           expire,
           abortSignal: controller.signal,
-          log: (m) => process.stderr.write(`${m}\n`),
+          log: (m) => {
+            process.stderr.write(`${m}\n`);
+          },
         },
         config.expireSweepMs,
       ),

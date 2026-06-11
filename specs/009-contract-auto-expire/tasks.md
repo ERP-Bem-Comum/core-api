@@ -84,8 +84,8 @@ clock.now(), -180)` → `findExpirable` → para cada: `Contract.expire(active, 
 - [ ] T019 [P] Integração: cobrir `findExpirable` no MySQL real (suite atrás de `pnpm run test:integration`).
       **Deferida ao pré-merge** — lógica coberta por unit (in-memory); SQL é `WHERE` direto. Rodar
       `pnpm run test:integration` antes do merge (constituição §Development Workflow).
-- [ ] T020 Mover o card `handbook/tickets/todo/CTR-CONTRACT-AUTO-EXPIRE.md` → `done/` ao fechar (após W3 verde).
-- [ ] T021 Gate W3 (`/speckit-verify`): `typecheck` + `format:check` + `lint` + `test` verdes.
+- [x] T020 Mover o card `handbook/tickets/todo/CTR-CONTRACT-AUTO-EXPIRE.md` → `done/` ao fechar (após W3 verde).
+- [x] T021 Gate W3 (`/speckit-verify`): `typecheck` + `format:check` + `lint` + `test` verdes.
 
 ---
 

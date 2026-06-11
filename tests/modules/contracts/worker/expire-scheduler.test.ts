@@ -18,12 +18,14 @@ describe('runExpireScheduler', () => {
 
     await runExpireScheduler(
       {
-        expire: async () => {
+        expire: () => {
           calls += 1;
-          return ok({ scanned: 2, expired: 1, failures: [] });
+          return Promise.resolve(ok({ scanned: 2, expired: 1, failures: [] }));
         },
         abortSignal: controller.signal,
-        log: (m) => logs.push(m),
+        log: (m) => {
+          logs.push(m);
+        },
       },
       3_600_000,
     );

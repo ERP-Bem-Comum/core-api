@@ -2,6 +2,8 @@
 // Roda `expire()` em ciclo, dorme `intervalMs` entre execuções e encerra ao receber o AbortSignal
 // (graceful shutdown). Loga a contagem por ciclo. Falha de um ciclo é logada; o próximo tenta de novo.
 
+import { setTimeout as delay } from 'node:timers/promises';
+
 import type { Result } from '../../../shared/primitives/result.ts';
 import type { ExpireDueContractsResult } from '../application/use-cases/expire-due-contracts.ts';
 import type { ContractRepositoryError } from '../domain/contract/repository.ts';
@@ -12,30 +14,14 @@ export type ExpireSchedulerDeps = Readonly<{
   log: (message: string) => void;
 }>;
 
-// Sleep abortável: resolve no timeout OU no abort (o que vier antes), sem deixar timer/listener pendurado.
-const abortableSleep = (ms: number, signal: AbortSignal): Promise<void> =>
-  new Promise((resolve) => {
-    if (signal.aborted) {
-      resolve();
-      return;
-    }
-    const onAbort = (): void => {
-      clearTimeout(timer);
-      resolve();
-    };
-    const timer = setTimeout(() => {
-      signal.removeEventListener('abort', onAbort);
-      resolve();
-    }, ms);
-    signal.addEventListener('abort', onAbort, { once: true });
-  });
-
 export const runExpireScheduler = async (
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types -- AbortSignal é mutável por design
   deps: ExpireSchedulerDeps,
   intervalMs: number,
 ): Promise<void> => {
-  // do-while: roda ao menos um ciclo, mesmo se o abort chegar durante o boot.
-  do {
+  // Loop infinito com breaks explícitos: roda ao menos um ciclo (mesmo se o abort chegar no boot)
+  // e encerra no abort (logo após o sweep ou durante o sleep).
+  for (;;) {
     const r = await deps.expire();
     if (r.ok) {
       deps.log(
@@ -43,9 +29,14 @@ export const runExpireScheduler = async (
           `failures=${r.value.failures.length}`,
       );
     } else {
-      deps.log(`[expire-sweep] erro de varredura: ${r.error}`);
+      deps.log(`[expire-sweep] erro de varredura: ${JSON.stringify(r.error)}`);
     }
     if (deps.abortSignal.aborted) break;
-    await abortableSleep(intervalMs, deps.abortSignal);
-  } while (!deps.abortSignal.aborted);
+    try {
+      // `delay` rejeita com AbortError no shutdown → encerra o loop sem timer pendurado.
+      await delay(intervalMs, undefined, { signal: deps.abortSignal });
+    } catch {
+      break;
+    }
+  }
 };
