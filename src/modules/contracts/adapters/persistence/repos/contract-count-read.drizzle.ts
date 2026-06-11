@@ -2,7 +2,7 @@
 // contratos por contratado + aditivos via JOIN). Conta todos os estados. `selectDistinct` para os filtros
 // R2. Boundary: try/catch → Result (zero throw). ADR-0014 (só `ctr_*`). ADR-0020 (COUNT/GROUP BY/JOIN ok).
 
-import { and, eq, inArray, sql } from 'drizzle-orm';
+import { and, eq, inArray, sql, type SQL } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
@@ -28,9 +28,13 @@ export const createDrizzleContractCountReadStore = (
 
   const distinctIds = async (
     scope: string,
-    where: ReturnType<typeof and>,
+    type: ContractorType,
+    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types -- SQL (drizzle) é mutável por design
+    extra?: SQL,
   ): Promise<Result<ReadonlySet<string>, ContractCountReadError>> => {
     try {
+      const where =
+        extra === undefined ? eq(c.contractorType, type) : and(eq(c.contractorType, type), extra);
       const rows = await db.selectDistinct({ id: c.contractorId }).from(c).where(where);
       return ok(new Set(rows.map((r) => r.id)));
     } catch (cause) {
@@ -60,11 +64,11 @@ export const createDrizzleContractCountReadStore = (
         for (const id of ids) map.set(id, { contracts: 0, amendments: 0 });
         for (const row of contractRows) {
           const e = map.get(row.id);
-          if (e) e.contracts = Number(row.n);
+          if (e !== undefined) e.contracts = row.n;
         }
         for (const row of amendmentRows) {
           const e = map.get(row.id);
-          if (e) e.amendments = Number(row.n);
+          if (e !== undefined) e.amendments = row.n;
         }
         return ok(map);
       } catch (cause) {
@@ -74,9 +78,8 @@ export const createDrizzleContractCountReadStore = (
     },
 
     contractorIdsWithContractStatus: async (type: ContractorType, status: ContractStatus) =>
-      distinctIds('withStatus', and(eq(c.contractorType, type), eq(c.status, status))),
+      distinctIds('withStatus', type, eq(c.status, status)),
 
-    contractorIdsWithAnyContract: async (type: ContractorType) =>
-      distinctIds('anyContract', and(eq(c.contractorType, type))),
+    contractorIdsWithAnyContract: async (type: ContractorType) => distinctIds('anyContract', type),
   };
 };
