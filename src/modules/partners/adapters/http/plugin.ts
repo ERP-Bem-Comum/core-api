@@ -37,6 +37,7 @@ import {
   collaboratorsForExport,
 } from './collaborator-list-query.ts';
 import { collaboratorsToCsv } from '../export/collaborator-csv.ts';
+import { attachContractCounts } from './contract-counts.ts';
 import {
   collaboratorListQuerySchema,
   collaboratorPaginatedSchema,
@@ -139,11 +140,12 @@ const collaboratorsRoutes =
           });
         }
         const page = paginateRecords(result.value, queryToFilter(req.query), req.query);
-        return sendResult(
-          reply,
-          ok({ items: page.items.map(collaboratorToDetailDto), meta: page.meta }),
-          { ok: 200 },
+        const items = await attachContractCounts(
+          deps.contractCountRead,
+          'collaborator',
+          page.items.map(collaboratorToDetailDto),
         );
+        return sendResult(reply, ok({ items, meta: page.meta }), { ok: 200 });
       },
     });
 

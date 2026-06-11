@@ -41,6 +41,7 @@ export type {
   ContractCountReadHandle,
   ContractorCount,
   ContractorType,
+  ContractStatus,
   InMemoryContractCountRow,
 } from './contract-count-read.ts';
 

@@ -22,16 +22,20 @@ Duas fatias independentes: **A** (contagem cross-módulo + filtro fornecedor) ·
 - [x] T004 [A] Implementar `contract-count-read.in-memory.ts` (conta sobre store injetável; default vazio).
 - [x] T005 [A] Implementar `contract-count-read.drizzle.ts` (2 GROUP BY + sets por status; `IN (...)`) +
       `buildContractCountReadPort` (pool próprio, falha DEGRADA — espelha `buildProgramsReadPort`).
-- [ ] T006 [P] [A] W0 RED: `tests/modules/partners/adapters/http/collaborators-list.routes.test.ts` (e
-      análogos supplier/act) — item de lista traz `contractsCount`/`amendmentsCount` reais (port in-memory
-      semeado); **1** chamada de contagem por página.
-- [ ] T007 [A] Injetar `contractCountRead` em `PartnersHttpDeps` (`composition.ts`) + compor as contagens nos
-      list items de collaborator/supplier/act (`*-dto.ts`, `*-schemas.ts`, plugins) — degrada para 0 se o port falha.
-- [ ] T008 [P] [A] W0 RED: supplier list — filtro `contractStatus` (com/sem contrato em estado X).
-- [ ] T009 [A] Implementar o filtro `contractStatus` no `supplier-list-query.ts`/`supplier-schemas.ts` (pré-
-      filtra ids via `contractorIdsWithContractStatus`/`...AnyContract`).
-- [ ] T010 [A] Wirar `buildContractCountReadPort` (mysql) em `src/server.ts` → `buildPartnersHttpDeps`
-      (memory → in-memory vazio).
+- [x] T006 [P] [A] W0 RED: `tests/modules/partners/adapters/http/partners-list-contract-counts.routes.test.ts`
+      — item de lista (collaborator/supplier/act) traz `contractsCount`/`amendmentsCount` reais (port in-memory
+      semeado via `contractCountRead`); **1** chamada de `countByContractor` por página (spy).
+- [x] T007 [A] Injetar `contractCountRead` em `PartnersHttpDeps` (`composition.ts`) + compor as contagens nos
+      list items de collaborator/supplier/act (helper `contract-counts.ts`; `*ListItemSchema` em `*-schemas.ts`;
+      plugins) — degrada para 0/0 se o port falha.
+- [x] T008 [P] [A] W0 RED: supplier list — filtro `contractStatus`
+      (`tests/.../suppliers-contract-status-filter.routes.test.ts`): estado X → só com contrato nesse estado;
+      `none` → só sem contrato; ausência → não filtra.
+- [x] T009 [A] Implementar o filtro `contractStatus` no `supplier-list-query.ts`/`supplier-schemas.ts`
+      (`resolveContractStatusFilter` pré-filtra ids via `contractorIdsWithContractStatus`/`...AnyContract`
+      antes de paginar).
+- [x] T010 [A] Wirar `buildContractCountReadPort` (mysql, reusa `CONTRACTS_DATABASE_URL`) em `src/server.ts`
+      → `buildPartnersHttpDeps` (memory → in-memory vazio; handle fechado no graceful shutdown).
 
 **Checkpoint A**: os 3 grids mostram contagens; filtro de status do fornecedor funciona.
 

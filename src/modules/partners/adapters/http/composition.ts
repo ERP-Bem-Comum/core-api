@@ -12,6 +12,10 @@
 
 import { ok, type Result } from '#src/shared/primitives/result.ts';
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
+import {
+  makeInMemoryContractCountReadPort,
+  type ContractCountReadPort,
+} from '#src/modules/contracts/public-api/index.ts';
 import * as CollaboratorId from '#src/modules/partners/domain/collaborator/collaborator-id.ts';
 import * as SupplierId from '#src/modules/partners/domain/supplier/supplier-id.ts';
 import * as FinancierId from '#src/modules/partners/domain/financier/financier-id.ts';
@@ -111,6 +115,12 @@ export type PartnersCompositionConfig = Readonly<{
   readerUrl?: string;
   /** Seed dev/test (memory). Ignorado em mysql. */
   seed?: PartnersSeed;
+  /**
+   * Read port de contagem de contratos/aditivos por contratado (010-partner-contract-counts).
+   * Exposto por `contracts/public-api` e consumido na borda dos grids (ADR-0006/0014). Ausente →
+   * adapter in-memory vazio (degrada para 0/0 — boot memory e testes sem contagem semeada).
+   */
+  contractCountRead?: ContractCountReadPort;
 }>;
 
 export type PartnersHttpDeps = Readonly<{
@@ -164,6 +174,12 @@ export type PartnersHttpDeps = Readonly<{
   deactivateAct: ReturnType<typeof deactivateAct>;
   reactivateAct: ReturnType<typeof reactivateAct>;
   editAct: ReturnType<typeof editAct>;
+  /**
+   * Contagem de contratos/aditivos por contratado (010-partner-contract-counts). Consumido
+   * pelos handlers de lista dos grids (collaborator/supplier/act) para compor `contractsCount`/
+   * `amendmentsCount` em lote; e pelo filtro `contractStatus` do Fornecedor.
+   */
+  contractCountRead: ContractCountReadPort;
   shutdown: () => Promise<void>;
 }>;
 
@@ -249,9 +265,10 @@ const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools
   };
 };
 
-const makeDeps = (pools: Pools): PartnersHttpDeps => {
+const makeDeps = (pools: Pools, contractCountRead: ContractCountReadPort): PartnersHttpDeps => {
   const clock = ClockReal();
   return {
+    contractCountRead,
     listCollaborators: listCollaborators({ collaboratorRepo: pools.collaboratorReaderRepo }),
     getCollaboratorById: async (rawId) => {
       // Zod já valida o formato UUID na rota; rehydrate defensivo → id desconhecido = ok(null).
@@ -328,11 +345,13 @@ const makeDeps = (pools: Pools): PartnersHttpDeps => {
 export const buildPartnersHttpDeps = async (
   config: PartnersCompositionConfig,
 ): Promise<PartnersHttpDeps> => {
+  // Ausente → in-memory vazio (degrada para 0/0). server.ts injeta o adapter mysql (T010).
+  const contractCountRead = config.contractCountRead ?? makeInMemoryContractCountReadPort();
   if (config.driver === 'memory') {
-    return makeDeps(buildMemoryPools(config));
+    return makeDeps(buildMemoryPools(config), contractCountRead);
   }
   if (config.writerUrl === undefined || config.writerUrl.length === 0) {
     throw new Error('partners-composition: driver mysql exige writerUrl');
   }
-  return makeDeps(await buildMysqlPools(config));
+  return makeDeps(await buildMysqlPools(config), contractCountRead);
 };

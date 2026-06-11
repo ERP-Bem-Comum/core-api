@@ -6,11 +6,38 @@
 
 import type { SupplierReadRecord } from '#src/modules/partners/application/ports/supplier-reader.ts';
 import type { Supplier } from '#src/modules/partners/domain/supplier/types.ts';
+import type {
+  ContractCountReadPort,
+  ContractStatus,
+} from '#src/modules/contracts/public-api/index.ts';
 import {
   supplierMatchesFilter,
   type SupplierListFilter,
 } from '#src/modules/partners/application/use-cases/list-suppliers.ts';
-import type { SupplierListQuery } from './supplier-schemas.ts';
+import type { ContractStatusFilter, SupplierListQuery } from './supplier-schemas.ts';
+
+/**
+ * Resolve o filtro `contractStatus` (FR-006) em um conjunto de ids permitidos (010-partner-
+ * contract-counts). Um estado de contrato → `contractorIdsWithContractStatus`; `none` → complemento
+ * de `contractorIdsWithAnyContract`. Falha do port → conjunto vazio (filtro não resolvido restringe
+ * a nada — não vaza fornecedores que poderiam não casar). `undefined` ⇒ não filtra.
+ */
+export const resolveContractStatusFilter = async (
+  port: ContractCountReadPort,
+  filter: ContractStatusFilter,
+  candidateIds: readonly string[],
+): Promise<ReadonlySet<string>> => {
+  if (filter === 'none') {
+    const r = await port.contractorIdsWithAnyContract('supplier');
+    if (!r.ok) return new Set();
+    const withContract = r.value;
+    return new Set(candidateIds.filter((id) => !withContract.has(id)));
+  }
+  // `filter` é um ContractStatus (o enum do schema é superset { …status, 'none' }).
+  const r = await port.contractorIdsWithContractStatus('supplier', filter satisfies ContractStatus);
+  if (!r.ok) return new Set();
+  return r.value;
+};
 
 // Aceita qualquer query que carregue os 3 campos de filtro (lista e export).
 export const queryToFilter = (

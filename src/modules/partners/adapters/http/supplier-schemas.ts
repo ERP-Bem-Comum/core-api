@@ -13,7 +13,23 @@ const LIST_LIMIT_DEFAULT = 5;
 
 const toArray = (v: unknown): unknown => (v === undefined ? undefined : Array.isArray(v) ? v : [v]);
 
-/** Query do GET /api/v1/suppliers (subconjunto legado: search, active, categories). */
+/**
+ * Filtro `contractStatus` (010-partner-contract-counts / FR-006): situação contratual do
+ * fornecedor. Um estado de contrato → fornecedores com ≥1 contrato nesse estado; `none` →
+ * fornecedores SEM nenhum contrato (complemento). Ausente → não filtra.
+ */
+export const CONTRACT_STATUS_FILTER_VALUES = [
+  'Pending',
+  'Active',
+  'Expired',
+  'Terminated',
+  'Cancelled',
+  'none',
+] as const;
+
+export type ContractStatusFilter = (typeof CONTRACT_STATUS_FILTER_VALUES)[number];
+
+/** Query do GET /api/v1/suppliers (subconjunto legado: search, active, categories + contractStatus). */
 export const supplierListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(LIST_LIMIT_MAX).default(LIST_LIMIT_DEFAULT),
@@ -21,6 +37,7 @@ export const supplierListQuerySchema = z.object({
   search: z.string().min(1).optional(),
   active: z.coerce.number().int().min(0).max(1).optional(),
   categories: z.preprocess(toArray, z.array(z.string()).optional()),
+  contractStatus: z.enum(CONTRACT_STATUS_FILTER_VALUES).optional(),
 });
 
 export type SupplierListQuery = z.infer<typeof supplierListQuerySchema>;
@@ -82,6 +99,17 @@ export const supplierDetailSchema = z.object({
 
 export type SupplierDetailDto = z.infer<typeof supplierDetailSchema>;
 
+/**
+ * Item de lista (010-partner-contract-counts): detalhe + contagem de contratos/aditivos do
+ * contratado (0/0 sem contrato). Só na lista; o detalhe (`GET /:id`) não conta.
+ */
+export const supplierListItemSchema = supplierDetailSchema.extend({
+  contractsCount: z.number().int().nonnegative(),
+  amendmentsCount: z.number().int().nonnegative(),
+});
+
+export type SupplierListItemDto = z.infer<typeof supplierListItemSchema>;
+
 /** Meta de paginação legada (openapi.yaml:2331). */
 export const supplierPaginationMetaSchema = z.object({
   itemCount: z.number().int().nonnegative(),
@@ -91,9 +119,9 @@ export const supplierPaginationMetaSchema = z.object({
   currentPage: z.number().int(),
 });
 
-/** Response paginado do GET /api/v1/suppliers — item = detalhe completo. */
+/** Response paginado do GET /api/v1/suppliers — item = detalhe + contagem de contratos. */
 export const supplierPaginatedSchema = z.object({
-  items: z.array(supplierDetailSchema),
+  items: z.array(supplierListItemSchema),
   meta: supplierPaginationMetaSchema,
 });
 

@@ -135,6 +135,17 @@ export const collaboratorDetailSchema = z.object({
 
 export type CollaboratorDetailDto = z.infer<typeof collaboratorDetailSchema>;
 
+/**
+ * Item de lista (010-partner-contract-counts): detalhe + contagem de contratos/aditivos do
+ * contratado (0/0 quando sem contrato — FR-004). Só na lista; o detalhe (`GET /:id`) não conta.
+ */
+export const collaboratorListItemSchema = collaboratorDetailSchema.extend({
+  contractsCount: z.number().int().nonnegative(),
+  amendmentsCount: z.number().int().nonnegative(),
+});
+
+export type CollaboratorListItemDto = z.infer<typeof collaboratorListItemSchema>;
+
 /** Meta de paginação legada (nestjs-typeorm-paginate — openapi.yaml:2331). */
 export const collaboratorPaginationMetaSchema = z.object({
   itemCount: z.number().int().nonnegative().meta({ description: 'Itens na página atual' }),
@@ -144,9 +155,9 @@ export const collaboratorPaginationMetaSchema = z.object({
   currentPage: z.number().int().meta({ description: '1-indexed' }),
 });
 
-/** Response paginado do GET /api/v1/collaborators — item = detalhe completo (legado). */
+/** Response paginado do GET /api/v1/collaborators — item = detalhe + contagem de contratos. */
 export const collaboratorPaginatedSchema = z.object({
-  items: z.array(collaboratorDetailSchema),
+  items: z.array(collaboratorListItemSchema),
   meta: collaboratorPaginationMetaSchema,
 });
 

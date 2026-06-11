@@ -24,8 +24,14 @@ import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
 
 import type { PartnersHttpDeps } from './composition.ts';
 import { supplierToDetailDto } from './supplier-dto.ts';
-import { queryToFilter, paginateRecords, suppliersForExport } from './supplier-list-query.ts';
+import {
+  queryToFilter,
+  paginateRecords,
+  suppliersForExport,
+  resolveContractStatusFilter,
+} from './supplier-list-query.ts';
 import { suppliersToCsv } from '../export/supplier-csv.ts';
+import { attachContractCounts } from './contract-counts.ts';
 import { listServiceCategories } from '../../domain/supplier/service-category.ts';
 import { listServiceRatings } from '../../domain/supplier/service-rating.ts';
 import {
@@ -106,12 +112,25 @@ const suppliersRoutes =
             errors: { 'supplier-read-unavailable': 503 },
           });
         }
-        const page = paginateRecords(result.value, queryToFilter(req.query), req.query);
-        return sendResult(
-          reply,
-          ok({ items: page.items.map(supplierToDetailDto), meta: page.meta }),
-          { ok: 200 },
+        // Filtro `contractStatus` (FR-006): pré-filtra os ids pela situação contratual ANTES de
+        // paginar — operação distinta da contagem (FR-007). Ausente → não restringe.
+        let records = result.value;
+        const { contractStatus } = req.query;
+        if (contractStatus !== undefined) {
+          const allowed = await resolveContractStatusFilter(
+            deps.contractCountRead,
+            contractStatus,
+            records.map((r) => String(r.supplier.id)),
+          );
+          records = records.filter((r) => allowed.has(String(r.supplier.id)));
+        }
+        const page = paginateRecords(records, queryToFilter(req.query), req.query);
+        const items = await attachContractCounts(
+          deps.contractCountRead,
+          'supplier',
+          page.items.map(supplierToDetailDto),
         );
+        return sendResult(reply, ok({ items, meta: page.meta }), { ok: 200 });
       },
     });
 

@@ -27,6 +27,10 @@ import {
   buildContractsHttpDeps,
 } from '#src/modules/contracts/public-api/http.ts';
 import {
+  buildContractCountReadPort,
+  type ContractCountReadHandle,
+} from '#src/modules/contracts/public-api/index.ts';
+import {
   collaboratorsHttpPlugin,
   suppliersHttpPlugin,
   financiersHttpPlugin,
@@ -137,6 +141,24 @@ const main = async (): Promise<void> => {
         },
   );
 
+  // 010-partner-contract-counts: read port de contagem de contratos/aditivos (ADR-0006/0014),
+  // consumido pela borda dos grids de partners. Só em mysql + CONTRACTS_DATABASE_URL (reusa a
+  // connection string do writer de contracts); falha de abertura DEGRADA (contagens 0/0 — não
+  // derruba o boot). Em memory → in-memory vazio (default do composition). Fechado no shutdown.
+  let contractCountReadHandle: ContractCountReadHandle | undefined = undefined;
+  if (
+    process.env['CONTRACTS_DRIVER'] === 'mysql' &&
+    contractsWriterUrl !== undefined &&
+    contractsWriterUrl.length > 0
+  ) {
+    const portR = await buildContractCountReadPort({ connectionString: contractsWriterUrl });
+    if (portR.ok) contractCountReadHandle = portR.value;
+    else
+      process.stderr.write(
+        `server: contract count read port indisponível (${portR.error}) — grids degradados (0/0)\n`,
+      );
+  }
+
   // RW split (ADR-0026) do módulo partners: PARTNERS_DATABASE_URL = writer; PARTNERS_READER_URL
   // = réplica (ausente → reusa o writer). Reads (lista de colaboradores) roteiam ao reader.
   const partnersWriterUrl = process.env['PARTNERS_DATABASE_URL'];
@@ -147,8 +169,16 @@ const main = async (): Promise<void> => {
           driver: 'mysql',
           ...(partnersWriterUrl !== undefined ? { writerUrl: partnersWriterUrl } : {}),
           ...(partnersReaderUrl !== undefined ? { readerUrl: partnersReaderUrl } : {}),
+          ...(contractCountReadHandle !== undefined
+            ? { contractCountRead: contractCountReadHandle }
+            : {}),
         }
-      : { driver: 'memory' },
+      : {
+          driver: 'memory',
+          ...(contractCountReadHandle !== undefined
+            ? { contractCountRead: contractCountReadHandle }
+            : {}),
+        },
   );
 
   // Módulo programs (spec 008, ADR-0033) → /api/v1/programs. Logo storage S3/MinIO (ADR-0019)
@@ -293,6 +323,8 @@ const main = async (): Promise<void> => {
     await programsDeps.shutdown();
     // CTR-NUMBER-PROGRAM: fecha o pool do read port de programs injetado em contracts.
     if (programsReadPort !== undefined) await programsReadPort.close();
+    // 010-partner-contract-counts: fecha o pool do read port de contagem injetado em partners.
+    if (contractCountReadHandle !== undefined) await contractCountReadHandle.close();
     app.log.info('Servidor encerrado.');
   };
 

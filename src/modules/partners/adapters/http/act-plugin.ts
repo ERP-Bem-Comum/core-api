@@ -36,6 +36,7 @@ import {
 import { queryToFilter as actQueryToFilter, actsForExport } from './act-list-query.ts';
 import { actMatchesFilter } from '../../application/use-cases/list-acts.ts';
 import { actsToCsv } from '../export/act-csv.ts';
+import { attachContractCounts } from './contract-counts.ts';
 import { ACT_PERMISSION } from '../../public-api/permissions.ts';
 
 export type ActsHttpHooks = Readonly<{
@@ -107,13 +108,18 @@ const actsRoutes =
         const totalItems = filtered.length;
         const totalPages = totalItems === 0 ? 0 : Math.ceil(totalItems / q.limit);
         const start = (q.page - 1) * q.limit;
-        const items = filtered.slice(start, start + q.limit);
+        const pageItems = filtered.slice(start, start + q.limit);
+        const items = await attachContractCounts(
+          deps.contractCountRead,
+          'act',
+          pageItems.map(actToDetailDto),
+        );
         return sendResult(
           reply,
           ok({
-            items: items.map(actToDetailDto),
+            items,
             meta: {
-              itemCount: items.length,
+              itemCount: pageItems.length,
               totalItems,
               itemsPerPage: q.limit,
               totalPages,

@@ -50,6 +50,17 @@ export const actDetailSchema = z.object({
 
 export type ActDetailDto = z.infer<typeof actDetailSchema>;
 
+/**
+ * Item de lista (010-partner-contract-counts): detalhe + contagem de contratos/aditivos do
+ * contratado (0/0 sem contrato). Só na lista; o detalhe (`GET /:id`) não conta.
+ */
+export const actListItemSchema = actDetailSchema.extend({
+  contractsCount: z.number().int().nonnegative(),
+  amendmentsCount: z.number().int().nonnegative(),
+});
+
+export type ActListItemDto = z.infer<typeof actListItemSchema>;
+
 /** Meta de paginação legada. */
 export const actPaginationMetaSchema = z.object({
   itemCount: z.number().int().nonnegative(),
@@ -72,9 +83,9 @@ export const actListQuerySchema = z.object({
 
 export type ActListQuery = z.infer<typeof actListQuerySchema>;
 
-/** Response paginado do GET /api/v1/acts. */
+/** Response paginado do GET /api/v1/acts — item = detalhe + contagem de contratos. */
 export const actPaginatedSchema = z.object({
-  items: z.array(actDetailSchema),
+  items: z.array(actListItemSchema),
   meta: actPaginationMetaSchema,
 });
 

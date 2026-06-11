@@ -13,6 +13,9 @@ export type {
   ContractorCount,
   ContractorType,
 } from '../application/ports/contract-count-read.ts';
+// Estado de contrato — parâmetro de `contractorIdsWithContractStatus` (consumido pelo filtro
+// `contractStatus` do grid de Fornecedores em partners — 010-partner-contract-counts).
+export type { ContractStatus } from '../domain/contract/types.ts';
 export { makeInMemoryContractCountReadPort } from '../adapters/persistence/repos/contract-count-read.in-memory.ts';
 export type { InMemoryContractCountRow } from '../adapters/persistence/repos/contract-count-read.in-memory.ts';
 
