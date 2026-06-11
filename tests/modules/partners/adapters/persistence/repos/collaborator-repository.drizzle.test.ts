@@ -23,7 +23,7 @@ const VALID_CONN = `mysql://root:rootpw-migration-test-only@127.0.0.1:${process.
 const integrationEnabled = (): boolean => process.env['MYSQL_INTEGRATION'] === '1';
 const clock = ClockFixed(new Date('2026-06-01T12:00:00.000Z'));
 
-const buildActive = (over: { cpf?: string; email?: string } = {}) => {
+const buildActive = (over: { cpf?: string; email?: string; programId?: string | null } = {}) => {
   const r = Collaborator.register({
     id: CollaboratorId.generate(),
     name: 'Maria Silva',
@@ -34,6 +34,7 @@ const buildActive = (over: { cpf?: string; email?: string } = {}) => {
     startOfContract: new Date('2025-02-01T00:00:00.000Z'),
     employmentRelationship: 'CLT',
     registeredAt: clock.now(),
+    ...(over.programId !== undefined ? { programId: over.programId } : {}),
   });
   if (!r.ok) throw new Error(`fixture collaborator: ${r.error}`);
   return r.value.collaborator;
@@ -118,6 +119,37 @@ if (integrationEnabled()) {
       const dup = await repo.save(buildActive({ cpf: '529.982.247-25' }));
       assert.equal(isErr(dup), true);
       if (!dup.ok) assert.equal(dup.error, 'collaborator-email-duplicate');
+    });
+
+    // ── programId round-trip (0009_outstanding_stingray.sql) ──────────────────
+    // Prova que a migration 0009 aplicou a coluna program_id e que o mapper faz
+    // o round-trip com UUID preenchido e com null.
+
+    it('programId preenchido — round-trip salva e relê o UUID corretamente', async () => {
+      if (handle === null) return;
+      const repo = createDrizzleCollaboratorStore(handle, clock);
+      const programUuid = 'f1234567-89ab-4cde-8000-000000000001';
+      const c = buildActive({ programId: programUuid });
+      assert.equal(isOk(await repo.save(c)), true);
+
+      const found = await repo.findById(c.id);
+      assert.equal(isOk(found), true);
+      if (found.ok && found.value !== null) {
+        assert.equal(found.value.programId, programUuid, 'programId deve ser o UUID semeado');
+      }
+    });
+
+    it('programId null — round-trip persiste e relê null corretamente', async () => {
+      if (handle === null) return;
+      const repo = createDrizzleCollaboratorStore(handle, clock);
+      const c = buildActive({ programId: null });
+      assert.equal(isOk(await repo.save(c)), true);
+
+      const found = await repo.findById(c.id);
+      assert.equal(isOk(found), true);
+      if (found.ok && found.value !== null) {
+        assert.equal(found.value.programId, null, 'programId deve ser null quando não vinculado');
+      }
     });
   });
 }

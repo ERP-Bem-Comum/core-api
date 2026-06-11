@@ -71,3 +71,12 @@ antes (coluna + referência por ID ao módulo `programs`, ADR-0014). **Decidir c
 - **Read port novo** no `contracts/public-api`: este é o item de maior valor e a real dependência
   arquitetural. Tudo o mais (R2, e a borda do R1) pendura nele.
 - **Aditivos:** confirmar com o front se a coluna mostra contratos, aditivos ou os dois.
+
+## Entrega (2026-06-11 — `specs/010-partner-contract-counts`)
+
+- **R1** ✅ `ContractCountReadPort` em `contracts/public-api` (batch, 2 GROUP BY, sem N+1); list items
+  dos 3 grids com `contractsCount`/`amendmentsCount` (a coluna mostra **os dois**, em campos separados).
+- **R2** ✅ filtro `contractStatus` no grid de Fornecedor (`Pending|Active|Expired|Terminated|Cancelled|none`).
+- **R3** ✅ **entregue por inteiro** (não ficou bloqueado): vínculo Colaborador↔Programa modelado nesta
+  mesma feature — `programId` (UUID, ref leve ADR-0014) no agregado + migration `par_collaborators.program_id`
+  (0009) + filtro `programIds` na listagem/borda HTTP.

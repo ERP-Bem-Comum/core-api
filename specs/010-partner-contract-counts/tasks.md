@@ -10,7 +10,7 @@ Duas fatias independentes: **A** (contagem cross-módulo + filtro fornecedor) ·
 
 ## Phase 1 — Setup
 
-- [ ] T001 Confirmar branch/feature ativa (`specs/010-partner-contract-counts`); nenhuma dependência nova.
+- [x] T001 Confirmar branch/feature ativa (`specs/010-partner-contract-counts`); nenhuma dependência nova.
 
 ## Phase 2 — Fatia A: read port de contagem (núcleo, R1) + filtro fornecedor (R2)
 
@@ -60,12 +60,13 @@ Duas fatias independentes: **A** (contagem cross-módulo + filtro fornecedor) ·
 
 ## Phase 4 — Polish & Cross-Cutting
 
-- [ ] T019 [P] Integração: `contract-count-read.drizzle` + `program_id` no MySQL real (`test:integration`). Pré-merge.
-- [ ] T020 [P] Atualizar `docs/05-frontend-api-handoff.md` (counts nos list items; `programId`/`programIds`;
+- [x] T019 [P] Integração: `contract-count-read.drizzle` + `program_id` no MySQL real (`test:integration`). Pré-merge.
+- [x] T020 [P] Atualizar `docs/05-frontend-api-handoff.md` (counts nos list items; `programId`/`programIds`;
       `contractStatus`) e o handoff do front.
-- [ ] T021 Mover `handbook/tickets/todo/PAR-GRID-CONTRACTS-COUNT.md` → `done/` (após W3 verde). Anotar R3
+- [x] T021 Mover `handbook/tickets/todo/PAR-GRID-CONTRACTS-COUNT.md` → `done/` (após W3 verde). Anotar R3
       entregue (vínculo programa).
-- [ ] T022 Gate W3 (`/speckit-verify`): typecheck + format:check + lint + test verdes.
+- [x] T022 Gate W3 (`/speckit-verify`): typecheck + format:check + lint + test verdes (2657 testes, 0 fail;
+      integração MySQL: contracts 91 pass + partners 33 pass).
 
 ---
 

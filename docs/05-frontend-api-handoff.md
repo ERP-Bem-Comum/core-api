@@ -209,7 +209,9 @@ Estes módulos/recursos passam a existir para o front consumir: **Gestão de Usu
 (`/api/v1/users`), **Gestão de Acessos/RBAC** (`/api/v1/roles`, `/permissions`), **Programas**
 (`/api/v1/programs`), **foto de perfil** (user/me), **import CSV de colaboradores**, **export CSV**
 (contracts/collaborators/suppliers/financiers/acts), **agregador de parceiros**
-(`GET /api/v1/partners`). Detalhes na §2.
+(`GET /api/v1/partners`), **contagem de contratos/aditivos nos grids de parceiros** + filtro
+`contractStatus` (fornecedor) + vínculo **Colaborador↔Programa** (`programId`/filtro `programIds`
+— ver §2.6). Detalhes na §2.
 
 ---
 
@@ -322,25 +324,35 @@ pixKey? }`); `snapshot:null` em degradação (nunca quebra a rota). Para `type:'
 
 ### 2.6 Parceiros — `/api/v1`
 
+> **Contagem de contratos nos grids:** o **item de lista** de Colaborador, Fornecedor e ACT traz
+> `contractsCount` e `amendmentsCount` (inteiros ≥ 0 — contratos do parceiro em **qualquer** estado e
+> seus aditivos). Só na **lista** (o detalhe `GET /:id` não muda). Em degradação do módulo de
+> contratos os campos vêm `0`/`0` (a listagem nunca quebra).
+
 #### 2.6.1 Colaboradores — `/api/v1/collaborators`
 
-| Método & rota                                    | Permissão                                                    | Notas                                                                                                                                                                 |
-| ------------------------------------------------ | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /collaborators`                             | `collaborator:read`                                          | filtros ricos: `search, active, status, occupationAreas, employmentRelationships, genderIdentities, breeds, educations, disableBy, roles, yearOfContract` + paginação |
-| `GET /collaborators/export`                      | `collaborator:read`                                          | CSV                                                                                                                                                                   |
-| `GET /collaborators/:id`                         | `collaborator:read`                                          | detalhe completo (27+ campos)                                                                                                                                         |
-| `POST /collaborators`                            | `collaborator:write`                                         | `{ name,email,cpf(11),occupationArea(PARC\|DDI\|DCE\|EPV),role,startOfContract,employmentRelationship(CLT\|PJ) }` → **201**+Location. 409 cpf/email dup               |
-| `PATCH /collaborators/:id/complete-registration` | `collaborator:write`                                         | completa os campos pessoais (todos opcionais/nullable)                                                                                                                |
-| `POST /collaborators/:id/deactivate`             | `collaborator:write`                                         | `{ disableBy }`                                                                                                                                                       |
-| `POST /collaborators/:id/reactivate`             | `collaborator:write`                                         | —                                                                                                                                                                     |
-| `PUT /collaborators/:id`                         | `collaborator:write` (+`collaborator:edit-sensitive` p/ CPF) | edição cadastral; **CPF exige permissão extra** (403 sem ela)                                                                                                         |
-| `POST /collaborators/import`                     | `collaborator:write`                                         | **body `text/csv`** (≤2 MiB). Sempre **200** `{ created, failed:[{line,error}] }`                                                                                     |
+| Método & rota                                    | Permissão                                                    | Notas                                                                                                                                                                                                                                   |
+| ------------------------------------------------ | ------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /collaborators`                             | `collaborator:read`                                          | filtros ricos: `search, active, status, occupationAreas, employmentRelationships, genderIdentities, breeds, educations, disableBy, roles, yearOfContract, programIds` + paginação. Item de lista com `contractsCount`/`amendmentsCount` |
+| `GET /collaborators/export`                      | `collaborator:read`                                          | CSV                                                                                                                                                                                                                                     |
+| `GET /collaborators/:id`                         | `collaborator:read`                                          | detalhe completo (27+ campos, incl. `programId: uuid \| null`)                                                                                                                                                                          |
+| `POST /collaborators`                            | `collaborator:write`                                         | `{ name,email,cpf(11),occupationArea(PARC\|DDI\|DCE\|EPV),role,startOfContract,employmentRelationship(CLT\|PJ),programId? }` → **201**+Location. 409 cpf/email dup                                                                      |
+| `PATCH /collaborators/:id/complete-registration` | `collaborator:write`                                         | completa os campos pessoais (todos opcionais/nullable)                                                                                                                                                                                  |
+| `POST /collaborators/:id/deactivate`             | `collaborator:write`                                         | `{ disableBy }`                                                                                                                                                                                                                         |
+| `POST /collaborators/:id/reactivate`             | `collaborator:write`                                         | —                                                                                                                                                                                                                                       |
+| `PUT /collaborators/:id`                         | `collaborator:write` (+`collaborator:edit-sensitive` p/ CPF) | edição cadastral (mesmo body do POST, incl. `programId?` — `null` desvincula); **CPF exige permissão extra** (403 sem ela)                                                                                                              |
+| `POST /collaborators/import`                     | `collaborator:write`                                         | **body `text/csv`** (≤2 MiB). Sempre **200** `{ created, failed:[{line,error}] }`                                                                                                                                                       |
+
+**Vínculo a Programa (`programId`):** UUID de `GET /api/v1/programs` (ref leve — não há validação
+de existência cross-módulo). Opcional no POST (ausente = não vinculado); no PUT, `null` desvincula.
+Formato inválido → 400. **Filtro `programIds`:** param repetido (`?programIds=a&programIds=b`) ou
+único; OR entre os valores (colaboradores vinculados a **qualquer** um dos programas).
 
 #### 2.6.2 Fornecedores — `/api/v1/suppliers`
 
 | Método & rota                                       | Permissão                                             | Notas                                                                                                                                                                         |
 | --------------------------------------------------- | ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET /suppliers`                                    | `supplier:read`                                       | filtros `search, active, categories`                                                                                                                                          |
+| `GET /suppliers`                                    | `supplier:read`                                       | filtros `search, active, categories, contractStatus`. Item de lista com `contractsCount`/`amendmentsCount`                                                                    |
 | `GET /suppliers/service-categories`                 | `supplier:read`                                       | `string[]` (catálogo)                                                                                                                                                         |
 | `GET /suppliers/service-ratings`                    | `supplier:read`                                       | `["RUIM","REGULAR","BOM","OTIMO"]`                                                                                                                                            |
 | `GET /suppliers/export`                             | `supplier:read`                                       | CSV                                                                                                                                                                           |
@@ -351,6 +363,10 @@ pixKey? }`); `snapshot:null` em degradação (nunca quebra a rota). Para `type:'
 
 `bankAccount = { bank, agency, accountNumber, checkDigit }`; `pixKey = { keyType:
 cpf\|cnpj\|email\|phone\|random-key, key }`.
+
+**Filtro `contractStatus`:** `Pending | Active | Expired | Terminated | Cancelled | none` —
+fornecedores com **ao menos um** contrato no estado pedido; `none` = fornecedores **sem nenhum**
+contrato. Ausente → não filtra.
 
 #### 2.6.3 Financiadores — `/api/v1/financiers`
 
@@ -364,14 +380,14 @@ cpf\|cnpj\|email\|phone\|random-key, key }`.
 
 #### 2.6.4 Acordos (ACT) — `/api/v1/acts` ⚠️ ver breaking change §1.1
 
-| Método & rota                                  | Permissão   | Notas                                                                                     |
-| ---------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------- |
-| `GET /acts`                                    | `act:read`  | filtros `search, active, hasFinancialTransfer(0\|1), occupationArea(PARC\|DDI\|DCE\|EPV)` |
-| `GET /acts/export`                             | `act:read`  | CSV (colunas do acordo)                                                                   |
-| `GET /acts/:id`                                | `act:read`  | detalhe do acordo                                                                         |
-| `POST /acts`                                   | `act:write` | body abaixo → **201**+Location. 409 `actNumber` dup                                       |
-| `PUT /acts/:id`                                | `act:write` | substituição total (mesmo body)                                                           |
-| `POST /acts/:id/deactivate` · `.../reactivate` | `act:write` | —                                                                                         |
+| Método & rota                                  | Permissão   | Notas                                                                                                                                           |
+| ---------------------------------------------- | ----------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /acts`                                    | `act:read`  | filtros `search, active, hasFinancialTransfer(0\|1), occupationArea(PARC\|DDI\|DCE\|EPV)`. Item de lista com `contractsCount`/`amendmentsCount` |
+| `GET /acts/export`                             | `act:read`  | CSV (colunas do acordo)                                                                                                                         |
+| `GET /acts/:id`                                | `act:read`  | detalhe do acordo                                                                                                                               |
+| `POST /acts`                                   | `act:write` | body abaixo → **201**+Location. 409 `actNumber` dup                                                                                             |
+| `PUT /acts/:id`                                | `act:write` | substituição total (mesmo body)                                                                                                                 |
+| `POST /acts/:id/deactivate` · `.../reactivate` | `act:write` | —                                                                                                                                               |
 
 **Body POST/PUT `/acts`:**
 
