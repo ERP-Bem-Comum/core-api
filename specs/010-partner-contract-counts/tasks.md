@@ -1,0 +1,78 @@
+# Tasks: Contagem de contratos/aditivos por parceiro nos grids
+
+**Feature**: `specs/010-partner-contract-counts` · **Branch**: `feat/backlog-residual-sdd` · **Size**: L (3 BCs)
+
+**Disciplina**: TDD W0→W3 (RED antes de `src/`). Gate via `/speckit-verify`. `[P]` paraleliz. · `[Ax]/[Bx]` fatia.
+
+Duas fatias independentes: **A** (contagem cross-módulo + filtro fornecedor) · **B** (vínculo colaborador↔programa).
+
+---
+
+## Phase 1 — Setup
+
+- [ ] T001 Confirmar branch/feature ativa (`specs/010-partner-contract-counts`); nenhuma dependência nova.
+
+## Phase 2 — Fatia A: read port de contagem (núcleo, R1) + filtro fornecedor (R2)
+
+- [ ] T002 [P] [A] W0 RED: `tests/modules/contracts/public-api/contract-count-read.in-memory.test.ts` —
+      `countByContractor(type, ids)` agrupa contratos+aditivos; id sem contrato → {0,0}; sem vazamento type/id;
+      `contractorIdsWithContractStatus`/`...AnyContract`.
+- [ ] T003 [A] Definir o port + tipos em `src/modules/contracts/public-api/contract-count-read.ts`
+      (`ContractCountReadPort`, `ContractorCount`, erro) + reexport em `public-api/index.ts`.
+- [ ] T004 [A] Implementar `contract-count-read.in-memory.ts` (conta sobre store injetável; default vazio).
+- [ ] T005 [A] Implementar `contract-count-read.drizzle.ts` (2 GROUP BY + sets por status; `IN (...)`) +
+      `buildContractCountReadPort` (pool próprio, falha DEGRADA — espelha `buildProgramsReadPort`).
+- [ ] T006 [P] [A] W0 RED: `tests/modules/partners/adapters/http/collaborators-list.routes.test.ts` (e
+      análogos supplier/act) — item de lista traz `contractsCount`/`amendmentsCount` reais (port in-memory
+      semeado); **1** chamada de contagem por página.
+- [ ] T007 [A] Injetar `contractCountRead` em `PartnersHttpDeps` (`composition.ts`) + compor as contagens nos
+      list items de collaborator/supplier/act (`*-dto.ts`, `*-schemas.ts`, plugins) — degrada para 0 se o port falha.
+- [ ] T008 [P] [A] W0 RED: supplier list — filtro `contractStatus` (com/sem contrato em estado X).
+- [ ] T009 [A] Implementar o filtro `contractStatus` no `supplier-list-query.ts`/`supplier-schemas.ts` (pré-
+      filtra ids via `contractorIdsWithContractStatus`/`...AnyContract`).
+- [ ] T010 [A] Wirar `buildContractCountReadPort` (mysql) em `src/server.ts` → `buildPartnersHttpDeps`
+      (memory → in-memory vazio).
+
+**Checkpoint A**: os 3 grids mostram contagens; filtro de status do fornecedor funciona.
+
+## Phase 3 — Fatia B: vínculo Colaborador↔Programa (R3)
+
+- [ ] T011 [P] [B] W0 RED: `tests/modules/partners/domain/collaborator/collaborator.test.ts` — `programId`
+      opcional no register/edit/complete; UUID inválido → erro; null aceito.
+- [ ] T012 [B] Adicionar `programId: string | null` ao core/inputs em `domain/collaborator/types.ts` +
+      validação (UUID v4|null) em `collaborator.ts` (register/edit/complete preservam).
+- [ ] T013 [B] Schema: `par_collaborators.program_id varchar(36)` nullable em `schemas/mysql.ts`;
+      `mappers/collaborator.mapper.ts` row↔domínio. W0 RED do mapper/round-trip antes.
+- [ ] T014 [B] Gerar migration `pnpm run db:generate:partners` + editar charset/collate (COLLATE bin) +
+      versionar; validar `db:generate` → "nothing to migrate" (snapshot consistente).
+- [ ] T015 [P] [B] W0 RED: `tests/modules/partners/application/use-cases/list-collaborators.test.ts` —
+      filtro `programIds` casa só os vinculados; ausência do filtro não afeta.
+- [ ] T016 [B] Adicionar `programIds?` ao `ListCollaboratorsFilter` + predicado em `list-collaborators.ts`.
+- [ ] T017 [P] [B] W0 RED: `tests/modules/partners/adapters/http/collaborators-*.routes.test.ts` —
+      `programId` no cadastro/detalhe + `programIds` na query.
+- [ ] T018 [B] HTTP do colaborador: `programId` no body/dto/schema; `programIds` no `collaborator-list-query.ts`.
+
+**Checkpoint B**: colaborador vincula programa; filtro por programa funciona.
+
+## Phase 4 — Polish & Cross-Cutting
+
+- [ ] T019 [P] Integração: `contract-count-read.drizzle` + `program_id` no MySQL real (`test:integration`). Pré-merge.
+- [ ] T020 [P] Atualizar `docs/05-frontend-api-handoff.md` (counts nos list items; `programId`/`programIds`;
+      `contractStatus`) e o handoff do front.
+- [ ] T021 Mover `handbook/tickets/todo/PAR-GRID-CONTRACTS-COUNT.md` → `done/` (após W3 verde). Anotar R3
+      entregue (vínculo programa).
+- [ ] T022 Gate W3 (`/speckit-verify`): typecheck + format:check + lint + test verdes.
+
+---
+
+## Dependências
+
+- **Fatia A (T002–T010)** e **Fatia B (T011–T018)** são independentes — podem ir em sequência.
+- Dentro de A: T002→(T003,T004,T005)→T006→T007; T008→T009; T010 por último de A.
+- Dentro de B: T011→T012; T013→T014; T015→T016; T017→T018.
+- Polish (T019–T022) por último.
+
+## MVP
+
+**Fatia A** entrega o núcleo (coluna Contratos/Aditivos nos 3 grids + filtro de status do fornecedor). **Fatia
+B** (vínculo programa) é incremento independente.
