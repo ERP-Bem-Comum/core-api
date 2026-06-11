@@ -18,10 +18,14 @@ const toArray = (v: unknown): unknown => (v === undefined ? undefined : Array.is
  * Query do GET /api/v1/collaborators (subconjunto legado — P1b). `status` = RegistrationStatus;
  * `active` (0|1) é o soft-delete.
  *
- * FR-012 (épico partners-http-gaps): os filtros `programa` e `idade` são DESCARTADOS (fora de
- * escopo) — `programa` não é conceito do BC do colaborador; `idade` é derivável de `birthDate` no
- * client. O contrato NÃO os anuncia; chaves desconhecidas são removidas (strip) por este `z.object`.
+ * FR-012 (épico partners-http-gaps): o filtro legado `programa` (string) e `idade` são DESCARTADOS
+ * — `idade` é derivável de `birthDate` no client. O contrato NÃO os anuncia; chaves desconhecidas
+ * são removidas (strip) por este `z.object`.
  * Guarda: `tests/modules/partners/adapters/http/collaborator-list-filters-contract.test.ts`.
+ *
+ * R3 (010-partner-contract-counts): o vínculo Colaborador↔Programa passou a existir no domínio
+ * (`programId`, ref leve UUID — ADR-0014). O filtro por programa agora é `programIds` (array de
+ * UUID), distinto do `programa` legado (string) que segue descartado.
  */
 export const collaboratorListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -87,6 +91,8 @@ export const collaboratorListQuerySchema = z.object({
   ),
   roles: z.preprocess(toArray, z.array(z.string()).optional()),
   yearOfContract: z.coerce.number().int().min(1900).max(2200).optional(),
+  // R3 — filtro por Programa (UUID v4). Param repetido → array; OR dentro do array.
+  programIds: z.preprocess(toArray, z.array(z.uuid()).optional()),
 });
 
 export type CollaboratorListQuery = z.infer<typeof collaboratorListQuerySchema>;
@@ -128,6 +134,8 @@ export const collaboratorDetailSchema = z.object({
   emergencyContactName: z.string().nullable(),
   emergencyContactTelephone: z.string().nullable(),
   experienceInThePublicSector: z.boolean().nullable(),
+  // R3 — vínculo a Programa por referência leve (UUID v4|null — ADR-0014).
+  programId: z.string().nullable(),
   active: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -174,6 +182,9 @@ export const createCollaboratorBodySchema = z.object({
   role: z.string().min(1),
   startOfContract: z.coerce.date().meta({ description: 'Início do contrato (ISO date)' }),
   employmentRelationship: z.enum(['CLT', 'PJ']),
+  // R3 — vínculo opcional a Programa (UUID v4 — ref leve cross-módulo, ADR-0014). Ausente = não
+  // vinculado; `null` = desvincular (no PUT). Formato inválido → 400 (Zod, antes do domínio).
+  programId: z.uuid().nullable().optional(),
 });
 
 export type CreateCollaboratorBody = z.infer<typeof createCollaboratorBodySchema>;

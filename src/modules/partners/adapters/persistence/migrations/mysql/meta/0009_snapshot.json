@@ -1,0 +1,1018 @@
+{
+  "version": "5",
+  "dialect": "mysql",
+  "id": "3a3e14da-0684-4e02-9e77-fad486f1eb72",
+  "prevId": "a8c7e1d2-0008-4acc-9f31-0aceaccord008",
+  "tables": {
+    "par_acts": {
+      "name": "par_acts",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "act_number": {
+          "name": "act_number",
+          "type": "varchar(60)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cnpj": {
+          "name": "cnpj",
+          "type": "varchar(14)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "corporate_name": {
+          "name": "corporate_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fantasy_name": {
+          "name": "fantasy_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "occupation_area": {
+          "name": "occupation_area",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "legal_representative": {
+          "name": "legal_representative",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "validity_start": {
+          "name": "validity_start",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "validity_end": {
+          "name": "validity_end",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "has_financial_transfer": {
+          "name": "has_financial_transfer",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "bank_account_bank": {
+          "name": "bank_account_bank",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "bank_account_agency": {
+          "name": "bank_account_agency",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "bank_account_number": {
+          "name": "bank_account_number",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "bank_account_check_digit": {
+          "name": "bank_account_check_digit",
+          "type": "varchar(5)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pix_key_type": {
+          "name": "pix_key_type",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pix_key": {
+          "name": "pix_key",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "deactivated_at": {
+          "name": "deactivated_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "legacy_id": {
+          "name": "legacy_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "par_acts_act_number_idx": {
+          "name": "par_acts_act_number_idx",
+          "columns": [
+            "act_number"
+          ],
+          "isUnique": true
+        },
+        "par_acts_legacy_id_idx": {
+          "name": "par_acts_legacy_id_idx",
+          "columns": [
+            "legacy_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "par_acts_id": {
+          "name": "par_acts_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {
+        "par_acts_active_consistency_chk": {
+          "name": "par_acts_active_consistency_chk",
+          "value": "(`par_acts`.`active` = FALSE) = (`par_acts`.`deactivated_at` IS NOT NULL)"
+        },
+        "par_acts_payment_target_chk": {
+          "name": "par_acts_payment_target_chk",
+          "value": "(`par_acts`.`has_financial_transfer` = FALSE) OR (`par_acts`.`bank_account_bank` IS NOT NULL) OR (`par_acts`.`pix_key` IS NOT NULL)"
+        },
+        "par_acts_bank_block_chk": {
+          "name": "par_acts_bank_block_chk",
+          "value": "(`par_acts`.`bank_account_bank` IS NULL) = (`par_acts`.`bank_account_agency` IS NULL)\n        AND (`par_acts`.`bank_account_bank` IS NULL) = (`par_acts`.`bank_account_number` IS NULL)\n        AND (`par_acts`.`bank_account_bank` IS NULL) = (`par_acts`.`bank_account_check_digit` IS NULL)"
+        },
+        "par_acts_pix_block_chk": {
+          "name": "par_acts_pix_block_chk",
+          "value": "(`par_acts`.`pix_key_type` IS NULL) = (`par_acts`.`pix_key` IS NULL)"
+        }
+      }
+    },
+    "par_collaborators": {
+      "name": "par_collaborators",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cpf": {
+          "name": "cpf",
+          "type": "varchar(11)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "occupation_area": {
+          "name": "occupation_area",
+          "type": "varchar(10)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "role": {
+          "name": "role",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "start_of_contract": {
+          "name": "start_of_contract",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "employment_relationship": {
+          "name": "employment_relationship",
+          "type": "varchar(5)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "registration_status": {
+          "name": "registration_status",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rg": {
+          "name": "rg",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "date_of_birth": {
+          "name": "date_of_birth",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "gender_identity": {
+          "name": "gender_identity",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "race": {
+          "name": "race",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "education": {
+          "name": "education",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "food_category": {
+          "name": "food_category",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "food_category_description": {
+          "name": "food_category_description",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "complete_address": {
+          "name": "complete_address",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "telephone": {
+          "name": "telephone",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "emergency_contact_name": {
+          "name": "emergency_contact_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "emergency_contact_telephone": {
+          "name": "emergency_contact_telephone",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "allergies": {
+          "name": "allergies",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "biography": {
+          "name": "biography",
+          "type": "varchar(2000)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "experience_in_the_public_sector": {
+          "name": "experience_in_the_public_sector",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "program_id": {
+          "name": "program_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "disable_by": {
+          "name": "disable_by",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "deactivated_at": {
+          "name": "deactivated_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "legacy_id": {
+          "name": "legacy_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "par_collaborators_cpf_idx": {
+          "name": "par_collaborators_cpf_idx",
+          "columns": [
+            "cpf"
+          ],
+          "isUnique": true
+        },
+        "par_collaborators_email_idx": {
+          "name": "par_collaborators_email_idx",
+          "columns": [
+            "email"
+          ],
+          "isUnique": true
+        },
+        "par_collaborators_legacy_id_idx": {
+          "name": "par_collaborators_legacy_id_idx",
+          "columns": [
+            "legacy_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "par_collaborators_id": {
+          "name": "par_collaborators_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {
+        "par_collaborators_soft_delete_chk": {
+          "name": "par_collaborators_soft_delete_chk",
+          "value": "((`par_collaborators`.`active` = FALSE) = (`par_collaborators`.`deactivated_at` IS NOT NULL))\n        AND ((`par_collaborators`.`active` = FALSE) = (`par_collaborators`.`disable_by` IS NOT NULL))"
+        }
+      }
+    },
+    "par_financiers": {
+      "name": "par_financiers",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "corporate_name": {
+          "name": "corporate_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "legal_representative": {
+          "name": "legal_representative",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cnpj": {
+          "name": "cnpj",
+          "type": "varchar(14)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "telephone": {
+          "name": "telephone",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "address": {
+          "name": "address",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "deactivated_at": {
+          "name": "deactivated_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "legacy_id": {
+          "name": "legacy_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "par_financiers_cnpj_idx": {
+          "name": "par_financiers_cnpj_idx",
+          "columns": [
+            "cnpj"
+          ],
+          "isUnique": true
+        },
+        "par_financiers_legacy_id_idx": {
+          "name": "par_financiers_legacy_id_idx",
+          "columns": [
+            "legacy_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "par_financiers_id": {
+          "name": "par_financiers_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {
+        "par_financiers_active_consistency_chk": {
+          "name": "par_financiers_active_consistency_chk",
+          "value": "(`par_financiers`.`active` = FALSE) = (`par_financiers`.`deactivated_at` IS NOT NULL)"
+        }
+      }
+    },
+    "par_municipalities": {
+      "name": "par_municipalities",
+      "columns": {
+        "ibge_code": {
+          "name": "ibge_code",
+          "type": "varchar(7)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "uf": {
+          "name": "uf",
+          "type": "varchar(2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "deactivated_at": {
+          "name": "deactivated_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "par_municipalities_ibge_code": {
+          "name": "par_municipalities_ibge_code",
+          "columns": [
+            "ibge_code"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {
+        "par_municipalities_active_consistency_chk": {
+          "name": "par_municipalities_active_consistency_chk",
+          "value": "(`par_municipalities`.`active` = FALSE) = (`par_municipalities`.`deactivated_at` IS NOT NULL)"
+        }
+      }
+    },
+    "par_states": {
+      "name": "par_states",
+      "columns": {
+        "uf": {
+          "name": "uf",
+          "type": "varchar(2)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "deactivated_at": {
+          "name": "deactivated_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "par_states_uf": {
+          "name": "par_states_uf",
+          "columns": [
+            "uf"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {
+        "par_states_active_consistency_chk": {
+          "name": "par_states_active_consistency_chk",
+          "value": "(`par_states`.`active` = FALSE) = (`par_states`.`deactivated_at` IS NOT NULL)"
+        }
+      }
+    },
+    "par_suppliers": {
+      "name": "par_suppliers",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "email": {
+          "name": "email",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cnpj": {
+          "name": "cnpj",
+          "type": "varchar(14)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "corporate_name": {
+          "name": "corporate_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "fantasy_name": {
+          "name": "fantasy_name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "service_category": {
+          "name": "service_category",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "active": {
+          "name": "active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": true
+        },
+        "deactivated_at": {
+          "name": "deactivated_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "bank_account_bank": {
+          "name": "bank_account_bank",
+          "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "bank_account_agency": {
+          "name": "bank_account_agency",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "bank_account_number": {
+          "name": "bank_account_number",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "bank_account_check_digit": {
+          "name": "bank_account_check_digit",
+          "type": "varchar(5)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pix_key_type": {
+          "name": "pix_key_type",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "pix_key": {
+          "name": "pix_key",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "service_rating": {
+          "name": "service_rating",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "rating_comment": {
+          "name": "rating_comment",
+          "type": "varchar(1000)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "legacy_id": {
+          "name": "legacy_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "par_suppliers_cnpj_idx": {
+          "name": "par_suppliers_cnpj_idx",
+          "columns": [
+            "cnpj"
+          ],
+          "isUnique": true
+        },
+        "par_suppliers_legacy_id_idx": {
+          "name": "par_suppliers_legacy_id_idx",
+          "columns": [
+            "legacy_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "par_suppliers_id": {
+          "name": "par_suppliers_id",
+          "columns": [
+            "id"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {
+        "par_suppliers_active_consistency_chk": {
+          "name": "par_suppliers_active_consistency_chk",
+          "value": "(`par_suppliers`.`active` = FALSE) = (`par_suppliers`.`deactivated_at` IS NOT NULL)"
+        },
+        "par_suppliers_payment_target_chk": {
+          "name": "par_suppliers_payment_target_chk",
+          "value": "(`par_suppliers`.`bank_account_bank` IS NOT NULL) OR (`par_suppliers`.`pix_key` IS NOT NULL)"
+        },
+        "par_suppliers_bank_block_chk": {
+          "name": "par_suppliers_bank_block_chk",
+          "value": "(`par_suppliers`.`bank_account_bank` IS NULL) = (`par_suppliers`.`bank_account_agency` IS NULL)\n        AND (`par_suppliers`.`bank_account_bank` IS NULL) = (`par_suppliers`.`bank_account_number` IS NULL)\n        AND (`par_suppliers`.`bank_account_bank` IS NULL) = (`par_suppliers`.`bank_account_check_digit` IS NULL)"
+        },
+        "par_suppliers_pix_block_chk": {
+          "name": "par_suppliers_pix_block_chk",
+          "value": "(`par_suppliers`.`pix_key_type` IS NULL) = (`par_suppliers`.`pix_key` IS NULL)"
+        },
+        "par_suppliers_service_rating_chk": {
+          "name": "par_suppliers_service_rating_chk",
+          "value": "`par_suppliers`.`service_rating` IS NULL OR `par_suppliers`.`service_rating` IN ('RUIM','REGULAR','BOM','OTIMO')"
+        }
+      }
+    },
+    "par_user_profiles": {
+      "name": "par_user_profiles",
+      "columns": {
+        "user_ref": {
+          "name": "user_ref",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cpf": {
+          "name": "cpf",
+          "type": "varchar(11)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "telephone": {
+          "name": "telephone",
+          "type": "varchar(30)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "avatar_url": {
+          "name": "avatar_url",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "collaborator_ref": {
+          "name": "collaborator_ref",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "legacy_id": {
+          "name": "legacy_id",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "par_user_profiles_cpf_idx": {
+          "name": "par_user_profiles_cpf_idx",
+          "columns": [
+            "cpf"
+          ],
+          "isUnique": true
+        },
+        "par_user_profiles_legacy_id_idx": {
+          "name": "par_user_profiles_legacy_id_idx",
+          "columns": [
+            "legacy_id"
+          ],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "par_user_profiles_user_ref": {
+          "name": "par_user_profiles_user_ref",
+          "columns": [
+            "user_ref"
+          ]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    }
+  },
+  "views": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "tables": {},
+    "indexes": {}
+  }
+}

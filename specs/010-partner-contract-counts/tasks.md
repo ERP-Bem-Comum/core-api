@@ -41,20 +41,20 @@ Duas fatias independentes: **A** (contagem cross-módulo + filtro fornecedor) ·
 
 ## Phase 3 — Fatia B: vínculo Colaborador↔Programa (R3)
 
-- [ ] T011 [P] [B] W0 RED: `tests/modules/partners/domain/collaborator/collaborator.test.ts` — `programId`
+- [x] T011 [P] [B] W0 RED: `tests/modules/partners/domain/collaborator/collaborator.test.ts` — `programId`
       opcional no register/edit/complete; UUID inválido → erro; null aceito.
-- [ ] T012 [B] Adicionar `programId: string | null` ao core/inputs em `domain/collaborator/types.ts` +
+- [x] T012 [B] Adicionar `programId: string | null` ao core/inputs em `domain/collaborator/types.ts` +
       validação (UUID v4|null) em `collaborator.ts` (register/edit/complete preservam).
-- [ ] T013 [B] Schema: `par_collaborators.program_id varchar(36)` nullable em `schemas/mysql.ts`;
+- [x] T013 [B] Schema: `par_collaborators.program_id varchar(36)` nullable em `schemas/mysql.ts`;
       `mappers/collaborator.mapper.ts` row↔domínio. W0 RED do mapper/round-trip antes.
-- [ ] T014 [B] Gerar migration `pnpm run db:generate:partners` + editar charset/collate (COLLATE bin) +
+- [x] T014 [B] Gerar migration `pnpm run db:generate:partners` + editar charset/collate (COLLATE bin) +
       versionar; validar `db:generate` → "nothing to migrate" (snapshot consistente).
-- [ ] T015 [P] [B] W0 RED: `tests/modules/partners/application/use-cases/list-collaborators.test.ts` —
+- [x] T015 [P] [B] W0 RED: `tests/modules/partners/application/use-cases/list-collaborators.test.ts` —
       filtro `programIds` casa só os vinculados; ausência do filtro não afeta.
-- [ ] T016 [B] Adicionar `programIds?` ao `ListCollaboratorsFilter` + predicado em `list-collaborators.ts`.
-- [ ] T017 [P] [B] W0 RED: `tests/modules/partners/adapters/http/collaborators-*.routes.test.ts` —
+- [x] T016 [B] Adicionar `programIds?` ao `ListCollaboratorsFilter` + predicado em `list-collaborators.ts`.
+- [x] T017 [P] [B] W0 RED: `tests/modules/partners/adapters/http/collaborators-*.routes.test.ts` —
       `programId` no cadastro/detalhe + `programIds` na query.
-- [ ] T018 [B] HTTP do colaborador: `programId` no body/dto/schema; `programIds` no `collaborator-list-query.ts`.
+- [x] T018 [B] HTTP do colaborador: `programId` no body/dto/schema; `programIds` no `collaborator-list-query.ts`.
 
 **Checkpoint B**: colaborador vincula programa; filtro por programa funciona.
 

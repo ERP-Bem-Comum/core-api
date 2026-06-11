@@ -27,6 +27,8 @@ export type EditCollaboratorCommand = Readonly<{
   role: string;
   startOfContract: Date;
   employmentRelationship: string;
+  // R3 — vínculo a Programa (UUID v4|null). Ausente/undefined = preserva; `null` = desvincula.
+  programId?: string | null | undefined;
 }>;
 
 export type EditCollaboratorError =
@@ -68,6 +70,8 @@ export const editCollaborator =
         role: cmd.role,
         startOfContract: cmd.startOfContract,
         employmentRelationship: cmd.employmentRelationship,
+        // Repassa apenas se veio no comando — ausente preserva o vínculo atual (domínio decide via undefined).
+        ...(cmd.programId !== undefined ? { programId: cmd.programId } : {}),
       },
       deps.clock.now(),
     );

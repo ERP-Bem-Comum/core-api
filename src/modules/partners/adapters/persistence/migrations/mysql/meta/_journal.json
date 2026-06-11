@@ -64,6 +64,13 @@
       "when": 1781568000000,
       "tag": "0008_act_acordo_rewrite",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1781192047472,
+      "tag": "0009_outstanding_stingray",
+      "breakpoints": true
     }
   ]
 }

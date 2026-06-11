@@ -172,6 +172,9 @@ export const parCollaborators = mysqlTable(
     allergies: varchar('allergies', { length: 500 }),
     biography: varchar('biography', { length: 2000 }),
     experienceInThePublicSector: boolean('experience_in_the_public_sector'),
+    // Vínculo opcional a Programa (UUID v4 — ref leve cross-módulo, ADR-0014: sem FK física,
+    // sem import de programs/domain). NULL = não vinculado. COLLATE utf8mb4_bin no SQL manual.
+    programId: varchar('program_id', { length: 36 }),
     // Soft-delete: Inactive carrega disable_by + deactivated_at.
     active: boolean('active').notNull().default(true),
     disableBy: varchar('disable_by', { length: 40 }),

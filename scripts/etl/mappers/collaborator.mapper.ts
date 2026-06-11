@@ -141,6 +141,8 @@ export const mapLegacyCollaboratorRow = (
     biography,
     experienceInThePublicSector:
       row.experienceInThePublicSector === null ? null : row.experienceInThePublicSector === 1,
+    // Legado não tem vínculo a Programa — entra sem vínculo (null); pode ser atribuído depois.
+    programId: null,
     status,
     disableBy,
     deactivatedAt,

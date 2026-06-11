@@ -25,6 +25,8 @@ package-lock.json
 # Drizzle Kit artifacts — gerados por `pnpm run db:generate`, não formatar
 src/modules/contracts/adapters/persistence/migrations/mysql/meta/
 src/modules/auth/adapters/persistence/migrations/mysql/meta/
+src/modules/partners/adapters/persistence/migrations/mysql/meta/
+src/modules/programs/adapters/persistence/migrations/mysql/meta/
 
 # Artefatos de relatórios E2E (incluem JSON intencionalmente malformado p/ testes de tamper)
 tests/reports/

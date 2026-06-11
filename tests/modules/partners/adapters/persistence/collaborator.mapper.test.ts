@@ -13,6 +13,8 @@ import type { CollaboratorRow } from '#src/modules/partners/adapters/persistence
 const NOW = new Date('2026-06-01T12:00:00.000Z');
 const LATER = new Date('2026-06-02T12:00:00.000Z');
 
+const PROGRAM_ID = '8f1b9c2d-3e4a-4b6c-8d9e-0f1a2b3c4d5e';
+
 const baseRegister = () => ({
   id: CollaboratorId.generate(),
   name: 'Maria Silva',
@@ -45,6 +47,12 @@ const completeInput = () => ({
 const makeActive = () => {
   const r = Collaborator.register(baseRegister());
   if (!r.ok) throw new Error(`fixture collaborator: ${r.error}`);
+  return r.value.collaborator;
+};
+
+const makeWithProgram = () => {
+  const r = Collaborator.register({ ...baseRegister(), programId: PROGRAM_ID });
+  if (!r.ok) throw new Error(`fixture collaborator+program: ${r.error}`);
   return r.value.collaborator;
 };
 
@@ -87,6 +95,14 @@ describe('collaborator.mapper — collaboratorToInsert', () => {
     assert.equal(row.deactivatedAt!.getTime(), LATER.getTime());
     assert.equal(row.disableBy, 'TEMPO_CONTRATO_FINALIZADO');
   });
+
+  it('sem vínculo → program_id null', () => {
+    assert.equal(collaboratorToInsert(makeActive(), NOW).programId, null);
+  });
+
+  it('com vínculo → program_id preenchido (UUID)', () => {
+    assert.equal(collaboratorToInsert(makeWithProgram(), NOW).programId, PROGRAM_ID);
+  });
 });
 
 describe('collaborator.mapper — collaboratorFromRow', () => {
@@ -117,6 +133,7 @@ describe('collaborator.mapper — collaboratorFromRow', () => {
     active: true,
     disableBy: null,
     deactivatedAt: null,
+    programId: null,
     createdAt: NOW,
     updatedAt: NOW,
     legacyId: null,
@@ -201,6 +218,23 @@ describe('collaborator.mapper — collaboratorFromRow', () => {
     if (back.ok && back.value.status === 'Inactive') {
       assert.equal(back.value.disableBy, 'TEMPO_CONTRATO_FINALIZADO');
     }
+  });
+
+  it('reconstrói program_id da row (vínculo a programa)', () => {
+    const r = collaboratorFromRow({ ...preRegRow, programId: PROGRAM_ID });
+    assert.equal(isOk(r), true);
+    if (r.ok) assert.equal(r.value.programId, PROGRAM_ID);
+  });
+
+  it('round-trip com programId: fromRow(toInsert(c)) preserva o vínculo', () => {
+    const c = makeWithProgram();
+    const back = collaboratorFromRow({
+      ...collaboratorToInsert(c, NOW),
+      createdAt: NOW,
+      updatedAt: NOW,
+    } as CollaboratorRow);
+    assert.equal(isOk(back), true);
+    if (back.ok) assert.equal(back.value.programId, PROGRAM_ID);
   });
 
   it('rejeita id inválido', () => {

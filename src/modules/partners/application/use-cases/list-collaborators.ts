@@ -36,6 +36,9 @@ export type CollaboratorListFilter = Readonly<{
   disableReasons?: readonly DisableReason[];
   roles?: readonly string[];
   yearOfContract?: number;
+  // R3 — vínculo a Programa (ref leve UUID). OR dentro do array; colaborador sem vínculo
+  // (programId null) nunca casa um filtro presente; ausente/vazio = não restringe.
+  programIds?: readonly string[];
 }>;
 
 // `search` casa name (substring case-insensitive) OU cpf (só dígitos do termo). Termo
@@ -73,7 +76,8 @@ export const collaboratorMatchesFilter = (
   matchesInNullable(c.education, filter.educations) &&
   matchesInNullable(c.status === 'Inactive' ? c.disableBy : null, filter.disableReasons) &&
   matchesIn(c.role, filter.roles) &&
-  matchesYear(c.startOfContract, filter.yearOfContract);
+  matchesYear(c.startOfContract, filter.yearOfContract) &&
+  matchesInNullable(c.programId, filter.programIds);
 
 type Deps = Readonly<{ collaboratorRepo: CollaboratorRepository }>;
 

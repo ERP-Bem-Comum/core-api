@@ -10,6 +10,7 @@
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import { immutable } from '#src/shared/primitives/immutable.ts';
+import { isUuidV4 } from '#src/shared/utils/id.ts';
 import * as Cpf from '#src/shared/kernel/cpf.ts';
 import * as OccupationArea from './occupation-area.ts';
 import * as EmploymentRelationship from './employment-relationship.ts';
@@ -32,6 +33,13 @@ import type {
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const isBlank = (s: string): boolean => s.trim().length === 0;
 
+// Vínculo a Programa (ref leve cross-módulo — ADR-0014): `null` é válido (não vinculado);
+// presença exige UUID v4. Usado por register/edit (a borda já achata para string|null).
+const validateProgramId = (programId: string | null): Result<string | null, CollaboratorError> =>
+  programId === null || isUuidV4(programId)
+    ? ok(programId)
+    : err('collaborator-program-id-invalid');
+
 export const register = (
   input: RegisterCollaboratorInput,
 ): Result<{ collaborator: ActiveCollaborator; event: CollaboratorEvent }, CollaboratorError> => {
@@ -49,6 +57,9 @@ export const register = (
   const employmentRelationship = EmploymentRelationship.parse(input.employmentRelationship);
   if (!employmentRelationship.ok) return employmentRelationship;
 
+  const programId = validateProgramId(input.programId ?? null);
+  if (!programId.ok) return programId;
+
   const collaborator: ActiveCollaborator = immutable({
     id: input.id,
     name: input.name.trim(),
@@ -59,6 +70,7 @@ export const register = (
     startOfContract: input.startOfContract,
     employmentRelationship: employmentRelationship.value,
     registrationStatus: 'PreRegistration',
+    programId: programId.value,
     rg: null,
     dateOfBirth: null,
     genderIdentity: null,
@@ -110,6 +122,12 @@ export const edit = (
   const employmentRelationship = EmploymentRelationship.parse(input.employmentRelationship);
   if (!employmentRelationship.ok) return employmentRelationship;
 
+  // `programId` ausente no input preserva o vínculo atual; presente (UUID|null) atualiza/desvincula.
+  const programId = validateProgramId(
+    input.programId === undefined ? collaborator.programId : input.programId,
+  );
+  if (!programId.ok) return programId;
+
   // Spread preserva pessoais + registrationStatus + estado (Active/Inactive + disableBy/deactivatedAt).
   const edited: Collaborator = immutable({
     ...collaborator,
@@ -120,6 +138,7 @@ export const edit = (
     role: input.role.trim(),
     startOfContract: input.startOfContract,
     employmentRelationship: employmentRelationship.value,
+    programId: programId.value,
   });
 
   return ok({

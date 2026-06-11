@@ -28,6 +28,18 @@ const baseRegister = () => ({
   registeredAt: NOW,
 });
 
+const PROGRAM_ID = '8f1b9c2d-3e4a-4b6c-8d9e-0f1a2b3c4d5e';
+
+const baseEdit = () => ({
+  name: 'Maria S. Edited',
+  email: 'maria.edited@bemcomum.org',
+  cpf: '11144477735',
+  occupationArea: 'DDI',
+  role: 'Coordenadora',
+  startOfContract: new Date('2026-03-01T00:00:00.000Z'),
+  employmentRelationship: 'PJ',
+});
+
 const personal = () => ({
   rg: '12.345.678-9',
   dateOfBirth: new Date('1990-05-20T00:00:00.000Z'),
@@ -181,5 +193,79 @@ describe('Collaborator.deactivate / reactivate', () => {
     const again = Collaborator.reactivate(registerActive(), LATER);
     assert.equal(isErr(again), true);
     if (!again.ok) assert.equal(again.error, 'collaborator-already-active');
+  });
+});
+
+describe('Collaborator — vínculo Programa (programId, ref leve UUID — ADR-0014)', () => {
+  it('register sem programId → programId null (campo opcional)', () => {
+    const r = Collaborator.register({ ...baseRegister() });
+    assert.equal(isOk(r), true);
+    if (r.ok) assert.equal(r.value.collaborator.programId, null);
+  });
+
+  it('register com programId UUID v4 válido → preservado', () => {
+    const r = Collaborator.register({ ...baseRegister(), programId: PROGRAM_ID });
+    assert.equal(isOk(r), true);
+    if (r.ok) assert.equal(r.value.collaborator.programId, PROGRAM_ID);
+  });
+
+  it('register com programId null explícito → aceito (null)', () => {
+    const r = Collaborator.register({ ...baseRegister(), programId: null });
+    assert.equal(isOk(r), true);
+    if (r.ok) assert.equal(r.value.collaborator.programId, null);
+  });
+
+  it('register com programId UUID inválido → collaborator-program-id-invalid', () => {
+    const r = Collaborator.register({ ...baseRegister(), programId: 'not-a-uuid' });
+    assert.equal(isErr(r), true);
+    if (!r.ok) assert.equal(r.error, 'collaborator-program-id-invalid');
+  });
+
+  it('edit com programId UUID v4 → atualiza o vínculo', () => {
+    const edited = Collaborator.edit(
+      registerActive(),
+      { ...baseEdit(), programId: PROGRAM_ID },
+      LATER,
+    );
+    assert.equal(isOk(edited), true);
+    if (edited.ok) assert.equal(edited.value.collaborator.programId, PROGRAM_ID);
+  });
+
+  it('edit com programId null → desvincula', () => {
+    const withProgram = Collaborator.register({ ...baseRegister(), programId: PROGRAM_ID });
+    assert.ok(withProgram.ok);
+    const edited = Collaborator.edit(
+      withProgram.value.collaborator,
+      { ...baseEdit(), programId: null },
+      LATER,
+    );
+    assert.equal(isOk(edited), true);
+    if (edited.ok) assert.equal(edited.value.collaborator.programId, null);
+  });
+
+  it('edit sem programId no input → preserva o vínculo existente', () => {
+    const withProgram = Collaborator.register({ ...baseRegister(), programId: PROGRAM_ID });
+    assert.ok(withProgram.ok);
+    const edited = Collaborator.edit(withProgram.value.collaborator, { ...baseEdit() }, LATER);
+    assert.equal(isOk(edited), true);
+    if (edited.ok) assert.equal(edited.value.collaborator.programId, PROGRAM_ID);
+  });
+
+  it('edit com programId UUID inválido → collaborator-program-id-invalid', () => {
+    const edited = Collaborator.edit(registerActive(), { ...baseEdit(), programId: 'xpto' }, LATER);
+    assert.equal(isErr(edited), true);
+    if (!edited.ok) assert.equal(edited.error, 'collaborator-program-id-invalid');
+  });
+
+  it('completeRegistration preserva o programId (não toca o vínculo)', () => {
+    const withProgram = Collaborator.register({ ...baseRegister(), programId: PROGRAM_ID });
+    assert.ok(withProgram.ok);
+    const done = Collaborator.completeRegistration(
+      withProgram.value.collaborator,
+      { ...personal() },
+      LATER,
+    );
+    assert.equal(isOk(done), true);
+    if (done.ok) assert.equal(done.value.collaborator.programId, PROGRAM_ID);
   });
 });

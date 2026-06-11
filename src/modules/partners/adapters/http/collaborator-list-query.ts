@@ -41,6 +41,7 @@ export const queryToFilter = (q: CollaboratorListQuery): CollaboratorListFilter 
   ...(q.disableBy !== undefined ? { disableReasons: q.disableBy } : {}),
   ...(q.roles !== undefined ? { roles: q.roles } : {}),
   ...(q.yearOfContract !== undefined ? { yearOfContract: q.yearOfContract } : {}),
+  ...(q.programIds !== undefined ? { programIds: q.programIds } : {}),
 });
 
 export type PaginationMeta = Readonly<{

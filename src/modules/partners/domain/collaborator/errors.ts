@@ -19,6 +19,7 @@ export type CollaboratorError =
   | 'collaborator-already-inactive'
   | 'collaborator-already-active'
   | 'collaborator-inactive-requires-disable-reason'
+  | 'collaborator-program-id-invalid'
   | OccupationAreaError
   | EmploymentRelationshipError
   | GenderIdentityError

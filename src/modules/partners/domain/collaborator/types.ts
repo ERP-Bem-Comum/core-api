@@ -50,6 +50,9 @@ type CollaboratorCore = Readonly<{
   startOfContract: Date;
   employmentRelationship: EmploymentRelationship;
   registrationStatus: RegistrationStatus;
+  // Vínculo opcional a Programa por referência leve de ID (UUID v4 — ADR-0014: sem FK física
+  // cross-módulo, sem import de `programs/domain`). `null` = não vinculado.
+  programId: string | null;
 }> &
   PersonalFields;
 
@@ -70,6 +73,8 @@ export type RegisterCollaboratorInput = Readonly<{
   startOfContract: Date;
   employmentRelationship: string;
   registeredAt: Date;
+  // Vínculo opcional a Programa (UUID v4|null). Ausente = não vinculado (null).
+  programId?: string | null;
 }>;
 
 /** Payload de edição cadastral (PUT total): os 7 campos cadastrais. Pessoais/estado preservados. */
@@ -81,6 +86,8 @@ export type EditCollaboratorInput = Readonly<{
   role: string;
   startOfContract: Date;
   employmentRelationship: string;
+  // Vínculo a Programa (UUID v4|null). Ausente = preserva o vínculo atual; `null` = desvincula.
+  programId?: string | null;
 }>;
 
 // Payload de auto-cadastro (campos pessoais; enums como string, validados no domínio).

@@ -26,6 +26,8 @@ export type RegisterCollaboratorCommand = Readonly<{
   role: string;
   startOfContract: Date;
   employmentRelationship: string;
+  // R3 — vínculo opcional a Programa (UUID v4|null). Ausente/undefined = não vinculado.
+  programId?: string | null | undefined;
 }>;
 
 export type RegisterCollaboratorError =
@@ -56,6 +58,7 @@ export const registerCollaborator =
       startOfContract: cmd.startOfContract,
       employmentRelationship: cmd.employmentRelationship,
       registeredAt: deps.clock.now(),
+      programId: cmd.programId ?? null,
     });
     if (!registered.ok) return registered;
 

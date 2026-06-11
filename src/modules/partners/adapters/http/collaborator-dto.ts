@@ -40,6 +40,7 @@ export const collaboratorToDetailDto = (record: CollaboratorReadRecord): Collabo
     emergencyContactName: c.emergencyContactName,
     emergencyContactTelephone: c.emergencyContactTelephone,
     experienceInThePublicSector: c.experienceInThePublicSector,
+    programId: c.programId,
     active: c.status === 'Active',
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
