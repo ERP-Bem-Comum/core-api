@@ -33,9 +33,11 @@
 
 ## Notes
 
-- **3 pontos para o `/speckit-clarify`** (assumidos como default, não bloqueantes):
-  1. A coluna mostra contratos, aditivos ou os **dois** (assumido: os dois).
-  2. **Quais estados** de contrato contam (assumido: todos menos Cancelado).
-  3. **R3 Programa** (Colaborador): modelar o vínculo agora ou **adiar** (assumido: adiar — sub-ticket).
+- ✅ **Clarifications resolvidas (Session 2026-06-11):**
+  1. Coluna expõe **os dois** (contratos + aditivos) → FR-001.
+  2. Contagem inclui **todos os estados** (até Cancelado) → FR-007.
+  3. **R3 Programa entra na feature** — modela o vínculo Colaborador↔Programa → FR-008/FR-009, US3,
+     Impacto Arquitetural (migration `par_collaborators.program_id`).
 - Achado arquitetural central: **não existe** read port de "contratos por contratado" em
-  `contracts/public-api` — a feature o cria (contagem em lote). Detalhe vai para o `/speckit-plan`.
+  `contracts/public-api` — a feature o cria (contagem em lote). Detalhe técnico vai para o `/speckit-plan`.
+- ⚠️ Escopo cresceu com a clarify #3 (vínculo de domínio + migration) — a feature é **L**, toca 3 BCs.

@@ -12,6 +12,18 @@
 contagem dos contratos que referenciam o parceiro como **contratado**; e o grid de Fornecedor não tem o
 filtro **"Status de contrato"**.
 
+## Clarifications
+
+### Session 2026-06-11
+
+- Q: A coluna mostra contratos, aditivos ou os dois? → A: **Os dois** — cada item de lista expõe
+  `contractsCount` **e** `amendmentsCount`.
+- Q: Quais estados de contrato entram na contagem? → A: **Todos** — conta qualquer contrato que referencie o
+  parceiro como contratado, em qualquer estado (inclusive Cancelado). Os aditivos contam os desses contratos.
+- Q: R3 — filtro "Programa" no grid de Colaborador exige modelar o vínculo colaborador↔programa (inexistente
+  no domínio). Fazer agora ou adiar? → A: **Modelar agora** — o vínculo colaborador↔programa entra **nesta**
+  feature (referência por ID ao módulo `programs`, ADR-0014: domínio + schema/migration + borda + filtro).
+
 ## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Coluna Contratos/Aditivos preenchida nos grids de parceiros (Priority: P1)
@@ -61,6 +73,29 @@ fornecedores que satisfazem aquela situação contratual.
 
 ---
 
+### User Story 3 - Filtro "Programa" no grid de Colaboradores (Priority: P3)
+
+Um gestor quer filtrar a lista de Colaboradores pelo **Programa** ao qual estão vinculados. Hoje esse filtro
+está desabilitado no front porque o Colaborador **não tem vínculo com Programa** no backend. Esta história
+modela o vínculo (referência ao módulo de Programas) e habilita o filtro.
+
+**Why this priority**: depende de modelar um vínculo de domínio novo (Colaborador→Programa) — é o item de
+maior custo/risco da feature e o mais isolável dos demais. Por isso fica por último.
+
+**Independent Test**: vincular um colaborador a um programa, aplicar o filtro por aquele programa e confirmar
+que a lista retorna apenas os colaboradores daquele programa.
+
+**Acceptance Scenarios**:
+
+1. **Given** colaboradores vinculados a programas distintos (e alguns sem programa), **When** o filtro por um
+   programa específico é aplicado, **Then** a lista retorna apenas os colaboradores daquele programa.
+2. **Given** um colaborador sem programa, **When** nenhum filtro de programa é aplicado, **Then** ele aparece
+   normalmente; **When** um filtro de programa é aplicado, **Then** ele não aparece.
+3. **Given** o cadastro/edição de um colaborador, **When** um programa é informado por referência, **Then** o
+   vínculo é persistido e refletido nas leituras.
+
+---
+
 ### Edge Cases
 
 - **Parceiro sem contratos**: contagem = 0 (não omitir a linha; não mostrar `—`).
@@ -90,8 +125,14 @@ fornecedores que satisfazem aquela situação contratual.
   contagem entre parceiros de tipos/ids diferentes.
 - **FR-006**: O grid de **Fornecedores** MUST oferecer um filtro por **situação contratual** que restrinja a
   lista aos fornecedores que satisfazem a situação selecionada.
-- **FR-007**: A definição de **quais estados de contrato entram na contagem** (e no filtro de situação) MUST
-  ser única e consistente entre a coluna de contagem e o filtro.
+- **FR-007**: A contagem (FR-001) MUST considerar **todos os contratos** que referenciam o parceiro, em
+  **qualquer estado** (inclusive Cancelado); os aditivos contados são os desses contratos. O filtro de
+  situação contratual do Fornecedor (FR-006) é uma operação **distinta**, parametrizada pelo estado escolhido.
+- **FR-008**: O agregado **Colaborador** MUST passar a referenciar um **Programa** por ID (referência leve ao
+  módulo `programs`, sem importar seu domínio — ADR-0014); o vínculo é **opcional** (colaborador pode não ter
+  programa). Cadastro/edição do colaborador MUST aceitar/preservar essa referência.
+- **FR-009**: O grid de **Colaboradores** MUST oferecer um filtro por **Programa** que restrinja a lista aos
+  colaboradores vinculados ao(s) programa(s) selecionado(s).
 
 ### Key Entities _(include if feature involves data)_
 
@@ -113,6 +154,9 @@ fornecedores que satisfazem aquela situação contratual.
 - **SC-003**: O filtro de situação contratual do grid de Fornecedores retorna exatamente o subconjunto
   correto (0 falsos positivos/negativos) para cada situação suportada.
 - **SC-004**: Nenhuma contagem vaza entre parceiros de tipos/ids diferentes (0 cross-contamination).
+- **SC-005**: Após vincular colaboradores a programas, o filtro por programa do grid de Colaboradores retorna
+  exatamente o subconjunto vinculado (0 falsos positivos/negativos); colaboradores sem programa nunca casam
+  um filtro de programa.
 
 ## Impacto Arquitetural (core-api) _(obrigatório se a feature toca `src/`)_
 
@@ -122,26 +166,33 @@ fornecedores que satisfazem aquela situação contratual.
     acoplamento é **unidirecional e por contrato público** (Parceiros → `contracts/public-api`), exatamente
     o padrão sancionado pelo ADR-0006 para leitura cross-módulo (já usado pelo bloco `contractor` no sentido
     inverso). Não há leitura cruzada de tabelas nem import de `domain`/`application` alheio.
-- **Novos agregados / Value Objects?**: Nenhum agregado novo. Surge uma **projeção de leitura** (read port)
-  no `contracts/public-api`: "contagem de contratos/aditivos por contratado".
-- **Novos eventos de domínio (outbox)?**: Não — é leitura síncrona sob demanda (não evento).
+- **Novos agregados / Value Objects?**: Nenhum agregado novo. (1) Surge uma **projeção de leitura** (read
+  port) no `contracts/public-api`: "contagem de contratos/aditivos por contratado". (2) O agregado
+  **Colaborador** ganha uma **referência opcional a Programa** (`programId`, UUID — ref leve cross-módulo,
+  sem importar `programs/domain`; ADR-0014).
+- **Novos eventos de domínio (outbox)?**: Não — contagem é leitura síncrona sob demanda; o vínculo de
+  programa é cadastro (não evento novo nesta feature).
 - **Novos subcomandos de CLI?**: N/A (ADR-0037).
-- **Borda HTTP envolvida?**: Sim, indiretamente — os list items dos grids de Parceiros (`/api/v1/...`)
-  passam a incluir os campos de contagem. Sem rota nova; mudança aditiva no DTO de item de lista.
-- **Possíveis violações da constituição (I–VIII)?**: Nenhuma — o cross-módulo é via `public-api` (ADR-0006);
-  MySQL único; domínio puro; contagem em lote (sem N+1).
+- **Borda HTTP envolvida?**: Sim, **aditivo** — (a) os list items dos grids de Parceiros (`/api/v1/...`)
+  incluem `contractsCount`/`amendmentsCount`; (b) o item/cadastro de Colaborador inclui `programId`; (c) a
+  query de listagem de Colaboradores aceita filtro por programa. Sem rota nova.
+- **Migration (ADR-0020)**: `par_collaborators` ganha a coluna `program_id` (`varchar(36)` nullable). Gerada
+  via `pnpm run db:generate:partners` (nunca SQL à mão); ref leve, sem FK física cross-módulo (ADR-0014).
+- **Possíveis violações da constituição (I–VIII)?**: Nenhuma — cross-módulo via `public-api`/ref por ID
+  (ADR-0006/0014); MySQL único; domínio puro; contagem em lote (sem N+1). ⚠️ Toca **3 BCs** (contracts +
+  partners + ref a programs) — justificado: leitura por contrato público (contagem) + ref leve por ID
+  (programa), padrões sancionados; sem leitura cruzada de tabelas nem import de domínio alheio.
 
 ## Assumptions
 
-- **A coluna mostra os dois números** (contratos **e** aditivos) — o cabeçalho é "Contratos/Aditivos".
-  _(a confirmar no `/speckit-clarify`.)_
-- **Quais contratos contam** _(a confirmar no clarify)_: assumido **todos os contratos não-cancelados**
-  (Pending/Active/Expired/Terminated) em que o parceiro é contratado; "Cancelados" (rascunho descartado) não
-  contam. Os **aditivos** contam os dos contratos contados.
-- **R3 — filtro "Programa" no grid de Colaborador**: **ADIADO/bloqueado** nesta feature. O agregado
-  Collaborator **não tem vínculo com programa** no domínio (achado de código); modelar esse vínculo é um
-  trabalho próprio (referência por ID ao módulo `programs`, ADR-0014) e fica como **follow-up** — _a
-  confirmar no clarify se entra agora ou vira sub-ticket._
+- **A coluna mostra os dois números** (contratos **e** aditivos) — resolvido (Clarifications): expõe
+  `contractsCount` + `amendmentsCount`.
+- **Quais contratos contam** — resolvido (Clarifications): **todos os estados** (inclusive Cancelado). A
+  contagem é state-agnostic; o filtro de situação do Fornecedor (FR-006) é a operação state-specific.
+- **R3 — vínculo Colaborador↔Programa** — resolvido (Clarifications): **entra nesta feature**. Modela-se a
+  referência `programId` (UUID) no Colaborador + coluna `program_id` em `par_collaborators` (migration) +
+  cadastro/edição + filtro na listagem. Referência leve por ID (ADR-0014), sem FK física nem import de
+  `programs/domain`. ⚠️ É o eixo de maior custo/tamanho da feature (US3, P3).
 - **Já entregue (fora de escopo, verificado em código)**: filtros do colaborador
   (educations/races/genderIdentities/disableReasons/occupationAreas/employmentRelationships/roles/
   yearOfContract), filtros do ACT (hasFinancialTransfer/occupationArea), export CSV dos 4 submódulos, import
