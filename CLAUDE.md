@@ -7,7 +7,7 @@
 
 <!-- SPECKIT START -->
 
-Plano corrente: `specs/008-gestao-programas/plan.md` (novo módulo `programs` — CRUD + ciclo de vida de Programa via HTTP `/api/v1/programs`; identidade dupla UUID + `program_number`; ver `research.md`, `data-model.md`, `contracts/programs-http.md`).
+Plano corrente: `specs/009-contract-auto-expire/plan.md` (expiração automática de contratos: sweep no worker de outbox que aplica `Contract.expire` aos contratos vencidos — Active+Fixed, `current_period_end < hoje_BRT`; borda D+1 em UTC-3; reusa evento `ContractExpired`; sem schema/HTTP novos; ver `research.md`, `data-model.md`, `contracts/internal-contracts.md`).
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan.
 
