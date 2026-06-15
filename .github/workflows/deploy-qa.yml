@@ -88,4 +88,4 @@ jobs:
           # A chave está travada (forced command) p/ rodar só /opt/erp-qa/deploy.sh.
           # Se um container não ficar healthy, deploy.sh sai != 0 e este job fica vermelho.
           ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
-            ubuntu@201.23.88.83 deploy
+            ubuntu@201.23.88.74 deploy

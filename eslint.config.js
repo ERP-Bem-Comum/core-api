@@ -22,6 +22,12 @@ export default tseslint.config(
       // specs/ guarda artefatos spec-kit (SDD). Os contracts/*.ts são esboços
       // de ports para documentar design — não entram em nenhum tsconfig.
       'specs/**',
+      // Worktrees de sessões paralelas do Claude Code são cópias completas de
+      // src/ e tests/ de outras branches. O .gitignore já as exclui, mas o flat
+      // config do ESLint NÃO lê .gitignore — sem isto o projectService type-aware
+      // ingere ~1748 .ts extras e estoura o heap do V8 (OOM no `pnpm run lint`).
+      '.claude/**',
+      '.agents/**',
     ],
   },
 

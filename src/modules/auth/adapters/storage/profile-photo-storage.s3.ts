@@ -6,10 +6,17 @@
  * try/catch so aqui; resultado sempre Result<void, ProfilePhotoStorageError>. ASCII puro.
  */
 
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
+import {
+  S3Client,
+  PutObjectCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+} from '@aws-sdk/client-s3';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type {
+  DownloadedPhoto,
+  ProfilePhotoDownloadError,
   ProfilePhotoStorage,
   ProfilePhotoStorageError,
   UploadPhotoInput,
@@ -60,5 +67,21 @@ export const createS3ProfilePhotoStorage = (config: ProfilePhotoS3Config): Profi
     }
   };
 
-  return { upload, remove };
+  const download = async (
+    key: string,
+  ): Promise<Result<DownloadedPhoto, ProfilePhotoDownloadError>> => {
+    try {
+      const res = await client.send(new GetObjectCommand({ Bucket: config.bucket, Key: key }));
+      if (res.Body === undefined) return err('photo-object-missing');
+      const bytes = await res.Body.transformToByteArray();
+      return ok({ bytes, contentType: res.ContentType ?? 'application/octet-stream' });
+    } catch (cause) {
+      // NoSuchKey (GetObject) / NotFound (S3-compat variantes) -> objeto ausente, nao indisponibilidade.
+      const name = cause instanceof Error ? cause.name : '';
+      if (name === 'NoSuchKey' || name === 'NotFound') return err('photo-object-missing');
+      return err('photo-storage-unavailable');
+    }
+  };
+
+  return { upload, remove, download };
 };

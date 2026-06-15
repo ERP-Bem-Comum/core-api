@@ -28,6 +28,7 @@ import { updateProgram } from '../../application/use-cases/update-program.ts';
 import { deactivateProgram } from '../../application/use-cases/deactivate-program.ts';
 import { reactivateProgram } from '../../application/use-cases/reactivate-program.ts';
 import { uploadProgramLogo } from '../../application/use-cases/upload-program-logo.ts';
+import { getProgramLogo } from '../../application/use-cases/get-program-logo.ts';
 
 export type ProgramsDriver = 'memory' | 'mysql';
 
@@ -47,6 +48,8 @@ export type ProgramsHttpDeps = Readonly<{
   deactivateProgram: ReturnType<typeof deactivateProgram>;
   reactivateProgram: ReturnType<typeof reactivateProgram>;
   uploadProgramLogo: ReturnType<typeof uploadProgramLogo>;
+  /** Leitura dos bytes do logo (PRG-LOGO-CONTENT) — GET /api/v1/programs/:id/logo. */
+  getProgramLogo: ReturnType<typeof getProgramLogo>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -90,6 +93,7 @@ const makeDeps = (pools: Pools): ProgramsHttpDeps => {
     deactivateProgram: deactivateProgram({ programRepo, clock }),
     reactivateProgram: reactivateProgram({ programRepo, clock }),
     uploadProgramLogo: uploadProgramLogo({ programRepo, storage: pools.storage, clock }),
+    getProgramLogo: getProgramLogo({ programRepo, storage: pools.storage }),
     shutdown: pools.shutdown,
   };
 };

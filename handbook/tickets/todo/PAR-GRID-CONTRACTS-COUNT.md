@@ -5,6 +5,15 @@
 > em código (2026-06-10): ~70% de cada já estava entregue. Este card mantém **só o que falta de fato**.
 > Os dois cards originais foram removidos do kanban (substituídos por este).
 
+> ---
+> **🧭 Decisão de abordagem (2026-06-15, painel DDD + dados + Clean) — read-model, NÃO port síncrono.**
+> A contagem cross-módulo **não** deve ser feita por um read port síncrono `partners → contracts` (criaria
+> ciclo `contracts ⇄ partners`, contra ADR-0006). A saída canônica é um **read-model materializado via
+> outbox** (ADR-0022), mantido por eventos `ContractCreated`/`AmendmentHomologated`, que a grid de Parceiros
+> lê localmente — conforme `handbook/architecture/adr/0032-transient-http-composition-read-until-bff.md:87`.
+> As menções a `countByContractor` **síncrono** abaixo ficam substituídas por essa abordagem.
+> ---
+
 ## Título
 
 Grids de Parceiros — coluna **Contratos/Aditivos** (contagem cross-módulo) + filtros dependentes de vínculo
@@ -32,11 +41,12 @@ contagem de contratos/aditivos que referenciam aquele parceiro **como contratado
 - Cada list item passa a expor `contractsCount` (e, se o front quiser, `amendmentsCount`).
 - **Cross-módulo (ADR-0006/0014):** a contagem é dado do módulo **Contratos**. Partners **não** importa
   `contracts/domain`/`application` — consome via `contracts/public-api`.
-- ⚠️ **Achado:** **não existe** hoje read port de "contratos por contratado" no `contracts/public-api`
-  (grep vazio). O contrato referencia o contratado por `{ contractorType, contractorId }` (bloco
+- ⚠️ **Achado:** o contrato referencia o contratado por `{ contractorType, contractorId }` (bloco
   `contractor`); falta a **consulta inversa** (quantos contratos/aditivos apontam para um `contractorId`).
-  → **Criar** um read port em `contracts/public-api`, ex.:
-  `countByContractor(refs: {type,id}[]) → Map<id, {contracts, amendments}>` (**batch**, não 1-a-1).
+  → **Abordagem (painel 2026-06-15): read-model materializado via outbox (ADR-0022)** — projeção de
+  contagem por `contractorId` mantida por eventos `ContractCreated`/`AmendmentHomologated` que `contracts`
+  publica; a grid de Parceiros lê a projeção **local** (sem chamar `contracts` em tempo de request, sem
+  ciclo de dependência). **Não** criar read port síncrono `partners → contracts`.
 
 ### R2 — Filtro **"Status de contrato"** no grid de Fornecedor
 

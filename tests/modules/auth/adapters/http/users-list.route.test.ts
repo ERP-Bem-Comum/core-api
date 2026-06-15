@@ -64,6 +64,7 @@ const makeApp = async (): Promise<{ app: AppHandle; teardown: () => Promise<void
             deactivateUser: authDeps.deactivateUser,
             setProfilePhoto: authDeps.setProfilePhoto,
             removeProfilePhoto: authDeps.removeProfilePhoto,
+            getProfilePhoto: authDeps.getProfilePhoto,
           },
           { requireAuth, authorize: authDeps.authorize },
         ),

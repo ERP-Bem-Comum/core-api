@@ -81,8 +81,9 @@ const collaboratorItem = (r: CollaboratorReadRecord): PartnerListItem => ({
 
 const actItem = (r: ActReadRecord): PartnerListItem => ({
   type: 'act',
+  // ACT identifica-se pela razão social (corporateName) — não pelo objeto do acordo (name).
+  name: r.act.corporateName,
   id: r.act.id as unknown as string,
-  name: r.act.name,
   document: r.act.cnpj as unknown as string,
   active: r.act.status === 'Active',
 });

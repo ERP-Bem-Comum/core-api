@@ -42,6 +42,7 @@ describe('HTTP-SEC-HARDENING — F5 rate-limit nas rotas de escrita de users', (
               deactivateUser: authDeps.deactivateUser,
               setProfilePhoto: authDeps.setProfilePhoto,
               removeProfilePhoto: authDeps.removeProfilePhoto,
+              getProfilePhoto: authDeps.getProfilePhoto,
             },
             { requireAuth, authorize: authDeps.authorize },
           ),

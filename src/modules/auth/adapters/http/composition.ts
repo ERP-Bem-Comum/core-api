@@ -60,6 +60,7 @@ import {
   setProfilePhoto,
   removeProfilePhoto,
 } from '../../application/use-cases/set-profile-photo.ts';
+import { getProfilePhoto } from '../../application/use-cases/get-profile-photo.ts';
 import { makeInMemoryProfilePhotoStorage } from '../storage/profile-photo-storage.in-memory.ts';
 import { createS3ProfilePhotoStorage } from '../storage/profile-photo-storage.s3.ts';
 import type { ProfilePhotoStorage } from '../../application/ports/profile-photo-storage.ts';
@@ -195,6 +196,8 @@ export type AuthHttpDeps = Readonly<{
   setProfilePhoto: ReturnType<typeof setProfilePhoto>;
   /** Remoção de foto de perfil (spec 005 US6) — consumido por DELETE /api/v1/users/:id/photo. */
   removeProfilePhoto: ReturnType<typeof removeProfilePhoto>;
+  /** Leitura dos bytes da foto (USR-ME-PHOTO-DISPLAY) — GET /api/v1/me/photo e /users/:id/photo. */
+  getProfilePhoto: ReturnType<typeof getProfilePhoto>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -572,6 +575,10 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
       userRepo: stores.userRepo,
       storage: stores.profilePhotoStorage,
       clock,
+    }),
+    getProfilePhoto: getProfilePhoto({
+      userReader: stores.userReader,
+      storage: stores.profilePhotoStorage,
     }),
     verifyAccessToken: tokenIssuer.verifyAccessToken,
     sensitiveRateLimit: config.sensitiveRateLimit ?? DEFAULT_SENSITIVE_RATE_LIMIT,
