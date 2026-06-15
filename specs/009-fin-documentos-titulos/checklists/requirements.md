@@ -13,7 +13,7 @@
 
 ## Requirement Completeness
 
-- [ ] No [NEEDS CLARIFICATION] markers remain — _3 decisões propostas com default, registradas em discovery.md e Assumptions; a ratificar em `/speckit-clarify` (ver Notes)_
+- [x] No [NEEDS CLARIFICATION] markers remain — _3 decisões resolvidas em `/speckit-clarify` (Session 2026-06-15); ver `spec.md#Clarifications`_
 - [x] Requirements are testable and unambiguous
 - [x] Success criteria are measurable
 - [x] Success criteria are technology-agnostic (no implementation details)
@@ -31,8 +31,7 @@
 
 ## Notes
 
-- A spec aplica **defaults explícitos** para as 3 decisões de escopo (obrigatoriedade de plano/categoria;
-  validação por formato vs existência; granularidade da trilha), documentados em `spec.md#Assumptions` e
-  `discovery.md#Perguntas em aberto`. Recomenda-se rodar `/speckit-clarify` para ratificá-las antes de
-  `/speckit-plan` — são reversíveis, mas afetam o modelo de dados.
-- Demais itens passam. Spec pronta para clarificação ou planejamento.
+- As 3 decisões de escopo foram **resolvidas** em `/speckit-clarify` (Session 2026-06-15) e integradas em
+  `spec.md#Clarifications` + seções afetadas (FR-014/FR-015, Key Entities, SC-006, Assumptions): refs leves
+  opcionais; validação só por formato; **timeline por-campo completa** (amplia o escopo da fatia).
+- Todos os 16 itens passam. Spec pronta para `/speckit-plan` (na pipeline core-api-sdd, precede Domínio/BCs → ADRs).

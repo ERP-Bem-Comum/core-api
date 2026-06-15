@@ -109,8 +109,9 @@ remessa ou conciliação.
 
 - **RNF-001 (Integridade)**: O líquido derivado e a soma das obrigações DEVEM ser sempre consistentes com a
   fórmula — zero divergência tolerada (`gestao-documentos.md:78-81`).
-- **RNF-002 (Auditoria)**: Toda mudança de estado/valor DEVE emitir evento de domínio que sustente a trilha
-  (Time Travel) — auditoria é transversal e obrigatória (`02-context-map.md:79`, `01-introducao.md:16`).
+- **RNF-002 (Auditoria)**: O sistema DEVE manter **trilha por-campo** (Time Travel) de cada documento/título —
+  autor, instante, valor anterior → novo — replicando `contracts/timeline`; mudanças também emitem evento de
+  domínio. Auditoria é transversal e obrigatória (`02-context-map.md:79`, `01-introducao.md:16`).
 - **RNF-003 (Isolamento)**: O módulo DEVE viver em schema `fin_*` isolado, sem acoplar `ctr_*`/`partners_*`
   (ADR-0014); consumo cross-módulo só via `public-api` (ADR-0006).
 
@@ -147,14 +148,13 @@ remessa ou conciliação.
 | RF-006 (R8.1) | US-005   | Desfazer aprovação → `Aberto`, filhos hard delete se valor mudou | a definir na fase 7 |
 | RF-009        | US-006   | Cancelar só em `Aberto`; demais status rejeitam                  | a definir na fase 7 |
 
-## Perguntas em aberto
+## Decisões (resolvidas em `/speckit-clarify` — Session 2026-06-15)
 
-- [ ] **[NEEDS CLARIFICATION: obrigatoriedade dos vínculos orçamentários]** Plano orçamentário e categoria
-      são **obrigatórios** no salvamento já nesta fatia (como o agregado sugere) ou **opcionais** até existir o
-      módulo Orçamento? → resolver em `/speckit-clarify`. _Default proposto: opcionais (refs leves nuláveis)._
-- [ ] **[NEEDS CLARIFICATION: validação de existência das refs]** O fornecedor deve ter sua existência
-      verificada via `partners` read port no salvamento, ou basta validar o formato (UUID v4)? → `/speckit-clarify`.
-      _Default proposto: validar apenas formato nesta fatia; cross-check de existência fica para fatia posterior._
-- [ ] **[NEEDS CLARIFICATION: granularidade da trilha de auditoria]** Persistir já uma timeline por-campo
-      (estilo `contracts/timeline`) ou apenas emitir eventos de domínio nesta fatia? _Default proposto: emitir
-      eventos; timeline detalhada em fatia futura._
+- [x] **Obrigatoriedade dos vínculos orçamentários** → **Opcionais** (refs UUID nuláveis). Segue a Fatia 1 com
+      refs leves; o módulo Orçamento vira SDD próprio na fatia de Conciliação (não há fonte de domínio dele hoje).
+- [x] **Validação das refs** → **Apenas formato (UUID v4)**; sem cross-check de existência nesta fatia.
+- [x] **Granularidade da trilha** → **Timeline por-campo completa** (estilo `contracts/timeline`) já nesta fatia
+      (escolha do P.O. — amplia o escopo em relação à proposta inicial de "só eventos").
+
+> Identidade do documento também ratificada: UUID interno + número/série fiscal como entrada do usuário (sem
+> número de negócio gerado). Ver `spec.md#Clarifications`.

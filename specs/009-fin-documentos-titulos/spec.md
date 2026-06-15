@@ -8,6 +8,15 @@
 
 **Input**: Fatia 1 do Módulo Financeiro — Gestão de Documentos (Fato Gerador) + geração automática de Títulos (Pai + Filhos) + máquina de estados Rascunho→Aberto→Aprovado. Fonte de domínio: `handbook/domain_questions/financeiro/`. Discovery (Fase 0): `./discovery.md`.
 
+## Clarifications
+
+### Session 2026-06-15
+
+- Q: Os vínculos orçamentários (plano + categoria) são obrigatórios ao salvar nesta fatia? → A: **Opcionais** (refs UUID nuláveis). Segue a Fatia 1 com refs leves; o módulo Orçamento será um SDD próprio na fatia de Conciliação (não há fonte de domínio do Orçamento hoje).
+- Q: Como validar as referências (fornecedor, contrato, plano, categoria, programa)? → A: **Apenas formato (UUID v4)**; sem cross-check de existência nesta fatia.
+- Q: Qual a granularidade da trilha de auditoria (Time Travel)? → A: **Timeline por-campo completa**, replicando o padrão `contracts/timeline` (não apenas eventos de domínio).
+- Q: Como modelar a identidade do documento? → A: **UUID interno + número/série fiscal** como dado de entrada do usuário; sem número de negócio gerado pelo sistema.
+
 ## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Lançar documento não-fiscal e gerar título pai (Priority: P1)
@@ -136,15 +145,16 @@ O Operador salva um documento incompleto como `Rascunho` e, mais tarde, submete-
 - **FR-012**: O sistema MUST impor a separação de funções: o Operador MUST NOT aprovar; apenas o Aprovador aprova e desfaz aprovação.
 - **FR-013**: O documento MUST armazenar a forma de pagamento (TED, Transferência Bancária, PIX, Boleto, Cartão Corporativo, Câmbio, Guia de Recolhimento, Outro), sem efeito de remessa nesta fatia.
 - **FR-014**: O documento MUST guardar os vínculos como referências por identificador: fornecedor (obrigatório), contrato, plano orçamentário, categoria e programa (opcionais nesta fatia), sem acoplar o domínio dono.
-- **FR-015**: Cada mudança de estado relevante (documento salvo, título aprovado, aprovação desfeita, documento cancelado) MUST emitir um evento de domínio que sustente a trilha de auditoria.
+- **FR-015**: O sistema MUST manter uma **trilha de auditoria por-campo** (Time Travel) de cada documento e título, registrando autor, instante e o valor anterior → novo de cada alteração de campo e de cada transição de estado — replicando o padrão `contracts/timeline`. As mudanças relevantes também MUST emitir evento de domínio (outbox).
 - **FR-016**: O sistema MUST reconhecer os estados `Transmitido`, `Recusado`, `Pago` e `Conciliado` como existentes, porém sem transições disponíveis nesta fatia (reservados para fatias futuras).
 
 ### Key Entities
 
-- **Documento (Fato Gerador)**: raiz da obrigação. Atributos: tipo (fiscal/não-fiscal), fornecedor (ref), vínculos opcionais (contrato, plano orçamentário, categoria, programa — refs), forma de pagamento, dados financeiros (bruto, descontos na fonte, retenções, impostos registrados, descontos, multa, juros, líquido calculado), metadados de origem (inclusão manual; flag de divergência). Compartilha o ciclo de vida com o título pai.
+- **Documento (Fato Gerador)**: raiz da obrigação. Identidade interna por UUID; número/série fiscal são dado de entrada do usuário (sem número de negócio gerado). Atributos: tipo (fiscal/não-fiscal), fornecedor (ref), vínculos opcionais (contrato, plano orçamentário, categoria, programa — refs), forma de pagamento, dados financeiros (bruto, descontos na fonte, retenções, impostos registrados, descontos, multa, juros, líquido calculado), metadados de origem (inclusão manual; flag de divergência). Compartilha o ciclo de vida com o título pai.
 - **Título Financeiro (Pai/Filho)**: obrigação a pagar derivada do documento. Atributos: origem (documento), tipo (Pai|Filho), status, valor, vencimento, forma de pagamento. Pai = valor líquido; Filho = um imposto retido.
 - **Retenção**: imposto que gera filho e abate do líquido. Atributos: tipo (ISS|IRRF|INSS|CSRF), base de cálculo, alíquota, valor.
 - **Imposto Registrado**: imposto apenas lido/registrado. Atributos: tipo (ICMS|IPI|PIS|COFINS|CBS|IBS Municipal|IBS Estadual), base, alíquota, valor; nunca gera filho nem afeta o líquido.
+- **Trilha de Auditoria (Timeline)**: histórico imutável por-campo do documento e seus títulos. Atributos: alvo (documento/título), autor, instante, tipo de mudança (alteração de campo | transição de estado), valor anterior, valor novo.
 
 ## Success Criteria _(mandatory)_
 
@@ -155,13 +165,13 @@ O Operador salva um documento incompleto como `Rascunho` e, mais tarde, submete-
 - **SC-003**: Após a aprovação, 0% das tentativas de alterar campos vitais são bem-sucedidas (imutabilidade garantida).
 - **SC-004**: 100% das operações fora da máquina de estados (ex.: cancelar `Aprovado`, aprovar como Operador) são rejeitadas com erro explícito.
 - **SC-005**: O Operador conclui o lançamento de um documento fiscal com retenções (preencher + salvar + ver títulos) em menos de 3 minutos, com o cálculo do líquido feito pelo sistema sem digitação manual.
-- **SC-006**: 100% das mudanças de estado relevantes produzem um registro auditável (quem/quando/o quê).
+- **SC-006**: 100% das alterações de campo e transições de estado de documentos/títulos são reconstituíveis pela trilha por-campo (quem, quando, valor anterior → novo).
 
 ## Impacto Arquitetural (core-api) _(obrigatório se a feature toca `src/`)_
 
 - **Bounded Contexts afetados**: [ ] Contratos (`ctr_*`) · [x] Financeiro (`fin_*`) · [ ] Auth (`auth_*`) · [ ] Parceiros (`partners_*`)
   - Toca apenas o BC Financeiro. Fornecedor/contrato/programa são **consumidos como refs leves** (sem importar domínios), preservando o isolamento do ADR-0014. O catálogo RBAC do `auth` será estendido com permissões do Financeiro (mudança aditiva no catálogo deploy-time, sem acoplar schemas).
-- **Novos agregados / Value Objects?**: agregados `Document` (Fato Gerador) e `Payable` (Título, Pai/Filho). VOs: `DocumentId`, `PayableId` (branded); `Retention`, `RegisteredTax`; refs leves (`ContractRef`/`ProgramRef`/`BudgetPlanRef`/`CategoryRef` — formato UUID). Reúso de `Money` (`src/shared/kernel/money.ts`) e `SupplierRef` (`partners/public-api`). Cada VO exige smart constructor + `Result<T,E>`.
+- **Novos agregados / Value Objects?**: agregados `Document` (Fato Gerador), `Payable` (Título, Pai/Filho) e a trilha `DocumentTimeline` (auditoria por-campo, espelhando `contracts/domain/timeline/`). VOs: `DocumentId`, `PayableId` (branded); `Retention`, `RegisteredTax`; refs leves (`ContractRef`/`ProgramRef`/`BudgetPlanRef`/`CategoryRef` — formato UUID). Reúso de `Money` (`src/shared/kernel/money.ts`) e `SupplierRef` (`partners/public-api`). Cada VO exige smart constructor + `Result<T,E>`.
 - **Novos eventos de domínio (outbox)?**: `DocumentSaved`, `PayableApproved`, `ApprovalUndone`, `DocumentCancelled`, `DocumentDraftSaved` (EN passado). Nenhum evento cross-módulo publicado nesta fatia (`TituloConciliado` é fatia futura) — o outbox é usado para a trilha interna/integração futura. Contratos de evento a registrar em `handbook/architecture/`.
 - **Novos subcomandos de CLI?**: N/A — CLI embutida removida (ADR-0037 / CLI-RETIRE-EMBEDDED).
 - **Borda HTTP envolvida?**: Sim. HTTP é a UX primária (ADR-0037). Rotas sob `/api/v1/` para documentos e títulos (detalhe no plano/contracts).
@@ -170,9 +180,9 @@ O Operador salva um documento incompleto como `Rascunho` e, mais tarde, submete-
 ## Assumptions
 
 - **Inclusão manual apenas**: não há OCR nesta fatia; os campos de metadados de OCR (valor original lido, flag de divergência) são entrada opcional. (decisão do P.O.)
-- **Refs leves opcionais (proposto)**: plano orçamentário e categoria são **opcionais** no salvamento até existir o módulo Orçamento; fornecedor é obrigatório. _A ratificar em `/speckit-clarify` (Q1 do discovery)._
-- **Validação por formato (proposto)**: as referências são validadas apenas quanto ao formato (UUID v4); a existência do fornecedor não é cross-checada via `partners` read port nesta fatia. _A ratificar em `/speckit-clarify` (Q2)._
-- **Trilha por eventos (proposto)**: nesta fatia a auditoria se dá via emissão de eventos de domínio; uma timeline por-campo (estilo `contracts/timeline`) fica para fatia futura. _A ratificar em `/speckit-clarify` (Q3)._
+- **Refs leves opcionais (decidido — clarify 2026-06-15)**: plano orçamentário, categoria e contrato são **refs UUID opcionais**; fornecedor é obrigatório. O módulo Orçamento será um SDD próprio na fatia de Conciliação (não há fonte de domínio do Orçamento hoje).
+- **Validação por formato (decidido — clarify 2026-06-15)**: as referências são validadas apenas quanto ao formato (UUID v4); sem cross-check de existência nesta fatia.
+- **Trilha por-campo (decidido — clarify 2026-06-15)**: a fatia inclui timeline por-campo completa (Time Travel), replicando o padrão `contracts/timeline` — ver FR-015. Amplia o escopo da fatia em relação à proposta inicial (só eventos).
 - **Autosave é do cliente**: o backend expõe salvar/atualizar rascunho; o salvamento automático periódico é responsabilidade da UI.
 - **Moeda única**: valores em Real (BRL), Money em centavos (`bigint`); sem multi-moeda.
 - **Identidade do documento**: número/série são dados de entrada do usuário; a identidade interna é um UUID. (Identidade dupla número-de-negócio, se necessária, será decidida no plano, espelhando `programs`/`contracts`.)
