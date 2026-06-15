@@ -53,3 +53,17 @@ export const PHOTO_REMOVE_ERROR_STATUS = {
   'photo-storage-unavailable': 503,
   'user-repo-unavailable': 503,
 } as const;
+
+/**
+ * Status dos erros de `getProfilePhoto` (GET — USR-ME-PHOTO-DISPLAY). `photo-object-missing`
+ * (ref aponta objeto que sumiu do storage) é 404 como "sem foto": o front cai no fallback de
+ * iniciais; 503 fica só para indisponibilidade real.
+ */
+export const PHOTO_GET_ERROR_STATUS = {
+  'user-id-invalid': 400,
+  'user-not-found': 404,
+  'user-photo-not-found': 404,
+  'photo-object-missing': 404,
+  'photo-storage-unavailable': 503,
+  'user-repo-unavailable': 503,
+} as const;

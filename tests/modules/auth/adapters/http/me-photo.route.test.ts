@@ -42,6 +42,7 @@ const makeApp = async (): Promise<{ app: AppHandle; teardown: () => Promise<void
             requestPasswordReset: authDeps.requestPasswordReset,
             setProfilePhoto: authDeps.setProfilePhoto,
             removeProfilePhoto: authDeps.removeProfilePhoto,
+            getProfilePhoto: authDeps.getProfilePhoto,
           },
           { requireAuth },
         ),
