@@ -45,6 +45,10 @@ import {
   type ProgramsReadPort,
 } from '#src/modules/programs/public-api/index.ts';
 import type { LogoS3Config } from '#src/modules/programs/adapters/storage/logo-storage.s3.ts';
+import {
+  financialHttpPlugin,
+  buildFinancialHttpDeps,
+} from '#src/modules/financial/public-api/http.ts';
 
 // Config S3/MinIO do logo de programa (ADR-0019). Só retorna config quando todas as envs
 // obrigatórias estão presentes; ausência de qualquer uma → undefined (storage in-memory).
@@ -168,6 +172,18 @@ const main = async (): Promise<void> => {
         } satisfies ProgramsCompositionConfig),
   );
 
+  // Módulo financial (spec 009, fatia 1) → /api/v2/financial. Greenfield V2 (plugin direto).
+  // Driver mysql só com FINANCIAL_DRIVER=mysql + FINANCIAL_DATABASE_URL; senão in-memory (degradado).
+  const financialWriterUrl = process.env['FINANCIAL_DATABASE_URL'];
+  const financialDeps = await buildFinancialHttpDeps(
+    process.env['FINANCIAL_DRIVER'] === 'mysql'
+      ? {
+          driver: 'mysql',
+          ...(financialWriterUrl !== undefined ? { writerUrl: financialWriterUrl } : {}),
+        }
+      : { driver: 'memory' },
+  );
+
   // requireAuth do auth (cross-módulo via public-api, ADR-0006/0024) protege as rotas de contracts.
   const requireAuth = makeRequireAuth(authDeps.verifyAccessToken);
 
@@ -176,6 +192,7 @@ const main = async (): Promise<void> => {
       // Modelo novo (greenfield) → /api/v2 (plugin direto, forma legada do buildApp).
       authHttpPlugin(authDeps),
       contractsHttpPlugin(contractsDeps, { requireAuth, authorize: authDeps.authorize }),
+      financialHttpPlugin(financialDeps, { requireAuth, authorize: authDeps.authorize }),
       // Espelho do legado (ADR-0033) → /api/v1.
       {
         plugin: collaboratorsHttpPlugin(partnersDeps, {
@@ -293,6 +310,7 @@ const main = async (): Promise<void> => {
     await contractsDeps.shutdown();
     await partnersDeps.shutdown();
     await programsDeps.shutdown();
+    await financialDeps.shutdown();
     // CTR-NUMBER-PROGRAM: fecha o pool do read port de programs injetado em contracts.
     if (programsReadPort !== undefined) await programsReadPort.close();
     app.log.info('Servidor encerrado.');

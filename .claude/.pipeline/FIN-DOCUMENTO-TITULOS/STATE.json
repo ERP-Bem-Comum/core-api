@@ -3,9 +3,9 @@
   "ticket": "FIN-DOCUMENTO-TITULOS",
   "size": "L",
   "createdAt": "2026-06-15T20:00:37.495Z",
-  "closedAt": null,
-  "currentWave": "W3",
-  "status": "in-progress",
+  "closedAt": "2026-06-15T23:01:49.621Z",
+  "currentWave": null,
+  "status": "closed-green",
   "waves": [
     {
       "id": "W0",
@@ -39,15 +39,15 @@
     },
     {
       "id": "W3",
-      "status": "pending",
-      "agent": null,
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-06-15T23:01:48.561Z",
+      "finishedAt": "2026-06-15T23:01:49.093Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
     }
   ],
   "blockers": [],
-  "lastEvent": "W2 finished (APPROVED)"
+  "lastEvent": "closed-green"
 }
