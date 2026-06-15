@@ -92,6 +92,80 @@ describe('composeContractor — não-supplier (sem bancário/PIX)', () => {
   });
 });
 
+describe('composeContractor — act identifica-se pela razão social (CON-ACT-CONTRACTOR-RAZAO-SOCIAL)', () => {
+  // W0 RED — `viewToSnapshot` no ramo act deve usar `corporateName` como `name`.
+  // RED por inexistência: hoje o act cai no `else` e usa `view.name` (objeto do acordo).
+  it('act: snapshot.name = corporateName (razão social), não o name do objeto', async () => {
+    const port = fakePort({
+      getActView: () =>
+        Promise.resolve(
+          ok({
+            type: 'act',
+            id: SUPPLIER_ID,
+            name: 'Acordo de Cooperação 2026', // objeto/título do acordo
+            corporateName: 'Instituição Parceira LTDA', // razão social
+            email: 'a@y.com',
+            document: '11222333000181',
+            role: 'Representante Legal',
+            occupationArea: 'PARC',
+            updatedAt: UPDATED,
+          }),
+        ),
+    });
+    const block = await composeContractor(port, { type: 'act', id: SUPPLIER_ID });
+    assert.equal(block.type, 'act');
+    assert.equal(block.snapshot?.name, 'Instituição Parceira LTDA');
+    assert.notEqual(block.snapshot?.name, 'Acordo de Cooperação 2026');
+    // documento e demais campos inalterados
+    assert.equal(block.snapshot?.document, '11222333000181');
+    assert.equal('bankAccount' in (block.snapshot ?? {}), false);
+  });
+
+  it('não-regressão: collaborator/financier/supplier mantêm snapshot.name = name do parceiro', async () => {
+    const collaboratorPort = fakePort({
+      getCollaboratorView: () =>
+        Promise.resolve(
+          ok({
+            type: 'collaborator',
+            id: SUPPLIER_ID,
+            name: 'João Souza',
+            email: 'j@y.com',
+            document: '11144477735',
+            role: 'Educador',
+            occupationArea: 'PARC',
+            updatedAt: UPDATED,
+          }),
+        ),
+    });
+    const financierPort = fakePort({
+      getFinancierView: () =>
+        Promise.resolve(
+          ok({
+            type: 'financier',
+            id: SUPPLIER_ID,
+            name: 'Fundação Bem Comum',
+            corporateName: 'Fundação Bem Comum LTDA',
+            document: '11444777000161',
+            legalRepresentative: 'Maria',
+            telephone: '+5511999998888',
+            address: 'Av. Paulista, 1000',
+            updatedAt: UPDATED,
+          }),
+        ),
+    });
+
+    const collab = await composeContractor(collaboratorPort, {
+      type: 'collaborator',
+      id: SUPPLIER_ID,
+    });
+    assert.equal(collab.snapshot?.name, 'João Souza');
+
+    const fin = await composeContractor(financierPort, { type: 'financier', id: SUPPLIER_ID });
+    // financier conserva o `name` do parceiro (NÃO usa corporateName como identificação).
+    assert.equal(fin.snapshot?.name, 'Fundação Bem Comum');
+  });
+});
+
 describe('composeContractor — degradação graciosa (FR-006, anti-oráculo)', () => {
   it('contratado inexistente (ok(null)) → snapshot null', async () => {
     const block = await composeContractor(fakePort(), { type: 'supplier', id: SUPPLIER_ID });

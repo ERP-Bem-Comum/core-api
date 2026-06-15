@@ -5,8 +5,10 @@
  * Expoe helpers (`size`, `get`) para asserts de teste. ASCII puro.
  */
 
-import { type Result, ok } from '#src/shared/primitives/result.ts';
+import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type {
+  DownloadedPhoto,
+  ProfilePhotoDownloadError,
   ProfilePhotoStorage,
   ProfilePhotoStorageError,
   UploadPhotoInput,
@@ -35,9 +37,18 @@ export const makeInMemoryProfilePhotoStorage = (): InMemoryProfilePhotoStorage =
     blobs.delete(key);
     return ok(undefined);
   };
+  const download = async (
+    key: string,
+  ): Promise<Result<DownloadedPhoto, ProfilePhotoDownloadError>> => {
+    await Promise.resolve();
+    const stored = blobs.get(key);
+    if (stored === undefined) return err('photo-object-missing');
+    return ok({ bytes: stored.bytes, contentType: stored.mimeType });
+  };
   return {
     upload,
     remove,
+    download,
     size: () => blobs.size,
     get: (key: string) => blobs.get(key),
   };

@@ -24,6 +24,7 @@ import type {
   setProfilePhoto,
   removeProfilePhoto,
 } from '../../application/use-cases/set-profile-photo.ts';
+import type { getProfilePhoto } from '../../application/use-cases/get-profile-photo.ts';
 import {
   userDetailResponseSchema,
   meUpdateBodySchema,
@@ -34,6 +35,7 @@ import {
   PHOTO_BODY_LIMIT,
   PHOTO_SET_ERROR_STATUS,
   PHOTO_REMOVE_ERROR_STATUS,
+  PHOTO_GET_ERROR_STATUS,
 } from './photo-upload.ts';
 
 export type MeHttpDeps = Readonly<{
@@ -42,6 +44,7 @@ export type MeHttpDeps = Readonly<{
   requestPasswordReset: ReturnType<typeof requestPasswordReset>;
   setProfilePhoto: ReturnType<typeof setProfilePhoto>;
   removeProfilePhoto: ReturnType<typeof removeProfilePhoto>;
+  getProfilePhoto: ReturnType<typeof getProfilePhoto>;
 }>;
 
 export type MeHttpHooks = Readonly<{ requireAuth: preHandlerAsyncHookHandler }>;
@@ -153,6 +156,25 @@ const meRoutes =
           ok: 200,
           errors: { 'user-id-invalid': 400, 'user-not-found': 404 },
         });
+      },
+    });
+
+    // GET /me/photo — bytes da propria foto (USR-ME-PHOTO-DISPLAY). Self por construcao (req.userId).
+    // Corpo binario (sem `response` schema — mesma convencao do documents/:id/content). Cache: o hook
+    // onSend global do buildApp ja forca `no-store` em /api/* (nao redefinir aqui).
+    scope.route({
+      method: 'GET',
+      url: '/me/photo',
+      preHandler: [hooks.requireAuth],
+      schema: {} satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.getProfilePhoto({ targetId: req.userId });
+        if (!result.ok) {
+          return sendResult(reply, result, { errors: PHOTO_GET_ERROR_STATUS });
+        }
+        return reply
+          .header('content-type', result.value.contentType)
+          .send(Buffer.from(result.value.bytes));
       },
     });
 

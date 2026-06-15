@@ -201,4 +201,18 @@ describe('actToView (paridade 4/4 — FR-005)', () => {
     const contractor: ContractorView = view;
     assert.equal(contractor.type === 'act' ? contractor.occupationArea : null, 'PARC');
   });
+
+  // CON-ACT-CONTRACTOR-RAZAO-SOCIAL — W0 RED — `ActView` ganha `corporateName` (razão social).
+  // Molde da `FinancierView`/`financierToView`, que já carregam `corporateName`.
+  // RED por inexistência: o campo `corporateName` não existe na `ActView`/`actToView`.
+  it('expõe corporateName (razão social) distinto do name (objeto do acordo)', () => {
+    const a = anAct();
+    const view = actToView(a, UPDATED_AT);
+
+    assert.equal(view.corporateName, 'Instituição Ana LTDA');
+    assert.equal(view.corporateName, a.corporateName);
+    // O objeto do acordo (`name`) é diferente da razão social (`corporateName`).
+    assert.equal(view.name, 'Acordo Ana');
+    assert.notEqual(view.corporateName, view.name);
+  });
 });

@@ -35,6 +35,7 @@ import type {
   setProfilePhoto,
   removeProfilePhoto,
 } from '../../application/use-cases/set-profile-photo.ts';
+import type { getProfilePhoto } from '../../application/use-cases/get-profile-photo.ts';
 import type { UserStatusFilter } from '../../application/ports/user-query.ts';
 import {
   userListQuerySchema,
@@ -51,6 +52,7 @@ import {
   PHOTO_BODY_LIMIT,
   PHOTO_SET_ERROR_STATUS,
   PHOTO_REMOVE_ERROR_STATUS,
+  PHOTO_GET_ERROR_STATUS,
 } from './photo-upload.ts';
 
 export type UsersHttpDeps = Readonly<{
@@ -63,6 +65,7 @@ export type UsersHttpDeps = Readonly<{
   deactivateUser: ReturnType<typeof deactivateUser>;
   setProfilePhoto: ReturnType<typeof setProfilePhoto>;
   removeProfilePhoto: ReturnType<typeof removeProfilePhoto>;
+  getProfilePhoto: ReturnType<typeof getProfilePhoto>;
 }>;
 
 export type UsersHttpHooks = Readonly<{
@@ -323,6 +326,27 @@ const usersRoutes =
           ok: 200,
           errors: { 'user-id-invalid': 400, 'user-not-found': 404 },
         });
+      },
+    });
+
+    // USR-ME-PHOTO-DISPLAY: GET /users/:id/photo — bytes da foto do usuario (lado admin).
+    // Read: mesma permissao do GET /users/:id (`user:read`). Corpo binario (sem `response` schema —
+    // mesma convencao do documents/:id/content). Cache: hook onSend global ja forca `no-store`.
+    scope.route({
+      method: 'GET',
+      url: '/users/:id/photo',
+      preHandler: [hooks.requireAuth, hooks.authorize(USER_READ_PERMISSION)],
+      schema: {
+        params: userIdParamSchema,
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.getProfilePhoto({ targetId: req.params.id });
+        if (!result.ok) {
+          return sendResult(reply, result, { errors: PHOTO_GET_ERROR_STATUS });
+        }
+        return reply
+          .header('content-type', result.value.contentType)
+          .send(Buffer.from(result.value.bytes));
       },
     });
 

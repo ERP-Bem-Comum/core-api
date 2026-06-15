@@ -66,6 +66,7 @@ const makeDeps = (users: readonly User[], opts?: { storageFails?: boolean }) => 
       captured.removed = key;
       return Promise.resolve(ok(undefined));
     },
+    download: () => Promise.resolve(err('photo-object-missing' as const)),
   };
   return { deps: { userReader, userRepo, storage, clock: ClockFixed(AT) }, captured };
 };

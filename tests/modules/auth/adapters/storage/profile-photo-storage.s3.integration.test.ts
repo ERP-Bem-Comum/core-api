@@ -85,6 +85,22 @@ if (!integrationOn) {
       assert.equal(head.ContentType, 'image/jpeg');
     });
 
+    // USR-ME-PHOTO-DISPLAY: round-trip de leitura (servir a foto). Roda apos CA1 (objeto presente).
+    it('CA1b: download devolve bytes identicos + ContentType gravado no upload', async () => {
+      const r = await storage.download(KEY);
+      assert.equal(r.ok, true);
+      if (r.ok) {
+        assert.deepEqual(new Uint8Array(r.value.bytes), JPEG);
+        assert.equal(r.value.contentType, 'image/jpeg');
+      }
+    });
+
+    it('CA1c: download de key inexistente -> photo-object-missing', async () => {
+      const r = await storage.download('users/nao-existe-display');
+      assert.equal(r.ok, false);
+      if (!r.ok) assert.equal(r.error, 'photo-object-missing');
+    });
+
     it('CA2: remove apaga o objeto', async () => {
       const r = await storage.remove(KEY);
       assert.equal(r.ok, true);
