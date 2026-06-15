@@ -25,8 +25,7 @@ describe('financial/domain/shared/retention — gera filho, abate do líquido', 
     }
   });
 
-  it('rejeita tipo fora do union de retenção', () => {
-    // @ts-expect-error 'ICMS' não é retenção (é imposto registrado)
+  it('rejeita tipo fora do union de retenção (validação runtime)', () => {
     assert.equal(
       isErr(Retention.create({ type: 'ICMS', baseCents: 1000, rateBps: 100, valueCents: 10 })),
       true,

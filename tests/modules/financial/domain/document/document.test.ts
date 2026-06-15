@@ -16,6 +16,12 @@ const supplier = (): SupplierRef => {
   return r.value;
 };
 
+const money = (n: number): Money.Money => {
+  const r = Money.fromCents(n);
+  if (!r.ok) throw new Error('test setup: money');
+  return r.value;
+};
+
 // Input de DOMÍNIO (VOs já construídos; a borda/use case faz a tradução de primitivos).
 const baseInput = (): Document.CreateDocumentInput => ({
   id: DocumentId.generate(),
@@ -23,7 +29,7 @@ const baseInput = (): Document.CreateDocumentInput => ({
   type: 'Boleto',
   supplier: supplier(),
   paymentMethod: 'Boleto',
-  grossValue: Money.fromCents(100000).value as Money.Money,
+  grossValue: money(100000),
   sourceDiscounts: Money.ZERO,
   discounts: Money.ZERO,
   penalty: Money.ZERO,
@@ -50,8 +56,8 @@ describe('financial/domain/document — create (US1: documento não-fiscal)', ()
     const r = Document.create({
       ...baseInput(),
       type: 'Fatura',
-      grossValue: Money.fromCents(500000).value as Money.Money,
-      discounts: Money.fromCents(20000).value as Money.Money,
+      grossValue: money(500000),
+      discounts: money(20000),
     });
     assert.equal(isOk(r), true);
     if (r.ok) assert.equal(r.value.payables.parent.value.cents, 480000);
