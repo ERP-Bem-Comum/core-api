@@ -83,7 +83,13 @@ Refinements no domínio (`parseOpen`/`parseApproved`/`parseDraft` → `invalid-s
 `approveDocument` (clock+UserRef), `undoApproval`, `cancelDocument` (delete), `submitDraft` — carregam do repo, refinam o
 estado (transição inválida vira erro runtime), chamam o domínio, persistem e publicam. Teste `transitions.test.ts`. **61/61 verdes + typecheck OK.**
 
+## Incremento Application A3 completa — adjustDocument (GREEN)
+
+`adjustDocument`: carrega Open, constrói VOs parciais das mudanças (Money/Retention via helpers), `Document.adjust`,
+persiste, publica. Teste `adjust-document.test.ts`. **Camada Application da Fatia 1 completa** (`saveDocument` +
+`approveDocument`/`undoApproval`/`cancelDocument`/`submitDraft`/`adjustDocument`). **63/63 verdes + typecheck OK.**
+
 ## Pendente (infra — mesmo ticket)
 
-`adjustDocument` (fecha A3 — constrói VOs das mudanças). **Persistência P2** (schema Drizzle `fin_*` + migration + drizzle
-repo via `test:integration`). **Borda HTTP** `/api/v1` + RBAC. Depois: W2 (review) + W3 (gate completo).
+**Persistência P2** (schema Drizzle `fin_*` 6 tabelas + migration `db:generate` + mapper + drizzle repo via
+`test:integration`/MySQL). **Borda HTTP** `/api/v1/financial` (Fastify+Zod) + permissões RBAC. Depois: W2 (review) + W3 (gate completo).
