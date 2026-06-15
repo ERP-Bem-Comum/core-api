@@ -321,4 +321,11 @@ describe('FIN-DOCUMENTO-TITULOS — /api/v2/financial/documents', () => {
     );
     assert.equal(res.statusCode, 422);
   });
+
+  // ── Segurança: guard de overflow numérico na borda (security review F1) ────
+  it('CA16: POST com grossValueCents de string longa → 400 (não chega ao domínio)', async () => {
+    const res = await postDocument(WRITER, nfseBody({ grossValueCents: '9'.repeat(30) }));
+    // Zod rejeita na borda (max 16 dígitos + safe-integer) → 400, sem corromper o cálculo de Money.
+    assert.equal(res.statusCode, 400, res.body);
+  });
 });

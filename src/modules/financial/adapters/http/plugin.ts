@@ -87,8 +87,21 @@ const writeErrorStatus = (code: string): number => {
 
 const sendDomainError = (reply: FastifyReply, error: string): Promise<void> => {
   const requestId = currentCorrelationId() ?? reply.request.id;
+  const status = writeErrorStatus(error);
+
+  // 5xx não revela o componente interno (ex.: 'document-repository-failure', 'outbox-append-failed'):
+  // envelope genérico ao cliente, code real apenas no log do servidor (espelha shared/http/reply.ts).
+  if (status >= 500) {
+    reply.request.log.error({ errorCode: error, status, requestId }, 'financial-domain-error-5xx');
+    return reply
+      .code(status)
+      .send(
+        toErrorEnvelope('internal', 'An internal error occurred', requestId),
+      ) as unknown as Promise<void>;
+  }
+
   return reply
-    .code(writeErrorStatus(error))
+    .code(status)
     .send(toErrorEnvelope(error, error, requestId)) as unknown as Promise<void>;
 };
 

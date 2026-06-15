@@ -12,10 +12,18 @@ import * as z from 'zod/v4';
 
 // ─── Shared ──────────────────────────────────────────────────────────────────
 
-/** Centavos serializados como string decimal. Aceita qualquer inteiro não-negativo. */
+/**
+ * Centavos serializados como string decimal de inteiro não-negativo.
+ *
+ * Bounds de segurança (ADR-0027 — validação na borda): `.max(16)` barra string longa antes do `Number()`
+ * (DoS/amplificação) e o `refine` garante inteiro seguro — `Number("9".repeat(30))` === 1e30 passaria pelo regex
+ * mas não é safe integer. MAX_SAFE_INTEGER (9007199254740991) tem 16 dígitos → margem suficiente p/ valor real.
+ */
 const centsStringSchema = z
   .string()
-  .regex(/^\d+$/, 'deve ser string de dígitos representando centavos');
+  .regex(/^\d+$/, 'deve ser string de dígitos representando centavos')
+  .max(16, 'valor de centavos excede o limite seguro (máx. 16 dígitos)')
+  .refine((s) => Number.isSafeInteger(Number(s)), 'valor de centavos não é um inteiro seguro');
 
 const retentionTypeSchema = z.enum(['ISS', 'IRRF', 'INSS', 'CSRF']);
 const registeredTaxTypeSchema = z.enum([

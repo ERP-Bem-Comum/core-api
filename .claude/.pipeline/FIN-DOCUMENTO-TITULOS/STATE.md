@@ -5,10 +5,10 @@
 | Wave | Status | Skill | REPORT | Última atualização |
 | :--- | :--- | :--- | :--- | :--- |
 | W0 | done (RED) | tdd-strategist | 002-tests/REPORT.md | 2026-06-15T20:18:20.181Z |
-| W1 | in-progress | ts-domain-modeler | — | 2026-06-15T20:27:59.435Z |
-| W2 | pending | — | — | — |
+| W1 | done (GREEN) | ts-domain-modeler | 003-impl/REPORT.md | 2026-06-15T22:46:20.479Z |
+| W2 | done (APPROVED) [rounds=2] | code-reviewer | 004-code-review/REVIEW.md | 2026-06-15T22:56:10.805Z |
 | W3 | pending | — | — | — |
 
 ## Último evento
 
-W1 started (ts-domain-modeler)
+W2 finished (APPROVED)
