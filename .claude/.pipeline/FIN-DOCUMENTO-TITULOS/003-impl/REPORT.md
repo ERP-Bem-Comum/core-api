@@ -141,14 +141,46 @@ O teste de integração `document-repository.drizzle-mysql.test.ts` está corret
 sem `MYSQL_INTEGRATION=1` ele imprime aviso e não registra nenhum `describe()` — o runner
 Node 24 não o conta como falha nem skip.
 
-### Pendente para execução (não bloqueante para commit)
+### Integração MySQL — executada e verde
 
-- **`pnpm run test:integration:financial`**: rodar a contract suite contra MySQL real (Docker Compose).
-  Requer: (1) adicionar o script em `package.json` espelhando `test:integration:programs`; (2) subir MySQL com `docker compose up -d mysql --wait`; (3) `MYSQL_INTEGRATION=1 node --test ... document-repository.drizzle-mysql.test.ts`.
-  A migration `0000_solid_solo.sql` será aplicada pelo driver com `applyMigrations: true`.
-- **`fin_document_timeline` + `fin_timeline_field_changes`**: tabelas do read-model de Time Travel — fatia futura.
-- **Borda HTTP** `/api/v1/financial` (Fastify + Zod + RBAC): próximo incremento.
+- **`pnpm run test:integration:financial`** ✅: contract suite (`document-repository.suite.ts`) contra MySQL 8.4 real
+  (Docker Compose `--wait`). **4 testes verdes**: round-trip Open+payables, `document-not-found`, `delete`, persistência
+  de `Draft` sem payables. Migration `0000_solid_solo.sql` aplicada pelo driver (`applyMigrations: true`, journal isolado
+  `__drizzle_migrations_financial`). Script adicionado em `package.json` espelhando `test:integration:programs`.
+- **Correção de borda**: conn string default do teste alinhada a contracts/programs (`root` — migrations exigem DDL;
+  o usuário de aplicação do compose é `core_app`, sem grant de DDL; `app` nem existe).
 
-## Pendente (próximos incrementos)
+## Borda HTTP `/api/v2/financial` (Fastify + Zod + RBAC) — concluída
 
-**Borda HTTP** `/api/v1/financial` (Fastify+Zod) + permissões RBAC. Depois: W2 (review) + W3 (gate completo).
+> O financeiro é **V2** (montado sob `DEFAULT_API_PREFIX='/api/v2'`; greenfield, sem mirror v1).
+> Agente especialista: **`fastify-server-expert`** (rotas/plugin/Zod). Padrão espelha `contracts/adapters/http/`.
+
+**Arquivos:** `adapters/http/{plugin,schemas,dto,composition}.ts` · `public-api/{http,permissions,index}.ts`.
+
+**Rotas (RBAC por rota):** `POST /documents` (write), `PATCH /documents/:id` (write), `POST /documents/:id/approve`
+(payable:approve), `POST /documents/:id/undo-approval` (payable:approve), `DELETE /documents/:id` (cancel),
+`GET /documents` · `GET /documents/:id` (read). Mapa erro-domínio→HTTP: 400/401/403/404/409/422.
+
+**Permissões:** catálogo RBAC do `auth` estendido (aditivo, ADR-0004) com `fiscal-document:{read,write,cancel}` +
+`payable:{approve,undo-approval}`. Testes do catálogo verdes (10/10).
+
+**Testes de borda** (`tests/modules/financial/adapters/http/financial-documents.http.test.ts`): **15/15 verdes** via
+`fastify.inject` + driver in-memory + hooks de auth fake (sem login real → sem rate-limit). Cobre CA1–CA15
+(criação NFS-e com retenções, draft, ajuste, aprovação com herança, separação de funções 403, undo, cancelamento,
+GET detalhe/lista/404, 422 de regra de negócio).
+
+## Gate W3 — verde de ponta a ponta
+
+```
+pnpm run typecheck                  → ✅ OK
+pnpm run format:check               → ✅ OK
+pnpm run lint                       → ✅ OK
+pnpm test                           → ✅ 2438 pass · 0 fail · 17 skipped
+pnpm run test:integration:financial → ✅ 4 pass · 0 fail
+```
+
+## Pendente (próximos incrementos — fora do escopo desta fatia)
+
+- **`fin_document_timeline` + `fin_timeline_field_changes`**: read-model de Time Travel (fatia futura).
+- **W2 (code review read-only)** + registro do `financialHttpPlugin` no `src/server.ts` quando a borda for plugada na app real.
+- Submódulo Conciliação, módulo Orçamento, integração bancária (fatias futuras).

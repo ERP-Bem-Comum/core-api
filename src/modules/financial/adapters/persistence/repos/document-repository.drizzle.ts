@@ -172,7 +172,7 @@ export const createDrizzleDocumentRepository = (
           // mysql2 retorna `affectedRows` no ResultSetHeader. Drizzle expõe como
           // array [ResultSetHeader, ...]. Verificamos se ao menos 1 row foi afetada.
           // Se 0 rows afetadas, outra transação incrementou a versão antes de nós.
-          const affectedRows = (result as unknown as [{ affectedRows: number }])[0]?.affectedRows;
+          const affectedRows = (result as unknown as [{ affectedRows: number }])[0].affectedRows;
           if (affectedRows === 0) {
             throw new Error(
               `optimistic-lock-conflict:${documentId}:expected-version:${currentVersion}`,

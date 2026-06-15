@@ -1,0 +1,362 @@
+/**
+ * Plugin HTTP do módulo financial (ADR-0025/0027/0037).
+ *
+ * Greenfield V2 → montado sob `/api/v2/financial` (ADR-0033; DEFAULT_API_PREFIX='/api/v2').
+ * Zod contract-first (ADR-0027): schemas em schemas.ts, validação na borda, domínio recebe primitivos.
+ * RBAC: requireAuth (401) + authorize(permission) (403) por rota.
+ *
+ * Rotas (todas sob /financial/documents):
+ *   POST   /financial/documents                      fiscal-document:write  → saveDocument | saveDraft
+ *   PATCH  /financial/documents/:id                  fiscal-document:write  → adjustDocument
+ *   POST   /financial/documents/:id/approve          payable:approve        → approveDocument
+ *   POST   /financial/documents/:id/undo-approval    payable:approve        → undoApproval
+ *   DELETE /financial/documents/:id                  fiscal-document:cancel → cancelDocument (204)
+ *   GET    /financial/documents                      fiscal-document:read   → listDocuments
+ *   GET    /financial/documents/:id                  fiscal-document:read   → findDocumentById
+ *
+ * Mapa erro→HTTP (financial-http.md §Status codes):
+ *   400 schema/ref inválida         Zod + financial-ref-invalid + document-id-invalid
+ *   401/403                         requireAuth / authorize
+ *   404 document-not-found
+ *   409 transição inválida / cancel fora de Open
+ *   422 net-value-not-positive / retention-not-allowed-for-type / document-incomplete
+ */
+
+import type { FastifyPluginAsync, FastifyReply, preHandlerAsyncHookHandler } from 'fastify';
+import type {
+  FastifyPluginAsyncZodOpenApi,
+  FastifyZodOpenApiSchema,
+  FastifyZodOpenApiTypeProvider,
+} from 'fastify-zod-openapi';
+
+import { ok, err } from '#src/shared/primitives/result.ts';
+import { sendResult } from '#src/shared/http/reply.ts';
+import { toErrorEnvelope } from '#src/shared/http/errors.ts';
+import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
+
+import * as DocumentId from '../../domain/shared/document-id.ts';
+import type { RetentionInput } from '../../domain/shared/retention.ts';
+import type { RegisteredTaxInput } from '../../domain/shared/registered-tax.ts';
+import { FINANCIAL_PERMISSION } from '../../public-api/permissions.ts';
+import { documentToDto } from './dto.ts';
+import type { FinancialHttpDeps } from './composition.ts';
+import {
+  createDocumentBodySchema,
+  adjustDocumentBodySchema,
+  approveBodySchema,
+  documentIdParamSchema,
+  listDocumentsQuerySchema,
+  documentResponseSchema,
+  documentListResponseSchema,
+} from './schemas.ts';
+
+export type FinancialHttpHooks = Readonly<{
+  requireAuth: preHandlerAsyncHookHandler;
+  /** Fábrica de preHandler RBAC — espelha ContractsHttpHooks. */
+  authorize: (permissionName: string) => preHandlerAsyncHookHandler;
+}>;
+
+// ─── Classificação de erros → status HTTP ────────────────────────────────────
+
+const NOT_FOUND_CODES: ReadonlySet<string> = new Set(['document-not-found']);
+
+const CONFLICT_CODES: ReadonlySet<string> = new Set([
+  'invalid-state-transition',
+  'document-version-conflict',
+  'cancel-not-allowed',
+]);
+
+const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
+  'financial-ref-invalid',
+  'invalid-supplier-ref',
+  'document-id-invalid',
+]);
+
+const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
+  'document-repository-failure',
+  'outbox-append-failed',
+]);
+
+const writeErrorStatus = (code: string): number => {
+  if (NOT_FOUND_CODES.has(code)) return 404;
+  if (CONFLICT_CODES.has(code)) return 409;
+  if (BAD_REQUEST_CODES.has(code)) return 400;
+  if (UNAVAILABLE_CODES.has(code)) return 503;
+  return 422;
+};
+
+const sendDomainError = (reply: FastifyReply, error: string): Promise<void> => {
+  const requestId = currentCorrelationId() ?? reply.request.id;
+  return reply
+    .code(writeErrorStatus(error))
+    .send(toErrorEnvelope(error, error, requestId)) as unknown as Promise<void>;
+};
+
+// ─── Helper: carrega stored document e serializa ──────────────────────────────
+
+// Lê o estado pós-mutação do repositório e envia como DTO.
+// `reply` já deve ter o status code correto definido pelo caller (200 ou 201).
+const loadAndSerialize = async (
+  deps: FinancialHttpDeps,
+  reply: FastifyReply,
+  rawId: string,
+): Promise<void> => {
+  const idR = DocumentId.rehydrate(rawId);
+  if (!idR.ok) return sendDomainError(reply, 'document-id-invalid');
+
+  const found = await deps.findDocumentById(idR.value);
+  if (!found.ok) return sendDomainError(reply, found.error);
+
+  return sendResult(reply, ok(documentToDto(found.value.document, found.value.payables)), {
+    ok: reply.statusCode === 201 ? 201 : 200,
+  });
+};
+
+// ─── Mapeadores de body Zod → command (bridge undefined→null para exactOptionalPropertyTypes) ──
+
+// Campos opcionais do Zod chegam como `string | undefined`; os commands do domínio tipam como
+// `string | null` (exactOptionalPropertyTypes proíbe undefined onde não é explícito). A ponte
+// `?? null` converte antes de passar ao use case.
+
+const toRetentionInputs = (
+  retentions: readonly {
+    type: 'ISS' | 'IRRF' | 'INSS' | 'CSRF';
+    baseCents: string;
+    rateBps: number;
+    valueCents: string;
+  }[],
+): RetentionInput[] =>
+  retentions.map((r) => ({
+    type: r.type,
+    baseCents: Number(r.baseCents),
+    rateBps: r.rateBps,
+    valueCents: Number(r.valueCents),
+  }));
+
+const toRegisteredTaxInputs = (
+  taxes: readonly {
+    type: 'ICMS' | 'IPI' | 'PIS' | 'COFINS' | 'CBS' | 'IBS_Municipal' | 'IBS_Estadual';
+    baseCents: string;
+    rateBps: number;
+    valueCents: string;
+  }[],
+): RegisteredTaxInput[] =>
+  taxes.map((t) => ({
+    type: t.type,
+    baseCents: Number(t.baseCents),
+    rateBps: t.rateBps,
+    valueCents: Number(t.valueCents),
+  }));
+
+// ─── Rotas ───────────────────────────────────────────────────────────────────
+
+const financialRoutes =
+  (deps: FinancialHttpDeps, hooks: FinancialHttpHooks): FastifyPluginAsyncZodOpenApi =>
+  async (scope) => {
+    // POST /financial/documents — cria documento (Open ou Draft).
+    scope.route({
+      method: 'POST',
+      url: '/financial/documents',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.write)],
+      schema: {
+        body: createDocumentBodySchema,
+        response: { 201: documentResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const body = req.body;
+
+        if (body.asDraft) {
+          // Rascunho — campos opcionais. `undefined` → `null` (exactOptionalPropertyTypes).
+          const result = await deps.saveDraft({
+            documentNumber: body.documentNumber,
+            series: body.series ?? null,
+            type: body.type,
+            supplierRef: body.supplierRef,
+            contractRef: body.contractRef ?? null,
+            budgetPlanRef: body.budgetPlanRef ?? null,
+            categoryRef: body.categoryRef ?? null,
+            programRef: body.programRef ?? null,
+            paymentMethod: body.paymentMethod,
+            grossValueCents: Number(body.grossValueCents),
+            sourceDiscountsCents: Number(body.sourceDiscountsCents),
+            discountsCents: Number(body.discountsCents),
+            penaltyCents: Number(body.penaltyCents),
+            interestCents: Number(body.interestCents),
+            retentions: toRetentionInputs(body.retentions),
+            registeredTaxes: toRegisteredTaxInputs(body.registeredTaxes),
+            dueDate: body.dueDate !== undefined ? new Date(body.dueDate) : null,
+            description: body.description ?? null,
+          });
+          if (!result.ok) return sendDomainError(reply, result.error);
+          const idStr = String(result.value.documentId);
+          reply.header('location', `/api/v2/financial/documents/${idStr}`);
+          reply.code(201);
+          return loadAndSerialize(deps, reply, idStr);
+        }
+
+        // Open — dueDate obrigatória.
+        if (body.dueDate === undefined) {
+          return sendDomainError(reply, 'document-incomplete');
+        }
+        const result = await deps.saveDocument({
+          documentNumber: body.documentNumber,
+          series: body.series ?? null,
+          type: body.type,
+          supplierRef: body.supplierRef,
+          contractRef: body.contractRef ?? null,
+          budgetPlanRef: body.budgetPlanRef ?? null,
+          categoryRef: body.categoryRef ?? null,
+          programRef: body.programRef ?? null,
+          paymentMethod: body.paymentMethod,
+          grossValueCents: Number(body.grossValueCents),
+          sourceDiscountsCents: Number(body.sourceDiscountsCents),
+          discountsCents: Number(body.discountsCents),
+          penaltyCents: Number(body.penaltyCents),
+          interestCents: Number(body.interestCents),
+          retentions: toRetentionInputs(body.retentions),
+          registeredTaxes: toRegisteredTaxInputs(body.registeredTaxes),
+          dueDate: new Date(body.dueDate),
+          description: body.description ?? null,
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        const idStr = String(result.value.documentId);
+        reply.header('location', `/api/v2/financial/documents/${idStr}`);
+        reply.code(201);
+        return loadAndSerialize(deps, reply, idStr);
+      },
+    });
+
+    // PATCH /financial/documents/:id — ajusta documento Open.
+    scope.route({
+      method: 'PATCH',
+      url: '/financial/documents/:id',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.write)],
+      schema: {
+        params: documentIdParamSchema,
+        body: adjustDocumentBodySchema,
+        response: { 200: documentResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const body = req.body;
+        const result = await deps.adjustDocument({
+          documentId: req.params.id,
+          ...(body.grossValueCents !== undefined
+            ? { grossValueCents: Number(body.grossValueCents) }
+            : {}),
+          ...(body.sourceDiscountsCents !== undefined
+            ? { sourceDiscountsCents: Number(body.sourceDiscountsCents) }
+            : {}),
+          ...(body.discountsCents !== undefined
+            ? { discountsCents: Number(body.discountsCents) }
+            : {}),
+          ...(body.penaltyCents !== undefined ? { penaltyCents: Number(body.penaltyCents) } : {}),
+          ...(body.interestCents !== undefined
+            ? { interestCents: Number(body.interestCents) }
+            : {}),
+          ...(body.retentions !== undefined
+            ? { retentions: toRetentionInputs(body.retentions) }
+            : {}),
+          ...(body.dueDate !== undefined ? { dueDate: new Date(body.dueDate) } : {}),
+          ...(body.description !== undefined ? { description: body.description } : {}),
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return loadAndSerialize(deps, reply, req.params.id);
+      },
+    });
+
+    // POST /financial/documents/:id/approve — Open → Approved.
+    scope.route({
+      method: 'POST',
+      url: '/financial/documents/:id/approve',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.payableApprove)],
+      schema: {
+        params: documentIdParamSchema,
+        body: approveBodySchema,
+        response: { 200: documentResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.approveDocument({
+          documentId: req.params.id,
+          approvedBy: req.userId,
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return loadAndSerialize(deps, reply, req.params.id);
+      },
+    });
+
+    // POST /financial/documents/:id/undo-approval — Approved → Open.
+    scope.route({
+      method: 'POST',
+      url: '/financial/documents/:id/undo-approval',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.payableApprove)],
+      schema: {
+        params: documentIdParamSchema,
+        body: approveBodySchema,
+        response: { 200: documentResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.undoApproval({ documentId: req.params.id });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return loadAndSerialize(deps, reply, req.params.id);
+      },
+    });
+
+    // DELETE /financial/documents/:id — cancela (só Open); hard delete. 204 sem corpo.
+    scope.route({
+      method: 'DELETE',
+      url: '/financial/documents/:id',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.cancel)],
+      schema: {
+        params: documentIdParamSchema,
+        // 204 sem body → sem response schema (convenção das rotas 204 deste projeto).
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.cancelDocument({ documentId: req.params.id });
+        return sendResult(reply, result.ok ? ok(undefined) : err(result.error), {
+          ok: 204,
+          errors: {
+            'document-not-found': 404,
+            'invalid-state-transition': 409,
+            'document-repository-failure': 503,
+            'outbox-append-failed': 503,
+          },
+        });
+      },
+    });
+
+    // GET /financial/documents — lista paginada (stub Fatia 1; scan DB na Fatia 2).
+    scope.route({
+      method: 'GET',
+      url: '/financial/documents',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        querystring: listDocumentsQuerySchema,
+        response: { 200: documentListResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) => {
+        return sendResult(reply, ok({ items: [], page: 1, pageSize: 20, total: 0 }), { ok: 200 });
+      },
+    });
+
+    // GET /financial/documents/:id — detalhe completo.
+    scope.route({
+      method: 'GET',
+      url: '/financial/documents/:id',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        params: documentIdParamSchema,
+        response: { 200: documentResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        return loadAndSerialize(deps, reply, req.params.id);
+      },
+    });
+  };
+
+export const financialHttpPlugin =
+  (deps: FinancialHttpDeps, hooks: FinancialHttpHooks): FastifyPluginAsync =>
+  async (app) => {
+    await app
+      .withTypeProvider<FastifyZodOpenApiTypeProvider>()
+      .register(financialRoutes(deps, hooks));
+  };

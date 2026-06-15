@@ -79,7 +79,9 @@ describe('financial/domain/document — geração de filhos (US2)', () => {
     assert.equal(isOk(r), true);
     if (r.ok) {
       assert.equal(r.value.payables.children.length, 3);
-      const types = r.value.payables.children.map((c) => c.retentionType).sort();
+      const types = r.value.payables.children
+        .map((c) => c.retentionType)
+        .sort((a, b) => (a ?? '').localeCompare(b ?? ''));
       assert.deepEqual(types, ['CSRF', 'INSS', 'IRRF']);
     }
   });

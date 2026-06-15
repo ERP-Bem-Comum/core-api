@@ -150,7 +150,7 @@ const toMoneyRequired = (
 // ─── Retention rows → domain Retention[] ─────────────────────────────────────
 
 const mapRetentionRows = (
-  rows: readonly RetentionRow[],
+  rows: readonly Readonly<RetentionRow>[],
 ): Result<readonly Retention.Retention[], DocumentMapperError> => {
   const retentions: Retention.Retention[] = [];
   for (const row of rows) {
@@ -169,7 +169,7 @@ const mapRetentionRows = (
 // ─── RegisteredTax rows → domain RegisteredTax[] ─────────────────────────────
 
 const mapRegisteredTaxRows = (
-  rows: readonly RegisteredTaxRow[],
+  rows: readonly Readonly<RegisteredTaxRow>[],
 ): Result<readonly RegisteredTax.RegisteredTax[], DocumentMapperError> => {
   const taxes: RegisteredTax.RegisteredTax[] = [];
   for (const row of rows) {
@@ -191,9 +191,9 @@ const mapRegisteredTaxRows = (
 // O caller passa as tabelas filhas já lidas para evitar N+1 no repo.
 
 export type MapDocumentInput = Readonly<{
-  documentRow: DocumentRow;
-  retentionRows: readonly RetentionRow[];
-  registeredTaxRows: readonly RegisteredTaxRow[];
+  documentRow: Readonly<DocumentRow>;
+  retentionRows: readonly Readonly<RetentionRow>[];
+  registeredTaxRows: readonly Readonly<RegisteredTaxRow>[];
 }>;
 
 export const mapRowToDocument = (
@@ -219,48 +219,48 @@ export const mapRowToDocument = (
   // ─── Draft ─────────────────────────────────────────────────────────────────
   if (status === 'Draft') {
     let supplier: SupplierRef | null = null;
-    if (row.supplierRef !== null && row.supplierRef !== undefined) {
+    if (row.supplierRef !== null) {
       const r = SupplierRef.rehydrate(row.supplierRef);
       if (!r.ok) return err('mapper-invalid-supplier-ref');
       supplier = r.value;
     }
 
     let contractRef: ContractRefType | null = null;
-    if (row.contractRef !== null && row.contractRef !== undefined) {
+    if (row.contractRef !== null) {
       const r = ContractRef.rehydrate(row.contractRef);
       if (!r.ok) return err('mapper-invalid-contract-ref');
       contractRef = r.value;
     }
 
     let budgetPlanRef: BudgetPlanRefType | null = null;
-    if (row.budgetPlanRef !== null && row.budgetPlanRef !== undefined) {
+    if (row.budgetPlanRef !== null) {
       const r = BudgetPlanRef.rehydrate(row.budgetPlanRef);
       if (!r.ok) return err('mapper-invalid-budget-plan-ref');
       budgetPlanRef = r.value;
     }
 
     let categoryRef: CategoryRefType | null = null;
-    if (row.categoryRef !== null && row.categoryRef !== undefined) {
+    if (row.categoryRef !== null) {
       const r = CategoryRef.rehydrate(row.categoryRef);
       if (!r.ok) return err('mapper-invalid-category-ref');
       categoryRef = r.value;
     }
 
     let programRef: ProgramRefType | null = null;
-    if (row.programRef !== null && row.programRef !== undefined) {
+    if (row.programRef !== null) {
       const r = ProgramRef.rehydrate(row.programRef);
       if (!r.ok) return err('mapper-invalid-program-ref');
       programRef = r.value;
     }
 
     let type: DocumentType | null = null;
-    if (row.type !== null && row.type !== undefined) {
+    if (row.type !== null) {
       if (!isDocumentType(row.type)) return err('mapper-invalid-document-type');
       type = row.type;
     }
 
     let paymentMethod: PaymentMethod | null = null;
-    if (row.paymentMethod !== null && row.paymentMethod !== undefined) {
+    if (row.paymentMethod !== null) {
       if (!isPaymentMethod(row.paymentMethod)) return err('mapper-invalid-payment-method');
       paymentMethod = row.paymentMethod;
     }
@@ -308,18 +308,13 @@ export const mapRowToDocument = (
   // ─── Open / Approved / demais ───────────────────────────────────────────────
   // Campos obrigatórios a partir de Open. NULL aqui = corrupção → erro.
 
-  if (!row.supplierRef) return err('mapper-invalid-supplier-ref');
+  if (row.supplierRef === null) return err('mapper-invalid-supplier-ref');
   const supplierR = SupplierRef.rehydrate(row.supplierRef);
   if (!supplierR.ok) return err('mapper-invalid-supplier-ref');
 
-  if (row.type === null || row.type === undefined || !isDocumentType(row.type))
-    return err('mapper-invalid-document-type');
+  if (row.type === null || !isDocumentType(row.type)) return err('mapper-invalid-document-type');
 
-  if (
-    row.paymentMethod === null ||
-    row.paymentMethod === undefined ||
-    !isPaymentMethod(row.paymentMethod)
-  )
+  if (row.paymentMethod === null || !isPaymentMethod(row.paymentMethod))
     return err('mapper-invalid-payment-method');
 
   const grossValueR = toMoneyRequired(row.grossValue);
@@ -340,32 +335,32 @@ export const mapRowToDocument = (
   const netValueR = toMoneyRequired(row.netValue);
   if (!netValueR.ok) return netValueR;
 
-  if (row.dueDate === null || row.dueDate === undefined) return err('mapper-invalid-due-date');
+  if (row.dueDate === null) return err('mapper-invalid-due-date');
 
   // Refs cross-BC opcionais (podem ser null mesmo em Open/Approved).
   let contractRef: ContractRefType | null = null;
-  if (row.contractRef !== null && row.contractRef !== undefined) {
+  if (row.contractRef !== null) {
     const r = ContractRef.rehydrate(row.contractRef);
     if (!r.ok) return err('mapper-invalid-contract-ref');
     contractRef = r.value;
   }
 
   let budgetPlanRef: BudgetPlanRefType | null = null;
-  if (row.budgetPlanRef !== null && row.budgetPlanRef !== undefined) {
+  if (row.budgetPlanRef !== null) {
     const r = BudgetPlanRef.rehydrate(row.budgetPlanRef);
     if (!r.ok) return err('mapper-invalid-budget-plan-ref');
     budgetPlanRef = r.value;
   }
 
   let categoryRef: CategoryRefType | null = null;
-  if (row.categoryRef !== null && row.categoryRef !== undefined) {
+  if (row.categoryRef !== null) {
     const r = CategoryRef.rehydrate(row.categoryRef);
     if (!r.ok) return err('mapper-invalid-category-ref');
     categoryRef = r.value;
   }
 
   let programRef: ProgramRefType | null = null;
-  if (row.programRef !== null && row.programRef !== undefined) {
+  if (row.programRef !== null) {
     const r = ProgramRef.rehydrate(row.programRef);
     if (!r.ok) return err('mapper-invalid-program-ref');
     programRef = r.value;
@@ -397,10 +392,8 @@ export const mapRowToDocument = (
 
   if (status === 'Approved') {
     // Approved exige approvedAt + approvedBy (defesa em profundidade — CHECK no schema).
-    if (row.approvedAt === null || row.approvedAt === undefined)
-      return err('mapper-corrupt-approved-document');
-    if (row.approvedBy === null || row.approvedBy === undefined)
-      return err('mapper-corrupt-approved-document');
+    if (row.approvedAt === null) return err('mapper-corrupt-approved-document');
+    if (row.approvedBy === null) return err('mapper-corrupt-approved-document');
 
     // approvedBy é UserRef (UUID v4). Reidrata via smart constructor síncrono.
     const approvedByR = UserRef.rehydrate(row.approvedBy);
@@ -439,11 +432,11 @@ export const mapRowToDocument = (
 // O caller já filtrou pelo documentId antes de chamar.
 
 export const mapPayableRows = (
-  rows: readonly PayableRow[],
+  rows: readonly Readonly<PayableRow>[],
 ): Result<Payables | null, DocumentMapperError> => {
   if (rows.length === 0) return ok(null);
 
-  const mapPayable = (row: PayableRow): Result<Payable, DocumentMapperError> => {
+  const mapPayable = (row: Readonly<PayableRow>): Result<Payable, DocumentMapperError> => {
     const idR = PayableId.rehydrate(row.id);
     if (!idR.ok) return err('mapper-invalid-payable-id');
 
@@ -459,10 +452,8 @@ export const mapPayableRows = (
 
     if (!isPaymentMethod(row.paymentMethod)) return err('mapper-invalid-payment-method');
 
-    if (row.dueDate === null || row.dueDate === undefined) return err('mapper-invalid-due-date');
-
     let retentionType: RetentionType | null = null;
-    if (row.retentionType !== null && row.retentionType !== undefined) {
+    if (row.retentionType !== null) {
       if (!isRetentionType(row.retentionType)) return err('mapper-invalid-payable-retention-type');
       retentionType = row.retentionType;
     }
@@ -512,11 +503,14 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
       documentNumber: document.documentNumber ?? null,
       series: document.series ?? null,
       type: document.type ?? null,
-      supplierRef: document.supplier ? (document.supplier as unknown as string) : null,
-      contractRef: document.contractRef ? (document.contractRef as unknown as string) : null,
-      budgetPlanRef: document.budgetPlanRef ? (document.budgetPlanRef as unknown as string) : null,
-      categoryRef: document.categoryRef ? (document.categoryRef as unknown as string) : null,
-      programRef: document.programRef ? (document.programRef as unknown as string) : null,
+      supplierRef: document.supplier !== null ? (document.supplier as unknown as string) : null,
+      contractRef:
+        document.contractRef !== null ? (document.contractRef as unknown as string) : null,
+      budgetPlanRef:
+        document.budgetPlanRef !== null ? (document.budgetPlanRef as unknown as string) : null,
+      categoryRef:
+        document.categoryRef !== null ? (document.categoryRef as unknown as string) : null,
+      programRef: document.programRef !== null ? (document.programRef as unknown as string) : null,
       paymentMethod: document.paymentMethod ?? null,
       grossValue: document.grossValue?.cents ?? null,
       sourceDiscounts: document.sourceDiscounts?.cents ?? 0,
@@ -545,10 +539,10 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
     series: core.series ?? null,
     type: core.type,
     supplierRef: core.supplier as unknown as string,
-    contractRef: core.contractRef ? (core.contractRef as unknown as string) : null,
-    budgetPlanRef: core.budgetPlanRef ? (core.budgetPlanRef as unknown as string) : null,
-    categoryRef: core.categoryRef ? (core.categoryRef as unknown as string) : null,
-    programRef: core.programRef ? (core.programRef as unknown as string) : null,
+    contractRef: core.contractRef !== null ? (core.contractRef as unknown as string) : null,
+    budgetPlanRef: core.budgetPlanRef !== null ? (core.budgetPlanRef as unknown as string) : null,
+    categoryRef: core.categoryRef !== null ? (core.categoryRef as unknown as string) : null,
+    programRef: core.programRef !== null ? (core.programRef as unknown as string) : null,
     paymentMethod: core.paymentMethod,
     grossValue: core.grossValue.cents,
     sourceDiscounts: core.sourceDiscounts.cents,

@@ -13,7 +13,7 @@ export const createInMemoryOutbox = (): Readonly<{
 }> => {
   const events: DocumentEvent[] = [];
   const port: FinancialOutbox = {
-    append: (evs: readonly DocumentEvent[]): Promise<Result<void, OutboxAppendError>> => {
+    append: async (evs: readonly DocumentEvent[]): Promise<Result<void, OutboxAppendError>> => {
       events.push(...evs);
       return Promise.resolve(ok(undefined));
     },

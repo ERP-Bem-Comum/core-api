@@ -1,4 +1,4 @@
-# Contrato HTTP: Financeiro — Fatia 1 (`/api/v1/financial`)
+# Contrato HTTP: Financeiro — Fatia 1 (`/api/v2/financial`)
 
 **Feature**: `specs/009-fin-documentos-titulos/` · Roteamento: `fastify-server-expert` (rotas/plugin/Zod) + `bruno-api-client-expert` (coleção `.bru` E2E — ADR-0034).
 
@@ -8,7 +8,7 @@
 
 ## Recursos
 
-Prefixo: `/api/v1/financial`. Autenticação: Bearer (sessão `auth`). Autorização: por permissão (coluna "Perm").
+Prefixo: `/api/v2/financial`. Autenticação: Bearer (sessão `auth`). Autorização: por permissão (coluna "Perm").
 
 | #   | Método | Rota                           | Ação                                                                  | Perm                     | Sucesso |
 | --- | ------ | ------------------------------ | --------------------------------------------------------------------- | ------------------------ | ------- |

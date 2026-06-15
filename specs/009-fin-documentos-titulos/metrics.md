@@ -10,28 +10,28 @@
 
 > "O sistema faz a coisa certa" — verificáveis por teste/BDD (Fases 6–7).
 
-| ID     | Métrica                                                                                  | Alvo                                              | Como medir                |
-| ------ | --------------------------------------------------------------------------------------- | ------------------------------------------------- | ------------------------- |
-| MF-001 | Cálculo do líquido (`Bruto − DescFonte − Retenções − Descontos + Multa + Juros`)         | 100% correto; rejeita líquido não-positivo        | teste de domínio          |
-| MF-002 | Geração de filhos por tipo (NFS-e/RPA = N retenções; demais = 0)                          | 100% conforme tabela de origem                     | teste de domínio          |
-| MF-003 | Impostos registrados (ICMS/IPI/PIS/COFINS/CBS/IBS) não entram no líquido                  | 0 impacto no cálculo                               | teste de domínio          |
-| MF-004 | Herança de aprovação (aprovar Pai → Filhos `Aprovado`)                                    | 100% dos filhos aprovados junto                    | teste de domínio          |
-| MF-005 | Imutabilidade pós-aprovação (só `description`/`dueDate`)                                  | 0% alterações de campo vital aceitas               | teste de domínio          |
-| MF-006 | Máquina de estados — transições inválidas rejeitadas                                      | 100% rejeitadas com erro tipado                    | teste de domínio          |
-| MF-007 | Cancelamento só em `Open` → hard delete (pai+filhos)                                      | 100%; bloqueado em outros estados                  | teste de domínio          |
-| MF-008 | Desfazer aprovação com mudança de valores → hard delete + recriação de filhos            | 100% conforme R8.1                                 | teste de domínio          |
-| MF-009 | Separação de funções (Operador não aprova)                                               | 100% negado sem `payable:approve`                  | teste de borda (autorização) |
-| MF-010 | Trilha por-campo (autor, instante, antes→novo) por alteração/transição                   | 100% reconstituível                                | teste de integração       |
+| ID     | Métrica                                                                          | Alvo                                       | Como medir                   |
+| ------ | -------------------------------------------------------------------------------- | ------------------------------------------ | ---------------------------- |
+| MF-001 | Cálculo do líquido (`Bruto − DescFonte − Retenções − Descontos + Multa + Juros`) | 100% correto; rejeita líquido não-positivo | teste de domínio             |
+| MF-002 | Geração de filhos por tipo (NFS-e/RPA = N retenções; demais = 0)                 | 100% conforme tabela de origem             | teste de domínio             |
+| MF-003 | Impostos registrados (ICMS/IPI/PIS/COFINS/CBS/IBS) não entram no líquido         | 0 impacto no cálculo                       | teste de domínio             |
+| MF-004 | Herança de aprovação (aprovar Pai → Filhos `Aprovado`)                           | 100% dos filhos aprovados junto            | teste de domínio             |
+| MF-005 | Imutabilidade pós-aprovação (só `description`/`dueDate`)                         | 0% alterações de campo vital aceitas       | teste de domínio             |
+| MF-006 | Máquina de estados — transições inválidas rejeitadas                             | 100% rejeitadas com erro tipado            | teste de domínio             |
+| MF-007 | Cancelamento só em `Open` → hard delete (pai+filhos)                             | 100%; bloqueado em outros estados          | teste de domínio             |
+| MF-008 | Desfazer aprovação com mudança de valores → hard delete + recriação de filhos    | 100% conforme R8.1                         | teste de domínio             |
+| MF-009 | Separação de funções (Operador não aprova)                                       | 100% negado sem `payable:approve`          | teste de borda (autorização) |
+| MF-010 | Trilha por-campo (autor, instante, antes→novo) por alteração/transição           | 100% reconstituível                        | teste de integração          |
 
 ## Métricas não-funcionais (NFRs)
 
-| ID      | Categoria      | Alvo mensurável                                                                  | Como medir                                |
-| ------- | -------------- | ------------------------------------------------------------------------------- | ----------------------------------------- |
-| NFR-001 | Integridade    | Zero divergência aritmética líquido/soma das obrigações                          | property-based test + teste de domínio    |
-| NFR-002 | Auditoria      | 100% das mudanças de estado/campo na timeline; 100% emitem evento ao outbox      | teste de integração (timeline + outbox)   |
-| NFR-003 | Isolamento     | 0 import cross-módulo de `domain/`/`application/`; `fin_*` não compartilha tabela | ESLint boundaries + review + EXPLAIN schema |
-| NFR-004 | Segurança      | Toda rota exige permissão (`fiscal-document:*`/`payable:*`); input validado na borda | review `web-security-backend` + teste de borda |
-| NFR-005 | Concorrência   | Edição/aprovação concorrente do mesmo documento não corrompe (versionamento)     | teste de integração                       |
+| ID      | Categoria    | Alvo mensurável                                                                      | Como medir                                     |
+| ------- | ------------ | ------------------------------------------------------------------------------------ | ---------------------------------------------- |
+| NFR-001 | Integridade  | Zero divergência aritmética líquido/soma das obrigações                              | property-based test + teste de domínio         |
+| NFR-002 | Auditoria    | 100% das mudanças de estado/campo na timeline; 100% emitem evento ao outbox          | teste de integração (timeline + outbox)        |
+| NFR-003 | Isolamento   | 0 import cross-módulo de `domain/`/`application/`; `fin_*` não compartilha tabela    | ESLint boundaries + review + EXPLAIN schema    |
+| NFR-004 | Segurança    | Toda rota exige permissão (`fiscal-document:*`/`payable:*`); input validado na borda | review `web-security-backend` + teste de borda |
+| NFR-005 | Concorrência | Edição/aprovação concorrente do mesmo documento não corrompe (versionamento)         | teste de integração                            |
 
 **Citação que sustenta os NFRs (isolamento — NFR-003):**
 
@@ -49,12 +49,12 @@
 
 > A UX primária é HTTP (ADR-0037) — mede-se na **borda `/api/v1`** (não há CLI). Baseline N/A (feature nova).
 
-| ID     | Indicador                                            | Baseline | Alvo (p95) | Orçamento (p99) |
-| ------ | --------------------------------------------------- | -------- | ---------- | --------------- |
-| MP-001 | `POST /documents` (salva + gera pai+filhos, N≤5)     | N/A      | < 300 ms   | < 600 ms        |
-| MP-002 | `POST /documents/:id/approve` (herança aos filhos)   | N/A      | < 200 ms   | < 400 ms        |
-| MP-003 | `GET /documents` (lista paginada, 20/página)         | N/A      | < 400 ms   | < 800 ms        |
-| MP-004 | `GET /documents/:id/timeline` (trilha por-campo)     | N/A      | < 400 ms   | < 800 ms        |
+| ID     | Indicador                                          | Baseline | Alvo (p95) | Orçamento (p99) |
+| ------ | -------------------------------------------------- | -------- | ---------- | --------------- |
+| MP-001 | `POST /documents` (salva + gera pai+filhos, N≤5)   | N/A      | < 300 ms   | < 600 ms        |
+| MP-002 | `POST /documents/:id/approve` (herança aos filhos) | N/A      | < 200 ms   | < 400 ms        |
+| MP-003 | `GET /documents` (lista paginada, 20/página)       | N/A      | < 400 ms   | < 800 ms        |
+| MP-004 | `GET /documents/:id/timeline` (trilha por-campo)   | N/A      | < 400 ms   | < 800 ms        |
 
 ## Critérios de sucesso (mensuráveis, tech-agnostic)
 

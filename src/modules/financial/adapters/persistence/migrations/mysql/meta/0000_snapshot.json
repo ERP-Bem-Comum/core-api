@@ -200,30 +200,22 @@
       "indexes": {
         "fin_documents_supplier_ref_idx": {
           "name": "fin_documents_supplier_ref_idx",
-          "columns": [
-            "supplier_ref"
-          ],
+          "columns": ["supplier_ref"],
           "isUnique": false
         },
         "fin_documents_status_idx": {
           "name": "fin_documents_status_idx",
-          "columns": [
-            "status"
-          ],
+          "columns": ["status"],
           "isUnique": false
         },
         "fin_documents_due_date_idx": {
           "name": "fin_documents_due_date_idx",
-          "columns": [
-            "due_date"
-          ],
+          "columns": ["due_date"],
           "isUnique": false
         },
         "fin_documents_doc_number_idx": {
           "name": "fin_documents_doc_number_idx",
-          "columns": [
-            "document_number"
-          ],
+          "columns": ["document_number"],
           "isUnique": false
         }
       },
@@ -231,9 +223,7 @@
       "compositePrimaryKeys": {
         "fin_documents_id": {
           "name": "fin_documents_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -350,16 +340,12 @@
       "indexes": {
         "fin_payables_document_id_idx": {
           "name": "fin_payables_document_id_idx",
-          "columns": [
-            "document_id"
-          ],
+          "columns": ["document_id"],
           "isUnique": false
         },
         "fin_payables_status_idx": {
           "name": "fin_payables_status_idx",
-          "columns": [
-            "status"
-          ],
+          "columns": ["status"],
           "isUnique": false
         }
       },
@@ -368,12 +354,8 @@
           "name": "fin_payables_document_id_fk",
           "tableFrom": "fin_payables",
           "tableTo": "fin_documents",
-          "columnsFrom": [
-            "document_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["document_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -381,9 +363,7 @@
       "compositePrimaryKeys": {
         "fin_payables_id": {
           "name": "fin_payables_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -463,9 +443,7 @@
       "indexes": {
         "fin_registered_taxes_document_id_idx": {
           "name": "fin_registered_taxes_document_id_idx",
-          "columns": [
-            "document_id"
-          ],
+          "columns": ["document_id"],
           "isUnique": false
         }
       },
@@ -474,12 +452,8 @@
           "name": "fin_registered_taxes_document_id_fk",
           "tableFrom": "fin_registered_taxes",
           "tableTo": "fin_documents",
-          "columnsFrom": [
-            "document_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["document_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -487,9 +461,7 @@
       "compositePrimaryKeys": {
         "fin_registered_taxes_id": {
           "name": "fin_registered_taxes_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},
@@ -561,9 +533,7 @@
       "indexes": {
         "fin_retentions_document_id_idx": {
           "name": "fin_retentions_document_id_idx",
-          "columns": [
-            "document_id"
-          ],
+          "columns": ["document_id"],
           "isUnique": false
         }
       },
@@ -572,12 +542,8 @@
           "name": "fin_retentions_document_id_fk",
           "tableFrom": "fin_retentions",
           "tableTo": "fin_documents",
-          "columnsFrom": [
-            "document_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["document_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -585,9 +551,7 @@
       "compositePrimaryKeys": {
         "fin_retentions_id": {
           "name": "fin_retentions_id",
-          "columns": [
-            "id"
-          ]
+          "columns": ["id"]
         }
       },
       "uniqueConstraints": {},

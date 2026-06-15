@@ -96,6 +96,13 @@ describe('PermissionCatalog.all', () => {
       'contract:read',
       'contract:write',
       'etl:mass-approver',
+      // fiscal-document:* e payable:* — modulo financial (FIN-DOCUMENTO-TITULOS)
+      'fiscal-document:cancel',
+      'fiscal-document:read',
+      'fiscal-document:write',
+      'payable:approve',
+      'payable:read',
+      'payable:undo-approval',
       'financier:read',
       'financier:write',
       'geography:read',

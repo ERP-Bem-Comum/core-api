@@ -74,7 +74,7 @@ src/modules/financial/
 │   ├── ports/             # DocumentRepository (domain), EventBus/Outbox, Clock
 │   └── use-cases/         # saveDocument, adjustDocument, approveDocument, undoApproval, cancelDocument, getDocumentTimeline, listDocuments
 ├── adapters/
-│   ├── http/              # plugin, schemas (Zod), dto, composition — rotas /api/v1/financial
+│   ├── http/              # plugin, schemas (Zod), dto, composition — rotas /api/v2/financial
 │   ├── persistence/       # schemas/mysql.ts (fin_*), mappers, repos (drizzle + in-memory), driver, migrations
 │   └── outbox/            # outbox.in-memory + drizzle
 └── public-api/            # index.ts, events.ts, permissions.ts, refs.ts (barrel — ADR-0006)
@@ -101,12 +101,12 @@ tests/modules/financial/   # espelho: domain/ · application/ · adapters/ (inte
 ## Contrato HTTP (ADR-0037 — borda ativa)
 
 - **Endpoints novos** (detalhe Zod em `contracts/financial-http.md`):
-  - `POST /api/v1/financial/documents` — cria/salva documento → gera pai+filhos (`Open`). Perm: `fiscal-document:write`
-  - `PATCH /api/v1/financial/documents/:id` — ajusta em `Open` (recalcula). Perm: `fiscal-document:write`
-  - `POST /api/v1/financial/documents/:id/approve` — aprova (herança). Perm: `payable:approve`
-  - `POST /api/v1/financial/documents/:id/undo-approval` — `Approved`→`Open`. Perm: `payable:approve`
-  - `DELETE /api/v1/financial/documents/:id` — cancela (só `Open`, hard delete). Perm: `fiscal-document:cancel`
-  - `GET /api/v1/financial/documents` (lista paginada) + `GET /:id` + `GET /:id/timeline`. Perm: `fiscal-document:read`
+  - `POST /api/v2/financial/documents` — cria/salva documento → gera pai+filhos (`Open`). Perm: `fiscal-document:write`
+  - `PATCH /api/v2/financial/documents/:id` — ajusta em `Open` (recalcula). Perm: `fiscal-document:write`
+  - `POST /api/v2/financial/documents/:id/approve` — aprova (herança). Perm: `payable:approve`
+  - `POST /api/v2/financial/documents/:id/undo-approval` — `Approved`→`Open`. Perm: `payable:approve`
+  - `DELETE /api/v2/financial/documents/:id` — cancela (só `Open`, hard delete). Perm: `fiscal-document:cancel`
+  - `GET /api/v2/financial/documents` (lista paginada) + `GET /:id` + `GET /:id/timeline`. Perm: `fiscal-document:read`
 - **Backward-compat / versionamento**: `/api/v1` novo; sem quebra.
 
 ## Estimativa de Pipeline (W0 size)

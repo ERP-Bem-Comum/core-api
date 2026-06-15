@@ -11,15 +11,15 @@ import type {
 export const createInMemoryDocumentRepository = (): DocumentRepository => {
   const store = new Map<string, StoredDocument>();
   return immutable<DocumentRepository>({
-    save: (aggregate: StoredDocument): Promise<Result<void, DocumentRepositoryError>> => {
+    save: async (aggregate: StoredDocument): Promise<Result<void, DocumentRepositoryError>> => {
       store.set(aggregate.document.id, aggregate);
       return Promise.resolve(ok(undefined));
     },
-    findById: (id: DocumentId): Promise<Result<StoredDocument, DocumentRepositoryError>> => {
+    findById: async (id: DocumentId): Promise<Result<StoredDocument, DocumentRepositoryError>> => {
       const found = store.get(id);
-      return Promise.resolve(found ? ok(found) : err('document-not-found'));
+      return Promise.resolve(found !== undefined ? ok(found) : err('document-not-found'));
     },
-    delete: (id: DocumentId): Promise<Result<void, DocumentRepositoryError>> => {
+    delete: async (id: DocumentId): Promise<Result<void, DocumentRepositoryError>> => {
       store.delete(id);
       return Promise.resolve(ok(undefined));
     },

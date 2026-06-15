@@ -30,10 +30,12 @@ if (!process.env['MYSQL_INTEGRATION']) {
     '[financial:drizzle-mysql] MYSQL_INTEGRATION não definido — pulando testes de integração.\n',
   );
 } else {
+  // Migrations exigem DDL (CREATE TABLE) → conecta como root, como contracts/programs.
+  // O usuário de aplicação do compose é `core_app` (sem grant de DDL); `app` nem existe.
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://app:apppw-migration-test-only@127.0.0.1:3306/core';
+    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
 
   describe('DocumentRepository — Drizzle + MySQL (integração)', () => {
     let handle: FinancialMysqlHandle;

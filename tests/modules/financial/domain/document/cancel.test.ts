@@ -52,7 +52,7 @@ describe('financial/domain/document — cancel (US6)', () => {
     if (r.ok) {
       const cancelled = r.value.events.find((e) => e.type === 'DocumentCancelled');
       assert.ok(cancelled);
-      if (cancelled && cancelled.type === 'DocumentCancelled') {
+      if (cancelled?.type === 'DocumentCancelled') {
         assert.equal(cancelled.documentId, open.document.id);
         assert.equal(cancelled.payableIds.length, 4); // 1 pai + 3 filhos (hard delete)
       }
