@@ -77,8 +77,13 @@ Use case `saveDocument` (Imperative Shell): primitivos → VOs (smart constructo
 `Document.create` → `repo.save` → `outbox.append`. Sequência validar→domain→persist→publish (`.claude/rules/application.md`).
 Testes: round-trip + evento, fornecedor inválido (não publica), retenção incompatível. **55/55 verdes + typecheck OK.**
 
+## Incremento Application A3 — use cases de transição (GREEN)
+
+Refinements no domínio (`parseOpen`/`parseApproved`/`parseDraft` → `invalid-state-transition`) + use cases
+`approveDocument` (clock+UserRef), `undoApproval`, `cancelDocument` (delete), `submitDraft` — carregam do repo, refinam o
+estado (transição inválida vira erro runtime), chamam o domínio, persistem e publicam. Teste `transitions.test.ts`. **61/61 verdes + typecheck OK.**
+
 ## Pendente (infra — mesmo ticket)
 
-**Application A3**: use cases de transição (approve/adjust/undoApproval/cancel/submit — carregam do repo, refinam estado,
-chamam domínio, publicam). **Borda HTTP** `/api/v1` + RBAC. **Persistência P2** (schema Drizzle `fin_*` + migration + drizzle
-repo via `test:integration`). Depois: W2 (review) + W3 (gate completo).
+`adjustDocument` (fecha A3 — constrói VOs das mudanças). **Persistência P2** (schema Drizzle `fin_*` + migration + drizzle
+repo via `test:integration`). **Borda HTTP** `/api/v1` + RBAC. Depois: W2 (review) + W3 (gate completo).

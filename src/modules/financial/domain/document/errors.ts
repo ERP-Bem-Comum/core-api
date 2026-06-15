@@ -3,4 +3,5 @@
 export type DocumentError =
   | 'net-value-not-positive'
   | 'retention-not-allowed-for-type'
-  | 'document-incomplete';
+  | 'document-incomplete'
+  | 'invalid-state-transition';

@@ -14,6 +14,7 @@ import type {
   OpenDocument,
   ApprovedDocument,
   DraftDocument,
+  Document,
 } from './types.ts';
 import type { Payable, Payables } from '../payable/types.ts';
 import type { DocumentEvent } from './events.ts';
@@ -451,3 +452,14 @@ export const submit = (draft: DraftDocument): Result<CreateDocumentOutput, Docum
     description: draft.description,
   });
 };
+
+// Refinement constructors (ts-domain-modeler §3.D.2): estreitam o estado lido do repositório (union `Document`).
+// É aqui que "transição inválida" vira erro runtime — o use case carrega o agregado e refina antes da operação.
+export const parseOpen = (d: Document): Result<OpenDocument, DocumentError> =>
+  d.status === 'Open' ? ok(d) : err('invalid-state-transition');
+
+export const parseApproved = (d: Document): Result<ApprovedDocument, DocumentError> =>
+  d.status === 'Approved' ? ok(d) : err('invalid-state-transition');
+
+export const parseDraft = (d: Document): Result<DraftDocument, DocumentError> =>
+  d.status === 'Draft' ? ok(d) : err('invalid-state-transition');
