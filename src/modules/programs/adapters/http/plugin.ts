@@ -64,6 +64,20 @@ const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
 
 const writeErrorStatus = (code: string): number => WRITE_ERROR_STATUS[code] ?? 422;
 
+// PRG-LOGO-CONTENT: status dos erros de `getProgramLogo` (GET de bytes). `logo-object-missing`
+// (logoKey aponta objeto que sumiu do storage) e 404 como "sem logo": o front cai no placeholder;
+// 503 fica so para indisponibilidade real. Espelha PHOTO_GET_ERROR_STATUS.
+const LOGO_GET_ERROR_STATUS = {
+  'program-id-invalid': 400,
+  'program-not-found': 404,
+  'program-logo-not-found': 404,
+  'logo-object-missing': 404,
+  'logo-storage-unavailable': 503,
+  'program-repo-unavailable': 503,
+  'program-repo-conflict': 409,
+  'outbox-append-failed': 503,
+} as const;
+
 const sendWriteError = (reply: FastifyReply, code: string): Promise<void> => {
   const requestId = currentCorrelationId() ?? reply.request.id;
   return reply
@@ -218,6 +232,27 @@ const programsRoutes =
         });
         if (!result.ok) return sendWriteError(reply, result.error);
         return sendResult(reply, ok({ logoKey: result.value.program.logoKey ?? '' }), { ok: 200 });
+      },
+    });
+
+    // GET /programs/:id/logo — bytes do logo (PRG-LOGO-CONTENT). Mesma `program:read` do detalhe.
+    // Corpo binario (sem `response` schema — mesma convencao do GET /me/photo e documents/:id/content).
+    // Cache: o hook onSend global do buildApp ja forca `no-store` em /api/* (nao redefinir aqui).
+    scope.route({
+      method: 'GET',
+      url: '/programs/:id/logo',
+      preHandler: [hooks.requireAuth, hooks.authorize(PROGRAM_PERMISSION.read)],
+      schema: {
+        params: programIdParamSchema,
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.getProgramLogo({ targetId: req.params.id });
+        if (!result.ok) {
+          return sendResult(reply, result, { errors: LOGO_GET_ERROR_STATUS });
+        }
+        return reply
+          .header('content-type', result.value.contentType)
+          .send(Buffer.from(result.value.bytes));
       },
     });
   };

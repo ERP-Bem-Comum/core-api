@@ -1,8 +1,10 @@
 // Adapter in-memory do LogoStorage (testes + driver memory). Map indexado pela key;
 // `remove` idempotente. Helpers (size/get) para asserts de teste.
 
-import { type Result, ok } from '#src/shared/primitives/result.ts';
+import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type {
+  DownloadedLogo,
+  LogoDownloadError,
   LogoStorage,
   LogoStorageError,
   UploadLogoInput,
@@ -34,9 +36,17 @@ export const makeInMemoryLogoStorage = (): InMemoryLogoStorage => {
     return ok(undefined);
   };
 
+  const download = async (key: string): Promise<Result<DownloadedLogo, LogoDownloadError>> => {
+    await Promise.resolve();
+    const stored = blobs.get(key);
+    if (stored === undefined) return err('logo-object-missing');
+    return ok({ bytes: stored.bytes, contentType: stored.mimeType });
+  };
+
   return {
     upload,
     remove,
+    download,
     size: () => blobs.size,
     get: (key: string) => blobs.get(key),
   };

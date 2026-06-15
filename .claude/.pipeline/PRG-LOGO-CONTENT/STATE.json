@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "PRG-LOGO-CONTENT",
+  "size": "M",
+  "createdAt": "2026-06-15T19:04:11.670Z",
+  "closedAt": "2026-06-15T19:59:32.666Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-06-15T19:16:20.430Z",
+      "finishedAt": "2026-06-15T19:28:59.343Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "contratos-orchestrator",
+      "startedAt": "2026-06-15T19:28:59.919Z",
+      "finishedAt": "2026-06-15T19:37:16.019Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-06-15T19:37:16.536Z",
+      "finishedAt": "2026-06-15T19:42:19.802Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-06-15T19:42:20.334Z",
+      "finishedAt": "2026-06-15T19:59:32.030Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}
