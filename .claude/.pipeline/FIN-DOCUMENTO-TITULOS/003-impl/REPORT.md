@@ -64,7 +64,13 @@ parcial, sem validação) + `submit` (Draft→Open: valida obrigatórios → `cr
 
 > **Camada de domínio da Fatia 1 completa**: create · filhos · approve · adjust · undoApproval · cancel · saveDraft · submit.
 
+## Incremento Persistência P1 — port + in-memory + contract suite (GREEN)
+
+`domain/document/repository.ts` (port `DocumentRepository`: `save`/`findById`/`delete`; `StoredDocument` = documento +
+`payables | null`). `adapters/persistence/repos/document-repository.in-memory.ts`. Contract suite parametrizada
+(`document-repository.suite.ts`): round-trip Open, not-found, delete, rascunho. **52/52 verdes + typecheck OK.**
+
 ## Pendente (infra — mesmo ticket)
 
-Persistência Drizzle `fin_*` + migration · mappers + repos (drizzle/in-memory) · outbox · use cases (application) ·
-borda HTTP `/api/v1` + permissões RBAC (separação de funções). Depois: W2 (review) + W3 (gate completo).
+**Persistência P2**: schema Drizzle `fin_*` (6 tabelas) + migration (`db:generate`) + mappers + drizzle repo (mesma contract
+suite via `test:integration`/MySQL). Depois: outbox · use cases (application) · borda HTTP `/api/v1` + RBAC. Depois: W2 + W3.
