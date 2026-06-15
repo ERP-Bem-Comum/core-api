@@ -7,7 +7,7 @@
 
 <!-- SPECKIT START -->
 
-Plano corrente: `specs/008-gestao-programas/plan.md` (novo módulo `programs` — CRUD + ciclo de vida de Programa via HTTP `/api/v1/programs`; identidade dupla UUID + `program_number`; ver `research.md`, `data-model.md`, `contracts/programs-http.md`).
+Plano corrente: `specs/009-fin-documentos-titulos/plan.md` (novo módulo `financial` — fatia 1: Gestão de Documentos (Fato Gerador) + geração de Títulos Pai/Filhos via HTTP `/api/v1/financial`; agregado `Document` raiz com `Payable` interno, trilha por-campo, refs leves UUID; ver `research.md`, `data-model.md`, `contracts/financial-http.md`, `adr/0001-0005`).
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan.
 

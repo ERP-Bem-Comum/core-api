@@ -31,12 +31,20 @@ const CATALOG_RAW = [
   'contract:write',
   // etl:* (ingestao partners)
   'etl:mass-approver',
+  // fiscal-document:* (modulo financial - fato gerador)
+  'fiscal-document:cancel',
+  'fiscal-document:read',
+  'fiscal-document:write',
   // financier:* (modulo partners - financiadores)
   'financier:read',
   'financier:write',
   // geography:* (modulo partners - territorio)
   'geography:read',
   'geography:write',
+  // payable:* (modulo financial - titulos gerados)
+  'payable:approve',
+  'payable:read',
+  'payable:undo-approval',
   // program:* (modulo programs - gestao de programas)
   'program:deactivate',
   'program:read',

@@ -32,7 +32,8 @@
     "drizzle.config.ts",
     "drizzle.config.auth.ts",
     "drizzle.config.partners.ts",
-    "drizzle.config.programs.ts"
+    "drizzle.config.programs.ts",
+    "drizzle.config.financial.ts"
   ],
   "exclude": ["node_modules", "dist"]
 }

@@ -1,14 +1,12 @@
 /**
- * Public API do módulo Financial — barrel.
+ * Barrel da public-api do módulo financial (ADR-0006).
  *
- * Outros módulos (`contracts`, `notifications`, futuros) importam APENAS daqui.
- * Nunca importar de `../domain/`, `../application/` nem `../adapters/`
- * diretamente — isso quebra a fronteira do modular monolith (ADR-0006).
- *
- * Exports atuais:
- *   - `FinancialModuleEvent` — union estável dos eventos do módulo.
- *   - `FINANCIAL_SCHEMA_VERSION` — wire format version (atual: 1).
- *   - `isFinancialModuleEvent` — type guard para borda externa.
+ * Único ponto de import de eventos e permissões para outros módulos.
+ * NÃO re-exporta borda HTTP (ver http.ts — importar http.ts arrasta Fastify).
  */
 
-export * from './events.ts';
+export { FINANCIAL_SCHEMA_VERSION, isFinancialModuleEvent } from './events.ts';
+export type { FinancialModuleEvent } from './events.ts';
+
+export { FINANCIAL_PERMISSION } from './permissions.ts';
+export type { FinancialPermission } from './permissions.ts';
