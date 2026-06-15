@@ -5,7 +5,7 @@ import type { SupplierRef } from '#src/modules/partners/public-api/refs.ts';
 import * as PayableId from '../shared/payable-id.ts';
 import type { DocumentId } from '../shared/document-id.ts';
 import type { ContractRef, BudgetPlanRef, CategoryRef, ProgramRef } from '../shared/refs.ts';
-import type { Retention } from '../shared/retention.ts';
+import type { Retention, RetentionType } from '../shared/retention.ts';
 import type { RegisteredTax } from '../shared/registered-tax.ts';
 import type { DocumentType, PaymentMethod, OpenDocument } from './types.ts';
 import type { Payable, Payables } from '../payable/types.ts';
@@ -43,8 +43,15 @@ export type CreateDocumentOutput = Readonly<{
   events: readonly DocumentEvent[];
 }>;
 
-// Salva o documento (Fato Gerador) e gera os títulos em `Open`.
-// US1 (não-fiscal): apenas o título pai (valor líquido). Geração de filhos (NFS-e/RPA) entra na US2.
+// Retenções permitidas por tipo de documento (R8): só NFS-e e RPA geram filhos.
+const EMPTY_RETENTIONS: ReadonlySet<RetentionType> = new Set();
+const ALLOWED_RETENTIONS: Readonly<Partial<Record<DocumentType, ReadonlySet<RetentionType>>>> = {
+  'NFS-e': new Set<RetentionType>(['ISS', 'IRRF', 'INSS', 'CSRF']),
+  RPA: new Set<RetentionType>(['IRRF', 'INSS', 'CSRF']),
+};
+
+// Salva o documento (Fato Gerador) e gera os títulos em `Open`: 1 pai (líquido) + 1 filho por retenção
+// (apenas NFS-e/RPA — R8). Retenção em tipo não permitido é rejeitada.
 export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput, DocumentError> => {
   const net = computeNetValue({
     grossValue: input.grossValue,
@@ -67,7 +74,23 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     paymentMethod: input.paymentMethod,
   });
 
-  const children: readonly Payable[] = [];
+  const allowed = ALLOWED_RETENTIONS[input.type] ?? EMPTY_RETENTIONS;
+  for (const r of input.retentions) {
+    if (!allowed.has(r.type)) return err('retention-not-allowed-for-type');
+  }
+
+  const children: readonly Payable[] = input.retentions.map((r) =>
+    immutable<Payable>({
+      id: PayableId.generate(),
+      origin: input.id,
+      kind: 'Child',
+      retentionType: r.type,
+      status: 'Open',
+      value: r.value,
+      dueDate: input.dueDate,
+      paymentMethod: input.paymentMethod,
+    }),
+  );
 
   const document: OpenDocument = immutable<OpenDocument>({
     id: input.id,
@@ -94,7 +117,11 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
   });
 
   const events: readonly DocumentEvent[] = [
-    { type: 'DocumentSaved', documentId: input.id, payableIds: [parent.id] },
+    {
+      type: 'DocumentSaved',
+      documentId: input.id,
+      payableIds: [parent.id, ...children.map((c) => c.id)],
+    },
   ];
 
   return ok(

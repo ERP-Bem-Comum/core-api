@@ -35,7 +35,14 @@ node --test (5 arquivos financial) → tests 30 · pass 30 · fail 0
 - `rateBps` (basis points, inteiro) para alíquotas — evita float no domínio.
 - Eventos sem `occurredAt`/actor (Functional Core síncrono) — carimbados na borda/use case.
 
+## Incremento US2 — geração de filhos (GREEN)
+
+`document.ts`: validação tipo×retenção (`ALLOWED_RETENTIONS`: NFS-e={ISS,IRRF,INSS,CSRF}, RPA={IRRF,INSS,CSRF}) +
+geração de 1 filho por retenção (kind `Child`, `retentionType`, `value`=retention.value, status `Open`, vencimento do pai).
+DANFE/Fatura/não-fiscais → só pai. Erro novo `retention-not-allowed-for-type`. Teste: `children.test.ts` (CT-003/005/006/009 + RPA com ISS).
+**35/35 testes verdes + typecheck OK.**
+
 ## Pendente (próximos incrementos — mesmo ticket)
 
-US2 (geração de filhos NFS-e/RPA) · US3 (aprovação/herança/imutabilidade) · US4/US5 (ajuste/desfazer) · US6 (cancelamento)
-· US7 (rascunho) · persistência Drizzle `fin_*` + migration · outbox · borda HTTP `/api/v1` + RBAC. Depois: W2 (review) + W3 (gate).
+US3 (aprovação/herança/imutabilidade) · US4/US5 (ajuste/desfazer) · US6 (cancelamento) · US7 (rascunho) ·
+persistência Drizzle `fin_*` + migration · outbox · borda HTTP `/api/v1` + RBAC. Depois: W2 (review) + W3 (gate).
