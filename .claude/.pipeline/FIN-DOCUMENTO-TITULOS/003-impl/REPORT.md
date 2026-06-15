@@ -70,7 +70,15 @@ parcial, sem validação) + `submit` (Draft→Open: valida obrigatórios → `cr
 `payables | null`). `adapters/persistence/repos/document-repository.in-memory.ts`. Contract suite parametrizada
 (`document-repository.suite.ts`): round-trip Open, not-found, delete, rascunho. **52/52 verdes + typecheck OK.**
 
+## Incremento Application A1+A2 — Outbox port + use case saveDocument (GREEN)
+
+`application/ports/outbox.ts` (`FinancialOutbox` mínimo: `append`) + `adapters/outbox/outbox.in-memory.ts`.
+Use case `saveDocument` (Imperative Shell): primitivos → VOs (smart constructors: Money/refs/Retention/RegisteredTax) →
+`Document.create` → `repo.save` → `outbox.append`. Sequência validar→domain→persist→publish (`.claude/rules/application.md`).
+Testes: round-trip + evento, fornecedor inválido (não publica), retenção incompatível. **55/55 verdes + typecheck OK.**
+
 ## Pendente (infra — mesmo ticket)
 
-**Persistência P2**: schema Drizzle `fin_*` (6 tabelas) + migration (`db:generate`) + mappers + drizzle repo (mesma contract
-suite via `test:integration`/MySQL). Depois: outbox · use cases (application) · borda HTTP `/api/v1` + RBAC. Depois: W2 + W3.
+**Application A3**: use cases de transição (approve/adjust/undoApproval/cancel/submit — carregam do repo, refinam estado,
+chamam domínio, publicam). **Borda HTTP** `/api/v1` + RBAC. **Persistência P2** (schema Drizzle `fin_*` + migration + drizzle
+repo via `test:integration`). Depois: W2 (review) + W3 (gate completo).
