@@ -23,4 +23,20 @@ export type ApprovalUndone = Readonly<{
   documentId: DocumentId;
 }>;
 
-export type DocumentEvent = DocumentSaved | PayableApproved | ApprovalUndone;
+export type DocumentDraftSaved = Readonly<{
+  type: 'DocumentDraftSaved';
+  documentId: DocumentId;
+}>;
+
+export type DocumentCancelled = Readonly<{
+  type: 'DocumentCancelled';
+  documentId: DocumentId;
+  payableIds: readonly PayableId[];
+}>;
+
+export type DocumentEvent =
+  | DocumentSaved
+  | PayableApproved
+  | ApprovalUndone
+  | DocumentDraftSaved
+  | DocumentCancelled;

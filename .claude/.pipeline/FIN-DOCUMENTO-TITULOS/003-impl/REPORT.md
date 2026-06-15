@@ -56,7 +56,15 @@ Refator (regressão zero): extraídos helpers `retentionsAllowed`, `buildOpenPay
 `undoApproval` (Approved→Open): filhos voltam a `Open` (reaproveitados); evento `ApprovalUndone`. Testes: `adjust.test.ts`
 (CT-016 + regeneração + retenção inválida) e `undo-approval.test.ts` (CT-018/019). **44/44 verdes + typecheck OK.**
 
-## Pendente (próximos incrementos — mesmo ticket)
+## Incremento US6 + US7 — cancelamento e rascunho (GREEN) — DOMÍNIO COMPLETO
 
-US6 (cancelamento) · US7 (rascunho) · persistência Drizzle `fin_*` + migration · outbox · borda HTTP `/api/v1` + RBAC.
-Depois: W2 (review) + W3 (gate).
+`cancel` (Open→⊥): emite `DocumentCancelled` (pai+filhos); hard delete físico é do repositório. `saveDraft` (rascunho
+parcial, sem validação) + `submit` (Draft→Open: valida obrigatórios → `create`; senão `document-incomplete`).
+`DraftDocument` com campos nuláveis. Testes: `cancel.test.ts` (CT-022) + `draft.test.ts` (CT-024/025/026). **48/48 verdes + typecheck OK.**
+
+> **Camada de domínio da Fatia 1 completa**: create · filhos · approve · adjust · undoApproval · cancel · saveDraft · submit.
+
+## Pendente (infra — mesmo ticket)
+
+Persistência Drizzle `fin_*` + migration · mappers + repos (drizzle/in-memory) · outbox · use cases (application) ·
+borda HTTP `/api/v1` + permissões RBAC (separação de funções). Depois: W2 (review) + W3 (gate completo).

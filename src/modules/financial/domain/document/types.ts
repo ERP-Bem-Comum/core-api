@@ -57,5 +57,28 @@ export type OpenDocument = DocumentCore & Readonly<{ status: 'Open' }>;
 export type ApprovedDocument = DocumentCore &
   Readonly<{ status: 'Approved'; approvedAt: Date; approvedBy: UserRef }>;
 
-// Estado refinado Draft (+ rascunho/submit) entra na US7.
-export type Document = OpenDocument | ApprovedDocument;
+// Rascunho: persistência temporária parcial (US7). Campos nuláveis até a submissão.
+export type DraftDocument = Readonly<{
+  id: DocumentId;
+  status: 'Draft';
+  documentNumber: string | null;
+  series: string | null;
+  type: DocumentType | null;
+  supplier: SupplierRef | null;
+  contractRef: ContractRef | null;
+  budgetPlanRef: BudgetPlanRef | null;
+  categoryRef: CategoryRef | null;
+  programRef: ProgramRef | null;
+  paymentMethod: PaymentMethod | null;
+  grossValue: Money | null;
+  sourceDiscounts: Money | null;
+  discounts: Money | null;
+  penalty: Money | null;
+  interest: Money | null;
+  retentions: readonly Retention[];
+  registeredTaxes: readonly RegisteredTax[];
+  dueDate: Date | null;
+  description: string | null;
+}>;
+
+export type Document = DraftDocument | OpenDocument | ApprovedDocument;
