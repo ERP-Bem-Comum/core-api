@@ -42,7 +42,14 @@ geração de 1 filho por retenção (kind `Child`, `retentionType`, `value`=rete
 DANFE/Fatura/não-fiscais → só pai. Erro novo `retention-not-allowed-for-type`. Teste: `children.test.ts` (CT-003/005/006/009 + RPA com ISS).
 **35/35 testes verdes + typecheck OK.**
 
+## Incremento US3 — aprovação (GREEN)
+
+`document.ts`: `approve` (Open → Approved) com tipo refinado `ApprovedDocument` (+ `approvedAt`/`approvedBy`); herança
+ao(s) filho(s) (status `Approved`); campos vitais imutáveis (garantido pelo tipo refinado — não há operação que os altere).
+Evento `PayableApproved` por título (pai + filhos). Separação de funções (Operador ≠ Aprovador) fica na borda HTTP.
+Teste: `approve.test.ts` (CT-011/012). **38/38 verdes + typecheck OK.**
+
 ## Pendente (próximos incrementos — mesmo ticket)
 
-US3 (aprovação/herança/imutabilidade) · US4/US5 (ajuste/desfazer) · US6 (cancelamento) · US7 (rascunho) ·
-persistência Drizzle `fin_*` + migration · outbox · borda HTTP `/api/v1` + RBAC. Depois: W2 (review) + W3 (gate).
+US4/US5 (ajuste/desfazer) · US6 (cancelamento) · US7 (rascunho) · persistência Drizzle `fin_*` + migration · outbox ·
+borda HTTP `/api/v1` + RBAC (separação de funções). Depois: W2 (review) + W3 (gate).

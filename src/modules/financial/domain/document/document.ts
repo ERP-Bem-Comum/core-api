@@ -1,13 +1,14 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import { immutable } from '../../../../shared/primitives/immutable.ts';
 import type { Money } from '../../../../shared/kernel/money.ts';
+import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
 import type { SupplierRef } from '#src/modules/partners/public-api/refs.ts';
 import * as PayableId from '../shared/payable-id.ts';
 import type { DocumentId } from '../shared/document-id.ts';
 import type { ContractRef, BudgetPlanRef, CategoryRef, ProgramRef } from '../shared/refs.ts';
 import type { Retention, RetentionType } from '../shared/retention.ts';
 import type { RegisteredTax } from '../shared/registered-tax.ts';
-import type { DocumentType, PaymentMethod, OpenDocument } from './types.ts';
+import type { DocumentType, PaymentMethod, OpenDocument, ApprovedDocument } from './types.ts';
 import type { Payable, Payables } from '../payable/types.ts';
 import type { DocumentEvent } from './events.ts';
 import type { DocumentError } from './errors.ts';
@@ -126,6 +127,54 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
 
   return ok(
     immutable<CreateDocumentOutput>({
+      document,
+      payables: immutable<Payables>({ parent, children }),
+      events,
+    }),
+  );
+};
+
+export type ApproveDocumentInput = Readonly<{
+  document: OpenDocument;
+  payables: Payables;
+  by: UserRef;
+  at: Date;
+}>;
+
+export type ApproveDocumentOutput = Readonly<{
+  document: ApprovedDocument;
+  payables: Payables;
+  events: readonly DocumentEvent[];
+}>;
+
+// Aprovação (Open → Approved): herança ao(s) filho(s); campos vitais imutáveis (garantido pelo tipo refinado).
+// Separação de funções (Operador ≠ Aprovador) é imposta na borda HTTP (permissão `payable:approve`), não no domínio.
+export const approve = (
+  input: ApproveDocumentInput,
+): Result<ApproveDocumentOutput, DocumentError> => {
+  const toApproved = (p: Payable): Payable => immutable<Payable>({ ...p, status: 'Approved' });
+  const parent = toApproved(input.payables.parent);
+  const children = input.payables.children.map(toApproved);
+
+  const document: ApprovedDocument = immutable<ApprovedDocument>({
+    ...input.document,
+    status: 'Approved',
+    approvedAt: input.at,
+    approvedBy: input.by,
+  });
+
+  const events: readonly DocumentEvent[] = [parent, ...children].map(
+    (p): DocumentEvent => ({
+      type: 'PayableApproved',
+      documentId: input.document.id,
+      payableId: p.id,
+      approvedBy: input.by,
+      approvedAt: input.at,
+    }),
+  );
+
+  return ok(
+    immutable<ApproveDocumentOutput>({
       document,
       payables: immutable<Payables>({ parent, children }),
       events,

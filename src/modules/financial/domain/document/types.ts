@@ -1,4 +1,5 @@
 import type { Money } from '../../../../shared/kernel/money.ts';
+import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
 import type { SupplierRef } from '#src/modules/partners/public-api/refs.ts';
 import type { DocumentId } from '../shared/document-id.ts';
 import type { ContractRef, BudgetPlanRef, CategoryRef, ProgramRef } from '../shared/refs.ts';
@@ -53,5 +54,8 @@ export type DocumentCore = Readonly<{
 
 export type OpenDocument = DocumentCore & Readonly<{ status: 'Open' }>;
 
-// Estados refinados Draft/Approved (+ transições) entram nas próximas stories (US3/US7).
-export type Document = OpenDocument;
+export type ApprovedDocument = DocumentCore &
+  Readonly<{ status: 'Approved'; approvedAt: Date; approvedBy: UserRef }>;
+
+// Estado refinado Draft (+ rascunho/submit) entra na US7.
+export type Document = OpenDocument | ApprovedDocument;
