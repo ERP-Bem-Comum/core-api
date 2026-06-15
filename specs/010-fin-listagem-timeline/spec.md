@@ -8,6 +8,14 @@
 
 **Input**: User description: "Módulo Financeiro (fin\_\*) — Fatia 2: Listagem de Documentos + Trilha por-campo (Time Travel). Construída sobre a fatia 1 (009, já merged na dev). Substituir o stub de GET /documents por listagem real com filtros + paginação; implementar a trilha por-campo (Time Travel) materializada (fin_document_timeline + fin_timeline_field_changes), gravada na mesma transação dos use cases; expor GET /documents/:id/timeline. Resolver no clarify os follow-ups da fatia 1 (optimistic lock, permissões inertes, reader/writer split)."
 
+## Clarifications
+
+### Session 2026-06-15
+
+- Q: Edição concorrente (optimistic lock) — enforçar `version` ou remover do contrato? → A: **Enforçar** — propagar `version` do cliente ao use case; repo faz `UPDATE WHERE id=? AND version=?`; versão stale → `409 document-version-conflict`. Cumpre o contrato anunciado na fatia 1.
+- Q: Permissões `payable:read` e `payable:undo-approval` declaradas e não usadas — wire ou remover? → A: **Remover** ambas do catálogo do auth + `FINANCIAL_PERMISSION`; undo-approval permanece sob `payable:approve` (menor privilégio).
+- Q: Read path da listagem — reusar writer pool ou já fazer reader/writer split? → A: **Reusar o writer pool** (single-node) nesta fatia; **registrar como dívida técnica** o split reader/writer (ADR-0026), a ser feito quando o backend estiver completo e após análise das métricas (com o time de back).
+
 ## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Listar documentos financeiros com filtros e paginação (Priority: P1)
@@ -70,8 +78,8 @@ Como **Aprovador** (ou auditor com leitura financeira), quero **consultar o hist
 - **FR-006**: A trilha MUST ser alimentada **automaticamente e de forma síncrona** por todos os use cases mutantes da fatia 1 (criar, salvar rascunho, ajustar, aprovar, desfazer aprovação, cancelar, submeter rascunho), no mesmo limite transacional da escrita do agregado — sem janela em que o documento exista sem sua entrada de trilha correspondente.
 - **FR-007**: O sistema MUST expor `GET /api/v2/financial/documents/:id/timeline` retornando as entradas em ordem cronológica, cada uma com `eventType`, `target {kind, id}`, `occurredAt`, `actor` (nullable) e `changes[] {field, before, after}`.
 - **FR-008**: Leitura de lista e de trilha MUST exigir a permissão de leitura financeira já existente (`fiscal-document:read`); sem ela → 403. Documento inexistente na trilha → 404.
-- **FR-009**: O sistema MUST definir o comportamento de **edição concorrente** (optimistic lock) das operações que hoje recebem `version` (ajuste, aprovação, desfazer aprovação): ou rejeitar a operação quando a versão informada estiver desatualizada (conflito → 409), ou remover a expectativa de versionamento do contrato. _(decisão a confirmar no `/speckit-clarify` — follow-up #1 da fatia 1; default proposto: **enforçar** o conflito de versão, pois o contrato da fatia 1 já o anuncia.)_
-- **FR-010**: O catálogo de permissões financeiras MUST refletir apenas permissões efetivamente usadas por rota; permissões declaradas e não enforçadas devem ser conectadas a uma rota ou removidas. _(decisão a confirmar no `/speckit-clarify` — follow-up #2; default proposto: remover `payable:read` e `payable:undo-approval`, mantendo undo sob `payable:approve`.)_
+- **FR-009**: O sistema MUST **enforçar optimistic lock** nas operações que recebem `version` (ajuste, aprovação, desfazer aprovação): a borda propaga o `version` do cliente ao use case, que persiste com `UPDATE ... WHERE id = ? AND version = ?`; quando a versão informada estiver desatualizada (conflito), a operação MUST falhar com `409 document-version-conflict` (sem aplicar a mudança). _(clarify 2026-06-15)_
+- **FR-010**: O catálogo de permissões financeiras MUST conter apenas permissões efetivamente enforçadas por rota; `payable:read` e `payable:undo-approval` (declaradas e não usadas) MUST ser **removidas** do catálogo do auth e de `FINANCIAL_PERMISSION`; o desfazer-aprovação permanece sob `payable:approve`. _(clarify 2026-06-15)_
 
 ### Key Entities _(include if feature involves data)_
 
@@ -92,7 +100,7 @@ Como **Aprovador** (ou auditor com leitura financeira), quero **consultar o hist
 
 ## Impacto Arquitetural (core-api) _(obrigatório se a feature toca `src/`)_
 
-- **Bounded Contexts afetados**: [x] Financeiro (`fin_*`). Toca o catálogo de permissões do Auth de forma **aditiva/subtrativa** (follow-up #2) — sem ler/escrever tabelas de outro BC; cross-módulo só via `public-api` (ADR-0006).
+- **Bounded Contexts afetados**: [x] Financeiro (`fin_*`). Toca o catálogo de permissões do Auth de forma **subtrativa** (remove `payable:read`/`payable:undo-approval` inertes — clarify FR-010) — sem ler/escrever tabelas de outro BC; cross-módulo só via `public-api` (ADR-0006).
 - **Novos agregados / Value Objects?**: `DocumentTimeline` (agregado de auditoria, espelha `contracts/domain/timeline/`) + VO `FieldChange`. `DocumentSummary` é projeção de leitura (read-model), não agregado. Cada VO com smart constructor + branded + `Result<T,E>`.
 - **Novos eventos de domínio (outbox)?**: Não — reusa os eventos da fatia 1 (`DocumentSaved`/`PayableApproved`/`ApprovalUndone`/`DocumentDraftSaved`/`DocumentCancelled`). A trilha é read-model materializado síncrono (derivado de eventos — ADR-0003), gravado na mesma transação; **não** depende de worker/projeção do outbox (research.md 009 §R2).
 - **Novos subcomandos de CLI?**: N/A (CLI removida — ADR-0037).
@@ -104,8 +112,8 @@ Como **Aprovador** (ou auditor com leitura financeira), quero **consultar o hist
 - **Construída sobre a fatia 1 (009)**: o agregado `Document`, os use cases mutantes, o schema `fin_*` base, a borda `/api/v2/financial` e o outbox já existem e estão em produção na `dev`. Esta fatia estende, não reescreve.
 - **Decisão de read-model fixada (não re-litigar)**: trilha **materializada append-only** em `fin_document_timeline` + `fin_timeline_field_changes` (1FN, sem JSON), gravada na mesma transação do agregado — conforme `research.md` (009) R2/R8 e `data-model.md` (009). Alternativa de projeção on-the-fly a partir do outbox foi rejeitada lá.
 - **Tabelas de trilha já desenhadas**: as colunas e índices de `fin_document_timeline`/`fin_timeline_field_changes` constam em `data-model.md` (009) §read-model — a fase de plano/data-model desta fatia as materializa via migration `fin_*`.
-- **Optimistic lock (a confirmar no clarify — FR-009)**: default assumido = **enforçar** o conflito de versão (o contrato da fatia 1 já anuncia `409 document-version-conflict`).
-- **Permissões inertes (a confirmar no clarify — FR-010)**: default assumido = **remover** `payable:read`/`payable:undo-approval` do catálogo (menor privilégio; undo permanece sob `payable:approve`).
-- **Read path de persistência (a confirmar no clarify, decisão de plano)**: default assumido = **reusar o pool writer** (single-node) para a listagem na fatia 2; o split reader/writer (ADR-0026, como contracts/partners) fica como otimização posterior — YAGNI.
+- **Optimistic lock (resolvido — clarify 2026-06-15, FR-009)**: **enforçar** o conflito de versão (`409 document-version-conflict`), propagando `version` ao use case.
+- **Permissões inertes (resolvido — clarify 2026-06-15, FR-010)**: **remover** `payable:read`/`payable:undo-approval` do catálogo; undo permanece sob `payable:approve`.
+- **Read path de persistência (resolvido — clarify 2026-06-15)**: **reusar o pool writer** (single-node) para a listagem nesta fatia. **Dívida técnica registrada**: implementar o split reader/writer (ADR-0026, como contracts/partners — reads à réplica) quando o backend estiver completo, **após análise das métricas** com o time de back (gatilho de revisão, não escopo desta fatia).
 - **Sem novo perfil/ator**: Operador e Aprovador (fatia 1) com `fiscal-document:read` cobrem lista e trilha.
 - **Escopo de filtros**: a listagem cobre os filtros já previstos no contrato `financial-http.md` (009); buscas textuais avançadas/ordenação custom ficam fora desta fatia.

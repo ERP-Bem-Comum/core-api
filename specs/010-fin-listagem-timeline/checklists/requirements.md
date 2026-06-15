@@ -31,8 +31,8 @@
 
 ## Notes
 
-- FR-009 (optimistic lock) e FR-010 (permissões inertes) carregam **defaults informados** + decisão formal pendente
-  para o `/speckit-clarify` (follow-ups #1 e #2 da fatia 1). Não são `[NEEDS CLARIFICATION]` bloqueantes: há default
-  razoável documentado nas Assumptions; o clarify confirma/ajusta.
-- Read path reader/writer split é decisão de plano (Assumptions), não de spec.
+- **Clarify 2026-06-15 concluído** — 3 decisões fechadas e integradas (seção `## Clarifications` + FR-009/FR-010 + Assumptions):
+  FR-009 = **enforçar** optimistic lock (409); FR-010 = **remover** `payable:read`/`payable:undo-approval`;
+  read path = **reusar writer** agora + dívida técnica do split reader/writer registrada (revisar pós-métricas).
 - Detalhe técnico (colunas, índices, migration `fin_*`) vive em `data-model.md` (já desenhado em 009) — não na spec.
+- Pronto para `/speckit-plan` (após Domínio/ADRs/Métricas, conforme o fluxo SDD do repo).
