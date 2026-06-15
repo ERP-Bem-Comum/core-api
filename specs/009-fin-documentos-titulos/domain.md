@@ -7,11 +7,9 @@
 > com [`modular-monolith`](../../.claude/skills/modular-monolith/SKILL.md) para a fronteira `fin_*` e refs cross-BC.
 > Fonte de domínio: `handbook/domain_questions/financeiro/`. Spec clarificada: [`spec.md`](./spec.md).
 
-> ⚠️ **Citações canônicas Evans/Vernon pendentes.** O princípio IX da pipeline exige trecho literal ≥4 linhas
-> via a tool MCP `skills_citar` (`acdg-skills`), que **não está disponível nesta sessão interativa** (só no fluxo
-> headless do engine — ver memória `pipeline-sdd-acdg-skills-mcp`). Os pontos marcados **[CITAÇÃO PENDENTE]**
-> devem ser preenchidos com o trecho literal antes do gate; as justificativas abaixo estão ancoradas nas fontes
-> que temos e citamos literalmente (handbook do projeto + ADRs aceitos).
+> **Citações canônicas (princípio IX).** Trechos literais de Evans/Vernon inseridos a partir do **fallback local**
+> `acdg/skills_base/shared-references/ddd/` — a tool MCP `skills_citar`/`acdg-skills` não existe nesta sessão interativa
+> (ver memórias `acdg-skills-base-fallback` e `pipeline-sdd-acdg-skills-mcp`). Formato: `arquivo:linha, AUTOR, LIVRO`.
 
 ---
 
@@ -24,7 +22,11 @@ nesta fatia como **um agregado** (ver §"Boundary do agregado"), não como módu
 
 **Justificativa das fronteiras:**
 
-> **[CITAÇÃO PENDENTE — Evans/Vernon via `skills_citar`]** (boundary de Bounded Context e isolamento de modelo).
+> "A BOUNDED CONTEXT delimits the applicability of a particular model so that team members have a clear and shared
+> understanding of what has to be consistent and how it relates to other CONTEXTS. Within that CONTEXT, work to keep the
+> model logically unified, but do not worry about applicability outside those bounds. In other CONTEXTS, other models
+> apply, with differences in terminology, in concepts and rules, and in dialects of the UBIQUITOUS LANGUAGE."
+> — _(ddd--evans-livro-azul.md:4689 — Bounded Context; Eric Evans, *Domain-Driven Design*)_
 
 Âncora disponível (citada literalmente do handbook/ADR):
 
@@ -71,7 +73,11 @@ são **entidades internas** ao agregado, não agregados próprios.
   Liquidação/Conciliação. **Reavaliar o split** (promover `Payable` a agregado próprio referenciado por `DocumentId`)
   quando aquelas fatias entrarem.
 
-> **[CITAÇÃO PENDENTE — Vernon, *Effective Aggregate Design* (agregados pequenos × consistência transacional)]**
+> "Cluster the ENTITIES and VALUE OBJECTS into AGGREGATES and define boundaries around each. Choose one ENTITY to be the
+> root of each AGGREGATE, and control all access to the objects inside the boundary through the root. Allow external
+> objects to hold references to the root only... This arrangement makes it practical to enforce all invariants for objects
+> in the AGGREGATE and for the AGGREGATE as a whole in any state change."
+> — _(ddd--evans-livro-azul.md:1474; Eric Evans, *Domain-Driven Design*)_
 
 ---
 
@@ -312,4 +318,4 @@ o outbox transporta eventos internos que alimentam a timeline e a integração f
 
 Fase 3 — **ADRs** (`adr/NNNN-*.md`) para as decisões A–E acima. Roteamento: decisão de arquitetura apoiada por
 `modular-monolith` (A/B), `drizzle-orm-expert`/`mysql-database-expert` (C — persistência da timeline), `typescript-language-expert`
-(type system). **[CITAÇÃO PENDENTE]** a resolver via `skills_citar` no fluxo headless.
+(type system). Citações Evans/Vernon inseridas via fallback local `acdg/skills_base/shared-references/ddd/`.

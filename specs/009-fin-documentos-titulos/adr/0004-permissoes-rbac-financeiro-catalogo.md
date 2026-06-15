@@ -25,7 +25,14 @@ via RBAC dinâmico — não tipos hardcoded. A borda HTTP exige a permissão cor
 
 ## Citação canônica _(obrigatória — princípio IX)_
 
-> **[CITAÇÃO PENDENTE]** — trecho ≥4 linhas (RBAC / separation of duties) via `skills_citar`, indisponível nesta sessão.
+> "It is a careful balance. The SHARED KERNEL cannot be changed as freely as other parts of the design. Decisions
+> involve consultation with another team. Automated test suites must be integrated because all tests of both teams must
+> pass when changes are made. Usually, teams make changes on separate copies of the KERNEL, integrating with the other
+> team at intervals."
+> — _(ddd--evans-livro-azul.md:4913 — Shared Kernel; Eric Evans, *Domain-Driven Design*)_
+
+Nota: a justificativa de _separation of duties_ (Operador ≠ Aprovador) é de segurança/RBAC; a citação sustenta que o
+catálogo do `auth` é um kernel compartilhado, alterável só por coordenação cross-módulo.
 
 ## Alternativas consideradas
 

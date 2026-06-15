@@ -31,8 +31,12 @@ será um SDD próprio na fatia de Conciliação, quando passa a ter função rea
 
 ## Citação canônica _(obrigatória — princípio IX)_
 
-> **[CITAÇÃO PENDENTE]** — trecho ≥4 linhas (Vernon, _Implementing DDD_ — referência entre agregados por identidade)
-> via `skills_citar` (`/acdg-skills:software-architect`), indisponível nesta sessão interativa.
+> "[Evans] states that one Aggregate may hold references to the Root of other Aggregates. However, we must keep in mind
+> that this does not place the referenced Aggregate inside the consistency boundary of the one referencing it. The
+> reference does not cause the formation of just one whole Aggregate. There are still two (or more)..."
+> — _(ddd--vernon-livro-vermelho.md:9076 — "Rule: Reference Other Aggregates by Identity"; Vaughn Vernon, *Implementing Domain-Driven Design*)_
+
+Fonte literal via fallback local (MCP `acdg-skills` off): `acdg/skills_base/shared-references/ddd/`.
 
 ## Alternativas consideradas
 

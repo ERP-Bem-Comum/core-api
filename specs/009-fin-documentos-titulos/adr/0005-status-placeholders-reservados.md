@@ -22,8 +22,11 @@ A máquina de estados completa do título tem **7 status** (`titulos-liquidacao.
 
 ## Citação canônica _(obrigatória — princípio IX)_
 
-> **[CITAÇÃO PENDENTE]** — trecho ≥4 linhas (evolução de modelo / open-closed em enums de estado) via `skills_citar`,
-> indisponível nesta sessão.
+> "Every object has a life cycle. An object is born, it likely goes through various states, and it eventually dies—being
+> either archived or deleted... But other objects have longer lives... They have complex interdependencies with other
+> objects. They go through changes of state to which invariants apply. Managing these objects presents challenges that
+> can easily derail an attempt at MODEL-DRIVEN DESIGN."
+> — _(ddd--evans-livro-azul.md:1409 — Life Cycle of a Domain Object; Eric Evans, *Domain-Driven Design*)_
 
 ## Alternativas consideradas
 

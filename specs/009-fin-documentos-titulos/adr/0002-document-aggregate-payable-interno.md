@@ -26,8 +26,11 @@ fronteira de consistência transacional. Quando as fatias de Liquidação/Concil
 
 ## Citação canônica _(obrigatória — princípio IX)_
 
-> **[CITAÇÃO PENDENTE]** — trecho ≥4 linhas (Vernon, _Effective Aggregate Design_: "Design small Aggregates" /
-> consistência transacional × eventual) via `skills_citar`, indisponível nesta sessão.
+> "Invariants, which are consistency rules that must be maintained whenever data changes, will involve relationships
+> between members of the AGGREGATE. Any rule that spans AGGREGATES will not be expected to be up-to-date at all times.
+> Through event processing, batch processing, or other update mechanisms, other dependencies can be resolved within some
+> specified time. But the invariants applied within an AGGREGATE will be enforced with the completion of each transaction."
+> — _(ddd--evans-livro-azul.md:1457; Eric Evans, *Domain-Driven Design*)_
 
 ## Alternativas consideradas
 

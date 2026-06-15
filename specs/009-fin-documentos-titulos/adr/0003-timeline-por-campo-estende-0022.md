@@ -24,8 +24,11 @@ O rótulo PT-BR é responsabilidade do formatter (não do domínio).
 
 ## Citação canônica _(obrigatória — princípio IX)_
 
-> **[CITAÇÃO PENDENTE]** — trecho ≥4 linhas (Vernon/Young, event-sourced projections / CQRS read-model) via
-> `skills_citar`, indisponível nesta sessão.
+> "To update synchronously, the query model and command model would normally share the same database (or schema), and we
+> would update the two models in the same transaction. That keeps both models completely consistent. Yet, this will
+> require more processing time for the multiple table updates... If the system is normally under heavy load and the query
+> model update process is lengthy, use asynchronous updates instead. This may lead to challenges of eventual consistency..."
+> — _(ddd--vernon-livro-vermelho.md:3257 — CQRS / query model; Vaughn Vernon, *Implementing Domain-Driven Design*)_
 
 ## Alternativas consideradas
 
