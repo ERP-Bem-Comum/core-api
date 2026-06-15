@@ -137,9 +137,12 @@ describe('aggregatePartners — projeção + merge + sort', () => {
     const r = aggregatePartners(seed(), DEFAULT_QUERY);
     assert.equal(isOk(r), true);
     if (!r.ok) return;
+    // ACT identifica-se pela razão social (CON-ACT-CONTRACTOR-RAZAO-SOCIAL): o item de
+    // `anAct('Delta')` projeta `corporateName = 'Delta Instituição LTDA'`. Ordem (name,type,id)
+    // inalterada: 'Delta Instituição LTDA' segue entre 'Beta' e 'Gama' (D < G).
     assert.deepEqual(
       r.value.items.map((i) => i.name),
-      ['Alpha', 'Beta', 'Delta', 'Gama', 'Zeta'],
+      ['Alpha', 'Beta', 'Delta Instituição LTDA', 'Gama', 'Zeta'],
     );
     assert.equal(r.value.meta.totalItems, 5);
     // projeção plana
@@ -197,5 +200,22 @@ describe('aggregatePartners — safety cap', () => {
     const r = aggregatePartners(seed(), DEFAULT_QUERY, { maxTotal: 2 });
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'partners-aggregate-too-large');
+  });
+});
+
+// CON-ACT-CONTRACTOR-RAZAO-SOCIAL — W0 RED — item de ACT identifica-se pela razão social.
+// `actItem` deve projetar `name = act.corporateName ?? act.name` (a inclusão de contrato
+// seleciona o ACT pela razão social). RED por inexistência: hoje `actItem` usa `act.name`
+// (= objeto do acordo). O seed cria `anAct('Delta')` com `corporateName='Delta Instituição LTDA'`.
+describe('aggregatePartners — ACT identificado pela razão social (corporateName)', () => {
+  it('item de ACT tem name = corporateName (razão social), não o objeto do acordo', () => {
+    const r = aggregatePartners(seed(), { ...DEFAULT_QUERY, type: 'act' });
+    assert.equal(isOk(r), true);
+    if (!r.ok) return;
+    assert.equal(r.value.items.length, 1);
+    const act = r.value.items[0];
+    assert.equal(act?.type, 'act');
+    assert.equal(act?.name, 'Delta Instituição LTDA');
+    assert.notEqual(act?.name, 'Delta');
   });
 });

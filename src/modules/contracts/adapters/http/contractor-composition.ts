@@ -47,7 +47,14 @@ const viewToSnapshot = (view: ContractorView): ContractorSnapshot =>
         bankAccount: view.bankAccount,
         pixKey: view.pixKey,
       }
-    : { name: view.name, document: view.document, updatedAt: view.updatedAt.toISOString() };
+    : view.type === 'act'
+      ? // ACT identifica-se pela razão social (corporateName) — não pelo objeto do acordo (name).
+        {
+          name: view.corporateName,
+          document: view.document,
+          updatedAt: view.updatedAt.toISOString(),
+        }
+      : { name: view.name, document: view.document, updatedAt: view.updatedAt.toISOString() };
 
 const readByType = (
   port: ContractorReadPort,

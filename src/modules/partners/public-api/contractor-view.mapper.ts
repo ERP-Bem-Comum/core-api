@@ -62,6 +62,7 @@ export type ActView = Readonly<{
   name: string;
   email: string;
   document: string;
+  corporateName: string; // razão social (identificação do ACT como contratado)
   role: string;
   occupationArea: string;
   updatedAt: Date;
@@ -114,6 +115,7 @@ export const actToView = (act: Act, updatedAt: Date): ActView => ({
   name: act.name,
   email: act.email,
   document: act.cnpj as unknown as string,
+  corporateName: act.corporateName,
   role: act.legalRepresentative,
   occupationArea: act.occupationArea as unknown as string,
   updatedAt,
