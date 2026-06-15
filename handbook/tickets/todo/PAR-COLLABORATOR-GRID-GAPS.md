@@ -16,6 +16,13 @@
 > - **Veredito:** PARCIAL (~80% feito) — filtros (exceto os 2 descartados), import e export prontos; falta só a coluna de contagem Contratos/Aditivos.
 > ---
 
+> **🧭 Decisão (2026-06-15) — coluna Contratos/Aditivos ADIADA (cross-módulo).** Painel arquitetural unânime
+> (DDD + dados + Clean/YAGNI): a contagem exige `partners → contracts`; **não** fazer por port síncrono —
+> criaria ciclo `contracts ⇄ partners`, contra ADR-0006. Saída canônica = **read-model materializado via
+> outbox (ADR-0022)**, conforme `handbook/architecture/adr/0032-transient-http-composition-read-until-bff.md:87`.
+> Adiado por YAGNI (front não bloqueado: coluna `—`). Implementar como read-model quando virar requisito
+> firme; **nunca** via composição síncrona reversa. O restante do card (filtros, import, export) já entregue.
+
 ## Título
 Grid de Colaboradores — filtros e coluna faltantes vs. legado
 

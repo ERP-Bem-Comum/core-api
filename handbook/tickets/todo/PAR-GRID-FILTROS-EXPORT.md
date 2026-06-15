@@ -17,6 +17,14 @@
 > - **Veredito:** PARCIAL (~70% feito) — export 100% e filtros de ACT 100%; faltam o filtro "status de contrato" do Supplier e a coluna de contagem Contratos/Aditivos (ambos dependem de vínculo/projeção com o módulo Contracts).
 > ---
 
+> **🧭 Decisão (2026-06-15) — itens cross-módulo ADIADOS.** A coluna Contratos/Aditivos (4 tipos) e o filtro
+> "status de contrato" (Supplier) exigem `partners → contracts`. Painel arquitetural unânime (DDD + dados +
+> Clean/YAGNI): **não** fazer por port síncrono — criaria ciclo `contracts ⇄ partners`, contra ADR-0006.
+> Saída canônica = **read-model materializado via outbox (ADR-0022)**, conforme
+> `handbook/architecture/adr/0032-transient-http-composition-read-until-bff.md:87`. Adiado por YAGNI (front
+> não bloqueado). Implementar como read-model quando virar requisito firme. Export (4/4) e filtros de ACT
+> já entregues.
+
 ## Título
 Grids de Parceiros — filtros faltantes, contagem Contratos/Aditivos e export CSV
 
