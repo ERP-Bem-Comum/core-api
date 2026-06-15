@@ -89,7 +89,66 @@ estado (transição inválida vira erro runtime), chamam o domínio, persistem e
 persiste, publica. Teste `adjust-document.test.ts`. **Camada Application da Fatia 1 completa** (`saveDocument` +
 `approveDocument`/`undoApproval`/`cancelDocument`/`submitDraft`/`adjustDocument`). **63/63 verdes + typecheck OK.**
 
-## Pendente (infra — mesmo ticket)
+## Incremento Persistência P2 — schema `fin_*` + migration + mapper + Drizzle repo (GREEN typecheck + pnpm test)
 
-**Persistência P2** (schema Drizzle `fin_*` 6 tabelas + migration `db:generate` + mapper + drizzle repo via
-`test:integration`/MySQL). **Borda HTTP** `/api/v1/financial` (Fastify+Zod) + permissões RBAC. Depois: W2 (review) + W3 (gate completo).
+**Data**: 2026-06-15 · **Agente**: `drizzle-orm-expert` + skill `drizzle-schema-author`
+
+### Arquivos criados
+
+| Arquivo | Conteúdo |
+| --- | --- |
+| `src/modules/financial/adapters/persistence/schemas/mysql.ts` | 4 tabelas `fin_*`: `fin_documents` (26 colunas), `fin_payables`, `fin_retentions`, `fin_registered_taxes`. CHECKs para todos os enums de domínio, índices justificados por query, FKs ON DELETE CASCADE nomeadas. |
+| `src/modules/financial/adapters/persistence/migrations/mysql/0000_solid_solo.sql` | Migration gerada por `pnpm exec drizzle-kit generate --config drizzle.config.financial.ts`. Editada manualmente: `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci` em cada `CREATE TABLE` + `COLLATE utf8mb4_bin` em todas as colunas UUID (id, FKs, approved_by). |
+| `src/modules/financial/adapters/persistence/mappers/document.mapper.ts` | `mapRowToDocument` (bifurca por status: Draft vs Open/Approved/demais), `mapPayableRows`, `mapDocumentToRow`, `mapPayablesToRows`, `mapRetentionsToRows`, `mapRegisteredTaxesToRows`. Todos retornam `Result<T, DocumentMapperError>` — sem throw cruzando a borda. |
+| `src/modules/financial/adapters/persistence/drivers/mysql-driver.ts` | `openMysqlFinancial` (espelha driver de contracts). Journal isolado: `__drizzle_migrations_financial` (ADR-0014). |
+| `src/modules/financial/adapters/persistence/repos/document-repository.drizzle.ts` | `createDrizzleDocumentRepository`. `save()` abre UMA transação: SELECT FOR UPDATE (optimistic lock R5) → INSERT-or-UPDATE → DELETE+INSERT em lote das 3 filhas. `findById()` com try/catch próprio que preserva `document-not-found` semântico. `delete()` via DELETE raiz + CASCADE. |
+| `drizzle.config.financial.ts` | Config `drizzle-kit` do módulo financial (espelha `drizzle.config.programs.ts`). Uso: `pnpm exec drizzle-kit generate --config drizzle.config.financial.ts`. |
+| `tests/modules/financial/adapters/persistence/document-repository.drizzle-mysql.test.ts` | Consome a contract suite contra MySQL real. Gateado por `MYSQL_INTEGRATION=1` — não interfere em `pnpm test` puro. |
+
+### Decisões de DDL (citadas)
+
+- **UUID → varchar(36) + COLLATE utf8mb4_bin** (ADR-0018 §"Mapeamentos canônicos"). Comparação binária elimina drift Unicode em FK matches e é mais rápida para strings de formato fixo (schema.ts `§CHARSET/COLLATE`).
+- **Money → bigint(mode:'number')** (ADR-0018 §"Money cents"). Sem decimal, sem JSON. O mapper converte `number → Money.fromCents()`, que blinda contra negativo e `> MAX_SAFE_INTEGER` (money.ts §"Defeito #8").
+- **Enums → varchar(N) + CHECK** (ADR-0018/0020 §"Features proibidas": `mysqlEnum` proibido). `status` 7 valores, `type` 7 valores, `paymentMethod` 8 valores, `kind` 2 valores, `retentionType` 4 valores, `registeredTaxType` 7 valores — todos como `varchar` + `CHECK IN (...)`.
+- **FK ON DELETE CASCADE** (data-model.md §"A delete operation must remove everything within the AGGREGATE boundary at once" — Evans DDD). Autorizado porque `fin_payables`, `fin_retentions` e `fin_registered_taxes` são parte do boundary do agregado `Document`.
+- **Upsert via SELECT-then-UPDATE-or-INSERT em transação** (ADR-0020 §"Padrão de upsert"). `ODKU` proibido aqui: atua em QUALQUER UNIQUE (Refman §13.2.6.2) — risco de sobrescrita silenciosa.
+- **Optimistic lock (R5)**: `SELECT FOR UPDATE` lê `version` atual → `UPDATE WHERE id=? AND version=?`. Conflito detectado por `affectedRows=0`.
+- **Journal isolado `__drizzle_migrations_financial`** (ADR-0014 §"Isolamento"): evita que o migrator de um módulo pule migrations do outro por comparação de timestamp.
+- **`fin_document_timeline` e `fin_timeline_field_changes` NÃO incluídas** nesta fatia (escopo de P2 conforme task). São read-model futuro.
+- **CHARSET/COLLATE manual**: Drizzle 0.45.x não expõe charset/collate table-level (documentado em `contracts/adapters/persistence/schemas/mysql.ts §CHARSET/COLLATE`). Inserido manualmente na migration.
+
+### Índices — justificativas
+
+| Índice | Tabela | Query alvo |
+| --- | --- | --- |
+| `fin_documents_supplier_ref_idx` | `fin_documents` | Relatório de contas a pagar por fornecedor |
+| `fin_documents_status_idx` | `fin_documents` | Dashboard "documentos Open/Approved" |
+| `fin_documents_due_date_idx` | `fin_documents` | Agenda de vencimentos na semana |
+| `fin_documents_doc_number_idx` | `fin_documents` | Busca por número fiscal |
+| `fin_payables_document_id_idx` | `fin_payables` | Reconstrução do agregado (findById) |
+| `fin_payables_status_idx` | `fin_payables` | Agenda de pagamentos por status |
+| `fin_retentions_document_id_idx` | `fin_retentions` | Reconstrução do agregado (findById) |
+| `fin_registered_taxes_document_id_idx` | `fin_registered_taxes` | Reconstrução do agregado (findById) |
+
+### Resultado da validação
+
+```
+pnpm run typecheck → ✅ OK (zero erros; projeto todo)
+pnpm test         → ✅ 2440 tests · 0 fail · 17 skipped (sem alteração nos skips existentes)
+```
+
+O teste de integração `document-repository.drizzle-mysql.test.ts` está corretamente gateado:
+sem `MYSQL_INTEGRATION=1` ele imprime aviso e não registra nenhum `describe()` — o runner
+Node 24 não o conta como falha nem skip.
+
+### Pendente para execução (não bloqueante para commit)
+
+- **`pnpm run test:integration:financial`**: rodar a contract suite contra MySQL real (Docker Compose).
+  Requer: (1) adicionar o script em `package.json` espelhando `test:integration:programs`; (2) subir MySQL com `docker compose up -d mysql --wait`; (3) `MYSQL_INTEGRATION=1 node --test ... document-repository.drizzle-mysql.test.ts`.
+  A migration `0000_solid_solo.sql` será aplicada pelo driver com `applyMigrations: true`.
+- **`fin_document_timeline` + `fin_timeline_field_changes`**: tabelas do read-model de Time Travel — fatia futura.
+- **Borda HTTP** `/api/v1/financial` (Fastify + Zod + RBAC): próximo incremento.
+
+## Pendente (próximos incrementos)
+
+**Borda HTTP** `/api/v1/financial` (Fastify+Zod) + permissões RBAC. Depois: W2 (review) + W3 (gate completo).
