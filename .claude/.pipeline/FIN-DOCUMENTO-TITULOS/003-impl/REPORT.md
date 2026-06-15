@@ -49,7 +49,14 @@ ao(s) filho(s) (status `Approved`); campos vitais imutáveis (garantido pelo tip
 Evento `PayableApproved` por título (pai + filhos). Separação de funções (Operador ≠ Aprovador) fica na borda HTTP.
 Teste: `approve.test.ts` (CT-011/012). **38/38 verdes + typecheck OK.**
 
+## Incremento US4 + US5 — ajuste e desfazer aprovação (GREEN)
+
+Refator (regressão zero): extraídos helpers `retentionsAllowed`, `buildOpenPayables`, `documentSavedEvents` (reuso create/adjust).
+`adjust` (Open→Open): merge de `changes` + recálculo do líquido + **regeneração dos filhos** (hard delete + recria — R8.1).
+`undoApproval` (Approved→Open): filhos voltam a `Open` (reaproveitados); evento `ApprovalUndone`. Testes: `adjust.test.ts`
+(CT-016 + regeneração + retenção inválida) e `undo-approval.test.ts` (CT-018/019). **44/44 verdes + typecheck OK.**
+
 ## Pendente (próximos incrementos — mesmo ticket)
 
-US4/US5 (ajuste/desfazer) · US6 (cancelamento) · US7 (rascunho) · persistência Drizzle `fin_*` + migration · outbox ·
-borda HTTP `/api/v1` + RBAC (separação de funções). Depois: W2 (review) + W3 (gate).
+US6 (cancelamento) · US7 (rascunho) · persistência Drizzle `fin_*` + migration · outbox · borda HTTP `/api/v1` + RBAC.
+Depois: W2 (review) + W3 (gate).

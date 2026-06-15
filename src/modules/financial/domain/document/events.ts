@@ -18,4 +18,9 @@ export type PayableApproved = Readonly<{
   approvedAt: Date;
 }>;
 
-export type DocumentEvent = DocumentSaved | PayableApproved;
+export type ApprovalUndone = Readonly<{
+  type: 'ApprovalUndone';
+  documentId: DocumentId;
+}>;
+
+export type DocumentEvent = DocumentSaved | PayableApproved | ApprovalUndone;

@@ -51,9 +51,62 @@ const ALLOWED_RETENTIONS: Readonly<Partial<Record<DocumentType, ReadonlySet<Rete
   RPA: new Set<RetentionType>(['IRRF', 'INSS', 'CSRF']),
 };
 
+const retentionsAllowed = (type: DocumentType, retentions: readonly Retention[]): boolean => {
+  const allowed = ALLOWED_RETENTIONS[type] ?? EMPTY_RETENTIONS;
+  return retentions.every((r) => allowed.has(r.type));
+};
+
+// Gera os títulos em `Open`: 1 pai (valor líquido) + 1 filho por retenção. Usado por create e adjust
+// (no adjust, os filhos antigos são descartados e estes substituem — hard delete + recria, R8.1).
+const buildOpenPayables = (params: {
+  readonly documentId: DocumentId;
+  readonly retentions: readonly Retention[];
+  readonly netValue: Money;
+  readonly dueDate: Date;
+  readonly paymentMethod: PaymentMethod;
+}): Payables => {
+  const parent: Payable = immutable<Payable>({
+    id: PayableId.generate(),
+    origin: params.documentId,
+    kind: 'Parent',
+    retentionType: null,
+    status: 'Open',
+    value: params.netValue,
+    dueDate: params.dueDate,
+    paymentMethod: params.paymentMethod,
+  });
+  const children: readonly Payable[] = params.retentions.map((r) =>
+    immutable<Payable>({
+      id: PayableId.generate(),
+      origin: params.documentId,
+      kind: 'Child',
+      retentionType: r.type,
+      status: 'Open',
+      value: r.value,
+      dueDate: params.dueDate,
+      paymentMethod: params.paymentMethod,
+    }),
+  );
+  return immutable<Payables>({ parent, children });
+};
+
+const documentSavedEvents = (
+  documentId: DocumentId,
+  payables: Payables,
+): readonly DocumentEvent[] => [
+  {
+    type: 'DocumentSaved',
+    documentId,
+    payableIds: [payables.parent.id, ...payables.children.map((c) => c.id)],
+  },
+];
+
 // Salva o documento (Fato Gerador) e gera os títulos em `Open`: 1 pai (líquido) + 1 filho por retenção
 // (apenas NFS-e/RPA — R8). Retenção em tipo não permitido é rejeitada.
 export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput, DocumentError> => {
+  if (!retentionsAllowed(input.type, input.retentions))
+    return err('retention-not-allowed-for-type');
+
   const net = computeNetValue({
     grossValue: input.grossValue,
     sourceDiscounts: input.sourceDiscounts,
@@ -64,34 +117,13 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
   });
   if (!net.ok) return err(net.error);
 
-  const parent: Payable = immutable<Payable>({
-    id: PayableId.generate(),
-    origin: input.id,
-    kind: 'Parent',
-    retentionType: null,
-    status: 'Open',
-    value: net.value,
+  const payables = buildOpenPayables({
+    documentId: input.id,
+    retentions: input.retentions,
+    netValue: net.value,
     dueDate: input.dueDate,
     paymentMethod: input.paymentMethod,
   });
-
-  const allowed = ALLOWED_RETENTIONS[input.type] ?? EMPTY_RETENTIONS;
-  for (const r of input.retentions) {
-    if (!allowed.has(r.type)) return err('retention-not-allowed-for-type');
-  }
-
-  const children: readonly Payable[] = input.retentions.map((r) =>
-    immutable<Payable>({
-      id: PayableId.generate(),
-      origin: input.id,
-      kind: 'Child',
-      retentionType: r.type,
-      status: 'Open',
-      value: r.value,
-      dueDate: input.dueDate,
-      paymentMethod: input.paymentMethod,
-    }),
-  );
 
   const document: OpenDocument = immutable<OpenDocument>({
     id: input.id,
@@ -117,19 +149,11 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     status: 'Open',
   });
 
-  const events: readonly DocumentEvent[] = [
-    {
-      type: 'DocumentSaved',
-      documentId: input.id,
-      payableIds: [parent.id, ...children.map((c) => c.id)],
-    },
-  ];
-
   return ok(
     immutable<CreateDocumentOutput>({
       document,
-      payables: immutable<Payables>({ parent, children }),
-      events,
+      payables,
+      events: documentSavedEvents(input.id, payables),
     }),
   );
 };
@@ -180,4 +204,134 @@ export const approve = (
       events,
     }),
   );
+};
+
+export type AdjustDocumentChanges = Readonly<{
+  grossValue?: Money;
+  sourceDiscounts?: Money;
+  discounts?: Money;
+  penalty?: Money;
+  interest?: Money;
+  retentions?: readonly Retention[];
+  dueDate?: Date;
+  description?: string | null;
+}>;
+
+export type AdjustDocumentInput = Readonly<{
+  document: OpenDocument;
+  payables: Payables;
+  changes: AdjustDocumentChanges;
+}>;
+
+export type AdjustDocumentOutput = Readonly<{
+  document: OpenDocument;
+  payables: Payables;
+  events: readonly DocumentEvent[];
+}>;
+
+// Ajuste em `Open` (US4): recalcula o líquido e REGENERA os filhos a partir das retenções atuais.
+export const adjust = (input: AdjustDocumentInput): Result<AdjustDocumentOutput, DocumentError> => {
+  const d = input.document;
+  const c = input.changes;
+  const retentions = c.retentions ?? d.retentions;
+  if (!retentionsAllowed(d.type, retentions)) return err('retention-not-allowed-for-type');
+
+  const grossValue = c.grossValue ?? d.grossValue;
+  const sourceDiscounts = c.sourceDiscounts ?? d.sourceDiscounts;
+  const discounts = c.discounts ?? d.discounts;
+  const penalty = c.penalty ?? d.penalty;
+  const interest = c.interest ?? d.interest;
+  const dueDate = c.dueDate ?? d.dueDate;
+
+  const net = computeNetValue({
+    grossValue,
+    sourceDiscounts,
+    discounts,
+    penalty,
+    interest,
+    retentions,
+  });
+  if (!net.ok) return err(net.error);
+
+  const payables = buildOpenPayables({
+    documentId: d.id,
+    retentions,
+    netValue: net.value,
+    dueDate,
+    paymentMethod: d.paymentMethod,
+  });
+
+  const document: OpenDocument = immutable<OpenDocument>({
+    ...d,
+    grossValue,
+    sourceDiscounts,
+    discounts,
+    penalty,
+    interest,
+    retentions,
+    netValue: net.value,
+    dueDate,
+    description: c.description ?? d.description,
+    status: 'Open',
+  });
+
+  return ok(
+    immutable<AdjustDocumentOutput>({
+      document,
+      payables,
+      events: documentSavedEvents(d.id, payables),
+    }),
+  );
+};
+
+export type UndoApprovalInput = Readonly<{
+  document: ApprovedDocument;
+  payables: Payables;
+}>;
+
+export type UndoApprovalOutput = Readonly<{
+  document: OpenDocument;
+  payables: Payables;
+  events: readonly DocumentEvent[];
+}>;
+
+// Desfazer aprovação (US5): Approved → Open; filhos voltam a `Open` (reaproveitados). A alteração de valores
+// — que dispara hard delete + recriação dos filhos (R8.1) — ocorre no `adjust` subsequente.
+export const undoApproval = (
+  input: UndoApprovalInput,
+): Result<UndoApprovalOutput, DocumentError> => {
+  const d = input.document;
+  const toOpen = (p: Payable): Payable => immutable<Payable>({ ...p, status: 'Open' });
+  const payables = immutable<Payables>({
+    parent: toOpen(input.payables.parent),
+    children: input.payables.children.map(toOpen),
+  });
+
+  const document: OpenDocument = immutable<OpenDocument>({
+    id: d.id,
+    documentNumber: d.documentNumber,
+    series: d.series,
+    type: d.type,
+    supplier: d.supplier,
+    contractRef: d.contractRef,
+    budgetPlanRef: d.budgetPlanRef,
+    categoryRef: d.categoryRef,
+    programRef: d.programRef,
+    paymentMethod: d.paymentMethod,
+    grossValue: d.grossValue,
+    sourceDiscounts: d.sourceDiscounts,
+    retentions: d.retentions,
+    registeredTaxes: d.registeredTaxes,
+    discounts: d.discounts,
+    penalty: d.penalty,
+    interest: d.interest,
+    netValue: d.netValue,
+    description: d.description,
+    dueDate: d.dueDate,
+    status: 'Open',
+  });
+
+  const events: readonly DocumentEvent[] = [{ type: 'ApprovalUndone', documentId: d.id }];
+
+  return ok(immutable<UndoApprovalOutput>({ document, payables, events }));
 };
