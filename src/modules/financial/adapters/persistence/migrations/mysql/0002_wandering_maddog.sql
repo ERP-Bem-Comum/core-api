@@ -1,0 +1,2 @@
+ALTER TABLE `fin_document_timeline` DROP CONSTRAINT `ck_fin_tl_event_type`;--> statement-breakpoint
+ALTER TABLE `fin_document_timeline` ADD CONSTRAINT `ck_fin_tl_event_type` CHECK (`fin_document_timeline`.`event_type` IN ('DocumentSaved','PayableApproved','ApprovalUndone','DocumentDraftSaved'));

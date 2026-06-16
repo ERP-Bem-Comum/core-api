@@ -9,7 +9,7 @@
  */
 
 import * as z from 'zod/v4';
-import { DOCUMENT_EVENT_TYPES } from '../../domain/document/events.ts';
+import { TIMELINE_EVENT_TYPES } from '../../domain/document/events.ts';
 
 // ─── Shared ──────────────────────────────────────────────────────────────────
 
@@ -232,7 +232,7 @@ export type DocumentListResponseDto = z.infer<typeof documentListResponseSchema>
 
 /** Uma entrada da trilha por-campo (Time Travel). */
 export const timelineEntrySchema = z.object({
-  eventType: z.enum([...DOCUMENT_EVENT_TYPES]).meta({
+  eventType: z.enum(TIMELINE_EVENT_TYPES).meta({
     description: 'Tipo do evento de domínio que originou esta entrada na trilha',
   }),
   target: z.object({

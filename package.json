@@ -58,6 +58,7 @@
     "db:generate:auth": "drizzle-kit generate --config drizzle.config.auth.ts",
     "db:generate:partners": "drizzle-kit generate --config drizzle.config.partners.ts",
     "db:generate:programs": "drizzle-kit generate --config drizzle.config.programs.ts",
+    "db:generate:financial": "drizzle-kit generate --config drizzle.config.financial.ts",
     "db:seed:partners": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/seed-partners.ts"
   },
   "devDependencies": {

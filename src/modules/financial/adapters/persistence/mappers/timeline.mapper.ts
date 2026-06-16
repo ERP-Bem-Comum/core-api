@@ -19,8 +19,8 @@ import { newUuid } from '../../../../../shared/utils/id.ts';
 import * as UserRef from '../../../../../shared/kernel/user-ref.ts';
 import type { DocumentId } from '../../../domain/shared/document-id.ts';
 import type { PayableId } from '../../../domain/shared/payable-id.ts';
-import { DOCUMENT_EVENT_TYPES } from '../../../domain/document/events.ts';
-import type { DocumentEvent } from '../../../domain/document/events.ts';
+import { TIMELINE_EVENT_TYPES } from '../../../domain/document/events.ts';
+import type { TimelineEventType } from '../../../domain/document/events.ts';
 import type {
   FieldChange,
   FinancialTimelineEntry,
@@ -52,12 +52,12 @@ export type EntryWithChanges = Readonly<{
 
 // ─── Row → Domínio ────────────────────────────────────────────────────────────
 
-// Conjunto de event types válidos derivado da fonte única exaustiva do domínio
-// (`DOCUMENT_EVENT_TYPES`). Set para O(1) no guard de narrowing. Não há lista duplicada:
-// adicionar um membro à union sem atualizar a fonte QUEBRA `pnpm run typecheck` (no missing).
-const VALID_EVENT_TYPES: ReadonlySet<string> = new Set(DOCUMENT_EVENT_TYPES);
+// Conjunto de event types válidos NA TRILHA (`TIMELINE_EVENT_TYPES` — sem `DocumentCancelled`,
+// inalcançável por design). Set para O(1) no guard. Uma row com `DocumentCancelled` (barrada pelo
+// CHECK do banco) é rejeitada como corrupção → 'timeline-invalid-event-type'.
+const VALID_EVENT_TYPES: ReadonlySet<string> = new Set(TIMELINE_EVENT_TYPES);
 
-const isValidEventType = (s: string): s is DocumentEvent['type'] => VALID_EVENT_TYPES.has(s);
+const isValidEventType = (s: string): s is TimelineEventType => VALID_EVENT_TYPES.has(s);
 
 const mapChangeRow = (row: Readonly<TimelineFieldChangeRow>): FieldChange => ({
   field: row.field,
@@ -104,7 +104,7 @@ export const mapRowToTimelineEntry = (
     eventId: entryRow.eventId,
     documentId,
     target,
-    kind: entryRow.eventType,
+    eventType: entryRow.eventType,
     occurredAt: entryRow.occurredAt,
     actor,
     changes,
@@ -132,7 +132,7 @@ export const mapEntryToRows = (entry: FinancialTimelineEntry): EntryRows => {
     documentId: entry.documentId as unknown as string,
     targetKind: entry.target.kind,
     targetId: entry.target.id as unknown as string,
-    eventType: entry.kind,
+    eventType: entry.eventType,
     occurredAt: entry.occurredAt,
     actorRef: entry.actor !== null ? (entry.actor as unknown as string) : null,
   };

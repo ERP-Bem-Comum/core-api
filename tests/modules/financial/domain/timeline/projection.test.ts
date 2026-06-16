@@ -93,5 +93,7 @@ describe('financial/domain/timeline/projection — diff por função pura (ADR-0
     assert.ok(docEntry, 'deve haver entrada com alvo Document');
     assert.equal(docEntry.occurredAt.getTime(), at.getTime());
     assert.ok(docEntry.changes.some((c) => c.field === 'grossValue'));
+    // #56a: o discriminador de evento da entry é `eventType` (não `kind`). RED enquanto o campo for `kind`.
+    assert.equal(docEntry.eventType, 'DocumentSaved');
   });
 });
