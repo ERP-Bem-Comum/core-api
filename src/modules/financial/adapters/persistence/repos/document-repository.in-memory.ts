@@ -130,8 +130,29 @@ export const createInMemoryDocumentRepository = (
       const matched = [...store.values()].filter((e) =>
         matchesFilter(e.aggregate.document, filter),
       );
+
+      // Ordena com mesma semântica do Drizzle adapter: dueDate ASC, NULLs primeiro,
+      // desempate por id ASC.
+      // Justificativa NULLs-primeiro: MySQL 8.4 Refman §11.4.2 —
+      //   "NULL values are considered lower than any non-NULL value".
+      // Cópia defensiva ([...matched]) evita mutação do array temporário via sort() in-place.
+      const sorted = [...matched].sort((a, b) => {
+        const dueDateA = a.aggregate.document.dueDate;
+        const dueDateB = b.aggregate.document.dueDate;
+        // Ambos NULL → igual; NULL < non-NULL (NULL vem primeiro).
+        if (dueDateA === null && dueDateB === null) return 0;
+        if (dueDateA === null) return -1;
+        if (dueDateB === null) return 1;
+        const diff = dueDateA.getTime() - dueDateB.getTime();
+        if (diff !== 0) return diff;
+        // Tie-breaker: id ASC (string compare — UUIDs v4, comprimento fixo 36).
+        const idA = a.aggregate.document.id;
+        const idB = b.aggregate.document.id;
+        return idA < idB ? -1 : idA > idB ? 1 : 0;
+      });
+
       const start = (page - 1) * pageSize;
-      const items = matched.slice(start, start + pageSize).map(toListItem);
+      const items = sorted.slice(start, start + pageSize).map(toListItem);
       return Promise.resolve(ok({ items, page, pageSize, total: matched.length }));
     },
   });

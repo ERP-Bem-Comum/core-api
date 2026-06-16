@@ -346,11 +346,14 @@ export const createDrizzleDocumentRepository = (
   // Read-model leve (US1 — FR-004): lê APENAS fin_documents (sem tabelas filhas),
   // retornando Page<DocumentListItem> com `total` filtrado e `items` paginados.
   //
-  // Índice utilizado: `fin_documents_due_date_idx` (schema.ts §"Índices") cobre
-  // ORDER BY dueDate ASC — ordenação determinística escolhida por ser o campo de
-  // maior relevância funcional (agenda de vencimentos) e por já ter índice explícito.
-  // Rows com dueDate NULL (Drafts) aparecem primeiro no ASC — comportamento MySQL 8.4
-  // (Refman §11.4.2: "NULL values are considered lower than any non-NULL value").
+  // Ordenação ESTÁVEL: dueDate ASC, desempate por id ASC.
+  //   - Rows com dueDate NULL (Drafts) aparecem PRIMEIRO — MySQL 8.4 Refman §11.4.2:
+  //     "NULL values are considered lower than any non-NULL value".
+  //   - Quando dois documentos têm o mesmo dueDate (ou ambos NULL), o tie-breaker
+  //     `id ASC` (UUID v4, varchar(36)) garante ordem determinística em paginação
+  //     OFFSET — sem ele, InnoDB pode variar a ordem dentro do mesmo índice.
+  //   - `fin_documents_due_date_idx` cobre ORDER BY dueDate; o desempate por `id`
+  //     é servido pela PK do cluster InnoDB (fin_documents.id é a PK).
   //
   // Filtros combinados via and(...) (operators.mdx §"and"):
   //   status   → eq   (fin_documents_status_idx cobre)
@@ -402,7 +405,7 @@ export const createDrizzleDocumentRepository = (
       }
 
       // 2. SELECT read-model com LIMIT/OFFSET.
-      //    Ordenação determinística por dueDate ASC (fin_documents_due_date_idx).
+      //    Ordenação estável: dueDate ASC (NULLs primeiro), desempate por id ASC.
       //    Colunas: apenas as necessárias para DocumentListItem.
       //    `version` incluída (FR-009): grids do front precisam para ações inline
       //    (PATCH/approve) sem findById extra — Vernon, _Implementing DDD_ (ddd--vernon-livro-vermelho.md:8869).
@@ -419,7 +422,7 @@ export const createDrizzleDocumentRepository = (
         })
         .from(finDocuments)
         .where(whereClause)
-        .orderBy(asc(finDocuments.dueDate))
+        .orderBy(asc(finDocuments.dueDate), asc(finDocuments.id))
         .limit(pageSize)
         .offset((page - 1) * pageSize);
 

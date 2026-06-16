@@ -120,4 +120,9 @@ describe('FIN-LISTAGEM-TIMELINE — GET /api/v2/financial/documents (listagem re
     const res = await list('?status=Open', PLAIN);
     assert.equal(res.statusCode, 403);
   });
+
+  it('CT-009: type inválido (fora do enum) → 400', async () => {
+    const res = await list('?type=FOO');
+    assert.equal(res.statusCode, 400, res.body);
+  });
 });

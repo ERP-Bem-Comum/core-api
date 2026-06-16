@@ -1,6 +1,7 @@
 import type { DocumentId } from '../shared/document-id.ts';
 import type { PayableId } from '../shared/payable-id.ts';
 import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
+import { exhaustiveStringUnion } from '../../../../shared/primitives/exhaustive.ts';
 
 // Eventos de domínio (EN passado). `occurredAt`/actor são carimbados na borda/use case
 // (Functional Core síncrono não conhece relógio).
@@ -40,3 +41,22 @@ export type DocumentEvent =
   | ApprovalUndone
   | DocumentDraftSaved
   | DocumentCancelled;
+
+/**
+ * Fonte única dos literais de `DocumentEvent['type']` (anti-drift) — consumida pelos
+ * adapters (schema HTTP do `z.enum`, guard de reidratação do timeline mapper).
+ *
+ * `exhaustiveStringUnion` força cobertura EXATA da union em tempo de compilação:
+ *   - no extra: um literal fora de `DocumentEvent['type']` não compila;
+ *   - no missing: adicionar um novo membro à union sem listá-lo aqui QUEBRA `pnpm run typecheck`.
+ *
+ * O tipo preserva os literais (`as const`), portanto serve direto a `z.enum([...])`,
+ * que exige `readonly [string, ...string[]]`.
+ */
+export const DOCUMENT_EVENT_TYPES = exhaustiveStringUnion<DocumentEvent['type']>()([
+  'DocumentSaved',
+  'PayableApproved',
+  'ApprovalUndone',
+  'DocumentDraftSaved',
+  'DocumentCancelled',
+] as const);

@@ -19,6 +19,7 @@ import { newUuid } from '../../../../../shared/utils/id.ts';
 import * as UserRef from '../../../../../shared/kernel/user-ref.ts';
 import type { DocumentId } from '../../../domain/shared/document-id.ts';
 import type { PayableId } from '../../../domain/shared/payable-id.ts';
+import { DOCUMENT_EVENT_TYPES } from '../../../domain/document/events.ts';
 import type { DocumentEvent } from '../../../domain/document/events.ts';
 import type {
   FieldChange,
@@ -51,15 +52,10 @@ export type EntryWithChanges = Readonly<{
 
 // ─── Row → Domínio ────────────────────────────────────────────────────────────
 
-// Conjunto de event types válidos (espelha o CHECK do schema e domain/document/events.ts).
-// Usar Set para O(1) no guard de narrowing.
-const VALID_EVENT_TYPES = new Set<string>([
-  'DocumentSaved',
-  'PayableApproved',
-  'ApprovalUndone',
-  'DocumentCancelled',
-  'DocumentDraftSaved',
-]);
+// Conjunto de event types válidos derivado da fonte única exaustiva do domínio
+// (`DOCUMENT_EVENT_TYPES`). Set para O(1) no guard de narrowing. Não há lista duplicada:
+// adicionar um membro à union sem atualizar a fonte QUEBRA `pnpm run typecheck` (no missing).
+const VALID_EVENT_TYPES: ReadonlySet<string> = new Set(DOCUMENT_EVENT_TYPES);
 
 const isValidEventType = (s: string): s is DocumentEvent['type'] => VALID_EVENT_TYPES.has(s);
 

@@ -104,6 +104,9 @@ export const documentRepositoryContract = (makeRepo: () => DocumentRepository): 
     const SUP_PAGE = '5a000000-0000-4000-8000-000000000002';
     const SUP_WINDOW = '5a000000-0000-4000-8000-000000000003';
     const SUP_EMPTY = '5a000000-0000-4000-8000-000000000004';
+    // Novos: isolados por supplierRef único (isolation-safe no Drizzle/MySQL compartilhado).
+    const SUP_STABLE_ORDER = '5a000000-0000-4000-8000-000000000005';
+    const SUP_DRAFT_NULL = '5a000000-0000-4000-8000-000000000006';
     const sup = (uuid: string): SupplierRef => {
       const r = SupplierRef.rehydrate(uuid);
       if (!r.ok) throw new Error('test setup: sup');
@@ -209,6 +212,111 @@ export const documentRepositoryContract = (makeRepo: () => DocumentRepository): 
       if (page.ok) {
         assert.equal(page.value.total, 0);
         assert.equal(page.value.items.length, 0);
+      }
+    });
+
+    // ─── Ordenação estável: empate de dueDate desempatado por id ASC ─────────
+    //
+    // Cobre a correção do Fix 2 (W2 round 2): sem tie-breaker `id ASC`, paginação
+    // OFFSET em MySQL pode repetir/pular linhas quando dois documentos têm o mesmo
+    // dueDate — InnoDB não garante ordenação dentro de um tie sem critério secundário
+    // explícito. O adapter Drizzle usa `.orderBy(asc(dueDate), asc(id))`; o in-memory
+    // usa [...matched].sort() com a mesma semântica.
+    //
+    // Montagem: três documentos com o MESMO dueDate mas IDs distintos e lexicograficamente
+    // ordenados (via DocumentId.rehydrate). Inserção na ordem INVERSA da esperada —
+    // se o sort não estiver aplicado, os items estarão na ordem errada.
+    it('findPaged: empate de dueDate → desempate por id ASC (ordenação estável)', async () => {
+      const repo = makeRepo();
+      const s = sup(SUP_STABLE_ORDER);
+      const sharedDue = '2026-10-15';
+
+      // IDs lexicograficamente ordenados: idA < idB < idC.
+      // UUIDs v4 válidos (versão 4, variante 8) para passar pela validação de DocumentId.rehydrate.
+      const idA = '1a000000-0000-4000-8000-000000000001'; // menor
+      const idB = '2b000000-0000-4000-8000-000000000002'; // médio
+      const idC = '3c000000-0000-4000-8000-000000000003'; // maior
+
+      const mkDoc = (rawId: string): Document.CreateDocumentOutput => {
+        const idResult = DocumentId.rehydrate(rawId);
+        if (!idResult.ok) throw new Error(`test setup: id inválido ${rawId}`);
+        const r = Document.create({
+          id: idResult.value,
+          documentNumber: `NFS-TIE-${rawId.slice(0, 4)}`,
+          type: 'NFS-e',
+          supplier: s,
+          paymentMethod: 'TED',
+          grossValue: money(100000),
+          sourceDiscounts: Money.ZERO,
+          discounts: Money.ZERO,
+          penalty: Money.ZERO,
+          interest: Money.ZERO,
+          retentions: [],
+          registeredTaxes: [],
+          dueDate: new Date(sharedDue),
+        });
+        if (!r.ok) throw new Error('test setup: mkDoc');
+        return r.value;
+      };
+
+      // Inserir na ordem inversa da esperada (C → A → B) para provar que a ordenação
+      // não depende da ordem de inserção.
+      const dC = mkDoc(idC);
+      await repo.save({ document: dC.document, payables: dC.payables }, []);
+      const dA = mkDoc(idA);
+      await repo.save({ document: dA.document, payables: dA.payables }, []);
+      const dB = mkDoc(idB);
+      await repo.save({ document: dB.document, payables: dB.payables }, []);
+
+      const page = await repo.findPaged({ supplierRef: SUP_STABLE_ORDER }, 1, 10);
+      assert.equal(isOk(page), true);
+      if (page.ok) {
+        assert.equal(page.value.total, 3);
+        assert.equal(page.value.items[0]?.id, idA, 'primeiro deve ser o menor id');
+        assert.equal(page.value.items[1]?.id, idB, 'segundo deve ser o id médio');
+        assert.equal(page.value.items[2]?.id, idC, 'terceiro deve ser o maior id');
+      }
+    });
+
+    // ─── Drafts (dueDate NULL) aparecem antes de documentos com dueDate ───────
+    //
+    // MySQL 8.4 Refman §11.4.2: "NULL values are considered lower than any non-NULL
+    // value" em ORDER BY ASC → NULLs primeiro. O in-memory replica esse comportamento
+    // explicitamente no sort.
+    it('findPaged: Drafts (dueDate NULL) aparecem antes de documentos com dueDate', async () => {
+      const repo = makeRepo();
+      const s = sup(SUP_DRAFT_NULL);
+
+      // Documento com dueDate
+      const withDue = openAt(s, '2026-11-01');
+      await repo.save({ document: withDue.document, payables: withDue.payables }, []);
+
+      // Draft sem dueDate (NULL)
+      const draft = Document.saveDraft({
+        id: DocumentId.generate(),
+        documentNumber: 'D-NULL-1',
+        supplier: s,
+      });
+      if (!draft.ok) throw new Error('test setup: draft');
+      await repo.save({ document: draft.value.document, payables: null }, []);
+
+      const page = await repo.findPaged({ supplierRef: SUP_DRAFT_NULL }, 1, 10);
+      assert.equal(isOk(page), true);
+      if (page.ok) {
+        assert.equal(page.value.total, 2);
+        // O primeiro item DEVE ser o Draft (dueDate null = NULL vem primeiro).
+        assert.equal(
+          page.value.items[0]?.status,
+          'Draft',
+          'Draft (NULL dueDate) deve vir primeiro',
+        );
+        assert.equal(page.value.items[0]?.dueDate, null, 'primeiro item deve ter dueDate null');
+        // O segundo item deve ser o documento com dueDate definida.
+        assert.notEqual(
+          page.value.items[1]?.dueDate,
+          null,
+          'segundo item deve ter dueDate definida',
+        );
       }
     });
   });

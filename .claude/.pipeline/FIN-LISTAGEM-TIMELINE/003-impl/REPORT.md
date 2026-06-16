@@ -144,3 +144,16 @@ O Minor do zod-expert ("`version` não exposto") foi **implementado** (não adia
 
 Os 3 incrementos da W1 estão GREEN: (1) Foundational + US1 listagem; (2) US2 trilha por-campo; (3) optimistic lock + RBAC.
 Próximo: **W2** (code-review + segurança) e **W3** (gate final).
+
+## Incremento 5 — Correções da W2 round 1 (GREEN)
+
+**Data**: 2026-06-16 · A W2 round 1 deu **REJECTED** (1 Major de segurança + 2 🟡). Os 3 bloqueantes foram corrigidos, cada camada por um agente, e re-validados (W2 round 2 → APPROVED). Ver `004-code-review/REVIEW.md` §"Round 2".
+
+| Bloqueante | Fix | Arquivos | Agente |
+| --- | --- | --- | --- |
+| M1 (🔴 seg.) — filtro `type` arbitrário | `type: documentTypeSchema.optional()` (enum dos 7 tipos) + CT-009 (`?type=FOO` → 400) | `adapters/http/schemas.ts`, `tests/.../list-documents.http.test.ts` | **`fastify-server-expert`** (validado por **`zod-expert`** → APPROVED) |
+| Issue 2 (🟡) — paginação instável + paridade | Drizzle `.orderBy(asc(dueDate), asc(id))`; in-memory ordena dueDate ASC (NULLs primeiro — Refman §11.4.2) + tie-breaker `id`; 2 casos na contract-suite (empate de dueDate; Drafts antes) | `document-repository.{drizzle,in-memory}.ts`, `tests/.../document-repository.suite.ts` | **`drizzle-orm-expert`** |
+| Issue 3 (🟡) — `satisfies` sem exhaustividade | helper `exhaustiveStringUnion` (no-extra **AND** no-missing); fonte única `DOCUMENT_EVENT_TYPES` no domínio, consumida por schema HTTP + timeline mapper | `src/shared/primitives/exhaustive.ts` (novo), `src/shared/index.ts`, `domain/document/events.ts`, `adapters/http/schemas.ts`, `mappers/timeline.mapper.ts` | **`typescript-language-expert`** |
+
+**Gate (3 fixes juntos):** `typecheck` ✅ · `format:check` ✅ · `lint` ✅ · `pnpm test` ✅ **2494 pass · 0 fail · 18 skipped**.
+**Pendente p/ W3:** `pnpm run test:integration:financial` (MySQL real — prova o tie-breaker do Fix 2 contra o `ORDER BY` real).

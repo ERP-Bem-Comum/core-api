@@ -9,7 +9,7 @@
  */
 
 import * as z from 'zod/v4';
-import type { DocumentEvent } from '../../domain/document/events.ts';
+import { DOCUMENT_EVENT_TYPES } from '../../domain/document/events.ts';
 
 // ─── Shared ──────────────────────────────────────────────────────────────────
 
@@ -147,7 +147,7 @@ export const documentIdParamSchema = z.object({
 export const listDocumentsQuerySchema = z.object({
   status: z.enum(['Draft', 'Open', 'Approved']).optional(),
   supplierRef: z.uuid().optional(),
-  type: z.string().optional(),
+  type: documentTypeSchema.optional(),
   dueFrom: z.iso.date().optional(),
   dueTo: z.iso.date().optional(),
   page: z.coerce.number().int().min(1).default(1),
@@ -218,17 +218,10 @@ export type DocumentListResponseDto = z.infer<typeof documentListResponseSchema>
 
 // ─── GET /documents/:id/timeline ─────────────────────────────────────────────
 
-/**
- * Valores válidos de `DocumentEvent['type']` — anti-drift: o compilador acusa se a union
- * de eventos mudar sem atualizar esta lista (via `satisfies`).
- */
-const DOCUMENT_EVENT_TYPES = [
-  'DocumentSaved',
-  'PayableApproved',
-  'ApprovalUndone',
-  'DocumentDraftSaved',
-  'DocumentCancelled',
-] as const satisfies readonly DocumentEvent['type'][];
+// Valores válidos de `DocumentEvent['type']` — fonte única exaustiva importada do domínio
+// (`domain/document/events.ts`). A garantia é "no extra AND no missing": adicionar um membro
+// à union sem listá-lo lá QUEBRA `pnpm run typecheck` (não falha em runtime na validação do
+// response de GET /timeline).
 
 /** Uma entrada da trilha por-campo (Time Travel). */
 export const timelineEntrySchema = z.object({
