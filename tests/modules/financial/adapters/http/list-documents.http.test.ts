@@ -125,4 +125,51 @@ describe('FIN-LISTAGEM-TIMELINE — GET /api/v2/financial/documents (listagem re
     const res = await list('?type=FOO');
     assert.equal(res.statusCode, 400, res.body);
   });
+
+  // ── #47/US1: enriquecimento do item (campos locais) ────────────────────────
+  it('CT-DTO-01: item traz series, grossValueCents, paymentMethod, contractRef', async () => {
+    const SUP = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const CONTRACT = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    const created = await post(
+      nfseBody({
+        supplierRef: SUP,
+        series: 'A1',
+        contractRef: CONTRACT,
+        grossValueCents: '150000',
+        paymentMethod: 'TED',
+      }),
+    );
+    assert.equal(created.statusCode, 201, created.body);
+
+    const res = await list(`?supplierRef=${SUP}`);
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as {
+      items: {
+        series: string | null;
+        grossValueCents: string | null;
+        paymentMethod: string | null;
+        contractRef: string | null;
+      }[];
+    };
+    const item = body.items[0];
+    assert.ok(item, 'deve haver item');
+    assert.equal(item.series, 'A1');
+    assert.equal(item.grossValueCents, '150000');
+    assert.equal(item.paymentMethod, 'TED');
+    assert.equal(item.contractRef, CONTRACT);
+  });
+
+  it('CT-DTO-02: documento sem série/contrato → series/contractRef null', async () => {
+    const SUP = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
+    await post(nfseBody({ supplierRef: SUP }));
+    const res = await list(`?supplierRef=${SUP}`);
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as {
+      items: { series: string | null; contractRef: string | null }[];
+    };
+    const item = body.items[0];
+    assert.ok(item, 'deve haver item');
+    assert.equal(item.series, null);
+    assert.equal(item.contractRef, null);
+  });
 });

@@ -1,5 +1,5 @@
 import type { Money } from '../../../../shared/kernel/money.ts';
-import type { DocumentStatus, DocumentType } from './types.ts';
+import type { DocumentStatus, DocumentType, PaymentMethod } from './types.ts';
 
 // Tipos de leitura (read path) da listagem paginada — US1. `type` é match livre (string) pois
 // a query da borda aceita qualquer texto; os demais filtros são tipados.
@@ -24,6 +24,11 @@ export type DocumentListItem = Readonly<{
   documentNumber: string | null;
   type: DocumentType | null;
   supplierRef: string | null;
+  // Campos locais do documento expostos no grid de Contas a Pagar (#47/US1).
+  series: string | null;
+  grossValue: Money | null; // null em Draft (sem bruto informado)
+  paymentMethod: PaymentMethod | null;
+  contractRef: string | null;
   netValue: Money | null; // null em Draft (sem líquido calculado)
   dueDate: Date | null;
   version: number;

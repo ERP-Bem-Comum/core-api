@@ -416,6 +416,10 @@ export const createDrizzleDocumentRepository = (
           documentNumber: finDocuments.documentNumber,
           type: finDocuments.type,
           supplierRef: finDocuments.supplierRef,
+          series: finDocuments.series,
+          grossValue: finDocuments.grossValue,
+          paymentMethod: finDocuments.paymentMethod,
+          contractRef: finDocuments.contractRef,
           netValue: finDocuments.netValue,
           dueDate: finDocuments.dueDate,
           version: finDocuments.version,
@@ -447,6 +451,18 @@ export const createDrizzleDocumentRepository = (
           netValue = moneyResult.value;
         }
 
+        let grossValue: DocumentListItem['grossValue'] = null;
+        if (row.grossValue !== null) {
+          const grossResult = Money.fromCents(row.grossValue);
+          if (!grossResult.ok) {
+            process.stderr.write(
+              `[document-repo:findPaged:mapper] invalid grossValue=${String(row.grossValue)} id=${row.id}: ${grossResult.error}\n`,
+            );
+            throw new Error(`corrupt-gross-value:${row.id}`);
+          }
+          grossValue = grossResult.value;
+        }
+
         items.push({
           id: row.id,
           // CHECK fin_documents_status_chk garante o conjunto válido — cast seguro.
@@ -455,6 +471,11 @@ export const createDrizzleDocumentRepository = (
           // CHECK fin_documents_type_chk garante o conjunto válido (ou NULL) — cast seguro.
           type: row.type as DocumentType | null,
           supplierRef: row.supplierRef,
+          series: row.series,
+          grossValue,
+          // CHECK fin_documents_payment_method_chk garante o conjunto válido (ou NULL) — cast seguro.
+          paymentMethod: row.paymentMethod as DocumentListItem['paymentMethod'],
+          contractRef: row.contractRef,
           netValue,
           dueDate: row.dueDate,
           version: row.version,

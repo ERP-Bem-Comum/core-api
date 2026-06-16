@@ -156,7 +156,13 @@ export const documentRepositoryContract = (makeRepo: () => DocumentRepository): 
       assert.equal(isOk(openPage), true);
       if (openPage.ok) {
         assert.equal(openPage.value.total, 1);
-        assert.equal(openPage.value.items[0]?.status, 'Open');
+        const item = openPage.value.items[0];
+        assert.equal(item?.status, 'Open');
+        // #47/US1: o read-model expõe os campos locais do documento.
+        assert.equal(item?.paymentMethod, 'TED');
+        assert.ok(item?.grossValue != null, 'grossValue presente no item Open');
+        assert.equal(item?.series, null); // não informado no helper
+        assert.equal(item?.contractRef, null);
       }
       const approvedPage = await repo.findPaged(
         { status: 'Approved', supplierRef: SUP_STATUS },

@@ -194,6 +194,11 @@ export const documentSummarySchema = z.object({
   documentNumber: z.string().nullable(),
   type: z.string().nullable(),
   supplierRef: z.string().nullable(),
+  // Campos locais do documento no grid de Contas a Pagar (#47/US1).
+  series: z.string().max(20).nullable(),
+  grossValueCents: centsStringSchema.nullable(),
+  paymentMethod: paymentMethodSchema.nullable(),
+  contractRef: z.string().max(36).nullable(),
   netValueCents: centsStringSchema.nullable(),
   dueDate: z.string().nullable(),
   version: z
