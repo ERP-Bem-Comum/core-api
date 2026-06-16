@@ -48,13 +48,17 @@ export const from = (iso: string): Result<PlainDate, PlainDateError> => {
   return ok(immutable({ year, month, day }) as PlainDate);
 };
 
+/**
+ * Constrói a partir de campos de calendário JÁ confiáveis (extraídos por `getUTC*`, por
+ * `Intl.DateTimeFormat`, ou de outro `PlainDate`). Encapsula o cast `as PlainDate` no kernel —
+ * para entrada não-confiável (string) use `from`, que valida.
+ */
+export const fromParts = (year: number, month: number, day: number): PlainDate =>
+  immutable({ year, month, day }) as PlainDate;
+
 /** Extrai os campos de calendário UTC de um instante. Usado por `Clock.today`. */
 export const fromDate = (d: Date): PlainDate =>
-  immutable({
-    year: d.getUTCFullYear(),
-    month: d.getUTCMonth() + 1,
-    day: d.getUTCDate(),
-  }) as PlainDate;
+  fromParts(d.getUTCFullYear(), d.getUTCMonth() + 1, d.getUTCDate());
 
 /** Espelha `Temporal.PlainDate.compare` (estático): -1 antes, 0 igual, 1 depois. */
 export const compare = (a: PlainDate, b: PlainDate): -1 | 0 | 1 => {

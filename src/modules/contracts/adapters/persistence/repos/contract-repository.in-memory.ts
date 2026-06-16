@@ -1,6 +1,6 @@
 import { ok, err } from '../../../../../shared/primitives/result.ts';
 import type { ContractId } from '../../../domain/shared/ids.ts';
-import type { Contract } from '../../../domain/contract/types.ts';
+import type { Contract, ActiveContract } from '../../../domain/contract/types.ts';
 import type {
   ContractRepository,
   ListContractsQuery,
@@ -9,6 +9,9 @@ import type { OutboxPort } from '../../../application/ports/outbox.ts';
 import type { ContractsModuleEvent } from '../../../application/ports/event-bus.ts';
 import { InMemoryOutbox } from '../../outbox/outbox.in-memory.ts';
 import { formatSequentialNumber } from '../../../domain/contract/sequential-number.ts';
+import { Contract as ContractAgg } from '../../../domain/contract/contract.ts';
+import * as PlainDate from '../../../../../shared/kernel/plain-date.ts';
+import type { PlainDate as PlainDateType } from '../../../../../shared/kernel/plain-date.ts';
 
 // CA-4 (CTR-OUTBOX-INTEGRATION-IN-REPOS): InMemoryContractRepository recebe
 // OutboxPort como dependência opcional. Default = InMemoryOutbox().port (isolado).
@@ -78,6 +81,42 @@ export const InMemoryContractRepository = (
         if (!r.ok) return err(r.error);
       }
       return ok(undefined);
+    },
+
+    // CTR-AUTO-EXPIRE (issue #39 · ADR-0041): espelha o filtro do adapter Drizzle em memória.
+    // Elegível = Active + Fixed + currentPeriod.end < cutoff.
+    // Ordena determinístico por (end ASC, id ASC) — mesma semântica do ORDER BY do SQL
+    // (current_period_end ASC garante que contratos mais antigos expiram primeiro; id
+    //  como tie-break para testes determinísticos). Aplica limit.
+    //
+    // Decisão CA5 (opção a): SELECT simples, SEM FOR UPDATE — o lock não persistiria
+    // entre findExpirable (tx A) e save (tx B) separadas. Coordenação multi-instância
+    // fica para F-Plus via GET_LOCK ou UNIQUE(job_name, run_date) — ADR-0041 §"Decisão (4)".
+    findExpirable: async (cutoff: PlainDateType, limit: number) => {
+      // Coleta apenas Active + Fixed com end < cutoff.
+      // `ActiveFixed` é um subtipo local que estreita `currentPeriod` para Fixed,
+      // permitindo acessar `.end` sem erro de compilação no sort abaixo.
+      type ActiveFixed = ActiveContract &
+        Readonly<{ currentPeriod: { kind: 'Fixed'; end: PlainDateType; start: PlainDateType } }>;
+
+      const activeFixed: ActiveFixed[] = [];
+      for (const c of map.values()) {
+        if (c.status !== 'Active') continue;
+        if (c.currentPeriod.kind !== 'Fixed') continue;
+        // Elegível: end < cutoff  (D+1 — guarda D+1 vive em Contract.expire)
+        if (!PlainDate.isBefore(c.currentPeriod.end, cutoff)) continue;
+        const r = ContractAgg.parseActive(c);
+        if (!r.ok) continue; // nunca — já sabemos que c.status === 'Active'
+        // Narrow seguro: filtramos kind==='Fixed' acima.
+        activeFixed.push(r.value as ActiveFixed);
+      }
+      // Ordenação determinística: (end ASC, id ASC) — mesma semântica do SQL.
+      activeFixed.sort((a, b) => {
+        const cmpEnd = PlainDate.compare(a.currentPeriod.end, b.currentPeriod.end);
+        if (cmpEnd !== 0) return cmpEnd;
+        return String(a.id).localeCompare(String(b.id));
+      });
+      return ok(activeFixed.slice(0, limit) as readonly ActiveContract[]);
     },
   };
 

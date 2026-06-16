@@ -1,0 +1,1 @@
+CREATE INDEX `ctr_contracts_expirable_idx` ON `ctr_contracts` (`status`,`current_period_kind`,`current_period_end`);

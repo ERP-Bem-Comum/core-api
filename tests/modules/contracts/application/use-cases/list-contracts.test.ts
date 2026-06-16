@@ -92,6 +92,7 @@ describe('listContracts (paginado) — CTR-HTTP-CONTRACT-LIST-FILTERS', () => {
       list: () => Promise.resolve({ ok: true, value: [] }),
       listPaged: () => Promise.resolve({ ok: false, error: 'contract-repo-unavailable' }),
       save: () => Promise.resolve({ ok: true, value: undefined }),
+      findExpirable: () => Promise.resolve({ ok: true, value: [] }),
     };
     const useCase = listContracts({ contractRepo: failing });
     const r = await useCase({ page: 1, limit: 20, order: 'ASC' });

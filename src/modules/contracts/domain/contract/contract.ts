@@ -248,7 +248,9 @@ const expire = (
   }
 
   const atDate = PlainDate.fromDate(at);
-  if (PlainDate.isBefore(atDate, contract.currentPeriod.end)) {
+  // D+1 (CTR-AUTO-EXPIRE / issue #39): o último dia da vigência conta INTEIRO — o contrato
+  // só expira quando `at` é POSTERIOR ao fim (zero hora do dia seguinte). Rejeita `at <= end`.
+  if (!PlainDate.isAfter(atDate, contract.currentPeriod.end)) {
     return err(ContractError.contractCannotExpireYet(contract.currentPeriod.end, atDate));
   }
 

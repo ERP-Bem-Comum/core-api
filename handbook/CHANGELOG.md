@@ -4,6 +4,18 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-16 — ⚙️ ADR-0041: workers especializados + jobs one-shot via cron externo
+
+Novo [ADR-0041](./architecture/adr/0041-specialized-workers-and-oneshot-jobs.md) (**Accepted**), **estende** o
+[ADR-0006](./architecture/adr/0006-modular-monolith-core-api.md). Fixa o padrão de **workers/jobs** do core-api:
+um **entrypoint por responsabilidade** (HTTP · outbox-worker · jobs) no mesmo monorepo, e **jobs periódicos como
+processos one-shot disparados por cron externo** — nunca `setInterval` long-running nem acoplado ao loop do outbox.
+
+- `worker_threads`/`cluster` descartados para jobs I/O-bound; coordenação multi-instância futura via `GET_LOCK`/`UNIQUE` no MySQL (**sem Redis** — ADR-0030 deferido).
+- Padrão canônico `src/jobs/<módulo>/<job>/run.ts` (one-shot, Clock port, `AsyncLocalStorage` p/ correlation-id).
+- Ancorado em **Parnas** (responsabilidade isolada + falha rastreável), **Newman** (background fora do caminho crítico + idempotência) e doc do Node 24. Pesquisa: agente `nodejs-runtime-expert`.
+- **Job piloto:** CTR-AUTO-EXPIRE (auto-expire de contratos, issue #39).
+
 ## 2026-06-16 — 🔒 Financeiro fatia 2: `version` (optimistic lock) exposto na borda `/api/v2/financial`
 
 Feature `specs/010-fin-listagem-timeline/` (FR-009/ADR-0002 da feature). O token de optimistic lock (`version`) passa a
