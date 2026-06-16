@@ -9,11 +9,21 @@
  * `cnpj` reusa o VO `Cnpj` do shared-kernel (ADR-0031 §4). Campos de texto são
  * `string` já validados (não-vazios) na construção via smart constructor.
  *
+ * Destino de pagamento (`bankAccount`/`pixKey`): VOs compartilhados com `Supplier`/`Act`
+ * (REUSE de `../supplier/payment-target.ts` — import intra-módulo). No `Financier` ambos
+ * são **opcionais** — NÃO há invariante "ao menos um destino" (ao contrário de `Supplier`).
+ *
  * Origem: legado `financiers` (handbook/legacy_docs/database-er.md:175-184).
  */
 
 import type { Cnpj } from '#src/shared/kernel/cnpj.ts';
 import type { FinancierId } from './financier-id.ts';
+import type {
+  BankAccount,
+  PixKey,
+  BankAccountInput,
+  PixKeyInput,
+} from '../supplier/payment-target.ts';
 
 type FinancierCore = Readonly<{
   id: FinancierId;
@@ -23,6 +33,9 @@ type FinancierCore = Readonly<{
   cnpj: Cnpj;
   telephone: string;
   address: string;
+  // Destino de pagamento opcional (ambos `null` quando não informado).
+  bankAccount: BankAccount | null;
+  pixKey: PixKey | null;
 }>;
 
 export type ActiveFinancier = FinancierCore & Readonly<{ status: 'Active' }>;
@@ -32,7 +45,7 @@ export type InactiveFinancier = FinancierCore &
 
 export type Financier = ActiveFinancier | InactiveFinancier;
 
-/** Payload de edição (PUT total): os 6 campos cadastrais. `id`/estado preservados pela operação. */
+/** Payload de edição (PUT total): campos cadastrais + payment target. `id`/estado preservados. */
 export type EditFinancierInput = Readonly<{
   name: string;
   corporateName: string;
@@ -40,6 +53,8 @@ export type EditFinancierInput = Readonly<{
   cnpj: string;
   telephone: string;
   address: string;
+  bankAccount: BankAccountInput | null;
+  pixKey: PixKeyInput | null;
 }>;
 
 export type RegisterFinancierInput = Readonly<{
@@ -50,6 +65,8 @@ export type RegisterFinancierInput = Readonly<{
   cnpj: string;
   telephone: string;
   address: string;
+  bankAccount: BankAccountInput | null;
+  pixKey: PixKeyInput | null;
   registeredAt: Date;
 }>;
 
@@ -66,6 +83,8 @@ export type RehydrateFinancierInput = Readonly<{
   cnpj: Cnpj;
   telephone: string;
   address: string;
+  bankAccount: BankAccount | null;
+  pixKey: PixKey | null;
   status: 'Active' | 'Inactive';
   deactivatedAt: Date | null;
 }>;

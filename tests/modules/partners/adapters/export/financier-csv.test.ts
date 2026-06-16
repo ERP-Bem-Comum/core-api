@@ -37,6 +37,8 @@ const baseInput = () => ({
   cnpj: '11.222.333/0001-81',
   telephone: '+5511999998888',
   address: 'Av Teste 100',
+  bankAccount: null,
+  pixKey: null,
   registeredAt: NOW,
 });
 

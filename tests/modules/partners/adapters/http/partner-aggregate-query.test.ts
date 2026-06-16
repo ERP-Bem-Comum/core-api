@@ -55,6 +55,8 @@ const aFinancier = (name: string, cnpj: string) =>
       cnpj,
       telephone: '+5511999998888',
       address: 'Av. Teste, 1',
+      bankAccount: null,
+      pixKey: null,
       registeredAt: NOW,
     }),
   ).financier;

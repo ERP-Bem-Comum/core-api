@@ -5,11 +5,23 @@ import { isErr, isOk } from '#src/shared/index.ts';
 import * as Cnpj from '#src/shared/kernel/cnpj.ts';
 import * as FinancierId from '#src/modules/partners/domain/financier/financier-id.ts';
 import * as Financier from '#src/modules/partners/domain/financier/financier.ts';
+import * as PaymentTarget from '#src/modules/partners/domain/supplier/payment-target.ts';
 
 const cnpj = () => {
   const c = Cnpj.parse('11222333000181');
   if (!c.ok) throw new Error('fixture cnpj');
   return c.value;
+};
+
+const bankVo = () => {
+  const r = PaymentTarget.createBankAccount({
+    bank: '001',
+    agency: '0001-2',
+    accountNumber: '123456',
+    checkDigit: '7',
+  });
+  if (!r.ok) throw new Error('fixture bank');
+  return r.value;
 };
 
 const base = () => ({
@@ -20,6 +32,8 @@ const base = () => ({
   cnpj: cnpj(),
   telephone: '+5511999998888',
   address: 'Av. Paulista, 1000',
+  bankAccount: null as ReturnType<typeof bankVo> | null,
+  pixKey: null,
 });
 
 describe('Financier.rehydrate', () => {
@@ -42,5 +56,26 @@ describe('Financier.rehydrate', () => {
     const r = Financier.rehydrate({ ...base(), status: 'Inactive', deactivatedAt: null });
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'financier-inactive-requires-deactivated-at');
+  });
+
+  // CA6 — payment target opcional: reidrata com bankAccount preenchido sem reaplicar invariante.
+  it('reconstrói Active com bankAccount preenchido', () => {
+    const r = Financier.rehydrate({
+      ...base(),
+      bankAccount: bankVo(),
+      status: 'Active',
+      deactivatedAt: null,
+    });
+    assert.equal(isOk(r), true);
+    if (r.ok) assert.equal(r.value.bankAccount?.accountNumber, '123456');
+  });
+
+  it('reconstrói Active com ambos os destinos null (sem invariante de destino)', () => {
+    const r = Financier.rehydrate({ ...base(), status: 'Active', deactivatedAt: null });
+    assert.equal(isOk(r), true);
+    if (r.ok) {
+      assert.equal(r.value.bankAccount, null);
+      assert.equal(r.value.pixKey, null);
+    }
   });
 });

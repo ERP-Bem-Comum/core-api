@@ -29,7 +29,9 @@ import { sql } from 'drizzle-orm';
 
 // ─── par_financiers ─────────────────────────────────────────────────────────
 // Financiador (legado `financiers`, database-er.md:175-184). `cnpj` UNIQUE.
-// Soft-delete via `active` + `deactivated_at` (estado Inactive do agregado).
+// Soft-delete via `active` + `deactivated_at` (estado Inactive do agregado). Destino de
+// pagamento (banco/PIX) achatado em colunas nullable — OPCIONAL (sem CHECK "ao menos um
+// destino", ao contrário de par_suppliers); apenas a coerência de bloco é imposta por CHECK.
 export const parFinanciers = mysqlTable(
   'par_financiers',
   {
@@ -45,6 +47,14 @@ export const parFinanciers = mysqlTable(
     active: boolean('active').notNull().default(true),
     // Preenchido sse inativo (estado Inactive carrega deactivatedAt).
     deactivatedAt: datetime('deactivated_at', { mode: 'date', fsp: 3 }),
+    // Destino de pagamento — bloco bancário (juntos NULL ou juntos preenchidos). Opcional.
+    bankAccountBank: varchar('bank_account_bank', { length: 50 }),
+    bankAccountAgency: varchar('bank_account_agency', { length: 20 }),
+    bankAccountNumber: varchar('bank_account_number', { length: 30 }),
+    bankAccountCheckDigit: varchar('bank_account_check_digit', { length: 5 }),
+    // Destino de pagamento — bloco pix (juntos NULL ou juntos preenchidos). Opcional.
+    pixKeyType: varchar('pix_key_type', { length: 20 }),
+    pixKey: varchar('pix_key', { length: 255 }),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
     // Correlação ETL (P2): id de origem no legado (int AUTO_INCREMENT). NULL = registro
@@ -57,6 +67,15 @@ export const parFinanciers = mysqlTable(
       'par_financiers_active_consistency_chk',
       sql`(${t.active} = FALSE) = (${t.deactivatedAt} IS NOT NULL)`,
     ),
+    // coerência do bloco bancário (4 colunas juntas NULL ou juntas preenchidas).
+    check(
+      'par_financiers_bank_block_chk',
+      sql`(${t.bankAccountBank} IS NULL) = (${t.bankAccountAgency} IS NULL)
+        AND (${t.bankAccountBank} IS NULL) = (${t.bankAccountNumber} IS NULL)
+        AND (${t.bankAccountBank} IS NULL) = (${t.bankAccountCheckDigit} IS NULL)`,
+    ),
+    // coerência do bloco pix (pix_key_type ⟺ pix_key). NÃO há payment_target_chk (opcional).
+    check('par_financiers_pix_block_chk', sql`(${t.pixKeyType} IS NULL) = (${t.pixKey} IS NULL)`),
     // UNIQUE(cnpj) — legado `financiers.cnpj` UNIQUE.
     uniqueIndex('par_financiers_cnpj_idx').on(t.cnpj),
     // UNIQUE(legacy_id) — idempotência da ETL (múltiplos NULL convivem no InnoDB).

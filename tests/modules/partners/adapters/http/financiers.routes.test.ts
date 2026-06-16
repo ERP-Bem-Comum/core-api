@@ -38,6 +38,8 @@ const seedRecord = (): { id: string; record: FinancierReadRecord } => {
     cnpj: '11222333000181',
     telephone: '+5511999998888',
     address: 'Av. Central, 1000',
+    bankAccount: null,
+    pixKey: null,
     registeredAt: NOW,
   });
   assert.ok(r.ok, `fixture register: ${r.ok ? '' : r.error}`);

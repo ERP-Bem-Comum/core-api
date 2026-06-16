@@ -77,6 +77,8 @@ const seed = () => {
       cnpj: '11.444.777/0001-61',
       telephone: '+5511999998888',
       address: 'Av. Teste, 1',
+      bankAccount: null,
+      pixKey: null,
       registeredAt: NOW,
     }),
   ).financier;

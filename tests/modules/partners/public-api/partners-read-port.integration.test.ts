@@ -62,6 +62,8 @@ const aFinancier = () => {
     cnpj: '11444777000161',
     telephone: '+5511999998888',
     address: 'Av. Paulista, 1000',
+    bankAccount: null,
+    pixKey: null,
     registeredAt: clock.now(),
   });
   if (!r.ok) throw new Error(`fixture financier: ${r.error}`);

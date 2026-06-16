@@ -11,6 +11,10 @@ import type { Clock } from '#src/shared/ports/clock.ts';
 import * as FinancierId from '#src/modules/partners/domain/financier/financier-id.ts';
 import * as Financier from '#src/modules/partners/domain/financier/financier.ts';
 import type { ActiveFinancier } from '#src/modules/partners/domain/financier/types.ts';
+import type {
+  BankAccountInput,
+  PixKeyInput,
+} from '#src/modules/partners/domain/supplier/payment-target.ts';
 import type { FinancierEvent } from '#src/modules/partners/domain/financier/events.ts';
 import type { FinancierError } from '#src/modules/partners/domain/financier/errors.ts';
 import type {
@@ -25,6 +29,8 @@ export type RegisterFinancierCommand = Readonly<{
   cnpj: string;
   telephone: string;
   address: string;
+  bankAccount: BankAccountInput | null;
+  pixKey: PixKeyInput | null;
 }>;
 
 export type RegisterFinancierError =
@@ -52,6 +58,8 @@ export const registerFinancier =
       cnpj: cmd.cnpj,
       telephone: cmd.telephone,
       address: cmd.address,
+      bankAccount: cmd.bankAccount,
+      pixKey: cmd.pixKey,
       registeredAt: deps.clock.now(),
     });
     if (!registered.ok) return registered;

@@ -41,6 +41,9 @@ export const mapLegacyFinancierRow = (row: LegacyFinancierRow): MapperResult<Fin
     cnpj,
     telephone,
     address,
+    // Legado `financiers` não tinha banco/PIX — migra como null (destino opcional no agregado).
+    bankAccount: null,
+    pixKey: null,
     status,
     deactivatedAt,
   });

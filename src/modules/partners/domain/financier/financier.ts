@@ -15,6 +15,8 @@
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import { immutable } from '#src/shared/primitives/immutable.ts';
 import * as Cnpj from '#src/shared/kernel/cnpj.ts';
+import * as PaymentTarget from '../supplier/payment-target.ts';
+import type { BankAccount, PixKey } from '../supplier/payment-target.ts';
 import type {
   ActiveFinancier,
   EditFinancierInput,
@@ -40,6 +42,21 @@ export const register = (
   const cnpj = Cnpj.parse(input.cnpj);
   if (!cnpj.ok) return err('invalid-cnpj');
 
+  // Payment target OPCIONAL (sem invariante "ao menos um destino", ao contrário de Supplier).
+  let bankAccount: BankAccount | null = null;
+  if (input.bankAccount !== null) {
+    const r = PaymentTarget.createBankAccount(input.bankAccount);
+    if (!r.ok) return err(r.error);
+    bankAccount = r.value;
+  }
+
+  let pixKey: PixKey | null = null;
+  if (input.pixKey !== null) {
+    const r = PaymentTarget.createPixKey(input.pixKey);
+    if (!r.ok) return err(r.error);
+    pixKey = r.value;
+  }
+
   const financier: ActiveFinancier = immutable({
     id: input.id,
     name: input.name.trim(),
@@ -48,6 +65,8 @@ export const register = (
     cnpj: cnpj.value,
     telephone: input.telephone.trim(),
     address: input.address.trim(),
+    bankAccount,
+    pixKey,
     status: 'Active',
   });
 
@@ -80,6 +99,21 @@ export const edit = (
   const cnpj = Cnpj.parse(input.cnpj);
   if (!cnpj.ok) return err('invalid-cnpj');
 
+  // Payment target OPCIONAL (reconstruído a cada PUT total; sem invariante de destino).
+  let bankAccount: BankAccount | null = null;
+  if (input.bankAccount !== null) {
+    const r = PaymentTarget.createBankAccount(input.bankAccount);
+    if (!r.ok) return err(r.error);
+    bankAccount = r.value;
+  }
+
+  let pixKey: PixKey | null = null;
+  if (input.pixKey !== null) {
+    const r = PaymentTarget.createPixKey(input.pixKey);
+    if (!r.ok) return err(r.error);
+    pixKey = r.value;
+  }
+
   const core = {
     id: financier.id,
     name: input.name.trim(),
@@ -88,6 +122,8 @@ export const edit = (
     cnpj: cnpj.value,
     telephone: input.telephone.trim(),
     address: input.address.trim(),
+    bankAccount,
+    pixKey,
   };
 
   const edited: Financier =
@@ -147,6 +183,9 @@ export const rehydrate = (input: RehydrateFinancierInput): Result<Financier, Fin
     cnpj: input.cnpj,
     telephone: input.telephone,
     address: input.address,
+    // Payment target opcional — VOs já reconstruídos pela borda; sem reaplicar invariante.
+    bankAccount: input.bankAccount,
+    pixKey: input.pixKey,
   };
 
   if (input.status === 'Active') {

@@ -25,6 +25,8 @@ const validCmd = (cnpj = '11.222.333/0001-81') => ({
   cnpj,
   telephone: '+5511999998888',
   address: 'Av. Paulista, 1000',
+  bankAccount: null,
+  pixKey: null,
 });
 
 beforeEach(() => {

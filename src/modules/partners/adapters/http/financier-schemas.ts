@@ -1,12 +1,39 @@
 /**
  * Schemas Zod das rotas de Financiadores (ADR-0027). Espelha o schema `Financier`/
- * `PaginatedFinanciers` legado. Mais simples que supplier (sem payment-target/categoria).
+ * `PaginatedFinanciers` legado. Destino de pagamento (`bankAccount`/`pixKey`) espelha o
+ * shape de Supplier/Act, porém OPCIONAL (sem invariante "ao menos um destino" no Financier).
  */
 
 import * as z from 'zod/v4';
 
 const LIST_LIMIT_MAX = 100;
 const LIST_LIMIT_DEFAULT = 5;
+
+// Destino de pagamento — shape local (igual a supplier-schemas). `pixKey.keyType` é enum no
+// detalhe (valor já validado) e `z.string()` no body (a rejeição é do domínio → 422).
+const bankAccountSchema = z.object({
+  bank: z.string(),
+  agency: z.string(),
+  accountNumber: z.string(),
+  checkDigit: z.string(),
+});
+
+const pixKeySchema = z.object({
+  keyType: z.enum(['cpf', 'cnpj', 'email', 'phone', 'random-key']),
+  key: z.string(),
+});
+
+const bankAccountInputSchema = z.object({
+  bank: z.string(),
+  agency: z.string(),
+  accountNumber: z.string(),
+  checkDigit: z.string(),
+});
+
+const pixKeyInputSchema = z.object({
+  keyType: z.string(),
+  key: z.string(),
+});
 
 /** Query do GET /api/v1/financiers (subconjunto legado: search + active). */
 export const financierListQuerySchema = z.object({
@@ -34,6 +61,8 @@ export const financierDetailSchema = z.object({
   cnpj: z.string().meta({ description: 'CNPJ (14 dígitos)' }),
   telephone: z.string(),
   address: z.string(),
+  bankAccount: bankAccountSchema.nullable(),
+  pixKey: pixKeySchema.nullable(),
   active: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -56,7 +85,10 @@ export const financierPaginatedSchema = z.object({
 
 export type FinancierPaginatedDto = z.infer<typeof financierPaginatedSchema>;
 
-/** Body do POST /financiers. Espelha `CreateFinancier` legado. CNPJ DV validado no domínio. */
+/**
+ * Body do POST /financiers. Espelha `CreateFinancier` legado. CNPJ DV validado no domínio.
+ * `bankAccount`/`pixKey` OPCIONAIS (default null) — banco/PIX inválidos → 422 (domínio).
+ */
 export const createFinancierBodySchema = z.object({
   name: z.string().min(1),
   corporateName: z.string().min(1),
@@ -64,6 +96,8 @@ export const createFinancierBodySchema = z.object({
   cnpj: z.string().length(14).meta({ description: 'CNPJ — 14 dígitos (DV validado no domínio)' }),
   telephone: z.string().min(1),
   address: z.string().min(1),
+  bankAccount: bankAccountInputSchema.nullable().default(null),
+  pixKey: pixKeyInputSchema.nullable().default(null),
 });
 
 export type CreateFinancierBody = z.infer<typeof createFinancierBodySchema>;
