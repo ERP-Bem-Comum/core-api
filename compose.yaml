@@ -161,6 +161,57 @@ services:
     profiles:
       - app
 
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job one-shot contracts-sweeper (opt-in via profile `jobs` — ADR-0041).
+  #
+  # Reutiliza a imagem `core-api:dev` (construída pelo serviço `app`). O ENTRYPOINT da
+  # imagem é `tini -- node src/server.ts` — server.ts ESTÁ no entrypoint. Por isso
+  # sobrescrevemos `entrypoint: [tini, --, node]` (PID 1 + runtime) e deixamos o
+  # `command` apontar o script do job; sem o override, o `command` seria ANEXADO ao
+  # server.ts (subiria o servidor, não o sweeper). NODE_OPTIONS=--experimental-strip-types
+  # vem do ENV da imagem (herdado). Efetivo: `tini -- node src/jobs/.../run.ts`.
+  #
+  # Disparo: `docker compose --profile jobs run --rm contracts-sweeper`
+  # Em produção: agendado 1×/dia 00:05 America/Sao_Paulo via ERP-INFRA
+  # (systemd timer / ofelia). Ver handbook/infrastructure/06-contracts-sweeper-job.md.
+  #
+  # restart:"no" — one-shot puro (ADR-0041 §2); retry = próximo tick do cron.
+  # exit 78 (EX_CONFIG) ou exit 1 → alerta em ERP-INFRA; sem restart loop.
+  # ──────────────────────────────────────────────────────────────────────────
+  contracts-sweeper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      cache_from:
+        - core-api:dev
+    image: core-api:dev
+    # SEM container_name fixo (M2): nome fixo + disparo sem --rm aborta o próximo run com
+    # "name already in use" → o cron pararia de expirar SILENCIOSAMENTE. Docker gera nome
+    # único por run; o --rm do disparo canônico limpa ao final.
+    restart: 'no'
+    entrypoint: ['tini', '--', 'node']
+    command: ['src/jobs/contracts/sweeper/run.ts']
+    depends_on:
+      mysql:
+        condition: service_healthy
+    environment:
+      CONTRACTS_DATABASE_URL_FILE: /run/secrets/contracts_database_url
+    secrets:
+      - contracts_database_url
+    # Hardening de job one-shot (só conecta ao MySQL e sai): zero capabilities Linux,
+    # rootfs read-only (mysql2 não grava em disco), /tmp efêmero defensivo.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    read_only: true
+    tmpfs:
+      - /tmp
+    networks:
+      - core-api
+    profiles:
+      - jobs
+
 # ────────────────────────────────────────────────────────────────────────────
 # Top-level secrets — populados pelo scripts/setup-secrets.sh.
 # Compose falha se algum arquivo estiver ausente (RED válido em W0 — CA-2).
@@ -172,6 +223,8 @@ secrets:
     file: ./secrets/mysql_app_password.txt
   mysql_readonly_password:
     file: ./secrets/mysql_readonly_password.txt
+  contracts_database_url:
+    file: ./secrets/contracts_database_url.txt
 
 volumes:
   minio-data:
