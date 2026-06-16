@@ -36,6 +36,14 @@ const toListItem = (entry: StoreEntry): DocumentListItem => ({
   type: entry.aggregate.document.type ?? null,
   supplierRef:
     entry.aggregate.document.supplier === null ? null : String(entry.aggregate.document.supplier),
+  // Campos locais do documento expostos no grid (#47/US1).
+  series: entry.aggregate.document.series,
+  grossValue: entry.aggregate.document.grossValue,
+  paymentMethod: entry.aggregate.document.paymentMethod,
+  contractRef:
+    entry.aggregate.document.contractRef === null
+      ? null
+      : String(entry.aggregate.document.contractRef),
   netValue: entry.aggregate.document.status === 'Draft' ? null : entry.aggregate.document.netValue,
   dueDate: entry.aggregate.document.dueDate ?? null,
   version: entry.version,
