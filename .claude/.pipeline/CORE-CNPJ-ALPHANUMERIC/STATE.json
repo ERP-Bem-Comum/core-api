@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "CORE-CNPJ-ALPHANUMERIC",
+  "size": "S",
+  "createdAt": "2026-06-16T23:22:51.218Z",
+  "closedAt": "2026-06-16T23:32:46.303Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-06-16T23:25:09.738Z",
+      "finishedAt": "2026-06-16T23:26:02.689Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "ts-domain-modeler",
+      "startedAt": "2026-06-16T23:26:03.288Z",
+      "finishedAt": "2026-06-16T23:27:22.243Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-06-16T23:27:22.802Z",
+      "finishedAt": "2026-06-16T23:30:18.139Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-06-16T23:30:18.787Z",
+      "finishedAt": "2026-06-16T23:32:45.706Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}
