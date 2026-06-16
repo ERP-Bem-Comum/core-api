@@ -50,8 +50,46 @@ enquanto o in-memory é fresh por teste. Os testes que filtravam por `status` gl
 **Correção nos testes** (não no `findPaged`): escopar cada caso por `supplierRef` único → isolation-safe nos dois adapters.
 Política de regressão zero: causa endereçada, integração 8/8 verde.
 
+## Incremento 2 — US2: Trilha por-campo (Time Travel) — GREEN
+
+**Data**: 2026-06-15 · **Implementado por agentes especialistas (1 camada por agente) + validação cruzada por agentes.**
+
+### Quem fez o quê (cada camada por um agente)
+
+| Camada | Entrega | Agente |
+| --- | --- | --- |
+| Persistência | tabelas `fin_document_timeline` + `fin_timeline_field_changes` + migration `0001_natural_shadowcat.sql` + `timeline-repository.{drizzle,in-memory}.ts` + `timeline.mapper.ts` + `save(aggregate, timelineEntries)` na MESMA tx | **`drizzle-orm-expert`** |
+| **Validação persistência** | review read-only do DDL/migration/CASCADE/índices/tx | **`mysql-database-expert`** → APPROVED (1 blocker = optimistic lock, que é o próximo incremento FR-009; ternário morto corrigido) |
+| Aplicação | `timeline-recording.ts` (helper) + instrumentação dos 6 use cases mutantes (before/after → `projectEntry` → `save` na tx; `clock` injetado) + `get-document-timeline.ts` + composition (store compartilhado / timeline repo) | **`typescript-language-expert`** |
+| Borda HTTP | `GET /api/v2/financial/documents/:id/timeline` (rota + `documentTimelineResponseSchema` + `timelineToDto`; 404/403) | **`fastify-server-expert`** |
+| **Validação borda (Zod)** | review read-only dos schemas (contract-first ADR-0027) | **`zod-expert`** (criado em `.claude/agents/zod-expert.md`) → CHANGES-REQUESTED: M1 `eventType` `z.string()`→`z.enum` + `.meta()` — **aplicados pelo `fastify-server-expert`** |
+
+### Decisões de design (dos agentes, validadas)
+
+- **Trilha na MESMA transação do agregado** (ADR-0001/Vernon:3257): `save` recebe `timelineEntries` e grava doc+payables+trilha em um `db.transaction` (drizzle) / store compartilhado (in-memory). Rollback atômico → sem trilha órfã (SC-004/NFR-001).
+- **Diff por função pura** sobre snapshots (eventos da fatia 1 intactos). `eventType` no response é `z.enum` derivado de `DocumentEvent['type']` com `satisfies` anti-drift (achado M1 do zod-expert).
+- **Cancelamento**: `delete` cascateia a trilha (FK ON DELETE CASCADE — SC-006); registro permanente fica no evento de outbox.
+
+### RED → GREEN
+
+- W0: `timeline.http.test.ts` (CT-014/015/016) — agora GREEN.
+- Unidade (in-memory): `timeline-recording.test.ts` — recording por use case.
+- **Integração (MySQL real)**: novo caso em `document-repository.drizzle-mysql.test.ts` — `save` grava trilha na tx → `findByDocument` lê → `delete` cascateia. **9/9 verde**.
+
+### Gate (incremento US2)
+
+```
+pnpm run typecheck                  → ✅
+pnpm run format:check               → ✅
+pnpm run lint                       → ✅
+pnpm test                           → ✅ 2479 pass · 0 fail · 18 skipped
+pnpm run test:integration:financial → ✅ 9 pass · 0 fail (inclui trilha vs MySQL)
+```
+
+### Higiene de gate feita inline (não-camada)
+
+Lint dos arquivos de persistência do agente (readonly params do Drizzle via `eslint-disable`, `async` nas factories, `!== undefined` redundante em row `T|null`) + ternário morto que o `mysql-database-expert` apontou — disciplina `ts-quality-checker`.
+
 ## Próximo incremento (W1)
 
-US2 — trilha materializada (`domain/timeline/repository.ts` port + tabelas `fin_*` + migration + repo drizzle/in-memory
-compartilhando tx + instrumentação dos 7 use cases) e `GET /:id/timeline`; depois optimistic lock (409) e remoção de
-permissões inertes.
+Optimistic lock enforçado (FR-009/ADR-0002 — `version` → 409; o `mysql-database-expert` confirmou que o `save` ainda não compara `version`) e remoção das permissões inertes (FR-010/ADR-0004). Cada um com seus testes RED primeiro.

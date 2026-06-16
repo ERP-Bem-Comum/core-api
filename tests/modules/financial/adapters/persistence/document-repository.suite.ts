@@ -53,7 +53,7 @@ export const documentRepositoryContract = (makeRepo: () => DocumentRepository): 
     it('save + findById faz round-trip de um documento Open com payables', async () => {
       const repo = makeRepo();
       const open = openNfse();
-      const saved = await repo.save({ document: open.document, payables: open.payables });
+      const saved = await repo.save({ document: open.document, payables: open.payables }, []);
       assert.equal(isOk(saved), true);
 
       const found = await repo.findById(open.document.id);
@@ -76,7 +76,7 @@ export const documentRepositoryContract = (makeRepo: () => DocumentRepository): 
     it('delete remove o agregado (findById passa a falhar)', async () => {
       const repo = makeRepo();
       const open = openNfse();
-      await repo.save({ document: open.document, payables: open.payables });
+      await repo.save({ document: open.document, payables: open.payables }, []);
       const del = await repo.delete(open.document.id);
       assert.equal(isOk(del), true);
       const found = await repo.findById(open.document.id);
@@ -87,7 +87,7 @@ export const documentRepositoryContract = (makeRepo: () => DocumentRepository): 
       const repo = makeRepo();
       const draft = Document.saveDraft({ id: DocumentId.generate(), documentNumber: 'D-1' });
       if (!draft.ok) throw new Error('saveDraft falhou');
-      const saved = await repo.save({ document: draft.value.document, payables: null });
+      const saved = await repo.save({ document: draft.value.document, payables: null }, []);
       assert.equal(isOk(saved), true);
       const found = await repo.findById(draft.value.document.id);
       if (found.ok) {
@@ -138,7 +138,7 @@ export const documentRepositoryContract = (makeRepo: () => DocumentRepository): 
       const repo = makeRepo();
       const s = sup(SUP_STATUS);
       const openOne = openAt(s, '2026-07-01');
-      await repo.save({ document: openOne.document, payables: openOne.payables });
+      await repo.save({ document: openOne.document, payables: openOne.payables }, []);
       const toApprove = openAt(s, '2026-07-02');
       const approved = Document.approve({
         document: toApprove.document,
@@ -147,7 +147,7 @@ export const documentRepositoryContract = (makeRepo: () => DocumentRepository): 
         at: new Date('2026-07-03'),
       });
       if (!approved.ok) throw new Error('test setup: approve');
-      await repo.save({ document: approved.value.document, payables: approved.value.payables });
+      await repo.save({ document: approved.value.document, payables: approved.value.payables }, []);
 
       const openPage = await repo.findPaged({ status: 'Open', supplierRef: SUP_STATUS }, 1, 10);
       assert.equal(isOk(openPage), true);
@@ -173,7 +173,7 @@ export const documentRepositoryContract = (makeRepo: () => DocumentRepository): 
       const s = sup(SUP_PAGE);
       for (let i = 1; i <= 5; i++) {
         const d = openAt(s, `2026-08-0${String(i)}`);
-        await repo.save({ document: d.document, payables: d.payables });
+        await repo.save({ document: d.document, payables: d.payables }, []);
       }
       const page = await repo.findPaged({ supplierRef: SUP_PAGE }, 2, 2);
       assert.equal(isOk(page), true);
@@ -190,8 +190,8 @@ export const documentRepositoryContract = (makeRepo: () => DocumentRepository): 
       const s = sup(SUP_WINDOW);
       const inside = openAt(s, '2026-09-20');
       const outside = openAt(s, '2026-09-30');
-      await repo.save({ document: inside.document, payables: inside.payables });
-      await repo.save({ document: outside.document, payables: outside.payables });
+      await repo.save({ document: inside.document, payables: inside.payables }, []);
+      await repo.save({ document: outside.document, payables: outside.payables }, []);
 
       const byWindow = await repo.findPaged(
         { supplierRef: SUP_WINDOW, dueFrom: new Date('2026-09-15'), dueTo: new Date('2026-09-25') },

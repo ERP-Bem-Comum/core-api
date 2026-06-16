@@ -50,9 +50,15 @@ const DocumentListResponse = z.object({
 const Timeline = z.object({
   entries: z.array(
     z.object({
-      eventType: z.string(), // DocumentSaved | PayableApproved | ApprovalUndone | DocumentCancelled | DocumentDraftSaved
+      eventType: z.enum([
+        'DocumentSaved',
+        'PayableApproved',
+        'ApprovalUndone',
+        'DocumentDraftSaved',
+        'DocumentCancelled',
+      ]),
       target: z.object({ kind: z.enum(['Document', 'Payable']), id: z.uuid() }),
-      occurredAt: z.string().datetime(),
+      occurredAt: z.iso.datetime(),
       actor: z.uuid().nullable(),
       changes: z.array(
         z.object({

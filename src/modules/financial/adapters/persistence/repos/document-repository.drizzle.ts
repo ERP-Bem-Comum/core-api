@@ -46,6 +46,7 @@ import type {
 import type { DocumentId } from '../../../domain/shared/document-id.ts';
 import type { DocumentListFilter, DocumentListItem, Page } from '../../../domain/document/query.ts';
 import type { DocumentStatus, DocumentType } from '../../../domain/document/types.ts';
+import type { FinancialTimelineEntry } from '../../../domain/timeline/types.ts';
 import type { FinancialMysqlHandle } from '../drivers/mysql-driver.ts';
 import {
   mapRowToDocument,
@@ -55,6 +56,7 @@ import {
   mapRetentionsToRows,
   mapRegisteredTaxesToRows,
 } from '../mappers/document.mapper.ts';
+import { mapEntryToRows } from '../mappers/timeline.mapper.ts';
 
 // Wrapper de segurança: captura qualquer exceção de I/O ou violação de
 // constraint (mysql2 lança ER_DUP_ENTRY, ER_DATA_TOO_LONG etc.) e converte
@@ -138,10 +140,17 @@ export const createDrizzleDocumentRepository = (
 
   // ─── save ──────────────────────────────────────────────────────────────────
   //
-  // Transação única: documento + tabelas filhas (hard replace).
+  // Transação única: documento + tabelas filhas (hard replace) + trilha de timeline.
   // Optimistic lock (R5): SELECT FOR UPDATE lê o `version` atual;
   // UPDATE WHERE version=? falha se outra tx incrementou.
-  const save = async (aggregate: StoredDocument): Promise<Result<void, DocumentRepositoryError>> =>
+  //
+  // `timelineEntries`: gravadas NA MESMA transação (SC-004/NFR-001 — Vernon:3257:
+  //   "update synchronously [...] in the same transaction"). Quem não tem trilha
+  //   passa [] — noop sem overhead.
+  const save = async (
+    aggregate: StoredDocument,
+    timelineEntries: readonly FinancialTimelineEntry[],
+  ): Promise<Result<void, DocumentRepositoryError>> =>
     safe('save', async () => {
       const { document, payables } = aggregate;
       const documentId = document.id as unknown as string;
@@ -204,18 +213,31 @@ export const createDrizzleDocumentRepository = (
         }
 
         // Retenções vêm do documento (campo `retentions` em DocumentCore e DraftDocument).
-        const retentions = document.status === 'Draft' ? document.retentions : document.retentions;
+        const retentions = document.retentions;
         if (retentions.length > 0) {
           const retentionRows = mapRetentionsToRows(retentions, documentId);
           await tx.insert(schema.finRetentions).values([...retentionRows]);
         }
 
         // Impostos registrados.
-        const registeredTaxes =
-          document.status === 'Draft' ? document.registeredTaxes : document.registeredTaxes;
+        const registeredTaxes = document.registeredTaxes;
         if (registeredTaxes.length > 0) {
           const taxRows = mapRegisteredTaxesToRows(registeredTaxes, documentId);
           await tx.insert(schema.finRegisteredTaxes).values([...taxRows]);
+        }
+
+        // 4. Timeline (SC-004/NFR-001): gravar entries na MESMA transação.
+        //    Append-only (ADR-0020 §"sem UPDATE/DELETE em read-model").
+        //    mysql2 lança ER_PARSE_ERROR se values([]) — guard obrigatório.
+        if (timelineEntries.length > 0) {
+          const mapped = timelineEntries.map(mapEntryToRows);
+          const entryRows = mapped.map((m) => m.entryRow);
+          await tx.insert(schema.finDocumentTimeline).values([...entryRows]);
+
+          const changeRows = mapped.flatMap((m) => [...m.changeRows]);
+          if (changeRows.length > 0) {
+            await tx.insert(schema.finTimelineFieldChanges).values(changeRows);
+          }
         }
       });
     });

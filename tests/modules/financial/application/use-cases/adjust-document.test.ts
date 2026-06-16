@@ -4,6 +4,7 @@ import { strict as assert } from 'node:assert';
 import { isErr, isOk } from '#src/shared/index.ts';
 import * as Money from '#src/shared/kernel/money.ts';
 import * as UserRef from '#src/shared/kernel/user-ref.ts';
+import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import { SupplierRef } from '#src/modules/partners/public-api/refs.ts';
 import { DocumentId } from '#src/modules/financial/domain/shared/ids.ts';
 import * as Retention from '#src/modules/financial/domain/shared/retention.ts';
@@ -50,9 +51,11 @@ const createdNfse = (): Document.CreateDocumentOutput => {
   if (!r.ok) throw new Error('setup create');
   return r.value;
 };
+const CLOCK = ClockFixed(new Date('2026-06-15T12:00:00Z'));
+
 const seedOpen = async (repo: DocumentRepository) => {
   const c = createdNfse();
-  await repo.save({ document: c.document, payables: c.payables });
+  await repo.save({ document: c.document, payables: c.payables }, []);
   return c.document.id;
 };
 const seedApproved = async (repo: DocumentRepository) => {
@@ -66,7 +69,7 @@ const seedApproved = async (repo: DocumentRepository) => {
     at: new Date('2026-07-10'),
   });
   if (!a.ok) throw new Error('setup approve');
-  await repo.save({ document: a.value.document, payables: a.value.payables });
+  await repo.save({ document: a.value.document, payables: a.value.payables }, []);
   return a.value.document.id;
 };
 
@@ -75,7 +78,7 @@ describe('financial/application — adjustDocument', () => {
     const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
     const id = await seedOpen(repo);
-    const r = await adjustDocument({ repo, outbox: outbox.port })({
+    const r = await adjustDocument({ repo, outbox: outbox.port, clock: CLOCK })({
       documentId: id,
       interestCents: 500,
       retentions: [
@@ -93,7 +96,7 @@ describe('financial/application — adjustDocument', () => {
     const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
     const id = await seedApproved(repo);
-    const r = await adjustDocument({ repo, outbox: outbox.port })({
+    const r = await adjustDocument({ repo, outbox: outbox.port, clock: CLOCK })({
       documentId: id,
       interestCents: 100,
     });

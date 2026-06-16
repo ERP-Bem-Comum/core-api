@@ -55,9 +55,11 @@ const createdNfse = (): Document.CreateDocumentOutput => {
   return r.value;
 };
 
+const CLOCK = ClockFixed(new Date('2026-06-15T12:00:00Z'));
+
 const seedOpen = async (repo: DocumentRepository): Promise<string> => {
   const c = createdNfse();
-  await repo.save({ document: c.document, payables: c.payables });
+  await repo.save({ document: c.document, payables: c.payables }, []);
   return c.document.id;
 };
 const seedApproved = async (repo: DocumentRepository): Promise<string> => {
@@ -71,7 +73,7 @@ const seedApproved = async (repo: DocumentRepository): Promise<string> => {
     at: new Date('2026-07-10'),
   });
   if (!a.ok) throw new Error('setup approve');
-  await repo.save({ document: a.value.document, payables: a.value.payables });
+  await repo.save({ document: a.value.document, payables: a.value.payables }, []);
   return a.value.document.id;
 };
 const seedDraft = async (repo: DocumentRepository): Promise<string> => {
@@ -85,7 +87,7 @@ const seedDraft = async (repo: DocumentRepository): Promise<string> => {
     dueDate: new Date('2026-07-01'),
   });
   if (!d.ok) throw new Error('setup draft');
-  await repo.save({ document: d.value.document, payables: null });
+  await repo.save({ document: d.value.document, payables: null }, []);
   return d.value.document.id;
 };
 
@@ -133,7 +135,7 @@ describe('financial/application — undoApproval', () => {
     const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
     const id = await seedApproved(repo);
-    const r = await undoApproval({ repo, outbox: outbox.port })({ documentId: id });
+    const r = await undoApproval({ repo, outbox: outbox.port, clock: CLOCK })({ documentId: id });
     assert.equal(isOk(r), true);
     const found = await repo.findById(id as never);
     if (found.ok) assert.equal(found.value.document.status, 'Open');
@@ -167,7 +169,7 @@ describe('financial/application — submitDraft', () => {
     const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
     const id = await seedDraft(repo);
-    const r = await submitDraft({ repo, outbox: outbox.port })({ documentId: id });
+    const r = await submitDraft({ repo, outbox: outbox.port, clock: CLOCK })({ documentId: id });
     assert.equal(isOk(r), true);
     const found = await repo.findById(id as never);
     if (found.ok) {

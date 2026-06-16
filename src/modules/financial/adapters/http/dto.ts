@@ -10,7 +10,12 @@
 import type { Document } from '../../domain/document/types.ts';
 import type { DocumentListItem } from '../../domain/document/query.ts';
 import type { Payables } from '../../domain/payable/types.ts';
-import type { DocumentResponseDto, DocumentSummaryDto } from './schemas.ts';
+import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
+import type {
+  DocumentResponseDto,
+  DocumentSummaryDto,
+  DocumentTimelineResponseDto,
+} from './schemas.ts';
 
 /** Serializa Money (branded { cents: number }) como string de centavos. */
 const moneyToCentsString = (cents: number): string => String(cents);
@@ -79,4 +84,27 @@ export const listItemToSummaryDto = (item: DocumentListItem): DocumentSummaryDto
   supplierRef: item.supplierRef,
   netValueCents: item.netValue !== null ? moneyToCentsString(item.netValue.cents) : null,
   dueDate: item.dueDate !== null ? item.dueDate.toISOString().slice(0, 10) : null,
+});
+
+/**
+ * Serializa a trilha por-campo (Time Travel) para o DTO de resposta.
+ * IDs branded são coercidos para string; Date → ISO 8601; actor null preservado.
+ */
+export const timelineToDto = (
+  entries: readonly FinancialTimelineEntry[],
+): DocumentTimelineResponseDto => ({
+  entries: entries.map((entry) => ({
+    eventType: entry.kind,
+    target: {
+      kind: entry.target.kind,
+      id: String(entry.target.id),
+    },
+    occurredAt: entry.occurredAt.toISOString(),
+    actor: entry.actor !== null ? String(entry.actor) : null,
+    changes: entry.changes.map((c) => ({
+      field: c.field,
+      before: c.before,
+      after: c.after,
+    })),
+  })),
 });

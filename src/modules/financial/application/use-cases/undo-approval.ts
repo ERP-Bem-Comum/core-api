@@ -1,4 +1,5 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
+import type { Clock } from '../../../../shared/ports/clock.ts';
 import * as DocumentId from '../../domain/shared/document-id.ts';
 import * as Document from '../../domain/document/document.ts';
 import type { DocumentError } from '../../domain/document/errors.ts';
@@ -7,8 +8,13 @@ import type {
   DocumentRepositoryError,
 } from '../../domain/document/repository.ts';
 import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
+import { buildTimelineEntries } from '../timeline-recording.ts';
 
-export type UndoApprovalDeps = Readonly<{ repo: DocumentRepository; outbox: FinancialOutbox }>;
+export type UndoApprovalDeps = Readonly<{
+  repo: DocumentRepository;
+  outbox: FinancialOutbox;
+  clock: Clock;
+}>;
 export type UndoApprovalCommand = Readonly<{ documentId: string }>;
 export type UndoApprovalError =
   | DocumentError
@@ -35,10 +41,25 @@ export const undoApproval =
     });
     if (!undone.ok) return err(undone.error);
 
-    const saved = await deps.repo.save({
-      document: undone.value.document,
-      payables: undone.value.payables,
+    // Trilha: marco de desfazer-aprovação. before = estado lido (Approved); after = Open.
+    const event = undone.value.events[0];
+    if (event === undefined) return err('document-repository-failure');
+    const entries = buildTimelineEntries(deps.clock, {
+      event,
+      before: approved.value,
+      after: undone.value.document,
+      payablesBefore: found.value.payables,
+      payablesAfter: undone.value.payables,
+      actor: null,
     });
+
+    const saved = await deps.repo.save(
+      {
+        document: undone.value.document,
+        payables: undone.value.payables,
+      },
+      entries,
+    );
     if (!saved.ok) return err(saved.error);
 
     const published = await deps.outbox.append(undone.value.events);

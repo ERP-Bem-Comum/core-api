@@ -2,11 +2,13 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import { isErr, isOk } from '#src/shared/index.ts';
+import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import { createInMemoryDocumentRepository } from '#src/modules/financial/adapters/persistence/repos/document-repository.in-memory.ts';
 import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
 import { saveDocument } from '#src/modules/financial/application/use-cases/save-document.ts';
 
 const SUP = '11111111-1111-4111-8111-111111111111';
+const CLOCK = ClockFixed(new Date('2026-06-15T12:00:00Z'));
 
 const nfseCommand = () => ({
   documentNumber: 'NFS-1',
@@ -27,7 +29,7 @@ describe('financial/application — saveDocument', () => {
   it('salva o documento, gera títulos e publica DocumentSaved no outbox', async () => {
     const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
-    const result = await saveDocument({ repo, outbox: outbox.port })(nfseCommand());
+    const result = await saveDocument({ repo, outbox: outbox.port, clock: CLOCK })(nfseCommand());
 
     assert.equal(isOk(result), true);
     if (result.ok) {
@@ -47,7 +49,7 @@ describe('financial/application — saveDocument', () => {
   it('rejeita fornecedor com formato inválido (não persiste nem publica)', async () => {
     const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
-    const result = await saveDocument({ repo, outbox: outbox.port })({
+    const result = await saveDocument({ repo, outbox: outbox.port, clock: CLOCK })({
       ...nfseCommand(),
       supplierRef: 'not-a-uuid',
     });
@@ -58,7 +60,7 @@ describe('financial/application — saveDocument', () => {
   it('rejeita retenção incompatível com o tipo (Boleto + ISS)', async () => {
     const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
-    const result = await saveDocument({ repo, outbox: outbox.port })({
+    const result = await saveDocument({ repo, outbox: outbox.port, clock: CLOCK })({
       documentNumber: 'BOL-1',
       type: 'Boleto',
       supplierRef: SUP,

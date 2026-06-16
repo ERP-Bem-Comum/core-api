@@ -12,6 +12,8 @@ import type {
   StoredDocument,
   DocumentRepositoryError,
 } from '#src/modules/financial/domain/document/repository.ts';
+import type { FinancialTimelineEntry } from '#src/modules/financial/domain/timeline/types.ts';
+import type { TimelineStore } from './timeline-repository.in-memory.ts';
 
 const matchesFilter = (doc: Document, f: DocumentListFilter): boolean => {
   if (f.status !== undefined && doc.status !== f.status) return false;
@@ -35,11 +37,33 @@ const toListItem = (doc: Document): DocumentListItem => ({
 });
 
 // Adapter in-memory (testes + composition root de memória). Guarda o agregado por id branded.
-export const createInMemoryDocumentRepository = (): DocumentRepository => {
+//
+// `timelineStore`: store compartilhado com o `createInMemoryTimelineRepository`.
+//   Quando fornecido, o `save` acumula as entries de trilha no mesmo Map que o
+//   timeline-repo lê — garantindo atomicidade em memória sem precisar de tx.
+//   Quando omitido (testes de contrato antigos que passam []), o store é descartado.
+export const createInMemoryDocumentRepository = (
+  timelineStore?: TimelineStore,
+): DocumentRepository => {
   const store = new Map<string, StoredDocument>();
   return immutable<DocumentRepository>({
-    save: async (aggregate: StoredDocument): Promise<Result<void, DocumentRepositoryError>> => {
+    save: async (
+      aggregate: StoredDocument,
+      timelineEntries: readonly FinancialTimelineEntry[],
+    ): Promise<Result<void, DocumentRepositoryError>> => {
       store.set(aggregate.document.id, aggregate);
+      // Acumular entries de trilha no store compartilhado (sc-004/nfr-001).
+      if (timelineStore !== undefined && timelineEntries.length > 0) {
+        for (const entry of timelineEntries) {
+          const key = entry.documentId as unknown as string;
+          const existing = timelineStore.get(key);
+          if (existing !== undefined) {
+            existing.push(entry);
+          } else {
+            timelineStore.set(key, [entry]);
+          }
+        }
+      }
       return Promise.resolve(ok(undefined));
     },
     findById: async (id: DocumentId): Promise<Result<StoredDocument, DocumentRepositoryError>> => {
@@ -48,6 +72,10 @@ export const createInMemoryDocumentRepository = (): DocumentRepository => {
     },
     delete: async (id: DocumentId): Promise<Result<void, DocumentRepositoryError>> => {
       store.delete(id);
+      // Cascata em memória: remover a trilha junto com o documento (espelha ON DELETE CASCADE do MySQL).
+      if (timelineStore !== undefined) {
+        timelineStore.delete(id as unknown as string);
+      }
       return Promise.resolve(ok(undefined));
     },
     findPaged: async (

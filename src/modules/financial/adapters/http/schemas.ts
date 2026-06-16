@@ -9,6 +9,7 @@
  */
 
 import * as z from 'zod/v4';
+import type { DocumentEvent } from '../../domain/document/events.ts';
 
 // ─── Shared ──────────────────────────────────────────────────────────────────
 
@@ -204,3 +205,57 @@ export const documentListResponseSchema = z.object({
 });
 
 export type DocumentListResponseDto = z.infer<typeof documentListResponseSchema>;
+
+// ─── GET /documents/:id/timeline ─────────────────────────────────────────────
+
+/**
+ * Valores válidos de `DocumentEvent['type']` — anti-drift: o compilador acusa se a union
+ * de eventos mudar sem atualizar esta lista (via `satisfies`).
+ */
+const DOCUMENT_EVENT_TYPES = [
+  'DocumentSaved',
+  'PayableApproved',
+  'ApprovalUndone',
+  'DocumentDraftSaved',
+  'DocumentCancelled',
+] as const satisfies readonly DocumentEvent['type'][];
+
+/** Uma entrada da trilha por-campo (Time Travel). */
+export const timelineEntrySchema = z.object({
+  eventType: z.enum([...DOCUMENT_EVENT_TYPES]).meta({
+    description: 'Tipo do evento de domínio que originou esta entrada na trilha',
+  }),
+  target: z.object({
+    kind: z.enum(['Document', 'Payable']).meta({
+      description: 'Entidade afetada pelo evento — documento principal ou título filho',
+    }),
+    id: z.uuid().meta({
+      description: 'UUID da entidade afetada (Document.id ou Payable.id)',
+    }),
+  }),
+  occurredAt: z.iso.datetime().meta({
+    description: 'Instante UTC em que o evento ocorreu (ISO-8601 com offset)',
+  }),
+  actor: z.uuid().nullable().meta({
+    description: 'UUID do usuário responsável pela ação; nulo em ações automáticas do sistema',
+  }),
+  changes: z
+    .array(
+      z.object({
+        field: z.string(),
+        before: z.string().nullable(),
+        after: z.string().nullable(),
+      }),
+    )
+    .meta({
+      description:
+        'Lista de campos alterados com o valor anterior e o novo valor serializados como string',
+    }),
+});
+
+/** Response do GET /documents/:id/timeline. */
+export const documentTimelineResponseSchema = z.object({
+  entries: z.array(timelineEntrySchema),
+});
+
+export type DocumentTimelineResponseDto = z.infer<typeof documentTimelineResponseSchema>;

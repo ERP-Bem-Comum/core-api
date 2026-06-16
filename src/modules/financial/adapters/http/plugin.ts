@@ -38,7 +38,7 @@ import * as DocumentId from '../../domain/shared/document-id.ts';
 import type { RetentionInput } from '../../domain/shared/retention.ts';
 import type { RegisteredTaxInput } from '../../domain/shared/registered-tax.ts';
 import { FINANCIAL_PERMISSION } from '../../public-api/permissions.ts';
-import { documentToDto, listItemToSummaryDto } from './dto.ts';
+import { documentToDto, listItemToSummaryDto, timelineToDto } from './dto.ts';
 import type { DocumentListFilter } from '../../domain/document/query.ts';
 import type { FinancialHttpDeps } from './composition.ts';
 import {
@@ -49,6 +49,7 @@ import {
   listDocumentsQuerySchema,
   documentResponseSchema,
   documentListResponseSchema,
+  documentTimelineResponseSchema,
 } from './schemas.ts';
 
 export type FinancialHttpHooks = Readonly<{
@@ -382,6 +383,31 @@ const financialRoutes =
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
         return loadAndSerialize(deps, reply, req.params.id);
+      },
+    });
+
+    // GET /financial/documents/:id/timeline — trilha por-campo (Time Travel, US2).
+    scope.route({
+      method: 'GET',
+      url: '/financial/documents/:id/timeline',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        params: documentIdParamSchema,
+        response: { 200: documentTimelineResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        // 1. Verificar existência do documento → 404 se não encontrado.
+        const idR = DocumentId.rehydrate(req.params.id);
+        if (!idR.ok) return sendDomainError(reply, 'document-id-invalid');
+
+        const found = await deps.findDocumentById(idR.value);
+        if (!found.ok) return sendDomainError(reply, found.error);
+
+        // 2. Buscar trilha.
+        const result = await deps.getDocumentTimeline({ documentId: req.params.id });
+        if (!result.ok) return sendDomainError(reply, result.error);
+
+        return sendResult(reply, ok(timelineToDto(result.value)), { ok: 200 });
       },
     });
   };

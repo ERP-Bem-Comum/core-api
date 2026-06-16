@@ -1,4 +1,5 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
+import type { Clock } from '../../../../shared/ports/clock.ts';
 import * as Money from '../../../../shared/kernel/money.ts';
 import { SupplierRef, type PartnerRefError } from '#src/modules/partners/public-api/refs.ts';
 import {
@@ -20,10 +21,12 @@ import type {
   DocumentRepositoryError,
 } from '../../domain/document/repository.ts';
 import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
+import { buildTimelineEntries } from '../timeline-recording.ts';
 
 export type SaveDocumentDeps = Readonly<{
   repo: DocumentRepository;
   outbox: FinancialOutbox;
+  clock: Clock;
 }>;
 
 export type SaveDocumentCommand = Readonly<{
@@ -127,10 +130,27 @@ export const saveDocument =
     });
     if (!created.ok) return err(created.error);
 
-    const saved = await deps.repo.save({
-      document: created.value.document,
-      payables: created.value.payables,
+    // Trilha (Time Travel): marco de criação. before/payablesBefore=null (documento novo);
+    // actor=null (criação não carrega autoria nesta fatia). events[0] sempre presente — o
+    // domínio emite ≥1 evento em create; guard mantém Result-clean sob noUncheckedIndexedAccess.
+    const event = created.value.events[0];
+    if (event === undefined) return err('document-repository-failure');
+    const entries = buildTimelineEntries(deps.clock, {
+      event,
+      before: null,
+      after: created.value.document,
+      payablesBefore: null,
+      payablesAfter: created.value.payables,
+      actor: null,
     });
+
+    const saved = await deps.repo.save(
+      {
+        document: created.value.document,
+        payables: created.value.payables,
+      },
+      entries,
+    );
     if (!saved.ok) return err(saved.error);
 
     const published = await deps.outbox.append(created.value.events);
