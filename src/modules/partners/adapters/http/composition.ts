@@ -43,6 +43,22 @@ import {
   type PartnersMysqlHandle,
 } from '../persistence/drivers/mysql-driver.ts';
 
+// #43 — autocadastro público: token uso-único + e-mail + use cases.
+import { makeInMemoryCollaboratorInviteTokenStore } from '../persistence/repos/collaborator-invite-token-repository.in-memory.ts';
+import { createDrizzleCollaboratorInviteTokenStore } from '../persistence/repos/collaborator-invite-token-repository.drizzle.ts';
+import { makeNodeCollaboratorInviteTokenMinter } from '../crypto/collaborator-invite-token-minter.node.ts';
+import { makeEmailCollaboratorActivationMailer } from '../notifications/collaborator-activation-mailer.email.ts';
+import { requestCollaboratorActivation } from '../../application/use-cases/request-collaborator-activation.ts';
+import { getCollaboratorActivationByToken } from '../../application/use-cases/get-collaborator-activation-by-token.ts';
+import { completeCollaboratorRegistrationPublic } from '../../application/use-cases/complete-collaborator-registration-public.ts';
+import type { CollaboratorInviteTokenRepository } from '../../domain/collaborator/invite-token-repository.ts';
+import type { CollaboratorActivationMailer } from '../../application/ports/collaborator-activation-mailer.ts';
+import {
+  parseSmtpConfig,
+  createNodemailerEmailSender,
+  parseEmailAddress,
+} from '#src/modules/notifications/public-api/index.ts';
+
 import { registerSupplier } from '../../application/use-cases/register-supplier.ts';
 import { deactivateSupplier } from '../../application/use-cases/deactivate-supplier.ts';
 import { reactivateSupplier } from '../../application/use-cases/reactivate-supplier.ts';
@@ -111,6 +127,15 @@ export type PartnersCompositionConfig = Readonly<{
   readerUrl?: string;
   /** Seed dev/test (memory). Ignorado em mysql. */
   seed?: PartnersSeed;
+  /** #43 — Origem confiável do link de autocadastro. Nunca derivada do header Host. */
+  activationBaseUrl?: string;
+  /** #43 — TTL do token de ativação em segundos. Default: 604800 (7 dias). */
+  inviteTtlSeconds?: number;
+  /**
+   * #43 — Mailer de ativação injetável (dev/test). Quando ausente, resolve da env (SMTP +
+   * PARTNERS_ACTIVATION_FROM → Nodemailer real; senão no-op SEGURO). Testes injetam o InMemory.
+   */
+  activationMailer?: CollaboratorActivationMailer;
 }>;
 
 export type PartnersHttpDeps = Readonly<{
@@ -164,6 +189,12 @@ export type PartnersHttpDeps = Readonly<{
   deactivateAct: ReturnType<typeof deactivateAct>;
   reactivateAct: ReturnType<typeof reactivateAct>;
   editAct: ReturnType<typeof editAct>;
+  /** #43 — autocadastro: operador dispara token + e-mail (rota autenticada). */
+  requestCollaboratorActivation: ReturnType<typeof requestCollaboratorActivation>;
+  /** #43 — autocadastro: preview público do pré-cadastro (CPF mascarado). */
+  getCollaboratorActivationByToken: ReturnType<typeof getCollaboratorActivationByToken>;
+  /** #43 — autocadastro: conclusão pública (token + cpfPrefix). */
+  completeCollaboratorRegistrationPublic: ReturnType<typeof completeCollaboratorRegistrationPublic>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -178,6 +209,8 @@ type Pools = Readonly<{
   geographyRepo: PartnerGeographyRepository;
   actWriterRepo: ActRepository;
   actReader: ActReader;
+  /** #43 — store do token de autocadastro (writer pool). */
+  inviteTokenRepo: CollaboratorInviteTokenRepository;
   shutdown: () => Promise<void>;
 }>;
 
@@ -202,6 +235,7 @@ const buildMemoryPools = (config: PartnersCompositionConfig): Pools => {
     geographyRepo: makeInMemoryPartnerGeographyStore().repository,
     actWriterRepo: actRepository,
     actReader,
+    inviteTokenRepo: makeInMemoryCollaboratorInviteTokenStore().repository,
     shutdown: () => Promise.resolve(),
   };
 };
@@ -242,6 +276,7 @@ const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools
     geographyRepo: createDrizzlePartnerGeographyStore(writerHandle, clock),
     actWriterRepo: createDrizzleActStore(writerHandle, clock),
     actReader: createDrizzleActReader(readerHandle),
+    inviteTokenRepo: createDrizzleCollaboratorInviteTokenStore(writerHandle).repository,
     shutdown: async () => {
       await writerHandle.close();
       if (readerHandle !== writerHandle) await readerHandle.close();
@@ -249,8 +284,40 @@ const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools
   };
 };
 
-const makeDeps = (pools: Pools): PartnersHttpDeps => {
+// #43 — defaults do autocadastro. Prod sobrepõe via config/env.
+const DEFAULT_INVITE_TTL = 604_800; // 7 dias (convite generoso)
+const DEFAULT_ACTIVATION_BASE_URL = 'http://localhost:3000/collaborators/autocadastro';
+
+/**
+ * #43 — resolve o mailer de ativação a partir da env (espelha buildResetMailer do auth). SMTP
+ * (parseSmtpConfig) + PARTNERS_ACTIVATION_FROM válidos → Nodemailer real (notifications/public-api);
+ * senão → no-op SEGURO (não envia, não loga e-mail/link). Mantém o boot resiliente sem SMTP.
+ */
+const buildActivationMailer = (env: Readonly<NodeJS.ProcessEnv>): CollaboratorActivationMailer => {
+  const smtp = parseSmtpConfig(env);
+  const fromRaw = env['PARTNERS_ACTIVATION_FROM'];
+  if (smtp.ok && fromRaw !== undefined && fromRaw.length > 0) {
+    const from = parseEmailAddress(fromRaw);
+    if (from.ok) {
+      return makeEmailCollaboratorActivationMailer({
+        emailSender: createNodemailerEmailSender(smtp.value),
+        from: from.value,
+      });
+    }
+  }
+  return { sendActivationLink: async () => ok(undefined) };
+};
+
+/** #43 — bundle do autocadastro já resolvido (mailer/baseUrl/ttl) injetado em makeDeps. */
+type ActivationConfig = Readonly<{
+  mailer: CollaboratorActivationMailer;
+  activationBaseUrl: string;
+  inviteTtlSeconds: number;
+}>;
+
+const makeDeps = (pools: Pools, activation: ActivationConfig): PartnersHttpDeps => {
   const clock = ClockReal();
+  const minter = makeNodeCollaboratorInviteTokenMinter();
   return {
     listCollaborators: listCollaborators({ collaboratorRepo: pools.collaboratorReaderRepo }),
     getCollaboratorById: async (rawId) => {
@@ -321,6 +388,28 @@ const makeDeps = (pools: Pools): PartnersHttpDeps => {
     deactivateAct: deactivateAct({ actRepo: pools.actWriterRepo, clock }),
     reactivateAct: reactivateAct({ actRepo: pools.actWriterRepo, clock }),
     editAct: editAct({ actRepo: pools.actWriterRepo, clock }),
+    // #43 — autocadastro: request (writer) dispara token + e-mail; get/complete consomem o token.
+    requestCollaboratorActivation: requestCollaboratorActivation({
+      collaboratorRepo: pools.collaboratorWriterRepo,
+      inviteTokenRepo: pools.inviteTokenRepo,
+      minter,
+      mailer: activation.mailer,
+      clock,
+      inviteTtlSeconds: activation.inviteTtlSeconds,
+      activationBaseUrl: activation.activationBaseUrl,
+    }),
+    getCollaboratorActivationByToken: getCollaboratorActivationByToken({
+      inviteTokenRepo: pools.inviteTokenRepo,
+      collaboratorRepo: pools.collaboratorWriterRepo,
+      minter,
+      clock,
+    }),
+    completeCollaboratorRegistrationPublic: completeCollaboratorRegistrationPublic({
+      collaboratorRepo: pools.collaboratorWriterRepo,
+      inviteTokenRepo: pools.inviteTokenRepo,
+      minter,
+      clock,
+    }),
     shutdown: pools.shutdown,
   };
 };
@@ -328,11 +417,18 @@ const makeDeps = (pools: Pools): PartnersHttpDeps => {
 export const buildPartnersHttpDeps = async (
   config: PartnersCompositionConfig,
 ): Promise<PartnersHttpDeps> => {
+  // #43 — resolve o bundle de autocadastro (mailer injetado no teste; senão env → real|no-op).
+  const activation: ActivationConfig = {
+    mailer: config.activationMailer ?? buildActivationMailer(process.env),
+    activationBaseUrl: config.activationBaseUrl ?? DEFAULT_ACTIVATION_BASE_URL,
+    inviteTtlSeconds: config.inviteTtlSeconds ?? DEFAULT_INVITE_TTL,
+  };
+
   if (config.driver === 'memory') {
-    return makeDeps(buildMemoryPools(config));
+    return makeDeps(buildMemoryPools(config), activation);
   }
   if (config.writerUrl === undefined || config.writerUrl.length === 0) {
     throw new Error('partners-composition: driver mysql exige writerUrl');
   }
-  return makeDeps(await buildMysqlPools(config));
+  return makeDeps(await buildMysqlPools(config), activation);
 };

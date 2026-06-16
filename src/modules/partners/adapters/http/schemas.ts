@@ -210,3 +210,43 @@ export const deactivateCollaboratorBodySchema = z.object({
 });
 
 export type DeactivateCollaboratorBody = z.infer<typeof deactivateCollaboratorBodySchema>;
+
+// ─── #43 — autocadastro público (sem requireAuth) ─────────────────────────────
+
+/** Query do GET /collaborators/autocadastro — token uso-único (opaco, base64url). */
+export const activationTokenQuerySchema = z.object({
+  token: z.string().min(1).meta({ description: 'Token de ativação (uso único)' }),
+});
+
+export type ActivationTokenQuery = z.infer<typeof activationTokenQuerySchema>;
+
+/**
+ * Resposta do GET /collaborators/autocadastro — preview do pré-cadastro com CPF MASCARADO (CA2).
+ * NUNCA inclui o CPF completo.
+ */
+export const activationPreviewSchema = z.object({
+  collaboratorId: z.uuid(),
+  name: z.string(),
+  email: z.string(),
+  cpfMasked: z.string().meta({ description: 'CPF mascarado (ex.: ***.***.**9-00)' }),
+  occupationArea: z.string(),
+  role: z.string(),
+});
+
+export type ActivationPreviewDto = z.infer<typeof activationPreviewSchema>;
+
+/**
+ * Body do POST /collaborators/autocadastro (conclusão pública). `token` uso-único + `cpfPrefix`
+ * (3 primeiros dígitos do CPF, verificação leve de identidade) + campos pessoais (reusa o
+ * completeRegistrationBodySchema). `cpfPrefix` em string para preservar zeros à esquerda.
+ */
+export const activationCompleteBodySchema = z.object({
+  token: z.string().min(1),
+  cpfPrefix: z
+    .string()
+    .regex(/^\d{3}$/)
+    .meta({ description: '3 primeiros dígitos do CPF' }),
+  ...completeRegistrationBodySchema.shape,
+});
+
+export type ActivationCompleteBody = z.infer<typeof activationCompleteBodySchema>;

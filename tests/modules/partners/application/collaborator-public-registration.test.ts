@@ -9,7 +9,12 @@ import * as CollaboratorId from '#src/modules/partners/domain/collaborator/colla
 import * as Collaborator from '#src/modules/partners/domain/collaborator/collaborator.ts';
 import type { Collaborator as CollaboratorType } from '#src/modules/partners/domain/collaborator/types.ts';
 import { makeInMemoryCollaboratorStore } from '#src/modules/partners/adapters/persistence/repos/collaborator-repository.in-memory.ts';
+import { makeInMemoryCollaboratorInviteTokenStore } from '#src/modules/partners/adapters/persistence/repos/collaborator-invite-token-repository.in-memory.ts';
+import { makeNodeCollaboratorInviteTokenMinter } from '#src/modules/partners/adapters/crypto/collaborator-invite-token-minter.node.ts';
 import type { CollaboratorRepository } from '#src/modules/partners/domain/collaborator/repository.ts';
+import type { CollaboratorInviteTokenRepository } from '#src/modules/partners/domain/collaborator/invite-token-repository.ts';
+import * as InviteToken from '#src/modules/partners/domain/collaborator/invite-token.ts';
+import * as InviteTokenId from '#src/modules/partners/domain/collaborator/invite-token-id.ts';
 import { verifyCpfPrefix } from '#src/modules/partners/application/use-cases/verify-cpf-prefix.ts';
 import { checkFirstThreeNumbersCpf } from '#src/modules/partners/application/use-cases/check-first-three-numbers-cpf.ts';
 import { completeCollaboratorRegistrationPublic } from '#src/modules/partners/application/use-cases/complete-collaborator-registration-public.ts';
@@ -130,19 +135,42 @@ describe('checkFirstThreeNumbersCpf', () => {
   });
 });
 
-describe('completeCollaboratorRegistrationPublic', () => {
+// #43 — o use case EVOLUIU: consome o token uso-único (cmd.token) em vez de {collaboratorId}.
+// Os slugs de contrato são `collaborator-autocadastro-*` (a rota só mapeia status).
+describe('completeCollaboratorRegistrationPublic (com token)', () => {
   let repo: CollaboratorRepository;
+  let inviteTokenRepo: CollaboratorInviteTokenRepository;
   let collab: CollaboratorType;
+  const minter = makeNodeCollaboratorInviteTokenMinter();
+
+  // Emite um token pending válido para o colaborador e devolve o token em claro.
+  const issueTokenFor = async (id: CollaboratorType['id']): Promise<string> => {
+    const secret = minter.mint();
+    const issued = InviteToken.issue({
+      id: InviteTokenId.generate(),
+      collaboratorId: id,
+      tokenHash: secret.tokenHash,
+      requestedAt: NOW,
+      expiresAt: new Date(NOW.getTime() + 900_000),
+    });
+    assert.ok(issued.ok);
+    await inviteTokenRepo.save(issued.value);
+    return secret.token;
+  };
+
+  const deps = () => ({ collaboratorRepo: repo, inviteTokenRepo, minter, clock });
 
   beforeEach(async () => {
     repo = makeInMemoryCollaboratorStore().repository;
+    inviteTokenRepo = makeInMemoryCollaboratorInviteTokenStore().repository;
     collab = register();
     await repo.save(collab);
   });
 
-  it('prefixo correto → Complete + evento persistido', async () => {
-    const r = await completeCollaboratorRegistrationPublic({ collaboratorRepo: repo, clock })({
-      collaboratorId: collab.id as unknown as string,
+  it('token válido + prefixo correto → Complete + evento + token usado', async () => {
+    const token = await issueTokenFor(collab.id);
+    const r = await completeCollaboratorRegistrationPublic(deps())({
+      token,
       cpfPrefix: '111',
       ...completeInput(),
     });
@@ -155,45 +183,53 @@ describe('completeCollaboratorRegistrationPublic', () => {
     if (found.ok && found.value !== null) {
       assert.equal(found.value.registrationStatus, 'Complete');
     }
+    const unused = await inviteTokenRepo.findUnusedByCollaboratorId(collab.id);
+    assert.ok(unused.ok);
+    if (unused.ok) assert.equal(unused.value.length, 0);
   });
 
-  it('prefixo errado → cpf-prefix-mismatch e NÃO persiste', async () => {
-    const r = await completeCollaboratorRegistrationPublic({ collaboratorRepo: repo, clock })({
-      collaboratorId: collab.id as unknown as string,
+  it('prefixo errado → cpf-mismatch, NÃO persiste e NÃO queima o token', async () => {
+    const token = await issueTokenFor(collab.id);
+    const r = await completeCollaboratorRegistrationPublic(deps())({
+      token,
       cpfPrefix: '999',
       ...completeInput(),
     });
     assert.equal(isErr(r), true);
-    if (!r.ok) assert.equal(r.error, 'cpf-prefix-mismatch');
+    if (!r.ok) assert.equal(r.error, 'collaborator-autocadastro-cpf-mismatch');
 
     const found = await repo.findById(collab.id);
     if (found.ok && found.value !== null) {
       assert.equal(found.value.registrationStatus, 'PreRegistration');
     }
+    const unused = await inviteTokenRepo.findUnusedByCollaboratorId(collab.id);
+    assert.ok(unused.ok);
+    if (unused.ok) assert.equal(unused.value.length, 1);
   });
 
-  it('já Complete → collaborator-already-complete', async () => {
-    await completeCollaboratorRegistrationPublic({ collaboratorRepo: repo, clock })({
-      collaboratorId: collab.id as unknown as string,
+  it('segundo uso do mesmo token → token-used', async () => {
+    const token = await issueTokenFor(collab.id);
+    await completeCollaboratorRegistrationPublic(deps())({
+      token,
       cpfPrefix: '111',
       ...completeInput(),
     });
-    const again = await completeCollaboratorRegistrationPublic({ collaboratorRepo: repo, clock })({
-      collaboratorId: collab.id as unknown as string,
+    const again = await completeCollaboratorRegistrationPublic(deps())({
+      token,
       cpfPrefix: '111',
       ...completeInput(),
     });
     assert.equal(isErr(again), true);
-    if (!again.ok) assert.equal(again.error, 'collaborator-already-complete');
+    if (!again.ok) assert.equal(again.error, 'collaborator-autocadastro-token-used');
   });
 
-  it('id inexistente → public-complete-not-found', async () => {
-    const r = await completeCollaboratorRegistrationPublic({ collaboratorRepo: repo, clock })({
-      collaboratorId: MISSING_ID,
+  it('token inexistente → token-invalid', async () => {
+    const r = await completeCollaboratorRegistrationPublic(deps())({
+      token: 'nao-existe',
       cpfPrefix: '111',
       ...completeInput(),
     });
     assert.equal(isErr(r), true);
-    if (!r.ok) assert.equal(r.error, 'public-complete-not-found');
+    if (!r.ok) assert.equal(r.error, 'collaborator-autocadastro-token-invalid');
   });
 });

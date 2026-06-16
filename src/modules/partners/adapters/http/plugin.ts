@@ -46,6 +46,9 @@ import {
   completeRegistrationBodySchema,
   deactivateCollaboratorBodySchema,
   updateCollaboratorBodySchema,
+  activationTokenQuerySchema,
+  activationPreviewSchema,
+  activationCompleteBodySchema,
 } from './schemas.ts';
 import { COLLABORATOR_PERMISSION } from '../../public-api/permissions.ts';
 
@@ -76,12 +79,20 @@ const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
   'deactivate-collaborator-not-found',
   'reactivate-collaborator-not-found',
   'edit-collaborator-not-found',
+  'request-collaborator-activation-not-found',
+  // #43 — autocadastro: token inexistente/expirado/usado → 404 (não vazar dados, anti-enumeração).
+  'collaborator-autocadastro-token-invalid',
+  'collaborator-autocadastro-token-expired',
+  'collaborator-autocadastro-token-used',
 ]);
 const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
   'complete-collaborator-registration-invalid-id',
   'deactivate-collaborator-invalid-id',
   'reactivate-collaborator-invalid-id',
   'edit-collaborator-invalid-id',
+  'request-collaborator-activation-invalid-id',
+  // #43 — cpf-mismatch é falha de identidade (não some dado) → 400 (não 404).
+  'collaborator-autocadastro-cpf-mismatch',
 ]);
 const FORBIDDEN_CODES: ReadonlySet<string> = new Set(['edit-collaborator-sensitive-forbidden']);
 const REPO_UNAVAILABLE_CODES: ReadonlySet<string> = new Set(['collaborator-repo-unavailable']);
@@ -335,6 +346,55 @@ const collaboratorsRoutes =
         return reply
           .code(200)
           .send({ created: out.importedCount, failed }) as unknown as Promise<void>;
+      },
+    });
+
+    // ── #43 — autocadastro público do colaborador ────────────────────────────
+    // CA1: operador AUTENTICADO dispara o request (gera token uso-único + dispara e-mail com link
+    // de origem confiável). Endpoint DEDICADO (não acopla ao POST /collaborators existente — evita
+    // regressão em rota já testada). 202 (best-effort de envio). `collaborator:write`.
+    scope.route({
+      method: 'POST',
+      url: '/collaborators/:id/activate/request',
+      preHandler: [hooks.requireAuth, hooks.authorize(COLLABORATOR_PERMISSION.write)],
+      schema: {
+        params: collaboratorIdParamSchema,
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.requestCollaboratorActivation({ collaboratorId: req.params.id });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return reply.code(202).send() as unknown as Promise<void>;
+      },
+    });
+
+    // CA2/CA3: preview PÚBLICO (SEM requireAuth) do pré-cadastro a partir do token. 200 com CPF
+    // MASCARADO; token inexistente/expirado/usado → 404 (slug distinto, sem vazar dados).
+    scope.route({
+      method: 'GET',
+      url: '/collaborators/autocadastro',
+      schema: {
+        querystring: activationTokenQuerySchema,
+        response: { 200: activationPreviewSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.getCollaboratorActivationByToken({ token: req.query.token });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return sendResult(reply, ok(result.value), { ok: 200 });
+      },
+    });
+
+    // CA4/CA5: conclusão PÚBLICA (SEM requireAuth). token + cpfPrefix + pessoais → Complete +
+    // token usado (one-time). cpf-mismatch → 400 (token NÃO queima). token usado/expirado → 404.
+    scope.route({
+      method: 'POST',
+      url: '/collaborators/autocadastro',
+      schema: {
+        body: activationCompleteBodySchema,
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.completeCollaboratorRegistrationPublic(req.body);
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return reply.code(200).send() as unknown as Promise<void>;
       },
     });
   };

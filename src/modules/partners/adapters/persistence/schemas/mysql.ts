@@ -17,9 +17,12 @@
 
 import {
   boolean,
+  char,
   check,
   date,
   datetime,
+  foreignKey,
+  index,
   int,
   mysqlTable,
   uniqueIndex,
@@ -362,3 +365,47 @@ export const parActs = mysqlTable(
 
 export type ActRow = typeof parActs.$inferSelect;
 export type NewActRow = typeof parActs.$inferInsert;
+
+// ─── par_invite_tokens ────────────────────────────────────────────────────────
+// Token de autocadastro do colaborador (#43). Opaco (SHA-256 hex do valor aleatório),
+// one-time + TTL: emitido → (pending) → consumido (used_at NOT NULL) ou expirado
+// (now >= expires_at). Espelha auth_password_reset (DUPLICADO — ADR-0006: o mecanismo de
+// token NÃO é importado do auth). FK física para par_collaborators (RESTRICT — colaborador
+// usa soft-delete, nunca DELETE físico, então tokens não ficam órfãos).
+export const parInviteTokens = mysqlTable(
+  'par_invite_tokens',
+  {
+    // UUID v4 gerado no domínio. COLLATE utf8mb4_bin no SQL manual.
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    // collaborator_id: soft FK + FK física abaixo (par_it_collaborator_fk). COLLATE utf8mb4_bin no SQL manual.
+    collaboratorId: varchar('collaborator_id', { length: 36 }).notNull(),
+    // SHA-256 hex (64 chars). UNIQUE (findByTokenHash). COLLATE utf8mb4_bin (hash ASCII) no SQL manual.
+    tokenHash: char('token_hash', { length: 64 }).notNull(),
+    requestedAt: datetime('requested_at', { mode: 'date', fsp: 3 }).notNull(),
+    expiresAt: datetime('expires_at', { mode: 'date', fsp: 3 }).notNull(),
+    // null = pending; NOT NULL = consumido (one-time).
+    usedAt: datetime('used_at', { mode: 'date', fsp: 3 }),
+  },
+  (t) => [
+    // CHECK: expires_at > requested_at.
+    check('par_invite_tokens_expiry_chk', sql`${t.expiresAt} > ${t.requestedAt}`),
+    // CHECK: token_hash não-vazio (defesa em profundidade).
+    check('par_invite_tokens_hash_nonempty_chk', sql`CHAR_LENGTH(${t.tokenHash}) > 0`),
+    // FK par_it_collaborator_fk → par_collaborators.id (RESTRICT/RESTRICT — padrão do módulo).
+    foreignKey({
+      name: 'par_it_collaborator_fk',
+      columns: [t.collaboratorId],
+      foreignColumns: [parCollaborators.id],
+    })
+      .onDelete('restrict')
+      .onUpdate('restrict'),
+    // UNIQUE em token_hash: findByTokenHash (type=const) + defesa anti-colisão (CA3/CA4).
+    uniqueIndex('par_invite_tokens_token_hash_idx').on(t.tokenHash),
+    // Composto (collaborator_id, used_at): findUnusedByCollaboratorId
+    // (WHERE collaborator_id=? AND used_at IS NULL).
+    index('par_invite_tokens_collab_used_idx').on(t.collaboratorId, t.usedAt),
+  ],
+);
+
+export type InviteTokenRow = typeof parInviteTokens.$inferSelect;
+export type NewInviteTokenRow = typeof parInviteTokens.$inferInsert;
