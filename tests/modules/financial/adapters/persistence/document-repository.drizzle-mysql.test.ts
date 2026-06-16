@@ -135,7 +135,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
         }
 
         // Cascade: hard delete do documento remove a trilha (FK ON DELETE CASCADE — SC-006).
-        const del = await repo.delete(created.value.document.id);
+        const del = await repo.delete(created.value.document.id, 0);
         assert.equal(isOk(del), true);
         const afterDelete = await timelineRepo.findByDocument(created.value.document.id);
         assert.equal(isOk(afterDelete), true);
@@ -188,7 +188,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
         assert.equal(stale.ok, false);
         if (!stale.ok) assert.equal(stale.error, 'document-version-conflict');
 
-        await repo.delete(created.document.id);
+        await repo.delete(created.document.id, 1); // versão corrente após o update bem-sucedido
       });
     });
   });

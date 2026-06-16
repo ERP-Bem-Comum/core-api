@@ -46,6 +46,7 @@ import {
   createDocumentBodySchema,
   adjustDocumentBodySchema,
   approveBodySchema,
+  cancelDocumentBodySchema,
   documentIdParamSchema,
   listDocumentsQuerySchema,
   documentResponseSchema,
@@ -306,16 +307,21 @@ const financialRoutes =
     });
 
     // DELETE /financial/documents/:id — cancela (só Open); hard delete. 204 sem corpo.
+    // Exige `version` no body (optimistic lock — #55/FR-009): versão defasada → 409.
     scope.route({
       method: 'DELETE',
       url: '/financial/documents/:id',
       preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.cancel)],
       schema: {
         params: documentIdParamSchema,
+        body: cancelDocumentBodySchema,
         // 204 sem body → sem response schema (convenção das rotas 204 deste projeto).
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
-        const result = await deps.cancelDocument({ documentId: req.params.id });
+        const result = await deps.cancelDocument({
+          documentId: req.params.id,
+          expectedVersion: req.body.version,
+        });
         if (!result.ok) return sendDomainError(reply, result.error);
         return reply.code(204).send() as unknown as Promise<void>;
       },

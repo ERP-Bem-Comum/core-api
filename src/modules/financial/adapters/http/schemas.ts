@@ -136,6 +136,13 @@ export const approveBodySchema = z.object({
 
 export type ApproveBody = z.infer<typeof approveBodySchema>;
 
+// Optimistic lock no cancelamento (#55): o cliente envia a `version` que leu (FR-009).
+export const cancelDocumentBodySchema = z.object({
+  version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+});
+
+export type CancelDocumentBody = z.infer<typeof cancelDocumentBodySchema>;
+
 // ─── Params ──────────────────────────────────────────────────────────────────
 
 export const documentIdParamSchema = z.object({

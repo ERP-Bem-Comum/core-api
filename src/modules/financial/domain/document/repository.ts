@@ -47,7 +47,12 @@ export type DocumentRepository = Readonly<{
   // participar do optimistic lock (FR-009). A `version` é o token de locking — o caller
   // passa-a como `expectedVersion` na próxima mutação.
   findById: (id: DocumentId) => Promise<Result<LoadedDocument, DocumentRepositoryError>>;
-  delete: (id: DocumentId) => Promise<Result<void, DocumentRepositoryError>>;
+  // `expectedVersion` (FR-009): o cancelamento participa do optimistic lock como adjust/approve/undo.
+  // DELETE ... WHERE id=? AND version=expectedVersion; affectedRows=0 → 'document-version-conflict'.
+  delete: (
+    id: DocumentId,
+    expectedVersion: number,
+  ) => Promise<Result<void, DocumentRepositoryError>>;
   // Read path da listagem paginada (US1) — read-model leve (sem títulos) + total filtrado.
   findPaged: (
     filter: DocumentListFilter,

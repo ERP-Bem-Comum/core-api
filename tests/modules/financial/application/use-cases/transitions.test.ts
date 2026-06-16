@@ -152,7 +152,10 @@ describe('financial/application — cancelDocument', () => {
     const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
     const id = await seedOpen(repo);
-    const r = await cancelDocument({ repo, outbox: outbox.port })({ documentId: id });
+    const r = await cancelDocument({ repo, outbox: outbox.port })({
+      documentId: id,
+      expectedVersion: 0,
+    });
     assert.equal(isOk(r), true);
     const found = await repo.findById(id as never);
     assert.equal(found.ok, false); // removido
@@ -163,9 +166,26 @@ describe('financial/application — cancelDocument', () => {
     const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
     const id = await seedApproved(repo);
-    const r = await cancelDocument({ repo, outbox: outbox.port })({ documentId: id });
+    const r = await cancelDocument({ repo, outbox: outbox.port })({
+      documentId: id,
+      expectedVersion: 1,
+    });
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'invalid-state-transition');
+  });
+
+  it('rejeita cancelar com versão defasada — document-version-conflict (#55)', async () => {
+    const repo = createInMemoryDocumentRepository();
+    const outbox = createInMemoryOutbox();
+    const id = await seedOpen(repo); // v0
+    const r = await cancelDocument({ repo, outbox: outbox.port })({
+      documentId: id,
+      expectedVersion: 999,
+    });
+    assert.equal(isErr(r), true);
+    if (!r.ok) assert.equal(r.error, 'document-version-conflict');
+    const found = await repo.findById(id as never);
+    assert.equal(found.ok, true); // permanece (não apagado)
   });
 });
 
