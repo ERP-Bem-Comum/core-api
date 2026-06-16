@@ -37,3 +37,11 @@ trustPolicyExclude:
 # Transitivas só de fontes confiáveis (registry/workspace), nunca git/tarball exótico.
 # Default no pnpm 11. Ver settings.md#blockexoticsubdeps.
 blockExoticSubdeps: true
+
+# Store virtual global: cada worktree (`claude --worktree`) usa symlinks para um
+# store central em vez de duplicar `.pnpm` por checkout — criar worktree fica quase
+# instantâneo e sem custo de disco. Seguro: todos os worktrees compartilham o mesmo
+# trust boundary (agentes confiáveis). NÃO afeta o build Docker — o Dockerfile copia
+# só package.json + pnpm-lock.yaml (não este arquivo) e instala com --frozen-lockfile.
+# Ver settings.md#enableglobalvirtualstore (v10.12.1+).
+enableGlobalVirtualStore: true
