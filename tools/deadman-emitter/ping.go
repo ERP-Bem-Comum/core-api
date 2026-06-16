@@ -72,19 +72,32 @@ func (p Ping) Sign(key []byte) (string, error) {
 	return hex.EncodeToString(mac.Sum(nil)), nil
 }
 
-// Line devolve a linha JSONL pronta para append (assinada, terminada em '\n').
-func (p Ping) Line(key []byte) (string, error) {
+// Signed devolve uma cópia com `sig` preenchido (consumida pelo dual-write: S3 + dispatch).
+func (p Ping) Signed(key []byte) (Ping, error) {
 	sig, err := p.Sign(key)
 	if err != nil {
-		return "", err
+		return Ping{}, err
 	}
-	signed := p
-	signed.Sig = sig
-	b, err := json.Marshal(signed)
+	p.Sig = sig
+	return p, nil
+}
+
+// JSONL serializa o ping (como está) como linha JSONL terminada em '\n'.
+func (p Ping) JSONL() (string, error) {
+	b, err := json.Marshal(p)
 	if err != nil {
 		return "", fmt.Errorf("marshal ping: %w", err)
 	}
 	return string(b) + "\n", nil
+}
+
+// Line = Signed + JSONL (assina e serializa numa linha pronta para gravar).
+func (p Ping) Line(key []byte) (string, error) {
+	signed, err := p.Signed(key)
+	if err != nil {
+		return "", err
+	}
+	return signed.JSONL()
 }
 
 // Verify confere a assinatura (consumido pelo Auditor). Usa hmac.Equal (constante).
