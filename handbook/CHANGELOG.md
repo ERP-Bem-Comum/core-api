@@ -4,6 +4,18 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-16 — 🔤 ADR-0044: CNPJ alfanumérico (Serpro/Receita 2026) no VO `Cnpj` do kernel
+
+Novo [ADR-0044](./architecture/adr/0044-cnpj-alphanumeric-kernel.md) (**Accepted**), **estende** o
+[ADR-0031](./architecture/adr/0031-partners-registry-module.md) §4. O VO `Cnpj` (`src/shared/kernel/cnpj.ts`),
+fonte única cross-BC, passa a validar o **CNPJ alfanumérico**: 12 posições `[0-9A-Z]` + 2 DVs numéricos, mesmo
+módulo 11 com `valor(c) = ASCII(c) − 48`. **Retrocompatível** (numérico valida idêntico) e **sem migration**
+(persistência `varchar`, ADR-0020).
+
+- Normalização passa a fazer `toUpperCase()` mantendo `A-Z`; valor brandado pode conter letras.
+- Docstring do VO corrigido (removida referência stale a `financial/.../tax-id.ts`, inexistente).
+- Ticket `CORE-CNPJ-ALPHANUMERIC` (W0→W3). Eventos que descrevem `document` como "14 dígitos" (ex.: ADR-0043) devem passar a dizer "14 caracteres alfanuméricos".
+
 ## 2026-06-16 — ⚙️ ADR-0041: workers especializados + jobs one-shot via cron externo
 
 Novo [ADR-0041](./architecture/adr/0041-specialized-workers-and-oneshot-jobs.md) (**Accepted**), **estende** o
