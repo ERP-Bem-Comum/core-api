@@ -20,8 +20,10 @@ import {
   check,
   date,
   datetime,
+  index,
   int,
   mysqlTable,
+  smallint,
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/mysql-core';
@@ -362,3 +364,90 @@ export const parActs = mysqlTable(
 
 export type ActRow = typeof parActs.$inferSelect;
 export type NewActRow = typeof parActs.$inferInsert;
+
+// ─── par_outbox — eventos pendentes/em processamento ─────────────────────────
+//
+// Espelha `ctr_outbox` (ADR-0015). Fluxo: `save(aggregate, events)` insere aqui
+// atomicamente com o estado do agregado (via `appendOutboxInTx`). Worker lê
+// WHERE processed_at IS NULL ORDER BY occurred_at LIMIT N FOR UPDATE SKIP LOCKED.
+//
+// payload: VARCHAR(8192) serializado (sem JSON nativo — ADR-0020 §"proibido").
+// IDs em varchar(36) (convenção do módulo partners; COLLATE utf8mb4_bin no SQL manual)
+// — diverge do `ctr_outbox` (que usa char(36)) para alinhar com as demais tabelas par_*.
+export const parOutbox = mysqlTable(
+  'par_outbox',
+  {
+    // UUID v4 do evento — gerado antes do INSERT. COLLATE utf8mb4_bin no SQL manual.
+    eventId: varchar('event_id', { length: 36 }).primaryKey().notNull(),
+    // supplierId (UUID v4). COLLATE utf8mb4_bin no SQL manual.
+    aggregateId: varchar('aggregate_id', { length: 36 }).notNull(),
+    // 'Supplier' — controlado por CHECK abaixo.
+    aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
+    // PascalCase EN: SupplierRegistered, SupplierEdited, …
+    eventType: varchar('event_type', { length: 64 }).notNull(),
+    // Versão do contrato do payload (inicia em 1).
+    schemaVersion: smallint('schema_version').notNull(),
+    // Timestamp do domain event (moment em que ocorreu no domínio).
+    occurredAt: datetime('occurred_at', { mode: 'date', fsp: 3 }).notNull(),
+    // Timestamp do INSERT na outbox (audit trail).
+    enqueuedAt: datetime('enqueued_at', { mode: 'date', fsp: 3 }).notNull(),
+    // NULL = pendente; NOT NULL = worker marcou após delivery OK.
+    processedAt: datetime('processed_at', { mode: 'date', fsp: 3 }),
+    // Número de tentativas de entrega. Default 0; incrementado pelo worker.
+    attempts: smallint('attempts').notNull().default(0),
+    // Payload serializado do evento de integração — VARCHAR, nunca JSON nativo (ADR-0020).
+    payload: varchar('payload', { length: 8192 }).notNull(),
+  },
+  (t) => [
+    // CHECK attempts >= 0 — defesa em profundidade.
+    check('par_outbox_attempts_nonneg_chk', sql`${t.attempts} >= 0`),
+    // CHECK event_type não-vazio — PascalCase sem espaço.
+    check('par_outbox_event_type_nonempty_chk', sql`CHAR_LENGTH(${t.eventType}) > 0`),
+    // CHECK aggregate_type restrito ao catálogo do módulo partners (só Supplier por ora).
+    check('par_outbox_aggregate_type_chk', sql`${t.aggregateType} IN ('Supplier')`),
+    // Índice composto (ADR-0015 §"Sobre o índice"): processed_at PRIMEIRO → NULLs
+    // agrupados → worker faz range scan eficiente na query canônica.
+    index('par_outbox_processed_at_occurred_at_idx').on(t.processedAt, t.occurredAt),
+    // Índice por agregado — auditoria "todos os eventos do fornecedor X".
+    index('par_outbox_aggregate_id_idx').on(t.aggregateId),
+  ],
+);
+
+export type OutboxRow = typeof parOutbox.$inferSelect;
+export type NewOutboxRow = typeof parOutbox.$inferInsert;
+
+// ─── par_outbox_dead_letter — eventos que falharam N tentativas ───────────────
+//
+// Espelha `ctr_outbox_dead_letter`. O worker move para cá quando `attempts >=
+// MAX_ATTEMPTS`. A row é uma cópia da outbox original + `failed_at` + `last_error`.
+// Sem FK com `par_outbox` — a row original pode ser apagada da outbox.
+export const parOutboxDeadLetter = mysqlTable(
+  'par_outbox_dead_letter',
+  {
+    eventId: varchar('event_id', { length: 36 }).primaryKey().notNull(),
+    aggregateId: varchar('aggregate_id', { length: 36 }).notNull(),
+    aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
+    eventType: varchar('event_type', { length: 64 }).notNull(),
+    schemaVersion: smallint('schema_version').notNull(),
+    occurredAt: datetime('occurred_at', { mode: 'date', fsp: 3 }).notNull(),
+    // Copiado da outbox original (audit: quando foi enfileirado inicialmente).
+    enqueuedAt: datetime('enqueued_at', { mode: 'date', fsp: 3 }).notNull(),
+    // Timestamp do roteamento para dead letter (quando MAX_ATTEMPTS foi atingido).
+    failedAt: datetime('failed_at', { mode: 'date', fsp: 3 }).notNull(),
+    // Número total de tentativas realizadas antes do descarte.
+    attempts: smallint('attempts').notNull(),
+    // Tag + payload do erro tagged (ex.: 'max-retries-exceeded: ...').
+    lastError: varchar('last_error', { length: 2048 }).notNull(),
+    // Payload copiado da outbox original — VARCHAR, nunca JSON nativo (ADR-0020).
+    payload: varchar('payload', { length: 8192 }).notNull(),
+  },
+  (t) => [
+    // Mesma restrição de aggregate_type da tabela principal.
+    check('par_outbox_dlq_aggregate_type_chk', sql`${t.aggregateType} IN ('Supplier')`),
+    // Índice por failed_at — monitoramento "eventos mortos nos últimos N dias".
+    index('par_outbox_dlq_failed_at_idx').on(t.failedAt),
+  ],
+);
+
+export type OutboxDeadLetterRow = typeof parOutboxDeadLetter.$inferSelect;
+export type NewOutboxDeadLetterRow = typeof parOutboxDeadLetter.$inferInsert;

@@ -177,7 +177,7 @@ describe('adapter InMemory', () => {
     const reg = await registerSupplier({ supplierRepo: repo, clock })(validCmd());
     if (!reg.ok) return;
     const clone = { ...reg.value.supplier, id: '00000000-0000-4000-8000-000000000000' };
-    const saved = await repo.save(clone as typeof reg.value.supplier);
+    const saved = await repo.save(clone as typeof reg.value.supplier, []);
     assert.equal(isErr(saved), true);
     if (!saved.ok) assert.equal(saved.error, 'supplier-cnpj-duplicate');
   });

@@ -138,7 +138,7 @@ if (integrationEnabled()) {
     it('getSupplierView: round-trip read com bancário/PIX + updatedAt', async () => {
       if (handle === null || port === null) return;
       const s = aSupplier();
-      const saved = await createDrizzleSupplierStore(handle, clock).save(s);
+      const saved = await createDrizzleSupplierStore(handle, clock).save(s, []);
       assert.equal(saved.ok, true);
 
       const got = await port.getSupplierView(s.id as unknown as string);
