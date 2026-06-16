@@ -16,6 +16,22 @@ módulo 11 com `valor(c) = ASCII(c) − 48`. **Retrocompatível** (numérico val
 - Docstring do VO corrigido (removida referência stale a `financial/.../tax-id.ts`, inexistente).
 - Ticket `CORE-CNPJ-ALPHANUMERIC` (W0→W3). Eventos que descrevem `document` como "14 dígitos" (ex.: ADR-0043) devem passar a dizer "14 caracteres alfanuméricos".
 
+## 2026-06-16 — 📤 ADR-0043: contrato de eventos `partners → financial` (Supplier cadastrado/atualizado)
+
+Novo [ADR-0043](./architecture/adr/0043-partners-supplier-integration-events.md) (**Accepted**), **estende**
+[ADR-0015](./architecture/adr/0015-mysql-outbox-pattern.md) (outbox) e [ADR-0006](./architecture/adr/0006-modular-monolith-core-api.md)
+(comunicação cross-módulo por eventos). Feature [`013-partners-supplier-outbox`](../specs/013-partners-supplier-outbox/) ·
+issue [#92](https://github.com/ERP-Bem-Comum/core-api/issues/92) (pré-requisito da US2 da #47, read-model de fornecedor no `financial`).
+
+- O `partners` passa a **publicar** `SupplierRegistered` e `SupplierEdited` no outbox `par_outbox` (ticket `PAR-SUPPLIER-EVENTS`).
+  `SupplierDeactivated`/`SupplierReactivated` ficam **fora do contrato** (não mudam nome/CNPJ).
+- **Payload autocontido** `{ supplierRef, name, document, occurredAt }`, montado **no adapter** a partir do snapshot do
+  agregado (Opção A — domínio intocado), `JSON.stringify` em `varchar` (ADR-0020).
+- **Atomicidade:** `save(supplier, events)` persiste o supplier **e** faz `appendOutboxInTx` na MESMA transação — rollback total
+  se falhar. **At-least-once** + **idempotência** por `event_id` (upsert idempotente no consumidor).
+- **Canônico:** Vernon, _Implementing DDD_, cap. "Domain Events" (evento de domínio interno vs evento de integração cross-fronteira).
+- Consumer/read-model no `financial` (`fin_supplier_view`) é a **feature seguinte** (US2 da #47) — fora do escopo.
+
 ## 2026-06-16 — ⚙️ ADR-0041: workers especializados + jobs one-shot via cron externo
 
 Novo [ADR-0041](./architecture/adr/0041-specialized-workers-and-oneshot-jobs.md) (**Accepted**), **estende** o
