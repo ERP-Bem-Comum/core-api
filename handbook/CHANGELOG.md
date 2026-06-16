@@ -4,6 +4,18 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-15 — 🎫 ADR-0040: achados de agente viram GitHub Issues testáveis
+
+Novo [ADR-0040](./architecture/adr/0040-agent-findings-as-github-issues.md) (**Accepted**). Resolve a
+desatualização crônica dos índices de `handbook/tickets/`: o backlog de achados passa a viver no **GitHub
+Issues** (tracker primário), produzido pelo agente via a skill [`issue-report`](../.claude/skills/issue-report/SKILL.md)
+com o template [`.github/ISSUE_TEMPLATE/agent-finding.md`](../.github/ISSUE_TEMPLATE/agent-finding.md) —
+critérios de aceite testáveis (Dado/Quando/Então) + Definition of Done amarrada ao gate W3, dedup por `dedup-key`.
+
+- Regra `AGENTS.md` §Anti-padrões **#15**: achado fora de escopo → issue, não scope-creep.
+- Detecção sistemática de contrato (`oasdiff`), tracker git-backed (Beads) e broker em VPS ficam como **F-Plus** (adiados).
+- Notificação no Discord pelo webhook nativo do GitHub. Validado: 8 issues criadas (#39–#46) dos tickets vigentes.
+
 ## 2026-06-10 — 🧹 CLI-RETIRE-EMBEDDED: CLI embutida removida (executa ADR-0037)
 
 Execução da remoção faseada que o [ADR-0037](./architecture/adr/0037-http-first-retire-embedded-cli.md)

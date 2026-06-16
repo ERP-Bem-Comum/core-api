@@ -231,6 +231,7 @@ Pre-commit hook: `.claude/hooks/pre-commit-typecheck.sh` (ativar via `git config
 12. **Citar `.mdx`/`.md` do handbook "de memória"** — abrir o arquivo e citar literalmente.
 13. **Importar de `<module>/domain/` ou `<module>/application/` de outro módulo** — usar exclusivamente `<module>/public-api/` (ADR-0006).
 14. **Dispensar vermelho como "não é meu erro"** — ver §"Política de regressão zero" abaixo. É o anti-padrão mais grave: terminar wave/ticket/turn com falha não-endereçada.
+15. **Consertar no meio do caminho um problema fora do escopo do ticket atual** (scope-creep) — em vez disso, registre-o via skill [`issue-report`](.claude/skills/issue-report/SKILL.md) (GitHub Issue testável, com critérios de aceite + dedup) e siga o ticket corrente. Não perca o achado **nem** desvie o foco (ADR-0040).
 
 ---
 
