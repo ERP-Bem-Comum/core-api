@@ -9,6 +9,7 @@ import type {
 } from '#src/modules/financial/domain/document/query.ts';
 import type {
   DocumentRepository,
+  LoadedDocument,
   StoredDocument,
   DocumentRepositoryError,
 } from '#src/modules/financial/domain/document/repository.ts';
@@ -26,14 +27,18 @@ const matchesFilter = (doc: Document, f: DocumentListFilter): boolean => {
   return true;
 };
 
-const toListItem = (doc: Document): DocumentListItem => ({
-  id: doc.id,
-  status: doc.status,
-  documentNumber: doc.documentNumber ?? null,
-  type: doc.type ?? null,
-  supplierRef: doc.supplier === null ? null : String(doc.supplier),
-  netValue: doc.status === 'Draft' ? null : doc.netValue,
-  dueDate: doc.dueDate ?? null,
+// FR-009: version é exposta no read-model para ações inline do front (PATCH/approve sem findById extra).
+// Recebe o StoreEntry completo (doc + version) em vez de só o Document.
+const toListItem = (entry: StoreEntry): DocumentListItem => ({
+  id: entry.aggregate.document.id,
+  status: entry.aggregate.document.status,
+  documentNumber: entry.aggregate.document.documentNumber ?? null,
+  type: entry.aggregate.document.type ?? null,
+  supplierRef:
+    entry.aggregate.document.supplier === null ? null : String(entry.aggregate.document.supplier),
+  netValue: entry.aggregate.document.status === 'Draft' ? null : entry.aggregate.document.netValue,
+  dueDate: entry.aggregate.document.dueDate ?? null,
+  version: entry.version,
 });
 
 // Entrada interna do store: agrega o documento + a versão corrente.
@@ -97,9 +102,16 @@ export const createInMemoryDocumentRepository = (
       }
       return Promise.resolve(ok(undefined));
     },
-    findById: async (id: DocumentId): Promise<Result<StoredDocument, DocumentRepositoryError>> => {
+    findById: async (id: DocumentId): Promise<Result<LoadedDocument, DocumentRepositoryError>> => {
       const entry = store.get(id);
-      return Promise.resolve(entry !== undefined ? ok(entry.aggregate) : err('document-not-found'));
+      // FR-009: retorna `version` junto com o agregado para que o cliente HTTP
+      // possa participar do optimistic lock. Os use cases de mutação continuam usando
+      // `cmd.expectedVersion` (versão enviada pelo cliente), nunca a versão recém-lida.
+      return Promise.resolve(
+        entry !== undefined
+          ? ok({ ...entry.aggregate, version: entry.version })
+          : err('document-not-found'),
+      );
     },
     delete: async (id: DocumentId): Promise<Result<void, DocumentRepositoryError>> => {
       store.delete(id);
@@ -114,9 +126,10 @@ export const createInMemoryDocumentRepository = (
       page: number,
       pageSize: number,
     ): Promise<Result<Page<DocumentListItem>, DocumentRepositoryError>> => {
-      const matched = [...store.values()]
-        .map((e) => e.aggregate.document)
-        .filter((d) => matchesFilter(d, filter));
+      // Filtra por documento mas mantém o StoreEntry para preservar a version (FR-009).
+      const matched = [...store.values()].filter((e) =>
+        matchesFilter(e.aggregate.document, filter),
+      );
       const start = (page - 1) * pageSize;
       const items = matched.slice(start, start + pageSize).map(toListItem);
       return Promise.resolve(ok({ items, page, pageSize, total: matched.length }));

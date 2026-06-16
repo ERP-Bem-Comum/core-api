@@ -179,6 +179,10 @@ export const documentResponseSchema = z.object({
   dueDate: z.string().nullable(),
   description: z.string().nullable(),
   payables: z.array(payableResponseSchema),
+  version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).meta({
+    description:
+      'Versão atual do documento (optimistic lock) — reenvie no próximo PATCH/approve/undo-approval',
+  }),
 });
 
 export type DocumentResponseDto = z.infer<typeof documentResponseSchema>;
@@ -192,6 +196,12 @@ export const documentSummarySchema = z.object({
   supplierRef: z.string().nullable(),
   netValueCents: centsStringSchema.nullable(),
   dueDate: z.string().nullable(),
+  version: z
+    .number()
+    .int()
+    .min(0)
+    .max(Number.MAX_SAFE_INTEGER)
+    .meta({ description: 'Versão atual (optimistic lock) para ações inline' }),
 });
 
 export type DocumentSummaryDto = z.infer<typeof documentSummarySchema>;

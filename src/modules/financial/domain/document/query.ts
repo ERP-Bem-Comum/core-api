@@ -14,6 +14,10 @@ export type DocumentListFilter = Readonly<{
 
 // Read-model leve da listagem (FR-004 — payload enxuto, sem títulos/retenções). Evita
 // reconstruir o agregado completo (overfetch das tabelas filhas) por linha da página.
+//
+// `version` (FR-009): exposto para que o front possa realizar ações inline (PATCH/approve)
+// sem precisar de um findById extra. Espelha `fin_documents.version` via coluna lida no
+// SELECT de listagem. Vernon, _Implementing DDD_ (ddd--vernon-livro-vermelho.md:8869).
 export type DocumentListItem = Readonly<{
   id: string;
   status: DocumentStatus;
@@ -22,6 +26,7 @@ export type DocumentListItem = Readonly<{
   supplierRef: string | null;
   netValue: Money | null; // null em Draft (sem líquido calculado)
   dueDate: Date | null;
+  version: number;
 }>;
 
 export type Page<T> = Readonly<{

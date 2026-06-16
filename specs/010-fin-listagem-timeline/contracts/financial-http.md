@@ -32,8 +32,18 @@ const ListQuery = z.object({
 });
 
 // Response 200
+const DocumentSummary = z.object({
+  id: z.uuid(),
+  status: z.string(),
+  documentNumber: z.string().nullable(),
+  type: z.string().nullable(),
+  supplierRef: z.string().nullable(),
+  netValueCents: centsStringSchema.nullable(),
+  dueDate: z.string().nullable(),
+  version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER), // optimistic lock (FR-009) — p/ ações inline
+});
 const DocumentListResponse = z.object({
-  items: z.array(DocumentSummary), // id, status, documentNumber, type, supplierRef, netValueCents(nullable), dueDate(nullable)
+  items: z.array(DocumentSummary),
   page: z.number().int(),
   pageSize: z.number().int(),
   total: z.number().int(), // contagem com os filtros aplicados (não a página)
@@ -42,6 +52,8 @@ const DocumentListResponse = z.object({
 
 - Filtros combináveis (AND). Janela `dueFrom..dueTo` inclusiva; invertida → `items: []`. Nenhum resultado → `200` com
   `items: []`, `total: 0` (não erro). `supplierRef` não-UUID → `400` (Zod).
+- **`version`** vem em cada item (e na resposta de escrita / `GET /:id`) — é o token de optimistic lock que o cliente
+  reenvia no `PATCH`/`approve`/`undo-approval` (ver [`../frontend-optimistic-lock.md`](../frontend-optimistic-lock.md)).
 
 ## 8. `GET /documents/:id/timeline` — trilha por-campo
 

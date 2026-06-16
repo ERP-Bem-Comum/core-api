@@ -123,9 +123,22 @@ pnpm test                           → ✅ 2483 pass · 0 fail · 18 skipped
 pnpm run test:integration:financial → ✅ 10 pass · 0 fail (inclui version-conflict + trilha vs MySQL)
 ```
 
-### Follow-up registrado (Minor do zod-expert — não-bloqueante, cross-layer)
+### Incremento 4 — Exposição de `version` na resposta (consumo do front) — GREEN
 
-- **`version` não exposto na resposta**: o cliente (frontend) não sabe a versão atual para enviar no PATCH/approve → optimistic lock difícil de usar pela borda. Exige expor `version` via `StoredDocument` (port) → `findById` → DTO → response schema. **Decisão de produto/W2** — registrar antes do handoff de frontend (contrato da fatia 2 não exige hoje; o enforço no servidor está correto e testado).
+O Minor do zod-expert ("`version` não exposto") foi **implementado** (não adiado), pois sem ele o front não consegue usar o lock. Cada camada por um agente:
+
+| Camada | Entrega | Agente |
+| --- | --- | --- |
+| Persistência/leitura | `findById` → `LoadedDocument` (com `version`); `DocumentListItem.version` | **`drizzle-orm-expert`** |
+| Borda | `version` em `documentResponseSchema`/`documentSummarySchema`; `documentToDto(...,version)`; `loadAndSerialize` repassa | **`fastify-server-expert`** |
+| Validação Zod | review → APPROVED (3 Minors: `.max` simetria, cobertura undo, doc) | **`zod-expert`** |
+| Correção | `.max(MAX_SAFE_INTEGER)` no `version` da resposta + CVR-007/008 (undo) | **`fastify-server-expert`** |
+
+- **Regra preservada**: os use cases de mutação usam `cmd.expectedVersion` (versão do CLIENTE), nunca a recém-lida — o `version` exposto é só para o cliente reenviar.
+- **Prova**: `version-roundtrip.http.test.ts` (CVR-001..008) — criação→v0, PATCH→v1, stale→409, approve→v2, undo→v3, lista com version.
+- **Fundamentação canônica**: Vernon `ddd--vernon-livro-vermelho.md:8869` (cópia do cliente carrega a versão; stale → rejeitada).
+- **Docs (consumo do front)**: [`frontend-optimistic-lock.md`](../../../specs/010-fin-listagem-timeline/frontend-optimistic-lock.md) + `contracts/financial-http.md` atualizado + entrada em `handbook/CHANGELOG.md` (2026-06-16).
+- **Gate**: typecheck + format + lint + `pnpm test` 2491 · 0 fail + integração 10/10.
 
 ## W1 — completa
 

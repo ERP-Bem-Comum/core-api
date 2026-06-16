@@ -23,10 +23,13 @@ const moneyToCentsString = (cents: number): string => String(cents);
 /**
  * Mapeia um StoredDocument (Document + Payables | null) para o DTO de resposta completo.
  * `payables` é null apenas em Draft — nesse caso devolve array vazio.
+ * `version` (FR-009/optimistic lock): lido de `LoadedDocument.version` e incluído na resposta
+ * para que o cliente reenvie no próximo PATCH/approve/undo-approval.
  */
 export const documentToDto = (
   document: Document,
   payables: Payables | null,
+  version: number,
 ): DocumentResponseDto => {
   const payableItems =
     payables === null
@@ -53,6 +56,7 @@ export const documentToDto = (
       dueDate: document.dueDate !== null ? document.dueDate.toISOString().slice(0, 10) : null,
       description: document.description,
       payables: payableItems,
+      version,
     };
   }
 
@@ -69,12 +73,14 @@ export const documentToDto = (
     dueDate: document.dueDate.toISOString().slice(0, 10),
     description: document.description,
     payables: payableItems,
+    version,
   };
 };
 
 /**
  * Mapeia o read-model leve `DocumentListItem` (findPaged) para o item da listagem.
  * Usado pelo GET /documents — sem payables (payload enxuto, FR-004).
+ * `version` (FR-009): exposto para ações inline no grid do front sem findById extra.
  */
 export const listItemToSummaryDto = (item: DocumentListItem): DocumentSummaryDto => ({
   id: item.id,
@@ -84,6 +90,7 @@ export const listItemToSummaryDto = (item: DocumentListItem): DocumentSummaryDto
   supplierRef: item.supplierRef,
   netValueCents: item.netValue !== null ? moneyToCentsString(item.netValue.cents) : null,
   dueDate: item.dueDate !== null ? item.dueDate.toISOString().slice(0, 10) : null,
+  version: item.version,
 });
 
 /**

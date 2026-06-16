@@ -122,9 +122,11 @@ const loadAndSerialize = async (
   const found = await deps.findDocumentById(idR.value);
   if (!found.ok) return sendDomainError(reply, found.error);
 
-  return sendResult(reply, ok(documentToDto(found.value.document, found.value.payables)), {
-    ok: reply.statusCode === 201 ? 201 : 200,
-  });
+  return sendResult(
+    reply,
+    ok(documentToDto(found.value.document, found.value.payables, found.value.version)),
+    { ok: reply.statusCode === 201 ? 201 : 200 },
+  );
 };
 
 // ─── Mapeadores de body Zod → command (bridge undefined→null para exactOptionalPropertyTypes) ──

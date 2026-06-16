@@ -13,6 +13,16 @@ export type StoredDocument = Readonly<{
   payables: Payables | null;
 }>;
 
+// Retorno enriquecido de `findById` (FR-009): expõe o optimistic lock token para que o
+// cliente HTTP possa participar do optimistic lock no PATCH/approve/undo.
+// Vernon, _Implementing DDD_ (ddd--vernon-livro-vermelho.md:8869): "objects carry a version
+// number that is incremented when changes are made and checked before they are saved... If
+// the version on the persisted object is greater than the version on the client's copy, the
+// client's is considered stale and updates are rejected."
+// A `version` é exposta APENAS na serialização/resposta — os use cases de mutação continuam
+// usando `cmd.expectedVersion` (a versão que o CLIENTE enviou), NUNCA a versão recém-lida.
+export type LoadedDocument = StoredDocument & Readonly<{ version: number }>;
+
 export type DocumentRepositoryError =
   | 'document-not-found'
   | 'document-repository-failure'
@@ -33,7 +43,10 @@ export type DocumentRepository = Readonly<{
     timelineEntries: readonly FinancialTimelineEntry[],
     expectedVersion?: number,
   ) => Promise<Result<void, DocumentRepositoryError>>;
-  findById: (id: DocumentId) => Promise<Result<StoredDocument, DocumentRepositoryError>>;
+  // Retorna `LoadedDocument` (StoredDocument + version) para que o cliente HTTP possa
+  // participar do optimistic lock (FR-009). A `version` é o token de locking — o caller
+  // passa-a como `expectedVersion` na próxima mutação.
+  findById: (id: DocumentId) => Promise<Result<LoadedDocument, DocumentRepositoryError>>;
   delete: (id: DocumentId) => Promise<Result<void, DocumentRepositoryError>>;
   // Read path da listagem paginada (US1) — read-model leve (sem títulos) + total filtrado.
   findPaged: (

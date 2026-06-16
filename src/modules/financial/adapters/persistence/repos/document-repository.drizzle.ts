@@ -44,6 +44,7 @@ import * as Money from '../../../../../shared/kernel/money.ts';
 import type {
   DocumentRepository,
   DocumentRepositoryError,
+  LoadedDocument,
   StoredDocument,
 } from '../../../domain/document/repository.ts';
 import type { DocumentId } from '../../../domain/shared/document-id.ts';
@@ -115,7 +116,7 @@ export const createDrizzleDocumentRepository = (
   // o 'document-not-found' que é retorno semântico (não exceção).
   const findById = async (
     id: DocumentId,
-  ): Promise<Result<StoredDocument, DocumentRepositoryError>> => {
+  ): Promise<Result<LoadedDocument, DocumentRepositoryError>> => {
     try {
       const docRows = await db
         .select()
@@ -155,7 +156,11 @@ export const createDrizzleDocumentRepository = (
         return err('document-repository-failure');
       }
 
-      return ok({ document: documentR.value, payables: payablesR.value });
+      // FR-009: expõe `version` para participação no optimistic lock pelo cliente HTTP.
+      // A `version` vem diretamente da coluna `fin_documents.version` lida no SELECT acima.
+      // Os use cases de mutação continuam usando `cmd.expectedVersion` (versão que o CLIENTE
+      // enviou) — a versão aqui serve apenas para serialização/resposta; não altera o lock.
+      return ok({ document: documentR.value, payables: payablesR.value, version: docRow.version });
     } catch (cause) {
       process.stderr.write(`[document-repo:findById] ${String(cause)}\n`);
       return err('document-repository-failure');
@@ -398,8 +403,9 @@ export const createDrizzleDocumentRepository = (
 
       // 2. SELECT read-model com LIMIT/OFFSET.
       //    Ordenação determinística por dueDate ASC (fin_documents_due_date_idx).
-      //    Colunas: apenas as necessárias para DocumentListItem (sem gross_value,
-      //    retentions, payables, version etc — evita overfetch).
+      //    Colunas: apenas as necessárias para DocumentListItem.
+      //    `version` incluída (FR-009): grids do front precisam para ações inline
+      //    (PATCH/approve) sem findById extra — Vernon, _Implementing DDD_ (ddd--vernon-livro-vermelho.md:8869).
       const rows = await db
         .select({
           id: finDocuments.id,
@@ -409,6 +415,7 @@ export const createDrizzleDocumentRepository = (
           supplierRef: finDocuments.supplierRef,
           netValue: finDocuments.netValue,
           dueDate: finDocuments.dueDate,
+          version: finDocuments.version,
         })
         .from(finDocuments)
         .where(whereClause)
@@ -420,6 +427,7 @@ export const createDrizzleDocumentRepository = (
       //    netValue: bigint(mode:'number') chega como number | null.
       //    status/type: varchar com CHECK — cast seguro para os tipos de domínio.
       //    documentNumber/supplierRef/dueDate: passam direto (nullable conforme schema).
+      //    version: int NOT NULL — passa direto (já é number).
       const items: DocumentListItem[] = [];
       for (const row of rows) {
         let netValue: DocumentListItem['netValue'] = null;
@@ -446,6 +454,7 @@ export const createDrizzleDocumentRepository = (
           supplierRef: row.supplierRef,
           netValue,
           dueDate: row.dueDate,
+          version: row.version,
         });
       }
 
