@@ -7,7 +7,7 @@
 
 <!-- SPECKIT START -->
 
-Plano corrente: `specs/009-fin-documentos-titulos/plan.md` (novo módulo `financial` — fatia 1: Gestão de Documentos (Fato Gerador) + geração de Títulos Pai/Filhos via HTTP `/api/v1/financial`; agregado `Document` raiz com `Payable` interno, trilha por-campo, refs leves UUID; ver `research.md`, `data-model.md`, `contracts/financial-http.md`, `adr/0001-0005`).
+Plano corrente: `specs/004-http-facade-controllers/plan.md` (épico de **refactor** — objeto-fachada de arrow-functions na borda HTTP de auth+contracts+partners+programs; **zero mudança de comportamento**; restrito a `adapters/http/` + composition root; 4 tickets W0→W3; ver `research.md`, `data-model.md`, `contracts/README.md`, `quickstart.md`).
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan.
 
