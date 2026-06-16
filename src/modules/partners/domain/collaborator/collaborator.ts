@@ -18,11 +18,18 @@ import * as Race from './race.ts';
 import * as FoodCategory from './food-category.ts';
 import * as Education from './education.ts';
 import * as DisableReason from './disable-reason.ts';
+import * as Sex from './sex.ts';
+import * as CivilStatus from './civil-status.ts';
+import * as State from '../geography/state.ts';
+import * as PaymentTarget from '../supplier/payment-target.ts';
+import type { BankAccount, PixKey } from '../supplier/payment-target.ts';
 import type { CollaboratorEvent } from './events.ts';
 import type { CollaboratorError } from './errors.ts';
 import type {
   ActiveCollaborator,
   Collaborator,
+  CollaboratorTerritory,
+  CollaboratorTerritoryInput,
   CompleteRegistrationInput,
   EditCollaboratorInput,
   RegisterCollaboratorInput,
@@ -31,6 +38,25 @@ import type {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const isBlank = (s: string): boolean => s.trim().length === 0;
+
+// Território (#42): UF do catálogo + município como NOME livre (texto da issue). UF inválida
+// vira o slug `territory-uf-invalid` (a borda faz toErrorEnvelope(code, code)). Ausente ou
+// ambos null → território null (backward-compatible). Município sem UF é permitido (texto livre).
+const parseTerritory = (
+  input: CollaboratorTerritoryInput | null,
+): Result<CollaboratorTerritory | null, 'territory-uf-invalid'> => {
+  if (input === null) return ok(null);
+  const rawUf = input.uf ?? null;
+  const rawMunicipality = input.municipality ?? null;
+  if (rawUf === null && rawMunicipality === null) return ok(null);
+  let uf: CollaboratorTerritory['uf'] = null;
+  if (rawUf !== null) {
+    const parsed = State.parse(rawUf);
+    if (!parsed.ok) return err('territory-uf-invalid');
+    uf = parsed.value;
+  }
+  return ok(immutable({ uf, municipality: rawMunicipality }));
+};
 
 export const register = (
   input: RegisterCollaboratorInput,
@@ -48,6 +74,25 @@ export const register = (
 
   const employmentRelationship = EmploymentRelationship.parse(input.employmentRelationship);
   if (!employmentRelationship.ok) return employmentRelationship;
+
+  // TERRITÓRIO (#42) e BANCÁRIO (#40) opcionais já no pré-cadastro (validados no domínio).
+  const territory = parseTerritory(input.territory ?? null);
+  if (!territory.ok) return territory;
+
+  const bankAccountInput = input.bankAccount ?? null;
+  let bankAccount: BankAccount | null = null;
+  if (bankAccountInput !== null) {
+    const r = PaymentTarget.createBankAccount(bankAccountInput);
+    if (!r.ok) return err(r.error);
+    bankAccount = r.value;
+  }
+  const pixKeyInput = input.pixKey ?? null;
+  let pixKey: PixKey | null = null;
+  if (pixKeyInput !== null) {
+    const r = PaymentTarget.createPixKey(pixKeyInput);
+    if (!r.ok) return err(r.error);
+    pixKey = r.value;
+  }
 
   const collaborator: ActiveCollaborator = immutable({
     id: input.id,
@@ -73,6 +118,23 @@ export const register = (
     allergies: null,
     biography: null,
     experienceInThePublicSector: null,
+    // PERFIL (#41) nasce vazio; preenchido no completeRegistration.
+    sex: null,
+    maritalStatus: null,
+    hasChildren: null,
+    childrenCount: null,
+    childrenAges: null,
+    isPwd: null,
+    pwdDescription: null,
+    isOnLeave: null,
+    leaveDuration: null,
+    leaveRenewable: null,
+    leaveRenewalDuration: null,
+    publicSectorExperienceDuration: null,
+    // TERRITÓRIO (#42) e BANCÁRIO (#40) — entram já no pré-cadastro se fornecidos.
+    territory: territory.value,
+    bankAccount,
+    pixKey,
     status: 'Active',
   });
 
@@ -149,6 +211,39 @@ export const completeRegistration = (
     input.foodCategory === null ? ok(null) : FoodCategory.parse(input.foodCategory);
   if (!foodCategory.ok) return foodCategory;
 
+  // Campos novos podem chegar omitidos (undefined) em chamadas de domínio que não os passam;
+  // normalizamos `undefined → null` (a borda HTTP já envia null por default).
+  const sexRaw = input.sex ?? null;
+  const maritalStatusRaw = input.maritalStatus ?? null;
+  const territoryRaw = input.territory ?? null;
+  const bankAccountRaw = input.bankAccount ?? null;
+  const pixKeyRaw = input.pixKey ?? null;
+
+  // PERFIL (#41): sexo + estado civil como VOs (slugs sex-invalid / marital-status-invalid).
+  const sex = sexRaw === null ? ok(null) : Sex.parse(sexRaw);
+  if (!sex.ok) return sex;
+
+  const maritalStatus = maritalStatusRaw === null ? ok(null) : CivilStatus.parse(maritalStatusRaw);
+  if (!maritalStatus.ok) return maritalStatus;
+
+  // TERRITÓRIO (#42): UF validada pelo catálogo, remapeada para o slug territory-uf-invalid.
+  const territory = parseTerritory(territoryRaw);
+  if (!territory.ok) return territory;
+
+  // BANCÁRIO (#40 lado Colaborador): destino de pagamento opcional (sem invariante "ao menos um").
+  let bankAccount: BankAccount | null = null;
+  if (bankAccountRaw !== null) {
+    const r = PaymentTarget.createBankAccount(bankAccountRaw);
+    if (!r.ok) return err(r.error);
+    bankAccount = r.value;
+  }
+  let pixKey: PixKey | null = null;
+  if (pixKeyRaw !== null) {
+    const r = PaymentTarget.createPixKey(pixKeyRaw);
+    if (!r.ok) return err(r.error);
+    pixKey = r.value;
+  }
+
   const completed: Collaborator = immutable({
     ...collaborator,
     registrationStatus: 'Complete',
@@ -166,6 +261,21 @@ export const completeRegistration = (
     allergies: input.allergies,
     biography: input.biography,
     experienceInThePublicSector: input.experienceInThePublicSector,
+    sex: sex.value,
+    maritalStatus: maritalStatus.value,
+    hasChildren: input.hasChildren ?? null,
+    childrenCount: input.childrenCount ?? null,
+    childrenAges: input.childrenAges ?? null,
+    isPwd: input.isPwd ?? null,
+    pwdDescription: input.pwdDescription ?? null,
+    isOnLeave: input.isOnLeave ?? null,
+    leaveDuration: input.leaveDuration ?? null,
+    leaveRenewable: input.leaveRenewable ?? null,
+    leaveRenewalDuration: input.leaveRenewalDuration ?? null,
+    publicSectorExperienceDuration: input.publicSectorExperienceDuration ?? null,
+    territory: territory.value,
+    bankAccount,
+    pixKey,
   });
 
   return ok({

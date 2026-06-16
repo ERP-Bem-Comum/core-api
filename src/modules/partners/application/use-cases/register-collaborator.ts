@@ -10,7 +10,14 @@ import { type Result, ok, err } from '#src/shared/index.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
 import * as CollaboratorId from '#src/modules/partners/domain/collaborator/collaborator-id.ts';
 import * as Collaborator from '#src/modules/partners/domain/collaborator/collaborator.ts';
-import type { ActiveCollaborator } from '#src/modules/partners/domain/collaborator/types.ts';
+import type {
+  ActiveCollaborator,
+  CollaboratorTerritoryInput,
+} from '#src/modules/partners/domain/collaborator/types.ts';
+import type {
+  BankAccountInput,
+  PixKeyInput,
+} from '#src/modules/partners/domain/supplier/payment-target.ts';
 import type { CollaboratorEvent } from '#src/modules/partners/domain/collaborator/events.ts';
 import type { CollaboratorError } from '#src/modules/partners/domain/collaborator/errors.ts';
 import type {
@@ -26,6 +33,10 @@ export type RegisterCollaboratorCommand = Readonly<{
   role: string;
   startOfContract: Date;
   employmentRelationship: string;
+  // TERRITÓRIO (#42) e BANCÁRIO (#40) opcionais no pré-cadastro.
+  territory?: CollaboratorTerritoryInput | null;
+  bankAccount?: BankAccountInput | null;
+  pixKey?: PixKeyInput | null;
 }>;
 
 export type RegisterCollaboratorError =
@@ -55,6 +66,9 @@ export const registerCollaborator =
       role: cmd.role,
       startOfContract: cmd.startOfContract,
       employmentRelationship: cmd.employmentRelationship,
+      territory: cmd.territory ?? null,
+      bankAccount: cmd.bankAccount ?? null,
+      pixKey: cmd.pixKey ?? null,
       registeredAt: deps.clock.now(),
     });
     if (!registered.ok) return registered;

@@ -19,7 +19,7 @@ export type PixKey = Readonly<{
   key: string;
 }>;
 
-export type PaymentTargetError = 'invalid-bank-account' | 'invalid-pix-key';
+export type PaymentTargetError = 'invalid-bank-account' | 'bank-agency-invalid' | 'invalid-pix-key';
 
 export type BankAccountInput = Readonly<{
   bank: string;
@@ -40,12 +40,17 @@ const PIX_KEY_TYPES: ReadonlySet<string> = new Set<PixKeyType>([
 
 const isBlank = (s: string): boolean => s.trim().length === 0;
 
+// Agência: 4 dígitos + DV opcional (com ou sem hífen). Ex.: `1234`, `00012`, `0001-2`.
+// Regra harmonizada entre Supplier/Act/Collaborator (#40 CA3).
+const AGENCY_RE = /^\d{4}-?\d?$/;
+
 export const createBankAccount = (
   input: BankAccountInput,
 ): Result<BankAccount, PaymentTargetError> => {
   if (isBlank(input.bank) || isBlank(input.agency) || isBlank(input.accountNumber)) {
     return err('invalid-bank-account');
   }
+  if (!AGENCY_RE.test(input.agency.trim())) return err('bank-agency-invalid');
   return ok(
     immutable({
       bank: input.bank.trim(),

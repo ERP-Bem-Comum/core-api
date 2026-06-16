@@ -18,8 +18,29 @@ import type { Race } from './race.ts';
 import type { FoodCategory } from './food-category.ts';
 import type { Education } from './education.ts';
 import type { DisableReason } from './disable-reason.ts';
+import type { Sex } from './sex.ts';
+import type { CivilStatus } from './civil-status.ts';
+import type { StateAbbreviation } from '../geography/state.ts';
+import type {
+  BankAccount,
+  PixKey,
+  BankAccountInput,
+  PixKeyInput,
+} from '../supplier/payment-target.ts';
 
 export type RegistrationStatus = 'PreRegistration' | 'Complete';
+
+// Território de atuação (#42): UF do catálogo + município como NOME livre (texto da issue).
+export type CollaboratorTerritory = Readonly<{
+  uf: StateAbbreviation | null;
+  municipality: string | null;
+}>;
+
+// Shape de entrada do território (UF como string crua; validada no domínio).
+export type CollaboratorTerritoryInput = Readonly<{
+  uf: string | null;
+  municipality: string | null;
+}>;
 
 // Campos pessoais (preenchidos no completeRegistration; todos nullable — D3).
 type PersonalFields = Readonly<{
@@ -37,6 +58,23 @@ type PersonalFields = Readonly<{
   allergies: string | null;
   biography: string | null;
   experienceInThePublicSector: boolean | null;
+  // PERFIL (#41): sexo (VO), estado civil (VO), filhos, PCD, afastamento, experiência pública.
+  sex: Sex | null;
+  maritalStatus: CivilStatus | null;
+  hasChildren: boolean | null;
+  childrenCount: number | null;
+  childrenAges: string | null;
+  isPwd: boolean | null;
+  pwdDescription: string | null;
+  isOnLeave: boolean | null;
+  leaveDuration: string | null;
+  leaveRenewable: boolean | null;
+  leaveRenewalDuration: string | null;
+  publicSectorExperienceDuration: string | null;
+  // TERRITÓRIO (#42) e BANCÁRIO (#40 lado Colaborador) — todos nullable.
+  territory: CollaboratorTerritory | null;
+  bankAccount: BankAccount | null;
+  pixKey: PixKey | null;
 }>;
 
 type CollaboratorCore = Readonly<{
@@ -70,6 +108,10 @@ export type RegisterCollaboratorInput = Readonly<{
   startOfContract: Date;
   employmentRelationship: string;
   registeredAt: Date;
+  // TERRITÓRIO (#42) e BANCÁRIO (#40) opcionais já no pré-cadastro (omitidos = null).
+  territory?: CollaboratorTerritoryInput | null;
+  bankAccount?: BankAccountInput | null;
+  pixKey?: PixKeyInput | null;
 }>;
 
 /** Payload de edição cadastral (PUT total): os 7 campos cadastrais. Pessoais/estado preservados. */
@@ -99,6 +141,26 @@ export type CompleteRegistrationInput = Readonly<{
   allergies: string | null;
   biography: string | null;
   experienceInThePublicSector: boolean | null;
+  // PERFIL (#41) / TERRITÓRIO (#42) / BANCÁRIO (#40) — OPCIONAIS (omitidos = não informados).
+  // Opcionais para preservar chamadas de domínio legadas que só passam os campos originais;
+  // a borda HTTP sempre envia `null` por default. sex/maritalStatus como string (validados aqui).
+  sex?: string | null;
+  maritalStatus?: string | null;
+  hasChildren?: boolean | null;
+  childrenCount?: number | null;
+  childrenAges?: string | null;
+  isPwd?: boolean | null;
+  pwdDescription?: string | null;
+  isOnLeave?: boolean | null;
+  leaveDuration?: string | null;
+  leaveRenewable?: boolean | null;
+  leaveRenewalDuration?: string | null;
+  publicSectorExperienceDuration?: string | null;
+  // TERRITÓRIO (#42) — objeto { uf, municipality } (uf validada no domínio).
+  territory?: CollaboratorTerritoryInput | null;
+  // BANCÁRIO (#40 lado Colaborador) — shapes de input (validados no domínio).
+  bankAccount?: BankAccountInput | null;
+  pixKey?: PixKeyInput | null;
 }>;
 
 // Reidratação pela borda (mapper): VOs/enums já tipados. `rehydrate` reconstrói o

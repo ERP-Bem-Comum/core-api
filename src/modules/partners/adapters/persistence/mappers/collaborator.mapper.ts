@@ -18,7 +18,13 @@ import * as Race from '#src/modules/partners/domain/collaborator/race.ts';
 import * as Education from '#src/modules/partners/domain/collaborator/education.ts';
 import * as FoodCategory from '#src/modules/partners/domain/collaborator/food-category.ts';
 import * as DisableReason from '#src/modules/partners/domain/collaborator/disable-reason.ts';
+import * as Sex from '#src/modules/partners/domain/collaborator/sex.ts';
+import * as CivilStatus from '#src/modules/partners/domain/collaborator/civil-status.ts';
+import * as State from '#src/modules/partners/domain/geography/state.ts';
+import * as PaymentTarget from '#src/modules/partners/domain/supplier/payment-target.ts';
 import * as Collaborator from '#src/modules/partners/domain/collaborator/collaborator.ts';
+import type { BankAccount, PixKey } from '#src/modules/partners/domain/supplier/payment-target.ts';
+import type { CollaboratorTerritory } from '#src/modules/partners/domain/collaborator/types.ts';
 import type {
   Collaborator as CollaboratorEntity,
   RegistrationStatus,
@@ -29,6 +35,7 @@ export type CollaboratorMapperError =
   | 'collaborator-mapper-invalid-id'
   | 'collaborator-mapper-invalid-cpf'
   | 'collaborator-mapper-invalid-enum'
+  | 'collaborator-mapper-invalid-payment-target'
   | 'collaborator-mapper-invalid-state';
 
 const REGISTRATION_STATUSES: ReadonlySet<string> = new Set<RegistrationStatus>([
@@ -38,12 +45,13 @@ const REGISTRATION_STATUSES: ReadonlySet<string> = new Set<RegistrationStatus>([
 
 type ParseFn<T> = (raw: string) => Result<T, string>;
 
-// Enum opcional: ausência (null) é válida; presença inválida → erro do mapper.
+// Enum opcional: ausência (null/undefined — coluna NULL ou row parcial) é válida; presença
+// inválida → erro do mapper.
 const parseNullable = <T>(
-  raw: string | null,
+  raw: string | null | undefined,
   parse: ParseFn<T>,
 ): Result<T | null, 'enum-invalid'> => {
-  if (raw === null) return ok(null);
+  if (raw === null || raw === undefined) return ok(null);
   const r = parse(raw);
   return r.ok ? ok(r.value) : err('enum-invalid');
 };
@@ -72,12 +80,74 @@ export const collaboratorToInsert = (c: CollaboratorEntity, now: Date): NewColla
   allergies: c.allergies,
   biography: c.biography,
   experienceInThePublicSector: c.experienceInThePublicSector,
+  // PERFIL (#41) achatado em colunas.
+  sex: c.sex,
+  maritalStatus: c.maritalStatus,
+  hasChildren: c.hasChildren,
+  childrenCount: c.childrenCount,
+  childrenAges: c.childrenAges,
+  isPwd: c.isPwd,
+  pwdDescription: c.pwdDescription,
+  isOnLeave: c.isOnLeave,
+  leaveDuration: c.leaveDuration,
+  leaveRenewable: c.leaveRenewable,
+  leaveRenewalDuration: c.leaveRenewalDuration,
+  publicSectorExperienceDuration: c.publicSectorExperienceDuration,
+  // TERRITÓRIO (#42) achatado (uf é branded → string na coluna).
+  territoryUf: (c.territory?.uf ?? null) as string | null,
+  territoryMunicipality: c.territory?.municipality ?? null,
+  // BANCÁRIO (#40) achatado em colunas (espelha supplier.mapper).
+  bankAccountBank: c.bankAccount?.bank ?? null,
+  bankAccountAgency: c.bankAccount?.agency ?? null,
+  bankAccountNumber: c.bankAccount?.accountNumber ?? null,
+  bankAccountCheckDigit: c.bankAccount?.checkDigit ?? null,
+  pixKeyType: c.pixKey?.keyType ?? null,
+  pixKey: c.pixKey?.key ?? null,
   active: c.status === 'Active',
   disableBy: c.status === 'Inactive' ? c.disableBy : null,
   deactivatedAt: c.status === 'Inactive' ? c.deactivatedAt : null,
   createdAt: now,
   updatedAt: now,
 });
+
+// Reconstrói o território da row (UF validada pelo catálogo; município é nome livre).
+// Ambas colunas NULL → ok(null). UF inválida → err (estado inválido vindo do banco).
+const territoryFromRow = (
+  row: Readonly<CollaboratorRow>,
+): Result<CollaboratorTerritory | null, 'enum-invalid'> => {
+  const rawUf = row.territoryUf ?? null;
+  const rawMunicipality = row.territoryMunicipality ?? null;
+  if (rawUf === null && rawMunicipality === null) return ok(null);
+  let uf: CollaboratorTerritory['uf'] = null;
+  if (rawUf !== null) {
+    const parsed = State.parse(rawUf);
+    if (!parsed.ok) return err('enum-invalid');
+    uf = parsed.value;
+  }
+  return ok({ uf, municipality: rawMunicipality });
+};
+
+// Reconstrói BankAccount da row (4 colunas). Ausência total → ok(null). Erro de VO → err.
+const bankFromRow = (
+  row: Readonly<CollaboratorRow>,
+): Result<BankAccount | null, 'collaborator-mapper-invalid-payment-target'> => {
+  if (row.bankAccountBank === null) return ok(null);
+  const r = PaymentTarget.createBankAccount({
+    bank: row.bankAccountBank,
+    agency: row.bankAccountAgency ?? '',
+    accountNumber: row.bankAccountNumber ?? '',
+    checkDigit: row.bankAccountCheckDigit ?? '',
+  });
+  return r.ok ? { ok: true, value: r.value } : err('collaborator-mapper-invalid-payment-target');
+};
+
+const pixFromRow = (
+  row: Readonly<CollaboratorRow>,
+): Result<PixKey | null, 'collaborator-mapper-invalid-payment-target'> => {
+  if (row.pixKey === null) return ok(null);
+  const r = PaymentTarget.createPixKey({ keyType: row.pixKeyType ?? '', key: row.pixKey });
+  return r.ok ? { ok: true, value: r.value } : err('collaborator-mapper-invalid-payment-target');
+};
 
 export const collaboratorFromRow = (
   row: Readonly<CollaboratorRow>,
@@ -113,6 +183,21 @@ export const collaboratorFromRow = (
   const disableBy = parseNullable(row.disableBy, DisableReason.parse);
   if (!disableBy.ok) return err('collaborator-mapper-invalid-enum');
 
+  const sex = parseNullable(row.sex, Sex.parse);
+  if (!sex.ok) return err('collaborator-mapper-invalid-enum');
+
+  const maritalStatus = parseNullable(row.maritalStatus, CivilStatus.parse);
+  if (!maritalStatus.ok) return err('collaborator-mapper-invalid-enum');
+
+  const territory = territoryFromRow(row);
+  if (!territory.ok) return err('collaborator-mapper-invalid-enum');
+
+  const bank = bankFromRow(row);
+  if (!bank.ok) return bank;
+
+  const pix = pixFromRow(row);
+  if (!pix.ok) return pix;
+
   const rehydrated = Collaborator.rehydrate({
     id: id.value,
     name: row.name,
@@ -137,6 +222,21 @@ export const collaboratorFromRow = (
     allergies: row.allergies,
     biography: row.biography,
     experienceInThePublicSector: row.experienceInThePublicSector,
+    sex: sex.value,
+    maritalStatus: maritalStatus.value,
+    hasChildren: row.hasChildren,
+    childrenCount: row.childrenCount,
+    childrenAges: row.childrenAges,
+    isPwd: row.isPwd,
+    pwdDescription: row.pwdDescription,
+    isOnLeave: row.isOnLeave,
+    leaveDuration: row.leaveDuration,
+    leaveRenewable: row.leaveRenewable,
+    leaveRenewalDuration: row.leaveRenewalDuration,
+    publicSectorExperienceDuration: row.publicSectorExperienceDuration,
+    territory: territory.value,
+    bankAccount: bank.value,
+    pixKey: pix.value,
     status: row.active ? 'Active' : 'Inactive',
     disableBy: disableBy.value,
     deactivatedAt: row.deactivatedAt,

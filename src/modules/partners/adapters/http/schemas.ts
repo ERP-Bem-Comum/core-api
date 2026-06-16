@@ -96,6 +96,28 @@ export const collaboratorIdParamSchema = z.object({
   id: z.uuid().meta({ description: 'UUID do colaborador (core-api)' }),
 });
 
+// ─── Shapes compartilhados (PERFIL/TERRITÓRIO/BANCÁRIO — #41/#42/#40) ─────────
+
+/** Território do colaborador (#42): UF (sigla) + município (nome livre). Ambos nullable. */
+const territorySchema = z.object({
+  uf: z.string().nullable(),
+  municipality: z.string().nullable(),
+});
+
+/** Conta bancária — shape espelhando Supplier (#40). Valores validados no domínio. */
+const collaboratorBankAccountSchema = z.object({
+  bank: z.string(),
+  agency: z.string(),
+  accountNumber: z.string(),
+  checkDigit: z.string(),
+});
+
+/** Chave PIX — `keyType` validado no domínio (string aqui). */
+const collaboratorPixKeySchema = z.object({
+  keyType: z.string(),
+  key: z.string(),
+});
+
 /**
  * Detalhe do colaborador — espelha o schema `Collaborator` do legado
  * (handbook/legacy_docs/openapi.yaml:2435). `id` é o UUID do core; `legacyId` é o int
@@ -128,6 +150,23 @@ export const collaboratorDetailSchema = z.object({
   emergencyContactName: z.string().nullable(),
   emergencyContactTelephone: z.string().nullable(),
   experienceInThePublicSector: z.boolean().nullable(),
+  // PERFIL (#41) — todos nullable explícitos (CA4: vêm como null, não omitidos).
+  sex: z.string().nullable(),
+  maritalStatus: z.string().nullable(),
+  hasChildren: z.boolean().nullable(),
+  childrenCount: z.number().int().nullable(),
+  childrenAges: z.string().nullable(),
+  isPwd: z.boolean().nullable(),
+  pwdDescription: z.string().nullable(),
+  isOnLeave: z.boolean().nullable(),
+  leaveDuration: z.string().nullable(),
+  leaveRenewable: z.boolean().nullable(),
+  leaveRenewalDuration: z.string().nullable(),
+  publicSectorExperienceDuration: z.string().nullable(),
+  // TERRITÓRIO (#42) e BANCÁRIO (#40) — objeto ou null.
+  territory: territorySchema.nullable(),
+  bankAccount: collaboratorBankAccountSchema.nullable(),
+  pixKey: collaboratorPixKeySchema.nullable(),
   active: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -154,7 +193,10 @@ export type CollaboratorPaginatedDto = z.infer<typeof collaboratorPaginatedSchem
 
 // ─── P2 — escrita ────────────────────────────────────────────────────────────
 
-/** Body do POST /collaborators (pré-cadastro). Espelha `CreateCollaborator` legado. */
+/**
+ * Body do POST /collaborators (pré-cadastro). Espelha `CreateCollaborator` legado, com
+ * território (#42) e dados bancários (#40) OPCIONAIS já no cadastro inicial.
+ */
 export const createCollaboratorBodySchema = z.object({
   name: z.string().min(1),
   email: z.string().min(1),
@@ -163,6 +205,9 @@ export const createCollaboratorBodySchema = z.object({
   role: z.string().min(1),
   startOfContract: z.coerce.date().meta({ description: 'Início do contrato (ISO date)' }),
   employmentRelationship: z.enum(['CLT', 'PJ']),
+  territory: territorySchema.nullable().default(null),
+  bankAccount: collaboratorBankAccountSchema.nullable().default(null),
+  pixKey: collaboratorPixKeySchema.nullable().default(null),
 });
 
 export type CreateCollaboratorBody = z.infer<typeof createCollaboratorBodySchema>;
@@ -192,6 +237,23 @@ export const completeRegistrationBodySchema = z.object({
   allergies: z.string().nullable().default(null),
   biography: z.string().nullable().default(null),
   experienceInThePublicSector: z.boolean().nullable().default(null),
+  // PERFIL (#41) — sex/maritalStatus como string (validados no domínio); demais escalares.
+  sex: z.string().nullable().default(null),
+  maritalStatus: z.string().nullable().default(null),
+  hasChildren: z.boolean().nullable().default(null),
+  childrenCount: z.number().int().nullable().default(null),
+  childrenAges: z.string().nullable().default(null),
+  isPwd: z.boolean().nullable().default(null),
+  pwdDescription: z.string().nullable().default(null),
+  isOnLeave: z.boolean().nullable().default(null),
+  leaveDuration: z.string().nullable().default(null),
+  leaveRenewable: z.boolean().nullable().default(null),
+  leaveRenewalDuration: z.string().nullable().default(null),
+  publicSectorExperienceDuration: z.string().nullable().default(null),
+  // TERRITÓRIO (#42) e BANCÁRIO (#40) — também aceitos ao completar o cadastro.
+  territory: territorySchema.nullable().default(null),
+  bankAccount: collaboratorBankAccountSchema.nullable().default(null),
+  pixKey: collaboratorPixKeySchema.nullable().default(null),
 });
 
 export type CompleteRegistrationBody = z.infer<typeof completeRegistrationBodySchema>;

@@ -172,6 +172,30 @@ export const parCollaborators = mysqlTable(
     allergies: varchar('allergies', { length: 500 }),
     biography: varchar('biography', { length: 2000 }),
     experienceInThePublicSector: boolean('experience_in_the_public_sector'),
+    // PERFIL (#41) — todos nullable, aditivo. Enums sexo/estado civil são varchar (ADR-0020).
+    sex: varchar('sex', { length: 1 }),
+    maritalStatus: varchar('marital_status', { length: 20 }),
+    hasChildren: boolean('has_children'),
+    childrenCount: int('children_count'),
+    childrenAges: varchar('children_ages', { length: 255 }),
+    isPwd: boolean('is_pwd'),
+    pwdDescription: varchar('pwd_description', { length: 500 }),
+    isOnLeave: boolean('is_on_leave'),
+    leaveDuration: varchar('leave_duration', { length: 50 }),
+    leaveRenewable: boolean('leave_renewable'),
+    leaveRenewalDuration: varchar('leave_renewal_duration', { length: 50 }),
+    publicSectorExperienceDuration: varchar('public_sector_experience_duration', { length: 50 }),
+    // TERRITÓRIO (#42) — UF (sigla) + município como NOME livre (texto da issue).
+    territoryUf: varchar('territory_uf', { length: 2 }),
+    territoryMunicipality: varchar('territory_municipality', { length: 255 }),
+    // BANCÁRIO (#40 lado Colaborador) — destino de pagamento OPCIONAL (sem invariante "ao menos um").
+    // Espelha o bloco de par_suppliers; colunas juntas NULL ou juntas preenchidas (CHECK abaixo).
+    bankAccountBank: varchar('bank_account_bank', { length: 50 }),
+    bankAccountAgency: varchar('bank_account_agency', { length: 20 }),
+    bankAccountNumber: varchar('bank_account_number', { length: 30 }),
+    bankAccountCheckDigit: varchar('bank_account_check_digit', { length: 5 }),
+    pixKeyType: varchar('pix_key_type', { length: 20 }),
+    pixKey: varchar('pix_key', { length: 255 }),
     // Soft-delete: Inactive carrega disable_by + deactivated_at.
     active: boolean('active').notNull().default(true),
     disableBy: varchar('disable_by', { length: 40 }),
@@ -189,6 +213,25 @@ export const parCollaborators = mysqlTable(
       sql`((${t.active} = FALSE) = (${t.deactivatedAt} IS NOT NULL))
         AND ((${t.active} = FALSE) = (${t.disableBy} IS NOT NULL))`,
     ),
+    // coerência do bloco bancário (4 colunas juntas NULL ou juntas preenchidas).
+    check(
+      'par_collaborators_bank_block_chk',
+      sql`(${t.bankAccountBank} IS NULL) = (${t.bankAccountAgency} IS NULL)
+        AND (${t.bankAccountBank} IS NULL) = (${t.bankAccountNumber} IS NULL)
+        AND (${t.bankAccountBank} IS NULL) = (${t.bankAccountCheckDigit} IS NULL)`,
+    ),
+    // coerência do bloco pix (pix_key_type ⟺ pix_key).
+    check(
+      'par_collaborators_pix_block_chk',
+      sql`(${t.pixKeyType} IS NULL) = (${t.pixKey} IS NULL)`,
+    ),
+    // estado civil: conjunto fechado (NULL = não informado). Sem CHECK de banco/pix obrigatório.
+    check(
+      'par_collaborators_marital_status_chk',
+      sql`${t.maritalStatus} IS NULL OR ${t.maritalStatus} IN ('single','married','divorced','widowed','stable_union')`,
+    ),
+    // sexo: conjunto fechado (NULL = não informado).
+    check('par_collaborators_sex_chk', sql`${t.sex} IS NULL OR ${t.sex} IN ('F','M')`),
     // UNIQUE(cpf) e UNIQUE(email) — legado `collaborators`.
     uniqueIndex('par_collaborators_cpf_idx').on(t.cpf),
     uniqueIndex('par_collaborators_email_idx').on(t.email),
