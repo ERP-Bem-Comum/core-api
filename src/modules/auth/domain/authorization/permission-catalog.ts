@@ -42,9 +42,8 @@ const CATALOG_RAW = [
   'geography:read',
   'geography:write',
   // payable:* (modulo financial - titulos gerados)
+  // payable:read e payable:undo-approval removidas (FR-010/ADR-0004 010 - permissoes inertes: sem rota enforca).
   'payable:approve',
-  'payable:read',
-  'payable:undo-approval',
   // program:* (modulo programs - gestao de programas)
   'program:deactivate',
   'program:read',

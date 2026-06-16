@@ -15,7 +15,12 @@ export type UndoApprovalDeps = Readonly<{
   outbox: FinancialOutbox;
   clock: Clock;
 }>;
-export type UndoApprovalCommand = Readonly<{ documentId: string }>;
+export type UndoApprovalCommand = Readonly<{
+  documentId: string;
+  // Optimistic lock (FR-009/ADR-0002 da feature 010): versão do documento lida pelo cliente.
+  // Repassada ao `repo.save` como `expectedVersion` — UPDATE com WHERE version = expectedVersion.
+  expectedVersion: number;
+}>;
 export type UndoApprovalError =
   | DocumentError
   | DocumentRepositoryError
@@ -59,6 +64,7 @@ export const undoApproval =
         payables: undone.value.payables,
       },
       entries,
+      cmd.expectedVersion,
     );
     if (!saved.ok) return err(saved.error);
 

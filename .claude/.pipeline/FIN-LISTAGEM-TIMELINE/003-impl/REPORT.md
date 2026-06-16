@@ -90,6 +90,44 @@ pnpm run test:integration:financial → ✅ 9 pass · 0 fail (inclui trilha vs M
 
 Lint dos arquivos de persistência do agente (readonly params do Drizzle via `eslint-disable`, `async` nas factories, `!== undefined` redundante em row `T|null`) + ternário morto que o `mysql-database-expert` apontou — disciplina `ts-quality-checker`.
 
-## Próximo incremento (W1)
+## Incremento 3 — Optimistic lock (FR-009) + remoção de permissões inertes (FR-010) — GREEN
 
-Optimistic lock enforçado (FR-009/ADR-0002 — `version` → 409; o `mysql-database-expert` confirmou que o `save` ainda não compara `version`) e remoção das permissões inertes (FR-010/ADR-0004). Cada um com seus testes RED primeiro.
+**Data**: 2026-06-16 · **Cada camada por um agente + validação cruzada por agentes.**
+
+### W0 RED → GREEN
+
+- `optimistic-lock.http.test.ts` (CT-018/019/020/021): versão stale → `409 document-version-conflict`.
+- `permission-catalog.test.ts`: lista exaustiva sem `payable:read`/`payable:undo-approval` (deepEqual).
+
+### Quem fez o quê
+
+| Camada | Entrega | Agente |
+| --- | --- | --- |
+| Persistência (lock) | `save(aggregate, entries, expectedVersion?)`; `UPDATE ... WHERE id=? AND version=expectedVersion` → `affectedRows=0` → `document-version-conflict`; in-memory passa a modelar versão (`{aggregate, version}`); `document-version-conflict` no `DocumentRepositoryError` | **`drizzle-orm-expert`** |
+| Aplicação (lock) | `expectedVersion: number` em `Adjust/Approve/UndoApproval Command`; use cases repassam ao `save`; +forward mínimo na borda (regressão zero) | **`typescript-language-expert`** |
+| Validação borda (Zod) | review do `version`/409 → **Major**: `version` sem `.max()` (overflow `1e30`); +Minor `rateBps` sem `.max()` | **`zod-expert`** |
+| Correção da borda | `.max(Number.MAX_SAFE_INTEGER)` no `version`; `.max(10000)` no `rateBps` | **`fastify-server-expert`** |
+| RBAC (FR-010) | remove `payable:read`/`payable:undo-approval` do catálogo do auth + `FINANCIAL_PERMISSION`; verifica zero consumidores órfãos | **`security-backend-expert`** |
+
+### Decisão de design (validada)
+
+- **Optimistic lock**: `expectedVersion` opcional no `save` (criadores não passam; mutações de doc existente passam). `WHERE version=expectedVersion` (Refman §13.2.17 — `affectedRows=0` em divergência). `SELECT FOR UPDATE` serializa txs (Refman §15.7.2.4). Enforçado em ambos os adapters (in-memory + Drizzle) — a borda testa contra in-memory.
+
+### Gate (incremento)
+
+```
+pnpm run typecheck                  → ✅
+pnpm run format:check               → ✅
+pnpm run lint                       → ✅
+pnpm test                           → ✅ 2483 pass · 0 fail · 18 skipped
+pnpm run test:integration:financial → ✅ 10 pass · 0 fail (inclui version-conflict + trilha vs MySQL)
+```
+
+### Follow-up registrado (Minor do zod-expert — não-bloqueante, cross-layer)
+
+- **`version` não exposto na resposta**: o cliente (frontend) não sabe a versão atual para enviar no PATCH/approve → optimistic lock difícil de usar pela borda. Exige expor `version` via `StoredDocument` (port) → `findById` → DTO → response schema. **Decisão de produto/W2** — registrar antes do handoff de frontend (contrato da fatia 2 não exige hoje; o enforço no servidor está correto e testado).
+
+## W1 — completa
+
+Os 3 incrementos da W1 estão GREEN: (1) Foundational + US1 listagem; (2) US2 trilha por-campo; (3) optimistic lock + RBAC.
+Próximo: **W2** (code-review + segurança) e **W3** (gate final).

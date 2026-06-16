@@ -11,10 +11,13 @@
 //   silenciosamente (Refman §13.2.6.2). O padrão SELECT-then-UPDATE-or-INSERT
 //   com `.for('update')` serializa escritas concorrentes via next-key lock (Refman §15.7).
 //
-// Optimistic lock (R5 do spec, data-model.md §"Optimistic lock"):
-//   UPDATE WHERE id=? AND version=?  →  version = version + 1.
-//   Se 0 rows afetadas: outra tx ganhou a corrida → err('document-repository-failure').
-//   O `version` atual é lido no mesmo SELECT FOR UPDATE do upsert (sem extra round-trip).
+// Optimistic lock (FR-009 / feature 010):
+//   save(agg, entries, expectedVersion) com expectedVersion definido:
+//     UPDATE WHERE id=? AND version=expectedVersion → version = expectedVersion+1.
+//     mysql2 retorna affectedRows=0 se o WHERE não casa (Refman §13.2.17).
+//     → err('document-version-conflict').
+//   save(agg, entries) sem expectedVersion (criação): INSERT com version=0.
+//   SELECT FOR UPDATE antes do UPDATE serializa txs concorrentes (Refman §15.7.2.4).
 //
 // Transação única para todo o boundary (ADR-0015 + Evans §"AGGREGATE BOUNDARY"):
 //   save() abre UMA transação que persiste:
@@ -73,6 +76,27 @@ const safe = async <T>(
     return err('document-repository-failure');
   }
 };
+
+// Sentinela interna: distingue conflito de versão (semântico) de falha de infra no catch.
+// Usa Symbol único para identificação sem `class` (regra no-restricted-syntax do projeto).
+const VERSION_CONFLICT_SYMBOL = Symbol('version-conflict');
+
+type VersionConflictSentinel = Error & Readonly<{ [VERSION_CONFLICT_SYMBOL]: true }>;
+
+const makeVersionConflict = (
+  documentId: string,
+  expectedVersion: number,
+): VersionConflictSentinel => {
+  const e = new Error(
+    `version-conflict:${documentId}:expected:${expectedVersion}`,
+  ) as VersionConflictSentinel;
+  (e as unknown as Record<symbol, boolean>)[VERSION_CONFLICT_SYMBOL] = true;
+  return e;
+};
+
+const isVersionConflict = (cause: unknown): cause is VersionConflictSentinel =>
+  cause instanceof Error &&
+  (cause as unknown as Record<symbol, unknown>)[VERSION_CONFLICT_SYMBOL] === true;
 
 // `MySql2Database` expõe interface mutável internamente. Handle é read-only
 // do ponto de vista deste módulo — não mutamos o objeto em si.
@@ -141,8 +165,23 @@ export const createDrizzleDocumentRepository = (
   // ─── save ──────────────────────────────────────────────────────────────────
   //
   // Transação única: documento + tabelas filhas (hard replace) + trilha de timeline.
-  // Optimistic lock (R5): SELECT FOR UPDATE lê o `version` atual;
-  // UPDATE WHERE version=? falha se outra tx incrementou.
+  //
+  // `expectedVersion` controla o caminho de optimistic lock (FR-009/ADR-0002 feature 010):
+  //
+  //   undefined → criação / saveDraft / submit: executa SELECT FOR UPDATE para adquirir
+  //     next-key lock e detectar se o documento já existe (INSERT) ou houve race condition
+  //     inesperada (erro genérico). Não compara versão.
+  //
+  //   number    → mutação (adjust/approve/undo): o UPDATE usa
+  //     AND version = expectedVersion no WHERE. Refman MySQL 8.4 §13.2.17 (UPDATE):
+  //     "The affected-rows value reflects the number of rows actually changed."
+  //     Com InnoDB, mysql2 retorna affectedRows = 0 quando o WHERE não casa nenhuma
+  //     row — seja porque o doc não existe ou porque a versão foi incrementada por
+  //     outra transação. O use case fez findById antes, então affectedRows = 0 aqui
+  //     significa necessariamente que a versão divergiu → err('document-version-conflict').
+  //     O SELECT FOR UPDATE ainda é emitido para serializar leituras concorrentes
+  //     (next-key lock na PK) antes do UPDATE, evitando que duas txs leiam a mesma
+  //     versão e tentem incrementar em paralelo (Refman §15.7.2.4).
   //
   // `timelineEntries`: gravadas NA MESMA transação (SC-004/NFR-001 — Vernon:3257:
   //   "update synchronously [...] in the same transaction"). Quem não tem trilha
@@ -150,15 +189,35 @@ export const createDrizzleDocumentRepository = (
   const save = async (
     aggregate: StoredDocument,
     timelineEntries: readonly FinancialTimelineEntry[],
-  ): Promise<Result<void, DocumentRepositoryError>> =>
-    safe('save', async () => {
+    expectedVersion?: number,
+  ): Promise<Result<void, DocumentRepositoryError>> => {
+    // `save` não usa o helper `safe()` porque precisa distinguir dois tipos de falha:
+    //   1. 'document-version-conflict' — erro de domínio semântico (affectedRows = 0)
+    //   2. 'document-repository-failure' — falha de infra (I/O, constraint violada)
+    // O safe() converte qualquer exception para 'document-repository-failure', o que
+    // apagaria a distinção. Por isso usamos try/catch direto com uma sentinela tipada.
+    //
+    // Mecanismo de optimistic lock (FR-009):
+    //   expectedVersion === undefined → caminho de criação: INSERT com version=0.
+    //   expectedVersion definido → caminho de mutação: UPDATE WHERE id=? AND version=?
+    //     Refman MySQL 8.4 §13.2.17 (UPDATE): "The affected-rows value reflects the
+    //     number of rows actually changed." mysql2 expõe como ResultSetHeader.affectedRows.
+    //     InnoDB com REPEATABLE READ: o WHERE compara o valor FÍSICO da coluna (não a
+    //     snapshot de leitura), garantindo detecção de concurrent writes (Refman §15.7.2.3).
+    //     affectedRows=0 com id existente → versão divergiu → 'document-version-conflict'.
+    //
+    // SELECT FOR UPDATE antes do UPDATE (em ambos os caminhos):
+    //   Adquire next-key lock exclusivo na PK antes de qualquer escrita.
+    //   Refman MySQL 8.4 §15.7.2.4: "SELECT...FOR UPDATE sets an exclusive next-key
+    //   lock on every index record the search encounters."
+    //   Isso serializa duas txs que chegam simultaneamente ao mesmo documento,
+    //   evitando leituras de versão idênticas seguidas de dois UPDATEs concorrentes.
+    try {
       const { document, payables } = aggregate;
       const documentId = document.id as unknown as string;
 
       await db.transaction(async (tx) => {
-        // 1. SELECT FOR UPDATE — adquire next-key lock na PK, serializa escritas
-        //    concorrentes e lê o `version` atual para o optimistic lock (R5).
-        //    Refman MySQL 8.4 §15.7: SELECT...FOR UPDATE adquire lock exclusivo.
+        // 1. SELECT FOR UPDATE — serializa escritas concorrentes via next-key lock na PK.
         const existing = await tx
           .select({ version: schema.finDocuments.version })
           .from(schema.finDocuments)
@@ -167,34 +226,48 @@ export const createDrizzleDocumentRepository = (
 
         const currentVersion = existing[0]?.version;
 
-        if (currentVersion === undefined) {
-          // INSERT: documento novo. version = 0 (default do schema).
+        if (expectedVersion === undefined) {
+          // Caminho de criação: INSERT com version = 0 (default do schema).
+          // Se o doc já existe (race condition entre dois criadores), o INSERT
+          // falhará por violação de PK → capturado no catch abaixo como
+          // 'document-repository-failure' — comportamento correto.
           const row = mapDocumentToRow(document, 0);
           await tx.insert(schema.finDocuments).values(row);
         } else {
-          // UPDATE com optimistic lock: WHERE id=? AND version=currentVersion.
-          // Se 0 rows afetadas, outra tx ganhou a corrida → erro de conflito.
-          const nextVersion = currentVersion + 1;
+          // Caminho de mutação: UPDATE com optimistic lock enforçado no WHERE.
+          // WHERE id=? AND version=expectedVersion → só modifica se versão bate.
+          const nextVersion = expectedVersion + 1;
           const row = mapDocumentToRow(document, nextVersion);
-          const result = await tx
+          const updateResult = await tx
             .update(schema.finDocuments)
             .set(row)
-            .where(eq(schema.finDocuments.id, documentId));
-
-          // mysql2 retorna `affectedRows` no ResultSetHeader. Drizzle expõe como
-          // array [ResultSetHeader, ...]. Verificamos se ao menos 1 row foi afetada.
-          // Se 0 rows afetadas, outra transação incrementou a versão antes de nós.
-          const affectedRows = (result as unknown as [{ affectedRows: number }])[0].affectedRows;
-          if (affectedRows === 0) {
-            throw new Error(
-              `optimistic-lock-conflict:${documentId}:expected-version:${currentVersion}`,
+            .where(
+              and(
+                eq(schema.finDocuments.id, documentId),
+                eq(schema.finDocuments.version, expectedVersion),
+              ),
             );
+
+          // mysql2 retorna [ResultSetHeader, FieldPacket[]]. Drizzle expõe o raw
+          // do driver via cast. affectedRows=0 significa que o WHERE não casou —
+          // i.e., a versão foi incrementada por outra transação antes desta.
+          const affectedRows = (updateResult as unknown as [{ affectedRows: number }])[0]
+            .affectedRows;
+          if (affectedRows === 0) {
+            // Versão divergiu. Lançamos uma sentinela ANTES do catch genérico
+            // para que o catch consiga distinguir este caso de falhas de infra.
+            // O Error é capturado imediatamente no catch abaixo.
+            throw makeVersionConflict(documentId, expectedVersion);
           }
+
+          // currentVersion lida no SELECT FOR UPDATE é informativa.
+          // A checagem real é o affectedRows acima. void suprime unused warning.
+          void currentVersion;
         }
 
         // 2. Hard replace de tabelas filhas (R8.1: ajuste recria payables inteiros).
-        //    DELETE primeiro (CASCADE não é necessário aqui — fazemos explicitamente
-        //    para garantir que o INSERT em lote subsequente não colida em PK).
+        //    DELETE explícito: não dependemos de CASCADE aqui — garantimos que o
+        //    INSERT em lote subsequente não colide em PK.
         await tx.delete(schema.finPayables).where(eq(schema.finPayables.documentId, documentId));
         await tx
           .delete(schema.finRetentions)
@@ -204,7 +277,7 @@ export const createDrizzleDocumentRepository = (
           .where(eq(schema.finRegisteredTaxes.documentId, documentId));
 
         // 3. INSERT em lote de filhos (1 round-trip por tabela; skip se vazio).
-        //    mysql2 lança se `values([])` for chamado com array vazio.
+        //    mysql2 lança ER_PARSE_ERROR se values([]) — guard obrigatório.
         if (payables !== null) {
           const payableRows = mapPayablesToRows(payables, documentId);
           if (payableRows.length > 0) {
@@ -212,14 +285,12 @@ export const createDrizzleDocumentRepository = (
           }
         }
 
-        // Retenções vêm do documento (campo `retentions` em DocumentCore e DraftDocument).
         const retentions = document.retentions;
         if (retentions.length > 0) {
           const retentionRows = mapRetentionsToRows(retentions, documentId);
           await tx.insert(schema.finRetentions).values([...retentionRows]);
         }
 
-        // Impostos registrados.
         const registeredTaxes = document.registeredTaxes;
         if (registeredTaxes.length > 0) {
           const taxRows = mapRegisteredTaxesToRows(registeredTaxes, documentId);
@@ -240,7 +311,17 @@ export const createDrizzleDocumentRepository = (
           }
         }
       });
-    });
+
+      return ok(undefined);
+    } catch (cause) {
+      // Distinguir conflito de versão (semântico) de falha de infra (I/O, constraint).
+      if (isVersionConflict(cause)) {
+        return err('document-version-conflict');
+      }
+      process.stderr.write(`[document-repo:save] ${String(cause)}\n`);
+      return err('document-repository-failure');
+    }
+  };
 
   // ─── delete ────────────────────────────────────────────────────────────────
   //

@@ -40,14 +40,14 @@ const registeredTaxTypeSchema = z.enum([
 const retentionItemSchema = z.object({
   type: retentionTypeSchema,
   baseCents: centsStringSchema,
-  rateBps: z.number().int().min(0),
+  rateBps: z.number().int().min(0).max(10000),
   valueCents: centsStringSchema,
 });
 
 const registeredTaxItemSchema = z.object({
   type: registeredTaxTypeSchema,
   baseCents: centsStringSchema,
-  rateBps: z.number().int().min(0),
+  rateBps: z.number().int().min(0).max(10000),
   valueCents: centsStringSchema,
 });
 
@@ -111,7 +111,7 @@ export type CreateDocumentBody = z.infer<typeof createDocumentBodySchema>;
  */
 export const adjustDocumentBodySchema = z
   .object({
-    version: z.number().int().min(0),
+    version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
     grossValueCents: centsStringSchema.optional(),
     sourceDiscountsCents: centsStringSchema.optional(),
     discountsCents: centsStringSchema.optional(),
@@ -131,7 +131,7 @@ export type AdjustDocumentBody = z.infer<typeof adjustDocumentBodySchema>;
 
 /** Body das ações approve / undo-approval — só o optimistic lock. */
 export const approveBodySchema = z.object({
-  version: z.number().int().min(0),
+  version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
 });
 
 export type ApproveBody = z.infer<typeof approveBodySchema>;

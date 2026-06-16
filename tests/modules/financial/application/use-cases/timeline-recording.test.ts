@@ -77,6 +77,7 @@ describe('financial/application — timeline recording', () => {
     const approved = await approve({
       documentId: saved.value.documentId,
       approvedBy: USER,
+      expectedVersion: 0,
     });
     assert.equal(approved.ok, true);
 

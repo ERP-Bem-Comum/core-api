@@ -142,5 +142,54 @@ if (!process.env['MYSQL_INTEGRATION']) {
         if (afterDelete.ok) assert.equal(afterDelete.value.length, 0);
       });
     });
+
+    // Optimistic lock (FR-009/ADR-0002) contra MySQL real: UPDATE WHERE version=expectedVersion.
+    describe('Optimistic lock — Drizzle + MySQL', () => {
+      const OL_SUP = '5a000000-0000-4000-8000-0000000000b1';
+      const build = (): Document.CreateDocumentOutput => {
+        const supplierR = SupplierRef.rehydrate(OL_SUP);
+        if (!supplierR.ok) throw new Error('test setup: supplier');
+        const grossR = Money.fromCents(100000);
+        if (!grossR.ok) throw new Error('test setup: money');
+        const r = Document.create({
+          id: DocumentId.generate(),
+          documentNumber: 'NFS-OL-INT',
+          type: 'NFS-e',
+          supplier: supplierR.value,
+          paymentMethod: 'TED',
+          grossValue: grossR.value,
+          sourceDiscounts: Money.ZERO,
+          discounts: Money.ZERO,
+          penalty: Money.ZERO,
+          interest: Money.ZERO,
+          retentions: [],
+          registeredTaxes: [],
+          dueDate: new Date('2026-07-01'),
+        });
+        if (!r.ok) throw new Error('test setup: create');
+        return r.value;
+      };
+
+      it('expectedVersion casa → grava; versão stale → document-version-conflict', async () => {
+        const repo = createDrizzleDocumentRepository(handle);
+        const created = build();
+        const agg = { document: created.document, payables: created.payables };
+
+        // Criação (sem expectedVersion) → version 0.
+        const v0 = await repo.save(agg, []);
+        assert.equal(isOk(v0), true);
+
+        // Update com expectedVersion=0 (casa) → version 1.
+        const v1 = await repo.save(agg, [], 0);
+        assert.equal(isOk(v1), true);
+
+        // Update com expectedVersion=0 de novo (atual é 1) → conflito.
+        const stale = await repo.save(agg, [], 0);
+        assert.equal(stale.ok, false);
+        if (!stale.ok) assert.equal(stale.error, 'document-version-conflict');
+
+        await repo.delete(created.document.id);
+      });
+    });
   });
 }

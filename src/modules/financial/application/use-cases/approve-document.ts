@@ -17,7 +17,13 @@ export type ApproveDocumentDeps = Readonly<{
   clock: Clock;
 }>;
 
-export type ApproveDocumentCommand = Readonly<{ documentId: string; approvedBy: string }>;
+export type ApproveDocumentCommand = Readonly<{
+  documentId: string;
+  approvedBy: string;
+  // Optimistic lock (FR-009/ADR-0002 da feature 010): versão do documento lida pelo cliente.
+  // Repassada ao `repo.save` como `expectedVersion` — UPDATE com WHERE version = expectedVersion.
+  expectedVersion: number;
+}>;
 
 export type ApproveDocumentError =
   | DocumentError
@@ -68,6 +74,7 @@ export const approveDocument =
         payables: approved.value.payables,
       },
       entries,
+      cmd.expectedVersion,
     );
     if (!saved.ok) return err(saved.error);
 

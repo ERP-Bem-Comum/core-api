@@ -36,29 +36,60 @@ const toListItem = (doc: Document): DocumentListItem => ({
   dueDate: doc.dueDate ?? null,
 });
 
+// Entrada interna do store: agrega o documento + a versão corrente.
+// A versão não é exposta pelo domínio (DocumentRepository não tem getVersion()),
+// mas precisa ser rastreada internamente para enforçar o optimistic lock (FR-009).
+type StoreEntry = Readonly<{
+  aggregate: StoredDocument;
+  version: number;
+}>;
+
 // Adapter in-memory (testes + composition root de memória). Guarda o agregado por id branded.
 //
 // `timelineStore`: store compartilhado com o `createInMemoryTimelineRepository`.
 //   Quando fornecido, o `save` acumula as entries de trilha no mesmo Map que o
 //   timeline-repo lê — garantindo atomicidade em memória sem precisar de tx.
 //   Quando omitido (testes de contrato antigos que passam []), o store é descartado.
+//
+// Versão (optimistic lock — FR-009):
+//   O store interno guarda `{ aggregate, version }`. O `save` com `expectedVersion`
+//   definido compara a versão armazenada com `expectedVersion`; se divergir retorna
+//   err('document-version-conflict'). A criação (expectedVersion === undefined)
+//   insere com version=0. Cada mutação bem-sucedida incrementa a versão para
+//   `expectedVersion + 1`, espelhando o comportamento do Drizzle repo com MySQL.
 export const createInMemoryDocumentRepository = (
   timelineStore?: TimelineStore,
 ): DocumentRepository => {
-  const store = new Map<string, StoredDocument>();
+  const store = new Map<string, StoreEntry>();
   return immutable<DocumentRepository>({
     save: async (
       aggregate: StoredDocument,
       timelineEntries: readonly FinancialTimelineEntry[],
+      expectedVersion?: number,
     ): Promise<Result<void, DocumentRepositoryError>> => {
-      store.set(aggregate.document.id, aggregate);
-      // Acumular entries de trilha no store compartilhado (sc-004/nfr-001).
+      const id = aggregate.document.id;
+      const existing = store.get(id);
+
+      if (expectedVersion === undefined) {
+        // Caminho de criação: sem checagem de versão, insere com version=0.
+        store.set(id, { aggregate, version: 0 });
+      } else {
+        // Caminho de mutação: verificar que a versão armazenada bate com expectedVersion.
+        const storedVersion = existing?.version;
+        if (storedVersion !== expectedVersion) {
+          // Versão divergiu (outra operação já incrementou) → conflito.
+          return Promise.resolve(err('document-version-conflict'));
+        }
+        store.set(id, { aggregate, version: expectedVersion + 1 });
+      }
+
+      // Acumular entries de trilha no store compartilhado (SC-004/NFR-001).
       if (timelineStore !== undefined && timelineEntries.length > 0) {
         for (const entry of timelineEntries) {
           const key = entry.documentId as unknown as string;
-          const existing = timelineStore.get(key);
-          if (existing !== undefined) {
-            existing.push(entry);
+          const existingEntries = timelineStore.get(key);
+          if (existingEntries !== undefined) {
+            existingEntries.push(entry);
           } else {
             timelineStore.set(key, [entry]);
           }
@@ -67,8 +98,8 @@ export const createInMemoryDocumentRepository = (
       return Promise.resolve(ok(undefined));
     },
     findById: async (id: DocumentId): Promise<Result<StoredDocument, DocumentRepositoryError>> => {
-      const found = store.get(id);
-      return Promise.resolve(found !== undefined ? ok(found) : err('document-not-found'));
+      const entry = store.get(id);
+      return Promise.resolve(entry !== undefined ? ok(entry.aggregate) : err('document-not-found'));
     },
     delete: async (id: DocumentId): Promise<Result<void, DocumentRepositoryError>> => {
       store.delete(id);
@@ -84,7 +115,7 @@ export const createInMemoryDocumentRepository = (
       pageSize: number,
     ): Promise<Result<Page<DocumentListItem>, DocumentRepositoryError>> => {
       const matched = [...store.values()]
-        .map((s) => s.document)
+        .map((e) => e.aggregate.document)
         .filter((d) => matchesFilter(d, filter));
       const start = (page - 1) * pageSize;
       const items = matched.slice(start, start + pageSize).map(toListItem);

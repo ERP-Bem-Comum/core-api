@@ -13,14 +13,25 @@ export type StoredDocument = Readonly<{
   payables: Payables | null;
 }>;
 
-export type DocumentRepositoryError = 'document-not-found' | 'document-repository-failure';
+export type DocumentRepositoryError =
+  | 'document-not-found'
+  | 'document-repository-failure'
+  | 'document-version-conflict';
 
 export type DocumentRepository = Readonly<{
   // `timelineEntries` são gravadas NA MESMA transação do agregado (SC-004/NFR-001 — Vernon:3257).
   // Quem não tem trilha (testes de contrato sem timeline, fases anteriores) passa [].
+  //
+  // `expectedVersion` (opcional — mantém compatibilidade com criadores):
+  //   - undefined  → criação / saveDraft / saveDocument / submit: caminho de INSERT; sem checagem
+  //     de versão (documento pode não existir ainda).
+  //   - number     → mutação de documento existente (adjust/approve/undo): o UPDATE exige
+  //     WHERE version = expectedVersion. Se affectedRows = 0, retorna
+  //     err('document-version-conflict') (FR-009/ADR-0002 da feature 010).
   save: (
     aggregate: StoredDocument,
     timelineEntries: readonly FinancialTimelineEntry[],
+    expectedVersion?: number,
   ) => Promise<Result<void, DocumentRepositoryError>>;
   findById: (id: DocumentId) => Promise<Result<StoredDocument, DocumentRepositoryError>>;
   delete: (id: DocumentId) => Promise<Result<void, DocumentRepositoryError>>;

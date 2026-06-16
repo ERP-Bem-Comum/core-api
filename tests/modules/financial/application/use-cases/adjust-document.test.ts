@@ -80,6 +80,7 @@ describe('financial/application — adjustDocument', () => {
     const id = await seedOpen(repo);
     const r = await adjustDocument({ repo, outbox: outbox.port, clock: CLOCK })({
       documentId: id,
+      expectedVersion: 0,
       interestCents: 500,
       retentions: [
         { type: 'ISS', baseCents: 40000, rateBps: 1000, valueCents: 4000 },
@@ -98,6 +99,7 @@ describe('financial/application — adjustDocument', () => {
     const id = await seedApproved(repo);
     const r = await adjustDocument({ repo, outbox: outbox.port, clock: CLOCK })({
       documentId: id,
+      expectedVersion: 0,
       interestCents: 100,
     });
     assert.equal(isErr(r), true);

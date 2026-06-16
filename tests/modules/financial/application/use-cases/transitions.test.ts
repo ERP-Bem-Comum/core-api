@@ -103,6 +103,7 @@ describe('financial/application — approveDocument', () => {
     })({
       documentId: id,
       approvedBy: USER,
+      expectedVersion: 0,
     });
     assert.equal(isOk(r), true);
     const found = await repo.findById(id as never);
@@ -124,6 +125,7 @@ describe('financial/application — approveDocument', () => {
     })({
       documentId: id,
       approvedBy: USER,
+      expectedVersion: 0,
     });
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'invalid-state-transition');
@@ -135,7 +137,10 @@ describe('financial/application — undoApproval', () => {
     const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
     const id = await seedApproved(repo);
-    const r = await undoApproval({ repo, outbox: outbox.port, clock: CLOCK })({ documentId: id });
+    const r = await undoApproval({ repo, outbox: outbox.port, clock: CLOCK })({
+      documentId: id,
+      expectedVersion: 0,
+    });
     assert.equal(isOk(r), true);
     const found = await repo.findById(id as never);
     if (found.ok) assert.equal(found.value.document.status, 'Open');

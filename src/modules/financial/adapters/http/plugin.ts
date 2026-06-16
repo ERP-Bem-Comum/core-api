@@ -255,6 +255,8 @@ const financialRoutes =
         const body = req.body;
         const result = await deps.adjustDocument({
           documentId: req.params.id,
+          // Optimistic lock (FR-009): propaga `body.version` → `cmd.expectedVersion`.
+          expectedVersion: body.version,
           ...(body.grossValueCents !== undefined
             ? { grossValueCents: Number(body.grossValueCents) }
             : {}),
@@ -293,6 +295,8 @@ const financialRoutes =
         const result = await deps.approveDocument({
           documentId: req.params.id,
           approvedBy: req.userId,
+          // Optimistic lock (FR-009): propaga `body.version` → `cmd.expectedVersion`.
+          expectedVersion: req.body.version,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         return loadAndSerialize(deps, reply, req.params.id);
@@ -310,7 +314,11 @@ const financialRoutes =
         response: { 200: documentResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
-        const result = await deps.undoApproval({ documentId: req.params.id });
+        const result = await deps.undoApproval({
+          documentId: req.params.id,
+          // Optimistic lock (FR-009): propaga `body.version` → `cmd.expectedVersion`.
+          expectedVersion: req.body.version,
+        });
         if (!result.ok) return sendDomainError(reply, result.error);
         return loadAndSerialize(deps, reply, req.params.id);
       },
