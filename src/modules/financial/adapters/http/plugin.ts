@@ -29,10 +29,11 @@ import type {
   FastifyZodOpenApiTypeProvider,
 } from 'fastify-zod-openapi';
 
-import { ok, err } from '#src/shared/primitives/result.ts';
+import { ok } from '#src/shared/primitives/result.ts';
 import { sendResult } from '#src/shared/http/reply.ts';
 import { toErrorEnvelope } from '#src/shared/http/errors.ts';
 import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
+import { writeErrorStatus, toPublicCode, toPublicMessage } from './error-mapping.ts';
 
 import * as DocumentId from '../../domain/shared/document-id.ts';
 import type { RetentionInput } from '../../domain/shared/retention.ts';
@@ -45,6 +46,7 @@ import {
   createDocumentBodySchema,
   adjustDocumentBodySchema,
   approveBodySchema,
+  cancelDocumentBodySchema,
   documentIdParamSchema,
   listDocumentsQuerySchema,
   documentResponseSchema,
@@ -58,34 +60,7 @@ export type FinancialHttpHooks = Readonly<{
   authorize: (permissionName: string) => preHandlerAsyncHookHandler;
 }>;
 
-// ─── Classificação de erros → status HTTP ────────────────────────────────────
-
-const NOT_FOUND_CODES: ReadonlySet<string> = new Set(['document-not-found']);
-
-const CONFLICT_CODES: ReadonlySet<string> = new Set([
-  'invalid-state-transition',
-  'document-version-conflict',
-  'cancel-not-allowed',
-]);
-
-const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
-  'financial-ref-invalid',
-  'invalid-supplier-ref',
-  'document-id-invalid',
-]);
-
-const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
-  'document-repository-failure',
-  'outbox-append-failed',
-]);
-
-const writeErrorStatus = (code: string): number => {
-  if (NOT_FOUND_CODES.has(code)) return 404;
-  if (CONFLICT_CODES.has(code)) return 409;
-  if (BAD_REQUEST_CODES.has(code)) return 400;
-  if (UNAVAILABLE_CODES.has(code)) return 503;
-  return 422;
-};
+// ─── Classificação de erros → status HTTP + envelope público (OWASP API8 — #52) ──
 
 const sendDomainError = (reply: FastifyReply, error: string): Promise<void> => {
   const requestId = currentCorrelationId() ?? reply.request.id;
@@ -102,9 +77,14 @@ const sendDomainError = (reply: FastifyReply, error: string): Promise<void> => {
       ) as unknown as Promise<void>;
   }
 
+  // 4xx: o slug interno (mecanismo de concorrência, máquina de estados) NUNCA vaza no body —
+  // code público estável + message PT-BR; o slug fica só no log (OWASP API8:2023).
+  reply.request.log.debug({ errorCode: error, status, requestId }, 'financial-domain-error-4xx');
   return reply
     .code(status)
-    .send(toErrorEnvelope(error, error, requestId)) as unknown as Promise<void>;
+    .send(
+      toErrorEnvelope(toPublicCode(error), toPublicMessage(error), requestId),
+    ) as unknown as Promise<void>;
 };
 
 // ─── Helper: carrega stored document e serializa ──────────────────────────────
@@ -327,25 +307,23 @@ const financialRoutes =
     });
 
     // DELETE /financial/documents/:id — cancela (só Open); hard delete. 204 sem corpo.
+    // Exige `version` no body (optimistic lock — #55/FR-009): versão defasada → 409.
     scope.route({
       method: 'DELETE',
       url: '/financial/documents/:id',
       preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.cancel)],
       schema: {
         params: documentIdParamSchema,
+        body: cancelDocumentBodySchema,
         // 204 sem body → sem response schema (convenção das rotas 204 deste projeto).
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
-        const result = await deps.cancelDocument({ documentId: req.params.id });
-        return sendResult(reply, result.ok ? ok(undefined) : err(result.error), {
-          ok: 204,
-          errors: {
-            'document-not-found': 404,
-            'invalid-state-transition': 409,
-            'document-repository-failure': 503,
-            'outbox-append-failed': 503,
-          },
+        const result = await deps.cancelDocument({
+          documentId: req.params.id,
+          expectedVersion: req.body.version,
         });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return reply.code(204).send() as unknown as Promise<void>;
       },
     });
 

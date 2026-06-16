@@ -121,7 +121,18 @@ export const createInMemoryDocumentRepository = (
           : err('document-not-found'),
       );
     },
-    delete: async (id: DocumentId): Promise<Result<void, DocumentRepositoryError>> => {
+    delete: async (
+      id: DocumentId,
+      expectedVersion: number,
+    ): Promise<Result<void, DocumentRepositoryError>> => {
+      // Optimistic lock: espelha o DELETE ... WHERE version do adapter Drizzle — affectedRows=0
+      // (doc ausente ou versão divergente) → conflito. O use case já tratou not-found via findById.
+      // entry?.version é undefined se o doc não existe → undefined !== expectedVersion → conflito,
+      // espelhando o affectedRows=0 do Drizzle (doc ausente OU versão divergente).
+      const entry = store.get(id);
+      if (entry?.version !== expectedVersion) {
+        return Promise.resolve(err('document-version-conflict'));
+      }
       store.delete(id);
       // Cascata em memória: remover a trilha junto com o documento (espelha ON DELETE CASCADE do MySQL).
       if (timelineStore !== undefined) {

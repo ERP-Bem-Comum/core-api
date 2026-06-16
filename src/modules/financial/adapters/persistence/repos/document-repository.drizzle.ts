@@ -330,16 +330,50 @@ export const createDrizzleDocumentRepository = (
 
   // ─── delete ────────────────────────────────────────────────────────────────
   //
-  // Hard delete do documento raiz. As filhas (payables, retentions, registered_taxes)
-  // são removidas automaticamente via ON DELETE CASCADE (schema.ts §"FK ON DELETE CASCADE").
-  // ADR-0002 (Evans) + data-model.md: "A delete operation must remove everything
-  // within the AGGREGATE boundary at once."
-  const deleteDoc = async (id: DocumentId): Promise<Result<void, DocumentRepositoryError>> =>
-    safe('delete', async () => {
-      await db
-        .delete(schema.finDocuments)
-        .where(eq(schema.finDocuments.id, id as unknown as string));
-    });
+  // Hard delete do documento raiz com optimistic lock (FR-009 — espelha o `save`). As filhas
+  // (payables, retentions, registered_taxes, timeline) saem via ON DELETE CASCADE.
+  // ADR-0002 (Evans): "A delete operation must remove everything within the AGGREGATE boundary
+  // at once." O DELETE só remove se `version = expectedVersion`; affectedRows=0 (versão divergiu
+  // ou doc removido por outra tx entre o findById do use case e este DELETE) → conflito.
+  const deleteDoc = async (
+    id: DocumentId,
+    expectedVersion: number,
+  ): Promise<Result<void, DocumentRepositoryError>> => {
+    const documentId = id as unknown as string;
+    try {
+      await db.transaction(async (tx) => {
+        // SELECT FOR UPDATE — efeito colateral: next-key lock na PK (mesmo do save), serializa
+        // mutações concorrentes. O retorno é descartado; a checagem de versão é o WHERE do DELETE.
+        await tx
+          .select({ version: schema.finDocuments.version })
+          .from(schema.finDocuments)
+          .where(eq(schema.finDocuments.id, documentId))
+          .for('update');
+
+        const deleteResult = await tx
+          .delete(schema.finDocuments)
+          .where(
+            and(
+              eq(schema.finDocuments.id, documentId),
+              eq(schema.finDocuments.version, expectedVersion),
+            ),
+          );
+
+        const affectedRows = (deleteResult as unknown as [{ affectedRows: number }])[0]
+          .affectedRows;
+        if (affectedRows === 0) {
+          throw makeVersionConflict(documentId, expectedVersion);
+        }
+      });
+      return ok(undefined);
+    } catch (cause) {
+      if (isVersionConflict(cause)) {
+        return err('document-version-conflict');
+      }
+      process.stderr.write(`[document-repo:delete] ${String(cause)}\n`);
+      return err('document-repository-failure');
+    }
+  };
 
   // ─── findPaged ─────────────────────────────────────────────────────────────
   //

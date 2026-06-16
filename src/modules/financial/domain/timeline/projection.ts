@@ -61,13 +61,18 @@ export type ProjectEntryInput = Readonly<{
 
 // Gera as entradas do marco: 1 para o Documento + 1 por título alterado/criado.
 export const projectEntry = (input: ProjectEntryInput): readonly FinancialTimelineEntry[] => {
+  // Cancelar faz hard-delete + cascade — não há marco de trilha para `DocumentCancelled`.
+  // O guard também narrowa `eventType` para o subconjunto `TimelineEventType` (sem o cancelamento).
+  const eventType = input.event.type;
+  if (eventType === 'DocumentCancelled') return [];
+
   const documentId = input.after.id;
   const entries: FinancialTimelineEntry[] = [
     {
       eventId: input.eventId,
       documentId,
       target: { kind: 'Document', id: documentId },
-      kind: input.event.type,
+      eventType,
       occurredAt: input.occurredAt,
       actor: input.actor,
       changes: diffDocument(input.before, input.after),
@@ -88,7 +93,7 @@ export const projectEntry = (input: ProjectEntryInput): readonly FinancialTimeli
       eventId: input.eventId,
       documentId,
       target: { kind: 'Payable', id: after.id },
-      kind: input.event.type,
+      eventType,
       occurredAt: input.occurredAt,
       actor: input.actor,
       changes,

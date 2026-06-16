@@ -105,7 +105,7 @@ export const timelineToDto = (
   entries: readonly FinancialTimelineEntry[],
 ): DocumentTimelineResponseDto => ({
   entries: entries.map((entry) => ({
-    eventType: entry.kind,
+    eventType: entry.eventType,
     target: {
       kind: entry.target.kind,
       id: String(entry.target.id),

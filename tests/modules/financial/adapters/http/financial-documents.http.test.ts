@@ -244,6 +244,7 @@ describe('FIN-DOCUMENTO-TITULOS — /api/v2/financial/documents', () => {
       method: 'DELETE',
       url: `/api/v2/financial/documents/${docId}`,
       headers: bearer(WRITER),
+      payload: { version: 0 }, // #55: optimistic lock — doc recém-criado é v0
     });
     assert.equal(deleteRes.statusCode, 204);
   });
@@ -264,6 +265,7 @@ describe('FIN-DOCUMENTO-TITULOS — /api/v2/financial/documents', () => {
       method: 'DELETE',
       url: `/api/v2/financial/documents/${docId}`,
       headers: bearer(APPROVER),
+      payload: { version: 1 }, // #55: version corrente após approve; rejeição vem do estado (Approved)
     });
     assert.equal(deleteRes.statusCode, 409);
   });
