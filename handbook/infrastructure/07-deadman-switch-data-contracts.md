@@ -117,9 +117,11 @@ fontes — removendo o SPOF do Actions na decisão.
 
 ---
 
-## 6. Itens abertos (entram nos tickets derivados)
+## 6. SLO e payload (#72)
 
-- `threshold_days` por emitter (SLO — ADR-0042 D3).
+- **SLO / `threshold_days`** (D3): versionado em **`deadman/emitters.json`** (`default_threshold_days` + override por emitter). Lido pelos dois Auditores. Para o `sweeper-vps-qa` (cron diário): `2` dias (1 de grace).
+- **Payload de contingência** (quando `DEAD`): (1) **issue p1** de alerta + (2) **webhook Discord** (`DEADMAN_DISCORD_WEBHOOK`, opcional). Extensível — novos canais entram no mesmo ponto do Auditor.
+
+### Ainda abertos
 - Rotação da `key` do HMAC.
-- Retenção/compactação do `status.jsonl` (append infinito no S3 → política de roll/arquivamento).
-- Formato do "payload de contingência" (o que o disparo executa).
+- Retenção/compactação dos objetos `status/` (append infinito no S3 → política de roll/arquivamento).

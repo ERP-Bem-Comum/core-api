@@ -52,6 +52,8 @@ jobs:
       - name: Self-heal (S3 → history.jsonl) + decisão + keep-alive
         run: |
           set -euo pipefail
+          # SLO (D3/#72): threshold do config versionado deadman/emitters.json (fallback no env).
+          THRESHOLD_DAYS=$(jq -r ".default_threshold_days // ${THRESHOLD_DAYS}" deadman/emitters.json)
           last() { jq -s 'map(.ts // empty) | max // ""' -r "$1" 2>/dev/null || echo ""; }
           remote_last=$(last /tmp/remote.jsonl)
           local_last=$(last deadman/history.jsonl)
@@ -82,12 +84,16 @@ jobs:
             status=DEAD # nenhum sinal jamais visto
           fi
 
-          # payload (mínimo — #72 define o real): abre issue de alerta uma vez.
+          # payload de contingência (#72): (1) issue p1 + (2) webhook Discord (se configurado).
           if [ "$status" = "DEAD" ]; then
             fired=true
             gh issue create --title "🔴 DEAD-MAN FIRED — sem sinal há ${age_h}h (limite ${THRESHOLD_DAYS}d)" \
-              --body "Auditor: nenhum ping dentro da janela. last_seen=${last_seen:-nunca}. Ver deadman/audit.jsonl. Payload completo: #72." \
+              --body "Auditor: nenhum ping dentro da janela. last_seen=${last_seen:-nunca}. Ver deadman/audit.jsonl." \
               --label "agent-found,priority:p1" || true
+            if [ -n "${DEADMAN_DISCORD_WEBHOOK:-}" ]; then
+              curl -fsS -X POST "$DEADMAN_DISCORD_WEBHOOK" -H 'Content-Type: application/json' \
+                -d "$(jq -nc --arg c "🔴 DEAD-MAN FIRED — sem sinal há ${age_h}h (limite ${THRESHOLD_DAYS}d). last_seen=${last_seen:-nunca}" '{content:$c}')" || true
+            fi
           fi
 
           jq -nc --arg run "$run_at" --arg ls "${last_seen:-}" --argjson age "$age_h" \
@@ -102,3 +108,4 @@ jobs:
           git push
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEADMAN_DISCORD_WEBHOOK: ${{ secrets.DEADMAN_DISCORD_WEBHOOK }}
