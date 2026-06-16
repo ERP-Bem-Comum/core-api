@@ -259,6 +259,31 @@ const main = async (): Promise<number> => {
     }
   }
 
+  // Gera contracts_database_url.txt — connection string composta a partir de
+  // mysql_app_password.txt (já escrito acima). O host `mysql` é o nome do
+  // serviço no compose; em produção o ERP-INFRA injeta a URL real via secret.
+  const contractsDbUrlFile = resolve(SECRETS_DIR, 'contracts_database_url.txt');
+  if ((await fileExists(contractsDbUrlFile)) && !parsed.force) {
+    stderr.write('  ↷ contracts_database_url.txt já existe (use --force para regenerar)\n');
+  } else {
+    const appPwdFile = resolve(SECRETS_DIR, 'mysql_app_password.txt');
+    try {
+      const { readFile } = await import('node:fs/promises');
+      const appPwd = (await readFile(appPwdFile, 'utf8')).trim();
+      const connectionUrl = `mysql://core_app:${appPwd}@mysql:3306/core`;
+      // 0600 (só dono): contém a URL completa COM a senha do DB. Os secrets de senha bruta
+      // usam 0644 por restrição do initdb (gosu/uid 999 — ver writeSecret); essa restrição
+      // NÃO se aplica aqui (único consumidor é o container via /run/secrets, montado 0444).
+      await writeAtomic(contractsDbUrlFile, connectionUrl, 0o600);
+      stderr.write('  ✓ contracts_database_url.txt criado (chmod 0600)\n');
+    } catch (e: unknown) {
+      stderr.write(
+        `Erro ao gerar contracts_database_url.txt: ${e instanceof Error ? e.message : String(e)}\n`,
+      );
+      return EXIT_IOERR;
+    }
+  }
+
   stderr.write('\n→ Pronto. Próximo: docker compose up -d mysql\n');
   stderr.write('→ NUNCA commitar /secrets/*.txt. Já está no .gitignore.\n');
   return EXIT_OK;
