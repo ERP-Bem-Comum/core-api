@@ -150,6 +150,21 @@ export const contracts = mysqlTable(
     // relatórios temporais sem full table scan (Ramakrishnan §8.2).
     index('ctr_contracts_status_idx').on(t.status),
     index('ctr_contracts_signed_at_idx').on(t.signedAt),
+
+    // CTR-AUTO-EXPIRE (issue #39): índice composto para o sweep de auto-expiração.
+    // Query alvo: WHERE status='Active' AND current_period_kind='Fixed' AND current_period_end < :cutoff
+    //             ORDER BY current_period_end ASC LIMIT :n
+    //
+    // Ordem das colunas: igualdades primeiro (status, current_period_kind) → range scan em
+    // current_period_end (Refman 8.4 §10.2.1.2 — "The leftmost prefix of an index can be used
+    // for a range scan"). InnoDB usa o índice para filtro + ordenação, evitando filesort.
+    // Seletividade estimada: status='Active' ~40% (4 estados) → current_period_kind='Fixed' ~80%
+    // (Fixed vs Indefinite) → current_period_end < cutoff (range pequeno — contratos vencidos).
+    // O índice cobridor + limit torna o sweep O(k) onde k = batchSize.
+    //
+    // CHARSET/COLLATE (status, current_period_kind): varchar utf8mb4_unicode_ci da tabela-pai.
+    // A migration aplica ENGINE=InnoDB ... utf8mb4_unicode_ci (header §CHARSET/COLLATE).
+    index('ctr_contracts_expirable_idx').on(t.status, t.currentPeriodKind, t.currentPeriodEnd),
   ],
 );
 

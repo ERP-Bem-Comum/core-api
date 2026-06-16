@@ -223,6 +223,7 @@ describe('importContracts — falha de infra aborta', () => {
       list: fail,
       listPaged: fail,
       save: fail,
+      findExpirable: fail,
     };
     const useCase = importContracts({ contractRepo: failingRepo, clock });
 

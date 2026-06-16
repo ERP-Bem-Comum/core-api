@@ -1,6 +1,7 @@
 import type { Result } from '../../../../shared/primitives/result.ts';
 import type { ContractId } from '../shared/ids.ts';
-import type { Contract, ContractStatus } from './types.ts';
+import type { Contract, ContractStatus, ActiveContract } from './types.ts';
+import type { PlainDate } from '../../../../shared/kernel/plain-date.ts';
 import type { OutboxAppendError } from '../../application/ports/outbox.ts';
 import type { ContractsModuleEvent } from '../../application/ports/event-bus.ts';
 
@@ -60,4 +61,13 @@ export type ContractRepository = Readonly<{
     contract: Contract,
     events: readonly ContractsModuleEvent[],
   ) => Promise<Result<void, ContractRepositoryError>>;
+  // CTR-AUTO-EXPIRE (issue #39 · ADR-0041): contratos `Active` com vigência `Fixed` encerrada
+  // (`current_period_end < cutoff`). Os adapters (Drizzle + InMemory) usam `SELECT … LIMIT`
+  // simples — **sem** `FOR UPDATE`: o lock não persistiria entre `findExpirable` (tx A) e `save`
+  // (tx B), então coordenação multi-instância é F-Plus via `GET_LOCK`/`UNIQUE(job_name, run_date)`
+  // (ADR-0041). `cutoff` = "hoje" na timezone do negócio (America/Sao_Paulo).
+  findExpirable: (
+    cutoff: PlainDate,
+    limit: number,
+  ) => Promise<Result<readonly ActiveContract[], ContractRepositoryError>>;
 }>;

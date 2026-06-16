@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, like, or, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, like, lt, or, sql, type SQL } from 'drizzle-orm';
 
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
 import type {
@@ -6,8 +6,9 @@ import type {
   ContractRepositoryError,
   ListContractsQuery,
 } from '../../../domain/contract/repository.ts';
-import type { Contract } from '../../../domain/contract/types.ts';
+import type { Contract, ActiveContract } from '../../../domain/contract/types.ts';
 import type { ContractId } from '../../../domain/shared/ids.ts';
+import type { PlainDate as PlainDateType } from '../../../../../shared/kernel/plain-date.ts';
 import type { ContractsModuleEvent } from '../../../application/ports/event-bus.ts';
 import type { MysqlHandle } from '../drivers/mysql-driver.ts';
 import { contractFromRow, contractToInsert, type ContractRow } from '../mappers/contract.mapper.ts';
@@ -317,6 +318,90 @@ export const createDrizzleContractRepository = (
           await persistContractInTx(tx, contract);
           await appendOutboxInTx(tx, schema, events);
         });
+      }),
+
+    // CTR-AUTO-EXPIRE (issue #39 · ADR-0041): contratos elegíveis para expiração automática.
+    //
+    // Query: WHERE status='Active' AND current_period_kind='Fixed' AND current_period_end < :cutoff
+    //        ORDER BY current_period_end ASC, id ASC   LIMIT :limit
+    //
+    // Índice composto `ctr_contracts_expirable_idx` (status, current_period_kind, current_period_end)
+    // cobre o filtro completo: igualdades nas 2 primeiras colunas + range scan na terceira
+    // (Refman 8.4 §10.2.1.2 — index range scan; igualdades antes do range maximizam seletividade).
+    //
+    // Decisão CA5 (opção a): SELECT simples, SEM FOR UPDATE.
+    // Fundamentação: `runSweep` usa 2 transações separadas — findExpirable (tx A) + save (tx B).
+    // Um FOR UPDATE dentro de tx A liberaria os locks no COMMIT antes do save (tx B).
+    // O lock NÃO persiste entre as duas transações → não previne double-expire em multi-instância.
+    // ADR-0041 §"Decisão (4)": coordenação multi-instância via GET_LOCK / UNIQUE(job_name, run_date)
+    // é F-Plus. Hoje (single-instance + cron one-shot): SELECT simples é suficiente e correto.
+    //
+    // cutoff é PlainDate (data-calendário). O adapter Drizzle persiste current_period_end como
+    // `date` (mode:'date' no schema → Date meia-noite UTC). Convertemos cutoff → Date UTC antes
+    // de comparar com `lt` (less-than) — mesmo toUTCDate do period.mapper.ts.
+    findExpirable: async (cutoff: PlainDateType, limit: number) =>
+      safe('findExpirable', async () => {
+        // Converter PlainDate → Date UTC (meia-noite) para comparação com coluna `date`.
+        const cutoffDate = new Date(Date.UTC(cutoff.year, cutoff.month - 1, cutoff.day));
+
+        const rows = await db
+          .select()
+          .from(schema.contracts)
+          .where(
+            and(
+              eq(schema.contracts.status, 'Active'),
+              eq(schema.contracts.currentPeriodKind, 'Fixed'),
+              lt(schema.contracts.currentPeriodEnd, cutoffDate),
+            ),
+          )
+          // Ordena por (current_period_end ASC, id ASC): contratos mais antigos primeiro;
+          // id como tie-break determinístico (consistente com o InMemory adapter).
+          .orderBy(asc(schema.contracts.currentPeriodEnd), asc(schema.contracts.id))
+          .limit(limit);
+
+        if (rows.length === 0) return [] as readonly ActiveContract[];
+
+        // Todos os contratos elegíveis são Active + Fixed → sem homologatedAmendmentIds
+        // ainda carregados. Precisamos da junction table para reconstituir o agregado completo.
+        const contractIds = rows.map((r) => r.id);
+        const links = await db
+          .select({
+            contractId: schema.contractHomologatedAmendments.contractId,
+            amendmentId: schema.contractHomologatedAmendments.amendmentId,
+          })
+          .from(schema.contractHomologatedAmendments)
+          .where(inArray(schema.contractHomologatedAmendments.contractId, contractIds));
+
+        const byContract = new Map<string, string[]>();
+        for (const link of links) {
+          const arr = byContract.get(link.contractId) ?? [];
+          arr.push(link.amendmentId);
+          byContract.set(link.contractId, arr);
+        }
+
+        const active: ActiveContract[] = [];
+        for (const row of rows) {
+          const homologatedIds = (byContract.get(row.id) ?? []).map((amendmentId) => ({
+            amendmentId,
+          }));
+          const r = buildContract(row, homologatedIds);
+          if (!r.ok) throw new Error(JSON.stringify(r.error));
+          // Narrowing seguro: a query WHERE status='Active' garante o subtipo.
+          // buildContract retorna Contract; o status === 'Active' no WHERE garante
+          // que a row que chegou aqui é Active. O mapper também valida isso
+          // (contractMapperInvalidEndedAt protege se o DB estiver corrompido).
+          if (r.value.status !== 'Active') {
+            // Estado corrompido no DB (CHECK violado); buildContract não lança →
+            // logamos e pulamos para não derrubar o lote inteiro.
+            process.stderr.write(
+              `[contract-repo:findExpirable] row ${row.id} retornou status=${r.value.status} inesperado\n`,
+            );
+            continue;
+          }
+          active.push(r.value as ActiveContract);
+        }
+
+        return active as readonly ActiveContract[];
       }),
   };
 };
