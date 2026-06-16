@@ -27,7 +27,7 @@ do evento.
 
 > "To update synchronously, the query model and command model would normally share the same database (or schema), and we
 > would update the two models in the same transaction. That keeps both models completely consistent."
-> — _(ddd--vernon-livro-vermelho.md:3257 — CQRS / query model síncrono; Vaughn Vernon, _Implementing Domain-Driven Design_)_
+> — _(ddd--vernon-livro-vermelho.md:3257 — CQRS / query model síncrono; Vaughn Vernon, \_Implementing Domain-Driven Design_)\_
 
 ## Alternativas consideradas
 

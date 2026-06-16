@@ -13,14 +13,14 @@
 
 ## Linguagem ubíqua (novos termos da fatia)
 
-| Termo (PT)              | Código (EN)               | Definição                                                                                          |
-| ----------------------- | ------------------------- | -------------------------------------------------------------------------------------------------- |
-| Trilha do Documento     | `DocumentTimeline`        | Histórico imutável (append-only) por-campo de um documento e seus títulos. Read-model derivado de eventos. |
-| Entrada da trilha       | `FinancialTimelineEntry`  | Um marco: alvo, tipo de evento, instante, autor, lista de mudanças de campo.                        |
-| Mudança de campo        | `FieldChange`             | Alteração atômica `{ field, before, after }` dentro de uma entrada (sem JSON — 1FN).                |
-| Resumo de documento     | `DocumentSummary`         | Projeção enxuta do `Document` para a listagem (sem títulos/retenções).                              |
-| Filtro de listagem      | `DocumentListFilter`      | Critérios combináveis: status, fornecedor, tipo, janela de vencimento.                              |
-| Página                  | `Page<T>`                 | `{ items, page, pageSize, total }` — recorte paginado + contagem total filtrada.                    |
+| Termo (PT)          | Código (EN)              | Definição                                                                                                  |
+| ------------------- | ------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| Trilha do Documento | `DocumentTimeline`       | Histórico imutável (append-only) por-campo de um documento e seus títulos. Read-model derivado de eventos. |
+| Entrada da trilha   | `FinancialTimelineEntry` | Um marco: alvo, tipo de evento, instante, autor, lista de mudanças de campo.                               |
+| Mudança de campo    | `FieldChange`            | Alteração atômica `{ field, before, after }` dentro de uma entrada (sem JSON — 1FN).                       |
+| Resumo de documento | `DocumentSummary`        | Projeção enxuta do `Document` para a listagem (sem títulos/retenções).                                     |
+| Filtro de listagem  | `DocumentListFilter`     | Critérios combináveis: status, fornecedor, tipo, janela de vencimento.                                     |
+| Página              | `Page<T>`                | `{ items, page, pageSize, total }` — recorte paginado + contagem total filtrada.                           |
 
 ## Read-model `DocumentTimeline` (Time Travel por-campo)
 
@@ -52,7 +52,8 @@ export type FinancialTimelineEntry = Readonly<{
 ```
 
 > **NÃO é agregado** — é projeção (read-model). Não tem invariante de negócio própria; é derivada do agregado `Document`
-> + seus eventos. Por isso vive em `domain/timeline/` como `types` + função pura de projeção + port, espelhando contracts.
+>
+> - seus eventos. Por isso vive em `domain/timeline/` como `types` + função pura de projeção + port, espelhando contracts.
 
 ### Função pura de projeção/diff (domínio)
 
@@ -64,18 +65,24 @@ mantém os eventos da fatia 1 intactos):
 export const diffDocument = (
   before: Document | null, // null = criação
   after: Document,
-): readonly FieldChange[] => { /* compara campos vitais: grossValue, netValue, status, dueDate, description, ... */ };
+): readonly FieldChange[] => {
+  /* compara campos vitais: grossValue, netValue, status, dueDate, description, ... */
+};
 
-export const projectEntry = (input: Readonly<{
-  eventId: string;
-  event: DocumentEvent;
-  before: Document | null;
-  after: Document;
-  payablesBefore: Payables | null;
-  payablesAfter: Payables | null;
-  actor: UserRef | null;
-  occurredAt: Date;
-}>): readonly FinancialTimelineEntry[] => { /* 1 entry p/ Document + 1 por Payable alterado */ };
+export const projectEntry = (
+  input: Readonly<{
+    eventId: string;
+    event: DocumentEvent;
+    before: Document | null;
+    after: Document;
+    payablesBefore: Payables | null;
+    payablesAfter: Payables | null;
+    actor: UserRef | null;
+    occurredAt: Date;
+  }>,
+): readonly FinancialTimelineEntry[] => {
+  /* 1 entry p/ Document + 1 por Payable alterado */
+};
 ```
 
 - **Campos vitais rastreados** (Document): `documentNumber`, `type`, `supplierRef`, `paymentMethod`, `grossValue`,
@@ -90,9 +97,13 @@ export const projectEntry = (input: Readonly<{
 // domain/timeline/repository.ts
 export type FinancialTimelineRepository = Readonly<{
   // Anexa entries+changes do marco. Chamado DENTRO da mesma transação do save do agregado.
-  append: (entries: readonly FinancialTimelineEntry[]) => Promise<Result<void, TimelineRepositoryError>>;
+  append: (
+    entries: readonly FinancialTimelineEntry[],
+  ) => Promise<Result<void, TimelineRepositoryError>>;
   // Lê a trilha de um documento (ordenada por occurredAt asc) — usado pelo GET /timeline.
-  findByDocument: (id: DocumentId) => Promise<Result<readonly FinancialTimelineEntry[], TimelineRepositoryError>>;
+  findByDocument: (
+    id: DocumentId,
+  ) => Promise<Result<readonly FinancialTimelineEntry[], TimelineRepositoryError>>;
 }>;
 ```
 
@@ -112,7 +123,12 @@ export type DocumentListFilter = Readonly<{
   dueTo?: Date; // janela inclusiva
 }>;
 
-export type Page<T> = Readonly<{ items: readonly T[]; page: number; pageSize: number; total: number }>;
+export type Page<T> = Readonly<{
+  items: readonly T[];
+  page: number;
+  pageSize: number;
+  total: number;
+}>;
 
 // Adicionado ao DocumentRepository (port) — read path:
 //   findPaged: (filter, page, pageSize) => Promise<Result<Page<Document>, DocumentRepositoryError>>
@@ -128,15 +144,15 @@ export type Page<T> = Readonly<{ items: readonly T[]; page: number; pageSize: nu
 Cada use case **mutante** passa a (na mesma transação): computar `before`/`after`, projetar entries e `append` na timeline.
 Sem reescrever a lógica de negócio — só acrescenta a gravação do read-model.
 
-| Use case        | Marco na trilha (`kind`) | Alvos                          |
-| --------------- | ------------------------ | ------------------------------ |
-| `saveDocument`  | `DocumentSaved`          | Document (criação) + Payables  |
-| `saveDraft`     | `DocumentDraftSaved`     | Document                       |
-| `adjustDocument`| `DocumentSaved`          | Document + Payables alterados  |
-| `approveDocument`| `PayableApproved`       | Document + cada Payable        |
-| `undoApproval`  | `ApprovalUndone`         | Document + Payables            |
-| `cancelDocument`| `DocumentCancelled`      | Document (antes do hard delete)|
-| `submitDraft`   | `DocumentSaved`          | Document + Payables            |
+| Use case          | Marco na trilha (`kind`) | Alvos                           |
+| ----------------- | ------------------------ | ------------------------------- |
+| `saveDocument`    | `DocumentSaved`          | Document (criação) + Payables   |
+| `saveDraft`       | `DocumentDraftSaved`     | Document                        |
+| `adjustDocument`  | `DocumentSaved`          | Document + Payables alterados   |
+| `approveDocument` | `PayableApproved`        | Document + cada Payable         |
+| `undoApproval`    | `ApprovalUndone`         | Document + Payables             |
+| `cancelDocument`  | `DocumentCancelled`      | Document (antes do hard delete) |
+| `submitDraft`     | `DocumentSaved`          | Document + Payables             |
 
 ## Optimistic lock (clarify FR-009)
 
@@ -150,18 +166,18 @@ com a versão esperada do cliente**.
 A trilha materializada faz parte do boundary do agregado `Document` e é removida em cascata no hard delete do cancelamento:
 
 > "A delete operation must remove everything within the AGGREGATE boundary at once."
-> — _(ddd--evans-livro-azul.md:1471; Eric Evans, _Domain-Driven Design_)_
+> — _(ddd--evans-livro-azul.md:1471; Eric Evans, \_Domain-Driven Design_)\_
 
 O registro permanente do cancelamento permanece o evento `DocumentCancelled` no outbox (fatia 1).
 
 ## ADRs candidatos (Fase 3)
 
-| ID  | Decisão                                                                                          | Âncora                                  |
-| --- | ----------------------------------------------------------------------------------------------- | --------------------------------------- |
-| A   | Trilha materializada síncrona + **diff por função pura** sobre snapshots (não eventos carregam diff) | consolida 009 ADR-0003 + research R2    |
-| B   | Enforço de **optimistic lock** na borda financeira (`version` → `409`)                            | clarify FR-009; toca contrato fatia 1   |
-| C   | Listagem **reusa writer pool**; split reader/writer (ADR-0026) diferido pós-métricas (dívida)     | clarify; estende ADR-0026               |
-| D   | Remoção das **permissões inertes** `payable:read`/`payable:undo-approval` (emenda 009 ADR-0004)   | clarify FR-010                          |
+| ID  | Decisão                                                                                              | Âncora                                |
+| --- | ---------------------------------------------------------------------------------------------------- | ------------------------------------- |
+| A   | Trilha materializada síncrona + **diff por função pura** sobre snapshots (não eventos carregam diff) | consolida 009 ADR-0003 + research R2  |
+| B   | Enforço de **optimistic lock** na borda financeira (`version` → `409`)                               | clarify FR-009; toca contrato fatia 1 |
+| C   | Listagem **reusa writer pool**; split reader/writer (ADR-0026) diferido pós-métricas (dívida)        | clarify; estende ADR-0026             |
+| D   | Remoção das **permissões inertes** `payable:read`/`payable:undo-approval` (emenda 009 ADR-0004)      | clarify FR-010                        |
 
 ## Próxima fase
 

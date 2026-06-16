@@ -25,7 +25,7 @@ A `findPaged` do `DocumentRepository` lê do **mesmo pool writer** (single-node)
 
 > "Should the updates be performed synchronously or asynchronously? It depends on the normal load on the system... Data
 > consistency constraints and performance requirements will influence the decision."
-> — _(ddd--vernon-livro-vermelho.md:3255 — escolha de arquitetura de leitura guiada por carga/SLA; Vaughn Vernon, _Implementing Domain-Driven Design_)_
+> — _(ddd--vernon-livro-vermelho.md:3255 — escolha de arquitetura de leitura guiada por carga/SLA; Vaughn Vernon, \_Implementing Domain-Driven Design_)\_
 
 A decisão de separar leitura é guiada por **requisitos de performance medidos** — por isso diferida até haver métricas,
 em vez de antecipada (YAGNI).

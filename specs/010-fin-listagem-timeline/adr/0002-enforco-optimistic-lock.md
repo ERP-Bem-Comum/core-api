@@ -28,7 +28,7 @@ controle de concorrência** (o `version` vive em `fin_documents`, raiz do bounda
 > "The problem is acute in a system with concurrent access to the same objects by multiple clients. With many users
 > consulting and updating different objects in the system, we have to prevent simultaneous changes to interdependent
 > objects. Getting the scope wrong has serious consequences."
-> — _(ddd--evans-livro-azul.md:1435 — AGGREGATES como escopo de consistência sob concorrência; Eric Evans, _Domain-Driven Design_)_
+> — _(ddd--evans-livro-azul.md:1435 — AGGREGATES como escopo de consistência sob concorrência; Eric Evans, \_Domain-Driven Design_)\_
 
 ## Alternativas consideradas
 

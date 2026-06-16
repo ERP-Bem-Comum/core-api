@@ -38,7 +38,8 @@ import * as DocumentId from '../../domain/shared/document-id.ts';
 import type { RetentionInput } from '../../domain/shared/retention.ts';
 import type { RegisteredTaxInput } from '../../domain/shared/registered-tax.ts';
 import { FINANCIAL_PERMISSION } from '../../public-api/permissions.ts';
-import { documentToDto } from './dto.ts';
+import { documentToDto, listItemToSummaryDto } from './dto.ts';
+import type { DocumentListFilter } from '../../domain/document/query.ts';
 import type { FinancialHttpDeps } from './composition.ts';
 import {
   createDocumentBodySchema,
@@ -337,7 +338,7 @@ const financialRoutes =
       },
     });
 
-    // GET /financial/documents — lista paginada (stub Fatia 1; scan DB na Fatia 2).
+    // GET /financial/documents — listagem paginada real (US1; read path no writer pool — ADR-0003).
     scope.route({
       method: 'GET',
       url: '/financial/documents',
@@ -346,8 +347,27 @@ const financialRoutes =
         querystring: listDocumentsQuerySchema,
         response: { 200: documentListResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
-      handler: async (_req, reply) => {
-        return sendResult(reply, ok({ items: [], page: 1, pageSize: 20, total: 0 }), { ok: 200 });
+      handler: async (req, reply) => {
+        const q = req.query;
+        const filter: DocumentListFilter = {
+          ...(q.status !== undefined ? { status: q.status } : {}),
+          ...(q.supplierRef !== undefined ? { supplierRef: q.supplierRef } : {}),
+          ...(q.type !== undefined ? { type: q.type } : {}),
+          ...(q.dueFrom !== undefined ? { dueFrom: new Date(q.dueFrom) } : {}),
+          ...(q.dueTo !== undefined ? { dueTo: new Date(q.dueTo) } : {}),
+        };
+        const result = await deps.listDocuments(filter, q.page, q.pageSize);
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(
+          reply,
+          ok({
+            items: result.value.items.map(listItemToSummaryDto),
+            page: result.value.page,
+            pageSize: result.value.pageSize,
+            total: result.value.total,
+          }),
+          { ok: 200 },
+        );
       },
     });
 

@@ -33,16 +33,19 @@
 // Boundary: todo try/catch converte para Result. Nenhum Error cruza a borda
 //   (.claude/rules/adapters.md §"converter para Result na borda").
 
-import { eq } from 'drizzle-orm';
+import { and, asc, count, eq, gte, lte } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
+import * as Money from '../../../../../shared/kernel/money.ts';
 import type {
   DocumentRepository,
   DocumentRepositoryError,
   StoredDocument,
 } from '../../../domain/document/repository.ts';
 import type { DocumentId } from '../../../domain/shared/document-id.ts';
+import type { DocumentListFilter, DocumentListItem, Page } from '../../../domain/document/query.ts';
+import type { DocumentStatus, DocumentType } from '../../../domain/document/types.ts';
 import type { FinancialMysqlHandle } from '../drivers/mysql-driver.ts';
 import {
   mapRowToDocument,
@@ -230,6 +233,122 @@ export const createDrizzleDocumentRepository = (
         .where(eq(schema.finDocuments.id, id as unknown as string));
     });
 
+  // ─── findPaged ─────────────────────────────────────────────────────────────
+  //
+  // Read-model leve (US1 — FR-004): lê APENAS fin_documents (sem tabelas filhas),
+  // retornando Page<DocumentListItem> com `total` filtrado e `items` paginados.
+  //
+  // Índice utilizado: `fin_documents_due_date_idx` (schema.ts §"Índices") cobre
+  // ORDER BY dueDate ASC — ordenação determinística escolhida por ser o campo de
+  // maior relevância funcional (agenda de vencimentos) e por já ter índice explícito.
+  // Rows com dueDate NULL (Drafts) aparecem primeiro no ASC — comportamento MySQL 8.4
+  // (Refman §11.4.2: "NULL values are considered lower than any non-NULL value").
+  //
+  // Filtros combinados via and(...) (operators.mdx §"and"):
+  //   status   → eq   (fin_documents_status_idx cobre)
+  //   supplierRef → eq (fin_documents_supplier_ref_idx cobre)
+  //   type     → eq   (sem índice; seletividade baixa no modelo atual)
+  //   dueFrom  → gte  (fin_documents_due_date_idx cobre range)
+  //   dueTo    → lte  (idem)
+  //
+  // `total`: COUNT(*) com o MESMO WHERE antes do LIMIT/OFFSET — select.mdx §"count":
+  //   `await db.select({ value: count() }).from(users)` retorna number diretamente.
+  //   Não usa cast manual (count() do drizzle-orm já mapeia para number).
+  //
+  // Mapper inline: evita dependência de função de mapper dedicada para read-model
+  // leve. netValue NULL → null; netValue número → Money.fromCents(). Falha no
+  // fromCents = corrupção de row → err('document-repository-failure').
+  // status/type são cast seguros: CHECK de banco garante o conjunto válido.
+  const findPaged = async (
+    filter: DocumentListFilter,
+    page: number,
+    pageSize: number,
+  ): Promise<Result<Page<DocumentListItem>, DocumentRepositoryError>> =>
+    safe('findPaged', async () => {
+      const { finDocuments } = schema;
+
+      // Constrói predicados condicionalmente — filtros ausentes não entram no WHERE.
+      // and() com array vazio emite WHERE sem condições (SELECT all), que é o comportamento
+      // correto para listagem sem filtro. (operators.mdx §"and")
+      const conditions = [
+        filter.status !== undefined ? eq(finDocuments.status, filter.status) : undefined,
+        filter.supplierRef !== undefined
+          ? eq(finDocuments.supplierRef, filter.supplierRef)
+          : undefined,
+        filter.type !== undefined ? eq(finDocuments.type, filter.type) : undefined,
+        filter.dueFrom !== undefined ? gte(finDocuments.dueDate, filter.dueFrom) : undefined,
+        filter.dueTo !== undefined ? lte(finDocuments.dueDate, filter.dueTo) : undefined,
+      ].filter((c): c is NonNullable<typeof c> => c !== undefined);
+
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+      // 1. COUNT(*) com o mesmo WHERE — retorna { value: number }[].
+      //    select.mdx §"count": `count()` importado de drizzle-orm retorna number sem cast.
+      const countRows = await db.select({ value: count() }).from(finDocuments).where(whereClause);
+
+      const total = countRows[0]?.value ?? 0;
+
+      // Conjunto vazio → retornar imediatamente sem fazer a query de items.
+      if (total === 0) {
+        return { items: [], page, pageSize, total: 0 };
+      }
+
+      // 2. SELECT read-model com LIMIT/OFFSET.
+      //    Ordenação determinística por dueDate ASC (fin_documents_due_date_idx).
+      //    Colunas: apenas as necessárias para DocumentListItem (sem gross_value,
+      //    retentions, payables, version etc — evita overfetch).
+      const rows = await db
+        .select({
+          id: finDocuments.id,
+          status: finDocuments.status,
+          documentNumber: finDocuments.documentNumber,
+          type: finDocuments.type,
+          supplierRef: finDocuments.supplierRef,
+          netValue: finDocuments.netValue,
+          dueDate: finDocuments.dueDate,
+        })
+        .from(finDocuments)
+        .where(whereClause)
+        .orderBy(asc(finDocuments.dueDate))
+        .limit(pageSize)
+        .offset((page - 1) * pageSize);
+
+      // 3. Mapper inline: row → DocumentListItem.
+      //    netValue: bigint(mode:'number') chega como number | null.
+      //    status/type: varchar com CHECK — cast seguro para os tipos de domínio.
+      //    documentNumber/supplierRef/dueDate: passam direto (nullable conforme schema).
+      const items: DocumentListItem[] = [];
+      for (const row of rows) {
+        let netValue: DocumentListItem['netValue'] = null;
+        if (row.netValue !== null) {
+          const moneyResult = Money.fromCents(row.netValue);
+          if (!moneyResult.ok) {
+            process.stderr.write(
+              `[document-repo:findPaged:mapper] invalid netValue=${String(row.netValue)} id=${row.id}: ${moneyResult.error}\n`,
+            );
+            // Corrupção de row: valor monetário inválido no banco.
+            // Propaga como falha de repositório (adapters.md §"converter para Result na borda").
+            throw new Error(`corrupt-net-value:${row.id}`);
+          }
+          netValue = moneyResult.value;
+        }
+
+        items.push({
+          id: row.id,
+          // CHECK fin_documents_status_chk garante o conjunto válido — cast seguro.
+          status: row.status as DocumentStatus,
+          documentNumber: row.documentNumber,
+          // CHECK fin_documents_type_chk garante o conjunto válido (ou NULL) — cast seguro.
+          type: row.type as DocumentType | null,
+          supplierRef: row.supplierRef,
+          netValue,
+          dueDate: row.dueDate,
+        });
+      }
+
+      return { items, page, pageSize, total };
+    });
+
   return {
     // findById tem seu próprio try/catch interno que preserva 'document-not-found'
     // como retorno semântico (não convertido para 'document-repository-failure').
@@ -238,5 +357,7 @@ export const createDrizzleDocumentRepository = (
     save,
 
     delete: deleteDoc,
+
+    findPaged,
   };
 };

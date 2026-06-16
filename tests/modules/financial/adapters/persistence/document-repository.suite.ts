@@ -3,6 +3,7 @@ import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';
 import * as Money from '#src/shared/kernel/money.ts';
+import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import { SupplierRef } from '#src/modules/partners/public-api/refs.ts';
 import { DocumentId } from '#src/modules/financial/domain/shared/ids.ts';
 import * as Retention from '#src/modules/financial/domain/shared/retention.ts';
@@ -92,6 +93,122 @@ export const documentRepositoryContract = (makeRepo: () => DocumentRepository): 
       if (found.ok) {
         assert.equal(found.value.document.status, 'Draft');
         assert.equal(found.value.payables, null);
+      }
+    });
+
+    // ─── findPaged (US1 — listagem paginada) ─────────────────────────────────
+    // Cada teste de findPaged é escopado por um supplierRef ÚNICO → isolation-safe tanto no
+    // in-memory (repo fresh por teste) quanto no Drizzle/MySQL (DB compartilhado entre os it()
+    // da suite). Sem isso, filtros globais (ex.: status='Open') contariam docs de outros testes.
+    const SUP_STATUS = '5a000000-0000-4000-8000-000000000001';
+    const SUP_PAGE = '5a000000-0000-4000-8000-000000000002';
+    const SUP_WINDOW = '5a000000-0000-4000-8000-000000000003';
+    const SUP_EMPTY = '5a000000-0000-4000-8000-000000000004';
+    const sup = (uuid: string): SupplierRef => {
+      const r = SupplierRef.rehydrate(uuid);
+      if (!r.ok) throw new Error('test setup: sup');
+      return r.value;
+    };
+    const user = (): UserRef.UserRef => {
+      const r = UserRef.rehydrate('4b000000-0000-4000-8000-000000000001');
+      if (!r.ok) throw new Error('test setup: user');
+      return r.value;
+    };
+    const openAt = (s: SupplierRef, due: string): Document.CreateDocumentOutput => {
+      const r = Document.create({
+        id: DocumentId.generate(),
+        documentNumber: `NFS-${due}`,
+        type: 'NFS-e',
+        supplier: s,
+        paymentMethod: 'TED',
+        grossValue: money(100000),
+        sourceDiscounts: Money.ZERO,
+        discounts: Money.ZERO,
+        penalty: Money.ZERO,
+        interest: Money.ZERO,
+        retentions: [],
+        registeredTaxes: [],
+        dueDate: new Date(due),
+      });
+      if (!r.ok) throw new Error('test setup: openAt');
+      return r.value;
+    };
+
+    it('findPaged: filtra por status (Open vs Approved no mesmo fornecedor)', async () => {
+      const repo = makeRepo();
+      const s = sup(SUP_STATUS);
+      const openOne = openAt(s, '2026-07-01');
+      await repo.save({ document: openOne.document, payables: openOne.payables });
+      const toApprove = openAt(s, '2026-07-02');
+      const approved = Document.approve({
+        document: toApprove.document,
+        payables: toApprove.payables,
+        by: user(),
+        at: new Date('2026-07-03'),
+      });
+      if (!approved.ok) throw new Error('test setup: approve');
+      await repo.save({ document: approved.value.document, payables: approved.value.payables });
+
+      const openPage = await repo.findPaged({ status: 'Open', supplierRef: SUP_STATUS }, 1, 10);
+      assert.equal(isOk(openPage), true);
+      if (openPage.ok) {
+        assert.equal(openPage.value.total, 1);
+        assert.equal(openPage.value.items[0]?.status, 'Open');
+      }
+      const approvedPage = await repo.findPaged(
+        { status: 'Approved', supplierRef: SUP_STATUS },
+        1,
+        10,
+      );
+      assert.equal(isOk(approvedPage), true);
+      if (approvedPage.ok) assert.equal(approvedPage.value.total, 1);
+
+      const all = await repo.findPaged({ supplierRef: SUP_STATUS }, 1, 10);
+      assert.equal(isOk(all), true);
+      if (all.ok) assert.equal(all.value.total, 2);
+    });
+
+    it('findPaged: pagina (page 2, pageSize 2 de 5) com total filtrado', async () => {
+      const repo = makeRepo();
+      const s = sup(SUP_PAGE);
+      for (let i = 1; i <= 5; i++) {
+        const d = openAt(s, `2026-08-0${String(i)}`);
+        await repo.save({ document: d.document, payables: d.payables });
+      }
+      const page = await repo.findPaged({ supplierRef: SUP_PAGE }, 2, 2);
+      assert.equal(isOk(page), true);
+      if (page.ok) {
+        assert.equal(page.value.total, 5);
+        assert.equal(page.value.page, 2);
+        assert.equal(page.value.pageSize, 2);
+        assert.equal(page.value.items.length, 2);
+      }
+    });
+
+    it('findPaged: janela de vencimento inclusiva', async () => {
+      const repo = makeRepo();
+      const s = sup(SUP_WINDOW);
+      const inside = openAt(s, '2026-09-20');
+      const outside = openAt(s, '2026-09-30');
+      await repo.save({ document: inside.document, payables: inside.payables });
+      await repo.save({ document: outside.document, payables: outside.payables });
+
+      const byWindow = await repo.findPaged(
+        { supplierRef: SUP_WINDOW, dueFrom: new Date('2026-09-15'), dueTo: new Date('2026-09-25') },
+        1,
+        10,
+      );
+      assert.equal(isOk(byWindow), true);
+      if (byWindow.ok) assert.equal(byWindow.value.total, 1);
+    });
+
+    it('findPaged: conjunto vazio → total 0, sem erro', async () => {
+      const repo = makeRepo();
+      const page = await repo.findPaged({ supplierRef: SUP_EMPTY }, 1, 10);
+      assert.equal(isOk(page), true);
+      if (page.ok) {
+        assert.equal(page.value.total, 0);
+        assert.equal(page.value.items.length, 0);
       }
     });
   });

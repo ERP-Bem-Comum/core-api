@@ -46,10 +46,10 @@ export type FinancialHttpDeps = Readonly<{
   undoApproval: ReturnType<typeof undoApproval>;
   cancelDocument: ReturnType<typeof cancelDocument>;
   submitDraft: ReturnType<typeof submitDraft>;
-  /** Leitura direta do repositório — usado pelo GET /documents/:id e GET /documents. */
+  /** Leitura direta do repositório — usado pelo GET /documents/:id. */
   findDocumentById: DocumentRepository['findById'];
-  /** Listagem simplificada (sem query builder dedicado nesta fatia — scans small sets). */
-  listDocuments: DocumentRepository['findById'];
+  /** Listagem paginada (US1 — read path no writer pool; split reader/writer diferido — ADR-0003). */
+  listDocuments: DocumentRepository['findPaged'];
   shutdown: () => Promise<void>;
 }>;
 
@@ -92,7 +92,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     cancelDocument: cancelDocument(deps),
     submitDraft: submitDraft(deps),
     findDocumentById: pools.repo.findById,
-    listDocuments: pools.repo.findById, // placeholder — listagem real na fatia futura
+    listDocuments: pools.repo.findPaged,
     shutdown: pools.shutdown,
   };
 };

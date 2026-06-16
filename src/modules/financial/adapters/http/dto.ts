@@ -8,6 +8,7 @@
  */
 
 import type { Document } from '../../domain/document/types.ts';
+import type { DocumentListItem } from '../../domain/document/query.ts';
 import type { Payables } from '../../domain/payable/types.ts';
 import type { DocumentResponseDto, DocumentSummaryDto } from './schemas.ts';
 
@@ -67,29 +68,15 @@ export const documentToDto = (
 };
 
 /**
- * Mapeia um Document para o item resumido da listagem.
- * Usado pelo GET /documents — sem payables para manter o payload enxuto.
+ * Mapeia o read-model leve `DocumentListItem` (findPaged) para o item da listagem.
+ * Usado pelo GET /documents — sem payables (payload enxuto, FR-004).
  */
-export const documentToSummaryDto = (document: Document): DocumentSummaryDto => {
-  if (document.status === 'Draft') {
-    return {
-      id: String(document.id),
-      status: document.status,
-      documentNumber: document.documentNumber,
-      type: document.type,
-      supplierRef: document.supplier !== null ? String(document.supplier) : null,
-      netValueCents: null,
-      dueDate: document.dueDate !== null ? document.dueDate.toISOString().slice(0, 10) : null,
-    };
-  }
-
-  return {
-    id: String(document.id),
-    status: document.status,
-    documentNumber: document.documentNumber,
-    type: document.type,
-    supplierRef: String(document.supplier),
-    netValueCents: moneyToCentsString(document.netValue.cents),
-    dueDate: document.dueDate.toISOString().slice(0, 10),
-  };
-};
+export const listItemToSummaryDto = (item: DocumentListItem): DocumentSummaryDto => ({
+  id: item.id,
+  status: item.status,
+  documentNumber: item.documentNumber,
+  type: item.type,
+  supplierRef: item.supplierRef,
+  netValueCents: item.netValue !== null ? moneyToCentsString(item.netValue.cents) : null,
+  dueDate: item.dueDate !== null ? item.dueDate.toISOString().slice(0, 10) : null,
+});
