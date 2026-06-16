@@ -72,7 +72,7 @@ export const registerSupplier =
     if (!existing.ok) return existing;
     if (existing.value !== null) return err('register-supplier-cnpj-duplicate');
 
-    const saved = await deps.supplierRepo.save(registered.value.supplier);
+    const saved = await deps.supplierRepo.save(registered.value.supplier, [registered.value.event]);
     if (!saved.ok) return saved;
 
     return ok({ supplier: registered.value.supplier, event: registered.value.event });

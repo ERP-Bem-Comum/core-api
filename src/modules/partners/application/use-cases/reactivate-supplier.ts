@@ -45,7 +45,7 @@ export const reactivateSupplier =
     const transition = Supplier.reactivate(fetched.value, deps.clock.now());
     if (!transition.ok) return transition;
 
-    const saved = await deps.supplierRepo.save(transition.value.supplier);
+    const saved = await deps.supplierRepo.save(transition.value.supplier, [transition.value.event]);
     if (!saved.ok) return saved;
 
     return ok({ supplier: transition.value.supplier, event: transition.value.event });

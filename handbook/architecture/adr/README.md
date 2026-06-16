@@ -130,6 +130,7 @@ Um **ADR (Architecture Decision Record)** é um documento curto que captura uma 
 | [0035](./0035-partner-territory-soft-delete.md)                | Parceria territorial (estados/municípios) — Entity persistida com soft-delete (`active`+`deactivated_at`+CHECK); resolve D9 do ADR-0031   | Accepted                              | 2026-06-06 |
 | [0036](./0036-act-partner-placeholder.md)                      | `Act` — novo tipo de parceiro PLACEHOLDER (clone enxuto do núcleo do Collaborator); provisório, regras de negócio pendentes              | Accepted (provisório)                 | 2026-06-06 |
 | [0037](./0037-http-first-retire-embedded-cli.md)               | HTTP-first — aposenta a CLI embutida no core-api; validação E2E via Bruno (ADR-0034); CLI do domínio migra para `cli/` (binário `bc`). Supersede parcial do Princípio VII | Accepted | 2026-06-07 |
+| [0043](./0043-partners-supplier-integration-events.md)         | Contrato de eventos de integração `partners → financial` — `SupplierRegistered`/`SupplierEdited` publicados via outbox `par_outbox` (payload autocontido `{ supplierRef, name, document, occurredAt }`; at-least-once + idempotência) | Accepted | 2026-06-16 |
 
 ---
 

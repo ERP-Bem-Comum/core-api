@@ -89,7 +89,7 @@ export const editSupplier =
       }
     }
 
-    const saved = await deps.supplierRepo.save(edited.value.supplier);
+    const saved = await deps.supplierRepo.save(edited.value.supplier, [edited.value.event]);
     if (!saved.ok) return saved;
 
     return ok({ supplier: edited.value.supplier, event: edited.value.event });
