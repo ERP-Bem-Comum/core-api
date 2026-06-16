@@ -4,6 +4,22 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-16 — 🔒 Financeiro fatia 2: `version` (optimistic lock) exposto na borda `/api/v2/financial`
+
+Feature `specs/010-fin-listagem-timeline/` (FR-009/ADR-0002 da feature). O token de optimistic lock (`version`) passa a
+ser **devolvido em toda resposta de documento** (`POST`/`PATCH`/`approve`/`undo-approval`, `GET /:id`, e em cada item de
+`GET /documents`), permitindo ao **frontend** participar do controle de concorrência.
+
+- **Contrato de consumo (frontend):** [`specs/010-fin-listagem-timeline/frontend-optimistic-lock.md`](../specs/010-fin-listagem-timeline/frontend-optimistic-lock.md)
+  — ler o `version` da resposta → reenviar no `PATCH`/`approve`/`undo-approval` → em `409 document-version-conflict`,
+  re-buscar (`GET /:id`) e repetir. Mapa de status + exemplos de request/response.
+- **Por quê (canônico):** Vernon, _Implementing DDD_ (`ddd--vernon-livro-vermelho.md:8869`) — a checagem compara a versão
+  persistida com a "cópia do cliente"; logo a API deve entregar o `version` numa leitura. Análogo a `ETag`/`If-Match`.
+- **Prova:** `version-roundtrip.http.test.ts` (CVR-001..008), `optimistic-lock.http.test.ts` (CT-018..021) e integração
+  MySQL real (`UPDATE ... WHERE version=?` → `affectedRows=0` → conflito; Refman 8.4 §13.2.17).
+- **Também nesta fatia:** trilha por-campo (Time Travel) `GET /:id/timeline`; listagem real `GET /documents` (filtros +
+  paginação); remoção das permissões inertes `payable:read`/`payable:undo-approval` (menor privilégio).
+
 ## 2026-06-15 — 🎫 ADR-0040: achados de agente viram GitHub Issues testáveis
 
 Novo [ADR-0040](./architecture/adr/0040-agent-findings-as-github-issues.md) (**Accepted**). Resolve a

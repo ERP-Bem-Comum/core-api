@@ -24,7 +24,7 @@ import {
 
 // ─── Perfis como conjuntos de permissões (o "token" Bearer carrega as perms) ──────────
 const WRITER = 'fiscal-document:write,fiscal-document:read,fiscal-document:cancel';
-const APPROVER = `${WRITER},payable:approve,payable:undo-approval`;
+const APPROVER = `${WRITER},payable:approve`;
 const PLAIN = 'none'; // tem token, mas sem permissões financial → 403 (não 401)
 
 // ─── Hooks de auth FAKE ───────────────────────────────────────────────────────────────
@@ -225,8 +225,10 @@ describe('FIN-DOCUMENTO-TITULOS — /api/v2/financial/documents', () => {
     const undoRes = await handle.app.inject({
       method: 'POST',
       url: `/api/v2/financial/documents/${docId}/undo-approval`,
+      // version: 1 — o approve anterior (v0 → v1) incrementou a versão; o undo
+      // deve usar a versão coerente, agora que o optimistic lock é enforçado (FR-009).
       headers: bearer(APPROVER),
-      payload: { version: 0 },
+      payload: { version: 1 },
     });
     assert.equal(undoRes.statusCode, 200, undoRes.body);
     assert.equal((undoRes.json() as { status: string }).status, 'Open');

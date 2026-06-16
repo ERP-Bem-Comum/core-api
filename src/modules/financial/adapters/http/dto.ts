@@ -8,8 +8,14 @@
  */
 
 import type { Document } from '../../domain/document/types.ts';
+import type { DocumentListItem } from '../../domain/document/query.ts';
 import type { Payables } from '../../domain/payable/types.ts';
-import type { DocumentResponseDto, DocumentSummaryDto } from './schemas.ts';
+import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
+import type {
+  DocumentResponseDto,
+  DocumentSummaryDto,
+  DocumentTimelineResponseDto,
+} from './schemas.ts';
 
 /** Serializa Money (branded { cents: number }) como string de centavos. */
 const moneyToCentsString = (cents: number): string => String(cents);
@@ -17,10 +23,13 @@ const moneyToCentsString = (cents: number): string => String(cents);
 /**
  * Mapeia um StoredDocument (Document + Payables | null) para o DTO de resposta completo.
  * `payables` é null apenas em Draft — nesse caso devolve array vazio.
+ * `version` (FR-009/optimistic lock): lido de `LoadedDocument.version` e incluído na resposta
+ * para que o cliente reenvie no próximo PATCH/approve/undo-approval.
  */
 export const documentToDto = (
   document: Document,
   payables: Payables | null,
+  version: number,
 ): DocumentResponseDto => {
   const payableItems =
     payables === null
@@ -47,6 +56,7 @@ export const documentToDto = (
       dueDate: document.dueDate !== null ? document.dueDate.toISOString().slice(0, 10) : null,
       description: document.description,
       payables: payableItems,
+      version,
     };
   }
 
@@ -63,33 +73,45 @@ export const documentToDto = (
     dueDate: document.dueDate.toISOString().slice(0, 10),
     description: document.description,
     payables: payableItems,
+    version,
   };
 };
 
 /**
- * Mapeia um Document para o item resumido da listagem.
- * Usado pelo GET /documents — sem payables para manter o payload enxuto.
+ * Mapeia o read-model leve `DocumentListItem` (findPaged) para o item da listagem.
+ * Usado pelo GET /documents — sem payables (payload enxuto, FR-004).
+ * `version` (FR-009): exposto para ações inline no grid do front sem findById extra.
  */
-export const documentToSummaryDto = (document: Document): DocumentSummaryDto => {
-  if (document.status === 'Draft') {
-    return {
-      id: String(document.id),
-      status: document.status,
-      documentNumber: document.documentNumber,
-      type: document.type,
-      supplierRef: document.supplier !== null ? String(document.supplier) : null,
-      netValueCents: null,
-      dueDate: document.dueDate !== null ? document.dueDate.toISOString().slice(0, 10) : null,
-    };
-  }
+export const listItemToSummaryDto = (item: DocumentListItem): DocumentSummaryDto => ({
+  id: item.id,
+  status: item.status,
+  documentNumber: item.documentNumber,
+  type: item.type,
+  supplierRef: item.supplierRef,
+  netValueCents: item.netValue !== null ? moneyToCentsString(item.netValue.cents) : null,
+  dueDate: item.dueDate !== null ? item.dueDate.toISOString().slice(0, 10) : null,
+  version: item.version,
+});
 
-  return {
-    id: String(document.id),
-    status: document.status,
-    documentNumber: document.documentNumber,
-    type: document.type,
-    supplierRef: String(document.supplier),
-    netValueCents: moneyToCentsString(document.netValue.cents),
-    dueDate: document.dueDate.toISOString().slice(0, 10),
-  };
-};
+/**
+ * Serializa a trilha por-campo (Time Travel) para o DTO de resposta.
+ * IDs branded são coercidos para string; Date → ISO 8601; actor null preservado.
+ */
+export const timelineToDto = (
+  entries: readonly FinancialTimelineEntry[],
+): DocumentTimelineResponseDto => ({
+  entries: entries.map((entry) => ({
+    eventType: entry.kind,
+    target: {
+      kind: entry.target.kind,
+      id: String(entry.target.id),
+    },
+    occurredAt: entry.occurredAt.toISOString(),
+    actor: entry.actor !== null ? String(entry.actor) : null,
+    changes: entry.changes.map((c) => ({
+      field: c.field,
+      before: c.before,
+      after: c.after,
+    })),
+  })),
+});

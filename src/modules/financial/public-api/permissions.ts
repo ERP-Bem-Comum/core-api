@@ -12,9 +12,8 @@ export const FINANCIAL_PERMISSION = {
   write: 'fiscal-document:write',
   cancel: 'fiscal-document:cancel',
   // payable: operações sobre títulos gerados
-  payableRead: 'payable:read',
+  // payableRead e payableUndoApproval removidas (FR-010/ADR-0004 010 - permissoes inertes: sem rota enforca).
   payableApprove: 'payable:approve',
-  payableUndoApproval: 'payable:undo-approval',
 } as const;
 
 export type FinancialPermission = (typeof FINANCIAL_PERMISSION)[keyof typeof FINANCIAL_PERMISSION];

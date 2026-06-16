@@ -8,6 +8,13 @@
       "when": 1781559931576,
       "tag": "0000_solid_solo",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1781569530455,
+      "tag": "0001_natural_shadowcat",
+      "breakpoints": true
     }
   ]
 }

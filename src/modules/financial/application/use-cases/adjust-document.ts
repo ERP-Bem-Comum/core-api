@@ -1,4 +1,5 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
+import type { Clock } from '../../../../shared/ports/clock.ts';
 import * as Money from '../../../../shared/kernel/money.ts';
 import * as DocumentId from '../../domain/shared/document-id.ts';
 import * as Retention from '../../domain/shared/retention.ts';
@@ -9,11 +10,19 @@ import type {
   DocumentRepositoryError,
 } from '../../domain/document/repository.ts';
 import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
+import { buildTimelineEntries } from '../timeline-recording.ts';
 
-export type AdjustDocumentDeps = Readonly<{ repo: DocumentRepository; outbox: FinancialOutbox }>;
+export type AdjustDocumentDeps = Readonly<{
+  repo: DocumentRepository;
+  outbox: FinancialOutbox;
+  clock: Clock;
+}>;
 
 export type AdjustDocumentCommand = Readonly<{
   documentId: string;
+  // Optimistic lock (FR-009/ADR-0002 da feature 010): versão do documento lida pelo cliente.
+  // Repassada ao `repo.save` como `expectedVersion` — UPDATE com WHERE version = expectedVersion.
+  expectedVersion: number;
   grossValueCents?: number;
   sourceDiscountsCents?: number;
   discountsCents?: number;
@@ -104,10 +113,27 @@ export const adjustDocument =
     });
     if (!adjusted.ok) return err(adjusted.error);
 
-    const saved = await deps.repo.save({
-      document: adjusted.value.document,
-      payables: adjusted.value.payables,
+    // Trilha: marco de ajuste. before = estado lido (Open + payables atuais);
+    // after = estado ajustado. actor=null (ajuste não carrega autoria nesta fatia).
+    const event = adjusted.value.events[0];
+    if (event === undefined) return err('document-repository-failure');
+    const entries = buildTimelineEntries(deps.clock, {
+      event,
+      before: open.value,
+      after: adjusted.value.document,
+      payablesBefore: found.value.payables,
+      payablesAfter: adjusted.value.payables,
+      actor: null,
     });
+
+    const saved = await deps.repo.save(
+      {
+        document: adjusted.value.document,
+        payables: adjusted.value.payables,
+      },
+      entries,
+      cmd.expectedVersion,
+    );
     if (!saved.ok) return err(saved.error);
 
     const published = await deps.outbox.append(adjusted.value.events);
