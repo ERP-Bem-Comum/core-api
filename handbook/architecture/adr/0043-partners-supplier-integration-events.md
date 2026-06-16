@@ -43,7 +43,7 @@ Autocontido (FR-006), montado **no adapter de persistência** a partir do **snap
 {
   "supplierRef": "uuid", // String(supplier.id)
   "name": "Fornecedor X LTDA", // supplier.name (snapshot)
-  "document": "12345678000190", // String(supplier.cnpj) — CNPJ 14 dígitos
+  "document": "12345678000190", // String(supplier.cnpj) — 14 caracteres alfanuméricos (numérico ou A-Z; ADR-0044)
   "occurredAt": "2026-06-16T21:00:00.000Z", // event.occurredAt.toISOString()
 }
 ```
