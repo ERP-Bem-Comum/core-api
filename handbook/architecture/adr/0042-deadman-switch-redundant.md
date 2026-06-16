@@ -2,7 +2,7 @@
 
 # ADR-0042: Dead-man's switch redundante (S3/R2 ⟂ GitHub Actions, JSONL append-only) para detecção de jobs mortos
 
-- **Status:** Proposed
+- **Status:** Accepted
 - **Date:** 2026-06-16
 - **Deciders:** Gabriel (tech lead / arquiteto). Origem do desenho: P.O.; revisão de arquitetura: agente assistente.
 - **Origem:** SPIKE [#66](https://github.com/ERP-Bem-Comum/core-api/issues/66) — fecha a única camada de confiabilidade ainda aberta do `contracts-sweeper` (issues [#50](https://github.com/ERP-Bem-Comum/core-api/issues/50)/[#39](https://github.com/ERP-Bem-Comum/core-api/issues/39)): **"o scheduler morre e nunca dispara"**.
@@ -24,7 +24,7 @@ A **4ª** — o **scheduler/daemon morrer e nunca disparar** — é o ponto cego
 
 ---
 
-## Decisão (proposta)
+## Decisão
 
 Padrão **"Cinto e Suspensório"**: dois planos **independentes** de ingestão do sinal de vida, convergindo via **JSONL append-only**, com um Auditor que decide a inatividade e dispara a contingência.
 
@@ -36,9 +36,9 @@ Padrão **"Cinto e Suspensório"**: dois planos **independentes** de ingestão d
 3. **GitHub Actions — ingestão de fallback** — workflow disparado pelo webhook, commita a nova linha em `history.jsonl` no repo. Garante o registro mesmo se o S3 falhar.
 4. **GitHub Actions — Auditor Cron** (diário): baixa `status.jsonl`, compara com `history.jsonl`, decide inatividade pelo **registro mais recente entre as duas fontes** (`last_seen = max(remoto, local)`), faz **self-healing** (merge das linhas faltantes), e o **commit de auditoria** atua como **keep-alive** contra a **suspensão de 60 dias** de workflows agendados do GitHub. Dispara o **payload** (scripts de contingência) se `now − last_seen > limite`.
 
-### Decisões desta ADR (ajustes ao desenho original — itens a validar antes de `Accepted`)
+### Decisões desta ADR (ajustes ao desenho original)
 
-- **D1 — Sem Python.** O Emissor (e qualquer utilitário) é Deno/Bun/Go/Zig. Self-host do healthchecks.io (Django/Python) fica **rejeitado** pela mesma regra.
+- **D1 — Linguagem do Emissor (e utilitários não-Node): Go.** Sem Python (`no-python-scripts`). Critério do P.O.: _mais leve possível + fácil em Docker + bom em JSONL_ (Node é ruim em binário). **Go** atende: binário **estático único** → imagem `FROM scratch` (~10–15 MB), `encoding/json` + `bufio.Scanner` para JSONL linha-a-linha, `crypto/hmac` na stdlib para a integridade (§contratos), **zero runtime** no container (Dockerfile de 2 linhas, idêntico em `docker run`/compose). Rejeitados: **Deno/Bun** (binário ~90 MB com runtime embutido + ainda JS → não atende leve/binário); **Zig/Rust** (binário menor/seguro, mas JSONL/build menos _fáceis_ — Go é o ótimo leve×fácil×JSONL); self-host do healthchecks.io (Python).
 - **D2 — SPOF na detecção.** A redundância do desenho cobre a **ingestão** (S3 ⟂ Actions), mas a **detecção** (Auditor) roda **só** no GitHub Actions → ainda é SPOF: um outage do Actions no dia do disparo = ninguém dispara o payload. **Decisão:** adicionar um **2º auditor independente** (cron no ERP-INFRA cruzando o mesmo `status.jsonl`) — SPOF-free também na **detecção**, não só na ingestão.
 - **D3 — SLO explícito.** Definir o objetivo de detecção ("miss detectado em ≤ X") **antes** de fixar a cadência do auditor (cron diário do Actions tem jitter e resolução grosseira). Para o `contracts-sweeper` (sweep diário), detectar em ≤ 24-48h é provavelmente suficiente — mas o número entra no contrato.
 
