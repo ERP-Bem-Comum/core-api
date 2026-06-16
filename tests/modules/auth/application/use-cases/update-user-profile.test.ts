@@ -29,6 +29,14 @@ import * as Email from '#src/modules/auth/domain/identity/email.ts';
 import * as Cpf from '#src/modules/auth/domain/identity/cpf.ts';
 import * as Telephone from '#src/modules/auth/domain/identity/telephone.ts';
 import * as PasswordHash from '#src/modules/auth/domain/credential/password-hash.ts';
+import * as Role from '#src/modules/auth/domain/authorization/role.ts';
+import type { Role as RoleType } from '#src/modules/auth/domain/authorization/role.ts';
+import * as RoleId from '#src/modules/auth/domain/authorization/role-id.ts';
+import * as Permission from '#src/modules/auth/domain/authorization/permission.ts';
+import { makeInMemoryUserStore } from '#src/modules/auth/adapters/persistence/repos/user-repository.in-memory.ts';
+import { makeInMemoryRoleStore } from '#src/modules/auth/adapters/persistence/repos/role-repository.in-memory.ts';
+import { MASS_APPROVER_ROLE_NAME } from '#src/modules/auth/application/use-cases/mass-approver-role.ts';
+import { CONTRACT_PERMISSION } from '#src/modules/contracts/public-api/permissions.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 
 const AT = new Date('2026-06-07T12:00:00.000Z');
@@ -64,7 +72,9 @@ const makeDeps = (users: readonly User[]) => {
       return Promise.resolve(ok(undefined));
     },
   };
-  return { deps: { userReader, userRepo, clock: ClockFixed(AT) }, captured };
+  // roleRepo nunca tocado nestes casos (flag ausente); fornecido so para satisfazer a dep.
+  const roleRepo = makeInMemoryRoleStore().repository;
+  return { deps: { userReader, userRepo, roleRepo, clock: ClockFixed(AT) }, captured };
 };
 
 describe('updateUserProfile', () => {
@@ -192,5 +202,169 @@ describe('updateUserProfile', () => {
       const values = Object.values(r.value.event as Record<string, unknown>);
       assert.equal(values.includes('Nova'), false);
     }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AUTH-MASS-APPROVE-SETTABLE - flag massApprovalPermission setavel na edicao.
+// Usa stores InMemory reais para exercitar o motor RBAC (assign/revoke + resolve role).
+// ---------------------------------------------------------------------------
+
+const makeRole = (name: string, permissions: readonly string[]): RoleType => {
+  const perms = permissions.map((p) => {
+    const parsed = Permission.parse(p);
+    if (!parsed.ok) throw new Error('permission fixture');
+    return parsed.value;
+  });
+  const r = Role.create({ id: RoleId.generate(), name, permissions: perms });
+  if (!r.ok) throw new Error('role fixture');
+  return r.value;
+};
+
+describe('updateUserProfile - massApprovalPermission (AUTH-MASS-APPROVE-SETTABLE)', () => {
+  const makeRbacCtx = () => {
+    const userStore = makeInMemoryUserStore();
+    const roleStore = makeInMemoryRoleStore();
+    const update = updateUserProfile({
+      userReader: userStore.reader,
+      userRepo: userStore.repository,
+      roleRepo: roleStore.repository,
+      clock: ClockFixed(AT),
+    });
+    return { userStore, roleStore, update };
+  };
+
+  const saveUser = async (ctx: ReturnType<typeof makeRbacCtx>, user: User): Promise<void> => {
+    const r = await ctx.userStore.repository.save(user);
+    if (!r.ok) throw new Error('save user fixture');
+  };
+
+  // Ator com user:assign-role.
+  const makeAuthorizedActor = async (
+    ctx: ReturnType<typeof makeRbacCtx>,
+    email: string,
+  ): Promise<UserId.UserId> => {
+    const e = Email.parse(email);
+    const h = PasswordHash.fromString('$argon2id$x');
+    if (!e.ok || !h.ok) throw new Error('actor fixture');
+    const base = UserAgg.register(
+      { id: UserId.generate(), email: e.value, passwordHash: h.value, roles: [] },
+      AT,
+    ).user;
+    const role = makeRole('admin', ['user:update', 'user:assign-role']);
+    await ctx.roleStore.repository.save(role);
+    const { user: withRole } = UserAgg.assignRole(base, role, AT);
+    await saveUser(ctx, withRole);
+    return withRole.id;
+  };
+
+  // Ator sem user:assign-role (so user:update).
+  const makeUnprivilegedActor = async (
+    ctx: ReturnType<typeof makeRbacCtx>,
+    email: string,
+  ): Promise<UserId.UserId> => {
+    const e = Email.parse(email);
+    const h = PasswordHash.fromString('$argon2id$x');
+    if (!e.ok || !h.ok) throw new Error('actor fixture');
+    const base = UserAgg.register(
+      { id: UserId.generate(), email: e.value, passwordHash: h.value, roles: [] },
+      AT,
+    ).user;
+    const role = makeRole('weak-admin', ['user:update']);
+    await ctx.roleStore.repository.save(role);
+    const { user: withRole } = UserAgg.assignRole(base, role, AT);
+    await saveUser(ctx, withRole);
+    return withRole.id;
+  };
+
+  const makeTarget = async (
+    ctx: ReturnType<typeof makeRbacCtx>,
+    email: string,
+    roles: readonly RoleType[] = [],
+  ): Promise<UserId.UserId> => {
+    const e = Email.parse(email);
+    const h = PasswordHash.fromString('$argon2id$x');
+    if (!e.ok || !h.ok) throw new Error('target fixture');
+    const user = UserAgg.register(
+      { id: UserId.generate(), email: e.value, passwordHash: h.value, roles },
+      AT,
+    ).user;
+    await saveUser(ctx, user);
+    return user.id;
+  };
+
+  const massApproveOf = async (
+    ctx: ReturnType<typeof makeRbacCtx>,
+    userId: UserId.UserId,
+  ): Promise<boolean> => {
+    const found = await ctx.userStore.reader.findById(userId);
+    if (!found.ok || found.value === null) return false;
+    return found.value.roles
+      .flatMap((role) => role.permissions)
+      .some((permission) => String(permission) === CONTRACT_PERMISSION.massApprove);
+  };
+
+  it('CA3: flag=true atribui a role etl:mass-approver (idempotente se ja tem)', async () => {
+    const ctx = makeRbacCtx();
+    const actorId = await makeAuthorizedActor(ctx, 'admin.ma@x.com');
+    const targetId = await makeTarget(ctx, 'target.ma3@x.com');
+
+    const r1 = await ctx.update({ id: String(targetId), actorId, massApprovalPermission: true });
+    assert.equal(r1.ok, true);
+    assert.equal(await massApproveOf(ctx, targetId), true);
+
+    // Idempotente: setar de novo segue ok e nao duplica.
+    const r2 = await ctx.update({ id: String(targetId), actorId, massApprovalPermission: true });
+    assert.equal(r2.ok, true);
+    const found = await ctx.userStore.reader.findById(targetId);
+    assert.equal(found.ok, true);
+    if (!found.ok || found.value === null) return;
+    assert.equal(
+      found.value.roles.filter((role) => role.name === MASS_APPROVER_ROLE_NAME).length,
+      1,
+    );
+  });
+
+  it('CA4: flag=false revoga a role (idempotente se nao tem)', async () => {
+    const ctx = makeRbacCtx();
+    const actorId = await makeAuthorizedActor(ctx, 'admin.ma4@x.com');
+    const massRole = makeRole(MASS_APPROVER_ROLE_NAME, [CONTRACT_PERMISSION.massApprove]);
+    await ctx.roleStore.repository.save(massRole);
+    const targetId = await makeTarget(ctx, 'target.ma4@x.com', [massRole]);
+
+    assert.equal(await massApproveOf(ctx, targetId), true);
+
+    const r1 = await ctx.update({ id: String(targetId), actorId, massApprovalPermission: false });
+    assert.equal(r1.ok, true);
+    assert.equal(await massApproveOf(ctx, targetId), false);
+
+    // Idempotente: revogar de novo segue ok.
+    const r2 = await ctx.update({ id: String(targetId), actorId, massApprovalPermission: false });
+    assert.equal(r2.ok, true);
+    assert.equal(await massApproveOf(ctx, targetId), false);
+  });
+
+  it('CA5: flag ausente no patch parcial nao altera o estado da permissao', async () => {
+    const ctx = makeRbacCtx();
+    const actorId = await makeAuthorizedActor(ctx, 'admin.ma5@x.com');
+    const massRole = makeRole(MASS_APPROVER_ROLE_NAME, [CONTRACT_PERMISSION.massApprove]);
+    await ctx.roleStore.repository.save(massRole);
+    const targetId = await makeTarget(ctx, 'target.ma5@x.com', [massRole]);
+
+    const r = await ctx.update({ id: String(targetId), actorId, name: 'Novo Nome' });
+    assert.equal(r.ok, true);
+    // permissao preservada (continua true) mesmo sem a flag.
+    assert.equal(await massApproveOf(ctx, targetId), true);
+  });
+
+  it('CA6: ator sem user:assign-role que seta a flag -> forbidden e estado inalterado', async () => {
+    const ctx = makeRbacCtx();
+    const actorId = await makeUnprivilegedActor(ctx, 'weak.ma6@x.com');
+    const targetId = await makeTarget(ctx, 'target.ma6@x.com');
+
+    const r = await ctx.update({ id: String(targetId), actorId, massApprovalPermission: true });
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'forbidden');
+    assert.equal(await massApproveOf(ctx, targetId), false);
   });
 });

@@ -27,6 +27,8 @@ import * as UserId from '../../domain/identity/user-id.ts';
 import * as ResetToken from '../../domain/session/password-reset-token.ts';
 import * as ResetTokenId from '../../domain/session/password-reset-token-id.ts';
 import * as User from '../../domain/identity/user/user.ts';
+import * as Permission from '../../domain/authorization/permission.ts';
+import { authorize } from '../../domain/authorization/authorize.ts';
 import type { ActiveUser } from '../../domain/identity/user/types.ts';
 import type { UserCreated } from '../../domain/identity/user/events.ts';
 import type { UserId as UserIdType } from '../../domain/identity/user-id.ts';
@@ -38,11 +40,16 @@ import type {
   UserRepositoryError,
 } from '../../domain/identity/user/repository.ts';
 import type {
+  RoleRepository,
+  RoleRepositoryError,
+} from '../../domain/authorization/role-repository.ts';
+import type {
   PasswordResetTokenRepository,
   PasswordResetTokenRepositoryError,
 } from '../../domain/session/password-reset-token-repository.ts';
 import type { PasswordResetTokenMinter } from '../ports/password-reset-token-minter.ts';
 import type { InviteMailer, InviteMailerError } from '../ports/invite-mailer.ts';
+import { resolveMassApproverRole } from './mass-approver-role.ts';
 
 export type CreateUserByAdminCommand = Readonly<{
   /** Executor (admin autenticado); gravado no evento UserCreated para auditoria. */
@@ -52,6 +59,12 @@ export type CreateUserByAdminCommand = Readonly<{
   email: string;
   telephone: string;
   photo?: ProfilePhotoRef | null;
+  /**
+   * Concessao da capacidade "Aprovador em Massa" (AUTH-MASS-APPROVE-SETTABLE).
+   * Ausente -> nao mexe na permissao (fluxo atual). true -> concede a role etl:mass-approver;
+   * false -> nao concede. Setar a flag exige `user:assign-role` no ator (fail-closed).
+   */
+  massApprovalPermission?: boolean;
 }>;
 
 export type CreateUserByAdminError =
@@ -60,7 +73,10 @@ export type CreateUserByAdminError =
   | Telephone.TelephoneError
   | 'name-required'
   | 'email-already-registered'
+  | 'forbidden'
+  | 'mass-approver-role-invalid'
   | UserRepositoryError
+  | RoleRepositoryError
   | PasswordResetTokenRepositoryError
   | InviteMailerError;
 
@@ -69,6 +85,7 @@ export type CreateUserByAdminOutput = Readonly<{ user: ActiveUser; event: UserCr
 type Deps = Readonly<{
   userReader: UserReader;
   userRepo: UserRepository;
+  roleRepo: RoleRepository;
   resetTokenRepo: PasswordResetTokenRepository;
   minter: PasswordResetTokenMinter;
   inviteMailer: InviteMailer;
@@ -80,6 +97,22 @@ type Deps = Readonly<{
   /** Origem confiavel do link (config). NUNCA header Host (anti Host-Header-Injection). */
   activationBaseUrl: string;
 }>;
+
+// AUTH-MASS-APPROVE-SETTABLE: fail-closed. Carrega o ator, exige active + `user:assign-role`
+// (mesma permission do motor assignRole/revokeRole). Qualquer falha -> 'forbidden'.
+const authorizeMassApproval = async (
+  deps: Pick<Deps, 'userReader'>,
+  actorId: UserIdType,
+): Promise<Result<true, 'forbidden'>> => {
+  const actor = await deps.userReader.findById(actorId);
+  if (!actor.ok || actor.value === null) return err('forbidden');
+  const activeActor = User.parseActive(actor.value);
+  if (!activeActor.ok) return err('forbidden');
+  const required = Permission.parse('user:assign-role');
+  if (!required.ok) return err('forbidden');
+  if (!authorize(activeActor.value, required.value).ok) return err('forbidden');
+  return ok(true);
+};
 
 export const createUserByAdmin =
   (deps: Deps) =>
@@ -99,6 +132,14 @@ export const createUserByAdmin =
     if (!existing.ok) return existing;
     if (existing.value !== null) return err('email-already-registered');
 
+    // AUTH-MASS-APPROVE-SETTABLE: setar a flag (true OU false) exige `user:assign-role` no ator.
+    // Fail-closed: a autorizacao roda ANTES de qualquer escrita (criar o user / token / convite).
+    // Flag ausente -> nenhuma carga de ator nem acesso a roleRepo (zero regressao no fluxo atual).
+    if (cmd.massApprovalPermission !== undefined) {
+      const authorized = await authorizeMassApproval(deps, cmd.adminId);
+      if (!authorized.ok) return err(authorized.error);
+    }
+
     const now = deps.clock.now();
     const newUserId = UserId.generate();
 
@@ -116,7 +157,16 @@ export const createUserByAdmin =
       now,
     );
 
-    const saved = await deps.userRepo.save(user);
+    // AUTH-MASS-APPROVE-SETTABLE: quando true, concede a role etl:mass-approver ao novo user
+    // (idempotente). O user nasce sem roles, logo false e no-op (nada a revogar).
+    let toSave: ActiveUser = user;
+    if (cmd.massApprovalPermission === true) {
+      const roleR = await resolveMassApproverRole({ roleRepo: deps.roleRepo });
+      if (!roleR.ok) return err(roleR.error);
+      toSave = User.assignRole(user, roleR.value, now).user;
+    }
+
+    const saved = await deps.userRepo.save(toSave);
     if (!saved.ok) return saved;
 
     // Token de ativacao (mesmo mecanismo do reset). Usuario novo -> sem tokens pendentes.
@@ -142,5 +192,6 @@ export const createUserByAdmin =
     });
     if (!invited.ok) return invited;
 
-    return ok({ user, event });
+    // Retorna o user efetivamente salvo (com a role, se concedida); o detalhe deriva a flag das roles.
+    return ok({ user: toSave, event });
   };

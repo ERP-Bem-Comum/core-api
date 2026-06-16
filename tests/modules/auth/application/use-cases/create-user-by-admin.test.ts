@@ -25,6 +25,16 @@ import type { User } from '#src/modules/auth/domain/identity/user/types.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import * as PasswordHash from '#src/modules/auth/domain/credential/password-hash.ts';
 import * as UserId from '#src/modules/auth/domain/identity/user-id.ts';
+import * as UserAgg from '#src/modules/auth/domain/identity/user/user.ts';
+import * as Email from '#src/modules/auth/domain/identity/email.ts';
+import * as Role from '#src/modules/auth/domain/authorization/role.ts';
+import type { Role as RoleType } from '#src/modules/auth/domain/authorization/role.ts';
+import * as RoleId from '#src/modules/auth/domain/authorization/role-id.ts';
+import * as Permission from '#src/modules/auth/domain/authorization/permission.ts';
+import { makeInMemoryUserStore } from '#src/modules/auth/adapters/persistence/repos/user-repository.in-memory.ts';
+import { makeInMemoryRoleStore } from '#src/modules/auth/adapters/persistence/repos/role-repository.in-memory.ts';
+import { MASS_APPROVER_ROLE_NAME } from '#src/modules/auth/application/use-cases/mass-approver-role.ts';
+import { CONTRACT_PERMISSION } from '#src/modules/contracts/public-api/permissions.ts';
 
 const AT = new Date('2026-06-07T12:00:00.000Z');
 const TTL = 604_800; // 7 dias
@@ -35,6 +45,55 @@ const unusableHash = (): PasswordHash.PasswordHash => {
   const h = PasswordHash.fromString('$argon2id$v=19$dummy-placeholder');
   if (!h.ok) throw new Error('setup');
   return h.value;
+};
+
+const emailOf = (raw: string): Email.Email => {
+  const r = Email.parse(raw);
+  if (!r.ok) throw new Error(`fixture email: ${r.error}`);
+  return r.value;
+};
+
+const makeRole = (name: string, permissions: readonly string[]): RoleType => {
+  const perms = permissions.map((p) => {
+    const parsed = Permission.parse(p);
+    if (!parsed.ok) throw new Error('permission fixture');
+    return parsed.value;
+  });
+  const r = Role.create({ id: RoleId.generate(), name, permissions: perms });
+  if (!r.ok) throw new Error('role fixture');
+  return r.value;
+};
+
+// Contexto RBAC com stores InMemory reais (espelha assign-role.test.ts). O use case ganha a dep
+// roleRepo e usa o motor RBAC (resolve role + User.assignRole) quando a flag e definida.
+const makeRbacCtx = () => {
+  const userStore = makeInMemoryUserStore();
+  const roleStore = makeInMemoryRoleStore();
+  const resetTokenRepo: PasswordResetTokenRepository = {
+    save: () => Promise.resolve(ok(undefined)),
+    findByTokenHash: () => Promise.resolve(ok(null)),
+    findUnusedByUserId: () => Promise.resolve(ok([])),
+  };
+  const minter: PasswordResetTokenMinter = {
+    mint: () => ({ token: 'plain-token-xyz', tokenHash: 'hash-xyz' }),
+    hash: (raw) => `hash-of-${raw}`,
+  };
+  const inviteMailer: InviteMailer = {
+    sendInvite: () => Promise.resolve(ok(undefined)),
+  };
+  const create = createUserByAdmin({
+    userReader: userStore.reader,
+    userRepo: userStore.repository,
+    roleRepo: roleStore.repository,
+    resetTokenRepo,
+    minter,
+    inviteMailer,
+    clock: ClockFixed(AT),
+    unusablePasswordHash: unusableHash(),
+    inviteTtlSeconds: TTL,
+    activationBaseUrl: BASE_URL,
+  });
+  return { userStore, roleStore, create };
 };
 
 interface Captured {
@@ -82,10 +141,13 @@ const makeDeps = (opts?: {
     },
   };
   const clock = ClockFixed(AT);
+  // roleRepo nunca e tocado nestes casos (flag ausente); fornecido so para satisfazer a dep.
+  const roleRepo = makeInMemoryRoleStore().repository;
 
   const deps = {
     userReader,
     userRepo,
+    roleRepo,
     resetTokenRepo,
     minter,
     inviteMailer,
@@ -179,5 +241,133 @@ describe('createUserByAdmin', () => {
 
     assert.ok(captured.savedToken !== null);
     assert.deepEqual(captured.savedToken?.expiresAt, new Date(AT.getTime() + TTL * 1000));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AUTH-MASS-APPROVE-SETTABLE - flag massApprovalPermission setavel na criacao.
+// Usa stores InMemory reais para exercitar o motor RBAC (resolve role + assign).
+// ---------------------------------------------------------------------------
+
+describe('createUserByAdmin - massApprovalPermission (AUTH-MASS-APPROVE-SETTABLE)', () => {
+  // Ator admin com user:create + user:assign-role; persiste no userStore.
+  const makeAuthorizedAdmin = async (
+    ctx: ReturnType<typeof makeRbacCtx>,
+  ): Promise<UserId.UserId> => {
+    const base = UserAgg.register(
+      {
+        id: UserId.generate(),
+        email: emailOf('admin.rbac@x.com'),
+        passwordHash: unusableHash(),
+        roles: [],
+      },
+      AT,
+    ).user;
+    const role = makeRole('admin', ['user:create', 'user:assign-role']);
+    await ctx.roleStore.repository.save(role);
+    const { user: withRole } = UserAgg.assignRole(base, role, AT);
+    await ctx.userStore.repository.save(withRole);
+    return withRole.id;
+  };
+
+  // Ator sem user:assign-role (so user:create); fail-closed para a flag.
+  const makeUnprivilegedAdmin = async (
+    ctx: ReturnType<typeof makeRbacCtx>,
+  ): Promise<UserId.UserId> => {
+    const base = UserAgg.register(
+      {
+        id: UserId.generate(),
+        email: emailOf('weak.rbac@x.com'),
+        passwordHash: unusableHash(),
+        roles: [],
+      },
+      AT,
+    ).user;
+    const role = makeRole('weak-admin', ['user:create']);
+    await ctx.roleStore.repository.save(role);
+    const { user: withRole } = UserAgg.assignRole(base, role, AT);
+    await ctx.userStore.repository.save(withRole);
+    return withRole.id;
+  };
+
+  const massApproveOf = async (
+    ctx: ReturnType<typeof makeRbacCtx>,
+    userId: UserId.UserId,
+  ): Promise<boolean> => {
+    const found = await ctx.userStore.reader.findById(userId);
+    if (!found.ok || found.value === null) return false;
+    return found.value.roles
+      .flatMap((role) => role.permissions)
+      .some((permission) => String(permission) === CONTRACT_PERMISSION.massApprove);
+  };
+
+  it('CA1: massApprovalPermission=true cria o usuario E concede a role etl:mass-approver', async () => {
+    const ctx = makeRbacCtx();
+    const adminId = await makeAuthorizedAdmin(ctx);
+
+    const r = await ctx.create({ ...validCmd(), adminId, massApprovalPermission: true });
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+
+    const created = r.value.user;
+    assert.equal(
+      created.roles.some((role) => role.name === MASS_APPROVER_ROLE_NAME),
+      true,
+    );
+    assert.equal(await massApproveOf(ctx, created.id), true);
+  });
+
+  it('CA2: massApprovalPermission=false cria sem a role (comportamento atual preservado)', async () => {
+    const ctx = makeRbacCtx();
+    const adminId = await makeAuthorizedAdmin(ctx);
+
+    const r = await ctx.create({ ...validCmd(), adminId, massApprovalPermission: false });
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    assert.equal(await massApproveOf(ctx, r.value.user.id), false);
+  });
+
+  it('CA6: ator sem user:assign-role que seta a flag -> forbidden e usuario NAO criado', async () => {
+    const ctx = makeRbacCtx();
+    const adminId = await makeUnprivilegedAdmin(ctx);
+
+    const r = await ctx.create({ ...validCmd(), adminId, massApprovalPermission: true });
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'forbidden');
+
+    // Fail-closed real: nada persistido para o email novo.
+    const leaked = await ctx.userStore.reader.findByEmail(emailOf('amanda@x.com'));
+    assert.equal(leaked.ok && leaked.value === null, true);
+  });
+
+  it('CA7: role etl:mass-approver inexistente e criada (busca-ou-cria) antes do assign', async () => {
+    const ctx = makeRbacCtx();
+    const adminId = await makeAuthorizedAdmin(ctx);
+
+    const before = await ctx.roleStore.repository.list();
+    assert.equal(before.ok, true);
+    if (!before.ok) return;
+    assert.equal(
+      before.value.some((role) => role.name === MASS_APPROVER_ROLE_NAME),
+      false,
+    );
+
+    const r = await ctx.create({ ...validCmd(), adminId, massApprovalPermission: true });
+    assert.equal(r.ok, true);
+
+    const after = await ctx.roleStore.repository.list();
+    assert.equal(after.ok, true);
+    if (!after.ok) return;
+    assert.equal(after.value.filter((role) => role.name === MASS_APPROVER_ROLE_NAME).length, 1);
+  });
+
+  it('flag ausente nao toca roleRepo (zero regressao): cria sem mass-approve', async () => {
+    const ctx = makeRbacCtx();
+    const adminId = await makeAuthorizedAdmin(ctx);
+
+    const r = await ctx.create({ ...validCmd(), adminId });
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    assert.equal(await massApproveOf(ctx, r.value.user.id), false);
   });
 });

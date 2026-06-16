@@ -80,6 +80,9 @@ export const createUserBodySchema = z.object({
   cpf: z.string().min(1),
   email: z.string().min(1),
   telephone: z.string().min(1),
+  // AUTH-MASS-APPROVE-SETTABLE: concessao da capacidade "Aprovador em Massa". Ausente -> nao concede.
+  // Setar exige user:assign-role no ator (fail-closed no use case -> 403).
+  massApprovalPermission: z.boolean().optional(),
 });
 
 export type CreateUserBody = z.infer<typeof createUserBodySchema>;
@@ -98,6 +101,9 @@ export const updateUserBodySchema = z.object({
   cpf: z.string().min(1).optional(),
   telephone: z.string().min(1).optional(),
   collaboratorId: z.string().nullable().optional(),
+  // AUTH-MASS-APPROVE-SETTABLE: concede/revoga a capacidade "Aprovador em Massa". Ausente -> patch
+  // parcial nao altera (FR-009). Setar exige user:assign-role no ator (fail-closed -> 403).
+  massApprovalPermission: z.boolean().optional(),
 });
 
 export type UpdateUserBody = z.infer<typeof updateUserBodySchema>;
