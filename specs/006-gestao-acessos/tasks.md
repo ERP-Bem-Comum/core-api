@@ -1,5 +1,11 @@
 # Tasks: Gestão de Acessos (Papéis e Permissões)
 
+> **STATUS (reconciliado 2026-06-15): ✅ funcionalmente CONCLUÍDA.** As 7 user stories estão no código
+> (`src/modules/auth/domain/authorization/` + use cases + `roles-plugin.ts` + repos Drizzle/in-memory), testes verdes.
+> As 3 tasks abertas são intencionais: **T009/T049** (eventos `Role*` + wiring outbox) **deferidos por YAGNI** (sem
+> consumidor — reabrir com AuditLog/consumidor cross-módulo); **T052** depende de reescrever `quickstart.md` de
+> CLI → HTTP/Bruno (ADR-0037 aposentou a CLI embutida). Nada bloqueia funcionalidade.
+
 **Input**: Design documents from `/specs/006-gestao-acessos/`
 
 **Prerequisites**: plan.md, spec.md, research.md, data-model.md, contracts/http-roles.md

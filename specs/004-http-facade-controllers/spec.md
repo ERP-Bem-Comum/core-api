@@ -4,7 +4,7 @@
 
 **Created**: 2026-06-06
 
-**Status**: Planejado — não-prioritário (no board `.claude/.planning/HTTP-FACADE-CONTROLLERS.md`; sem `/speckit-plan` até repriorização)
+**Status**: Planejado — **repriorizado 2026-06-15** (`/speckit-plan` + `/speckit-tasks` gerados). Escopo **ampliado** para incluir o módulo `programs` (criado após a redação original; spec 008). Contagens reais reconciliadas pelo recon — ver tabela em `plan.md`. Board: `.claude/.planning/HTTP-FACADE-CONTROLLERS.md`.
 
 **Input**: User description: "Adotar o padrão objeto-fachada de arrow-functions em toda a borda HTTP (auth + contracts + partners), dando aparência de controller OO mantendo 100% da semântica funcional. Restrito a `adapters/http/` + composition root. Sem mudança de comportamento."
 
@@ -38,8 +38,10 @@ Como mantenedor do core-api, quero os handlers HTTP de `auth` agrupados como mem
 objeto-fachada (em vez de arrow-functions inline soltas), para ler a borda como um controller e ter um
 **padrão de referência** validado antes de propagar.
 
-**Why this priority**: P1 — é o **piloto**. O menor plugin isolado (9 rotas); fixa o padrão canônico que os
-demais módulos copiam. Bloqueia (como referência) US-002 e US-003.
+**Why this priority**: P1 — é o **piloto**. `auth` é o módulo de borda de **referência** — 4 plugins
+(`plugin`/`users`/`roles`/`me`, 33 rotas) com a suíte de caracterização mais densa (21 arquivos `fastify.inject`);
+exercitar o padrão em múltiplos plugins de um mesmo módulo de uma vez dá mais confiança antes de propagar. Fixa o
+padrão canônico que os demais módulos copiam. Bloqueia (como referência) US-002, US-003 e US-004.
 
 **Independent Test**: Rodar a suíte de rotas de `auth` (a mesma de hoje, sem alterá-la) e o gate W3 — tudo
 verde após o refactor; nenhuma resposta/headers/status muda.
@@ -54,17 +56,17 @@ verde após o refactor; nenhuma resposta/headers/status muda.
 
 ### User Story 2 - Padrão de fachada no módulo `contracts` (Priority: P2)
 
-Como mantenedor, quero o maior plugin (`contracts`, 15 rotas) convertido ao padrão já validado no piloto,
-para uniformizar a borda do módulo mais complexo.
+Como mantenedor, quero o plugin único e mais denso (`contracts`, 16 rotas: leituras + escritas + aditivos +
+documentos) convertido ao padrão já validado no piloto, para uniformizar a borda do módulo de maior densidade por arquivo.
 
-**Why this priority**: P2 — maior superfície; aplica o padrão de referência depois que ele está provado.
+**Why this priority**: P2 — maior densidade num só plugin; aplica o padrão de referência depois que ele está provado.
 
 **Independent Test**: Suíte de rotas de `contracts` (incl. detalhe composto, aditivos, documentos) verde
 sem alteração + gate W3.
 
 **Acceptance Scenarios**:
 
-1. **Given** as 15 rotas de `contracts` inline, **When** convertidas ao objeto-fachada, **Then** todos os testes de rota de `contracts` passam sem alteração.
+1. **Given** as 16 rotas de `contracts` inline, **When** convertidas ao objeto-fachada, **Then** todos os testes de rota de `contracts` passam sem alteração.
 2. **Given** rotas com composição na borda (ADR-0032: contractor/children/files), **When** refatoradas, **Then** a composição e os headers `Deprecation`/`Sunset` permanecem idênticos.
 
 ---
@@ -85,6 +87,26 @@ verdes sem alteração + gate W3.
 1. **Given** os 6 plugins de `partners` inline, **When** convertidos ao objeto-fachada (1 por plugin), **Then** todas as suítes de rota de `partners` passam sem alteração.
 2. **Given** o `partners-plugin` agregador e as rotas de export, **When** refatorados, **Then** AND-4-reads, cap→503, headers CSV e projeção permanecem idênticos.
 
+---
+
+### User Story 4 - Padrão de fachada no módulo `programs` (Priority: P4)
+
+Como mantenedor, quero o plugin de `programs` (1 plugin `programsRoutes`, 8 rotas — CRUD + ciclo de vida +
+upload/display de logo) convertido ao padrão, **fechando 100% da borda HTTP** sob o objeto-fachada.
+
+**Why this priority**: P4 — o módulo `programs` foi criado **depois** da redação original deste épico (spec 008)
+e nasceu com handlers inline; entra no escopo para que SC-001/SC-002 (100% dos plugins / zero inline) sejam
+verdadeiros de fato. Menor blast radius (1 plugin, 8 rotas, 5 arquivos de teste); vem por último porque o padrão
+já está provado em auth/contracts/partners. Independente dos demais (pode ser paralelo).
+
+**Independent Test**: Suíte de rotas de `programs` (lista/criar/detalhe/editar/desativar/reativar/logo) verde
+sem alteração + gate W3.
+
+**Acceptance Scenarios**:
+
+1. **Given** as 8 rotas de `programs` inline, **When** convertidas ao objeto-fachada `makeProgramsController`, **Then** todos os testes de rota de `programs` passam sem alteração.
+2. **Given** a rota de upload/display de logo (multipart), **When** refatorada, **Then** o transporte de arquivo, headers e status permanecem idênticos.
+
 ### Edge Cases
 
 - **Inferência de tipo quebrada**: se a fachada for extraída para FORA da closure de rotas, `req` vira `FastifyRequest` cru e a inferência Zod some → **proibido**; a fachada MUST viver dentro de `xRoutes(scope)`.
@@ -102,7 +124,7 @@ verdes sem alteração + gate W3.
 - **FR-004**: O refactor MUST NOT alterar comportamento observável: status, body, headers, ordem de `preHandler`, envelope de erro, contratos Zod — tudo idêntico.
 - **FR-005**: O refactor MUST NOT tocar `domain/` nem `application/` de nenhum módulo; restrito a `adapters/http/` + composition root.
 - **FR-006**: Cada módulo refatorado MUST manter **verdes e sem alteração** os testes de rota existentes (`fastify.inject`), salvo teste acoplado a detalhe interno (exceção registrada no ticket).
-- **FR-007**: O épico MUST ser entregue **incremental, um módulo por ticket** (auth → contracts → partners), nunca num único big-bang.
+- **FR-007**: O épico MUST ser entregue **incremental, um módulo por ticket** (auth → contracts → partners → programs), nunca num único big-bang.
 - **FR-008**: Cada ticket MUST fechar com o gate W3 (`typecheck` + `format:check` + `lint` + `test`) verde (regressão zero).
 
 ### Key Entities
@@ -114,7 +136,7 @@ verdes sem alteração + gate W3.
 
 ### Measurable Outcomes
 
-- **SC-001**: 100% dos plugins HTTP (auth + contracts + partners, ~8 arquivos) usam o objeto-fachada; **zero** arrow-function de rota inline remanescente em `scope.route`.
+- **SC-001**: 100% dos plugins HTTP (auth + contracts + partners + programs, **12 plugins / 97 rotas**) usam o objeto-fachada; **zero** arrow-function de rota inline remanescente em `scope.route`.
 - **SC-002**: **Zero** ocorrência de `class`/`this` na borda HTTP após o refactor (verificável por busca).
 - **SC-003**: 100% dos testes de rota existentes passam **sem alteração de asserção** (exceto exceções de teste acoplado a detalhe interno, contadas e justificadas).
 - **SC-004**: Gate W3 verde em cada ticket (typecheck/format/lint/test), com contagem de testes **igual ou maior** que a baseline (nenhum teste perdido).
@@ -122,7 +144,7 @@ verdes sem alteração + gate W3.
 
 ## Impacto Arquitetural (core-api)
 
-- **Bounded Contexts afetados**: [x] auth · [x] contracts · [x] partners — **apenas a camada `adapters/http/`** de cada um. Sem cross-BC, sem mudança de fronteira.
+- **Bounded Contexts afetados**: [x] auth · [x] contracts · [x] partners · [x] programs — **apenas a camada `adapters/http/`** de cada um. Sem cross-BC, sem mudança de fronteira.
 - **Novos agregados / Value Objects?**: nenhum. O objeto-fachada é organização de adapter (não domínio).
 - **Novos eventos de domínio (outbox)?**: não.
 - **Novos subcomandos de CLI?**: não.
@@ -131,9 +153,9 @@ verdes sem alteração + gate W3.
 
 ## Assumptions
 
-- O padrão objeto-fachada é puramente **estético/organizacional**; o ganho de legibilidade é subjetivo, aceito pelo solicitante como justificativa suficiente para o churn (~2k linhas).
+- O padrão objeto-fachada é puramente **estético/organizacional**; o ganho de legibilidade é subjetivo, aceito pelo solicitante como justificativa suficiente para o churn (~2–3k linhas; 97 handlers em 12 plugins).
 - A restrição de inferência (fachada dentro da closure) é **inegociável** — sem ela o refactor regride a tipagem; é critério de revisão (W2).
 - Cada plugin vira **uma** fachada (1:1 plugin↔controller). Plugins com sub-recursos (ex.: contracts com amendments/documents) podem agrupar por sub-objeto se melhorar a leitura, a critério do W1 — sem mudar comportamento.
 - Helpers locais não-handler (formatadores, mapeadores de status) permanecem como estão; só os handlers de rota entram na fachada.
 - Decisão `class` (Opção B) está **fora de escopo** — exigiria ADR próprio + exceção de lint; este épico é explicitamente a Opção A.
-- Ordem dos tickets (auth → contracts → partners) é fixa: o piloto valida o padrão antes da propagação.
+- Ordem dos tickets (auth → contracts → partners → programs) é fixa: o piloto valida o padrão antes da propagação.
