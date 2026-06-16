@@ -5,7 +5,9 @@ import { isErr, isOk } from '#src/shared/index.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
 import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import { makeInMemoryCollaboratorStore } from '#src/modules/partners/adapters/persistence/repos/collaborator-repository.in-memory.ts';
+import { makeInMemoryCollaboratorHistoryStore } from '#src/modules/partners/adapters/persistence/repos/collaborator-history-repository.in-memory.ts';
 import type { CollaboratorRepository } from '#src/modules/partners/domain/collaborator/repository.ts';
+import type { CollaboratorHistoryRepository } from '#src/modules/partners/domain/collaborator/collaborator-history-repository.ts';
 import { registerCollaborator } from '#src/modules/partners/application/use-cases/register-collaborator.ts';
 import { completeCollaboratorRegistration } from '#src/modules/partners/application/use-cases/complete-collaborator-registration.ts';
 import { deactivateCollaborator } from '#src/modules/partners/application/use-cases/deactivate-collaborator.ts';
@@ -21,6 +23,8 @@ const CPF_B = '529.982.247-25';
 
 let repo: CollaboratorRepository;
 let store: ReturnType<typeof makeInMemoryCollaboratorStore>;
+// #44: os use cases de escrita agora exigem historyRepo (append de histórico).
+let historyRepo: CollaboratorHistoryRepository;
 
 const baseCmd = () => ({
   name: 'Maria Silva',
@@ -54,6 +58,7 @@ const completeInput = () => ({
 beforeEach(() => {
   store = makeInMemoryCollaboratorStore();
   repo = store.repository;
+  historyRepo = makeInMemoryCollaboratorHistoryStore().repository;
 });
 
 describe('registerCollaborator', () => {
@@ -126,7 +131,11 @@ describe('completeCollaboratorRegistration', () => {
     if (!reg.ok) return;
     const id = reg.value.collaborator.id as unknown as string;
 
-    const r = await completeCollaboratorRegistration({ collaboratorRepo: repo, clock })({
+    const r = await completeCollaboratorRegistration({
+      collaboratorRepo: repo,
+      historyRepo,
+      clock,
+    })({
       collaboratorId: id,
       ...completeInput(),
     });
@@ -138,7 +147,11 @@ describe('completeCollaboratorRegistration', () => {
   });
 
   it('id inexistente → not-found', async () => {
-    const r = await completeCollaboratorRegistration({ collaboratorRepo: repo, clock })({
+    const r = await completeCollaboratorRegistration({
+      collaboratorRepo: repo,
+      historyRepo,
+      clock,
+    })({
       collaboratorId: '7f3a1234-5678-4abc-9def-fedcba987654',
       ...completeInput(),
     });
@@ -150,12 +163,16 @@ describe('completeCollaboratorRegistration', () => {
     const reg = await registerCollaborator({ collaboratorRepo: repo, clock })(validCmd());
     if (!reg.ok) return;
     const id = reg.value.collaborator.id as unknown as string;
-    await completeCollaboratorRegistration({ collaboratorRepo: repo, clock })({
+    await completeCollaboratorRegistration({ collaboratorRepo: repo, historyRepo, clock })({
       collaboratorId: id,
       ...completeInput(),
     });
 
-    const again = await completeCollaboratorRegistration({ collaboratorRepo: repo, clock })({
+    const again = await completeCollaboratorRegistration({
+      collaboratorRepo: repo,
+      historyRepo,
+      clock,
+    })({
       collaboratorId: id,
       ...completeInput(),
     });
@@ -170,7 +187,7 @@ describe('deactivateCollaborator / reactivateCollaborator', () => {
     if (!reg.ok) return;
     const id = reg.value.collaborator.id as unknown as string;
 
-    const r = await deactivateCollaborator({ collaboratorRepo: repo, clock })({
+    const r = await deactivateCollaborator({ collaboratorRepo: repo, historyRepo, clock })({
       collaboratorId: id,
       disableBy: 'TEMPO_CONTRATO_FINALIZADO',
     });
@@ -179,7 +196,7 @@ describe('deactivateCollaborator / reactivateCollaborator', () => {
   });
 
   it('id inexistente → not-found', async () => {
-    const r = await deactivateCollaborator({ collaboratorRepo: repo, clock })({
+    const r = await deactivateCollaborator({ collaboratorRepo: repo, historyRepo, clock })({
       collaboratorId: '7f3a1234-5678-4abc-9def-fedcba987654',
       disableBy: 'FALECIMENTO',
     });
@@ -192,7 +209,7 @@ describe('deactivateCollaborator / reactivateCollaborator', () => {
     if (!reg.ok) return;
     const id = reg.value.collaborator.id as unknown as string;
 
-    const r = await deactivateCollaborator({ collaboratorRepo: repo, clock })({
+    const r = await deactivateCollaborator({ collaboratorRepo: repo, historyRepo, clock })({
       collaboratorId: id,
       disableBy: 'MOTIVO_INEXISTENTE',
     });
@@ -204,12 +221,12 @@ describe('deactivateCollaborator / reactivateCollaborator', () => {
     const reg = await registerCollaborator({ collaboratorRepo: repo, clock })(validCmd());
     if (!reg.ok) return;
     const id = reg.value.collaborator.id as unknown as string;
-    await deactivateCollaborator({ collaboratorRepo: repo, clock })({
+    await deactivateCollaborator({ collaboratorRepo: repo, historyRepo, clock })({
       collaboratorId: id,
       disableBy: 'SOLICITACAO_RESCISAO_CONTRATUAL',
     });
 
-    const r = await reactivateCollaborator({ collaboratorRepo: repo, clock })({
+    const r = await reactivateCollaborator({ collaboratorRepo: repo, historyRepo, clock })({
       collaboratorId: id,
     });
     assert.equal(isOk(r), true);
@@ -221,7 +238,7 @@ describe('deactivateCollaborator / reactivateCollaborator', () => {
     if (!reg.ok) return;
     const id = reg.value.collaborator.id as unknown as string;
 
-    const r = await reactivateCollaborator({ collaboratorRepo: repo, clock })({
+    const r = await reactivateCollaborator({ collaboratorRepo: repo, historyRepo, clock })({
       collaboratorId: id,
     });
     assert.equal(isErr(r), true);

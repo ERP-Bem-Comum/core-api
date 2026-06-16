@@ -20,6 +20,8 @@ import type {
   CollaboratorRepository,
   CollaboratorRepositoryError,
 } from '#src/modules/partners/domain/collaborator/repository.ts';
+import type { CollaboratorHistoryRepository } from '#src/modules/partners/domain/collaborator/collaborator-history-repository.ts';
+import { appendCollaboratorHistory } from './collaborator-history-append.ts';
 
 export type CompleteCollaboratorRegistrationCommand = Readonly<{ collaboratorId: string }> &
   CompleteRegistrationInput;
@@ -35,7 +37,11 @@ export type CompleteCollaboratorRegistrationOutput = Readonly<{
   event: CollaboratorEvent;
 }>;
 
-type Deps = Readonly<{ collaboratorRepo: CollaboratorRepository; clock: Clock }>;
+type Deps = Readonly<{
+  collaboratorRepo: CollaboratorRepository;
+  historyRepo: CollaboratorHistoryRepository;
+  clock: Clock;
+}>;
 
 export const completeCollaboratorRegistration =
   (deps: Deps) =>
@@ -58,6 +64,16 @@ export const completeCollaboratorRegistration =
 
     const saved = await deps.collaboratorRepo.save(transition.value.collaborator);
     if (!saved.ok) return saved;
+
+    // Histórico append-only (#44): before = PreRegistration, after = Complete.
+    const history = await appendCollaboratorHistory({
+      historyRepo: deps.historyRepo,
+      changeType: 'Complementacao',
+      before: fetched.value,
+      after: transition.value.collaborator,
+      occurredAt: transition.value.event.occurredAt,
+    });
+    if (!history.ok) return history;
 
     return ok({ collaborator: transition.value.collaborator, event: transition.value.event });
   };

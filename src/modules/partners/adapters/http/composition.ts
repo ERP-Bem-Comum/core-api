@@ -21,6 +21,9 @@ import { makeInMemoryCollaboratorStore } from '../persistence/repos/collaborator
 import { createDrizzleCollaboratorStore } from '../persistence/repos/collaborator-repository.drizzle.ts';
 import { makeInMemoryCollaboratorReader } from '../persistence/repos/collaborator-reader.in-memory.ts';
 import { createDrizzleCollaboratorReader } from '../persistence/repos/collaborator-reader.drizzle.ts';
+import { makeInMemoryCollaboratorHistoryStore } from '../persistence/repos/collaborator-history-repository.in-memory.ts';
+import { createDrizzleCollaboratorHistoryStore } from '../persistence/repos/collaborator-history-repository.drizzle.ts';
+import { createDrizzleCollaboratorHistoryReader } from '../persistence/repos/collaborator-history-reader.drizzle.ts';
 import { makeInMemorySupplierReader } from '../persistence/repos/supplier-reader.in-memory.ts';
 import { createDrizzleSupplierReader } from '../persistence/repos/supplier-reader.drizzle.ts';
 import { makeInMemorySupplierStore } from '../persistence/repos/supplier-repository.in-memory.ts';
@@ -65,7 +68,10 @@ import { completeCollaboratorRegistration } from '../../application/use-cases/co
 import { deactivateCollaborator } from '../../application/use-cases/deactivate-collaborator.ts';
 import { reactivateCollaborator } from '../../application/use-cases/reactivate-collaborator.ts';
 import { editCollaborator } from '../../application/use-cases/edit-collaborator.ts';
+import { listCollaboratorHistory } from '../../application/use-cases/list-collaborator-history.ts';
 import type { CollaboratorRepository } from '../../domain/collaborator/repository.ts';
+import type { CollaboratorHistoryRepository } from '../../domain/collaborator/collaborator-history-repository.ts';
+import type { CollaboratorHistoryReader } from '../../application/ports/collaborator-history-reader.ts';
 import type {
   CollaboratorReader,
   CollaboratorReadRecord,
@@ -132,6 +138,8 @@ export type PartnersHttpDeps = Readonly<{
   deactivateCollaborator: ReturnType<typeof deactivateCollaborator>;
   reactivateCollaborator: ReturnType<typeof reactivateCollaborator>;
   editCollaborator: ReturnType<typeof editCollaborator>;
+  /** Histórico de alterações — leitura (#44). */
+  listCollaboratorHistory: ReturnType<typeof listCollaboratorHistory>;
   /** Fornecedores — leitura (reader pool, S1). */
   getSupplierById: (id: string) => Promise<Result<SupplierReadRecord | null, SupplierReaderError>>;
   listSupplierRecords: () => Promise<Result<readonly SupplierReadRecord[], SupplierReaderError>>;
@@ -171,6 +179,8 @@ type Pools = Readonly<{
   collaboratorReaderRepo: CollaboratorRepository;
   collaboratorWriterRepo: CollaboratorRepository;
   collaboratorReader: CollaboratorReader;
+  collaboratorHistoryRepo: CollaboratorHistoryRepository;
+  collaboratorHistoryReader: CollaboratorHistoryReader;
   supplierReader: SupplierReader;
   supplierWriterRepo: SupplierRepository;
   financierReader: FinancierReader;
@@ -184,6 +194,9 @@ type Pools = Readonly<{
 const buildMemoryPools = (config: PartnersCompositionConfig): Pools => {
   // RW split sem efeito físico em memory: reader = writer = mesmo store de agregados.
   const { repository } = makeInMemoryCollaboratorStore();
+  // Histórico (#44): único store respaldando repo (append) + reader (list DESC) — o reader lê o
+  // que o fluxo de escrita apendou (consistência em memória; sem reader pool separado).
+  const historyStore = makeInMemoryCollaboratorHistoryStore();
   const { repository: actRepository } = makeInMemoryActStore();
   // ActReader in-memory: usa seed explícito se fornecido, caso contrário deriva do repositório
   // writer (RW split em memória — sem reader pool separado, conforme padrão do colaborador).
@@ -195,6 +208,8 @@ const buildMemoryPools = (config: PartnersCompositionConfig): Pools => {
     collaboratorReaderRepo: repository,
     collaboratorWriterRepo: repository,
     collaboratorReader: makeInMemoryCollaboratorReader(config.seed?.collaborators ?? []),
+    collaboratorHistoryRepo: historyStore.repository,
+    collaboratorHistoryReader: historyStore.reader,
     supplierReader: makeInMemorySupplierReader(config.seed?.suppliers ?? []),
     supplierWriterRepo: makeInMemorySupplierStore().repository,
     financierReader: makeInMemoryFinancierReader(config.seed?.financiers ?? []),
@@ -234,6 +249,8 @@ const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools
     collaboratorReaderRepo: createDrizzleCollaboratorStore(readerHandle, clock),
     collaboratorWriterRepo: createDrizzleCollaboratorStore(writerHandle, clock),
     collaboratorReader: createDrizzleCollaboratorReader(readerHandle),
+    collaboratorHistoryRepo: createDrizzleCollaboratorHistoryStore(writerHandle, clock),
+    collaboratorHistoryReader: createDrizzleCollaboratorHistoryReader(readerHandle),
     supplierReader: createDrizzleSupplierReader(readerHandle),
     supplierWriterRepo: createDrizzleSupplierStore(writerHandle, clock),
     financierReader: createDrizzleFinancierReader(readerHandle),
@@ -266,17 +283,27 @@ const makeDeps = (pools: Pools): PartnersHttpDeps => {
     }),
     completeCollaboratorRegistration: completeCollaboratorRegistration({
       collaboratorRepo: pools.collaboratorWriterRepo,
+      historyRepo: pools.collaboratorHistoryRepo,
       clock,
     }),
     deactivateCollaborator: deactivateCollaborator({
       collaboratorRepo: pools.collaboratorWriterRepo,
+      historyRepo: pools.collaboratorHistoryRepo,
       clock,
     }),
     reactivateCollaborator: reactivateCollaborator({
       collaboratorRepo: pools.collaboratorWriterRepo,
+      historyRepo: pools.collaboratorHistoryRepo,
       clock,
     }),
-    editCollaborator: editCollaborator({ collaboratorRepo: pools.collaboratorWriterRepo, clock }),
+    editCollaborator: editCollaborator({
+      collaboratorRepo: pools.collaboratorWriterRepo,
+      historyRepo: pools.collaboratorHistoryRepo,
+      clock,
+    }),
+    listCollaboratorHistory: listCollaboratorHistory({
+      historyReader: pools.collaboratorHistoryReader,
+    }),
     importCollaborators: importCollaborators({
       collaboratorRepo: pools.collaboratorWriterRepo,
       clock,

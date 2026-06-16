@@ -20,8 +20,10 @@ import {
   check,
   date,
   datetime,
+  index,
   int,
   mysqlTable,
+  text,
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/mysql-core';
@@ -199,6 +201,44 @@ export const parCollaborators = mysqlTable(
 
 export type CollaboratorRow = typeof parCollaborators.$inferSelect;
 export type NewCollaboratorRow = typeof parCollaborators.$inferInsert;
+
+// ─── par_collaborator_history ─────────────────────────────────────────────────
+// Histórico append-only de alterações do Colaborador (#44). Snapshot GENÉRICO before/after do
+// agregado (text serializado) — agnóstico aos campos, sem acoplar com a trilha A (CA5). Sem FK
+// cross-agregado para `par_collaborators` (referência por ID, padrão par_user_profiles/ADR-0014).
+// `change_type` é varchar + CHECK (NÃO ENUM — ADR-0020). `id`/`collaborator_ref`/`changed_by_ref`
+// são UUID → COLLATE utf8mb4_bin no SQL manual. Apenas INSERT (sem update/delete).
+export const parCollaboratorHistory = mysqlTable(
+  'par_collaborator_history',
+  {
+    // UUID v4 gerado no domínio (PK de domínio — sem AUTO_INCREMENT). COLLATE utf8mb4_bin no SQL manual.
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    // UUID do colaborador (referência por ID, sem FK). COLLATE utf8mb4_bin no SQL manual.
+    collaboratorRef: varchar('collaborator_ref', { length: 36 }).notNull(),
+    // Tipo de alteração (literal). varchar + CHECK, NÃO ENUM (ADR-0020).
+    changeType: varchar('change_type', { length: 20 }).notNull(),
+    // Snapshot serializado genérico ANTES (null no 1º registro). text, NÃO JSON nativo (ADR-0020).
+    snapshotBefore: text('snapshot_before'),
+    // Snapshot serializado genérico DEPOIS (sempre presente).
+    snapshotAfter: text('snapshot_after').notNull(),
+    // UUID do auth.User autor (nullable enquanto a borda não propaga o ator). COLLATE utf8mb4_bin manual.
+    changedByRef: varchar('changed_by_ref', { length: 36 }),
+    occurredAt: datetime('occurred_at', { mode: 'date', fsp: 3 }).notNull(),
+    createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
+  },
+  (t) => [
+    // change_type ∈ conjunto fechado (espelha CollaboratorChangeType).
+    check(
+      'par_collaborator_history_change_type_chk',
+      sql`${t.changeType} IN ('Cadastro','Complementacao','Edicao','Desativacao','Reativacao')`,
+    ),
+    // Índice (NÃO unique) que atende a consulta da rota/CSV: por colaborador, mais recente primeiro.
+    index('par_ch_collaborator_occurred_idx').on(t.collaboratorRef, t.occurredAt),
+  ],
+);
+
+export type CollaboratorHistoryRow = typeof parCollaboratorHistory.$inferSelect;
+export type NewCollaboratorHistoryRow = typeof parCollaboratorHistory.$inferInsert;
 
 // ─── par_user_profiles ──────────────────────────────────────────────────────
 // Perfil de usuário (legado `users` — porção de perfil; autenticação fica no auth).

@@ -4,7 +4,8 @@
  */
 
 import type { CollaboratorReadRecord } from '#src/modules/partners/application/ports/collaborator-reader.ts';
-import type { CollaboratorDetailDto } from './schemas.ts';
+import type { CollaboratorHistoryEntry } from '#src/modules/partners/domain/collaborator/collaborator-history.ts';
+import type { CollaboratorDetailDto, CollaboratorHistoryItemDto } from './schemas.ts';
 
 const isoOrNull = (d: Date | null): string | null => (d === null ? null : d.toISOString());
 
@@ -45,3 +46,16 @@ export const collaboratorToDetailDto = (record: CollaboratorReadRecord): Collabo
     updatedAt: record.updatedAt.toISOString(),
   };
 };
+
+/** Entry de histórico → DTO HTTP (#44). Snapshots before/after serializados; datas em ISO 8601. */
+export const collaboratorHistoryToItemDto = (
+  entry: CollaboratorHistoryEntry,
+): CollaboratorHistoryItemDto => ({
+  id: String(entry.id),
+  collaboratorRef: String(entry.collaboratorRef),
+  changeType: entry.changeType,
+  before: entry.before,
+  after: entry.after,
+  occurredAt: entry.occurredAt.toISOString(),
+  changedByRef: entry.changedByRef,
+});

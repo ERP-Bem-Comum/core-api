@@ -27,6 +27,9 @@ export const collaboratorListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(LIST_LIMIT_MAX).default(LIST_LIMIT_DEFAULT),
   order: z.enum(['ASC', 'DESC']).default('ASC'),
+  // `type=history` (#44) seleciona o export de histórico na rota GET /collaborators/export.
+  // Ausente/qualquer outro = export cadastral (sem regressão). Lido direto na rota.
+  type: z.enum(['history']).optional(),
   search: z.string().min(1).optional(),
   active: z.coerce.number().int().min(0).max(1).optional(),
   status: z.preprocess(toArray, z.array(z.enum(['PreRegistration', 'Complete'])).optional()),
@@ -210,3 +213,25 @@ export const deactivateCollaboratorBodySchema = z.object({
 });
 
 export type DeactivateCollaboratorBody = z.infer<typeof deactivateCollaboratorBodySchema>;
+
+// ─── #44 — histórico de alterações ─────────────────────────────────────────────
+
+/** Item do histórico (resposta do GET /:id/history). Snapshots before/after serializados (text). */
+export const collaboratorHistoryItemSchema = z.object({
+  id: z.uuid(),
+  collaboratorRef: z.uuid(),
+  changeType: z.enum(['Cadastro', 'Complementacao', 'Edicao', 'Desativacao', 'Reativacao']),
+  before: z.string().nullable(),
+  after: z.string(),
+  occurredAt: z.string().meta({ description: 'ISO 8601' }),
+  changedByRef: z.string().nullable(),
+});
+
+export type CollaboratorHistoryItemDto = z.infer<typeof collaboratorHistoryItemSchema>;
+
+/** Response do GET /collaborators/:id/history — lista ordenada por occurredAt DESC. */
+export const collaboratorHistoryListSchema = z.object({
+  items: z.array(collaboratorHistoryItemSchema),
+});
+
+export type CollaboratorHistoryListDto = z.infer<typeof collaboratorHistoryListSchema>;

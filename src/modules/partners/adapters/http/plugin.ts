@@ -29,7 +29,8 @@ import { toErrorEnvelope } from '#src/shared/http/errors.ts';
 import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
 
 import type { PartnersHttpDeps } from './composition.ts';
-import { collaboratorToDetailDto } from './collaborator-dto.ts';
+import type { CollaboratorHistoryEntry } from '../../domain/collaborator/collaborator-history.ts';
+import { collaboratorToDetailDto, collaboratorHistoryToItemDto } from './collaborator-dto.ts';
 import { parseCollaboratorImportCsv } from './collaborator-import-dto.ts';
 import {
   queryToFilter,
@@ -37,10 +38,12 @@ import {
   collaboratorsForExport,
 } from './collaborator-list-query.ts';
 import { collaboratorsToCsv } from '../export/collaborator-csv.ts';
+import { collaboratorHistoryToCsv } from '../export/collaborator-history-csv.ts';
 import {
   collaboratorListQuerySchema,
   collaboratorPaginatedSchema,
   collaboratorDetailSchema,
+  collaboratorHistoryListSchema,
   collaboratorIdParamSchema,
   createCollaboratorBodySchema,
   completeRegistrationBodySchema,
@@ -163,15 +166,64 @@ const collaboratorsRoutes =
             errors: { 'collaborator-read-unavailable': 503 },
           });
         }
-        const csv = collaboratorsToCsv(
-          collaboratorsForExport(result.value, queryToFilter(req.query)),
-        );
+        const matched = collaboratorsForExport(result.value, queryToFilter(req.query));
+
+        // #44 — Exportar → Histórico: CSV legado (`;`, dd/MM/aaaa). Reúne o histórico dos
+        // colaboradores filtrados e ordena DESC por occurredAt. Reader indisponível → 503.
+        if (req.query.type === 'history') {
+          const all: CollaboratorHistoryEntry[] = [];
+          for (const c of matched) {
+            const listed = await deps.listCollaboratorHistory({ collaboratorId: String(c.id) });
+            if (!listed.ok) {
+              if (listed.error === 'collaborator-repo-unavailable') {
+                return sendWriteError(reply, listed.error);
+              }
+              // id-invalid não ocorre (id vem do agregado): trata defensivamente como vazio.
+              continue;
+            }
+            all.push(...listed.value);
+          }
+          all.sort((a, b) => b.occurredAt.getTime() - a.occurredAt.getTime());
+          const historyCsv = collaboratorHistoryToCsv(all);
+          return reply
+            .code(200)
+            .header('content-type', 'text/csv; charset=utf-8')
+            .header('content-disposition', 'attachment; filename="collaborators-history.csv"')
+            .header('x-content-type-options', 'nosniff')
+            .send(historyCsv) as unknown as Promise<void>;
+        }
+
+        const csv = collaboratorsToCsv(matched);
         return reply
           .code(200)
           .header('content-type', 'text/csv; charset=utf-8')
           .header('content-disposition', 'attachment; filename="collaborators.csv"')
           .header('x-content-type-options', 'nosniff')
           .send(csv) as unknown as Promise<void>;
+      },
+    });
+
+    // Histórico de alterações (#44): lista DESC por occurredAt. :id é UUID (Zod → 400);
+    // reader indisponível → 503 (collaborator-repo-unavailable). Rota estática `/export` já
+    // precede `/:id`; este sub-path `/:id/history` não colide com `/:id`. `collaborator:read`.
+    scope.route({
+      method: 'GET',
+      url: '/collaborators/:id/history',
+      preHandler: [hooks.requireAuth, hooks.authorize(COLLABORATOR_PERMISSION.read)],
+      schema: {
+        params: collaboratorIdParamSchema,
+        response: { 200: collaboratorHistoryListSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.listCollaboratorHistory({ collaboratorId: req.params.id });
+        if (!result.ok) {
+          // 503 com slug `collaborator-repo-unavailable` (REPO_UNAVAILABLE_CODES, CA3); `sendWriteError`
+          // preserva o slug em 503 (≠ `sendResult`, que mascara 5xx). invalid-id não ocorre (Zod → 400).
+          return sendWriteError(reply, result.error);
+        }
+        return sendResult(reply, ok({ items: result.value.map(collaboratorHistoryToItemDto) }), {
+          ok: 200,
+        });
       },
     });
 

@@ -14,6 +14,8 @@ import type {
   CollaboratorRepository,
   CollaboratorRepositoryError,
 } from '#src/modules/partners/domain/collaborator/repository.ts';
+import type { CollaboratorHistoryRepository } from '#src/modules/partners/domain/collaborator/collaborator-history-repository.ts';
+import { appendCollaboratorHistory } from './collaborator-history-append.ts';
 
 export type DeactivateCollaboratorCommand = Readonly<{ collaboratorId: string; disableBy: string }>;
 
@@ -30,7 +32,11 @@ export type DeactivateCollaboratorOutput = Readonly<{
   event: CollaboratorEvent;
 }>;
 
-type Deps = Readonly<{ collaboratorRepo: CollaboratorRepository; clock: Clock }>;
+type Deps = Readonly<{
+  collaboratorRepo: CollaboratorRepository;
+  historyRepo: CollaboratorHistoryRepository;
+  clock: Clock;
+}>;
 
 export const deactivateCollaborator =
   (deps: Deps) =>
@@ -49,6 +55,16 @@ export const deactivateCollaborator =
 
     const saved = await deps.collaboratorRepo.save(transition.value.collaborator);
     if (!saved.ok) return saved;
+
+    // Histórico append-only (#44): before = estado Active, after = estado Inactive.
+    const history = await appendCollaboratorHistory({
+      historyRepo: deps.historyRepo,
+      changeType: 'Desativacao',
+      before: fetched.value,
+      after: transition.value.collaborator,
+      occurredAt: transition.value.event.occurredAt,
+    });
+    if (!history.ok) return history;
 
     return ok({ collaborator: transition.value.collaborator, event: transition.value.event });
   };

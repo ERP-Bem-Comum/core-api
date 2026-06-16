@@ -16,6 +16,8 @@ import type {
   CollaboratorRepository,
   CollaboratorRepositoryError,
 } from '#src/modules/partners/domain/collaborator/repository.ts';
+import type { CollaboratorHistoryRepository } from '#src/modules/partners/domain/collaborator/collaborator-history-repository.ts';
+import { appendCollaboratorHistory } from './collaborator-history-append.ts';
 
 export type EditCollaboratorCommand = Readonly<{
   collaboratorId: string;
@@ -43,7 +45,11 @@ export type EditCollaboratorOutput = Readonly<{
   event: CollaboratorEvent;
 }>;
 
-type Deps = Readonly<{ collaboratorRepo: CollaboratorRepository; clock: Clock }>;
+type Deps = Readonly<{
+  collaboratorRepo: CollaboratorRepository;
+  historyRepo: CollaboratorHistoryRepository;
+  clock: Clock;
+}>;
 
 export const editCollaborator =
   (deps: Deps) =>
@@ -95,6 +101,16 @@ export const editCollaborator =
 
     const saved = await deps.collaboratorRepo.save(next);
     if (!saved.ok) return saved;
+
+    // Histórico append-only (#44): captura snapshot before/after no mesmo fluxo (consistência forte).
+    const history = await appendCollaboratorHistory({
+      historyRepo: deps.historyRepo,
+      changeType: 'Edicao',
+      before: current,
+      after: next,
+      occurredAt: edited.value.event.occurredAt,
+    });
+    if (!history.ok) return history;
 
     return ok({ collaborator: next, event: edited.value.event });
   };
