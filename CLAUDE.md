@@ -7,7 +7,7 @@
 
 <!-- SPECKIT START -->
 
-Plano corrente: `specs/004-http-facade-controllers/plan.md` (épico de **refactor** — objeto-fachada de arrow-functions na borda HTTP de auth+contracts+partners+programs; **zero mudança de comportamento**; restrito a `adapters/http/` + composition root; 4 tickets W0→W3; ver `research.md`, `data-model.md`, `contracts/README.md`, `quickstart.md`).
+Plano corrente: `specs/011-financial-hardening/plan.md` (feature de **hardening** do módulo `financial` pós-Fatia 2 — issues #52/#54/#55/#56; **zero mudança de comportamento** exceto onde os CAs exigem; restrito a `src/modules/financial/`; 4 tickets W0→W3 + 1 migration de CHECK; ver `research.md`, `data-model.md`, `contracts/README.md`, `quickstart.md`).
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan.
 
