@@ -152,3 +152,125 @@ describe('AUTH-HTTP-CREATE-USER — POST /api/v1/users', () => {
     assert.equal(res.statusCode, 422);
   });
 });
+
+// ---------------------------------------------------------------------------
+// AUTH-MASS-APPROVE-SETTABLE - flag massApprovalPermission no POST /users.
+// ADMIN_MA tem user:create + user:assign-role + user:read (para checar o detalhe).
+// ---------------------------------------------------------------------------
+
+const ADMIN_MA = 'admin.ma.create@example.com';
+const WEAK_MA = 'weak.ma.create@example.com';
+
+const makeMaApp = async (): Promise<{ app: AppHandle; teardown: () => Promise<void> }> => {
+  const authDeps = await buildAuthHttpDeps({
+    driver: 'memory',
+    seed: {
+      users: [
+        {
+          email: ADMIN_MA,
+          password: STRONG,
+          permissions: ['user:create', 'user:assign-role', 'user:read'],
+        },
+        { email: WEAK_MA, password: STRONG, permissions: ['user:create', 'user:read'] },
+      ],
+    },
+  });
+  const requireAuth = makeRequireAuth(authDeps.verifyAccessToken);
+  const app = await buildApp({
+    routes: [
+      authHttpPlugin(authDeps),
+      {
+        plugin: usersHttpPlugin(
+          {
+            listUsers: authDeps.listUsers,
+            getUser: authDeps.getUser,
+            createUserByAdmin: authDeps.createUserByAdmin,
+            updateUserProfile: authDeps.updateUserProfile,
+            activateUser: authDeps.activateUser,
+            deactivateUser: authDeps.deactivateUser,
+            setProfilePhoto: authDeps.setProfilePhoto,
+            removeProfilePhoto: authDeps.removeProfilePhoto,
+            getProfilePhoto: authDeps.getProfilePhoto,
+          },
+          { requireAuth, authorize: authDeps.authorize },
+        ),
+        prefix: '/api/v1',
+      },
+    ],
+  });
+  const teardown = async (): Promise<void> => {
+    await app.close();
+    await authDeps.shutdown();
+  };
+  return { app, teardown };
+};
+
+describe('AUTH-MASS-APPROVE-SETTABLE — POST /api/v1/users (massApprovalPermission)', () => {
+  let app: AppHandle;
+  let teardown: () => Promise<void>;
+  let adminToken: string;
+
+  before(async () => {
+    ({ app, teardown } = await makeMaApp());
+    adminToken = await login(app, ADMIN_MA);
+  });
+
+  after(async () => {
+    await teardown();
+  });
+
+  it('CA1: cria com massApprovalPermission=true e o detalhe reflete true', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/users',
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { ...validBody(), email: 'ma.true@example.com', massApprovalPermission: true },
+    });
+    assert.equal(res.statusCode, 201);
+    const { id } = res.json() as { id: string };
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/v1/users/${id}`,
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    assert.equal(detail.statusCode, 200);
+    assert.equal(
+      (detail.json() as { massApprovalPermission: boolean }).massApprovalPermission,
+      true,
+    );
+  });
+
+  it('CA2: cria com massApprovalPermission=false; detalhe reflete false', async () => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/users',
+      headers: { authorization: `Bearer ${adminToken}` },
+      payload: { ...validBody(), email: 'ma.false@example.com', massApprovalPermission: false },
+    });
+    assert.equal(res.statusCode, 201);
+    const { id } = res.json() as { id: string };
+
+    const detail = await app.inject({
+      method: 'GET',
+      url: `/api/v1/users/${id}`,
+      headers: { authorization: `Bearer ${adminToken}` },
+    });
+    assert.equal(detail.statusCode, 200);
+    assert.equal(
+      (detail.json() as { massApprovalPermission: boolean }).massApprovalPermission,
+      false,
+    );
+  });
+
+  it('CA6: ator sem user:assign-role que seta a flag -> 403', async () => {
+    const weakToken = await login(app, WEAK_MA);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v1/users',
+      headers: { authorization: `Bearer ${weakToken}` },
+      payload: { ...validBody(), email: 'ma.forbidden@example.com', massApprovalPermission: true },
+    });
+    assert.equal(res.statusCode, 403);
+  });
+});

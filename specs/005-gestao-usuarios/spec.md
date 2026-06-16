@@ -12,9 +12,14 @@
 
 ## Clarifications
 
+### Session 2026-06-16
+
+- Q: A flag "aprovador em massa" deve ser **setável** na criação/edição de usuário (pedido do front), revertendo o read-only de 2026-06-07? → A: **Sim, setável** — na criação **e** na edição. A concessão continua sendo **RBAC** (fonte única): a flag é um **atalho** que concede/revoga a role dedicada `etl:mass-approver` (que carrega exatamente a permissão `contract:mass-approve`) via o motor `assignRole`/`revokeRole` já existente. **Supersede** a decisão de 2026-06-07 (que tratava a 005 como read-only para essa permissão). Ver FR-005 e FR-015.
+- Q: Quem pode setar a flag precisa de qual autorização? → A: **Fail-closed** — além da permissão da própria ação (`user:create` / `user:update`), o ator precisa de `user:assign-role` para setar a flag (mesmo gate de conceder capacidade da `006`). Sem ela, a operação cadastral procede mas a flag é recusada.
+
 ### Session 2026-06-07
 
-- Q: "Aprovador em massa" (`massApprovalPermission`) é atributo de perfil (005) ou permissão RBAC (006)? → A: **Permissão RBAC** — a concessão vive na `006-gestao-acessos`; a 005 apenas **exibe** o estado (read-only), não concede.
+- Q: "Aprovador em massa" (`massApprovalPermission`) é atributo de perfil (005) ou permissão RBAC (006)? → A: **Permissão RBAC** — a concessão vive na `006-gestao-acessos`; a 005 apenas **exibe** o estado (read-only), não concede. _(Superseded em 2026-06-16: a 005 passa a conceder/revogar via role RBAC; a permissão segue sendo RBAC.)_
 - Q: Ao criar um usuário (admin), como se dá o primeiro acesso? → A: **Convite/ativação por email** — criar dispara convite; o usuário define a própria senha pelo fluxo existente (`request/confirm-password-reset` + EmailPort, ADR-0010). Nenhuma senha é definida pelo admin.
 - Q: `collaboratorId` é vínculo gerenciável (escopo 005) ou dado opaco read-only? → A: **Opaco/read-only por ora** — persistido e exibido, mas **não** gerenciável nesta feature; `partners`/RH fora do escopo da 005.
 
@@ -146,8 +151,8 @@ O usuário autenticado edita o próprio perfil e redefine a própria senha, sem 
 - **FR-001**: O sistema MUST listar usuários com paginação configurável (tamanhos 5, 10 e 25) e retornar metadados de paginação (página atual, total de páginas, total de itens).
 - **FR-002**: O sistema MUST permitir busca textual por nome, restringindo a listagem aos correspondentes.
 - **FR-003**: O sistema MUST permitir filtrar a listagem por status (ativo, inativo, todos).
-- **FR-004**: O sistema MUST expor o detalhe completo de um usuário por identificador, incluindo campos não presentes na listagem (telefone, foto, indicador **read-only** de "aprovador em massa" — ver FR-015, vínculo opaco a colaborador — ver FR-017).
-- **FR-005**: O sistema MUST permitir criar um usuário com nome, CPF, email, telefone e foto opcional, persistindo-o como **ativo**. A criação **não** define a permissão "aprovador em massa" (concedida na `006`) nem senha (ver FR-016).
+- **FR-004**: O sistema MUST expor o detalhe completo de um usuário por identificador, incluindo campos não presentes na listagem (telefone, foto, indicador de "aprovador em massa" — ver FR-015, vínculo opaco a colaborador — ver FR-017).
+- **FR-005**: O sistema MUST permitir criar um usuário com nome, CPF, email, telefone e foto opcional, persistindo-o como **ativo**. A criação **pode** definir a permissão "aprovador em massa" (ver FR-015); senha **não** é definida pelo admin (ver FR-016).
 - **FR-006**: O sistema MUST validar nome e email como obrigatórios, e CPF, email e telefone quanto ao formato, recusando entradas inválidas com indicação por campo.
 - **FR-007**: O sistema MUST garantir unicidade de email entre usuários, recusando criação/edição que viole essa regra.
 - **FR-008**: O sistema MUST armazenar CPF e telefone **normalizados** (somente dígitos), deixando formatação para a camada de apresentação.
@@ -157,13 +162,13 @@ O usuário autenticado edita o próprio perfil e redefine a própria senha, sem 
 - **FR-012**: O sistema MUST permitir enviar, trocar e remover a foto de perfil, validando tipo e tamanho do arquivo.
 - **FR-013**: O sistema MUST permitir que o usuário autenticado edite o **próprio** perfil e redefina a **própria** senha, reusando os fluxos de senha existentes no módulo `auth`.
 - **FR-014**: O sistema MUST exigir autorização para toda ação administrativa (listar, detalhar, criar, editar, ativar/desativar, gerir foto de terceiros), negando por padrão quando o ator não tem permissão (fail-closed).
-- **FR-015**: O sistema MUST **exibir** (read-only) se um usuário tem a permissão "aprovador em massa". A **concessão/revogação** dessa permissão NÃO pertence a esta feature — é modelada como permissão RBAC na `006-gestao-acessos`. A 005 não cria nem altera esse estado, apenas o reflete no detalhe do usuário.
+- **FR-015**: O sistema MUST **exibir** se um usuário tem a permissão "aprovador em massa" e MUST permitir **conceder/revogar** essa permissão na criação e na edição. A permissão continua sendo **RBAC** (fonte única): a flag é um atalho que atribui/remove a role dedicada `etl:mass-approver` (carrega exatamente `contract:mass-approve`) via o motor `assignRole`/`revokeRole` da `006-gestao-acessos`. A operação MUST ser **idempotente** (setar para o mesmo estado é no-op) e **fail-closed**: além de `user:create`/`user:update`, o ator MUST ter `user:assign-role`; sem ela, a flag é recusada. O catálogo da permissão e a definição da role permanecem na `006`.
 - **FR-016**: Ao criar um usuário, o sistema MUST iniciar o primeiro acesso por **convite/ativação por email**: o novo usuário recebe um convite e define a própria senha pelo fluxo de ativação existente no `auth` (`request-password-reset` / `confirm-password-reset`, via EmailPort — ADR-0010). O administrador **não** define senha; nenhuma senha trafega fora do fluxo de ativação.
 - **FR-017**: O sistema MUST persistir e exibir o vínculo do usuário a um colaborador (`collaboratorId`) como **referência opaca somente-leitura** herdada do legado. A 005 **não** gerencia esse vínculo nem acessa o módulo `partners`/RH; criação/alteração do vínculo fica fora de escopo (eventual feature futura).
 
 ### Key Entities _(include if feature involves data)_
 
-- **Usuário (perfil administrativo)**: representa uma conta gerenciável do ERP. Atributos cadastrais geridos aqui: nome, CPF (normalizado), email (único), telefone (normalizado), foto (opcional), status (ativo/inativo). Atributos apenas **refletidos** (read-only): indicador "aprovador em massa" (fonte: RBAC, `006`) e `collaboratorId` (referência opaca, legado). **Reusa** a identidade já existente no `auth` — esta feature trata da faceta administrativa/cadastral, não da credencial.
+- **Usuário (perfil administrativo)**: representa uma conta gerenciável do ERP. Atributos cadastrais geridos aqui: nome, CPF (normalizado), email (único), telefone (normalizado), foto (opcional), status (ativo/inativo). Atributo **gerenciável via RBAC**: indicador "aprovador em massa" (fonte: RBAC, `006`; setável aqui como atalho de assign/revoke da role `etl:mass-approver` — ver FR-015). Atributo apenas **refletido** (read-only): `collaboratorId` (referência opaca, legado). **Reusa** a identidade já existente no `auth` — esta feature trata da faceta administrativa/cadastral, não da credencial.
 - **Status do usuário**: estado binário (ativo/inativo) que governa a capacidade de acesso; transita por ativação/desativação explícitas.
 - **Foto de perfil**: artefato binário associado ao usuário, armazenado em storage de objetos; o cadastro referencia o artefato, não o conteúdo.
 

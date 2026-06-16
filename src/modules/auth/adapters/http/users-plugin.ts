@@ -207,12 +207,21 @@ const usersRoutes =
           cpf: req.body.cpf,
           email: req.body.email,
           telephone: req.body.telephone,
+          // exactOptionalPropertyTypes: omitir a flag quando ausente (nao passar undefined).
+          ...(req.body.massApprovalPermission !== undefined
+            ? { massApprovalPermission: req.body.massApprovalPermission }
+            : {}),
         });
         if (!result.ok) {
           return sendResult(reply, result, {
             errors: {
               ...FIELD_VALIDATION_STATUS,
               'email-already-registered': 409,
+              // AUTH-MASS-APPROVE-SETTABLE: ator sem user:assign-role tentando setar a flag -> 403
+              // (mesmo mapeamento de assign-role na borda).
+              forbidden: 403,
+              'mass-approver-role-invalid': 422,
+              'role-repo-unavailable': 503,
               'user-repo-unavailable': 503,
               'password-reset-token-repo-unavailable': 503,
               'invite-mail-failed': 502,
@@ -239,15 +248,24 @@ const usersRoutes =
         response: { 200: userDetailResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
-        const { name, email, cpf, telephone, collaboratorId } = req.body;
+        const { name, email, cpf, telephone, collaboratorId, massApprovalPermission } = req.body;
+        // actorId vem do JWT (requireAuth), NUNCA do body — necessario p/ autorizar a flag (fail-closed).
+        const actorId = UserId.rehydrate(req.userId);
+        if (!actorId.ok) {
+          return sendResult(reply, err('user-id-invalid' as const), {
+            errors: { 'user-id-invalid': 401 },
+          });
+        }
         // exactOptionalPropertyTypes: omitir chaves ausentes (nao passar undefined).
         const updated = await deps.updateUserProfile({
           id: req.params.id,
+          actorId: actorId.value,
           ...(name !== undefined ? { name } : {}),
           ...(email !== undefined ? { email } : {}),
           ...(cpf !== undefined ? { cpf } : {}),
           ...(telephone !== undefined ? { telephone } : {}),
           ...(collaboratorId !== undefined ? { collaboratorId } : {}),
+          ...(massApprovalPermission !== undefined ? { massApprovalPermission } : {}),
         });
         if (!updated.ok) {
           return sendResult(reply, updated, {
@@ -255,7 +273,12 @@ const usersRoutes =
               ...FIELD_VALIDATION_STATUS,
               'user-id-invalid': 400,
               'user-not-found': 404,
+              'user-disabled': 422,
               'email-already-registered': 409,
+              // AUTH-MASS-APPROVE-SETTABLE: ator sem user:assign-role tentando setar a flag -> 403.
+              forbidden: 403,
+              'mass-approver-role-invalid': 422,
+              'role-repo-unavailable': 503,
               'user-repo-unavailable': 503,
             },
           });

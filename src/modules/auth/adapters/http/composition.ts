@@ -541,6 +541,7 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
     createUserByAdmin: createUserByAdmin({
       userReader: stores.userReader,
       userRepo: stores.userRepo,
+      roleRepo: stores.roleRepo,
       resetTokenRepo: stores.resetTokenRepo,
       minter: resetMinter,
       inviteMailer,
@@ -552,6 +553,7 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
     updateUserProfile: updateUserProfile({
       userReader: stores.userReader,
       userRepo: stores.userRepo,
+      roleRepo: stores.roleRepo,
       clock,
     }),
     activateUser: activateUser({

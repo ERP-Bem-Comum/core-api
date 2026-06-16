@@ -19,14 +19,25 @@ import * as Cpf from '#src/modules/auth/domain/identity/cpf.ts';
 import * as Telephone from '#src/modules/auth/domain/identity/telephone.ts';
 import * as UserId from '#src/modules/auth/domain/identity/user-id.ts';
 import * as User from '#src/modules/auth/domain/identity/user/user.ts';
+import * as Permission from '#src/modules/auth/domain/authorization/permission.ts';
+import { authorize } from '#src/modules/auth/domain/authorization/authorize.ts';
 import type { UpdateProfileInput } from '#src/modules/auth/domain/identity/user/user.ts';
-import type { User as UserType } from '#src/modules/auth/domain/identity/user/types.ts';
+import type { User as UserType, ActiveUser } from '#src/modules/auth/domain/identity/user/types.ts';
+import type { UserId as UserIdType } from '#src/modules/auth/domain/identity/user-id.ts';
 import type { UserProfileUpdated } from '#src/modules/auth/domain/identity/user/events.ts';
 import type {
   UserReader,
   UserRepository,
   UserRepositoryError,
 } from '#src/modules/auth/domain/identity/user/repository.ts';
+import type {
+  RoleRepository,
+  RoleRepositoryError,
+} from '#src/modules/auth/domain/authorization/role-repository.ts';
+import {
+  MASS_APPROVER_ROLE_NAME,
+  resolveMassApproverRole,
+} from '#src/modules/auth/application/use-cases/mass-approver-role.ts';
 
 export type UpdateUserProfileCommand = Readonly<{
   id: string;
@@ -35,25 +46,77 @@ export type UpdateUserProfileCommand = Readonly<{
   cpf?: string;
   telephone?: string;
   collaboratorId?: string | null;
+  /**
+   * Executor (admin autenticado). Obrigatorio APENAS quando `massApprovalPermission` e definido
+   * (autorizacao fail-closed). Ausente nos demais patches (compat com o fluxo de perfil atual).
+   */
+  actorId?: UserIdType;
+  /**
+   * Concessao/revogacao da capacidade "Aprovador em Massa" (AUTH-MASS-APPROVE-SETTABLE).
+   * Ausente -> nao mexe na permissao (patch parcial, FR-009). true -> concede; false -> revoga.
+   * Setar (true OU false) exige `user:assign-role` no ator (fail-closed). Idempotente.
+   */
+  massApprovalPermission?: boolean;
 }>;
 
 export type UpdateUserProfileError =
   | 'user-id-invalid'
   | 'user-not-found'
+  | 'user-disabled'
   | 'name-required'
+  | 'forbidden'
+  | 'mass-approver-role-invalid'
   | Email.EmailError
   | Cpf.CpfError
   | Telephone.TelephoneError
   | 'email-already-registered'
-  | UserRepositoryError;
+  | UserRepositoryError
+  | RoleRepositoryError;
 
 export type UpdateUserProfileOutput = Readonly<{ user: UserType; event: UserProfileUpdated }>;
 
 type Deps = Readonly<{
   userReader: UserReader;
   userRepo: UserRepository;
+  roleRepo: RoleRepository;
   clock: Clock;
 }>;
+
+// AUTH-MASS-APPROVE-SETTABLE: fail-closed. Carrega o ator, exige active + `user:assign-role`.
+const authorizeMassApproval = async (
+  deps: Pick<Deps, 'userReader'>,
+  actorId: UserIdType | undefined,
+): Promise<Result<true, 'forbidden'>> => {
+  if (actorId === undefined) return err('forbidden');
+  const actor = await deps.userReader.findById(actorId);
+  if (!actor.ok || actor.value === null) return err('forbidden');
+  const activeActor = User.parseActive(actor.value);
+  if (!activeActor.ok) return err('forbidden');
+  const required = Permission.parse('user:assign-role');
+  if (!required.ok) return err('forbidden');
+  if (!authorize(activeActor.value, required.value).ok) return err('forbidden');
+  return ok(true);
+};
+
+// AUTH-MASS-APPROVE-SETTABLE: concede (true) ou revoga (false) a role etl:mass-approver no target.
+// Idempotente (herdado de User.assignRole/revokeRole). true resolve-ou-cria a role; false so
+// revoga se o target ja tiver a role pelo name (sem criar a role a toa).
+const applyMassApproval = async (
+  deps: Pick<Deps, 'roleRepo'>,
+  target: ActiveUser,
+  grant: boolean,
+  at: Date,
+): Promise<Result<ActiveUser, RoleRepositoryError | 'mass-approver-role-invalid'>> => {
+  if (grant) {
+    const roleR = await resolveMassApproverRole({ roleRepo: deps.roleRepo });
+    if (!roleR.ok) return roleR;
+    return ok(User.assignRole(target, roleR.value, at).user);
+  }
+  // Revogar: localiza a role atribuida pelo name; ausente -> no-op.
+  const current = target.roles.find((r) => r.name === MASS_APPROVER_ROLE_NAME);
+  if (current === undefined) return ok(target);
+  return ok(User.revokeRole(target, current.id, at).user);
+};
 
 export const updateUserProfile =
   (deps: Deps) =>
@@ -107,10 +170,34 @@ export const updateUserProfile =
       patch.collaboratorId = cmd.collaboratorId;
     }
 
-    const { user, event } = User.updateProfile(current, patch, deps.clock.now());
+    // AUTH-MASS-APPROVE-SETTABLE: setar a flag (true OU false) exige `user:assign-role` no ator.
+    // Fail-closed: autorizacao ANTES de qualquer escrita. Flag ausente -> nao carrega ator nem roleRepo.
+    if (cmd.massApprovalPermission !== undefined) {
+      const authorized = await authorizeMassApproval(deps, cmd.actorId);
+      if (!authorized.ok) return err(authorized.error);
+    }
 
-    const saved = await deps.userRepo.save(user);
+    const now = deps.clock.now();
+    const { user, event } = User.updateProfile(current, patch, now);
+
+    // AUTH-MASS-APPROVE-SETTABLE: aplica a concessao/revogacao da role etl:mass-approver (idempotente).
+    // Exige target ativo (assignRole/revokeRole operam sobre ActiveUser). Flag ausente -> sem efeito.
+    let toSave: UserType = user;
+    if (cmd.massApprovalPermission !== undefined) {
+      const activeTarget = User.parseActive(user);
+      if (!activeTarget.ok) return err('user-disabled');
+      const applied = await applyMassApproval(
+        deps,
+        activeTarget.value,
+        cmd.massApprovalPermission,
+        now,
+      );
+      if (!applied.ok) return applied;
+      toSave = applied.value;
+    }
+
+    const saved = await deps.userRepo.save(toSave);
     if (!saved.ok) return saved;
 
-    return ok({ user, event });
+    return ok({ user: toSave, event });
   };

@@ -18,9 +18,7 @@ import type { Clock } from '../../../../shared/ports/clock.ts';
 import type * as Email from '../../domain/identity/email.ts';
 import * as UserId from '../../domain/identity/user-id.ts';
 import * as User from '../../domain/identity/user/user.ts';
-import * as Role from '../../domain/authorization/role.ts';
-import * as RoleId from '../../domain/authorization/role-id.ts';
-import * as Permission from '../../domain/authorization/permission.ts';
+import type * as Role from '../../domain/authorization/role.ts';
 import * as Password from '../../domain/credential/password-policy.ts';
 import type {
   RoleRepository,
@@ -31,10 +29,11 @@ import type {
   ProvisionedUserStoreError,
 } from '../ports/provisioned-user-store.ts';
 import type { PasswordHasher, PasswordHasherError } from '../ports/password-hasher.ts';
-import { CONTRACT_PERMISSION } from '../../../contracts/public-api/permissions.ts';
+import { MASS_APPROVER_ROLE_NAME, resolveMassApproverRole } from './mass-approver-role.ts';
 
-// Nome canonico do Role compartilhado de aprovacao em massa (D15). Capacidade, nao identidade.
-export const MASS_APPROVER_ROLE_NAME = 'etl:mass-approver';
+// Reexporta o nome canonico do Role compartilhado (SSoT em mass-approver-role.ts; mantido aqui
+// por compat com call-sites/historicos que importavam daqui). Capacidade, nao identidade.
+export { MASS_APPROVER_ROLE_NAME };
 
 export type ProvisionLegacyUserInput = Readonly<{
   legacyId: number;
@@ -63,32 +62,6 @@ export type ProvisionLegacyUserDeps = Readonly<{
   secret: () => string;
 }>;
 
-// Resolve o Role compartilhado por name (reuso idempotente); cria + persiste se ausente.
-const resolveMassApproverRole = async (
-  deps: ProvisionLegacyUserDeps,
-): Promise<Result<Role.Role, ProvisionLegacyUserError>> => {
-  const listed = await deps.roleRepo.list();
-  if (!listed.ok) return err(listed.error);
-
-  const existing = listed.value.find((r) => r.name === MASS_APPROVER_ROLE_NAME);
-  if (existing !== undefined) return ok(existing);
-
-  const permR = Permission.parse(CONTRACT_PERMISSION.massApprove);
-  if (!permR.ok) return err('mass-approver-role-invalid');
-
-  const roleR = Role.create({
-    id: RoleId.generate(),
-    name: MASS_APPROVER_ROLE_NAME,
-    permissions: [permR.value],
-  });
-  if (!roleR.ok) return err('mass-approver-role-invalid');
-
-  const saved = await deps.roleRepo.save(roleR.value);
-  if (!saved.ok) return err(saved.error);
-
-  return ok(roleR.value);
-};
-
 export const provisionLegacyUser =
   (deps: ProvisionLegacyUserDeps) =>
   async (
@@ -104,7 +77,7 @@ export const provisionLegacyUser =
     // 2. Role compartilhado apenas quando massApprove (sem a flag -> nasce sem role).
     let roles: readonly Role.Role[] = [];
     if (input.massApprove) {
-      const roleR = await resolveMassApproverRole(deps);
+      const roleR = await resolveMassApproverRole({ roleRepo: deps.roleRepo });
       if (!roleR.ok) return err(roleR.error);
       roles = [roleR.value];
     }
