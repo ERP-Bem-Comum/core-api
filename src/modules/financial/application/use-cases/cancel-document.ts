@@ -9,7 +9,7 @@ import type {
 import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
 
 export type CancelDocumentDeps = Readonly<{ repo: DocumentRepository; outbox: FinancialOutbox }>;
-export type CancelDocumentCommand = Readonly<{ documentId: string }>;
+export type CancelDocumentCommand = Readonly<{ documentId: string; expectedVersion: number }>;
 export type CancelDocumentError =
   | DocumentError
   | DocumentRepositoryError
@@ -32,7 +32,7 @@ export const cancelDocument =
     const cancelled = Document.cancel({ document: open.value, payables: found.value.payables });
     if (!cancelled.ok) return err(cancelled.error);
 
-    const deleted = await deps.repo.delete(id.value);
+    const deleted = await deps.repo.delete(id.value, cmd.expectedVersion);
     if (!deleted.ok) return err(deleted.error);
 
     const published = await deps.outbox.append(cancelled.value.events);

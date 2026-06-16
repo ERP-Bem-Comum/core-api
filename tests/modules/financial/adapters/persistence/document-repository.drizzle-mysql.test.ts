@@ -18,6 +18,7 @@
 
 import { describe, before, after, it } from 'node:test';
 import { strict as assert } from 'node:assert';
+import { sql } from 'drizzle-orm';
 
 import { isOk } from '#src/shared/index.ts';
 import * as Money from '#src/shared/kernel/money.ts';
@@ -135,11 +136,73 @@ if (!process.env['MYSQL_INTEGRATION']) {
         }
 
         // Cascade: hard delete do documento remove a trilha (FK ON DELETE CASCADE — SC-006).
-        const del = await repo.delete(created.value.document.id);
+        const del = await repo.delete(created.value.document.id, 0);
         assert.equal(isOk(del), true);
         const afterDelete = await timelineRepo.findByDocument(created.value.document.id);
         assert.equal(isOk(afterDelete), true);
         if (afterDelete.ok) assert.equal(afterDelete.value.length, 0);
+      });
+
+      it('CHECK ck_fin_tl_event_type rejeita DocumentCancelled na trilha (#56b)', async () => {
+        const repo = createDrizzleDocumentRepository(handle);
+        const supplierR = SupplierRef.rehydrate(TL_SUP);
+        if (!supplierR.ok) throw new Error('test setup: supplier');
+        const grossR = Money.fromCents(100000);
+        if (!grossR.ok) throw new Error('test setup: money');
+        const created = Document.create({
+          id: DocumentId.generate(),
+          documentNumber: 'NFS-TL-CHK',
+          type: 'NFS-e',
+          supplier: supplierR.value,
+          paymentMethod: 'TED',
+          grossValue: grossR.value,
+          sourceDiscounts: Money.ZERO,
+          discounts: Money.ZERO,
+          penalty: Money.ZERO,
+          interest: Money.ZERO,
+          retentions: [],
+          registeredTaxes: [],
+          dueDate: new Date('2026-07-01'),
+        });
+        if (!created.ok) throw new Error('test setup: create');
+        const saved = await repo.save(
+          { document: created.value.document, payables: created.value.payables },
+          [],
+        );
+        assert.equal(isOk(saved), true);
+
+        // document_id válido (FK satisfeita) + target_kind/colunas válidos → a ÚNICA violação
+        // possível é o ck_fin_tl_event_type. O Drizzle envelopa o erro mysql2 (code/errno em .cause),
+        // então provamos a rejeição via try/catch e inspecionamos a cadeia de causas por garantia.
+        const docId = created.value.document.id as unknown as string;
+        let rejected = false;
+        let mentionsCheck = false;
+        try {
+          await handle.db.execute(
+            sql`INSERT INTO fin_document_timeline
+                  (id, event_id, document_id, target_kind, target_id, event_type, occurred_at)
+                VALUES (${newUuid()}, ${newUuid()}, ${docId}, 'Document', ${docId}, 'DocumentCancelled', NOW(3))`,
+          );
+        } catch (caught) {
+          rejected = true;
+          for (let e: unknown = caught; e !== null && e !== undefined; ) {
+            const node = e as { code?: string; errno?: number; message?: string; cause?: unknown };
+            if (
+              node.code === 'ER_CHECK_CONSTRAINT_VIOLATED' ||
+              node.errno === 3819 ||
+              /ck_fin_tl_event_type|check constraint/i.test(node.message ?? '')
+            ) {
+              mentionsCheck = true;
+              break;
+            }
+            e = node.cause;
+          }
+        }
+        assert.ok(
+          rejected,
+          'INSERT com event_type=DocumentCancelled deve ser rejeitado pelo CHECK',
+        );
+        assert.ok(mentionsCheck, 'a rejeição deve vir do CHECK ck_fin_tl_event_type');
       });
     });
 
@@ -188,7 +251,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
         assert.equal(stale.ok, false);
         if (!stale.ok) assert.equal(stale.error, 'document-version-conflict');
 
-        await repo.delete(created.document.id);
+        await repo.delete(created.document.id, 1); // versão corrente após o update bem-sucedido
       });
     });
   });

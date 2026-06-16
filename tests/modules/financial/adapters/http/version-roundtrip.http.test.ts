@@ -344,11 +344,13 @@ describe('FIN-LISTAGEM-TIMELINE — version round-trip (optimistic lock na borda
       409,
       `approve com versão stale deve retornar 409, recebeu: ${staleApprove.statusCode} ${staleApprove.body}`,
     );
+    // #52 (OWASP API8): o body 4xx expõe o `code` público `conflict`, não o slug interno
+    // `document-version-conflict` (que fica só no log). O 409 prova o optimistic lock.
     const errBody = staleApprove.json() as { error: { code: string } };
     assert.equal(
       errBody.error.code,
-      'document-version-conflict',
-      `código do erro deve ser document-version-conflict, recebeu: ${errBody.error.code}`,
+      'conflict',
+      `código público do erro deve ser conflict, recebeu: ${errBody.error.code}`,
     );
   });
 

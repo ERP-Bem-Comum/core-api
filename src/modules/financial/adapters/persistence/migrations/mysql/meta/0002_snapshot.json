@@ -1,0 +1,755 @@
+{
+  "version": "5",
+  "dialect": "mysql",
+  "id": "dc45e058-5028-402d-bce0-4354aaf48cb6",
+  "prevId": "2fbd5a22-0f26-4b4a-aaf9-cce91d6d7e06",
+  "tables": {
+    "fin_document_timeline": {
+      "name": "fin_document_timeline",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "event_id": {
+          "name": "event_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "document_id": {
+          "name": "document_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_kind": {
+          "name": "target_kind",
+          "type": "varchar(8)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "target_id": {
+          "name": "target_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "varchar(40)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "actor_ref": {
+          "name": "actor_ref",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_fin_tl_doc_time": {
+          "name": "idx_fin_tl_doc_time",
+          "columns": ["document_id", "occurred_at"],
+          "isUnique": false
+        },
+        "idx_fin_tl_target": {
+          "name": "idx_fin_tl_target",
+          "columns": ["target_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "fin_document_timeline_document_id_fk": {
+          "name": "fin_document_timeline_document_id_fk",
+          "tableFrom": "fin_document_timeline",
+          "tableTo": "fin_documents",
+          "columnsFrom": ["document_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "fin_document_timeline_id": {
+          "name": "fin_document_timeline_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {
+        "ck_fin_tl_target_kind": {
+          "name": "ck_fin_tl_target_kind",
+          "value": "`fin_document_timeline`.`target_kind` IN ('Document','Payable')"
+        },
+        "ck_fin_tl_event_type": {
+          "name": "ck_fin_tl_event_type",
+          "value": "`fin_document_timeline`.`event_type` IN ('DocumentSaved','PayableApproved','ApprovalUndone','DocumentDraftSaved')"
+        }
+      }
+    },
+    "fin_documents": {
+      "name": "fin_documents",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "document_number": {
+          "name": "document_number",
+          "type": "varchar(60)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "series": {
+          "name": "series",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "supplier_ref": {
+          "name": "supplier_ref",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "contract_ref": {
+          "name": "contract_ref",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "budget_plan_ref": {
+          "name": "budget_plan_ref",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "category_ref": {
+          "name": "category_ref",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "program_ref": {
+          "name": "program_ref",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "payment_method": {
+          "name": "payment_method",
+          "type": "varchar(24)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "gross_value": {
+          "name": "gross_value",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "source_discounts": {
+          "name": "source_discounts",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "discounts": {
+          "name": "discounts",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "penalty": {
+          "name": "penalty",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "interest": {
+          "name": "interest",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "net_value": {
+          "name": "net_value",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "description": {
+          "name": "description",
+          "type": "varchar(500)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "due_date": {
+          "name": "due_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "read_by_ocr": {
+          "name": "read_by_ocr",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "ocr_original_value": {
+          "name": "ocr_original_value",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "divergence_detected": {
+          "name": "divergence_detected",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": false
+        },
+        "version": {
+          "name": "version",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "approved_at": {
+          "name": "approved_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "approved_by": {
+          "name": "approved_by",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "fin_documents_supplier_ref_idx": {
+          "name": "fin_documents_supplier_ref_idx",
+          "columns": ["supplier_ref"],
+          "isUnique": false
+        },
+        "fin_documents_status_idx": {
+          "name": "fin_documents_status_idx",
+          "columns": ["status"],
+          "isUnique": false
+        },
+        "fin_documents_due_date_idx": {
+          "name": "fin_documents_due_date_idx",
+          "columns": ["due_date"],
+          "isUnique": false
+        },
+        "fin_documents_doc_number_idx": {
+          "name": "fin_documents_doc_number_idx",
+          "columns": ["document_number"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "fin_documents_id": {
+          "name": "fin_documents_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {
+        "fin_documents_type_chk": {
+          "name": "fin_documents_type_chk",
+          "value": "`fin_documents`.`type` IS NULL OR `fin_documents`.`type` IN ('NFS-e','DANFE','RPA','Fatura','Boleto','Recibo','Imposto')"
+        },
+        "fin_documents_payment_method_chk": {
+          "name": "fin_documents_payment_method_chk",
+          "value": "`fin_documents`.`payment_method` IS NULL OR `fin_documents`.`payment_method` IN ('TED','TransferenciaBancaria','PIX','Boleto','CartaoCorporativo','Cambio','GuiaRecolhimento','Outro')"
+        },
+        "fin_documents_status_chk": {
+          "name": "fin_documents_status_chk",
+          "value": "`fin_documents`.`status` IN ('Draft','Open','Approved','Transmitted','Refused','Paid','Reconciled')"
+        },
+        "fin_documents_gross_value_chk": {
+          "name": "fin_documents_gross_value_chk",
+          "value": "`fin_documents`.`gross_value` IS NULL OR `fin_documents`.`gross_value` >= 0"
+        },
+        "fin_documents_net_value_chk": {
+          "name": "fin_documents_net_value_chk",
+          "value": "`fin_documents`.`net_value` IS NULL OR `fin_documents`.`net_value` >= 0"
+        },
+        "fin_documents_source_discounts_chk": {
+          "name": "fin_documents_source_discounts_chk",
+          "value": "`fin_documents`.`source_discounts` >= 0"
+        },
+        "fin_documents_discounts_chk": {
+          "name": "fin_documents_discounts_chk",
+          "value": "`fin_documents`.`discounts` >= 0"
+        },
+        "fin_documents_penalty_chk": {
+          "name": "fin_documents_penalty_chk",
+          "value": "`fin_documents`.`penalty` >= 0"
+        },
+        "fin_documents_interest_chk": {
+          "name": "fin_documents_interest_chk",
+          "value": "`fin_documents`.`interest` >= 0"
+        },
+        "fin_documents_version_chk": {
+          "name": "fin_documents_version_chk",
+          "value": "`fin_documents`.`version` >= 0"
+        }
+      }
+    },
+    "fin_payables": {
+      "name": "fin_payables",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "document_id": {
+          "name": "document_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "kind": {
+          "name": "kind",
+          "type": "varchar(8)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "retention_type": {
+          "name": "retention_type",
+          "type": "varchar(8)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value": {
+          "name": "value",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "due_date": {
+          "name": "due_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payment_method": {
+          "name": "payment_method",
+          "type": "varchar(24)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "fin_payables_document_id_idx": {
+          "name": "fin_payables_document_id_idx",
+          "columns": ["document_id"],
+          "isUnique": false
+        },
+        "fin_payables_status_idx": {
+          "name": "fin_payables_status_idx",
+          "columns": ["status"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "fin_payables_document_id_fk": {
+          "name": "fin_payables_document_id_fk",
+          "tableFrom": "fin_payables",
+          "tableTo": "fin_documents",
+          "columnsFrom": ["document_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "fin_payables_id": {
+          "name": "fin_payables_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {
+        "fin_payables_kind_chk": {
+          "name": "fin_payables_kind_chk",
+          "value": "`fin_payables`.`kind` IN ('Parent','Child')"
+        },
+        "fin_payables_retention_type_chk": {
+          "name": "fin_payables_retention_type_chk",
+          "value": "`fin_payables`.`retention_type` IS NULL OR `fin_payables`.`retention_type` IN ('ISS','IRRF','INSS','CSRF')"
+        },
+        "fin_payables_status_chk": {
+          "name": "fin_payables_status_chk",
+          "value": "`fin_payables`.`status` IN ('Draft','Open','Approved','Transmitted','Refused','Paid','Reconciled')"
+        },
+        "fin_payables_payment_method_chk": {
+          "name": "fin_payables_payment_method_chk",
+          "value": "`fin_payables`.`payment_method` IN ('TED','TransferenciaBancaria','PIX','Boleto','CartaoCorporativo','Cambio','GuiaRecolhimento','Outro')"
+        },
+        "fin_payables_value_chk": {
+          "name": "fin_payables_value_chk",
+          "value": "`fin_payables`.`value` >= 0"
+        },
+        "fin_payables_child_retention_chk": {
+          "name": "fin_payables_child_retention_chk",
+          "value": "(`fin_payables`.`kind` = 'Child') = (`fin_payables`.`retention_type` IS NOT NULL)"
+        }
+      }
+    },
+    "fin_registered_taxes": {
+      "name": "fin_registered_taxes",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "document_id": {
+          "name": "document_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "base": {
+          "name": "base",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rate_bps": {
+          "name": "rate_bps",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value": {
+          "name": "value",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "fin_registered_taxes_document_id_idx": {
+          "name": "fin_registered_taxes_document_id_idx",
+          "columns": ["document_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "fin_registered_taxes_document_id_fk": {
+          "name": "fin_registered_taxes_document_id_fk",
+          "tableFrom": "fin_registered_taxes",
+          "tableTo": "fin_documents",
+          "columnsFrom": ["document_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "fin_registered_taxes_id": {
+          "name": "fin_registered_taxes_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {
+        "fin_registered_taxes_type_chk": {
+          "name": "fin_registered_taxes_type_chk",
+          "value": "`fin_registered_taxes`.`type` IN ('ICMS','IPI','PIS','COFINS','CBS','IBS_Municipal','IBS_Estadual')"
+        },
+        "fin_registered_taxes_base_chk": {
+          "name": "fin_registered_taxes_base_chk",
+          "value": "`fin_registered_taxes`.`base` >= 0"
+        },
+        "fin_registered_taxes_rate_bps_chk": {
+          "name": "fin_registered_taxes_rate_bps_chk",
+          "value": "`fin_registered_taxes`.`rate_bps` >= 0"
+        },
+        "fin_registered_taxes_value_chk": {
+          "name": "fin_registered_taxes_value_chk",
+          "value": "`fin_registered_taxes`.`value` >= 0"
+        }
+      }
+    },
+    "fin_retentions": {
+      "name": "fin_retentions",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "document_id": {
+          "name": "document_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "varchar(8)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "base": {
+          "name": "base",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "rate_bps": {
+          "name": "rate_bps",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value": {
+          "name": "value",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "fin_retentions_document_id_idx": {
+          "name": "fin_retentions_document_id_idx",
+          "columns": ["document_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "fin_retentions_document_id_fk": {
+          "name": "fin_retentions_document_id_fk",
+          "tableFrom": "fin_retentions",
+          "tableTo": "fin_documents",
+          "columnsFrom": ["document_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "fin_retentions_id": {
+          "name": "fin_retentions_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {
+        "fin_retentions_type_chk": {
+          "name": "fin_retentions_type_chk",
+          "value": "`fin_retentions`.`type` IN ('ISS','IRRF','INSS','CSRF')"
+        },
+        "fin_retentions_base_chk": {
+          "name": "fin_retentions_base_chk",
+          "value": "`fin_retentions`.`base` >= 0"
+        },
+        "fin_retentions_rate_bps_chk": {
+          "name": "fin_retentions_rate_bps_chk",
+          "value": "`fin_retentions`.`rate_bps` >= 0"
+        },
+        "fin_retentions_value_chk": {
+          "name": "fin_retentions_value_chk",
+          "value": "`fin_retentions`.`value` >= 0"
+        }
+      }
+    },
+    "fin_timeline_field_changes": {
+      "name": "fin_timeline_field_changes",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "timeline_entry_id": {
+          "name": "timeline_entry_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "field": {
+          "name": "field",
+          "type": "varchar(60)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "before_value": {
+          "name": "before_value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "after_value": {
+          "name": "after_value",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "idx_fin_tlfc_entry": {
+          "name": "idx_fin_tlfc_entry",
+          "columns": ["timeline_entry_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "fin_timeline_field_changes_entry_id_fk": {
+          "name": "fin_timeline_field_changes_entry_id_fk",
+          "tableFrom": "fin_timeline_field_changes",
+          "tableTo": "fin_document_timeline",
+          "columnsFrom": ["timeline_entry_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "fin_timeline_field_changes_id": {
+          "name": "fin_timeline_field_changes_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    }
+  },
+  "views": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "tables": {},
+    "indexes": {}
+  }
+}

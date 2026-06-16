@@ -60,3 +60,18 @@ export const DOCUMENT_EVENT_TYPES = exhaustiveStringUnion<DocumentEvent['type']>
   'DocumentDraftSaved',
   'DocumentCancelled',
 ] as const);
+
+/**
+ * Subconjunto dos tipos que aparecem NA TRILHA (#56b): exclui `DocumentCancelled`, inalcançável
+ * na leitura — cancelar faz hard-delete + cascade, a trilha some junto. Consumido pelo response
+ * schema (`z.enum`) e pelo CHECK da tabela de trilha. `Exclude<...>` preserva a exaustividade:
+ * adicionar um evento novo à union sem listá-lo aqui QUEBRA `pnpm run typecheck`.
+ */
+export type TimelineEventType = Exclude<DocumentEvent['type'], 'DocumentCancelled'>;
+
+export const TIMELINE_EVENT_TYPES = exhaustiveStringUnion<TimelineEventType>()([
+  'DocumentSaved',
+  'PayableApproved',
+  'ApprovalUndone',
+  'DocumentDraftSaved',
+] as const);

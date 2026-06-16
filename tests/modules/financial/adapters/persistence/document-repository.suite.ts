@@ -77,10 +77,21 @@ export const documentRepositoryContract = (makeRepo: () => DocumentRepository): 
       const repo = makeRepo();
       const open = openNfse();
       await repo.save({ document: open.document, payables: open.payables }, []);
-      const del = await repo.delete(open.document.id);
+      const del = await repo.delete(open.document.id, 0);
       assert.equal(isOk(del), true);
       const found = await repo.findById(open.document.id);
       assert.equal(found.ok, false);
+    });
+
+    it('delete com versão defasada → document-version-conflict (não remove) — #55', async () => {
+      const repo = makeRepo();
+      const open = openNfse();
+      await repo.save({ document: open.document, payables: open.payables }, []); // v0
+      const del = await repo.delete(open.document.id, 999);
+      assert.equal(del.ok, false);
+      if (!del.ok) assert.equal(del.error, 'document-version-conflict');
+      const found = await repo.findById(open.document.id);
+      assert.equal(found.ok, true); // permanece
     });
 
     it('persiste rascunho (Draft) sem payables', async () => {

@@ -9,7 +9,7 @@
  */
 
 import * as z from 'zod/v4';
-import { DOCUMENT_EVENT_TYPES } from '../../domain/document/events.ts';
+import { TIMELINE_EVENT_TYPES } from '../../domain/document/events.ts';
 
 // ─── Shared ──────────────────────────────────────────────────────────────────
 
@@ -136,6 +136,13 @@ export const approveBodySchema = z.object({
 
 export type ApproveBody = z.infer<typeof approveBodySchema>;
 
+// Optimistic lock no cancelamento (#55): o cliente envia a `version` que leu (FR-009).
+export const cancelDocumentBodySchema = z.object({
+  version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+});
+
+export type CancelDocumentBody = z.infer<typeof cancelDocumentBodySchema>;
+
 // ─── Params ──────────────────────────────────────────────────────────────────
 
 export const documentIdParamSchema = z.object({
@@ -225,7 +232,7 @@ export type DocumentListResponseDto = z.infer<typeof documentListResponseSchema>
 
 /** Uma entrada da trilha por-campo (Time Travel). */
 export const timelineEntrySchema = z.object({
-  eventType: z.enum([...DOCUMENT_EVENT_TYPES]).meta({
+  eventType: z.enum(TIMELINE_EVENT_TYPES).meta({
     description: 'Tipo do evento de domínio que originou esta entrada na trilha',
   }),
   target: z.object({
@@ -245,9 +252,15 @@ export const timelineEntrySchema = z.object({
   changes: z
     .array(
       z.object({
-        field: z.string(),
-        before: z.string().nullable(),
-        after: z.string().nullable(),
+        field: z.string().max(60).meta({
+          description: 'Nome do campo de domínio alterado (espelha varchar(60) no storage)',
+        }),
+        before: z.string().max(65535).nullable().meta({
+          description: 'Valor anterior serializado; null se o campo não existia (limite TEXT)',
+        }),
+        after: z.string().max(65535).nullable().meta({
+          description: 'Valor novo serializado; null se o campo foi removido (limite TEXT)',
+        }),
       }),
     )
     .meta({
