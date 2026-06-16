@@ -97,12 +97,11 @@ describe('PermissionCatalog.all', () => {
       'contract:write',
       'etl:mass-approver',
       // fiscal-document:* e payable:* — modulo financial (FIN-DOCUMENTO-TITULOS)
+      // payable:read e payable:undo-approval removidas (FR-010/ADR-0004 010 — permissoes inertes, sem rota).
       'fiscal-document:cancel',
       'fiscal-document:read',
       'fiscal-document:write',
       'payable:approve',
-      'payable:read',
-      'payable:undo-approval',
       'financier:read',
       'financier:write',
       'geography:read',
