@@ -4,6 +4,11 @@ description: 'Task list — Gestão de Programas (módulo programs)'
 
 # Tasks: Gestão de Programas
 
+> **STATUS (reconciliado 2026-06-15): ✅ CONCLUÍDA e mergeada.** Módulo `programs` entregue integralmente (domínio +
+> persistência InMemory/Drizzle + borda HTTP + logo/storage) via os tickets `PRG-PROGRAMS-MODULE` e `PRG-PROGRAMS-POLISH`
+> (pipeline W0→W3 closed-green, **PR #31**, 2026-06-09). Os checkboxes abaixo foram marcados retroativamente para refletir
+> o código real; a história auditável vive em `.claude/.pipeline/PRG-PROGRAMS-*`.
+
 **Input**: Design documents em `specs/008-gestao-programas/` (plan.md, spec.md, research.md, data-model.md, contracts/programs-http.md, quickstart.md)
 
 **Tests**: **OBRIGATÓRIOS** — a constituição do core-api (Princípio I, TDD W0→W3 fail-first) exige testes RED antes de tocar `src/`. Cada user story escreve testes que **falham** antes da implementação.
@@ -25,9 +30,9 @@ Módulo isolado em `src/modules/programs/`; testes em `tests/modules/programs/`.
 
 **Purpose**: estrutura do módulo e ticket de pipeline.
 
-- [ ] T001 Abrir ticket de pipeline: `pnpm run pipeline:state init PRG-PROGRAMS-MODULE --size L` e escrever `.claude/.pipeline/PRG-PROGRAMS-MODULE/000-request.md` (escopo + CAs derivados da spec)
-- [ ] T002 Criar a árvore de pastas `src/modules/programs/{domain/{shared,program},application/{ports,use-cases},adapters/{http,persistence/{drivers,mappers,migrations/mysql,repos,schemas},storage},public-api}` e `tests/modules/programs/{domain/program,application/use-cases,adapters/{http,persistence}}`
-- [ ] T003 [P] Criar `src/modules/programs/adapters/persistence/drivers/mysql-driver.ts` espelhando o de contracts, com `migrationsTable: '__drizzle_migrations_programs'`
+- [x] T001 Abrir ticket de pipeline: `pnpm run pipeline:state init PRG-PROGRAMS-MODULE --size L` e escrever `.claude/.pipeline/PRG-PROGRAMS-MODULE/000-request.md` (escopo + CAs derivados da spec)
+- [x] T002 Criar a árvore de pastas `src/modules/programs/{domain/{shared,program},application/{ports,use-cases},adapters/{http,persistence/{drivers,mappers,migrations/mysql,repos,schemas},storage},public-api}` e `tests/modules/programs/{domain/program,application/use-cases,adapters/{http,persistence}}`
+- [x] T003 [P] Criar `src/modules/programs/adapters/persistence/drivers/mysql-driver.ts` espelhando o de contracts, com `migrationsTable: '__drizzle_migrations_programs'`
 
 ---
 
@@ -35,25 +40,25 @@ Módulo isolado em `src/modules/programs/`; testes em `tests/modules/programs/`.
 
 **⚠️ CRITICAL**: nenhuma user story começa antes desta fase. Entrega o agregado base, persistência (com geração de `program_number` e optimistic-lock), permissões e o esqueleto HTTP.
 
-- [ ] T004 [P] `src/modules/programs/domain/program/errors.ts` — union `ProgramError` (ver data-model.md)
-- [ ] T005 [P] `src/modules/programs/domain/program/events.ts` — union `ProgramEvent` (`ProgramCreated|Updated|Deactivated|Reactivated`)
-- [ ] T006 [P] `src/modules/programs/domain/shared/program-id.ts` — `Brand<string,'ProgramId'>` + `generate`/`rehydrate` (espelha `contract-id.ts`)
-- [ ] T007 [P] Teste RED `tests/modules/programs/domain/program/sigla.test.ts` — normalização uppercase/trim, rejeição de espaço/caractere inválido, comprimento 2–20
-- [ ] T008 `src/modules/programs/domain/program/sigla.ts` — VO `Sigla` até GREEN do T007
-- [ ] T009 [P] Teste RED `tests/modules/programs/domain/program/status.test.ts` — transições válidas/ inválidas `ATIVO↔INATIVO`
-- [ ] T010 `src/modules/programs/domain/program/status.ts` — VO `ProgramStatus` + guardas de transição (switch exaustivo `const _: never`)
-- [ ] T011 [P] `src/modules/programs/domain/program/types.ts` — `Program = Readonly<{...}>` (inclui `programNumber`, `version`)
-- [ ] T012 `src/modules/programs/domain/program/repository.ts` — port `ProgramRepository` + `ListProgramsQuery` + `ProgramPage` (type, não interface)
-- [ ] T013 [P] `src/modules/programs/application/ports/outbox.ts` + `src/modules/programs/public-api/events.ts` — `ProgramsModuleEvent` + decoder versionado
-- [ ] T014 `src/modules/programs/adapters/persistence/schemas/mysql.ts` — `prg_programs` (PK `varchar(36)`, `program_number bigint UNIQUE`, `sigla varchar UNIQUE`, `status varchar+CHECK`, `version int`, timestamps `datetime(3)`) + `prg_outbox` (espelha `ctr_outbox`)
-- [ ] T015 Gerar migration: `pnpm run db:generate` e **editar o SQL** para `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci` + `COLLATE utf8mb4_bin` na coluna `id`
-- [ ] T016 [P] `src/modules/programs/adapters/persistence/mappers/program-mapper.ts` — row ↔ `Program`, retornando `Result<T,E>`
-- [ ] T017 [P] Suite de contrato do repo (RED) `tests/modules/programs/adapters/persistence/program-repository.suite.ts` — `findById`, `findBySigla`, `listPaged`, `save` (geração de `program_number` crescente, UNIQUE sigla, optimistic-lock) **+ asserção de que `save` grava o evento `Program*` correspondente em `prg_outbox` na mesma transação** (C3/FR-025)
-- [ ] T018 `src/modules/programs/adapters/persistence/repos/program-repository.in-memory.ts` + `tests/modules/programs/adapters/persistence/inmemory.test.ts` (roda a suite)
-- [ ] T019 `src/modules/programs/adapters/persistence/repos/program-repository.drizzle.ts` + `outbox-repository.drizzle.ts` — `program_number` via `MAX+1` sob `SELECT … FOR UPDATE`, optimistic-lock (`UPDATE … WHERE version=?`), append outbox na mesma tx + `tests/modules/programs/adapters/persistence/drizzle-mysql.test.ts` (`.integration`)
-- [ ] T020 [P] Permissões no catálogo global `src/modules/auth/domain/authorization/permission-catalog.ts` — adicionar `program:deactivate`, `program:read`, `program:write` (ordem alfabética) + `src/modules/programs/public-api/permissions.ts` (`PROGRAM_PERMISSION`)
-- [ ] T021 [P] `src/modules/programs/adapters/http/schemas.ts` — Zod base (DTO de programa, `:id` param, meta de paginação harmonizada) + `program-dto.ts` (`Program → DTO`)
-- [ ] T022 `src/modules/programs/adapters/http/composition.ts` (`buildProgramsHttpDeps`) + `plugin.ts` esqueleto (`programsRoutes`/`programsHttpPlugin`, sem rotas) + `public-api/http.ts` + registrar no server **sob prefixo explícito `/api/v1`** (`{ plugin, prefix: '/api/v1' }` — ADR-0033)
+- [x] T004 [P] `src/modules/programs/domain/program/errors.ts` — union `ProgramError` (ver data-model.md)
+- [x] T005 [P] `src/modules/programs/domain/program/events.ts` — union `ProgramEvent` (`ProgramCreated|Updated|Deactivated|Reactivated`)
+- [x] T006 [P] `src/modules/programs/domain/shared/program-id.ts` — `Brand<string,'ProgramId'>` + `generate`/`rehydrate` (espelha `contract-id.ts`)
+- [x] T007 [P] Teste RED `tests/modules/programs/domain/program/sigla.test.ts` — normalização uppercase/trim, rejeição de espaço/caractere inválido, comprimento 2–20
+- [x] T008 `src/modules/programs/domain/program/sigla.ts` — VO `Sigla` até GREEN do T007
+- [x] T009 [P] Teste RED `tests/modules/programs/domain/program/status.test.ts` — transições válidas/ inválidas `ATIVO↔INATIVO`
+- [x] T010 `src/modules/programs/domain/program/status.ts` — VO `ProgramStatus` + guardas de transição (switch exaustivo `const _: never`)
+- [x] T011 [P] `src/modules/programs/domain/program/types.ts` — `Program = Readonly<{...}>` (inclui `programNumber`, `version`)
+- [x] T012 `src/modules/programs/domain/program/repository.ts` — port `ProgramRepository` + `ListProgramsQuery` + `ProgramPage` (type, não interface)
+- [x] T013 [P] `src/modules/programs/application/ports/outbox.ts` + `src/modules/programs/public-api/events.ts` — `ProgramsModuleEvent` + decoder versionado
+- [x] T014 `src/modules/programs/adapters/persistence/schemas/mysql.ts` — `prg_programs` (PK `varchar(36)`, `program_number bigint UNIQUE`, `sigla varchar UNIQUE`, `status varchar+CHECK`, `version int`, timestamps `datetime(3)`) + `prg_outbox` (espelha `ctr_outbox`)
+- [x] T015 Gerar migration: `pnpm run db:generate` e **editar o SQL** para `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci` + `COLLATE utf8mb4_bin` na coluna `id`
+- [x] T016 [P] `src/modules/programs/adapters/persistence/mappers/program-mapper.ts` — row ↔ `Program`, retornando `Result<T,E>`
+- [x] T017 [P] Suite de contrato do repo (RED) `tests/modules/programs/adapters/persistence/program-repository.suite.ts` — `findById`, `findBySigla`, `listPaged`, `save` (geração de `program_number` crescente, UNIQUE sigla, optimistic-lock) **+ asserção de que `save` grava o evento `Program*` correspondente em `prg_outbox` na mesma transação** (C3/FR-025)
+- [x] T018 `src/modules/programs/adapters/persistence/repos/program-repository.in-memory.ts` + `tests/modules/programs/adapters/persistence/inmemory.test.ts` (roda a suite)
+- [x] T019 `src/modules/programs/adapters/persistence/repos/program-repository.drizzle.ts` + `outbox-repository.drizzle.ts` — `program_number` via `MAX+1` sob `SELECT … FOR UPDATE`, optimistic-lock (`UPDATE … WHERE version=?`), append outbox na mesma tx + `tests/modules/programs/adapters/persistence/drizzle-mysql.test.ts` (`.integration`)
+- [x] T020 [P] Permissões no catálogo global `src/modules/auth/domain/authorization/permission-catalog.ts` — adicionar `program:deactivate`, `program:read`, `program:write` (ordem alfabética) + `src/modules/programs/public-api/permissions.ts` (`PROGRAM_PERMISSION`)
+- [x] T021 [P] `src/modules/programs/adapters/http/schemas.ts` — Zod base (DTO de programa, `:id` param, meta de paginação harmonizada) + `program-dto.ts` (`Program → DTO`)
+- [x] T022 `src/modules/programs/adapters/http/composition.ts` (`buildProgramsHttpDeps`) + `plugin.ts` esqueleto (`programsRoutes`/`programsHttpPlugin`, sem rotas) + `public-api/http.ts` + registrar no server **sob prefixo explícito `/api/v1`** (`{ plugin, prefix: '/api/v1' }` — ADR-0033)
 
 **Checkpoint**: agregado + persistência + permissões + borda vazia prontos. User stories podem começar.
 
@@ -67,15 +72,15 @@ Módulo isolado em `src/modules/programs/`; testes em `tests/modules/programs/`.
 
 ### Tests (RED first) ⚠️
 
-- [ ] T023 [P] [US1] Teste RED `tests/modules/programs/domain/program/program.test.ts` — `Program.create` (nome ≥2, sigla válida, status ATIVO, version 1; erros `program-name-required`/`program-sigla-invalid`)
-- [ ] T024 [P] [US1] Teste RED `tests/modules/programs/application/use-cases/create-program.test.ts` — sigla duplicada → `program-sigla-duplicated`; `program_number` atribuído
-- [ ] T025 [P] [US1] Teste RED `tests/modules/programs/adapters/http/programs-writes.routes.test.ts` — POST 201 + `Location` + **corpo com o programa**; 409 sigla; 422 campos obrigatórios; **401 (sem token) e 403 (sem `program:write`)** (driver `memory`, `fastify.inject`) — cobre C2/SC-006/FR-023/FR-024
+- [x] T023 [P] [US1] Teste RED `tests/modules/programs/domain/program/program.test.ts` — `Program.create` (nome ≥2, sigla válida, status ATIVO, version 1; erros `program-name-required`/`program-sigla-invalid`)
+- [x] T024 [P] [US1] Teste RED `tests/modules/programs/application/use-cases/create-program.test.ts` — sigla duplicada → `program-sigla-duplicated`; `program_number` atribuído
+- [x] T025 [P] [US1] Teste RED `tests/modules/programs/adapters/http/programs-writes.routes.test.ts` — POST 201 + `Location` + **corpo com o programa**; 409 sigla; 422 campos obrigatórios; **401 (sem token) e 403 (sem `program:write`)** (driver `memory`, `fastify.inject`) — cobre C2/SC-006/FR-023/FR-024
 
 ### Implementation
 
-- [ ] T026 [US1] `src/modules/programs/domain/program/program.ts` — `Program.create` (puro, `Result`)
-- [ ] T027 [US1] `src/modules/programs/application/use-cases/create-program.ts` — checa `findBySigla` (normalizado) → delega `save` com evento `ProgramCreated`
-- [ ] T028 [US1] Rota `POST /programs` em `src/modules/programs/adapters/http/plugin.ts` — `preHandler: [requireAuth, authorize(PROGRAM_PERMISSION.write)]`, body schema, header `Location: /api/v1/programs/:id`, mapa de erro (409/422) via `sendResult`
+- [x] T026 [US1] `src/modules/programs/domain/program/program.ts` — `Program.create` (puro, `Result`)
+- [x] T027 [US1] `src/modules/programs/application/use-cases/create-program.ts` — checa `findBySigla` (normalizado) → delega `save` com evento `ProgramCreated`
+- [x] T028 [US1] Rota `POST /programs` em `src/modules/programs/adapters/http/plugin.ts` — `preHandler: [requireAuth, authorize(PROGRAM_PERMISSION.write)]`, body schema, header `Location: /api/v1/programs/:id`, mapa de erro (409/422) via `sendResult`
 
 **Checkpoint**: criar programa funcional e testável.
 
@@ -89,14 +94,14 @@ Módulo isolado em `src/modules/programs/`; testes em `tests/modules/programs/`.
 
 ### Tests (RED first) ⚠️
 
-- [ ] T029 [P] [US2] Teste RED `tests/modules/programs/adapters/http/programs-list.routes.test.ts` — paginação (5/10/25), `search` case-insensitive por substring em name/sigla, filtro `status`, lista vazia, `meta` correta
-- [ ] T030 [P] [US2] Estender a suite de persistência (T017) com casos de `listPaged` (ordenação, página além do fim) em `tests/modules/programs/adapters/persistence/program-repository.suite.ts`
+- [x] T029 [P] [US2] Teste RED `tests/modules/programs/adapters/http/programs-list.routes.test.ts` — paginação (5/10/25), `search` case-insensitive por substring em name/sigla, filtro `status`, lista vazia, `meta` correta
+- [x] T030 [P] [US2] Estender a suite de persistência (T017) com casos de `listPaged` (ordenação, página além do fim) em `tests/modules/programs/adapters/persistence/program-repository.suite.ts`
 
 ### Implementation
 
-- [ ] T031 [US2] `src/modules/programs/application/use-cases/list-programs.ts`
-- [ ] T032 [US2] Implementar `listPaged` nos repos (`*.in-memory.ts` + `*.drizzle.ts`) — `WHERE (name LIKE %?% OR sigla LIKE %?%)` case-insensitive, filtro status, `LIMIT/OFFSET`, `COUNT` para `meta`
-- [ ] T033 [US2] Rota `GET /programs` em `plugin.ts` — `authorize(PROGRAM_PERMISSION.read)`, querystring schema (inclui `status`), response paginado — o filtro `status=ATIVO` cobre o que cabe a esta feature da **FR-020** (a não-seleção de inativos em fluxos operacionais é regra dos módulos consumidores)
+- [x] T031 [US2] `src/modules/programs/application/use-cases/list-programs.ts`
+- [x] T032 [US2] Implementar `listPaged` nos repos (`*.in-memory.ts` + `*.drizzle.ts`) — `WHERE (name LIKE %?% OR sigla LIKE %?%)` case-insensitive, filtro status, `LIMIT/OFFSET`, `COUNT` para `meta`
+- [x] T033 [US2] Rota `GET /programs` em `plugin.ts` — `authorize(PROGRAM_PERMISSION.read)`, querystring schema (inclui `status`), response paginado — o filtro `status=ATIVO` cobre o que cabe a esta feature da **FR-020** (a não-seleção de inativos em fluxos operacionais é regra dos módulos consumidores)
 
 **Checkpoint**: MVP completo (criar + listar).
 
@@ -110,12 +115,12 @@ Módulo isolado em `src/modules/programs/`; testes em `tests/modules/programs/`.
 
 ### Tests (RED first) ⚠️
 
-- [ ] T034 [P] [US3] Teste RED em `tests/modules/programs/adapters/http/programs-reads.routes.test.ts` — GET `:id` 200 (campos completos) e 404 `program-not-found`
+- [x] T034 [P] [US3] Teste RED em `tests/modules/programs/adapters/http/programs-reads.routes.test.ts` — GET `:id` 200 (campos completos) e 404 `program-not-found`
 
 ### Implementation
 
-- [ ] T035 [US3] `src/modules/programs/application/use-cases/get-program.ts`
-- [ ] T036 [US3] Rota `GET /programs/:id` em `plugin.ts` — `authorize(PROGRAM_PERMISSION.read)`, param schema, 404
+- [x] T035 [US3] `src/modules/programs/application/use-cases/get-program.ts`
+- [x] T036 [US3] Rota `GET /programs/:id` em `plugin.ts` — `authorize(PROGRAM_PERMISSION.read)`, param schema, 404
 
 **Checkpoint**: detalhe funcional.
 
@@ -129,15 +134,15 @@ Módulo isolado em `src/modules/programs/`; testes em `tests/modules/programs/`.
 
 ### Tests (RED first) ⚠️
 
-- [ ] T037 [P] [US4] Teste RED em `program.test.ts` — `Program.update` (revalida nome/sigla; incrementa version)
-- [ ] T038 [P] [US4] Teste RED em `programs-writes.routes.test.ts` — PUT 200; 409 `program-version-conflict`; 409 sigla; 422 nome vazio
+- [x] T037 [P] [US4] Teste RED em `program.test.ts` — `Program.update` (revalida nome/sigla; incrementa version)
+- [x] T038 [P] [US4] Teste RED em `programs-writes.routes.test.ts` — PUT 200; 409 `program-version-conflict`; 409 sigla; 422 nome vazio
 
 ### Implementation
 
-- [ ] T039 [US4] `Program.update` em `domain/program/program.ts`
-- [ ] T040 [US4] `src/modules/programs/application/use-cases/update-program.ts` — compara `expectedVersion`
-- [ ] T041 [US4] Optimistic-lock no `program-repository.drizzle.ts` — `UPDATE … SET version=version+1 WHERE id=? AND version=?`; 0 linhas → `program-version-conflict` (refletir no in-memory)
-- [ ] T042 [US4] Rota `PUT /programs/:id` em `plugin.ts` — `authorize(PROGRAM_PERMISSION.write)`, body com `version`, **200 retorna o programa atualizado** (corpo, nunca vazio), erros 404/409 (`program-sigla-duplicated`/`program-version-conflict`)/422
+- [x] T039 [US4] `Program.update` em `domain/program/program.ts`
+- [x] T040 [US4] `src/modules/programs/application/use-cases/update-program.ts` — compara `expectedVersion`
+- [x] T041 [US4] Optimistic-lock no `program-repository.drizzle.ts` — `UPDATE … SET version=version+1 WHERE id=? AND version=?`; 0 linhas → `program-version-conflict` (refletir no in-memory)
+- [x] T042 [US4] Rota `PUT /programs/:id` em `plugin.ts` — `authorize(PROGRAM_PERMISSION.write)`, body com `version`, **200 retorna o programa atualizado** (corpo, nunca vazio), erros 404/409 (`program-sigla-duplicated`/`program-version-conflict`)/422
 
 **Checkpoint**: edição com concorrência protegida.
 
@@ -151,14 +156,14 @@ Módulo isolado em `src/modules/programs/`; testes em `tests/modules/programs/`.
 
 ### Tests (RED first) ⚠️
 
-- [ ] T043 [P] [US5] Teste RED em `program.test.ts` — `Program.deactivate` (rejeita já INATIVO)
-- [ ] T044 [P] [US5] Teste RED em `programs-writes.routes.test.ts` — POST `:id/deactivate` 200 e 409 `program-not-active`
+- [x] T043 [P] [US5] Teste RED em `program.test.ts` — `Program.deactivate` (rejeita já INATIVO)
+- [x] T044 [P] [US5] Teste RED em `programs-writes.routes.test.ts` — POST `:id/deactivate` 200 e 409 `program-not-active`
 
 ### Implementation
 
-- [ ] T045 [US5] `Program.deactivate` em `domain/program/program.ts` (evento `ProgramDeactivated`)
-- [ ] T046 [US5] `src/modules/programs/application/use-cases/deactivate-program.ts`
-- [ ] T047 [US5] Rota `POST /programs/:id/deactivate` — `authorize(PROGRAM_PERMISSION.deactivate)`, **sem `version`** (guarda de estado — F1), **200 retorna o programa atualizado** (corpo), erros 404 / 409 `program-not-active`
+- [x] T045 [US5] `Program.deactivate` em `domain/program/program.ts` (evento `ProgramDeactivated`)
+- [x] T046 [US5] `src/modules/programs/application/use-cases/deactivate-program.ts`
+- [x] T047 [US5] Rota `POST /programs/:id/deactivate` — `authorize(PROGRAM_PERMISSION.deactivate)`, **sem `version`** (guarda de estado — F1), **200 retorna o programa atualizado** (corpo), erros 404 / 409 `program-not-active`
 
 **Checkpoint**: desativação soft funcional.
 
@@ -172,14 +177,14 @@ Módulo isolado em `src/modules/programs/`; testes em `tests/modules/programs/`.
 
 ### Tests (RED first) ⚠️
 
-- [ ] T048 [P] [US6] Teste RED em `program.test.ts` — `Program.reactivate` (rejeita já ATIVO)
-- [ ] T049 [P] [US6] Teste RED em `programs-writes.routes.test.ts` — POST `:id/reactivate` 200 e 409 `program-not-inactive`
+- [x] T048 [P] [US6] Teste RED em `program.test.ts` — `Program.reactivate` (rejeita já ATIVO)
+- [x] T049 [P] [US6] Teste RED em `programs-writes.routes.test.ts` — POST `:id/reactivate` 200 e 409 `program-not-inactive`
 
 ### Implementation
 
-- [ ] T050 [US6] `Program.reactivate` em `domain/program/program.ts` (evento `ProgramReactivated`)
-- [ ] T051 [US6] `src/modules/programs/application/use-cases/reactivate-program.ts`
-- [ ] T052 [US6] Rota `POST /programs/:id/reactivate` — `authorize(PROGRAM_PERMISSION.deactivate)`, **sem `version`** (guarda de estado — F1), **200 retorna o programa atualizado** (corpo), erros 404 / 409 `program-not-inactive`
+- [x] T050 [US6] `Program.reactivate` em `domain/program/program.ts` (evento `ProgramReactivated`)
+- [x] T051 [US6] `src/modules/programs/application/use-cases/reactivate-program.ts`
+- [x] T052 [US6] Rota `POST /programs/:id/reactivate` — `authorize(PROGRAM_PERMISSION.deactivate)`, **sem `version`** (guarda de estado — F1), **200 retorna o programa atualizado** (corpo), erros 404 / 409 `program-not-inactive`
 
 **Checkpoint**: máquina de estados completa.
 
@@ -193,14 +198,14 @@ Módulo isolado em `src/modules/programs/`; testes em `tests/modules/programs/`.
 
 ### Tests (RED first) ⚠️
 
-- [ ] T053 [P] Teste RED `tests/modules/programs/adapters/http/programs-logo.routes.test.ts` — multipart 200; 413 (>5MB); 415 (tipo inválido) com `LogoStorage` in-memory
+- [x] T053 [P] Teste RED `tests/modules/programs/adapters/http/programs-logo.routes.test.ts` — multipart 200; 413 (>5MB); 415 (tipo inválido) com `LogoStorage` in-memory
 
 ### Implementation
 
-- [ ] T054 [P] `src/modules/programs/application/ports/logo-storage.ts` — port `LogoStorage`
-- [ ] T055 [P] `src/modules/programs/adapters/storage/logo-storage.in-memory.ts`
-- [ ] T056 `src/modules/programs/adapters/storage/logo-storage.s3.ts` — `@aws-sdk/client-s3` (ADR-0019)
-- [ ] T057 Rota `POST /programs/:id/logo` em `plugin.ts` — multipart, validação formato/tamanho, grava `logo_key`, `authorize(PROGRAM_PERMISSION.write)`
+- [x] T054 [P] `src/modules/programs/application/ports/logo-storage.ts` — port `LogoStorage`
+- [x] T055 [P] `src/modules/programs/adapters/storage/logo-storage.in-memory.ts`
+- [x] T056 `src/modules/programs/adapters/storage/logo-storage.s3.ts` — `@aws-sdk/client-s3` (ADR-0019)
+- [x] T057 Rota `POST /programs/:id/logo` em `plugin.ts` — multipart, validação formato/tamanho, grava `logo_key`, `authorize(PROGRAM_PERMISSION.write)`
 
 **Checkpoint**: logo funcional (ou diferido explicitamente).
 
@@ -208,11 +213,11 @@ Módulo isolado em `src/modules/programs/`; testes em `tests/modules/programs/`.
 
 ## Phase 10: Polish & Cross-Cutting Concerns
 
-- [ ] T058 [P] Coleção Bruno (ADR-0034) em `<dir de coleções>/programs/` exercitando `/api/v1/programs` (criar→listar→detalhar→editar→desativar→reativar) — integração HTTP real
-- [ ] T059 [P] Atualizar testes que validam o catálogo de permissões do `auth` para incluir `program:*` (regressão)
-- [ ] T060 Rodar `specs/008-gestao-programas/quickstart.md` (validação manual dos curls)
-- [ ] T061 Registrar no ticket as citações das decisões-chave (Princípio IX): Evans/Vernon (BC/agregado), Ramakrishnan (chaves), Beck (TDD) — `research.md` é a fonte
-- [ ] T062 Gate W3: `pnpm run typecheck && pnpm run format:check && pnpm run lint && pnpm test` + `pnpm run test:integration` — TODO verde; fechar pipeline (`pnpm run pipeline:state close PRG-PROGRAMS-MODULE`)
+- [x] T058 [P] Coleção Bruno (ADR-0034) em `<dir de coleções>/programs/` exercitando `/api/v1/programs` (criar→listar→detalhar→editar→desativar→reativar) — integração HTTP real
+- [x] T059 [P] Atualizar testes que validam o catálogo de permissões do `auth` para incluir `program:*` (regressão)
+- [x] T060 Rodar `specs/008-gestao-programas/quickstart.md` (validação manual dos curls)
+- [x] T061 Registrar no ticket as citações das decisões-chave (Princípio IX): Evans/Vernon (BC/agregado), Ramakrishnan (chaves), Beck (TDD) — `research.md` é a fonte
+- [x] T062 Gate W3: `pnpm run typecheck && pnpm run format:check && pnpm run lint && pnpm test` + `pnpm run test:integration` — TODO verde; fechar pipeline (`pnpm run pipeline:state close PRG-PROGRAMS-MODULE`)
 
 ---
 

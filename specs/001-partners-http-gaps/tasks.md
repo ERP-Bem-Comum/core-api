@@ -1,5 +1,9 @@
 # Tasks: Gaps de borda HTTP do módulo `partners`
 
+> **STATUS (reconciliado 2026-06-15): ✅ CONCLUÍDA no core-api.** 51/52 tasks entregues e verificadas no código
+> (`src/modules/partners/` — import/export CSV, território/geography, rotas HTTP). A única task aberta, **T050**, é
+> edição do `api-readiness-report.md` no repo **web-app** (fora do core-api) — responsabilidade do front. Sem pendência de backend.
+
 **Feature**: `specs/001-partners-http-gaps/` · **Input**: plan.md · data-model.md · contracts/README.md · bdd/\*.feature
 
 > Organizado por **ticket W0→W3** (cada ticket ≈ uma user story; ver `plan.md` §Fatiamento). Disciplina

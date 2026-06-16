@@ -1,5 +1,11 @@
 # Tasks — FIN-DOCUMENTO-INGESTAO
 
+> **STATUS (reconciliado 2026-06-15): 📋 fatia FUTURA, não iniciada (0/89).** ATENÇÃO: o **backend** do Financeiro
+> (agregado `Document`, geração de títulos, borda `/api/v2/financial`, persistência `fin_*`) foi entregue por
+> **`FIN-DOCUMENTO-TITULOS`** (PR #38, 2026-06-15) — ver `specs/009-fin-documentos-titulos/`. **Esta** spec (`INGESTAO`)
+> é a fatia **complementar** de UI/OCR/Storage/grid (upload de PDF, extração, tela de lançamento, grid de contas a
+> pagar) — **não redundante** com TITULOS. Mantida no backlog; abrir ticket quando UI/OCR for priorizada pela P.O.
+
 ## Fase 1: Schema + Domain Model (S)
 
 - [ ] **F1.1** Criar migration `fin_documentos`
