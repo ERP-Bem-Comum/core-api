@@ -38,7 +38,8 @@ import * as DocumentId from '../../domain/shared/document-id.ts';
 import type { RetentionInput } from '../../domain/shared/retention.ts';
 import type { RegisteredTaxInput } from '../../domain/shared/registered-tax.ts';
 import { FINANCIAL_PERMISSION } from '../../public-api/permissions.ts';
-import { documentToDto } from './dto.ts';
+import { documentToDto, listItemToSummaryDto, timelineToDto } from './dto.ts';
+import type { DocumentListFilter } from '../../domain/document/query.ts';
 import type { FinancialHttpDeps } from './composition.ts';
 import {
   createDocumentBodySchema,
@@ -48,6 +49,7 @@ import {
   listDocumentsQuerySchema,
   documentResponseSchema,
   documentListResponseSchema,
+  documentTimelineResponseSchema,
 } from './schemas.ts';
 
 export type FinancialHttpHooks = Readonly<{
@@ -120,9 +122,11 @@ const loadAndSerialize = async (
   const found = await deps.findDocumentById(idR.value);
   if (!found.ok) return sendDomainError(reply, found.error);
 
-  return sendResult(reply, ok(documentToDto(found.value.document, found.value.payables)), {
-    ok: reply.statusCode === 201 ? 201 : 200,
-  });
+  return sendResult(
+    reply,
+    ok(documentToDto(found.value.document, found.value.payables, found.value.version)),
+    { ok: reply.statusCode === 201 ? 201 : 200 },
+  );
 };
 
 // ─── Mapeadores de body Zod → command (bridge undefined→null para exactOptionalPropertyTypes) ──
@@ -253,6 +257,8 @@ const financialRoutes =
         const body = req.body;
         const result = await deps.adjustDocument({
           documentId: req.params.id,
+          // Optimistic lock (FR-009): propaga `body.version` → `cmd.expectedVersion`.
+          expectedVersion: body.version,
           ...(body.grossValueCents !== undefined
             ? { grossValueCents: Number(body.grossValueCents) }
             : {}),
@@ -291,6 +297,8 @@ const financialRoutes =
         const result = await deps.approveDocument({
           documentId: req.params.id,
           approvedBy: req.userId,
+          // Optimistic lock (FR-009): propaga `body.version` → `cmd.expectedVersion`.
+          expectedVersion: req.body.version,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         return loadAndSerialize(deps, reply, req.params.id);
@@ -308,7 +316,11 @@ const financialRoutes =
         response: { 200: documentResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
-        const result = await deps.undoApproval({ documentId: req.params.id });
+        const result = await deps.undoApproval({
+          documentId: req.params.id,
+          // Optimistic lock (FR-009): propaga `body.version` → `cmd.expectedVersion`.
+          expectedVersion: req.body.version,
+        });
         if (!result.ok) return sendDomainError(reply, result.error);
         return loadAndSerialize(deps, reply, req.params.id);
       },
@@ -337,7 +349,7 @@ const financialRoutes =
       },
     });
 
-    // GET /financial/documents — lista paginada (stub Fatia 1; scan DB na Fatia 2).
+    // GET /financial/documents — listagem paginada real (US1; read path no writer pool — ADR-0003).
     scope.route({
       method: 'GET',
       url: '/financial/documents',
@@ -346,8 +358,27 @@ const financialRoutes =
         querystring: listDocumentsQuerySchema,
         response: { 200: documentListResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
-      handler: async (_req, reply) => {
-        return sendResult(reply, ok({ items: [], page: 1, pageSize: 20, total: 0 }), { ok: 200 });
+      handler: async (req, reply) => {
+        const q = req.query;
+        const filter: DocumentListFilter = {
+          ...(q.status !== undefined ? { status: q.status } : {}),
+          ...(q.supplierRef !== undefined ? { supplierRef: q.supplierRef } : {}),
+          ...(q.type !== undefined ? { type: q.type } : {}),
+          ...(q.dueFrom !== undefined ? { dueFrom: new Date(q.dueFrom) } : {}),
+          ...(q.dueTo !== undefined ? { dueTo: new Date(q.dueTo) } : {}),
+        };
+        const result = await deps.listDocuments(filter, q.page, q.pageSize);
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(
+          reply,
+          ok({
+            items: result.value.items.map(listItemToSummaryDto),
+            page: result.value.page,
+            pageSize: result.value.pageSize,
+            total: result.value.total,
+          }),
+          { ok: 200 },
+        );
       },
     });
 
@@ -362,6 +393,31 @@ const financialRoutes =
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
         return loadAndSerialize(deps, reply, req.params.id);
+      },
+    });
+
+    // GET /financial/documents/:id/timeline — trilha por-campo (Time Travel, US2).
+    scope.route({
+      method: 'GET',
+      url: '/financial/documents/:id/timeline',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        params: documentIdParamSchema,
+        response: { 200: documentTimelineResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        // 1. Verificar existência do documento → 404 se não encontrado.
+        const idR = DocumentId.rehydrate(req.params.id);
+        if (!idR.ok) return sendDomainError(reply, 'document-id-invalid');
+
+        const found = await deps.findDocumentById(idR.value);
+        if (!found.ok) return sendDomainError(reply, found.error);
+
+        // 2. Buscar trilha.
+        const result = await deps.getDocumentTimeline({ documentId: req.params.id });
+        if (!result.ok) return sendDomainError(reply, result.error);
+
+        return sendResult(reply, ok(timelineToDto(result.value)), { ok: 200 });
       },
     });
   };

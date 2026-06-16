@@ -41,6 +41,7 @@ import {
   index,
   int,
   mysqlTable,
+  text,
   varchar,
 } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
@@ -318,6 +319,135 @@ export const finRegisteredTaxes = mysqlTable(
   ],
 );
 
+// ─── fin_document_timeline ────────────────────────────────────────────────────
+//
+// Read-model Time Travel (ADR-0001/010): materializa um marco por evento de domínio.
+// Append-only: nenhum UPDATE/DELETE aqui — a única remoção é o CASCADE do cancelamento
+// (hard delete de fin_documents → cascateia este tabela → cascateia fin_timeline_field_changes).
+//
+// Decisão de atomicidade (Vernon:3257 — ADR-0001/010):
+//   "update synchronously [...] in the same transaction" — gravado na MESMA transaction
+//   do DocumentRepository.save (SC-004/NFR-001: sem janela em que o doc existe sem trilha).
+//
+// Índices:
+//   idx_fin_tl_doc_time (document_id, occurred_at): leitura cronológica GET /timeline
+//     — cobertura do JOIN documentId + ordenação occurred_at em uma só varrida de índice.
+//   idx_fin_tl_target (target_id): busca de entries por alvo (future query).
+//
+// CHECKs:
+//   ck_fin_tl_target_kind: {Document, Payable} — 8 chars max; defesa em profundidade.
+//   ck_fin_tl_event_type: literais EN dos eventos do domínio (domain/document/events.ts).
+//
+// FK ON DELETE CASCADE: data-model.md §"FK ON DELETE CASCADE" — Evans §"A delete operation
+//   must remove everything within the AGGREGATE boundary at once" (data-model.md cita 1471).
+//
+// ⚠️ CHARSET/COLLATE: inserir manualmente na migration gerada (limitação Drizzle 0.45.x):
+//   ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci por tabela;
+//   COLLATE utf8mb4_bin em colunas UUID (id, document_id, target_id, actor_ref).
+export const finDocumentTimeline = mysqlTable(
+  'fin_document_timeline',
+  {
+    // PK: UUID v4 gerado pelo domínio (ADR-0020 §"sem AUTO_INCREMENT em PK de domínio").
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+
+    // Liga ao evento de domínio que originou o marco (idempotência futura).
+    eventId: varchar('event_id', { length: 36 }).notNull(),
+
+    // Agrupa a trilha por documento (mesmo quando target = Payable).
+    // FK ON DELETE CASCADE — pertence ao AGGREGATE BOUNDARY do documento.
+    documentId: varchar('document_id', { length: 36 }).notNull(),
+
+    // Discriminador do alvo: 'Document' ou 'Payable'. varchar(8) cobre ambos.
+    targetKind: varchar('target_kind', { length: 8 }).notNull(),
+
+    // ID do alvo (DocumentId ou PayableId — UUID v4).
+    targetId: varchar('target_id', { length: 36 }).notNull(),
+
+    // Tipo do marco: discriminador EN dos eventos de domínio (domain/document/events.ts).
+    // varchar(40): 'DocumentDraftSaved' tem 19 chars; margem para future events.
+    eventType: varchar('event_type', { length: 40 }).notNull(),
+
+    // Instante do marco: injetado via Clock (never new Date() no domínio).
+    // datetime(fsp:3) = milissegundo; mode:'date' = Date nativo (ADR-0020 §"Timestamps").
+    occurredAt: datetime('occurred_at', { mode: 'date', fsp: 3 }).notNull(),
+
+    // Ref ao autor (cross-BC — sem FK física; ADR-0014). Nullable: FR-005 best-effort.
+    actorRef: varchar('actor_ref', { length: 36 }),
+  },
+  (t) => [
+    // CHECKs de defesa em profundidade (domain valida primeiro):
+    check('ck_fin_tl_target_kind', sql`${t.targetKind} IN ('Document','Payable')`),
+    check(
+      'ck_fin_tl_event_type',
+      sql`${t.eventType} IN ('DocumentSaved','PayableApproved','ApprovalUndone','DocumentCancelled','DocumentDraftSaved')`,
+    ),
+
+    // FK intra-módulo ON DELETE CASCADE: data-model.md §"FK ON DELETE CASCADE".
+    foreignKey({
+      name: 'fin_document_timeline_document_id_fk',
+      columns: [t.documentId],
+      foreignColumns: [finDocuments.id],
+    }).onDelete('cascade'),
+
+    // Índice composto: leitura cronológica do GET /timeline (document_id + occurred_at).
+    // Cobre tanto o filtro (WHERE document_id = ?) quanto a ordenação (ORDER BY occurred_at ASC).
+    index('idx_fin_tl_doc_time').on(t.documentId, t.occurredAt),
+
+    // Índice: busca de entries por target_id (query futura de trilha por título).
+    index('idx_fin_tl_target').on(t.targetId),
+  ],
+);
+
+// ─── fin_timeline_field_changes ───────────────────────────────────────────────
+//
+// Diff decomposto em 1FN (ADR-0020 §"sem JSON nativo"): cada linha é um campo alterado.
+// Sem tabela de campo serializado/JSON — cada FieldChange vira uma row atômica.
+// `before_value` / `after_value` são `text` nullable: strings serializadas do domínio
+// (Money → centavos string; Date → ISO; refs → UUID; status/enum → literal EN).
+//
+// `text` em vez de `varchar(N)`:
+//   - `before_value`/`after_value` podem carregar valores longos (ex.: description até 500 chars).
+//   - `text` não entra no prefix-index limit (tabela sem índice nestas colunas — só
+//     `timeline_entry_id` é indexado, que é varchar(36)).
+//   - `field` permanece `varchar(60)` — nomes de campo de domínio são curtos e determinísticos.
+//
+// FK ON DELETE CASCADE dupla: documento → entry → changes (cascata dupla).
+//
+// Índice:
+//   idx_fin_tlfc_entry (timeline_entry_id): busca das changes de uma entry (JOIN no mapper).
+export const finTimelineFieldChanges = mysqlTable(
+  'fin_timeline_field_changes',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+
+    // FK para a entry que originou este campo alterado (ON DELETE CASCADE).
+    timelineEntryId: varchar('timeline_entry_id', { length: 36 }).notNull(),
+
+    // Nome do campo de domínio (EN): ex. 'grossValue', 'status', 'dueDate'.
+    // varchar(60): margem para nomes compostos futuros (ex.: 'paymentMethod').
+    field: varchar('field', { length: 60 }).notNull(),
+
+    // Valor anterior serializado (string atômica, 1FN, sem JSON — ADR-0020).
+    // null = campo não existia antes (criação do document ou do payable).
+    // text: acomoda values longos (description até 500 chars; ADR-0020 §"Texto livre longo").
+    beforeValue: text('before_value'),
+
+    // Valor novo serializado. null = campo foi removido (ex.: description apagada).
+    afterValue: text('after_value'),
+  },
+  (t) => [
+    // FK intra-módulo ON DELETE CASCADE: cascata dupla (documento → entry → changes).
+    foreignKey({
+      name: 'fin_timeline_field_changes_entry_id_fk',
+      columns: [t.timelineEntryId],
+      foreignColumns: [finDocumentTimeline.id],
+    }).onDelete('cascade'),
+
+    // Índice: busca de todas as changes de uma entry (JOIN no mapper ao reconstruir a trilha).
+    index('idx_fin_tlfc_entry').on(t.timelineEntryId),
+  ],
+);
+
 // ─── Tipos gerados pelo schema (consumidos pelos mappers) ─────────────────────
 //
 // `$inferSelect` = shape da row lida do banco (SELECT *).
@@ -336,3 +466,9 @@ export type NewRetentionRow = typeof finRetentions.$inferInsert;
 
 export type RegisteredTaxRow = typeof finRegisteredTaxes.$inferSelect;
 export type NewRegisteredTaxRow = typeof finRegisteredTaxes.$inferInsert;
+
+export type TimelineEntryRow = typeof finDocumentTimeline.$inferSelect;
+export type NewTimelineEntryRow = typeof finDocumentTimeline.$inferInsert;
+
+export type TimelineFieldChangeRow = typeof finTimelineFieldChanges.$inferSelect;
+export type NewTimelineFieldChangeRow = typeof finTimelineFieldChanges.$inferInsert;

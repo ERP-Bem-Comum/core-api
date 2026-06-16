@@ -9,6 +9,7 @@ import type {
   DocumentRepositoryError,
 } from '../../domain/document/repository.ts';
 import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
+import { buildTimelineEntries } from '../timeline-recording.ts';
 
 export type ApproveDocumentDeps = Readonly<{
   repo: DocumentRepository;
@@ -16,7 +17,13 @@ export type ApproveDocumentDeps = Readonly<{
   clock: Clock;
 }>;
 
-export type ApproveDocumentCommand = Readonly<{ documentId: string; approvedBy: string }>;
+export type ApproveDocumentCommand = Readonly<{
+  documentId: string;
+  approvedBy: string;
+  // Optimistic lock (FR-009/ADR-0002 da feature 010): versão do documento lida pelo cliente.
+  // Repassada ao `repo.save` como `expectedVersion` — UPDATE com WHERE version = expectedVersion.
+  expectedVersion: number;
+}>;
 
 export type ApproveDocumentError =
   | DocumentError
@@ -48,10 +55,27 @@ export const approveDocument =
     });
     if (!approved.ok) return err(approved.error);
 
-    const saved = await deps.repo.save({
-      document: approved.value.document,
-      payables: approved.value.payables,
+    // Trilha: marco de aprovação. before = estado lido (Open); after = Approved.
+    // actor = quem aprovou (UserRef) — único marco desta fatia que carrega autoria.
+    const event = approved.value.events[0];
+    if (event === undefined) return err('document-repository-failure');
+    const entries = buildTimelineEntries(deps.clock, {
+      event,
+      before: open.value,
+      after: approved.value.document,
+      payablesBefore: found.value.payables,
+      payablesAfter: approved.value.payables,
+      actor: by.value,
     });
+
+    const saved = await deps.repo.save(
+      {
+        document: approved.value.document,
+        payables: approved.value.payables,
+      },
+      entries,
+      cmd.expectedVersion,
+    );
     if (!saved.ok) return err(saved.error);
 
     const published = await deps.outbox.append(approved.value.events);

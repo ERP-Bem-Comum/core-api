@@ -1,4 +1,5 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
+import type { Clock } from '../../../../shared/ports/clock.ts';
 import * as Money from '../../../../shared/kernel/money.ts';
 import { SupplierRef, type PartnerRefError } from '#src/modules/partners/public-api/refs.ts';
 import {
@@ -19,10 +20,12 @@ import type {
   DocumentRepositoryError,
 } from '../../domain/document/repository.ts';
 import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
+import { buildTimelineEntries } from '../timeline-recording.ts';
 
 export type SaveDraftDeps = Readonly<{
   repo: DocumentRepository;
   outbox: FinancialOutbox;
+  clock: Clock;
 }>;
 
 // Campos opcionais para o rascunho — qualquer campo pode ser nulo/omitido (US7).
@@ -136,7 +139,19 @@ export const saveDraft =
     });
     if (!draft.ok) return err(draft.error);
 
-    const saved = await deps.repo.save({ document: draft.value.document, payables: null });
+    // Trilha: marco de rascunho. before/payables*=null (documento novo, sem títulos no Draft).
+    const event = draft.value.events[0];
+    if (event === undefined) return err('document-repository-failure');
+    const entries = buildTimelineEntries(deps.clock, {
+      event,
+      before: null,
+      after: draft.value.document,
+      payablesBefore: null,
+      payablesAfter: null,
+      actor: null,
+    });
+
+    const saved = await deps.repo.save({ document: draft.value.document, payables: null }, entries);
     if (!saved.ok) return err(saved.error);
 
     const published = await deps.outbox.append(draft.value.events);

@@ -9,6 +9,7 @@
  */
 
 import * as z from 'zod/v4';
+import { DOCUMENT_EVENT_TYPES } from '../../domain/document/events.ts';
 
 // ─── Shared ──────────────────────────────────────────────────────────────────
 
@@ -39,14 +40,14 @@ const registeredTaxTypeSchema = z.enum([
 const retentionItemSchema = z.object({
   type: retentionTypeSchema,
   baseCents: centsStringSchema,
-  rateBps: z.number().int().min(0),
+  rateBps: z.number().int().min(0).max(10000),
   valueCents: centsStringSchema,
 });
 
 const registeredTaxItemSchema = z.object({
   type: registeredTaxTypeSchema,
   baseCents: centsStringSchema,
-  rateBps: z.number().int().min(0),
+  rateBps: z.number().int().min(0).max(10000),
   valueCents: centsStringSchema,
 });
 
@@ -110,7 +111,7 @@ export type CreateDocumentBody = z.infer<typeof createDocumentBodySchema>;
  */
 export const adjustDocumentBodySchema = z
   .object({
-    version: z.number().int().min(0),
+    version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
     grossValueCents: centsStringSchema.optional(),
     sourceDiscountsCents: centsStringSchema.optional(),
     discountsCents: centsStringSchema.optional(),
@@ -130,7 +131,7 @@ export type AdjustDocumentBody = z.infer<typeof adjustDocumentBodySchema>;
 
 /** Body das ações approve / undo-approval — só o optimistic lock. */
 export const approveBodySchema = z.object({
-  version: z.number().int().min(0),
+  version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
 });
 
 export type ApproveBody = z.infer<typeof approveBodySchema>;
@@ -146,7 +147,7 @@ export const documentIdParamSchema = z.object({
 export const listDocumentsQuerySchema = z.object({
   status: z.enum(['Draft', 'Open', 'Approved']).optional(),
   supplierRef: z.uuid().optional(),
-  type: z.string().optional(),
+  type: documentTypeSchema.optional(),
   dueFrom: z.iso.date().optional(),
   dueTo: z.iso.date().optional(),
   page: z.coerce.number().int().min(1).default(1),
@@ -178,6 +179,10 @@ export const documentResponseSchema = z.object({
   dueDate: z.string().nullable(),
   description: z.string().nullable(),
   payables: z.array(payableResponseSchema),
+  version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).meta({
+    description:
+      'Versão atual do documento (optimistic lock) — reenvie no próximo PATCH/approve/undo-approval',
+  }),
 });
 
 export type DocumentResponseDto = z.infer<typeof documentResponseSchema>;
@@ -191,6 +196,12 @@ export const documentSummarySchema = z.object({
   supplierRef: z.string().nullable(),
   netValueCents: centsStringSchema.nullable(),
   dueDate: z.string().nullable(),
+  version: z
+    .number()
+    .int()
+    .min(0)
+    .max(Number.MAX_SAFE_INTEGER)
+    .meta({ description: 'Versão atual (optimistic lock) para ações inline' }),
 });
 
 export type DocumentSummaryDto = z.infer<typeof documentSummarySchema>;
@@ -204,3 +215,50 @@ export const documentListResponseSchema = z.object({
 });
 
 export type DocumentListResponseDto = z.infer<typeof documentListResponseSchema>;
+
+// ─── GET /documents/:id/timeline ─────────────────────────────────────────────
+
+// Valores válidos de `DocumentEvent['type']` — fonte única exaustiva importada do domínio
+// (`domain/document/events.ts`). A garantia é "no extra AND no missing": adicionar um membro
+// à union sem listá-lo lá QUEBRA `pnpm run typecheck` (não falha em runtime na validação do
+// response de GET /timeline).
+
+/** Uma entrada da trilha por-campo (Time Travel). */
+export const timelineEntrySchema = z.object({
+  eventType: z.enum([...DOCUMENT_EVENT_TYPES]).meta({
+    description: 'Tipo do evento de domínio que originou esta entrada na trilha',
+  }),
+  target: z.object({
+    kind: z.enum(['Document', 'Payable']).meta({
+      description: 'Entidade afetada pelo evento — documento principal ou título filho',
+    }),
+    id: z.uuid().meta({
+      description: 'UUID da entidade afetada (Document.id ou Payable.id)',
+    }),
+  }),
+  occurredAt: z.iso.datetime().meta({
+    description: 'Instante UTC em que o evento ocorreu (ISO-8601 com offset)',
+  }),
+  actor: z.uuid().nullable().meta({
+    description: 'UUID do usuário responsável pela ação; nulo em ações automáticas do sistema',
+  }),
+  changes: z
+    .array(
+      z.object({
+        field: z.string(),
+        before: z.string().nullable(),
+        after: z.string().nullable(),
+      }),
+    )
+    .meta({
+      description:
+        'Lista de campos alterados com o valor anterior e o novo valor serializados como string',
+    }),
+});
+
+/** Response do GET /documents/:id/timeline. */
+export const documentTimelineResponseSchema = z.object({
+  entries: z.array(timelineEntrySchema),
+});
+
+export type DocumentTimelineResponseDto = z.infer<typeof documentTimelineResponseSchema>;

@@ -11,10 +11,13 @@
 //   silenciosamente (Refman §13.2.6.2). O padrão SELECT-then-UPDATE-or-INSERT
 //   com `.for('update')` serializa escritas concorrentes via next-key lock (Refman §15.7).
 //
-// Optimistic lock (R5 do spec, data-model.md §"Optimistic lock"):
-//   UPDATE WHERE id=? AND version=?  →  version = version + 1.
-//   Se 0 rows afetadas: outra tx ganhou a corrida → err('document-repository-failure').
-//   O `version` atual é lido no mesmo SELECT FOR UPDATE do upsert (sem extra round-trip).
+// Optimistic lock (FR-009 / feature 010):
+//   save(agg, entries, expectedVersion) com expectedVersion definido:
+//     UPDATE WHERE id=? AND version=expectedVersion → version = expectedVersion+1.
+//     mysql2 retorna affectedRows=0 se o WHERE não casa (Refman §13.2.17).
+//     → err('document-version-conflict').
+//   save(agg, entries) sem expectedVersion (criação): INSERT com version=0.
+//   SELECT FOR UPDATE antes do UPDATE serializa txs concorrentes (Refman §15.7.2.4).
 //
 // Transação única para todo o boundary (ADR-0015 + Evans §"AGGREGATE BOUNDARY"):
 //   save() abre UMA transação que persiste:
@@ -33,16 +36,21 @@
 // Boundary: todo try/catch converte para Result. Nenhum Error cruza a borda
 //   (.claude/rules/adapters.md §"converter para Result na borda").
 
-import { eq } from 'drizzle-orm';
+import { and, asc, count, eq, gte, lte } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
+import * as Money from '../../../../../shared/kernel/money.ts';
 import type {
   DocumentRepository,
   DocumentRepositoryError,
+  LoadedDocument,
   StoredDocument,
 } from '../../../domain/document/repository.ts';
 import type { DocumentId } from '../../../domain/shared/document-id.ts';
+import type { DocumentListFilter, DocumentListItem, Page } from '../../../domain/document/query.ts';
+import type { DocumentStatus, DocumentType } from '../../../domain/document/types.ts';
+import type { FinancialTimelineEntry } from '../../../domain/timeline/types.ts';
 import type { FinancialMysqlHandle } from '../drivers/mysql-driver.ts';
 import {
   mapRowToDocument,
@@ -52,6 +60,7 @@ import {
   mapRetentionsToRows,
   mapRegisteredTaxesToRows,
 } from '../mappers/document.mapper.ts';
+import { mapEntryToRows } from '../mappers/timeline.mapper.ts';
 
 // Wrapper de segurança: captura qualquer exceção de I/O ou violação de
 // constraint (mysql2 lança ER_DUP_ENTRY, ER_DATA_TOO_LONG etc.) e converte
@@ -68,6 +77,27 @@ const safe = async <T>(
     return err('document-repository-failure');
   }
 };
+
+// Sentinela interna: distingue conflito de versão (semântico) de falha de infra no catch.
+// Usa Symbol único para identificação sem `class` (regra no-restricted-syntax do projeto).
+const VERSION_CONFLICT_SYMBOL = Symbol('version-conflict');
+
+type VersionConflictSentinel = Error & Readonly<{ [VERSION_CONFLICT_SYMBOL]: true }>;
+
+const makeVersionConflict = (
+  documentId: string,
+  expectedVersion: number,
+): VersionConflictSentinel => {
+  const e = new Error(
+    `version-conflict:${documentId}:expected:${expectedVersion}`,
+  ) as VersionConflictSentinel;
+  (e as unknown as Record<symbol, boolean>)[VERSION_CONFLICT_SYMBOL] = true;
+  return e;
+};
+
+const isVersionConflict = (cause: unknown): cause is VersionConflictSentinel =>
+  cause instanceof Error &&
+  (cause as unknown as Record<symbol, unknown>)[VERSION_CONFLICT_SYMBOL] === true;
 
 // `MySql2Database` expõe interface mutável internamente. Handle é read-only
 // do ponto de vista deste módulo — não mutamos o objeto em si.
@@ -86,7 +116,7 @@ export const createDrizzleDocumentRepository = (
   // o 'document-not-found' que é retorno semântico (não exceção).
   const findById = async (
     id: DocumentId,
-  ): Promise<Result<StoredDocument, DocumentRepositoryError>> => {
+  ): Promise<Result<LoadedDocument, DocumentRepositoryError>> => {
     try {
       const docRows = await db
         .select()
@@ -126,7 +156,11 @@ export const createDrizzleDocumentRepository = (
         return err('document-repository-failure');
       }
 
-      return ok({ document: documentR.value, payables: payablesR.value });
+      // FR-009: expõe `version` para participação no optimistic lock pelo cliente HTTP.
+      // A `version` vem diretamente da coluna `fin_documents.version` lida no SELECT acima.
+      // Os use cases de mutação continuam usando `cmd.expectedVersion` (versão que o CLIENTE
+      // enviou) — a versão aqui serve apenas para serialização/resposta; não altera o lock.
+      return ok({ document: documentR.value, payables: payablesR.value, version: docRow.version });
     } catch (cause) {
       process.stderr.write(`[document-repo:findById] ${String(cause)}\n`);
       return err('document-repository-failure');
@@ -135,18 +169,60 @@ export const createDrizzleDocumentRepository = (
 
   // ─── save ──────────────────────────────────────────────────────────────────
   //
-  // Transação única: documento + tabelas filhas (hard replace).
-  // Optimistic lock (R5): SELECT FOR UPDATE lê o `version` atual;
-  // UPDATE WHERE version=? falha se outra tx incrementou.
-  const save = async (aggregate: StoredDocument): Promise<Result<void, DocumentRepositoryError>> =>
-    safe('save', async () => {
+  // Transação única: documento + tabelas filhas (hard replace) + trilha de timeline.
+  //
+  // `expectedVersion` controla o caminho de optimistic lock (FR-009/ADR-0002 feature 010):
+  //
+  //   undefined → criação / saveDraft / submit: executa SELECT FOR UPDATE para adquirir
+  //     next-key lock e detectar se o documento já existe (INSERT) ou houve race condition
+  //     inesperada (erro genérico). Não compara versão.
+  //
+  //   number    → mutação (adjust/approve/undo): o UPDATE usa
+  //     AND version = expectedVersion no WHERE. Refman MySQL 8.4 §13.2.17 (UPDATE):
+  //     "The affected-rows value reflects the number of rows actually changed."
+  //     Com InnoDB, mysql2 retorna affectedRows = 0 quando o WHERE não casa nenhuma
+  //     row — seja porque o doc não existe ou porque a versão foi incrementada por
+  //     outra transação. O use case fez findById antes, então affectedRows = 0 aqui
+  //     significa necessariamente que a versão divergiu → err('document-version-conflict').
+  //     O SELECT FOR UPDATE ainda é emitido para serializar leituras concorrentes
+  //     (next-key lock na PK) antes do UPDATE, evitando que duas txs leiam a mesma
+  //     versão e tentem incrementar em paralelo (Refman §15.7.2.4).
+  //
+  // `timelineEntries`: gravadas NA MESMA transação (SC-004/NFR-001 — Vernon:3257:
+  //   "update synchronously [...] in the same transaction"). Quem não tem trilha
+  //   passa [] — noop sem overhead.
+  const save = async (
+    aggregate: StoredDocument,
+    timelineEntries: readonly FinancialTimelineEntry[],
+    expectedVersion?: number,
+  ): Promise<Result<void, DocumentRepositoryError>> => {
+    // `save` não usa o helper `safe()` porque precisa distinguir dois tipos de falha:
+    //   1. 'document-version-conflict' — erro de domínio semântico (affectedRows = 0)
+    //   2. 'document-repository-failure' — falha de infra (I/O, constraint violada)
+    // O safe() converte qualquer exception para 'document-repository-failure', o que
+    // apagaria a distinção. Por isso usamos try/catch direto com uma sentinela tipada.
+    //
+    // Mecanismo de optimistic lock (FR-009):
+    //   expectedVersion === undefined → caminho de criação: INSERT com version=0.
+    //   expectedVersion definido → caminho de mutação: UPDATE WHERE id=? AND version=?
+    //     Refman MySQL 8.4 §13.2.17 (UPDATE): "The affected-rows value reflects the
+    //     number of rows actually changed." mysql2 expõe como ResultSetHeader.affectedRows.
+    //     InnoDB com REPEATABLE READ: o WHERE compara o valor FÍSICO da coluna (não a
+    //     snapshot de leitura), garantindo detecção de concurrent writes (Refman §15.7.2.3).
+    //     affectedRows=0 com id existente → versão divergiu → 'document-version-conflict'.
+    //
+    // SELECT FOR UPDATE antes do UPDATE (em ambos os caminhos):
+    //   Adquire next-key lock exclusivo na PK antes de qualquer escrita.
+    //   Refman MySQL 8.4 §15.7.2.4: "SELECT...FOR UPDATE sets an exclusive next-key
+    //   lock on every index record the search encounters."
+    //   Isso serializa duas txs que chegam simultaneamente ao mesmo documento,
+    //   evitando leituras de versão idênticas seguidas de dois UPDATEs concorrentes.
+    try {
       const { document, payables } = aggregate;
       const documentId = document.id as unknown as string;
 
       await db.transaction(async (tx) => {
-        // 1. SELECT FOR UPDATE — adquire next-key lock na PK, serializa escritas
-        //    concorrentes e lê o `version` atual para o optimistic lock (R5).
-        //    Refman MySQL 8.4 §15.7: SELECT...FOR UPDATE adquire lock exclusivo.
+        // 1. SELECT FOR UPDATE — serializa escritas concorrentes via next-key lock na PK.
         const existing = await tx
           .select({ version: schema.finDocuments.version })
           .from(schema.finDocuments)
@@ -155,34 +231,48 @@ export const createDrizzleDocumentRepository = (
 
         const currentVersion = existing[0]?.version;
 
-        if (currentVersion === undefined) {
-          // INSERT: documento novo. version = 0 (default do schema).
+        if (expectedVersion === undefined) {
+          // Caminho de criação: INSERT com version = 0 (default do schema).
+          // Se o doc já existe (race condition entre dois criadores), o INSERT
+          // falhará por violação de PK → capturado no catch abaixo como
+          // 'document-repository-failure' — comportamento correto.
           const row = mapDocumentToRow(document, 0);
           await tx.insert(schema.finDocuments).values(row);
         } else {
-          // UPDATE com optimistic lock: WHERE id=? AND version=currentVersion.
-          // Se 0 rows afetadas, outra tx ganhou a corrida → erro de conflito.
-          const nextVersion = currentVersion + 1;
+          // Caminho de mutação: UPDATE com optimistic lock enforçado no WHERE.
+          // WHERE id=? AND version=expectedVersion → só modifica se versão bate.
+          const nextVersion = expectedVersion + 1;
           const row = mapDocumentToRow(document, nextVersion);
-          const result = await tx
+          const updateResult = await tx
             .update(schema.finDocuments)
             .set(row)
-            .where(eq(schema.finDocuments.id, documentId));
-
-          // mysql2 retorna `affectedRows` no ResultSetHeader. Drizzle expõe como
-          // array [ResultSetHeader, ...]. Verificamos se ao menos 1 row foi afetada.
-          // Se 0 rows afetadas, outra transação incrementou a versão antes de nós.
-          const affectedRows = (result as unknown as [{ affectedRows: number }])[0].affectedRows;
-          if (affectedRows === 0) {
-            throw new Error(
-              `optimistic-lock-conflict:${documentId}:expected-version:${currentVersion}`,
+            .where(
+              and(
+                eq(schema.finDocuments.id, documentId),
+                eq(schema.finDocuments.version, expectedVersion),
+              ),
             );
+
+          // mysql2 retorna [ResultSetHeader, FieldPacket[]]. Drizzle expõe o raw
+          // do driver via cast. affectedRows=0 significa que o WHERE não casou —
+          // i.e., a versão foi incrementada por outra transação antes desta.
+          const affectedRows = (updateResult as unknown as [{ affectedRows: number }])[0]
+            .affectedRows;
+          if (affectedRows === 0) {
+            // Versão divergiu. Lançamos uma sentinela ANTES do catch genérico
+            // para que o catch consiga distinguir este caso de falhas de infra.
+            // O Error é capturado imediatamente no catch abaixo.
+            throw makeVersionConflict(documentId, expectedVersion);
           }
+
+          // currentVersion lida no SELECT FOR UPDATE é informativa.
+          // A checagem real é o affectedRows acima. void suprime unused warning.
+          void currentVersion;
         }
 
         // 2. Hard replace de tabelas filhas (R8.1: ajuste recria payables inteiros).
-        //    DELETE primeiro (CASCADE não é necessário aqui — fazemos explicitamente
-        //    para garantir que o INSERT em lote subsequente não colida em PK).
+        //    DELETE explícito: não dependemos de CASCADE aqui — garantimos que o
+        //    INSERT em lote subsequente não colide em PK.
         await tx.delete(schema.finPayables).where(eq(schema.finPayables.documentId, documentId));
         await tx
           .delete(schema.finRetentions)
@@ -192,7 +282,7 @@ export const createDrizzleDocumentRepository = (
           .where(eq(schema.finRegisteredTaxes.documentId, documentId));
 
         // 3. INSERT em lote de filhos (1 round-trip por tabela; skip se vazio).
-        //    mysql2 lança se `values([])` for chamado com array vazio.
+        //    mysql2 lança ER_PARSE_ERROR se values([]) — guard obrigatório.
         if (payables !== null) {
           const payableRows = mapPayablesToRows(payables, documentId);
           if (payableRows.length > 0) {
@@ -200,22 +290,43 @@ export const createDrizzleDocumentRepository = (
           }
         }
 
-        // Retenções vêm do documento (campo `retentions` em DocumentCore e DraftDocument).
-        const retentions = document.status === 'Draft' ? document.retentions : document.retentions;
+        const retentions = document.retentions;
         if (retentions.length > 0) {
           const retentionRows = mapRetentionsToRows(retentions, documentId);
           await tx.insert(schema.finRetentions).values([...retentionRows]);
         }
 
-        // Impostos registrados.
-        const registeredTaxes =
-          document.status === 'Draft' ? document.registeredTaxes : document.registeredTaxes;
+        const registeredTaxes = document.registeredTaxes;
         if (registeredTaxes.length > 0) {
           const taxRows = mapRegisteredTaxesToRows(registeredTaxes, documentId);
           await tx.insert(schema.finRegisteredTaxes).values([...taxRows]);
         }
+
+        // 4. Timeline (SC-004/NFR-001): gravar entries na MESMA transação.
+        //    Append-only (ADR-0020 §"sem UPDATE/DELETE em read-model").
+        //    mysql2 lança ER_PARSE_ERROR se values([]) — guard obrigatório.
+        if (timelineEntries.length > 0) {
+          const mapped = timelineEntries.map(mapEntryToRows);
+          const entryRows = mapped.map((m) => m.entryRow);
+          await tx.insert(schema.finDocumentTimeline).values([...entryRows]);
+
+          const changeRows = mapped.flatMap((m) => [...m.changeRows]);
+          if (changeRows.length > 0) {
+            await tx.insert(schema.finTimelineFieldChanges).values(changeRows);
+          }
+        }
       });
-    });
+
+      return ok(undefined);
+    } catch (cause) {
+      // Distinguir conflito de versão (semântico) de falha de infra (I/O, constraint).
+      if (isVersionConflict(cause)) {
+        return err('document-version-conflict');
+      }
+      process.stderr.write(`[document-repo:save] ${String(cause)}\n`);
+      return err('document-repository-failure');
+    }
+  };
 
   // ─── delete ────────────────────────────────────────────────────────────────
   //
@@ -230,6 +341,129 @@ export const createDrizzleDocumentRepository = (
         .where(eq(schema.finDocuments.id, id as unknown as string));
     });
 
+  // ─── findPaged ─────────────────────────────────────────────────────────────
+  //
+  // Read-model leve (US1 — FR-004): lê APENAS fin_documents (sem tabelas filhas),
+  // retornando Page<DocumentListItem> com `total` filtrado e `items` paginados.
+  //
+  // Ordenação ESTÁVEL: dueDate ASC, desempate por id ASC.
+  //   - Rows com dueDate NULL (Drafts) aparecem PRIMEIRO — MySQL 8.4 Refman §11.4.2:
+  //     "NULL values are considered lower than any non-NULL value".
+  //   - Quando dois documentos têm o mesmo dueDate (ou ambos NULL), o tie-breaker
+  //     `id ASC` (UUID v4, varchar(36)) garante ordem determinística em paginação
+  //     OFFSET — sem ele, InnoDB pode variar a ordem dentro do mesmo índice.
+  //   - `fin_documents_due_date_idx` cobre ORDER BY dueDate; o desempate por `id`
+  //     é servido pela PK do cluster InnoDB (fin_documents.id é a PK).
+  //
+  // Filtros combinados via and(...) (operators.mdx §"and"):
+  //   status   → eq   (fin_documents_status_idx cobre)
+  //   supplierRef → eq (fin_documents_supplier_ref_idx cobre)
+  //   type     → eq   (sem índice; seletividade baixa no modelo atual)
+  //   dueFrom  → gte  (fin_documents_due_date_idx cobre range)
+  //   dueTo    → lte  (idem)
+  //
+  // `total`: COUNT(*) com o MESMO WHERE antes do LIMIT/OFFSET — select.mdx §"count":
+  //   `await db.select({ value: count() }).from(users)` retorna number diretamente.
+  //   Não usa cast manual (count() do drizzle-orm já mapeia para number).
+  //
+  // Mapper inline: evita dependência de função de mapper dedicada para read-model
+  // leve. netValue NULL → null; netValue número → Money.fromCents(). Falha no
+  // fromCents = corrupção de row → err('document-repository-failure').
+  // status/type são cast seguros: CHECK de banco garante o conjunto válido.
+  const findPaged = async (
+    filter: DocumentListFilter,
+    page: number,
+    pageSize: number,
+  ): Promise<Result<Page<DocumentListItem>, DocumentRepositoryError>> =>
+    safe('findPaged', async () => {
+      const { finDocuments } = schema;
+
+      // Constrói predicados condicionalmente — filtros ausentes não entram no WHERE.
+      // and() com array vazio emite WHERE sem condições (SELECT all), que é o comportamento
+      // correto para listagem sem filtro. (operators.mdx §"and")
+      const conditions = [
+        filter.status !== undefined ? eq(finDocuments.status, filter.status) : undefined,
+        filter.supplierRef !== undefined
+          ? eq(finDocuments.supplierRef, filter.supplierRef)
+          : undefined,
+        filter.type !== undefined ? eq(finDocuments.type, filter.type) : undefined,
+        filter.dueFrom !== undefined ? gte(finDocuments.dueDate, filter.dueFrom) : undefined,
+        filter.dueTo !== undefined ? lte(finDocuments.dueDate, filter.dueTo) : undefined,
+      ].filter((c): c is NonNullable<typeof c> => c !== undefined);
+
+      const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
+
+      // 1. COUNT(*) com o mesmo WHERE — retorna { value: number }[].
+      //    select.mdx §"count": `count()` importado de drizzle-orm retorna number sem cast.
+      const countRows = await db.select({ value: count() }).from(finDocuments).where(whereClause);
+
+      const total = countRows[0]?.value ?? 0;
+
+      // Conjunto vazio → retornar imediatamente sem fazer a query de items.
+      if (total === 0) {
+        return { items: [], page, pageSize, total: 0 };
+      }
+
+      // 2. SELECT read-model com LIMIT/OFFSET.
+      //    Ordenação estável: dueDate ASC (NULLs primeiro), desempate por id ASC.
+      //    Colunas: apenas as necessárias para DocumentListItem.
+      //    `version` incluída (FR-009): grids do front precisam para ações inline
+      //    (PATCH/approve) sem findById extra — Vernon, _Implementing DDD_ (ddd--vernon-livro-vermelho.md:8869).
+      const rows = await db
+        .select({
+          id: finDocuments.id,
+          status: finDocuments.status,
+          documentNumber: finDocuments.documentNumber,
+          type: finDocuments.type,
+          supplierRef: finDocuments.supplierRef,
+          netValue: finDocuments.netValue,
+          dueDate: finDocuments.dueDate,
+          version: finDocuments.version,
+        })
+        .from(finDocuments)
+        .where(whereClause)
+        .orderBy(asc(finDocuments.dueDate), asc(finDocuments.id))
+        .limit(pageSize)
+        .offset((page - 1) * pageSize);
+
+      // 3. Mapper inline: row → DocumentListItem.
+      //    netValue: bigint(mode:'number') chega como number | null.
+      //    status/type: varchar com CHECK — cast seguro para os tipos de domínio.
+      //    documentNumber/supplierRef/dueDate: passam direto (nullable conforme schema).
+      //    version: int NOT NULL — passa direto (já é number).
+      const items: DocumentListItem[] = [];
+      for (const row of rows) {
+        let netValue: DocumentListItem['netValue'] = null;
+        if (row.netValue !== null) {
+          const moneyResult = Money.fromCents(row.netValue);
+          if (!moneyResult.ok) {
+            process.stderr.write(
+              `[document-repo:findPaged:mapper] invalid netValue=${String(row.netValue)} id=${row.id}: ${moneyResult.error}\n`,
+            );
+            // Corrupção de row: valor monetário inválido no banco.
+            // Propaga como falha de repositório (adapters.md §"converter para Result na borda").
+            throw new Error(`corrupt-net-value:${row.id}`);
+          }
+          netValue = moneyResult.value;
+        }
+
+        items.push({
+          id: row.id,
+          // CHECK fin_documents_status_chk garante o conjunto válido — cast seguro.
+          status: row.status as DocumentStatus,
+          documentNumber: row.documentNumber,
+          // CHECK fin_documents_type_chk garante o conjunto válido (ou NULL) — cast seguro.
+          type: row.type as DocumentType | null,
+          supplierRef: row.supplierRef,
+          netValue,
+          dueDate: row.dueDate,
+          version: row.version,
+        });
+      }
+
+      return { items, page, pageSize, total };
+    });
+
   return {
     // findById tem seu próprio try/catch interno que preserva 'document-not-found'
     // como retorno semântico (não convertido para 'document-repository-failure').
@@ -238,5 +472,7 @@ export const createDrizzleDocumentRepository = (
     save,
 
     delete: deleteDoc,
+
+    findPaged,
   };
 };
