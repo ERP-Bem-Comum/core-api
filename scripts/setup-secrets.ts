@@ -50,6 +50,12 @@ const SECRETS_TO_GENERATE: readonly SecretSpec[] = [
   { name: 'mysql_root_password', label: 'root MySQL' },
   { name: 'mysql_app_password', label: 'core_app (escritor único de core.*)' },
   { name: 'mysql_readonly_password', label: 'readonly_bi (SELECT em core.*)' },
+  // MinIO exige: user >= 3 chars, password >= 8 chars. randomBytes(32).hex = 64
+  // chars — satisfaz ambos os requisitos. Modo 0644 (mesmo padrão dos secrets
+  // MySQL): o MinIO roda como root no container, portanto 0644 funciona; a
+  // consistência com os outros secrets facilita auditoria de permissões.
+  { name: 'minio_root_user', label: 'MinIO root user (access key)' },
+  { name: 'minio_root_password', label: 'MinIO root password (secret key)' },
 ];
 
 const USAGE = `Uso: pnpm secrets:setup [--random] [--force] [--help]

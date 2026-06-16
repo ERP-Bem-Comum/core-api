@@ -115,10 +115,13 @@ USER app:app
 # Sinal de parada limpa. Node 24 responde a SIGTERM via `process.on('SIGTERM')`.
 STOPSIGNAL SIGTERM
 
-# HTTP-first (ADR-0037): a borda primária é o servidor HTTP (`src/server.ts`). Healthcheck
-# pode ser habilitado quando o endpoint /health for confirmado:
-# HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-#   CMD wget -q --spider http://localhost:8080/health || exit 1
+# HTTP-first (ADR-0037): a borda primária é o servidor HTTP (`src/server.ts`).
+# Endpoint /health: src/shared/http/app.ts:185 → retorna {"status":"ok"}.
+# Porta: DEFAULT_PORT=3000 (src/shared/http/config.ts); override via env PORT.
+# Probe via node (Node 24 fetch global) — a imagem base (bookworm-slim) NÃO tem
+# curl nem wget, então `CMD wget ...` seria exit 127. O probe node é puro runtime.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:3000/health').then(r=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"
 
 # `tini` como PID 1, depois `node` com flags (NODE_OPTIONS habilita strip-types). ENTRYPOINT
 # é o binário Node direto (sem shell) — encaminha sinais corretamente sem shell-trap.

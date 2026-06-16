@@ -40,17 +40,26 @@ services:
       - '${MINIO_API_PORT:-9000}:9000'
       - '${MINIO_CONSOLE_PORT:-9001}:9001'
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-dev-access-key}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-dev-secret-key-min-8-chars}
+      # Credenciais via Docker secrets (ADR-0011 — sem default em texto).
+      # MINIO_ROOT_USER_FILE / MINIO_ROOT_PASSWORD_FILE: suportadas pelo MinIO
+      # desde ~2021. O MinIO lê o arquivo apontado e usa seu conteúdo como valor,
+      # idêntico ao mecanismo _FILE das imagens oficiais Docker. Verificado
+      # empiricamente: container subiu saudável com essas vars (issue #51, 2026-06-16).
+      # Fonte: https://min.io/docs/minio/linux/reference/minio-server/settings/core.html
+      MINIO_ROOT_USER_FILE: /run/secrets/minio_root_user
+      MINIO_ROOT_PASSWORD_FILE: /run/secrets/minio_root_password
       MINIO_PROMETHEUS_AUTH_TYPE: public
+    secrets:
+      - minio_root_user
+      - minio_root_password
     volumes:
       - minio-data:/data
     healthcheck:
-      test: ['CMD', 'mc', 'ready', 'local']
+      test: ['CMD', 'curl', '-fsS', 'http://127.0.0.1:9000/minio/health/ready']
       interval: 10s
       timeout: 3s
       retries: 5
-      start_period: 5s
+      start_period: 10s
     # Hardening — Compose reference §"Service-level elements". Impede que o
     # processo dentro do container ganhe novos privilégios via setuid/setgid.
     security_opt:
@@ -59,19 +68,27 @@ services:
       - core-api
 
   minio-bootstrap:
-    image: minio/mc:latest
+    # ADR-0011 §"Pin de versões" — digest pin do index multi-arch.
+    # Para atualizar: docker buildx imagetools inspect minio/mc:latest --format '{{.Manifest.Digest}}'
+    image: minio/mc:latest@sha256:a7fe349ef4bd8521fb8497f55c6042871b2ae640607cf99d9bede5e9bdf11727
     container_name: core-api-minio-bootstrap
     depends_on:
       minio:
         condition: service_healthy
+    # Credenciais lidas via $(cat /run/secrets/...) — NÃO interpoladas diretamente
+    # no entrypoint para não vazar em `docker inspect`. O conteúdo do secret nunca
+    # aparece nas env vars do container nem nos metadados do runtime (ADR-0011).
     entrypoint: >
       /bin/sh -c "
-      mc alias set local http://minio:9000 ${MINIO_ROOT_USER:-dev-access-key} ${MINIO_ROOT_PASSWORD:-dev-secret-key-min-8-chars};
+      mc alias set local http://minio:9000 $(cat /run/secrets/minio_root_user) $(cat /run/secrets/minio_root_password);
       mc mb --ignore-existing local/contracts-documents;
       mc version enable local/contracts-documents;
       mc anonymous set download local/contracts-documents;
       echo 'Bootstrap concluído: bucket contracts-documents pronto.';
       "
+    secrets:
+      - minio_root_user
+      - minio_root_password
     restart: 'no'
     networks:
       - core-api
@@ -154,6 +171,20 @@ services:
     container_name: core-api-app
     environment:
       NODE_ENV: development
+    # CA5 (issue #51): healthcheck explícito no compose — endpoint /health está em
+    # src/shared/http/app.ts:185; porta default 3000 (src/shared/http/config.ts).
+    # Probe via Node 24 fetch global (a imagem base não tem curl nem wget).
+    # Alinhado ao HEALTHCHECK do Dockerfile (porta 3000, mesmo probe).
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/health').then(r=>{process.exit(r.ok?0:1)}).catch(()=>process.exit(1))"
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
     security_opt:
       - no-new-privileges:true
     networks:
@@ -225,6 +256,10 @@ secrets:
     file: ./secrets/mysql_readonly_password.txt
   contracts_database_url:
     file: ./secrets/contracts_database_url.txt
+  minio_root_user:
+    file: ./secrets/minio_root_user.txt
+  minio_root_password:
+    file: ./secrets/minio_root_password.txt
 
 volumes:
   minio-data:
