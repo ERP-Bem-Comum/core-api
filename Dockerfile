@@ -44,7 +44,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # Corepack habilita pnpm sem npm install global. Versão pinada (ADR-0029).
-ENV PNPM_VERSION=11.5.0
+ENV PNPM_VERSION=11.7.0
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 WORKDIR /app
