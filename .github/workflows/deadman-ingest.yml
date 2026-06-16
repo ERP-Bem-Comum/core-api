@@ -1,0 +1,54 @@
+name: deadman-ingest
+
+# Plano "suspensório" (ADR-0042): registra o ping recebido por repository_dispatch em
+# deadman/history.jsonl, mesmo que o write no S3 (plano "cinto") tenha falhado.
+on:
+  repository_dispatch:
+    types: [deadman-ping]
+
+permissions:
+  contents: write
+
+# Serializa os commits no history.jsonl (pings concorrentes não colidem no push).
+concurrency:
+  group: deadman-history
+  cancel-in-progress: false
+
+jobs:
+  ingest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Append ping (dedup por emitter+seq)
+        env:
+          # O ping assinado vem no client_payload do dispatch.
+          PAYLOAD: ${{ toJSON(github.event.client_payload) }}
+        run: |
+          set -euo pipefail
+          mkdir -p deadman
+          touch deadman/history.jsonl
+
+          emitter=$(jq -r '.emitter' <<<"$PAYLOAD")
+          seq=$(jq -r '.seq' <<<"$PAYLOAD")
+          if [ -z "$emitter" ] || [ "$emitter" = "null" ] || [ -z "$seq" ] || [ "$seq" = "null" ]; then
+            echo "::error::payload sem emitter/seq"; exit 1
+          fi
+
+          # Dedup: o mesmo ping pode chegar pelo S3 e pelo webhook (contratos §4).
+          dup=$(jq -s --arg e "$emitter" --argjson s "$seq" \
+            'map(select(.emitter==$e and .seq==$s)) | length' deadman/history.jsonl)
+          if [ "$dup" -gt 0 ]; then
+            echo "ping ${emitter}#${seq} já ingerido — skip (idempotente)"; exit 0
+          fi
+
+          # Enriquecer (source + ingested_at) — contratos §2.
+          now=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+          jq -c --arg src webhook --arg now "$now" '. + {source:$src, ingested_at:$now}' \
+            <<<"$PAYLOAD" >> deadman/history.jsonl
+
+          git config user.name "deadman-bot"
+          git config user.email "deadman-bot@users.noreply.github.com"
+          git add deadman/history.jsonl
+          git commit -m "chore(deadman): ingest ${emitter}#${seq}"
+          git push

@@ -1,0 +1,111 @@
+name: deadman-audit
+
+# Auditor (ADR-0042): cruza o S3 (status/) com history.jsonl, decide inatividade pelo
+# registro mais recente das DUAS fontes, faz self-heal, e o commit é keep-alive (evita a
+# suspensão de 60 dias do GitHub p/ workflows agendados). Dispara o payload se morto.
+#
+# NB: o cron do GitHub é UTC. 03:05 UTC = 00:05 America/Sao_Paulo (UTC-3). A decisão é
+# por ESTADO (não por horário), então jitter do agendador não afeta a corretude.
+on:
+  schedule:
+    - cron: '5 3 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  issues: write # payload mínimo = abrir issue de alerta (payload completo: #72)
+
+concurrency:
+  group: deadman-history
+  cancel-in-progress: false
+
+env:
+  THRESHOLD_DAYS: '3' # SLO provisório — D3/#72 fixa o valor por emitter
+  AWS_ACCESS_KEY_ID: ${{ secrets.DEADMAN_S3_ACCESS_KEY_ID }}
+  AWS_SECRET_ACCESS_KEY: ${{ secrets.DEADMAN_S3_SECRET_ACCESS_KEY }}
+  AWS_DEFAULT_REGION: ${{ secrets.DEADMAN_S3_REGION }}
+  S3_ENDPOINT: ${{ secrets.DEADMAN_S3_ENDPOINT }}
+  S3_BUCKET: ${{ secrets.DEADMAN_S3_BUCKET }}
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Baixar pings do S3 (status/)
+        run: |
+          set -euo pipefail
+          mkdir -p deadman && touch deadman/history.jsonl
+          : > /tmp/remote.jsonl
+          keys=$(aws s3api list-objects-v2 --endpoint-url "$S3_ENDPOINT" --bucket "$S3_BUCKET" \
+                   --prefix "status/" --query 'Contents[].Key' --output text 2>/dev/null || true)
+          for k in $keys; do
+            [ -n "$k" ] && [ "$k" != "None" ] || continue
+            aws s3 cp "s3://$S3_BUCKET/$k" - --endpoint-url "$S3_ENDPOINT" >> /tmp/remote.jsonl 2>/dev/null || true
+            printf '\n' >> /tmp/remote.jsonl
+          done
+          # remove linhas vazias
+          sed -i '/^[[:space:]]*$/d' /tmp/remote.jsonl || true
+          echo "pings remotos: $(wc -l < /tmp/remote.jsonl)"
+
+      - name: Self-heal (S3 → history.jsonl) + decisão + keep-alive
+        run: |
+          set -euo pipefail
+          # SLO (D3/#72): threshold do config versionado deadman/emitters.json (fallback no env).
+          THRESHOLD_DAYS=$(jq -r ".default_threshold_days // ${THRESHOLD_DAYS}" deadman/emitters.json)
+          last() { jq -s 'map(.ts // empty) | max // ""' -r "$1" 2>/dev/null || echo ""; }
+          remote_last=$(last /tmp/remote.jsonl)
+          local_last=$(last deadman/history.jsonl)
+          # ts é ISO-8601 UTC com Z → ordenação lexicográfica == cronológica.
+          last_seen=$remote_last
+          [ "$local_last" \> "$last_seen" ] && last_seen=$local_last
+
+          # self-heal: pings remotos ausentes em history (por emitter+seq) → audit-merge.
+          merged=0
+          while IFS= read -r line; do
+            [ -n "$line" ] || continue
+            e=$(jq -r '.emitter' <<<"$line"); s=$(jq -r '.seq' <<<"$line")
+            dup=$(jq -s --arg e "$e" --argjson s "$s" 'map(select(.emitter==$e and .seq==$s))|length' deadman/history.jsonl)
+            if [ "$dup" -eq 0 ]; then
+              now=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+              jq -c --arg src audit-merge --arg now "$now" '. + {source:$src, ingested_at:$now}' <<<"$line" >> deadman/history.jsonl
+              merged=$((merged+1))
+            fi
+          done < /tmp/remote.jsonl
+
+          # idade desde o último sinal
+          run_at=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
+          status=alive; age_h=0; fired=false
+          if [ -n "$last_seen" ]; then
+            age_h=$(( ( $(date -u +%s) - $(date -u -d "$last_seen" +%s) ) / 3600 ))
+            if [ "$age_h" -gt $(( THRESHOLD_DAYS * 24 )) ]; then status=DEAD; fi
+          else
+            status=DEAD # nenhum sinal jamais visto
+          fi
+
+          # payload de contingência (#72): (1) issue p1 + (2) webhook Discord (se configurado).
+          if [ "$status" = "DEAD" ]; then
+            fired=true
+            gh issue create --title "🔴 DEAD-MAN FIRED — sem sinal há ${age_h}h (limite ${THRESHOLD_DAYS}d)" \
+              --body "Auditor: nenhum ping dentro da janela. last_seen=${last_seen:-nunca}. Ver deadman/audit.jsonl." \
+              --label "agent-found,priority:p1" || true
+            if [ -n "${DEADMAN_DISCORD_WEBHOOK:-}" ]; then
+              curl -fsS -X POST "$DEADMAN_DISCORD_WEBHOOK" -H 'Content-Type: application/json' \
+                -d "$(jq -nc --arg c "🔴 DEAD-MAN FIRED — sem sinal há ${age_h}h (limite ${THRESHOLD_DAYS}d). last_seen=${last_seen:-nunca}" '{content:$c}')" || true
+            fi
+          fi
+
+          jq -nc --arg run "$run_at" --arg ls "${last_seen:-}" --argjson age "$age_h" \
+                 --arg st "$status" --argjson m "$merged" --argjson th "$THRESHOLD_DAYS" --argjson f "$fired" \
+            '{v:1, run_at:$run, emitter:"*", last_seen:$ls, age_h:$age, status:$st, merged:$m, threshold_days:$th} + (if $f then {payload_fired:true} else {} end)' \
+            >> deadman/audit.jsonl
+
+          git config user.name "deadman-bot"
+          git config user.email "deadman-bot@users.noreply.github.com"
+          git add deadman/
+          git commit -m "chore(deadman): audit ${status} (age=${age_h}h, merged=${merged})"
+          git push
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEADMAN_DISCORD_WEBHOOK: ${{ secrets.DEADMAN_DISCORD_WEBHOOK }}
