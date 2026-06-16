@@ -8,11 +8,20 @@ JSONL é escolhido por: histórico imutável, append barato (sem reescrever o ar
 resiliência a corrupção parcial (uma linha quebrada não invalida o resto), e evolução de
 schema por linha (campo `v`).
 
-| Arquivo | Onde | Escrito por | Conteúdo |
+| Caminho | Onde | Escrito por | Conteúdo |
 | --- | --- | --- | --- |
-| `status.jsonl` | Object Storage (S3/R2) | **Emissor** | sinais de vida (pings) — fonte primária |
+| `status/<emitter>/<seq>.jsonl` | Object Storage (S3/R2) | **Emissor** | sinais de vida — **1 objeto por ping** (ver §0) |
 | `history.jsonl` | repositório (Git) | **GitHub Actions (ingestão)** | pings ingeridos (webhook + self-heal) — fallback |
 | `audit.jsonl` | repositório (Git) | **GitHub Actions (Auditor)** | 1 registro por run do Auditor — decisão + keep-alive |
+
+## 0. Por que 1-objeto-por-ping no Object Storage (decisão (a))
+
+S3/R2 **não têm `append` nativo**. Em vez de read-modify-write do `status.jsonl` (race entre
+pings + reescreve o objeto inteiro), cada ping é um **objeto imutável** sob o prefixo
+`status/<emitter>/<seq>.jsonl` (1 linha JSON por objeto). Vantagens: **PUT puro idempotente**
+(o mesmo `seq` sobrescreve com conteúdo idêntico — sem perda), sem coordenação, e o Auditor
+**lista o prefixo** (`ListObjectsV2`) e ordena por `seq`. "`status.jsonl`" no resto deste doc
+designa **o conjunto** desses objetos, não um arquivo único.
 
 ---
 
@@ -90,7 +99,7 @@ agendados do GitHub.
 
 ```
 para cada emitter:
-  remote_last = max(ts) de status.jsonl no S3        # baixado no run
+  remote_last = max(ts) sob status/<emitter>/* no S3   # ListObjectsV2(prefix) + read
   local_last  = max(ts) de history.jsonl no repo
   last_seen   = max(remote_last, local_last)         # robusto a falha de uma fonte
   age         = now - last_seen
