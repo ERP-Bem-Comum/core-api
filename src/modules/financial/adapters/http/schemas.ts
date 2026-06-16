@@ -245,9 +245,15 @@ export const timelineEntrySchema = z.object({
   changes: z
     .array(
       z.object({
-        field: z.string(),
-        before: z.string().nullable(),
-        after: z.string().nullable(),
+        field: z.string().max(60).meta({
+          description: 'Nome do campo de domínio alterado (espelha varchar(60) no storage)',
+        }),
+        before: z.string().max(65535).nullable().meta({
+          description: 'Valor anterior serializado; null se o campo não existia (limite TEXT)',
+        }),
+        after: z.string().max(65535).nullable().meta({
+          description: 'Valor novo serializado; null se o campo foi removido (limite TEXT)',
+        }),
       }),
     )
     .meta({
