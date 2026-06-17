@@ -95,6 +95,9 @@ export const listItemToSummaryDto = (item: DocumentListItem): DocumentSummaryDto
   netValueCents: item.netValue !== null ? moneyToCentsString(item.netValue.cents) : null,
   dueDate: item.dueDate !== null ? item.dueDate.toISOString().slice(0, 10) : null,
   version: item.version,
+  // Fornecedor resolvido do read-model local (#47/US2).
+  supplierName: item.supplierName,
+  supplierDocument: item.supplierDocument,
 });
 
 /**

@@ -14,6 +14,7 @@
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 
 import { createInMemoryDocumentRepository } from '../persistence/repos/document-repository.in-memory.ts';
+import { createInMemorySupplierViewStore } from '../persistence/repos/supplier-view-store.in-memory.ts';
 import {
   createInMemoryTimelineRepository,
   type TimelineStore,
@@ -75,7 +76,10 @@ const buildMemoryPools = (): Pools => {
   // Store compartilhado entre o document-repo (escreve trilha no save) e o timeline-repo
   // (lê). Garante atomicidade em memória sem tx (timeline-repository.in-memory.ts §store).
   const timelineStore: TimelineStore = new Map<string, FinancialTimelineEntry[]>();
-  const repo = createInMemoryDocumentRepository(timelineStore);
+  // Read-model de fornecedor (#47/US2): vazio no driver memory (sem consumer) → grid resolve
+  // fornecedor como null. Populado de verdade só no driver mysql (worker de projeção + JOIN).
+  const supplierViewStore = createInMemorySupplierViewStore();
+  const repo = createInMemoryDocumentRepository(timelineStore, supplierViewStore);
   const timelineRepo = createInMemoryTimelineRepository(timelineStore);
   return { repo, timelineRepo, shutdown: () => Promise.resolve() };
 };
