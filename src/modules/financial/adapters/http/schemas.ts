@@ -214,6 +214,10 @@ export const documentSummarySchema = z.object({
     .min(0)
     .max(Number.MAX_SAFE_INTEGER)
     .meta({ description: 'Versão atual (optimistic lock) para ações inline' }),
+  // Fornecedor resolvido pelo read-model local `fin_supplier_view` (#47/US2).
+  // null quando supplierRef é nulo ou ainda não processado (consistência eventual).
+  supplierName: z.string().nullable(),
+  supplierDocument: z.string().nullable(),
 });
 
 export type DocumentSummaryDto = z.infer<typeof documentSummarySchema>;

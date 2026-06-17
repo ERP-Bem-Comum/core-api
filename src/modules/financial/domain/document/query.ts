@@ -32,6 +32,10 @@ export type DocumentListItem = Readonly<{
   netValue: Money | null; // null em Draft (sem líquido calculado)
   dueDate: Date | null;
   version: number;
+  // Fornecedor resolvido pelo read-model local `fin_supplier_view` (#47/US2) — null quando
+  // `supplierRef` é nulo ou ainda não está no read-model (consistência eventual).
+  supplierName: string | null;
+  supplierDocument: string | null;
 }>;
 
 export type Page<T> = Readonly<{

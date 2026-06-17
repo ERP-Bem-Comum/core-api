@@ -4,6 +4,19 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-16 — 🗂️ ADR-0045: read-model de fornecedor no `financial` (US2 da #47)
+
+Novo [ADR-0045](./architecture/adr/0045-financial-supplier-read-model.md) (**Accepted**), **estende**
+[ADR-0015](./architecture/adr/0015-mysql-outbox-pattern.md)/[ADR-0022](./architecture/adr/0022-read-models-via-projection-over-event-stream.md)/[ADR-0043](./architecture/adr/0043-partners-supplier-integration-events.md).
+Feature [`014-financial-supplier-readmodel`](../specs/014-financial-supplier-readmodel/) (issue #47 US2).
+
+- O `financial` mantém `fin_supplier_view` (read-model local) alimentado **só** por eventos do `partners`
+  via `par_outbox` — o grid resolve nome+CNPJ sem chamada cross-módulo em runtime (LEFT JOIN intra-`financial`).
+- **Consumer** em worker dedicado (composition root `src/workers/supplier-view-projection/`) sobre o worker
+  de outbox genérico (`src/shared/outbox`); nenhum módulo importa o outro. Upsert idempotente com guard de
+  `occurred_at` (at-least-once + fora de ordem). **Backfill** one-shot dos fornecedores legados.
+- Decisão de manter outbox-MySQL (sem broker/Go) registrada em `.claude/.planning/ASYNC-MESSAGING-STRATEGY.md`.
+
 ## 2026-06-16 — 🔤 ADR-0044: CNPJ alfanumérico (Serpro/Receita 2026) no VO `Cnpj` do kernel
 
 Novo [ADR-0044](./architecture/adr/0044-cnpj-alphanumeric-kernel.md) (**Accepted**), **estende** o

@@ -7,7 +7,7 @@
 
 <!-- SPECKIT START -->
 
-Plano corrente: `specs/013-partners-supplier-outbox/plan.md` (issue #92 — pré-requisito da US2 da #47. Habilita o `partners` a **publicar eventos de fornecedor via outbox** (ADR-0015), replicando o `ctr_outbox` do `contracts` com prefixo `par_*`. Publica `SupplierRegistered`/`SupplierEdited` com payload de integração `{supplierRef,name,document,occurredAt}` montado no adapter (não toca o domínio). 2 tickets: `PAR-OUTBOX-INFRA` (schema+port+adapters+worker) e `PAR-SUPPLIER-EVENTS` (save+use cases+mapper+ADR). Produtor only — o consumer/read-model no `financial` é a US2 seguinte. Migration `par_outbox`/`par_outbox_dead_letter`).
+Plano corrente: `specs/014-financial-supplier-readmodel/plan.md` (issue #47 US2 — desbloqueada pela 013/#92 já mergeada). O `financial` resolve nome+CNPJ do fornecedor no grid de Contas a Pagar (`GET /api/v2/financial/documents`) a partir de uma **cópia local denormalizada** `fin_supplier_view`, mantida por eventos `SupplierRegistered`/`SupplierEdited` consumidos do `par_outbox` (ADR-0043) — sem chamada cross-módulo síncrona em runtime. Topologia: **worker dedicado em composition root** (`src/workers/supplier-view-projection/`) que lê o `par_outbox` via public-api do `partners` e aplica no `financial` via public-api (2 pools; nenhum módulo importa o outro — ADR-0006/0014/0041). Idempotência por upsert com guard de `occurred_at`. Inclui **backfill one-shot** (`src/jobs/financial/...`) dos fornecedores legados. 7 tickets (schema→apply→partners-surface→worker→list-dto→backfill→ADR-0045). Consumidor only — o `partners` não é alterado, só lido.
 For additional context about technologies to be used, project structure,
 shell commands, and other important information, read the current plan.
 

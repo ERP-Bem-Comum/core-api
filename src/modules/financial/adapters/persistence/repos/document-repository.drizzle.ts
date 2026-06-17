@@ -410,7 +410,7 @@ export const createDrizzleDocumentRepository = (
     pageSize: number,
   ): Promise<Result<Page<DocumentListItem>, DocumentRepositoryError>> =>
     safe('findPaged', async () => {
-      const { finDocuments } = schema;
+      const { finDocuments, finSupplierView } = schema;
 
       // Constrói predicados condicionalmente — filtros ausentes não entram no WHERE.
       // and() com array vazio emite WHERE sem condições (SELECT all), que é o comportamento
@@ -457,8 +457,12 @@ export const createDrizzleDocumentRepository = (
           netValue: finDocuments.netValue,
           dueDate: finDocuments.dueDate,
           version: finDocuments.version,
+          // Fornecedor resolvido pelo read-model local (#47/US2) — LEFT JOIN intra-financial.
+          supplierName: finSupplierView.name,
+          supplierDocument: finSupplierView.document,
         })
         .from(finDocuments)
+        .leftJoin(finSupplierView, eq(finDocuments.supplierRef, finSupplierView.supplierRef))
         .where(whereClause)
         .orderBy(asc(finDocuments.dueDate), asc(finDocuments.id))
         .limit(pageSize)
@@ -513,6 +517,9 @@ export const createDrizzleDocumentRepository = (
           netValue,
           dueDate: row.dueDate,
           version: row.version,
+          // LEFT JOIN fin_supplier_view → null quando sem match (#47/US2).
+          supplierName: row.supplierName,
+          supplierDocument: row.supplierDocument,
         });
       }
 

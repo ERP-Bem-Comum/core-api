@@ -14,7 +14,25 @@ import type {
   DocumentRepositoryError,
 } from '#src/modules/financial/domain/document/repository.ts';
 import type { FinancialTimelineEntry } from '#src/modules/financial/domain/timeline/types.ts';
+import type { SupplierViewStore } from '#src/modules/financial/application/ports/supplier-view-store.ts';
 import type { TimelineStore } from './timeline-repository.in-memory.ts';
+
+// Resolve fornecedor (nome/CNPJ) pelo read-model local — espelha o LEFT JOIN do adapter Drizzle
+// (#47/US2). Sem store ou supplierRef ausente no read-model → mantém null (consistência eventual).
+const enrichWithSupplierView = async (
+  items: readonly DocumentListItem[],
+  store: SupplierViewStore | undefined,
+): Promise<DocumentListItem[]> => {
+  if (store === undefined) return [...items];
+  return Promise.all(
+    items.map(async (item) => {
+      if (item.supplierRef === null) return item;
+      const view = await store.get(item.supplierRef);
+      if (!view.ok || view.value === null) return item;
+      return { ...item, supplierName: view.value.name, supplierDocument: view.value.document };
+    }),
+  );
+};
 
 const matchesFilter = (doc: Document, f: DocumentListFilter): boolean => {
   if (f.status !== undefined && doc.status !== f.status) return false;
@@ -47,6 +65,9 @@ const toListItem = (entry: StoreEntry): DocumentListItem => ({
   netValue: entry.aggregate.document.status === 'Draft' ? null : entry.aggregate.document.netValue,
   dueDate: entry.aggregate.document.dueDate ?? null,
   version: entry.version,
+  // Default null — enriquecido pelo read-model em findPaged (enrichWithSupplierView).
+  supplierName: null,
+  supplierDocument: null,
 });
 
 // Entrada interna do store: agrega o documento + a versão corrente.
@@ -72,6 +93,7 @@ type StoreEntry = Readonly<{
 //   `expectedVersion + 1`, espelhando o comportamento do Drizzle repo com MySQL.
 export const createInMemoryDocumentRepository = (
   timelineStore?: TimelineStore,
+  supplierViewStore?: SupplierViewStore,
 ): DocumentRepository => {
   const store = new Map<string, StoreEntry>();
   return immutable<DocumentRepository>({
@@ -171,8 +193,9 @@ export const createInMemoryDocumentRepository = (
       });
 
       const start = (page - 1) * pageSize;
-      const items = sorted.slice(start, start + pageSize).map(toListItem);
-      return Promise.resolve(ok({ items, page, pageSize, total: matched.length }));
+      const base = sorted.slice(start, start + pageSize).map(toListItem);
+      const items = await enrichWithSupplierView(base, supplierViewStore);
+      return ok({ items, page, pageSize, total: matched.length });
     },
   });
 };
