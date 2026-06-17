@@ -6,8 +6,9 @@
  * este util só conhece a mecânica de formato.
  *
  * Serialização (`toCsv`): entrada já é `string`, sem `Result`.
- *  - Anti-fórmula (CSV injection): célula iniciando em `= + - @ \t \r` recebe prefixo `'` —
- *    senão Excel/Sheets executam a fórmula (security MUST).
+ *  - Anti-fórmula (CSV injection — OWASP): célula iniciando em `= + - @`, tab/CR/LF ou as
+ *    variantes full-width `＝ ＋ － ＠` recebe prefixo `'` — senão Excel/Sheets executam a
+ *    fórmula (security MUST).
  *  - RFC 4180: célula com `,` `"` `\n` `\r` é envolta em aspas; `"` interno vira `""`.
  *
  * Parsing (`parseCsv`/`tokenizeCsv`): texto → `Table`. Retorna `Result` (entrada externa pode
@@ -20,7 +21,21 @@ export const BOM = '﻿';
 export const SEPARATOR = ',';
 export const LINE_TERMINATOR = '\r\n';
 
-const FORMULA_TRIGGERS: ReadonlySet<string> = new Set(['=', '+', '-', '@', '\t', '\r']);
+// Gatilhos de fórmula (OWASP CSV Injection): ASCII `= + - @`, tab/CR/LF, e as variantes
+// full-width `＝ ＋ － ＠` (interpretadas por Excel/Sheets em alguns locales).
+const FORMULA_TRIGGERS: ReadonlySet<string> = new Set([
+  '=',
+  '+',
+  '-',
+  '@',
+  '\t',
+  '\r',
+  '\n',
+  '＝',
+  '＋',
+  '－',
+  '＠',
+]);
 const RFC4180_SPECIAL = /[",\n\r]/;
 
 const neutralizeFormula = (value: string): string => {
