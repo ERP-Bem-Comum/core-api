@@ -35,6 +35,7 @@
     "worker:outbox:partners": "node --experimental-strip-types --enable-source-maps --no-warnings src/modules/partners/worker/run.ts",
     "worker:supplier-projection": "node --experimental-strip-types --enable-source-maps --no-warnings src/workers/supplier-view-projection/run.ts",
     "job:contracts:sweep": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/contracts/sweeper/run.ts",
+    "job:financial:supplier-view-backfill": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/financial/supplier-view-backfill/run.ts",
     "secrets:setup": "node --experimental-strip-types --enable-source-maps --no-warnings ./scripts/setup-secrets.ts",
     "pipeline:state": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/pipeline/state-cli.ts",
     "pipeline:status": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/pipeline/dashboard-cli.ts",

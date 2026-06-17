@@ -22,3 +22,7 @@ export type {
   ActView,
   ContractorView,
 } from './read.ts';
+
+// Listagem de fornecedores para projeção/backfill cross-módulo (US2 #47 — read-only).
+export { listSuppliersForProjection } from './supplier-projection.ts';
+export type { SupplierProjectionRecord } from './supplier-projection.ts';
