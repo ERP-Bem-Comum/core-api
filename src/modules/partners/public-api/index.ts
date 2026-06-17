@@ -7,6 +7,11 @@
 
 export type { SupplierRef, FinancierRef, CollaboratorRef, PartnerRefError } from './refs.ts';
 
+// VOs de destino de pagamento expostos na fronteira pública (consumidos pelo `contracts` na
+// composição do contratado). Import cross-módulo deve passar pela public-api, nunca por
+// `domain/` (ADR-0006 — resolve #101).
+export type { BankAccount, PixKey } from '../domain/shared/payment-target.ts';
+
 // Read port do contratado (PARTNERS-CONTRACTOR-READ-PORT) — leitura cross-módulo
 // da projeção plana do contratado (ADR-0032; ADR-0006/ADR-0014).
 export { buildPartnersReadPort } from './read.ts';
