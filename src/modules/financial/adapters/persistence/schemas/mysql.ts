@@ -449,6 +449,30 @@ export const finTimelineFieldChanges = mysqlTable(
   ],
 );
 
+// ─── fin_supplier_view ──────────────────────────────────────────────────────────
+//
+// Read-model de fornecedor (US2 #47 / ADR-0043): cópia local denormalizada
+// `supplier_ref → { name, document }`, mantida por eventos do `partners` consumidos do
+// `par_outbox` (consistência eventual). NÃO há FK física para o partners (ADR-0014 §cross-módulo
+// sem acoplamento direto). `occurred_at` é o guard de recência do upsert (não regride).
+// `document` = CNPJ alfanumérico (ADR-0044) — texto.
+export const finSupplierView = mysqlTable('fin_supplier_view', {
+  // PK = referência do fornecedor no partners (UUID v4). varchar(36), sem AUTO_INCREMENT.
+  supplierRef: varchar('supplier_ref', { length: 36 }).primaryKey().notNull(),
+
+  // Snapshot do nome do fornecedor (último evento aplicado).
+  name: varchar('name', { length: 255 }).notNull(),
+
+  // CNPJ alfanumérico (ADR-0044) — 14 chars; varchar(20) com folga. Texto, sem máscara.
+  document: varchar('document', { length: 20 }).notNull(),
+
+  // Instante do evento de origem — guard de recência (não aplica evento mais antigo).
+  occurredAt: datetime('occurred_at', { mode: 'date', fsp: 3 }).notNull(),
+
+  // Quando a linha foi gravada pelo consumer (auditoria).
+  updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
+});
+
 // ─── Tipos gerados pelo schema (consumidos pelos mappers) ─────────────────────
 //
 // `$inferSelect` = shape da row lida do banco (SELECT *).
@@ -473,3 +497,6 @@ export type NewTimelineEntryRow = typeof finDocumentTimeline.$inferInsert;
 
 export type TimelineFieldChangeRow = typeof finTimelineFieldChanges.$inferSelect;
 export type NewTimelineFieldChangeRow = typeof finTimelineFieldChanges.$inferInsert;
+
+export type SupplierViewRow = typeof finSupplierView.$inferSelect;
+export type NewSupplierViewRow = typeof finSupplierView.$inferInsert;
