@@ -18,6 +18,8 @@ import * as Race from '#src/modules/partners/domain/collaborator/race.ts';
 import * as Education from '#src/modules/partners/domain/collaborator/education.ts';
 import * as FoodCategory from '#src/modules/partners/domain/collaborator/food-category.ts';
 import * as DisableReason from '#src/modules/partners/domain/collaborator/disable-reason.ts';
+import * as Sex from '#src/modules/partners/domain/collaborator/sex.ts';
+import * as MaritalStatus from '#src/modules/partners/domain/collaborator/civil-status.ts';
 import * as Collaborator from '#src/modules/partners/domain/collaborator/collaborator.ts';
 import * as PaymentTarget from '#src/modules/partners/domain/shared/payment-target.ts';
 import type { BankAccount, PixKey } from '#src/modules/partners/domain/shared/payment-target.ts';
@@ -75,6 +77,18 @@ export const collaboratorToInsert = (c: CollaboratorEntity, now: Date): NewColla
   allergies: c.allergies,
   biography: c.biography,
   experienceInThePublicSector: c.experienceInThePublicSector,
+  sex: c.sex,
+  maritalStatus: c.maritalStatus,
+  hasChildren: c.hasChildren,
+  childrenCount: c.childrenCount,
+  childrenAges: c.childrenAges === null ? null : c.childrenAges.join(','),
+  isPwd: c.isPwd,
+  pwdDescription: c.pwdDescription,
+  isOnLeave: c.isOnLeave,
+  leaveDuration: c.leaveDuration,
+  leaveRenewable: c.leaveRenewable,
+  leaveRenewalDuration: c.leaveRenewalDuration,
+  publicSectorExperienceDuration: c.publicSectorExperienceDuration,
   bankAccountBank: c.bankAccount?.bank ?? null,
   bankAccountAgency: c.bankAccount?.agency ?? null,
   bankAccountNumber: c.bankAccount?.accountNumber ?? null,
@@ -108,6 +122,16 @@ const pixFromRow = (
   if (row.pixKey === null) return ok(null);
   const r = PaymentTarget.createPixKey({ keyType: row.pixKeyType ?? '', key: row.pixKey });
   return r.ok ? { ok: true, value: r.value } : err('collaborator-mapper-invalid-payment-target');
+};
+
+// childrenAges persistido como CSV (`5,8,12`). Vazio/null → null; ignora tokens não-numéricos.
+const parseChildrenAges = (raw: string | null): readonly number[] | null => {
+  if (raw === null || raw.trim() === '') return null;
+  const parsed = raw
+    .split(',')
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isFinite(n));
+  return parsed.length > 0 ? parsed : null;
 };
 
 export const collaboratorFromRow = (
@@ -150,6 +174,12 @@ export const collaboratorFromRow = (
   const pix = pixFromRow(row);
   if (!pix.ok) return pix;
 
+  const sex = parseNullable(row.sex, Sex.parse);
+  if (!sex.ok) return err('collaborator-mapper-invalid-enum');
+
+  const maritalStatus = parseNullable(row.maritalStatus, MaritalStatus.parse);
+  if (!maritalStatus.ok) return err('collaborator-mapper-invalid-enum');
+
   const rehydrated = Collaborator.rehydrate({
     id: id.value,
     name: row.name,
@@ -176,6 +206,18 @@ export const collaboratorFromRow = (
     allergies: row.allergies,
     biography: row.biography,
     experienceInThePublicSector: row.experienceInThePublicSector,
+    sex: sex.value,
+    maritalStatus: maritalStatus.value,
+    hasChildren: row.hasChildren,
+    childrenCount: row.childrenCount,
+    childrenAges: parseChildrenAges(row.childrenAges),
+    isPwd: row.isPwd,
+    pwdDescription: row.pwdDescription,
+    isOnLeave: row.isOnLeave,
+    leaveDuration: row.leaveDuration,
+    leaveRenewable: row.leaveRenewable,
+    leaveRenewalDuration: row.leaveRenewalDuration,
+    publicSectorExperienceDuration: row.publicSectorExperienceDuration,
     status: row.active ? 'Active' : 'Inactive',
     disableBy: disableBy.value,
     deactivatedAt: row.deactivatedAt,

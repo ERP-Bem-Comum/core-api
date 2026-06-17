@@ -24,6 +24,8 @@ import type {
   BankAccountInput,
   PixKeyInput,
 } from '../shared/payment-target.ts';
+import type { Sex } from './sex.ts';
+import type { MaritalStatus } from './civil-status.ts';
 
 export type RegistrationStatus = 'PreRegistration' | 'Complete';
 
@@ -43,6 +45,19 @@ type PersonalFields = Readonly<{
   allergies: string | null;
   biography: string | null;
   experienceInThePublicSector: boolean | null;
+  // Perfil completo (US2) — todos nullable. `sex` é independente de `genderIdentity`.
+  sex: Sex | null;
+  maritalStatus: MaritalStatus | null;
+  hasChildren: boolean | null;
+  childrenCount: number | null;
+  childrenAges: readonly number[] | null;
+  isPwd: boolean | null;
+  pwdDescription: string | null;
+  isOnLeave: boolean | null;
+  leaveDuration: string | null;
+  leaveRenewable: boolean | null;
+  leaveRenewalDuration: string | null;
+  publicSectorExperienceDuration: string | null;
 }>;
 
 type CollaboratorCore = Readonly<{
@@ -110,6 +125,19 @@ export type CompleteRegistrationInput = Readonly<{
   allergies: string | null;
   biography: string | null;
   experienceInThePublicSector: boolean | null;
+  // Perfil completo (US2) — opcionais (aditivo); enums (sex/maritalStatus) como string.
+  sex?: string | null;
+  maritalStatus?: string | null;
+  hasChildren?: boolean | null;
+  childrenCount?: number | null;
+  childrenAges?: readonly number[] | null;
+  isPwd?: boolean | null;
+  pwdDescription?: string | null;
+  isOnLeave?: boolean | null;
+  leaveDuration?: string | null;
+  leaveRenewable?: boolean | null;
+  leaveRenewalDuration?: string | null;
+  publicSectorExperienceDuration?: string | null;
 }>;
 
 // Reidratação pela borda (mapper): VOs/enums já tipados. `rehydrate` reconstrói o

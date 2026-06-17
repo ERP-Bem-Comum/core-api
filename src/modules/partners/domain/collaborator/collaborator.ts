@@ -18,6 +18,8 @@ import * as Race from './race.ts';
 import * as FoodCategory from './food-category.ts';
 import * as Education from './education.ts';
 import * as DisableReason from './disable-reason.ts';
+import * as Sex from './sex.ts';
+import * as MaritalStatus from './civil-status.ts';
 import * as PaymentTarget from '../shared/payment-target.ts';
 import type {
   BankAccount,
@@ -106,6 +108,18 @@ export const register = (
     allergies: null,
     biography: null,
     experienceInThePublicSector: null,
+    sex: null,
+    maritalStatus: null,
+    hasChildren: null,
+    childrenCount: null,
+    childrenAges: null,
+    isPwd: null,
+    pwdDescription: null,
+    isOnLeave: null,
+    leaveDuration: null,
+    leaveRenewable: null,
+    leaveRenewalDuration: null,
+    publicSectorExperienceDuration: null,
     status: 'Active',
   });
 
@@ -182,6 +196,21 @@ export const completeRegistration = (
     input.foodCategory === null ? ok(null) : FoodCategory.parse(input.foodCategory);
   if (!foodCategory.ok) return foodCategory;
 
+  const sexRaw = input.sex ?? null;
+  const sex = sexRaw === null ? ok(null) : Sex.parse(sexRaw);
+  if (!sex.ok) return sex;
+
+  const maritalRaw = input.maritalStatus ?? null;
+  const maritalStatus = maritalRaw === null ? ok(null) : MaritalStatus.parse(maritalRaw);
+  if (!maritalStatus.ok) return maritalStatus;
+
+  // Coerência (US2): sem filhos ⇒ contagem/idades vazias.
+  if (input.hasChildren === false) {
+    const count = input.childrenCount ?? 0;
+    const ages = input.childrenAges ?? [];
+    if (count > 0 || ages.length > 0) return err('collaborator-children-inconsistent');
+  }
+
   const completed: Collaborator = immutable({
     ...collaborator,
     registrationStatus: 'Complete',
@@ -199,6 +228,18 @@ export const completeRegistration = (
     allergies: input.allergies,
     biography: input.biography,
     experienceInThePublicSector: input.experienceInThePublicSector,
+    sex: sex.value,
+    maritalStatus: maritalStatus.value,
+    hasChildren: input.hasChildren ?? null,
+    childrenCount: input.childrenCount ?? null,
+    childrenAges: input.childrenAges ?? null,
+    isPwd: input.isPwd ?? null,
+    pwdDescription: input.pwdDescription ?? null,
+    isOnLeave: input.isOnLeave ?? null,
+    leaveDuration: input.leaveDuration ?? null,
+    leaveRenewable: input.leaveRenewable ?? null,
+    leaveRenewalDuration: input.leaveRenewalDuration ?? null,
+    publicSectorExperienceDuration: input.publicSectorExperienceDuration ?? null,
   });
 
   return ok({

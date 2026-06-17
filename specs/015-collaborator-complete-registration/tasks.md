@@ -48,19 +48,19 @@
 **Independent test**: complete-registration com os campos → detalhe retorna; `sex`/`maritalStatus` inválidos → 422.
 **Pré-condição**: US1 mergeada (gate W3 verde).
 
-- [ ] T019 [US2] `pnpm run pipeline:state init PAR-COLLABORATOR-PROFILE-FIELDS --size M`
-- [ ] T020 [US2] **W0 citação**: citação ≥4 linhas (Evans — VO/Invariantes) em `002-tests/REPORT.md`
-- [ ] T021 [P] [US2] **W0 RED** domínio: `tests/.../domain/collaborator/sex.test.ts` + `civil-status.test.ts`
-- [ ] T022 [P] [US2] **W0 RED** domínio: `collaborator-fields.test.ts` (coerência `hasChildren=false ⇒ vazios`; `childrenAges` CSV)
-- [ ] T023 [P] [US2] **W0 RED** borda: `tests/.../adapters/http/collaborators-fields.routes.test.ts`
-- [ ] T024 [P] [US2] **W1** VOs: `domain/collaborator/sex.ts` (→ `sex-invalid`) + `civil-status.ts` (→ `marital-status-invalid`)
-- [ ] T025 [US2] **W1** estender `domain/collaborator/types.ts` + `collaborator.ts` (completeRegistration aceita os 12 campos) + `errors.ts`
-- [ ] T026 [US2] **W1** schema: colunas de perfil em `par_collaborators` (`sex`, `marital_status`, filhos, PCD, licença, `public_sector_experience_duration`)
-- [ ] T027 [US2] **W1** `pnpm run db:generate` → migration `0011`
-- [ ] T028 [P] [US2] **W1** mapper `collaborator.mapper.ts` (serializa `childrenAges` CSV) + DTO `collaborator-dto.ts`
-- [ ] T029 [P] [US2] **W1** borda Zod: `schemas.ts` (`completeRegistrationBodySchema` + `collaboratorDetailSchema`)
-- [ ] T030 [US2] **W2** review (`code-reviewer`)
-- [ ] T031 [US2] **W3** gate verde + `close`
+- [x] T019 [US2] `pnpm run pipeline:state init PAR-COLLABORATOR-PROFILE-FIELDS --size M`
+- [x] T020 [US2] **W0 citação**: citação ≥4 linhas (Evans — VO/Invariantes) em `002-tests/REPORT.md`
+- [x] T021 [P] [US2] **W0 RED** domínio: `tests/.../domain/collaborator/sex.test.ts` + `civil-status.test.ts`
+- [x] T022 [P] [US2] **W0 RED** domínio: `collaborator-fields.test.ts` (coerência `hasChildren=false ⇒ vazios`; `childrenAges` CSV)
+- [x] T023 [P] [US2] **W0 RED** borda: `tests/.../adapters/http/collaborators-fields.routes.test.ts`
+- [x] T024 [P] [US2] **W1** VOs: `domain/collaborator/sex.ts` (→ `sex-invalid`) + `civil-status.ts` (→ `marital-status-invalid`)
+- [x] T025 [US2] **W1** estender `domain/collaborator/types.ts` + `collaborator.ts` (completeRegistration aceita os 12 campos) + `errors.ts`
+- [x] T026 [US2] **W1** schema: colunas de perfil em `par_collaborators` (`sex`, `marital_status`, filhos, PCD, licença, `public_sector_experience_duration`)
+- [x] T027 [US2] **W1** `pnpm run db:generate` → migration `0011`
+- [x] T028 [P] [US2] **W1** mapper `collaborator.mapper.ts` (serializa `childrenAges` CSV) + DTO `collaborator-dto.ts`
+- [x] T029 [P] [US2] **W1** borda Zod: `schemas.ts` (`completeRegistrationBodySchema` + `collaboratorDetailSchema`)
+- [x] T030 [US2] **W2** review (`code-reviewer`)
+- [x] T031 [US2] **W3** gate verde + `close`
 
 ---
 
