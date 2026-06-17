@@ -41,6 +41,8 @@ export const mapLegacyFinancierRow = (row: LegacyFinancierRow): MapperResult<Fin
     cnpj,
     telephone,
     address,
+    bankAccount: null,
+    pixKey: null,
     status,
     deactivatedAt,
   });

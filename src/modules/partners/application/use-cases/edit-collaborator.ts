@@ -16,6 +16,10 @@ import type {
   CollaboratorRepository,
   CollaboratorRepositoryError,
 } from '#src/modules/partners/domain/collaborator/repository.ts';
+import type {
+  CollaboratorHistoryRepository,
+  CollaboratorHistoryError,
+} from '#src/modules/partners/application/ports/collaborator-history.ts';
 
 export type EditCollaboratorCommand = Readonly<{
   collaboratorId: string;
@@ -36,14 +40,19 @@ export type EditCollaboratorError =
   | 'edit-collaborator-email-duplicate'
   | 'edit-collaborator-sensitive-forbidden'
   | CollaboratorError
-  | CollaboratorRepositoryError;
+  | CollaboratorRepositoryError
+  | CollaboratorHistoryError;
 
 export type EditCollaboratorOutput = Readonly<{
   collaborator: CollaboratorAggregate;
   event: CollaboratorEvent;
 }>;
 
-type Deps = Readonly<{ collaboratorRepo: CollaboratorRepository; clock: Clock }>;
+type Deps = Readonly<{
+  collaboratorRepo: CollaboratorRepository;
+  historyRepo: CollaboratorHistoryRepository;
+  clock: Clock;
+}>;
 
 export const editCollaborator =
   (deps: Deps) =>
@@ -58,6 +67,7 @@ export const editCollaborator =
     if (fetched.value === null) return err('edit-collaborator-not-found');
     const current = fetched.value;
 
+    const now = deps.clock.now();
     const edited = Collaborator.edit(
       current,
       {
@@ -69,7 +79,7 @@ export const editCollaborator =
         startOfContract: cmd.startOfContract,
         employmentRelationship: cmd.employmentRelationship,
       },
-      deps.clock.now(),
+      now,
     );
     if (!edited.ok) return edited;
     const next = edited.value.collaborator;
@@ -95,6 +105,16 @@ export const editCollaborator =
 
     const saved = await deps.collaboratorRepo.save(next);
     if (!saved.ok) return saved;
+
+    // Audit trail (US4) — diff por campo, consistência forte (logo após o save).
+    const recorded = await deps.historyRepo.record({
+      collaboratorId: cmd.collaboratorId,
+      eventType: 'CollaboratorEdited',
+      before: current,
+      after: next,
+      occurredAt: now,
+    });
+    if (!recorded.ok) return recorded;
 
     return ok({ collaborator: next, event: edited.value.event });
   };

@@ -18,6 +18,17 @@ import * as Race from './race.ts';
 import * as FoodCategory from './food-category.ts';
 import * as Education from './education.ts';
 import * as DisableReason from './disable-reason.ts';
+import * as Sex from './sex.ts';
+import * as MaritalStatus from './civil-status.ts';
+import * as Territory from './territory.ts';
+import * as PaymentTarget from '../shared/payment-target.ts';
+import type {
+  BankAccount,
+  BankAccountInput,
+  PaymentTargetError,
+  PixKey,
+  PixKeyInput,
+} from '../shared/payment-target.ts';
 import type { CollaboratorEvent } from './events.ts';
 import type { CollaboratorError } from './errors.ts';
 import type {
@@ -31,6 +42,26 @@ import type {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const isBlank = (s: string): boolean => s.trim().length === 0;
+
+// Banco/PIX opcionais (sem invariante "ao menos um"). Parseia os blocos presentes; null permanece null.
+const parsePaymentTargets = (
+  bankAccount: BankAccountInput | null,
+  pixKey: PixKeyInput | null,
+): Result<{ bankAccount: BankAccount | null; pixKey: PixKey | null }, PaymentTargetError> => {
+  let bank: BankAccount | null = null;
+  if (bankAccount !== null) {
+    const r = PaymentTarget.createBankAccount(bankAccount);
+    if (!r.ok) return r;
+    bank = r.value;
+  }
+  let pix: PixKey | null = null;
+  if (pixKey !== null) {
+    const r = PaymentTarget.createPixKey(pixKey);
+    if (!r.ok) return r;
+    pix = r.value;
+  }
+  return ok({ bankAccount: bank, pixKey: pix });
+};
 
 export const register = (
   input: RegisterCollaboratorInput,
@@ -49,6 +80,13 @@ export const register = (
   const employmentRelationship = EmploymentRelationship.parse(input.employmentRelationship);
   if (!employmentRelationship.ok) return employmentRelationship;
 
+  const targets = parsePaymentTargets(input.bankAccount ?? null, input.pixKey ?? null);
+  if (!targets.ok) return targets;
+
+  const territoryInput = input.territory ?? null;
+  const territory = territoryInput === null ? ok(null) : Territory.createTerritory(territoryInput);
+  if (!territory.ok) return territory;
+
   const collaborator: ActiveCollaborator = immutable({
     id: input.id,
     name: input.name.trim(),
@@ -59,6 +97,9 @@ export const register = (
     startOfContract: input.startOfContract,
     employmentRelationship: employmentRelationship.value,
     registrationStatus: 'PreRegistration',
+    bankAccount: targets.value.bankAccount,
+    pixKey: targets.value.pixKey,
+    territory: territory.value,
     rg: null,
     dateOfBirth: null,
     genderIdentity: null,
@@ -73,6 +114,18 @@ export const register = (
     allergies: null,
     biography: null,
     experienceInThePublicSector: null,
+    sex: null,
+    maritalStatus: null,
+    hasChildren: null,
+    childrenCount: null,
+    childrenAges: null,
+    isPwd: null,
+    pwdDescription: null,
+    isOnLeave: null,
+    leaveDuration: null,
+    leaveRenewable: null,
+    leaveRenewalDuration: null,
+    publicSectorExperienceDuration: null,
     status: 'Active',
   });
 
@@ -149,6 +202,21 @@ export const completeRegistration = (
     input.foodCategory === null ? ok(null) : FoodCategory.parse(input.foodCategory);
   if (!foodCategory.ok) return foodCategory;
 
+  const sexRaw = input.sex ?? null;
+  const sex = sexRaw === null ? ok(null) : Sex.parse(sexRaw);
+  if (!sex.ok) return sex;
+
+  const maritalRaw = input.maritalStatus ?? null;
+  const maritalStatus = maritalRaw === null ? ok(null) : MaritalStatus.parse(maritalRaw);
+  if (!maritalStatus.ok) return maritalStatus;
+
+  // Coerência (US2): sem filhos ⇒ contagem/idades vazias.
+  if (input.hasChildren === false) {
+    const count = input.childrenCount ?? 0;
+    const ages = input.childrenAges ?? [];
+    if (count > 0 || ages.length > 0) return err('collaborator-children-inconsistent');
+  }
+
   const completed: Collaborator = immutable({
     ...collaborator,
     registrationStatus: 'Complete',
@@ -166,6 +234,18 @@ export const completeRegistration = (
     allergies: input.allergies,
     biography: input.biography,
     experienceInThePublicSector: input.experienceInThePublicSector,
+    sex: sex.value,
+    maritalStatus: maritalStatus.value,
+    hasChildren: input.hasChildren ?? null,
+    childrenCount: input.childrenCount ?? null,
+    childrenAges: input.childrenAges ?? null,
+    isPwd: input.isPwd ?? null,
+    pwdDescription: input.pwdDescription ?? null,
+    isOnLeave: input.isOnLeave ?? null,
+    leaveDuration: input.leaveDuration ?? null,
+    leaveRenewable: input.leaveRenewable ?? null,
+    leaveRenewalDuration: input.leaveRenewalDuration ?? null,
+    publicSectorExperienceDuration: input.publicSectorExperienceDuration ?? null,
   });
 
   return ok({

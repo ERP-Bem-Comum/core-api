@@ -12,7 +12,7 @@ import type { Supplier as SupplierAggregate } from '#src/modules/partners/domain
 import type {
   BankAccountInput,
   PixKeyInput,
-} from '#src/modules/partners/domain/supplier/payment-target.ts';
+} from '#src/modules/partners/domain/shared/payment-target.ts';
 import type { SupplierEvent } from '#src/modules/partners/domain/supplier/events.ts';
 import type { SupplierError } from '#src/modules/partners/domain/supplier/errors.ts';
 import type {

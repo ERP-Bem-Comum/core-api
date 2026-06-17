@@ -142,3 +142,58 @@ export const decodeContractsModuleEventV1 = (
   if (!mapped.ok) return err(decoderInvalidPayload(mapped.error));
   return ok(mapped.value);
 };
+
+// ─── US6a: atribuição de contraparte para o consumidor de contagem (ADR-0046) ──
+//
+// Lê o `contractorRef` aditivo do payload v1 (estampado pelo `contractEventsToOutboxInserts`).
+// Eventos sem contraparte (amendments/documents) → `ok(null)`. NÃO reidrata o evento de domínio
+// (que não carrega contraparte) — é uma visão de INTEGRAÇÃO, distinta do decoder de domínio.
+
+export type ContractContractorAttribution = Readonly<{
+  contractRef: string;
+  contractorRef: Readonly<{ type: string; id: string }>;
+  occurredAt: Date;
+}>;
+
+const parseJsonSafe = (raw: string): Result<unknown, DecoderError> => {
+  try {
+    return ok(JSON.parse(raw) as unknown);
+  } catch {
+    return err(decoderInvalidShape('payload-not-json'));
+  }
+};
+
+export const decodeContractContractorRefV1 = (
+  row: Readonly<{
+    eventType: string;
+    schemaVersion: number;
+    payload: string;
+    occurredAt: Date;
+  }>,
+): Result<ContractContractorAttribution | null, DecoderError> => {
+  if (row.schemaVersion !== CONTRACTS_SCHEMA_VERSION) {
+    return err(decoderSchemaVersionMismatch(CONTRACTS_SCHEMA_VERSION, row.schemaVersion));
+  }
+  const parsedR = parseJsonSafe(row.payload);
+  if (!parsedR.ok) return parsedR;
+  const parsed = parsedR.value;
+  if (typeof parsed !== 'object' || parsed === null) {
+    return err(decoderInvalidShape('payload-not-an-object'));
+  }
+  const p = parsed as Record<string, unknown>;
+  const ref = p['contractorRef'];
+  if (ref === undefined || ref === null) return ok(null); // evento sem contraparte
+  if (typeof ref !== 'object') return err(decoderInvalidShape('contractorRef-not-an-object'));
+  const r = ref as Record<string, unknown>;
+  if (typeof r['type'] !== 'string' || typeof r['id'] !== 'string') {
+    return err(decoderInvalidShape('contractorRef-missing-fields'));
+  }
+  if (typeof p['contractId'] !== 'string') {
+    return err(decoderInvalidShape('contractorRef-missing-contractId'));
+  }
+  return ok({
+    contractRef: p['contractId'],
+    contractorRef: { type: r['type'], id: r['id'] },
+    occurredAt: row.occurredAt,
+  });
+};

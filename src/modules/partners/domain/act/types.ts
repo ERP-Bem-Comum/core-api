@@ -18,7 +18,7 @@ import type {
   PixKey,
   BankAccountInput,
   PixKeyInput,
-} from '../supplier/payment-target.ts';
+} from '../shared/payment-target.ts';
 
 type ActCore = Readonly<{
   id: ActId;

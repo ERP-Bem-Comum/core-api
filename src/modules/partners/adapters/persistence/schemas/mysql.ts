@@ -44,6 +44,13 @@ export const parFinanciers = mysqlTable(
     cnpj: varchar('cnpj', { length: 14 }).notNull(),
     telephone: varchar('telephone', { length: 30 }).notNull(),
     address: varchar('address', { length: 500 }).notNull(),
+    // Payment target (US1 feature 015) — banco/PIX OPCIONAIS (sem invariante "ao menos um").
+    bankAccountBank: varchar('bank_account_bank', { length: 50 }),
+    bankAccountAgency: varchar('bank_account_agency', { length: 20 }),
+    bankAccountNumber: varchar('bank_account_number', { length: 30 }),
+    bankAccountCheckDigit: varchar('bank_account_check_digit', { length: 5 }),
+    pixKeyType: varchar('pix_key_type', { length: 20 }),
+    pixKey: varchar('pix_key', { length: 255 }),
     active: boolean('active').notNull().default(true),
     // Preenchido sse inativo (estado Inactive carrega deactivatedAt).
     deactivatedAt: datetime('deactivated_at', { mode: 'date', fsp: 3 }),
@@ -59,6 +66,15 @@ export const parFinanciers = mysqlTable(
       'par_financiers_active_consistency_chk',
       sql`(${t.active} = FALSE) = (${t.deactivatedAt} IS NOT NULL)`,
     ),
+    // Coerência do bloco bank (4 colunas preenchidas juntas) — sem exigir presença (opcional).
+    check(
+      'par_financiers_bank_block_chk',
+      sql`(${t.bankAccountBank} IS NULL) = (${t.bankAccountAgency} IS NULL)
+        AND (${t.bankAccountBank} IS NULL) = (${t.bankAccountNumber} IS NULL)
+        AND (${t.bankAccountBank} IS NULL) = (${t.bankAccountCheckDigit} IS NULL)`,
+    ),
+    // Coerência do bloco pix (pix_key_type ⟺ pix_key).
+    check('par_financiers_pix_block_chk', sql`(${t.pixKeyType} IS NULL) = (${t.pixKey} IS NULL)`),
     // UNIQUE(cnpj) — legado `financiers.cnpj` UNIQUE.
     uniqueIndex('par_financiers_cnpj_idx').on(t.cnpj),
     // UNIQUE(legacy_id) — idempotência da ETL (múltiplos NULL convivem no InnoDB).
@@ -174,6 +190,29 @@ export const parCollaborators = mysqlTable(
     allergies: varchar('allergies', { length: 500 }),
     biography: varchar('biography', { length: 2000 }),
     experienceInThePublicSector: boolean('experience_in_the_public_sector'),
+    // Perfil completo (US2 feature 015) — todos nullable. childrenAges = CSV (sem JSON — ADR-0020).
+    sex: varchar('sex', { length: 1 }),
+    maritalStatus: varchar('marital_status', { length: 20 }),
+    hasChildren: boolean('has_children'),
+    childrenCount: int('children_count'),
+    childrenAges: varchar('children_ages', { length: 100 }),
+    isPwd: boolean('is_pwd'),
+    pwdDescription: varchar('pwd_description', { length: 255 }),
+    isOnLeave: boolean('is_on_leave'),
+    leaveDuration: varchar('leave_duration', { length: 50 }),
+    leaveRenewable: boolean('leave_renewable'),
+    leaveRenewalDuration: varchar('leave_renewal_duration', { length: 50 }),
+    publicSectorExperienceDuration: varchar('public_sector_experience_duration', { length: 50 }),
+    // Território de atuação (US3 feature 015) — uf (sigla IBGE) + município (texto livre), nullable.
+    territoryUf: varchar('territory_uf', { length: 2 }),
+    territoryMunicipality: varchar('territory_municipality', { length: 255 }),
+    // Payment target (US1 feature 015) — banco/PIX OPCIONAIS (sem invariante "ao menos um").
+    bankAccountBank: varchar('bank_account_bank', { length: 50 }),
+    bankAccountAgency: varchar('bank_account_agency', { length: 20 }),
+    bankAccountNumber: varchar('bank_account_number', { length: 30 }),
+    bankAccountCheckDigit: varchar('bank_account_check_digit', { length: 5 }),
+    pixKeyType: varchar('pix_key_type', { length: 20 }),
+    pixKey: varchar('pix_key', { length: 255 }),
     // Soft-delete: Inactive carrega disable_by + deactivated_at.
     active: boolean('active').notNull().default(true),
     disableBy: varchar('disable_by', { length: 40 }),
@@ -191,6 +230,18 @@ export const parCollaborators = mysqlTable(
       sql`((${t.active} = FALSE) = (${t.deactivatedAt} IS NOT NULL))
         AND ((${t.active} = FALSE) = (${t.disableBy} IS NOT NULL))`,
     ),
+    // Coerência do bloco bank (4 colunas preenchidas juntas) — sem exigir presença (opcional).
+    check(
+      'par_collaborators_bank_block_chk',
+      sql`(${t.bankAccountBank} IS NULL) = (${t.bankAccountAgency} IS NULL)
+        AND (${t.bankAccountBank} IS NULL) = (${t.bankAccountNumber} IS NULL)
+        AND (${t.bankAccountBank} IS NULL) = (${t.bankAccountCheckDigit} IS NULL)`,
+    ),
+    // Coerência do bloco pix (pix_key_type ⟺ pix_key).
+    check(
+      'par_collaborators_pix_block_chk',
+      sql`(${t.pixKeyType} IS NULL) = (${t.pixKey} IS NULL)`,
+    ),
     // UNIQUE(cpf) e UNIQUE(email) — legado `collaborators`.
     uniqueIndex('par_collaborators_cpf_idx').on(t.cpf),
     uniqueIndex('par_collaborators_email_idx').on(t.email),
@@ -201,6 +252,90 @@ export const parCollaborators = mysqlTable(
 
 export type CollaboratorRow = typeof parCollaborators.$inferSelect;
 export type NewCollaboratorRow = typeof parCollaborators.$inferInsert;
+
+// ─── par_collaborator_history ─────────────────────────────────────────────────
+// Audit trail (US4 feature 015) — LOG DE ATUALIZAÇÕES por campo (Ramakrishnan & Gehrke
+// §rastreamento de auditoria). Uma linha por campo alterado. `field_label` PT desnormalizado
+// (imutabilidade histórica). Sem FK formal: o módulo usa soft-delete (colaborador nunca é
+// hard-deleted), e ADR-0014 evita FK cross-agregado. Idempotência via UNIQUE.
+export const parCollaboratorHistory = mysqlTable(
+  'par_collaborator_history',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    collaboratorId: varchar('collaborator_id', { length: 36 }).notNull(),
+    eventType: varchar('event_type', { length: 64 }).notNull(),
+    fieldName: varchar('field_name', { length: 100 }).notNull(),
+    fieldLabel: varchar('field_label', { length: 100 }).notNull(),
+    valueBefore: varchar('value_before', { length: 1000 }),
+    valueAfter: varchar('value_after', { length: 1000 }),
+    occurredAt: datetime('occurred_at', { mode: 'date', fsp: 3 }).notNull(),
+  },
+  (t) => [
+    // Export por colaborador ordenado por data (WHERE collaborator_id = ? ORDER BY occurred_at).
+    index('par_collaborator_history_collab_date_idx').on(t.collaboratorId, t.occurredAt),
+    // Idempotência: mesmo evento (occurred_at) + campo não duplica.
+    uniqueIndex('par_collaborator_history_idem_idx').on(
+      t.collaboratorId,
+      t.occurredAt,
+      t.fieldName,
+    ),
+  ],
+);
+
+export type CollaboratorHistoryRow = typeof parCollaboratorHistory.$inferSelect;
+export type NewCollaboratorHistoryRow = typeof parCollaboratorHistory.$inferInsert;
+
+// ─── par_invite_tokens ──────────────────────────────────────────────────────
+// Convite de autocadastro do colaborador (US5). Espelha o molde auth password-reset:
+// token opaco minteado no adapter (CSPRNG), persiste só o HASH (sha256 hex). Uso-único
+// (`used_at`) + TTL (`expires_at`). `collaborator_id` referencia o colaborador por ID +
+// índice (sem FK rígida — ADR-0014, padrão `par_collaborator_history`/`par_user_profiles`).
+export const parInviteTokens = mysqlTable(
+  'par_invite_tokens',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    collaboratorId: varchar('collaborator_id', { length: 36 }).notNull(),
+    // sha256 hex (64 chars). UNIQUE: lookup do fluxo público (`findByTokenHash`); `COLLATE
+    // utf8mb4_bin` no SQL manual (comparação binária determinística — como `id`/`cnpj`).
+    tokenHash: varchar('token_hash', { length: 64 }).notNull(),
+    issuedAt: datetime('issued_at', { mode: 'date', fsp: 3 }).notNull(),
+    expiresAt: datetime('expires_at', { mode: 'date', fsp: 3 }).notNull(),
+    // null = pending; preenchido = consumido (uso-único). `markUsed`: UPDATE ... WHERE used_at IS NULL.
+    usedAt: datetime('used_at', { mode: 'date', fsp: 3 }),
+  },
+  (t) => [
+    // Lookup + unicidade do hash (`findByTokenHash`; nunca dois convites com o mesmo hash).
+    uniqueIndex('par_invite_tokens_token_hash_idx').on(t.tokenHash),
+    // Convites de um colaborador (referência por ID, sem FK física — ADR-0014).
+    index('par_invite_tokens_collaborator_idx').on(t.collaboratorId),
+  ],
+);
+
+export type InviteTokenRow = typeof parInviteTokens.$inferSelect;
+export type NewInviteTokenRow = typeof parInviteTokens.$inferInsert;
+
+// ─── par_contract_count_view ────────────────────────────────────────────────
+// Read-model de contagem de contratos por contraparte (US6b — ADR-0046/0022). DERIVADO e
+// reconstruível: projeção sobre o `ctr_outbox` (via `contracts/public-api`), idempotente por
+// eventId. Chaveado por `contractor_ref` (UUID do contratado). `count` aplicado por delta (±1).
+export const parContractCountView = mysqlTable('par_contract_count_view', {
+  contractorRef: varchar('contractor_ref', { length: 36 }).primaryKey().notNull(),
+  // ADR-0046 §4: `active_count` (contratos vigentes — delta −1 em Ended/Cancelled).
+  activeCount: int('active_count').notNull().default(0),
+});
+
+export type ContractCountRow = typeof parContractCountView.$inferSelect;
+export type NewContractCountRow = typeof parContractCountView.$inferInsert;
+
+// ─── par_contract_count_processed ───────────────────────────────────────────
+// Dedup de eventId da projeção de contagem (idempotência por message ID — Vernon, IDDD, p.412).
+// `event_id` PK: o INSERT no processed gateia a aplicação do delta (at-least-once → exactly-once).
+export const parContractCountProcessed = mysqlTable('par_contract_count_processed', {
+  eventId: varchar('event_id', { length: 36 }).primaryKey().notNull(),
+  processedAt: datetime('processed_at', { mode: 'date', fsp: 3 }).notNull(),
+});
+
+export type ContractCountProcessedRow = typeof parContractCountProcessed.$inferSelect;
 
 // ─── par_user_profiles ──────────────────────────────────────────────────────
 // Perfil de usuário (legado `users` — porção de perfil; autenticação fica no auth).

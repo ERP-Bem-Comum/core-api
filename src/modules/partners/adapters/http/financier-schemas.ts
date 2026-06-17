@@ -24,7 +24,20 @@ export const financierIdParamSchema = z.object({
   id: z.uuid().meta({ description: 'UUID do financiador (core-api)' }),
 });
 
-/** Detalhe — espelha o schema `Financier` legado. */
+// Payment target (US1 feature 015) — espelha o molde de Supplier/Act. `agency` valida no domínio.
+const bankAccountSchema = z.object({
+  bank: z.string(),
+  agency: z.string(),
+  accountNumber: z.string(),
+  checkDigit: z.string(),
+});
+
+const pixKeySchema = z.object({
+  keyType: z.enum(['cpf', 'cnpj', 'email', 'phone', 'random-key']),
+  key: z.string(),
+});
+
+/** Detalhe — espelha o schema `Financier` legado + payment target (US1). */
 export const financierDetailSchema = z.object({
   id: z.uuid(),
   legacyId: z.number().int().nullable(),
@@ -34,6 +47,8 @@ export const financierDetailSchema = z.object({
   cnpj: z.string().meta({ description: 'CNPJ (14 dígitos)' }),
   telephone: z.string(),
   address: z.string(),
+  bankAccount: bankAccountSchema.nullable(),
+  pixKey: pixKeySchema.nullable(),
   active: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -56,7 +71,10 @@ export const financierPaginatedSchema = z.object({
 
 export type FinancierPaginatedDto = z.infer<typeof financierPaginatedSchema>;
 
-/** Body do POST /financiers. Espelha `CreateFinancier` legado. CNPJ DV validado no domínio. */
+/**
+ * Body do POST /financiers. Espelha `CreateFinancier` legado + payment target (US1).
+ * `bankAccount`/`pixKey` são OPCIONAIS (omitidos → null). `agency` (formato) validada no domínio.
+ */
 export const createFinancierBodySchema = z.object({
   name: z.string().min(1),
   corporateName: z.string().min(1),
@@ -64,6 +82,8 @@ export const createFinancierBodySchema = z.object({
   cnpj: z.string().length(14).meta({ description: 'CNPJ — 14 dígitos (DV validado no domínio)' }),
   telephone: z.string().min(1),
   address: z.string().min(1),
+  bankAccount: bankAccountSchema.nullable().default(null),
+  pixKey: pixKeySchema.nullable().default(null),
 });
 
 export type CreateFinancierBody = z.infer<typeof createFinancierBodySchema>;

@@ -12,9 +12,11 @@ import { deactivateCollaborator } from '#src/modules/partners/application/use-ca
 import { reactivateCollaborator } from '#src/modules/partners/application/use-cases/reactivate-collaborator.ts';
 import { listCollaborators } from '#src/modules/partners/application/use-cases/list-collaborators.ts';
 import { findCollaboratorByCpf } from '#src/modules/partners/application/use-cases/find-collaborator-by-cpf.ts';
+import { makeInMemoryCollaboratorHistory } from '#src/modules/partners/adapters/persistence/repos/collaborator-history-repository.in-memory.ts';
 
 const NOW = new Date('2026-06-01T12:00:00.000Z');
 const clock: Clock = { now: () => NOW, today: () => PlainDate.fromDate(NOW) };
+const history = makeInMemoryCollaboratorHistory();
 
 const CPF_A = '111.444.777-35';
 const CPF_B = '529.982.247-25';
@@ -170,19 +172,23 @@ describe('deactivateCollaborator / reactivateCollaborator', () => {
     if (!reg.ok) return;
     const id = reg.value.collaborator.id as unknown as string;
 
-    const r = await deactivateCollaborator({ collaboratorRepo: repo, clock })({
-      collaboratorId: id,
-      disableBy: 'TEMPO_CONTRATO_FINALIZADO',
-    });
+    const r = await deactivateCollaborator({ collaboratorRepo: repo, historyRepo: history, clock })(
+      {
+        collaboratorId: id,
+        disableBy: 'TEMPO_CONTRATO_FINALIZADO',
+      },
+    );
     assert.equal(isOk(r), true);
     if (r.ok) assert.equal(r.value.collaborator.status, 'Inactive');
   });
 
   it('id inexistente → not-found', async () => {
-    const r = await deactivateCollaborator({ collaboratorRepo: repo, clock })({
-      collaboratorId: '7f3a1234-5678-4abc-9def-fedcba987654',
-      disableBy: 'FALECIMENTO',
-    });
+    const r = await deactivateCollaborator({ collaboratorRepo: repo, historyRepo: history, clock })(
+      {
+        collaboratorId: '7f3a1234-5678-4abc-9def-fedcba987654',
+        disableBy: 'FALECIMENTO',
+      },
+    );
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'deactivate-collaborator-not-found');
   });
@@ -192,10 +198,12 @@ describe('deactivateCollaborator / reactivateCollaborator', () => {
     if (!reg.ok) return;
     const id = reg.value.collaborator.id as unknown as string;
 
-    const r = await deactivateCollaborator({ collaboratorRepo: repo, clock })({
-      collaboratorId: id,
-      disableBy: 'MOTIVO_INEXISTENTE',
-    });
+    const r = await deactivateCollaborator({ collaboratorRepo: repo, historyRepo: history, clock })(
+      {
+        collaboratorId: id,
+        disableBy: 'MOTIVO_INEXISTENTE',
+      },
+    );
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'invalid-disable-reason');
   });
@@ -204,14 +212,16 @@ describe('deactivateCollaborator / reactivateCollaborator', () => {
     const reg = await registerCollaborator({ collaboratorRepo: repo, clock })(validCmd());
     if (!reg.ok) return;
     const id = reg.value.collaborator.id as unknown as string;
-    await deactivateCollaborator({ collaboratorRepo: repo, clock })({
+    await deactivateCollaborator({ collaboratorRepo: repo, historyRepo: history, clock })({
       collaboratorId: id,
       disableBy: 'SOLICITACAO_RESCISAO_CONTRATUAL',
     });
 
-    const r = await reactivateCollaborator({ collaboratorRepo: repo, clock })({
-      collaboratorId: id,
-    });
+    const r = await reactivateCollaborator({ collaboratorRepo: repo, historyRepo: history, clock })(
+      {
+        collaboratorId: id,
+      },
+    );
     assert.equal(isOk(r), true);
     if (r.ok) assert.equal(r.value.collaborator.status, 'Active');
   });
@@ -221,9 +231,11 @@ describe('deactivateCollaborator / reactivateCollaborator', () => {
     if (!reg.ok) return;
     const id = reg.value.collaborator.id as unknown as string;
 
-    const r = await reactivateCollaborator({ collaboratorRepo: repo, clock })({
-      collaboratorId: id,
-    });
+    const r = await reactivateCollaborator({ collaboratorRepo: repo, historyRepo: history, clock })(
+      {
+        collaboratorId: id,
+      },
+    );
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'collaborator-already-active');
   });

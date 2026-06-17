@@ -5,7 +5,7 @@ import { isErr, isOk } from '#src/shared/index.ts';
 import { isUuidV4 } from '#src/shared/utils/id.ts';
 import * as SupplierId from '#src/modules/partners/domain/supplier/supplier-id.ts';
 import * as ServiceCategory from '#src/modules/partners/domain/supplier/service-category.ts';
-import * as PaymentTarget from '#src/modules/partners/domain/supplier/payment-target.ts';
+import * as PaymentTarget from '#src/modules/partners/domain/shared/payment-target.ts';
 import * as Supplier from '#src/modules/partners/domain/supplier/supplier.ts';
 
 const NOW = new Date('2026-06-01T12:00:00.000Z');

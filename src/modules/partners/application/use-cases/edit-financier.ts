@@ -20,6 +20,10 @@ import type {
   FinancierRepository,
   FinancierRepositoryError,
 } from '#src/modules/partners/domain/financier/repository.ts';
+import type {
+  BankAccountInput,
+  PixKeyInput,
+} from '#src/modules/partners/domain/shared/payment-target.ts';
 
 export type EditFinancierCommand = Readonly<{
   financierId: string;
@@ -30,6 +34,8 @@ export type EditFinancierCommand = Readonly<{
   cnpj: string;
   telephone: string;
   address: string;
+  bankAccount?: BankAccountInput | null;
+  pixKey?: PixKeyInput | null;
 }>;
 
 export type EditFinancierError =
@@ -67,6 +73,8 @@ export const editFinancier =
         cnpj: cmd.cnpj,
         telephone: cmd.telephone,
         address: cmd.address,
+        bankAccount: cmd.bankAccount ?? null,
+        pixKey: cmd.pixKey ?? null,
       },
       deps.clock.now(),
     );

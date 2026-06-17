@@ -14,7 +14,14 @@
 
 import type { Cnpj } from '#src/shared/kernel/cnpj.ts';
 import type { FinancierId } from './financier-id.ts';
+import type {
+  BankAccount,
+  PixKey,
+  BankAccountInput,
+  PixKeyInput,
+} from '../shared/payment-target.ts';
 
+// Banco/PIX são opcionais no Financier (sem a invariante "ao menos um destino" do Supplier).
 type FinancierCore = Readonly<{
   id: FinancierId;
   name: string;
@@ -23,6 +30,8 @@ type FinancierCore = Readonly<{
   cnpj: Cnpj;
   telephone: string;
   address: string;
+  bankAccount: BankAccount | null;
+  pixKey: PixKey | null;
 }>;
 
 export type ActiveFinancier = FinancierCore & Readonly<{ status: 'Active' }>;
@@ -32,7 +41,7 @@ export type InactiveFinancier = FinancierCore &
 
 export type Financier = ActiveFinancier | InactiveFinancier;
 
-/** Payload de edição (PUT total): os 6 campos cadastrais. `id`/estado preservados pela operação. */
+/** Payload de edição (PUT total): campos cadastrais + payment target. `id`/estado preservados pela operação. */
 export type EditFinancierInput = Readonly<{
   name: string;
   corporateName: string;
@@ -40,6 +49,8 @@ export type EditFinancierInput = Readonly<{
   cnpj: string;
   telephone: string;
   address: string;
+  bankAccount?: BankAccountInput | null;
+  pixKey?: PixKeyInput | null;
 }>;
 
 export type RegisterFinancierInput = Readonly<{
@@ -50,6 +61,8 @@ export type RegisterFinancierInput = Readonly<{
   cnpj: string;
   telephone: string;
   address: string;
+  bankAccount?: BankAccountInput | null;
+  pixKey?: PixKeyInput | null;
   registeredAt: Date;
 }>;
 
@@ -66,6 +79,8 @@ export type RehydrateFinancierInput = Readonly<{
   cnpj: Cnpj;
   telephone: string;
   address: string;
+  bankAccount: BankAccount | null;
+  pixKey: PixKey | null;
   status: 'Active' | 'Inactive';
   deactivatedAt: Date | null;
 }>;

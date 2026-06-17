@@ -36,6 +36,18 @@ describe('escapeCsvCell — anti-fórmula (CSV injection)', () => {
     assert.equal(escapeCsvCell('\rfoo'), '"\'\rfoo"');
   });
 
+  it('prefixa célula iniciando em LF (gatilho de fórmula + RFC4180)', () => {
+    // \n dispara fórmula E RFC4180 → prefixo + quoting.
+    assert.equal(escapeCsvCell('\n=1+1'), '"\'\n=1+1"');
+  });
+
+  it('prefixa variantes full-width ＝ ＋ － ＠ (OWASP)', () => {
+    assert.equal(escapeCsvCell('＝1'), "'＝1");
+    assert.equal(escapeCsvCell('＋1'), "'＋1");
+    assert.equal(escapeCsvCell('－1'), "'－1");
+    assert.equal(escapeCsvCell('＠cmd'), "'＠cmd");
+  });
+
   it('não altera célula comum sem gatilho', () => {
     assert.equal(escapeCsvCell('Empresa LTDA'), 'Empresa LTDA');
     assert.equal(escapeCsvCell(''), '');

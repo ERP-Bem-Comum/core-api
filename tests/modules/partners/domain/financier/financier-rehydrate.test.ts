@@ -20,6 +20,8 @@ const base = () => ({
   cnpj: cnpj(),
   telephone: '+5511999998888',
   address: 'Av. Paulista, 1000',
+  bankAccount: null,
+  pixKey: null,
 });
 
 describe('Financier.rehydrate', () => {

@@ -4,6 +4,20 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-17 — 🔗 ADR-0046 (Accepted): contrato de eventos `contracts → partners` (`contractorRef` p/ contagem nos grids, US6 #46)
+
+Novo [ADR-0046](./architecture/adr/0046-contracts-contractor-ref-integration-events.md) (**Accepted**), **estende**
+[ADR-0022](./architecture/adr/0022-read-models-via-projection-over-event-stream.md) (read-models via projeção idempotente) e
+[ADR-0043](./architecture/adr/0043-partners-supplier-integration-events.md) (molde do contrato de integração cross-módulo, Opção A).
+
+Desbloqueia a **US6** (#46) da feature 015: o `contracts` enriquece o wire-format v1 (**aditivo**, sem bump) com
+`contractorRef` montado no adapter de outbox (Opção A — domínio intocado), e o `partners` projeta `par_contract_count_view`
+via worker dedicado (molde da feature 014), idempotente por `eventId` (Vernon, _Implementing DDD_, p. 412). Fatiado em
+**US6a** `CTR-CONTRACT-EVENT-CONTRACTOR-REF` (produtor `ctr_*`) + **US6b** `PAR-CONTRACT-COUNT-READMODEL` (consumidor
+`par_*`, depende de 6a). Ratificado (Accepted) em 2026-06-17 — desbloqueia o W0 da US6a.
+
+---
+
 ## 2026-06-16 — 🗂️ ADR-0045: read-model de fornecedor no `financial` (US2 da #47)
 
 Novo [ADR-0045](./architecture/adr/0045-financial-supplier-read-model.md) (**Accepted**), **estende**

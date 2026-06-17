@@ -96,12 +96,36 @@ export const collaboratorIdParamSchema = z.object({
   id: z.uuid().meta({ description: 'UUID do colaborador (core-api)' }),
 });
 
+/** Query do GET /collaborators/:id/export — US4: por ora só `type=history` (CSV de alterações). */
+export const collaboratorHistoryExportQuerySchema = z.object({
+  type: z.literal('history').meta({ description: 'Tipo de export (alterações = history)' }),
+});
+
 /**
  * Detalhe do colaborador — espelha o schema `Collaborator` do legado
  * (handbook/legacy_docs/openapi.yaml:2435). `id` é o UUID do core; `legacyId` é o int
  * antigo (decisão do dono). `status` carrega o `registrationStatus`; `active` é o soft-delete
  * (booleano separado). Datas em ISO 8601.
  */
+// Payment target (US1 feature 015) — espelha o molde de Supplier/Act. `agency` valida no domínio.
+const bankAccountSchema = z.object({
+  bank: z.string(),
+  agency: z.string(),
+  accountNumber: z.string(),
+  checkDigit: z.string(),
+});
+
+const pixKeySchema = z.object({
+  keyType: z.enum(['cpf', 'cnpj', 'email', 'phone', 'random-key']),
+  key: z.string(),
+});
+
+// Território (US3) — uf validada no domínio (catálogo geography); municipality texto livre.
+const territorySchema = z.object({
+  uf: z.string().nullable(),
+  municipality: z.string().nullable(),
+});
+
 export const collaboratorDetailSchema = z.object({
   id: z.uuid(),
   legacyId: z.number().int().nullable(),
@@ -128,6 +152,21 @@ export const collaboratorDetailSchema = z.object({
   emergencyContactName: z.string().nullable(),
   emergencyContactTelephone: z.string().nullable(),
   experienceInThePublicSector: z.boolean().nullable(),
+  sex: z.string().nullable(),
+  maritalStatus: z.string().nullable(),
+  hasChildren: z.boolean().nullable(),
+  childrenCount: z.number().int().nullable(),
+  childrenAges: z.array(z.number().int()).nullable(),
+  isPwd: z.boolean().nullable(),
+  pwdDescription: z.string().nullable(),
+  isOnLeave: z.boolean().nullable(),
+  leaveDuration: z.string().nullable(),
+  leaveRenewable: z.boolean().nullable(),
+  leaveRenewalDuration: z.string().nullable(),
+  publicSectorExperienceDuration: z.string().nullable(),
+  bankAccount: bankAccountSchema.nullable(),
+  pixKey: pixKeySchema.nullable(),
+  territory: territorySchema.nullable(),
   active: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -154,7 +193,10 @@ export type CollaboratorPaginatedDto = z.infer<typeof collaboratorPaginatedSchem
 
 // ─── P2 — escrita ────────────────────────────────────────────────────────────
 
-/** Body do POST /collaborators (pré-cadastro). Espelha `CreateCollaborator` legado. */
+/**
+ * Body do POST /collaborators (pré-cadastro). Espelha `CreateCollaborator` legado + payment
+ * target (US1). `bankAccount`/`pixKey` OPCIONAIS (omitidos → null); `agency` validada no domínio.
+ */
 export const createCollaboratorBodySchema = z.object({
   name: z.string().min(1),
   email: z.string().min(1),
@@ -163,12 +205,19 @@ export const createCollaboratorBodySchema = z.object({
   role: z.string().min(1),
   startOfContract: z.coerce.date().meta({ description: 'Início do contrato (ISO date)' }),
   employmentRelationship: z.enum(['CLT', 'PJ']),
+  bankAccount: bankAccountSchema.nullable().default(null),
+  pixKey: pixKeySchema.nullable().default(null),
+  territory: territorySchema.nullable().default(null),
 });
 
 export type CreateCollaboratorBody = z.infer<typeof createCollaboratorBodySchema>;
 
-/** Body do PUT /collaborators/:id — substituição total dos cadastrais (= create). Pessoais não entram aqui. */
-export const updateCollaboratorBodySchema = createCollaboratorBodySchema;
+/** Body do PUT /collaborators/:id — substituição total dos cadastrais. Pessoais e banco/PIX não entram aqui. */
+export const updateCollaboratorBodySchema = createCollaboratorBodySchema.omit({
+  bankAccount: true,
+  pixKey: true,
+  territory: true,
+});
 
 export type UpdateCollaboratorBody = z.infer<typeof updateCollaboratorBodySchema>;
 
@@ -192,9 +241,44 @@ export const completeRegistrationBodySchema = z.object({
   allergies: z.string().nullable().default(null),
   biography: z.string().nullable().default(null),
   experienceInThePublicSector: z.boolean().nullable().default(null),
+  // Perfil completo (US2). sex/maritalStatus como string (enum validado no domínio).
+  sex: z.string().nullable().default(null),
+  maritalStatus: z.string().nullable().default(null),
+  hasChildren: z.boolean().nullable().default(null),
+  childrenCount: z.number().int().nonnegative().nullable().default(null),
+  childrenAges: z.array(z.number().int().nonnegative()).nullable().default(null),
+  isPwd: z.boolean().nullable().default(null),
+  pwdDescription: z.string().nullable().default(null),
+  isOnLeave: z.boolean().nullable().default(null),
+  leaveDuration: z.string().nullable().default(null),
+  leaveRenewable: z.boolean().nullable().default(null),
+  leaveRenewalDuration: z.string().nullable().default(null),
+  publicSectorExperienceDuration: z.string().nullable().default(null),
 });
 
 export type CompleteRegistrationBody = z.infer<typeof completeRegistrationBodySchema>;
+
+/**
+ * Autocadastro público (US5). GET usa o token opaco na query; POST estende o
+ * complete-registration com `token` + `cpfPrefix` (revalidação leve de identidade — os 3
+ * primeiros dígitos do CPF, validados no domínio).
+ */
+export const autocadastroQuerySchema = z.object({
+  token: z.string().min(1),
+});
+
+export const autocadastroBodySchema = completeRegistrationBodySchema.extend({
+  token: z.string().min(1),
+  // bound de input (W2/m2): o domínio exige 3 dígitos; o máximo absorve máscara legível.
+  cpfPrefix: z.string().min(1).max(14),
+});
+
+/** Preview de pré-cadastro (GET autocadastro) — só os 3 campos públicos; CPF mascarado (W2/m3). */
+export const autocadastroPreviewSchema = z.object({
+  collaboratorId: z.string(),
+  name: z.string(),
+  cpfMasked: z.string(),
+});
 
 /**
  * Body do POST /:id/deactivate (P3). `disableBy` = motivo de RH. `LEGACY_MIGRATION` é

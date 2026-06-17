@@ -12,8 +12,8 @@ import { immutable } from '#src/shared/primitives/immutable.ts';
 import * as Cnpj from '#src/shared/kernel/cnpj.ts';
 import * as ServiceCategory from './service-category.ts';
 import * as ServiceRating from './service-rating.ts';
-import * as PaymentTarget from './payment-target.ts';
-import type { BankAccount, PixKey } from './payment-target.ts';
+import * as PaymentTarget from '../shared/payment-target.ts';
+import type { BankAccount, PixKey } from '../shared/payment-target.ts';
 import type { ServiceRating as ServiceRatingValue } from './service-rating.ts';
 import type {
   ActiveSupplier,

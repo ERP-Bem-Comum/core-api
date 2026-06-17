@@ -18,6 +18,15 @@ import type { Race } from './race.ts';
 import type { FoodCategory } from './food-category.ts';
 import type { Education } from './education.ts';
 import type { DisableReason } from './disable-reason.ts';
+import type {
+  BankAccount,
+  PixKey,
+  BankAccountInput,
+  PixKeyInput,
+} from '../shared/payment-target.ts';
+import type { Sex } from './sex.ts';
+import type { MaritalStatus } from './civil-status.ts';
+import type { Territory, TerritoryInput } from './territory.ts';
 
 export type RegistrationStatus = 'PreRegistration' | 'Complete';
 
@@ -37,6 +46,19 @@ type PersonalFields = Readonly<{
   allergies: string | null;
   biography: string | null;
   experienceInThePublicSector: boolean | null;
+  // Perfil completo (US2) — todos nullable. `sex` é independente de `genderIdentity`.
+  sex: Sex | null;
+  maritalStatus: MaritalStatus | null;
+  hasChildren: boolean | null;
+  childrenCount: number | null;
+  childrenAges: readonly number[] | null;
+  isPwd: boolean | null;
+  pwdDescription: string | null;
+  isOnLeave: boolean | null;
+  leaveDuration: string | null;
+  leaveRenewable: boolean | null;
+  leaveRenewalDuration: string | null;
+  publicSectorExperienceDuration: string | null;
 }>;
 
 type CollaboratorCore = Readonly<{
@@ -50,6 +72,11 @@ type CollaboratorCore = Readonly<{
   startOfContract: Date;
   employmentRelationship: EmploymentRelationship;
   registrationStatus: RegistrationStatus;
+  // Payment target (US1) — banco/PIX opcionais, espelham o molde Supplier/Act.
+  bankAccount: BankAccount | null;
+  pixKey: PixKey | null;
+  // Território de atuação (US3) — uf validada vs catálogo geography; municipality livre.
+  territory: Territory | null;
 }> &
   PersonalFields;
 
@@ -69,6 +96,9 @@ export type RegisterCollaboratorInput = Readonly<{
   role: string;
   startOfContract: Date;
   employmentRelationship: string;
+  bankAccount?: BankAccountInput | null;
+  pixKey?: PixKeyInput | null;
+  territory?: TerritoryInput | null;
   registeredAt: Date;
 }>;
 
@@ -99,6 +129,19 @@ export type CompleteRegistrationInput = Readonly<{
   allergies: string | null;
   biography: string | null;
   experienceInThePublicSector: boolean | null;
+  // Perfil completo (US2) — opcionais (aditivo); enums (sex/maritalStatus) como string.
+  sex?: string | null;
+  maritalStatus?: string | null;
+  hasChildren?: boolean | null;
+  childrenCount?: number | null;
+  childrenAges?: readonly number[] | null;
+  isPwd?: boolean | null;
+  pwdDescription?: string | null;
+  isOnLeave?: boolean | null;
+  leaveDuration?: string | null;
+  leaveRenewable?: boolean | null;
+  leaveRenewalDuration?: string | null;
+  publicSectorExperienceDuration?: string | null;
 }>;
 
 // Reidratação pela borda (mapper): VOs/enums já tipados. `rehydrate` reconstrói o

@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "PAR-PARTNER-BANK-PIX",
+  "size": "M",
+  "createdAt": "2026-06-17T05:26:37.948Z",
+  "closedAt": "2026-06-17T06:24:46.712Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-06-17T05:30:20.787Z",
+      "finishedAt": "2026-06-17T06:24:42.628Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "ts-domain-modeler",
+      "startedAt": "2026-06-17T06:24:43.212Z",
+      "finishedAt": "2026-06-17T06:24:43.792Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-06-17T06:24:44.355Z",
+      "finishedAt": "2026-06-17T06:24:44.921Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-06-17T06:24:45.569Z",
+      "finishedAt": "2026-06-17T06:24:46.150Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

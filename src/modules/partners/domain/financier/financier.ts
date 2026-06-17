@@ -15,6 +15,14 @@
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import { immutable } from '#src/shared/primitives/immutable.ts';
 import * as Cnpj from '#src/shared/kernel/cnpj.ts';
+import * as PaymentTarget from '../shared/payment-target.ts';
+import type {
+  BankAccount,
+  BankAccountInput,
+  PaymentTargetError,
+  PixKey,
+  PixKeyInput,
+} from '../shared/payment-target.ts';
 import type {
   ActiveFinancier,
   EditFinancierInput,
@@ -28,6 +36,26 @@ import type { FinancierError } from './errors.ts';
 
 const isBlank = (s: string): boolean => s.trim().length === 0;
 
+// Banco/PIX opcionais (sem invariante "ao menos um"). Parseia os blocos presentes; null permanece null.
+const parsePaymentTargets = (
+  bankAccount: BankAccountInput | null,
+  pixKey: PixKeyInput | null,
+): Result<{ bankAccount: BankAccount | null; pixKey: PixKey | null }, PaymentTargetError> => {
+  let bank: BankAccount | null = null;
+  if (bankAccount !== null) {
+    const r = PaymentTarget.createBankAccount(bankAccount);
+    if (!r.ok) return r;
+    bank = r.value;
+  }
+  let pix: PixKey | null = null;
+  if (pixKey !== null) {
+    const r = PaymentTarget.createPixKey(pixKey);
+    if (!r.ok) return r;
+    pix = r.value;
+  }
+  return ok({ bankAccount: bank, pixKey: pix });
+};
+
 export const register = (
   input: RegisterFinancierInput,
 ): Result<{ financier: ActiveFinancier; event: FinancierEvent }, FinancierError> => {
@@ -40,6 +68,9 @@ export const register = (
   const cnpj = Cnpj.parse(input.cnpj);
   if (!cnpj.ok) return err('invalid-cnpj');
 
+  const targets = parsePaymentTargets(input.bankAccount ?? null, input.pixKey ?? null);
+  if (!targets.ok) return targets;
+
   const financier: ActiveFinancier = immutable({
     id: input.id,
     name: input.name.trim(),
@@ -48,6 +79,8 @@ export const register = (
     cnpj: cnpj.value,
     telephone: input.telephone.trim(),
     address: input.address.trim(),
+    bankAccount: targets.value.bankAccount,
+    pixKey: targets.value.pixKey,
     status: 'Active',
   });
 
@@ -80,6 +113,9 @@ export const edit = (
   const cnpj = Cnpj.parse(input.cnpj);
   if (!cnpj.ok) return err('invalid-cnpj');
 
+  const targets = parsePaymentTargets(input.bankAccount ?? null, input.pixKey ?? null);
+  if (!targets.ok) return targets;
+
   const core = {
     id: financier.id,
     name: input.name.trim(),
@@ -88,6 +124,8 @@ export const edit = (
     cnpj: cnpj.value,
     telephone: input.telephone.trim(),
     address: input.address.trim(),
+    bankAccount: targets.value.bankAccount,
+    pixKey: targets.value.pixKey,
   };
 
   const edited: Financier =
@@ -147,6 +185,8 @@ export const rehydrate = (input: RehydrateFinancierInput): Result<Financier, Fin
     cnpj: input.cnpj,
     telephone: input.telephone,
     address: input.address,
+    bankAccount: input.bankAccount,
+    pixKey: input.pixKey,
   };
 
   if (input.status === 'Active') {

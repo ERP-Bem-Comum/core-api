@@ -18,7 +18,12 @@ import * as Race from '#src/modules/partners/domain/collaborator/race.ts';
 import * as Education from '#src/modules/partners/domain/collaborator/education.ts';
 import * as FoodCategory from '#src/modules/partners/domain/collaborator/food-category.ts';
 import * as DisableReason from '#src/modules/partners/domain/collaborator/disable-reason.ts';
+import * as Sex from '#src/modules/partners/domain/collaborator/sex.ts';
+import * as MaritalStatus from '#src/modules/partners/domain/collaborator/civil-status.ts';
+import * as Territory from '#src/modules/partners/domain/collaborator/territory.ts';
 import * as Collaborator from '#src/modules/partners/domain/collaborator/collaborator.ts';
+import * as PaymentTarget from '#src/modules/partners/domain/shared/payment-target.ts';
+import type { BankAccount, PixKey } from '#src/modules/partners/domain/shared/payment-target.ts';
 import type {
   Collaborator as CollaboratorEntity,
   RegistrationStatus,
@@ -29,6 +34,7 @@ export type CollaboratorMapperError =
   | 'collaborator-mapper-invalid-id'
   | 'collaborator-mapper-invalid-cpf'
   | 'collaborator-mapper-invalid-enum'
+  | 'collaborator-mapper-invalid-payment-target'
   | 'collaborator-mapper-invalid-state';
 
 const REGISTRATION_STATUSES: ReadonlySet<string> = new Set<RegistrationStatus>([
@@ -72,12 +78,64 @@ export const collaboratorToInsert = (c: CollaboratorEntity, now: Date): NewColla
   allergies: c.allergies,
   biography: c.biography,
   experienceInThePublicSector: c.experienceInThePublicSector,
+  sex: c.sex,
+  maritalStatus: c.maritalStatus,
+  hasChildren: c.hasChildren,
+  childrenCount: c.childrenCount,
+  childrenAges: c.childrenAges === null ? null : c.childrenAges.join(','),
+  isPwd: c.isPwd,
+  pwdDescription: c.pwdDescription,
+  isOnLeave: c.isOnLeave,
+  leaveDuration: c.leaveDuration,
+  leaveRenewable: c.leaveRenewable,
+  leaveRenewalDuration: c.leaveRenewalDuration,
+  publicSectorExperienceDuration: c.publicSectorExperienceDuration,
+  territoryUf: c.territory?.uf ?? null,
+  territoryMunicipality: c.territory?.municipality ?? null,
+  bankAccountBank: c.bankAccount?.bank ?? null,
+  bankAccountAgency: c.bankAccount?.agency ?? null,
+  bankAccountNumber: c.bankAccount?.accountNumber ?? null,
+  bankAccountCheckDigit: c.bankAccount?.checkDigit ?? null,
+  pixKeyType: c.pixKey?.keyType ?? null,
+  pixKey: c.pixKey?.key ?? null,
   active: c.status === 'Active',
   disableBy: c.status === 'Inactive' ? c.disableBy : null,
   deactivatedAt: c.status === 'Inactive' ? c.deactivatedAt : null,
   createdAt: now,
   updatedAt: now,
 });
+
+// Reconstrói BankAccount/PixKey da row. Ausência total → ok(null). Erro de VO → err.
+const bankFromRow = (
+  row: Readonly<CollaboratorRow>,
+): Result<BankAccount | null, 'collaborator-mapper-invalid-payment-target'> => {
+  if (row.bankAccountBank === null) return ok(null);
+  const r = PaymentTarget.createBankAccount({
+    bank: row.bankAccountBank,
+    agency: row.bankAccountAgency ?? '',
+    accountNumber: row.bankAccountNumber ?? '',
+    checkDigit: row.bankAccountCheckDigit ?? '',
+  });
+  return r.ok ? { ok: true, value: r.value } : err('collaborator-mapper-invalid-payment-target');
+};
+
+const pixFromRow = (
+  row: Readonly<CollaboratorRow>,
+): Result<PixKey | null, 'collaborator-mapper-invalid-payment-target'> => {
+  if (row.pixKey === null) return ok(null);
+  const r = PaymentTarget.createPixKey({ keyType: row.pixKeyType ?? '', key: row.pixKey });
+  return r.ok ? { ok: true, value: r.value } : err('collaborator-mapper-invalid-payment-target');
+};
+
+// childrenAges persistido como CSV (`5,8,12`). Vazio/null → null; ignora tokens não-numéricos.
+const parseChildrenAges = (raw: string | null): readonly number[] | null => {
+  if (raw === null || raw.trim() === '') return null;
+  const parsed = raw
+    .split(',')
+    .map((s) => Number(s.trim()))
+    .filter((n) => Number.isFinite(n));
+  return parsed.length > 0 ? parsed : null;
+};
 
 export const collaboratorFromRow = (
   row: Readonly<CollaboratorRow>,
@@ -113,6 +171,27 @@ export const collaboratorFromRow = (
   const disableBy = parseNullable(row.disableBy, DisableReason.parse);
   if (!disableBy.ok) return err('collaborator-mapper-invalid-enum');
 
+  const bank = bankFromRow(row);
+  if (!bank.ok) return bank;
+
+  const pix = pixFromRow(row);
+  if (!pix.ok) return pix;
+
+  const sex = parseNullable(row.sex, Sex.parse);
+  if (!sex.ok) return err('collaborator-mapper-invalid-enum');
+
+  const maritalStatus = parseNullable(row.maritalStatus, MaritalStatus.parse);
+  if (!maritalStatus.ok) return err('collaborator-mapper-invalid-enum');
+
+  const territory =
+    row.territoryUf === null && row.territoryMunicipality === null
+      ? ok(null)
+      : Territory.createTerritory({
+          uf: row.territoryUf,
+          municipality: row.territoryMunicipality,
+        });
+  if (!territory.ok) return err('collaborator-mapper-invalid-enum');
+
   const rehydrated = Collaborator.rehydrate({
     id: id.value,
     name: row.name,
@@ -123,6 +202,9 @@ export const collaboratorFromRow = (
     startOfContract: row.startOfContract,
     employmentRelationship: employmentRelationship.value,
     registrationStatus: row.registrationStatus as RegistrationStatus,
+    bankAccount: bank.value,
+    pixKey: pix.value,
+    territory: territory.value,
     rg: row.rg,
     dateOfBirth: row.dateOfBirth,
     genderIdentity: genderIdentity.value,
@@ -137,6 +219,18 @@ export const collaboratorFromRow = (
     allergies: row.allergies,
     biography: row.biography,
     experienceInThePublicSector: row.experienceInThePublicSector,
+    sex: sex.value,
+    maritalStatus: maritalStatus.value,
+    hasChildren: row.hasChildren,
+    childrenCount: row.childrenCount,
+    childrenAges: parseChildrenAges(row.childrenAges),
+    isPwd: row.isPwd,
+    pwdDescription: row.pwdDescription,
+    isOnLeave: row.isOnLeave,
+    leaveDuration: row.leaveDuration,
+    leaveRenewable: row.leaveRenewable,
+    leaveRenewalDuration: row.leaveRenewalDuration,
+    publicSectorExperienceDuration: row.publicSectorExperienceDuration,
     status: row.active ? 'Active' : 'Inactive',
     disableBy: disableBy.value,
     deactivatedAt: row.deactivatedAt,

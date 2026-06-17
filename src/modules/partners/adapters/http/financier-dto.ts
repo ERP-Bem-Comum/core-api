@@ -16,6 +16,8 @@ export const financierToDetailDto = (record: FinancierReadRecord): FinancierDeta
     cnpj: String(f.cnpj),
     telephone: f.telephone,
     address: f.address,
+    bankAccount: f.bankAccount,
+    pixKey: f.pixKey,
     active: f.status === 'Active',
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
