@@ -44,6 +44,13 @@ export const parFinanciers = mysqlTable(
     cnpj: varchar('cnpj', { length: 14 }).notNull(),
     telephone: varchar('telephone', { length: 30 }).notNull(),
     address: varchar('address', { length: 500 }).notNull(),
+    // Payment target (US1 feature 015) — banco/PIX OPCIONAIS (sem invariante "ao menos um").
+    bankAccountBank: varchar('bank_account_bank', { length: 50 }),
+    bankAccountAgency: varchar('bank_account_agency', { length: 20 }),
+    bankAccountNumber: varchar('bank_account_number', { length: 30 }),
+    bankAccountCheckDigit: varchar('bank_account_check_digit', { length: 5 }),
+    pixKeyType: varchar('pix_key_type', { length: 20 }),
+    pixKey: varchar('pix_key', { length: 255 }),
     active: boolean('active').notNull().default(true),
     // Preenchido sse inativo (estado Inactive carrega deactivatedAt).
     deactivatedAt: datetime('deactivated_at', { mode: 'date', fsp: 3 }),
@@ -59,6 +66,15 @@ export const parFinanciers = mysqlTable(
       'par_financiers_active_consistency_chk',
       sql`(${t.active} = FALSE) = (${t.deactivatedAt} IS NOT NULL)`,
     ),
+    // Coerência do bloco bank (4 colunas preenchidas juntas) — sem exigir presença (opcional).
+    check(
+      'par_financiers_bank_block_chk',
+      sql`(${t.bankAccountBank} IS NULL) = (${t.bankAccountAgency} IS NULL)
+        AND (${t.bankAccountBank} IS NULL) = (${t.bankAccountNumber} IS NULL)
+        AND (${t.bankAccountBank} IS NULL) = (${t.bankAccountCheckDigit} IS NULL)`,
+    ),
+    // Coerência do bloco pix (pix_key_type ⟺ pix_key).
+    check('par_financiers_pix_block_chk', sql`(${t.pixKeyType} IS NULL) = (${t.pixKey} IS NULL)`),
     // UNIQUE(cnpj) — legado `financiers.cnpj` UNIQUE.
     uniqueIndex('par_financiers_cnpj_idx').on(t.cnpj),
     // UNIQUE(legacy_id) — idempotência da ETL (múltiplos NULL convivem no InnoDB).
@@ -174,6 +190,13 @@ export const parCollaborators = mysqlTable(
     allergies: varchar('allergies', { length: 500 }),
     biography: varchar('biography', { length: 2000 }),
     experienceInThePublicSector: boolean('experience_in_the_public_sector'),
+    // Payment target (US1 feature 015) — banco/PIX OPCIONAIS (sem invariante "ao menos um").
+    bankAccountBank: varchar('bank_account_bank', { length: 50 }),
+    bankAccountAgency: varchar('bank_account_agency', { length: 20 }),
+    bankAccountNumber: varchar('bank_account_number', { length: 30 }),
+    bankAccountCheckDigit: varchar('bank_account_check_digit', { length: 5 }),
+    pixKeyType: varchar('pix_key_type', { length: 20 }),
+    pixKey: varchar('pix_key', { length: 255 }),
     // Soft-delete: Inactive carrega disable_by + deactivated_at.
     active: boolean('active').notNull().default(true),
     disableBy: varchar('disable_by', { length: 40 }),
@@ -190,6 +213,18 @@ export const parCollaborators = mysqlTable(
       'par_collaborators_soft_delete_chk',
       sql`((${t.active} = FALSE) = (${t.deactivatedAt} IS NOT NULL))
         AND ((${t.active} = FALSE) = (${t.disableBy} IS NOT NULL))`,
+    ),
+    // Coerência do bloco bank (4 colunas preenchidas juntas) — sem exigir presença (opcional).
+    check(
+      'par_collaborators_bank_block_chk',
+      sql`(${t.bankAccountBank} IS NULL) = (${t.bankAccountAgency} IS NULL)
+        AND (${t.bankAccountBank} IS NULL) = (${t.bankAccountNumber} IS NULL)
+        AND (${t.bankAccountBank} IS NULL) = (${t.bankAccountCheckDigit} IS NULL)`,
+    ),
+    // Coerência do bloco pix (pix_key_type ⟺ pix_key).
+    check(
+      'par_collaborators_pix_block_chk',
+      sql`(${t.pixKeyType} IS NULL) = (${t.pixKey} IS NULL)`,
     ),
     // UNIQUE(cpf) e UNIQUE(email) — legado `collaborators`.
     uniqueIndex('par_collaborators_cpf_idx').on(t.cpf),

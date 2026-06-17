@@ -5,6 +5,7 @@ import type { RaceError } from './race.ts';
 import type { FoodCategoryError } from './food-category.ts';
 import type { EducationError } from './education.ts';
 import type { DisableReasonError } from './disable-reason.ts';
+import type { PaymentTargetError } from '../shared/payment-target.ts';
 
 // Erros do agregado `Collaborator` — string union kebab EN. Compõe os erros dos
 // enums (validados em register/completeRegistration/deactivate).
@@ -19,6 +20,7 @@ export type CollaboratorError =
   | 'collaborator-already-inactive'
   | 'collaborator-already-active'
   | 'collaborator-inactive-requires-disable-reason'
+  | PaymentTargetError
   | OccupationAreaError
   | EmploymentRelationshipError
   | GenderIdentityError

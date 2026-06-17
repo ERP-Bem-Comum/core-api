@@ -18,6 +18,14 @@ import * as Race from './race.ts';
 import * as FoodCategory from './food-category.ts';
 import * as Education from './education.ts';
 import * as DisableReason from './disable-reason.ts';
+import * as PaymentTarget from '../shared/payment-target.ts';
+import type {
+  BankAccount,
+  BankAccountInput,
+  PaymentTargetError,
+  PixKey,
+  PixKeyInput,
+} from '../shared/payment-target.ts';
 import type { CollaboratorEvent } from './events.ts';
 import type { CollaboratorError } from './errors.ts';
 import type {
@@ -31,6 +39,26 @@ import type {
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const isBlank = (s: string): boolean => s.trim().length === 0;
+
+// Banco/PIX opcionais (sem invariante "ao menos um"). Parseia os blocos presentes; null permanece null.
+const parsePaymentTargets = (
+  bankAccount: BankAccountInput | null,
+  pixKey: PixKeyInput | null,
+): Result<{ bankAccount: BankAccount | null; pixKey: PixKey | null }, PaymentTargetError> => {
+  let bank: BankAccount | null = null;
+  if (bankAccount !== null) {
+    const r = PaymentTarget.createBankAccount(bankAccount);
+    if (!r.ok) return r;
+    bank = r.value;
+  }
+  let pix: PixKey | null = null;
+  if (pixKey !== null) {
+    const r = PaymentTarget.createPixKey(pixKey);
+    if (!r.ok) return r;
+    pix = r.value;
+  }
+  return ok({ bankAccount: bank, pixKey: pix });
+};
 
 export const register = (
   input: RegisterCollaboratorInput,
@@ -49,6 +77,9 @@ export const register = (
   const employmentRelationship = EmploymentRelationship.parse(input.employmentRelationship);
   if (!employmentRelationship.ok) return employmentRelationship;
 
+  const targets = parsePaymentTargets(input.bankAccount ?? null, input.pixKey ?? null);
+  if (!targets.ok) return targets;
+
   const collaborator: ActiveCollaborator = immutable({
     id: input.id,
     name: input.name.trim(),
@@ -59,6 +90,8 @@ export const register = (
     startOfContract: input.startOfContract,
     employmentRelationship: employmentRelationship.value,
     registrationStatus: 'PreRegistration',
+    bankAccount: targets.value.bankAccount,
+    pixKey: targets.value.pixKey,
     rg: null,
     dateOfBirth: null,
     genderIdentity: null,

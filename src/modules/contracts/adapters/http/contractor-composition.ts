@@ -12,7 +12,7 @@
 
 import type { ContractorType } from '../../domain/shared/contractor.ts';
 import type { ContractorReadPort, ContractorView } from '#src/modules/partners/public-api/index.ts';
-import type { BankAccount, PixKey } from '#src/modules/partners/domain/supplier/payment-target.ts';
+import type { BankAccount, PixKey } from '#src/modules/partners/domain/shared/payment-target.ts';
 
 const DEFAULT_TIMEOUT_MS = 2_000;
 

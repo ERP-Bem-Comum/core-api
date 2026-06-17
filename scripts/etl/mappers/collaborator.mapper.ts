@@ -126,6 +126,8 @@ export const mapLegacyCollaboratorRow = (
     startOfContract: row.startOfContract,
     employmentRelationship,
     registrationStatus,
+    bankAccount: null,
+    pixKey: null,
     rg: row.rg,
     dateOfBirth: row.dateOfBirth,
     genderIdentity,

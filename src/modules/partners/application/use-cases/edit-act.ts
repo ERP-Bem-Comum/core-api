@@ -16,7 +16,7 @@ import type {
 import type {
   BankAccountInput,
   PixKeyInput,
-} from '#src/modules/partners/domain/supplier/payment-target.ts';
+} from '#src/modules/partners/domain/shared/payment-target.ts';
 
 export type EditActCommand = Readonly<{
   actId: string;

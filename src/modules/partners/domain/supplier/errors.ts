@@ -1,4 +1,4 @@
-import type { PaymentTargetError } from './payment-target.ts';
+import type { PaymentTargetError } from '../shared/payment-target.ts';
 
 // Erros do agregado `Supplier` — string union kebab EN. Compõe os erros dos VOs
 // de payment target (`invalid-bank-account`/`invalid-pix-key`).

@@ -12,9 +12,9 @@ import * as SupplierId from '#src/modules/partners/domain/supplier/supplier-id.t
 import * as Supplier from '#src/modules/partners/domain/supplier/supplier.ts';
 import * as ServiceCategory from '#src/modules/partners/domain/supplier/service-category.ts';
 import type { ServiceCategory as ServiceCategoryType } from '#src/modules/partners/domain/supplier/service-category.ts';
-import * as PaymentTarget from '#src/modules/partners/domain/supplier/payment-target.ts';
+import * as PaymentTarget from '#src/modules/partners/domain/shared/payment-target.ts';
 import type { Supplier as SupplierEntity } from '#src/modules/partners/domain/supplier/types.ts';
-import type { BankAccount, PixKey } from '#src/modules/partners/domain/supplier/payment-target.ts';
+import type { BankAccount, PixKey } from '#src/modules/partners/domain/shared/payment-target.ts';
 import type { LegacySupplierRow } from '../legacy/rows.ts';
 import type { QuarantineReason } from '../quarantine/reason.ts';
 import {

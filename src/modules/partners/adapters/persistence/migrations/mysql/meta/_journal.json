@@ -71,6 +71,13 @@
       "when": 1781648615913,
       "tag": "0009_bumpy_taskmaster",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "5",
+      "when": 1781677152285,
+      "tag": "0010_spooky_violations",
+      "breakpoints": true
     }
   ]
 }

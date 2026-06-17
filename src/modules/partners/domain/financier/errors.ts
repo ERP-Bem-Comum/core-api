@@ -4,6 +4,8 @@
  * (`invalid-cnpj`). `invalid-cnpj` é reexportado do VO `Cnpj`.
  */
 
+import type { PaymentTargetError } from '../shared/payment-target.ts';
+
 export type FinancierError =
   | 'financier-name-required'
   | 'financier-corporate-name-required'
@@ -11,6 +13,7 @@ export type FinancierError =
   | 'financier-telephone-required'
   | 'financier-address-required'
   | 'invalid-cnpj'
+  | PaymentTargetError
   | 'financier-already-inactive'
   | 'financier-already-active'
   | 'financier-inactive-requires-deactivated-at';

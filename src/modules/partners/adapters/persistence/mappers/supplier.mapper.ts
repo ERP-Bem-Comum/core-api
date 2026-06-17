@@ -13,9 +13,9 @@ import * as Cnpj from '#src/shared/kernel/cnpj.ts';
 import * as SupplierId from '#src/modules/partners/domain/supplier/supplier-id.ts';
 import * as ServiceCategory from '#src/modules/partners/domain/supplier/service-category.ts';
 import * as ServiceRating from '#src/modules/partners/domain/supplier/service-rating.ts';
-import * as PaymentTarget from '#src/modules/partners/domain/supplier/payment-target.ts';
+import * as PaymentTarget from '#src/modules/partners/domain/shared/payment-target.ts';
 import * as Supplier from '#src/modules/partners/domain/supplier/supplier.ts';
-import type { BankAccount, PixKey } from '#src/modules/partners/domain/supplier/payment-target.ts';
+import type { BankAccount, PixKey } from '#src/modules/partners/domain/shared/payment-target.ts';
 import type { Supplier as SupplierEntity } from '#src/modules/partners/domain/supplier/types.ts';
 import type { SupplierRow, NewSupplierRow } from '../schemas/mysql.ts';
 

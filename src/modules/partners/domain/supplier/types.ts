@@ -13,7 +13,12 @@ import type { Cnpj } from '#src/shared/kernel/cnpj.ts';
 import type { SupplierId } from './supplier-id.ts';
 import type { ServiceCategory } from './service-category.ts';
 import type { ServiceRating } from './service-rating.ts';
-import type { BankAccount, PixKey, BankAccountInput, PixKeyInput } from './payment-target.ts';
+import type {
+  BankAccount,
+  PixKey,
+  BankAccountInput,
+  PixKeyInput,
+} from '../shared/payment-target.ts';
 
 type SupplierCore = Readonly<{
   id: SupplierId;

@@ -17,6 +17,10 @@ import type {
   CollaboratorRepository,
   CollaboratorRepositoryError,
 } from '#src/modules/partners/domain/collaborator/repository.ts';
+import type {
+  BankAccountInput,
+  PixKeyInput,
+} from '#src/modules/partners/domain/shared/payment-target.ts';
 
 export type RegisterCollaboratorCommand = Readonly<{
   name: string;
@@ -26,6 +30,8 @@ export type RegisterCollaboratorCommand = Readonly<{
   role: string;
   startOfContract: Date;
   employmentRelationship: string;
+  bankAccount?: BankAccountInput | null;
+  pixKey?: PixKeyInput | null;
 }>;
 
 export type RegisterCollaboratorError =
@@ -55,6 +61,8 @@ export const registerCollaborator =
       role: cmd.role,
       startOfContract: cmd.startOfContract,
       employmentRelationship: cmd.employmentRelationship,
+      bankAccount: cmd.bankAccount ?? null,
+      pixKey: cmd.pixKey ?? null,
       registeredAt: deps.clock.now(),
     });
     if (!registered.ok) return registered;

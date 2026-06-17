@@ -19,6 +19,8 @@ import * as Education from '#src/modules/partners/domain/collaborator/education.
 import * as FoodCategory from '#src/modules/partners/domain/collaborator/food-category.ts';
 import * as DisableReason from '#src/modules/partners/domain/collaborator/disable-reason.ts';
 import * as Collaborator from '#src/modules/partners/domain/collaborator/collaborator.ts';
+import * as PaymentTarget from '#src/modules/partners/domain/shared/payment-target.ts';
+import type { BankAccount, PixKey } from '#src/modules/partners/domain/shared/payment-target.ts';
 import type {
   Collaborator as CollaboratorEntity,
   RegistrationStatus,
@@ -29,6 +31,7 @@ export type CollaboratorMapperError =
   | 'collaborator-mapper-invalid-id'
   | 'collaborator-mapper-invalid-cpf'
   | 'collaborator-mapper-invalid-enum'
+  | 'collaborator-mapper-invalid-payment-target'
   | 'collaborator-mapper-invalid-state';
 
 const REGISTRATION_STATUSES: ReadonlySet<string> = new Set<RegistrationStatus>([
@@ -72,12 +75,40 @@ export const collaboratorToInsert = (c: CollaboratorEntity, now: Date): NewColla
   allergies: c.allergies,
   biography: c.biography,
   experienceInThePublicSector: c.experienceInThePublicSector,
+  bankAccountBank: c.bankAccount?.bank ?? null,
+  bankAccountAgency: c.bankAccount?.agency ?? null,
+  bankAccountNumber: c.bankAccount?.accountNumber ?? null,
+  bankAccountCheckDigit: c.bankAccount?.checkDigit ?? null,
+  pixKeyType: c.pixKey?.keyType ?? null,
+  pixKey: c.pixKey?.key ?? null,
   active: c.status === 'Active',
   disableBy: c.status === 'Inactive' ? c.disableBy : null,
   deactivatedAt: c.status === 'Inactive' ? c.deactivatedAt : null,
   createdAt: now,
   updatedAt: now,
 });
+
+// Reconstrói BankAccount/PixKey da row. Ausência total → ok(null). Erro de VO → err.
+const bankFromRow = (
+  row: Readonly<CollaboratorRow>,
+): Result<BankAccount | null, 'collaborator-mapper-invalid-payment-target'> => {
+  if (row.bankAccountBank === null) return ok(null);
+  const r = PaymentTarget.createBankAccount({
+    bank: row.bankAccountBank,
+    agency: row.bankAccountAgency ?? '',
+    accountNumber: row.bankAccountNumber ?? '',
+    checkDigit: row.bankAccountCheckDigit ?? '',
+  });
+  return r.ok ? { ok: true, value: r.value } : err('collaborator-mapper-invalid-payment-target');
+};
+
+const pixFromRow = (
+  row: Readonly<CollaboratorRow>,
+): Result<PixKey | null, 'collaborator-mapper-invalid-payment-target'> => {
+  if (row.pixKey === null) return ok(null);
+  const r = PaymentTarget.createPixKey({ keyType: row.pixKeyType ?? '', key: row.pixKey });
+  return r.ok ? { ok: true, value: r.value } : err('collaborator-mapper-invalid-payment-target');
+};
 
 export const collaboratorFromRow = (
   row: Readonly<CollaboratorRow>,
@@ -113,6 +144,12 @@ export const collaboratorFromRow = (
   const disableBy = parseNullable(row.disableBy, DisableReason.parse);
   if (!disableBy.ok) return err('collaborator-mapper-invalid-enum');
 
+  const bank = bankFromRow(row);
+  if (!bank.ok) return bank;
+
+  const pix = pixFromRow(row);
+  if (!pix.ok) return pix;
+
   const rehydrated = Collaborator.rehydrate({
     id: id.value,
     name: row.name,
@@ -123,6 +160,8 @@ export const collaboratorFromRow = (
     startOfContract: row.startOfContract,
     employmentRelationship: employmentRelationship.value,
     registrationStatus: row.registrationStatus as RegistrationStatus,
+    bankAccount: bank.value,
+    pixKey: pix.value,
     rg: row.rg,
     dateOfBirth: row.dateOfBirth,
     genderIdentity: genderIdentity.value,

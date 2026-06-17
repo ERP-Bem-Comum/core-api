@@ -15,7 +15,7 @@ import type { Supplier } from '../domain/supplier/types.ts';
 import type { Financier } from '../domain/financier/types.ts';
 import type { Collaborator } from '../domain/collaborator/types.ts';
 import type { Act } from '../domain/act/types.ts';
-import type { BankAccount, PixKey } from '../domain/supplier/payment-target.ts';
+import type { BankAccount, PixKey } from '../domain/shared/payment-target.ts';
 import type { ServiceCategory } from '../domain/supplier/service-category.ts';
 
 export type SupplierView = Readonly<{

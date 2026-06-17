@@ -102,6 +102,19 @@ export const collaboratorIdParamSchema = z.object({
  * antigo (decisão do dono). `status` carrega o `registrationStatus`; `active` é o soft-delete
  * (booleano separado). Datas em ISO 8601.
  */
+// Payment target (US1 feature 015) — espelha o molde de Supplier/Act. `agency` valida no domínio.
+const bankAccountSchema = z.object({
+  bank: z.string(),
+  agency: z.string(),
+  accountNumber: z.string(),
+  checkDigit: z.string(),
+});
+
+const pixKeySchema = z.object({
+  keyType: z.enum(['cpf', 'cnpj', 'email', 'phone', 'random-key']),
+  key: z.string(),
+});
+
 export const collaboratorDetailSchema = z.object({
   id: z.uuid(),
   legacyId: z.number().int().nullable(),
@@ -128,6 +141,8 @@ export const collaboratorDetailSchema = z.object({
   emergencyContactName: z.string().nullable(),
   emergencyContactTelephone: z.string().nullable(),
   experienceInThePublicSector: z.boolean().nullable(),
+  bankAccount: bankAccountSchema.nullable(),
+  pixKey: pixKeySchema.nullable(),
   active: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -154,7 +169,10 @@ export type CollaboratorPaginatedDto = z.infer<typeof collaboratorPaginatedSchem
 
 // ─── P2 — escrita ────────────────────────────────────────────────────────────
 
-/** Body do POST /collaborators (pré-cadastro). Espelha `CreateCollaborator` legado. */
+/**
+ * Body do POST /collaborators (pré-cadastro). Espelha `CreateCollaborator` legado + payment
+ * target (US1). `bankAccount`/`pixKey` OPCIONAIS (omitidos → null); `agency` validada no domínio.
+ */
 export const createCollaboratorBodySchema = z.object({
   name: z.string().min(1),
   email: z.string().min(1),
@@ -163,12 +181,17 @@ export const createCollaboratorBodySchema = z.object({
   role: z.string().min(1),
   startOfContract: z.coerce.date().meta({ description: 'Início do contrato (ISO date)' }),
   employmentRelationship: z.enum(['CLT', 'PJ']),
+  bankAccount: bankAccountSchema.nullable().default(null),
+  pixKey: pixKeySchema.nullable().default(null),
 });
 
 export type CreateCollaboratorBody = z.infer<typeof createCollaboratorBodySchema>;
 
-/** Body do PUT /collaborators/:id — substituição total dos cadastrais (= create). Pessoais não entram aqui. */
-export const updateCollaboratorBodySchema = createCollaboratorBodySchema;
+/** Body do PUT /collaborators/:id — substituição total dos cadastrais. Pessoais e banco/PIX não entram aqui. */
+export const updateCollaboratorBodySchema = createCollaboratorBodySchema.omit({
+  bankAccount: true,
+  pixKey: true,
+});
 
 export type UpdateCollaboratorBody = z.infer<typeof updateCollaboratorBodySchema>;
 

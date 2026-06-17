@@ -18,6 +18,12 @@ import type { Race } from './race.ts';
 import type { FoodCategory } from './food-category.ts';
 import type { Education } from './education.ts';
 import type { DisableReason } from './disable-reason.ts';
+import type {
+  BankAccount,
+  PixKey,
+  BankAccountInput,
+  PixKeyInput,
+} from '../shared/payment-target.ts';
 
 export type RegistrationStatus = 'PreRegistration' | 'Complete';
 
@@ -50,6 +56,9 @@ type CollaboratorCore = Readonly<{
   startOfContract: Date;
   employmentRelationship: EmploymentRelationship;
   registrationStatus: RegistrationStatus;
+  // Payment target (US1) — banco/PIX opcionais, espelham o molde Supplier/Act.
+  bankAccount: BankAccount | null;
+  pixKey: PixKey | null;
 }> &
   PersonalFields;
 
@@ -69,6 +78,8 @@ export type RegisterCollaboratorInput = Readonly<{
   role: string;
   startOfContract: Date;
   employmentRelationship: string;
+  bankAccount?: BankAccountInput | null;
+  pixKey?: PixKeyInput | null;
   registeredAt: Date;
 }>;
 

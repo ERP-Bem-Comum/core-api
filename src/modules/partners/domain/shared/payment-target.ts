@@ -1,9 +1,11 @@
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import { immutable } from '#src/shared/primitives/immutable.ts';
 
-// VOs de destino de pagamento do fornecedor (embedded `bancaryInfo`/`pixInfo` do
-// legado). `pixKeyType` é traduzido para EN (não está nas exceções D2 do ADR-0031).
-// A invariante "ao menos um destino" é imposta no `Supplier.register`, não aqui.
+// VOs de destino de pagamento, compartilhados pelos 4 tipos de parceiro (Supplier, Act,
+// Financier, Collaborator). Promovido de `domain/supplier/` para `domain/shared/` (US1 da
+// feature 015): banco/PIX são um "conceptual whole" imutável sem identidade (Evans, VOs) e
+// quatro agregados os usam — manter no agregado Supplier acoplaria os outros três a ele.
+// A invariante "ao menos um destino" é de cada agregado (Supplier.register / Act), não do VO.
 
 export type PixKeyType = 'cpf' | 'cnpj' | 'email' | 'phone' | 'random-key';
 
@@ -19,7 +21,7 @@ export type PixKey = Readonly<{
   key: string;
 }>;
 
-export type PaymentTargetError = 'invalid-bank-account' | 'invalid-pix-key';
+export type PaymentTargetError = 'invalid-bank-account' | 'invalid-bank-agency' | 'invalid-pix-key';
 
 export type BankAccountInput = Readonly<{
   bank: string;
@@ -38,6 +40,9 @@ const PIX_KEY_TYPES: ReadonlySet<string> = new Set<PixKeyType>([
   'random-key',
 ]);
 
+// Agência bancária BR: 4 dígitos + dígito verificador opcional (ex.: `0001` ou `0001-2`).
+const AGENCY_RE = /^\d{4}(-?\d)?$/;
+
 const isBlank = (s: string): boolean => s.trim().length === 0;
 
 export const createBankAccount = (
@@ -46,6 +51,7 @@ export const createBankAccount = (
   if (isBlank(input.bank) || isBlank(input.agency) || isBlank(input.accountNumber)) {
     return err('invalid-bank-account');
   }
+  if (!AGENCY_RE.test(input.agency.trim())) return err('invalid-bank-agency');
   return ok(
     immutable({
       bank: input.bank.trim(),

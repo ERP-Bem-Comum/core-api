@@ -17,6 +17,10 @@ import type {
   FinancierRepository,
   FinancierRepositoryError,
 } from '#src/modules/partners/domain/financier/repository.ts';
+import type {
+  BankAccountInput,
+  PixKeyInput,
+} from '#src/modules/partners/domain/shared/payment-target.ts';
 
 export type RegisterFinancierCommand = Readonly<{
   name: string;
@@ -25,6 +29,8 @@ export type RegisterFinancierCommand = Readonly<{
   cnpj: string;
   telephone: string;
   address: string;
+  bankAccount?: BankAccountInput | null;
+  pixKey?: PixKeyInput | null;
 }>;
 
 export type RegisterFinancierError =
@@ -52,6 +58,8 @@ export const registerFinancier =
       cnpj: cmd.cnpj,
       telephone: cmd.telephone,
       address: cmd.address,
+      bankAccount: cmd.bankAccount ?? null,
+      pixKey: cmd.pixKey ?? null,
       registeredAt: deps.clock.now(),
     });
     if (!registered.ok) return registered;

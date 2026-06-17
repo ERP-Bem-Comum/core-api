@@ -15,9 +15,9 @@ import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import * as ActId from '#src/modules/partners/domain/act/act-id.ts';
 import * as ActNumber from '#src/modules/partners/domain/act/act-number.ts';
 import * as OccupationArea from '#src/modules/partners/domain/collaborator/occupation-area.ts';
-import * as PaymentTarget from '#src/modules/partners/domain/supplier/payment-target.ts';
+import * as PaymentTarget from '#src/modules/partners/domain/shared/payment-target.ts';
 import * as Act from '#src/modules/partners/domain/act/act.ts';
-import type { BankAccount, PixKey } from '#src/modules/partners/domain/supplier/payment-target.ts';
+import type { BankAccount, PixKey } from '#src/modules/partners/domain/shared/payment-target.ts';
 import type { Act as ActEntity } from '#src/modules/partners/domain/act/types.ts';
 import type { ActRow, NewActRow } from '../schemas/mysql.ts';
 
