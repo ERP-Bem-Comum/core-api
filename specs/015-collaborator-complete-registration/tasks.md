@@ -170,7 +170,7 @@
 
 - [ ] T089 [P] Coleções Bruno (ADR-0034) por US (banco/PIX, perfil, território, histórico, autocadastro, grids) em `bruno/`
 - [ ] T090 [P] Atualizar `handbook/CHANGELOG.md` + fechar issues #40/#41/#42/#43/#44/#46 referenciando os PRs
-- [ ] T091 Registrar issue de débito externo: hardening anti-fórmula do `src/shared/utils/csv.ts` (`\n` + full-width OWASP) via skill `issue-report`
+- [x] T091 Registrar issue de débito externo: hardening anti-fórmula do `src/shared/utils/csv.ts` (`\n` + full-width OWASP) via skill `issue-report`
 - [ ] T092 Validar backward-compat final: colaborador/financiador legado (sem campos novos) segue válido em leitura/edição/export
 
 ---
