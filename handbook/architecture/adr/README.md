@@ -137,6 +137,7 @@ Um **ADR (Architecture Decision Record)** é um documento curto que captura uma 
 | [0042](./0042-deadman-switch-redundant.md)                     | Dead-man's switch redundante (S3/R2 ⟂ GitHub Actions, JSONL append-only) para detecção de jobs mortos                                   | Accepted | 2026-06-16 |
 | [0043](./0043-partners-supplier-integration-events.md)         | Contrato de eventos de integração `partners → financial` — `SupplierRegistered`/`SupplierEdited` publicados via outbox `par_outbox` (payload autocontido `{ supplierRef, name, document, occurredAt }`; at-least-once + idempotência) | Accepted | 2026-06-16 |
 | [0044](./0044-cnpj-alphanumeric-kernel.md)                     | CNPJ alfanumérico (Serpro/Receita 2026) no VO `Cnpj` do kernel — módulo 11 com `ASCII − 48`, DVs numéricos, retrocompatível; estende ADR-0031 §4 | Accepted | 2026-06-16 |
+| [0045](./0045-financial-supplier-read-model.md)                | Read-model de fornecedor no `financial` consumido do `par_outbox` (US2 #47) — worker em composition root, upsert com guard de `occurred_at`, backfill one-shot; estende ADR-0015/0022/0043 | Accepted | 2026-06-16 |
 
 ---
 
