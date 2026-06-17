@@ -19,3 +19,7 @@ export type {
   ApplySupplierEventInput,
   ApplySupplierEventError,
 } from '../application/use-cases/apply-supplier-event.ts';
+export type {
+  SupplierViewStore,
+  SupplierViewStoreError,
+} from '../application/ports/supplier-view-store.ts';
