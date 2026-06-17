@@ -42,6 +42,8 @@ import {
   makeActReaderFromRepository,
 } from '../persistence/repos/act-reader.in-memory.ts';
 import { createDrizzleActReader } from '../persistence/repos/act-reader.drizzle.ts';
+import { makeInMemoryContractCountStore } from '../persistence/repos/contract-count-store.in-memory.ts';
+import { createDrizzleContractCountStore } from '../persistence/repos/contract-count-store.drizzle.ts';
 import {
   openPartnersMysql,
   type PartnersMysqlHandle,
@@ -119,6 +121,10 @@ import type {
   ActReadRecord,
   ActReaderError,
 } from '../../application/ports/act-reader.ts';
+import type {
+  ContractCountStore,
+  ContractCountStoreError,
+} from '../../application/ports/contract-count-store.ts';
 
 export type PartnersDriver = 'memory' | 'mysql';
 
@@ -129,6 +135,8 @@ export type PartnersSeed = Readonly<{
   suppliers?: readonly SupplierReadRecord[];
   financiers?: readonly FinancierReadRecord[];
   acts?: readonly ActReadRecord[];
+  /** Contagem de contratos por contraparte (read-model US6b) — popula o `ContractCountStore` (#105). */
+  contractCounts?: readonly { contractorRef: string; activeCount: number }[];
 }>;
 
 export type PartnersCompositionConfig = Readonly<{
@@ -229,6 +237,10 @@ export type PartnersHttpDeps = Readonly<{
   deactivateAct: ReturnType<typeof deactivateAct>;
   reactivateAct: ReturnType<typeof reactivateAct>;
   editAct: ReturnType<typeof editAct>;
+  /** Contagem de contratos por contraparte (read-model US6b) — enriquece os grids (#105). */
+  getContractCounts: (
+    contractorRefs: readonly string[],
+  ) => Promise<Result<ReadonlyMap<string, number>, ContractCountStoreError>>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -247,6 +259,7 @@ type Pools = Readonly<{
   geographyRepo: PartnerGeographyRepository;
   actWriterRepo: ActRepository;
   actReader: ActReader;
+  contractCountStore: ContractCountStore;
   shutdown: () => Promise<void>;
 }>;
 
@@ -277,6 +290,7 @@ const buildMemoryPools = (config: PartnersCompositionConfig): Pools => {
     geographyRepo: makeInMemoryPartnerGeographyStore().repository,
     actWriterRepo: actRepository,
     actReader,
+    contractCountStore: makeInMemoryContractCountStore(config.seed?.contractCounts ?? []),
     shutdown: () => Promise.resolve(),
   };
 };
@@ -321,6 +335,8 @@ const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools
     geographyRepo: createDrizzlePartnerGeographyStore(writerHandle, clock),
     actWriterRepo: createDrizzleActStore(writerHandle, clock),
     actReader: createDrizzleActReader(readerHandle),
+    // Read-model de contagem (US6b): lê do reader pool (par_contract_count_view).
+    contractCountStore: createDrizzleContractCountStore(readerHandle),
     shutdown: async () => {
       await writerHandle.close();
       if (readerHandle !== writerHandle) await readerHandle.close();
@@ -431,6 +447,7 @@ const makeDeps = (pools: Pools, config: PartnersCompositionConfig): PartnersHttp
     deactivateAct: deactivateAct({ actRepo: pools.actWriterRepo, clock }),
     reactivateAct: reactivateAct({ actRepo: pools.actWriterRepo, clock }),
     editAct: editAct({ actRepo: pools.actWriterRepo, clock }),
+    getContractCounts: pools.contractCountStore.getCounts,
     shutdown: pools.shutdown,
   };
 };

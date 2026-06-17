@@ -52,6 +52,11 @@ export const financierDetailSchema = z.object({
   active: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  contractCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .meta({ description: 'Contratos ativos da contraparte (read-model par_contract_count_view)' }),
 });
 
 export type FinancierDetailDto = z.infer<typeof financierDetailSchema>;
@@ -64,6 +69,7 @@ export const financierPaginationMetaSchema = z.object({
   currentPage: z.number().int(),
 });
 
+/** Response paginado do GET /api/v1/financiers — item = detalhe (inclui contractCount). */
 export const financierPaginatedSchema = z.object({
   items: z.array(financierDetailSchema),
   meta: financierPaginationMetaSchema,

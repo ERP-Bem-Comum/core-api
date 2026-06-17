@@ -78,6 +78,11 @@ export const supplierDetailSchema = z.object({
   active: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  contractCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .meta({ description: 'Contratos ativos da contraparte (read-model par_contract_count_view)' }),
 });
 
 export type SupplierDetailDto = z.infer<typeof supplierDetailSchema>;
@@ -91,7 +96,7 @@ export const supplierPaginationMetaSchema = z.object({
   currentPage: z.number().int(),
 });
 
-/** Response paginado do GET /api/v1/suppliers — item = detalhe completo. */
+/** Response paginado do GET /api/v1/suppliers — item = detalhe (inclui contractCount). */
 export const supplierPaginatedSchema = z.object({
   items: z.array(supplierDetailSchema),
   meta: supplierPaginationMetaSchema,

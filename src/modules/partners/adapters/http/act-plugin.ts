@@ -108,10 +108,16 @@ const actsRoutes =
         const totalPages = totalItems === 0 ? 0 : Math.ceil(totalItems / q.limit);
         const start = (q.page - 1) * q.limit;
         const items = filtered.slice(start, start + q.limit);
+        const counts = await deps.getContractCounts(items.map((r) => String(r.act.id)));
+        if (!counts.ok) {
+          return sendResult(reply, err(counts.error), {
+            errors: { 'contract-count-store-unavailable': 503 },
+          });
+        }
         return sendResult(
           reply,
           ok({
-            items: items.map(actToDetailDto),
+            items: items.map((r) => actToDetailDto(r, counts.value.get(String(r.act.id)) ?? 0)),
             meta: {
               itemCount: items.length,
               totalItems,
@@ -172,7 +178,18 @@ const actsRoutes =
             errors: { 'act-not-found': 404 },
           });
         }
-        return sendResult(reply, ok(actToDetailDto(result.value)), { ok: 200 });
+        const contractorRef = String(result.value.act.id);
+        const counts = await deps.getContractCounts([contractorRef]);
+        if (!counts.ok) {
+          return sendResult(reply, err(counts.error), {
+            errors: { 'contract-count-store-unavailable': 503 },
+          });
+        }
+        return sendResult(
+          reply,
+          ok(actToDetailDto(result.value, counts.value.get(contractorRef) ?? 0)),
+          { ok: 200 },
+        );
       },
     });
 

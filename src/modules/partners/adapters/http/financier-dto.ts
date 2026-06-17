@@ -5,7 +5,10 @@
 import type { FinancierReadRecord } from '#src/modules/partners/application/ports/financier-reader.ts';
 import type { FinancierDetailDto } from './financier-schemas.ts';
 
-export const financierToDetailDto = (record: FinancierReadRecord): FinancierDetailDto => {
+export const financierToDetailDto = (
+  record: FinancierReadRecord,
+  contractCount: number,
+): FinancierDetailDto => {
   const f = record.financier;
   return {
     id: String(f.id),
@@ -21,5 +24,6 @@ export const financierToDetailDto = (record: FinancierReadRecord): FinancierDeta
     active: f.status === 'Active',
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+    contractCount,
   };
 };
