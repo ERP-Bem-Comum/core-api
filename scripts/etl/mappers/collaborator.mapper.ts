@@ -128,6 +128,7 @@ export const mapLegacyCollaboratorRow = (
     registrationStatus,
     bankAccount: null,
     pixKey: null,
+    territory: null,
     sex: null,
     maritalStatus: null,
     hasChildren: null,

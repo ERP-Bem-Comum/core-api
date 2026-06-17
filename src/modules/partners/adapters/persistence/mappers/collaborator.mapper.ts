@@ -20,6 +20,7 @@ import * as FoodCategory from '#src/modules/partners/domain/collaborator/food-ca
 import * as DisableReason from '#src/modules/partners/domain/collaborator/disable-reason.ts';
 import * as Sex from '#src/modules/partners/domain/collaborator/sex.ts';
 import * as MaritalStatus from '#src/modules/partners/domain/collaborator/civil-status.ts';
+import * as Territory from '#src/modules/partners/domain/collaborator/territory.ts';
 import * as Collaborator from '#src/modules/partners/domain/collaborator/collaborator.ts';
 import * as PaymentTarget from '#src/modules/partners/domain/shared/payment-target.ts';
 import type { BankAccount, PixKey } from '#src/modules/partners/domain/shared/payment-target.ts';
@@ -89,6 +90,8 @@ export const collaboratorToInsert = (c: CollaboratorEntity, now: Date): NewColla
   leaveRenewable: c.leaveRenewable,
   leaveRenewalDuration: c.leaveRenewalDuration,
   publicSectorExperienceDuration: c.publicSectorExperienceDuration,
+  territoryUf: c.territory?.uf ?? null,
+  territoryMunicipality: c.territory?.municipality ?? null,
   bankAccountBank: c.bankAccount?.bank ?? null,
   bankAccountAgency: c.bankAccount?.agency ?? null,
   bankAccountNumber: c.bankAccount?.accountNumber ?? null,
@@ -180,6 +183,15 @@ export const collaboratorFromRow = (
   const maritalStatus = parseNullable(row.maritalStatus, MaritalStatus.parse);
   if (!maritalStatus.ok) return err('collaborator-mapper-invalid-enum');
 
+  const territory =
+    row.territoryUf === null && row.territoryMunicipality === null
+      ? ok(null)
+      : Territory.createTerritory({
+          uf: row.territoryUf,
+          municipality: row.territoryMunicipality,
+        });
+  if (!territory.ok) return err('collaborator-mapper-invalid-enum');
+
   const rehydrated = Collaborator.rehydrate({
     id: id.value,
     name: row.name,
@@ -192,6 +204,7 @@ export const collaboratorFromRow = (
     registrationStatus: row.registrationStatus as RegistrationStatus,
     bankAccount: bank.value,
     pixKey: pix.value,
+    territory: territory.value,
     rg: row.rg,
     dateOfBirth: row.dateOfBirth,
     genderIdentity: genderIdentity.value,

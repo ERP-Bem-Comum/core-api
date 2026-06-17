@@ -26,6 +26,7 @@ import type {
 } from '../shared/payment-target.ts';
 import type { Sex } from './sex.ts';
 import type { MaritalStatus } from './civil-status.ts';
+import type { Territory, TerritoryInput } from './territory.ts';
 
 export type RegistrationStatus = 'PreRegistration' | 'Complete';
 
@@ -74,6 +75,8 @@ type CollaboratorCore = Readonly<{
   // Payment target (US1) — banco/PIX opcionais, espelham o molde Supplier/Act.
   bankAccount: BankAccount | null;
   pixKey: PixKey | null;
+  // Território de atuação (US3) — uf validada vs catálogo geography; municipality livre.
+  territory: Territory | null;
 }> &
   PersonalFields;
 
@@ -95,6 +98,7 @@ export type RegisterCollaboratorInput = Readonly<{
   employmentRelationship: string;
   bankAccount?: BankAccountInput | null;
   pixKey?: PixKeyInput | null;
+  territory?: TerritoryInput | null;
   registeredAt: Date;
 }>;
 

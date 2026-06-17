@@ -70,17 +70,17 @@
 **Independent test**: criar com/sem território; UF inválida → 422 `territory-uf-invalid`; território preservado em deactivate.
 **Pré-condição**: US2 mergeada.
 
-- [ ] T032 [US3] `pnpm run pipeline:state init PAR-COLLABORATOR-TERRITORY --size S`
-- [ ] T033 [US3] **W0 citação**: citação ≥4 linhas (Evans — VO/referência a catálogo) em `002-tests/REPORT.md`
-- [ ] T034 [P] [US3] **W0 RED** domínio: `tests/.../domain/collaborator/territory.test.ts` (UF vs catálogo)
-- [ ] T035 [P] [US3] **W0 RED** borda: `tests/.../adapters/http/collaborators-territory.routes.test.ts` (inclui preservação em deactivate)
-- [ ] T036 [US3] **W1** VO `domain/collaborator/territory.ts` (valida `uf` contra `domain/geography/state.ts`)
-- [ ] T037 [US3] **W1** estender `types.ts`/`collaborator.ts` (preservar território em edit/deactivate)
-- [ ] T038 [US3] **W1** schema: `territory_uf` (varchar 2), `territory_municipality` (varchar 255) em `par_collaborators`
-- [ ] T039 [US3] **W1** `pnpm run db:generate` → migration `0012`
-- [ ] T040 [P] [US3] **W1** mapper + DTO + borda Zod (create/update/detail)
-- [ ] T041 [US3] **W2** review (`code-reviewer`)
-- [ ] T042 [US3] **W3** gate verde + `close`
+- [x] T032 [US3] `pnpm run pipeline:state init PAR-COLLABORATOR-TERRITORY --size S`
+- [x] T033 [US3] **W0 citação**: citação ≥4 linhas (Evans — VO/referência a catálogo) em `002-tests/REPORT.md`
+- [x] T034 [P] [US3] **W0 RED** domínio: `tests/.../domain/collaborator/territory.test.ts` (UF vs catálogo)
+- [x] T035 [P] [US3] **W0 RED** borda: `tests/.../adapters/http/collaborators-territory.routes.test.ts` (inclui preservação em deactivate)
+- [x] T036 [US3] **W1** VO `domain/collaborator/territory.ts` (valida `uf` contra `domain/geography/state.ts`)
+- [x] T037 [US3] **W1** estender `types.ts`/`collaborator.ts` (preservar território em edit/deactivate)
+- [x] T038 [US3] **W1** schema: `territory_uf` (varchar 2), `territory_municipality` (varchar 255) em `par_collaborators`
+- [x] T039 [US3] **W1** `pnpm run db:generate` → migration `0012`
+- [x] T040 [P] [US3] **W1** mapper + DTO + borda Zod (create/update/detail)
+- [x] T041 [US3] **W2** review (`code-reviewer`)
+- [x] T042 [US3] **W3** gate verde + `close`
 
 ---
 

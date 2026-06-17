@@ -115,6 +115,12 @@ const pixKeySchema = z.object({
   key: z.string(),
 });
 
+// Território (US3) — uf validada no domínio (catálogo geography); municipality texto livre.
+const territorySchema = z.object({
+  uf: z.string().nullable(),
+  municipality: z.string().nullable(),
+});
+
 export const collaboratorDetailSchema = z.object({
   id: z.uuid(),
   legacyId: z.number().int().nullable(),
@@ -155,6 +161,7 @@ export const collaboratorDetailSchema = z.object({
   publicSectorExperienceDuration: z.string().nullable(),
   bankAccount: bankAccountSchema.nullable(),
   pixKey: pixKeySchema.nullable(),
+  territory: territorySchema.nullable(),
   active: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
@@ -195,6 +202,7 @@ export const createCollaboratorBodySchema = z.object({
   employmentRelationship: z.enum(['CLT', 'PJ']),
   bankAccount: bankAccountSchema.nullable().default(null),
   pixKey: pixKeySchema.nullable().default(null),
+  territory: territorySchema.nullable().default(null),
 });
 
 export type CreateCollaboratorBody = z.infer<typeof createCollaboratorBodySchema>;
@@ -203,6 +211,7 @@ export type CreateCollaboratorBody = z.infer<typeof createCollaboratorBodySchema
 export const updateCollaboratorBodySchema = createCollaboratorBodySchema.omit({
   bankAccount: true,
   pixKey: true,
+  territory: true,
 });
 
 export type UpdateCollaboratorBody = z.infer<typeof updateCollaboratorBodySchema>;

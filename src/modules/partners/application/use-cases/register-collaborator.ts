@@ -21,6 +21,7 @@ import type {
   BankAccountInput,
   PixKeyInput,
 } from '#src/modules/partners/domain/shared/payment-target.ts';
+import type { TerritoryInput } from '#src/modules/partners/domain/collaborator/territory.ts';
 
 export type RegisterCollaboratorCommand = Readonly<{
   name: string;
@@ -32,6 +33,7 @@ export type RegisterCollaboratorCommand = Readonly<{
   employmentRelationship: string;
   bankAccount?: BankAccountInput | null;
   pixKey?: PixKeyInput | null;
+  territory?: TerritoryInput | null;
 }>;
 
 export type RegisterCollaboratorError =
@@ -63,6 +65,7 @@ export const registerCollaborator =
       employmentRelationship: cmd.employmentRelationship,
       bankAccount: cmd.bankAccount ?? null,
       pixKey: cmd.pixKey ?? null,
+      territory: cmd.territory ?? null,
       registeredAt: deps.clock.now(),
     });
     if (!registered.ok) return registered;

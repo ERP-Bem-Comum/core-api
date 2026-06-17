@@ -54,6 +54,8 @@ export const collaboratorToDetailDto = (record: CollaboratorReadRecord): Collabo
     publicSectorExperienceDuration: c.publicSectorExperienceDuration,
     bankAccount: c.bankAccount,
     pixKey: c.pixKey,
+    territory:
+      c.territory === null ? null : { uf: c.territory.uf, municipality: c.territory.municipality },
     active: c.status === 'Active',
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),

@@ -8,6 +8,7 @@ import type { DisableReasonError } from './disable-reason.ts';
 import type { PaymentTargetError } from '../shared/payment-target.ts';
 import type { SexError } from './sex.ts';
 import type { MaritalStatusError } from './civil-status.ts';
+import type { TerritoryError } from './territory.ts';
 
 // Erros do agregado `Collaborator` — string union kebab EN. Compõe os erros dos
 // enums (validados em register/completeRegistration/deactivate).
@@ -26,6 +27,7 @@ export type CollaboratorError =
   | PaymentTargetError
   | SexError
   | MaritalStatusError
+  | TerritoryError
   | OccupationAreaError
   | EmploymentRelationshipError
   | GenderIdentityError

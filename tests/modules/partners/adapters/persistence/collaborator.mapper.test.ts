@@ -126,6 +126,8 @@ describe('collaborator.mapper — collaboratorFromRow', () => {
     leaveRenewable: null,
     leaveRenewalDuration: null,
     publicSectorExperienceDuration: null,
+    territoryUf: null,
+    territoryMunicipality: null,
     bankAccountBank: null,
     bankAccountAgency: null,
     bankAccountNumber: null,

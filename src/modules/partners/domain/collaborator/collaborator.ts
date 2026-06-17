@@ -20,6 +20,7 @@ import * as Education from './education.ts';
 import * as DisableReason from './disable-reason.ts';
 import * as Sex from './sex.ts';
 import * as MaritalStatus from './civil-status.ts';
+import * as Territory from './territory.ts';
 import * as PaymentTarget from '../shared/payment-target.ts';
 import type {
   BankAccount,
@@ -82,6 +83,10 @@ export const register = (
   const targets = parsePaymentTargets(input.bankAccount ?? null, input.pixKey ?? null);
   if (!targets.ok) return targets;
 
+  const territoryInput = input.territory ?? null;
+  const territory = territoryInput === null ? ok(null) : Territory.createTerritory(territoryInput);
+  if (!territory.ok) return territory;
+
   const collaborator: ActiveCollaborator = immutable({
     id: input.id,
     name: input.name.trim(),
@@ -94,6 +99,7 @@ export const register = (
     registrationStatus: 'PreRegistration',
     bankAccount: targets.value.bankAccount,
     pixKey: targets.value.pixKey,
+    territory: territory.value,
     rg: null,
     dateOfBirth: null,
     genderIdentity: null,

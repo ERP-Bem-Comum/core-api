@@ -203,6 +203,9 @@ export const parCollaborators = mysqlTable(
     leaveRenewable: boolean('leave_renewable'),
     leaveRenewalDuration: varchar('leave_renewal_duration', { length: 50 }),
     publicSectorExperienceDuration: varchar('public_sector_experience_duration', { length: 50 }),
+    // Território de atuação (US3 feature 015) — uf (sigla IBGE) + município (texto livre), nullable.
+    territoryUf: varchar('territory_uf', { length: 2 }),
+    territoryMunicipality: varchar('territory_municipality', { length: 255 }),
     // Payment target (US1 feature 015) — banco/PIX OPCIONAIS (sem invariante "ao menos um").
     bankAccountBank: varchar('bank_account_bank', { length: 50 }),
     bankAccountAgency: varchar('bank_account_agency', { length: 20 }),
