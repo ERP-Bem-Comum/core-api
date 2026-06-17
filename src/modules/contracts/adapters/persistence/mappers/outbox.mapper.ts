@@ -11,6 +11,7 @@ import * as UserRef from '../../../../../shared/kernel/user-ref.ts';
 import * as Money from '../../../../../shared/kernel/money.ts';
 import * as Period from '../../../../../shared/kernel/period.ts';
 import * as PlainDate from '../../../../../shared/kernel/plain-date.ts';
+import type * as ContractorRef from '../../../domain/shared/contractor.ts';
 import {
   createBucketName,
   createStorageKey,
@@ -355,6 +356,38 @@ export const eventToOutboxInsert = (
     payload: JSON.stringify(payload),
   };
 };
+
+// ─── US6a: enriquecimento aditivo com contractorRef (ADR-0046, Opção A) ─────────
+//
+// Espelha `partners/.../supplier-outbox.mapper.ts`: o `contract-repository.save(contract, events)`
+// tem o snapshot em escopo e passa `contract.contractor`. Estampa `contractorRef` ({ type, id })
+// nos eventos de ciclo de vida do contrato — ADITIVO ao wire-format v1 (sem bump). Não toca o
+// evento de domínio nem o decoder de domínio (`outboxRowToEvent` ignora o campo extra — retrocompat).
+
+type ContractorRefPayload = Readonly<{ type: string; id: string }>;
+
+const LIFECYCLE_WITH_CONTRACTOR: ReadonlySet<string> = new Set([
+  'ContractCreated',
+  'ContractCancelled',
+  'ContractEnded',
+]);
+
+export const contractEventsToOutboxInserts = (
+  events: readonly ContractsModuleEvent[],
+  contractor: ContractorRef.ContractorRef,
+  now: Date,
+  idGenerator: () => string = randomUUID,
+): readonly OutboxInsert[] =>
+  events.map((event) => {
+    const insert = eventToOutboxInsert(event, now, idGenerator);
+    if (!LIFECYCLE_WITH_CONTRACTOR.has(event.type)) return insert;
+    const base = JSON.parse(insert.payload) as Record<string, unknown>;
+    const contractorRef: ContractorRefPayload = {
+      type: contractor.type,
+      id: contractor.id as unknown as string,
+    };
+    return { ...insert, payload: JSON.stringify({ ...base, contractorRef }) };
+  });
 
 // ─── JSON parse helper ────────────────────────────────────────────────────────
 

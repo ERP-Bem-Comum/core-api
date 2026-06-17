@@ -316,7 +316,8 @@ export const createDrizzleContractRepository = (
       safe('save', async () => {
         await db.transaction(async (tx) => {
           await persistContractInTx(tx, contract);
-          await appendOutboxInTx(tx, schema, events);
+          // US6a (ADR-0046): enriquece os eventos de ciclo de vida com contractorRef (Opção A).
+          await appendOutboxInTx(tx, schema, events, contract.contractor);
         });
       }),
 

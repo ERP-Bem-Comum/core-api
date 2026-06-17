@@ -16,7 +16,12 @@ import type {
 } from '../../../application/ports/outbox.ts';
 import type { ContractsModuleEvent } from '../../../application/ports/event-bus.ts';
 import type { MysqlHandle } from '../drivers/mysql-driver.ts';
-import { eventToOutboxInsert, type OutboxRow } from '../mappers/outbox.mapper.ts';
+import {
+  eventToOutboxInsert,
+  contractEventsToOutboxInserts,
+  type OutboxRow,
+} from '../mappers/outbox.mapper.ts';
+import type { ContractorRef } from '../../../domain/shared/contractor.ts';
 import type * as schema from '../schemas/mysql.ts';
 
 // ─── ER_DUP_ENTRY detection ───────────────────────────────────────────────────
@@ -61,10 +66,17 @@ export const appendOutboxInTx = async (
   // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
   schemaArg: typeof schema,
   events: readonly ContractsModuleEvent[],
+  // US6a (ADR-0046): quando o repo pai é o contract-repository, passa `contract.contractor`
+  // p/ enriquecer os eventos de ciclo de vida com contractorRef (aditivo, sem bump). Ausente
+  // (amendment-repository / append genérico) → caminho original inalterado.
+  contractor?: ContractorRef,
 ): Promise<void> => {
   if (events.length === 0) return;
   const now = new Date();
-  const inserts = events.map((e) => eventToOutboxInsert(e, now));
+  const inserts =
+    contractor === undefined
+      ? events.map((e) => eventToOutboxInsert(e, now))
+      : [...contractEventsToOutboxInserts(events, contractor, now)];
   await tx.insert(schemaArg.ctrOutbox).values(inserts);
 };
 
