@@ -484,3 +484,22 @@ export const eventosProcessados = mysqlTable(
     index('eventos_processados_processed_at_idx').on(t.processedAt),
   ],
 );
+
+// ─── ctr_job_runs ───────────────────────────────────────────────────────────────
+//
+// Coordenação de jobs one-shot em multi-instância (CTR-SWEEPER-JOB-LOCK / ADR-0041).
+// PK composta (job_name, run_key): a 1ª instância faz `INSERT IGNORE` e roda; as demais batem
+// na PK e desistem. `run_key` é a janela de execução (ex.: a data do sweep diário). Backstop
+// barato sobre o cron singleton; lock de eficiência (jobs já idempotentes) — sem Redis/etcd.
+export const ctrJobRuns = mysqlTable(
+  'ctr_job_runs',
+  {
+    jobName: varchar('job_name', { length: 64 }).notNull(),
+    runKey: varchar('run_key', { length: 64 }).notNull(),
+    startedAt: datetime('started_at', { mode: 'date', fsp: 3 }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.jobName, t.runKey] })],
+);
+
+export type JobRunRow = typeof ctrJobRuns.$inferSelect;
+export type NewJobRunRow = typeof ctrJobRuns.$inferInsert;

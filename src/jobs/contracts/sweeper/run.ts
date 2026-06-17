@@ -21,6 +21,7 @@ import process from 'node:process';
 import { withNewCorrelation } from '#src/shared/observability/correlation.ts';
 import { openMysql } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleContractRepository } from '#src/modules/contracts/adapters/persistence/repos/contract-repository.drizzle.ts';
+import { claimJobRun } from '#src/modules/contracts/adapters/persistence/repos/job-run.drizzle.ts';
 import { runSweep } from './sweeper.ts';
 import { readJobConfig } from './config.ts';
 import { ClockSaoPaulo } from './clock-sao-paulo.ts';
@@ -51,6 +52,23 @@ const main = async (): Promise<number> => {
   try {
     const contractRepo = createDrizzleContractRepository(handle);
     const clock = ClockSaoPaulo();
+
+    // Coordenação multi-instância (defense-in-depth — ADR-0041): só uma instância roda o sweep do dia.
+    // Backstop sobre o cron singleton; o próprio sweep já é idempotente (lock de eficiência).
+    const runKey = clock.now().toISOString().slice(0, 10);
+    const claim = await claimJobRun(handle, 'contracts-sweeper', runKey, clock.now());
+    if (!claim.ok) {
+      process.stderr.write(
+        `[contracts-sweeper] falha ao reivindicar execução (${runKey}): ${claim.error}\n`,
+      );
+      return 1;
+    }
+    if (!claim.value) {
+      process.stdout.write(
+        `[contracts-sweeper] execução de ${runKey} já reivindicada por outra instância — skip\n`,
+      );
+      return 0;
+    }
 
     const result = await withNewCorrelation(async () =>
       runSweep({ contractRepo, clock }, { batchSize: config.batchSize }),
