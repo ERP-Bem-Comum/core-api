@@ -1,11 +1,12 @@
-import type { Result } from '../../../../shared/primitives/result.ts';
 import type { ContractsModuleEvent } from './event-bus.ts';
+import type { EventDelivery as SharedEventDelivery } from '#src/shared/outbox/index.ts';
 
-// ─── ProcessedEvent ───────────────────────────────────────────────────────────
+// ─── ProcessedEvent (específico do contracts — carrega o evento desserializado) ─
 
 /**
  * Envelope de evento já lido do outbox — pronto para entrega ao consumer.
- * O worker monta este shape antes de chamar `EventDelivery.deliver`.
+ * O worker desserializa o payload (`outboxRowToEvent`) e monta este shape antes
+ * de chamar `EventDelivery.deliver`.
  */
 export type ProcessedEvent = Readonly<{
   eventId: string;
@@ -14,46 +15,20 @@ export type ProcessedEvent = Readonly<{
   event: ContractsModuleEvent;
 }>;
 
-// ─── Tagged errors (Padrão D) ─────────────────────────────────────────────────
+// ─── Erros de delivery — canônicos compartilhados (CORE-OUTBOX-WORKER-GENERIC) ──
 
-export type DeliveryUnavailable = Readonly<{ tag: 'DeliveryUnavailable'; cause: string }>;
-export type DeliveryRejectedByConsumer = Readonly<{
-  tag: 'DeliveryRejectedByConsumer';
-  consumerId: string;
-  reason: string;
-}>;
-
-export type DeliveryError = DeliveryUnavailable | DeliveryRejectedByConsumer;
-
-// ─── Constructors ─────────────────────────────────────────────────────────────
-
-export const deliveryUnavailable = (cause: string): DeliveryUnavailable => ({
-  tag: 'DeliveryUnavailable',
-  cause,
-});
-
-export const deliveryRejectedByConsumer = (
-  consumerId: string,
-  reason: string,
-): DeliveryRejectedByConsumer => ({
-  tag: 'DeliveryRejectedByConsumer',
-  consumerId,
-  reason,
-});
+export type {
+  DeliveryError,
+  DeliveryUnavailable,
+  DeliveryRejectedByConsumer,
+} from '#src/shared/outbox/index.ts';
+export { deliveryUnavailable, deliveryRejectedByConsumer } from '#src/shared/outbox/index.ts';
 
 // ─── Port ─────────────────────────────────────────────────────────────────────
 
 /**
  * EventDelivery — driven port para entrega de eventos a um consumer específico.
- *
- * Cada consumer (módulo Financeiro, Logger, etc.) registra sua própria
- * implementação deste port. O worker chama `deliver` para cada consumer
- * inscrito, lidando com falha individual sem afetar os demais.
- *
- * `consumerId` é imutável após construção — identifica o consumer nos logs
- * e na tabela `eventos_processados` (idempotência).
+ * É o `EventDelivery<P>` genérico do `shared/outbox` aplicado ao `ProcessedEvent`
+ * do contracts. `consumerId` identifica o consumer nos logs e na `eventos_processados`.
  */
-export type EventDelivery = Readonly<{
-  consumerId: string;
-  deliver: (event: ProcessedEvent) => Promise<Result<void, DeliveryError>>;
-}>;
+export type EventDelivery = SharedEventDelivery<ProcessedEvent>;
