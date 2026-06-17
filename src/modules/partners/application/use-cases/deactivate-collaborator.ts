@@ -14,6 +14,10 @@ import type {
   CollaboratorRepository,
   CollaboratorRepositoryError,
 } from '#src/modules/partners/domain/collaborator/repository.ts';
+import type {
+  CollaboratorHistoryRepository,
+  CollaboratorHistoryError,
+} from '#src/modules/partners/application/ports/collaborator-history.ts';
 
 export type DeactivateCollaboratorCommand = Readonly<{ collaboratorId: string; disableBy: string }>;
 
@@ -21,7 +25,8 @@ export type DeactivateCollaboratorError =
   | 'deactivate-collaborator-invalid-id'
   | 'deactivate-collaborator-not-found'
   | CollaboratorError
-  | CollaboratorRepositoryError;
+  | CollaboratorRepositoryError
+  | CollaboratorHistoryError;
 
 // `Collaborator` (não `InactiveCollaborator`): o domínio `Collaborator.deactivate` não
 // estreita o retorno (diferente de `Supplier.deactivate`). Alinhado à assinatura do domínio.
@@ -30,7 +35,11 @@ export type DeactivateCollaboratorOutput = Readonly<{
   event: CollaboratorEvent;
 }>;
 
-type Deps = Readonly<{ collaboratorRepo: CollaboratorRepository; clock: Clock }>;
+type Deps = Readonly<{
+  collaboratorRepo: CollaboratorRepository;
+  historyRepo: CollaboratorHistoryRepository;
+  clock: Clock;
+}>;
 
 export const deactivateCollaborator =
   (deps: Deps) =>
@@ -44,11 +53,21 @@ export const deactivateCollaborator =
     if (!fetched.ok) return fetched;
     if (fetched.value === null) return err('deactivate-collaborator-not-found');
 
-    const transition = Collaborator.deactivate(fetched.value, cmd.disableBy, deps.clock.now());
+    const now = deps.clock.now();
+    const transition = Collaborator.deactivate(fetched.value, cmd.disableBy, now);
     if (!transition.ok) return transition;
 
     const saved = await deps.collaboratorRepo.save(transition.value.collaborator);
     if (!saved.ok) return saved;
+
+    const recorded = await deps.historyRepo.record({
+      collaboratorId: cmd.collaboratorId,
+      eventType: 'CollaboratorDeactivated',
+      before: fetched.value,
+      after: transition.value.collaborator,
+      occurredAt: now,
+    });
+    if (!recorded.ok) return recorded;
 
     return ok({ collaborator: transition.value.collaborator, event: transition.value.event });
   };

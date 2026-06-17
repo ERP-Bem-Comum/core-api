@@ -37,11 +37,13 @@ import {
   collaboratorsForExport,
 } from './collaborator-list-query.ts';
 import { collaboratorsToCsv } from '../export/collaborator-csv.ts';
+import { collaboratorHistoryToCsv } from '../export/collaborator-history-csv.ts';
 import {
   collaboratorListQuerySchema,
   collaboratorPaginatedSchema,
   collaboratorDetailSchema,
   collaboratorIdParamSchema,
+  collaboratorHistoryExportQuerySchema,
   createCollaboratorBodySchema,
   completeRegistrationBodySchema,
   deactivateCollaboratorBodySchema,
@@ -170,6 +172,36 @@ const collaboratorsRoutes =
           .code(200)
           .header('content-type', 'text/csv; charset=utf-8')
           .header('content-disposition', 'attachment; filename="collaborators.csv"')
+          .header('x-content-type-options', 'nosniff')
+          .send(csv) as unknown as Promise<void>;
+      },
+    });
+
+    // Export do histórico de alterações de um colaborador (US4). `?type=history`. CSV legado
+    // (separador `;`, datas dd/MM/aaaa). Reader indisponível → 503. `collaborator:read`.
+    scope.route({
+      method: 'GET',
+      url: '/collaborators/:id/export',
+      preHandler: [hooks.requireAuth, hooks.authorize(COLLABORATOR_PERMISSION.read)],
+      schema: {
+        params: collaboratorIdParamSchema,
+        querystring: collaboratorHistoryExportQuerySchema,
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.listCollaboratorHistory(req.params.id);
+        if (!result.ok) {
+          return sendResult(reply, err(result.error), {
+            errors: { 'collaborator-repo-unavailable': 503 },
+          });
+        }
+        const csv = collaboratorHistoryToCsv(result.value);
+        return reply
+          .code(200)
+          .header('content-type', 'text/csv; charset=utf-8')
+          .header(
+            'content-disposition',
+            `attachment; filename="collaborator-${req.params.id}-history.csv"`,
+          )
           .header('x-content-type-options', 'nosniff')
           .send(csv) as unknown as Promise<void>;
       },

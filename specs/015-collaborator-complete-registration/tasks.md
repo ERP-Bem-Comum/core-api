@@ -90,20 +90,20 @@
 **Independent test**: alterar cargo gera linha de histórico; `export?type=history` → CSV legado; repo indisponível → 503.
 **Pré-condição**: US3 mergeada.
 
-- [ ] T043 [US4] `pnpm run pipeline:state init PAR-COLLABORATOR-HISTORY-EXPORT --size L`
-- [ ] T044 [US4] **W0 citação**: citação ≥4 linhas (Vernon — projeções/read-model; ADR-0022) em `002-tests/REPORT.md`
-- [ ] T045 [P] [US4] **W0 RED** domínio: `tests/.../domain/collaborator/collaborator-history.test.ts`
-- [ ] T046 [P] [US4] **W0 RED** application: `tests/.../application/collaborator-history-capture.test.ts` (cadastro inicial não gera entry)
-- [ ] T047 [P] [US4] **W0 RED** export: `tests/.../adapters/export/collaborator-history-csv.test.ts` (cabeçalho legado + `programa` vazia, datas dd/MM/aaaa)
-- [ ] T048 [P] [US4] **W0 RED** borda: `tests/.../adapters/http/collaborators-history.routes.test.ts` (503 `collaborator-repo-unavailable`)
-- [ ] T049 [US4] **W1** domínio: `domain/collaborator/collaborator-history.ts` + `collaborator-history-id.ts` + snapshot
-- [ ] T050 [US4] **W1** port `application/ports/collaborator-history-repository.ts` + use case de captura/projeção (de `CollaboratorEdited`/`Deactivated`/`Reactivated`)
-- [ ] T051 [US4] **W1** schema: tabela `par_collaborator_history` + índice `(collaborator_id, data_alteracao DESC)`
-- [ ] T052 [US4] **W1** `pnpm run db:generate` → migration `0013`
-- [ ] T053 [P] [US4] **W1** adapters: repo Drizzle + InMemory (`adapters/persistence/repos/collaborator-history-*`)
-- [ ] T054 [P] [US4] **W1** export: `adapters/export/collaborator-history-csv.ts` (usa `src/shared/utils/csv.ts`) + rota `export?type=history` em `plugin.ts`
-- [ ] T055 [US4] **W2** review (`code-reviewer`)
-- [ ] T056 [US4] **W3** gate verde + `close`
+- [x] T043 [US4] `pnpm run pipeline:state init PAR-COLLABORATOR-HISTORY-EXPORT --size L`
+- [x] T044 [US4] **W0 citação**: citação ≥4 linhas (Vernon — projeções/read-model; ADR-0022) em `002-tests/REPORT.md`
+- [x] T045 [P] [US4] **W0 RED** domínio: `tests/.../domain/collaborator/collaborator-history.test.ts`
+- [x] T046 [P] [US4] **W0 RED** application: `tests/.../application/collaborator-history-capture.test.ts` (cadastro inicial não gera entry)
+- [x] T047 [P] [US4] **W0 RED** export: `tests/.../adapters/export/collaborator-history-csv.test.ts` (cabeçalho legado + `programa` vazia, datas dd/MM/aaaa)
+- [x] T048 [P] [US4] **W0 RED** borda: `tests/.../adapters/http/collaborators-history.routes.test.ts` (503 `collaborator-repo-unavailable`)
+- [x] T049 [US4] **W1** domínio: `domain/collaborator/collaborator-history.ts` + `collaborator-history-id.ts` + snapshot
+- [x] T050 [US4] **W1** port `application/ports/collaborator-history-repository.ts` + use case de captura/projeção (de `CollaboratorEdited`/`Deactivated`/`Reactivated`)
+- [x] T051 [US4] **W1** schema: tabela `par_collaborator_history` + índice `(collaborator_id, data_alteracao DESC)`
+- [x] T052 [US4] **W1** `pnpm run db:generate` → migration `0013`
+- [x] T053 [P] [US4] **W1** adapters: repo Drizzle + InMemory (`adapters/persistence/repos/collaborator-history-*`)
+- [x] T054 [P] [US4] **W1** export: `adapters/export/collaborator-history-csv.ts` (usa `src/shared/utils/csv.ts`) + rota `export?type=history` em `plugin.ts`
+- [x] T055 [US4] **W2** review (`code-reviewer`)
+- [x] T056 [US4] **W3** gate verde + `close`
 
 ---
 

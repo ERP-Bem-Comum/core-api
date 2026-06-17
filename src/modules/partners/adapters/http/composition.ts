@@ -21,6 +21,8 @@ import { makeInMemoryCollaboratorStore } from '../persistence/repos/collaborator
 import { createDrizzleCollaboratorStore } from '../persistence/repos/collaborator-repository.drizzle.ts';
 import { makeInMemoryCollaboratorReader } from '../persistence/repos/collaborator-reader.in-memory.ts';
 import { createDrizzleCollaboratorReader } from '../persistence/repos/collaborator-reader.drizzle.ts';
+import { makeInMemoryCollaboratorHistory } from '../persistence/repos/collaborator-history-repository.in-memory.ts';
+import { createDrizzleCollaboratorHistory } from '../persistence/repos/collaborator-history-repository.drizzle.ts';
 import { makeInMemorySupplierReader } from '../persistence/repos/supplier-reader.in-memory.ts';
 import { createDrizzleSupplierReader } from '../persistence/repos/supplier-reader.drizzle.ts';
 import { makeInMemorySupplierStore } from '../persistence/repos/supplier-repository.in-memory.ts';
@@ -72,6 +74,11 @@ import type {
   CollaboratorReaderError,
 } from '../../application/ports/collaborator-reader.ts';
 import type {
+  CollaboratorHistoryRepository,
+  CollaboratorHistoryEntry,
+  CollaboratorHistoryError,
+} from '../../application/ports/collaborator-history.ts';
+import type {
   SupplierReader,
   SupplierReadRecord,
   SupplierReaderError,
@@ -98,6 +105,7 @@ export type PartnersDriver = 'memory' | 'mysql';
 /** Seed dev/test (driver memory). Popula os readers com read-records. Ignorado em mysql. */
 export type PartnersSeed = Readonly<{
   collaborators?: readonly CollaboratorReadRecord[];
+  collaboratorHistory?: readonly CollaboratorHistoryEntry[];
   suppliers?: readonly SupplierReadRecord[];
   financiers?: readonly FinancierReadRecord[];
   acts?: readonly ActReadRecord[];
@@ -132,6 +140,10 @@ export type PartnersHttpDeps = Readonly<{
   deactivateCollaborator: ReturnType<typeof deactivateCollaborator>;
   reactivateCollaborator: ReturnType<typeof reactivateCollaborator>;
   editCollaborator: ReturnType<typeof editCollaborator>;
+  /** Histórico de alterações de um colaborador (US4 — export ?type=history). */
+  listCollaboratorHistory: (
+    collaboratorId: string,
+  ) => Promise<Result<readonly CollaboratorHistoryEntry[], CollaboratorHistoryError>>;
   /** Fornecedores — leitura (reader pool, S1). */
   getSupplierById: (id: string) => Promise<Result<SupplierReadRecord | null, SupplierReaderError>>;
   listSupplierRecords: () => Promise<Result<readonly SupplierReadRecord[], SupplierReaderError>>;
@@ -171,6 +183,7 @@ type Pools = Readonly<{
   collaboratorReaderRepo: CollaboratorRepository;
   collaboratorWriterRepo: CollaboratorRepository;
   collaboratorReader: CollaboratorReader;
+  collaboratorHistory: CollaboratorHistoryRepository;
   supplierReader: SupplierReader;
   supplierWriterRepo: SupplierRepository;
   financierReader: FinancierReader;
@@ -195,6 +208,7 @@ const buildMemoryPools = (config: PartnersCompositionConfig): Pools => {
     collaboratorReaderRepo: repository,
     collaboratorWriterRepo: repository,
     collaboratorReader: makeInMemoryCollaboratorReader(config.seed?.collaborators ?? []),
+    collaboratorHistory: makeInMemoryCollaboratorHistory(config.seed?.collaboratorHistory ?? []),
     supplierReader: makeInMemorySupplierReader(config.seed?.suppliers ?? []),
     supplierWriterRepo: makeInMemorySupplierStore().repository,
     financierReader: makeInMemoryFinancierReader(config.seed?.financiers ?? []),
@@ -234,6 +248,7 @@ const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools
     collaboratorReaderRepo: createDrizzleCollaboratorStore(readerHandle, clock),
     collaboratorWriterRepo: createDrizzleCollaboratorStore(writerHandle, clock),
     collaboratorReader: createDrizzleCollaboratorReader(readerHandle),
+    collaboratorHistory: createDrizzleCollaboratorHistory(writerHandle),
     supplierReader: createDrizzleSupplierReader(readerHandle),
     supplierWriterRepo: createDrizzleSupplierStore(writerHandle, clock),
     financierReader: createDrizzleFinancierReader(readerHandle),
@@ -270,13 +285,20 @@ const makeDeps = (pools: Pools): PartnersHttpDeps => {
     }),
     deactivateCollaborator: deactivateCollaborator({
       collaboratorRepo: pools.collaboratorWriterRepo,
+      historyRepo: pools.collaboratorHistory,
       clock,
     }),
     reactivateCollaborator: reactivateCollaborator({
       collaboratorRepo: pools.collaboratorWriterRepo,
+      historyRepo: pools.collaboratorHistory,
       clock,
     }),
-    editCollaborator: editCollaborator({ collaboratorRepo: pools.collaboratorWriterRepo, clock }),
+    editCollaborator: editCollaborator({
+      collaboratorRepo: pools.collaboratorWriterRepo,
+      historyRepo: pools.collaboratorHistory,
+      clock,
+    }),
+    listCollaboratorHistory: pools.collaboratorHistory.listByCollaborator,
     importCollaborators: importCollaborators({
       collaboratorRepo: pools.collaboratorWriterRepo,
       clock,

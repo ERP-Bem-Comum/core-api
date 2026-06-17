@@ -96,6 +96,11 @@ export const collaboratorIdParamSchema = z.object({
   id: z.uuid().meta({ description: 'UUID do colaborador (core-api)' }),
 });
 
+/** Query do GET /collaborators/:id/export — US4: por ora só `type=history` (CSV de alterações). */
+export const collaboratorHistoryExportQuerySchema = z.object({
+  type: z.literal('history').meta({ description: 'Tipo de export (alterações = history)' }),
+});
+
 /**
  * Detalhe do colaborador — espelha o schema `Collaborator` do legado
  * (handbook/legacy_docs/openapi.yaml:2435). `id` é o UUID do core; `legacyId` é o int

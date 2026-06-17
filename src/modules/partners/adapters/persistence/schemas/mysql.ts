@@ -253,6 +253,38 @@ export const parCollaborators = mysqlTable(
 export type CollaboratorRow = typeof parCollaborators.$inferSelect;
 export type NewCollaboratorRow = typeof parCollaborators.$inferInsert;
 
+// ─── par_collaborator_history ─────────────────────────────────────────────────
+// Audit trail (US4 feature 015) — LOG DE ATUALIZAÇÕES por campo (Ramakrishnan & Gehrke
+// §rastreamento de auditoria). Uma linha por campo alterado. `field_label` PT desnormalizado
+// (imutabilidade histórica). Sem FK formal: o módulo usa soft-delete (colaborador nunca é
+// hard-deleted), e ADR-0014 evita FK cross-agregado. Idempotência via UNIQUE.
+export const parCollaboratorHistory = mysqlTable(
+  'par_collaborator_history',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    collaboratorId: varchar('collaborator_id', { length: 36 }).notNull(),
+    eventType: varchar('event_type', { length: 64 }).notNull(),
+    fieldName: varchar('field_name', { length: 100 }).notNull(),
+    fieldLabel: varchar('field_label', { length: 100 }).notNull(),
+    valueBefore: varchar('value_before', { length: 1000 }),
+    valueAfter: varchar('value_after', { length: 1000 }),
+    occurredAt: datetime('occurred_at', { mode: 'date', fsp: 3 }).notNull(),
+  },
+  (t) => [
+    // Export por colaborador ordenado por data (WHERE collaborator_id = ? ORDER BY occurred_at).
+    index('par_collaborator_history_collab_date_idx').on(t.collaboratorId, t.occurredAt),
+    // Idempotência: mesmo evento (occurred_at) + campo não duplica.
+    uniqueIndex('par_collaborator_history_idem_idx').on(
+      t.collaboratorId,
+      t.occurredAt,
+      t.fieldName,
+    ),
+  ],
+);
+
+export type CollaboratorHistoryRow = typeof parCollaboratorHistory.$inferSelect;
+export type NewCollaboratorHistoryRow = typeof parCollaboratorHistory.$inferInsert;
+
 // ─── par_user_profiles ──────────────────────────────────────────────────────
 // Perfil de usuário (legado `users` — porção de perfil; autenticação fica no auth).
 // Identidade = `user_ref` (PK natural, 1:1 com auth.User). Sem soft-delete (ciclo de

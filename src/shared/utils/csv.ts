@@ -36,23 +36,30 @@ const FORMULA_TRIGGERS: ReadonlySet<string> = new Set([
   '－',
   '＠',
 ]);
-const RFC4180_SPECIAL = /[",\n\r]/;
+const RFC4180_QUOTE = /["\n\r]/;
 
 const neutralizeFormula = (value: string): string => {
   const first = value[0];
   return first !== undefined && FORMULA_TRIGGERS.has(first) ? `'${value}` : value;
 };
 
-export const escapeCsvCell = (raw: string): string => {
+// `separator` parametrizável (default `,`) — o legado de histórico (US4) usa `;`. Uma célula é
+// quotada se contém aspas/quebra OU o separador em uso, então `;` é tratado corretamente.
+export const escapeCsvCell = (raw: string, separator: string = SEPARATOR): string => {
   const neutralized = neutralizeFormula(raw);
-  return RFC4180_SPECIAL.test(neutralized) ? `"${neutralized.replaceAll('"', '""')}"` : neutralized;
+  const needsQuote = RFC4180_QUOTE.test(neutralized) || neutralized.includes(separator);
+  return needsQuote ? `"${neutralized.replaceAll('"', '""')}"` : neutralized;
 };
 
-export const toCsvLine = (cells: readonly string[]): string =>
-  cells.map(escapeCsvCell).join(SEPARATOR);
+export const toCsvLine = (cells: readonly string[], separator: string = SEPARATOR): string =>
+  cells.map((cell) => escapeCsvCell(cell, separator)).join(separator);
 
-export const toCsv = (headers: readonly string[], rows: readonly (readonly string[])[]): string => {
-  const lines = [toCsvLine(headers), ...rows.map(toCsvLine)];
+export const toCsv = (
+  headers: readonly string[],
+  rows: readonly (readonly string[])[],
+  separator: string = SEPARATOR,
+): string => {
+  const lines = [toCsvLine(headers, separator), ...rows.map((r) => toCsvLine(r, separator))];
   return BOM + lines.join(LINE_TERMINATOR) + LINE_TERMINATOR;
 };
 
