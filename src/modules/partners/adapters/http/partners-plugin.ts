@@ -15,7 +15,7 @@ import type {
   FastifyZodOpenApiTypeProvider,
 } from 'fastify-zod-openapi';
 
-import { err } from '#src/shared/primitives/result.ts';
+import { ok, err } from '#src/shared/primitives/result.ts';
 import { sendResult } from '#src/shared/http/reply.ts';
 
 import type { PartnersHttpDeps } from './composition.ts';
@@ -85,10 +85,21 @@ const partnersRoutes =
           },
           req.query,
         );
-        return sendResult(reply, result, {
-          ok: 200,
-          errors: { 'partners-aggregate-too-large': 503 },
-        });
+        if (!result.ok) {
+          return sendResult(reply, result, { errors: { 'partners-aggregate-too-large': 503 } });
+        }
+        // Enriquece só a PÁGINA (≤ limit) com a contagem do read-model (batch, anti-N+1; #107).
+        const counts = await deps.getContractCounts(result.value.items.map((it) => it.id));
+        if (!counts.ok) {
+          return sendResult(reply, err(counts.error), {
+            errors: { 'contract-count-store-unavailable': 503 },
+          });
+        }
+        const items = result.value.items.map((it) => ({
+          ...it,
+          contractCount: counts.value.get(it.id) ?? 0,
+        }));
+        return sendResult(reply, ok({ items, meta: result.value.meta }), { ok: 200 });
       },
     });
   };

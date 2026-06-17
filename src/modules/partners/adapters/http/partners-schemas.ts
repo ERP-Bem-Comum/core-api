@@ -25,6 +25,11 @@ const partnerListItemSchema = z.object({
   name: z.string(),
   document: z.string(),
   active: z.boolean(),
+  contractCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .meta({ description: 'Contratos ativos da contraparte (read-model par_contract_count_view)' }),
 });
 
 const partnersPaginationMetaSchema = z.object({
