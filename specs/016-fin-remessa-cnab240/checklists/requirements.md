@@ -32,5 +32,5 @@
 ## Notes
 
 - **Decisão de escopo do usuário (travada):** somente a **geração** da remessa; o retorno/importação é sub-fatia seguinte da Fatia 3 (#58).
-- Assumptions registram defaults (cedente via config, 1 remessa por execução, numeração via contador, só Bradesco, envio à VAN externo) — candidatos a refino em `/speckit-clarify` se desejado.
-- ADRs candidatos (layout/ACL, hash, numeração) ficam para o `/speckit-plan`.
+- **`/speckit-clarify` (Session 2026-06-17) — 4 decisões integradas:** entrega via object-storage (ADR-0019); operador **seleciona subconjunto** de títulos; **múltiplas contas-cedente** → 1 lote/arquivo por conta; **NSA monotônico por conta**. Ver `## Clarifications` na spec.
+- ADRs candidatos (layout/ACL, hash, NSA por conta) ficam para o `/speckit-plan`.
