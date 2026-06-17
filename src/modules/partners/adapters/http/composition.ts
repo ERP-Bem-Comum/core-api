@@ -10,6 +10,8 @@
  * timestamps). `seed` (memory, dev/test) popula o reader.
  */
 
+import process from 'node:process';
+
 import { ok, type Result } from '#src/shared/primitives/result.ts';
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import * as CollaboratorId from '#src/modules/partners/domain/collaborator/collaborator-id.ts';
@@ -64,6 +66,24 @@ import { listCollaborators } from '../../application/use-cases/list-collaborator
 import { registerCollaborator } from '../../application/use-cases/register-collaborator.ts';
 import { importCollaborators } from '../../application/use-cases/import-collaborators.ts';
 import { completeCollaboratorRegistration } from '../../application/use-cases/complete-collaborator-registration.ts';
+import { issueCollaboratorInvite } from '../../application/use-cases/issue-collaborator-invite.ts';
+import { viewCollaboratorInvite } from '../../application/use-cases/view-collaborator-invite.ts';
+import { completeCollaboratorRegistrationViaInvite } from '../../application/use-cases/complete-collaborator-registration-via-invite.ts';
+import { makeNodeCollaboratorInviteTokenMinter } from '../crypto/collaborator-invite-token-minter.node.ts';
+import { makeInMemoryCollaboratorInviteTokenStore } from '../persistence/repos/collaborator-invite-token-repository.in-memory.ts';
+import { createDrizzleCollaboratorInviteTokenStore } from '../persistence/repos/collaborator-invite-token-repository.drizzle.ts';
+import {
+  makeCapturingCollaboratorInviteMailer,
+  type CapturedCollaboratorInvite,
+} from '../notifications/collaborator-invite-mailer.capturing.ts';
+import { makeEmailCollaboratorInviteMailer } from '../notifications/collaborator-invite-mailer.email.ts';
+import {
+  parseSmtpConfig,
+  createNodemailerEmailSender,
+  parseEmailAddress,
+} from '#src/modules/notifications/public-api/index.ts';
+import type { CollaboratorInviteTokenRepository } from '../../domain/collaborator/invite-token-repository.ts';
+import type { CollaboratorInviteMailer } from '../../application/ports/collaborator-invite-mailer.ts';
 import { deactivateCollaborator } from '../../application/use-cases/deactivate-collaborator.ts';
 import { reactivateCollaborator } from '../../application/use-cases/reactivate-collaborator.ts';
 import { editCollaborator } from '../../application/use-cases/edit-collaborator.ts';
@@ -119,7 +139,32 @@ export type PartnersCompositionConfig = Readonly<{
   readerUrl?: string;
   /** Seed dev/test (memory). Ignorado em mysql. */
   seed?: PartnersSeed;
+  /** Autocadastro (US5): URL base do link de convite — origem confiável (anti Host-Header-Injection). */
+  autocadastroBaseUrl?: string;
+  /** TTL do convite em dias (default 7 — clarify). */
+  inviteTtlDays?: number;
 }>;
+
+const DEFAULT_AUTOCADASTRO_BASE_URL = 'http://localhost/api/v1/collaborators/autocadastro';
+const DEFAULT_INVITE_TTL_DAYS = 7;
+
+// US5: resolve o mailer de convite do env. SMTP (parseSmtpConfig) + PARTNERS_INVITE_FROM válidos
+// → Nodemailer real (notifications/public-api); senão → no-op SEGURO (não envia, não loga link).
+// Espelha auth/buildInviteMailer; mantém o boot resiliente em dev sem SMTP configurado.
+const buildPartnersInviteMailer = (env: Readonly<NodeJS.ProcessEnv>): CollaboratorInviteMailer => {
+  const smtp = parseSmtpConfig(env);
+  const fromRaw = env['PARTNERS_INVITE_FROM'];
+  if (smtp.ok && fromRaw !== undefined && fromRaw.length > 0) {
+    const from = parseEmailAddress(fromRaw);
+    if (from.ok) {
+      return makeEmailCollaboratorInviteMailer({
+        emailSender: createNodemailerEmailSender(smtp.value),
+        from: from.value,
+      });
+    }
+  }
+  return { sendInvite: () => Promise.resolve(ok(undefined)) };
+};
 
 export type PartnersHttpDeps = Readonly<{
   listCollaborators: ReturnType<typeof listCollaborators>;
@@ -136,6 +181,14 @@ export type PartnersHttpDeps = Readonly<{
   /** Import em lote (writer pool, US-001): reusa registerCollaborator por linha. */
   importCollaborators: ReturnType<typeof importCollaborators>;
   completeCollaboratorRegistration: ReturnType<typeof completeCollaboratorRegistration>;
+  /** Autocadastro público (US5): emite convite (chamado após register na rota), view (CPF mascarado) e complete via token. */
+  issueCollaboratorInvite: ReturnType<typeof issueCollaboratorInvite>;
+  viewCollaboratorInvite: ReturnType<typeof viewCollaboratorInvite>;
+  completeCollaboratorRegistrationViaInvite: ReturnType<
+    typeof completeCollaboratorRegistrationViaInvite
+  >;
+  /** Convites capturados (driver memory/test). Ausente em mysql. */
+  sentInvites?: readonly CapturedCollaboratorInvite[];
   /** Soft-delete (writer pool, P3). */
   deactivateCollaborator: ReturnType<typeof deactivateCollaborator>;
   reactivateCollaborator: ReturnType<typeof reactivateCollaborator>;
@@ -184,6 +237,9 @@ type Pools = Readonly<{
   collaboratorWriterRepo: CollaboratorRepository;
   collaboratorReader: CollaboratorReader;
   collaboratorHistory: CollaboratorHistoryRepository;
+  inviteRepo: CollaboratorInviteTokenRepository;
+  inviteMailer: CollaboratorInviteMailer;
+  sentInvites?: readonly CapturedCollaboratorInvite[];
   supplierReader: SupplierReader;
   supplierWriterRepo: SupplierRepository;
   financierReader: FinancierReader;
@@ -198,6 +254,8 @@ const buildMemoryPools = (config: PartnersCompositionConfig): Pools => {
   // RW split sem efeito físico em memory: reader = writer = mesmo store de agregados.
   const { repository } = makeInMemoryCollaboratorStore();
   const { repository: actRepository } = makeInMemoryActStore();
+  const inviteStore = makeInMemoryCollaboratorInviteTokenStore();
+  const capturingMailer = makeCapturingCollaboratorInviteMailer();
   // ActReader in-memory: usa seed explícito se fornecido, caso contrário deriva do repositório
   // writer (RW split em memória — sem reader pool separado, conforme padrão do colaborador).
   const actReader =
@@ -209,6 +267,9 @@ const buildMemoryPools = (config: PartnersCompositionConfig): Pools => {
     collaboratorWriterRepo: repository,
     collaboratorReader: makeInMemoryCollaboratorReader(config.seed?.collaborators ?? []),
     collaboratorHistory: makeInMemoryCollaboratorHistory(config.seed?.collaboratorHistory ?? []),
+    inviteRepo: inviteStore.repository,
+    inviteMailer: capturingMailer.mailer,
+    sentInvites: capturingMailer.sent,
     supplierReader: makeInMemorySupplierReader(config.seed?.suppliers ?? []),
     supplierWriterRepo: makeInMemorySupplierStore().repository,
     financierReader: makeInMemoryFinancierReader(config.seed?.financiers ?? []),
@@ -249,6 +310,9 @@ const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools
     collaboratorWriterRepo: createDrizzleCollaboratorStore(writerHandle, clock),
     collaboratorReader: createDrizzleCollaboratorReader(readerHandle),
     collaboratorHistory: createDrizzleCollaboratorHistory(writerHandle),
+    // Invite (US5): repo Drizzle no writer pool; mailer resolvido do env (Nodemailer ou no-op seguro).
+    inviteRepo: createDrizzleCollaboratorInviteTokenStore(writerHandle).repository,
+    inviteMailer: buildPartnersInviteMailer(process.env),
     supplierReader: createDrizzleSupplierReader(readerHandle),
     supplierWriterRepo: createDrizzleSupplierStore(writerHandle, clock),
     financierReader: createDrizzleFinancierReader(readerHandle),
@@ -264,8 +328,11 @@ const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools
   };
 };
 
-const makeDeps = (pools: Pools): PartnersHttpDeps => {
+const makeDeps = (pools: Pools, config: PartnersCompositionConfig): PartnersHttpDeps => {
   const clock = ClockReal();
+  const inviteMinter = makeNodeCollaboratorInviteTokenMinter();
+  const autocadastroBaseUrl = config.autocadastroBaseUrl ?? DEFAULT_AUTOCADASTRO_BASE_URL;
+  const inviteTtlDays = config.inviteTtlDays ?? DEFAULT_INVITE_TTL_DAYS;
   return {
     listCollaborators: listCollaborators({ collaboratorRepo: pools.collaboratorReaderRepo }),
     getCollaboratorById: async (rawId) => {
@@ -283,6 +350,27 @@ const makeDeps = (pools: Pools): PartnersHttpDeps => {
       collaboratorRepo: pools.collaboratorWriterRepo,
       clock,
     }),
+    issueCollaboratorInvite: issueCollaboratorInvite({
+      inviteRepo: pools.inviteRepo,
+      minter: inviteMinter,
+      mailer: pools.inviteMailer,
+      clock,
+      autocadastroBaseUrl,
+      inviteTtlDays,
+    }),
+    viewCollaboratorInvite: viewCollaboratorInvite({
+      inviteRepo: pools.inviteRepo,
+      minter: inviteMinter,
+      collaboratorRepo: pools.collaboratorWriterRepo,
+      clock,
+    }),
+    completeCollaboratorRegistrationViaInvite: completeCollaboratorRegistrationViaInvite({
+      inviteRepo: pools.inviteRepo,
+      minter: inviteMinter,
+      collaboratorRepo: pools.collaboratorWriterRepo,
+      clock,
+    }),
+    ...(pools.sentInvites === undefined ? {} : { sentInvites: pools.sentInvites }),
     deactivateCollaborator: deactivateCollaborator({
       collaboratorRepo: pools.collaboratorWriterRepo,
       historyRepo: pools.collaboratorHistory,
@@ -351,10 +439,10 @@ export const buildPartnersHttpDeps = async (
   config: PartnersCompositionConfig,
 ): Promise<PartnersHttpDeps> => {
   if (config.driver === 'memory') {
-    return makeDeps(buildMemoryPools(config));
+    return makeDeps(buildMemoryPools(config), config);
   }
   if (config.writerUrl === undefined || config.writerUrl.length === 0) {
     throw new Error('partners-composition: driver mysql exige writerUrl');
   }
-  return makeDeps(await buildMysqlPools(config));
+  return makeDeps(await buildMysqlPools(config), config);
 };

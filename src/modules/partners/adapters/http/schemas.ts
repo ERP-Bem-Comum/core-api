@@ -259,6 +259,28 @@ export const completeRegistrationBodySchema = z.object({
 export type CompleteRegistrationBody = z.infer<typeof completeRegistrationBodySchema>;
 
 /**
+ * Autocadastro público (US5). GET usa o token opaco na query; POST estende o
+ * complete-registration com `token` + `cpfPrefix` (revalidação leve de identidade — os 3
+ * primeiros dígitos do CPF, validados no domínio).
+ */
+export const autocadastroQuerySchema = z.object({
+  token: z.string().min(1),
+});
+
+export const autocadastroBodySchema = completeRegistrationBodySchema.extend({
+  token: z.string().min(1),
+  // bound de input (W2/m2): o domínio exige 3 dígitos; o máximo absorve máscara legível.
+  cpfPrefix: z.string().min(1).max(14),
+});
+
+/** Preview de pré-cadastro (GET autocadastro) — só os 3 campos públicos; CPF mascarado (W2/m3). */
+export const autocadastroPreviewSchema = z.object({
+  collaboratorId: z.string(),
+  name: z.string(),
+  cpfMasked: z.string(),
+});
+
+/**
  * Body do POST /:id/deactivate (P3). `disableBy` = motivo de RH. `LEGACY_MIGRATION` é
  * marcador de proveniência de ETL — fora da borda humana (valor inválido → 400).
  */

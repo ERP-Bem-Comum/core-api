@@ -285,6 +285,35 @@ export const parCollaboratorHistory = mysqlTable(
 export type CollaboratorHistoryRow = typeof parCollaboratorHistory.$inferSelect;
 export type NewCollaboratorHistoryRow = typeof parCollaboratorHistory.$inferInsert;
 
+// ─── par_invite_tokens ──────────────────────────────────────────────────────
+// Convite de autocadastro do colaborador (US5). Espelha o molde auth password-reset:
+// token opaco minteado no adapter (CSPRNG), persiste só o HASH (sha256 hex). Uso-único
+// (`used_at`) + TTL (`expires_at`). `collaborator_id` referencia o colaborador por ID +
+// índice (sem FK rígida — ADR-0014, padrão `par_collaborator_history`/`par_user_profiles`).
+export const parInviteTokens = mysqlTable(
+  'par_invite_tokens',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    collaboratorId: varchar('collaborator_id', { length: 36 }).notNull(),
+    // sha256 hex (64 chars). UNIQUE: lookup do fluxo público (`findByTokenHash`); `COLLATE
+    // utf8mb4_bin` no SQL manual (comparação binária determinística — como `id`/`cnpj`).
+    tokenHash: varchar('token_hash', { length: 64 }).notNull(),
+    issuedAt: datetime('issued_at', { mode: 'date', fsp: 3 }).notNull(),
+    expiresAt: datetime('expires_at', { mode: 'date', fsp: 3 }).notNull(),
+    // null = pending; preenchido = consumido (uso-único). `markUsed`: UPDATE ... WHERE used_at IS NULL.
+    usedAt: datetime('used_at', { mode: 'date', fsp: 3 }),
+  },
+  (t) => [
+    // Lookup + unicidade do hash (`findByTokenHash`; nunca dois convites com o mesmo hash).
+    uniqueIndex('par_invite_tokens_token_hash_idx').on(t.tokenHash),
+    // Convites de um colaborador (referência por ID, sem FK física — ADR-0014).
+    index('par_invite_tokens_collaborator_idx').on(t.collaboratorId),
+  ],
+);
+
+export type InviteTokenRow = typeof parInviteTokens.$inferSelect;
+export type NewInviteTokenRow = typeof parInviteTokens.$inferInsert;
+
 // ─── par_user_profiles ──────────────────────────────────────────────────────
 // Perfil de usuário (legado `users` — porção de perfil; autenticação fica no auth).
 // Identidade = `user_ref` (PK natural, 1:1 com auth.User). Sem soft-delete (ciclo de

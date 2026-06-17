@@ -48,6 +48,9 @@ import {
   completeRegistrationBodySchema,
   deactivateCollaboratorBodySchema,
   updateCollaboratorBodySchema,
+  autocadastroQuerySchema,
+  autocadastroBodySchema,
+  autocadastroPreviewSchema,
 } from './schemas.ts';
 import { COLLABORATOR_PERMISSION } from '../../public-api/permissions.ts';
 
@@ -78,15 +81,22 @@ const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
   'deactivate-collaborator-not-found',
   'reactivate-collaborator-not-found',
   'edit-collaborator-not-found',
+  // Autocadastro (US5): 404 uniforme anti-enumeração (desconhecido == expirado).
+  'collaborator-autocadastro-token-expired',
+  'collaborator-autocadastro-token-used',
 ]);
 const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
   'complete-collaborator-registration-invalid-id',
   'deactivate-collaborator-invalid-id',
   'reactivate-collaborator-invalid-id',
   'edit-collaborator-invalid-id',
+  'collaborator-autocadastro-cpf-mismatch',
 ]);
 const FORBIDDEN_CODES: ReadonlySet<string> = new Set(['edit-collaborator-sensitive-forbidden']);
-const REPO_UNAVAILABLE_CODES: ReadonlySet<string> = new Set(['collaborator-repo-unavailable']);
+const REPO_UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
+  'collaborator-repo-unavailable',
+  'invite-token-repo-unavailable',
+]);
 
 // Erro de escrita → status. Default 422 (invariante de domínio: nome/email/cpf/enum inválidos).
 const writeErrorStatus = (code: string): number => {
@@ -109,6 +119,11 @@ const sendWriteError = (reply: FastifyReply, code: string): Promise<void> => {
 // o use-case importa linha a linha, sequencial). `bodyLimit` por parser preserva o global nas
 // demais rotas. ~2 MiB cobre o volume real (≤ alguns milhares de linhas).
 const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
+
+// Rate-limit dedicado das rotas PÚBLICAS de autocadastro (W2/M2): são as únicas sem requireAuth,
+// alvo de brute-force de token/cpfPrefix. Espelha o sensitiveRateLimit do auth (por-rota, sobre o
+// rate-limit global). O fluxo legítimo é pontual (1 view + 1 submit por convite).
+const AUTOCADASTRO_RATE_LIMIT = { max: 10, timeWindow: '1 minute' } as const;
 
 const collaboratorsRoutes =
   (deps: PartnersHttpDeps, hooks: CollaboratorsHttpHooks): FastifyPluginAsyncZodOpenApi =>
@@ -244,11 +259,53 @@ const collaboratorsRoutes =
       handler: async (req, reply) => {
         const result = await deps.registerCollaborator(req.body);
         if (!result.ok) return sendWriteError(reply, result.error);
-        const id = String(result.value.collaborator.id);
+        const collaborator = result.value.collaborator;
+        // US5: o pré-cadastro dispara o convite de autocadastro (mint + e-mail) — composto na
+        // ROTA (não no use case registerCollaborator, p/ não disparar convite no import em lote).
+        const invited = await deps.issueCollaboratorInvite({
+          collaboratorId: collaborator.id,
+          email: collaborator.email,
+          recipientName: collaborator.name,
+        });
+        if (!invited.ok) return sendWriteError(reply, invited.error);
         return reply
           .code(201)
-          .header('location', `/api/v1/collaborators/${id}`)
+          .header('location', `/api/v1/collaborators/${String(collaborator.id)}`)
           .send() as unknown as Promise<void>;
+      },
+    });
+
+    // Autocadastro público (US5) — SEM requireAuth. Rotas ESTÁTICAS: têm precedência sobre /:id
+    // no radix tree do Fastify. GET: token válido → 200 (CPF mascarado); desconhecido/expirado/
+    // usado → 404 UNIFORME (anti-enumeração OWASP).
+    scope.route({
+      method: 'GET',
+      url: '/collaborators/autocadastro',
+      config: { rateLimit: AUTOCADASTRO_RATE_LIMIT },
+      schema: {
+        querystring: autocadastroQuerySchema,
+        response: { 200: autocadastroPreviewSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.viewCollaboratorInvite({ token: req.query.token });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return reply.code(200).send(result.value) as unknown as Promise<void>;
+      },
+    });
+
+    // POST: completa via token (uso-único). CPF não confere → 400 (token preservado);
+    // expirado/usado → 404; sucesso → 200 + token invalidado (markUsed atômico).
+    scope.route({
+      method: 'POST',
+      url: '/collaborators/autocadastro',
+      config: { rateLimit: AUTOCADASTRO_RATE_LIMIT },
+      schema: {
+        body: autocadastroBodySchema,
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.completeCollaboratorRegistrationViaInvite(req.body);
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return reply.code(200).send() as unknown as Promise<void>;
       },
     });
 
