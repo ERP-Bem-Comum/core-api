@@ -108,17 +108,37 @@ describe('CTR-OUTBOX-CONSUMER-PORT — INV-2: contrato não mora na camada worke
   }
 });
 
-// ─── CA1 + CA3 — contrato de consumo mora num port (INV-3) ──────────────────
+// ─── CA1 + CA3 — contrato de consumo é canônico em shared/outbox (INV-3) ─────
+//
+// Evolução CORE-OUTBOX-WORKER-GENERIC (supersede parcial de CTR-OUTBOX-CONSUMER-PORT):
+// o contrato de consumo subiu de `application/ports/` para `src/shared/outbox/`, agora
+// compartilhado entre contracts/partners (worker genérico). O port do módulo RE-EXPORTA o
+// contrato, preservando o acesso via `application/ports/` (adapters/testes inalterados).
+// O invariante essencial permanece: o contrato mora numa camada de PORT (não no worker/
+// adapter), e worker+adapter dependem dele — não um do outro.
 
-describe('CTR-OUTBOX-CONSUMER-PORT — INV-3: contrato declarado em application/ports/', () => {
-  it('algum arquivo em application/ports/ declara OutboxBatchOps E WorkerOutboxOps', () => {
-    const declarers = listTsFiles(PORTS_DIR).filter((rel) => {
+const SHARED_OUTBOX_DIR = 'src/shared/outbox';
+
+describe('CTR-OUTBOX-CONSUMER-PORT — INV-3: contrato canônico em shared/outbox, re-exportado pelo port', () => {
+  it('src/shared/outbox declara OutboxBatchOps E WorkerOutboxOps', () => {
+    const declarers = listTsFiles(SHARED_OUTBOX_DIR).filter((rel) => {
       const c = read(rel);
       return CONTRACT_TYPES.every((t) => new RegExp(`export\\s+type\\s+${t}\\b`).test(c));
     });
     assert.ok(
       declarers.length >= 1,
-      'nenhum port em application/ports/ declara o contrato de consumo (OutboxBatchOps + WorkerOutboxOps)',
+      'shared/outbox não declara o contrato de consumo (OutboxBatchOps + WorkerOutboxOps)',
+    );
+  });
+
+  it('o port application/ports/ re-exporta WorkerOutboxOps de shared/outbox', () => {
+    const reexports = listTsFiles(PORTS_DIR).some((rel) => {
+      const c = read(rel);
+      return /\bWorkerOutboxOps\b/.test(c) && c.includes('shared/outbox');
+    });
+    assert.ok(
+      reexports,
+      'nenhum port em application/ports/ re-exporta o contrato de shared/outbox',
     );
   });
 });
@@ -130,14 +150,18 @@ describe('CTR-OUTBOX-CONSUMER-PORT — INV-3: contrato declarado em application/
 // `withPendingBatch` — importá-lo no worker seria import morto (no-unused-vars).
 // Que `OutboxBatchOps` viva no port é garantido por INV-3.
 
-describe('CTR-OUTBOX-CONSUMER-PORT — INV-5: worker importa o contrato do port', () => {
-  it('worker importa `WorkerOutboxOps` de application/ports/', () => {
-    const fromPorts = parseImports(read(WORKER)).some(
-      (i) => i.path.includes('application/ports') && /\bWorkerOutboxOps\b/.test(i.bindings),
-    );
+describe('CTR-OUTBOX-CONSUMER-PORT — INV-5: worker importa o contrato (shared/outbox)', () => {
+  it('worker importa `WorkerOutboxOps` do contrato compartilhado, nunca de adapter', () => {
+    const imp = parseImports(read(WORKER)).find((i) => /\bWorkerOutboxOps\b/.test(i.bindings));
+    assert.ok(imp !== undefined, 'worker não importa WorkerOutboxOps de lugar algum');
     assert.ok(
-      fromPorts,
-      'worker não importa WorkerOutboxOps de application/ports/ (esperado: contrato consumido do port)',
+      imp.path.includes('shared/outbox') || imp.path.includes('application/ports'),
+      `worker importa WorkerOutboxOps de local inesperado (${imp.path}); esperado shared/outbox ou application/ports`,
+    );
+    assert.equal(
+      imp.path.includes('adapters/'),
+      false,
+      'worker importa o contrato de adapters/ (proibido — quebraria a inversão de dependência)',
     );
   });
 });
