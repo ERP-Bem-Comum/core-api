@@ -314,6 +314,29 @@ export const parInviteTokens = mysqlTable(
 export type InviteTokenRow = typeof parInviteTokens.$inferSelect;
 export type NewInviteTokenRow = typeof parInviteTokens.$inferInsert;
 
+// ─── par_contract_count_view ────────────────────────────────────────────────
+// Read-model de contagem de contratos por contraparte (US6b — ADR-0046/0022). DERIVADO e
+// reconstruível: projeção sobre o `ctr_outbox` (via `contracts/public-api`), idempotente por
+// eventId. Chaveado por `contractor_ref` (UUID do contratado). `count` aplicado por delta (±1).
+export const parContractCountView = mysqlTable('par_contract_count_view', {
+  contractorRef: varchar('contractor_ref', { length: 36 }).primaryKey().notNull(),
+  // ADR-0046 §4: `active_count` (contratos vigentes — delta −1 em Ended/Cancelled).
+  activeCount: int('active_count').notNull().default(0),
+});
+
+export type ContractCountRow = typeof parContractCountView.$inferSelect;
+export type NewContractCountRow = typeof parContractCountView.$inferInsert;
+
+// ─── par_contract_count_processed ───────────────────────────────────────────
+// Dedup de eventId da projeção de contagem (idempotência por message ID — Vernon, IDDD, p.412).
+// `event_id` PK: o INSERT no processed gateia a aplicação do delta (at-least-once → exactly-once).
+export const parContractCountProcessed = mysqlTable('par_contract_count_processed', {
+  eventId: varchar('event_id', { length: 36 }).primaryKey().notNull(),
+  processedAt: datetime('processed_at', { mode: 'date', fsp: 3 }).notNull(),
+});
+
+export type ContractCountProcessedRow = typeof parContractCountProcessed.$inferSelect;
+
 // ─── par_user_profiles ──────────────────────────────────────────────────────
 // Perfil de usuário (legado `users` — porção de perfil; autenticação fica no auth).
 // Identidade = `user_ref` (PK natural, 1:1 com auth.User). Sem soft-delete (ciclo de

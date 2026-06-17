@@ -31,3 +31,14 @@ export type {
 // Listagem de fornecedores para projeção/backfill cross-módulo (US2 #47 — read-only).
 export { listSuppliersForProjection } from './supplier-projection.ts';
 export type { SupplierProjectionRecord } from './supplier-projection.ts';
+
+// US6b: projeção da contagem de contratos por contraparte (consome ctr_outbox via contracts/public-api).
+export { applyContractCountEvent } from '../application/use-cases/apply-contract-count-event.ts';
+export type {
+  ContractCountMessage,
+  ApplyContractCountEventError,
+} from '../application/use-cases/apply-contract-count-event.ts';
+export type {
+  ContractCountStore,
+  ContractCountStoreError,
+} from '../application/ports/contract-count-store.ts';
