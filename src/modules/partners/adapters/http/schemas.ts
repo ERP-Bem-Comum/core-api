@@ -170,6 +170,11 @@ export const collaboratorDetailSchema = z.object({
   active: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  contractCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .meta({ description: 'Contratos ativos da contraparte (read-model par_contract_count_view)' }),
 });
 
 export type CollaboratorDetailDto = z.infer<typeof collaboratorDetailSchema>;
@@ -183,7 +188,7 @@ export const collaboratorPaginationMetaSchema = z.object({
   currentPage: z.number().int().meta({ description: '1-indexed' }),
 });
 
-/** Response paginado do GET /api/v1/collaborators — item = detalhe completo (legado). */
+/** Response paginado do GET /api/v1/collaborators — item = detalhe (inclui contractCount). */
 export const collaboratorPaginatedSchema = z.object({
   items: z.array(collaboratorDetailSchema),
   meta: collaboratorPaginationMetaSchema,

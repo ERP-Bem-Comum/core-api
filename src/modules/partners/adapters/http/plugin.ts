@@ -156,9 +156,22 @@ const collaboratorsRoutes =
           });
         }
         const page = paginateRecords(result.value, queryToFilter(req.query), req.query);
+        const counts = await deps.getContractCounts(
+          page.items.map((rec) => String(rec.collaborator.id)),
+        );
+        if (!counts.ok) {
+          return sendResult(reply, err(counts.error), {
+            errors: { 'contract-count-store-unavailable': 503 },
+          });
+        }
         return sendResult(
           reply,
-          ok({ items: page.items.map(collaboratorToDetailDto), meta: page.meta }),
+          ok({
+            items: page.items.map((rec) =>
+              collaboratorToDetailDto(rec, counts.value.get(String(rec.collaborator.id)) ?? 0),
+            ),
+            meta: page.meta,
+          }),
           { ok: 200 },
         );
       },
@@ -244,7 +257,18 @@ const collaboratorsRoutes =
             errors: { 'collaborator-not-found': 404 },
           });
         }
-        return sendResult(reply, ok(collaboratorToDetailDto(result.value)), { ok: 200 });
+        const contractorRef = String(result.value.collaborator.id);
+        const counts = await deps.getContractCounts([contractorRef]);
+        if (!counts.ok) {
+          return sendResult(reply, err(counts.error), {
+            errors: { 'contract-count-store-unavailable': 503 },
+          });
+        }
+        return sendResult(
+          reply,
+          ok(collaboratorToDetailDto(result.value, counts.value.get(contractorRef) ?? 0)),
+          { ok: 200 },
+        );
       },
     });
 

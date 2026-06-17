@@ -6,7 +6,10 @@
 import type { SupplierReadRecord } from '#src/modules/partners/application/ports/supplier-reader.ts';
 import type { SupplierDetailDto } from './supplier-schemas.ts';
 
-export const supplierToDetailDto = (record: SupplierReadRecord): SupplierDetailDto => {
+export const supplierToDetailDto = (
+  record: SupplierReadRecord,
+  contractCount: number,
+): SupplierDetailDto => {
   const s = record.supplier;
   return {
     id: String(s.id),
@@ -24,5 +27,6 @@ export const supplierToDetailDto = (record: SupplierReadRecord): SupplierDetailD
     active: s.status === 'Active',
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+    contractCount,
   };
 };

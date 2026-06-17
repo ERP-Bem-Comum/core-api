@@ -16,4 +16,11 @@ export type ContractCountStore = Readonly<{
     input: Readonly<{ contractorRef: string; delta: number; eventId: string }>,
   ) => Promise<Result<void, ContractCountStoreError>>;
   getCount: (contractorRef: string) => Promise<Result<number, ContractCountStoreError>>;
+  /**
+   * Batch: contagem de vários refs numa única leitura (anti-N+1 nos grids paginados). O map só
+   * traz os refs presentes no read-model; ausentes resolvem a `0` no chamador (CA2 da #105).
+   */
+  getCounts: (
+    contractorRefs: readonly string[],
+  ) => Promise<Result<ReadonlyMap<string, number>, ContractCountStoreError>>;
 }>;

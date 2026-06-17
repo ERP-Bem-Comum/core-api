@@ -9,7 +9,7 @@
  * try/catch → Result.
  */
 
-import { eq, sql } from 'drizzle-orm';
+import { eq, inArray, sql } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
@@ -70,6 +70,21 @@ export const createDrizzleContractCountStore = (
           .where(eq(schema.parContractCountView.contractorRef, contractorRef))
           .limit(1);
         return rows[0]?.activeCount ?? 0;
+      }),
+
+    getCounts: async (contractorRefs) =>
+      safe('getCounts', async () => {
+        const out = new Map<string, number>();
+        if (contractorRefs.length === 0) return out;
+        const rows = await db
+          .select({
+            contractorRef: schema.parContractCountView.contractorRef,
+            activeCount: schema.parContractCountView.activeCount,
+          })
+          .from(schema.parContractCountView)
+          .where(inArray(schema.parContractCountView.contractorRef, [...contractorRefs]));
+        for (const row of rows) out.set(row.contractorRef, row.activeCount);
+        return out;
       }),
   };
 };

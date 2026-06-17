@@ -1,14 +1,17 @@
 /**
  * Adapter InMemory de `ContractCountStore` (US6b). `Map<contractorRef, count>` + `Set<eventId>`
  * de aplicados (idempotência por eventId — single-thread torna o dedup atômico por construção).
- * Serve testes/CLI e o driver memory do worker. ASCII puro.
+ * Serve testes/CLI e o driver memory do worker. `seed` pré-popula contagens (driver memory da
+ * borda HTTP, #105). ASCII puro.
  */
 
 import { ok } from '#src/shared/primitives/result.ts';
 import type { ContractCountStore } from '#src/modules/partners/application/ports/contract-count-store.ts';
 
-export const makeInMemoryContractCountStore = (): ContractCountStore => {
-  const counts = new Map<string, number>();
+export const makeInMemoryContractCountStore = (
+  seed: readonly { contractorRef: string; activeCount: number }[] = [],
+): ContractCountStore => {
+  const counts = new Map<string, number>(seed.map((s) => [s.contractorRef, s.activeCount]));
   const applied = new Set<string>();
 
   return {
@@ -19,5 +22,13 @@ export const makeInMemoryContractCountStore = (): ContractCountStore => {
       return ok(undefined);
     },
     getCount: async (contractorRef) => ok(counts.get(contractorRef) ?? 0),
+    getCounts: async (contractorRefs) => {
+      const out = new Map<string, number>();
+      for (const ref of contractorRefs) {
+        const v = counts.get(ref);
+        if (v !== undefined) out.set(ref, v);
+      }
+      return ok(out);
+    },
   };
 };

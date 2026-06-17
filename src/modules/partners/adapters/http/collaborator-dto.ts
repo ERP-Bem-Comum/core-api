@@ -12,7 +12,10 @@ const isoOrNull = (d: Date | null): string | null => (d === null ? null : d.toIS
  * Detalhe espelhando o schema legado `Collaborator`. `status` recebe o `registrationStatus`;
  * `active` deriva do soft-delete (`status === 'Active'`); `disableBy` só existe em Inactive.
  */
-export const collaboratorToDetailDto = (record: CollaboratorReadRecord): CollaboratorDetailDto => {
+export const collaboratorToDetailDto = (
+  record: CollaboratorReadRecord,
+  contractCount: number,
+): CollaboratorDetailDto => {
   const c = record.collaborator;
   return {
     id: String(c.id),
@@ -59,5 +62,6 @@ export const collaboratorToDetailDto = (record: CollaboratorReadRecord): Collabo
     active: c.status === 'Active',
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+    contractCount,
   };
 };

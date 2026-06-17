@@ -7,7 +7,7 @@ import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import type { ActReadRecord } from '#src/modules/partners/application/ports/act-reader.ts';
 import type { ActDetailDto } from './act-schemas.ts';
 
-export const actToDetailDto = (record: ActReadRecord): ActDetailDto => {
+export const actToDetailDto = (record: ActReadRecord, contractCount: number): ActDetailDto => {
   const a = record.act;
   const v = a.validity;
   return {
@@ -29,5 +29,6 @@ export const actToDetailDto = (record: ActReadRecord): ActDetailDto => {
     active: a.status === 'Active',
     createdAt: record.createdAt.toISOString(),
     updatedAt: record.updatedAt.toISOString(),
+    contractCount,
   };
 };

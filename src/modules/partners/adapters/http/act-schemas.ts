@@ -46,6 +46,11 @@ export const actDetailSchema = z.object({
   active: z.boolean(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  contractCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .meta({ description: 'Contratos ativos da contraparte (read-model par_contract_count_view)' }),
 });
 
 export type ActDetailDto = z.infer<typeof actDetailSchema>;
@@ -72,7 +77,7 @@ export const actListQuerySchema = z.object({
 
 export type ActListQuery = z.infer<typeof actListQuerySchema>;
 
-/** Response paginado do GET /api/v1/acts. */
+/** Response paginado do GET /api/v1/acts — item = detalhe (inclui contractCount). */
 export const actPaginatedSchema = z.object({
   items: z.array(actDetailSchema),
   meta: actPaginationMetaSchema,
