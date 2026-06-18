@@ -11,10 +11,16 @@ import type { Document } from '../../domain/document/types.ts';
 import type { DocumentListItem } from '../../domain/document/query.ts';
 import type { Payables } from '../../domain/payable/types.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
+import type { StatementTransaction } from '../../domain/statement/types.ts';
+import type { PaidPayableView } from '../../application/ports/payable-reconciliation-view.ts';
+import type { MatchSuggestion } from '../../application/use-cases/suggest-matches.ts';
 import type {
   DocumentResponseDto,
   DocumentSummaryDto,
   DocumentTimelineResponseDto,
+  PaidPayablesResponseDto,
+  StatementTransactionsResponseDto,
+  SuggestionsResponseDto,
 } from './schemas.ts';
 
 /** Serializa Money (branded { cents: number }) como string de centavos. */
@@ -120,5 +126,55 @@ export const timelineToDto = (
       before: c.before,
       after: c.after,
     })),
+  })),
+});
+
+/**
+ * Serializa as transações de um extrato (US1 conciliação) para o DTO de resposta.
+ * IDs/FITID branded → string; Date → ISO 8601; valores em string de centavos (assinado tolerado).
+ */
+export const statementTransactionsToDto = (
+  transactions: readonly StatementTransaction[],
+): StatementTransactionsResponseDto => ({
+  items: transactions.map((t) => ({
+    id: String(t.id),
+    fitid: String(t.fitid),
+    date: t.date.toISOString(),
+    movement: t.movement,
+    entryType: t.entryType,
+    payeeName: t.payeeName,
+    memo: t.memo,
+    valueCents: String(t.valueCents),
+    balanceAfterCents: String(t.balanceAfterCents),
+    reconciliationStatus: t.reconciliationStatus,
+  })),
+});
+
+/** Serializa os títulos `Paid` (GET /payables?status=Paid). valueCents em string; dueDate ISO (data). */
+export const paidPayablesToDto = (views: readonly PaidPayableView[]): PaidPayablesResponseDto => ({
+  items: views.map((v) => ({
+    id: v.id,
+    documentId: v.documentId,
+    valueCents: String(v.valueCents),
+    dueDate: v.dueDate.toISOString().slice(0, 10),
+    paymentMethod: v.paymentMethod,
+  })),
+});
+
+/** Serializa as sugestões de match (US2). score branded → number; band já é alta|media (baixa filtrada). */
+export const suggestionsToDto = (
+  suggestions: readonly MatchSuggestion[],
+): SuggestionsResponseDto => ({
+  suggestions: suggestions.map((s) => ({
+    payableId: s.payableId,
+    score: s.score,
+    band: s.band,
+    criteria: {
+      payeeMatch: s.criteria.payeeMatch,
+      exactValue: s.criteria.exactValue,
+      dateD0: s.criteria.dateD0,
+      memoRef: s.criteria.memoRef,
+      supplierOpenCount: s.criteria.supplierOpenCount,
+    },
   })),
 });

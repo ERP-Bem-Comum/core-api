@@ -284,3 +284,223 @@ export const documentTimelineResponseSchema = z.object({
 });
 
 export type DocumentTimelineResponseDto = z.infer<typeof documentTimelineResponseSchema>;
+
+// ─── POST /bank-statements (importBankStatement, US1 conciliação) ────────────
+
+/**
+ * Body de importação de extrato. `content` é o arquivo bruto (OFX/CSV) como texto; o `.max` barra
+ * payload gigante antes do parse (DoS). `fileName` é opcional (rótulo de origem).
+ */
+export const importBankStatementBodySchema = z.object({
+  debitAccountRef: z.uuid(),
+  format: z.enum(['OFX', 'CSV']),
+  content: z.string().min(1).max(5_000_000),
+  fileName: z.string().min(1).max(255).optional(),
+});
+
+export type ImportBankStatementBody = z.infer<typeof importBankStatementBodySchema>;
+
+export const bankStatementIdParamSchema = z.object({
+  id: z.uuid().meta({ description: 'UUID do extrato bancário' }),
+});
+
+/** Response da importação (201). `duplicatesDiscarded` = transações já conhecidas (descarte silencioso). */
+export const importBankStatementResponseSchema = z.object({
+  statementId: z.uuid(),
+  imported: z.number().int().min(0),
+  duplicatesDiscarded: z.number().int().min(0),
+  period: z.object({
+    start: z.iso.datetime(),
+    end: z.iso.datetime(),
+  }),
+});
+
+export type ImportBankStatementResponseDto = z.infer<typeof importBankStatementResponseSchema>;
+
+// ─── GET /bank-statements/:id/transactions ──────────────────────────────────
+
+// valueCents/balanceAfterCents trafegam como string (cents). Não usam o regex não-negativo de
+// `centsStringSchema`: saldo pode ser negativo (cheque especial); é serialização nossa (confiável).
+const statementTransactionSchema = z.object({
+  id: z.uuid(),
+  fitid: z.string(),
+  date: z.iso.datetime(),
+  movement: z.enum(['Debit', 'Credit']),
+  entryType: z.string(),
+  payeeName: z.string(),
+  memo: z.string(),
+  valueCents: z.string(),
+  balanceAfterCents: z.string(),
+  reconciliationStatus: z.enum(['Pending', 'Reconciled', 'ManualEntry']),
+});
+
+export const statementTransactionsResponseSchema = z.object({
+  items: z.array(statementTransactionSchema),
+});
+
+export type StatementTransactionsResponseDto = z.infer<typeof statementTransactionsResponseSchema>;
+
+// ─── POST /reconciliations (confirmReconciliation, US2/US4) ──────────────────
+
+// `reconciledBy` NÃO vem no body — é o usuário autenticado (req.userId). `difference.valueCents` pode
+// ser negativo (Discount): número inteiro JSON (não a string não-negativa de centavos). A validação de
+// consistência sinal×tratamento (ex.: Discount deve ser negativo) é da conciliação parcial avançada (#141);
+// aqui o domínio só checa o fechamento 100% (R3).
+export const confirmReconciliationBodySchema = z.object({
+  transactionId: z.uuid(),
+  payableIds: z.array(z.uuid()).min(1).max(100),
+  difference: z
+    .object({
+      valueCents: z.number().int().min(-Number.MAX_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+      treatment: z.enum(['Interest', 'Penalty', 'Discount', 'Fee', 'Partial']),
+    })
+    .optional(),
+});
+
+export type ConfirmReconciliationBody = z.infer<typeof confirmReconciliationBodySchema>;
+
+export const reconciliationIdParamSchema = z.object({
+  id: z.uuid().meta({ description: 'UUID da conciliação' }),
+});
+
+export const undoReconciliationBodySchema = z.object({
+  reason: z.string().min(1).max(500).optional(),
+});
+
+export type UndoReconciliationBody = z.infer<typeof undoReconciliationBodySchema>;
+
+export const confirmReconciliationResponseSchema = z.object({
+  reconciliationId: z.uuid(),
+  type: z.enum(['Individual', 'Multiple', 'Partial']),
+  itemCount: z.number().int().min(1),
+});
+
+export const undoReconciliationResponseSchema = z.object({
+  reconciliationId: z.uuid(),
+  status: z.literal('Undone'),
+});
+
+// ─── GET /payables?status=Paid (searchPaidPayables, US2) ─────────────────────
+
+export const paidPayablesQuerySchema = z.object({
+  status: z.literal('Paid'),
+});
+
+const paidPayableSchema = z.object({
+  id: z.uuid(),
+  documentId: z.uuid(),
+  valueCents: z.string(),
+  dueDate: z.string(),
+  paymentMethod: z.string(),
+});
+
+export const paidPayablesResponseSchema = z.object({
+  items: z.array(paidPayableSchema),
+});
+
+export type PaidPayablesResponseDto = z.infer<typeof paidPayablesResponseSchema>;
+
+// ─── GET /statement-transactions/:id/suggestions (suggestMatches, US2) ───────
+
+export const statementTransactionIdParamSchema = z.object({
+  id: z.uuid().meta({ description: 'UUID da transação de extrato' }),
+});
+
+// band `baixa` (<50) não é retornada (R1/FR-011) → só alta|media na resposta.
+const matchSuggestionSchema = z.object({
+  payableId: z.uuid(),
+  score: z.number().int().min(0).max(100),
+  band: z.enum(['alta', 'media']),
+  criteria: z.object({
+    payeeMatch: z.boolean(),
+    exactValue: z.boolean(),
+    dateD0: z.boolean(),
+    memoRef: z.boolean(),
+    supplierOpenCount: z.number().int().min(0),
+  }),
+});
+
+export const suggestionsResponseSchema = z.object({
+  suggestions: z.array(matchSuggestionSchema),
+});
+
+export type SuggestionsResponseDto = z.infer<typeof suggestionsResponseSchema>;
+
+// ─── POST /statement-transactions/:id/reject-suggestion (rejectSuggestion, US2) ──
+
+export const rejectSuggestionBodySchema = z.object({
+  payableId: z.uuid(),
+});
+
+export type RejectSuggestionBody = z.infer<typeof rejectSuggestionBodySchema>;
+
+export const rejectSuggestionResponseSchema = z.object({
+  transactionId: z.uuid(),
+  payableId: z.uuid(),
+});
+
+// ─── POST /statement-transactions/:id/manual-entry + /reconciliations/batch (US5) ──
+
+const manualEntryTypeSchema = z.enum([
+  'Payment',
+  'Receipt',
+  'Transfer',
+  'FeePenaltyInterest',
+  'Investment',
+  'Redemption',
+]);
+
+// `value` NÃO vem no body — é o valor da transação (derivado no use-case).
+export const manualEntryBodySchema = z.object({
+  type: manualEntryTypeSchema,
+  supplierRef: z.uuid().optional(),
+  categoryRef: z.uuid().optional(),
+  costCenterRef: z.uuid().optional(),
+  programRef: z.uuid().optional(),
+  description: z.string().min(1).max(500).optional(),
+});
+
+export type ManualEntryBody = z.infer<typeof manualEntryBodySchema>;
+
+export const manualEntryResponseSchema = z.object({
+  reconciliationId: z.uuid(),
+  type: z.literal('ManualEntry'),
+  manualEntryId: z.uuid(),
+});
+
+export const batchBodySchema = z.object({
+  transactionIds: z.array(z.uuid()).min(1).max(500),
+  template: manualEntryBodySchema,
+});
+
+export type BatchBody = z.infer<typeof batchBodySchema>;
+
+export const batchResponseSchema = z.object({
+  created: z.number().int().min(0),
+  reconciliationIds: z.array(z.uuid()),
+  // Best-effort: transações que falharam (estado/guard) com o code público — o lote não aborta por uma.
+  failed: z.array(z.object({ transactionId: z.uuid(), error: z.string() })),
+});
+
+// ─── US6 — fechar período + exportar ─────────────────────────────────────────
+
+export const closePeriodBodySchema = z.object({
+  debitAccountRef: z.uuid(),
+  periodStart: z.iso.date(),
+  periodEnd: z.iso.date(),
+});
+
+export type ClosePeriodBody = z.infer<typeof closePeriodBodySchema>;
+
+export const closePeriodResponseSchema = z.object({
+  periodId: z.uuid(),
+  status: z.literal('Closed'),
+});
+
+export const reconciliationPeriodIdParamSchema = z.object({
+  id: z.uuid().meta({ description: 'UUID do período de conciliação' }),
+});
+
+export const exportReconciliationQuerySchema = z.object({
+  format: z.enum(['ofx', 'csv']),
+});
