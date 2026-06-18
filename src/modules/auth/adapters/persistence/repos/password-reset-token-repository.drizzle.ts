@@ -14,6 +14,7 @@ import { type Result, ok, err } from '../../../../../shared/primitives/result.ts
 import type {
   PasswordResetTokenRepository,
   PasswordResetTokenRepositoryError,
+  PasswordResetOutboxMessage,
 } from '../../../domain/session/password-reset-token-repository.ts';
 import type { PasswordResetToken } from '../../../domain/session/password-reset-token.ts';
 import type { UserId } from '../../../domain/identity/user-id.ts';
@@ -22,6 +23,7 @@ import {
   passwordResetTokenFromRow,
   passwordResetTokenToInsert,
 } from '../mappers/password-reset-token.mapper.ts';
+import { appendOutboxInTx } from './outbox-repository.drizzle.ts';
 
 const safe = async <T>(
   ctx: string,
@@ -92,26 +94,36 @@ export const createDrizzlePasswordResetTokenStore = (
       return tokens;
     });
 
+  // Upsert do token DENTRO de uma tx ja aberta (reusado por save e saveWithEvents).
+  // SELECT FOR UPDATE -> UPDATE (so used_at) ou INSERT. ADR-0020 — sem ON DUPLICATE KEY.
+  const upsertTokenInTx = async (
+    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+    tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+    token: PasswordResetToken,
+  ): Promise<void> => {
+    const existing = await tx
+      .select({ id: schema.authPasswordReset.id })
+      .from(schema.authPasswordReset)
+      .where(eq(schema.authPasswordReset.id, token.id as unknown as string))
+      .for('update');
+
+    if (existing.length > 0) {
+      // UPDATE toca só used_at (único campo do ciclo de vida; o resto é imutável após emissão).
+      await tx
+        .update(schema.authPasswordReset)
+        .set({ usedAt: token.usedAt })
+        .where(eq(schema.authPasswordReset.id, token.id as unknown as string));
+    } else {
+      await tx.insert(schema.authPasswordReset).values(passwordResetTokenToInsert(token));
+    }
+  };
+
   const save = async (
     token: PasswordResetToken,
   ): Promise<Result<void, PasswordResetTokenRepositoryError>> => {
     try {
       await db.transaction(async (tx) => {
-        const existing = await tx
-          .select({ id: schema.authPasswordReset.id })
-          .from(schema.authPasswordReset)
-          .where(eq(schema.authPasswordReset.id, token.id as unknown as string))
-          .for('update');
-
-        if (existing.length > 0) {
-          // UPDATE toca só used_at (único campo do ciclo de vida; o resto é imutável após emissão).
-          await tx
-            .update(schema.authPasswordReset)
-            .set({ usedAt: token.usedAt })
-            .where(eq(schema.authPasswordReset.id, token.id as unknown as string));
-        } else {
-          await tx.insert(schema.authPasswordReset).values(passwordResetTokenToInsert(token));
-        }
+        await upsertTokenInTx(tx, token);
       });
       return ok(undefined);
     } catch (cause) {
@@ -120,8 +132,28 @@ export const createDrizzlePasswordResetTokenStore = (
     }
   };
 
+  // AUTH-DOMAIN-OUTBOX (ADR-0047): salva o token E grava os eventos no auth_outbox na MESMA
+  // transacao (atomicidade — ADR-0015). Se qualquer passo lancar, o Drizzle faz rollback de
+  // tudo — token e evento somem juntos (sem token orfao sem evento, nem evento orfao sem token).
+  const saveWithEvents = async (
+    token: PasswordResetToken,
+    events: readonly PasswordResetOutboxMessage[],
+  ): Promise<Result<void, PasswordResetTokenRepositoryError>> => {
+    try {
+      await db.transaction(async (tx) => {
+        await upsertTokenInTx(tx, token);
+        await appendOutboxInTx(tx, schema, events);
+      });
+      return ok(undefined);
+    } catch (cause) {
+      process.stderr.write(`[password-reset-repo:saveWithEvents] ${String(cause)}\n`);
+      return err('password-reset-token-repo-unavailable');
+    }
+  };
+
   const repository: PasswordResetTokenRepository = {
     save,
+    saveWithEvents,
     findByTokenHash,
     findUnusedByUserId,
   };

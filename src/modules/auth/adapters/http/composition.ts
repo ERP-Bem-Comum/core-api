@@ -27,6 +27,7 @@ import { makeNodePasswordResetTokenMinter } from '../crypto/password-reset-token
 import { makeInMemoryLoginLockoutStore } from '../persistence/repos/login-lockout-store.in-memory.ts';
 import { makeInMemoryPasswordResetTokenStore } from '../persistence/repos/password-reset-token-repository.in-memory.ts';
 import { createDrizzlePasswordResetTokenStore } from '../persistence/repos/password-reset-token-repository.drizzle.ts';
+import { InMemoryAuthOutbox } from '../outbox/auth-outbox.in-memory.ts';
 import { createDrizzleLoginLockoutStore } from '../persistence/repos/login-lockout-store.drizzle.ts';
 import { makeNodeRefreshTokenMinter } from '../crypto/refresh-token-minter.node.ts';
 import { makeEs256TokenIssuer, type Es256Config } from '../crypto/token-issuer.es256.ts';
@@ -279,11 +280,15 @@ const buildStores = async (config: AuthCompositionConfig): Promise<Stores> => {
     const userStore = makeInMemoryUserStore();
     const refreshStore = makeInMemoryRefreshTokenStore();
     const roleStore = makeInMemoryRoleStore();
+    // AUTH-DOMAIN-OUTBOX (ADR-0047): outbox de eventos de dominio (dark-launch — sem consumidor).
+    // No driver memory injetamos um InMemoryAuthOutbox no store de reset/invite-token para que
+    // saveWithEvents acumule PasswordResetRequested/UserInvited (paridade com o Drizzle).
+    const authOutbox = InMemoryAuthOutbox();
     return {
       userReader: userStore.reader,
       userRepo: userStore.repository,
       refreshTokenRepo: refreshStore.repository,
-      resetTokenRepo: makeInMemoryPasswordResetTokenStore().repository,
+      resetTokenRepo: makeInMemoryPasswordResetTokenStore(authOutbox.port).repository,
       lockoutStore: makeInMemoryLoginLockoutStore(),
       roleRepo: roleStore.repository,
       userQuery: inMemoryUserQuery(userStore.snapshot),
