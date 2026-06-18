@@ -10,8 +10,6 @@
  * timestamps). `seed` (memory, dev/test) popula o reader.
  */
 
-import process from 'node:process';
-
 import { ok, type Result } from '#src/shared/primitives/result.ts';
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import * as CollaboratorId from '#src/modules/partners/domain/collaborator/collaborator-id.ts';
@@ -75,19 +73,7 @@ import { makeNodeCollaboratorInviteTokenMinter } from '../crypto/collaborator-in
 import { makeInMemoryCollaboratorInviteTokenStore } from '../persistence/repos/collaborator-invite-token-repository.in-memory.ts';
 import { createDrizzleCollaboratorInviteTokenStore } from '../persistence/repos/collaborator-invite-token-repository.drizzle.ts';
 import { InMemoryParEmailOutbox } from '../outbox/par-email-outbox.in-memory.ts';
-import { makeOutboxCollaboratorInviteMailer } from '../notifications/collaborator-invite-mailer.outbox.ts';
-import { makeEmailCollaboratorInviteMailer } from '../notifications/collaborator-invite-mailer.email.ts';
-import { openNotificationsMysql } from '#src/modules/notifications/adapters/persistence/drivers/mysql-driver.ts';
-import { createDrizzleEmailOutbox } from '#src/modules/notifications/adapters/outbox/email-outbox.drizzle.ts';
-import {
-  parseEmailConfig,
-  parseEmailAddress,
-  resolveFrom,
-  buildEmailSender,
-} from '#src/modules/notifications/public-api/index.ts';
-import type { EmailSender } from '#src/modules/notifications/public-api/index.ts';
 import type { CollaboratorInviteTokenRepository } from '../../domain/collaborator/invite-token-repository.ts';
-import type { CollaboratorInviteMailer } from '../../application/ports/collaborator-invite-mailer.ts';
 import { deactivateCollaborator } from '../../application/use-cases/deactivate-collaborator.ts';
 import { reactivateCollaborator } from '../../application/use-cases/reactivate-collaborator.ts';
 import { editCollaborator } from '../../application/use-cases/edit-collaborator.ts';
@@ -158,72 +144,9 @@ export type PartnersCompositionConfig = Readonly<{
 const DEFAULT_AUTOCADASTRO_BASE_URL = 'http://localhost/api/v1/collaborators/autocadastro';
 const DEFAULT_INVITE_TTL_DAYS = 7;
 
-// US5 + NOTIF-INVITE-FALLBACK-SYNC (#136): resolve o mailer de convite do env, espelhando EXATAMENTE
-// auth/buildInviteMailer e buildResetMailer — fallback SÍNCRONO real (não outbox InMemory sem worker).
-//
-// Remetente: PARTNERS_INVITE_FROM (override específico do módulo, maior precedência) ou a config
-// central resolveFrom('invite') (EMAIL_FROM_INVITE / EMAIL_FROM / alias legado).
-//
-// Preferência: com `NOTIFICATIONS_DATABASE_URL` + remetente válidos, ENFILEIRA no outbox Drizzle —
-// o worker envia com retry/backoff. Retorna também `close` (shutdown do pool). INALTERADO.
-// Fallback síncrono: provider resolvido por env (smtp/resend/memory) + sandbox; envia já no request.
-//   Provider inválido → boot falha. Sem remetente → no-op SEGURO.
-//
-// `emailSender` é seam de teste opcional (default = buildEmailSender(env)).
-type PartnersInviteMailerBuild = Readonly<{
-  mailer: CollaboratorInviteMailer;
-  close?: () => Promise<void>;
-}>;
-
-export const buildPartnersInviteMailer = async (
-  env: Readonly<NodeJS.ProcessEnv>,
-  emailSender?: EmailSender,
-): Promise<PartnersInviteMailerBuild> => {
-  const config = parseEmailConfig(env);
-  if (!config.ok) {
-    throw new Error(`partners-composition: configuração de e-mail inválida (${config.error.tag})`);
-  }
-
-  let from = resolveFrom('invite', config.value);
-  const overrideRaw = env['PARTNERS_INVITE_FROM'];
-  if (overrideRaw !== undefined && overrideRaw.length > 0) {
-    const override = parseEmailAddress(overrideRaw);
-    if (!override.ok) {
-      throw new Error('partners-composition: PARTNERS_INVITE_FROM inválido');
-    }
-    from = override.value;
-  }
-
-  // Caminho assíncrono (preferido): outbox de e-mail no MySQL do módulo notifications.
-  const notificationsUrl = env['NOTIFICATIONS_DATABASE_URL'];
-  if (from !== undefined && notificationsUrl !== undefined && notificationsUrl.length > 0) {
-    const handleR = await openNotificationsMysql({
-      connectionString: notificationsUrl,
-      applyMigrations: false,
-    });
-    if (handleR.ok) {
-      const outbox = createDrizzleEmailOutbox(handleR.value);
-      return {
-        mailer: makeOutboxCollaboratorInviteMailer({ emailOutbox: outbox, from }),
-        close: handleR.value.close,
-      };
-    }
-    process.stderr.write(
-      `[partners-composition] outbox de convite indisponível (${handleR.error}); fallback síncrono/no-op\n`,
-    );
-  }
-
-  // Fallback síncrono: provider resolvido por env (smtp/resend/memory) + sandbox. No-op SEGURO
-  // (não envia, não loga link) quando não há remetente configurado.
-  const senderR = emailSender !== undefined ? ok(emailSender) : buildEmailSender(env);
-  if (senderR.ok && from !== undefined) {
-    return { mailer: makeEmailCollaboratorInviteMailer({ emailSender: senderR.value, from }) };
-  }
-  if (!senderR.ok) {
-    throw new Error(`partners-composition: provider de e-mail inválido (${senderR.error.tag})`);
-  }
-  return { mailer: { sendInvite: () => Promise.resolve(ok(undefined)) } };
-};
+// ADR-0047 (fatia 02b — NOTIF-EMAIL-OUTBOX-RETIRE): o builder sincrono de mailer de convite foi
+// REMOVIDO. O envio e do consumidor (worker `email-dispatch`); o produtor (partners) apenas EMITE
+// o evento na tx (par_email_outbox via InMemoryParEmailOutbox).
 
 export type PartnersHttpDeps = Readonly<{
   listCollaborators: ReturnType<typeof listCollaborators>;

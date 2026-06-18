@@ -25,9 +25,6 @@ export type { EmailMessage, EmailReceipt, EmailError } from '../domain/email/typ
 // Application port
 export type { EmailSender } from '../application/ports/email-sender.ts';
 
-// Application port - outbox de e-mail (entrega assincrona via worker; NOTIF-EMAIL-OUTBOX)
-export type { EmailOutbox, EmailOutboxError } from '../application/ports/email-outbox.ts';
-
 // Production adapter (Nodemailer)
 export type { SmtpConfig, SmtpConfigError } from '../adapters/email/nodemailer-config.ts';
 export { parseSmtpConfig } from '../adapters/email/nodemailer-config.ts';

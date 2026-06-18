@@ -35,7 +35,6 @@
     "worker:outbox:partners": "node --experimental-strip-types --enable-source-maps --no-warnings src/modules/partners/worker/run.ts",
     "worker:supplier-projection": "node --experimental-strip-types --enable-source-maps --no-warnings src/workers/supplier-view-projection/run.ts",
     "worker:contract-count-projection": "node --experimental-strip-types --enable-source-maps --no-warnings src/workers/contract-count-projection/run.ts",
-    "worker:email": "node --experimental-strip-types --enable-source-maps --no-warnings src/modules/notifications/worker/run.ts",
     "worker:email-dispatch": "node --experimental-strip-types --enable-source-maps --no-warnings src/workers/email-dispatch/run.ts",
     "job:contracts:sweep": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/contracts/sweeper/run.ts",
     "job:financial:supplier-view-backfill": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/financial/supplier-view-backfill/run.ts",

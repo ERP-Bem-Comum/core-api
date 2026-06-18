@@ -8,6 +8,13 @@
       "when": 1781745273109,
       "tag": "0000_silly_goliath",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1781794913142,
+      "tag": "0001_bouncy_maddog",
+      "breakpoints": true
     }
   ]
 }

@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "NOTIF-EMAIL-OUTBOX-RETIRE",
+  "size": "M",
+  "createdAt": "2026-06-18T14:52:19.094Z",
+  "closedAt": "2026-06-18T15:11:45.125Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-06-18T14:54:30.881Z",
+      "finishedAt": "2026-06-18T14:57:12.119Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "ports-and-adapters",
+      "startedAt": "2026-06-18T14:57:12.662Z",
+      "finishedAt": "2026-06-18T15:07:58.243Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-06-18T15:07:58.813Z",
+      "finishedAt": "2026-06-18T15:08:21.572Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-06-18T15:08:22.111Z",
+      "finishedAt": "2026-06-18T15:11:44.598Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}
