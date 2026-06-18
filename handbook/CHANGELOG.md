@@ -4,6 +4,22 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-18 — 📨 ADR-0047 (Accepted): e-mail transacional como evento de domínio no outbox do produtor
+
+Novo [ADR-0047](./architecture/adr/0047-transactional-email-via-producer-domain-event.md) (**Accepted**), **estende** [ADR-0015](./architecture/adr/0015-mysql-outbox-pattern.md) (outbox/atomicidade) e
+[ADR-0010](./architecture/adr/0010-email-port-adapter-pattern.md) (Email Port/Adapter).
+
+Decisão (c) da issue [#134](https://github.com/ERP-Bem-Comum/core-api/issues/134) (follow-up de #117): o disparo de
+e-mail transacional deixa de ser chamada cross-módulo best-effort e passa a ser **evento de domínio do módulo produtor**,
+gravado no **seu** outbox na MESMA transação do save (atomicidade, ADR-0015) — `notifications` vira **consumidor**
+(template → `EmailSender`), mesmo padrão de `fin_supplier_view` (ADR-0045) / `par_contract_count_view` (ADR-0046).
+Consequências: `auth` ganha outbox de eventos (não tem hoje); o `notifications_email_outbox` (de `NOTIF-EMAIL-OUTBOX`)
+vira redundante (aposentadoria planejada). Interino até a implementação: best-effort atual com fallback síncrono
+(`NOTIF-INVITE-FALLBACK-SYNC`). Fatiamento proposto: `AUTH-DOMAIN-OUTBOX` + `NOTIF-EMAIL-EVENT-CONSUMER` +
+`PARTNERS-INVITE-DOMAIN-EVENT`. Ratificado (**Accepted**) em 2026-06-18.
+
+---
+
 ## 2026-06-17 — 🔗 ADR-0046 (Accepted): contrato de eventos `contracts → partners` (`contractorRef` p/ contagem nos grids, US6 #46)
 
 Novo [ADR-0046](./architecture/adr/0046-contracts-contractor-ref-integration-events.md) (**Accepted**), **estende**

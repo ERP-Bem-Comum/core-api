@@ -33,7 +33,8 @@
     "drizzle.config.auth.ts",
     "drizzle.config.partners.ts",
     "drizzle.config.programs.ts",
-    "drizzle.config.financial.ts"
+    "drizzle.config.financial.ts",
+    "drizzle.config.notifications.ts"
   ],
   "exclude": ["node_modules", "dist"]
 }
