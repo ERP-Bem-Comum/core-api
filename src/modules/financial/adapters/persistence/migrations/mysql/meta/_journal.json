@@ -36,6 +36,13 @@
       "when": 1781788662474,
       "tag": "0004_freezing_nekra",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1781794519358,
+      "tag": "0005_silky_scorpion",
+      "breakpoints": true
     }
   ]
 }

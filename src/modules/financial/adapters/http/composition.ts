@@ -19,9 +19,12 @@ import {
   createInMemoryTimelineRepository,
   type TimelineStore,
 } from '../persistence/repos/timeline-repository.in-memory.ts';
+import { createInMemoryBankStatementRepository } from '../persistence/repos/bank-statement-repository.in-memory.ts';
 import { createInMemoryOutbox } from '../outbox/outbox.in-memory.ts';
 import { createDrizzleDocumentRepository } from '../persistence/repos/document-repository.drizzle.ts';
 import { createDrizzleTimelineRepository } from '../persistence/repos/timeline-repository.drizzle.ts';
+import { createDrizzleBankStatementRepository } from '../persistence/repos/bank-statement-repository.drizzle.ts';
+import { bankStatementParser } from '../statement-parsers/bank-statement-parser.ts';
 import {
   openMysqlFinancial,
   type FinancialMysqlHandle,
@@ -35,9 +38,11 @@ import { undoApproval } from '../../application/use-cases/undo-approval.ts';
 import { cancelDocument } from '../../application/use-cases/cancel-document.ts';
 import { submitDraft } from '../../application/use-cases/submit-draft.ts';
 import { getDocumentTimeline } from '../../application/use-cases/get-document-timeline.ts';
+import { importBankStatement } from '../../application/use-cases/import-bank-statement.ts';
 import type { DocumentRepository } from '../../domain/document/repository.ts';
 import type { FinancialTimelineRepository } from '../../domain/timeline/repository.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
+import type { BankStatementRepository } from '../../application/ports/bank-statement-repository.ts';
 
 export type FinancialDriver = 'memory' | 'mysql';
 
@@ -61,6 +66,10 @@ export type FinancialHttpDeps = Readonly<{
   listDocuments: DocumentRepository['findPaged'];
   /** Trilha por-campo (Time Travel) de um documento — consumido pelo GET /documents/:id/timeline. */
   getDocumentTimeline: ReturnType<typeof getDocumentTimeline>;
+  /** Importação de extrato bancário (US1 conciliação) — POST /bank-statements. */
+  importBankStatement: ReturnType<typeof importBankStatement>;
+  /** Leitura das transações de um extrato — GET /bank-statements/:id/transactions. */
+  listStatementTransactions: BankStatementRepository['listTransactions'];
   shutdown: () => Promise<void>;
 }>;
 
@@ -69,6 +78,7 @@ type Pools = Readonly<{
   // Repo de LEITURA da trilha. Na escrita, o `save` do DocumentRepository grava a trilha
   // na mesma transação (memory: store compartilhado; mysql: dentro da tx do save).
   timelineRepo: FinancialTimelineRepository;
+  statementRepo: BankStatementRepository;
   shutdown: () => Promise<void>;
 }>;
 
@@ -81,7 +91,8 @@ const buildMemoryPools = (): Pools => {
   const supplierViewStore = createInMemorySupplierViewStore();
   const repo = createInMemoryDocumentRepository(timelineStore, supplierViewStore);
   const timelineRepo = createInMemoryTimelineRepository(timelineStore);
-  return { repo, timelineRepo, shutdown: () => Promise.resolve() };
+  const statementRepo = createInMemoryBankStatementRepository();
+  return { repo, timelineRepo, statementRepo, shutdown: () => Promise.resolve() };
 };
 
 const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pools> => {
@@ -98,6 +109,7 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     repo: createDrizzleDocumentRepository(handle),
     // Leitura da trilha via pool (a escrita é feita dentro da tx do document-repo.save).
     timelineRepo: createDrizzleTimelineRepository(handle),
+    statementRepo: createDrizzleBankStatementRepository(handle),
     shutdown: () => handle.close(),
   };
 };
@@ -119,6 +131,13 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     findDocumentById: pools.repo.findById,
     listDocuments: pools.repo.findPaged,
     getDocumentTimeline: getDocumentTimeline({ timelineRepo: pools.timelineRepo }),
+    importBankStatement: importBankStatement({
+      parser: bankStatementParser,
+      repo: pools.statementRepo,
+      clock,
+      outbox: outbox.port,
+    }),
+    listStatementTransactions: pools.statementRepo.listTransactions,
     shutdown: pools.shutdown,
   };
 };

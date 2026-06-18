@@ -284,3 +284,58 @@ export const documentTimelineResponseSchema = z.object({
 });
 
 export type DocumentTimelineResponseDto = z.infer<typeof documentTimelineResponseSchema>;
+
+// ─── POST /bank-statements (importBankStatement, US1 conciliação) ────────────
+
+/**
+ * Body de importação de extrato. `content` é o arquivo bruto (OFX/CSV) como texto; o `.max` barra
+ * payload gigante antes do parse (DoS). `fileName` é opcional (rótulo de origem).
+ */
+export const importBankStatementBodySchema = z.object({
+  debitAccountRef: z.uuid(),
+  format: z.enum(['OFX', 'CSV']),
+  content: z.string().min(1).max(5_000_000),
+  fileName: z.string().min(1).max(255).optional(),
+});
+
+export type ImportBankStatementBody = z.infer<typeof importBankStatementBodySchema>;
+
+export const bankStatementIdParamSchema = z.object({
+  id: z.uuid().meta({ description: 'UUID do extrato bancário' }),
+});
+
+/** Response da importação (201). `duplicatesDiscarded` = transações já conhecidas (descarte silencioso). */
+export const importBankStatementResponseSchema = z.object({
+  statementId: z.uuid(),
+  imported: z.number().int().min(0),
+  duplicatesDiscarded: z.number().int().min(0),
+  period: z.object({
+    start: z.iso.datetime(),
+    end: z.iso.datetime(),
+  }),
+});
+
+export type ImportBankStatementResponseDto = z.infer<typeof importBankStatementResponseSchema>;
+
+// ─── GET /bank-statements/:id/transactions ──────────────────────────────────
+
+// valueCents/balanceAfterCents trafegam como string (cents). Não usam o regex não-negativo de
+// `centsStringSchema`: saldo pode ser negativo (cheque especial); é serialização nossa (confiável).
+const statementTransactionSchema = z.object({
+  id: z.uuid(),
+  fitid: z.string(),
+  date: z.iso.datetime(),
+  movement: z.enum(['Debit', 'Credit']),
+  entryType: z.string(),
+  payeeName: z.string(),
+  memo: z.string(),
+  valueCents: z.string(),
+  balanceAfterCents: z.string(),
+  reconciliationStatus: z.enum(['Pending', 'Reconciled', 'ManualEntry']),
+});
+
+export const statementTransactionsResponseSchema = z.object({
+  items: z.array(statementTransactionSchema),
+});
+
+export type StatementTransactionsResponseDto = z.infer<typeof statementTransactionsResponseSchema>;

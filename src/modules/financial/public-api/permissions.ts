@@ -14,6 +14,9 @@ export const FINANCIAL_PERMISSION = {
   // payable: operações sobre títulos gerados
   // payableRead e payableUndoApproval removidas (FR-010/ADR-0004 010 - permissoes inertes: sem rota enforca).
   payableApprove: 'payable:approve',
+  // reconciliation: conciliação bancária (US1 — importação/leitura de extrato)
+  reconciliationImport: 'reconciliation:import',
+  reconciliationRead: 'reconciliation:read',
 } as const;
 
 export type FinancialPermission = (typeof FINANCIAL_PERMISSION)[keyof typeof FINANCIAL_PERMISSION];

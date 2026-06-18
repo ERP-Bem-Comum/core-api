@@ -9,6 +9,7 @@
 const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
   'document-not-found',
   'timeline-document-not-found',
+  'bank-statement-not-found',
 ]);
 
 const CONFLICT_CODES: ReadonlySet<string> = new Set([
@@ -21,12 +22,17 @@ const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
   'partner-ref-invalid',
   'document-id-invalid',
   'user-ref-invalid',
+  // Importação de extrato (US1): formato/conteúdo inválido vindo do parser.
+  'malformed-statement',
+  'unsupported-format',
+  'empty-content',
 ]);
 
 const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   'document-repository-failure',
   'timeline-repository-failure',
   'outbox-append-failed',
+  'bank-statement-repository-failure',
 ]);
 
 /** Status HTTP para um slug interno de erro. Default 422 (regra de negócio inválida). */
@@ -86,6 +92,12 @@ const SLUG_MESSAGES: Record<string, string> = {
   'registered-tax-rate-invalid': 'Taxa de imposto registrada inválida.',
   'registered-tax-money-invalid': 'Valor monetário de imposto registrado inválido.',
   'user-ref-invalid': 'Identificador de usuário inválido.',
+  // Importação de extrato (US1 conciliação).
+  'malformed-statement': 'Arquivo de extrato malformado: não foi possível interpretar o conteúdo.',
+  'unsupported-format': 'Formato de extrato não suportado (esperado OFX ou CSV).',
+  'empty-content': 'O conteúdo do extrato está vazio.',
+  'empty-statement': 'O extrato não contém nenhuma transação para importar.',
+  'bank-statement-not-found': 'Extrato bancário não encontrado.',
 };
 
 /** Mensagem PT-BR ao humano para um slug; fallback por `code` público. Nunca retorna o slug. */

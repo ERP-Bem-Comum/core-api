@@ -39,7 +39,12 @@ import * as DocumentId from '../../domain/shared/document-id.ts';
 import type { RetentionInput } from '../../domain/shared/retention.ts';
 import type { RegisteredTaxInput } from '../../domain/shared/registered-tax.ts';
 import { FINANCIAL_PERMISSION } from '../../public-api/permissions.ts';
-import { documentToDto, listItemToSummaryDto, timelineToDto } from './dto.ts';
+import {
+  documentToDto,
+  listItemToSummaryDto,
+  timelineToDto,
+  statementTransactionsToDto,
+} from './dto.ts';
 import type { DocumentListFilter } from '../../domain/document/query.ts';
 import type { FinancialHttpDeps } from './composition.ts';
 import {
@@ -52,6 +57,10 @@ import {
   documentResponseSchema,
   documentListResponseSchema,
   documentTimelineResponseSchema,
+  importBankStatementBodySchema,
+  importBankStatementResponseSchema,
+  bankStatementIdParamSchema,
+  statementTransactionsResponseSchema,
 } from './schemas.ts';
 
 export type FinancialHttpHooks = Readonly<{
@@ -396,6 +405,57 @@ const financialRoutes =
         if (!result.ok) return sendDomainError(reply, result.error);
 
         return sendResult(reply, ok(timelineToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // POST /financial/bank-statements — importa extrato OFX/CSV (US1 conciliação).
+    scope.route({
+      method: 'POST',
+      url: '/financial/bank-statements',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationImport)],
+      schema: {
+        body: importBankStatementBodySchema,
+        response: { 201: importBankStatementResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const body = req.body;
+        const result = await deps.importBankStatement({
+          debitAccountRef: body.debitAccountRef,
+          format: body.format,
+          content: body.content,
+          ...(body.fileName !== undefined ? { fileName: body.fileName } : {}),
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(
+          reply,
+          ok({
+            statementId: String(result.value.statementId),
+            imported: result.value.imported,
+            duplicatesDiscarded: result.value.discardedDuplicates,
+            period: {
+              start: result.value.period.start.toISOString(),
+              end: result.value.period.end.toISOString(),
+            },
+          }),
+          { ok: 201 },
+        );
+      },
+    });
+
+    // GET /financial/bank-statements/:id/transactions — transações do extrato importado.
+    scope.route({
+      method: 'GET',
+      url: '/financial/bank-statements/:id/transactions',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationRead)],
+      schema: {
+        params: bankStatementIdParamSchema,
+        response: { 200: statementTransactionsResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.listStatementTransactions(req.params.id);
+        if (!result.ok) return sendDomainError(reply, result.error);
+        if (result.value === null) return sendDomainError(reply, 'bank-statement-not-found');
+        return sendResult(reply, ok(statementTransactionsToDto(result.value)), { ok: 200 });
       },
     });
   };

@@ -42,6 +42,7 @@ import {
   int,
   mysqlTable,
   text,
+  uniqueIndex,
   varchar,
 } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
@@ -505,6 +506,70 @@ export const finCedenteAccounts = mysqlTable(
   ],
 );
 
+// ─── fin_bank_statements ──────────────────────────────────────────────────────
+//
+// Raiz do agregado BankStatement (US1 conciliação): extrato importado (OFX/CSV). period_* e file_*
+// decompostos (sem JSON — ADR-0020); balanços em bigint cents. `file_format` é enum varchar+CHECK.
+//
+// ⚠️ CHARSET/COLLATE — inserir manualmente na migration gerada (limitação Drizzle 0.45.x):
+//   ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; `id`/`debit_account_ref` em utf8mb4_bin.
+export const finBankStatements = mysqlTable(
+  'fin_bank_statements',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    debitAccountRef: varchar('debit_account_ref', { length: 36 }).notNull(),
+    periodStart: datetime('period_start', { mode: 'date', fsp: 3 }).notNull(),
+    periodEnd: datetime('period_end', { mode: 'date', fsp: 3 }).notNull(),
+    fileName: varchar('file_name', { length: 255 }).notNull(),
+    fileFormat: varchar('file_format', { length: 8 }).notNull(),
+    fileHash: varchar('file_hash', { length: 64 }).notNull(),
+    openingBalanceCents: bigint('opening_balance_cents', { mode: 'number' }).notNull(),
+    closingBalanceCents: bigint('closing_balance_cents', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    check('fin_bank_statements_file_format_chk', sql`${t.fileFormat} IN ('OFX','CSV')`),
+    index('fin_bank_statements_debit_account_ref_idx').on(t.debitAccountRef),
+  ],
+);
+
+// ─── fin_statement_transactions ───────────────────────────────────────────────
+//
+// Transações do extrato. `debit_account_ref` é desnormalizado da raiz para sustentar o índice ÚNICO
+// `(debit_account_ref, fitid)` — defesa de anti-duplicidade (R5) no nível do banco, independente do
+// dedup da aplicação. `movement`/`reconciliation_status` são enums varchar+CHECK; `entry_type` é
+// livre (string aberta do parser — domínio #118). FK → raiz ON DELETE CASCADE (aggregate boundary).
+export const finStatementTransactions = mysqlTable(
+  'fin_statement_transactions',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    statementId: varchar('statement_id', { length: 36 }).notNull(),
+    debitAccountRef: varchar('debit_account_ref', { length: 36 }).notNull(),
+    fitid: varchar('fitid', { length: 64 }).notNull(),
+    date: datetime('date', { mode: 'date', fsp: 3 }).notNull(),
+    movement: varchar('movement', { length: 8 }).notNull(),
+    entryType: varchar('entry_type', { length: 32 }).notNull(),
+    payeeName: varchar('payee_name', { length: 255 }).notNull(),
+    memo: varchar('memo', { length: 500 }).notNull(),
+    valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
+    balanceAfterCents: bigint('balance_after_cents', { mode: 'number' }).notNull(),
+    reconciliationStatus: varchar('reconciliation_status', { length: 12 }).notNull(),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.statementId],
+      foreignColumns: [finBankStatements.id],
+      name: 'fin_statement_transactions_statement_id_fk',
+    }).onDelete('cascade'),
+    uniqueIndex('fin_statement_transactions_account_fitid_uq').on(t.debitAccountRef, t.fitid),
+    index('fin_statement_transactions_statement_id_idx').on(t.statementId),
+    check('fin_statement_transactions_movement_chk', sql`${t.movement} IN ('Debit','Credit')`),
+    check(
+      'fin_statement_transactions_recon_status_chk',
+      sql`${t.reconciliationStatus} IN ('Pending','Reconciled','ManualEntry')`,
+    ),
+  ],
+);
+
 // ─── Tipos gerados pelo schema (consumidos pelos mappers) ─────────────────────
 //
 // `$inferSelect` = shape da row lida do banco (SELECT *).
@@ -535,3 +600,9 @@ export type NewSupplierViewRow = typeof finSupplierView.$inferInsert;
 
 export type CedenteAccountRow = typeof finCedenteAccounts.$inferSelect;
 export type NewCedenteAccountRow = typeof finCedenteAccounts.$inferInsert;
+
+export type BankStatementRow = typeof finBankStatements.$inferSelect;
+export type NewBankStatementRow = typeof finBankStatements.$inferInsert;
+
+export type StatementTransactionRow = typeof finStatementTransactions.$inferSelect;
+export type NewStatementTransactionRow = typeof finStatementTransactions.$inferInsert;
