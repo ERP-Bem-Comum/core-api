@@ -37,6 +37,7 @@ import {
   int,
   mysqlTable,
   primaryKey,
+  smallint,
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/mysql-core';
@@ -345,6 +346,58 @@ export const authLoginLockout = mysqlTable(
       .onUpdate('restrict'),
   ],
 );
+
+// ─── auth_outbox — eventos de dominio pendentes (AUTH-DOMAIN-OUTBOX / ADR-0047) ──
+//
+// Outbox de eventos de dominio do auth (PasswordResetRequested, UserInvited). Espelha
+// `par_outbox` (ADR-0015). Fluxo: o save do reset/invite-token insere aqui na MESMA tx
+// (via appendOutboxInTx) — atomicidade evento <=> commit da operacao. Dark-launch nesta
+// fatia (nenhum consumidor; worker e a fatia 02).
+//
+// payload: VARCHAR(8192) JSON serializado (sem JSON nativo — ADR-0020 §proibido). Carrega
+// link/token de uso unico (SENSIVEL): outbox interno (nunca cruza public-api publica — ADR-0006),
+// nao logado. IDs em varchar(36) (COLLATE utf8mb4_bin no SQL manual).
+export const authOutbox = mysqlTable(
+  'auth_outbox',
+  {
+    // UUID v4 do evento — gerado antes do INSERT. COLLATE utf8mb4_bin no SQL manual.
+    eventId: varchar('event_id', { length: 36 }).primaryKey().notNull(),
+    // userId (UUID v4). COLLATE utf8mb4_bin no SQL manual.
+    aggregateId: varchar('aggregate_id', { length: 36 }).notNull(),
+    // 'User' — controlado por CHECK abaixo.
+    aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
+    // PascalCase EN passado: PasswordResetRequested, UserInvited.
+    eventType: varchar('event_type', { length: 64 }).notNull(),
+    // Versao do contrato do payload (inicia em 1).
+    schemaVersion: smallint('schema_version').notNull(),
+    // Timestamp do domain event (momento em que ocorreu no dominio).
+    occurredAt: datetime('occurred_at', { mode: 'date', fsp: 3 }).notNull(),
+    // Timestamp do INSERT na outbox (audit trail).
+    enqueuedAt: datetime('enqueued_at', { mode: 'date', fsp: 3 }).notNull(),
+    // NULL = pendente; NOT NULL = worker marcou apos delivery OK (fatia 02).
+    processedAt: datetime('processed_at', { mode: 'date', fsp: 3 }),
+    // Numero de tentativas de entrega. Default 0; incrementado pelo worker (fatia 02).
+    attempts: smallint('attempts').notNull().default(0),
+    // Payload serializado do evento — VARCHAR, nunca JSON nativo (ADR-0020).
+    payload: varchar('payload', { length: 8192 }).notNull(),
+  },
+  (t) => [
+    // CHECK attempts >= 0 — defesa em profundidade.
+    check('auth_outbox_attempts_nonneg_chk', sql`${t.attempts} >= 0`),
+    // CHECK event_type nao-vazio.
+    check('auth_outbox_event_type_nonempty_chk', sql`CHAR_LENGTH(${t.eventType}) > 0`),
+    // CHECK aggregate_type restrito ao catalogo do modulo auth (so User por ora).
+    check('auth_outbox_aggregate_type_chk', sql`${t.aggregateType} IN ('User')`),
+    // Indice composto (ADR-0015 §"Sobre o indice"): processed_at PRIMEIRO → NULLs
+    // agrupados → worker faz range scan eficiente na query canonica.
+    index('auth_outbox_processed_at_occurred_at_idx').on(t.processedAt, t.occurredAt),
+    // Indice por agregado — auditoria "todos os eventos do usuario X".
+    index('auth_outbox_aggregate_id_idx').on(t.aggregateId),
+  ],
+);
+
+export type OutboxRow = typeof authOutbox.$inferSelect;
+export type NewOutboxRow = typeof authOutbox.$inferInsert;
 
 // ─── Tipos do schema — consumidos pelos mappers ───────────────────────────────
 export type PermissionRow = typeof authPermission.$inferSelect;

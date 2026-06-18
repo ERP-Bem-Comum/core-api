@@ -49,6 +49,7 @@ import type {
 } from '../../domain/session/password-reset-token-repository.ts';
 import type { PasswordResetTokenMinter } from '../ports/password-reset-token-minter.ts';
 import type { InviteMailer, InviteMailerError } from '../ports/invite-mailer.ts';
+import { userInvitedMessage } from '../email-events.ts';
 import { resolveMassApproverRole } from './mass-approver-role.ts';
 
 export type CreateUserByAdminCommand = Readonly<{
@@ -180,11 +181,24 @@ export const createUserByAdmin =
     });
     if (!issued.ok) return err('password-reset-token-repo-unavailable');
 
-    const savedToken = await deps.resetTokenRepo.save(issued.value);
-    if (!savedToken.ok) return savedToken;
-
     // URL de ativacao de origem confiavel (config), nunca derivada de header Host.
     const activationUrl = `${deps.activationBaseUrl}?token=${secret.token}`;
+
+    // AUTH-DOMAIN-OUTBOX (ADR-0047): grava o invite-token E o evento UserInvited na MESMA tx
+    // (atomicidade — ADR-0015). Payload autocontido (destinatario + link de ativacao + nome);
+    // sensivel, nunca logado.
+    const invitedEvent = userInvitedMessage({
+      userId: String(newUserId),
+      email: cmd.email,
+      activationUrl,
+      recipientName: cmd.name.trim(),
+      occurredAt: now,
+    });
+    const savedToken = await deps.resetTokenRepo.saveWithEvents(issued.value, [invitedEvent]);
+    if (!savedToken.ok) return savedToken;
+
+    // Dark-launch: o envio de convite atual CONTINUA (sem regressao). O consumidor do evento
+    // (fatia 02) ainda nao existe; por ora o evento apenas acumula no outbox.
     const invited = await deps.inviteMailer.sendInvite({
       email: cmd.email,
       activationUrl,

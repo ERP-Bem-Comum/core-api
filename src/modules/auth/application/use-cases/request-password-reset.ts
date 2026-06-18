@@ -24,6 +24,7 @@ import type {
   PasswordResetMailer,
   PasswordResetMailerError,
 } from '../ports/password-reset-mailer.ts';
+import { passwordResetRequestedMessage } from '../email-events.ts';
 
 export type RequestPasswordResetCommand = Readonly<{ email: string }>;
 
@@ -79,9 +80,23 @@ export const requestPasswordReset =
       expiresAt: new Date(now.getTime() + deps.resetTtlSeconds * 1000),
     });
     if (!issued.ok) return ok(undefined);
-    const saved = await deps.resetTokenRepo.save(issued.value);
-    if (!saved.ok) return saved;
 
     const resetUrl = `${deps.resetBaseUrl}?token=${secret.token}`;
+
+    // AUTH-DOMAIN-OUTBOX (ADR-0047): grava o reset-token E o evento PasswordResetRequested na
+    // MESMA tx (atomicidade — ADR-0015). O evento so e montado aqui (conta existe/ativa),
+    // preservando a anti-enumeracao dos early-returns acima. Payload autocontido (destinatario
+    // + link de uso unico); sensivel, nunca logado.
+    const event = passwordResetRequestedMessage({
+      userId: String(user.id),
+      email: cmd.email,
+      resetUrl,
+      occurredAt: now,
+    });
+    const saved = await deps.resetTokenRepo.saveWithEvents(issued.value, [event]);
+    if (!saved.ok) return saved;
+
+    // Dark-launch: o envio de e-mail atual CONTINUA (sem regressao). O consumidor do evento
+    // (fatia 02) ainda nao existe; por ora o evento apenas acumula no outbox.
     return deps.mailer.sendResetLink({ email: cmd.email, resetUrl });
   };

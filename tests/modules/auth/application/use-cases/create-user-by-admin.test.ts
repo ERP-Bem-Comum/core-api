@@ -71,6 +71,7 @@ const makeRbacCtx = () => {
   const roleStore = makeInMemoryRoleStore();
   const resetTokenRepo: PasswordResetTokenRepository = {
     save: () => Promise.resolve(ok(undefined)),
+    saveWithEvents: () => Promise.resolve(ok(undefined)),
     findByTokenHash: () => Promise.resolve(ok(null)),
     findUnusedByUserId: () => Promise.resolve(ok([])),
   };
@@ -123,6 +124,11 @@ const makeDeps = (opts?: {
   };
   const resetTokenRepo: PasswordResetTokenRepository = {
     save: (token) => {
+      captured.savedToken = token;
+      return Promise.resolve(ok(undefined));
+    },
+    // AUTH-DOMAIN-OUTBOX: o use case agora persiste token + evento via saveWithEvents.
+    saveWithEvents: (token) => {
       captured.savedToken = token;
       return Promise.resolve(ok(undefined));
     },
