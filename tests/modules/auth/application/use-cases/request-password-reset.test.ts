@@ -1,22 +1,25 @@
 /**
- * CTR-AUTH-RESET-REQUEST — W0/W1 — use case requestPasswordReset (BE-REC-003). ASCII puro.
+ * CTR-AUTH-RESET-REQUEST — use case requestPasswordReset (BE-REC-003). ASCII puro.
  *
- * Anti-enumeracao: conta inexistente -> ok sem enviar. Conta ativa -> token novo + email com link
- * (origem confiavel). Tokens pendentes anteriores sao invalidados.
+ * Anti-enumeracao: conta inexistente -> ok sem emitir evento. Conta ativa -> token novo + evento
+ * PasswordResetRequested no auth_outbox (origem confiavel). Tokens pendentes anteriores sao
+ * invalidados.
+ *
+ * NOTIF-EMAIL-EVENT-CONSUMER (fatia 02): o use case NAO chama mais mailer; o envio vem do consumidor
+ * (worker email-dispatch). O teste verifica EMISSAO do evento, nao chamada sincrona de envio.
  */
 
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
-import { ok } from '#src/shared/primitives/result.ts';
 import { requestPasswordReset } from '#src/modules/auth/application/use-cases/request-password-reset.ts';
 import { registerUser } from '#src/modules/auth/application/use-cases/register-user.ts';
 import { makeInMemoryUserStore } from '#src/modules/auth/adapters/persistence/repos/user-repository.in-memory.ts';
 import { makeInMemoryPasswordResetTokenStore } from '#src/modules/auth/adapters/persistence/repos/password-reset-token-repository.in-memory.ts';
+import { InMemoryAuthOutbox } from '#src/modules/auth/adapters/outbox/auth-outbox.in-memory.ts';
 import { makeFakePasswordHasher } from '#src/modules/auth/adapters/crypto/password-hasher.fake.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import type { PasswordResetTokenMinter } from '#src/modules/auth/application/ports/password-reset-token-minter.ts';
-import type { PasswordResetMailer } from '#src/modules/auth/application/ports/password-reset-mailer.ts';
 
 const AT = new Date('2026-05-30T12:00:00.000Z');
 const EMAIL = 'user@example.com';
@@ -26,7 +29,8 @@ const TTL = 900;
 
 const makeCtx = () => {
   const userStore = makeInMemoryUserStore();
-  const resetStore = makeInMemoryPasswordResetTokenStore();
+  const outbox = InMemoryAuthOutbox();
+  const resetStore = makeInMemoryPasswordResetTokenStore(outbox.port);
   const passwordHasher = makeFakePasswordHasher();
   const register = registerUser({
     userReader: userStore.reader,
@@ -44,48 +48,42 @@ const makeCtx = () => {
     hash: (raw) => `${raw}-h`,
   };
 
-  const mailerSent: { email: string; resetUrl: string }[] = [];
-  const mailer: PasswordResetMailer = {
-    sendResetLink: async (input) => {
-      await Promise.resolve();
-      mailerSent.push(input);
-      return ok(undefined);
-    },
-  };
-
   const request = requestPasswordReset({
     userReader: userStore.reader,
     resetTokenRepo: resetStore.repository,
     minter,
-    mailer,
     clock: ClockFixed(AT),
     resetTtlSeconds: TTL,
     resetBaseUrl: BASE,
   });
 
-  return { register, request, resetStore, mailerSent };
+  return { register, request, resetStore, outbox };
 };
 
 describe('requestPasswordReset (BE-REC-003)', () => {
-  it('conta ativa -> emite token + envia link com origem confiável', async () => {
-    const { register, request, resetStore, mailerSent } = makeCtx();
+  it('conta ativa -> emite token + evento PasswordResetRequested com origem confiável', async () => {
+    const { register, request, resetStore, outbox } = makeCtx();
     await register({ email: EMAIL, password: PASSWORD });
 
     const r = await request({ email: EMAIL });
     assert.equal(r.ok, true);
-    assert.equal(mailerSent.length, 1);
-    assert.equal(mailerSent[0]?.resetUrl, `${BASE}?token=plain-1`);
+
+    const rows = outbox.all();
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]?.eventType, 'PasswordResetRequested');
+    const payload = JSON.parse(rows[0]?.payload ?? '{}') as Record<string, unknown>;
+    assert.equal(payload['resetUrl'], `${BASE}?token=plain-1`);
 
     const persisted = await resetStore.repository.findByTokenHash('hash-1');
     assert.equal(persisted.ok, true);
     if (persisted.ok) assert.notEqual(persisted.value, null);
   });
 
-  it('conta inexistente -> ok sem enviar (anti-enumeração)', async () => {
-    const { request, mailerSent } = makeCtx();
+  it('conta inexistente -> ok sem emitir evento (anti-enumeração)', async () => {
+    const { request, outbox } = makeCtx();
     const r = await request({ email: 'ghost@example.com' });
     assert.equal(r.ok, true);
-    assert.equal(mailerSent.length, 0);
+    assert.equal(outbox.all().length, 0);
   });
 
   it('invalida tokens pendentes anteriores ao emitir um novo', async () => {

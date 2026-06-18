@@ -1,16 +1,21 @@
-// Adapter Drizzle do OutboxPort do auth (AUTH-DOMAIN-OUTBOX / ADR-0047).
-// Espelha `partners/.../outbox-repository.drizzle.ts`, GENERICO (opera sobre `OutboxMessage`).
+// Adapter Drizzle do OutboxPort do auth (AUTH-DOMAIN-OUTBOX / ADR-0047) + auxiliares do worker
+// (NOTIF-EMAIL-EVENT-CONSUMER, fatia 02).
 //
 //   - append(messages) — batch INSERT em `auth_outbox`. ER_DUP_ENTRY → tagged.
 //   - appendOutboxInTx(tx, schema, messages) — INSERT batch DENTRO de uma tx ja aberta
 //     pelo repo do agregado (save do reset/invite-token) — estado + outbox na MESMA tx
 //     (atomicidade — ADR-0015). Lanca em erro p/ o Drizzle fazer rollback; o repo pai
 //     converte o throw em Result na borda.
+//   - withPendingBatch / findPendingForUpdate / markProcessed / markFailed / moveToDeadLetter
+//     (claim com FOR UPDATE SKIP LOCKED — molde partners). Consumo pelo worker `email-dispatch`.
 //
-// Worker (consumo) e a fatia 02 (NOTIF-EMAIL-EVENT-CONSUMER) — nao implementado aqui (dark-launch).
+// DLQ SEM tabela dedicada nesta fatia: `moveToDeadLetter` marca `processed_at` (sai do pending
+// pool, preserva a row para auditoria) — `auth_outbox_dead_letter` e diferido (exigiria migration
+// destrutiva/CREATE; recorte liga+desliga nao gera migration). Mesma semantica no InMemory.
 //
 // ADR-0015 (outbox), ADR-0014 (auth_*), ADR-0020 (sem JSON nativo). Boundary: try/catch → Result.
 
+import { isNull, asc, eq, and } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
@@ -19,10 +24,13 @@ import type {
   OutboxMessage,
   OutboxRow,
   OutboxAppendError,
+  OutboxQueryError,
+  OutboxBatchOps,
 } from '../../../application/ports/outbox.ts';
 import {
   outboxAppendUnavailable,
   outboxAppendDuplicateEventId,
+  outboxQueryUnavailable,
 } from '../../../application/ports/outbox.ts';
 import type { AuthMysqlHandle } from '../drivers/mysql-driver.ts';
 import type { NewOutboxRow } from '../schemas/mysql.ts';
@@ -86,15 +94,48 @@ export const appendOutboxInTx = async (
   await tx.insert(schemaArg.authOutbox).values(inserts);
 };
 
+// ─── safe wrapper ─────────────────────────────────────────────────────────────
+
+const safe = async <T>(ctx: string, op: () => Promise<T>): Promise<Result<T, OutboxQueryError>> => {
+  try {
+    return ok(await op());
+  } catch (cause) {
+    process.stderr.write(`[auth-outbox-repo:${ctx}] ${String(cause)}\n`);
+    return err(outboxQueryUnavailable(String(cause)));
+  }
+};
+
 /**
- * createDrizzleAuthOutboxRepository — OutboxPort (`append`) para MySQL via Drizzle.
+ * createDrizzleAuthOutboxRepository — OutboxPort (`append`) + auxiliares do worker para MySQL.
+ *
  * O caminho atomico (save + evento) usa `appendOutboxInTx` no repo do token; este `append`
- * direto serve testes contratuais / boot sem agregado.
+ * direto serve testes contratuais / boot sem agregado. Os helpers do worker sao consumidos
+ * pelo `email-dispatch` (claim FOR UPDATE SKIP LOCKED).
  */
 export const createDrizzleAuthOutboxRepository = (
   handle: AuthMysqlHandle, // eslint-disable-line @typescript-eslint/prefer-readonly-parameter-types
-): OutboxPort => {
+): OutboxPort & {
+  withPendingBatch: <R>(
+    limit: number,
+    handler: (rows: readonly OutboxRow[], ops: OutboxBatchOps) => Promise<R>,
+  ) => Promise<Result<R, OutboxQueryError>>;
+  findPendingForUpdate: (limit: number) => Promise<Result<readonly OutboxRow[], OutboxQueryError>>;
+  markProcessed: (eventId: string, now: Date) => Promise<Result<void, OutboxQueryError>>;
+  markFailed: (
+    eventId: string,
+    now: Date,
+    errorTag: string,
+    attempt: number,
+  ) => Promise<Result<void, OutboxQueryError>>;
+  moveToDeadLetter: (
+    eventId: string,
+    now: Date,
+    errorMessage: string,
+  ) => Promise<Result<void, OutboxQueryError>>;
+} => {
   const { db } = handle;
+
+  // ── append ──────────────────────────────────────────────────────────────────
 
   const append = async (
     messages: readonly OutboxMessage[],
@@ -117,5 +158,140 @@ export const createDrizzleAuthOutboxRepository = (
     }
   };
 
-  return { append };
+  // ── findPendingForUpdate ──────────────────────────────────────────────────────
+
+  const findPendingForUpdate = async (
+    limit: number,
+  ): Promise<Result<readonly OutboxRow[], OutboxQueryError>> => {
+    return safe('findPendingForUpdate', async () => {
+      const rows = await db
+        .select()
+        .from(schema.authOutbox)
+        .where(isNull(schema.authOutbox.processedAt))
+        .orderBy(asc(schema.authOutbox.processedAt), asc(schema.authOutbox.occurredAt))
+        .limit(limit)
+        .for('update', { skipLocked: true });
+      return rows as readonly OutboxRow[];
+    });
+  };
+
+  // ── withPendingBatch ──────────────────────────────────────────────────────────
+  // UMA transacao: trava ate `limit` rows com FOR UPDATE SKIP LOCKED, invoca `handler`
+  // com as rows + ops de marcacao ligadas a MESMA tx. O lock sobrevive ate o COMMIT.
+
+  const withPendingBatch = async <R>(
+    limit: number,
+    handler: (rows: readonly OutboxRow[], ops: OutboxBatchOps) => Promise<R>,
+  ): Promise<Result<R, OutboxQueryError>> => {
+    try {
+      const result = await db.transaction(async (tx) => {
+        const rows = (await tx
+          .select()
+          .from(schema.authOutbox)
+          .where(isNull(schema.authOutbox.processedAt))
+          .orderBy(asc(schema.authOutbox.processedAt), asc(schema.authOutbox.occurredAt))
+          .limit(limit)
+          .for('update', { skipLocked: true })) as readonly OutboxRow[];
+
+        const ops: OutboxBatchOps = {
+          markProcessed: async (eventId, now) =>
+            safe('withPendingBatch:markProcessed', async () => {
+              await tx
+                .update(schema.authOutbox)
+                .set({ processedAt: now })
+                .where(
+                  and(
+                    eq(schema.authOutbox.eventId, eventId),
+                    isNull(schema.authOutbox.processedAt),
+                  ),
+                );
+            }),
+          markFailed: async (eventId, _now, _errorTag, attempt) =>
+            safe('withPendingBatch:markFailed', async () => {
+              await tx
+                .update(schema.authOutbox)
+                .set({ attempts: attempt })
+                .where(eq(schema.authOutbox.eventId, eventId));
+            }),
+          // DLQ sem tabela: marca processed (sai do pending), preserva a row para auditoria.
+          moveToDeadLetter: async (eventId, now, _errorMessage) =>
+            safe('withPendingBatch:moveToDeadLetter', async () => {
+              await tx
+                .update(schema.authOutbox)
+                .set({ processedAt: now })
+                .where(
+                  and(
+                    eq(schema.authOutbox.eventId, eventId),
+                    isNull(schema.authOutbox.processedAt),
+                  ),
+                );
+            }),
+        };
+
+        return handler(rows, ops);
+      });
+      return ok(result);
+    } catch (cause) {
+      process.stderr.write(`[auth-outbox-repo:withPendingBatch] ${String(cause)}\n`);
+      return err(outboxQueryUnavailable(String(cause)));
+    }
+  };
+
+  // ── markProcessed (idempotente via WHERE processed_at IS NULL) ─────────────────
+
+  const markProcessed = async (
+    eventId: string,
+    now: Date,
+  ): Promise<Result<void, OutboxQueryError>> => {
+    return safe('markProcessed', async () => {
+      await db
+        .update(schema.authOutbox)
+        .set({ processedAt: now })
+        .where(and(eq(schema.authOutbox.eventId, eventId), isNull(schema.authOutbox.processedAt)));
+    });
+  };
+
+  // ── markFailed ────────────────────────────────────────────────────────────────
+
+  const markFailed = async (
+    eventId: string,
+    now: Date,
+    errorTag: string,
+    attempt: number,
+  ): Promise<Result<void, OutboxQueryError>> => {
+    // `now`/`errorTag` reservados para a futura DLQ; por ora marcamos apenas `attempts`.
+    void now;
+    void errorTag;
+    return safe('markFailed', async () => {
+      await db
+        .update(schema.authOutbox)
+        .set({ attempts: attempt })
+        .where(eq(schema.authOutbox.eventId, eventId));
+    });
+  };
+
+  // ── moveToDeadLetter ──────────────────────────────────────────────────────────
+  // SEM tabela DLQ nesta fatia: marca processed (sai do pending), preserva a row para auditoria.
+
+  const moveToDeadLetter = async (
+    eventId: string,
+    now: Date,
+    _errorMessage: string,
+  ): Promise<Result<void, OutboxQueryError>> => {
+    return safe('moveToDeadLetter', async () => {
+      await db
+        .update(schema.authOutbox)
+        .set({ processedAt: now })
+        .where(and(eq(schema.authOutbox.eventId, eventId), isNull(schema.authOutbox.processedAt)));
+    });
+  };
+
+  return {
+    append,
+    withPendingBatch,
+    findPendingForUpdate,
+    markProcessed,
+    markFailed,
+    moveToDeadLetter,
+  };
 };

@@ -10,9 +10,8 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
-import { ok, err } from '#src/shared/primitives/result.ts';
+import { err } from '#src/shared/primitives/result.ts';
 import { createUserByAdmin } from '#src/modules/auth/application/use-cases/create-user-by-admin.ts';
-import type { InviteMailer } from '#src/modules/auth/application/ports/invite-mailer.ts';
 import type { PasswordResetTokenMinter } from '#src/modules/auth/application/ports/password-reset-token-minter.ts';
 import { makeInMemoryUserStore } from '#src/modules/auth/adapters/persistence/repos/user-repository.in-memory.ts';
 import { makeInMemoryRoleStore } from '#src/modules/auth/adapters/persistence/repos/role-repository.in-memory.ts';
@@ -48,15 +47,15 @@ const makeCtx = (over?: {
     mint: () => ({ token: 'plain-token-xyz', tokenHash: 'hash-xyz' }),
     hash: (raw) => `hash-of-${raw}`,
   };
-  const inviteMailer: InviteMailer = { sendInvite: () => Promise.resolve(ok(undefined)) };
 
+  // NOTIF-EMAIL-EVENT-CONSUMER (fatia 02): o use case nao recebe mais inviteMailer; o envio
+  // do convite e do consumidor. O evento UserInvited continua emitido na tx (saveWithEvents).
   const create = createUserByAdmin({
     userReader: userStore.reader,
     userRepo: userStore.repository,
     roleRepo: roleStore.repository,
     resetTokenRepo: resetStore.repository,
     minter,
-    inviteMailer,
     clock: ClockFixed(AT),
     unusablePasswordHash: unusableHash(),
     inviteTtlSeconds: TTL,
