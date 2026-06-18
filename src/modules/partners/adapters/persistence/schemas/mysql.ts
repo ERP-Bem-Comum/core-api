@@ -586,3 +586,56 @@ export const parOutboxDeadLetter = mysqlTable(
 
 export type OutboxDeadLetterRow = typeof parOutboxDeadLetter.$inferSelect;
 export type NewOutboxDeadLetterRow = typeof parOutboxDeadLetter.$inferInsert;
+
+// ─── par_email_outbox — eventos de e-mail transacional (PARTNERS-INVITE-DOMAIN-EVENT / ADR-0047) ──
+//
+// Outbox de e-mail DEDICADO do partners, single-consumer (so o worker email-dispatch). Distinto do
+// `par_outbox` de integracao (single-consumer destrutivo, ja consumido pelo supplier-view-projection):
+// colocar CollaboratorInvited la canibalizaria aquele consumidor. Espelha `auth_outbox` (fatia 01).
+//
+// Fluxo: o save do invite-token insere aqui na MESMA tx (via appendEmailOutboxInTx) — atomicidade
+// evento <=> commit da operacao (ADR-0015). payload: VARCHAR(8192) JSON serializado (sem JSON nativo
+// — ADR-0020 §proibido). Carrega o link de autocadastro com token de uso unico (SENSIVEL): outbox
+// interno (nunca cruza public-api publica — ADR-0006), nao logado. IDs em varchar(36) (COLLATE
+// utf8mb4_bin no SQL manual).
+export const parEmailOutbox = mysqlTable(
+  'par_email_outbox',
+  {
+    // UUID v4 do evento — gerado antes do INSERT. COLLATE utf8mb4_bin no SQL manual.
+    eventId: varchar('event_id', { length: 36 }).primaryKey().notNull(),
+    // collaboratorId (UUID v4). COLLATE utf8mb4_bin no SQL manual.
+    aggregateId: varchar('aggregate_id', { length: 36 }).notNull(),
+    // 'Collaborator' — controlado por CHECK abaixo.
+    aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
+    // PascalCase EN passado: CollaboratorInvited.
+    eventType: varchar('event_type', { length: 64 }).notNull(),
+    // Versao do contrato do payload (inicia em 1).
+    schemaVersion: smallint('schema_version').notNull(),
+    // Timestamp do domain event (momento em que ocorreu no dominio).
+    occurredAt: datetime('occurred_at', { mode: 'date', fsp: 3 }).notNull(),
+    // Timestamp do INSERT na outbox (audit trail).
+    enqueuedAt: datetime('enqueued_at', { mode: 'date', fsp: 3 }).notNull(),
+    // NULL = pendente; NOT NULL = worker marcou apos delivery OK.
+    processedAt: datetime('processed_at', { mode: 'date', fsp: 3 }),
+    // Numero de tentativas de entrega. Default 0; incrementado pelo worker.
+    attempts: smallint('attempts').notNull().default(0),
+    // Payload serializado do evento — VARCHAR, nunca JSON nativo (ADR-0020).
+    payload: varchar('payload', { length: 8192 }).notNull(),
+  },
+  (t) => [
+    // CHECK attempts >= 0 — defesa em profundidade.
+    check('par_email_outbox_attempts_nonneg_chk', sql`${t.attempts} >= 0`),
+    // CHECK event_type nao-vazio.
+    check('par_email_outbox_event_type_nonempty_chk', sql`CHAR_LENGTH(${t.eventType}) > 0`),
+    // CHECK aggregate_type restrito ao catalogo de e-mail do partners (so Collaborator por ora).
+    check('par_email_outbox_aggregate_type_chk', sql`${t.aggregateType} IN ('Collaborator')`),
+    // Indice composto (ADR-0015 §"Sobre o indice"): processed_at PRIMEIRO → NULLs agrupados →
+    // worker faz range scan eficiente na query canonica.
+    index('par_email_outbox_processed_at_occurred_at_idx').on(t.processedAt, t.occurredAt),
+    // Indice por agregado — auditoria "todos os e-mails do colaborador X".
+    index('par_email_outbox_aggregate_id_idx').on(t.aggregateId),
+  ],
+);
+
+export type EmailOutboxRow = typeof parEmailOutbox.$inferSelect;
+export type NewEmailOutboxRow = typeof parEmailOutbox.$inferInsert;

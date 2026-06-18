@@ -74,10 +74,7 @@ import { completeCollaboratorRegistrationViaInvite } from '../../application/use
 import { makeNodeCollaboratorInviteTokenMinter } from '../crypto/collaborator-invite-token-minter.node.ts';
 import { makeInMemoryCollaboratorInviteTokenStore } from '../persistence/repos/collaborator-invite-token-repository.in-memory.ts';
 import { createDrizzleCollaboratorInviteTokenStore } from '../persistence/repos/collaborator-invite-token-repository.drizzle.ts';
-import {
-  makeCapturingCollaboratorInviteMailer,
-  type CapturedCollaboratorInvite,
-} from '../notifications/collaborator-invite-mailer.capturing.ts';
+import { InMemoryParEmailOutbox } from '../outbox/par-email-outbox.in-memory.ts';
 import { makeOutboxCollaboratorInviteMailer } from '../notifications/collaborator-invite-mailer.outbox.ts';
 import { makeEmailCollaboratorInviteMailer } from '../notifications/collaborator-invite-mailer.email.ts';
 import { openNotificationsMysql } from '#src/modules/notifications/adapters/persistence/drivers/mysql-driver.ts';
@@ -249,8 +246,8 @@ export type PartnersHttpDeps = Readonly<{
   completeCollaboratorRegistrationViaInvite: ReturnType<
     typeof completeCollaboratorRegistrationViaInvite
   >;
-  /** Convites capturados (driver memory/test). Ausente em mysql. */
-  sentInvites?: readonly CapturedCollaboratorInvite[];
+  /** Convites capturados do par_email_outbox (driver memory/test). Ausente em mysql. */
+  sentInvites?: readonly SentInviteCapture[];
   /** Soft-delete (writer pool, P3). */
   deactivateCollaborator: ReturnType<typeof deactivateCollaborator>;
   reactivateCollaborator: ReturnType<typeof reactivateCollaborator>;
@@ -304,8 +301,10 @@ type Pools = Readonly<{
   collaboratorReader: CollaboratorReader;
   collaboratorHistory: CollaboratorHistoryRepository;
   inviteRepo: CollaboratorInviteTokenRepository;
-  inviteMailer: CollaboratorInviteMailer;
-  sentInvites?: readonly CapturedCollaboratorInvite[];
+  // PARTNERS-INVITE-DOMAIN-EVENT (ADR-0047): o convite vira evento no par_email_outbox; nao ha mais
+  // mailer sincrono no fluxo. `getSentInvites` (driver memory/test) le os eventos emitidos e extrai
+  // `{ to, token }` do payload para os seams de teste. Ausente em mysql.
+  getSentInvites?: () => readonly SentInviteCapture[];
   supplierReader: SupplierReader;
   supplierWriterRepo: SupplierRepository;
   financierReader: FinancierReader;
@@ -317,12 +316,26 @@ type Pools = Readonly<{
   shutdown: () => Promise<void>;
 }>;
 
+/** Captura `{ to, token }` de um convite emitido — derivado do par_email_outbox (driver memory/test). */
+export type SentInviteCapture = Readonly<{ to: string; token: string }>;
+
 const buildMemoryPools = (config: PartnersCompositionConfig): Pools => {
   // RW split sem efeito físico em memory: reader = writer = mesmo store de agregados.
   const { repository } = makeInMemoryCollaboratorStore();
   const { repository: actRepository } = makeInMemoryActStore();
-  const inviteStore = makeInMemoryCollaboratorInviteTokenStore();
-  const capturingMailer = makeCapturingCollaboratorInviteMailer();
+  // PARTNERS-INVITE-DOMAIN-EVENT (ADR-0047): o invite-token store emite CollaboratorInvited no
+  // outbox de e-mail InMemory (injetado). `getSentInvites` deriva `{ to, token }` do payload.
+  const emailOutbox = InMemoryParEmailOutbox();
+  const inviteStore = makeInMemoryCollaboratorInviteTokenStore(emailOutbox.port);
+  const getSentInvites = (): readonly SentInviteCapture[] =>
+    emailOutbox
+      .all()
+      .filter((r) => r.eventType === 'CollaboratorInvited')
+      .map((r) => {
+        const payload = JSON.parse(r.payload) as { email?: string; autocadastroUrl?: string };
+        const url = new URL(payload.autocadastroUrl ?? 'http://invalid/');
+        return { to: payload.email ?? '', token: url.searchParams.get('token') ?? '' };
+      });
   // ActReader in-memory: usa seed explícito se fornecido, caso contrário deriva do repositório
   // writer (RW split em memória — sem reader pool separado, conforme padrão do colaborador).
   const actReader =
@@ -335,8 +348,7 @@ const buildMemoryPools = (config: PartnersCompositionConfig): Pools => {
     collaboratorReader: makeInMemoryCollaboratorReader(config.seed?.collaborators ?? []),
     collaboratorHistory: makeInMemoryCollaboratorHistory(config.seed?.collaboratorHistory ?? []),
     inviteRepo: inviteStore.repository,
-    inviteMailer: capturingMailer.mailer,
-    sentInvites: capturingMailer.sent,
+    getSentInvites,
     supplierReader: makeInMemorySupplierReader(config.seed?.suppliers ?? []),
     supplierWriterRepo: makeInMemorySupplierStore().repository,
     financierReader: makeInMemoryFinancierReader(config.seed?.financiers ?? []),
@@ -373,18 +385,15 @@ const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools
     readerHandle = readerR.value;
   }
 
-  // Invite (NOTIF-INVITE-OUTBOX): mailer outbox-first. Abre seu próprio pool de notifications (se
-  // `NOTIFICATIONS_DATABASE_URL`); o `close` é encadeado no shutdown do pool (espelha auth).
-  const inviteMailerBuild = await buildPartnersInviteMailer(process.env);
-
   return {
     collaboratorReaderRepo: createDrizzleCollaboratorStore(readerHandle, clock),
     collaboratorWriterRepo: createDrizzleCollaboratorStore(writerHandle, clock),
     collaboratorReader: createDrizzleCollaboratorReader(readerHandle),
     collaboratorHistory: createDrizzleCollaboratorHistory(writerHandle),
-    // Invite (US5): repo Drizzle no writer pool; mailer enfileira no outbox de e-mail (worker envia).
+    // Invite (PARTNERS-INVITE-DOMAIN-EVENT / ADR-0047): repo Drizzle no writer pool; o saveWithEvents
+    // emite CollaboratorInvited no par_email_outbox na MESMA tx. O e-mail e enviado pelo worker
+    // email-dispatch (multi-fonte). Nao ha mais mailer sincrono no fluxo.
     inviteRepo: createDrizzleCollaboratorInviteTokenStore(writerHandle).repository,
-    inviteMailer: inviteMailerBuild.mailer,
     supplierReader: createDrizzleSupplierReader(readerHandle),
     supplierWriterRepo: createDrizzleSupplierStore(writerHandle, clock),
     financierReader: createDrizzleFinancierReader(readerHandle),
@@ -398,7 +407,6 @@ const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools
     shutdown: async () => {
       await writerHandle.close();
       if (readerHandle !== writerHandle) await readerHandle.close();
-      if (inviteMailerBuild.close !== undefined) await inviteMailerBuild.close();
     },
   };
 };
@@ -408,7 +416,7 @@ const makeDeps = (pools: Pools, config: PartnersCompositionConfig): PartnersHttp
   const inviteMinter = makeNodeCollaboratorInviteTokenMinter();
   const autocadastroBaseUrl = config.autocadastroBaseUrl ?? DEFAULT_AUTOCADASTRO_BASE_URL;
   const inviteTtlDays = config.inviteTtlDays ?? DEFAULT_INVITE_TTL_DAYS;
-  return {
+  const deps: PartnersHttpDeps = {
     listCollaborators: listCollaborators({ collaboratorRepo: pools.collaboratorReaderRepo }),
     getCollaboratorById: async (rawId) => {
       // Zod já valida o formato UUID na rota; rehydrate defensivo → id desconhecido = ok(null).
@@ -428,7 +436,6 @@ const makeDeps = (pools: Pools, config: PartnersCompositionConfig): PartnersHttp
     issueCollaboratorInvite: issueCollaboratorInvite({
       inviteRepo: pools.inviteRepo,
       minter: inviteMinter,
-      mailer: pools.inviteMailer,
       clock,
       autocadastroBaseUrl,
       inviteTtlDays,
@@ -445,7 +452,6 @@ const makeDeps = (pools: Pools, config: PartnersCompositionConfig): PartnersHttp
       collaboratorRepo: pools.collaboratorWriterRepo,
       clock,
     }),
-    ...(pools.sentInvites === undefined ? {} : { sentInvites: pools.sentInvites }),
     deactivateCollaborator: deactivateCollaborator({
       collaboratorRepo: pools.collaboratorWriterRepo,
       historyRepo: pools.collaboratorHistory,
@@ -509,6 +515,18 @@ const makeDeps = (pools: Pools, config: PartnersCompositionConfig): PartnersHttp
     getContractCounts: pools.contractCountStore.getCounts,
     shutdown: pools.shutdown,
   };
+
+  // `sentInvites` (driver memory/test): getter LIVE sobre o par_email_outbox InMemory — reflete os
+  // convites emitidos ate o momento da leitura (apos o POST /collaborators). Ausente em mysql.
+  const { getSentInvites } = pools;
+  if (getSentInvites !== undefined) {
+    Object.defineProperty(deps, 'sentInvites', {
+      get: () => getSentInvites(),
+      enumerable: true,
+    });
+  }
+
+  return deps;
 };
 
 export const buildPartnersHttpDeps = async (

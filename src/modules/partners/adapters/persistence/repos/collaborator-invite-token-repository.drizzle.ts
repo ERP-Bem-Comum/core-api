@@ -20,8 +20,10 @@ import type {
 } from '#src/modules/partners/domain/collaborator/invite-token-repository.ts';
 import type { CollaboratorInviteToken } from '#src/modules/partners/domain/collaborator/invite-token.ts';
 import type { CollaboratorInviteTokenId } from '#src/modules/partners/domain/collaborator/invite-token-id.ts';
+import type { CollaboratorInviteOutboxMessage } from '#src/modules/partners/domain/collaborator/invite-token-repository.ts';
 import type { PartnersMysqlHandle } from '../drivers/mysql-driver.ts';
 import { inviteTokenFromRow, inviteTokenToInsert } from '../mappers/invite-token.mapper.ts';
+import { appendEmailOutboxInTx } from './email-outbox-repository.drizzle.ts';
 
 const safe = async <T>(
   ctx: string,
@@ -46,6 +48,26 @@ export const createDrizzleCollaboratorInviteTokenStore = (
     safe('save', async () => {
       await db.insert(schema.parInviteTokens).values(inviteTokenToInsert(token));
     });
+
+  // PARTNERS-INVITE-DOMAIN-EVENT (ADR-0047): salva o invite-token E grava os eventos no
+  // par_email_outbox na MESMA transacao (atomicidade — ADR-0015). Se qualquer passo lancar, o
+  // Drizzle faz rollback de tudo — token e evento somem juntos (sem token orfao sem evento, nem
+  // evento orfao sem token).
+  const saveWithEvents = async (
+    token: CollaboratorInviteToken,
+    events: readonly CollaboratorInviteOutboxMessage[],
+  ): Promise<Result<void, CollaboratorInviteTokenRepositoryError>> => {
+    try {
+      await db.transaction(async (tx) => {
+        await tx.insert(schema.parInviteTokens).values(inviteTokenToInsert(token));
+        await appendEmailOutboxInTx(tx, schema, events);
+      });
+      return ok(undefined);
+    } catch (cause) {
+      process.stderr.write(`[invite-token-repo:saveWithEvents] ${String(cause)}\n`);
+      return err('invite-token-repo-unavailable');
+    }
+  };
 
   const findByTokenHash = async (
     tokenHash: string,
@@ -82,6 +104,11 @@ export const createDrizzleCollaboratorInviteTokenStore = (
       return res[0].affectedRows > 0;
     });
 
-  const repository: CollaboratorInviteTokenRepository = { save, findByTokenHash, markUsed };
+  const repository: CollaboratorInviteTokenRepository = {
+    save,
+    saveWithEvents,
+    findByTokenHash,
+    markUsed,
+  };
   return { repository };
 };

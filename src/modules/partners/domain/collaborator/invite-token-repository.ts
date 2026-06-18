@@ -16,10 +16,36 @@ import type { CollaboratorInviteTokenId } from './invite-token-id.ts';
 
 export type CollaboratorInviteTokenRepositoryError = 'invite-token-repo-unavailable';
 
+/**
+ * Mensagem de outbox de e-mail (PARTNERS-INVITE-DOMAIN-EVENT / ADR-0047). Shape estrutural —
+ * declarado aqui para o repo (persistencia) nao depender da application layer (regra domain.md).
+ * Equivalente ao `OutboxMessage` do `application/ports/email-outbox.ts` (structural typing
+ * reconcilia ambos).
+ */
+export type CollaboratorInviteOutboxMessage = Readonly<{
+  eventId: string;
+  aggregateId: string;
+  aggregateType: string;
+  eventType: string;
+  occurredAt: Date;
+  payload: string;
+}>;
+
 export type CollaboratorInviteTokenRepository = Readonly<{
   /** Persiste um convite recém-emitido (insert; `usedAt` null). */
   save: (
     token: CollaboratorInviteToken,
+  ) => Promise<Result<void, CollaboratorInviteTokenRepositoryError>>;
+  /**
+   * saveWithEvents — PARTNERS-INVITE-DOMAIN-EVENT (ADR-0047). Salva o invite-token E grava as
+   * `events` (mensagens de outbox ja montadas, ex.: CollaboratorInvited) na MESMA transacao
+   * (atomicidade — ADR-0015). Ambos persistem ou nenhum (rollback total). O adapter Drizzle
+   * envolve `appendEmailOutboxInTx` na propria `db.transaction` do save; o InMemory grava
+   * token + outbox em sequencia (atomico em memoria).
+   */
+  saveWithEvents: (
+    token: CollaboratorInviteToken,
+    events: readonly CollaboratorInviteOutboxMessage[],
   ) => Promise<Result<void, CollaboratorInviteTokenRepositoryError>>;
   findByTokenHash: (
     tokenHash: string,
