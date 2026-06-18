@@ -88,7 +88,8 @@ import { makeEmailPasswordResetMailer } from '../notifications/password-reset-ma
 import { makeOutboxPasswordResetMailer } from '../notifications/password-reset-mailer.outbox.ts';
 import { openNotificationsMysql } from '#src/modules/notifications/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleEmailOutbox } from '#src/modules/notifications/adapters/outbox/email-outbox.drizzle.ts';
-import { makeEmailInviteMailer } from '../notifications/invite-mailer.email.ts';
+import { InMemoryEmailOutbox } from '#src/modules/notifications/adapters/outbox/email-outbox.in-memory.ts';
+import { makeOutboxInviteMailer } from '../notifications/invite-mailer.outbox.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
 
 // Seed RBAC (CONTRACTS-HTTP-READS C1, D4): bootstrap de permissões para dev/test.
@@ -430,25 +431,52 @@ const buildResetMailer = async (env: Readonly<NodeJS.ProcessEnv>): Promise<Reset
   return { mailer: { sendResetLink: async () => ok(undefined) } };
 };
 
-// Convite de ativacao (spec 005 US3). Mesma logica do reset: SMTP + remetente -> Nodemailer real;
-// senao -> no-op SEGURO. Reusa AUTH_RESET_FROM como remetente se AUTH_INVITE_FROM nao for definido.
-const buildInviteMailer = (env: Readonly<NodeJS.ProcessEnv>): InviteMailer => {
+// Convite de ativacao (spec 005 US3). NOTIF-INVITE-OUTBOX: passa a ENFILEIRAR no outbox de e-mail
+// (entrega assincrona pelo worker), espelhando buildResetMailer.
+//
+// Preferência: com `NOTIFICATIONS_DATABASE_URL` + remetente válidos, ENFILEIRA no outbox Drizzle —
+// o worker envia com retry/backoff. Retorna também `close` (shutdown do pool).
+// Fallback 1: sem URL mas com remetente → enfileira num EmailOutbox InMemory (dev/test sem DB).
+// Fallback 2: no-op SEGURO (não envia, não loga e-mail/link) quando não há remetente configurado.
+type InviteMailerBuild = Readonly<{
+  mailer: InviteMailer;
+  close?: () => Promise<void>;
+}>;
+
+const buildInviteMailer = async (env: Readonly<NodeJS.ProcessEnv>): Promise<InviteMailerBuild> => {
   // NOTIF-EMAIL-DEPLOY-CONFIG: remetente via config central (EMAIL_FROM_INVITE / EMAIL_FROM,
-  // alias legado AUTH_INVITE_FROM). Provider e sandbox resolvidos pela fábrica. No-op SEGURO
-  // quando não há remetente configurado.
+  // alias legado AUTH_INVITE_FROM). Config inválida = boot falha (não silencioso).
   const config = parseEmailConfig(env);
   if (!config.ok) {
     throw new Error(`auth-composition: configuração de e-mail inválida (${config.error.tag})`);
   }
   const from = resolveFrom('invite', config.value);
-  const senderR = buildEmailSender(env);
-  if (!senderR.ok) {
-    throw new Error(`auth-composition: provider de e-mail inválido (${senderR.error.tag})`);
+
+  // Caminho assíncrono (preferido): outbox de e-mail no MySQL do módulo notifications.
+  const notificationsUrl = env['NOTIFICATIONS_DATABASE_URL'];
+  if (from !== undefined && notificationsUrl !== undefined && notificationsUrl.length > 0) {
+    const handleR = await openNotificationsMysql({
+      connectionString: notificationsUrl,
+      applyMigrations: false,
+    });
+    if (handleR.ok) {
+      const outbox = createDrizzleEmailOutbox(handleR.value);
+      return {
+        mailer: makeOutboxInviteMailer({ emailOutbox: outbox, from }),
+        close: handleR.value.close,
+      };
+    }
+    process.stderr.write(
+      `[auth-composition] outbox de convite indisponível (${handleR.error}); fallback InMemory/no-op\n`,
+    );
   }
+
+  // Fallback InMemory (dev/test sem DB): enfileira em memória; sem worker, o e-mail não sai, mas o
+  // boot não quebra. No-op SEGURO quando não há remetente configurado.
   if (from !== undefined) {
-    return makeEmailInviteMailer({ emailSender: senderR.value, from });
+    return { mailer: makeOutboxInviteMailer({ emailOutbox: InMemoryEmailOutbox().port, from }) };
   }
-  return { sendInvite: async () => ok(undefined) };
+  return { mailer: { sendInvite: async () => ok(undefined) } };
 };
 
 export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<AuthHttpDeps> => {
@@ -486,7 +514,8 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
 
   // Convite de ativacao (spec 005 US3). Reusa o dummyPasswordHash como placeholder unusable
   // (mesma tecnica: hash de bytes aleatorios; o plaintext nunca e conhecido -> nunca autentica).
-  const inviteMailer = buildInviteMailer(process.env);
+  const inviteMailerBuild = await buildInviteMailer(process.env);
+  const inviteMailer = inviteMailerBuild.mailer;
   const activationBaseUrl = config.activationBaseUrl ?? DEFAULT_ACTIVATION_BASE_URL;
   const inviteTtlSeconds = config.inviteTtlSeconds ?? DEFAULT_INVITE_TTL;
 
@@ -640,6 +669,7 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
     shutdown: async () => {
       await stores.shutdown();
       if (resetMailerBuild.close !== undefined) await resetMailerBuild.close();
+      if (inviteMailerBuild.close !== undefined) await inviteMailerBuild.close();
     },
   };
 };

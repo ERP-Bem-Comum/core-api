@@ -78,9 +78,11 @@ import {
   makeCapturingCollaboratorInviteMailer,
   type CapturedCollaboratorInvite,
 } from '../notifications/collaborator-invite-mailer.capturing.ts';
-import { makeEmailCollaboratorInviteMailer } from '../notifications/collaborator-invite-mailer.email.ts';
+import { makeOutboxCollaboratorInviteMailer } from '../notifications/collaborator-invite-mailer.outbox.ts';
+import { openNotificationsMysql } from '#src/modules/notifications/adapters/persistence/drivers/mysql-driver.ts';
+import { createDrizzleEmailOutbox } from '#src/modules/notifications/adapters/outbox/email-outbox.drizzle.ts';
+import { InMemoryEmailOutbox } from '#src/modules/notifications/adapters/outbox/email-outbox.in-memory.ts';
 import {
-  buildEmailSender,
   parseEmailConfig,
   parseEmailAddress,
   resolveFrom,
@@ -157,13 +159,24 @@ export type PartnersCompositionConfig = Readonly<{
 const DEFAULT_AUTOCADASTRO_BASE_URL = 'http://localhost/api/v1/collaborators/autocadastro';
 const DEFAULT_INVITE_TTL_DAYS = 7;
 
-// US5: resolve o mailer de convite do env. SMTP (parseSmtpConfig) + PARTNERS_INVITE_FROM válidos
-// → Nodemailer real (notifications/public-api); senão → no-op SEGURO (não envia, não loga link).
-// Espelha auth/buildInviteMailer; mantém o boot resiliente em dev sem SMTP configurado.
-const buildPartnersInviteMailer = (env: Readonly<NodeJS.ProcessEnv>): CollaboratorInviteMailer => {
-  // NOTIF-EMAIL-DEPLOY-CONFIG: provider + sandbox via fábrica central. Remetente: PARTNERS_INVITE_FROM
-  // (override específico do módulo, maior precedência) ou a config central resolveFrom('invite')
-  // (EMAIL_FROM_INVITE / EMAIL_FROM / alias legado). No-op SEGURO sem remetente.
+// US5 + NOTIF-INVITE-OUTBOX: resolve o mailer de convite do env, agora ENFILEIRANDO no outbox de
+// e-mail (entrega assíncrona pelo worker), espelhando auth/buildInviteMailer.
+//
+// Remetente: PARTNERS_INVITE_FROM (override específico do módulo, maior precedência) ou a config
+// central resolveFrom('invite') (EMAIL_FROM_INVITE / EMAIL_FROM / alias legado).
+//
+// Preferência: com `NOTIFICATIONS_DATABASE_URL` + remetente válidos, ENFILEIRA no outbox Drizzle —
+// o worker envia com retry/backoff. Retorna também `close` (shutdown do pool).
+// Fallback 1: sem URL mas com remetente → enfileira num EmailOutbox InMemory (dev/test sem DB).
+// Fallback 2: no-op SEGURO (não envia, não loga link) quando não há remetente configurado.
+type PartnersInviteMailerBuild = Readonly<{
+  mailer: CollaboratorInviteMailer;
+  close?: () => Promise<void>;
+}>;
+
+const buildPartnersInviteMailer = async (
+  env: Readonly<NodeJS.ProcessEnv>,
+): Promise<PartnersInviteMailerBuild> => {
   const config = parseEmailConfig(env);
   if (!config.ok) {
     throw new Error(`partners-composition: configuração de e-mail inválida (${config.error.tag})`);
@@ -179,14 +192,33 @@ const buildPartnersInviteMailer = (env: Readonly<NodeJS.ProcessEnv>): Collaborat
     from = override.value;
   }
 
-  const senderR = buildEmailSender(env);
-  if (!senderR.ok) {
-    throw new Error(`partners-composition: provider de e-mail inválido (${senderR.error.tag})`);
+  // Caminho assíncrono (preferido): outbox de e-mail no MySQL do módulo notifications.
+  const notificationsUrl = env['NOTIFICATIONS_DATABASE_URL'];
+  if (from !== undefined && notificationsUrl !== undefined && notificationsUrl.length > 0) {
+    const handleR = await openNotificationsMysql({
+      connectionString: notificationsUrl,
+      applyMigrations: false,
+    });
+    if (handleR.ok) {
+      const outbox = createDrizzleEmailOutbox(handleR.value);
+      return {
+        mailer: makeOutboxCollaboratorInviteMailer({ emailOutbox: outbox, from }),
+        close: handleR.value.close,
+      };
+    }
+    process.stderr.write(
+      `[partners-composition] outbox de convite indisponível (${handleR.error}); fallback InMemory/no-op\n`,
+    );
   }
+
+  // Fallback InMemory (dev/test sem DB): enfileira em memória; sem worker, o e-mail não sai, mas o
+  // boot não quebra. No-op SEGURO quando não há remetente configurado.
   if (from !== undefined) {
-    return makeEmailCollaboratorInviteMailer({ emailSender: senderR.value, from });
+    return {
+      mailer: makeOutboxCollaboratorInviteMailer({ emailOutbox: InMemoryEmailOutbox().port, from }),
+    };
   }
-  return { sendInvite: () => Promise.resolve(ok(undefined)) };
+  return { mailer: { sendInvite: () => Promise.resolve(ok(undefined)) } };
 };
 
 export type PartnersHttpDeps = Readonly<{
@@ -334,14 +366,18 @@ const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools
     readerHandle = readerR.value;
   }
 
+  // Invite (NOTIF-INVITE-OUTBOX): mailer outbox-first. Abre seu próprio pool de notifications (se
+  // `NOTIFICATIONS_DATABASE_URL`); o `close` é encadeado no shutdown do pool (espelha auth).
+  const inviteMailerBuild = await buildPartnersInviteMailer(process.env);
+
   return {
     collaboratorReaderRepo: createDrizzleCollaboratorStore(readerHandle, clock),
     collaboratorWriterRepo: createDrizzleCollaboratorStore(writerHandle, clock),
     collaboratorReader: createDrizzleCollaboratorReader(readerHandle),
     collaboratorHistory: createDrizzleCollaboratorHistory(writerHandle),
-    // Invite (US5): repo Drizzle no writer pool; mailer resolvido do env (Nodemailer ou no-op seguro).
+    // Invite (US5): repo Drizzle no writer pool; mailer enfileira no outbox de e-mail (worker envia).
     inviteRepo: createDrizzleCollaboratorInviteTokenStore(writerHandle).repository,
-    inviteMailer: buildPartnersInviteMailer(process.env),
+    inviteMailer: inviteMailerBuild.mailer,
     supplierReader: createDrizzleSupplierReader(readerHandle),
     supplierWriterRepo: createDrizzleSupplierStore(writerHandle, clock),
     financierReader: createDrizzleFinancierReader(readerHandle),
@@ -355,6 +391,7 @@ const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools
     shutdown: async () => {
       await writerHandle.close();
       if (readerHandle !== writerHandle) await readerHandle.close();
+      if (inviteMailerBuild.close !== undefined) await inviteMailerBuild.close();
     },
   };
 };
