@@ -48,7 +48,6 @@ import type {
   PasswordResetTokenRepositoryError,
 } from '../../domain/session/password-reset-token-repository.ts';
 import type { PasswordResetTokenMinter } from '../ports/password-reset-token-minter.ts';
-import type { InviteMailer, InviteMailerError } from '../ports/invite-mailer.ts';
 import { userInvitedMessage } from '../email-events.ts';
 import { resolveMassApproverRole } from './mass-approver-role.ts';
 
@@ -78,8 +77,7 @@ export type CreateUserByAdminError =
   | 'mass-approver-role-invalid'
   | UserRepositoryError
   | RoleRepositoryError
-  | PasswordResetTokenRepositoryError
-  | InviteMailerError;
+  | PasswordResetTokenRepositoryError;
 
 export type CreateUserByAdminOutput = Readonly<{ user: ActiveUser; event: UserCreated }>;
 
@@ -89,7 +87,6 @@ type Deps = Readonly<{
   roleRepo: RoleRepository;
   resetTokenRepo: PasswordResetTokenRepository;
   minter: PasswordResetTokenMinter;
-  inviteMailer: InviteMailer;
   clock: Clock;
   /** Hash placeholder (composition root). Nunca autentica; nunca logado/exposto. */
   unusablePasswordHash: PasswordHash;
@@ -184,9 +181,13 @@ export const createUserByAdmin =
     // URL de ativacao de origem confiavel (config), nunca derivada de header Host.
     const activationUrl = `${deps.activationBaseUrl}?token=${secret.token}`;
 
-    // AUTH-DOMAIN-OUTBOX (ADR-0047): grava o invite-token E o evento UserInvited na MESMA tx
+    // ADR-0047 (fatia 02): grava o invite-token E o evento UserInvited na MESMA tx
     // (atomicidade — ADR-0015). Payload autocontido (destinatario + link de ativacao + nome);
     // sensivel, nunca logado.
+    //
+    // O ENVIO do convite NAO acontece mais aqui: e responsabilidade do consumidor (worker
+    // `email-dispatch`), que le o auth_outbox e envia via EmailSender. Sem chamada sincrona de
+    // mailer => sem duplicacao (CA5).
     const invitedEvent = userInvitedMessage({
       userId: String(newUserId),
       email: cmd.email,
@@ -196,15 +197,6 @@ export const createUserByAdmin =
     });
     const savedToken = await deps.resetTokenRepo.saveWithEvents(issued.value, [invitedEvent]);
     if (!savedToken.ok) return savedToken;
-
-    // Dark-launch: o envio de convite atual CONTINUA (sem regressao). O consumidor do evento
-    // (fatia 02) ainda nao existe; por ora o evento apenas acumula no outbox.
-    const invited = await deps.inviteMailer.sendInvite({
-      email: cmd.email,
-      activationUrl,
-      recipientName: cmd.name.trim(),
-    });
-    if (!invited.ok) return invited;
 
     // Retorna o user efetivamente salvo (com a role, se concedida); o detalhe deriva a flag das roles.
     return ok({ user: toSave, event });

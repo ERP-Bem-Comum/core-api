@@ -12,7 +12,7 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
-import { ok, err } from '#src/shared/primitives/result.ts';
+import { err } from '#src/shared/primitives/result.ts';
 import { requestPasswordReset } from '#src/modules/auth/application/use-cases/request-password-reset.ts';
 import { registerUser } from '#src/modules/auth/application/use-cases/register-user.ts';
 import { makeInMemoryUserStore } from '#src/modules/auth/adapters/persistence/repos/user-repository.in-memory.ts';
@@ -21,7 +21,6 @@ import { InMemoryAuthOutbox } from '#src/modules/auth/adapters/outbox/auth-outbo
 import { makeFakePasswordHasher } from '#src/modules/auth/adapters/crypto/password-hasher.fake.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import type { PasswordResetTokenMinter } from '#src/modules/auth/application/ports/password-reset-token-minter.ts';
-import type { PasswordResetMailer } from '#src/modules/auth/application/ports/password-reset-mailer.ts';
 
 const AT = new Date('2026-05-30T12:00:00.000Z');
 const EMAIL = 'user@example.com';
@@ -55,20 +54,14 @@ const makeCtx = (over?: {
     hash: (raw) => `${raw}-h`,
   };
 
+  // NOTIF-EMAIL-EVENT-CONSUMER (fatia 02): o use case nao chama mais mailer; mantemos `mailerSent`
+  // (sempre vazio) para os asserts de anti-enumeracao que so checam ausencia de side-effect.
   const mailerSent: { email: string; resetUrl: string }[] = [];
-  const mailer: PasswordResetMailer = {
-    sendResetLink: async (input) => {
-      await Promise.resolve();
-      mailerSent.push(input);
-      return ok(undefined);
-    },
-  };
 
   const request = requestPasswordReset({
     userReader: userStore.reader,
     resetTokenRepo: resetStore.repository,
     minter,
-    mailer,
     clock: ClockFixed(AT),
     resetTtlSeconds: TTL,
     resetBaseUrl: BASE,

@@ -397,7 +397,11 @@ type ResetMailerBuild = Readonly<{
   close?: () => Promise<void>;
 }>;
 
-const buildResetMailer = async (env: Readonly<NodeJS.ProcessEnv>): Promise<ResetMailerBuild> => {
+// ADR-0047 (fatia 02): orfao/inerte — o composition nao chama mais isto (envio e do worker
+// `email-dispatch`). Mantido exportado ate a fatia 02b (limpeza). NAO referenciado no fluxo de envio.
+export const buildResetMailer = async (
+  env: Readonly<NodeJS.ProcessEnv>,
+): Promise<ResetMailerBuild> => {
   // NOTIF-EMAIL-DEPLOY-CONFIG: remetente resolvido pela config central (EMAIL_FROM_RESET /
   // EMAIL_FROM, com alias legado AUTH_RESET_FROM). Config inválida = boot falha (não silencioso).
   const config = parseEmailConfig(env);
@@ -518,19 +522,17 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
   const lockoutStore = stores.lockoutStore;
   const lockoutPolicy = config.lockoutPolicy ?? DEFAULT_LOCKOUT_POLICY;
 
-  // BE-REC-003: token de reset + entrega por e-mail. Com SMTP (env) + AUTH_RESET_FROM válidos,
-  // usa o Nodemailer real (notifications/public-api); senão, no-op SEGURO (não envia, não loga
-  // e-mail/link). Ver buildResetMailer.
+  // ADR-0047 (fatia 02 — NOTIF-EMAIL-EVENT-CONSUMER): o ENVIO de e-mail (reset/convite) deixou de
+  // ser sincrono no use case. O produtor (auth) apenas EMITE o evento na tx (auth_outbox); o envio
+  // e do consumidor (worker `email-dispatch`). Por isso o composition NAO monta mais `resetMailer`/
+  // `inviteMailer` para os use cases — sem chamada sincrona => sem duplicacao.
+  //
+  // `buildResetMailer`/`buildInviteMailer` permanecem definidos (orfaos/inertes) ate a fatia 02b
+  // (`NOTIF-EMAIL-OUTBOX-RETIRE`, issue de limpeza) — ainda exportados/cobertos por testes.
   const resetMinter = makeNodePasswordResetTokenMinter();
-  const resetMailerBuild = await buildResetMailer(process.env);
-  const resetMailer = resetMailerBuild.mailer;
   const resetBaseUrl = config.resetBaseUrl ?? DEFAULT_RESET_BASE_URL;
   const resetTtlSeconds = config.resetTtlSeconds ?? DEFAULT_RESET_TTL;
 
-  // Convite de ativacao (spec 005 US3). Reusa o dummyPasswordHash como placeholder unusable
-  // (mesma tecnica: hash de bytes aleatorios; o plaintext nunca e conhecido -> nunca autentica).
-  const inviteMailerBuild = await buildInviteMailer(process.env);
-  const inviteMailer = inviteMailerBuild.mailer;
   const activationBaseUrl = config.activationBaseUrl ?? DEFAULT_ACTIVATION_BASE_URL;
   const inviteTtlSeconds = config.inviteTtlSeconds ?? DEFAULT_INVITE_TTL;
 
@@ -610,7 +612,6 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
       userReader: stores.userReader,
       resetTokenRepo: stores.resetTokenRepo,
       minter: resetMinter,
-      mailer: resetMailer,
       clock,
       resetTtlSeconds,
       resetBaseUrl,
@@ -632,7 +633,6 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
       roleRepo: stores.roleRepo,
       resetTokenRepo: stores.resetTokenRepo,
       minter: resetMinter,
-      inviteMailer,
       clock,
       unusablePasswordHash: dummyPasswordHash,
       inviteTtlSeconds,
@@ -680,11 +680,10 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
       return makeAuthorize(stores.userReader)(parsed.value);
     },
     hasPermission: makeHasPermission(stores.userReader),
-    // Encadeia o close do pool do outbox de e-mail (se aberto) ao shutdown dos stores.
+    // ADR-0047 (fatia 02): o composition nao monta mais os mailers (envio e do worker
+    // `email-dispatch`); nao ha pool de outbox de e-mail para fechar aqui.
     shutdown: async () => {
       await stores.shutdown();
-      if (resetMailerBuild.close !== undefined) await resetMailerBuild.close();
-      if (inviteMailerBuild.close !== undefined) await inviteMailerBuild.close();
     },
   };
 };

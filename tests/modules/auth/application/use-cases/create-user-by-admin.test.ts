@@ -13,7 +13,7 @@ import { strict as assert } from 'node:assert';
 
 import { ok, err } from '#src/shared/primitives/result.ts';
 import { createUserByAdmin } from '#src/modules/auth/application/use-cases/create-user-by-admin.ts';
-import type { InviteMailer } from '#src/modules/auth/application/ports/invite-mailer.ts';
+import type { OutboxMessage } from '#src/modules/auth/application/ports/outbox.ts';
 import type {
   UserReader,
   UserRepository,
@@ -79,16 +79,14 @@ const makeRbacCtx = () => {
     mint: () => ({ token: 'plain-token-xyz', tokenHash: 'hash-xyz' }),
     hash: (raw) => `hash-of-${raw}`,
   };
-  const inviteMailer: InviteMailer = {
-    sendInvite: () => Promise.resolve(ok(undefined)),
-  };
+  // NOTIF-EMAIL-EVENT-CONSUMER (fatia 02): o use case nao recebe mais inviteMailer; o envio
+  // do convite e do consumidor (worker email-dispatch). O evento sai via saveWithEvents.
   const create = createUserByAdmin({
     userReader: userStore.reader,
     userRepo: userStore.repository,
     roleRepo: roleStore.repository,
     resetTokenRepo,
     minter,
-    inviteMailer,
     clock: ClockFixed(AT),
     unusablePasswordHash: unusableHash(),
     inviteTtlSeconds: TTL,
@@ -100,15 +98,11 @@ const makeRbacCtx = () => {
 interface Captured {
   savedUser: User | null;
   savedToken: PasswordResetToken | null;
-  invites: { email: string; activationUrl: string }[];
+  events: OutboxMessage[];
 }
 
-const makeDeps = (opts?: {
-  existingEmail?: string;
-  saveFails?: boolean;
-  inviteFails?: boolean;
-}) => {
-  const captured: Captured = { savedUser: null, savedToken: null, invites: [] };
+const makeDeps = (opts?: { existingEmail?: string; saveFails?: boolean }) => {
+  const captured: Captured = { savedUser: null, savedToken: null, events: [] };
 
   const userReader: UserReader = {
     findById: () => Promise.resolve(ok(null)),
@@ -127,9 +121,11 @@ const makeDeps = (opts?: {
       captured.savedToken = token;
       return Promise.resolve(ok(undefined));
     },
-    // AUTH-DOMAIN-OUTBOX: o use case agora persiste token + evento via saveWithEvents.
-    saveWithEvents: (token) => {
+    // ADR-0047 (fatia 02): o use case persiste token + evento UserInvited via saveWithEvents.
+    // O envio do convite NAO ocorre mais no use case (vem do consumidor); aqui capturamos o evento.
+    saveWithEvents: (token, events) => {
       captured.savedToken = token;
+      captured.events.push(...events);
       return Promise.resolve(ok(undefined));
     },
     findByTokenHash: () => Promise.resolve(ok(null)),
@@ -138,13 +134,6 @@ const makeDeps = (opts?: {
   const minter: PasswordResetTokenMinter = {
     mint: () => ({ token: 'plain-token-xyz', tokenHash: 'hash-xyz' }),
     hash: (raw) => `hash-of-${raw}`,
-  };
-  const inviteMailer: InviteMailer = {
-    sendInvite: (input) => {
-      if (opts?.inviteFails) return Promise.resolve(err('invite-mail-failed' as const));
-      captured.invites.push({ email: input.email, activationUrl: input.activationUrl });
-      return Promise.resolve(ok(undefined));
-    },
   };
   const clock = ClockFixed(AT);
   // roleRepo nunca e tocado nestes casos (flag ausente); fornecido so para satisfazer a dep.
@@ -156,7 +145,6 @@ const makeDeps = (opts?: {
     roleRepo,
     resetTokenRepo,
     minter,
-    inviteMailer,
     clock,
     unusablePasswordHash: unusableHash(),
     inviteTtlSeconds: TTL,
@@ -183,22 +171,26 @@ describe('createUserByAdmin', () => {
     assert.equal(captured.savedUser?.passwordHash, deps.unusablePasswordHash);
   });
 
-  it('CA2: convite enviado exatamente 1x com email correto e URL nao-vazia', async () => {
+  it('CA2: evento UserInvited emitido 1x com email correto e URL nao-vazia (envio e do consumidor)', async () => {
     const { deps, captured } = makeDeps();
     await createUserByAdmin(deps)(validCmd());
 
-    assert.equal(captured.invites.length, 1);
-    assert.equal(captured.invites[0]?.email, 'amanda@x.com');
-    assert.ok((captured.invites[0]?.activationUrl ?? '').length > 0);
+    const invites = captured.events.filter((e) => e.eventType === 'UserInvited');
+    assert.equal(invites.length, 1);
+    const payload = JSON.parse(invites[0]?.payload ?? '{}') as Record<string, unknown>;
+    assert.equal(payload['email'], 'amanda@x.com');
+    assert.ok(((payload['activationUrl'] as string | undefined) ?? '').length > 0);
   });
 
   it('CA3: URL de ativacao usa a base de config (anti host-injection); sem fragmento do command', async () => {
     const { deps, captured } = makeDeps();
     await createUserByAdmin(deps)(validCmd());
 
-    const url = captured.invites[0]?.activationUrl ?? '';
+    const invites = captured.events.filter((e) => e.eventType === 'UserInvited');
+    const payload = JSON.parse(invites[0]?.payload ?? '{}') as Record<string, unknown>;
+    const url = (payload['activationUrl'] as string | undefined) ?? '';
     assert.ok(url.startsWith(`${BASE_URL}?token=`), `url inesperada: ${url}`);
-    assert.equal(url.includes('amanda'), false); // nao vaza email/nome na URL
+    assert.equal(url.includes('amanda'), false); // nao vaza email na URL
   });
 
   it('CA4: email duplicado -> err e userRepo.save NAO chamado', async () => {
@@ -210,11 +202,12 @@ describe('createUserByAdmin', () => {
     assert.equal(captured.savedUser, null);
   });
 
-  it('CA5: falha no envio do convite -> err invite-mail-failed', async () => {
-    const { deps } = makeDeps({ inviteFails: true });
+  it('CA5: sem duplicacao — nenhum envio sincrono; so o evento UserInvited e emitido', async () => {
+    const { deps, captured } = makeDeps();
     const r = await createUserByAdmin(deps)(validCmd());
-    assert.equal(r.ok, false);
-    if (!r.ok) assert.equal(r.error, 'invite-mail-failed');
+    assert.equal(r.ok, true);
+    // O use case nao tem mais mailer; o e-mail sai SO pelo consumidor. Aqui so o evento existe.
+    assert.equal(captured.events.filter((e) => e.eventType === 'UserInvited').length, 1);
   });
 
   it('CA6: name em branco -> err name-required; cpf invalido -> err cpf', async () => {

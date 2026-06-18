@@ -224,7 +224,8 @@ const usersRoutes =
               'role-repo-unavailable': 503,
               'user-repo-unavailable': 503,
               'password-reset-token-repo-unavailable': 503,
-              'invite-mail-failed': 502,
+              // ADR-0047 (fatia 02): 'invite-mail-failed' removido — o envio do convite saiu do
+              // use case (vai pro consumidor); o use case nao retorna mais esse erro.
             },
           });
         }

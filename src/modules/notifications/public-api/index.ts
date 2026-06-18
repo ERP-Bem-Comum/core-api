@@ -52,3 +52,7 @@ export { parseEmailConfig, resolveFrom } from '../adapters/email/email-config.ts
 export { withSandboxRedirect } from '../adapters/email/sandbox-redirect.ts';
 
 export { buildEmailSender } from '../adapters/email/build-email-sender.ts';
+
+// Consumidor de eventos de e-mail transacional (NOTIF-EMAIL-EVENT-CONSUMER / ADR-0047 fatia 02).
+// O worker `email-dispatch` (composition root) instancia este EventDelivery<OutboxRow>.
+export { createEmailEventDelivery } from '../adapters/event-delivery/email-event-delivery.ts';
