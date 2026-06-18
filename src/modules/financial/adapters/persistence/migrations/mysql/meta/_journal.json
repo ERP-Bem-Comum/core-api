@@ -29,6 +29,13 @@
       "when": 1781660083424,
       "tag": "0003_dapper_joseph",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1781788662474,
+      "tag": "0004_freezing_nekra",
+      "breakpoints": true
     }
   ]
 }

@@ -83,6 +83,10 @@ export const finDocuments = mysqlTable(
     categoryRef: varchar('category_ref', { length: 36 }),
     programRef: varchar('program_ref', { length: 36 }),
 
+    // Conta-cedente de débito (D-CEDENTE — de qual conta o pagamento sai). Ref lógica a
+    // fin_cedente_accounts; sem FK física (ADR-0014 §cross-acoplamento). Nullable até a remessa atribuir.
+    debitAccountRef: varchar('debit_account_ref', { length: 36 }),
+
     // Método de pagamento. CHECK = enum de domínio (8 valores — domain/document/types.ts §PaymentMethod).
     paymentMethod: varchar('payment_method', { length: 24 }),
 
@@ -473,6 +477,34 @@ export const finSupplierView = mysqlTable('fin_supplier_view', {
   updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
 });
 
+// ─── fin_cedente_accounts ─────────────────────────────────────────────────────
+//
+// Conta-cedente: conta-débito Bradesco da organização (D-CEDENTE), seedável via config. Liga
+// documento → conta de pagamento (`fin_documents.debit_account_ref`). `next_nsa` é o contador
+// monotônico de remessa (alocação é da 016). `status` controla o guard de conta encerrada
+// (FR-015 da conciliação). varchar+CHECK para enum (ADR-0018/0020); PK UUID sem AUTO_INCREMENT.
+//
+// ⚠️ CHARSET/COLLATE — inserir manualmente na migration gerada (limitação Drizzle 0.45.x):
+//   ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; coluna `id` em utf8mb4_bin.
+export const finCedenteAccounts = mysqlTable(
+  'fin_cedente_accounts',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    bankCode: varchar('bank_code', { length: 8 }).notNull(),
+    agency: varchar('agency', { length: 12 }).notNull(),
+    accountNumber: varchar('account_number', { length: 20 }).notNull(),
+    accountDigit: varchar('account_digit', { length: 4 }).notNull(),
+    convenio: varchar('convenio', { length: 30 }).notNull(),
+    document: varchar('document', { length: 20 }).notNull(),
+    status: varchar('status', { length: 8 }).notNull(),
+    nextNsa: int('next_nsa').notNull(),
+  },
+  (t) => [
+    check('fin_cedente_accounts_status_chk', sql`${t.status} IN ('Active','Closed')`),
+    check('fin_cedente_accounts_next_nsa_chk', sql`${t.nextNsa} >= 1`),
+  ],
+);
+
 // ─── Tipos gerados pelo schema (consumidos pelos mappers) ─────────────────────
 //
 // `$inferSelect` = shape da row lida do banco (SELECT *).
@@ -500,3 +532,6 @@ export type NewTimelineFieldChangeRow = typeof finTimelineFieldChanges.$inferIns
 
 export type SupplierViewRow = typeof finSupplierView.$inferSelect;
 export type NewSupplierViewRow = typeof finSupplierView.$inferInsert;
+
+export type CedenteAccountRow = typeof finCedenteAccounts.$inferSelect;
+export type NewCedenteAccountRow = typeof finCedenteAccounts.$inferInsert;
