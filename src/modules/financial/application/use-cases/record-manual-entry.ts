@@ -23,12 +23,17 @@ import type {
   ReconciliationRepository,
   ReconciliationRepositoryError,
 } from '../ports/reconciliation-repository.ts';
+import type {
+  ReconciliationPeriodStore,
+  ReconciliationPeriodStoreError,
+} from '../ports/reconciliation-period-store.ts';
 import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
 
 export type RecordManualEntryDeps = Readonly<{
   reconciliationRepo: Pick<ReconciliationRepository, 'confirmManualEntry'>;
   statements: Pick<BankStatementRepository, 'findTransaction'>;
   cedenteStore: Pick<CedenteAccountStore, 'findById'>;
+  periods: Pick<ReconciliationPeriodStore, 'isClosed'>;
   clock: Pick<Clock, 'now'>;
   outbox: FinancialOutbox;
 }>;
@@ -55,9 +60,11 @@ export type RecordManualEntryError =
   | 'transaction-already-reconciled'
   | 'cedente-account-not-found'
   | 'account-closed'
+  | 'period-closed'
   | ReconciliationRepositoryError
   | BankStatementRepositoryError
   | CedenteAccountStoreError
+  | ReconciliationPeriodStoreError
   | OutboxAppendError;
 
 // Lança um ManualEntry para uma transação `Pending` sem título (ex.: tarifa). Guard FR-015 (conta não
@@ -80,6 +87,11 @@ export const recordManualEntry =
     if (!accR.ok) return err(accR.error);
     if (accR.value === null) return err('cedente-account-not-found');
     if (isClosed(accR.value)) return err('account-closed');
+
+    // Guard R18: período fechado não aceita lançamento manual na data da transação.
+    const periodClosedR = await deps.periods.isClosed(debitAccountRef, transaction.date);
+    if (!periodClosedR.ok) return err(periodClosedR.error);
+    if (periodClosedR.value) return err('period-closed');
 
     const confirmed = confirmManualEntry({
       reconciliationId: ReconciliationId.generate(),

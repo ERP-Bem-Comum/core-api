@@ -678,6 +678,32 @@ export const finManualEntries = mysqlTable(
   ],
 );
 
+// ─── fin_reconciliation_periods ────────────────────────────────────────────────
+//
+// Período de conciliação fechado (US6 — "selo" contábil). UNIQUE `(debit_account_ref, period_start,
+// period_end)` impede fechar o mesmo período 2×. `status` enum varchar+CHECK. Datas date-only.
+// ⚠️ CHARSET/COLLATE manual na migration: id/debit_account_ref/closed_by em utf8mb4_bin.
+export const finReconciliationPeriods = mysqlTable(
+  'fin_reconciliation_periods',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    debitAccountRef: varchar('debit_account_ref', { length: 36 }).notNull(),
+    periodStart: date('period_start', { mode: 'date' }).notNull(),
+    periodEnd: date('period_end', { mode: 'date' }).notNull(),
+    status: varchar('status', { length: 8 }).notNull(),
+    closedAt: datetime('closed_at', { mode: 'date', fsp: 3 }),
+    closedBy: varchar('closed_by', { length: 36 }),
+  },
+  (t) => [
+    check('fin_reconciliation_periods_status_chk', sql`${t.status} IN ('Open','Closed')`),
+    uniqueIndex('fin_reconciliation_periods_account_range_uq').on(
+      t.debitAccountRef,
+      t.periodStart,
+      t.periodEnd,
+    ),
+  ],
+);
+
 // ─── Tipos gerados pelo schema (consumidos pelos mappers) ─────────────────────
 //
 // `$inferSelect` = shape da row lida do banco (SELECT *).
@@ -726,3 +752,6 @@ export type NewRejectedSuggestionRow = typeof finRejectedSuggestions.$inferInser
 
 export type ManualEntryRow = typeof finManualEntries.$inferSelect;
 export type NewManualEntryRow = typeof finManualEntries.$inferInsert;
+
+export type ReconciliationPeriodRow = typeof finReconciliationPeriods.$inferSelect;
+export type NewReconciliationPeriodRow = typeof finReconciliationPeriods.$inferInsert;

@@ -15,6 +15,8 @@ const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
   'reconciliation-not-found',
   'cedente-account-not-found',
   'payable-not-found',
+  // Período (US6).
+  'reconciliation-period-not-found',
 ]);
 
 const CONFLICT_CODES: ReadonlySet<string> = new Set([
@@ -24,6 +26,7 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'transaction-already-reconciled',
   'reconciliation-already-undone',
   'account-closed',
+  'period-closed',
 ]);
 
 const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
@@ -37,6 +40,10 @@ const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
   'empty-content',
   // Conciliação: id malformado.
   'reconciliation-id-invalid',
+  // Período (US6): range/id/format inválidos.
+  'invalid-period-range',
+  'reconciliation-period-id-invalid',
+  'unsupported-export-format',
 ]);
 
 const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
@@ -51,6 +58,8 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   // Match/sugestão (US2).
   'suggestion-view-failure',
   'rejected-suggestion-repository-failure',
+  // Período (US6).
+  'reconciliation-period-store-failure',
 ]);
 
 /** Status HTTP para um slug interno de erro. Default 422 (regra de negócio inválida). */
@@ -132,6 +141,14 @@ const SLUG_MESSAGES: Record<string, string> = {
   // Lançamento manual / lote (US5).
   'manual-entry-value-not-positive': 'O valor do lançamento manual deve ser positivo.',
   'empty-batch': 'Informe ao menos uma transação para o lote.',
+  // Período (US6).
+  'period-has-pending-transactions':
+    'O período tem transações pendentes: concilie ou justifique todas antes de fechar.',
+  'invalid-period-range': 'Intervalo de período inválido: a data inicial deve ser ≤ a final.',
+  'period-closed': 'O período está fechado: não é possível importar/conciliar/desfazer nele.',
+  'reconciliation-period-not-found': 'Período de conciliação não encontrado.',
+  'reconciliation-period-id-invalid': 'Identificador de período inválido.',
+  'unsupported-export-format': 'Formato de exportação não suportado (esperado OFX ou CSV).',
 };
 
 /** Mensagem PT-BR ao humano para um slug; fallback por `code` público. Nunca retorna o slug. */

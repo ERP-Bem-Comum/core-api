@@ -481,3 +481,26 @@ export const batchResponseSchema = z.object({
   // Best-effort: transações que falharam (estado/guard) com o code público — o lote não aborta por uma.
   failed: z.array(z.object({ transactionId: z.uuid(), error: z.string() })),
 });
+
+// ─── US6 — fechar período + exportar ─────────────────────────────────────────
+
+export const closePeriodBodySchema = z.object({
+  debitAccountRef: z.uuid(),
+  periodStart: z.iso.date(),
+  periodEnd: z.iso.date(),
+});
+
+export type ClosePeriodBody = z.infer<typeof closePeriodBodySchema>;
+
+export const closePeriodResponseSchema = z.object({
+  periodId: z.uuid(),
+  status: z.literal('Closed'),
+});
+
+export const reconciliationPeriodIdParamSchema = z.object({
+  id: z.uuid().meta({ description: 'UUID do período de conciliação' }),
+});
+
+export const exportReconciliationQuerySchema = z.object({
+  format: z.enum(['ofx', 'csv']),
+});

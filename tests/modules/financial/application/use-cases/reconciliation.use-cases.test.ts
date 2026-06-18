@@ -122,6 +122,8 @@ const fakeOutbox = (cap: Captured) => ({
     return Promise.resolve(ok(undefined));
   },
 });
+// Período nunca fechado nestes testes (guard R18 do #125 é no-op aqui).
+const openPeriods = { isClosed: (): Promise<Result<boolean, never>> => Promise.resolve(ok(false)) };
 
 const confirmDeps = (
   cap: Captured,
@@ -133,6 +135,7 @@ const confirmDeps = (
   payables: fakePayables(snaps),
   statements: fakeStatements(tx),
   cedenteStore: fakeCedente(account),
+  periods: openPeriods,
   clock,
   outbox: fakeOutbox(cap),
 });
@@ -247,6 +250,8 @@ describe('financial/application/use-cases/undo-reconciliation', () => {
     cap.stored = buildActive();
     const r = await undoReconciliation({
       reconciliationRepo: fakeReconRepo(cap),
+      statements: fakeStatements(null),
+      periods: openPeriods,
       clock,
       outbox: fakeOutbox(cap),
     })({
@@ -264,6 +269,8 @@ describe('financial/application/use-cases/undo-reconciliation', () => {
     cap.stored = null;
     const r = await undoReconciliation({
       reconciliationRepo: fakeReconRepo(cap),
+      statements: fakeStatements(null),
+      periods: openPeriods,
       clock,
       outbox: fakeOutbox(cap),
     })({

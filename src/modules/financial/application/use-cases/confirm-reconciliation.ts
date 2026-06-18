@@ -24,6 +24,10 @@ import type {
   ReconciliationRepository,
   ReconciliationRepositoryError,
 } from '../ports/reconciliation-repository.ts';
+import type {
+  ReconciliationPeriodStore,
+  ReconciliationPeriodStoreError,
+} from '../ports/reconciliation-period-store.ts';
 import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
 
 export type ConfirmReconciliationDeps = Readonly<{
@@ -31,6 +35,7 @@ export type ConfirmReconciliationDeps = Readonly<{
   payables: Pick<PayableReconciliationView, 'findSnapshotsByIds'>;
   statements: Pick<BankStatementRepository, 'findTransaction'>;
   cedenteStore: Pick<CedenteAccountStore, 'findById'>;
+  periods: Pick<ReconciliationPeriodStore, 'isClosed'>;
   clock: Pick<Clock, 'now'>;
   outbox: FinancialOutbox;
 }>;
@@ -54,11 +59,13 @@ export type ConfirmReconciliationError =
   | 'transaction-already-reconciled'
   | 'cedente-account-not-found'
   | 'account-closed'
+  | 'period-closed'
   | 'payable-not-found'
   | ReconciliationRepositoryError
   | PayableReconciliationViewError
   | BankStatementRepositoryError
   | CedenteAccountStoreError
+  | ReconciliationPeriodStoreError
   | OutboxAppendError;
 
 // Imperative Shell (validar → fetch → domain → persist → publish). Concilia sob comando explícito (R1):
@@ -82,6 +89,11 @@ export const confirmReconciliation =
     if (!accR.ok) return err(accR.error);
     if (accR.value === null) return err('cedente-account-not-found');
     if (isClosed(accR.value)) return err('account-closed');
+
+    // Guard R18: a data da transação não pode cair em período fechado.
+    const periodClosedR = await deps.periods.isClosed(debitAccountRef, transaction.date);
+    if (!periodClosedR.ok) return err(periodClosedR.error);
+    if (periodClosedR.value) return err('period-closed');
 
     const snapsR = await deps.payables.findSnapshotsByIds(input.payableIds);
     if (!snapsR.ok) return err(snapsR.error);

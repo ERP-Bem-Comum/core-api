@@ -25,4 +25,11 @@ export type BankStatementRepository = Readonly<{
       BankStatementRepositoryError
     >
   >;
+  // Transações de uma conta-débito num intervalo de datas (US6): base do fechamento de período
+  // (contar `Pending`) e do export (listar conciliadas). Usa o `debit_account_ref` desnormalizado.
+  listTransactionsByPeriod: (
+    debitAccountRef: string,
+    periodStart: Date,
+    periodEnd: Date,
+  ) => Promise<Result<readonly StatementTransaction[], BankStatementRepositoryError>>;
 }>;

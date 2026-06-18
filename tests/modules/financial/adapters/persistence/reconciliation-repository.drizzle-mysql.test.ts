@@ -20,6 +20,7 @@ import { createDrizzleBankStatementRepository } from '#src/modules/financial/ada
 import { createDrizzleCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.drizzle.ts';
 import { createDrizzlePayableReconciliationView } from '#src/modules/financial/adapters/persistence/repos/payable-reconciliation-view.drizzle.ts';
 import { createDrizzleReconciliationRepository } from '#src/modules/financial/adapters/persistence/repos/reconciliation-repository.drizzle.ts';
+import { createDrizzleReconciliationPeriodStore } from '#src/modules/financial/adapters/persistence/repos/reconciliation-period-store.drizzle.ts';
 import {
   finCedenteAccounts,
   finPayables,
@@ -151,6 +152,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       payables: createDrizzlePayableReconciliationView(handle),
       statements: createDrizzleBankStatementRepository(handle),
       cedenteStore: createDrizzleCedenteAccountStore(handle),
+      periods: createDrizzleReconciliationPeriodStore(handle),
       clock: ClockReal(),
       outbox: createInMemoryOutbox().port,
     });

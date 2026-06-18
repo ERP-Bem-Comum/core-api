@@ -16,6 +16,7 @@ import { createDrizzleReconciliationRepository } from '#src/modules/financial/ad
 import { createDrizzleBankStatementRepository } from '#src/modules/financial/adapters/persistence/repos/bank-statement-repository.drizzle.ts';
 import { createDrizzleCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.drizzle.ts';
 import { finManualEntries } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
+import { createDrizzleReconciliationPeriodStore } from '#src/modules/financial/adapters/persistence/repos/reconciliation-period-store.drizzle.ts';
 import { recordManualEntry } from '#src/modules/financial/application/use-cases/record-manual-entry.ts';
 import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
 import { create as createCedente } from '#src/modules/financial/domain/cedente/cedente-account.ts';
@@ -105,6 +106,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
         reconciliationRepo: createDrizzleReconciliationRepository(handle),
         statements: statementRepo,
         cedenteStore: createDrizzleCedenteAccountStore(handle),
+        periods: createDrizzleReconciliationPeriodStore(handle),
         clock: ClockReal(),
         outbox: createInMemoryOutbox().port,
       });

@@ -78,6 +78,10 @@ import {
   manualEntryResponseSchema,
   batchBodySchema,
   batchResponseSchema,
+  closePeriodBodySchema,
+  closePeriodResponseSchema,
+  reconciliationPeriodIdParamSchema,
+  exportReconciliationQuerySchema,
 } from './schemas.ts';
 
 export type FinancialHttpHooks = Readonly<{
@@ -661,6 +665,56 @@ const financialRoutes =
           }),
           { ok: 201 },
         );
+      },
+    });
+
+    // POST /financial/reconciliation-periods/close — fecha o período (US6, FR-013).
+    scope.route({
+      method: 'POST',
+      url: '/financial/reconciliation-periods/close',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationClose)],
+      schema: {
+        body: closePeriodBodySchema,
+        response: { 200: closePeriodResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const body = req.body;
+        const result = await deps.closeReconciliationPeriod({
+          debitAccountRef: body.debitAccountRef,
+          periodStart: new Date(body.periodStart),
+          periodEnd: new Date(body.periodEnd),
+          closedBy: req.userId,
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(
+          reply,
+          ok({ periodId: String(result.value.periodId), status: result.value.status }),
+          { ok: 200 },
+        );
+      },
+    });
+
+    // GET /financial/reconciliation-periods/:id/export?format=ofx|csv — exporta a conciliação (US6).
+    scope.route({
+      method: 'GET',
+      url: '/financial/reconciliation-periods/:id/export',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationRead)],
+      schema: {
+        params: reconciliationPeriodIdParamSchema,
+        querystring: exportReconciliationQuerySchema,
+        // Resposta é arquivo texto (OFX/CSV) — sem response schema JSON (convenção das rotas não-JSON).
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.exportReconciliation({
+          periodId: req.params.id,
+          format: req.query.format,
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        const contentType = result.value.format === 'csv' ? 'text/csv' : 'application/x-ofx';
+        return reply
+          .code(200)
+          .header('content-type', `${contentType}; charset=utf-8`)
+          .send(result.value.content) as unknown as Promise<void>;
       },
     });
   };

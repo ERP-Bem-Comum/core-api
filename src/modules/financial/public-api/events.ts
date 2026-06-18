@@ -15,6 +15,7 @@ import type {
   PayableReconciled,
   ReconciliationUndone,
 } from '../domain/reconciliation/events.ts';
+import type { ReconciliationPeriodClosed } from '../domain/reconciliation/period.ts';
 
 /** Schema version corrente do wire format da outbox financeira. Bump em breaking changes. */
 export const FINANCIAL_SCHEMA_VERSION = 1 as const;
@@ -25,7 +26,8 @@ export type FinancialModuleEvent =
   | BankStatementImported
   | PayableReconciled
   | ReconciliationUndone
-  | ManualEntryRecorded;
+  | ManualEntryRecorded
+  | ReconciliationPeriodClosed;
 
 const KNOWN_FINANCIAL_EVENT_TYPES: ReadonlySet<string> = new Set([
   'DocumentSaved',
@@ -37,6 +39,7 @@ const KNOWN_FINANCIAL_EVENT_TYPES: ReadonlySet<string> = new Set([
   'PayableReconciled',
   'ReconciliationUndone',
   'ManualEntryRecorded',
+  'ReconciliationPeriodClosed',
 ]);
 
 /**

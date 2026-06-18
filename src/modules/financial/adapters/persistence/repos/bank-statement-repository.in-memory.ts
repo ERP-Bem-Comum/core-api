@@ -62,5 +62,23 @@ export const createInMemoryBankStatementRepository = (
       }
       return Promise.resolve(ok(null));
     },
+
+    listTransactionsByPeriod: async (
+      debitAccountRef: string,
+      periodStart: Date,
+      periodEnd: Date,
+    ): Promise<Result<readonly StatementTransaction[], BankStatementRepositoryError>> => {
+      const from = periodStart.getTime();
+      const to = periodEnd.getTime();
+      const found: StatementTransaction[] = [];
+      for (const statement of statements.values()) {
+        if (statement.debitAccountRef !== debitAccountRef) continue;
+        for (const tx of statement.transactions) {
+          const at = tx.date.getTime();
+          if (at >= from && at <= to) found.push(tx);
+        }
+      }
+      return Promise.resolve(ok(found));
+    },
   };
 };

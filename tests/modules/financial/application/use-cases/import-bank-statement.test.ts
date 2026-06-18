@@ -45,9 +45,16 @@ const parserWith = (fitids: readonly string[]): BankStatementParser => {
   return { parse: (): Result<ParsedStatement, ParseError> => ok(statement) };
 };
 
+// Período sempre aberto (guard R18 do #125 é no-op no escopo do #120).
+const openPeriods = {
+  isClosed: (): Promise<Result<boolean, 'reconciliation-period-store-failure'>> =>
+    Promise.resolve(ok(false)),
+};
+
 const deps = (parser: BankStatementParser, captured: Captured) => ({
   parser,
   repo: createInMemoryBankStatementRepository(),
+  periods: openPeriods,
   clock,
   outbox: fakeOutbox(captured),
 });

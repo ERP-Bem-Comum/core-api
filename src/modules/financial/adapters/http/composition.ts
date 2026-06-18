@@ -31,6 +31,7 @@ import { createInMemoryReconciliationRepository } from '../persistence/repos/rec
 import { createInMemoryCedenteAccountStore } from '../persistence/repos/cedente-account-store.in-memory.ts';
 import { createInMemorySuggestionView } from '../persistence/repos/suggestion-view.in-memory.ts';
 import { createInMemoryRejectedSuggestionRepository } from '../persistence/repos/rejected-suggestion-repository.in-memory.ts';
+import { createInMemoryReconciliationPeriodStore } from '../persistence/repos/reconciliation-period-store.in-memory.ts';
 import { createInMemoryOutbox } from '../outbox/outbox.in-memory.ts';
 import { createDrizzleDocumentRepository } from '../persistence/repos/document-repository.drizzle.ts';
 import { createDrizzleTimelineRepository } from '../persistence/repos/timeline-repository.drizzle.ts';
@@ -40,6 +41,8 @@ import { createDrizzleReconciliationRepository } from '../persistence/repos/reco
 import { createDrizzleCedenteAccountStore } from '../persistence/repos/cedente-account-store.drizzle.ts';
 import { createDrizzleSuggestionView } from '../persistence/repos/suggestion-view.drizzle.ts';
 import { createDrizzleRejectedSuggestionRepository } from '../persistence/repos/rejected-suggestion-repository.drizzle.ts';
+import { createDrizzleReconciliationPeriodStore } from '../persistence/repos/reconciliation-period-store.drizzle.ts';
+import { reconciliationExporter } from '../export/reconciliation-exporter.ts';
 import { bankStatementParser } from '../statement-parsers/bank-statement-parser.ts';
 import {
   openMysqlFinancial,
@@ -62,6 +65,8 @@ import { suggestMatches } from '../../application/use-cases/suggest-matches.ts';
 import { rejectSuggestion } from '../../application/use-cases/reject-suggestion.ts';
 import { recordManualEntry } from '../../application/use-cases/record-manual-entry.ts';
 import { confirmBatch } from '../../application/use-cases/confirm-batch.ts';
+import { closeReconciliationPeriod } from '../../application/use-cases/close-reconciliation-period.ts';
+import { exportReconciliation } from '../../application/use-cases/export-reconciliation.ts';
 import type { DocumentRepository } from '../../domain/document/repository.ts';
 import type { FinancialTimelineRepository } from '../../domain/timeline/repository.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
@@ -71,6 +76,7 @@ import type { ReconciliationRepository } from '../../application/ports/reconcili
 import type { CedenteAccountStore } from '../../application/ports/cedente-account-store.ts';
 import type { SuggestionView } from '../../application/ports/suggestion-view.ts';
 import type { RejectedSuggestionRepository } from '../../application/ports/rejected-suggestion-repository.ts';
+import type { ReconciliationPeriodStore } from '../../application/ports/reconciliation-period-store.ts';
 
 export type FinancialDriver = 'memory' | 'mysql';
 
@@ -112,6 +118,10 @@ export type FinancialHttpDeps = Readonly<{
   recordManualEntry: ReturnType<typeof recordManualEntry>;
   /** Conciliação em lote (US5) — POST /reconciliations/batch. */
   confirmBatch: ReturnType<typeof confirmBatch>;
+  /** Fecha período (US6) — POST /reconciliation-periods/close. */
+  closeReconciliationPeriod: ReturnType<typeof closeReconciliationPeriod>;
+  /** Exporta conciliação OFX/CSV (US6) — GET /reconciliation-periods/:id/export. */
+  exportReconciliation: ReturnType<typeof exportReconciliation>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -126,6 +136,7 @@ type Pools = Readonly<{
   cedenteStore: CedenteAccountStore;
   suggestionView: SuggestionView;
   rejectedSuggestionRepo: RejectedSuggestionRepository;
+  periodStore: ReconciliationPeriodStore;
   shutdown: () => Promise<void>;
 }>;
 
@@ -152,6 +163,7 @@ const buildMemoryPools = (): Pools => {
   // Match/sugestão (US2): stores dedicados (vazios no boot; testes semeiam). mysql faz JOIN real.
   const suggestionView = createInMemorySuggestionView();
   const rejectedSuggestionRepo = createInMemoryRejectedSuggestionRepository();
+  const periodStore = createInMemoryReconciliationPeriodStore();
   return {
     repo,
     timelineRepo,
@@ -161,6 +173,7 @@ const buildMemoryPools = (): Pools => {
     cedenteStore,
     suggestionView,
     rejectedSuggestionRepo,
+    periodStore,
     shutdown: () => Promise.resolve(),
   };
 };
@@ -185,6 +198,7 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     cedenteStore: createDrizzleCedenteAccountStore(handle),
     suggestionView: createDrizzleSuggestionView(handle),
     rejectedSuggestionRepo: createDrizzleRejectedSuggestionRepository(handle),
+    periodStore: createDrizzleReconciliationPeriodStore(handle),
     shutdown: () => handle.close(),
   };
 };
@@ -200,6 +214,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     reconciliationRepo: pools.reconciliationRepo,
     statements: pools.statementRepo,
     cedenteStore: pools.cedenteStore,
+    periods: pools.periodStore,
     clock,
     outbox: outbox.port,
   });
@@ -217,6 +232,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     importBankStatement: importBankStatement({
       parser: bankStatementParser,
       repo: pools.statementRepo,
+      periods: pools.periodStore,
       clock,
       outbox: outbox.port,
     }),
@@ -226,11 +242,14 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       payables: pools.payableView,
       statements: pools.statementRepo,
       cedenteStore: pools.cedenteStore,
+      periods: pools.periodStore,
       clock,
       outbox: outbox.port,
     }),
     undoReconciliation: undoReconciliation({
       reconciliationRepo: pools.reconciliationRepo,
+      statements: pools.statementRepo,
+      periods: pools.periodStore,
       clock,
       outbox: outbox.port,
     }),
@@ -243,6 +262,17 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     rejectSuggestion: rejectSuggestion({ rejected: pools.rejectedSuggestionRepo, clock }),
     recordManualEntry: record,
     confirmBatch: confirmBatch({ record }),
+    closeReconciliationPeriod: closeReconciliationPeriod({
+      periodStore: pools.periodStore,
+      statements: pools.statementRepo,
+      clock,
+      outbox: outbox.port,
+    }),
+    exportReconciliation: exportReconciliation({
+      periodStore: pools.periodStore,
+      statements: pools.statementRepo,
+      exporter: reconciliationExporter,
+    }),
     shutdown: pools.shutdown,
   };
 };

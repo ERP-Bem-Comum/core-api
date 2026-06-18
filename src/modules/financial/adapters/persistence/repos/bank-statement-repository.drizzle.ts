@@ -3,7 +3,7 @@
 // anti-duplicidade (R5) — uma transação duplicada faz o INSERT falhar e o save retorna erro.
 // Boundary: todo try/catch converte para Result; nenhum Error cruza (.claude/rules/adapters.md).
 
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, between, eq, inArray } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
@@ -126,6 +126,37 @@ export const createDrizzleBankStatementRepository = (
         return ok({ transaction: mapped.value, debitAccountRef: row.debitAccountRef });
       } catch (cause) {
         logStore('findTransaction', cause);
+        return err('bank-statement-repository-failure');
+      }
+    },
+
+    listTransactionsByPeriod: async (
+      debitAccountRef: string,
+      periodStart: Date,
+      periodEnd: Date,
+    ): Promise<Result<readonly StatementTransaction[], BankStatementRepositoryError>> => {
+      try {
+        const rows = await db
+          .select()
+          .from(finStatementTransactions)
+          .where(
+            and(
+              eq(finStatementTransactions.debitAccountRef, debitAccountRef),
+              between(finStatementTransactions.date, periodStart, periodEnd),
+            ),
+          );
+        const transactions: StatementTransaction[] = [];
+        for (const row of rows) {
+          const mapped = transactionRowToDomain(row);
+          if (!mapped.ok) {
+            logStore('listTransactionsByPeriod:map', mapped.error);
+            return err('bank-statement-repository-failure');
+          }
+          transactions.push(mapped.value);
+        }
+        return ok(transactions);
+      } catch (cause) {
+        logStore('listTransactionsByPeriod', cause);
         return err('bank-statement-repository-failure');
       }
     },

@@ -21,11 +21,17 @@ import type {
   BankStatementRepository,
   BankStatementRepositoryError,
 } from '../ports/bank-statement-repository.ts';
+import type {
+  ReconciliationPeriodStore,
+  ReconciliationPeriodStoreError,
+} from '../ports/reconciliation-period-store.ts';
 import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
 
 export type ImportBankStatementDeps = Readonly<{
   parser: BankStatementParser;
   repo: BankStatementRepository;
+  // Guard R18 (#125): não importa em período fechado. Pick mínimo do store.
+  periods: Pick<ReconciliationPeriodStore, 'isClosed'>;
   // Só precisa do instante (occurredAt do evento) — depende da interface mais estreita do Clock.
   clock: Pick<Clock, 'now'>;
   outbox: FinancialOutbox;
@@ -48,7 +54,9 @@ export type ImportBankStatementOutput = Readonly<{
 export type ImportBankStatementError =
   | ParseError
   | BankStatementError
+  | 'period-closed'
   | BankStatementRepositoryError
+  | ReconciliationPeriodStoreError
   | OutboxAppendError;
 
 // Resolve a chave anti-duplicidade da transação: FITID nativo (OFX) via `fromNative`; ausente (CSV)
@@ -78,6 +86,13 @@ export const importBankStatement =
   ): Promise<Result<ImportBankStatementOutput, ImportBankStatementError>> => {
     const parsed = deps.parser.parse(input.format, input.content);
     if (!parsed.ok) return err(parsed.error);
+
+    // Guard R18: período fechado não aceita nova importação (checa início e fim do extrato).
+    for (const at of [parsed.value.periodStart, parsed.value.periodEnd]) {
+      const closedR = await deps.periods.isClosed(input.debitAccountRef, at);
+      if (!closedR.ok) return err(closedR.error);
+      if (closedR.value) return err('period-closed');
+    }
 
     const transactions: DomainTransaction[] = parsed.value.transactions.map((tx, seq) => ({
       fitid: resolveFitid(input.debitAccountRef, tx, seq),
