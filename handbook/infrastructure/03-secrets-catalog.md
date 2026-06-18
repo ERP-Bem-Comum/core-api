@@ -91,6 +91,29 @@ mysql://<user>:<password>@<host>:3306/<database>?ssl=true
 
 ---
 
+### 3.6. E-mail (notifications) — composição por deploy
+
+Provider, remetente e sandbox são escolhidos **só por env**, validados no boot por
+`buildEmailSender(env)` (ticket `NOTIF-EMAIL-DEPLOY-CONFIG`; [ADR-0010](../architecture/adr/0010-email-port-adapter-pattern.md)).
+Config inválida (provider desconhecido, provider sem suas envs, `EMAIL_FROM` malformado) = **boot falha**.
+
+| Variável | Tipo | Obrigatória quando | Descrição |
+| :--- | :--- | :--- | :--- |
+| `EMAIL_PROVIDER` | config | sempre (ausente = compat) | `smtp` \| `resend` \| `memory`. Ausente → `smtp` se `SMTP_*` válidos, senão `memory`. |
+| `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` | config | `provider=smtp` | Servidor SMTP. Umbler: `smtp.umbler.com:587` (STARTTLS, `SMTP_SECURE=false`) ou `:465` (`true`). |
+| `SMTP_PASS` | **secret** | `provider=smtp` | Senha SMTP. Rotação: conforme provedor. |
+| `SMTP_POOL` / `SMTP_MAX_CONNS` | config | opcional | Pool (default `true` / `5`). |
+| `RESEND_API_KEY` | **secret** | `provider=resend` | API key Resend. Rotação: conforme provedor. |
+| `EMAIL_FROM` | config | `provider≠memory` | Remetente global, ex.: `"Bem Comum <no-reply@dominio>"`. |
+| `EMAIL_FROM_RESET` / `EMAIL_FROM_INVITE` / `EMAIL_FROM_NOTIFICATION` | config | opcional | Remetente por fluxo (fallback → `EMAIL_FROM`). |
+| `EMAIL_SANDBOX_TO` | config | **só não-prod** | Redireciona TODO e-mail (to/cc/bcc) para esta caixa. Nunca setar em prod. |
+
+> **Aliases legados (deprecados):** `AUTH_RESET_FROM`, `AUTH_INVITE_FROM`, `PARTNERS_INVITE_FROM` —
+> ainda lidos quando os `EMAIL_FROM*` correspondentes não estão setados. Secrets reais nesta seção:
+> `SMTP_PASS`, `RESEND_API_KEY`.
+
+---
+
 ## 4. Procedimento de Rotação
 
 Para cada secret rotacionado:

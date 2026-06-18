@@ -1,0 +1,238 @@
+{
+  "version": "5",
+  "dialect": "mysql",
+  "id": "c06933af-cac4-4227-a1bb-ad1e95708c6e",
+  "prevId": "00000000-0000-0000-0000-000000000000",
+  "tables": {
+    "notifications_email_outbox": {
+      "name": "notifications_email_outbox",
+      "columns": {
+        "event_id": {
+          "name": "event_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "aggregate_id": {
+          "name": "aggregate_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "aggregate_type": {
+          "name": "aggregate_type",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "schema_version": {
+          "name": "schema_version",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "enqueued_at": {
+          "name": "enqueued_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "processed_at": {
+          "name": "processed_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "payload": {
+          "name": "payload",
+          "type": "varchar(8192)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "idempotency_key": {
+          "name": "idempotency_key",
+          "type": "varchar(200)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "notifications_email_outbox_processed_occurred_idx": {
+          "name": "notifications_email_outbox_processed_occurred_idx",
+          "columns": ["processed_at", "occurred_at"],
+          "isUnique": false
+        },
+        "notifications_email_outbox_idem_idx": {
+          "name": "notifications_email_outbox_idem_idx",
+          "columns": ["idempotency_key"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "notifications_email_outbox_event_id": {
+          "name": "notifications_email_outbox_event_id",
+          "columns": ["event_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {
+        "notifications_email_outbox_attempts_nonneg_chk": {
+          "name": "notifications_email_outbox_attempts_nonneg_chk",
+          "value": "`notifications_email_outbox`.`attempts` >= 0"
+        },
+        "notifications_email_outbox_event_type_nonempty_chk": {
+          "name": "notifications_email_outbox_event_type_nonempty_chk",
+          "value": "CHAR_LENGTH(`notifications_email_outbox`.`event_type`) > 0"
+        },
+        "notifications_email_outbox_aggregate_type_chk": {
+          "name": "notifications_email_outbox_aggregate_type_chk",
+          "value": "`notifications_email_outbox`.`aggregate_type` IN ('EmailMessage')"
+        }
+      }
+    },
+    "notifications_email_outbox_dead_letter": {
+      "name": "notifications_email_outbox_dead_letter",
+      "columns": {
+        "event_id": {
+          "name": "event_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "aggregate_id": {
+          "name": "aggregate_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "aggregate_type": {
+          "name": "aggregate_type",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "schema_version": {
+          "name": "schema_version",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "enqueued_at": {
+          "name": "enqueued_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "failed_at": {
+          "name": "failed_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_error": {
+          "name": "last_error",
+          "type": "varchar(2048)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "payload": {
+          "name": "payload",
+          "type": "varchar(8192)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "notifications_email_outbox_dlq_failed_at_idx": {
+          "name": "notifications_email_outbox_dlq_failed_at_idx",
+          "columns": ["failed_at"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "notifications_email_outbox_dead_letter_event_id": {
+          "name": "notifications_email_outbox_dead_letter_event_id",
+          "columns": ["event_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {
+        "notifications_email_outbox_dlq_aggregate_type_chk": {
+          "name": "notifications_email_outbox_dlq_aggregate_type_chk",
+          "value": "`notifications_email_outbox_dead_letter`.`aggregate_type` IN ('EmailMessage')"
+        }
+      }
+    }
+  },
+  "views": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "tables": {},
+    "indexes": {}
+  }
+}

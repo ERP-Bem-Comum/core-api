@@ -25,6 +25,9 @@ export type { EmailMessage, EmailReceipt, EmailError } from '../domain/email/typ
 // Application port
 export type { EmailSender } from '../application/ports/email-sender.ts';
 
+// Application port - outbox de e-mail (entrega assincrona via worker; NOTIF-EMAIL-OUTBOX)
+export type { EmailOutbox, EmailOutboxError } from '../application/ports/email-outbox.ts';
+
 // Production adapter (Nodemailer)
 export type { SmtpConfig, SmtpConfigError } from '../adapters/email/nodemailer-config.ts';
 export { parseSmtpConfig } from '../adapters/email/nodemailer-config.ts';
@@ -36,3 +39,16 @@ export type { ResendConfig, ResendConfigError } from '../adapters/email/resend-c
 export { parseResendConfig } from '../adapters/email/resend-config.ts';
 
 export { createResendEmailSender } from '../adapters/email/resend.ts';
+
+// Composicao por env (deploy) - NOTIF-EMAIL-DEPLOY-CONFIG (materializa ADR-0010).
+export type {
+  EmailConfig,
+  EmailConfigError,
+  EmailProvider,
+  EmailFromKind,
+} from '../adapters/email/email-config.ts';
+export { parseEmailConfig, resolveFrom } from '../adapters/email/email-config.ts';
+
+export { withSandboxRedirect } from '../adapters/email/sandbox-redirect.ts';
+
+export { buildEmailSender } from '../adapters/email/build-email-sender.ts';

@@ -80,9 +80,10 @@ import {
 } from '../notifications/collaborator-invite-mailer.capturing.ts';
 import { makeEmailCollaboratorInviteMailer } from '../notifications/collaborator-invite-mailer.email.ts';
 import {
-  parseSmtpConfig,
-  createNodemailerEmailSender,
+  buildEmailSender,
+  parseEmailConfig,
   parseEmailAddress,
+  resolveFrom,
 } from '#src/modules/notifications/public-api/index.ts';
 import type { CollaboratorInviteTokenRepository } from '../../domain/collaborator/invite-token-repository.ts';
 import type { CollaboratorInviteMailer } from '../../application/ports/collaborator-invite-mailer.ts';
@@ -160,16 +161,30 @@ const DEFAULT_INVITE_TTL_DAYS = 7;
 // → Nodemailer real (notifications/public-api); senão → no-op SEGURO (não envia, não loga link).
 // Espelha auth/buildInviteMailer; mantém o boot resiliente em dev sem SMTP configurado.
 const buildPartnersInviteMailer = (env: Readonly<NodeJS.ProcessEnv>): CollaboratorInviteMailer => {
-  const smtp = parseSmtpConfig(env);
-  const fromRaw = env['PARTNERS_INVITE_FROM'];
-  if (smtp.ok && fromRaw !== undefined && fromRaw.length > 0) {
-    const from = parseEmailAddress(fromRaw);
-    if (from.ok) {
-      return makeEmailCollaboratorInviteMailer({
-        emailSender: createNodemailerEmailSender(smtp.value),
-        from: from.value,
-      });
+  // NOTIF-EMAIL-DEPLOY-CONFIG: provider + sandbox via fábrica central. Remetente: PARTNERS_INVITE_FROM
+  // (override específico do módulo, maior precedência) ou a config central resolveFrom('invite')
+  // (EMAIL_FROM_INVITE / EMAIL_FROM / alias legado). No-op SEGURO sem remetente.
+  const config = parseEmailConfig(env);
+  if (!config.ok) {
+    throw new Error(`partners-composition: configuração de e-mail inválida (${config.error.tag})`);
+  }
+
+  let from = resolveFrom('invite', config.value);
+  const overrideRaw = env['PARTNERS_INVITE_FROM'];
+  if (overrideRaw !== undefined && overrideRaw.length > 0) {
+    const override = parseEmailAddress(overrideRaw);
+    if (!override.ok) {
+      throw new Error('partners-composition: PARTNERS_INVITE_FROM inválido');
     }
+    from = override.value;
+  }
+
+  const senderR = buildEmailSender(env);
+  if (!senderR.ok) {
+    throw new Error(`partners-composition: provider de e-mail inválido (${senderR.error.tag})`);
+  }
+  if (from !== undefined) {
+    return makeEmailCollaboratorInviteMailer({ emailSender: senderR.value, from });
   }
   return { sendInvite: () => Promise.resolve(ok(undefined)) };
 };
