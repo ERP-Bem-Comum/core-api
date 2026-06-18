@@ -35,7 +35,6 @@
     "worker:outbox:partners": "node --experimental-strip-types --enable-source-maps --no-warnings src/modules/partners/worker/run.ts",
     "worker:supplier-projection": "node --experimental-strip-types --enable-source-maps --no-warnings src/workers/supplier-view-projection/run.ts",
     "worker:contract-count-projection": "node --experimental-strip-types --enable-source-maps --no-warnings src/workers/contract-count-projection/run.ts",
-    "worker:email": "node --experimental-strip-types --enable-source-maps --no-warnings src/modules/notifications/worker/run.ts",
     "worker:email-dispatch": "node --experimental-strip-types --enable-source-maps --no-warnings src/workers/email-dispatch/run.ts",
     "job:contracts:sweep": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/contracts/sweeper/run.ts",
     "job:financial:supplier-view-backfill": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/financial/supplier-view-backfill/run.ts",
@@ -71,7 +70,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/node": "^22.10.0",
-    "@types/nodemailer": "^8.0.0",
+    "@types/nodemailer": "^8.0.1",
     "@typescript/native-preview": "7.0.0-dev.20260515.1",
     "@usebruno/cli": "3.4.2",
     "drizzle-kit": "^0.31.10",
@@ -95,7 +94,7 @@
     "hash-wasm": "^4.12.0",
     "jose": "^6.2.3",
     "mysql2": "^3.22.3",
-    "nodemailer": "^8.0.7",
+    "nodemailer": "^9.0.1",
     "resend": "^6.12.4",
     "zod": "4.4.3",
     "zod-openapi": "5.4.6"

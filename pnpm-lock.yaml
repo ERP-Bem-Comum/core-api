@@ -48,8 +48,8 @@ importers:
         specifier: ^3.22.3
         version: 3.22.3(@types/node@22.19.19)
       nodemailer:
-        specifier: ^8.0.7
-        version: 8.0.7
+        specifier: ^9.0.1
+        version: 9.0.1
       resend:
         specifier: ^6.12.4
         version: 6.12.4
@@ -67,8 +67,8 @@ importers:
         specifier: ^22.10.0
         version: 22.19.19
       '@types/nodemailer':
-        specifier: ^8.0.0
-        version: 8.0.0
+        specifier: ^8.0.1
+        version: 8.0.1
       '@typescript/native-preview':
         specifier: 7.0.0-dev.20260515.1
         version: 7.0.0-dev.20260515.1
@@ -1208,8 +1208,8 @@ packages:
   '@types/node@22.19.19':
     resolution: {integrity: sha512-dyh/xO2Fh5bYrfWaaqGrRQQGkNdmYw6AmaAUvYeUMNTWQtvb796ikLdmTchRmOlOiIJ1TDXfWgVx1QkUlQ6Hew==}
 
-  '@types/nodemailer@8.0.0':
-    resolution: {integrity: sha512-fyf8jWULsCo0d0BuoQ75i6IeoHs47qcqxWc7yUdUcV0pOZGjUTTOvwdG1PRXUDqN/8A64yQdQdnA2pZgcdi+cA==}
+  '@types/nodemailer@8.0.1':
+    resolution: {integrity: sha512-PxpaInm8V1JQDd4j0ds5HfvWQk8JupS1C0Picb96QJsrrRDjBH+DlK7L4ZdNSqNULhiZRQHc40nLVShaGxXAMw==}
 
   '@types/qs@6.15.1':
     resolution: {integrity: sha512-GZHUBZR9hckSUhrxmp1nG6NwdpM9fCunJwyThLW1X3AyHgd9IlHb6VANpQQqDr2o/qQp6McZ3y/IA2rVzKzSbw==}
@@ -2510,8 +2510,8 @@ packages:
     version: 24.16.0
     hasBin: true
 
-  nodemailer@8.0.7:
-    resolution: {integrity: sha512-pkjE4mkBzQjdJT4/UmlKl3pX0rC9fZmjh7c6C9o7lv66Ac6w9WCnzPzhbPNxwZAzlF4mdq4CSWB5+FbK6FWCow==}
+  nodemailer@9.0.1:
+    resolution: {integrity: sha512-Gwv8SQewT616ZM/URn0H54b8PWo/Wum7md3EW2aWy1lO27+WZCX+Xyak3J+NlmHUjDh5ME+uesJUDRbR3Ye8Bw==}
     engines: {node: '>=6.0.0'}
 
   npm-run-path@4.0.1:
@@ -4363,7 +4363,7 @@ snapshots:
     dependencies:
       undici-types: 6.21.0
 
-  '@types/nodemailer@8.0.0':
+  '@types/nodemailer@8.0.1':
     dependencies:
       '@types/node': 22.19.19
 
@@ -4500,7 +4500,7 @@ snapshots:
       '@usebruno/js': 0.48.0(debug@4.4.3)
       '@usebruno/lang': 0.36.0
       '@usebruno/requests': 0.17.0
-      aws4-axios: 3.4.0(axios@1.13.6)
+      aws4-axios: 3.4.0(axios@1.13.6(debug@4.4.3))
       axios: 1.13.6(debug@4.4.3)
       axios-ntlm: 1.4.6(debug@4.4.3)
       chai: 4.5.0
@@ -4685,7 +4685,7 @@ snapshots:
 
   aws-ssl-profiles@1.1.2: {}
 
-  aws4-axios@3.4.0(axios@1.13.6):
+  aws4-axios@3.4.0(axios@1.13.6(debug@4.4.3)):
     dependencies:
       '@aws-sdk/client-sts': 3.1061.0
       aws4: 1.13.2
@@ -5682,7 +5682,7 @@ snapshots:
 
   node@runtime:24.16.0: {}
 
-  nodemailer@8.0.7: {}
+  nodemailer@9.0.1: {}
 
   npm-run-path@4.0.1:
     dependencies:

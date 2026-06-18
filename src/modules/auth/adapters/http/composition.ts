@@ -75,23 +75,8 @@ import type { TokenIssuer } from '../../application/ports/token-issuer.ts';
 import type { PasswordHasher } from '../../application/ports/password-hasher.ts';
 import type { LockoutPolicy } from '../../domain/session/account-lockout.ts';
 import type { PasswordResetTokenRepository } from '../../domain/session/password-reset-token-repository.ts';
-import type { PasswordResetMailer } from '../../application/ports/password-reset-mailer.ts';
 import type { LoginLockoutStore } from '../../application/ports/login-lockout-store.ts';
 import type { UserQuery } from '../../application/ports/user-query.ts';
-import type { InviteMailer } from '../../application/ports/invite-mailer.ts';
-import { ok } from '#src/shared/primitives/result.ts';
-import {
-  buildEmailSender,
-  parseEmailConfig,
-  resolveFrom,
-} from '#src/modules/notifications/public-api/index.ts';
-import { makeEmailPasswordResetMailer } from '../notifications/password-reset-mailer.email.ts';
-import { makeOutboxPasswordResetMailer } from '../notifications/password-reset-mailer.outbox.ts';
-import { openNotificationsMysql } from '#src/modules/notifications/adapters/persistence/drivers/mysql-driver.ts';
-import { createDrizzleEmailOutbox } from '#src/modules/notifications/adapters/outbox/email-outbox.drizzle.ts';
-import { makeOutboxInviteMailer } from '../notifications/invite-mailer.outbox.ts';
-import { makeEmailInviteMailer } from '../notifications/invite-mailer.email.ts';
-import type { EmailSender } from '#src/modules/notifications/public-api/index.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
 
 // Seed RBAC (CONTRACTS-HTTP-READS C1, D4): bootstrap de permissões para dev/test.
@@ -383,120 +368,9 @@ const applyRbacSeed = async (seed: AuthSeed, deps: SeedDeps): Promise<void> => {
   }
 };
 
-// BE-REC-003 + NOTIF-EMAIL-OUTBOX: resolve o mailer de reset a partir da env.
-//
-// Preferência (entrega assíncrona resiliente): com `NOTIFICATIONS_DATABASE_URL` +
-// `AUTH_RESET_FROM` válidos, ENFILEIRA no outbox de e-mail (Drizzle) — o worker
-// `notifications/worker` envia com retry/backoff. Retorna também `close` (shutdown do pool).
-//
-// Fallback 1 (legado): SMTP (parseSmtpConfig) + AUTH_RESET_FROM válidos → Nodemailer
-// SÍNCRONO no request (sem outbox provisionado). Fallback 2: no-op SEGURO (não envia,
-// não loga e-mail/link). Mantém o boot resiliente em dev/test.
-type ResetMailerBuild = Readonly<{
-  mailer: PasswordResetMailer;
-  close?: () => Promise<void>;
-}>;
-
-// ADR-0047 (fatia 02): orfao/inerte — o composition nao chama mais isto (envio e do worker
-// `email-dispatch`). Mantido exportado ate a fatia 02b (limpeza). NAO referenciado no fluxo de envio.
-export const buildResetMailer = async (
-  env: Readonly<NodeJS.ProcessEnv>,
-): Promise<ResetMailerBuild> => {
-  // NOTIF-EMAIL-DEPLOY-CONFIG: remetente resolvido pela config central (EMAIL_FROM_RESET /
-  // EMAIL_FROM, com alias legado AUTH_RESET_FROM). Config inválida = boot falha (não silencioso).
-  const config = parseEmailConfig(env);
-  if (!config.ok) {
-    throw new Error(`auth-composition: configuração de e-mail inválida (${config.error.tag})`);
-  }
-  const from = resolveFrom('reset', config.value);
-
-  // Caminho assíncrono (preferido): outbox de e-mail no MySQL do módulo notifications.
-  const notificationsUrl = env['NOTIFICATIONS_DATABASE_URL'];
-  if (from !== undefined && notificationsUrl !== undefined && notificationsUrl.length > 0) {
-    const handleR = await openNotificationsMysql({
-      connectionString: notificationsUrl,
-      applyMigrations: false,
-    });
-    if (handleR.ok) {
-      const outbox = createDrizzleEmailOutbox(handleR.value);
-      return {
-        mailer: makeOutboxPasswordResetMailer({ emailOutbox: outbox, from }),
-        close: handleR.value.close,
-      };
-    }
-    process.stderr.write(
-      `[auth-composition] outbox de e-mail indisponível (${handleR.error}); fallback síncrono/no-op\n`,
-    );
-  }
-
-  // Fallback síncrono: provider resolvido por env (smtp/resend/memory) + sandbox. No-op SEGURO
-  // (não envia, não loga link) quando não há remetente configurado.
-  const senderR = buildEmailSender(env);
-  if (senderR.ok && from !== undefined) {
-    return { mailer: makeEmailPasswordResetMailer({ emailSender: senderR.value, from }) };
-  }
-  if (!senderR.ok) {
-    throw new Error(`auth-composition: provider de e-mail inválido (${senderR.error.tag})`);
-  }
-  return { mailer: { sendResetLink: async () => ok(undefined) } };
-};
-
-// Convite de ativacao (spec 005 US3). NOTIF-INVITE-FALLBACK-SYNC (#136): espelha EXATAMENTE
-// buildResetMailer — fallback SÍNCRONO real (não outbox InMemory sem worker, que prendia o e-mail).
-//
-// Preferência: com `NOTIFICATIONS_DATABASE_URL` + remetente válidos, ENFILEIRA no outbox Drizzle —
-// o worker envia com retry/backoff. Retorna também `close` (shutdown do pool). INALTERADO.
-// Fallback síncrono: provider resolvido por env (smtp/resend/memory) + sandbox; envia já no request.
-//   Provider inválido → boot falha. Sem remetente → no-op SEGURO.
-//
-// `emailSender` é seam de teste opcional (default = buildEmailSender(env)); espelha a forma do reset.
-type InviteMailerBuild = Readonly<{
-  mailer: InviteMailer;
-  close?: () => Promise<void>;
-}>;
-
-export const buildInviteMailer = async (
-  env: Readonly<NodeJS.ProcessEnv>,
-  emailSender?: EmailSender,
-): Promise<InviteMailerBuild> => {
-  // NOTIF-EMAIL-DEPLOY-CONFIG: remetente via config central (EMAIL_FROM_INVITE / EMAIL_FROM,
-  // alias legado AUTH_INVITE_FROM). Config inválida = boot falha (não silencioso).
-  const config = parseEmailConfig(env);
-  if (!config.ok) {
-    throw new Error(`auth-composition: configuração de e-mail inválida (${config.error.tag})`);
-  }
-  const from = resolveFrom('invite', config.value);
-
-  // Caminho assíncrono (preferido): outbox de e-mail no MySQL do módulo notifications.
-  const notificationsUrl = env['NOTIFICATIONS_DATABASE_URL'];
-  if (from !== undefined && notificationsUrl !== undefined && notificationsUrl.length > 0) {
-    const handleR = await openNotificationsMysql({
-      connectionString: notificationsUrl,
-      applyMigrations: false,
-    });
-    if (handleR.ok) {
-      const outbox = createDrizzleEmailOutbox(handleR.value);
-      return {
-        mailer: makeOutboxInviteMailer({ emailOutbox: outbox, from }),
-        close: handleR.value.close,
-      };
-    }
-    process.stderr.write(
-      `[auth-composition] outbox de convite indisponível (${handleR.error}); fallback síncrono/no-op\n`,
-    );
-  }
-
-  // Fallback síncrono: provider resolvido por env (smtp/resend/memory) + sandbox. No-op SEGURO
-  // (não envia, não loga link) quando não há remetente configurado.
-  const senderR = emailSender !== undefined ? ok(emailSender) : buildEmailSender(env);
-  if (senderR.ok && from !== undefined) {
-    return { mailer: makeEmailInviteMailer({ emailSender: senderR.value, from }) };
-  }
-  if (!senderR.ok) {
-    throw new Error(`auth-composition: provider de e-mail inválido (${senderR.error.tag})`);
-  }
-  return { mailer: { sendInvite: async () => ok(undefined) } };
-};
+// ADR-0047 (fatia 02b — NOTIF-EMAIL-OUTBOX-RETIRE): os builders sincronos de mailer de reset/convite
+// foram REMOVIDOS. O envio de e-mail e do consumidor (worker `email-dispatch`); o produtor (auth)
+// apenas EMITE o evento na tx (auth_outbox). O composition nao monta mais nenhum mailer sincrono.
 
 export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<AuthHttpDeps> => {
   const issuer = config.issuer ?? DEFAULT_ISSUER;
@@ -525,10 +399,8 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
   // ADR-0047 (fatia 02 — NOTIF-EMAIL-EVENT-CONSUMER): o ENVIO de e-mail (reset/convite) deixou de
   // ser sincrono no use case. O produtor (auth) apenas EMITE o evento na tx (auth_outbox); o envio
   // e do consumidor (worker `email-dispatch`). Por isso o composition NAO monta mais `resetMailer`/
-  // `inviteMailer` para os use cases — sem chamada sincrona => sem duplicacao.
-  //
-  // `buildResetMailer`/`buildInviteMailer` permanecem definidos (orfaos/inertes) ate a fatia 02b
-  // (`NOTIF-EMAIL-OUTBOX-RETIRE`, issue de limpeza) — ainda exportados/cobertos por testes.
+  // `inviteMailer` para os use cases — sem chamada sincrona => sem duplicacao. Os builders sincronos
+  // legados foram removidos na fatia 02b (`NOTIF-EMAIL-OUTBOX-RETIRE`).
   const resetMinter = makeNodePasswordResetTokenMinter();
   const resetBaseUrl = config.resetBaseUrl ?? DEFAULT_RESET_BASE_URL;
   const resetTtlSeconds = config.resetTtlSeconds ?? DEFAULT_RESET_TTL;
