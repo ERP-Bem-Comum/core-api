@@ -1,13 +1,16 @@
 // Entrypoint standalone do worker de envio de e-mail transacional (NOTIF-EMAIL-EVENT-CONSUMER /
 // ADR-0047 fatia 02) — COMPOSITION ROOT.
 //
-// Le o `auth_outbox` (pool do `auth`) e entrega os eventos `PasswordResetRequested`/`UserInvited`
-// ao consumidor do `notifications` (decode via auth/public-api -> template -> EmailSender.send),
-// via o worker generico (`shared/outbox`). Um pool (auth), um processo dedicado (ADR-0041);
-// nenhum modulo importa o outro — a ligacao e aqui.
+// Le o `auth_outbox` (pool do `auth`) E o `par_email_outbox` (pool do `partners`) e entrega os
+// eventos de e-mail transacional (`PasswordResetRequested`/`UserInvited`/`CollaboratorInvited`) ao
+// consumidor do `notifications` (decode via {auth,partners}/public-api -> template -> EmailSender.send),
+// via o worker generico (`shared/outbox`). MULTI-FONTE (PARTNERS-INVITE-DOMAIN-EVENT / ADR-0047): dois
+// `runLoop` concorrentes compartilham o MESMO `EventDelivery` de e-mail. Dois pools, um processo
+// dedicado (ADR-0041); nenhum modulo importa o outro — a ligacao e aqui.
 //
-// Config por env: AUTH_DATABASE_URL (le o auth_outbox) + config de e-mail (EMAIL_PROVIDER / from
-// resolvido por `parseEmailConfig`+`resolveFrom`, igual ao composition do auth). Migrations NAO
+// Config por env: AUTH_DATABASE_URL (le o auth_outbox) + PARTNERS_DATABASE_URL (le o par_email_outbox)
+// + config de e-mail (EMAIL_PROVIDER / from resolvido por `parseEmailConfig`+`resolveFrom`). Se
+// PARTNERS_DATABASE_URL ausente, o worker roda so a fonte auth (degradacao graciosa). Migrations NAO
 // sao aplicadas aqui (responsabilidade do release). Encerrado por SIGTERM/SIGINT (graceful — Node 24).
 
 import process from 'node:process';
@@ -16,6 +19,11 @@ import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import { runLoop } from '#src/shared/outbox/index.ts';
 import { openAuthMysql } from '#src/modules/auth/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleAuthOutboxRepository } from '#src/modules/auth/adapters/persistence/repos/outbox-repository.drizzle.ts';
+import {
+  openPartnersMysql,
+  type PartnersMysqlHandle,
+} from '#src/modules/partners/adapters/persistence/drivers/mysql-driver.ts';
+import { createDrizzleParEmailOutboxRepository } from '#src/modules/partners/adapters/persistence/repos/email-outbox-repository.drizzle.ts';
 import {
   buildEmailSender,
   parseEmailConfig,
@@ -60,8 +68,28 @@ const main = async (): Promise<number> => {
 
   const authHandle = authR.value;
   const clock = ClockReal();
-  const outbox = createDrizzleAuthOutboxRepository(authHandle);
+  const authOutbox = createDrizzleAuthOutboxRepository(authHandle);
+  // O MESMO EventDelivery serve as duas fontes (multi-fonte — ADR-0047): decodifica por eventType.
   const delivery = buildEmailDispatchDelivery({ emailSender: senderR.value, from });
+
+  // PARTNERS-INVITE-DOMAIN-EVENT (ADR-0047): segunda fonte par_email_outbox (opcional). Sem
+  // PARTNERS_DATABASE_URL, o worker roda so a fonte auth (degradacao graciosa).
+  const partnersUrl = process.env['PARTNERS_DATABASE_URL'];
+  let partnersHandle: PartnersMysqlHandle | null = null;
+  if (partnersUrl !== undefined && partnersUrl.length > 0) {
+    const partnersR = await openPartnersMysql({
+      connectionString: partnersUrl,
+      applyMigrations: false,
+    });
+    if (!partnersR.ok) {
+      process.stderr.write(`${TAG}falha ao abrir MySQL (partners): ${partnersR.error}\n`);
+      await authHandle.close();
+      return 1;
+    }
+    partnersHandle = partnersR.value;
+  } else {
+    process.stderr.write(`${TAG}PARTNERS_DATABASE_URL ausente — rodando so a fonte auth\n`);
+  }
 
   const controller = new AbortController();
   const shutdown = (): void => {
@@ -70,20 +98,43 @@ const main = async (): Promise<number> => {
   process.once('SIGTERM', shutdown);
   process.once('SIGINT', shutdown);
 
-  process.stderr.write(`${TAG}iniciando — auth_outbox -> EmailSender\n`);
+  process.stderr.write(
+    `${TAG}iniciando — auth_outbox${partnersHandle !== null ? ' + par_email_outbox' : ''} -> EmailSender\n`,
+  );
+
+  const loopConfig = { batchSize: 10, maxAttempts: 5, pollIntervalMs: 500, idleSleepMs: 1000 };
 
   try {
-    const stats = await runLoop(
-      {
-        outbox,
-        delivery,
-        rowToProcessed: rowToEmailRow,
-        clock,
-        tag: TAG,
-        abortSignal: controller.signal,
-      },
-      { batchSize: 10, maxAttempts: 5, pollIntervalMs: 500, idleSleepMs: 1000 },
-    );
+    const loops: Promise<unknown>[] = [
+      runLoop(
+        {
+          outbox: authOutbox,
+          delivery,
+          rowToProcessed: rowToEmailRow,
+          clock,
+          tag: `${TAG}[auth] `,
+          abortSignal: controller.signal,
+        },
+        loopConfig,
+      ),
+    ];
+    if (partnersHandle !== null) {
+      const partnersOutbox = createDrizzleParEmailOutboxRepository(partnersHandle);
+      loops.push(
+        runLoop(
+          {
+            outbox: partnersOutbox,
+            delivery,
+            rowToProcessed: rowToEmailRow,
+            clock,
+            tag: `${TAG}[partners] `,
+            abortSignal: controller.signal,
+          },
+          loopConfig,
+        ),
+      );
+    }
+    const stats = await Promise.all(loops);
     process.stderr.write(`${TAG}shutdown limpo — stats: ${JSON.stringify(stats)}\n`);
     return 0;
   } catch (cause) {
@@ -94,6 +145,7 @@ const main = async (): Promise<number> => {
     process.off('SIGTERM', shutdown);
     process.off('SIGINT', shutdown);
     await authHandle.close();
+    if (partnersHandle !== null) await partnersHandle.close();
   }
 };
 
