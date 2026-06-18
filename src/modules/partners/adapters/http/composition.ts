@@ -79,14 +79,16 @@ import {
   type CapturedCollaboratorInvite,
 } from '../notifications/collaborator-invite-mailer.capturing.ts';
 import { makeOutboxCollaboratorInviteMailer } from '../notifications/collaborator-invite-mailer.outbox.ts';
+import { makeEmailCollaboratorInviteMailer } from '../notifications/collaborator-invite-mailer.email.ts';
 import { openNotificationsMysql } from '#src/modules/notifications/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleEmailOutbox } from '#src/modules/notifications/adapters/outbox/email-outbox.drizzle.ts';
-import { InMemoryEmailOutbox } from '#src/modules/notifications/adapters/outbox/email-outbox.in-memory.ts';
 import {
   parseEmailConfig,
   parseEmailAddress,
   resolveFrom,
+  buildEmailSender,
 } from '#src/modules/notifications/public-api/index.ts';
+import type { EmailSender } from '#src/modules/notifications/public-api/index.ts';
 import type { CollaboratorInviteTokenRepository } from '../../domain/collaborator/invite-token-repository.ts';
 import type { CollaboratorInviteMailer } from '../../application/ports/collaborator-invite-mailer.ts';
 import { deactivateCollaborator } from '../../application/use-cases/deactivate-collaborator.ts';
@@ -159,23 +161,26 @@ export type PartnersCompositionConfig = Readonly<{
 const DEFAULT_AUTOCADASTRO_BASE_URL = 'http://localhost/api/v1/collaborators/autocadastro';
 const DEFAULT_INVITE_TTL_DAYS = 7;
 
-// US5 + NOTIF-INVITE-OUTBOX: resolve o mailer de convite do env, agora ENFILEIRANDO no outbox de
-// e-mail (entrega assíncrona pelo worker), espelhando auth/buildInviteMailer.
+// US5 + NOTIF-INVITE-FALLBACK-SYNC (#136): resolve o mailer de convite do env, espelhando EXATAMENTE
+// auth/buildInviteMailer e buildResetMailer — fallback SÍNCRONO real (não outbox InMemory sem worker).
 //
 // Remetente: PARTNERS_INVITE_FROM (override específico do módulo, maior precedência) ou a config
 // central resolveFrom('invite') (EMAIL_FROM_INVITE / EMAIL_FROM / alias legado).
 //
 // Preferência: com `NOTIFICATIONS_DATABASE_URL` + remetente válidos, ENFILEIRA no outbox Drizzle —
-// o worker envia com retry/backoff. Retorna também `close` (shutdown do pool).
-// Fallback 1: sem URL mas com remetente → enfileira num EmailOutbox InMemory (dev/test sem DB).
-// Fallback 2: no-op SEGURO (não envia, não loga link) quando não há remetente configurado.
+// o worker envia com retry/backoff. Retorna também `close` (shutdown do pool). INALTERADO.
+// Fallback síncrono: provider resolvido por env (smtp/resend/memory) + sandbox; envia já no request.
+//   Provider inválido → boot falha. Sem remetente → no-op SEGURO.
+//
+// `emailSender` é seam de teste opcional (default = buildEmailSender(env)).
 type PartnersInviteMailerBuild = Readonly<{
   mailer: CollaboratorInviteMailer;
   close?: () => Promise<void>;
 }>;
 
-const buildPartnersInviteMailer = async (
+export const buildPartnersInviteMailer = async (
   env: Readonly<NodeJS.ProcessEnv>,
+  emailSender?: EmailSender,
 ): Promise<PartnersInviteMailerBuild> => {
   const config = parseEmailConfig(env);
   if (!config.ok) {
@@ -207,16 +212,18 @@ const buildPartnersInviteMailer = async (
       };
     }
     process.stderr.write(
-      `[partners-composition] outbox de convite indisponível (${handleR.error}); fallback InMemory/no-op\n`,
+      `[partners-composition] outbox de convite indisponível (${handleR.error}); fallback síncrono/no-op\n`,
     );
   }
 
-  // Fallback InMemory (dev/test sem DB): enfileira em memória; sem worker, o e-mail não sai, mas o
-  // boot não quebra. No-op SEGURO quando não há remetente configurado.
-  if (from !== undefined) {
-    return {
-      mailer: makeOutboxCollaboratorInviteMailer({ emailOutbox: InMemoryEmailOutbox().port, from }),
-    };
+  // Fallback síncrono: provider resolvido por env (smtp/resend/memory) + sandbox. No-op SEGURO
+  // (não envia, não loga link) quando não há remetente configurado.
+  const senderR = emailSender !== undefined ? ok(emailSender) : buildEmailSender(env);
+  if (senderR.ok && from !== undefined) {
+    return { mailer: makeEmailCollaboratorInviteMailer({ emailSender: senderR.value, from }) };
+  }
+  if (!senderR.ok) {
+    throw new Error(`partners-composition: provider de e-mail inválido (${senderR.error.tag})`);
   }
   return { mailer: { sendInvite: () => Promise.resolve(ok(undefined)) } };
 };

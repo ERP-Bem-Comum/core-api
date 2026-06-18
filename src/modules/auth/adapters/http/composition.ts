@@ -88,8 +88,9 @@ import { makeEmailPasswordResetMailer } from '../notifications/password-reset-ma
 import { makeOutboxPasswordResetMailer } from '../notifications/password-reset-mailer.outbox.ts';
 import { openNotificationsMysql } from '#src/modules/notifications/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleEmailOutbox } from '#src/modules/notifications/adapters/outbox/email-outbox.drizzle.ts';
-import { InMemoryEmailOutbox } from '#src/modules/notifications/adapters/outbox/email-outbox.in-memory.ts';
 import { makeOutboxInviteMailer } from '../notifications/invite-mailer.outbox.ts';
+import { makeEmailInviteMailer } from '../notifications/invite-mailer.email.ts';
+import type { EmailSender } from '#src/modules/notifications/public-api/index.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
 
 // Seed RBAC (CONTRACTS-HTTP-READS C1, D4): bootstrap de permissões para dev/test.
@@ -431,19 +432,24 @@ const buildResetMailer = async (env: Readonly<NodeJS.ProcessEnv>): Promise<Reset
   return { mailer: { sendResetLink: async () => ok(undefined) } };
 };
 
-// Convite de ativacao (spec 005 US3). NOTIF-INVITE-OUTBOX: passa a ENFILEIRAR no outbox de e-mail
-// (entrega assincrona pelo worker), espelhando buildResetMailer.
+// Convite de ativacao (spec 005 US3). NOTIF-INVITE-FALLBACK-SYNC (#136): espelha EXATAMENTE
+// buildResetMailer — fallback SÍNCRONO real (não outbox InMemory sem worker, que prendia o e-mail).
 //
 // Preferência: com `NOTIFICATIONS_DATABASE_URL` + remetente válidos, ENFILEIRA no outbox Drizzle —
-// o worker envia com retry/backoff. Retorna também `close` (shutdown do pool).
-// Fallback 1: sem URL mas com remetente → enfileira num EmailOutbox InMemory (dev/test sem DB).
-// Fallback 2: no-op SEGURO (não envia, não loga e-mail/link) quando não há remetente configurado.
+// o worker envia com retry/backoff. Retorna também `close` (shutdown do pool). INALTERADO.
+// Fallback síncrono: provider resolvido por env (smtp/resend/memory) + sandbox; envia já no request.
+//   Provider inválido → boot falha. Sem remetente → no-op SEGURO.
+//
+// `emailSender` é seam de teste opcional (default = buildEmailSender(env)); espelha a forma do reset.
 type InviteMailerBuild = Readonly<{
   mailer: InviteMailer;
   close?: () => Promise<void>;
 }>;
 
-const buildInviteMailer = async (env: Readonly<NodeJS.ProcessEnv>): Promise<InviteMailerBuild> => {
+export const buildInviteMailer = async (
+  env: Readonly<NodeJS.ProcessEnv>,
+  emailSender?: EmailSender,
+): Promise<InviteMailerBuild> => {
   // NOTIF-EMAIL-DEPLOY-CONFIG: remetente via config central (EMAIL_FROM_INVITE / EMAIL_FROM,
   // alias legado AUTH_INVITE_FROM). Config inválida = boot falha (não silencioso).
   const config = parseEmailConfig(env);
@@ -467,14 +473,18 @@ const buildInviteMailer = async (env: Readonly<NodeJS.ProcessEnv>): Promise<Invi
       };
     }
     process.stderr.write(
-      `[auth-composition] outbox de convite indisponível (${handleR.error}); fallback InMemory/no-op\n`,
+      `[auth-composition] outbox de convite indisponível (${handleR.error}); fallback síncrono/no-op\n`,
     );
   }
 
-  // Fallback InMemory (dev/test sem DB): enfileira em memória; sem worker, o e-mail não sai, mas o
-  // boot não quebra. No-op SEGURO quando não há remetente configurado.
-  if (from !== undefined) {
-    return { mailer: makeOutboxInviteMailer({ emailOutbox: InMemoryEmailOutbox().port, from }) };
+  // Fallback síncrono: provider resolvido por env (smtp/resend/memory) + sandbox. No-op SEGURO
+  // (não envia, não loga link) quando não há remetente configurado.
+  const senderR = emailSender !== undefined ? ok(emailSender) : buildEmailSender(env);
+  if (senderR.ok && from !== undefined) {
+    return { mailer: makeEmailInviteMailer({ emailSender: senderR.value, from }) };
+  }
+  if (!senderR.ok) {
+    throw new Error(`auth-composition: provider de e-mail inválido (${senderR.error.tag})`);
   }
   return { mailer: { sendInvite: async () => ok(undefined) } };
 };
