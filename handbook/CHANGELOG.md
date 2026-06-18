@@ -4,6 +4,22 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-17 — 🧭 ADR-0047 (Proposed): topologia de comunicação cross-módulo (read port síncrono vs projeção)
+
+Novo [ADR-0047](./architecture/adr/0047-cross-module-communication-topology.md) (**Proposed**, pendente de ratificação),
+**estende** [ADR-0006](./architecture/adr/0006-modular-monolith-core-api.md)/[ADR-0015](./architecture/adr/0015-mysql-outbox-pattern.md)/[ADR-0022](./architecture/adr/0022-read-models-via-projection-over-event-stream.md)/[ADR-0032](./architecture/adr/0032-transient-http-composition-read-until-bff.md)
+e **generaliza** as instâncias [ADR-0043](./architecture/adr/0043-partners-supplier-integration-events.md)/[ADR-0045](./architecture/adr/0045-financial-supplier-read-model.md)/[ADR-0046](./architecture/adr/0046-contracts-contractor-ref-integration-events.md).
+
+Crava a regra que faltava para escolher a topologia quando o módulo A precisa de dado do módulo B: discriminador
+**exibe vs consulta** — só exibe → read port síncrono (N1); consulta por campo alheio (sort/filter/search) → projeção
+local mantida por outbox (N4); snapshot histórico → copiar no agregado; projeção intra-módulo → síncrona na mesma tx
+(N2). Ancorado em Vernon, _Implementing DDD_, p. 464 (consistência eventual é escolha deliberada) e p. 382 (publish
+in-process síncrono é o default). Classifica os 4 fluxos cross-módulo atuais (todos no nível correto após a regra) e
+registra 3 follow-ups: outbox não-atômico do `financial` (🔴 bug), reconciler do contador `par_contract_count_view`,
+e o desvio do `fin_document_timeline` (escrita síncrona na tx) vs ADR-0022 (projeção via event-delivery).
+
+---
+
 ## 2026-06-17 — 🔗 ADR-0046 (Accepted): contrato de eventos `contracts → partners` (`contractorRef` p/ contagem nos grids, US6 #46)
 
 Novo [ADR-0046](./architecture/adr/0046-contracts-contractor-ref-integration-events.md) (**Accepted**), **estende**
