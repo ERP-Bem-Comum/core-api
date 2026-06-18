@@ -2,12 +2,34 @@ import type { PayableId } from '../shared/payable-id.ts';
 import type { StatementTransactionId } from '../statement/statement-transaction-id.ts';
 import type { DocumentStatus } from '../document/types.ts';
 import type { ReconciliationId } from './reconciliation-id.ts';
+import type { ManualEntryId } from './manual-entry-id.ts';
 import type { ReconciliationEvent } from './events.ts';
 
 // Valores em EN (C1 — casam com fin_payables.status). Tradução PT é apresentação.
-export type ReconciliationType = 'Individual' | 'Multiple' | 'Partial';
+export type ReconciliationType = 'Individual' | 'Multiple' | 'Partial' | 'ManualEntry';
 export type ReconciliationStatus = 'Active' | 'Undone';
 export type DifferenceTreatment = 'Interest' | 'Penalty' | 'Discount' | 'Fee' | 'Partial';
+
+// Lançamento manual (US5): registro financeiro sem título de origem (ex.: tarifa). Parte do boundary
+// da Reconciliation quando `type = ManualEntry`.
+export type ManualEntryType =
+  | 'Payment'
+  | 'Receipt'
+  | 'Transfer'
+  | 'FeePenaltyInterest'
+  | 'Investment'
+  | 'Redemption';
+
+export type ManualEntry = Readonly<{
+  id: ManualEntryId;
+  type: ManualEntryType;
+  valueCents: number;
+  supplierRef: string | null;
+  categoryRef: string | null;
+  costCenterRef: string | null;
+  programRef: string | null;
+  description: string | null;
+}>;
 
 // Foto do título no momento da conciliação (referência por identidade — D-AGGREGATES).
 export type PayableSnapshot = Readonly<{
@@ -45,6 +67,8 @@ export type Reconciliation = Readonly<{
   status: ReconciliationStatus;
   items: readonly ReconciliationItem[];
   difference: Difference | null;
+  // Preenchido só quando `type = ManualEntry` (US5); null nas conciliações com título.
+  manualEntry: ManualEntry | null;
   audit: ReconciliationAudit;
 }>;
 

@@ -69,6 +69,18 @@ export const createInMemoryReconciliationRepository = (
       return Promise.resolve(ok(undefined));
     },
 
+    confirmManualEntry: async (
+      reconciliation: Reconciliation,
+      transactionId: StatementTransactionId,
+    ): Promise<Result<void, ReconciliationRepositoryError>> => {
+      // Lançamento manual: sem título → só flipa a transação e guarda a conciliação (com manualEntry).
+      if (!flipTransaction(statements, String(transactionId), 'Pending', 'Reconciled')) {
+        return Promise.resolve(err('reconciliation-repository-failure'));
+      }
+      reconciliations.set(String(reconciliation.id), reconciliation);
+      return Promise.resolve(ok(undefined));
+    },
+
     findById: async (
       id: ReconciliationId,
     ): Promise<Result<Reconciliation | null, ReconciliationRepositoryError>> =>

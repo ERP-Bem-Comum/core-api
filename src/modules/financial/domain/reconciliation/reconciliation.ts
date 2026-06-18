@@ -47,6 +47,7 @@ export const confirm = (input: ConfirmInput): Result<ConfirmOutput, Reconciliati
     status: 'Active',
     items,
     difference: input.difference ?? null,
+    manualEntry: null,
     audit: {
       reconciledAt: input.occurredAt,
       reconciledBy: input.reconciledBy,

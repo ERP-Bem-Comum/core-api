@@ -50,6 +50,13 @@
       "when": 1781800771848,
       "tag": "0006_last_living_lightning",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1781812923636,
+      "tag": "0007_new_hercules",
+      "breakpoints": true
     }
   ]
 }

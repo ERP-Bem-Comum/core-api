@@ -74,6 +74,10 @@ import {
   suggestionsResponseSchema,
   rejectSuggestionBodySchema,
   rejectSuggestionResponseSchema,
+  manualEntryBodySchema,
+  manualEntryResponseSchema,
+  batchBodySchema,
+  batchResponseSchema,
 } from './schemas.ts';
 
 export type FinancialHttpHooks = Readonly<{
@@ -580,6 +584,83 @@ const financialRoutes =
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(reply, ok(result.value), { ok: 200 });
+      },
+    });
+
+    // POST /financial/statement-transactions/:id/manual-entry — lançamento manual (US5; transação sem título).
+    scope.route({
+      method: 'POST',
+      url: '/financial/statement-transactions/:id/manual-entry',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationWrite)],
+      schema: {
+        params: statementTransactionIdParamSchema,
+        body: manualEntryBodySchema,
+        response: { 201: manualEntryResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const body = req.body;
+        const result = await deps.recordManualEntry({
+          transactionId: req.params.id,
+          type: body.type,
+          ...(body.supplierRef !== undefined ? { supplierRef: body.supplierRef } : {}),
+          ...(body.categoryRef !== undefined ? { categoryRef: body.categoryRef } : {}),
+          ...(body.costCenterRef !== undefined ? { costCenterRef: body.costCenterRef } : {}),
+          ...(body.programRef !== undefined ? { programRef: body.programRef } : {}),
+          ...(body.description !== undefined ? { description: body.description } : {}),
+          reconciledBy: req.userId,
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(
+          reply,
+          ok({
+            reconciliationId: String(result.value.reconciliationId),
+            type: 'ManualEntry' as const,
+            manualEntryId: String(result.value.manualEntryId),
+          }),
+          { ok: 201 },
+        );
+      },
+    });
+
+    // POST /financial/reconciliations/batch — conciliação em lote (US5; N transações × 1 template).
+    scope.route({
+      method: 'POST',
+      url: '/financial/reconciliations/batch',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationWrite)],
+      schema: {
+        body: batchBodySchema,
+        response: { 201: batchResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const body = req.body;
+        const t = body.template;
+        const result = await deps.confirmBatch({
+          transactionIds: body.transactionIds,
+          // Bridge undefined→omitido (exactOptionalPropertyTypes vs Zod .optional()).
+          template: {
+            type: t.type,
+            ...(t.supplierRef !== undefined ? { supplierRef: t.supplierRef } : {}),
+            ...(t.categoryRef !== undefined ? { categoryRef: t.categoryRef } : {}),
+            ...(t.costCenterRef !== undefined ? { costCenterRef: t.costCenterRef } : {}),
+            ...(t.programRef !== undefined ? { programRef: t.programRef } : {}),
+            ...(t.description !== undefined ? { description: t.description } : {}),
+          },
+          reconciledBy: req.userId,
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(
+          reply,
+          ok({
+            created: result.value.created,
+            reconciliationIds: result.value.reconciliationIds.map((id) => String(id)),
+            // Code público estável por transação falha (não vaza o slug interno — OWASP API8).
+            failed: result.value.failed.map((f) => ({
+              transactionId: f.transactionId,
+              error: toPublicCode(f.error),
+            })),
+          }),
+          { ok: 201 },
+        );
       },
     });
   };

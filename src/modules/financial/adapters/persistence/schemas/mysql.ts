@@ -593,7 +593,10 @@ export const finReconciliations = mysqlTable(
     undoReason: varchar('undo_reason', { length: 500 }),
   },
   (t) => [
-    check('fin_reconciliations_type_chk', sql`${t.type} IN ('Individual','Multiple','Partial')`),
+    check(
+      'fin_reconciliations_type_chk',
+      sql`${t.type} IN ('Individual','Multiple','Partial','ManualEntry')`,
+    ),
     check('fin_reconciliations_status_chk', sql`${t.status} IN ('Active','Undone')`),
     check(
       'fin_reconciliations_difference_chk',
@@ -641,6 +644,40 @@ export const finRejectedSuggestions = mysqlTable(
   (t) => [uniqueIndex('fin_rejected_suggestions_tx_payable_uq').on(t.transactionId, t.payableId)],
 );
 
+// ─── fin_manual_entries ────────────────────────────────────────────────────────
+//
+// Lançamento manual (US5): registro contábil de uma conciliação tipo `ManualEntry` (transação sem
+// título — ex.: tarifa). Parte do boundary da Reconciliation → FK ON DELETE CASCADE. `type` enum
+// varchar+CHECK; refs (supplier/category/cost_center/program) opcionais por identidade (sem FK cross-aggregate).
+// ⚠️ CHARSET/COLLATE manual na migration: id/reconciliation_id/*_ref em utf8mb4_bin.
+export const finManualEntries = mysqlTable(
+  'fin_manual_entries',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    reconciliationId: varchar('reconciliation_id', { length: 36 }).notNull(),
+    type: varchar('type', { length: 24 }).notNull(),
+    valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
+    supplierRef: varchar('supplier_ref', { length: 36 }),
+    categoryRef: varchar('category_ref', { length: 36 }),
+    costCenterRef: varchar('cost_center_ref', { length: 36 }),
+    programRef: varchar('program_ref', { length: 36 }),
+    description: varchar('description', { length: 500 }),
+  },
+  (t) => [
+    foreignKey({
+      columns: [t.reconciliationId],
+      foreignColumns: [finReconciliations.id],
+      name: 'fin_manual_entries_reconciliation_id_fk',
+    }).onDelete('cascade'),
+    check(
+      'fin_manual_entries_type_chk',
+      sql`${t.type} IN ('Payment','Receipt','Transfer','FeePenaltyInterest','Investment','Redemption')`,
+    ),
+    check('fin_manual_entries_value_chk', sql`${t.valueCents} > 0`),
+    index('fin_manual_entries_reconciliation_id_idx').on(t.reconciliationId),
+  ],
+);
+
 // ─── Tipos gerados pelo schema (consumidos pelos mappers) ─────────────────────
 //
 // `$inferSelect` = shape da row lida do banco (SELECT *).
@@ -686,3 +723,6 @@ export type NewReconciliationItemRow = typeof finReconciliationItems.$inferInser
 
 export type RejectedSuggestionRow = typeof finRejectedSuggestions.$inferSelect;
 export type NewRejectedSuggestionRow = typeof finRejectedSuggestions.$inferInsert;
+
+export type ManualEntryRow = typeof finManualEntries.$inferSelect;
+export type NewManualEntryRow = typeof finManualEntries.$inferInsert;

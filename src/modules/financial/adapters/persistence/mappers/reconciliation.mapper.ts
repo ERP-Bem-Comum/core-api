@@ -9,12 +9,14 @@ import * as PayableId from '#src/modules/financial/domain/shared/payable-id.ts';
 import type {
   Difference,
   DifferenceTreatment,
+  ManualEntry,
   Reconciliation,
   ReconciliationItem,
   ReconciliationStatus,
   ReconciliationType,
 } from '#src/modules/financial/domain/reconciliation/types.ts';
 import type {
+  NewManualEntryRow,
   NewReconciliationItemRow,
   NewReconciliationRow,
   ReconciliationItemRow,
@@ -65,6 +67,21 @@ export const itemsToRows = (reconciliation: Reconciliation): NewReconciliationIt
     reconciledValueCents: item.reconciledValueCents,
   }));
 
+export const manualEntryToRow = (
+  reconciliationId: ReconciliationId.ReconciliationId,
+  manualEntry: ManualEntry,
+): NewManualEntryRow => ({
+  id: manualEntry.id,
+  reconciliationId,
+  type: manualEntry.type,
+  valueCents: manualEntry.valueCents,
+  supplierRef: manualEntry.supplierRef,
+  categoryRef: manualEntry.categoryRef,
+  costCenterRef: manualEntry.costCenterRef,
+  programRef: manualEntry.programRef,
+  description: manualEntry.description,
+});
+
 export const toDomain = (
   row: Readonly<ReconciliationRow>,
   itemRows: readonly Readonly<ReconciliationItemRow>[],
@@ -106,6 +123,9 @@ export const toDomain = (
       status,
       items,
       difference,
+      // O lançamento manual (fin_manual_entries) não é recarregado aqui: o undo não o lê e nenhum
+      // use-case desta fatia precisa do boundary pós-criação (US5). Reidratar fica p/ ticket futuro se preciso.
+      manualEntry: null,
       audit: {
         reconciledAt: row.reconciledAt,
         reconciledBy: row.reconciledBy,

@@ -14,6 +14,12 @@ export type ReconciliationRepository = Readonly<{
     reconciliation: Reconciliation,
     transactionId: StatementTransactionId,
   ) => Promise<Result<void, ReconciliationRepositoryError>>;
+  // Lançamento manual (US5): insere conciliação `ManualEntry` + `fin_manual_entries` e marca a transação
+  // `Pending→Reconciled` — mesma tx. SEM título (items vazio). `reconciliation.manualEntry` deve estar setado.
+  confirmManualEntry: (
+    reconciliation: Reconciliation,
+    transactionId: StatementTransactionId,
+  ) => Promise<Result<void, ReconciliationRepositoryError>>;
   findById: (
     id: ReconciliationId,
   ) => Promise<Result<Reconciliation | null, ReconciliationRepositoryError>>;

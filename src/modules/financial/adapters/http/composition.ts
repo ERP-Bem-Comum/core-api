@@ -60,6 +60,8 @@ import { undoReconciliation } from '../../application/use-cases/undo-reconciliat
 import { searchPaidPayables } from '../../application/use-cases/search-paid-payables.ts';
 import { suggestMatches } from '../../application/use-cases/suggest-matches.ts';
 import { rejectSuggestion } from '../../application/use-cases/reject-suggestion.ts';
+import { recordManualEntry } from '../../application/use-cases/record-manual-entry.ts';
+import { confirmBatch } from '../../application/use-cases/confirm-batch.ts';
 import type { DocumentRepository } from '../../domain/document/repository.ts';
 import type { FinancialTimelineRepository } from '../../domain/timeline/repository.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
@@ -106,6 +108,10 @@ export type FinancialHttpDeps = Readonly<{
   suggestMatches: ReturnType<typeof suggestMatches>;
   /** Rejeita uma sugestão (US2) — POST /statement-transactions/:id/reject-suggestion. */
   rejectSuggestion: ReturnType<typeof rejectSuggestion>;
+  /** Lançamento manual (US5) — POST /statement-transactions/:id/manual-entry. */
+  recordManualEntry: ReturnType<typeof recordManualEntry>;
+  /** Conciliação em lote (US5) — POST /reconciliations/batch. */
+  confirmBatch: ReturnType<typeof confirmBatch>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -189,6 +195,14 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
   // Deps base (repo + outbox); os 6 use cases mutantes também recebem `clock` para
   // carimbar `occurredAt` das entries da trilha (timeline-recording.ts).
   const deps = { repo: pools.repo, outbox: outbox.port, clock };
+  // Lançamento manual (US5): reaproveitado pelo confirmBatch (1 template × N transações).
+  const record = recordManualEntry({
+    reconciliationRepo: pools.reconciliationRepo,
+    statements: pools.statementRepo,
+    cedenteStore: pools.cedenteStore,
+    clock,
+    outbox: outbox.port,
+  });
   return {
     saveDocument: saveDocument(deps),
     saveDraft: saveDraft(deps),
@@ -227,6 +241,8 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       rejected: pools.rejectedSuggestionRepo,
     }),
     rejectSuggestion: rejectSuggestion({ rejected: pools.rejectedSuggestionRepo, clock }),
+    recordManualEntry: record,
+    confirmBatch: confirmBatch({ record }),
     shutdown: pools.shutdown,
   };
 };

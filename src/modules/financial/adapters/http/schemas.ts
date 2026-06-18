@@ -438,3 +438,46 @@ export const rejectSuggestionResponseSchema = z.object({
   transactionId: z.uuid(),
   payableId: z.uuid(),
 });
+
+// ─── POST /statement-transactions/:id/manual-entry + /reconciliations/batch (US5) ──
+
+const manualEntryTypeSchema = z.enum([
+  'Payment',
+  'Receipt',
+  'Transfer',
+  'FeePenaltyInterest',
+  'Investment',
+  'Redemption',
+]);
+
+// `value` NÃO vem no body — é o valor da transação (derivado no use-case).
+export const manualEntryBodySchema = z.object({
+  type: manualEntryTypeSchema,
+  supplierRef: z.uuid().optional(),
+  categoryRef: z.uuid().optional(),
+  costCenterRef: z.uuid().optional(),
+  programRef: z.uuid().optional(),
+  description: z.string().min(1).max(500).optional(),
+});
+
+export type ManualEntryBody = z.infer<typeof manualEntryBodySchema>;
+
+export const manualEntryResponseSchema = z.object({
+  reconciliationId: z.uuid(),
+  type: z.literal('ManualEntry'),
+  manualEntryId: z.uuid(),
+});
+
+export const batchBodySchema = z.object({
+  transactionIds: z.array(z.uuid()).min(1).max(500),
+  template: manualEntryBodySchema,
+});
+
+export type BatchBody = z.infer<typeof batchBodySchema>;
+
+export const batchResponseSchema = z.object({
+  created: z.number().int().min(0),
+  reconciliationIds: z.array(z.uuid()),
+  // Best-effort: transações que falharam (estado/guard) com o code público — o lote não aborta por uma.
+  failed: z.array(z.object({ transactionId: z.uuid(), error: z.string() })),
+});

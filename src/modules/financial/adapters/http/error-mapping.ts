@@ -129,6 +129,9 @@ const SLUG_MESSAGES: Record<string, string> = {
     'O fechamento não bate: a soma dos títulos mais a diferença deve igualar o valor da transação.',
   'empty-reconciliation': 'Informe ao menos um título para conciliar.',
   'reconciliation-id-invalid': 'Identificador de conciliação inválido.',
+  // Lançamento manual / lote (US5).
+  'manual-entry-value-not-positive': 'O valor do lançamento manual deve ser positivo.',
+  'empty-batch': 'Informe ao menos uma transação para o lote.',
 };
 
 /** Mensagem PT-BR ao humano para um slug; fallback por `code` público. Nunca retorna o slug. */

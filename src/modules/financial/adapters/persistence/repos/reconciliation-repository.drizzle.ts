@@ -16,12 +16,18 @@ import type {
 } from '#src/modules/financial/application/ports/reconciliation-repository.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import {
+  finManualEntries,
   finPayables,
   finReconciliationItems,
   finReconciliations,
   finStatementTransactions,
 } from '../schemas/mysql.ts';
-import { reconciliationToRow, itemsToRows, toDomain } from '../mappers/reconciliation.mapper.ts';
+import {
+  reconciliationToRow,
+  itemsToRows,
+  manualEntryToRow,
+  toDomain,
+} from '../mappers/reconciliation.mapper.ts';
 
 const logStore = (op: string, cause: unknown): void => {
   process.stderr.write(`[fin-reconciliation-repo] ${op} failed: ${String(cause)}\n`);
@@ -71,6 +77,36 @@ export const createDrizzleReconciliationRepository = (
         return ok(undefined);
       } catch (cause) {
         logStore('confirm', cause);
+        return err('reconciliation-repository-failure');
+      }
+    },
+
+    confirmManualEntry: async (
+      reconciliation: Reconciliation,
+      transactionId: StatementTransactionId,
+    ): Promise<Result<void, ReconciliationRepositoryError>> => {
+      const manualEntry = reconciliation.manualEntry;
+      if (manualEntry === null) return err('reconciliation-repository-failure');
+      try {
+        await db.transaction(async (tx) => {
+          await tx.insert(finReconciliations).values(reconciliationToRow(reconciliation));
+          await tx
+            .insert(finManualEntries)
+            .values(manualEntryToRow(reconciliation.id, manualEntry));
+          const txRes = await tx
+            .update(finStatementTransactions)
+            .set({ reconciliationStatus: 'Reconciled' })
+            .where(
+              and(
+                eq(finStatementTransactions.id, String(transactionId)),
+                eq(finStatementTransactions.reconciliationStatus, 'Pending'),
+              ),
+            );
+          if (affectedRowsOf(txRes) !== 1) throw new Error('transaction-not-pending');
+        });
+        return ok(undefined);
+      } catch (cause) {
+        logStore('confirmManualEntry', cause);
         return err('reconciliation-repository-failure');
       }
     },
