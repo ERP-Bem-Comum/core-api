@@ -19,11 +19,23 @@ import {
   createInMemoryTimelineRepository,
   type TimelineStore,
 } from '../persistence/repos/timeline-repository.in-memory.ts';
-import { createInMemoryBankStatementRepository } from '../persistence/repos/bank-statement-repository.in-memory.ts';
+import {
+  createInMemoryBankStatementRepository,
+  type BankStatementStore,
+} from '../persistence/repos/bank-statement-repository.in-memory.ts';
+import {
+  createInMemoryPayableReconciliationView,
+  type PayableStore,
+} from '../persistence/repos/payable-reconciliation-view.in-memory.ts';
+import { createInMemoryReconciliationRepository } from '../persistence/repos/reconciliation-repository.in-memory.ts';
+import { createInMemoryCedenteAccountStore } from '../persistence/repos/cedente-account-store.in-memory.ts';
 import { createInMemoryOutbox } from '../outbox/outbox.in-memory.ts';
 import { createDrizzleDocumentRepository } from '../persistence/repos/document-repository.drizzle.ts';
 import { createDrizzleTimelineRepository } from '../persistence/repos/timeline-repository.drizzle.ts';
 import { createDrizzleBankStatementRepository } from '../persistence/repos/bank-statement-repository.drizzle.ts';
+import { createDrizzlePayableReconciliationView } from '../persistence/repos/payable-reconciliation-view.drizzle.ts';
+import { createDrizzleReconciliationRepository } from '../persistence/repos/reconciliation-repository.drizzle.ts';
+import { createDrizzleCedenteAccountStore } from '../persistence/repos/cedente-account-store.drizzle.ts';
 import { bankStatementParser } from '../statement-parsers/bank-statement-parser.ts';
 import {
   openMysqlFinancial,
@@ -39,10 +51,16 @@ import { cancelDocument } from '../../application/use-cases/cancel-document.ts';
 import { submitDraft } from '../../application/use-cases/submit-draft.ts';
 import { getDocumentTimeline } from '../../application/use-cases/get-document-timeline.ts';
 import { importBankStatement } from '../../application/use-cases/import-bank-statement.ts';
+import { confirmReconciliation } from '../../application/use-cases/confirm-reconciliation.ts';
+import { undoReconciliation } from '../../application/use-cases/undo-reconciliation.ts';
+import { searchPaidPayables } from '../../application/use-cases/search-paid-payables.ts';
 import type { DocumentRepository } from '../../domain/document/repository.ts';
 import type { FinancialTimelineRepository } from '../../domain/timeline/repository.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
 import type { BankStatementRepository } from '../../application/ports/bank-statement-repository.ts';
+import type { PayableReconciliationView } from '../../application/ports/payable-reconciliation-view.ts';
+import type { ReconciliationRepository } from '../../application/ports/reconciliation-repository.ts';
+import type { CedenteAccountStore } from '../../application/ports/cedente-account-store.ts';
 
 export type FinancialDriver = 'memory' | 'mysql';
 
@@ -70,6 +88,12 @@ export type FinancialHttpDeps = Readonly<{
   importBankStatement: ReturnType<typeof importBankStatement>;
   /** Leitura das transações de um extrato — GET /bank-statements/:id/transactions. */
   listStatementTransactions: BankStatementRepository['listTransactions'];
+  /** Confirma a conciliação (US2/4) — POST /reconciliations. */
+  confirmReconciliation: ReturnType<typeof confirmReconciliation>;
+  /** Desfaz a conciliação (US3) — POST /reconciliations/:id/undo. */
+  undoReconciliation: ReturnType<typeof undoReconciliation>;
+  /** Lista títulos `Paid` (US2) — GET /payables?status=Paid. */
+  searchPaidPayables: ReturnType<typeof searchPaidPayables>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -79,6 +103,9 @@ type Pools = Readonly<{
   // na mesma transação (memory: store compartilhado; mysql: dentro da tx do save).
   timelineRepo: FinancialTimelineRepository;
   statementRepo: BankStatementRepository;
+  payableView: PayableReconciliationView;
+  reconciliationRepo: ReconciliationRepository;
+  cedenteStore: CedenteAccountStore;
   shutdown: () => Promise<void>;
 }>;
 
@@ -91,8 +118,26 @@ const buildMemoryPools = (): Pools => {
   const supplierViewStore = createInMemorySupplierViewStore();
   const repo = createInMemoryDocumentRepository(timelineStore, supplierViewStore);
   const timelineRepo = createInMemoryTimelineRepository(timelineStore);
-  const statementRepo = createInMemoryBankStatementRepository();
-  return { repo, timelineRepo, statementRepo, shutdown: () => Promise.resolve() };
+  // Stores compartilhados da conciliação: o reconciliationRepo flipa status no MESMO statementStore
+  // (transação) e payableStore (título) lidos pelo statementRepo/payableView (atomicidade em memória).
+  const statementStore: BankStatementStore = new Map();
+  const payableStore: PayableStore = new Map();
+  const statementRepo = createInMemoryBankStatementRepository(statementStore);
+  const payableView = createInMemoryPayableReconciliationView(payableStore);
+  const reconciliationRepo = createInMemoryReconciliationRepository({
+    payables: payableStore,
+    statements: statementStore,
+  });
+  const cedenteStore = createInMemoryCedenteAccountStore();
+  return {
+    repo,
+    timelineRepo,
+    statementRepo,
+    payableView,
+    reconciliationRepo,
+    cedenteStore,
+    shutdown: () => Promise.resolve(),
+  };
 };
 
 const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pools> => {
@@ -110,6 +155,9 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     // Leitura da trilha via pool (a escrita é feita dentro da tx do document-repo.save).
     timelineRepo: createDrizzleTimelineRepository(handle),
     statementRepo: createDrizzleBankStatementRepository(handle),
+    payableView: createDrizzlePayableReconciliationView(handle),
+    reconciliationRepo: createDrizzleReconciliationRepository(handle),
+    cedenteStore: createDrizzleCedenteAccountStore(handle),
     shutdown: () => handle.close(),
   };
 };
@@ -138,6 +186,20 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       outbox: outbox.port,
     }),
     listStatementTransactions: pools.statementRepo.listTransactions,
+    confirmReconciliation: confirmReconciliation({
+      reconciliationRepo: pools.reconciliationRepo,
+      payables: pools.payableView,
+      statements: pools.statementRepo,
+      cedenteStore: pools.cedenteStore,
+      clock,
+      outbox: outbox.port,
+    }),
+    undoReconciliation: undoReconciliation({
+      reconciliationRepo: pools.reconciliationRepo,
+      clock,
+      outbox: outbox.port,
+    }),
+    searchPaidPayables: searchPaidPayables({ payables: pools.payableView }),
     shutdown: pools.shutdown,
   };
 };

@@ -15,4 +15,14 @@ export type BankStatementRepository = Readonly<{
   listTransactions: (
     statementId: string,
   ) => Promise<Result<readonly StatementTransaction[] | null, BankStatementRepositoryError>>;
+  // Localiza uma transação por id, com o `debit_account_ref` da raiz (desnormalizado) — base da
+  // conciliação (#123): fornece valor + conta para o guard FR-015 e a checagem de status `Pending`.
+  findTransaction: (
+    transactionId: string,
+  ) => Promise<
+    Result<
+      Readonly<{ transaction: StatementTransaction; debitAccountRef: string }> | null,
+      BankStatementRepositoryError
+    >
+  >;
 }>;

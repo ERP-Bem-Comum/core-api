@@ -41,6 +41,7 @@ import {
   index,
   int,
   mysqlTable,
+  primaryKey,
   text,
   uniqueIndex,
   varchar,
@@ -570,6 +571,76 @@ export const finStatementTransactions = mysqlTable(
   ],
 );
 
+// ─── fin_reconciliations ───────────────────────────────────────────────────────
+//
+// Raiz do agregado Reconciliation (US2/3/4). `transaction_id`/`payable_id` (nos itens) referenciam
+// outros agregados POR IDENTIDADE (sem FK cross-aggregate — D-AGGREGATES/Evans); só os itens têm FK
+// para a própria raiz (boundary). `difference_*` decompõe o VO Difference (sem JSON — ADR-0020).
+// ⚠️ CHARSET/COLLATE manual na migration: ENGINE=InnoDB ...; id/transaction_id/*_by em utf8mb4_bin.
+export const finReconciliations = mysqlTable(
+  'fin_reconciliations',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    transactionId: varchar('transaction_id', { length: 36 }).notNull(),
+    type: varchar('type', { length: 12 }).notNull(),
+    status: varchar('status', { length: 8 }).notNull(),
+    differenceValueCents: bigint('difference_value_cents', { mode: 'number' }),
+    differenceTreatment: varchar('difference_treatment', { length: 10 }),
+    reconciledAt: datetime('reconciled_at', { mode: 'date', fsp: 3 }).notNull(),
+    reconciledBy: varchar('reconciled_by', { length: 36 }).notNull(),
+    undoneAt: datetime('undone_at', { mode: 'date', fsp: 3 }),
+    undoneBy: varchar('undone_by', { length: 36 }),
+    undoReason: varchar('undo_reason', { length: 500 }),
+  },
+  (t) => [
+    check('fin_reconciliations_type_chk', sql`${t.type} IN ('Individual','Multiple','Partial')`),
+    check('fin_reconciliations_status_chk', sql`${t.status} IN ('Active','Undone')`),
+    check(
+      'fin_reconciliations_difference_chk',
+      sql`(${t.differenceValueCents} IS NULL AND ${t.differenceTreatment} IS NULL) OR (${t.differenceValueCents} IS NOT NULL AND ${t.differenceTreatment} IN ('Interest','Penalty','Discount','Fee','Partial'))`,
+    ),
+    index('fin_reconciliations_transaction_id_idx').on(t.transactionId),
+  ],
+);
+
+// ─── fin_reconciliation_items ──────────────────────────────────────────────────
+//
+// Itens da conciliação (1 por título). PK composta (reconciliation_id, payable_id) — chave natural.
+// FK → raiz ON DELETE CASCADE (boundary). `payable_id` é referência por identidade (sem FK cross-aggregate).
+export const finReconciliationItems = mysqlTable(
+  'fin_reconciliation_items',
+  {
+    reconciliationId: varchar('reconciliation_id', { length: 36 }).notNull(),
+    payableId: varchar('payable_id', { length: 36 }).notNull(),
+    reconciledValueCents: bigint('reconciled_value_cents', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.reconciliationId, t.payableId] }),
+    foreignKey({
+      columns: [t.reconciliationId],
+      foreignColumns: [finReconciliations.id],
+      name: 'fin_reconciliation_items_reconciliation_id_fk',
+    }).onDelete('cascade'),
+    index('fin_reconciliation_items_payable_id_idx').on(t.payableId),
+  ],
+);
+
+// ─── fin_rejected_suggestions ──────────────────────────────────────────────────
+//
+// Sugestões de match rejeitadas pelo operador (US2 — #121). Aqui só a TABELA (sem use-case nesta fatia);
+// o índice único impede rejeitar a mesma dupla (transação, título) duas vezes.
+export const finRejectedSuggestions = mysqlTable(
+  'fin_rejected_suggestions',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    transactionId: varchar('transaction_id', { length: 36 }).notNull(),
+    payableId: varchar('payable_id', { length: 36 }).notNull(),
+    rejectedAt: datetime('rejected_at', { mode: 'date', fsp: 3 }).notNull(),
+    rejectedBy: varchar('rejected_by', { length: 36 }).notNull(),
+  },
+  (t) => [uniqueIndex('fin_rejected_suggestions_tx_payable_uq').on(t.transactionId, t.payableId)],
+);
+
 // ─── Tipos gerados pelo schema (consumidos pelos mappers) ─────────────────────
 //
 // `$inferSelect` = shape da row lida do banco (SELECT *).
@@ -606,3 +677,12 @@ export type NewBankStatementRow = typeof finBankStatements.$inferInsert;
 
 export type StatementTransactionRow = typeof finStatementTransactions.$inferSelect;
 export type NewStatementTransactionRow = typeof finStatementTransactions.$inferInsert;
+
+export type ReconciliationRow = typeof finReconciliations.$inferSelect;
+export type NewReconciliationRow = typeof finReconciliations.$inferInsert;
+
+export type ReconciliationItemRow = typeof finReconciliationItems.$inferSelect;
+export type NewReconciliationItemRow = typeof finReconciliationItems.$inferInsert;
+
+export type RejectedSuggestionRow = typeof finRejectedSuggestions.$inferSelect;
+export type NewRejectedSuggestionRow = typeof finRejectedSuggestions.$inferInsert;

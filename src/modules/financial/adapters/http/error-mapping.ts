@@ -10,11 +10,20 @@ const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
   'document-not-found',
   'timeline-document-not-found',
   'bank-statement-not-found',
+  // Conciliação (US2/3/4).
+  'statement-transaction-not-found',
+  'reconciliation-not-found',
+  'cedente-account-not-found',
+  'payable-not-found',
 ]);
 
 const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'invalid-state-transition',
   'document-version-conflict',
+  // Conciliação: pré-condições de estado.
+  'transaction-already-reconciled',
+  'reconciliation-already-undone',
+  'account-closed',
 ]);
 
 const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
@@ -26,6 +35,8 @@ const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
   'malformed-statement',
   'unsupported-format',
   'empty-content',
+  // Conciliação: id malformado.
+  'reconciliation-id-invalid',
 ]);
 
 const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
@@ -33,6 +44,10 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   'timeline-repository-failure',
   'outbox-append-failed',
   'bank-statement-repository-failure',
+  // Conciliação.
+  'reconciliation-repository-failure',
+  'payable-view-failure',
+  'cedente-account-store-unavailable',
 ]);
 
 /** Status HTTP para um slug interno de erro. Default 422 (regra de negócio inválida). */
@@ -98,6 +113,19 @@ const SLUG_MESSAGES: Record<string, string> = {
   'empty-content': 'O conteúdo do extrato está vazio.',
   'empty-statement': 'O extrato não contém nenhuma transação para importar.',
   'bank-statement-not-found': 'Extrato bancário não encontrado.',
+  // Conciliação (US2/3/4).
+  'statement-transaction-not-found': 'Transação de extrato não encontrada.',
+  'reconciliation-not-found': 'Conciliação não encontrada.',
+  'cedente-account-not-found': 'Conta-cedente não encontrada para a transação.',
+  'payable-not-found': 'Um ou mais títulos informados não foram encontrados.',
+  'transaction-already-reconciled': 'A transação já está conciliada.',
+  'reconciliation-already-undone': 'A conciliação já foi desfeita.',
+  'account-closed': 'A conta-cedente está encerrada: não é possível conciliar.',
+  'title-not-paid': 'Só é possível conciliar títulos no estado Pago.',
+  'reconciliation-not-balanced':
+    'O fechamento não bate: a soma dos títulos mais a diferença deve igualar o valor da transação.',
+  'empty-reconciliation': 'Informe ao menos um título para conciliar.',
+  'reconciliation-id-invalid': 'Identificador de conciliação inválido.',
 };
 
 /** Mensagem PT-BR ao humano para um slug; fallback por `code` público. Nunca retorna o slug. */

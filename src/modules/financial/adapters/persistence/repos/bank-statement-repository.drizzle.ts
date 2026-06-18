@@ -17,7 +17,12 @@ import type {
 } from '#src/modules/financial/application/ports/bank-statement-repository.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { finBankStatements, finStatementTransactions } from '../schemas/mysql.ts';
-import { statementToRow, transactionsToRows, toDomain } from '../mappers/statement.mapper.ts';
+import {
+  statementToRow,
+  transactionsToRows,
+  toDomain,
+  transactionRowToDomain,
+} from '../mappers/statement.mapper.ts';
 
 const logStore = (op: string, cause: unknown): void => {
   process.stderr.write(`[fin-bank-statement-repo] ${op} failed: ${String(cause)}\n`);
@@ -92,6 +97,35 @@ export const createDrizzleBankStatementRepository = (
         return ok(mapped.value.transactions);
       } catch (cause) {
         logStore('listTransactions', cause);
+        return err('bank-statement-repository-failure');
+      }
+    },
+
+    findTransaction: async (
+      transactionId: string,
+    ): Promise<
+      Result<
+        Readonly<{ transaction: StatementTransaction; debitAccountRef: string }> | null,
+        BankStatementRepositoryError
+      >
+    > => {
+      try {
+        const rows = await db
+          .select()
+          .from(finStatementTransactions)
+          .where(eq(finStatementTransactions.id, transactionId))
+          .limit(1);
+        const row = rows[0];
+        if (row === undefined) return ok(null);
+
+        const mapped = transactionRowToDomain(row);
+        if (!mapped.ok) {
+          logStore('findTransaction:map', mapped.error);
+          return err('bank-statement-repository-failure');
+        }
+        return ok({ transaction: mapped.value, debitAccountRef: row.debitAccountRef });
+      } catch (cause) {
+        logStore('findTransaction', cause);
         return err('bank-statement-repository-failure');
       }
     },

@@ -339,3 +339,63 @@ export const statementTransactionsResponseSchema = z.object({
 });
 
 export type StatementTransactionsResponseDto = z.infer<typeof statementTransactionsResponseSchema>;
+
+// ─── POST /reconciliations (confirmReconciliation, US2/US4) ──────────────────
+
+// `reconciledBy` NÃO vem no body — é o usuário autenticado (req.userId). `difference.valueCents` pode
+// ser negativo (Discount): número inteiro JSON (não a string não-negativa de centavos). A validação de
+// consistência sinal×tratamento (ex.: Discount deve ser negativo) é da conciliação parcial avançada (#141);
+// aqui o domínio só checa o fechamento 100% (R3).
+export const confirmReconciliationBodySchema = z.object({
+  transactionId: z.uuid(),
+  payableIds: z.array(z.uuid()).min(1).max(100),
+  difference: z
+    .object({
+      valueCents: z.number().int().min(-Number.MAX_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
+      treatment: z.enum(['Interest', 'Penalty', 'Discount', 'Fee', 'Partial']),
+    })
+    .optional(),
+});
+
+export type ConfirmReconciliationBody = z.infer<typeof confirmReconciliationBodySchema>;
+
+export const reconciliationIdParamSchema = z.object({
+  id: z.uuid().meta({ description: 'UUID da conciliação' }),
+});
+
+export const undoReconciliationBodySchema = z.object({
+  reason: z.string().min(1).max(500).optional(),
+});
+
+export type UndoReconciliationBody = z.infer<typeof undoReconciliationBodySchema>;
+
+export const confirmReconciliationResponseSchema = z.object({
+  reconciliationId: z.uuid(),
+  type: z.enum(['Individual', 'Multiple', 'Partial']),
+  itemCount: z.number().int().min(1),
+});
+
+export const undoReconciliationResponseSchema = z.object({
+  reconciliationId: z.uuid(),
+  status: z.literal('Undone'),
+});
+
+// ─── GET /payables?status=Paid (searchPaidPayables, US2) ─────────────────────
+
+export const paidPayablesQuerySchema = z.object({
+  status: z.literal('Paid'),
+});
+
+const paidPayableSchema = z.object({
+  id: z.uuid(),
+  documentId: z.uuid(),
+  valueCents: z.string(),
+  dueDate: z.string(),
+  paymentMethod: z.string(),
+});
+
+export const paidPayablesResponseSchema = z.object({
+  items: z.array(paidPayableSchema),
+});
+
+export type PaidPayablesResponseDto = z.infer<typeof paidPayablesResponseSchema>;

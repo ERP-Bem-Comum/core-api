@@ -68,6 +68,35 @@ export const transactionsToRows = (statement: BankStatement): NewStatementTransa
     reconciliationStatus: tx.reconciliationStatus,
   }));
 
+export const transactionRowToDomain = (
+  tr: Readonly<StatementTransactionRow>,
+): Result<StatementTransaction, StatementMapperError> => {
+  const txId = StatementTransactionId.rehydrate(tr.id);
+  if (!txId.ok) return err('invalid-statement-transaction-id');
+
+  const fitid = Fitid.rehydrate(tr.fitid);
+  if (!fitid.ok) return err('invalid-statement-fitid');
+
+  const movement = toMovement(tr.movement);
+  if (movement === null) return err('invalid-statement-movement');
+
+  const reconciliationStatus = toReconStatus(tr.reconciliationStatus);
+  if (reconciliationStatus === null) return err('invalid-statement-reconciliation-status');
+
+  return ok({
+    id: txId.value,
+    fitid: fitid.value,
+    date: tr.date,
+    movement,
+    entryType: tr.entryType,
+    payeeName: tr.payeeName,
+    memo: tr.memo,
+    valueCents: tr.valueCents,
+    balanceAfterCents: tr.balanceAfterCents,
+    reconciliationStatus,
+  });
+};
+
 export const toDomain = (
   row: Readonly<BankStatementRow>,
   txRows: readonly Readonly<StatementTransactionRow>[],
@@ -80,30 +109,9 @@ export const toDomain = (
 
   const transactions: StatementTransaction[] = [];
   for (const tr of txRows) {
-    const txId = StatementTransactionId.rehydrate(tr.id);
-    if (!txId.ok) return err('invalid-statement-transaction-id');
-
-    const fitid = Fitid.rehydrate(tr.fitid);
-    if (!fitid.ok) return err('invalid-statement-fitid');
-
-    const movement = toMovement(tr.movement);
-    if (movement === null) return err('invalid-statement-movement');
-
-    const reconciliationStatus = toReconStatus(tr.reconciliationStatus);
-    if (reconciliationStatus === null) return err('invalid-statement-reconciliation-status');
-
-    transactions.push({
-      id: txId.value,
-      fitid: fitid.value,
-      date: tr.date,
-      movement,
-      entryType: tr.entryType,
-      payeeName: tr.payeeName,
-      memo: tr.memo,
-      valueCents: tr.valueCents,
-      balanceAfterCents: tr.balanceAfterCents,
-      reconciliationStatus,
-    });
+    const mapped = transactionRowToDomain(tr);
+    if (!mapped.ok) return err(mapped.error);
+    transactions.push(mapped.value);
   }
 
   return ok(

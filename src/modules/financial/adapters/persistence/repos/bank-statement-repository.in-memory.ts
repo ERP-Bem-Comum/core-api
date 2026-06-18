@@ -8,11 +8,15 @@ import type {
   BankStatementRepositoryError,
 } from '#src/modules/financial/application/ports/bank-statement-repository.ts';
 
+// Store compartilhável: o ReconciliationRepository in-memory mexe na mesma referência para flipar o
+// status da transação (`Pending↔Reconciled`) — espelha o uso do timelineStore em #120.
+export type BankStatementStore = Map<string, BankStatement>;
+
 // Adapter in-memory (testes + composição de memória). Espelha a defesa de dedup do índice único
 // `(debit_account_ref, fitid)` varrendo as transações já salvas da conta-débito.
-export const createInMemoryBankStatementRepository = (): BankStatementRepository => {
-  const statements = new Map<string, BankStatement>();
-
+export const createInMemoryBankStatementRepository = (
+  statements: BankStatementStore = new Map<string, BankStatement>(),
+): BankStatementRepository => {
   return {
     save: async (statement: BankStatement): Promise<Result<void, BankStatementRepositoryError>> => {
       statements.set(statement.id, statement);
@@ -40,6 +44,23 @@ export const createInMemoryBankStatementRepository = (): BankStatementRepository
       const statement = statements.get(statementId);
       if (statement === undefined) return Promise.resolve(ok(null));
       return Promise.resolve(ok(statement.transactions));
+    },
+
+    findTransaction: async (
+      transactionId: string,
+    ): Promise<
+      Result<
+        Readonly<{ transaction: StatementTransaction; debitAccountRef: string }> | null,
+        BankStatementRepositoryError
+      >
+    > => {
+      for (const statement of statements.values()) {
+        const transaction = statement.transactions.find((t) => t.id === transactionId);
+        if (transaction !== undefined) {
+          return Promise.resolve(ok({ transaction, debitAccountRef: statement.debitAccountRef }));
+        }
+      }
+      return Promise.resolve(ok(null));
     },
   };
 };

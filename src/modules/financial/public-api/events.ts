@@ -10,12 +10,17 @@
 
 import type { DocumentEvent } from '../domain/document/events.ts';
 import type { BankStatementImported } from '../domain/statement/events.ts';
+import type { PayableReconciled, ReconciliationUndone } from '../domain/reconciliation/events.ts';
 
 /** Schema version corrente do wire format da outbox financeira. Bump em breaking changes. */
 export const FINANCIAL_SCHEMA_VERSION = 1 as const;
 
-/** Union estável de todos os eventos públicos do módulo Financial (Fatia 1 + US1 conciliação). */
-export type FinancialModuleEvent = DocumentEvent | BankStatementImported;
+/** Union estável de todos os eventos públicos do módulo Financial (Fatia 1 + US1/US2/US3/US4 conciliação). */
+export type FinancialModuleEvent =
+  | DocumentEvent
+  | BankStatementImported
+  | PayableReconciled
+  | ReconciliationUndone;
 
 const KNOWN_FINANCIAL_EVENT_TYPES: ReadonlySet<string> = new Set([
   'DocumentSaved',
@@ -24,6 +29,8 @@ const KNOWN_FINANCIAL_EVENT_TYPES: ReadonlySet<string> = new Set([
   'DocumentDraftSaved',
   'DocumentCancelled',
   'BankStatementImported',
+  'PayableReconciled',
+  'ReconciliationUndone',
 ]);
 
 /**

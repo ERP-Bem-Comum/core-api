@@ -43,6 +43,13 @@
       "when": 1781794519358,
       "tag": "0005_silky_scorpion",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1781800771848,
+      "tag": "0006_last_living_lightning",
+      "breakpoints": true
     }
   ]
 }

@@ -44,6 +44,7 @@ import {
   listItemToSummaryDto,
   timelineToDto,
   statementTransactionsToDto,
+  paidPayablesToDto,
 } from './dto.ts';
 import type { DocumentListFilter } from '../../domain/document/query.ts';
 import type { FinancialHttpDeps } from './composition.ts';
@@ -61,6 +62,13 @@ import {
   importBankStatementResponseSchema,
   bankStatementIdParamSchema,
   statementTransactionsResponseSchema,
+  confirmReconciliationBodySchema,
+  confirmReconciliationResponseSchema,
+  reconciliationIdParamSchema,
+  undoReconciliationBodySchema,
+  undoReconciliationResponseSchema,
+  paidPayablesQuerySchema,
+  paidPayablesResponseSchema,
 } from './schemas.ts';
 
 export type FinancialHttpHooks = Readonly<{
@@ -456,6 +464,80 @@ const financialRoutes =
         if (!result.ok) return sendDomainError(reply, result.error);
         if (result.value === null) return sendDomainError(reply, 'bank-statement-not-found');
         return sendResult(reply, ok(statementTransactionsToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // POST /financial/reconciliations — concilia transação↔título(s) (US2/US4). Nunca automático (R1).
+    scope.route({
+      method: 'POST',
+      url: '/financial/reconciliations',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationWrite)],
+      schema: {
+        body: confirmReconciliationBodySchema,
+        response: { 201: confirmReconciliationResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const body = req.body;
+        const result = await deps.confirmReconciliation({
+          transactionId: body.transactionId,
+          payableIds: body.payableIds,
+          ...(body.difference !== undefined ? { difference: body.difference } : {}),
+          reconciledBy: req.userId,
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(
+          reply,
+          ok({
+            reconciliationId: String(result.value.reconciliationId),
+            type: result.value.type,
+            itemCount: result.value.itemCount,
+          }),
+          { ok: 201 },
+        );
+      },
+    });
+
+    // POST /financial/reconciliations/:id/undo — desfaz a conciliação (US3, R7).
+    scope.route({
+      method: 'POST',
+      url: '/financial/reconciliations/:id/undo',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationWrite)],
+      schema: {
+        params: reconciliationIdParamSchema,
+        body: undoReconciliationBodySchema,
+        response: { 200: undoReconciliationResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.undoReconciliation({
+          reconciliationId: req.params.id,
+          undoneBy: req.userId,
+          ...(req.body.reason !== undefined ? { reason: req.body.reason } : {}),
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(
+          reply,
+          ok({
+            reconciliationId: String(result.value.reconciliationId),
+            status: result.value.status,
+          }),
+          { ok: 200 },
+        );
+      },
+    });
+
+    // GET /financial/payables?status=Paid — títulos disponíveis para conciliar (US2).
+    scope.route({
+      method: 'GET',
+      url: '/financial/payables',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationRead)],
+      schema: {
+        querystring: paidPayablesQuerySchema,
+        response: { 200: paidPayablesResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) => {
+        const result = await deps.searchPaidPayables({});
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(paidPayablesToDto(result.value)), { ok: 200 });
       },
     });
   };

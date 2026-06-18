@@ -12,10 +12,12 @@ import type { DocumentListItem } from '../../domain/document/query.ts';
 import type { Payables } from '../../domain/payable/types.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
 import type { StatementTransaction } from '../../domain/statement/types.ts';
+import type { PaidPayableView } from '../../application/ports/payable-reconciliation-view.ts';
 import type {
   DocumentResponseDto,
   DocumentSummaryDto,
   DocumentTimelineResponseDto,
+  PaidPayablesResponseDto,
   StatementTransactionsResponseDto,
 } from './schemas.ts';
 
@@ -143,5 +145,16 @@ export const statementTransactionsToDto = (
     valueCents: String(t.valueCents),
     balanceAfterCents: String(t.balanceAfterCents),
     reconciliationStatus: t.reconciliationStatus,
+  })),
+});
+
+/** Serializa os títulos `Paid` (GET /payables?status=Paid). valueCents em string; dueDate ISO (data). */
+export const paidPayablesToDto = (views: readonly PaidPayableView[]): PaidPayablesResponseDto => ({
+  items: views.map((v) => ({
+    id: v.id,
+    documentId: v.documentId,
+    valueCents: String(v.valueCents),
+    dueDate: v.dueDate.toISOString().slice(0, 10),
+    paymentMethod: v.paymentMethod,
   })),
 });
