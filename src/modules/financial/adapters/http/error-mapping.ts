@@ -48,6 +48,9 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   'reconciliation-repository-failure',
   'payable-view-failure',
   'cedente-account-store-unavailable',
+  // Match/sugestão (US2).
+  'suggestion-view-failure',
+  'rejected-suggestion-repository-failure',
 ]);
 
 /** Status HTTP para um slug interno de erro. Default 422 (regra de negócio inválida). */

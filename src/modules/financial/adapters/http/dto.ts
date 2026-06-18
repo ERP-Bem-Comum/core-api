@@ -13,12 +13,14 @@ import type { Payables } from '../../domain/payable/types.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
 import type { StatementTransaction } from '../../domain/statement/types.ts';
 import type { PaidPayableView } from '../../application/ports/payable-reconciliation-view.ts';
+import type { MatchSuggestion } from '../../application/use-cases/suggest-matches.ts';
 import type {
   DocumentResponseDto,
   DocumentSummaryDto,
   DocumentTimelineResponseDto,
   PaidPayablesResponseDto,
   StatementTransactionsResponseDto,
+  SuggestionsResponseDto,
 } from './schemas.ts';
 
 /** Serializa Money (branded { cents: number }) como string de centavos. */
@@ -156,5 +158,23 @@ export const paidPayablesToDto = (views: readonly PaidPayableView[]): PaidPayabl
     valueCents: String(v.valueCents),
     dueDate: v.dueDate.toISOString().slice(0, 10),
     paymentMethod: v.paymentMethod,
+  })),
+});
+
+/** Serializa as sugestões de match (US2). score branded → number; band já é alta|media (baixa filtrada). */
+export const suggestionsToDto = (
+  suggestions: readonly MatchSuggestion[],
+): SuggestionsResponseDto => ({
+  suggestions: suggestions.map((s) => ({
+    payableId: s.payableId,
+    score: s.score,
+    band: s.band,
+    criteria: {
+      payeeMatch: s.criteria.payeeMatch,
+      exactValue: s.criteria.exactValue,
+      dateD0: s.criteria.dateD0,
+      memoRef: s.criteria.memoRef,
+      supplierOpenCount: s.criteria.supplierOpenCount,
+    },
   })),
 });

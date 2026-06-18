@@ -399,3 +399,42 @@ export const paidPayablesResponseSchema = z.object({
 });
 
 export type PaidPayablesResponseDto = z.infer<typeof paidPayablesResponseSchema>;
+
+// ─── GET /statement-transactions/:id/suggestions (suggestMatches, US2) ───────
+
+export const statementTransactionIdParamSchema = z.object({
+  id: z.uuid().meta({ description: 'UUID da transação de extrato' }),
+});
+
+// band `baixa` (<50) não é retornada (R1/FR-011) → só alta|media na resposta.
+const matchSuggestionSchema = z.object({
+  payableId: z.uuid(),
+  score: z.number().int().min(0).max(100),
+  band: z.enum(['alta', 'media']),
+  criteria: z.object({
+    payeeMatch: z.boolean(),
+    exactValue: z.boolean(),
+    dateD0: z.boolean(),
+    memoRef: z.boolean(),
+    supplierOpenCount: z.number().int().min(0),
+  }),
+});
+
+export const suggestionsResponseSchema = z.object({
+  suggestions: z.array(matchSuggestionSchema),
+});
+
+export type SuggestionsResponseDto = z.infer<typeof suggestionsResponseSchema>;
+
+// ─── POST /statement-transactions/:id/reject-suggestion (rejectSuggestion, US2) ──
+
+export const rejectSuggestionBodySchema = z.object({
+  payableId: z.uuid(),
+});
+
+export type RejectSuggestionBody = z.infer<typeof rejectSuggestionBodySchema>;
+
+export const rejectSuggestionResponseSchema = z.object({
+  transactionId: z.uuid(),
+  payableId: z.uuid(),
+});

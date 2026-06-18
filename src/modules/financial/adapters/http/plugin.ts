@@ -45,6 +45,7 @@ import {
   timelineToDto,
   statementTransactionsToDto,
   paidPayablesToDto,
+  suggestionsToDto,
 } from './dto.ts';
 import type { DocumentListFilter } from '../../domain/document/query.ts';
 import type { FinancialHttpDeps } from './composition.ts';
@@ -69,6 +70,10 @@ import {
   undoReconciliationResponseSchema,
   paidPayablesQuerySchema,
   paidPayablesResponseSchema,
+  statementTransactionIdParamSchema,
+  suggestionsResponseSchema,
+  rejectSuggestionBodySchema,
+  rejectSuggestionResponseSchema,
 } from './schemas.ts';
 
 export type FinancialHttpHooks = Readonly<{
@@ -538,6 +543,43 @@ const financialRoutes =
         const result = await deps.searchPaidPayables({});
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(reply, ok(paidPayablesToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /financial/statement-transactions/:id/suggestions — sugestões de match (US2, read; R1).
+    scope.route({
+      method: 'GET',
+      url: '/financial/statement-transactions/:id/suggestions',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationRead)],
+      schema: {
+        params: statementTransactionIdParamSchema,
+        response: { 200: suggestionsResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.suggestMatches(req.params.id);
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(suggestionsToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // POST /financial/statement-transactions/:id/reject-suggestion — rejeita sugestão (US2).
+    scope.route({
+      method: 'POST',
+      url: '/financial/statement-transactions/:id/reject-suggestion',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationWrite)],
+      schema: {
+        params: statementTransactionIdParamSchema,
+        body: rejectSuggestionBodySchema,
+        response: { 200: rejectSuggestionResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.rejectSuggestion({
+          transactionId: req.params.id,
+          payableId: req.body.payableId,
+          rejectedBy: req.userId,
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(result.value), { ok: 200 });
       },
     });
   };

@@ -29,6 +29,8 @@ import {
 } from '../persistence/repos/payable-reconciliation-view.in-memory.ts';
 import { createInMemoryReconciliationRepository } from '../persistence/repos/reconciliation-repository.in-memory.ts';
 import { createInMemoryCedenteAccountStore } from '../persistence/repos/cedente-account-store.in-memory.ts';
+import { createInMemorySuggestionView } from '../persistence/repos/suggestion-view.in-memory.ts';
+import { createInMemoryRejectedSuggestionRepository } from '../persistence/repos/rejected-suggestion-repository.in-memory.ts';
 import { createInMemoryOutbox } from '../outbox/outbox.in-memory.ts';
 import { createDrizzleDocumentRepository } from '../persistence/repos/document-repository.drizzle.ts';
 import { createDrizzleTimelineRepository } from '../persistence/repos/timeline-repository.drizzle.ts';
@@ -36,6 +38,8 @@ import { createDrizzleBankStatementRepository } from '../persistence/repos/bank-
 import { createDrizzlePayableReconciliationView } from '../persistence/repos/payable-reconciliation-view.drizzle.ts';
 import { createDrizzleReconciliationRepository } from '../persistence/repos/reconciliation-repository.drizzle.ts';
 import { createDrizzleCedenteAccountStore } from '../persistence/repos/cedente-account-store.drizzle.ts';
+import { createDrizzleSuggestionView } from '../persistence/repos/suggestion-view.drizzle.ts';
+import { createDrizzleRejectedSuggestionRepository } from '../persistence/repos/rejected-suggestion-repository.drizzle.ts';
 import { bankStatementParser } from '../statement-parsers/bank-statement-parser.ts';
 import {
   openMysqlFinancial,
@@ -54,6 +58,8 @@ import { importBankStatement } from '../../application/use-cases/import-bank-sta
 import { confirmReconciliation } from '../../application/use-cases/confirm-reconciliation.ts';
 import { undoReconciliation } from '../../application/use-cases/undo-reconciliation.ts';
 import { searchPaidPayables } from '../../application/use-cases/search-paid-payables.ts';
+import { suggestMatches } from '../../application/use-cases/suggest-matches.ts';
+import { rejectSuggestion } from '../../application/use-cases/reject-suggestion.ts';
 import type { DocumentRepository } from '../../domain/document/repository.ts';
 import type { FinancialTimelineRepository } from '../../domain/timeline/repository.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
@@ -61,6 +67,8 @@ import type { BankStatementRepository } from '../../application/ports/bank-state
 import type { PayableReconciliationView } from '../../application/ports/payable-reconciliation-view.ts';
 import type { ReconciliationRepository } from '../../application/ports/reconciliation-repository.ts';
 import type { CedenteAccountStore } from '../../application/ports/cedente-account-store.ts';
+import type { SuggestionView } from '../../application/ports/suggestion-view.ts';
+import type { RejectedSuggestionRepository } from '../../application/ports/rejected-suggestion-repository.ts';
 
 export type FinancialDriver = 'memory' | 'mysql';
 
@@ -94,6 +102,10 @@ export type FinancialHttpDeps = Readonly<{
   undoReconciliation: ReturnType<typeof undoReconciliation>;
   /** Lista títulos `Paid` (US2) — GET /payables?status=Paid. */
   searchPaidPayables: ReturnType<typeof searchPaidPayables>;
+  /** Sugestões de match (US2, read-model) — GET /statement-transactions/:id/suggestions. */
+  suggestMatches: ReturnType<typeof suggestMatches>;
+  /** Rejeita uma sugestão (US2) — POST /statement-transactions/:id/reject-suggestion. */
+  rejectSuggestion: ReturnType<typeof rejectSuggestion>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -106,6 +118,8 @@ type Pools = Readonly<{
   payableView: PayableReconciliationView;
   reconciliationRepo: ReconciliationRepository;
   cedenteStore: CedenteAccountStore;
+  suggestionView: SuggestionView;
+  rejectedSuggestionRepo: RejectedSuggestionRepository;
   shutdown: () => Promise<void>;
 }>;
 
@@ -129,6 +143,9 @@ const buildMemoryPools = (): Pools => {
     statements: statementStore,
   });
   const cedenteStore = createInMemoryCedenteAccountStore();
+  // Match/sugestão (US2): stores dedicados (vazios no boot; testes semeiam). mysql faz JOIN real.
+  const suggestionView = createInMemorySuggestionView();
+  const rejectedSuggestionRepo = createInMemoryRejectedSuggestionRepository();
   return {
     repo,
     timelineRepo,
@@ -136,6 +153,8 @@ const buildMemoryPools = (): Pools => {
     payableView,
     reconciliationRepo,
     cedenteStore,
+    suggestionView,
+    rejectedSuggestionRepo,
     shutdown: () => Promise.resolve(),
   };
 };
@@ -158,6 +177,8 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     payableView: createDrizzlePayableReconciliationView(handle),
     reconciliationRepo: createDrizzleReconciliationRepository(handle),
     cedenteStore: createDrizzleCedenteAccountStore(handle),
+    suggestionView: createDrizzleSuggestionView(handle),
+    rejectedSuggestionRepo: createDrizzleRejectedSuggestionRepository(handle),
     shutdown: () => handle.close(),
   };
 };
@@ -200,6 +221,12 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       outbox: outbox.port,
     }),
     searchPaidPayables: searchPaidPayables({ payables: pools.payableView }),
+    suggestMatches: suggestMatches({
+      statements: pools.statementRepo,
+      suggestions: pools.suggestionView,
+      rejected: pools.rejectedSuggestionRepo,
+    }),
+    rejectSuggestion: rejectSuggestion({ rejected: pools.rejectedSuggestionRepo, clock }),
     shutdown: pools.shutdown,
   };
 };
