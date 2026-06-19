@@ -43,6 +43,7 @@ export type CreateDocumentInput = Readonly<{
   registeredTaxes: readonly RegisteredTax[];
   dueDate: Date;
   description?: string | null;
+  issueDate?: Date | null; // #163: data de emissão (opcional no create)
 }>;
 
 export type CreateDocumentOutput = Readonly<{
@@ -153,6 +154,7 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     netValue: net.value,
     description: input.description ?? null,
     dueDate: input.dueDate,
+    issueDate: input.issueDate ?? null,
     status: 'Open',
   });
 
@@ -373,6 +375,7 @@ export const undoApproval = (
     netValue: d.netValue,
     description: d.description,
     dueDate: d.dueDate,
+    issueDate: d.issueDate,
     status: 'Open',
   });
 
@@ -429,6 +432,7 @@ export type SaveDraftInput = Readonly<{
   registeredTaxes?: readonly RegisteredTax[];
   dueDate?: Date | null;
   description?: string | null;
+  issueDate?: Date | null; // #163
 }>;
 
 export type SaveDraftOutput = Readonly<{
@@ -459,6 +463,7 @@ export const saveDraft = (input: SaveDraftInput): Result<SaveDraftOutput, Docume
     registeredTaxes: input.registeredTaxes ?? [],
     dueDate: input.dueDate ?? null,
     description: input.description ?? null,
+    issueDate: input.issueDate ?? null,
   });
   const events: readonly DocumentEvent[] = [{ type: 'DocumentDraftSaved', documentId: input.id }];
   return ok(immutable<SaveDraftOutput>({ document, events }));

@@ -50,6 +50,9 @@ export type DocumentCore = Readonly<{
   netValue: Money;
   description: string | null;
   dueDate: Date;
+  // Data de EMISSÃO do documento (#163) — capturada no create (OCR/manual). Nullable: opcional e
+  // back-compat com documentos pré-existentes. Distinta de `dueDate` (vencimento).
+  issueDate: Date | null;
 }>;
 
 export type OpenDocument = DocumentCore & Readonly<{ status: 'Open' }>;
@@ -79,6 +82,7 @@ export type DraftDocument = Readonly<{
   registeredTaxes: readonly RegisteredTax[];
   dueDate: Date | null;
   description: string | null;
+  issueDate: Date | null; // #163: emissão (opcional no rascunho)
 }>;
 
 export type Document = DraftDocument | OpenDocument | ApprovedDocument;

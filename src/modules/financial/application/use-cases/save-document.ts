@@ -47,6 +47,7 @@ export type SaveDocumentCommand = Readonly<{
   retentions?: readonly Retention.RetentionInput[];
   registeredTaxes?: readonly RegisteredTax.RegisteredTaxInput[];
   dueDate: Date;
+  issueDate?: Date | null; // #163
   description?: string | null;
 }>;
 
@@ -126,6 +127,7 @@ export const saveDocument =
       retentions,
       registeredTaxes,
       dueDate: cmd.dueDate,
+      issueDate: cmd.issueDate ?? null,
       description: cmd.description ?? null,
     });
     if (!created.ok) return err(created.error);

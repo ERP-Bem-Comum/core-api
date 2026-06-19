@@ -10,6 +10,8 @@ export type DocumentListFilter = Readonly<{
   type?: string;
   dueFrom?: Date;
   dueTo?: Date; // janela inclusiva
+  issuedFrom?: Date; // #163: filtro por emissão (janela inclusiva)
+  issuedTo?: Date;
 }>;
 
 // Read-model leve da listagem (FR-004 — payload enxuto, sem títulos/retenções). Evita
@@ -31,6 +33,7 @@ export type DocumentListItem = Readonly<{
   contractRef: string | null;
   netValue: Money | null; // null em Draft (sem líquido calculado)
   dueDate: Date | null;
+  issueDate: Date | null; // #163: data de emissão exposta no grid
   version: number;
   // Fornecedor resolvido pelo read-model local `fin_supplier_view` (#47/US2) — null quando
   // `supplierRef` é nulo ou ainda não está no read-model (consistência eventual).

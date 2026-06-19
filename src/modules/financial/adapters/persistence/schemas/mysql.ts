@@ -114,6 +114,9 @@ export const finDocuments = mysqlTable(
     // Data de vencimento (obrigatório a partir de Open; nullable em Draft).
     dueDate: date('due_date', { mode: 'date' }),
 
+    // Data de EMISSÃO (#163) — capturada no create (OCR/manual); nullable (opcional + back-compat).
+    issueDate: date('issue_date', { mode: 'date' }),
+
     // Metadados de origem OCR (R-OCR).
     readByOcr: boolean('read_by_ocr').notNull().default(false),
     ocrOriginalValue: bigint('ocr_original_value', { mode: 'number' }),
@@ -160,6 +163,8 @@ export const finDocuments = mysqlTable(
     index('fin_documents_status_idx').on(t.status),
     // due_date: query "vencimentos na semana" (agenda).
     index('fin_documents_due_date_idx').on(t.dueDate),
+    // issue_date: filtro por emissão na listagem (#163).
+    index('fin_documents_issue_date_idx').on(t.issueDate),
     // document_number: busca por nota fiscal / nº do documento.
     index('fin_documents_doc_number_idx').on(t.documentNumber),
   ],

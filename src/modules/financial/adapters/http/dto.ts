@@ -69,6 +69,7 @@ export const documentToDto = (
         document.grossValue !== null ? moneyToCentsString(document.grossValue.cents) : null,
       netValueCents: null, // Draft não tem líquido calculado
       dueDate: document.dueDate !== null ? document.dueDate.toISOString().slice(0, 10) : null,
+      issueDate: document.issueDate !== null ? document.issueDate.toISOString().slice(0, 10) : null,
       description: document.description,
       payables: payableItems,
       version,
@@ -86,6 +87,7 @@ export const documentToDto = (
     grossValueCents: moneyToCentsString(document.grossValue.cents),
     netValueCents: moneyToCentsString(document.netValue.cents),
     dueDate: document.dueDate.toISOString().slice(0, 10),
+    issueDate: document.issueDate !== null ? document.issueDate.toISOString().slice(0, 10) : null,
     description: document.description,
     payables: payableItems,
     version,
@@ -109,6 +111,7 @@ export const listItemToSummaryDto = (item: DocumentListItem): DocumentSummaryDto
   contractRef: item.contractRef,
   netValueCents: item.netValue !== null ? moneyToCentsString(item.netValue.cents) : null,
   dueDate: item.dueDate !== null ? item.dueDate.toISOString().slice(0, 10) : null,
+  issueDate: item.issueDate !== null ? item.issueDate.toISOString().slice(0, 10) : null,
   version: item.version,
   // Fornecedor resolvido do read-model local (#47/US2).
   supplierName: item.supplierName,

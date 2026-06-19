@@ -39,6 +39,20 @@ const baseInput = (): Document.CreateDocumentInput => ({
   dueDate: new Date('2026-07-01'),
 });
 
+describe('financial/domain/document — issueDate (#163)', () => {
+  it('create captura a data de emissão (issueDate)', () => {
+    const r = Document.create({ ...baseInput(), issueDate: new Date('2026-06-15') });
+    assert.ok(r.ok);
+    assert.equal(r.value.document.issueDate?.toISOString().slice(0, 10), '2026-06-15');
+  });
+
+  it('create sem issueDate → null (emissão é opcional / back-compat)', () => {
+    const r = Document.create(baseInput());
+    assert.ok(r.ok);
+    assert.equal(r.value.document.issueDate, null);
+  });
+});
+
 describe('financial/domain/document — create (US1: documento não-fiscal)', () => {
   it('CT-001: Boleto sem retenções gera 1 título pai em Open, sem filhos', () => {
     const r = Document.create(baseInput());

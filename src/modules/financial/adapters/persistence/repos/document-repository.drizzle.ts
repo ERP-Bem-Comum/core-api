@@ -423,6 +423,10 @@ export const createDrizzleDocumentRepository = (
         filter.type !== undefined ? eq(finDocuments.type, filter.type) : undefined,
         filter.dueFrom !== undefined ? gte(finDocuments.dueDate, filter.dueFrom) : undefined,
         filter.dueTo !== undefined ? lte(finDocuments.dueDate, filter.dueTo) : undefined,
+        filter.issuedFrom !== undefined
+          ? gte(finDocuments.issueDate, filter.issuedFrom)
+          : undefined,
+        filter.issuedTo !== undefined ? lte(finDocuments.issueDate, filter.issuedTo) : undefined,
       ].filter((c): c is NonNullable<typeof c> => c !== undefined);
 
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -456,6 +460,7 @@ export const createDrizzleDocumentRepository = (
           contractRef: finDocuments.contractRef,
           netValue: finDocuments.netValue,
           dueDate: finDocuments.dueDate,
+          issueDate: finDocuments.issueDate,
           version: finDocuments.version,
           // Fornecedor resolvido pelo read-model local (#47/US2) — LEFT JOIN intra-financial.
           supplierName: finSupplierView.name,
@@ -516,6 +521,7 @@ export const createDrizzleDocumentRepository = (
           contractRef: row.contractRef,
           netValue,
           dueDate: row.dueDate,
+          issueDate: row.issueDate,
           version: row.version,
           // LEFT JOIN fin_supplier_view → null quando sem match (#47/US2).
           supplierName: row.supplierName,
