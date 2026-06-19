@@ -51,6 +51,7 @@ import {
   accountStatementToDto,
   transactionReconciliationToDto,
   reconciliationPeriodsToDto,
+  statementSuggestionsToDto,
 } from './dto.ts';
 import type { DocumentListFilter } from '../../domain/document/query.ts';
 import type { FinancialHttpDeps } from './composition.ts';
@@ -98,6 +99,7 @@ import {
   transactionReconciliationResponseSchema,
   reconciliationPeriodsQuerySchema,
   reconciliationPeriodsResponseSchema,
+  statementSuggestionsResponseSchema,
 } from './schemas.ts';
 
 export type FinancialHttpHooks = Readonly<{
@@ -526,6 +528,22 @@ const financialRoutes =
         if (!result.ok) return sendDomainError(reply, result.error);
         if (result.value === null) return sendDomainError(reply, 'bank-statement-not-found');
         return sendResult(reply, ok(statementTransactionsToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /financial/bank-statements/:id/suggestions — palpite de topo por transação (#174, lote).
+    scope.route({
+      method: 'GET',
+      url: '/financial/bank-statements/:id/suggestions',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationRead)],
+      schema: {
+        params: bankStatementIdParamSchema,
+        response: { 200: statementSuggestionsResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.getStatementSuggestions({ statementId: req.params.id });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(statementSuggestionsToDto(result.value)), { ok: 200 });
       },
     });
 

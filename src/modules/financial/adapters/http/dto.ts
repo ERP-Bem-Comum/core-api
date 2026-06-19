@@ -17,10 +17,12 @@ import type { Reconciliation } from '../../domain/reconciliation/types.ts';
 import type { ReconciliationPeriod } from '../../domain/reconciliation/period.ts';
 import type { PaidPayableView } from '../../application/ports/payable-reconciliation-view.ts';
 import type { MatchSuggestion } from '../../application/use-cases/suggest-matches.ts';
+import type { GetStatementSuggestionsOutput } from '../../application/use-cases/get-statement-suggestions.ts';
 import type {
   AccountStatementResponseDto,
   TransactionReconciliationResponseDto,
   ReconciliationPeriodsResponseDto,
+  StatementSuggestionsResponseDto,
   DocumentResponseDto,
   DocumentSummaryDto,
   DocumentTimelineResponseDto,
@@ -245,3 +247,14 @@ export const reconciliationPeriodsToDto = (
     closedAt: p.closedAt !== null ? p.closedAt.toISOString() : null,
     closedBy: p.closedBy,
   }));
+
+/** Serializa os palpites de topo por transação de um extrato (#174). */
+export const statementSuggestionsToDto = (
+  out: GetStatementSuggestionsOutput,
+): StatementSuggestionsResponseDto => ({
+  items: out.items.map((i) => ({
+    transactionId: i.transactionId,
+    topBand: i.topBand,
+    topScore: i.topScore,
+  })),
+});
