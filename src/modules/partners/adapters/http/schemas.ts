@@ -102,6 +102,19 @@ export const collaboratorHistoryExportQuerySchema = z.object({
 });
 
 /**
+ * Query do GET /collaborators/export (#126): filtros da lista + `?type=history` opcional.
+ * Sem `type` → CSV da lista (US-002). `type=history` → CSV combinado do histórico do filtro.
+ */
+export const collaboratorExportQuerySchema = collaboratorListQuerySchema.extend({
+  type: z
+    .literal('history')
+    .optional()
+    .meta({ description: 'history → export do histórico do filtro' }),
+});
+
+export type CollaboratorExportQuery = z.infer<typeof collaboratorExportQuerySchema>;
+
+/**
  * Detalhe do colaborador — espelha o schema `Collaborator` do legado
  * (handbook/legacy_docs/openapi.yaml:2435). `id` é o UUID do core; `legacyId` é o int
  * antigo (decisão do dono). `status` carrega o `registrationStatus`; `active` é o soft-delete

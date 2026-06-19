@@ -37,9 +37,15 @@ import {
   collaboratorsForExport,
 } from './collaborator-list-query.ts';
 import { collaboratorsToCsv } from '../export/collaborator-csv.ts';
-import { collaboratorHistoryToCsv } from '../export/collaborator-history-csv.ts';
+import {
+  collaboratorHistoryToCsv,
+  type CollaboratorHistoryGroup,
+} from '../export/collaborator-history-csv.ts';
+import type { Collaborator } from '../../domain/collaborator/types.ts';
+import type { CollaboratorHistoryEntry } from '../../application/ports/collaborator-history.ts';
 import {
   collaboratorListQuerySchema,
+  collaboratorExportQuerySchema,
   collaboratorPaginatedSchema,
   collaboratorDetailSchema,
   collaboratorIdParamSchema,
@@ -63,6 +69,22 @@ export type CollaboratorsHttpHooks = Readonly<{
 }>;
 
 const SENSITIVE_PERMISSION = 'collaborator:edit-sensitive';
+
+// #126: monta um grupo (identidade + entradas) para o CSV de histórico de 9 colunas.
+// `programa` = área de atuação. Usado pelo export da lista e do detalhe.
+const toHistoryGroup = (
+  c: Collaborator,
+  entries: readonly CollaboratorHistoryEntry[],
+): CollaboratorHistoryGroup => ({
+  identity: {
+    name: c.name,
+    email: c.email,
+    cpf: String(c.cpf),
+    programa: c.occupationArea,
+    startOfContract: c.startOfContract,
+  },
+  entries,
+});
 
 // Conflito de estado/unicidade → 409.
 const CONFLICT_CODES: ReadonlySet<string> = new Set([
@@ -177,14 +199,15 @@ const collaboratorsRoutes =
       },
     });
 
-    // Export CSV (US-002 / spec 003): filtra (search/active/…) e serializa via util compartilhado
-    // (escape anti-fórmula). Rota estática tem precedência sobre `/:id`. `collaborator:read`.
+    // Export CSV (US-002 / spec 003 + #126): `?type=history` → CSV combinado do histórico de TODOS
+    // os colaboradores do filtro (formato legado de 9 colunas); sem `type` → CSV da lista. Rota
+    // estática tem precedência sobre `/:id`. `collaborator:read`.
     scope.route({
       method: 'GET',
       url: '/collaborators/export',
       preHandler: [hooks.requireAuth, hooks.authorize(COLLABORATOR_PERMISSION.read)],
       schema: {
-        querystring: collaboratorListQuerySchema,
+        querystring: collaboratorExportQuerySchema,
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
         const result = await deps.listCollaboratorRecords();
@@ -193,9 +216,28 @@ const collaboratorsRoutes =
             errors: { 'collaborator-read-unavailable': 503 },
           });
         }
-        const csv = collaboratorsToCsv(
-          collaboratorsForExport(result.value, queryToFilter(req.query)),
-        );
+        const collaborators = collaboratorsForExport(result.value, queryToFilter(req.query));
+
+        if (req.query.type === 'history') {
+          const groups: CollaboratorHistoryGroup[] = [];
+          for (const c of collaborators) {
+            const hist = await deps.listCollaboratorHistory(String(c.id));
+            if (!hist.ok) {
+              return sendResult(reply, err(hist.error), {
+                errors: { 'collaborator-repo-unavailable': 503 },
+              });
+            }
+            groups.push(toHistoryGroup(c, hist.value));
+          }
+          return reply
+            .code(200)
+            .header('content-type', 'text/csv; charset=utf-8')
+            .header('content-disposition', 'attachment; filename="collaborators-history.csv"')
+            .header('x-content-type-options', 'nosniff')
+            .send(collaboratorHistoryToCsv(groups)) as unknown as Promise<void>;
+        }
+
+        const csv = collaboratorsToCsv(collaborators);
         return reply
           .code(200)
           .header('content-type', 'text/csv; charset=utf-8')
@@ -222,7 +264,21 @@ const collaboratorsRoutes =
             errors: { 'collaborator-repo-unavailable': 503 },
           });
         }
-        const csv = collaboratorHistoryToCsv(result.value);
+        // #126: 9 colunas → precisa da identidade. Reader indisponível → 503; inexistente → 404.
+        const rec = await deps.getCollaboratorById(req.params.id);
+        if (!rec.ok) {
+          return sendResult(reply, err(rec.error), {
+            errors: { 'collaborator-read-unavailable': 503 },
+          });
+        }
+        if (rec.value === null) {
+          return sendResult(reply, err('collaborator-not-found' as const), {
+            errors: { 'collaborator-not-found': 404 },
+          });
+        }
+        const csv = collaboratorHistoryToCsv([
+          toHistoryGroup(rec.value.collaborator, result.value),
+        ]);
         return reply
           .code(200)
           .header('content-type', 'text/csv; charset=utf-8')

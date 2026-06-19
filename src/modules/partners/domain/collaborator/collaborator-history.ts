@@ -14,6 +14,16 @@ export type CollaboratorFieldChange = Readonly<{
 
 // Campos sob auditoria (os editáveis via PUT + situação). Cadastro/completeRegistration
 // inicial não passam por aqui. Projeção neutra (texto) — sem label PT, sem tradução de enum.
+// Serialização dos VOs opcionais (#126): território `UF/Município`, banco `código/agência/conta`,
+// PIX `chave`. null quando o VO está ausente.
+const territoryText = (c: Collaborator): string | null =>
+  c.territory === null ? null : `${c.territory.uf ?? ''}/${c.territory.municipality ?? ''}`;
+const bankText = (c: Collaborator): string | null =>
+  c.bankAccount === null
+    ? null
+    : `${c.bankAccount.bank}/${c.bankAccount.agency}/${c.bankAccount.accountNumber}`;
+const pixText = (c: Collaborator): string | null => (c.pixKey === null ? null : c.pixKey.key);
+
 const trackedValues = (c: Collaborator): Readonly<Record<string, string | null>> => ({
   name: c.name,
   email: c.email,
@@ -24,6 +34,10 @@ const trackedValues = (c: Collaborator): Readonly<Record<string, string | null>>
   employmentRelationship: c.employmentRelationship,
   status: c.status,
   disableBy: c.status === 'Inactive' ? c.disableBy : null,
+  // #126: território + banco/PIX entram no audit trail (linhas adicionais no histórico).
+  territory: territoryText(c),
+  bankAccount: bankText(c),
+  pixKey: pixText(c),
 });
 
 /**
