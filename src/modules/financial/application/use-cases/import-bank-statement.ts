@@ -3,6 +3,8 @@ import { sha256Hex } from '../../../../shared/utils/hash.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
 
 import * as Fitid from '../../domain/statement/fitid.ts';
+import * as CedenteAccountId from '../../domain/cedente/cedente-account-id.ts';
+import { isClosed } from '../../domain/cedente/cedente-account.ts';
 import { importStatement } from '../../domain/statement/bank-statement.ts';
 import type { BankStatementError } from '../../domain/statement/errors.ts';
 import type { BankStatementId } from '../../domain/statement/bank-statement-id.ts';
@@ -25,6 +27,10 @@ import type {
   ReconciliationPeriodStore,
   ReconciliationPeriodStoreError,
 } from '../ports/reconciliation-period-store.ts';
+import type {
+  CedenteAccountStore,
+  CedenteAccountStoreError,
+} from '../ports/cedente-account-store.ts';
 import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
 
 export type ImportBankStatementDeps = Readonly<{
@@ -32,6 +38,8 @@ export type ImportBankStatementDeps = Readonly<{
   repo: BankStatementRepository;
   // Guard R18 (#125): não importa em período fechado. Pick mínimo do store.
   periods: Pick<ReconciliationPeriodStore, 'isClosed'>;
+  // Guard FR-011 (019): conta-cedente encerrada não aceita import. Pick mínimo.
+  cedenteStore: Pick<CedenteAccountStore, 'findById'>;
   // Só precisa do instante (occurredAt do evento) — depende da interface mais estreita do Clock.
   clock: Pick<Clock, 'now'>;
   outbox: FinancialOutbox;
@@ -55,8 +63,10 @@ export type ImportBankStatementError =
   | ParseError
   | BankStatementError
   | 'period-closed'
+  | 'account-closed'
   | BankStatementRepositoryError
   | ReconciliationPeriodStoreError
+  | CedenteAccountStoreError
   | OutboxAppendError;
 
 // Resolve a chave anti-duplicidade da transação: FITID nativo (OFX) via `fromNative`; ausente (CSV)
@@ -84,6 +94,15 @@ export const importBankStatement =
   async (
     input: ImportBankStatementInput,
   ): Promise<Result<ImportBankStatementOutput, ImportBankStatementError>> => {
+    // Guard FR-011: conta-cedente encerrada não aceita nova importação (antes de parsear).
+    // Lenient: ref não-uuid ou conta inexistente não bloqueia aqui (FK fica para #160).
+    const accId = CedenteAccountId.rehydrate(input.debitAccountRef);
+    if (accId.ok) {
+      const accR = await deps.cedenteStore.findById(accId.value);
+      if (!accR.ok) return err(accR.error);
+      if (accR.value !== null && isClosed(accR.value)) return err('account-closed');
+    }
+
     const parsed = deps.parser.parse(input.format, input.content);
     if (!parsed.ok) return err(parsed.error);
 

@@ -1,6 +1,11 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import { immutable } from '../../../../shared/primitives/immutable.ts';
-import type { CedenteAccount, CedenteAccountError, CreateInput } from './types.ts';
+import {
+  ACCOUNT_TYPES,
+  type CedenteAccount,
+  type CedenteAccountError,
+  type CreateInput,
+} from './types.ts';
 
 const isBlank = (value: string): boolean => value.trim().length === 0;
 
@@ -13,6 +18,15 @@ export const create = (input: CreateInput): Result<CedenteAccount, CedenteAccoun
   const nextNsa = input.nextNsa ?? 1;
   if (nextNsa < 1) return err('invalid-nsa');
 
+  if (input.type !== undefined && !ACCOUNT_TYPES.includes(input.type)) {
+    return err('invalid-account-type');
+  }
+
+  // Par coeso (FR-006): saldo de abertura e sua data vêm juntos ou nenhum.
+  if ((input.openingBalanceCents === undefined) !== (input.openingBalanceDate === undefined)) {
+    return err('opening-balance-requires-date');
+  }
+
   return ok(
     immutable<CedenteAccount>({
       id: input.id,
@@ -24,6 +38,15 @@ export const create = (input: CreateInput): Result<CedenteAccount, CedenteAccoun
       document: input.document,
       status: input.status ?? 'Active',
       nextNsa,
+      ...(input.type !== undefined ? { type: input.type } : {}),
+      ...(input.nickname !== undefined ? { nickname: input.nickname } : {}),
+      ...(input.bankName !== undefined ? { bankName: input.bankName } : {}),
+      ...(input.openingBalanceCents !== undefined
+        ? { openingBalanceCents: input.openingBalanceCents }
+        : {}),
+      ...(input.openingBalanceDate !== undefined
+        ? { openingBalanceDate: input.openingBalanceDate }
+        : {}),
     }),
   );
 };

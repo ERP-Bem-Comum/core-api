@@ -13,7 +13,6 @@ const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
   // Conciliação (US2/3/4).
   'statement-transaction-not-found',
   'reconciliation-not-found',
-  'cedente-account-not-found',
   'payable-not-found',
   // Período (US6).
   'reconciliation-period-not-found',
@@ -27,6 +26,10 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'reconciliation-already-undone',
   'account-closed',
   'period-closed',
+  // Conta-cedente (019): conflitos de estado/unicidade.
+  'cedente-account-already-closed',
+  'cedente-account-duplicate',
+  'cedente-account-bank-data-locked',
 ]);
 
 const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
@@ -44,6 +47,8 @@ const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
   'invalid-period-range',
   'reconciliation-period-id-invalid',
   'unsupported-export-format',
+  // Conta-cedente (019): id malformado.
+  'cedente-account-id-invalid',
 ]);
 
 const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
@@ -55,12 +60,18 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   'reconciliation-repository-failure',
   'payable-view-failure',
   'cedente-account-store-unavailable',
+  'cedente-account-history-unavailable',
   // Match/sugestão (US2).
   'suggestion-view-failure',
   'rejected-suggestion-repository-failure',
   // Período (US6).
   'reconciliation-period-store-failure',
 ]);
+
+// NOTA (019): `cedente-account-not-found` NÃO está em NOT_FOUND_CODES de propósito → default 422.
+// (1) No CRUD da conta-cedente, o smoke de existência da rota /close usa id ausente e exige ≠404
+// (404 fica reservado a rota não-montada). (2) Em confirm/manual-entry é uma referência pendente
+// (transação aponta p/ conta inexistente), não "recurso pedido pelo cliente" → 422 é defensável.
 
 /** Status HTTP para um slug interno de erro. Default 422 (regra de negócio inválida). */
 export const writeErrorStatus = (code: string): number => {
@@ -128,7 +139,16 @@ const SLUG_MESSAGES: Record<string, string> = {
   // Conciliação (US2/3/4).
   'statement-transaction-not-found': 'Transação de extrato não encontrada.',
   'reconciliation-not-found': 'Conciliação não encontrada.',
-  'cedente-account-not-found': 'Conta-cedente não encontrada para a transação.',
+  'cedente-account-not-found': 'Conta-cedente não encontrada.',
+  // Conta-cedente (019 — CRUD).
+  'cedente-account-duplicate':
+    'Já existe uma conta-cedente com esta chave bancária (banco/agência/conta/dígito).',
+  'cedente-account-already-closed': 'A conta-cedente já está encerrada.',
+  'cedente-account-bank-data-locked':
+    'A conta-cedente já tem histórico: os dados bancários não podem mais ser alterados.',
+  'invalid-account-type': 'Tipo de conta inválido (esperado: corrente, poupanca ou investimento).',
+  'opening-balance-requires-date': 'Saldo de abertura e data do saldo devem ser informados juntos.',
+  'cedente-account-id-invalid': 'Identificador de conta-cedente inválido.',
   'payable-not-found': 'Um ou mais títulos informados não foram encontrados.',
   'transaction-already-reconciled': 'A transação já está conciliada.',
   'reconciliation-already-undone': 'A conciliação já foi desfeita.',
