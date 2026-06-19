@@ -12,9 +12,11 @@ import type { DocumentListItem } from '../../domain/document/query.ts';
 import type { Payables } from '../../domain/payable/types.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
 import type { StatementTransaction } from '../../domain/statement/types.ts';
+import type { StatementView } from '../../domain/statement/statement-view.ts';
 import type { PaidPayableView } from '../../application/ports/payable-reconciliation-view.ts';
 import type { MatchSuggestion } from '../../application/use-cases/suggest-matches.ts';
 import type {
+  AccountStatementResponseDto,
   DocumentResponseDto,
   DocumentSummaryDto,
   DocumentTimelineResponseDto,
@@ -176,5 +178,35 @@ export const suggestionsToDto = (
       memoRef: s.criteria.memoRef,
       supplierOpenCount: s.criteria.supplierOpenCount,
     },
+  })),
+});
+
+/** Serializa o read-model do extrato (#139). Money em string (convenção); datas em ISO. */
+export const accountStatementToDto = (view: StatementView): AccountStatementResponseDto => ({
+  openingBalanceCents: String(view.openingBalanceCents),
+  closingBalanceCents: String(view.closingBalanceCents),
+  counters: {
+    all: view.counters.all,
+    in: view.counters.in,
+    out: view.counters.out,
+    reconciled: view.counters.reconciled,
+    pending: view.counters.pending,
+  },
+  days: view.days.map((d) => ({
+    date: d.date,
+    inCents: String(d.inCents),
+    outCents: String(d.outCents),
+    dayBalanceCents: String(d.dayBalanceCents),
+    lines: d.lines.map((l) => ({
+      id: l.id,
+      date: l.date.toISOString(),
+      movement: l.movement,
+      entryType: l.entryType,
+      payeeName: l.payeeName,
+      memo: l.memo,
+      valueCents: String(l.valueCents),
+      runningBalanceCents: String(l.runningBalanceCents),
+      reconciliationStatus: l.reconciliationStatus,
+    })),
   })),
 });

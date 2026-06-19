@@ -71,6 +71,7 @@ import { createCedenteAccount } from '../../application/use-cases/create-cedente
 import { listCedenteAccounts } from '../../application/use-cases/list-cedente-accounts.ts';
 import { closeCedenteAccount } from '../../application/use-cases/close-cedente-account.ts';
 import { editCedenteAccount } from '../../application/use-cases/edit-cedente-account.ts';
+import { getAccountStatement } from '../../application/use-cases/get-account-statement.ts';
 import { createStatementBackedAccountHistory } from '../persistence/repos/cedente-account-history.from-statements.ts';
 import type { DocumentRepository } from '../../domain/document/repository.ts';
 import type { FinancialTimelineRepository } from '../../domain/timeline/repository.ts';
@@ -137,6 +138,8 @@ export type FinancialHttpDeps = Readonly<{
   closeCedenteAccount: ReturnType<typeof closeCedenteAccount>;
   /** Conta-cedente (019) — PATCH /cedente-accounts/:id. */
   editCedenteAccount: ReturnType<typeof editCedenteAccount>;
+  /** Read-model do extrato (#139) — GET /cedente-accounts/:id/statement. */
+  getAccountStatement: ReturnType<typeof getAccountStatement>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -296,6 +299,10 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     editCedenteAccount: editCedenteAccount({
       cedenteStore: pools.cedenteStore,
       accountHistory: createStatementBackedAccountHistory(pools.statementRepo),
+    }),
+    getAccountStatement: getAccountStatement({
+      cedenteStore: pools.cedenteStore,
+      statements: pools.statementRepo,
     }),
     shutdown: pools.shutdown,
   };
