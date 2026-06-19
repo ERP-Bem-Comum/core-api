@@ -161,11 +161,24 @@ describe('financial/http — match (US2)', () => {
     const res = await getSuggestions(READER);
     assert.equal(res.statusCode, 200, res.body);
     const body = res.json() as {
-      suggestions: { payableId: string; band: string; score: number }[];
+      suggestions: {
+        payableId: string;
+        band: string;
+        score: number;
+        criteriaBreakdown: { criterion: string; weight: number; result: string }[];
+      }[];
     };
     assert.equal(body.suggestions.length, 2);
     assert.equal(body.suggestions[0]?.payableId, String(A));
     assert.equal(body.suggestions[0]?.band, 'alta');
+    // #140: breakdown por critério (peso + ok|parcial|falha) presente em cada sugestão.
+    const breakdown = body.suggestions[0]?.criteriaBreakdown;
+    assert.equal(breakdown?.length, 5);
+    assert.equal(
+      breakdown?.reduce((s, c) => s + c.weight, 0),
+      100,
+    );
+    assert.ok(breakdown?.every((c) => ['ok', 'parcial', 'falha'].includes(c.result)));
   });
 
   it('CA6: POST reject-suggestion → 200 e a sugestão some do GET', async () => {
