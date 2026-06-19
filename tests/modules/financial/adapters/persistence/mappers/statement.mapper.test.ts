@@ -81,4 +81,14 @@ describe('financial/adapters/persistence/mappers/statement.mapper', () => {
     assert.equal(back.ok, false);
     if (!back.ok) assert.equal(back.error, 'invalid-statement-movement');
   });
+
+  // W0 RED (#159 CA4): com o union fechado, toDomain rejeita entry_type fora do conjunto.
+  it('CA4: toDomain rejeita entry_type fora do union vindo do banco', () => {
+    const statement = buildStatement();
+    const row = statementToRow(statement);
+    const corrupted = transactionsToRows(statement).map((r) => ({ ...r, entryType: 'XPTO' }));
+    const back = toDomain(row, corrupted);
+    assert.equal(back.ok, false);
+    if (!back.ok) assert.equal(back.error, 'invalid-statement-entry-type');
+  });
 });

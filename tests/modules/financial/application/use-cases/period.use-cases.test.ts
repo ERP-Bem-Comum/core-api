@@ -68,7 +68,7 @@ const tx = (raw: string): ParsedTransaction => ({
   fitid: fitidOf(raw),
   date: IN_PERIOD,
   movement: 'Debit',
-  entryType: 'TARIFA',
+  entryType: 'Fee',
   payeeName: 'BANCO',
   memo: 'tarifa',
   valueCents: 990,

@@ -44,6 +44,23 @@ describe('financial/adapters/statement-parsers/ofx-parser', () => {
     }
   });
 
+  it('CA2 (#159): TRNTYPE bruto é normalizado p/ o union EntryType (fallback Other)', () => {
+    const ofx = `<OFX><BANKTRANLIST>
+<STMTTRN><TRNTYPE>FEE</TRNTYPE><DTPOSTED>20240518</DTPOSTED><TRNAMT>-4.90</TRNAMT><FITID>f1</FITID><NAME>BANCO</NAME><MEMO>TARIFA</MEMO></STMTTRN>
+<STMTTRN><TRNTYPE>PIX</TRNTYPE><DTPOSTED>20240519</DTPOSTED><TRNAMT>-10.00</TRNAMT><FITID>f2</FITID><NAME>FULANO</NAME><MEMO>pix</MEMO></STMTTRN>
+<STMTTRN><TRNTYPE>XFER</TRNTYPE><DTPOSTED>20240520</DTPOSTED><TRNAMT>-20.00</TRNAMT><FITID>f3</FITID><NAME>SICRANO</NAME><MEMO>ted</MEMO></STMTTRN>
+<STMTTRN><TRNTYPE>XPTO</TRNTYPE><DTPOSTED>20240521</DTPOSTED><TRNAMT>-30.00</TRNAMT><FITID>f4</FITID><NAME>DESCONHECIDO</NAME><MEMO>?</MEMO></STMTTRN>
+</BANKTRANLIST></OFX>`;
+    const r = parseOfx(ofx);
+    assert.equal(r.ok, true);
+    if (r.ok) {
+      assert.equal(r.value.transactions[0]?.entryType, 'Fee');
+      assert.equal(r.value.transactions[1]?.entryType, 'PIX');
+      assert.equal(r.value.transactions[2]?.entryType, 'Transfer');
+      assert.equal(r.value.transactions[3]?.entryType, 'Other');
+    }
+  });
+
   it('CA3: conteúdo sem estrutura OFX reconhecível → malformed-statement', () => {
     const r = parseOfx('isto nao eh um arquivo ofx');
     assert.equal(isErr(r), true);

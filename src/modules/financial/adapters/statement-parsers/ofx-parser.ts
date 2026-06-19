@@ -1,5 +1,6 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import { isValidDate } from '../../../../shared/utils/date.ts';
+import * as EntryType from '../../domain/statement/entry-type.ts';
 import type {
   ParseError,
   ParsedStatement,
@@ -45,7 +46,7 @@ export const parseOfx = (content: string): Result<ParsedStatement, ParseError> =
       fitid: tag(block, 'FITID'),
       date,
       movement,
-      entryType: trnType.length > 0 ? trnType : 'Other',
+      entryType: EntryType.normalize(trnType),
       payeeName: tag(block, 'NAME') ?? '',
       memo: tag(block, 'MEMO') ?? '',
       valueCents: Math.abs(signed),

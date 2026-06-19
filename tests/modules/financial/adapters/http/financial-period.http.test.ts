@@ -75,7 +75,7 @@ before(async () => {
           fitid: fitid.value,
           date: new Date('2024-05-18T00:00:00.000Z'),
           movement: 'Debit',
-          entryType: 'TARIFA',
+          entryType: 'Fee',
           payeeName: 'BANCO',
           memo: 'tarifa',
           valueCents: 990,

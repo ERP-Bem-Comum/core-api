@@ -554,8 +554,8 @@ export const finBankStatements = mysqlTable(
 //
 // Transações do extrato. `debit_account_ref` é desnormalizado da raiz para sustentar o índice ÚNICO
 // `(debit_account_ref, fitid)` — defesa de anti-duplicidade (R5) no nível do banco, independente do
-// dedup da aplicação. `movement`/`reconciliation_status` são enums varchar+CHECK; `entry_type` é
-// livre (string aberta do parser — domínio #118). FK → raiz ON DELETE CASCADE (aggregate boundary).
+// dedup da aplicação. `movement`/`reconciliation_status`/`entry_type` são enums varchar+CHECK
+// (`entry_type` fechado em #159 — spec 017). FK → raiz ON DELETE CASCADE (aggregate boundary).
 export const finStatementTransactions = mysqlTable(
   'fin_statement_transactions',
   {
@@ -565,7 +565,7 @@ export const finStatementTransactions = mysqlTable(
     fitid: varchar('fitid', { length: 64 }).notNull(),
     date: datetime('date', { mode: 'date', fsp: 3 }).notNull(),
     movement: varchar('movement', { length: 8 }).notNull(),
-    entryType: varchar('entry_type', { length: 32 }).notNull(),
+    entryType: varchar('entry_type', { length: 16 }).notNull(),
     payeeName: varchar('payee_name', { length: 255 }).notNull(),
     memo: varchar('memo', { length: 500 }).notNull(),
     valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
@@ -581,6 +581,10 @@ export const finStatementTransactions = mysqlTable(
     uniqueIndex('fin_statement_transactions_account_fitid_uq').on(t.debitAccountRef, t.fitid),
     index('fin_statement_transactions_statement_id_idx').on(t.statementId),
     check('fin_statement_transactions_movement_chk', sql`${t.movement} IN ('Debit','Credit')`),
+    check(
+      'fin_statement_transactions_entry_type_chk',
+      sql`${t.entryType} IN ('PIX','TED','DOC','Fee','Boleto','DARF','Investment','Redemption','Transfer','Other')`,
+    ),
     check(
       'fin_statement_transactions_recon_status_chk',
       sql`${t.reconciliationStatus} IN ('Pending','Reconciled','ManualEntry')`,

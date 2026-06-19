@@ -24,6 +24,22 @@ describe('financial/adapters/statement-parsers/csv-parser', () => {
     }
   });
 
+  it('CA2 (#159): coluna tipo é normalizada p/ o union EntryType (fallback Other)', () => {
+    const csv = `data;tipo;valor;nome;descricao;saldo
+2024-05-18;TARIFA;-4.90;BANCO;tarifa pix;500.00
+2024-05-19;PIX;-10.00;FULANO;pix enviado;490.00
+2024-05-20;TRANSFERENCIA;-20.00;SICRANO;transf;470.00
+2024-05-21;XPTO;-30.00;DESCONHECIDO;?;440.00`;
+    const r = parseCsv(csv);
+    assert.equal(r.ok, true);
+    if (r.ok) {
+      assert.equal(r.value.transactions[0]?.entryType, 'Fee');
+      assert.equal(r.value.transactions[1]?.entryType, 'PIX');
+      assert.equal(r.value.transactions[2]?.entryType, 'Transfer');
+      assert.equal(r.value.transactions[3]?.entryType, 'Other');
+    }
+  });
+
   it('CA3: CSV só com header (sem linhas) → malformed-statement', () => {
     const r = parseCsv('data;tipo;valor;nome;descricao;saldo');
     assert.equal(isErr(r), true);

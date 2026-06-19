@@ -1,5 +1,6 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import { isValidDate } from '../../../../shared/utils/date.ts';
+import * as EntryType from '../../domain/statement/entry-type.ts';
 import type {
   ParseError,
   ParsedStatement,
@@ -38,7 +39,7 @@ export const parseCsv = (content: string): Result<ParsedStatement, ParseError> =
       fitid: null,
       date,
       movement,
-      entryType: tipo.length > 0 ? tipo : 'Other',
+      entryType: EntryType.normalize(tipo),
       payeeName: (cells[3] ?? '').trim(),
       memo: (cells[4] ?? '').trim(),
       valueCents: Math.abs(signed),

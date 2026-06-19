@@ -1,14 +1,16 @@
 // CA7 (#120) — integração BankStatementRepository (Drizzle + MySQL real, migration 0005).
+// CA5 (#159) — o CHECK `fin_statement_transactions_entry_type_chk` rejeita `entry_type` fora do union.
 //
 // Valida: (1) save + listTransactions round-trip e knownFitids; (2) o índice ÚNICO
 // `(debit_account_ref, fitid)` rejeita FITID duplicado na MESMA conta (defesa de dedup no DB, R5);
-// (3) mesma FITID em conta-débito diferente é permitida.
+// (3) mesma FITID em conta-débito diferente é permitida; (4) o CHECK de `entry_type` é a defesa no DB.
 //
 // GATE: só roda com `MYSQL_INTEGRATION=1` (ver `package.json §test:integration:financial`).
 
 import { describe, it, before, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
+import { sql } from 'drizzle-orm';
 
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
@@ -121,6 +123,25 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const b = await repo.save(buildStatement(accountB, 'fitid-shared'));
       assert.equal(a.ok, true);
       assert.equal(b.ok, true);
+    });
+
+    it('CA5 (#159): CHECK rejeita entry_type fora do union no nível do DB', async () => {
+      const repo = createDrizzleBankStatementRepository(handle);
+      const account = '55555555-5555-4555-8555-555555555555';
+      const statement = buildStatement(account, 'fitid-chk-1');
+      assert.equal((await repo.save(statement)).ok, true);
+
+      const txId = statement.transactions[0]?.id;
+      assert.ok(txId);
+
+      // UPDATE cru bypassa o domínio para provar a defesa no nível do DB (CHECK constraint).
+      await assert.rejects(
+        () =>
+          handle.db.execute(
+            sql`UPDATE fin_statement_transactions SET entry_type = 'XPTO' WHERE id = ${txId}`,
+          ),
+        /entry_type|constraint|check/i,
+      );
     });
   });
 }
