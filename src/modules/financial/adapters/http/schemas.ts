@@ -418,6 +418,15 @@ const matchSuggestionSchema = z.object({
     memoRef: z.boolean(),
     supplierOpenCount: z.number().int().min(0),
   }),
+  // #140: breakdown por critério (peso + ok|parcial|falha) p/ a UI renderizar chips sem heurística.
+  criteriaBreakdown: z.array(
+    z.object({
+      criterion: z.enum(['exactValue', 'payeeMatch', 'dateD0', 'memoRef', 'supplierOpen']),
+      weight: z.number().int().min(0).max(100),
+      result: z.enum(['ok', 'parcial', 'falha']),
+      detail: z.string(),
+    }),
+  ),
 });
 
 export const suggestionsResponseSchema = z.object({

@@ -13,6 +13,7 @@ import type { Payables } from '../../domain/payable/types.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
 import type { StatementTransaction } from '../../domain/statement/types.ts';
 import type { StatementView } from '../../domain/statement/statement-view.ts';
+import { criteriaBreakdown } from '../../domain/reconciliation/match-score.ts';
 import type { Reconciliation } from '../../domain/reconciliation/types.ts';
 import type { ReconciliationPeriod } from '../../domain/reconciliation/period.ts';
 import type { PaidPayableView } from '../../application/ports/payable-reconciliation-view.ts';
@@ -184,6 +185,12 @@ export const suggestionsToDto = (
       memoRef: s.criteria.memoRef,
       supplierOpenCount: s.criteria.supplierOpenCount,
     },
+    criteriaBreakdown: criteriaBreakdown(s.criteria).map((c) => ({
+      criterion: c.criterion,
+      weight: c.weight,
+      result: c.result,
+      detail: c.detail,
+    })),
   })),
 });
 

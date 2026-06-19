@@ -62,6 +62,46 @@ export const compute = (criteria: MatchCriteria): MatchScore => {
   return clamped as MatchScore;
 };
 
+// Breakdown dos critérios (#140): expõe peso + resultado por critério p/ a UI renderizar os chips
+// (ok|parcial|falha) sem heurística própria. Read-only — NÃO altera R1 (nunca concilia). Pura.
+export type CriterionKey = 'exactValue' | 'payeeMatch' | 'dateD0' | 'memoRef' | 'supplierOpen';
+export type CriterionOutcome = 'ok' | 'parcial' | 'falha';
+export type CriterionResult = Readonly<{
+  criterion: CriterionKey;
+  weight: number;
+  result: CriterionOutcome;
+  detail: string;
+}>;
+
+const boolOutcome = (passed: boolean): CriterionOutcome => (passed ? 'ok' : 'falha');
+
+// supplierOpenCount é sinal fraco: exatamente 1 título aberto = `ok`; vários = `parcial` (ambíguo); 0 = `falha`.
+const supplierOutcome = (count: number): CriterionOutcome =>
+  count === 0 ? 'falha' : count === 1 ? 'ok' : 'parcial';
+
+export const criteriaBreakdown = (criteria: MatchCriteria): readonly CriterionResult[] => [
+  {
+    criterion: 'exactValue',
+    weight: W_EXACT_VALUE,
+    result: boolOutcome(criteria.exactValue),
+    detail: '',
+  },
+  {
+    criterion: 'payeeMatch',
+    weight: W_PAYEE,
+    result: boolOutcome(criteria.payeeMatch),
+    detail: '',
+  },
+  { criterion: 'dateD0', weight: W_DATE_D0, result: boolOutcome(criteria.dateD0), detail: '' },
+  { criterion: 'memoRef', weight: W_MEMO_REF, result: boolOutcome(criteria.memoRef), detail: '' },
+  {
+    criterion: 'supplierOpen',
+    weight: W_SUPPLIER_OPEN,
+    result: supplierOutcome(criteria.supplierOpenCount),
+    detail: String(criteria.supplierOpenCount),
+  },
+];
+
 const normalizeName = (value: string): string => value.trim().toUpperCase().replace(/\s+/g, ' ');
 
 const sameDayUtc = (a: Date, b: Date): boolean =>
