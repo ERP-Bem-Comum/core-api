@@ -16,7 +16,7 @@ const tx = (raw: string, valueCents = 1000) => ({
   fitid: fit(raw),
   date: new Date('2024-05-18T00:00:00.000Z'),
   movement: 'Debit' as const,
-  entryType: 'TED',
+  entryType: 'TED' as const,
   payeeName: 'FORNECEDOR X',
   memo: 'pagamento',
   valueCents,

@@ -1,4 +1,5 @@
 import type { Fitid } from './fitid.ts';
+import type { EntryType } from './entry-type.ts';
 import type { BankStatementId } from './bank-statement-id.ts';
 import type { StatementTransactionId } from './statement-transaction-id.ts';
 import type { BankStatementEvent } from './events.ts';
@@ -16,7 +17,7 @@ export type StatementTransaction = Readonly<{
   fitid: Fitid;
   date: Date;
   movement: Movement;
-  entryType: string;
+  entryType: EntryType;
   payeeName: string;
   memo: string;
   valueCents: number;
@@ -39,7 +40,7 @@ export type ParsedTransaction = Readonly<{
   fitid: Fitid;
   date: Date;
   movement: Movement;
-  entryType: string;
+  entryType: EntryType;
   payeeName: string;
   memo: string;
   valueCents: number;

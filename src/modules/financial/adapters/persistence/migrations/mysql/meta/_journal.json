@@ -64,6 +64,13 @@
       "when": 1781824259702,
       "tag": "0008_numerous_dreadnoughts",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "5",
+      "when": 1781839874520,
+      "tag": "0009_redundant_genesis",
+      "breakpoints": true
     }
   ]
 }
