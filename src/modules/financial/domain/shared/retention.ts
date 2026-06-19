@@ -2,7 +2,7 @@ import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import { immutable } from '../../../../shared/primitives/immutable.ts';
 import * as Money from '../../../../shared/kernel/money.ts';
 
-// Retenção: imposto que GERA título filho e ABATE do líquido (NFS-e: ISS/IRRF/INSS/CSRF; RPA: IRRF/INSS/CSRF).
+// Retenção: imposto que GERA título filho e ABATE do líquido (NFS-e e RPA: ISS/IRRF/INSS/CSRF — #154).
 // `rateBps` = alíquota em basis points (1100 = 11%) — inteiro, evita float no domínio.
 
 export type RetentionType = 'ISS' | 'IRRF' | 'INSS' | 'CSRF';

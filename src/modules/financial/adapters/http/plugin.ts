@@ -361,6 +361,22 @@ const financialRoutes =
       },
     });
 
+    // POST /financial/documents/:id/submit — finaliza rascunho (Draft → Open) (#91).
+    scope.route({
+      method: 'POST',
+      url: '/financial/documents/:id/submit',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.write)],
+      schema: {
+        params: documentIdParamSchema,
+        response: { 200: documentResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.submitDraft({ documentId: req.params.id });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return loadAndSerialize(deps, reply, req.params.id);
+      },
+    });
+
     // DELETE /financial/documents/:id — cancela (só Open); hard delete. 204 sem corpo.
     // Exige `version` no body (optimistic lock — #55/FR-009): versão defasada → 409.
     scope.route({
