@@ -20,6 +20,10 @@ export const COLLABORATOR_FIELD_LABELS: Readonly<Record<string, string>> = {
   employmentRelationship: 'Vínculo',
   status: 'Situação',
   disableBy: 'Motivo de Desativação',
+  // #126: novos campos rastreados (linhas adicionais no histórico).
+  territory: 'Território',
+  bankAccount: 'Banco',
+  pixKey: 'Chave PIX',
 };
 
 /** Diff por campo → entradas materializadas (id, label PT). Diff vazio → []. */

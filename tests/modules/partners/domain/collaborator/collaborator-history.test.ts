@@ -52,4 +52,26 @@ describe('diffCollaborator (US4)', () => {
     const fields = changes.map((c) => c.fieldName).sort();
     assert.deepEqual(fields, ['name', 'role']);
   });
+
+  // #126 (CA4): histórico passa a rastrear território e banco/PIX (linhas adicionais).
+  it('#126: mudança de território → change "territory" serializado UF/Município', () => {
+    const before = make('Analista');
+    const after = { ...before, territory: { uf: 'CE', municipality: 'Fortaleza' } };
+    const t = diffCollaborator(before, after).find((c) => c.fieldName === 'territory');
+    assert.ok(t, 'esperava change de territory');
+    assert.equal(t.valueBefore, null);
+    assert.equal(t.valueAfter, 'CE/Fortaleza');
+  });
+
+  it('#126: mudança de banco e PIX → changes "bankAccount" e "pixKey"', () => {
+    const before = make('Analista');
+    const after = {
+      ...before,
+      bankAccount: { bank: '237', agency: '1234', accountNumber: '56789' },
+      pixKey: { keyType: 'email' as const, key: 'maria@bemcomum.org' },
+    } as CollaboratorEntity;
+    const changes = diffCollaborator(before, after);
+    assert.equal(changes.find((c) => c.fieldName === 'bankAccount')?.valueAfter, '237/1234/56789');
+    assert.equal(changes.find((c) => c.fieldName === 'pixKey')?.valueAfter, 'maria@bemcomum.org');
+  });
 });
