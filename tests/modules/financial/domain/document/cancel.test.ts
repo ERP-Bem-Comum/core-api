@@ -58,4 +58,19 @@ describe('financial/domain/document — cancel (US6)', () => {
       }
     }
   });
+
+  it('#166: cancelar documento em Draft emite DocumentCancelled sem payables (rascunho nao gera filhos)', () => {
+    const draft = Document.saveDraft({ id: DocumentId.generate(), documentNumber: 'NFS-DRAFT' });
+    if (!draft.ok) throw new Error('test setup: draft');
+    const r = Document.cancelDraft(draft.value.document);
+    assert.equal(isOk(r), true);
+    if (r.ok) {
+      const cancelled = r.value.events.find((e) => e.type === 'DocumentCancelled');
+      assert.ok(cancelled);
+      if (cancelled?.type === 'DocumentCancelled') {
+        assert.equal(cancelled.documentId, draft.value.document.id);
+        assert.equal(cancelled.payableIds.length, 0);
+      }
+    }
+  });
 });
