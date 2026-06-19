@@ -64,6 +64,7 @@ export type ImportBankStatementError =
   | BankStatementError
   | 'period-closed'
   | 'account-closed'
+  | 'account-not-found'
   | BankStatementRepositoryError
   | ReconciliationPeriodStoreError
   | CedenteAccountStoreError
@@ -94,14 +95,15 @@ export const importBankStatement =
   async (
     input: ImportBankStatementInput,
   ): Promise<Result<ImportBankStatementOutput, ImportBankStatementError>> => {
-    // Guard FR-011: conta-cedente encerrada não aceita nova importação (antes de parsear).
-    // Lenient: ref não-uuid ou conta inexistente não bloqueia aqui (FK fica para #160).
+    // Guards (antes de parsear): integridade por IDENTIDADE (#160) + conta encerrada (FR-011).
+    // O extrato deve referenciar uma conta-cedente existente e ativa. Sem FK física cross-aggregate:
+    // agregados se referenciam por identidade (Vernon, Implementing DDD, p.460) — a validação é aqui.
     const accId = CedenteAccountId.rehydrate(input.debitAccountRef);
-    if (accId.ok) {
-      const accR = await deps.cedenteStore.findById(accId.value);
-      if (!accR.ok) return err(accR.error);
-      if (accR.value !== null && isClosed(accR.value)) return err('account-closed');
-    }
+    if (!accId.ok) return err('account-not-found');
+    const accR = await deps.cedenteStore.findById(accId.value);
+    if (!accR.ok) return err(accR.error);
+    if (accR.value === null) return err('account-not-found');
+    if (isClosed(accR.value)) return err('account-closed');
 
     const parsed = deps.parser.parse(input.format, input.content);
     if (!parsed.ok) return err(parsed.error);

@@ -10,7 +10,8 @@ import type { BankStatementParser } from '#src/modules/financial/application/por
 // W0 RED: use-case e repo in-memory ainda não existem.
 import { importBankStatement } from '#src/modules/financial/application/use-cases/import-bank-statement.ts';
 import { createInMemoryBankStatementRepository } from '#src/modules/financial/adapters/persistence/repos/bank-statement-repository.in-memory.ts';
-import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
+import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
+import { create as createCedente } from '#src/modules/financial/domain/cedente/cedente-account.ts';
 
 const WHEN = new Date('2024-05-19T09:00:00.000Z');
 const clock = { now: (): Date => WHEN };
@@ -52,16 +53,39 @@ const openPeriods = {
     Promise.resolve(ok(false)),
 };
 
+// Conta-cedente ativa existente — o guard de integridade (#160) exige que `debitAccountRef`
+// referencie um cedente real. Stub `findById` devolve essa conta (existe e está ativa).
+const activeAccount = (() => {
+  const r = createCedente({
+    id: CedenteAccountId.generate(),
+    bankCode: '237',
+    agency: '1234',
+    accountNumber: '567890',
+    accountDigit: '1',
+    convenio: '9999999',
+    document: '12345678000190',
+  });
+  if (!r.ok) throw new Error('setup: cedente');
+  return r.value;
+})();
+
 const deps = (parser: BankStatementParser, captured: Captured) => ({
   parser,
   repo: createInMemoryBankStatementRepository(),
   periods: openPeriods,
-  cedenteStore: createInMemoryCedenteAccountStore(),
+  cedenteStore: {
+    findById: (): Promise<Result<typeof activeAccount, never>> =>
+      Promise.resolve(ok(activeAccount)),
+  },
   clock,
   outbox: fakeOutbox(captured),
 });
 
-const input = { debitAccountRef: 'acc-1', format: 'OFX' as const, content: '<OFX/>' };
+const input = {
+  debitAccountRef: String(activeAccount.id),
+  format: 'OFX' as const,
+  content: '<OFX/>',
+};
 
 // Critérios em .claude/.pipeline/FIN-RECON-STATEMENT-PERSIST-HTTP/000-request.md (CA1–CA4).
 describe('financial/application/use-cases/import-bank-statement', () => {
@@ -122,5 +146,31 @@ describe('financial/application/use-cases/import-bank-statement', () => {
     const r = await importBankStatement(deps(nullFitidParser, captured))(input);
     assert.equal(r.ok, true);
     if (r.ok) assert.equal(r.value.imported, 1);
+  });
+
+  // #160: integridade por identidade (Vernon p.460) — guard, não FK cross-aggregate.
+  it('conta-cedente inexistente → account-not-found, sem parsear/persistir', async () => {
+    const captured: Captured = { events: [] };
+    const fail = (label: string): never => {
+      throw new Error(`não deve ser chamado quando a conta não existe: ${label}`);
+    };
+    const d = {
+      parser: { parse: () => fail('parser.parse') },
+      repo: { has: () => fail('repo.has'), save: () => fail('repo.save') },
+      periods: openPeriods,
+      cedenteStore: {
+        findById: (): Promise<Result<null, never>> => Promise.resolve(ok(null)),
+      },
+      clock,
+      outbox: fakeOutbox(captured),
+    };
+    const r = await importBankStatement(d as never)({
+      debitAccountRef: String(CedenteAccountId.generate()),
+      format: 'OFX',
+      content: '<OFX/>',
+    });
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'account-not-found');
+    assert.equal(captured.events.length, 0);
   });
 });

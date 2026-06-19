@@ -153,6 +153,7 @@ const SLUG_MESSAGES: Record<string, string> = {
   'transaction-already-reconciled': 'A transação já está conciliada.',
   'reconciliation-already-undone': 'A conciliação já foi desfeita.',
   'account-closed': 'A conta-cedente está encerrada: não é possível conciliar.',
+  'account-not-found': 'A conta-cedente informada não existe.',
   'title-not-paid': 'Só é possível conciliar títulos no estado Pago.',
   'reconciliation-not-balanced':
     'O fechamento não bate: a soma dos títulos mais a diferença deve igualar o valor da transação.',

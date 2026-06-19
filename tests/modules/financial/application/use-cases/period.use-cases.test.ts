@@ -224,11 +224,26 @@ describe('financial — guard period-closed (CA4)', () => {
       'data;tipo;valor;nome;descricao;saldo',
       '2024-05-18;DEBITO;10.00;X;pag;500.00',
     ].join('\n');
+    // Guard de integridade (#160): ACCOUNT deve referenciar um cedente existente p/ chegar ao guard de período.
+    const accId = CedenteAccountId.rehydrate(ACCOUNT);
+    if (!accId.ok) throw new Error('setup: account id');
+    const acc = createCedente({
+      id: accId.value,
+      bankCode: '237',
+      agency: '1234',
+      accountNumber: '567890',
+      accountDigit: '1',
+      convenio: '9999999',
+      document: '12345678000190',
+    });
+    if (!acc.ok) throw new Error('setup: cedente');
+    const cedenteStore = createInMemoryCedenteAccountStore();
+    await cedenteStore.save(acc.value);
     const r = await importBankStatement({
       parser: bankStatementParser,
       repo: createInMemoryBankStatementRepository(),
       periods: periodStore,
-      cedenteStore: createInMemoryCedenteAccountStore(),
+      cedenteStore,
       clock: ClockReal(),
       outbox: createInMemoryOutbox().port,
     })({ debitAccountRef: ACCOUNT, format: 'CSV', content: csv });
