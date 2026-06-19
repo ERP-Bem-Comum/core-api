@@ -49,6 +49,7 @@ import {
   paidPayablesToDto,
   suggestionsToDto,
   accountStatementToDto,
+  transactionReconciliationToDto,
 } from './dto.ts';
 import type { DocumentListFilter } from '../../domain/document/query.ts';
 import type { FinancialHttpDeps } from './composition.ts';
@@ -93,6 +94,7 @@ import {
   type CedenteAccountResponseDto,
   accountStatementQuerySchema,
   accountStatementResponseSchema,
+  transactionReconciliationResponseSchema,
 } from './schemas.ts';
 
 export type FinancialHttpHooks = Readonly<{
@@ -611,6 +613,23 @@ const financialRoutes =
         const result = await deps.suggestMatches(req.params.id);
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(reply, ok(suggestionsToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /financial/statement-transactions/:id/reconciliation — conciliação ativa da transação (#175).
+    // Destrava o "Desfazer" pós-reload (id p/ POST /reconciliations/:id/undo) + modal de detalhes.
+    scope.route({
+      method: 'GET',
+      url: '/financial/statement-transactions/:id/reconciliation',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationRead)],
+      schema: {
+        params: statementTransactionIdParamSchema,
+        response: { 200: transactionReconciliationResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.getTransactionReconciliation({ transactionId: req.params.id });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(transactionReconciliationToDto(result.value)), { ok: 200 });
       },
     });
 

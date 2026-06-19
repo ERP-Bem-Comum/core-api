@@ -601,3 +601,20 @@ export const accountStatementResponseSchema = z.object({
 });
 
 export type AccountStatementResponseDto = z.infer<typeof accountStatementResponseSchema>;
+
+// ─── Lookup da conciliação ativa por transação (#175) ──────────────────────────
+
+export const transactionReconciliationResponseSchema = z.object({
+  id: z.uuid(),
+  transactionId: z.uuid(),
+  type: z.enum(['Individual', 'Multiple', 'Partial', 'ManualEntry']),
+  status: z.enum(['Active', 'Undone']),
+  reconciledBy: z.string(),
+  reconciledAt: z.iso.datetime(),
+  differenceCents: z.string().nullable(),
+  items: z.array(z.object({ payableId: z.uuid(), reconciledValueCents: z.string() })),
+});
+
+export type TransactionReconciliationResponseDto = z.infer<
+  typeof transactionReconciliationResponseSchema
+>;
