@@ -638,3 +638,17 @@ const reconciliationPeriodItemSchema = z.object({
 export const reconciliationPeriodsResponseSchema = z.array(reconciliationPeriodItemSchema);
 
 export type ReconciliationPeriodsResponseDto = z.infer<typeof reconciliationPeriodsResponseSchema>;
+
+// ─── Sugestões de match em lote por extrato (#174) ─────────────────────────────
+
+export const statementSuggestionsResponseSchema = z.object({
+  items: z.array(
+    z.object({
+      transactionId: z.uuid(),
+      topBand: z.enum(['alta', 'media']).nullable(),
+      topScore: z.number().int().min(0).max(100).nullable(),
+    }),
+  ),
+});
+
+export type StatementSuggestionsResponseDto = z.infer<typeof statementSuggestionsResponseSchema>;

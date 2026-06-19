@@ -74,6 +74,7 @@ import { editCedenteAccount } from '../../application/use-cases/edit-cedente-acc
 import { getAccountStatement } from '../../application/use-cases/get-account-statement.ts';
 import { getTransactionReconciliation } from '../../application/use-cases/get-transaction-reconciliation.ts';
 import { listReconciliationPeriods } from '../../application/use-cases/list-reconciliation-periods.ts';
+import { getStatementSuggestions } from '../../application/use-cases/get-statement-suggestions.ts';
 import { createStatementBackedAccountHistory } from '../persistence/repos/cedente-account-history.from-statements.ts';
 import type { DocumentRepository } from '../../domain/document/repository.ts';
 import type { FinancialTimelineRepository } from '../../domain/timeline/repository.ts';
@@ -146,6 +147,8 @@ export type FinancialHttpDeps = Readonly<{
   getTransactionReconciliation: ReturnType<typeof getTransactionReconciliation>;
   /** Lista períodos de conciliação por conta (#173) — GET /reconciliation-periods. */
   listReconciliationPeriods: ReturnType<typeof listReconciliationPeriods>;
+  /** Sugestões de match em lote por extrato (#174) — GET /bank-statements/:id/suggestions. */
+  getStatementSuggestions: ReturnType<typeof getStatementSuggestions>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -242,6 +245,12 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     clock,
     outbox: outbox.port,
   });
+  // Sugestões: instância reusada pela rota por-transação (#121) e pelo lote (#174).
+  const suggest = suggestMatches({
+    statements: pools.statementRepo,
+    suggestions: pools.suggestionView,
+    rejected: pools.rejectedSuggestionRepo,
+  });
   return {
     saveDocument: saveDocument(deps),
     saveDraft: saveDraft(deps),
@@ -279,10 +288,10 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       outbox: outbox.port,
     }),
     searchPaidPayables: searchPaidPayables({ payables: pools.payableView }),
-    suggestMatches: suggestMatches({
-      statements: pools.statementRepo,
-      suggestions: pools.suggestionView,
-      rejected: pools.rejectedSuggestionRepo,
+    suggestMatches: suggest,
+    getStatementSuggestions: getStatementSuggestions({
+      listStatementTransactions: pools.statementRepo.listTransactions,
+      suggestMatches: suggest,
     }),
     rejectSuggestion: rejectSuggestion({ rejected: pools.rejectedSuggestionRepo, clock }),
     recordManualEntry: record,
