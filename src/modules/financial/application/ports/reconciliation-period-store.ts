@@ -15,4 +15,8 @@ export type ReconciliationPeriodStore = Readonly<{
     debitAccountRef: string,
     date: Date,
   ) => Promise<Result<boolean, ReconciliationPeriodStoreError>>;
+  // Lista os períodos de uma conta-débito (#173) — obter periodId p/ exportar fora do fechamento.
+  listByAccount: (
+    debitAccountRef: string,
+  ) => Promise<Result<readonly ReconciliationPeriod[], ReconciliationPeriodStoreError>>;
 }>;

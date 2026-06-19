@@ -14,11 +14,13 @@ import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
 import type { StatementTransaction } from '../../domain/statement/types.ts';
 import type { StatementView } from '../../domain/statement/statement-view.ts';
 import type { Reconciliation } from '../../domain/reconciliation/types.ts';
+import type { ReconciliationPeriod } from '../../domain/reconciliation/period.ts';
 import type { PaidPayableView } from '../../application/ports/payable-reconciliation-view.ts';
 import type { MatchSuggestion } from '../../application/use-cases/suggest-matches.ts';
 import type {
   AccountStatementResponseDto,
   TransactionReconciliationResponseDto,
+  ReconciliationPeriodsResponseDto,
   DocumentResponseDto,
   DocumentSummaryDto,
   DocumentTimelineResponseDto,
@@ -229,3 +231,17 @@ export const transactionReconciliationToDto = (
     reconciledValueCents: String(i.reconciledValueCents),
   })),
 });
+
+/** Serializa os períodos de conciliação de uma conta (#173). Datas do intervalo em YYYY-MM-DD. */
+export const reconciliationPeriodsToDto = (
+  periods: readonly ReconciliationPeriod[],
+): ReconciliationPeriodsResponseDto =>
+  periods.map((p) => ({
+    id: String(p.id),
+    debitAccountRef: p.debitAccountRef,
+    periodStart: p.periodStart.toISOString().slice(0, 10),
+    periodEnd: p.periodEnd.toISOString().slice(0, 10),
+    status: p.status,
+    closedAt: p.closedAt !== null ? p.closedAt.toISOString() : null,
+    closedBy: p.closedBy,
+  }));

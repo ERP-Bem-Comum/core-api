@@ -61,6 +61,30 @@ export const createDrizzleReconciliationPeriodStore = (
       }
     },
 
+    listByAccount: async (
+      debitAccountRef: string,
+    ): Promise<Result<readonly ReconciliationPeriod[], ReconciliationPeriodStoreError>> => {
+      try {
+        const rows = await db
+          .select()
+          .from(finReconciliationPeriods)
+          .where(eq(finReconciliationPeriods.debitAccountRef, debitAccountRef));
+        const periods: ReconciliationPeriod[] = [];
+        for (const row of rows) {
+          const mapped = toDomain(row);
+          if (!mapped.ok) {
+            logStore('listByAccount:map', mapped.error);
+            return err('reconciliation-period-store-failure');
+          }
+          periods.push(mapped.value);
+        }
+        return ok(periods);
+      } catch (cause) {
+        logStore('listByAccount', cause);
+        return err('reconciliation-period-store-failure');
+      }
+    },
+
     isClosed: async (
       debitAccountRef: string,
       date: Date,
