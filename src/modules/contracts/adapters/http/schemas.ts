@@ -47,6 +47,9 @@ const registrationShape = {
   categorizacao: z.string().nullable(),
   centroDeCusto: z.string().nullable(),
   program: programBlockSchema,
+  // #116: ref do contratante no list-item (filtrar/exibir por fornecedor sem N+1).
+  contractorId: z.string(),
+  contractorType: z.enum(['supplier', 'financier', 'collaborator', 'act']),
 };
 
 const effectiveShape = {
@@ -93,6 +96,9 @@ export const contractListQuerySchema = z.object({
   order: z.enum(['ASC', 'DESC']).default('ASC'),
   search: z.string().min(1).optional(),
   status: z.enum(['Pending', 'Active', 'Expired', 'Terminated', 'Cancelled']).optional(),
+  // #116: filtra os contratos de um contratante (supplierId = contractorId quando type='supplier').
+  contractorId: z.uuid().optional(),
+  contractorType: z.enum(['supplier', 'financier', 'collaborator', 'act']).optional(),
 });
 
 export type ContractListQuery = z.infer<typeof contractListQuerySchema>;

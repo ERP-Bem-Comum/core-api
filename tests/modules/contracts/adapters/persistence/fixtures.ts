@@ -80,6 +80,9 @@ export type ContractOverrides = Partial<{
   budgetPlanId: string | null;
   categorizacao: string | null;
   centroDeCusto: string | null;
+  // #116: contratante customizável (default supplier id 5555…).
+  contractorId: string;
+  contractorType: 'supplier' | 'financier' | 'collaborator' | 'act';
 }>;
 
 // Spread condicional dos metadados de cadastro (CTR-NUMBER-PROGRAM) — `classification`
@@ -113,7 +116,7 @@ export const buildContract = (overrides: ContractOverrides = {}): ActiveContract
     signedAt: new Date(overrides.signedAtISO ?? '2026-01-15'),
     originalValue: someMoney(overrides.originalValueCents ?? 10_000_000),
     originalPeriod: period,
-    contractor: someContractor(),
+    contractor: someContractor(overrides.contractorType, overrides.contractorId),
     ...registrationMeta(overrides),
   });
   return unwrap('Contract.create', r).contract;

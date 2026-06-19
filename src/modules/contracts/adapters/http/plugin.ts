@@ -25,6 +25,7 @@ import { toErrorEnvelope } from '#src/shared/http/errors.ts';
 import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
 
 import type { ContractsHttpDeps } from './composition.ts';
+import type { ContractorId } from '../../domain/shared/contractor.ts';
 import { contractToListItem, contractToDetailDto } from './contract-dto.ts';
 import { programBlockFromSnapshots } from './program-composition.ts';
 import type { ContractMetadataPatch } from '../../application/use-cases/update-contract-metadata.ts';
@@ -190,6 +191,9 @@ const contractsRoutes =
           order: q.order,
           ...(q.search !== undefined ? { search: q.search } : {}),
           ...(q.status !== undefined ? { status: q.status } : {}),
+          // #116: contractorId já validado como uuid pelo Zod → brand seguro; contractorType é o union.
+          ...(q.contractorId !== undefined ? { contractorId: q.contractorId as ContractorId } : {}),
+          ...(q.contractorType !== undefined ? { contractorType: q.contractorType } : {}),
         });
         if (!result.ok) {
           return sendResult(reply, err(toErrorCode(result.error)), {

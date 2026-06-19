@@ -40,6 +40,9 @@ describe('contractToListItem — mapper agregado -> DTO', () => {
       categorizacao: null,
       centroDeCusto: null,
       program: null,
+      // #116: ref do contratante exposta no list-item.
+      contractorId: '55555555-5555-4555-8555-555555555555',
+      contractorType: 'supplier',
       signedAt: '2026-01-15T00:00:00.000Z',
       currentValue: { cents: 10_000_000 },
       currentPeriod: { kind: 'Fixed', start: '2026-02-01', end: '2026-12-31' },
