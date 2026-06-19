@@ -21,6 +21,9 @@ const CATALOG_RAW = [
   // act:* (modulo partners - atos)
   'act:read',
   'act:write',
+  // bank-account:* (modulo financial - conta-cedente, #138)
+  'bank-account:read',
+  'bank-account:write',
   // collaborator:* (modulo partners - colaboradores)
   'collaborator:read',
   'collaborator:write',
@@ -48,6 +51,11 @@ const CATALOG_RAW = [
   'program:deactivate',
   'program:read',
   'program:write',
+  // reconciliation:* (modulo financial - conciliacao bancaria, #176)
+  'reconciliation:close',
+  'reconciliation:import',
+  'reconciliation:read',
+  'reconciliation:write',
   // role:* (gestao de acessos - spec 006, novas)
   'role:assign',
   'role:create',
