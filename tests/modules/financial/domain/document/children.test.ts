@@ -105,9 +105,13 @@ describe('financial/domain/document — geração de filhos (US2)', () => {
     if (!r.ok) assert.equal(r.error, 'retention-not-allowed-for-type');
   });
 
-  it('RPA com ISS é rejeitada (ISS só existe em NFS-e)', () => {
+  it('#154: RPA com ISS é aceita (RPA pode reter ISS) e gera o filho ISS', () => {
     const r = Document.create({ ...base('RPA'), retentions: [ret('ISS', 5000)] });
-    assert.equal(isErr(r), true);
-    if (!r.ok) assert.equal(r.error, 'retention-not-allowed-for-type');
+    assert.equal(isOk(r), true);
+    if (r.ok) {
+      const iss = r.value.payables.children.find((c) => c.retentionType === 'ISS');
+      assert.ok(iss, 'deveria gerar o filho de retenção ISS');
+      assert.equal(iss?.value.cents, 5000);
+    }
   });
 });

@@ -55,7 +55,7 @@ export type CreateDocumentOutput = Readonly<{
 const EMPTY_RETENTIONS: ReadonlySet<RetentionType> = new Set();
 const ALLOWED_RETENTIONS: Readonly<Partial<Record<DocumentType, ReadonlySet<RetentionType>>>> = {
   'NFS-e': new Set<RetentionType>(['ISS', 'IRRF', 'INSS', 'CSRF']),
-  RPA: new Set<RetentionType>(['IRRF', 'INSS', 'CSRF']),
+  RPA: new Set<RetentionType>(['ISS', 'IRRF', 'INSS', 'CSRF']),
 };
 
 const retentionsAllowed = (type: DocumentType, retentions: readonly Retention[]): boolean => {
