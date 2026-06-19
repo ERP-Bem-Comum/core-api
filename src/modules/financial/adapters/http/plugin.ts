@@ -50,6 +50,7 @@ import {
   suggestionsToDto,
   accountStatementToDto,
   transactionReconciliationToDto,
+  reconciliationPeriodsToDto,
 } from './dto.ts';
 import type { DocumentListFilter } from '../../domain/document/query.ts';
 import type { FinancialHttpDeps } from './composition.ts';
@@ -95,6 +96,8 @@ import {
   accountStatementQuerySchema,
   accountStatementResponseSchema,
   transactionReconciliationResponseSchema,
+  reconciliationPeriodsQuerySchema,
+  reconciliationPeriodsResponseSchema,
 } from './schemas.ts';
 
 export type FinancialHttpHooks = Readonly<{
@@ -728,6 +731,24 @@ const financialRoutes =
           }),
           { ok: 201 },
         );
+      },
+    });
+
+    // GET /financial/reconciliation-periods?debitAccountRef=... — lista períodos da conta (#173).
+    scope.route({
+      method: 'GET',
+      url: '/financial/reconciliation-periods',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationRead)],
+      schema: {
+        querystring: reconciliationPeriodsQuerySchema,
+        response: { 200: reconciliationPeriodsResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.listReconciliationPeriods({
+          debitAccountRef: req.query.debitAccountRef,
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(reconciliationPeriodsToDto(result.value)), { ok: 200 });
       },
     });
 

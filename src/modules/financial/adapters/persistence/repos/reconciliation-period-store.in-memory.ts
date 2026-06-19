@@ -37,4 +37,9 @@ export const createInMemoryReconciliationPeriodStore = (
     }
     return Promise.resolve(ok(false));
   },
+
+  listByAccount: async (
+    debitAccountRef: string,
+  ): Promise<Result<readonly ReconciliationPeriod[], ReconciliationPeriodStoreError>> =>
+    Promise.resolve(ok([...periods.values()].filter((p) => p.debitAccountRef === debitAccountRef))),
 });

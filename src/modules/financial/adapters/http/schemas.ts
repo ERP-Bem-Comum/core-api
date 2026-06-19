@@ -618,3 +618,23 @@ export const transactionReconciliationResponseSchema = z.object({
 export type TransactionReconciliationResponseDto = z.infer<
   typeof transactionReconciliationResponseSchema
 >;
+
+// ─── Listar períodos de conciliação por conta (#173) ───────────────────────────
+
+export const reconciliationPeriodsQuerySchema = z.object({
+  debitAccountRef: z.uuid(),
+});
+
+const reconciliationPeriodItemSchema = z.object({
+  id: z.uuid(),
+  debitAccountRef: z.string(),
+  periodStart: z.iso.date(),
+  periodEnd: z.iso.date(),
+  status: z.enum(['Open', 'Closed']),
+  closedAt: z.iso.datetime().nullable(),
+  closedBy: z.string().nullable(),
+});
+
+export const reconciliationPeriodsResponseSchema = z.array(reconciliationPeriodItemSchema);
+
+export type ReconciliationPeriodsResponseDto = z.infer<typeof reconciliationPeriodsResponseSchema>;

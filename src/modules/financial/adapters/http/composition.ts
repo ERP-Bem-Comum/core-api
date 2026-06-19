@@ -73,6 +73,7 @@ import { closeCedenteAccount } from '../../application/use-cases/close-cedente-a
 import { editCedenteAccount } from '../../application/use-cases/edit-cedente-account.ts';
 import { getAccountStatement } from '../../application/use-cases/get-account-statement.ts';
 import { getTransactionReconciliation } from '../../application/use-cases/get-transaction-reconciliation.ts';
+import { listReconciliationPeriods } from '../../application/use-cases/list-reconciliation-periods.ts';
 import { createStatementBackedAccountHistory } from '../persistence/repos/cedente-account-history.from-statements.ts';
 import type { DocumentRepository } from '../../domain/document/repository.ts';
 import type { FinancialTimelineRepository } from '../../domain/timeline/repository.ts';
@@ -143,6 +144,8 @@ export type FinancialHttpDeps = Readonly<{
   getAccountStatement: ReturnType<typeof getAccountStatement>;
   /** Lookup da conciliação ativa por transação (#175) — GET /statement-transactions/:id/reconciliation. */
   getTransactionReconciliation: ReturnType<typeof getTransactionReconciliation>;
+  /** Lista períodos de conciliação por conta (#173) — GET /reconciliation-periods. */
+  listReconciliationPeriods: ReturnType<typeof listReconciliationPeriods>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -310,6 +313,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     getTransactionReconciliation: getTransactionReconciliation({
       reconciliationRepo: pools.reconciliationRepo,
     }),
+    listReconciliationPeriods: listReconciliationPeriods({ periodStore: pools.periodStore }),
     shutdown: pools.shutdown,
   };
 };
