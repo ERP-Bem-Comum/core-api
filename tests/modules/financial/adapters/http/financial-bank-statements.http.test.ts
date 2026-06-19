@@ -21,11 +21,13 @@ const READER = 'reconciliation:read';
 const PLAIN = 'none'; // token válido, sem permissões de conciliação → 403
 
 const TEST_USER_ID = '99999999-9999-4999-8999-999999999999';
+const CREATOR = 'bank-account:write'; // cria as contas-cedente (guard de integridade #160)
 // Conta-débito distinta por cenário: o dedup é por (conta, fitid) e o FITID sintético do CSV é
 // determinístico — reimportar o mesmo CSV na mesma conta descartaria tudo (comportamento esperado).
-const ACCOUNT_POST = 'a1111111-1111-4111-8111-111111111111';
-const ACCOUNT_GET = 'a2222222-2222-4222-8222-222222222222';
-const ACCOUNT_MISC = 'a3333333-3333-4333-8333-333333333333';
+// Ids reais atribuídos no before() (o import exige cedente existente — #160).
+let ACCOUNT_POST = '';
+let ACCOUNT_GET = '';
+let ACCOUNT_MISC = '';
 
 const requireAuth: preHandlerAsyncHookHandler = async (req, reply) => {
   const auth = req.headers.authorization;
@@ -74,6 +76,31 @@ before(async () => {
       await financialDeps.shutdown();
     },
   };
+
+  // #160: o import exige que `debitAccountRef` referencie um cedente existente. Cria 3 via API
+  // (cada uma com chave natural distinta) e usa os ids reais retornados nos cenários.
+  const createAccount = async (accountNumber: string): Promise<string> => {
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/financial/cedente-accounts',
+      headers: { authorization: `Bearer ${CREATOR}` },
+      payload: {
+        bankCode: '237',
+        bankName: 'Bradesco',
+        type: 'corrente',
+        agency: '1234',
+        accountNumber,
+        accountDigit: '1',
+        document: '12345678000190',
+        nickname: `Conta ${accountNumber}`,
+      },
+    });
+    if (res.statusCode !== 201) throw new Error(`setup cedente: ${res.body}`);
+    return (res.json() as { id: string }).id;
+  };
+  ACCOUNT_POST = await createAccount('100001');
+  ACCOUNT_GET = await createAccount('100002');
+  ACCOUNT_MISC = await createAccount('100003');
 });
 
 after(async () => {
