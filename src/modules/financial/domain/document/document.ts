@@ -291,6 +291,44 @@ export const adjust = (input: AdjustDocumentInput): Result<AdjustDocumentOutput,
   );
 };
 
+export type EditMetadataInput = Readonly<{
+  document: OpenDocument | ApprovedDocument;
+  payables: Payables;
+  dueDate?: Date;
+  description?: string | null;
+}>;
+
+export type EditMetadataOutput = Readonly<{
+  document: OpenDocument | ApprovedDocument;
+  payables: Payables;
+  events: readonly DocumentEvent[];
+}>;
+
+// Ajuste leve (#165): edita só dueDate/description, válido em Open E Approved. NÃO regenera os
+// títulos-filho — preserva ids e status; apenas propaga o novo dueDate aos payables in-place
+// (mesma semântica do adjust completo, que leva o dueDate aos filhos). O status é preservado.
+export const editMetadata = (
+  input: EditMetadataInput,
+): Result<EditMetadataOutput, DocumentError> => {
+  const d = input.document;
+  const dueDate = input.dueDate ?? d.dueDate;
+  const description = input.description !== undefined ? input.description : d.description;
+
+  const propagate = (p: Payable): Payable => immutable<Payable>({ ...p, dueDate });
+  const payables = immutable<Payables>({
+    parent: propagate(input.payables.parent),
+    children: input.payables.children.map(propagate),
+  });
+
+  const document = immutable<OpenDocument | ApprovedDocument>({ ...d, dueDate, description });
+  const payableIds = [payables.parent.id, ...payables.children.map((c) => c.id)];
+  const events: readonly DocumentEvent[] = [
+    { type: 'DocumentSaved', documentId: d.id, payableIds },
+  ];
+
+  return ok(immutable<EditMetadataOutput>({ document, payables, events }));
+};
+
 export type UndoApprovalInput = Readonly<{
   document: ApprovedDocument;
   payables: Payables;
@@ -358,6 +396,15 @@ export const cancel = (input: CancelDocumentInput): Result<CancelDocumentOutput,
   const payableIds = [input.payables.parent.id, ...input.payables.children.map((c) => c.id)];
   const events: readonly DocumentEvent[] = [
     { type: 'DocumentCancelled', documentId: input.document.id, payableIds },
+  ];
+  return ok(immutable<CancelDocumentOutput>({ events }));
+};
+
+// Descarte de rascunho (#166): Draft não gera títulos-filho, então o cancelamento emite
+// `DocumentCancelled` com `payableIds` vazio. Hard delete físico é do repositório.
+export const cancelDraft = (draft: DraftDocument): Result<CancelDocumentOutput, DocumentError> => {
+  const events: readonly DocumentEvent[] = [
+    { type: 'DocumentCancelled', documentId: draft.id, payableIds: [] },
   ];
   return ok(immutable<CancelDocumentOutput>({ events }));
 };

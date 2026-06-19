@@ -99,6 +99,56 @@ export const adjustDocument =
     const found = await deps.repo.findById(id.value);
     if (!found.ok) return err(found.error);
 
+    const hasValueChanges =
+      cmd.grossValueCents !== undefined ||
+      cmd.sourceDiscountsCents !== undefined ||
+      cmd.discountsCents !== undefined ||
+      cmd.penaltyCents !== undefined ||
+      cmd.interestCents !== undefined ||
+      cmd.retentions !== undefined;
+
+    // #165: ajuste leve (só dueDate/description) — aceito em Open E Approved, sem regenerar os
+    // títulos-filho (preserva ids/status, propaga dueDate in-place). Campos de valor seguem o
+    // caminho completo abaixo (só Open).
+    if (!hasValueChanges) {
+      const doc = found.value.document;
+      if (doc.status !== 'Open' && doc.status !== 'Approved') {
+        return err('invalid-state-transition');
+      }
+      if (found.value.payables === null) return err('document-repository-failure');
+
+      const edited = Document.editMetadata({
+        document: doc,
+        payables: found.value.payables,
+        ...(cmd.dueDate !== undefined ? { dueDate: cmd.dueDate } : {}),
+        ...(cmd.description !== undefined ? { description: cmd.description } : {}),
+      });
+      if (!edited.ok) return err(edited.error);
+
+      const event = edited.value.events[0];
+      if (event === undefined) return err('document-repository-failure');
+      const entries = buildTimelineEntries(deps.clock, {
+        event,
+        before: doc,
+        after: edited.value.document,
+        payablesBefore: found.value.payables,
+        payablesAfter: edited.value.payables,
+        actor: null,
+      });
+
+      const saved = await deps.repo.save(
+        { document: edited.value.document, payables: edited.value.payables },
+        entries,
+        cmd.expectedVersion,
+      );
+      if (!saved.ok) return err(saved.error);
+
+      const published = await deps.outbox.append(edited.value.events);
+      if (!published.ok) return err(published.error);
+
+      return ok(undefined);
+    }
+
     const open = Document.parseOpen(found.value.document);
     if (!open.ok) return err(open.error);
     if (found.value.payables === null) return err('document-repository-failure');

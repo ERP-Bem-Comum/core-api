@@ -25,7 +25,23 @@ export const cancelDocument =
     const found = await deps.repo.findById(id.value);
     if (!found.ok) return err(found.error);
 
-    const open = Document.parseOpen(found.value.document);
+    const doc = found.value.document;
+
+    // #166: rascunho (Draft) também pode ser descartado — não tem títulos-filho.
+    if (doc.status === 'Draft') {
+      const draft = Document.parseDraft(doc);
+      if (!draft.ok) return err(draft.error);
+      const cancelled = Document.cancelDraft(draft.value);
+      if (!cancelled.ok) return err(cancelled.error);
+      const deleted = await deps.repo.delete(id.value, cmd.expectedVersion);
+      if (!deleted.ok) return err(deleted.error);
+      const published = await deps.outbox.append(cancelled.value.events);
+      if (!published.ok) return err(published.error);
+      return ok(undefined);
+    }
+
+    // Open: hard delete junto dos títulos-filho. Approved não é cancelável (invalid-state-transition).
+    const open = Document.parseOpen(doc);
     if (!open.ok) return err(open.error);
     if (found.value.payables === null) return err('document-repository-failure');
 
