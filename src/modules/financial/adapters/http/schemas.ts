@@ -504,3 +504,57 @@ export const reconciliationPeriodIdParamSchema = z.object({
 export const exportReconciliationQuerySchema = z.object({
   format: z.enum(['ofx', 'csv']),
 });
+
+// ─── Conta-cedente (019 — CRUD + encerrar) ─────────────────────────────────────
+
+const accountTypeSchema = z.enum(['corrente', 'poupanca', 'investimento']);
+
+export const createCedenteAccountBodySchema = z.object({
+  bankCode: z.string().min(1).max(10),
+  bankName: z.string().min(1).max(120).optional(),
+  type: accountTypeSchema,
+  agency: z.string().min(1).max(10),
+  accountNumber: z.string().min(1).max(20),
+  accountDigit: z.string().max(2),
+  convenio: z.string().max(20).optional(),
+  document: z.string().min(1).max(18),
+  nickname: z.string().min(1).max(120).optional(),
+  openingBalanceCents: centsStringSchema.optional(),
+  openingBalanceDate: z.iso.date().optional(),
+});
+
+export type CreateCedenteAccountBody = z.infer<typeof createCedenteAccountBodySchema>;
+
+export const editCedenteAccountBodySchema = z.object({
+  bankCode: z.string().min(1).max(10).optional(),
+  agency: z.string().min(1).max(10).optional(),
+  accountNumber: z.string().min(1).max(20).optional(),
+  accountDigit: z.string().max(2).optional(),
+  type: accountTypeSchema.optional(),
+  nickname: z.string().min(1).max(120).optional(),
+  bankName: z.string().min(1).max(120).optional(),
+});
+
+export const cedenteAccountIdParamSchema = z.object({
+  id: z.uuid().meta({ description: 'UUID da conta-cedente' }),
+});
+
+export const cedenteAccountResponseSchema = z.object({
+  id: z.uuid(),
+  bankCode: z.string(),
+  bankName: z.string().nullable(),
+  type: z.string().nullable(),
+  agency: z.string(),
+  accountNumber: z.string(),
+  accountDigit: z.string(),
+  convenio: z.string(),
+  document: z.string(),
+  status: z.string(),
+  nickname: z.string().nullable(),
+  openingBalanceCents: z.string().nullable(),
+  openingBalanceDate: z.string().nullable(),
+});
+
+export const cedenteAccountListResponseSchema = z.array(cedenteAccountResponseSchema);
+
+export type CedenteAccountResponseDto = z.infer<typeof cedenteAccountResponseSchema>;

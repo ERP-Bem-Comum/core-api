@@ -15,12 +15,16 @@ import { createDrizzleCedenteAccountStore } from '#src/modules/financial/adapter
 import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
 import { create, close } from '#src/modules/financial/domain/cedente/cedente-account.ts';
 
+// W1 (FR-016): cada chamada gera uma CHAVE NATURAL distinta (accountNumber via contador) — o
+// UNIQUE INDEX da migration 0009 colidiria se dois testes reusassem 237/1234/567890/1.
+let naturalKeySeq = 0;
 const buildAccount = () => {
+  naturalKeySeq += 1;
   const r = create({
     id: CedenteAccountId.generate(),
     bankCode: '237',
     agency: '1234',
-    accountNumber: '567890',
+    accountNumber: `5678${String(naturalKeySeq).padStart(2, '0')}`,
     accountDigit: '1',
     convenio: '9999999',
     document: '12345678000190',
@@ -92,6 +96,80 @@ if (!process.env['MYSQL_INTEGRATION']) {
         } else {
           assert.fail('conta não encontrada após upsert');
         }
+      }
+    });
+
+    // ─── Extensão conciliação (feature 019 / FIN-RECON-CEDENTE-ACCOUNT) ───
+    // W1: `buildAccount()` agora gera chave natural distinta por chamada (contador) → os CA5
+    // acima não colidem com o UNIQUE INDEX de FR-016 (migration 0009).
+
+    it('019/round-trip: campos de conciliação persistem e retornam', async () => {
+      const store = createDrizzleCedenteAccountStore(handle);
+      const r = create({
+        id: CedenteAccountId.generate(),
+        bankCode: '341',
+        agency: '4444',
+        accountNumber: '111222',
+        accountDigit: '3',
+        convenio: '9999999',
+        document: '98765432000100',
+        type: 'poupanca',
+        nickname: 'Conta poupança',
+        bankName: 'Itaú',
+        openingBalanceCents: 250000,
+        openingBalanceDate: '2026-01-01',
+      } as never);
+      assert.equal(r.ok, true);
+      if (!r.ok) return;
+
+      const saved = await store.save(r.value);
+      assert.equal(saved.ok, true);
+
+      const found = await store.findById(r.value.id);
+      assert.equal(found.ok, true);
+      if (found.ok && found.value !== null) {
+        const v = found.value as Record<string, unknown>;
+        assert.equal(v['type'], 'poupanca');
+        assert.equal(v['nickname'], 'Conta poupança');
+        assert.equal(v['bankName'], 'Itaú');
+        assert.equal(v['openingBalanceCents'], 250000);
+      } else {
+        assert.fail('conta não encontrada após save (campos de conciliação)');
+      }
+    });
+
+    it('019/FR-016: UNIQUE (banco+agência+conta+dígito) impede 2ª conta com mesma chave natural', async () => {
+      const store = createDrizzleCedenteAccountStore(handle);
+      const naturalKey = {
+        bankCode: '001',
+        agency: '7777',
+        accountNumber: '333444',
+        accountDigit: '5',
+        convenio: '9999999',
+        document: '11122233000155',
+      };
+
+      const a = create({ id: CedenteAccountId.generate(), ...naturalKey });
+      assert.equal(a.ok, true);
+      if (!a.ok) return;
+      await store.save(a.value);
+
+      const b = create({ id: CedenteAccountId.generate(), ...naturalKey });
+      assert.equal(b.ok, true);
+      if (!b.ok) return;
+      await store.save(b.value);
+
+      // Com o UNIQUE INDEX, a 2ª conta (id diferente, mesma chave natural) NÃO gera linha nova:
+      // o ON DUPLICATE KEY UPDATE colide na chave natural e atualiza a linha de A; o id de B nunca
+      // é inserido. Sem o índice (estado atual) a linha de B existe → este assert falha (RED).
+      const foundB = await store.findById(b.value.id);
+      assert.equal(foundB.ok, true);
+      if (foundB.ok) {
+        assert.equal(
+          foundB.value,
+          null,
+          'a 2ª conta com chave natural duplicada não deveria existir (UNIQUE FR-016)',
+        );
       }
     });
   });

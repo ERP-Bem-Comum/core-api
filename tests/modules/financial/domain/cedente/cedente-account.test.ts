@@ -82,3 +82,52 @@ describe('financial/domain/cedente/cedente-account — status', () => {
     }
   });
 });
+
+// ─── Extensão conciliação (feature 019 / FIN-RECON-CEDENTE-ACCOUNT) — W0 RED ───
+// create() ainda não aceita/valida os campos de conciliação; estes casos falham até a extensão.
+describe('financial/domain/cedente/cedente-account — extensão conciliação (019)', () => {
+  const conciliacaoInput = (over: Record<string, unknown> = {}) => ({
+    ...validInput(),
+    type: 'corrente',
+    nickname: 'Conta principal',
+    bankName: 'Bradesco',
+    ...over,
+  });
+
+  it('CA6: campos de conciliação válidos → ok e refletidos no agregado', () => {
+    const r = create(conciliacaoInput() as never);
+    assert.equal(r.ok, true);
+    if (r.ok) {
+      assert.equal((r.value as { type?: string }).type, 'corrente');
+      assert.equal((r.value as { nickname?: string }).nickname, 'Conta principal');
+      assert.equal((r.value as { bankName?: string }).bankName, 'Bradesco');
+    }
+  });
+
+  it('CA7: type fora de corrente|poupanca|investimento → invalid-account-type', () => {
+    const r = create(conciliacaoInput({ type: 'salario' }) as never);
+    assert.equal(isErr(r), true);
+    if (!r.ok) assert.equal(r.error, 'invalid-account-type');
+  });
+
+  it('CA8: saldo de abertura sem data → opening-balance-requires-date', () => {
+    const r = create(conciliacaoInput({ openingBalanceCents: 150000 }) as never);
+    assert.equal(isErr(r), true);
+    if (!r.ok) assert.equal(r.error, 'opening-balance-requires-date');
+  });
+
+  it('CA8: data de saldo sem valor → opening-balance-requires-date', () => {
+    const r = create(conciliacaoInput({ openingBalanceDate: '2026-01-01' }) as never);
+    assert.equal(isErr(r), true);
+    if (!r.ok) assert.equal(r.error, 'opening-balance-requires-date');
+  });
+
+  it('CA9: saldo de abertura + data → ok (par coeso)', () => {
+    const r = create(
+      conciliacaoInput({ openingBalanceCents: 150000, openingBalanceDate: '2026-01-01' }) as never,
+    );
+    assert.equal(r.ok, true);
+    if (r.ok)
+      assert.equal((r.value as { openingBalanceCents?: number }).openingBalanceCents, 150000);
+  });
+});

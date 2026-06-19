@@ -19,6 +19,9 @@ export const FINANCIAL_PERMISSION = {
   reconciliationRead: 'reconciliation:read',
   reconciliationWrite: 'reconciliation:write',
   reconciliationClose: 'reconciliation:close',
+  // bank-account: conta-cedente da organização (019 — CRUD + encerrar)
+  bankAccountRead: 'bank-account:read',
+  bankAccountWrite: 'bank-account:write',
 } as const;
 
 export type FinancialPermission = (typeof FINANCIAL_PERMISSION)[keyof typeof FINANCIAL_PERMISSION];

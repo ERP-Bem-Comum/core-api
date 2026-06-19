@@ -1,7 +1,7 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "89a9308d-d72f-462a-8a07-f652fc8b6dd4",
+  "id": "7180d311-808b-4c14-ac27-626e54b70430",
   "prevId": "342a8411-3075-4d57-840b-e74a70aec356",
   "tables": {
     "fin_bank_statements": {
@@ -158,9 +158,50 @@
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
+        },
+        "type": {
+          "name": "type",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "nickname": {
+          "name": "nickname",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "bank_name": {
+          "name": "bank_name",
+          "type": "varchar(120)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "opening_balance_cents": {
+          "name": "opening_balance_cents",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "opening_balance_date": {
+          "name": "opening_balance_date",
+          "type": "date",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "fin_cedente_accounts_natural_key_uq": {
+          "name": "fin_cedente_accounts_natural_key_uq",
+          "columns": ["bank_code", "agency", "account_number", "account_digit"],
+          "isUnique": true
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {
         "fin_cedente_accounts_id": {
@@ -177,6 +218,10 @@
         "fin_cedente_accounts_next_nsa_chk": {
           "name": "fin_cedente_accounts_next_nsa_chk",
           "value": "`fin_cedente_accounts`.`next_nsa` >= 1"
+        },
+        "fin_cedente_accounts_type_chk": {
+          "name": "fin_cedente_accounts_type_chk",
+          "value": "`fin_cedente_accounts`.`type` IS NULL OR `fin_cedente_accounts`.`type` IN ('corrente','poupanca','investimento')"
         }
       }
     },
@@ -1302,7 +1347,7 @@
         },
         "entry_type": {
           "name": "entry_type",
-          "type": "varchar(16)",
+          "type": "varchar(32)",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -1377,10 +1422,6 @@
         "fin_statement_transactions_movement_chk": {
           "name": "fin_statement_transactions_movement_chk",
           "value": "`fin_statement_transactions`.`movement` IN ('Debit','Credit')"
-        },
-        "fin_statement_transactions_entry_type_chk": {
-          "name": "fin_statement_transactions_entry_type_chk",
-          "value": "`fin_statement_transactions`.`entry_type` IN ('PIX','TED','DOC','Fee','Boleto','DARF','Investment','Redemption','Transfer','Other')"
         },
         "fin_statement_transactions_recon_status_chk": {
           "name": "fin_statement_transactions_recon_status_chk",

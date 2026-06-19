@@ -67,6 +67,11 @@ import { recordManualEntry } from '../../application/use-cases/record-manual-ent
 import { confirmBatch } from '../../application/use-cases/confirm-batch.ts';
 import { closeReconciliationPeriod } from '../../application/use-cases/close-reconciliation-period.ts';
 import { exportReconciliation } from '../../application/use-cases/export-reconciliation.ts';
+import { createCedenteAccount } from '../../application/use-cases/create-cedente-account.ts';
+import { listCedenteAccounts } from '../../application/use-cases/list-cedente-accounts.ts';
+import { closeCedenteAccount } from '../../application/use-cases/close-cedente-account.ts';
+import { editCedenteAccount } from '../../application/use-cases/edit-cedente-account.ts';
+import { createStatementBackedAccountHistory } from '../persistence/repos/cedente-account-history.from-statements.ts';
 import type { DocumentRepository } from '../../domain/document/repository.ts';
 import type { FinancialTimelineRepository } from '../../domain/timeline/repository.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
@@ -122,6 +127,16 @@ export type FinancialHttpDeps = Readonly<{
   closeReconciliationPeriod: ReturnType<typeof closeReconciliationPeriod>;
   /** Exporta conciliação OFX/CSV (US6) — GET /reconciliation-periods/:id/export. */
   exportReconciliation: ReturnType<typeof exportReconciliation>;
+  /** Conta-cedente (019) — POST /cedente-accounts. */
+  createCedenteAccount: ReturnType<typeof createCedenteAccount>;
+  /** Conta-cedente (019) — GET /cedente-accounts. */
+  listCedenteAccounts: ReturnType<typeof listCedenteAccounts>;
+  /** Conta-cedente (019) — leitura direta para GET /cedente-accounts/:id. */
+  findCedenteAccountById: CedenteAccountStore['findById'];
+  /** Conta-cedente (019) — POST /cedente-accounts/:id/close. */
+  closeCedenteAccount: ReturnType<typeof closeCedenteAccount>;
+  /** Conta-cedente (019) — PATCH /cedente-accounts/:id. */
+  editCedenteAccount: ReturnType<typeof editCedenteAccount>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -233,6 +248,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       parser: bankStatementParser,
       repo: pools.statementRepo,
       periods: pools.periodStore,
+      cedenteStore: pools.cedenteStore,
       clock,
       outbox: outbox.port,
     }),
@@ -272,6 +288,14 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       periodStore: pools.periodStore,
       statements: pools.statementRepo,
       exporter: reconciliationExporter,
+    }),
+    createCedenteAccount: createCedenteAccount({ cedenteStore: pools.cedenteStore }),
+    listCedenteAccounts: listCedenteAccounts({ cedenteStore: pools.cedenteStore }),
+    findCedenteAccountById: pools.cedenteStore.findById,
+    closeCedenteAccount: closeCedenteAccount({ cedenteStore: pools.cedenteStore }),
+    editCedenteAccount: editCedenteAccount({
+      cedenteStore: pools.cedenteStore,
+      accountHistory: createStatementBackedAccountHistory(pools.statementRepo),
     }),
     shutdown: pools.shutdown,
   };

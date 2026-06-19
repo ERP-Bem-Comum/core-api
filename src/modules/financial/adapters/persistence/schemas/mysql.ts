@@ -500,10 +500,27 @@ export const finCedenteAccounts = mysqlTable(
     document: varchar('document', { length: 20 }).notNull(),
     status: varchar('status', { length: 8 }).notNull(),
     nextNsa: int('next_nsa').notNull(),
+    // Extensão conciliação (019) — nullable (ALTER ADD COLUMN não-quebrante, migration 0009).
+    type: varchar('type', { length: 16 }),
+    nickname: varchar('nickname', { length: 120 }),
+    bankName: varchar('bank_name', { length: 120 }),
+    openingBalanceCents: bigint('opening_balance_cents', { mode: 'number' }),
+    openingBalanceDate: date('opening_balance_date', { mode: 'string' }),
   },
   (t) => [
     check('fin_cedente_accounts_status_chk', sql`${t.status} IN ('Active','Closed')`),
     check('fin_cedente_accounts_next_nsa_chk', sql`${t.nextNsa} >= 1`),
+    check(
+      'fin_cedente_accounts_type_chk',
+      sql`${t.type} IS NULL OR ${t.type} IN ('corrente','poupanca','investimento')`,
+    ),
+    // FR-016: unicidade por chave natural (banco + agência + conta + dígito).
+    uniqueIndex('fin_cedente_accounts_natural_key_uq').on(
+      t.bankCode,
+      t.agency,
+      t.accountNumber,
+      t.accountDigit,
+    ),
   ],
 );
 
