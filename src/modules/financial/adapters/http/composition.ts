@@ -72,6 +72,7 @@ import { listCedenteAccounts } from '../../application/use-cases/list-cedente-ac
 import { closeCedenteAccount } from '../../application/use-cases/close-cedente-account.ts';
 import { editCedenteAccount } from '../../application/use-cases/edit-cedente-account.ts';
 import { getAccountStatement } from '../../application/use-cases/get-account-statement.ts';
+import { getTransactionReconciliation } from '../../application/use-cases/get-transaction-reconciliation.ts';
 import { createStatementBackedAccountHistory } from '../persistence/repos/cedente-account-history.from-statements.ts';
 import type { DocumentRepository } from '../../domain/document/repository.ts';
 import type { FinancialTimelineRepository } from '../../domain/timeline/repository.ts';
@@ -140,6 +141,8 @@ export type FinancialHttpDeps = Readonly<{
   editCedenteAccount: ReturnType<typeof editCedenteAccount>;
   /** Read-model do extrato (#139) — GET /cedente-accounts/:id/statement. */
   getAccountStatement: ReturnType<typeof getAccountStatement>;
+  /** Lookup da conciliação ativa por transação (#175) — GET /statement-transactions/:id/reconciliation. */
+  getTransactionReconciliation: ReturnType<typeof getTransactionReconciliation>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -303,6 +306,9 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     getAccountStatement: getAccountStatement({
       cedenteStore: pools.cedenteStore,
       statements: pools.statementRepo,
+    }),
+    getTransactionReconciliation: getTransactionReconciliation({
+      reconciliationRepo: pools.reconciliationRepo,
     }),
     shutdown: pools.shutdown,
   };

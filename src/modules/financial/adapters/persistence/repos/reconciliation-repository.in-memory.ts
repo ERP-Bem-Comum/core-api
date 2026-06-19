@@ -86,6 +86,17 @@ export const createInMemoryReconciliationRepository = (
     ): Promise<Result<Reconciliation | null, ReconciliationRepositoryError>> =>
       Promise.resolve(ok(reconciliations.get(String(id)) ?? null)),
 
+    findActiveByTransaction: async (
+      transactionId: StatementTransactionId,
+    ): Promise<Result<Reconciliation | null, ReconciliationRepositoryError>> => {
+      for (const rec of reconciliations.values()) {
+        if (rec.status === 'Active' && String(rec.transactionId) === String(transactionId)) {
+          return Promise.resolve(ok(rec));
+        }
+      }
+      return Promise.resolve(ok(null));
+    },
+
     undo: async (
       reconciliation: Reconciliation,
     ): Promise<Result<void, ReconciliationRepositoryError>> => {

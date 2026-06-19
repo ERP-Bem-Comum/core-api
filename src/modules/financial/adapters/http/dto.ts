@@ -13,10 +13,12 @@ import type { Payables } from '../../domain/payable/types.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
 import type { StatementTransaction } from '../../domain/statement/types.ts';
 import type { StatementView } from '../../domain/statement/statement-view.ts';
+import type { Reconciliation } from '../../domain/reconciliation/types.ts';
 import type { PaidPayableView } from '../../application/ports/payable-reconciliation-view.ts';
 import type { MatchSuggestion } from '../../application/use-cases/suggest-matches.ts';
 import type {
   AccountStatementResponseDto,
+  TransactionReconciliationResponseDto,
   DocumentResponseDto,
   DocumentSummaryDto,
   DocumentTimelineResponseDto,
@@ -208,5 +210,22 @@ export const accountStatementToDto = (view: StatementView): AccountStatementResp
       runningBalanceCents: String(l.runningBalanceCents),
       reconciliationStatus: l.reconciliationStatus,
     })),
+  })),
+});
+
+/** Serializa o detalhe da conciliação ativa de uma transação (#175). Money em string; data ISO. */
+export const transactionReconciliationToDto = (
+  r: Reconciliation,
+): TransactionReconciliationResponseDto => ({
+  id: String(r.id),
+  transactionId: String(r.transactionId),
+  type: r.type,
+  status: r.status,
+  reconciledBy: r.audit.reconciledBy,
+  reconciledAt: r.audit.reconciledAt.toISOString(),
+  differenceCents: r.difference !== null ? String(r.difference.valueCents) : null,
+  items: r.items.map((i) => ({
+    payableId: String(i.payableId),
+    reconciledValueCents: String(i.reconciledValueCents),
   })),
 });

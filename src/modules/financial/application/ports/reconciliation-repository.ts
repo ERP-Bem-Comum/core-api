@@ -23,6 +23,11 @@ export type ReconciliationRepository = Readonly<{
   findById: (
     id: ReconciliationId,
   ) => Promise<Result<Reconciliation | null, ReconciliationRepositoryError>>;
+  // Lookup reverso (#175): a conciliação ATIVA de uma transação (null se não houver). Destrava o
+  // "Desfazer" pós-reload e o modal de detalhes — `fin_reconciliations` tem índice em transaction_id.
+  findActiveByTransaction: (
+    transactionId: StatementTransactionId,
+  ) => Promise<Result<Reconciliation | null, ReconciliationRepositoryError>>;
   // `Active→Undone` (preserva registro), `Reconciled→Paid` nos títulos e `Reconciled→Pending` na transação.
   undo: (reconciliation: Reconciliation) => Promise<Result<void, ReconciliationRepositoryError>>;
 }>;

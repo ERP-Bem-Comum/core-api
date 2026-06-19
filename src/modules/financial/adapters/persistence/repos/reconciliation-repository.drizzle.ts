@@ -140,6 +140,40 @@ export const createDrizzleReconciliationRepository = (
       }
     },
 
+    findActiveByTransaction: async (
+      transactionId: StatementTransactionId,
+    ): Promise<Result<Reconciliation | null, ReconciliationRepositoryError>> => {
+      try {
+        const rows = await db
+          .select()
+          .from(finReconciliations)
+          .where(
+            and(
+              eq(finReconciliations.transactionId, String(transactionId)),
+              eq(finReconciliations.status, 'Active'),
+            ),
+          )
+          .limit(1);
+        const row = rows[0];
+        if (row === undefined) return ok(null);
+
+        const itemRows = await db
+          .select()
+          .from(finReconciliationItems)
+          .where(eq(finReconciliationItems.reconciliationId, row.id));
+
+        const mapped = toDomain(row, itemRows);
+        if (!mapped.ok) {
+          logStore('findActiveByTransaction:map', mapped.error);
+          return err('reconciliation-repository-failure');
+        }
+        return ok(mapped.value);
+      } catch (cause) {
+        logStore('findActiveByTransaction', cause);
+        return err('reconciliation-repository-failure');
+      }
+    },
+
     undo: async (
       reconciliation: Reconciliation,
     ): Promise<Result<void, ReconciliationRepositoryError>> => {
