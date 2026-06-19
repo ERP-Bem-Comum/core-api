@@ -83,12 +83,40 @@ describe('PermissionCatalog.all', () => {
     assert.equal(PermissionCatalog.all.includes(parseOrThrow('contract:mass-approve')), true);
   });
 
+  it('#176: contem reconciliation:* (conciliacao bancaria — RBAC dos endpoints /reconciliation)', () => {
+    const required = [
+      'reconciliation:import',
+      'reconciliation:read',
+      'reconciliation:write',
+      'reconciliation:close',
+    ];
+    for (const name of required) {
+      assert.equal(
+        PermissionCatalog.all.includes(parseOrThrow(name)),
+        true,
+        `catalogo deve conter ${name}`,
+      );
+    }
+  });
+
+  it('#138: contem bank-account:* (conta-cedente — RBAC dos endpoints /cedente-accounts)', () => {
+    for (const name of ['bank-account:read', 'bank-account:write']) {
+      assert.equal(
+        PermissionCatalog.all.includes(parseOrThrow(name)),
+        true,
+        `catalogo deve conter ${name}`,
+      );
+    }
+  });
+
   it('CA5: contem exatamente o conjunto conhecido do sistema (integridade - sem entrada perdida por typo)', () => {
     // build() filtra entradas invalidas em vez de lancar (rule domain.md: sem throw).
     // Esta verificacao garante que nenhuma permission auditada foi descartada silenciosamente.
     const expected = [
       'act:read',
       'act:write',
+      'bank-account:read',
+      'bank-account:write',
       'collaborator:read',
       'collaborator:write',
       'contract:delete',
@@ -109,6 +137,10 @@ describe('PermissionCatalog.all', () => {
       'program:deactivate',
       'program:read',
       'program:write',
+      'reconciliation:close',
+      'reconciliation:import',
+      'reconciliation:read',
+      'reconciliation:write',
       'role:assign',
       'role:create',
       'role:read',
