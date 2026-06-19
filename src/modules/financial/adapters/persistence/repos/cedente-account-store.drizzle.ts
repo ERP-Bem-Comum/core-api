@@ -3,13 +3,14 @@
 // Boundary: todo try/catch converte para Result; nenhum Error cruza a borda
 // (.claude/rules/adapters.md §"converter para Result na borda").
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type { CedenteAccount } from '#src/modules/financial/domain/cedente/types.ts';
 import type { CedenteAccountId } from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
 import type {
+  CedenteAccountNaturalKey,
   CedenteAccountStore,
   CedenteAccountStoreError,
 } from '#src/modules/financial/application/ports/cedente-account-store.ts';
@@ -51,6 +52,56 @@ export const createDrizzleCedenteAccountStore = (
       }
     },
 
+    findByNaturalKey: async (
+      key: CedenteAccountNaturalKey,
+    ): Promise<Result<CedenteAccount | null, CedenteAccountStoreError>> => {
+      try {
+        const rows = await db
+          .select()
+          .from(finCedenteAccounts)
+          .where(
+            and(
+              eq(finCedenteAccounts.bankCode, key.bankCode),
+              eq(finCedenteAccounts.agency, key.agency),
+              eq(finCedenteAccounts.accountNumber, key.accountNumber),
+              eq(finCedenteAccounts.accountDigit, key.accountDigit),
+            ),
+          )
+          .limit(1);
+        const row = rows[0];
+        if (row === undefined) return ok(null);
+
+        const mapped = toDomain(row);
+        if (!mapped.ok) {
+          logStore('findByNaturalKey:map', mapped.error);
+          return err('cedente-account-store-unavailable');
+        }
+        return ok(mapped.value);
+      } catch (cause) {
+        logStore('findByNaturalKey', cause);
+        return err('cedente-account-store-unavailable');
+      }
+    },
+
+    list: async (): Promise<Result<readonly CedenteAccount[], CedenteAccountStoreError>> => {
+      try {
+        const rows = await db.select().from(finCedenteAccounts);
+        const accounts: CedenteAccount[] = [];
+        for (const row of rows) {
+          const mapped = toDomain(row);
+          if (!mapped.ok) {
+            logStore('list:map', mapped.error);
+            return err('cedente-account-store-unavailable');
+          }
+          accounts.push(mapped.value);
+        }
+        return ok(accounts);
+      } catch (cause) {
+        logStore('list', cause);
+        return err('cedente-account-store-unavailable');
+      }
+    },
+
     save: async (account: CedenteAccount): Promise<Result<void, CedenteAccountStoreError>> => {
       try {
         const row = toRow(account);
@@ -67,6 +118,11 @@ export const createDrizzleCedenteAccountStore = (
               document: row.document,
               status: row.status,
               nextNsa: row.nextNsa,
+              type: row.type,
+              nickname: row.nickname,
+              bankName: row.bankName,
+              openingBalanceCents: row.openingBalanceCents,
+              openingBalanceDate: row.openingBalanceDate,
             },
           });
         return ok(undefined);

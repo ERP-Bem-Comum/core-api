@@ -228,6 +228,7 @@ describe('financial — guard period-closed (CA4)', () => {
       parser: bankStatementParser,
       repo: createInMemoryBankStatementRepository(),
       periods: periodStore,
+      cedenteStore: createInMemoryCedenteAccountStore(),
       clock: ClockReal(),
       outbox: createInMemoryOutbox().port,
     })({ debitAccountRef: ACCOUNT, format: 'CSV', content: csv });

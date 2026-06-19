@@ -36,6 +36,8 @@ import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
 import { writeErrorStatus, toPublicCode, toPublicMessage } from './error-mapping.ts';
 
 import * as DocumentId from '../../domain/shared/document-id.ts';
+import * as CedenteAccountId from '../../domain/cedente/cedente-account-id.ts';
+import type { CedenteAccount } from '../../domain/cedente/types.ts';
 import type { RetentionInput } from '../../domain/shared/retention.ts';
 import type { RegisteredTaxInput } from '../../domain/shared/registered-tax.ts';
 import { FINANCIAL_PERMISSION } from '../../public-api/permissions.ts';
@@ -82,6 +84,12 @@ import {
   closePeriodResponseSchema,
   reconciliationPeriodIdParamSchema,
   exportReconciliationQuerySchema,
+  createCedenteAccountBodySchema,
+  editCedenteAccountBodySchema,
+  cedenteAccountIdParamSchema,
+  cedenteAccountResponseSchema,
+  cedenteAccountListResponseSchema,
+  type CedenteAccountResponseDto,
 } from './schemas.ts';
 
 export type FinancialHttpHooks = Readonly<{
@@ -174,6 +182,23 @@ const toRegisteredTaxInputs = (
     rateBps: t.rateBps,
     valueCents: Number(t.valueCents),
   }));
+
+// Serializa a conta-cedente (019). Money em string (convenção); opcionais → null.
+const cedenteAccountToDto = (a: CedenteAccount): CedenteAccountResponseDto => ({
+  id: String(a.id),
+  bankCode: a.bankCode,
+  bankName: a.bankName ?? null,
+  type: a.type ?? null,
+  agency: a.agency,
+  accountNumber: a.accountNumber,
+  accountDigit: a.accountDigit,
+  convenio: a.convenio,
+  document: a.document,
+  status: a.status,
+  nickname: a.nickname ?? null,
+  openingBalanceCents: a.openingBalanceCents !== undefined ? String(a.openingBalanceCents) : null,
+  openingBalanceDate: a.openingBalanceDate ?? null,
+});
 
 // ─── Rotas ───────────────────────────────────────────────────────────────────
 
@@ -715,6 +740,118 @@ const financialRoutes =
           .code(200)
           .header('content-type', `${contentType}; charset=utf-8`)
           .send(result.value.content) as unknown as Promise<void>;
+      },
+    });
+
+    // ─── Conta-cedente (019 — CRUD + encerrar) ─────────────────────────────────
+    // POST /financial/cedente-accounts — cria conta (bank-account:write).
+    scope.route({
+      method: 'POST',
+      url: '/financial/cedente-accounts',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.bankAccountWrite)],
+      schema: {
+        body: createCedenteAccountBodySchema,
+        response: { 201: cedenteAccountResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const b = req.body;
+        const result = await deps.createCedenteAccount({
+          bankCode: b.bankCode,
+          type: b.type,
+          agency: b.agency,
+          accountNumber: b.accountNumber,
+          accountDigit: b.accountDigit,
+          document: b.document,
+          ...(b.bankName !== undefined ? { bankName: b.bankName } : {}),
+          ...(b.convenio !== undefined ? { convenio: b.convenio } : {}),
+          ...(b.nickname !== undefined ? { nickname: b.nickname } : {}),
+          ...(b.openingBalanceCents !== undefined
+            ? { openingBalanceCents: Number(b.openingBalanceCents) }
+            : {}),
+          ...(b.openingBalanceDate !== undefined
+            ? { openingBalanceDate: b.openingBalanceDate }
+            : {}),
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        reply.header('location', `/api/v2/financial/cedente-accounts/${String(result.value.id)}`);
+        return sendResult(reply, ok(cedenteAccountToDto(result.value)), { ok: 201 });
+      },
+    });
+
+    // GET /financial/cedente-accounts — lista (bank-account:read).
+    scope.route({
+      method: 'GET',
+      url: '/financial/cedente-accounts',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.bankAccountRead)],
+      schema: {
+        response: { 200: cedenteAccountListResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) => {
+        const result = await deps.listCedenteAccounts();
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(result.value.map(cedenteAccountToDto)), { ok: 200 });
+      },
+    });
+
+    // GET /financial/cedente-accounts/:id — consulta por id (bank-account:read).
+    scope.route({
+      method: 'GET',
+      url: '/financial/cedente-accounts/:id',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.bankAccountRead)],
+      schema: {
+        params: cedenteAccountIdParamSchema,
+        response: { 200: cedenteAccountResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const idR = CedenteAccountId.rehydrate(req.params.id);
+        if (!idR.ok) return sendDomainError(reply, idR.error);
+        const result = await deps.findCedenteAccountById(idR.value);
+        if (!result.ok) return sendDomainError(reply, result.error);
+        if (result.value === null) return sendDomainError(reply, 'cedente-account-not-found');
+        return sendResult(reply, ok(cedenteAccountToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // PATCH /financial/cedente-accounts/:id — edita (bank-account:write; FR-008 trava dados bancários).
+    scope.route({
+      method: 'PATCH',
+      url: '/financial/cedente-accounts/:id',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.bankAccountWrite)],
+      schema: {
+        params: cedenteAccountIdParamSchema,
+        body: editCedenteAccountBodySchema,
+        response: { 200: cedenteAccountResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const b = req.body;
+        const result = await deps.editCedenteAccount({
+          id: req.params.id,
+          ...(b.bankCode !== undefined ? { bankCode: b.bankCode } : {}),
+          ...(b.agency !== undefined ? { agency: b.agency } : {}),
+          ...(b.accountNumber !== undefined ? { accountNumber: b.accountNumber } : {}),
+          ...(b.accountDigit !== undefined ? { accountDigit: b.accountDigit } : {}),
+          ...(b.type !== undefined ? { type: b.type } : {}),
+          ...(b.nickname !== undefined ? { nickname: b.nickname } : {}),
+          ...(b.bankName !== undefined ? { bankName: b.bankName } : {}),
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(cedenteAccountToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // POST /financial/cedente-accounts/:id/close — encerra (bank-account:write).
+    scope.route({
+      method: 'POST',
+      url: '/financial/cedente-accounts/:id/close',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.bankAccountWrite)],
+      schema: {
+        params: cedenteAccountIdParamSchema,
+        response: { 200: cedenteAccountResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.closeCedenteAccount({ id: req.params.id });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(cedenteAccountToDto(result.value)), { ok: 200 });
       },
     });
   };

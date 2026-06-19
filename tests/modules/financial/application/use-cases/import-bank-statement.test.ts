@@ -10,6 +10,7 @@ import type { BankStatementParser } from '#src/modules/financial/application/por
 // W0 RED: use-case e repo in-memory ainda não existem.
 import { importBankStatement } from '#src/modules/financial/application/use-cases/import-bank-statement.ts';
 import { createInMemoryBankStatementRepository } from '#src/modules/financial/adapters/persistence/repos/bank-statement-repository.in-memory.ts';
+import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
 
 const WHEN = new Date('2024-05-19T09:00:00.000Z');
 const clock = { now: (): Date => WHEN };
@@ -55,6 +56,7 @@ const deps = (parser: BankStatementParser, captured: Captured) => ({
   parser,
   repo: createInMemoryBankStatementRepository(),
   periods: openPeriods,
+  cedenteStore: createInMemoryCedenteAccountStore(),
   clock,
   outbox: fakeOutbox(captured),
 });
