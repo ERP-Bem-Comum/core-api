@@ -558,3 +558,46 @@ export const cedenteAccountResponseSchema = z.object({
 export const cedenteAccountListResponseSchema = z.array(cedenteAccountResponseSchema);
 
 export type CedenteAccountResponseDto = z.infer<typeof cedenteAccountResponseSchema>;
+
+// ─── Read-model do extrato por conta + período (#139) ──────────────────────────
+
+export const accountStatementQuerySchema = z.object({
+  from: z.iso.date(),
+  to: z.iso.date(),
+  filter: z.enum(['all', 'in', 'out', 'reconciled', 'pending']).optional(),
+});
+
+const statementViewLineSchema = z.object({
+  id: z.string(),
+  date: z.iso.datetime(),
+  movement: z.enum(['Debit', 'Credit']),
+  entryType: z.string(),
+  payeeName: z.string(),
+  memo: z.string(),
+  valueCents: z.string(),
+  runningBalanceCents: z.string(),
+  reconciliationStatus: z.enum(['Pending', 'Reconciled', 'ManualEntry']),
+});
+
+const statementViewDaySchema = z.object({
+  date: z.string(),
+  lines: z.array(statementViewLineSchema),
+  inCents: z.string(),
+  outCents: z.string(),
+  dayBalanceCents: z.string(),
+});
+
+export const accountStatementResponseSchema = z.object({
+  openingBalanceCents: z.string(),
+  closingBalanceCents: z.string(),
+  counters: z.object({
+    all: z.number().int().min(0),
+    in: z.number().int().min(0),
+    out: z.number().int().min(0),
+    reconciled: z.number().int().min(0),
+    pending: z.number().int().min(0),
+  }),
+  days: z.array(statementViewDaySchema),
+});
+
+export type AccountStatementResponseDto = z.infer<typeof accountStatementResponseSchema>;

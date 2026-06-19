@@ -48,6 +48,7 @@ import {
   statementTransactionsToDto,
   paidPayablesToDto,
   suggestionsToDto,
+  accountStatementToDto,
 } from './dto.ts';
 import type { DocumentListFilter } from '../../domain/document/query.ts';
 import type { FinancialHttpDeps } from './composition.ts';
@@ -90,6 +91,8 @@ import {
   cedenteAccountResponseSchema,
   cedenteAccountListResponseSchema,
   type CedenteAccountResponseDto,
+  accountStatementQuerySchema,
+  accountStatementResponseSchema,
 } from './schemas.ts';
 
 export type FinancialHttpHooks = Readonly<{
@@ -825,6 +828,29 @@ const financialRoutes =
         if (!result.ok) return sendDomainError(reply, result.error);
         if (result.value === null) return sendDomainError(reply, 'cedente-account-not-found');
         return sendResult(reply, ok(cedenteAccountToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /financial/cedente-accounts/:id/statement — read-model do extrato por período (#139).
+    // `to` é estendido ao fim do dia (UTC) para incluir todo o dia final do intervalo.
+    scope.route({
+      method: 'GET',
+      url: '/financial/cedente-accounts/:id/statement',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationRead)],
+      schema: {
+        params: cedenteAccountIdParamSchema,
+        querystring: accountStatementQuerySchema,
+        response: { 200: accountStatementResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.getAccountStatement({
+          accountId: req.params.id,
+          from: new Date(`${req.query.from}T00:00:00.000Z`),
+          to: new Date(`${req.query.to}T23:59:59.999Z`),
+          ...(req.query.filter !== undefined ? { filter: req.query.filter } : {}),
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(accountStatementToDto(result.value)), { ok: 200 });
       },
     });
 
