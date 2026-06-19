@@ -247,6 +247,7 @@ const financialRoutes =
             retentions: toRetentionInputs(body.retentions),
             registeredTaxes: toRegisteredTaxInputs(body.registeredTaxes),
             dueDate: body.dueDate !== undefined ? new Date(body.dueDate) : null,
+            issueDate: body.issueDate !== undefined ? new Date(body.issueDate) : null,
             description: body.description ?? null,
           });
           if (!result.ok) return sendDomainError(reply, result.error);
@@ -278,6 +279,7 @@ const financialRoutes =
           retentions: toRetentionInputs(body.retentions),
           registeredTaxes: toRegisteredTaxInputs(body.registeredTaxes),
           dueDate: new Date(body.dueDate),
+          issueDate: body.issueDate !== undefined ? new Date(body.issueDate) : null,
           description: body.description ?? null,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
@@ -425,6 +427,8 @@ const financialRoutes =
           ...(q.type !== undefined ? { type: q.type } : {}),
           ...(q.dueFrom !== undefined ? { dueFrom: new Date(q.dueFrom) } : {}),
           ...(q.dueTo !== undefined ? { dueTo: new Date(q.dueTo) } : {}),
+          ...(q.issuedFrom !== undefined ? { issuedFrom: new Date(q.issuedFrom) } : {}),
+          ...(q.issuedTo !== undefined ? { issuedTo: new Date(q.issuedTo) } : {}),
         };
         const result = await deps.listDocuments(filter, q.page, q.pageSize);
         if (!result.ok) return sendDomainError(reply, result.error);

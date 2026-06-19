@@ -42,6 +42,10 @@ const matchesFilter = (doc: Document, f: DocumentListFilter): boolean => {
   }
   if (f.dueFrom !== undefined && (doc.dueDate === null || doc.dueDate < f.dueFrom)) return false;
   if (f.dueTo !== undefined && (doc.dueDate === null || doc.dueDate > f.dueTo)) return false;
+  if (f.issuedFrom !== undefined && (doc.issueDate === null || doc.issueDate < f.issuedFrom))
+    return false;
+  if (f.issuedTo !== undefined && (doc.issueDate === null || doc.issueDate > f.issuedTo))
+    return false;
   return true;
 };
 
@@ -64,6 +68,7 @@ const toListItem = (entry: StoreEntry): DocumentListItem => ({
       : String(entry.aggregate.document.contractRef),
   netValue: entry.aggregate.document.status === 'Draft' ? null : entry.aggregate.document.netValue,
   dueDate: entry.aggregate.document.dueDate ?? null,
+  issueDate: entry.aggregate.document.issueDate ?? null,
   version: entry.version,
   // Default null — enriquecido pelo read-model em findPaged (enrichWithSupplierView).
   supplierName: null,

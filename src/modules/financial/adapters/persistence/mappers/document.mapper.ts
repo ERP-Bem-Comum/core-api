@@ -300,6 +300,7 @@ export const mapRowToDocument = (
       retentions: retentionsR.value,
       registeredTaxes: taxesR.value,
       dueDate: row.dueDate ?? null,
+      issueDate: row.issueDate ?? null,
       description: row.description ?? null,
     };
     return ok(draft);
@@ -388,6 +389,7 @@ export const mapRowToDocument = (
     netValue: netValueR.value,
     description: row.description ?? null,
     dueDate: row.dueDate,
+    issueDate: row.issueDate ?? null,
   };
 
   if (status === 'Approved') {
@@ -521,6 +523,7 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
       status: document.status,
       description: document.description ?? null,
       dueDate: document.dueDate ?? null,
+      issueDate: document.issueDate ?? null,
       readByOcr: false,
       ocrOriginalValue: null,
       divergenceDetected: false,
@@ -553,6 +556,7 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
     status: core.status,
     description: core.description ?? null,
     dueDate: core.dueDate,
+    issueDate: core.issueDate,
     readByOcr: false,
     ocrOriginalValue: null,
     divergenceDetected: false,

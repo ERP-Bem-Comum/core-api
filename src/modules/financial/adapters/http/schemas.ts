@@ -96,6 +96,7 @@ export const createDocumentBodySchema = z.object({
   retentions: z.array(retentionItemSchema).default([]),
   registeredTaxes: z.array(registeredTaxItemSchema).default([]),
   dueDate: z.iso.date().optional(),
+  issueDate: z.iso.date().optional(), // #163: data de emissão (opcional)
   description: z.string().max(500).optional(),
   asDraft: z.boolean().default(false),
 });
@@ -157,6 +158,8 @@ export const listDocumentsQuerySchema = z.object({
   type: documentTypeSchema.optional(),
   dueFrom: z.iso.date().optional(),
   dueTo: z.iso.date().optional(),
+  issuedFrom: z.iso.date().optional(), // #163: filtro por emissão (janela inclusiva)
+  issuedTo: z.iso.date().optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
@@ -184,6 +187,7 @@ export const documentResponseSchema = z.object({
   grossValueCents: centsStringSchema.nullable(),
   netValueCents: centsStringSchema.nullable(),
   dueDate: z.string().nullable(),
+  issueDate: z.string().nullable(), // #163: data de emissão
   description: z.string().nullable(),
   payables: z.array(payableResponseSchema),
   version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).meta({
@@ -208,6 +212,7 @@ export const documentSummarySchema = z.object({
   contractRef: z.string().max(36).nullable(),
   netValueCents: centsStringSchema.nullable(),
   dueDate: z.string().nullable(),
+  issueDate: z.string().nullable(), // #163: data de emissão
   version: z
     .number()
     .int()

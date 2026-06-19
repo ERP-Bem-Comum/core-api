@@ -21,6 +21,7 @@ const item = (over: Partial<DocumentListItem> = {}): DocumentListItem =>
     contractRef: null,
     netValue: null,
     dueDate: null,
+    issueDate: null,
     version: 0,
     supplierName: 'Gráfica Boa Impressão',
     supplierDocument: '11222333000181',

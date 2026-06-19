@@ -117,6 +117,7 @@ export const documentRepositoryContract = (makeRepo: () => DocumentRepository): 
     const SUP_EMPTY = '5a000000-0000-4000-8000-000000000004';
     // Novos: isolados por supplierRef único (isolation-safe no Drizzle/MySQL compartilhado).
     const SUP_STABLE_ORDER = '5a000000-0000-4000-8000-000000000005';
+    const SUP_ISSUE_WINDOW = '5a000000-0000-4000-8000-000000000006';
     const SUP_DRAFT_NULL = '5a000000-0000-4000-8000-000000000006';
     const sup = (uuid: string): SupplierRef => {
       const r = SupplierRef.rehydrate(uuid);
@@ -128,10 +129,10 @@ export const documentRepositoryContract = (makeRepo: () => DocumentRepository): 
       if (!r.ok) throw new Error('test setup: user');
       return r.value;
     };
-    const openAt = (s: SupplierRef, due: string): Document.CreateDocumentOutput => {
+    const openAt = (s: SupplierRef, due: string, issue?: string): Document.CreateDocumentOutput => {
       const r = Document.create({
         id: DocumentId.generate(),
-        documentNumber: `NFS-${due}`,
+        documentNumber: `NFS-${due}-${issue ?? 'x'}`,
         type: 'NFS-e',
         supplier: s,
         paymentMethod: 'TED',
@@ -143,6 +144,7 @@ export const documentRepositoryContract = (makeRepo: () => DocumentRepository): 
         retentions: [],
         registeredTaxes: [],
         dueDate: new Date(due),
+        issueDate: issue !== undefined ? new Date(issue) : null,
       });
       if (!r.ok) throw new Error('test setup: openAt');
       return r.value;
@@ -220,6 +222,34 @@ export const documentRepositoryContract = (makeRepo: () => DocumentRepository): 
       );
       assert.equal(isOk(byWindow), true);
       if (byWindow.ok) assert.equal(byWindow.value.total, 1);
+    });
+
+    it('findPaged: janela de EMISSÃO inclusiva + issueDate exposto no item (#163)', async () => {
+      const repo = makeRepo();
+      const s = sup(SUP_ISSUE_WINDOW);
+      const inside = openAt(s, '2026-10-10', '2026-09-20'); // emitido na janela
+      const outside = openAt(s, '2026-10-11', '2026-09-30'); // emitido fora
+      await repo.save({ document: inside.document, payables: inside.payables }, []);
+      await repo.save({ document: outside.document, payables: outside.payables }, []);
+
+      const byIssue = await repo.findPaged(
+        {
+          supplierRef: SUP_ISSUE_WINDOW,
+          issuedFrom: new Date('2026-09-15'),
+          issuedTo: new Date('2026-09-25'),
+        },
+        1,
+        10,
+      );
+      assert.equal(isOk(byIssue), true);
+      if (byIssue.ok) {
+        assert.equal(byIssue.value.total, 1);
+        assert.equal(
+          byIssue.value.items[0]?.issueDate?.toISOString().slice(0, 10),
+          '2026-09-20',
+          'issueDate exposto no read-model',
+        );
+      }
     });
 
     it('findPaged: conjunto vazio → total 0, sem erro', async () => {

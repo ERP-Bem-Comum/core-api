@@ -47,6 +47,7 @@ export type SaveDraftCommand = Readonly<{
   retentions?: readonly Retention.RetentionInput[];
   registeredTaxes?: readonly RegisteredTax.RegisteredTaxInput[];
   dueDate?: Date | null;
+  issueDate?: Date | null; // #163
   description?: string | null;
 }>;
 
@@ -135,6 +136,7 @@ export const saveDraft =
       retentions,
       registeredTaxes,
       ...(cmd.dueDate !== undefined ? { dueDate: cmd.dueDate } : {}),
+      ...(cmd.issueDate !== undefined ? { issueDate: cmd.issueDate } : {}),
       ...(cmd.description !== undefined ? { description: cmd.description } : {}),
     });
     if (!draft.ok) return err(draft.error);
