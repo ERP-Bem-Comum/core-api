@@ -53,6 +53,7 @@
     "test:integration:etl:orchestrate": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/test-integration.ts etl:orchestrate",
     "etl:check-duplicates": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/etl/diagnostics/check-duplicates.ts",
     "serve": "node --experimental-strip-types --enable-source-maps --no-warnings src/server.ts",
+    "dev": "overmind start",
     "test:e2e:auth": "bash scripts/e2e-auth.sh",
     "test:e2e:contracts": "bash scripts/e2e-contracts.sh",
     "test:e2e:collaborators": "bash scripts/e2e-collaborators.sh",
