@@ -33,6 +33,11 @@ export type InMemoryContractRepositoryHandle = Readonly<{
 // ordenação por sequentialNumber e paginação. Mantém o mesmo contrato observável.
 const matchesQuery = (c: Contract, query: ListContractsQuery): boolean => {
   if (query.status !== undefined && c.status !== query.status) return false;
+  // #116: filtro por contratante (id e/ou tipo).
+  if (query.contractorId !== undefined && String(c.contractor.id) !== String(query.contractorId))
+    return false;
+  if (query.contractorType !== undefined && c.contractor.type !== query.contractorType)
+    return false;
   if (query.search !== undefined && query.search.length > 0) {
     const term = query.search.toLowerCase();
     const haystack = `${c.title}\n${c.objective}\n${c.sequentialNumber}`.toLowerCase();

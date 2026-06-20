@@ -1,0 +1,1 @@
+CREATE INDEX `ctr_contracts_contractor_idx` ON `ctr_contracts` (`contractor_id`,`status`);

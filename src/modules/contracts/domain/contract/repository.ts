@@ -1,5 +1,6 @@
 import type { Result } from '../../../../shared/primitives/result.ts';
 import type { ContractId } from '../shared/ids.ts';
+import type { ContractorId, ContractorType } from '../shared/contractor.ts';
 import type { Contract, ContractStatus, ActiveContract } from './types.ts';
 import type { PlainDate } from '../../../../shared/kernel/plain-date.ts';
 import type { OutboxAppendError } from '../../application/ports/outbox.ts';
@@ -17,6 +18,9 @@ export type ListContractsQuery = Readonly<{
   order: 'ASC' | 'DESC';
   search?: string;
   status?: ContractStatus;
+  // #116: filtra os contratos de um contratante (supplierId = contractorId quando type='supplier').
+  contractorId?: ContractorId;
+  contractorType?: ContractorType;
 }>;
 
 /** Resultado paginado: a página de itens + o total absoluto (para `meta`). */

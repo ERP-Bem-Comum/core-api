@@ -51,6 +51,10 @@ export const contractToListItem = (
     categorizacao: c.categorizacao,
     centroDeCusto: c.centroDeCusto,
     program,
+    // #116: ref do contratante (local, sem composição cross-módulo) — habilita filtrar/exibir
+    // os contratos de um fornecedor no list sem N+1. `contractorId` = supplierId quando type='supplier'.
+    contractorId: String(c.contractor.id),
+    contractorType: c.contractor.type,
   };
 
   switch (c.status) {

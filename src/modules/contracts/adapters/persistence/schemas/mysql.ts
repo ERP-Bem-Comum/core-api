@@ -150,6 +150,8 @@ export const contracts = mysqlTable(
     // relatórios temporais sem full table scan (Ramakrishnan §8.2).
     index('ctr_contracts_status_idx').on(t.status),
     index('ctr_contracts_signed_at_idx').on(t.signedAt),
+    // #116: filtro "contratos do fornecedor" (composto com status p/ os vigentes do contratante).
+    index('ctr_contracts_contractor_idx').on(t.contractorId, t.status),
 
     // CTR-AUTO-EXPIRE (issue #39): índice composto para o sweep de auto-expiração.
     // Query alvo: WHERE status='Active' AND current_period_kind='Fixed' AND current_period_end < :cutoff

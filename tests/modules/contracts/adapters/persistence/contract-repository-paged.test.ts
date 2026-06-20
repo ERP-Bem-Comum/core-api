@@ -16,7 +16,12 @@ import { strict as assert } from 'node:assert';
 import { InMemoryContractRepository } from '#src/modules/contracts/adapters/persistence/repos/contract-repository.in-memory.ts';
 import type { ContractRepository } from '#src/modules/contracts/domain/contract/repository.ts';
 
-import { buildContract, buildExpiredContract, buildTerminatedContract } from './fixtures.ts';
+import {
+  buildContract,
+  buildExpiredContract,
+  buildTerminatedContract,
+  someContractor,
+} from './fixtures.ts';
 
 // IDs estáveis (UUID v4) — um por contrato semeado.
 const ID = {
@@ -167,5 +172,35 @@ describe('ContractRepository.listPaged (InMemory) — CTR-HTTP-CONTRACT-LIST-FIL
     if (!r.ok) return;
     assert.deepEqual([...r.value.items], []);
     assert.equal(r.value.total, 0);
+  });
+
+  it('#116: filtra os contratos de um contratante (contractorId)', async () => {
+    const SUP_A = '6a000000-0000-4000-8000-000000000001';
+    const SUP_B = '6a000000-0000-4000-8000-000000000002';
+    const fresh = InMemoryContractRepository().repo;
+    await fresh.save(
+      buildContract({ id: ID.alpha, sequentialNumber: '010/2026', contractorId: SUP_A }),
+      [],
+    );
+    await fresh.save(
+      buildContract({ id: ID.beta, sequentialNumber: '011/2026', contractorId: SUP_A }),
+      [],
+    );
+    await fresh.save(
+      buildContract({ id: ID.gamma, sequentialNumber: '012/2026', contractorId: SUP_B }),
+      [],
+    );
+
+    const onlyA = await fresh.listPaged({
+      page: 1,
+      limit: 50,
+      order: 'ASC',
+      contractorId: someContractor('supplier', SUP_A).id,
+    });
+    assert.ok(onlyA.ok);
+    if (onlyA.ok) {
+      assert.equal(onlyA.value.total, 2);
+      assert.ok(onlyA.value.items.every((c) => String(c.contractor.id) === SUP_A));
+    }
   });
 });

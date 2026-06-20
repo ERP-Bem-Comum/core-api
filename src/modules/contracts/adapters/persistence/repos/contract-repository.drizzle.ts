@@ -148,6 +148,13 @@ export const createDrizzleContractRepository = (
     if (query.status !== undefined) {
       clauses.push(eq(schema.contracts.status, query.status));
     }
+    // #116: filtro por contratante (contractor_id e/ou contractor_type).
+    if (query.contractorId !== undefined) {
+      clauses.push(eq(schema.contracts.contractorId, String(query.contractorId)));
+    }
+    if (query.contractorType !== undefined) {
+      clauses.push(eq(schema.contracts.contractorType, query.contractorType));
+    }
     if (query.search !== undefined && query.search.length > 0) {
       const escaped = query.search.replace(/[\\%_]/g, (ch) => `\\${ch}`);
       const pattern = `%${escaped}%`;
