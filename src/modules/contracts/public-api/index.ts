@@ -107,3 +107,14 @@ export type {
   SupersedeDocumentError,
   SupersedeDocumentDeps,
 } from '../application/use-cases/supersede-document.ts';
+
+// #178 — public-api de leitura da categorização do contrato (consumida pelo financial, ADR-0006).
+export { buildContractsReadPort, createInMemoryContractCategorizationReadStore } from './read.ts';
+export type {
+  ContractsReadPort,
+  BuildContractsReadPortOptions,
+  BuildContractsReadPortError,
+  ContractCategorizationReadPort,
+  ContractCategorizationReadError,
+  ContractCategorizationView,
+} from './read.ts';
