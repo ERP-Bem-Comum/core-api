@@ -27,10 +27,12 @@ import {
   ContractRef,
   BudgetPlanRef,
   CategoryRef,
+  CostCenterRef,
   ProgramRef,
   type ContractRef as ContractRefType,
   type BudgetPlanRef as BudgetPlanRefType,
   type CategoryRef as CategoryRefType,
+  type CostCenterRef as CostCenterRefType,
   type ProgramRef as ProgramRefType,
 } from '../../../domain/shared/refs.ts';
 import { SupplierRef } from '#src/modules/partners/public-api/refs.ts';
@@ -67,6 +69,7 @@ export type DocumentMapperError =
   | 'mapper-invalid-contract-ref'
   | 'mapper-invalid-budget-plan-ref'
   | 'mapper-invalid-category-ref'
+  | 'mapper-invalid-cost-center-ref'
   | 'mapper-invalid-program-ref'
   | 'mapper-invalid-approved-by'
   | 'mapper-invalid-status'
@@ -246,6 +249,13 @@ export const mapRowToDocument = (
       categoryRef = r.value;
     }
 
+    let costCenterRef: CostCenterRefType | null = null;
+    if (row.costCenterRef !== null) {
+      const r = CostCenterRef.rehydrate(row.costCenterRef);
+      if (!r.ok) return err('mapper-invalid-cost-center-ref');
+      costCenterRef = r.value;
+    }
+
     let programRef: ProgramRefType | null = null;
     if (row.programRef !== null) {
       const r = ProgramRef.rehydrate(row.programRef);
@@ -290,6 +300,7 @@ export const mapRowToDocument = (
       contractRef,
       budgetPlanRef,
       categoryRef,
+      costCenterRef,
       programRef,
       paymentMethod,
       grossValue: grossValueR.value,
@@ -360,6 +371,13 @@ export const mapRowToDocument = (
     categoryRef = r.value;
   }
 
+  let costCenterRef: CostCenterRefType | null = null;
+  if (row.costCenterRef !== null) {
+    const r = CostCenterRef.rehydrate(row.costCenterRef);
+    if (!r.ok) return err('mapper-invalid-cost-center-ref');
+    costCenterRef = r.value;
+  }
+
   let programRef: ProgramRefType | null = null;
   if (row.programRef !== null) {
     const r = ProgramRef.rehydrate(row.programRef);
@@ -377,6 +395,7 @@ export const mapRowToDocument = (
     contractRef,
     budgetPlanRef,
     categoryRef,
+    costCenterRef,
     programRef,
     paymentMethod: row.paymentMethod,
     grossValue: grossValueR.value,
@@ -512,6 +531,8 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
         document.budgetPlanRef !== null ? (document.budgetPlanRef as unknown as string) : null,
       categoryRef:
         document.categoryRef !== null ? (document.categoryRef as unknown as string) : null,
+      costCenterRef:
+        document.costCenterRef !== null ? (document.costCenterRef as unknown as string) : null,
       programRef: document.programRef !== null ? (document.programRef as unknown as string) : null,
       paymentMethod: document.paymentMethod ?? null,
       grossValue: document.grossValue?.cents ?? null,
@@ -545,6 +566,7 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
     contractRef: core.contractRef !== null ? (core.contractRef as unknown as string) : null,
     budgetPlanRef: core.budgetPlanRef !== null ? (core.budgetPlanRef as unknown as string) : null,
     categoryRef: core.categoryRef !== null ? (core.categoryRef as unknown as string) : null,
+    costCenterRef: core.costCenterRef !== null ? (core.costCenterRef as unknown as string) : null,
     programRef: core.programRef !== null ? (core.programRef as unknown as string) : null,
     paymentMethod: core.paymentMethod,
     grossValue: core.grossValue.cents,

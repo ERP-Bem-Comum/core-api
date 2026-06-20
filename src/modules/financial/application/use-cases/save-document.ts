@@ -6,6 +6,7 @@ import {
   ContractRef,
   BudgetPlanRef,
   CategoryRef,
+  CostCenterRef,
   ProgramRef,
   type FinancialRefError,
 } from '../../domain/shared/refs.ts';
@@ -43,6 +44,7 @@ export type SaveDocumentCommand = Readonly<{
   contractRef?: string | null;
   budgetPlanRef?: string | null;
   categoryRef?: string | null;
+  costCenterRef?: string | null;
   programRef?: string | null;
   paymentMethod: PaymentMethod;
   grossValueCents: number;
@@ -88,6 +90,9 @@ export const saveDocument =
     if (budgetPlanRef !== null && !budgetPlanRef.ok) return err(budgetPlanRef.error);
     const categoryRef = cmd.categoryRef == null ? null : CategoryRef.rehydrate(cmd.categoryRef);
     if (categoryRef !== null && !categoryRef.ok) return err(categoryRef.error);
+    const costCenterRef =
+      cmd.costCenterRef == null ? null : CostCenterRef.rehydrate(cmd.costCenterRef);
+    if (costCenterRef !== null && !costCenterRef.ok) return err(costCenterRef.error);
     const programRef = cmd.programRef == null ? null : ProgramRef.rehydrate(cmd.programRef);
     if (programRef !== null && !programRef.ok) return err(programRef.error);
 
@@ -149,6 +154,7 @@ export const saveDocument =
       contractRef: contractRef?.value ?? null,
       budgetPlanRef: resolvedBudgetPlanRef,
       categoryRef: categoryRef?.value ?? null,
+      costCenterRef: costCenterRef?.value ?? null,
       programRef: resolvedProgramRef,
       paymentMethod: cmd.paymentMethod,
       grossValue: grossValue.value,

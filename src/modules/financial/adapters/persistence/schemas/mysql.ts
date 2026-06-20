@@ -83,6 +83,7 @@ export const finDocuments = mysqlTable(
     contractRef: varchar('contract_ref', { length: 36 }),
     budgetPlanRef: varchar('budget_plan_ref', { length: 36 }),
     categoryRef: varchar('category_ref', { length: 36 }),
+    costCenterRef: varchar('cost_center_ref', { length: 36 }),
     programRef: varchar('program_ref', { length: 36 }),
 
     // Conta-cedente de débito (D-CEDENTE — de qual conta o pagamento sai). Ref lógica a

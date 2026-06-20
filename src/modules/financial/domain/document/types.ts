@@ -2,7 +2,13 @@ import type { Money } from '../../../../shared/kernel/money.ts';
 import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
 import type { SupplierRef } from '#src/modules/partners/public-api/refs.ts';
 import type { DocumentId } from '../shared/document-id.ts';
-import type { ContractRef, BudgetPlanRef, CategoryRef, ProgramRef } from '../shared/refs.ts';
+import type {
+  ContractRef,
+  BudgetPlanRef,
+  CategoryRef,
+  CostCenterRef,
+  ProgramRef,
+} from '../shared/refs.ts';
 import type { Retention } from '../shared/retention.ts';
 import type { RegisteredTax } from '../shared/registered-tax.ts';
 
@@ -38,6 +44,7 @@ export type DocumentCore = Readonly<{
   contractRef: ContractRef | null;
   budgetPlanRef: BudgetPlanRef | null;
   categoryRef: CategoryRef | null;
+  costCenterRef: CostCenterRef | null;
   programRef: ProgramRef | null;
   paymentMethod: PaymentMethod;
   grossValue: Money;
@@ -71,6 +78,7 @@ export type DraftDocument = Readonly<{
   contractRef: ContractRef | null;
   budgetPlanRef: BudgetPlanRef | null;
   categoryRef: CategoryRef | null;
+  costCenterRef: CostCenterRef | null;
   programRef: ProgramRef | null;
   paymentMethod: PaymentMethod | null;
   grossValue: Money | null;

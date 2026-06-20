@@ -82,6 +82,12 @@ export const documentToDto = (
       documentNumber: document.documentNumber,
       type: document.type,
       supplierRef: document.supplier !== null ? String(document.supplier) : null,
+      // Refs branded são strings em runtime — atribuição direta (cross-BC, #147).
+      contractRef: document.contractRef,
+      budgetPlanRef: document.budgetPlanRef,
+      categoryRef: document.categoryRef,
+      costCenterRef: document.costCenterRef,
+      programRef: document.programRef,
       paymentMethod: document.paymentMethod,
       grossValueCents:
         document.grossValue !== null ? moneyToCentsString(document.grossValue.cents) : null,
@@ -101,6 +107,12 @@ export const documentToDto = (
     documentNumber: document.documentNumber,
     type: document.type,
     supplierRef: String(document.supplier),
+    // Refs branded são strings em runtime — atribuição direta (cross-BC, #147).
+    contractRef: document.contractRef,
+    budgetPlanRef: document.budgetPlanRef,
+    categoryRef: document.categoryRef,
+    costCenterRef: document.costCenterRef,
+    programRef: document.programRef,
     paymentMethod: document.paymentMethod,
     grossValueCents: moneyToCentsString(document.grossValue.cents),
     netValueCents: moneyToCentsString(document.netValue.cents),

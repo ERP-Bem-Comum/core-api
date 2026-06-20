@@ -6,6 +6,7 @@ import {
   ContractRef,
   BudgetPlanRef,
   CategoryRef,
+  CostCenterRef,
   ProgramRef,
   type FinancialRefError,
 } from '../../domain/shared/refs.ts';
@@ -37,6 +38,7 @@ export type SaveDraftCommand = Readonly<{
   contractRef?: string | null;
   budgetPlanRef?: string | null;
   categoryRef?: string | null;
+  costCenterRef?: string | null;
   programRef?: string | null;
   paymentMethod?: PaymentMethod | null;
   grossValueCents?: number | null;
@@ -86,6 +88,9 @@ export const saveDraft =
     if (!budgetPlanRef.ok) return err(budgetPlanRef.error);
     const categoryRef = cmd.categoryRef == null ? ok(null) : CategoryRef.rehydrate(cmd.categoryRef);
     if (!categoryRef.ok) return err(categoryRef.error);
+    const costCenterRef =
+      cmd.costCenterRef == null ? ok(null) : CostCenterRef.rehydrate(cmd.costCenterRef);
+    if (!costCenterRef.ok) return err(costCenterRef.error);
     const programRef = cmd.programRef == null ? ok(null) : ProgramRef.rehydrate(cmd.programRef);
     if (!programRef.ok) return err(programRef.error);
 
@@ -126,6 +131,7 @@ export const saveDraft =
       ...(contractRef.value !== null ? { contractRef: contractRef.value } : {}),
       ...(budgetPlanRef.value !== null ? { budgetPlanRef: budgetPlanRef.value } : {}),
       ...(categoryRef.value !== null ? { categoryRef: categoryRef.value } : {}),
+      ...(costCenterRef.value !== null ? { costCenterRef: costCenterRef.value } : {}),
       ...(programRef.value !== null ? { programRef: programRef.value } : {}),
       ...(cmd.paymentMethod !== undefined ? { paymentMethod: cmd.paymentMethod } : {}),
       ...(grossValue.value !== null ? { grossValue: grossValue.value } : {}),

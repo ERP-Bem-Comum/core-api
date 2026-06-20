@@ -5,7 +5,13 @@ import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
 import type { SupplierRef } from '#src/modules/partners/public-api/refs.ts';
 import * as PayableId from '../shared/payable-id.ts';
 import type { DocumentId } from '../shared/document-id.ts';
-import type { ContractRef, BudgetPlanRef, CategoryRef, ProgramRef } from '../shared/refs.ts';
+import type {
+  ContractRef,
+  BudgetPlanRef,
+  CategoryRef,
+  CostCenterRef,
+  ProgramRef,
+} from '../shared/refs.ts';
 import type { Retention, RetentionType } from '../shared/retention.ts';
 import type { RegisteredTax } from '../shared/registered-tax.ts';
 import type {
@@ -32,6 +38,7 @@ export type CreateDocumentInput = Readonly<{
   contractRef?: ContractRef | null;
   budgetPlanRef?: BudgetPlanRef | null;
   categoryRef?: CategoryRef | null;
+  costCenterRef?: CostCenterRef | null;
   programRef?: ProgramRef | null;
   paymentMethod: PaymentMethod;
   grossValue: Money;
@@ -142,6 +149,7 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     contractRef: input.contractRef ?? null,
     budgetPlanRef: input.budgetPlanRef ?? null,
     categoryRef: input.categoryRef ?? null,
+    costCenterRef: input.costCenterRef ?? null,
     programRef: input.programRef ?? null,
     paymentMethod: input.paymentMethod,
     grossValue: input.grossValue,
@@ -363,6 +371,7 @@ export const undoApproval = (
     contractRef: d.contractRef,
     budgetPlanRef: d.budgetPlanRef,
     categoryRef: d.categoryRef,
+    costCenterRef: d.costCenterRef,
     programRef: d.programRef,
     paymentMethod: d.paymentMethod,
     grossValue: d.grossValue,
@@ -421,6 +430,7 @@ export type SaveDraftInput = Readonly<{
   contractRef?: ContractRef | null;
   budgetPlanRef?: BudgetPlanRef | null;
   categoryRef?: CategoryRef | null;
+  costCenterRef?: CostCenterRef | null;
   programRef?: ProgramRef | null;
   paymentMethod?: PaymentMethod | null;
   grossValue?: Money | null;
@@ -452,6 +462,7 @@ export const saveDraft = (input: SaveDraftInput): Result<SaveDraftOutput, Docume
     contractRef: input.contractRef ?? null,
     budgetPlanRef: input.budgetPlanRef ?? null,
     categoryRef: input.categoryRef ?? null,
+    costCenterRef: input.costCenterRef ?? null,
     programRef: input.programRef ?? null,
     paymentMethod: input.paymentMethod ?? null,
     grossValue: input.grossValue ?? null,
@@ -491,6 +502,7 @@ export const submit = (draft: DraftDocument): Result<CreateDocumentOutput, Docum
     contractRef: draft.contractRef,
     budgetPlanRef: draft.budgetPlanRef,
     categoryRef: draft.categoryRef,
+    costCenterRef: draft.costCenterRef,
     programRef: draft.programRef,
     paymentMethod,
     grossValue,
