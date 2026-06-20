@@ -10,6 +10,7 @@ import {
 import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
 import type { FinancialTimelineEntry } from '#src/modules/financial/domain/timeline/types.ts';
 import { saveDocument } from '#src/modules/financial/application/use-cases/save-document.ts';
+import { createInMemoryContractCategorizationReadStore } from '#src/modules/contracts/public-api/index.ts';
 import { approveDocument } from '#src/modules/financial/application/use-cases/approve-document.ts';
 import { getDocumentTimeline } from '#src/modules/financial/application/use-cases/get-document-timeline.ts';
 
@@ -41,7 +42,12 @@ const wire = () => {
   const repo = createInMemoryDocumentRepository(timelineStore);
   const timelineRepo = createInMemoryTimelineRepository(timelineStore);
   const outbox = createInMemoryOutbox();
-  const deps = { repo, outbox: outbox.port, clock: CLOCK };
+  const deps = {
+    repo,
+    outbox: outbox.port,
+    clock: CLOCK,
+    contractCategorizationReader: createInMemoryContractCategorizationReadStore(),
+  };
   return {
     save: saveDocument(deps),
     approve: approveDocument(deps),

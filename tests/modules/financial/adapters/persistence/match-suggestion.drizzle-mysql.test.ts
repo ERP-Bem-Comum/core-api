@@ -12,6 +12,7 @@ import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
+import { createInMemoryContractCategorizationReadStore } from '#src/modules/contracts/public-api/index.ts';
 import { createDrizzleDocumentRepository } from '#src/modules/financial/adapters/persistence/repos/document-repository.drizzle.ts';
 import { createDrizzleSuggestionView } from '#src/modules/financial/adapters/persistence/repos/suggestion-view.drizzle.ts';
 import { createDrizzleRejectedSuggestionRepository } from '#src/modules/financial/adapters/persistence/repos/rejected-suggestion-repository.drizzle.ts';
@@ -48,6 +49,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
         repo: createDrizzleDocumentRepository(handle),
         outbox: createInMemoryOutbox().port,
         clock: ClockReal(),
+        contractCategorizationReader: createInMemoryContractCategorizationReadStore(),
       });
       const created = await save({
         documentNumber,
