@@ -52,6 +52,9 @@ import {
   transactionReconciliationToDto,
   reconciliationPeriodsToDto,
   statementSuggestionsToDto,
+  categoriesToDto,
+  costCentersToDto,
+  programsToDto,
 } from './dto.ts';
 import type { DocumentListFilter } from '../../domain/document/query.ts';
 import type { FinancialHttpDeps } from './composition.ts';
@@ -93,6 +96,9 @@ import {
   cedenteAccountIdParamSchema,
   cedenteAccountResponseSchema,
   cedenteAccountListResponseSchema,
+  categoryListResponseSchema,
+  costCenterListResponseSchema,
+  programListResponseSchema,
   type CedenteAccountResponseDto,
   accountStatementQuerySchema,
   accountStatementResponseSchema,
@@ -856,6 +862,51 @@ const financialRoutes =
         if (!result.ok) return sendDomainError(reply, result.error);
         reply.header('location', `/api/v2/financial/cedente-accounts/${String(result.value.id)}`);
         return sendResult(reply, ok(cedenteAccountToDto(result.value)), { ok: 201 });
+      },
+    });
+
+    // GET /financial/categories — dados de referência de categorização (020 · US1, reference:read).
+    scope.route({
+      method: 'GET',
+      url: '/financial/categories',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.referenceRead)],
+      schema: {
+        response: { 200: categoryListResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) => {
+        const result = await deps.listCategories();
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(categoriesToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /financial/cost-centers — dados de referência de rateio (020 · US2, reference:read).
+    scope.route({
+      method: 'GET',
+      url: '/financial/cost-centers',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.referenceRead)],
+      schema: {
+        response: { 200: costCenterListResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) => {
+        const result = await deps.listCostCenters();
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(costCentersToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /financial/programs — passthrough da fonte canônica de programa (020 · US3, reference:read).
+    scope.route({
+      method: 'GET',
+      url: '/financial/programs',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.referenceRead)],
+      schema: {
+        response: { 200: programListResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) => {
+        const result = await deps.listPrograms();
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(programsToDto(result.value)), { ok: 200 });
       },
     });
 

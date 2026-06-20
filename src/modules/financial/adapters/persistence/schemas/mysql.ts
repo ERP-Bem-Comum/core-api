@@ -781,3 +781,51 @@ export type NewManualEntryRow = typeof finManualEntries.$inferInsert;
 
 export type ReconciliationPeriodRow = typeof finReconciliationPeriods.$inferSelect;
 export type NewReconciliationPeriodRow = typeof finReconciliationPeriods.$inferInsert;
+
+// ─── fin_categories ───────────────────────────────────────────────────────────
+//
+// Dado de referência LOCAL do financeiro (020 · Decisão A — research.md D1): categorias de
+// classificação, agrupadas por natureza (`group` ∈ despesa/receita/ajuste). Povoadas por seed
+// idempotente com UUIDs fixos (SC-002). Read-only nesta feature (sem CRUD — FR-008).
+//
+// `group`: varchar(12) + CHECK (ADR-0020 — sem ENUM nativo); cast row→union seguro pós-CHECK.
+// Índices: (group, name) para a listagem agrupada+ordenada; active para o filtro de seleção.
+export const finCategories = mysqlTable(
+  'fin_categories',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    name: varchar('name', { length: 120 }).notNull(),
+    group: varchar('group', { length: 12 }).notNull(),
+    active: boolean('active').notNull().default(true),
+  },
+  (t) => [
+    check('fin_categories_group_chk', sql`${t.group} IN ('despesa','receita','ajuste')`),
+    index('fin_categories_group_name_idx').on(t.group, t.name),
+    index('fin_categories_active_idx').on(t.active),
+  ],
+);
+
+export type CategoryRow = typeof finCategories.$inferSelect;
+export type NewCategoryRow = typeof finCategories.$inferInsert;
+
+// ─── fin_cost_centers ───────────────────────────────────────────────────────
+//
+// Dado de referência LOCAL do financeiro (020 · US2 — Decisão A): centros de custo (dimensão de
+// rateio), `code` (CC-001…) + `name`. Povoados por seed idempotente com UUIDs fixos (SC-002).
+// Read-only nesta feature (sem CRUD — FR-008). Índices: `code` (ordenação) e `active` (seleção).
+export const finCostCenters = mysqlTable(
+  'fin_cost_centers',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    code: varchar('code', { length: 20 }).notNull(),
+    name: varchar('name', { length: 120 }).notNull(),
+    active: boolean('active').notNull().default(true),
+  },
+  (t) => [
+    index('fin_cost_centers_code_idx').on(t.code),
+    index('fin_cost_centers_active_idx').on(t.active),
+  ],
+);
+
+export type CostCenterRow = typeof finCostCenters.$inferSelect;
+export type NewCostCenterRow = typeof finCostCenters.$inferInsert;

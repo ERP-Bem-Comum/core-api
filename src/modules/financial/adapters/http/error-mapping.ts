@@ -66,6 +66,10 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   'rejected-suggestion-repository-failure',
   // Período (US6).
   'reconciliation-period-store-failure',
+  // Dados de referência (020): reader indisponível → 503 (contracts/categorization-read.md).
+  'category-read-unavailable',
+  'cost-center-read-unavailable',
+  'program-read-unavailable',
 ]);
 
 // NOTA (019): `cedente-account-not-found` NÃO está em NOT_FOUND_CODES de propósito → default 422.
