@@ -73,6 +73,7 @@ export type DocumentMapperError =
   | 'mapper-invalid-category-ref'
   | 'mapper-invalid-cost-center-ref'
   | 'mapper-invalid-program-ref'
+  | 'mapper-invalid-approver-ref'
   | 'mapper-invalid-approved-by'
   | 'mapper-invalid-status'
   | 'mapper-invalid-document-type'
@@ -237,6 +238,13 @@ export const mapRowToDocument = (
       payeeKind = row.payeeKind;
     }
 
+    let approverRef: UserRef.UserRef | null = null;
+    if (row.approverRef !== null) {
+      const r = UserRef.rehydrate(row.approverRef);
+      if (!r.ok) return err('mapper-invalid-approver-ref');
+      approverRef = r.value;
+    }
+
     let contractRef: ContractRefType | null = null;
     if (row.contractRef !== null) {
       const r = ContractRef.rehydrate(row.contractRef);
@@ -323,6 +331,7 @@ export const mapRowToDocument = (
       dueDate: row.dueDate ?? null,
       issueDate: row.issueDate ?? null,
       description: row.description ?? null,
+      approverRef,
     };
     return ok(draft);
   }
@@ -339,6 +348,13 @@ export const mapRowToDocument = (
   if (row.payeeKind !== null) {
     if (!isPayeeKind(row.payeeKind)) return err('mapper-invalid-payee-kind');
     payeeKind = row.payeeKind;
+  }
+
+  let approverRef: UserRef.UserRef | null = null;
+  if (row.approverRef !== null) {
+    const r = UserRef.rehydrate(row.approverRef);
+    if (!r.ok) return err('mapper-invalid-approver-ref');
+    approverRef = r.value;
   }
 
   if (row.type === null || !isDocumentType(row.type)) return err('mapper-invalid-document-type');
@@ -427,6 +443,7 @@ export const mapRowToDocument = (
     description: row.description ?? null,
     dueDate: row.dueDate,
     issueDate: row.issueDate ?? null,
+    approverRef,
   };
 
   if (status === 'Approved') {
@@ -571,6 +588,8 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
       createdAt: now,
       approvedAt: null,
       approvedBy: null,
+      approverRef:
+        document.approverRef !== null ? (document.approverRef as unknown as string) : null,
     };
   }
 
@@ -606,6 +625,7 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
     createdAt: now,
     approvedAt: document.status === 'Approved' ? document.approvedAt : null,
     approvedBy: document.status === 'Approved' ? (document.approvedBy as unknown as string) : null,
+    approverRef: core.approverRef !== null ? (core.approverRef as unknown as string) : null,
   };
 };
 

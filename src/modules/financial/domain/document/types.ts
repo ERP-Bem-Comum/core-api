@@ -71,6 +71,9 @@ export type DocumentCore = Readonly<{
   // Data de EMISSÃO do documento (#163) — capturada no create (OCR/manual). Nullable: opcional e
   // back-compat com documentos pré-existentes. Distinta de `dueDate` (vencimento).
   issueDate: Date | null;
+  // Aprovador PRETENDIDO definido na inclusão (#148). Distinto de `approvedBy` (preenchido na
+  // aprovação efetiva). A aprovação segue sendo ação separada — este campo é só o destinatário.
+  approverRef: UserRef | null;
 }>;
 
 export type OpenDocument = DocumentCore & Readonly<{ status: 'Open' }>;
@@ -103,6 +106,7 @@ export type DraftDocument = Readonly<{
   dueDate: Date | null;
   description: string | null;
   issueDate: Date | null; // #163: emissão (opcional no rascunho)
+  approverRef: UserRef | null; // #148: aprovador pretendido (opcional no rascunho)
 }>;
 
 export type Document = DraftDocument | OpenDocument | ApprovedDocument;

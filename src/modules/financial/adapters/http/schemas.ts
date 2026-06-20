@@ -84,6 +84,7 @@ export const createDocumentBodySchema = z.object({
   series: z.string().max(20).optional(),
   supplierRef: z.uuid(),
   payeeKind: z.enum(['supplier', 'financier', 'act', 'collaborator']).optional(),
+  approverRef: z.uuid().optional(),
   contractRef: z.uuid().optional(),
   budgetPlanRef: z.uuid().optional(),
   categoryRef: z.uuid().optional(),
@@ -187,6 +188,8 @@ export const documentResponseSchema = z.object({
   supplierRef: z.string().nullable(),
   // Tipo do favorecido (#90) — round-trip p/ o front exibir o kind correto.
   payeeKind: z.string().nullable(),
+  // Aprovador pretendido definido na inclusão (#148).
+  approverRef: z.string().nullable(),
   // Refs de categorização editável (#147) — round-trip p/ o drawer refletir a categorização salva.
   contractRef: z.string().nullable(),
   budgetPlanRef: z.string().nullable(),

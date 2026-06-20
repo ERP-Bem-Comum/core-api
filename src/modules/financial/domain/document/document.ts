@@ -53,6 +53,7 @@ export type CreateDocumentInput = Readonly<{
   dueDate: Date;
   description?: string | null;
   issueDate?: Date | null; // #163: data de emissão (opcional no create)
+  approverRef?: UserRef | null; // #148: aprovador pretendido (opcional)
 }>;
 
 export type CreateDocumentOutput = Readonly<{
@@ -166,6 +167,7 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     description: input.description ?? null,
     dueDate: input.dueDate,
     issueDate: input.issueDate ?? null,
+    approverRef: input.approverRef ?? null,
     status: 'Open',
   });
 
@@ -389,6 +391,7 @@ export const undoApproval = (
     description: d.description,
     dueDate: d.dueDate,
     issueDate: d.issueDate,
+    approverRef: d.approverRef,
     status: 'Open',
   });
 
@@ -448,6 +451,7 @@ export type SaveDraftInput = Readonly<{
   dueDate?: Date | null;
   description?: string | null;
   issueDate?: Date | null; // #163
+  approverRef?: UserRef | null; // #148
 }>;
 
 export type SaveDraftOutput = Readonly<{
@@ -481,6 +485,7 @@ export const saveDraft = (input: SaveDraftInput): Result<SaveDraftOutput, Docume
     dueDate: input.dueDate ?? null,
     description: input.description ?? null,
     issueDate: input.issueDate ?? null,
+    approverRef: input.approverRef ?? null,
   });
   const events: readonly DocumentEvent[] = [{ type: 'DocumentDraftSaved', documentId: input.id }];
   return ok(immutable<SaveDraftOutput>({ document, events }));
@@ -521,6 +526,7 @@ export const submit = (draft: DraftDocument): Result<CreateDocumentOutput, Docum
     registeredTaxes: draft.registeredTaxes,
     dueDate,
     description: draft.description,
+    approverRef: draft.approverRef,
   });
 };
 

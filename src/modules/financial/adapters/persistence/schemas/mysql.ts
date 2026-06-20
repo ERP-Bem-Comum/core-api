@@ -136,6 +136,10 @@ export const finDocuments = mysqlTable(
 
     // Ref ao aprovador (cross-BC — sem FK física). Preenchido somente em Approved.
     approvedBy: varchar('approved_by', { length: 36 }),
+
+    // Aprovador PRETENDIDO definido na inclusão (#148) — cross-BC (auth), sem FK física. Nullable
+    // (opcional + back-compat). Distinto de approved_by (efetivado na aprovação).
+    approverRef: varchar('approver_ref', { length: 36 }),
   },
   (t) => [
     // CHECKs de domínio (defesa em profundidade — ADR-0018 §"Features proibidas"):

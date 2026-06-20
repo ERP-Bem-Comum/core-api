@@ -1,6 +1,7 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
 import * as Money from '../../../../shared/kernel/money.ts';
+import * as UserRef from '../../../../shared/kernel/user-ref.ts';
 import { SupplierRef, type PartnerRefError } from '#src/modules/partners/public-api/refs.ts';
 import {
   ContractRef,
@@ -52,6 +53,7 @@ export type SaveDraftCommand = Readonly<{
   dueDate?: Date | null;
   issueDate?: Date | null; // #163
   description?: string | null;
+  approverRef?: string | null; // #148
 }>;
 
 export type SaveDraftOutput = Readonly<{ documentId: DocumentId.DocumentId }>;
@@ -64,7 +66,8 @@ export type SaveDraftError =
   | FinancialRefError
   | Money.MoneyError
   | Retention.RetentionError
-  | RegisteredTax.RegisteredTaxError;
+  | RegisteredTax.RegisteredTaxError
+  | UserRef.UserRefError;
 
 const optionalMoney = (
   cents: number | null | undefined,
@@ -94,6 +97,8 @@ export const saveDraft =
     if (!costCenterRef.ok) return err(costCenterRef.error);
     const programRef = cmd.programRef == null ? ok(null) : ProgramRef.rehydrate(cmd.programRef);
     if (!programRef.ok) return err(programRef.error);
+    const approverRef = cmd.approverRef == null ? ok(null) : UserRef.rehydrate(cmd.approverRef);
+    if (!approverRef.ok) return err(approverRef.error);
 
     const grossValue = optionalMoney(cmd.grossValueCents);
     if (!grossValue.ok) return err(grossValue.error);
@@ -146,6 +151,7 @@ export const saveDraft =
       ...(cmd.dueDate !== undefined ? { dueDate: cmd.dueDate } : {}),
       ...(cmd.issueDate !== undefined ? { issueDate: cmd.issueDate } : {}),
       ...(cmd.description !== undefined ? { description: cmd.description } : {}),
+      ...(approverRef.value !== null ? { approverRef: approverRef.value } : {}),
     });
     if (!draft.ok) return err(draft.error);
 
