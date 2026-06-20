@@ -14,7 +14,7 @@ import * as DocumentId from '../../domain/shared/document-id.ts';
 import * as Retention from '../../domain/shared/retention.ts';
 import * as RegisteredTax from '../../domain/shared/registered-tax.ts';
 import * as Document from '../../domain/document/document.ts';
-import type { DocumentType, PaymentMethod } from '../../domain/document/types.ts';
+import type { DocumentType, PaymentMethod, PayeeKind } from '../../domain/document/types.ts';
 import type { DocumentError } from '../../domain/document/errors.ts';
 import type {
   DocumentRepository,
@@ -35,6 +35,7 @@ export type SaveDraftCommand = Readonly<{
   series?: string | null;
   type?: DocumentType | null;
   supplierRef?: string | null;
+  payeeKind?: PayeeKind | null;
   contractRef?: string | null;
   budgetPlanRef?: string | null;
   categoryRef?: string | null;
@@ -128,6 +129,7 @@ export const saveDraft =
       ...(cmd.series !== undefined ? { series: cmd.series } : {}),
       ...(cmd.type !== undefined ? { type: cmd.type } : {}),
       supplier: supplier.value,
+      ...(cmd.payeeKind !== undefined ? { payeeKind: cmd.payeeKind } : {}),
       ...(contractRef.value !== null ? { contractRef: contractRef.value } : {}),
       ...(budgetPlanRef.value !== null ? { budgetPlanRef: budgetPlanRef.value } : {}),
       ...(categoryRef.value !== null ? { categoryRef: categoryRef.value } : {}),

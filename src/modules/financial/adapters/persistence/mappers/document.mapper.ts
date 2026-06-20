@@ -39,15 +39,17 @@ import { SupplierRef } from '#src/modules/partners/public-api/refs.ts';
 import * as Retention from '../../../domain/shared/retention.ts';
 import type { RetentionType } from '../../../domain/shared/retention.ts';
 import * as RegisteredTax from '../../../domain/shared/registered-tax.ts';
-import type {
-  DocumentType,
-  PaymentMethod,
-  DocumentStatus,
-  DocumentCore,
-  DraftDocument,
-  OpenDocument,
-  ApprovedDocument,
-  Document,
+import {
+  isPayeeKind,
+  type DocumentType,
+  type PaymentMethod,
+  type PayeeKind,
+  type DocumentStatus,
+  type DocumentCore,
+  type DraftDocument,
+  type OpenDocument,
+  type ApprovedDocument,
+  type Document,
 } from '../../../domain/document/types.ts';
 import type { Payable, Payables } from '../../../domain/payable/types.ts';
 import type {
@@ -75,6 +77,7 @@ export type DocumentMapperError =
   | 'mapper-invalid-status'
   | 'mapper-invalid-document-type'
   | 'mapper-invalid-payment-method'
+  | 'mapper-invalid-payee-kind'
   | 'mapper-invalid-money'
   | 'mapper-invalid-due-date'
   | 'mapper-invalid-retention'
@@ -228,6 +231,12 @@ export const mapRowToDocument = (
       supplier = r.value;
     }
 
+    let payeeKind: PayeeKind | null = null;
+    if (row.payeeKind !== null) {
+      if (!isPayeeKind(row.payeeKind)) return err('mapper-invalid-payee-kind');
+      payeeKind = row.payeeKind;
+    }
+
     let contractRef: ContractRefType | null = null;
     if (row.contractRef !== null) {
       const r = ContractRef.rehydrate(row.contractRef);
@@ -297,6 +306,7 @@ export const mapRowToDocument = (
       series: row.series ?? null,
       type,
       supplier,
+      payeeKind,
       contractRef,
       budgetPlanRef,
       categoryRef,
@@ -323,6 +333,13 @@ export const mapRowToDocument = (
   if (row.supplierRef === null) return err('mapper-invalid-supplier-ref');
   const supplierR = SupplierRef.rehydrate(row.supplierRef);
   if (!supplierR.ok) return err('mapper-invalid-supplier-ref');
+
+  // payeeKind (#90): legacy null → 'supplier' (back-compat); valor inválido no banco → erro.
+  let payeeKind: PayeeKind = 'supplier';
+  if (row.payeeKind !== null) {
+    if (!isPayeeKind(row.payeeKind)) return err('mapper-invalid-payee-kind');
+    payeeKind = row.payeeKind;
+  }
 
   if (row.type === null || !isDocumentType(row.type)) return err('mapper-invalid-document-type');
 
@@ -392,6 +409,7 @@ export const mapRowToDocument = (
     series: row.series ?? null,
     type: row.type,
     supplier: supplierR.value,
+    payeeKind,
     contractRef,
     budgetPlanRef,
     categoryRef,
@@ -525,6 +543,7 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
       series: document.series ?? null,
       type: document.type ?? null,
       supplierRef: document.supplier !== null ? (document.supplier as unknown as string) : null,
+      payeeKind: document.payeeKind ?? null,
       contractRef:
         document.contractRef !== null ? (document.contractRef as unknown as string) : null,
       budgetPlanRef:
@@ -563,6 +582,7 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
     series: core.series ?? null,
     type: core.type,
     supplierRef: core.supplier as unknown as string,
+    payeeKind: core.payeeKind,
     contractRef: core.contractRef !== null ? (core.contractRef as unknown as string) : null,
     budgetPlanRef: core.budgetPlanRef !== null ? (core.budgetPlanRef as unknown as string) : null,
     categoryRef: core.categoryRef !== null ? (core.categoryRef as unknown as string) : null,

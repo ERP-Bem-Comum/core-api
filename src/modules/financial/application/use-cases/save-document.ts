@@ -14,7 +14,7 @@ import * as DocumentId from '../../domain/shared/document-id.ts';
 import * as Retention from '../../domain/shared/retention.ts';
 import * as RegisteredTax from '../../domain/shared/registered-tax.ts';
 import * as Document from '../../domain/document/document.ts';
-import type { DocumentType, PaymentMethod } from '../../domain/document/types.ts';
+import type { DocumentType, PaymentMethod, PayeeKind } from '../../domain/document/types.ts';
 import type { PayableId } from '../../domain/shared/payable-id.ts';
 import type { DocumentError } from '../../domain/document/errors.ts';
 import type {
@@ -41,6 +41,7 @@ export type SaveDocumentCommand = Readonly<{
   series?: string | null;
   type: DocumentType;
   supplierRef: string;
+  payeeKind?: PayeeKind;
   contractRef?: string | null;
   budgetPlanRef?: string | null;
   categoryRef?: string | null;
@@ -151,6 +152,7 @@ export const saveDocument =
       series: cmd.series ?? null,
       type: cmd.type,
       supplier: supplier.value,
+      payeeKind: cmd.payeeKind ?? 'supplier',
       contractRef: contractRef?.value ?? null,
       budgetPlanRef: resolvedBudgetPlanRef,
       categoryRef: categoryRef?.value ?? null,

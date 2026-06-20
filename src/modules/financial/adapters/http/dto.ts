@@ -82,6 +82,7 @@ export const documentToDto = (
       documentNumber: document.documentNumber,
       type: document.type,
       supplierRef: document.supplier !== null ? String(document.supplier) : null,
+      payeeKind: document.payeeKind,
       // Refs branded são strings em runtime — atribuição direta (cross-BC, #147).
       contractRef: document.contractRef,
       budgetPlanRef: document.budgetPlanRef,
@@ -107,6 +108,7 @@ export const documentToDto = (
     documentNumber: document.documentNumber,
     type: document.type,
     supplierRef: String(document.supplier),
+    payeeKind: document.payeeKind,
     // Refs branded são strings em runtime — atribuição direta (cross-BC, #147).
     contractRef: document.contractRef,
     budgetPlanRef: document.budgetPlanRef,

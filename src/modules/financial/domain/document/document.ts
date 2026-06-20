@@ -17,6 +17,7 @@ import type { RegisteredTax } from '../shared/registered-tax.ts';
 import type {
   DocumentType,
   PaymentMethod,
+  PayeeKind,
   OpenDocument,
   ApprovedDocument,
   DraftDocument,
@@ -35,6 +36,7 @@ export type CreateDocumentInput = Readonly<{
   series?: string | null;
   type: DocumentType;
   supplier: SupplierRef;
+  payeeKind?: PayeeKind;
   contractRef?: ContractRef | null;
   budgetPlanRef?: BudgetPlanRef | null;
   categoryRef?: CategoryRef | null;
@@ -146,6 +148,7 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     series: input.series ?? null,
     type: input.type,
     supplier: input.supplier,
+    payeeKind: input.payeeKind ?? 'supplier',
     contractRef: input.contractRef ?? null,
     budgetPlanRef: input.budgetPlanRef ?? null,
     categoryRef: input.categoryRef ?? null,
@@ -368,6 +371,7 @@ export const undoApproval = (
     series: d.series,
     type: d.type,
     supplier: d.supplier,
+    payeeKind: d.payeeKind,
     contractRef: d.contractRef,
     budgetPlanRef: d.budgetPlanRef,
     categoryRef: d.categoryRef,
@@ -427,6 +431,7 @@ export type SaveDraftInput = Readonly<{
   series?: string | null;
   type?: DocumentType | null;
   supplier?: SupplierRef | null;
+  payeeKind?: PayeeKind | null;
   contractRef?: ContractRef | null;
   budgetPlanRef?: BudgetPlanRef | null;
   categoryRef?: CategoryRef | null;
@@ -459,6 +464,7 @@ export const saveDraft = (input: SaveDraftInput): Result<SaveDraftOutput, Docume
     series: input.series ?? null,
     type: input.type ?? null,
     supplier: input.supplier ?? null,
+    payeeKind: input.payeeKind ?? null,
     contractRef: input.contractRef ?? null,
     budgetPlanRef: input.budgetPlanRef ?? null,
     categoryRef: input.categoryRef ?? null,
@@ -499,6 +505,7 @@ export const submit = (draft: DraftDocument): Result<CreateDocumentOutput, Docum
     series: draft.series,
     type,
     supplier,
+    payeeKind: draft.payeeKind ?? 'supplier',
     contractRef: draft.contractRef,
     budgetPlanRef: draft.budgetPlanRef,
     categoryRef: draft.categoryRef,

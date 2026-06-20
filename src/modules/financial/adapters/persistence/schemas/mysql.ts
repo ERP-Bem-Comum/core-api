@@ -76,8 +76,12 @@ export const finDocuments = mysqlTable(
     // Valor null permitido em Draft (todos os campos opcionais — domain/document/types.ts §DraftDocument).
     type: varchar('type', { length: 16 }),
 
-    // Ref ao fornecedor (cross-módulo partners). Sem FK física (ADR-0014 §cross-módulo sem acoplamento direto).
+    // Ref ao favorecido (cross-módulo partners). Sem FK física (ADR-0014 §cross-módulo sem acoplamento direto).
     supplierRef: varchar('supplier_ref', { length: 36 }),
+
+    // Tipo do favorecido (#90). Nullable: back-compat com documentos pré-#90 (lidos como 'supplier').
+    // CHECK = enum de domínio (4 valores — domain/document/types.ts §PayeeKind; ADR-0020 §"sem ENUM").
+    payeeKind: varchar('payee_kind', { length: 16 }),
 
     // Refs cruzadas opcionais (cross-BC — ADR-0014): sem FK física.
     contractRef: varchar('contract_ref', { length: 36 }),
@@ -142,6 +146,10 @@ export const finDocuments = mysqlTable(
     check(
       'fin_documents_payment_method_chk',
       sql`${t.paymentMethod} IS NULL OR ${t.paymentMethod} IN ('TED','TransferenciaBancaria','PIX','Boleto','CartaoCorporativo','Cambio','GuiaRecolhimento','Outro')`,
+    ),
+    check(
+      'fin_documents_payee_kind_chk',
+      sql`${t.payeeKind} IS NULL OR ${t.payeeKind} IN ('supplier','financier','act','collaborator')`,
     ),
     check(
       'fin_documents_status_chk',

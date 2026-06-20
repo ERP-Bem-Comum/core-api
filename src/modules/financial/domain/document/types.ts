@@ -35,12 +35,23 @@ export type DocumentStatus =
   | 'Paid'
   | 'Reconciled';
 
+// Tipo do favorecido (#90): o documento aponta para um parceiro (`supplier` — ref por formato, sem
+// acoplamento ao domínio dono). `payeeKind` registra QUAL tipo de parceiro é, já que o id sozinho
+// não distingue. Default 'supplier' (back-compat com documentos pré-#90).
+export type PayeeKind = 'supplier' | 'financier' | 'act' | 'collaborator';
+
+export const PAYEE_KINDS = ['supplier', 'financier', 'act', 'collaborator'] as const;
+
+export const isPayeeKind = (v: string): v is PayeeKind =>
+  (PAYEE_KINDS as readonly string[]).includes(v);
+
 export type DocumentCore = Readonly<{
   id: DocumentId;
   documentNumber: string;
   series: string | null;
   type: DocumentType;
   supplier: SupplierRef;
+  payeeKind: PayeeKind;
   contractRef: ContractRef | null;
   budgetPlanRef: BudgetPlanRef | null;
   categoryRef: CategoryRef | null;
@@ -75,6 +86,7 @@ export type DraftDocument = Readonly<{
   series: string | null;
   type: DocumentType | null;
   supplier: SupplierRef | null;
+  payeeKind: PayeeKind | null;
   contractRef: ContractRef | null;
   budgetPlanRef: BudgetPlanRef | null;
   categoryRef: CategoryRef | null;
