@@ -22,6 +22,9 @@ export const FINANCIAL_PERMISSION = {
   // bank-account: conta-cedente da organização (019 — CRUD + encerrar)
   bankAccountRead: 'bank-account:read',
   bankAccountWrite: 'bank-account:write',
+  // reference: dados de referência de categorização (020 — categoria/CC/programa). Transversal:
+  // alimenta lançamento manual (#124), tratamento da diferença (#5) e categorização do documento (#147).
+  referenceRead: 'reference:read',
 } as const;
 
 export type FinancialPermission = (typeof FINANCIAL_PERMISSION)[keyof typeof FINANCIAL_PERMISSION];

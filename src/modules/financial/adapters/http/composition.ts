@@ -39,6 +39,22 @@ import {
   type ContractCategorizationReadPort,
 } from '#src/modules/contracts/public-api/index.ts';
 import { createInMemoryOutbox } from '../outbox/outbox.in-memory.ts';
+import { createInMemoryCategoryReadStore } from '../persistence/repos/category-read.in-memory.ts';
+import { createDrizzleCategoryReadStore } from '../persistence/repos/category-read.drizzle.ts';
+import { REFERENCE_CATEGORY_SEED } from '../persistence/seed/reference-categories.ts';
+import * as Category from '../../domain/category/category.ts';
+import * as CategoryId from '../../domain/category/category-id.ts';
+import type { CategoryReadPort } from '../../application/ports/category-read.ts';
+import { createInMemoryCostCenterReadStore } from '../persistence/repos/cost-center-read.in-memory.ts';
+import { createDrizzleCostCenterReadStore } from '../persistence/repos/cost-center-read.drizzle.ts';
+import { REFERENCE_COST_CENTER_SEED } from '../persistence/seed/reference-cost-centers.ts';
+import * as CostCenter from '../../domain/cost-center/cost-center.ts';
+import * as CostCenterId from '../../domain/cost-center/cost-center-id.ts';
+import type { CostCenterReadPort } from '../../application/ports/cost-center-read.ts';
+import { createInMemoryProgramReadStore } from '../persistence/repos/program-read.in-memory.ts';
+import { createProgramsApiReadStore } from '../persistence/repos/program-read.from-programs.ts';
+import { buildProgramsReadPort } from '#src/modules/programs/public-api/index.ts';
+import type { ProgramReadPort, ProgramView } from '../../application/ports/program-read.ts';
 import { createDrizzleDocumentRepository } from '../persistence/repos/document-repository.drizzle.ts';
 import { createDrizzleTimelineRepository } from '../persistence/repos/timeline-repository.drizzle.ts';
 import { createDrizzleBankStatementRepository } from '../persistence/repos/bank-statement-repository.drizzle.ts';
@@ -155,6 +171,12 @@ export type FinancialHttpDeps = Readonly<{
   listReconciliationPeriods: ReturnType<typeof listReconciliationPeriods>;
   /** Sugestões de match em lote por extrato (#174) — GET /bank-statements/:id/suggestions. */
   getStatementSuggestions: ReturnType<typeof getStatementSuggestions>;
+  /** Categorias de referência (020 · US1) — GET /financial/categories. */
+  listCategories: CategoryReadPort['list'];
+  /** Centros de custo de referência (020 · US2) — GET /financial/cost-centers. */
+  listCostCenters: CostCenterReadPort['list'];
+  /** Programas (020 · US3) — GET /financial/programs (passthrough cross-módulo). */
+  listPrograms: ProgramReadPort['list'];
   shutdown: () => Promise<void>;
 }>;
 
@@ -173,8 +195,37 @@ type Pools = Readonly<{
   suggestionView: SuggestionView;
   rejectedSuggestionRepo: RejectedSuggestionRepository;
   periodStore: ReconciliationPeriodStore;
+  categoryReader: CategoryReadPort;
+  costCenterReader: CostCenterReadPort;
+  programReader: ProgramReadPort;
   shutdown: () => Promise<void>;
 }>;
+
+// Categorias de referência semeadas (020 · D5) para o driver memory — mesmos UUIDs fixos da
+// migration 0012. Itens com id/grupo inválido são descartados (defensivo; não deve ocorrer).
+const seededCategories = (): readonly Category.Category[] =>
+  REFERENCE_CATEGORY_SEED.flatMap((s) => {
+    const idR = CategoryId.rehydrate(s.id);
+    if (!idR.ok) return [];
+    const r = Category.create({ id: idR.value, name: s.name, group: s.group });
+    return r.ok ? [r.value] : [];
+  });
+
+const seededCostCenters = (): readonly CostCenter.CostCenter[] =>
+  REFERENCE_COST_CENTER_SEED.flatMap((s) => {
+    const idR = CostCenterId.rehydrate(s.id);
+    if (!idR.ok) return [];
+    const r = CostCenter.create({ id: idR.value, code: s.code, name: s.name });
+    return r.ok ? [r.value] : [];
+  });
+
+// Stub de programas para o driver memory (dev/testes). No driver mysql a fonte real é
+// programs/public-api (ADR-0006) via createProgramsApiReadStore.
+const seededProgramsStub = (): readonly ProgramView[] => [
+  { id: '7b000000-0000-4000-8000-000000000001', name: 'Saúde Comunitária' },
+  { id: '7b000000-0000-4000-8000-000000000002', name: 'Educação Infantil' },
+  { id: '7b000000-0000-4000-8000-000000000003', name: 'Captação de recursos' },
+];
 
 const buildMemoryPools = (): Pools => {
   // Store compartilhado entre o document-repo (escreve trilha no save) e o timeline-repo
@@ -200,8 +251,14 @@ const buildMemoryPools = (): Pools => {
   const suggestionView = createInMemorySuggestionView();
   const rejectedSuggestionRepo = createInMemoryRejectedSuggestionRepository();
   const periodStore = createInMemoryReconciliationPeriodStore();
+  const categoryReader = createInMemoryCategoryReadStore(seededCategories());
+  const costCenterReader = createInMemoryCostCenterReadStore(seededCostCenters());
+  const programReader = createInMemoryProgramReadStore(seededProgramsStub());
   return {
     contractCategorizationReader: createInMemoryContractCategorizationReadStore(),
+    categoryReader,
+    costCenterReader,
+    programReader,
     repo,
     timelineRepo,
     statementRepo,
@@ -234,6 +291,16 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     );
   }
   const contractsReadPort = readPortR.value;
+  // 020 · US3: programa lido da fonte canônica `programs` via public-api (ADR-0006), mesma conexão.
+  const programsReadPortR = await buildProgramsReadPort({ connectionString: writerUrl });
+  if (!programsReadPortR.ok) {
+    await contractsReadPort.close();
+    await handle.close();
+    throw new Error(
+      `financial-composition: falha ao abrir read-port de programs (${programsReadPortR.error})`,
+    );
+  }
+  const programsReadPort = programsReadPortR.value;
   return {
     contractCategorizationReader: contractsReadPort,
     repo: createDrizzleDocumentRepository(handle),
@@ -243,10 +310,14 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     payableView: createDrizzlePayableReconciliationView(handle),
     reconciliationRepo: createDrizzleReconciliationRepository(handle),
     cedenteStore: createDrizzleCedenteAccountStore(handle),
+    categoryReader: createDrizzleCategoryReadStore(handle),
+    costCenterReader: createDrizzleCostCenterReadStore(handle),
+    programReader: createProgramsApiReadStore(programsReadPort),
     suggestionView: createDrizzleSuggestionView(handle),
     rejectedSuggestionRepo: createDrizzleRejectedSuggestionRepository(handle),
     periodStore: createDrizzleReconciliationPeriodStore(handle),
     shutdown: async () => {
+      await programsReadPort.close();
       await contractsReadPort.close();
       await handle.close();
     },
@@ -351,6 +422,9 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       reconciliationRepo: pools.reconciliationRepo,
     }),
     listReconciliationPeriods: listReconciliationPeriods({ periodStore: pools.periodStore }),
+    listCategories: pools.categoryReader.list,
+    listCostCenters: pools.costCenterReader.list,
+    listPrograms: pools.programReader.list,
     shutdown: pools.shutdown,
   };
 };

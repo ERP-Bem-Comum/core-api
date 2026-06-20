@@ -118,7 +118,7 @@ export const documentRepositoryContract = (makeRepo: () => DocumentRepository): 
     // Novos: isolados por supplierRef único (isolation-safe no Drizzle/MySQL compartilhado).
     const SUP_STABLE_ORDER = '5a000000-0000-4000-8000-000000000005';
     const SUP_ISSUE_WINDOW = '5a000000-0000-4000-8000-000000000006';
-    const SUP_DRAFT_NULL = '5a000000-0000-4000-8000-000000000006';
+    const SUP_DRAFT_NULL = '5a000000-0000-4000-8000-000000000007';
     const sup = (uuid: string): SupplierRef => {
       const r = SupplierRef.rehydrate(uuid);
       if (!r.ok) throw new Error('test setup: sup');

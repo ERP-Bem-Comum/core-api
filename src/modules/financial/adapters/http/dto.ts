@@ -16,6 +16,9 @@ import type { StatementView } from '../../domain/statement/statement-view.ts';
 import { criteriaBreakdown } from '../../domain/reconciliation/match-score.ts';
 import type { Reconciliation } from '../../domain/reconciliation/types.ts';
 import type { ReconciliationPeriod } from '../../domain/reconciliation/period.ts';
+import type { Category } from '../../domain/category/category.ts';
+import type { CostCenter } from '../../domain/cost-center/cost-center.ts';
+import type { ProgramView } from '../../application/ports/program-read.ts';
 import type { PaidPayableView } from '../../application/ports/payable-reconciliation-view.ts';
 import type { MatchSuggestion } from '../../application/use-cases/suggest-matches.ts';
 import type { GetStatementSuggestionsOutput } from '../../application/use-cases/get-statement-suggestions.ts';
@@ -30,10 +33,25 @@ import type {
   PaidPayablesResponseDto,
   StatementTransactionsResponseDto,
   SuggestionsResponseDto,
+  CategoryResponseDto,
+  CostCenterResponseDto,
+  ProgramResponseDto,
 } from './schemas.ts';
 
 /** Serializa Money (branded { cents: number }) como string de centavos. */
 const moneyToCentsString = (cents: number): string => String(cents);
+
+/** Categorias de referência (020 · US1) → DTO lean `{ id, name, group }`. Nunca expõe o row cru. */
+export const categoriesToDto = (categories: readonly Category[]): CategoryResponseDto[] =>
+  categories.map((c) => ({ id: String(c.id), name: c.name, group: c.group }));
+
+/** Centros de custo de referência (020 · US2) → DTO lean `{ id, code, name }`. */
+export const costCentersToDto = (costCenters: readonly CostCenter[]): CostCenterResponseDto[] =>
+  costCenters.map((c) => ({ id: String(c.id), code: c.code, name: c.name }));
+
+/** Programas (020 · US3) → DTO lean `{ id, name }` (passthrough da fonte canônica). */
+export const programsToDto = (programs: readonly ProgramView[]): ProgramResponseDto[] =>
+  programs.map((p) => ({ id: p.id, name: p.name }));
 
 /**
  * Mapeia um StoredDocument (Document + Payables | null) para o DTO de resposta completo.

@@ -573,6 +573,38 @@ export const cedenteAccountListResponseSchema = z.array(cedenteAccountResponseSc
 
 export type CedenteAccountResponseDto = z.infer<typeof cedenteAccountResponseSchema>;
 
+// Dados de referência de categorização (020 · US1) — GET /financial/categories.
+export const categoryResponseSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  group: z.enum(['despesa', 'receita', 'ajuste']),
+});
+
+export const categoryListResponseSchema = z.array(categoryResponseSchema);
+
+export type CategoryResponseDto = z.infer<typeof categoryResponseSchema>;
+
+// Centros de custo de referência (020 · US2) — GET /financial/cost-centers.
+export const costCenterResponseSchema = z.object({
+  id: z.uuid(),
+  code: z.string(),
+  name: z.string(),
+});
+
+export const costCenterListResponseSchema = z.array(costCenterResponseSchema);
+
+export type CostCenterResponseDto = z.infer<typeof costCenterResponseSchema>;
+
+// Programas (020 · US3) — GET /financial/programs (passthrough da fonte canônica de `programs`).
+export const programResponseSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+});
+
+export const programListResponseSchema = z.array(programResponseSchema);
+
+export type ProgramResponseDto = z.infer<typeof programResponseSchema>;
+
 // ─── Read-model do extrato por conta + período (#139) ──────────────────────────
 
 export const accountStatementQuerySchema = z.object({
