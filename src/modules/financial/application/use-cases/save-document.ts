@@ -21,12 +21,18 @@ import type {
   DocumentRepositoryError,
 } from '../../domain/document/repository.ts';
 import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
+import type {
+  ContractCategorizationReadPort,
+  ContractCategorizationReadError,
+} from '#src/modules/contracts/public-api/index.ts';
 import { buildTimelineEntries } from '../timeline-recording.ts';
 
 export type SaveDocumentDeps = Readonly<{
   repo: DocumentRepository;
   outbox: FinancialOutbox;
   clock: Clock;
+  // #48: leitura cross-módulo (ADR-0006) p/ herdar a categorização do contrato vinculado.
+  contractCategorizationReader: ContractCategorizationReadPort;
 }>;
 
 export type SaveDocumentCommand = Readonly<{
@@ -62,6 +68,7 @@ export type SaveDocumentError =
   | OutboxAppendError
   | PartnerRefError
   | FinancialRefError
+  | ContractCategorizationReadError
   | Money.MoneyError
   | Retention.RetentionError
   | RegisteredTax.RegisteredTaxError;
@@ -83,6 +90,31 @@ export const saveDocument =
     if (categoryRef !== null && !categoryRef.ok) return err(categoryRef.error);
     const programRef = cmd.programRef == null ? null : ProgramRef.rehydrate(cmd.programRef);
     if (programRef !== null && !programRef.ok) return err(programRef.error);
+
+    // #48: herda programRef/budgetPlanRef do contrato vinculado quando não informados pelo front
+    // (pré-fill editável). categoria/centro de custo são rótulos livres do contrato, sem campo-ref
+    // no documento → fora desta fatia. Leitura cross-módulo via public-api de contracts (#178).
+    let resolvedProgramRef = programRef?.value ?? null;
+    let resolvedBudgetPlanRef = budgetPlanRef?.value ?? null;
+    if (
+      contractRef?.value != null &&
+      (resolvedProgramRef === null || resolvedBudgetPlanRef === null)
+    ) {
+      const cat = await deps.contractCategorizationReader.getCategorization(
+        String(contractRef.value),
+      );
+      if (!cat.ok) return err(cat.error);
+      if (cat.value !== null) {
+        if (resolvedProgramRef === null && cat.value.programId !== null) {
+          const r = ProgramRef.rehydrate(cat.value.programId);
+          if (r.ok) resolvedProgramRef = r.value;
+        }
+        if (resolvedBudgetPlanRef === null && cat.value.budgetPlanId !== null) {
+          const r = BudgetPlanRef.rehydrate(cat.value.budgetPlanId);
+          if (r.ok) resolvedBudgetPlanRef = r.value;
+        }
+      }
+    }
 
     const grossValue = Money.fromCents(cmd.grossValueCents);
     if (!grossValue.ok) return err(grossValue.error);
@@ -115,9 +147,9 @@ export const saveDocument =
       type: cmd.type,
       supplier: supplier.value,
       contractRef: contractRef?.value ?? null,
-      budgetPlanRef: budgetPlanRef?.value ?? null,
+      budgetPlanRef: resolvedBudgetPlanRef,
       categoryRef: categoryRef?.value ?? null,
-      programRef: programRef?.value ?? null,
+      programRef: resolvedProgramRef,
       paymentMethod: cmd.paymentMethod,
       grossValue: grossValue.value,
       sourceDiscounts: sourceDiscounts.value,

@@ -32,6 +32,12 @@ import { createInMemoryCedenteAccountStore } from '../persistence/repos/cedente-
 import { createInMemorySuggestionView } from '../persistence/repos/suggestion-view.in-memory.ts';
 import { createInMemoryRejectedSuggestionRepository } from '../persistence/repos/rejected-suggestion-repository.in-memory.ts';
 import { createInMemoryReconciliationPeriodStore } from '../persistence/repos/reconciliation-period-store.in-memory.ts';
+// #48: read-port cross-módulo da categorização do contrato (ADR-0006 — só via public-api).
+import {
+  buildContractsReadPort,
+  createInMemoryContractCategorizationReadStore,
+  type ContractCategorizationReadPort,
+} from '#src/modules/contracts/public-api/index.ts';
 import { createInMemoryOutbox } from '../outbox/outbox.in-memory.ts';
 import { createDrizzleDocumentRepository } from '../persistence/repos/document-repository.drizzle.ts';
 import { createDrizzleTimelineRepository } from '../persistence/repos/timeline-repository.drizzle.ts';
@@ -153,6 +159,9 @@ export type FinancialHttpDeps = Readonly<{
 }>;
 
 type Pools = Readonly<{
+  // #48: leitura cross-módulo da categorização do contrato (ADR-0006). memory: in-memory vazio;
+  // mysql: read-port de contracts na MESMA conexão (ctr_* no mesmo DB do monólito).
+  contractCategorizationReader: ContractCategorizationReadPort;
   repo: DocumentRepository;
   // Repo de LEITURA da trilha. Na escrita, o `save` do DocumentRepository grava a trilha
   // na mesma transação (memory: store compartilhado; mysql: dentro da tx do save).
@@ -192,6 +201,7 @@ const buildMemoryPools = (): Pools => {
   const rejectedSuggestionRepo = createInMemoryRejectedSuggestionRepository();
   const periodStore = createInMemoryReconciliationPeriodStore();
   return {
+    contractCategorizationReader: createInMemoryContractCategorizationReadStore(),
     repo,
     timelineRepo,
     statementRepo,
@@ -215,7 +225,17 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     throw new Error(`financial-composition: falha ao abrir pool MySQL (${handleR.error})`);
   }
   const handle: FinancialMysqlHandle = handleR.value;
+  // #48: read-port de contracts na MESMA conexão (ctr_* no mesmo DB do monólito — ADR-0006/0014).
+  const readPortR = await buildContractsReadPort({ connectionString: writerUrl });
+  if (!readPortR.ok) {
+    await handle.close();
+    throw new Error(
+      `financial-composition: falha ao abrir read-port de contracts (${readPortR.error})`,
+    );
+  }
+  const contractsReadPort = readPortR.value;
   return {
+    contractCategorizationReader: contractsReadPort,
     repo: createDrizzleDocumentRepository(handle),
     // Leitura da trilha via pool (a escrita é feita dentro da tx do document-repo.save).
     timelineRepo: createDrizzleTimelineRepository(handle),
@@ -226,7 +246,10 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     suggestionView: createDrizzleSuggestionView(handle),
     rejectedSuggestionRepo: createDrizzleRejectedSuggestionRepository(handle),
     periodStore: createDrizzleReconciliationPeriodStore(handle),
-    shutdown: () => handle.close(),
+    shutdown: async () => {
+      await contractsReadPort.close();
+      await handle.close();
+    },
   };
 };
 
@@ -235,7 +258,12 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
   const clock = ClockReal();
   // Deps base (repo + outbox); os 6 use cases mutantes também recebem `clock` para
   // carimbar `occurredAt` das entries da trilha (timeline-recording.ts).
-  const deps = { repo: pools.repo, outbox: outbox.port, clock };
+  const deps = {
+    repo: pools.repo,
+    outbox: outbox.port,
+    clock,
+    contractCategorizationReader: pools.contractCategorizationReader,
+  };
   // Lançamento manual (US5): reaproveitado pelo confirmBatch (1 template × N transações).
   const record = recordManualEntry({
     reconciliationRepo: pools.reconciliationRepo,
