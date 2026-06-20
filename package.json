@@ -59,12 +59,12 @@
     "test:integration:all": "bash scripts/e2e-bruno-all.sh",
     "test:integration:photo": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/test-integration.ts photo",
     "test:integration:logo": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/test-integration.ts logo",
-    "db:generate": "drizzle-kit generate",
-    "db:generate:auth": "drizzle-kit generate --config drizzle.config.auth.ts",
-    "db:generate:partners": "drizzle-kit generate --config drizzle.config.partners.ts",
-    "db:generate:programs": "drizzle-kit generate --config drizzle.config.programs.ts",
-    "db:generate:financial": "drizzle-kit generate --config drizzle.config.financial.ts",
-    "db:generate:notifications": "drizzle-kit generate --config drizzle.config.notifications.ts",
+    "db:generate": "drizzle-kit generate --config db/drizzle/contracts.ts",
+    "db:generate:auth": "drizzle-kit generate --config db/drizzle/auth.ts",
+    "db:generate:partners": "drizzle-kit generate --config db/drizzle/partners.ts",
+    "db:generate:programs": "drizzle-kit generate --config db/drizzle/programs.ts",
+    "db:generate:financial": "drizzle-kit generate --config db/drizzle/financial.ts",
+    "db:generate:notifications": "drizzle-kit generate --config db/drizzle/notifications.ts",
     "db:seed:partners": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/seed-partners.ts"
   },
   "devDependencies": {

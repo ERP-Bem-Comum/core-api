@@ -76,18 +76,24 @@ describe('CTR-CLEANUP-SQLITE — CA-1..8: artefatos SQLite removidos', () => {
     });
   }
 
-  it('CA-8: drizzle.config.ts existe e tem dialect:mysql (renomeado de drizzle.mysql.config.ts)', () => {
-    const drizzleConfig = join(PROJECT_ROOT, 'drizzle.config.ts');
-    assert.ok(existsSync(drizzleConfig), 'drizzle.config.ts ausente');
+  it('CA-8: config drizzle MySQL vive em db/drizzle/ (sem SQLite, sem legado na raiz)', () => {
+    // Repo cleanup (Fase 2): os drizzle.config.*.ts da raiz foram movidos para db/drizzle/.
+    const drizzleConfig = join(PROJECT_ROOT, 'db/drizzle/contracts.ts');
+    assert.ok(existsSync(drizzleConfig), 'db/drizzle/contracts.ts ausente');
     const content = readFileSync(drizzleConfig, 'utf-8');
-    assert.match(content, /dialect:\s*['"]mysql['"]/, 'drizzle.config.ts não tem dialect:mysql');
-    // Não deve existir paralelo drizzle.mysql.config.ts após o rename.
-    const drizzleMysqlConfig = join(PROJECT_ROOT, 'drizzle.mysql.config.ts');
-    assert.equal(
-      existsSync(drizzleMysqlConfig),
-      false,
-      'drizzle.mysql.config.ts ainda existe — rename pendente',
+    assert.match(
+      content,
+      /dialect:\s*['"]mysql['"]/,
+      'db/drizzle/contracts.ts não tem dialect:mysql',
     );
+    // Não deve sobrar config drizzle legado na raiz.
+    for (const legado of ['drizzle.config.ts', 'drizzle.mysql.config.ts']) {
+      assert.equal(
+        existsSync(join(PROJECT_ROOT, legado)),
+        false,
+        `${legado} ainda existe na raiz — mover para db/drizzle/ pendente`,
+      );
+    }
   });
 });
 
