@@ -9,7 +9,12 @@ import {
   type ProgramsMysqlDriverError,
 } from '../adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleProgramReadStore } from '../adapters/persistence/repos/program-read.drizzle.ts';
-import type { ProgramReadPort } from '../application/ports/program-read.ts';
+import { createDrizzleProgramListReader } from '../adapters/persistence/repos/program-list-read.drizzle.ts';
+import type {
+  ProgramReadPort,
+  ProgramView,
+  ProgramReadError,
+} from '../application/ports/program-read.ts';
 
 export type {
   ProgramReadPort,
@@ -19,6 +24,8 @@ export type {
 
 export type ProgramsReadPort = ProgramReadPort &
   Readonly<{
+    // Listagem de todos os programas (projeção ProgramView) — consumo cross-módulo (financeiro 020 · US3).
+    listAll: () => Promise<Result<readonly ProgramView[], ProgramReadError>>;
     close: () => Promise<void>;
   }>;
 
@@ -38,9 +45,11 @@ export const buildProgramsReadPort = async (
   const handle = handleR.value;
 
   const store = createDrizzleProgramReadStore(handle);
+  const listReader = createDrizzleProgramListReader(handle);
 
   return ok({
     ...store,
+    listAll: listReader.listAll,
     close: async () => handle.close(),
   });
 };
