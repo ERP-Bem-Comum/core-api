@@ -8,6 +8,7 @@
 
 import { type Result, ok } from '#src/shared/primitives/result.ts';
 import type { User } from '#src/modules/auth/domain/identity/user/types.ts';
+import { listPermissions } from '#src/modules/auth/domain/authorization/list-permissions.ts';
 import type {
   UserQuery,
   ListUsersQuery,
@@ -42,5 +43,18 @@ export const inMemoryUserQuery = (source: () => readonly User[]): UserQuery => (
     const items = sorted.slice(start, start + pageSize).map(toItem);
 
     return ok({ items, meta: { currentPage: page, pageSize, totalItems, totalPages } });
+  },
+
+  // #148: usuários ativos com a permissão (achatada das roles via listPermissions). Ordena por nome.
+  listByPermission: async (
+    permission,
+  ): Promise<Result<readonly UserListItem[], UserQueryError>> => {
+    const wanted = permission.trim().toLowerCase();
+    const items = source()
+      .filter((u) => u.status === 'active')
+      .filter((u) => listPermissions(u).some((p) => String(p) === wanted))
+      .sort((a, b) => (a.name ?? '').localeCompare(b.name ?? ''))
+      .map(toItem);
+    return ok(items);
   },
 });

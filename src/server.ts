@@ -19,6 +19,7 @@ import {
   makeRequireAuth,
   parseE2eAuthSeed,
   usersHttpPlugin,
+  approversHttpPlugin,
   rolesHttpPlugin,
   meHttpPlugin,
 } from '#src/modules/auth/public-api/http.ts';
@@ -262,6 +263,14 @@ const main = async (): Promise<void> => {
             removeProfilePhoto: authDeps.removeProfilePhoto,
             getProfilePhoto: authDeps.getProfilePhoto,
           },
+          { requireAuth, authorize: authDeps.authorize },
+        ),
+        prefix: '/api/v1',
+      },
+      // Listagem de aprovadores (#148) → /api/v1/approvers. Plugin separado (aditivo). RBAC user:list.
+      {
+        plugin: approversHttpPlugin(
+          { listUsersByPermission: authDeps.listUsersByPermission },
           { requireAuth, authorize: authDeps.authorize },
         ),
         prefix: '/api/v1',

@@ -16,6 +16,8 @@ export { makeRequireAuth, makeAuthorize, makeHasPermission } from '../adapters/h
 export { parseE2eAuthSeed } from '../adapters/http/e2e-seed.ts';
 export { usersHttpPlugin } from '../adapters/http/users-plugin.ts';
 export type { UsersHttpDeps, UsersHttpHooks } from '../adapters/http/users-plugin.ts';
+export { approversHttpPlugin } from '../adapters/http/approvers-plugin.ts';
+export type { ApproversHttpDeps, ApproversHttpHooks } from '../adapters/http/approvers-plugin.ts';
 export { rolesHttpPlugin } from '../adapters/http/roles-plugin.ts';
 export type { RolesHttpDeps, RolesHttpHooks } from '../adapters/http/roles-plugin.ts';
 export { meHttpPlugin } from '../adapters/http/me-plugin.ts';
