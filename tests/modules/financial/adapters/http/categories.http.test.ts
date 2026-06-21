@@ -84,6 +84,25 @@ describe('financial/http — GET /categories (020 · US1)', () => {
     );
   });
 
+  it('#147 F3: cada categoria expõe parentId (hierarquia auto-referente; null = top-level)', async () => {
+    const res = await handle.app.inject({
+      method: 'GET',
+      url: '/api/v2/financial/categories',
+      headers: { authorization: `Bearer ${READER}` },
+    });
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as readonly { id: string; parentId: string | null }[];
+    for (const item of body) {
+      assert.ok(
+        Object.prototype.hasOwnProperty.call(item, 'parentId'),
+        'item deve ter a chave parentId',
+      );
+      assert.ok(item.parentId === null || typeof item.parentId === 'string');
+    }
+    // Sem taxonomia semeada ainda → todas top-level (parentId null).
+    assert.ok(body.every((c) => c.parentId === null));
+  });
+
   it('sem reference:read → 403', async () => {
     const res = await handle.app.inject({
       method: 'GET',

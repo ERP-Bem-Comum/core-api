@@ -31,6 +31,7 @@ export const createDrizzleCategoryReadStore = (
             name: finCategories.name,
             group: finCategories.group,
             active: finCategories.active,
+            parentId: finCategories.parentId,
           })
           .from(finCategories)
           .where(eq(finCategories.active, true))
@@ -40,11 +41,18 @@ export const createDrizzleCategoryReadStore = (
         for (const row of rows) {
           const idR = CategoryId.rehydrate(row.id);
           if (!idR.ok) return err('category-read-unavailable');
+          let parentId: CategoryId.CategoryId | null = null;
+          if (row.parentId !== null) {
+            const pR = CategoryId.rehydrate(row.parentId);
+            if (!pR.ok) return err('category-read-unavailable');
+            parentId = pR.value;
+          }
           const catR = Category.create({
             id: idR.value,
             name: row.name,
             group: row.group,
             active: row.active,
+            parentId,
           });
           if (!catR.ok) return err('category-read-unavailable');
           out.push(catR.value);

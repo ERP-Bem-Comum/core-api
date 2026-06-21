@@ -810,11 +810,15 @@ export const finCategories = mysqlTable(
     name: varchar('name', { length: 120 }).notNull(),
     group: varchar('group', { length: 12 }).notNull(),
     active: boolean('active').notNull().default(true),
+    // Hierarquia auto-referente (#147 F3): pai da categoria (subcategoria). Nullable = top-level.
+    // Sem FK física (mesma tabela; validação de existência é do seed) — ADR-0014.
+    parentId: varchar('parent_id', { length: 36 }),
   },
   (t) => [
     check('fin_categories_group_chk', sql`${t.group} IN ('despesa','receita','ajuste')`),
     index('fin_categories_group_name_idx').on(t.group, t.name),
     index('fin_categories_active_idx').on(t.active),
+    index('fin_categories_parent_id_idx').on(t.parentId),
   ],
 );
 

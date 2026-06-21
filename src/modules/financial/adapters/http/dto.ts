@@ -43,7 +43,13 @@ const moneyToCentsString = (cents: number): string => String(cents);
 
 /** Categorias de referência (020 · US1) → DTO lean `{ id, name, group }`. Nunca expõe o row cru. */
 export const categoriesToDto = (categories: readonly Category[]): CategoryResponseDto[] =>
-  categories.map((c) => ({ id: String(c.id), name: c.name, group: c.group }));
+  categories.map((c) => ({
+    id: String(c.id),
+    name: c.name,
+    group: c.group,
+    // Hierarquia (#147 F3): parentId branded é string em runtime — atribuição direta.
+    parentId: c.parentId,
+  }));
 
 /** Centros de custo de referência (020 · US2) → DTO lean `{ id, code, name }`. */
 export const costCentersToDto = (costCenters: readonly CostCenter[]): CostCenterResponseDto[] =>

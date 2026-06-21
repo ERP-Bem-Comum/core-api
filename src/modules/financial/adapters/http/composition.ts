@@ -207,7 +207,14 @@ const seededCategories = (): readonly Category.Category[] =>
   REFERENCE_CATEGORY_SEED.flatMap((s) => {
     const idR = CategoryId.rehydrate(s.id);
     if (!idR.ok) return [];
-    const r = Category.create({ id: idR.value, name: s.name, group: s.group });
+    // #147 F3: parentId opcional no seed (subcategoria). Pai inválido → descarta o item (defensivo).
+    let parentId: CategoryId.CategoryId | null = null;
+    if (s.parentId !== undefined) {
+      const pR = CategoryId.rehydrate(s.parentId);
+      if (!pR.ok) return [];
+      parentId = pR.value;
+    }
+    const r = Category.create({ id: idR.value, name: s.name, group: s.group, parentId });
     return r.ok ? [r.value] : [];
   });
 

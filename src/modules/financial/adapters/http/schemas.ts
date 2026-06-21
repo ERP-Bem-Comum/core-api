@@ -591,6 +591,8 @@ export const categoryResponseSchema = z.object({
   id: z.uuid(),
   name: z.string(),
   group: z.enum(['despesa', 'receita', 'ajuste']),
+  // Hierarquia auto-referente (#147 F3): pai (subcategoria). null = top-level.
+  parentId: z.string().nullable(),
 });
 
 export const categoryListResponseSchema = z.array(categoryResponseSchema);
