@@ -582,9 +582,16 @@ export const cedenteAccountResponseSchema = z.object({
   openingBalanceDate: z.string().nullable(),
 });
 
-export const cedenteAccountListResponseSchema = z.array(cedenteAccountResponseSchema);
+// Item da listagem (#89c F1): inclui o saldo ATUAL (abertura + Σ extratos importados). Money em
+// string de centavos (convenção). Distinto de openingBalanceCents (saldo de abertura).
+export const cedenteAccountListItemSchema = cedenteAccountResponseSchema.extend({
+  currentBalanceCents: z.string(),
+});
+
+export const cedenteAccountListResponseSchema = z.array(cedenteAccountListItemSchema);
 
 export type CedenteAccountResponseDto = z.infer<typeof cedenteAccountResponseSchema>;
+export type CedenteAccountListItemDto = z.infer<typeof cedenteAccountListItemSchema>;
 
 // Dados de referência de categorização (020 · US1) — GET /financial/categories.
 export const categoryResponseSchema = z.object({

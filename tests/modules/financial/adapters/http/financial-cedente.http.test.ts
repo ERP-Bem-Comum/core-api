@@ -96,6 +96,34 @@ describe('financial/http — cedente-accounts (019) — W0 RED', () => {
     assert.equal(res.statusCode, 200, res.body);
   });
 
+  it('#89c F1: GET lista expõe currentBalanceCents (= abertura quando sem extratos)', async () => {
+    const created = await handle.app.inject({
+      method: 'POST',
+      url: '/api/v2/financial/cedente-accounts',
+      headers: { authorization: `Bearer ${WRITER}` },
+      payload: body({
+        accountNumber: '778899',
+        nickname: 'Conta com saldo',
+        openingBalanceCents: '50000',
+        openingBalanceDate: '2026-01-01',
+      }),
+    });
+    assert.equal(created.statusCode, 201, created.body);
+    const id = (created.json() as { id: string }).id;
+
+    const res = await handle.app.inject({
+      method: 'GET',
+      url: '/api/v2/financial/cedente-accounts',
+      headers: { authorization: `Bearer ${READER}` },
+    });
+    assert.equal(res.statusCode, 200, res.body);
+    const items = res.json() as readonly { id: string; currentBalanceCents: string | null }[];
+    const item = items.find((a) => a.id === id);
+    assert.ok(item, 'conta criada deve aparecer na lista');
+    // Sem extratos importados → saldo atual = saldo de abertura.
+    assert.equal(item.currentBalanceCents, '50000');
+  });
+
   it('CA-US2: POST /cedente-accounts/:id/close → rota existe (≠ 404)', async () => {
     const id = '11111111-1111-4111-8111-111111111111';
     const res = await handle.app.inject({

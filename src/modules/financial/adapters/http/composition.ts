@@ -91,6 +91,7 @@ import { closeReconciliationPeriod } from '../../application/use-cases/close-rec
 import { exportReconciliation } from '../../application/use-cases/export-reconciliation.ts';
 import { createCedenteAccount } from '../../application/use-cases/create-cedente-account.ts';
 import { listCedenteAccounts } from '../../application/use-cases/list-cedente-accounts.ts';
+import { listCedenteAccountsWithBalance } from '../../application/use-cases/list-cedente-accounts-with-balance.ts';
 import { closeCedenteAccount } from '../../application/use-cases/close-cedente-account.ts';
 import { editCedenteAccount } from '../../application/use-cases/edit-cedente-account.ts';
 import { getAccountStatement } from '../../application/use-cases/get-account-statement.ts';
@@ -157,6 +158,8 @@ export type FinancialHttpDeps = Readonly<{
   createCedenteAccount: ReturnType<typeof createCedenteAccount>;
   /** Conta-cedente (019) — GET /cedente-accounts. */
   listCedenteAccounts: ReturnType<typeof listCedenteAccounts>;
+  /** Conta-cedente + saldo atual (#89c F1) — GET /cedente-accounts (lista com currentBalanceCents). */
+  listCedenteAccountsWithBalance: ReturnType<typeof listCedenteAccountsWithBalance>;
   /** Conta-cedente (019) — leitura direta para GET /cedente-accounts/:id. */
   findCedenteAccountById: CedenteAccountStore['findById'];
   /** Conta-cedente (019) — POST /cedente-accounts/:id/close. */
@@ -415,6 +418,11 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     }),
     createCedenteAccount: createCedenteAccount({ cedenteStore: pools.cedenteStore }),
     listCedenteAccounts: listCedenteAccounts({ cedenteStore: pools.cedenteStore }),
+    listCedenteAccountsWithBalance: listCedenteAccountsWithBalance({
+      cedenteStore: pools.cedenteStore,
+      statements: pools.statementRepo,
+      clock,
+    }),
     findCedenteAccountById: pools.cedenteStore.findById,
     closeCedenteAccount: closeCedenteAccount({ cedenteStore: pools.cedenteStore }),
     editCedenteAccount: editCedenteAccount({
