@@ -37,8 +37,12 @@ chmod 644 secrets/mysql_*.txt
 # MySQL 8.4 via compose; --wait bloqueia até o healthcheck passar. (MinIO não sobe — sem upload no smoke.)
 docker compose up -d mysql --wait || exit 1
 
-# Servidor real em background. Composition aplica migrations (auth+contracts) no boot e semeia o
-# operador RBAC (CORE_API_E2E=1 + AUTH_SEED_JSON). Dual-pool: writer=root, reader=readonly_bi (SELECT-only).
+# Provisiona o schema (CORE-MIGRATE-BOOT-INVERT: o server NÃO migra mais no boot).
+MIGRATE_DATABASE_URL='mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core' \
+  node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/migrate/run.ts || exit 1
+
+# Servidor real em background (applyMigrations:false — schema já provisionado). Semeia o operador
+# RBAC (CORE_API_E2E=1 + AUTH_SEED_JSON). Dual-pool: writer=root, reader=readonly_bi (SELECT-only).
 AUTH_DRIVER=mysql \
   AUTH_DATABASE_URL='mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core' \
   CONTRACTS_DRIVER=mysql \

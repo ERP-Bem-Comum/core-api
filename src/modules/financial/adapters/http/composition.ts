@@ -276,7 +276,9 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
   const writerUrl = config.writerUrl ?? '';
   const handleR = await openMysqlFinancial({
     connectionString: writerUrl,
-    applyMigrations: true,
+    // Boot NÃO migra (CORE-MIGRATE-BOOT-INVERT): o schema é provisionado pelo job
+    // `migrate` antes do deploy — evita race multi-instância (M5 do mysql-driver).
+    applyMigrations: false,
   });
   if (!handleR.ok) {
     throw new Error(`financial-composition: falha ao abrir pool MySQL (${handleR.error})`);

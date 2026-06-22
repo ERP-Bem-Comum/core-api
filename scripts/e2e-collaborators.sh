@@ -42,7 +42,11 @@ export MYSQL_PORT
 # MySQL 8.4 via compose; --wait bloqueia ate o healthcheck passar.
 docker compose up -d mysql --wait || exit 1
 
-# Servidor real em background. partners=mysql aplica migrations par_* no boot; auth=memory semeia o
+# Provisiona o schema (CORE-MIGRATE-BOOT-INVERT: o server NÃO migra mais no boot).
+MIGRATE_DATABASE_URL="mysql://root:rootpw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core" \
+  node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/migrate/run.ts || exit 1
+
+# Servidor real em background (applyMigrations:false — schema já provisionado). auth=memory semeia o
 # operador RBAC (CORE_API_E2E=1 + AUTH_SEED_JSON com collaborator:read+write). contracts=memory (default).
 PARTNERS_DRIVER=mysql \
   PARTNERS_DATABASE_URL="mysql://root:rootpw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core" \

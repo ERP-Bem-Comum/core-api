@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # scripts/e2e-auth.sh — orquestra o smoke E2E da borda auth (AUTH-HTTP-E2E-SMOKE).
 #
-# Sobe MySQL (Docker), inicia o servidor real (AUTH_DRIVER=mysql, migrations no boot)
+# Sobe MySQL (Docker), provisiona o schema (job migrate), inicia o servidor real (AUTH_DRIVER=mysql)
 # e roda o smoke (tests/e2e/auth-smoke.e2e.ts) via Node + fetch. `trap` garante o
 # teardown (mata o server, derruba o compose, remove secrets) mesmo em falha.
 #
@@ -26,7 +26,11 @@ chmod 644 secrets/mysql_*.txt
 # MySQL 8.4 via compose; --wait bloqueia até o healthcheck passar.
 docker compose up -d mysql --wait || exit 1
 
-# Servidor real em background; o composition aplica as migrations auth no boot.
+# Provisiona o schema (CORE-MIGRATE-BOOT-INVERT: o server NÃO migra mais no boot).
+MIGRATE_DATABASE_URL='mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core' \
+  node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/migrate/run.ts || exit 1
+
+# Servidor real em background (applyMigrations:false — schema já provisionado acima).
 AUTH_DRIVER=mysql \
   AUTH_DATABASE_URL='mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core' \
   PORT=3100 \

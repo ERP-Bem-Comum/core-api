@@ -61,7 +61,8 @@ x-worker-base: &x-worker-base
   networks:
     - core-api
   # Workers são processos long-running que consomem o banco. Dependem do `http`
-  # (que aplica migrations no boot) estar healthy, além do mysql healthy.
+  # healthy (que por sua vez depende do job `migrate` completar — o schema é
+  # provisionado pelo migrate, não no boot), além do mysql healthy.
   # Garantia: schema migrado antes de qualquer worker processar mensagens.
   depends_on:
     mysql:
@@ -261,7 +262,8 @@ services:
   #
   # CLI-RETIRE-EMBEDDED (ADR-0037): a CLI embutida foi removida. O ENTRYPOINT
   # da imagem é o servidor HTTP (`src/server.ts`). Este serviço sobe o HTTP real,
-  # conectado ao MySQL (via secret file) e aplica migrations no boot.
+  # conectado ao MySQL (via secret file). NÃO migra no boot (applyMigrations:false,
+  # CORE-MIGRATE-BOOT-INVERT) — depende do job `migrate` completar antes (depends_on).
   #
   # Injeção de secrets: workers NÃO suportam *_DATABASE_URL_FILE — usam o
   # padrão $(cat) via sh wrapper. O `http` também usa este padrão para
@@ -323,6 +325,8 @@ services:
     depends_on:
       mysql:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   # ──────────────────────────────────────────────────────────────────────────
   # Workers long-running (opt-in via profile `workers`).
@@ -497,6 +501,8 @@ services:
   migrate:
     <<: *x-job-base
     profiles:
+      - app
+      - workers
       - jobs
     # $0 = src/jobs/migrate/run.ts (4º elemento do array entrypoint do wrapper sh).
     entrypoint:

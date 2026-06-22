@@ -287,7 +287,9 @@ const buildStores = async (config: AuthCompositionConfig): Promise<Stores> => {
   }
   const handleR = await openAuthMysql({
     connectionString: config.connectionString,
-    applyMigrations: true,
+    // Boot NÃO migra (CORE-MIGRATE-BOOT-INVERT): o schema é provisionado pelo job
+    // `migrate` antes do deploy — evita race multi-instância (M5 do mysql-driver).
+    applyMigrations: false,
   });
   if (!handleR.ok) throw new Error(`auth-composition: falha ao abrir MySQL (${handleR.error})`);
   const handle = handleR.value;
