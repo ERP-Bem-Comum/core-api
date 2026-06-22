@@ -27,25 +27,29 @@ import {
   ContractRef,
   BudgetPlanRef,
   CategoryRef,
+  CostCenterRef,
   ProgramRef,
   type ContractRef as ContractRefType,
   type BudgetPlanRef as BudgetPlanRefType,
   type CategoryRef as CategoryRefType,
+  type CostCenterRef as CostCenterRefType,
   type ProgramRef as ProgramRefType,
 } from '../../../domain/shared/refs.ts';
 import { SupplierRef } from '#src/modules/partners/public-api/refs.ts';
 import * as Retention from '../../../domain/shared/retention.ts';
 import type { RetentionType } from '../../../domain/shared/retention.ts';
 import * as RegisteredTax from '../../../domain/shared/registered-tax.ts';
-import type {
-  DocumentType,
-  PaymentMethod,
-  DocumentStatus,
-  DocumentCore,
-  DraftDocument,
-  OpenDocument,
-  ApprovedDocument,
-  Document,
+import {
+  isPayeeKind,
+  type DocumentType,
+  type PaymentMethod,
+  type PayeeKind,
+  type DocumentStatus,
+  type DocumentCore,
+  type DraftDocument,
+  type OpenDocument,
+  type ApprovedDocument,
+  type Document,
 } from '../../../domain/document/types.ts';
 import type { Payable, Payables } from '../../../domain/payable/types.ts';
 import type {
@@ -67,11 +71,14 @@ export type DocumentMapperError =
   | 'mapper-invalid-contract-ref'
   | 'mapper-invalid-budget-plan-ref'
   | 'mapper-invalid-category-ref'
+  | 'mapper-invalid-cost-center-ref'
   | 'mapper-invalid-program-ref'
+  | 'mapper-invalid-approver-ref'
   | 'mapper-invalid-approved-by'
   | 'mapper-invalid-status'
   | 'mapper-invalid-document-type'
   | 'mapper-invalid-payment-method'
+  | 'mapper-invalid-payee-kind'
   | 'mapper-invalid-money'
   | 'mapper-invalid-due-date'
   | 'mapper-invalid-retention'
@@ -225,6 +232,19 @@ export const mapRowToDocument = (
       supplier = r.value;
     }
 
+    let payeeKind: PayeeKind | null = null;
+    if (row.payeeKind !== null) {
+      if (!isPayeeKind(row.payeeKind)) return err('mapper-invalid-payee-kind');
+      payeeKind = row.payeeKind;
+    }
+
+    let approverRef: UserRef.UserRef | null = null;
+    if (row.approverRef !== null) {
+      const r = UserRef.rehydrate(row.approverRef);
+      if (!r.ok) return err('mapper-invalid-approver-ref');
+      approverRef = r.value;
+    }
+
     let contractRef: ContractRefType | null = null;
     if (row.contractRef !== null) {
       const r = ContractRef.rehydrate(row.contractRef);
@@ -244,6 +264,13 @@ export const mapRowToDocument = (
       const r = CategoryRef.rehydrate(row.categoryRef);
       if (!r.ok) return err('mapper-invalid-category-ref');
       categoryRef = r.value;
+    }
+
+    let costCenterRef: CostCenterRefType | null = null;
+    if (row.costCenterRef !== null) {
+      const r = CostCenterRef.rehydrate(row.costCenterRef);
+      if (!r.ok) return err('mapper-invalid-cost-center-ref');
+      costCenterRef = r.value;
     }
 
     let programRef: ProgramRefType | null = null;
@@ -287,9 +314,11 @@ export const mapRowToDocument = (
       series: row.series ?? null,
       type,
       supplier,
+      payeeKind,
       contractRef,
       budgetPlanRef,
       categoryRef,
+      costCenterRef,
       programRef,
       paymentMethod,
       grossValue: grossValueR.value,
@@ -302,6 +331,7 @@ export const mapRowToDocument = (
       dueDate: row.dueDate ?? null,
       issueDate: row.issueDate ?? null,
       description: row.description ?? null,
+      approverRef,
     };
     return ok(draft);
   }
@@ -312,6 +342,20 @@ export const mapRowToDocument = (
   if (row.supplierRef === null) return err('mapper-invalid-supplier-ref');
   const supplierR = SupplierRef.rehydrate(row.supplierRef);
   if (!supplierR.ok) return err('mapper-invalid-supplier-ref');
+
+  // payeeKind (#90): legacy null → 'supplier' (back-compat); valor inválido no banco → erro.
+  let payeeKind: PayeeKind = 'supplier';
+  if (row.payeeKind !== null) {
+    if (!isPayeeKind(row.payeeKind)) return err('mapper-invalid-payee-kind');
+    payeeKind = row.payeeKind;
+  }
+
+  let approverRef: UserRef.UserRef | null = null;
+  if (row.approverRef !== null) {
+    const r = UserRef.rehydrate(row.approverRef);
+    if (!r.ok) return err('mapper-invalid-approver-ref');
+    approverRef = r.value;
+  }
 
   if (row.type === null || !isDocumentType(row.type)) return err('mapper-invalid-document-type');
 
@@ -360,6 +404,13 @@ export const mapRowToDocument = (
     categoryRef = r.value;
   }
 
+  let costCenterRef: CostCenterRefType | null = null;
+  if (row.costCenterRef !== null) {
+    const r = CostCenterRef.rehydrate(row.costCenterRef);
+    if (!r.ok) return err('mapper-invalid-cost-center-ref');
+    costCenterRef = r.value;
+  }
+
   let programRef: ProgramRefType | null = null;
   if (row.programRef !== null) {
     const r = ProgramRef.rehydrate(row.programRef);
@@ -374,9 +425,11 @@ export const mapRowToDocument = (
     series: row.series ?? null,
     type: row.type,
     supplier: supplierR.value,
+    payeeKind,
     contractRef,
     budgetPlanRef,
     categoryRef,
+    costCenterRef,
     programRef,
     paymentMethod: row.paymentMethod,
     grossValue: grossValueR.value,
@@ -390,6 +443,7 @@ export const mapRowToDocument = (
     description: row.description ?? null,
     dueDate: row.dueDate,
     issueDate: row.issueDate ?? null,
+    approverRef,
   };
 
   if (status === 'Approved') {
@@ -506,12 +560,15 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
       series: document.series ?? null,
       type: document.type ?? null,
       supplierRef: document.supplier !== null ? (document.supplier as unknown as string) : null,
+      payeeKind: document.payeeKind ?? null,
       contractRef:
         document.contractRef !== null ? (document.contractRef as unknown as string) : null,
       budgetPlanRef:
         document.budgetPlanRef !== null ? (document.budgetPlanRef as unknown as string) : null,
       categoryRef:
         document.categoryRef !== null ? (document.categoryRef as unknown as string) : null,
+      costCenterRef:
+        document.costCenterRef !== null ? (document.costCenterRef as unknown as string) : null,
       programRef: document.programRef !== null ? (document.programRef as unknown as string) : null,
       paymentMethod: document.paymentMethod ?? null,
       grossValue: document.grossValue?.cents ?? null,
@@ -531,6 +588,8 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
       createdAt: now,
       approvedAt: null,
       approvedBy: null,
+      approverRef:
+        document.approverRef !== null ? (document.approverRef as unknown as string) : null,
     };
   }
 
@@ -542,9 +601,11 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
     series: core.series ?? null,
     type: core.type,
     supplierRef: core.supplier as unknown as string,
+    payeeKind: core.payeeKind,
     contractRef: core.contractRef !== null ? (core.contractRef as unknown as string) : null,
     budgetPlanRef: core.budgetPlanRef !== null ? (core.budgetPlanRef as unknown as string) : null,
     categoryRef: core.categoryRef !== null ? (core.categoryRef as unknown as string) : null,
+    costCenterRef: core.costCenterRef !== null ? (core.costCenterRef as unknown as string) : null,
     programRef: core.programRef !== null ? (core.programRef as unknown as string) : null,
     paymentMethod: core.paymentMethod,
     grossValue: core.grossValue.cents,
@@ -564,6 +625,7 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
     createdAt: now,
     approvedAt: document.status === 'Approved' ? document.approvedAt : null,
     approvedBy: document.status === 'Approved' ? (document.approvedBy as unknown as string) : null,
+    approverRef: core.approverRef !== null ? (core.approverRef as unknown as string) : null,
   };
 };
 

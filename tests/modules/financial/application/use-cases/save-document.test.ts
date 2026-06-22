@@ -126,6 +126,75 @@ describe('financial/application — saveDocument', () => {
     }
   });
 
+  it('#147: persiste costCenterRef informado no comando', async () => {
+    const COST_CENTER = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+    const repo = createInMemoryDocumentRepository();
+    const outbox = createInMemoryOutbox();
+    const result = await saveDocument({
+      repo,
+      outbox: outbox.port,
+      clock: CLOCK,
+      contractCategorizationReader: emptyReader,
+    })({ ...nfseCommand(), costCenterRef: COST_CENTER });
+    assert.equal(isOk(result), true);
+    if (result.ok) {
+      const found = await repo.findById(result.value.documentId);
+      assert.equal(isOk(found), true);
+      if (found.ok && found.value.document.status === 'Open') {
+        assert.equal(String(found.value.document.costCenterRef), COST_CENTER);
+      }
+    }
+  });
+
+  it('#147: rejeita costCenterRef com formato inválido (não persiste nem publica)', async () => {
+    const repo = createInMemoryDocumentRepository();
+    const outbox = createInMemoryOutbox();
+    const result = await saveDocument({
+      repo,
+      outbox: outbox.port,
+      clock: CLOCK,
+      contractCategorizationReader: emptyReader,
+    })({ ...nfseCommand(), costCenterRef: 'not-a-uuid' });
+    assert.equal(isErr(result), true);
+    assert.equal(outbox.all().length, 0);
+  });
+
+  it('#90: persiste payeeKind informado (financier) no comando', async () => {
+    const repo = createInMemoryDocumentRepository();
+    const outbox = createInMemoryOutbox();
+    const result = await saveDocument({
+      repo,
+      outbox: outbox.port,
+      clock: CLOCK,
+      contractCategorizationReader: emptyReader,
+    })({ ...nfseCommand(), payeeKind: 'financier' });
+    assert.equal(isOk(result), true);
+    if (result.ok) {
+      const found = await repo.findById(result.value.documentId);
+      if (found.ok && found.value.document.status === 'Open') {
+        assert.equal(found.value.document.payeeKind, 'financier');
+      }
+    }
+  });
+
+  it('#90: payeeKind ausente → default supplier (back-compat)', async () => {
+    const repo = createInMemoryDocumentRepository();
+    const outbox = createInMemoryOutbox();
+    const result = await saveDocument({
+      repo,
+      outbox: outbox.port,
+      clock: CLOCK,
+      contractCategorizationReader: emptyReader,
+    })(nfseCommand());
+    assert.equal(isOk(result), true);
+    if (result.ok) {
+      const found = await repo.findById(result.value.documentId);
+      if (found.ok && found.value.document.status === 'Open') {
+        assert.equal(found.value.document.payeeKind, 'supplier');
+      }
+    }
+  });
+
   it('#48: ref informada pelo front prevalece sobre a do contrato (pré-fill editável)', async () => {
     const CONTRACT = '99999999-9999-4999-8999-999999999999';
     const FRONT_PROGRAM = '88888888-8888-4888-8888-888888888888';

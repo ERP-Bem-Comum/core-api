@@ -20,6 +20,7 @@ export const create = (input: CreateInput): Result<Category, CategoryError> => {
       name: input.name,
       group: groupR.value,
       active: input.active ?? true,
+      parentId: input.parentId ?? null,
     }),
   );
 };

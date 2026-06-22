@@ -1,0 +1,1 @@
+ALTER TABLE `fin_documents` ADD `cost_center_ref` varchar(36);

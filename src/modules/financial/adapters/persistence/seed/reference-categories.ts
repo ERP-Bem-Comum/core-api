@@ -3,7 +3,14 @@
 // `0012_*` (INSERT ... ON DUPLICATE KEY UPDATE — idempotente). Conjunto inicial = exemplos do
 // protótipo §9.4.5, refinável pela P.O. sem quebrar ids já gravados em lançamentos.
 
-export type ReferenceCategorySeed = Readonly<{ id: string; name: string; group: string }>;
+// `parentId` (#147 F3) opcional: quando a P.O. fornecer a taxonomia de subcategorias, basta
+// apontar para o `id` da categoria-pai aqui (sem mudança de código). Ausente = top-level.
+export type ReferenceCategorySeed = Readonly<{
+  id: string;
+  name: string;
+  group: string;
+  parentId?: string;
+}>;
 
 export const REFERENCE_CATEGORY_SEED: readonly ReferenceCategorySeed[] = [
   // despesa

@@ -1,11 +1,13 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
 import * as Money from '../../../../shared/kernel/money.ts';
+import * as UserRef from '../../../../shared/kernel/user-ref.ts';
 import { SupplierRef, type PartnerRefError } from '#src/modules/partners/public-api/refs.ts';
 import {
   ContractRef,
   BudgetPlanRef,
   CategoryRef,
+  CostCenterRef,
   ProgramRef,
   type FinancialRefError,
 } from '../../domain/shared/refs.ts';
@@ -13,7 +15,7 @@ import * as DocumentId from '../../domain/shared/document-id.ts';
 import * as Retention from '../../domain/shared/retention.ts';
 import * as RegisteredTax from '../../domain/shared/registered-tax.ts';
 import * as Document from '../../domain/document/document.ts';
-import type { DocumentType, PaymentMethod } from '../../domain/document/types.ts';
+import type { DocumentType, PaymentMethod, PayeeKind } from '../../domain/document/types.ts';
 import type { DocumentError } from '../../domain/document/errors.ts';
 import type {
   DocumentRepository,
@@ -34,9 +36,11 @@ export type SaveDraftCommand = Readonly<{
   series?: string | null;
   type?: DocumentType | null;
   supplierRef?: string | null;
+  payeeKind?: PayeeKind | null;
   contractRef?: string | null;
   budgetPlanRef?: string | null;
   categoryRef?: string | null;
+  costCenterRef?: string | null;
   programRef?: string | null;
   paymentMethod?: PaymentMethod | null;
   grossValueCents?: number | null;
@@ -49,6 +53,7 @@ export type SaveDraftCommand = Readonly<{
   dueDate?: Date | null;
   issueDate?: Date | null; // #163
   description?: string | null;
+  approverRef?: string | null; // #148
 }>;
 
 export type SaveDraftOutput = Readonly<{ documentId: DocumentId.DocumentId }>;
@@ -61,7 +66,8 @@ export type SaveDraftError =
   | FinancialRefError
   | Money.MoneyError
   | Retention.RetentionError
-  | RegisteredTax.RegisteredTaxError;
+  | RegisteredTax.RegisteredTaxError
+  | UserRef.UserRefError;
 
 const optionalMoney = (
   cents: number | null | undefined,
@@ -86,8 +92,13 @@ export const saveDraft =
     if (!budgetPlanRef.ok) return err(budgetPlanRef.error);
     const categoryRef = cmd.categoryRef == null ? ok(null) : CategoryRef.rehydrate(cmd.categoryRef);
     if (!categoryRef.ok) return err(categoryRef.error);
+    const costCenterRef =
+      cmd.costCenterRef == null ? ok(null) : CostCenterRef.rehydrate(cmd.costCenterRef);
+    if (!costCenterRef.ok) return err(costCenterRef.error);
     const programRef = cmd.programRef == null ? ok(null) : ProgramRef.rehydrate(cmd.programRef);
     if (!programRef.ok) return err(programRef.error);
+    const approverRef = cmd.approverRef == null ? ok(null) : UserRef.rehydrate(cmd.approverRef);
+    if (!approverRef.ok) return err(approverRef.error);
 
     const grossValue = optionalMoney(cmd.grossValueCents);
     if (!grossValue.ok) return err(grossValue.error);
@@ -123,9 +134,11 @@ export const saveDraft =
       ...(cmd.series !== undefined ? { series: cmd.series } : {}),
       ...(cmd.type !== undefined ? { type: cmd.type } : {}),
       supplier: supplier.value,
+      ...(cmd.payeeKind !== undefined ? { payeeKind: cmd.payeeKind } : {}),
       ...(contractRef.value !== null ? { contractRef: contractRef.value } : {}),
       ...(budgetPlanRef.value !== null ? { budgetPlanRef: budgetPlanRef.value } : {}),
       ...(categoryRef.value !== null ? { categoryRef: categoryRef.value } : {}),
+      ...(costCenterRef.value !== null ? { costCenterRef: costCenterRef.value } : {}),
       ...(programRef.value !== null ? { programRef: programRef.value } : {}),
       ...(cmd.paymentMethod !== undefined ? { paymentMethod: cmd.paymentMethod } : {}),
       ...(grossValue.value !== null ? { grossValue: grossValue.value } : {}),
@@ -138,6 +151,7 @@ export const saveDraft =
       ...(cmd.dueDate !== undefined ? { dueDate: cmd.dueDate } : {}),
       ...(cmd.issueDate !== undefined ? { issueDate: cmd.issueDate } : {}),
       ...(cmd.description !== undefined ? { description: cmd.description } : {}),
+      ...(approverRef.value !== null ? { approverRef: approverRef.value } : {}),
     });
     if (!draft.ok) return err(draft.error);
 

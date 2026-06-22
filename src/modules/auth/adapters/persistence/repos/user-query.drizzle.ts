@@ -112,5 +112,52 @@ export const createDrizzleUserQuery = (
     }
   };
 
-  return { list };
+  // #148: usuários ATIVOS com a permissão informada. Join user→role→permission (4 tabelas),
+  // DISTINCT (um usuário pode ter a permissão por mais de uma role). ORDER BY name.
+  // ADR-0020: SELECT/JOIN/DISTINCT permitidos; só lê auth_* (ADR-0014).
+  const listByPermission = async (
+    permission: string,
+  ): Promise<Result<readonly UserListItem[], UserQueryError>> => {
+    try {
+      const wanted = permission.trim().toLowerCase();
+      const rows = await db
+        .selectDistinct({
+          id: schema.authUser.id,
+          name: schema.authUser.name,
+          email: schema.authUser.email,
+          status: schema.authUser.status,
+        })
+        .from(schema.authUser)
+        .innerJoin(schema.authUserRole, eq(schema.authUserRole.userId, schema.authUser.id))
+        .innerJoin(
+          schema.authRolePermission,
+          eq(schema.authRolePermission.roleId, schema.authUserRole.roleId),
+        )
+        .innerJoin(
+          schema.authPermission,
+          eq(schema.authPermission.id, schema.authRolePermission.permissionId),
+        )
+        .where(and(eq(schema.authPermission.name, wanted), eq(schema.authUser.status, 'active')))
+        .orderBy(asc(schema.authUser.name))
+        // Teto defensivo (dropdown de aprovadores; org pequena-média). Evita materializar conjunto
+        // ilimitado se a base crescer. 500 é folgado para o caso de uso.
+        .limit(500);
+
+      const items: UserListItem[] = [];
+      for (const row of rows) {
+        const mapped = mapRowToItem(row);
+        if (!mapped.ok) {
+          process.stderr.write(`[user-query:listByPermission:mapper] ${mapped.reason}\n`);
+          return err('user-query-unavailable');
+        }
+        items.push(mapped.item);
+      }
+      return ok(items);
+    } catch (cause) {
+      process.stderr.write(`[user-query:listByPermission] ${String(cause)}\n`);
+      return err('user-query-unavailable');
+    }
+  };
+
+  return { list, listByPermission };
 };

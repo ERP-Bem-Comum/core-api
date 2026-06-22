@@ -173,6 +173,8 @@ export type AuthHttpDeps = Readonly<{
   confirmPasswordReset: ReturnType<typeof confirmPasswordReset>;
   /** Listagem administrativa de usuários (spec 005 US1, ADR-0037) — consumido por GET /api/v1/users. */
   listUsers: ReturnType<typeof listUsers>;
+  /** Listagem de aprovadores (#148) — usuários com `payable:approve`; consumido por GET /api/v1/approvers. */
+  listUsersByPermission: UserQuery['listByPermission'];
   /** Detalhe administrativo de usuário (spec 005 US2) — consumido por GET /api/v1/users/:id. */
   getUser: ReturnType<typeof getUser>;
   /** Criação administrativa de usuário + convite (spec 005 US3) — consumido por POST /api/v1/users. */
@@ -500,6 +502,7 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
       clock,
     }),
     listUsers: listUsers({ userQuery: stores.userQuery }),
+    listUsersByPermission: stores.userQuery.listByPermission,
     getUser: getUser({ userReader: stores.userReader }),
     createUserByAdmin: createUserByAdmin({
       userReader: stores.userReader,

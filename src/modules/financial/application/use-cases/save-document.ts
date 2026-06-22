@@ -1,11 +1,13 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
 import * as Money from '../../../../shared/kernel/money.ts';
+import * as UserRef from '../../../../shared/kernel/user-ref.ts';
 import { SupplierRef, type PartnerRefError } from '#src/modules/partners/public-api/refs.ts';
 import {
   ContractRef,
   BudgetPlanRef,
   CategoryRef,
+  CostCenterRef,
   ProgramRef,
   type FinancialRefError,
 } from '../../domain/shared/refs.ts';
@@ -13,7 +15,7 @@ import * as DocumentId from '../../domain/shared/document-id.ts';
 import * as Retention from '../../domain/shared/retention.ts';
 import * as RegisteredTax from '../../domain/shared/registered-tax.ts';
 import * as Document from '../../domain/document/document.ts';
-import type { DocumentType, PaymentMethod } from '../../domain/document/types.ts';
+import type { DocumentType, PaymentMethod, PayeeKind } from '../../domain/document/types.ts';
 import type { PayableId } from '../../domain/shared/payable-id.ts';
 import type { DocumentError } from '../../domain/document/errors.ts';
 import type {
@@ -40,9 +42,11 @@ export type SaveDocumentCommand = Readonly<{
   series?: string | null;
   type: DocumentType;
   supplierRef: string;
+  payeeKind?: PayeeKind;
   contractRef?: string | null;
   budgetPlanRef?: string | null;
   categoryRef?: string | null;
+  costCenterRef?: string | null;
   programRef?: string | null;
   paymentMethod: PaymentMethod;
   grossValueCents: number;
@@ -55,6 +59,7 @@ export type SaveDocumentCommand = Readonly<{
   dueDate: Date;
   issueDate?: Date | null; // #163
   description?: string | null;
+  approverRef?: string | null; // #148: aprovador pretendido
 }>;
 
 export type SaveDocumentOutput = Readonly<{
@@ -71,7 +76,8 @@ export type SaveDocumentError =
   | ContractCategorizationReadError
   | Money.MoneyError
   | Retention.RetentionError
-  | RegisteredTax.RegisteredTaxError;
+  | RegisteredTax.RegisteredTaxError
+  | UserRef.UserRefError;
 
 // Imperative Shell: traduz primitivos → VOs (smart constructors), chama o domínio, persiste e publica.
 // Sequência canônica (.claude/rules/application.md): validar → domain → persist → publish.
@@ -88,8 +94,13 @@ export const saveDocument =
     if (budgetPlanRef !== null && !budgetPlanRef.ok) return err(budgetPlanRef.error);
     const categoryRef = cmd.categoryRef == null ? null : CategoryRef.rehydrate(cmd.categoryRef);
     if (categoryRef !== null && !categoryRef.ok) return err(categoryRef.error);
+    const costCenterRef =
+      cmd.costCenterRef == null ? null : CostCenterRef.rehydrate(cmd.costCenterRef);
+    if (costCenterRef !== null && !costCenterRef.ok) return err(costCenterRef.error);
     const programRef = cmd.programRef == null ? null : ProgramRef.rehydrate(cmd.programRef);
     if (programRef !== null && !programRef.ok) return err(programRef.error);
+    const approverRef = cmd.approverRef == null ? null : UserRef.rehydrate(cmd.approverRef);
+    if (approverRef !== null && !approverRef.ok) return err(approverRef.error);
 
     // #48: herda programRef/budgetPlanRef do contrato vinculado quando não informados pelo front
     // (pré-fill editável). categoria/centro de custo são rótulos livres do contrato, sem campo-ref
@@ -146,9 +157,11 @@ export const saveDocument =
       series: cmd.series ?? null,
       type: cmd.type,
       supplier: supplier.value,
+      payeeKind: cmd.payeeKind ?? 'supplier',
       contractRef: contractRef?.value ?? null,
       budgetPlanRef: resolvedBudgetPlanRef,
       categoryRef: categoryRef?.value ?? null,
+      costCenterRef: costCenterRef?.value ?? null,
       programRef: resolvedProgramRef,
       paymentMethod: cmd.paymentMethod,
       grossValue: grossValue.value,
@@ -161,6 +174,7 @@ export const saveDocument =
       dueDate: cmd.dueDate,
       issueDate: cmd.issueDate ?? null,
       description: cmd.description ?? null,
+      approverRef: approverRef?.value ?? null,
     });
     if (!created.ok) return err(created.error);
 

@@ -5,12 +5,19 @@ import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
 import type { SupplierRef } from '#src/modules/partners/public-api/refs.ts';
 import * as PayableId from '../shared/payable-id.ts';
 import type { DocumentId } from '../shared/document-id.ts';
-import type { ContractRef, BudgetPlanRef, CategoryRef, ProgramRef } from '../shared/refs.ts';
+import type {
+  ContractRef,
+  BudgetPlanRef,
+  CategoryRef,
+  CostCenterRef,
+  ProgramRef,
+} from '../shared/refs.ts';
 import type { Retention, RetentionType } from '../shared/retention.ts';
 import type { RegisteredTax } from '../shared/registered-tax.ts';
 import type {
   DocumentType,
   PaymentMethod,
+  PayeeKind,
   OpenDocument,
   ApprovedDocument,
   DraftDocument,
@@ -29,9 +36,11 @@ export type CreateDocumentInput = Readonly<{
   series?: string | null;
   type: DocumentType;
   supplier: SupplierRef;
+  payeeKind?: PayeeKind;
   contractRef?: ContractRef | null;
   budgetPlanRef?: BudgetPlanRef | null;
   categoryRef?: CategoryRef | null;
+  costCenterRef?: CostCenterRef | null;
   programRef?: ProgramRef | null;
   paymentMethod: PaymentMethod;
   grossValue: Money;
@@ -44,6 +53,7 @@ export type CreateDocumentInput = Readonly<{
   dueDate: Date;
   description?: string | null;
   issueDate?: Date | null; // #163: data de emissão (opcional no create)
+  approverRef?: UserRef | null; // #148: aprovador pretendido (opcional)
 }>;
 
 export type CreateDocumentOutput = Readonly<{
@@ -139,9 +149,11 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     series: input.series ?? null,
     type: input.type,
     supplier: input.supplier,
+    payeeKind: input.payeeKind ?? 'supplier',
     contractRef: input.contractRef ?? null,
     budgetPlanRef: input.budgetPlanRef ?? null,
     categoryRef: input.categoryRef ?? null,
+    costCenterRef: input.costCenterRef ?? null,
     programRef: input.programRef ?? null,
     paymentMethod: input.paymentMethod,
     grossValue: input.grossValue,
@@ -155,6 +167,7 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     description: input.description ?? null,
     dueDate: input.dueDate,
     issueDate: input.issueDate ?? null,
+    approverRef: input.approverRef ?? null,
     status: 'Open',
   });
 
@@ -360,9 +373,11 @@ export const undoApproval = (
     series: d.series,
     type: d.type,
     supplier: d.supplier,
+    payeeKind: d.payeeKind,
     contractRef: d.contractRef,
     budgetPlanRef: d.budgetPlanRef,
     categoryRef: d.categoryRef,
+    costCenterRef: d.costCenterRef,
     programRef: d.programRef,
     paymentMethod: d.paymentMethod,
     grossValue: d.grossValue,
@@ -376,6 +391,7 @@ export const undoApproval = (
     description: d.description,
     dueDate: d.dueDate,
     issueDate: d.issueDate,
+    approverRef: d.approverRef,
     status: 'Open',
   });
 
@@ -418,9 +434,11 @@ export type SaveDraftInput = Readonly<{
   series?: string | null;
   type?: DocumentType | null;
   supplier?: SupplierRef | null;
+  payeeKind?: PayeeKind | null;
   contractRef?: ContractRef | null;
   budgetPlanRef?: BudgetPlanRef | null;
   categoryRef?: CategoryRef | null;
+  costCenterRef?: CostCenterRef | null;
   programRef?: ProgramRef | null;
   paymentMethod?: PaymentMethod | null;
   grossValue?: Money | null;
@@ -433,6 +451,7 @@ export type SaveDraftInput = Readonly<{
   dueDate?: Date | null;
   description?: string | null;
   issueDate?: Date | null; // #163
+  approverRef?: UserRef | null; // #148
 }>;
 
 export type SaveDraftOutput = Readonly<{
@@ -449,9 +468,11 @@ export const saveDraft = (input: SaveDraftInput): Result<SaveDraftOutput, Docume
     series: input.series ?? null,
     type: input.type ?? null,
     supplier: input.supplier ?? null,
+    payeeKind: input.payeeKind ?? null,
     contractRef: input.contractRef ?? null,
     budgetPlanRef: input.budgetPlanRef ?? null,
     categoryRef: input.categoryRef ?? null,
+    costCenterRef: input.costCenterRef ?? null,
     programRef: input.programRef ?? null,
     paymentMethod: input.paymentMethod ?? null,
     grossValue: input.grossValue ?? null,
@@ -464,6 +485,7 @@ export const saveDraft = (input: SaveDraftInput): Result<SaveDraftOutput, Docume
     dueDate: input.dueDate ?? null,
     description: input.description ?? null,
     issueDate: input.issueDate ?? null,
+    approverRef: input.approverRef ?? null,
   });
   const events: readonly DocumentEvent[] = [{ type: 'DocumentDraftSaved', documentId: input.id }];
   return ok(immutable<SaveDraftOutput>({ document, events }));
@@ -488,9 +510,11 @@ export const submit = (draft: DraftDocument): Result<CreateDocumentOutput, Docum
     series: draft.series,
     type,
     supplier,
+    payeeKind: draft.payeeKind ?? 'supplier',
     contractRef: draft.contractRef,
     budgetPlanRef: draft.budgetPlanRef,
     categoryRef: draft.categoryRef,
+    costCenterRef: draft.costCenterRef,
     programRef: draft.programRef,
     paymentMethod,
     grossValue,
@@ -502,6 +526,7 @@ export const submit = (draft: DraftDocument): Result<CreateDocumentOutput, Docum
     registeredTaxes: draft.registeredTaxes,
     dueDate,
     description: draft.description,
+    approverRef: draft.approverRef,
   });
 };
 

@@ -40,4 +40,9 @@ export type UserQueryError = 'user-query-unavailable';
 
 export type UserQuery = Readonly<{
   list: (query: ListUsersQuery) => Promise<Result<PagedUsers, UserQueryError>>;
+  // #148: lista (não paginada) os usuários ATIVOS que possuem a permissão informada — alimenta o
+  // dropdown de aprovadores (`payable:approve`) da inclusão do documento. Ordenado por nome.
+  listByPermission: (
+    permission: string,
+  ) => Promise<Result<readonly UserListItem[], UserQueryError>>;
 }>;

@@ -240,9 +240,12 @@ const financialRoutes =
             series: body.series ?? null,
             type: body.type,
             supplierRef: body.supplierRef,
+            ...(body.payeeKind !== undefined ? { payeeKind: body.payeeKind } : {}),
+            approverRef: body.approverRef ?? null,
             contractRef: body.contractRef ?? null,
             budgetPlanRef: body.budgetPlanRef ?? null,
             categoryRef: body.categoryRef ?? null,
+            costCenterRef: body.costCenterRef ?? null,
             programRef: body.programRef ?? null,
             paymentMethod: body.paymentMethod,
             grossValueCents: Number(body.grossValueCents),
@@ -272,9 +275,12 @@ const financialRoutes =
           series: body.series ?? null,
           type: body.type,
           supplierRef: body.supplierRef,
+          ...(body.payeeKind !== undefined ? { payeeKind: body.payeeKind } : {}),
+          approverRef: body.approverRef ?? null,
           contractRef: body.contractRef ?? null,
           budgetPlanRef: body.budgetPlanRef ?? null,
           categoryRef: body.categoryRef ?? null,
+          costCenterRef: body.costCenterRef ?? null,
           programRef: body.programRef ?? null,
           paymentMethod: body.paymentMethod,
           grossValueCents: Number(body.grossValueCents),
@@ -919,9 +925,19 @@ const financialRoutes =
         response: { 200: cedenteAccountListResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (_req, reply) => {
-        const result = await deps.listCedenteAccounts();
+        // #89c F1: saldo atual (abertura + Σ extratos) por conta junto da listagem.
+        const result = await deps.listCedenteAccountsWithBalance();
         if (!result.ok) return sendDomainError(reply, result.error);
-        return sendResult(reply, ok(result.value.map(cedenteAccountToDto)), { ok: 200 });
+        return sendResult(
+          reply,
+          ok(
+            result.value.map((a) => ({
+              ...cedenteAccountToDto(a.account),
+              currentBalanceCents: String(a.currentBalanceCents),
+            })),
+          ),
+          { ok: 200 },
+        );
       },
     });
 

@@ -76,13 +76,18 @@ export const finDocuments = mysqlTable(
     // Valor null permitido em Draft (todos os campos opcionais — domain/document/types.ts §DraftDocument).
     type: varchar('type', { length: 16 }),
 
-    // Ref ao fornecedor (cross-módulo partners). Sem FK física (ADR-0014 §cross-módulo sem acoplamento direto).
+    // Ref ao favorecido (cross-módulo partners). Sem FK física (ADR-0014 §cross-módulo sem acoplamento direto).
     supplierRef: varchar('supplier_ref', { length: 36 }),
+
+    // Tipo do favorecido (#90). Nullable: back-compat com documentos pré-#90 (lidos como 'supplier').
+    // CHECK = enum de domínio (4 valores — domain/document/types.ts §PayeeKind; ADR-0020 §"sem ENUM").
+    payeeKind: varchar('payee_kind', { length: 16 }),
 
     // Refs cruzadas opcionais (cross-BC — ADR-0014): sem FK física.
     contractRef: varchar('contract_ref', { length: 36 }),
     budgetPlanRef: varchar('budget_plan_ref', { length: 36 }),
     categoryRef: varchar('category_ref', { length: 36 }),
+    costCenterRef: varchar('cost_center_ref', { length: 36 }),
     programRef: varchar('program_ref', { length: 36 }),
 
     // Conta-cedente de débito (D-CEDENTE — de qual conta o pagamento sai). Ref lógica a
@@ -131,6 +136,10 @@ export const finDocuments = mysqlTable(
 
     // Ref ao aprovador (cross-BC — sem FK física). Preenchido somente em Approved.
     approvedBy: varchar('approved_by', { length: 36 }),
+
+    // Aprovador PRETENDIDO definido na inclusão (#148) — cross-BC (auth), sem FK física. Nullable
+    // (opcional + back-compat). Distinto de approved_by (efetivado na aprovação).
+    approverRef: varchar('approver_ref', { length: 36 }),
   },
   (t) => [
     // CHECKs de domínio (defesa em profundidade — ADR-0018 §"Features proibidas"):
@@ -141,6 +150,10 @@ export const finDocuments = mysqlTable(
     check(
       'fin_documents_payment_method_chk',
       sql`${t.paymentMethod} IS NULL OR ${t.paymentMethod} IN ('TED','TransferenciaBancaria','PIX','Boleto','CartaoCorporativo','Cambio','GuiaRecolhimento','Outro')`,
+    ),
+    check(
+      'fin_documents_payee_kind_chk',
+      sql`${t.payeeKind} IS NULL OR ${t.payeeKind} IN ('supplier','financier','act','collaborator')`,
     ),
     check(
       'fin_documents_status_chk',
@@ -797,11 +810,15 @@ export const finCategories = mysqlTable(
     name: varchar('name', { length: 120 }).notNull(),
     group: varchar('group', { length: 12 }).notNull(),
     active: boolean('active').notNull().default(true),
+    // Hierarquia auto-referente (#147 F3): pai da categoria (subcategoria). Nullable = top-level.
+    // Sem FK física (mesma tabela; validação de existência é do seed) — ADR-0014.
+    parentId: varchar('parent_id', { length: 36 }),
   },
   (t) => [
     check('fin_categories_group_chk', sql`${t.group} IN ('despesa','receita','ajuste')`),
     index('fin_categories_group_name_idx').on(t.group, t.name),
     index('fin_categories_active_idx').on(t.active),
+    index('fin_categories_parent_id_idx').on(t.parentId),
   ],
 );
 

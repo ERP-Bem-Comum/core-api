@@ -10,6 +10,7 @@ import type { Brand } from '../../../../shared/primitives/brand.ts';
 export type ContractRef = Brand<string, 'ContractRef'>;
 export type BudgetPlanRef = Brand<string, 'BudgetPlanRef'>;
 export type CategoryRef = Brand<string, 'CategoryRef'>;
+export type CostCenterRef = Brand<string, 'CostCenterRef'>;
 export type ProgramRef = Brand<string, 'ProgramRef'>;
 export type FinancialRefError = 'financial-ref-invalid';
 
@@ -27,6 +28,11 @@ export const BudgetPlanRef = {
 
 export const CategoryRef = {
   rehydrate: (raw: string): Result<CategoryRef, FinancialRefError> => rehydrateAs<CategoryRef>(raw),
+} as const;
+
+export const CostCenterRef = {
+  rehydrate: (raw: string): Result<CostCenterRef, FinancialRefError> =>
+    rehydrateAs<CostCenterRef>(raw),
 } as const;
 
 export const ProgramRef = {

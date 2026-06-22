@@ -83,9 +83,12 @@ export const createDocumentBodySchema = z.object({
   documentNumber: z.string().min(1).max(60),
   series: z.string().max(20).optional(),
   supplierRef: z.uuid(),
+  payeeKind: z.enum(['supplier', 'financier', 'act', 'collaborator']).optional(),
+  approverRef: z.uuid().optional(),
   contractRef: z.uuid().optional(),
   budgetPlanRef: z.uuid().optional(),
   categoryRef: z.uuid().optional(),
+  costCenterRef: z.uuid().optional(),
   programRef: z.uuid().optional(),
   paymentMethod: paymentMethodSchema,
   grossValueCents: centsStringSchema,
@@ -183,6 +186,16 @@ export const documentResponseSchema = z.object({
   documentNumber: z.string().nullable(),
   type: z.string().nullable(),
   supplierRef: z.string().nullable(),
+  // Tipo do favorecido (#90) — round-trip p/ o front exibir o kind correto.
+  payeeKind: z.string().nullable(),
+  // Aprovador pretendido definido na inclusão (#148).
+  approverRef: z.string().nullable(),
+  // Refs de categorização editável (#147) — round-trip p/ o drawer refletir a categorização salva.
+  contractRef: z.string().nullable(),
+  budgetPlanRef: z.string().nullable(),
+  categoryRef: z.string().nullable(),
+  costCenterRef: z.string().nullable(),
+  programRef: z.string().nullable(),
   paymentMethod: z.string().nullable(),
   grossValueCents: centsStringSchema.nullable(),
   netValueCents: centsStringSchema.nullable(),
@@ -569,15 +582,24 @@ export const cedenteAccountResponseSchema = z.object({
   openingBalanceDate: z.string().nullable(),
 });
 
-export const cedenteAccountListResponseSchema = z.array(cedenteAccountResponseSchema);
+// Item da listagem (#89c F1): inclui o saldo ATUAL (abertura + Σ extratos importados). Money em
+// string de centavos (convenção). Distinto de openingBalanceCents (saldo de abertura).
+export const cedenteAccountListItemSchema = cedenteAccountResponseSchema.extend({
+  currentBalanceCents: z.string(),
+});
+
+export const cedenteAccountListResponseSchema = z.array(cedenteAccountListItemSchema);
 
 export type CedenteAccountResponseDto = z.infer<typeof cedenteAccountResponseSchema>;
+export type CedenteAccountListItemDto = z.infer<typeof cedenteAccountListItemSchema>;
 
 // Dados de referência de categorização (020 · US1) — GET /financial/categories.
 export const categoryResponseSchema = z.object({
   id: z.uuid(),
   name: z.string(),
   group: z.enum(['despesa', 'receita', 'ajuste']),
+  // Hierarquia auto-referente (#147 F3): pai (subcategoria). null = top-level. UUID v4 (espelha id).
+  parentId: z.uuid().nullable(),
 });
 
 export const categoryListResponseSchema = z.array(categoryResponseSchema);

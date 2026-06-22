@@ -38,6 +38,8 @@ const makeFakeQuery = (result: Result<PagedUsers, UserQueryError> = ok(PAGE)) =>
       calls.push(q);
       return Promise.resolve(result);
     },
+    // #148: não exercitado por estes testes de listUsers — stub vazio satisfaz o port.
+    listByPermission: () => Promise.resolve(ok([])),
   };
   return { userQuery, calls };
 };

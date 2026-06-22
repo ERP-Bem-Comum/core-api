@@ -9,6 +9,9 @@ export type Category = Readonly<{
   name: string;
   group: CategoryGroup;
   active: boolean;
+  // Hierarquia auto-referente (#147 F3): null = categoria top-level; preenchido = subcategoria
+  // (filha de outra categoria). O documento referencia a folha selecionada via `categoryRef`.
+  parentId: CategoryId | null;
 }>;
 
 export type CreateInput = Readonly<{
@@ -16,6 +19,7 @@ export type CreateInput = Readonly<{
   name: string;
   group: string; // raw (seed/row) — validado contra o union no smart constructor
   active?: boolean;
+  parentId?: CategoryId | null;
 }>;
 
 export type CategoryError = 'category-name-empty' | 'category-group-invalid';
