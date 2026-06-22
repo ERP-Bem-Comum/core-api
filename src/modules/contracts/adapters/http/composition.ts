@@ -224,7 +224,8 @@ const buildMemoryPools = async (config: ContractsCompositionConfig): Promise<Poo
 
 const buildMysqlPools = async (config: ContractsCompositionConfig): Promise<Pools> => {
   const writerUrl = config.writerUrl ?? '';
-  const writerR = await openMysql({ connectionString: writerUrl, applyMigrations: true });
+  // Boot NÃO migra (CORE-MIGRATE-BOOT-INVERT): schema vem do job `migrate` (deploy-safe, M5).
+  const writerR = await openMysql({ connectionString: writerUrl, applyMigrations: false });
   if (!writerR.ok) {
     throw new Error(`contracts-composition: falha ao abrir writer (${writerR.error})`);
   }

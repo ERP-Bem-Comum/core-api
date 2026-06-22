@@ -16,9 +16,6 @@ export default tseslint.config(
       // tests/reports/ contém scripts ad-hoc de investigação (probes, dumps),
       // não código de produção/teste.
       'tests/reports/**',
-      // Portal de docs (Docusaurus) — projeto isolado com toolchain própria
-      // (lint/tsconfig próprios). Não é código do core-api.
-      'website/**',
       // specs/ guarda artefatos spec-kit (SDD). Os contracts/*.ts são esboços
       // de ports para documentar design — não entram em nenhum tsconfig.
       'specs/**',
@@ -28,6 +25,11 @@ export default tseslint.config(
       // ingere ~1748 .ts extras e estoura o heap do V8 (OOM no `pnpm run lint`).
       '.claude/**',
       '.agents/**',
+      // Worktrees de épico criados na raiz (`epic/<branch>`, convenção do dev):
+      // mesmo caso dos worktrees do Claude — cópia completa de src/ e tests/ de
+      // outra branch. Sem esta exclusão o projectService ingere os .ts extras e
+      // estoura o heap (OOM no lint), além de lintar código de outra branch.
+      'epic/**',
     ],
   },
 

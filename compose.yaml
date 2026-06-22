@@ -12,16 +12,79 @@
 #
 # Setup inicial (1 vez):
 #   pnpm secrets:setup                         # gera ./secrets/*.txt (TS script)
-#   docker compose up -d                       # sobe minio + mysql + bootstrap
+#   docker compose up -d                       # sobe minio + mysql + bootstrap (só infra)
 #
 # Para CI (sem expor portas):
 #   docker compose -f compose.yaml -f compose.ci.yaml up -d
 #
-# Profile opt-in:
-#   docker compose --profile app up -d         # adiciona o serviço `app` buildado
+# Profiles opt-in:
+#   docker compose --profile app up -d         # adiciona o serviço `http` (servidor HTTP)
+#   docker compose --profile workers up -d     # adiciona os 5 workers long-running
+#   docker compose --profile jobs up -d        # adiciona jobs one-shot (sweeper, backfill)
+#   docker compose --profile mail up -d        # adiciona mailpit (SMTP fake)
 # ─────────────────────────────────────────────────────────────────────────────
 
 name: core-api-dev
+
+# ─────────────────────────────────────────────────────────────────────────────
+# YAML Anchors — eliminam duplicação entre services de aplicação Node.
+#
+# Compose Specification §"Extension fields" permite `x-*` como extensões
+# de nível top-level. Anchors YAML (`&`) + merge keys (`<<: *`) são suportados
+# pelo parser do Docker Compose (Compose v2+). Referência: Compose file
+# reference §"Top-level elements" → `extension`.
+#
+# x-app-build  — bloco build+image comum a TODOS os services da imagem
+#                core-api (http, workers, jobs).
+# x-worker-base — base para os 5 workers long-running (restart+hardening+net+dep).
+# x-job-base  — base para jobs one-shot (no restart, hardening máximo).
+# ─────────────────────────────────────────────────────────────────────────────
+
+x-app-build: &x-app-build
+  build:
+    context: .
+    dockerfile: Dockerfile
+    cache_from:
+      - core-api:dev
+  image: core-api:dev
+
+x-worker-base: &x-worker-base
+  <<: *x-app-build
+  restart: unless-stopped
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  read_only: true
+  tmpfs:
+    - /tmp
+  networks:
+    - core-api
+  # Workers são processos long-running que consomem o banco. Dependem do `http`
+  # healthy (que por sua vez depende do job `migrate` completar — o schema é
+  # provisionado pelo migrate, não no boot), além do mysql healthy.
+  # Garantia: schema migrado antes de qualquer worker processar mensagens.
+  depends_on:
+    mysql:
+      condition: service_healthy
+    http:
+      condition: service_healthy
+
+x-job-base: &x-job-base
+  <<: *x-app-build
+  restart: 'no'
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+  read_only: true
+  tmpfs:
+    - /tmp
+  networks:
+    - core-api
+  depends_on:
+    mysql:
+      condition: service_healthy
 
 services:
   # ──────────────────────────────────────────────────────────────────────────
@@ -155,6 +218,14 @@ services:
   # ──────────────────────────────────────────────────────────────────────────
   # Mailpit — SMTP fake para DEV/teste de envio de e-mail (#135). Opt-in via profile `mail`.
   # SMTP em :1025, UI web em :8025. Ver handbook/infrastructure/08-email-delivery-runbook.md §8.
+  #
+  # Healthcheck: a imagem axllent/mailpit é construída sobre scratch/alpine minimal
+  # e NÃO inclui curl, wget ou shell sh/bash — ferramentas HTTP externas não estão
+  # disponíveis para probe. O binário /mailpit aceita o subcomando `readyz` que
+  # responde com exit 0 quando o servidor está pronto (equivale ao endpoint /readyz
+  # da API HTTP interna). Usando CMD direto no binário, sem shell wrapper.
+  # Ref: Dockerfile reference §HEALTHCHECK — "The CMD form [...] executes the
+  # command directly without a shell".
   # ──────────────────────────────────────────────────────────────────────────
   mailpit:
     # ADR-0011 §"Pin de versões" — digest pin. Atualizar:
@@ -170,30 +241,69 @@ services:
       # DEV: aceita qualquer credencial SMTP sem TLS (o adapter Nodemailer autentica normalmente).
       MP_SMTP_AUTH_ACCEPT_ANY: '1'
       MP_SMTP_AUTH_ALLOW_INSECURE: '1'
+    healthcheck:
+      test: ['CMD', '/mailpit', 'readyz']
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
     security_opt:
       - no-new-privileges:true
     networks:
       - core-api
 
   # ──────────────────────────────────────────────────────────────────────────
-  # Aplicação core-api (opt-in via profile `app`).
-  # CLI-RETIRE-EMBEDDED (ADR-0037): a CLI embutida foi removida. O ENTRYPOINT da imagem
-  # é o servidor HTTP (`src/server.ts`). Este serviço valida o build da imagem e que o
-  # servidor sobe. Sem `command:` override → usa o ENTRYPOINT (HTTP).
+  # Servidor HTTP core-api (opt-in via profile `app`).
   #
-  # Sem env vars `*_DATABASE_URL`, o server sobe em modo memory (drivers default). O wiring
-  # HTTP→MySQL real (CONTRACTS_DATABASE_URL etc.) é configuração de deploy, fora deste smoke.
+  # Renomeado de `app` → `http` (Fase 4). O profile permanece `app` para
+  # compatibilidade com o teste minio-compose.test.ts (CA-5) que usa
+  # `--profile app` para ativar o serviço; o teste foi atualizado para
+  # referenciar o nome `http`.
+  #
+  # CLI-RETIRE-EMBEDDED (ADR-0037): a CLI embutida foi removida. O ENTRYPOINT
+  # da imagem é o servidor HTTP (`src/server.ts`). Este serviço sobe o HTTP real,
+  # conectado ao MySQL (via secret file). NÃO migra no boot (applyMigrations:false,
+  # CORE-MIGRATE-BOOT-INVERT) — depende do job `migrate` completar antes (depends_on).
+  #
+  # Injeção de secrets: workers NÃO suportam *_DATABASE_URL_FILE — usam o
+  # padrão $(cat) via sh wrapper. O `http` também usa este padrão para
+  # consistência e para garantir que tini permaneça como PID 1.
+  #
+  # Disparo: docker compose --profile app up -d http
   # ──────────────────────────────────────────────────────────────────────────
-  app:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      cache_from:
-        - core-api:dev
-    image: core-api:dev
-    container_name: core-api-app
+  http:
+    <<: *x-app-build
+    container_name: core-api-http
+    profiles:
+      - app
     environment:
       NODE_ENV: development
+      AUTH_DRIVER: mysql
+      PROGRAMS_DRIVER: mysql
+      CONTRACTS_DRIVER: mysql
+      PARTNERS_DRIVER: mysql
+      FINANCIAL_DRIVER: mysql
+    # Injeção de DATABASE_URL via $(cat) — padrão ADR-0011. tini permanece PID 1.
+    # `exec tini -- node src/server.ts` substitui o sh pelo processo node após
+    # exportar as envs, mantendo sinalização correta (SIGTERM → Node → graceful).
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        export AUTH_DATABASE_URL="$(cat /run/secrets/auth_database_url)";
+        export PROGRAMS_DATABASE_URL="$(cat /run/secrets/programs_database_url)";
+        export CONTRACTS_DATABASE_URL="$(cat /run/secrets/contracts_database_url)";
+        export PARTNERS_DATABASE_URL="$(cat /run/secrets/partners_database_url)";
+        export FINANCIAL_DATABASE_URL="$(cat /run/secrets/financial_database_url)";
+        exec tini -- node src/server.ts
+    secrets:
+      - auth_database_url
+      - programs_database_url
+      - contracts_database_url
+      - partners_database_url
+      - financial_database_url
+    ports:
+      - '${HTTP_PORT:-3000}:3000'
     # CA5 (issue #51): healthcheck explícito no compose — endpoint /health está em
     # src/shared/http/app.ts:185; porta default 3000 (src/shared/http/config.ts).
     # Probe via Node 24 fetch global (a imagem base não tem curl nem wget).
@@ -212,18 +322,116 @@ services:
       - no-new-privileges:true
     networks:
       - core-api
+    depends_on:
+      mysql:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Workers long-running (opt-in via profile `workers`).
+  #
+  # Todos usam x-worker-base: imagem core-api:dev, restart unless-stopped,
+  # hardening (no-new-privileges, cap_drop ALL, read_only, tmpfs /tmp),
+  # network core-api, depends_on mysql healthy + http healthy (schema migrado).
+  #
+  # Injeção de DATABASE_URL via wrapper sh + $(cat /run/secrets/...) + exec tini.
+  # $0 recebe o run.ts via `command` do Compose (behavior de `exec` com sh -c).
+  # NODE_OPTIONS="--experimental-strip-types --no-warnings" é herdado do ENV da imagem.
+  #
+  # read_only: true — strip-types não grava em disco; mysql2 é JS puro (sem escrita);
+  # nenhum worker precisa escrever no rootfs. tmpfs /tmp é defensivo (libs que
+  # criam arquivos temporários em /tmp continuam funcionando).
+  # ──────────────────────────────────────────────────────────────────────────
+
+  outbox-contracts:
+    <<: *x-worker-base
     profiles:
-      - app
+      - workers
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        export CONTRACTS_DATABASE_URL="$(cat /run/secrets/contracts_database_url)";
+        exec tini -- node "$0"
+      - src/modules/contracts/worker/run.ts
+    secrets:
+      - contracts_database_url
+
+  outbox-partners:
+    <<: *x-worker-base
+    profiles:
+      - workers
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        export PARTNERS_DATABASE_URL="$(cat /run/secrets/partners_database_url)";
+        exec tini -- node "$0"
+      - src/modules/partners/worker/run.ts
+    secrets:
+      - partners_database_url
+
+  supplier-projection:
+    <<: *x-worker-base
+    profiles:
+      - workers
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        export PARTNERS_DATABASE_URL="$(cat /run/secrets/partners_database_url)";
+        export FINANCIAL_DATABASE_URL="$(cat /run/secrets/financial_database_url)";
+        exec tini -- node "$0"
+      - src/workers/supplier-view-projection/run.ts
+    secrets:
+      - partners_database_url
+      - financial_database_url
+
+  contract-count-projection:
+    <<: *x-worker-base
+    profiles:
+      - workers
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        export CONTRACTS_DATABASE_URL="$(cat /run/secrets/contracts_database_url)";
+        export PARTNERS_DATABASE_URL="$(cat /run/secrets/partners_database_url)";
+        exec tini -- node "$0"
+      - src/workers/contract-count-projection/run.ts
+    secrets:
+      - contracts_database_url
+      - partners_database_url
+
+  email-dispatch:
+    <<: *x-worker-base
+    profiles:
+      - workers
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        export AUTH_DATABASE_URL="$(cat /run/secrets/auth_database_url)";
+        export PARTNERS_DATABASE_URL="$(cat /run/secrets/partners_database_url)";
+        exec tini -- node "$0"
+      - src/workers/email-dispatch/run.ts
+    secrets:
+      - auth_database_url
+      - partners_database_url
 
   # ──────────────────────────────────────────────────────────────────────────
   # Job one-shot contracts-sweeper (opt-in via profile `jobs` — ADR-0041).
   #
-  # Reutiliza a imagem `core-api:dev` (construída pelo serviço `app`). O ENTRYPOINT da
-  # imagem é `tini -- node src/server.ts` — server.ts ESTÁ no entrypoint. Por isso
+  # Reutiliza a imagem `core-api:dev` (construída pelo serviço `http`). O ENTRYPOINT
+  # da imagem é `tini -- node src/server.ts` — server.ts ESTÁ no entrypoint. Por isso
   # sobrescrevemos `entrypoint: [tini, --, node]` (PID 1 + runtime) e deixamos o
   # `command` apontar o script do job; sem o override, o `command` seria ANEXADO ao
   # server.ts (subiria o servidor, não o sweeper). NODE_OPTIONS=--experimental-strip-types
   # vem do ENV da imagem (herdado). Efetivo: `tini -- node src/jobs/.../run.ts`.
+  #
+  # O sweeper usa CONTRACTS_DATABASE_URL_FILE (suportado pelo sweeper — único service
+  # que suporta este mecanismo nativo). Os demais jobs usam o padrão sh+$(cat).
   #
   # Disparo: `docker compose --profile jobs run --rm contracts-sweeper`
   # Em produção: agendado 1×/dia 00:05 America/Sao_Paulo via ERP-INFRA
@@ -233,41 +441,82 @@ services:
   # exit 78 (EX_CONFIG) ou exit 1 → alerta em ERP-INFRA; sem restart loop.
   # ──────────────────────────────────────────────────────────────────────────
   contracts-sweeper:
-    build:
-      context: .
-      dockerfile: Dockerfile
-      cache_from:
-        - core-api:dev
-    image: core-api:dev
+    <<: *x-job-base
     # SEM container_name fixo (M2): nome fixo + disparo sem --rm aborta o próximo run com
     # "name already in use" → o cron pararia de expirar SILENCIOSAMENTE. Docker gera nome
     # único por run; o --rm do disparo canônico limpa ao final.
-    restart: 'no'
     entrypoint: ['tini', '--', 'node']
     command: ['src/jobs/contracts/sweeper/run.ts']
-    depends_on:
-      mysql:
-        condition: service_healthy
     environment:
       CONTRACTS_DATABASE_URL_FILE: /run/secrets/contracts_database_url
     secrets:
       - contracts_database_url
-    # Hardening de job one-shot (só conecta ao MySQL e sai): zero capabilities Linux,
-    # rootfs read-only (mysql2 não grava em disco), /tmp efêmero defensivo.
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    read_only: true
-    tmpfs:
-      - /tmp
-    networks:
-      - core-api
     profiles:
       - jobs
 
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job one-shot supplier-view-backfill (opt-in via profile `jobs`).
+  #
+  # Repopula o read-model fin_supplier_view a partir dos dados existentes em
+  # partners. One-shot: run + exit; sem restart loop. Hardening máximo via
+  # x-job-base (cap_drop ALL, read_only, tmpfs /tmp).
+  #
+  # SEM container_name fixo — mesmo motivo do contracts-sweeper (M2).
+  # depends_on mysql healthy (via x-job-base) — não precisa do `http` pois
+  # o backfill acessa o DB diretamente sem depender do servidor HTTP.
+  #
+  # Disparo: docker compose --profile jobs run --rm supplier-view-backfill
+  # ──────────────────────────────────────────────────────────────────────────
+  supplier-view-backfill:
+    <<: *x-job-base
+    profiles:
+      - jobs
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        export PARTNERS_DATABASE_URL="$(cat /run/secrets/partners_database_url)";
+        export FINANCIAL_DATABASE_URL="$(cat /run/secrets/financial_database_url)";
+        exec tini -- node "$0"
+      - src/jobs/financial/supplier-view-backfill/run.ts
+    secrets:
+      - partners_database_url
+      - financial_database_url
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job one-shot migrate (opt-in via profile `jobs` — CORE-MIGRATE-JOB Slice A).
+  #
+  # Aplica as migrations dos 6 módulos (auth, contracts, financial, notifications,
+  # partners, programs) ANTES de subir http/workers. Roda `src/jobs/migrate/run.ts`,
+  # que lê MIGRATE_DATABASE_URL como string direta (não suporta _FILE).
+  #
+  # Injeção via wrapper sh + $(cat) — padrão ADR-0011, igual aos demais workers.
+  # tini como PID 1 garante sinalização correta (SIGTERM propagado ao Node).
+  #
+  # SEM container_name fixo — mesmo motivo do contracts-sweeper: nome fixo +
+  # disparo sem --rm aborta o próximo run com "name already in use".
+  #
+  # Disparo: docker compose --profile jobs run --rm migrate
+  # ──────────────────────────────────────────────────────────────────────────
+  migrate:
+    <<: *x-job-base
+    profiles:
+      - app
+      - workers
+      - jobs
+    # $0 = src/jobs/migrate/run.ts (4º elemento do array entrypoint do wrapper sh).
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        export MIGRATE_DATABASE_URL="$(cat /run/secrets/migrate_database_url)";
+        exec tini -- node "$0"
+      - src/jobs/migrate/run.ts
+    secrets:
+      - migrate_database_url
+
 # ────────────────────────────────────────────────────────────────────────────
-# Top-level secrets — populados pelo scripts/setup-secrets.sh.
+# Top-level secrets — populados pelo scripts/setup/secrets.ts (pnpm run secrets:setup).
 # Compose falha se algum arquivo estiver ausente (RED válido em W0 — CA-2).
 # ────────────────────────────────────────────────────────────────────────────
 secrets:
@@ -279,10 +528,20 @@ secrets:
     file: ./secrets/mysql_readonly_password.txt
   contracts_database_url:
     file: ./secrets/contracts_database_url.txt
+  auth_database_url:
+    file: ./secrets/auth_database_url.txt
+  programs_database_url:
+    file: ./secrets/programs_database_url.txt
+  partners_database_url:
+    file: ./secrets/partners_database_url.txt
+  financial_database_url:
+    file: ./secrets/financial_database_url.txt
   minio_root_user:
     file: ./secrets/minio_root_user.txt
   minio_root_password:
     file: ./secrets/minio_root_password.txt
+  migrate_database_url:
+    file: ./secrets/migrate_database_url.txt
 
 volumes:
   minio-data:

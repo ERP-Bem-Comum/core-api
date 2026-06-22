@@ -6,6 +6,13 @@ cli-state.json
 *.log
 .DS_Store
 
+# Worktrees git aninhados — cópias completas de src/tests de outras branches
+# (sessões paralelas). Têm seu próprio HEAD/formatação; nunca formatar pelo pai.
+# Mesma categoria de .claude/worktrees e .agents/worktrees no eslint.config.js.
+.claude/worktrees/
+.agents/worktrees/
+epic/
+
 # Documentação organizacional fica fora — mantemos formatação manual
 .claude/
 .pipeline/
@@ -14,9 +21,6 @@ cli-state.json
 .specify/
 # Handbook (copiado do monorepo pai; preserva formatação original)
 handbook/
-
-# Portal de docs (Docusaurus) — projeto isolado com formatação própria
-website/
 
 # Lock files são gerados — não formatar
 pnpm-lock.yaml
