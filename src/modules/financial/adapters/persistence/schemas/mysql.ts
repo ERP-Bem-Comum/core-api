@@ -846,3 +846,49 @@ export const finCostCenters = mysqlTable(
 
 export type CostCenterRow = typeof finCostCenters.$inferSelect;
 export type NewCostCenterRow = typeof finCostCenters.$inferInsert;
+
+// ─── fin_outbox ───────────────────────────────────────────────────────────────
+//
+// Outbox transacional do módulo Financeiro (#127, ADR-0015). Estado do agregado + evento são
+// gravados na MESMA db.transaction (atomicidade; evento durável SSE estado persistido). Espelha
+// `ctr_outbox` (contracts). UUID v4 como varchar(36) — convenção do módulo (sem char). payload é
+// VARCHAR(8192) serializado — NUNCA JSON nativo (ADR-0020). Idempotência via PK `event_id`.
+export const finOutbox = mysqlTable(
+  'fin_outbox',
+  {
+    // UUID v4 do evento — gerado pelo domínio antes do INSERT (idempotência via PK).
+    eventId: varchar('event_id', { length: 36 }).primaryKey().notNull(),
+    // id do agregado dono (documento / conciliação / extrato / período).
+    aggregateId: varchar('aggregate_id', { length: 36 }).notNull(),
+    // 'Document' | 'Reconciliation' | 'Statement' | 'ReconciliationPeriod' — CHECK abaixo.
+    aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
+    // PascalCase EN: DocumentSaved, PayableReconciled, …
+    eventType: varchar('event_type', { length: 64 }).notNull(),
+    // Versão do contrato do payload (inicia em 1).
+    schemaVersion: int('schema_version').notNull(),
+    // Instante do domain event.
+    occurredAt: datetime('occurred_at', { mode: 'date', fsp: 3 }).notNull(),
+    // Instante do INSERT na outbox (audit trail).
+    enqueuedAt: datetime('enqueued_at', { mode: 'date', fsp: 3 }).notNull(),
+    // NULL = pendente; NOT NULL = worker marcou após delivery.
+    processedAt: datetime('processed_at', { mode: 'date', fsp: 3 }),
+    // Tentativas de entrega (worker). Default 0.
+    attempts: int('attempts').notNull().default(0),
+    // Payload serializado — VARCHAR, nunca JSON nativo (ADR-0020).
+    payload: varchar('payload', { length: 8192 }).notNull(),
+  },
+  (t) => [
+    check('fin_outbox_attempts_nonneg_chk', sql`${t.attempts} >= 0`),
+    check('fin_outbox_event_type_nonempty_chk', sql`CHAR_LENGTH(${t.eventType}) > 0`),
+    check(
+      'fin_outbox_aggregate_type_chk',
+      sql`${t.aggregateType} IN ('Document', 'Reconciliation', 'Statement', 'ReconciliationPeriod')`,
+    ),
+    // Índice do worker (ADR-0015): processed_at PRIMEIRO → NULLs agrupados → range scan eficiente.
+    index('fin_outbox_processed_at_occurred_at_idx').on(t.processedAt, t.occurredAt),
+    index('fin_outbox_aggregate_id_idx').on(t.aggregateId),
+  ],
+);
+
+export type FinOutboxRow = typeof finOutbox.$inferSelect;
+export type NewFinOutboxRow = typeof finOutbox.$inferInsert;

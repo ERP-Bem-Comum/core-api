@@ -15,12 +15,11 @@ import { strict as assert } from 'node:assert';
 import * as PayableId from '#src/modules/financial/domain/shared/payable-id.ts';
 import * as ReconciliationId from '#src/modules/financial/domain/reconciliation/reconciliation-id.ts';
 import * as StatementTransactionId from '#src/modules/financial/domain/statement/statement-transaction-id.ts';
-import type { FinancialAppendableEvent } from '#src/modules/financial/application/ports/outbox.ts';
-// W0 RED: o helper ainda nao existe.
 import { appendFinOutboxInTx } from '#src/modules/financial/adapters/persistence/repos/fin-outbox-helpers.ts';
 
-const payableReconciled = (): FinancialAppendableEvent => ({
-  type: 'PayableReconciled',
+// Tipo inferido concreto (PayableReconciled tem `occurredAt`) — atribuível a FinancialAppendableEvent.
+const payableReconciled = () => ({
+  type: 'PayableReconciled' as const,
   payableId: PayableId.generate(),
   reconciliationId: ReconciliationId.generate(),
   transactionId: StatementTransactionId.generate(),
@@ -43,7 +42,7 @@ describe('#127 — appendFinOutboxInTx', () => {
     await appendFinOutboxInTx(fakeTx as never, [ev]);
 
     assert.ok(capturedRows, 'deve inserir 1 linha');
-    const row = capturedRows[0] as Record<string, unknown>;
+    const row = capturedRows[0]!;
     assert.equal(row['eventType'], 'PayableReconciled');
     assert.equal(row['aggregateType'], 'Reconciliation');
     assert.equal(typeof row['eventId'], 'string');

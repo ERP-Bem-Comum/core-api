@@ -2,13 +2,15 @@
 
 **Wave**: W0 · **Status**: in-progress (fundação RED autorada; fatias A/B + integração pendentes) · **Data**: 2026-06-22
 
-## RED autorado (fundação)
+## RED autorado (fundação) — CONFIRMADO (2026-06-22, resume)
 
-`tests/modules/financial/adapters/persistence/fin-outbox-helpers.test.ts` (NOVO) — helper `appendFinOutboxInTx`:
-```
-tests 1 · pass 0 · fail 1 (RED) — ERR_MODULE_NOT_FOUND (fin-outbox-helpers.ts não existe)
-```
-Casos (viram GREEN no W1): mapeia evento → linha (`eventType`/`aggregateType`/`payload` serializado/`processedAt=null`) e chama `tx.insert(finOutbox).values(...)`; `events=[]` → no-op.
+**1. Helper** `fin-outbox-helpers.test.ts`: `tests 1 · pass 0 · fail 1 (RED)` — ERR_MODULE_NOT_FOUND (helper inexistente). Casos: evento → linha (`eventType`/`aggregateType`/`payload` serializado/`processedAt=null`); `events=[]` → no-op.
+
+**2. Schema** `fin-outbox-schema.drizzle-mysql.test.ts` (integração/Docker): suíte financial `tests 42 · pass 40 · fail 2 (RED)` — `fin_outbox` não existe / `event_id` não é PK. Os 40 anteriores verdes (sem regressão).
+
+**Achado de processo (corrigido)**: `scripts/ci/test-integration.ts` usa **lista explícita** (não glob) — o teste de schema foi adicionado à lista `financial` (senão não rodaria no gate). Os 2 testes de atomicidade (document/reconciliation) entram na lista quando criados.
+
+> Fundação RED completa. Fatias A/B (rollback in-memory + atomicidade integração) são W1-acopladas (dependem da assinatura `save(agg, entries, events)`) → autoradas junto com a implementação de cada fatia (TDD por fatia).
 
 ## Restante do W0 (planejado — ver tasks.md T003, T007–T008, T014–T015)
 
