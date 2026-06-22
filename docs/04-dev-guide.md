@@ -72,7 +72,7 @@ pnpm run test:integration:infra        # suite mysql-compose (COMPOSE_INTEGRATIO
 pnpm run test:integration:auth         # auth (MYSQL_INTEGRATION=1)
 pnpm run test:integration:storage      # storage S3 contra MinIO
 pnpm run test:integration:notifications
-pnpm run test:e2e:auth                 # smoke E2E: server real + MySQL + fetch (scripts/e2e-auth.sh)
+pnpm run test:e2e:auth                 # smoke E2E: server real + MySQL + fetch (scripts/e2e/auth.sh)
 pnpm run test:e2e:contracts            # smoke E2E contracts: dual-pool + RBAC + fetch
 ```
 

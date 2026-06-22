@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/e2e-contracts.sh — orquestra o smoke E2E da borda contracts (CONTRACTS-HTTP-E2E-SMOKE).
+# scripts/e2e/contracts.sh — orquestra o smoke E2E da borda contracts (CONTRACTS-HTTP-E2E-SMOKE).
 #
 # Sobe MySQL (Docker), inicia o servidor real com auth+contracts em MySQL (dual-pool: writer=root,
 # reader=readonly_bi) e roda o smoke (tests/e2e/contracts-smoke.e2e.ts) via Node + fetch. O operador

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/e2e-bruno-all.sh — runner ÚNICO de integração HTTP (spec 007, US4).
+# scripts/e2e/bruno-all.sh — runner ÚNICO de integração HTTP (spec 007, US4).
 #
 # Sobe MySQL + MinIO via Docker, boota o server com TODOS os módulos em driver real (auth/contracts/
 # partners → mysql; storage → minio) e os seeds completos (SEED-CONTRACT), e executa a coleção

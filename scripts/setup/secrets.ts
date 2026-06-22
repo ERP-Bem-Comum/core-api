@@ -1,8 +1,8 @@
 #!/usr/bin/env -S node --experimental-strip-types --no-warnings
-// scripts/setup-secrets.ts
+// scripts/setup/secrets.ts
 //
 // Gera os 3 arquivos de secret consumidos pelo compose MySQL. Veja design
-// detalhado em scripts/setup-secrets.design.txt.
+// detalhado em scripts/setup/secrets.design.txt.
 //
 // Substitui setup-secrets.sh (bash) — Node + TS é mais legível, tipado e
 // resolve I-3 do W2 review (TTY-aware automático sem precisar de flag).
@@ -23,7 +23,8 @@ import { fileURLToPath } from 'node:url';
 
 // ─── Paths ────────────────────────────────────────────────────────────────
 const HERE = fileURLToPath(new URL('.', import.meta.url));
-const PROJECT_ROOT = resolve(HERE, '..');
+// scripts/setup/ → sobe 2 níveis até a raiz do projeto.
+const PROJECT_ROOT = resolve(HERE, '..', '..');
 const SECRETS_DIR = resolve(PROJECT_ROOT, 'secrets');
 
 // ─── Exit codes (sysexits.h) ──────────────────────────────────────────────

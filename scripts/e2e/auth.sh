@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/e2e-auth.sh — orquestra o smoke E2E da borda auth (AUTH-HTTP-E2E-SMOKE).
+# scripts/e2e/auth.sh — orquestra o smoke E2E da borda auth (AUTH-HTTP-E2E-SMOKE).
 #
 # Sobe MySQL (Docker), provisiona o schema (job migrate), inicia o servidor real (AUTH_DRIVER=mysql)
 # e roda o smoke (tests/e2e/auth-smoke.e2e.ts) via Node + fetch. `trap` garante o

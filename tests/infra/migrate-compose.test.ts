@@ -157,12 +157,12 @@ describe('CORE-MIGRATE-JOB — serviço migrate no compose (W0)', { skip }, () =
     );
   });
 
-  it('CA8: setup-secrets.ts gera o secret migrate_database_url', () => {
-    const src = readFileSync(join(PROJECT_ROOT, 'scripts', 'setup-secrets.ts'), 'utf-8');
+  it('CA8: scripts/setup/secrets.ts gera o secret migrate_database_url', () => {
+    const src = readFileSync(join(PROJECT_ROOT, 'scripts', 'setup', 'secrets.ts'), 'utf-8');
     assert.match(
       src,
       /['"]migrate_database_url['"]/,
-      'setup-secrets.ts deveria listar migrate_database_url em DATABASE_URL_SECRETS',
+      'scripts/setup/secrets.ts deveria listar migrate_database_url em DATABASE_URL_SECRETS',
     );
   });
 });

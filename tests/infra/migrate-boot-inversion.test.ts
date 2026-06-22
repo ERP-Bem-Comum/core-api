@@ -47,7 +47,7 @@ describe('CORE-MIGRATE-BOOT-INVERT — CA-B1: boot não migra (applyMigrations:f
 
 // ─── CA-B3 — scripts E2E rodam o migrate antes do server ────────────────────
 describe('CORE-MIGRATE-BOOT-INVERT — CA-B3: e2e migram antes de subir o server', () => {
-  const SCRIPTS = ['e2e-auth.sh', 'e2e-contracts.sh', 'e2e-collaborators.sh', 'e2e-bruno-all.sh'];
+  const SCRIPTS = ['e2e/auth.sh', 'e2e/contracts.sh', 'e2e/collaborators.sh', 'e2e/bruno-all.sh'];
 
   for (const name of SCRIPTS) {
     it(`CA-B3: scripts/${name} executa o migrate antes de src/server.ts`, () => {
