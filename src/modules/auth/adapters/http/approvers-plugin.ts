@@ -50,7 +50,8 @@ const approversRoutes =
         if (!result.ok) {
           return sendResult(reply, result, { errors: { 'user-query-unavailable': 503 } });
         }
-        const items = result.value.map((u) => ({ id: u.id, name: u.name, email: u.email }));
+        // Minimização (OWASP API3): só id+name; o email do UserListItem não é exposto aqui.
+        const items = result.value.map((u) => ({ id: u.id, name: u.name }));
         return sendResult(reply, ok({ items }), { ok: 200 });
       },
     });

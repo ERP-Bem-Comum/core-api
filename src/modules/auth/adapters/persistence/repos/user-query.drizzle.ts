@@ -138,7 +138,10 @@ export const createDrizzleUserQuery = (
           eq(schema.authPermission.id, schema.authRolePermission.permissionId),
         )
         .where(and(eq(schema.authPermission.name, wanted), eq(schema.authUser.status, 'active')))
-        .orderBy(asc(schema.authUser.name));
+        .orderBy(asc(schema.authUser.name))
+        // Teto defensivo (dropdown de aprovadores; org pequena-média). Evita materializar conjunto
+        // ilimitado se a base crescer. 500 é folgado para o caso de uso.
+        .limit(500);
 
       const items: UserListItem[] = [];
       for (const row of rows) {

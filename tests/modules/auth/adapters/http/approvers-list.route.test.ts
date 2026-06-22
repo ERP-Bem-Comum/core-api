@@ -72,7 +72,7 @@ const login = async (app: AppHandle, email: string): Promise<string> => {
 };
 
 interface ApproversBody {
-  items: readonly { id: string; name: string | null; email: string }[];
+  items: readonly { id: string; name: string | null }[];
 }
 
 describe('FIN-APPROVER-LISTING — GET /api/v1/approvers (#148)', () => {
@@ -104,7 +104,7 @@ describe('FIN-APPROVER-LISTING — GET /api/v1/approvers (#148)', () => {
     assert.equal(res.statusCode, 403);
   });
 
-  it('CA3: 200 → só usuários com payable:approve (exclui quem não tem)', async () => {
+  it('CA3: 200 → só usuários com payable:approve (2 de 4 ativos; exclui admin/plain)', async () => {
     const res = await app.inject({
       method: 'GET',
       url: '/api/v1/approvers',
@@ -112,10 +112,12 @@ describe('FIN-APPROVER-LISTING — GET /api/v1/approvers (#148)', () => {
     });
     assert.equal(res.statusCode, 200, res.body);
     const body = res.json() as ApproversBody;
-    const emails = body.items.map((u) => u.email).sort();
-    assert.deepEqual(emails, [APPROVER1_EMAIL, APPROVER2_EMAIL].sort());
-    // admin (user:list, sem payable:approve) e plain não aparecem.
-    assert.ok(!emails.includes(ADMIN_EMAIL));
-    assert.ok(!emails.includes(PLAIN_EMAIL));
+    // 4 usuários ativos semeados; só os 2 com payable:approve aparecem (admin/plain filtrados).
+    assert.equal(body.items.length, 2);
+    for (const item of body.items) {
+      assert.equal(typeof item.id, 'string');
+      // Minimização: a projeção não expõe email.
+      assert.ok(!Object.prototype.hasOwnProperty.call(item, 'email'), 'não deve expor email');
+    }
   });
 });

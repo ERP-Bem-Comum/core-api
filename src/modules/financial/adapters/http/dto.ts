@@ -41,7 +41,7 @@ import type {
 /** Serializa Money (branded { cents: number }) como string de centavos. */
 const moneyToCentsString = (cents: number): string => String(cents);
 
-/** Categorias de referência (020 · US1) → DTO lean `{ id, name, group }`. Nunca expõe o row cru. */
+/** Categorias de referência (020 · US1) → DTO lean `{ id, name, group, parentId }`. Nunca expõe o row cru. */
 export const categoriesToDto = (categories: readonly Category[]): CategoryResponseDto[] =>
   categories.map((c) => ({
     id: String(c.id),
