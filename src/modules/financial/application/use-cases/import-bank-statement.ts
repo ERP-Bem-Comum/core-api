@@ -31,7 +31,6 @@ import type {
   CedenteAccountStore,
   CedenteAccountStoreError,
 } from '../ports/cedente-account-store.ts';
-import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
 
 export type ImportBankStatementDeps = Readonly<{
   parser: BankStatementParser;
@@ -42,7 +41,6 @@ export type ImportBankStatementDeps = Readonly<{
   cedenteStore: Pick<CedenteAccountStore, 'findById'>;
   // Só precisa do instante (occurredAt do evento) — depende da interface mais estreita do Clock.
   clock: Pick<Clock, 'now'>;
-  outbox: FinancialOutbox;
 }>;
 
 export type ImportBankStatementInput = Readonly<{
@@ -67,8 +65,7 @@ export type ImportBankStatementError =
   | 'account-not-found'
   | BankStatementRepositoryError
   | ReconciliationPeriodStoreError
-  | CedenteAccountStoreError
-  | OutboxAppendError;
+  | CedenteAccountStoreError;
 
 // Resolve a chave anti-duplicidade da transação: FITID nativo (OFX) via `fromNative`; ausente (CSV)
 // ou malformado cai no FITID sintético determinístico (sha256 de conteúdo+seq) — preserva o dedup
@@ -150,11 +147,8 @@ export const importBankStatement =
     const imported = importStatement(domainInput, knownR.value);
     if (!imported.ok) return err(imported.error);
 
-    const saved = await deps.repo.save(imported.value.statement);
+    const saved = await deps.repo.save(imported.value.statement, imported.value.events);
     if (!saved.ok) return err(saved.error);
-
-    const published = await deps.outbox.append(imported.value.events);
-    if (!published.ok) return err(published.error);
 
     return ok({
       statementId: imported.value.statement.id,

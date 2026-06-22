@@ -6,7 +6,10 @@ import { and, eq, gte, lte } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
-import type { ReconciliationPeriod } from '#src/modules/financial/domain/reconciliation/period.ts';
+import type {
+  ReconciliationPeriod,
+  ReconciliationPeriodClosed,
+} from '#src/modules/financial/domain/reconciliation/period.ts';
 import type { ReconciliationPeriodId } from '#src/modules/financial/domain/reconciliation/reconciliation-period-id.ts';
 import type {
   ReconciliationPeriodStore,
@@ -15,6 +18,7 @@ import type {
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { finReconciliationPeriods } from '../schemas/mysql.ts';
 import { toRow, toDomain } from '../mappers/reconciliation-period.mapper.ts';
+import { appendFinOutboxInTx } from './fin-outbox-helpers.ts';
 
 const logStore = (op: string, cause: unknown): void => {
   process.stderr.write(`[fin-reconciliation-period-store] ${op} failed: ${String(cause)}\n`);
@@ -28,9 +32,14 @@ export const createDrizzleReconciliationPeriodStore = (
   return {
     close: async (
       period: ReconciliationPeriod,
+      events?: readonly ReconciliationPeriodClosed[],
     ): Promise<Result<void, ReconciliationPeriodStoreError>> => {
       try {
-        await db.insert(finReconciliationPeriods).values(toRow(period));
+        // #127: o INSERT do período e o do `fin_outbox` na MESMA tx (atomicidade — ADR-0015).
+        await db.transaction(async (tx) => {
+          await tx.insert(finReconciliationPeriods).values(toRow(period));
+          await appendFinOutboxInTx(tx, events ?? []);
+        });
         return ok(undefined);
       } catch (cause) {
         logStore('close', cause);

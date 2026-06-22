@@ -71,14 +71,14 @@ const activeAccount = (() => {
 
 const deps = (parser: BankStatementParser, captured: Captured) => ({
   parser,
-  repo: createInMemoryBankStatementRepository(),
+  // #127: o evento é gravado pelo repo na MESMA tx; a outbox que captura vai PARA DENTRO do repo.
+  repo: createInMemoryBankStatementRepository(new Map(), fakeOutbox(captured)),
   periods: openPeriods,
   cedenteStore: {
     findById: (): Promise<Result<typeof activeAccount, never>> =>
       Promise.resolve(ok(activeAccount)),
   },
   clock,
-  outbox: fakeOutbox(captured),
 });
 
 const input = {

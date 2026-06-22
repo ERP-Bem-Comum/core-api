@@ -1,4 +1,4 @@
-import { type Result, ok } from '#src/shared/primitives/result.ts';
+import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type {
   BankStatement,
   StatementTransaction,
@@ -7,6 +7,9 @@ import type {
   BankStatementRepository,
   BankStatementRepositoryError,
 } from '#src/modules/financial/application/ports/bank-statement-repository.ts';
+import type { BankStatementEvent } from '#src/modules/financial/domain/statement/events.ts';
+import type { FinancialOutbox } from '#src/modules/financial/application/ports/outbox.ts';
+import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
 
 // Store compartilhável: o ReconciliationRepository in-memory mexe na mesma referência para flipar o
 // status da transação (`Pending↔Reconciled`) — espelha o uso do timelineStore em #120.
@@ -16,11 +19,21 @@ export type BankStatementStore = Map<string, BankStatement>;
 // `(debit_account_ref, fitid)` varrendo as transações já salvas da conta-débito.
 export const createInMemoryBankStatementRepository = (
   statements: BankStatementStore = new Map<string, BankStatement>(),
+  // #127: outbox onde os eventos são "publicados" — paridade in-memory da atomicidade do Drizzle.
+  outbox: FinancialOutbox = createInMemoryOutbox().port,
 ): BankStatementRepository => {
   return {
-    save: async (statement: BankStatement): Promise<Result<void, BankStatementRepositoryError>> => {
+    save: async (
+      statement: BankStatement,
+      events?: readonly BankStatementEvent[],
+    ): Promise<Result<void, BankStatementRepositoryError>> => {
+      // #127 — atomicidade: publica ANTES de persistir; falha no outbox → não persiste.
+      if (events !== undefined && events.length > 0) {
+        const appended = await outbox.append(events);
+        if (!appended.ok) return err('bank-statement-repository-failure');
+      }
       statements.set(statement.id, statement);
-      return Promise.resolve(ok(undefined));
+      return ok(undefined);
     },
 
     knownFitids: async (

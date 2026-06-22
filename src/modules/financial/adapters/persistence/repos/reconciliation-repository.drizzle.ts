@@ -9,6 +9,7 @@ import process from 'node:process';
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type { Reconciliation } from '#src/modules/financial/domain/reconciliation/types.ts';
 import type { ReconciliationId } from '#src/modules/financial/domain/reconciliation/reconciliation-id.ts';
+import type { ReconciliationEvent } from '#src/modules/financial/domain/reconciliation/events.ts';
 import type { StatementTransactionId } from '#src/modules/financial/domain/statement/statement-transaction-id.ts';
 import type {
   ReconciliationRepository,
@@ -28,6 +29,7 @@ import {
   manualEntryToRow,
   toDomain,
 } from '../mappers/reconciliation.mapper.ts';
+import { appendFinOutboxInTx } from './fin-outbox-helpers.ts';
 
 const logStore = (op: string, cause: unknown): void => {
   process.stderr.write(`[fin-reconciliation-repo] ${op} failed: ${String(cause)}\n`);
@@ -46,6 +48,7 @@ export const createDrizzleReconciliationRepository = (
     confirm: async (
       reconciliation: Reconciliation,
       transactionId: StatementTransactionId,
+      events?: readonly ReconciliationEvent[],
     ): Promise<Result<void, ReconciliationRepositoryError>> => {
       try {
         await db.transaction(async (tx) => {
@@ -73,6 +76,9 @@ export const createDrizzleReconciliationRepository = (
               ),
             );
           if (affectedRowsOf(txRes) !== 1) throw new Error('transaction-not-pending');
+
+          // #127: estado + evento na MESMA tx (atomicidade — ADR-0015). Falha aqui reverte tudo.
+          await appendFinOutboxInTx(tx, events ?? []);
         });
         return ok(undefined);
       } catch (cause) {
@@ -84,6 +90,7 @@ export const createDrizzleReconciliationRepository = (
     confirmManualEntry: async (
       reconciliation: Reconciliation,
       transactionId: StatementTransactionId,
+      events?: readonly ReconciliationEvent[],
     ): Promise<Result<void, ReconciliationRepositoryError>> => {
       const manualEntry = reconciliation.manualEntry;
       if (manualEntry === null) return err('reconciliation-repository-failure');
@@ -103,6 +110,9 @@ export const createDrizzleReconciliationRepository = (
               ),
             );
           if (affectedRowsOf(txRes) !== 1) throw new Error('transaction-not-pending');
+
+          // #127: estado + evento na MESMA tx (atomicidade — ADR-0015). Falha aqui reverte tudo.
+          await appendFinOutboxInTx(tx, events ?? []);
         });
         return ok(undefined);
       } catch (cause) {
@@ -176,6 +186,7 @@ export const createDrizzleReconciliationRepository = (
 
     undo: async (
       reconciliation: Reconciliation,
+      events?: readonly ReconciliationEvent[],
     ): Promise<Result<void, ReconciliationRepositoryError>> => {
       try {
         await db.transaction(async (tx) => {
@@ -210,6 +221,9 @@ export const createDrizzleReconciliationRepository = (
                 eq(finStatementTransactions.reconciliationStatus, 'Reconciled'),
               ),
             );
+
+          // #127: estado + evento na MESMA tx (atomicidade — ADR-0015). Falha aqui reverte tudo.
+          await appendFinOutboxInTx(tx, events ?? []);
         });
         return ok(undefined);
       } catch (cause) {

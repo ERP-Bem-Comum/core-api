@@ -9,12 +9,10 @@ import type {
   DocumentRepository,
   DocumentRepositoryError,
 } from '../../domain/document/repository.ts';
-import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
 import { buildTimelineEntries } from '../timeline-recording.ts';
 
 export type AdjustDocumentDeps = Readonly<{
   repo: DocumentRepository;
-  outbox: FinancialOutbox;
   clock: Clock;
 }>;
 
@@ -36,7 +34,6 @@ export type AdjustDocumentCommand = Readonly<{
 export type AdjustDocumentError =
   | DocumentError
   | DocumentRepositoryError
-  | OutboxAppendError
   | DocumentId.DocumentIdError
   | Money.MoneyError
   | Retention.RetentionError;
@@ -140,11 +137,9 @@ export const adjustDocument =
         { document: edited.value.document, payables: edited.value.payables },
         entries,
         cmd.expectedVersion,
+        edited.value.events,
       );
       if (!saved.ok) return err(saved.error);
-
-      const published = await deps.outbox.append(edited.value.events);
-      if (!published.ok) return err(published.error);
 
       return ok(undefined);
     }
@@ -183,11 +178,9 @@ export const adjustDocument =
       },
       entries,
       cmd.expectedVersion,
+      adjusted.value.events,
     );
     if (!saved.ok) return err(saved.error);
-
-    const published = await deps.outbox.append(adjusted.value.events);
-    if (!published.ok) return err(published.error);
 
     return ok(undefined);
   };

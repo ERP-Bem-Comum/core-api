@@ -86,6 +86,11 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/financial/adapters/persistence/reconciliation-period.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/category-read.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/cost-center-read.drizzle-mysql.test.ts',
+    // #127 — outbox transacional do financial (atomicidade estado+evento)
+    'tests/modules/financial/adapters/persistence/fin-outbox-schema.drizzle-mysql.test.ts',
+    'tests/modules/financial/adapters/persistence/document-outbox-atomic.drizzle-mysql.test.ts',
+    'tests/modules/financial/adapters/persistence/reconciliation-outbox-atomic.drizzle-mysql.test.ts',
+    'tests/modules/financial/adapters/persistence/statement-period-outbox-atomic.drizzle-mysql.test.ts',
     'tests/workers/supplier-view-projection/projection.integration.test.ts',
   ]),
   'etl:orchestrate': mysqlSuite({ PARTNERS_ETL_INTEGRATION: '1' }, [

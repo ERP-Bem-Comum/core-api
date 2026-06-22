@@ -21,12 +21,10 @@ import type {
   DocumentRepository,
   DocumentRepositoryError,
 } from '../../domain/document/repository.ts';
-import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
 import { buildTimelineEntries } from '../timeline-recording.ts';
 
 export type SaveDraftDeps = Readonly<{
   repo: DocumentRepository;
-  outbox: FinancialOutbox;
   clock: Clock;
 }>;
 
@@ -61,7 +59,6 @@ export type SaveDraftOutput = Readonly<{ documentId: DocumentId.DocumentId }>;
 export type SaveDraftError =
   | DocumentError
   | DocumentRepositoryError
-  | OutboxAppendError
   | PartnerRefError
   | FinancialRefError
   | Money.MoneyError
@@ -167,11 +164,13 @@ export const saveDraft =
       actor: null,
     });
 
-    const saved = await deps.repo.save({ document: draft.value.document, payables: null }, entries);
+    const saved = await deps.repo.save(
+      { document: draft.value.document, payables: null },
+      entries,
+      undefined,
+      draft.value.events,
+    );
     if (!saved.ok) return err(saved.error);
-
-    const published = await deps.outbox.append(draft.value.events);
-    if (!published.ok) return err(published.error);
 
     return ok({ documentId: id });
   };

@@ -12,13 +12,11 @@ import type {
   ReconciliationPeriodStore,
   ReconciliationPeriodStoreError,
 } from '../ports/reconciliation-period-store.ts';
-import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
 
 export type CloseReconciliationPeriodDeps = Readonly<{
   periodStore: Pick<ReconciliationPeriodStore, 'close'>;
   statements: Pick<BankStatementRepository, 'listTransactionsByPeriod'>;
   clock: Pick<Clock, 'now'>;
-  outbox: FinancialOutbox;
 }>;
 
 export type CloseReconciliationPeriodInput = Readonly<{
@@ -36,8 +34,7 @@ export type CloseReconciliationPeriodOutput = Readonly<{
 export type CloseReconciliationPeriodError =
   | PeriodError
   | ReconciliationPeriodStoreError
-  | BankStatementRepositoryError
-  | OutboxAppendError;
+  | BankStatementRepositoryError;
 
 // Fecha o período (US6): conta transações `Pending` no range (FR-013) → domínio `closePeriod` → persiste
 // → publica `ReconciliationPeriodClosed`. O guard `period-closed` (R18) é aplicado pelos use-cases mutantes.
@@ -65,11 +62,8 @@ export const closeReconciliationPeriod =
     });
     if (!closed.ok) return err(closed.error);
 
-    const saved = await deps.periodStore.close(closed.value.period);
+    const saved = await deps.periodStore.close(closed.value.period, closed.value.events);
     if (!saved.ok) return err(saved.error);
-
-    const published = await deps.outbox.append(closed.value.events);
-    if (!published.ok) return err(published.error);
 
     return ok({ periodId: closed.value.period.id, status: 'Closed' });
   };

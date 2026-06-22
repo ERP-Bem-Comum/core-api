@@ -7,20 +7,14 @@ import type {
   DocumentRepository,
   DocumentRepositoryError,
 } from '../../domain/document/repository.ts';
-import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
 import { buildTimelineEntries } from '../timeline-recording.ts';
 
 export type SubmitDraftDeps = Readonly<{
   repo: DocumentRepository;
-  outbox: FinancialOutbox;
   clock: Clock;
 }>;
 export type SubmitDraftCommand = Readonly<{ documentId: string }>;
-export type SubmitDraftError =
-  | DocumentError
-  | DocumentRepositoryError
-  | OutboxAppendError
-  | DocumentId.DocumentIdError;
+export type SubmitDraftError = DocumentError | DocumentRepositoryError | DocumentId.DocumentIdError;
 
 export const submitDraft =
   (deps: SubmitDraftDeps) =>
@@ -56,11 +50,10 @@ export const submitDraft =
         payables: submitted.value.payables,
       },
       entries,
+      undefined,
+      submitted.value.events,
     );
     if (!saved.ok) return err(saved.error);
-
-    const published = await deps.outbox.append(submitted.value.events);
-    if (!published.ok) return err(published.error);
 
     return ok(undefined);
   };

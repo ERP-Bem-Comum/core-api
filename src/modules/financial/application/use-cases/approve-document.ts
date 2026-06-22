@@ -8,12 +8,10 @@ import type {
   DocumentRepository,
   DocumentRepositoryError,
 } from '../../domain/document/repository.ts';
-import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
 import { buildTimelineEntries } from '../timeline-recording.ts';
 
 export type ApproveDocumentDeps = Readonly<{
   repo: DocumentRepository;
-  outbox: FinancialOutbox;
   clock: Clock;
 }>;
 
@@ -28,7 +26,6 @@ export type ApproveDocumentCommand = Readonly<{
 export type ApproveDocumentError =
   | DocumentError
   | DocumentRepositoryError
-  | OutboxAppendError
   | DocumentId.DocumentIdError
   | UserRef.UserRefError;
 
@@ -75,11 +72,9 @@ export const approveDocument =
       },
       entries,
       cmd.expectedVersion,
+      approved.value.events,
     );
     if (!saved.ok) return err(saved.error);
-
-    const published = await deps.outbox.append(approved.value.events);
-    if (!published.ok) return err(published.error);
 
     return ok(undefined);
   };

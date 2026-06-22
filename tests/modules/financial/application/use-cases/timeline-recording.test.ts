@@ -39,12 +39,11 @@ const nfseCommand = () => ({
 
 const wire = () => {
   const timelineStore: TimelineStore = new Map<string, FinancialTimelineEntry[]>();
-  const repo = createInMemoryDocumentRepository(timelineStore);
-  const timelineRepo = createInMemoryTimelineRepository(timelineStore);
   const outbox = createInMemoryOutbox();
+  const repo = createInMemoryDocumentRepository(timelineStore, undefined, outbox.port);
+  const timelineRepo = createInMemoryTimelineRepository(timelineStore);
   const deps = {
     repo,
-    outbox: outbox.port,
     clock: CLOCK,
     contractCategorizationReader: createInMemoryContractCategorizationReadStore(),
   };

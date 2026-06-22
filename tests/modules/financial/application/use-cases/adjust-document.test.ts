@@ -75,10 +75,10 @@ const seedApproved = async (repo: DocumentRepository) => {
 
 describe('financial/application — adjustDocument', () => {
   it('ajusta um documento Open: recalcula o líquido e regenera os filhos', async () => {
-    const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
+    const repo = createInMemoryDocumentRepository(undefined, undefined, outbox.port);
     const id = await seedOpen(repo);
-    const r = await adjustDocument({ repo, outbox: outbox.port, clock: CLOCK })({
+    const r = await adjustDocument({ repo, clock: CLOCK })({
       documentId: id,
       expectedVersion: 0,
       interestCents: 500,
@@ -94,10 +94,10 @@ describe('financial/application — adjustDocument', () => {
   });
 
   it('rejeita ajustar documento não-Open (Approved) — invalid-state-transition', async () => {
-    const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
+    const repo = createInMemoryDocumentRepository(undefined, undefined, outbox.port);
     const id = await seedApproved(repo);
-    const r = await adjustDocument({ repo, outbox: outbox.port, clock: CLOCK })({
+    const r = await adjustDocument({ repo, clock: CLOCK })({
       documentId: id,
       expectedVersion: 0,
       interestCents: 100,

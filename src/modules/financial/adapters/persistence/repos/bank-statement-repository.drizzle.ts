@@ -15,6 +15,7 @@ import type {
   BankStatementRepository,
   BankStatementRepositoryError,
 } from '#src/modules/financial/application/ports/bank-statement-repository.ts';
+import type { BankStatementEvent } from '#src/modules/financial/domain/statement/events.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { finBankStatements, finStatementTransactions } from '../schemas/mysql.ts';
 import {
@@ -23,6 +24,7 @@ import {
   toDomain,
   transactionRowToDomain,
 } from '../mappers/statement.mapper.ts';
+import { appendFinOutboxInTx } from './fin-outbox-helpers.ts';
 
 const logStore = (op: string, cause: unknown): void => {
   process.stderr.write(`[fin-bank-statement-repo] ${op} failed: ${String(cause)}\n`);
@@ -34,7 +36,10 @@ export const createDrizzleBankStatementRepository = (
   const { db } = handle;
 
   return {
-    save: async (statement: BankStatement): Promise<Result<void, BankStatementRepositoryError>> => {
+    save: async (
+      statement: BankStatement,
+      events?: readonly BankStatementEvent[],
+    ): Promise<Result<void, BankStatementRepositoryError>> => {
       try {
         await db.transaction(async (tx) => {
           await tx.insert(finBankStatements).values(statementToRow(statement));
@@ -42,6 +47,8 @@ export const createDrizzleBankStatementRepository = (
           if (txRows.length > 0) {
             await tx.insert(finStatementTransactions).values(txRows);
           }
+          // #127: estado + evento na MESMA tx (atomicidade — ADR-0015). Falha aqui reverte tudo.
+          await appendFinOutboxInTx(tx, events ?? []);
         });
         return ok(undefined);
       } catch (cause) {

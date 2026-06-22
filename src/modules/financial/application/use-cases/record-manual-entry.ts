@@ -27,7 +27,6 @@ import type {
   ReconciliationPeriodStore,
   ReconciliationPeriodStoreError,
 } from '../ports/reconciliation-period-store.ts';
-import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
 
 export type RecordManualEntryDeps = Readonly<{
   reconciliationRepo: Pick<ReconciliationRepository, 'confirmManualEntry'>;
@@ -35,7 +34,6 @@ export type RecordManualEntryDeps = Readonly<{
   cedenteStore: Pick<CedenteAccountStore, 'findById'>;
   periods: Pick<ReconciliationPeriodStore, 'isClosed'>;
   clock: Pick<Clock, 'now'>;
-  outbox: FinancialOutbox;
 }>;
 
 export type RecordManualEntryInput = Readonly<{
@@ -64,8 +62,7 @@ export type RecordManualEntryError =
   | ReconciliationRepositoryError
   | BankStatementRepositoryError
   | CedenteAccountStoreError
-  | ReconciliationPeriodStoreError
-  | OutboxAppendError;
+  | ReconciliationPeriodStoreError;
 
 // Lança um ManualEntry para uma transação `Pending` sem título (ex.: tarifa). Guard FR-015 (conta não
 // `Closed`) → domínio confirmManualEntry (valor = valor da transação) → unit-of-work → outbox. R1.
@@ -111,11 +108,9 @@ export const recordManualEntry =
     const saved = await deps.reconciliationRepo.confirmManualEntry(
       confirmed.value.reconciliation,
       transaction.id,
+      confirmed.value.events,
     );
     if (!saved.ok) return err(saved.error);
-
-    const published = await deps.outbox.append(confirmed.value.events);
-    if (!published.ok) return err(published.error);
 
     return ok({
       reconciliationId: confirmed.value.reconciliation.id,

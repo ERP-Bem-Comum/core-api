@@ -22,7 +22,6 @@ import type {
   DocumentRepository,
   DocumentRepositoryError,
 } from '../../domain/document/repository.ts';
-import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
 import type {
   ContractCategorizationReadPort,
   ContractCategorizationReadError,
@@ -31,7 +30,6 @@ import { buildTimelineEntries } from '../timeline-recording.ts';
 
 export type SaveDocumentDeps = Readonly<{
   repo: DocumentRepository;
-  outbox: FinancialOutbox;
   clock: Clock;
   // #48: leitura cross-módulo (ADR-0006) p/ herdar a categorização do contrato vinculado.
   contractCategorizationReader: ContractCategorizationReadPort;
@@ -70,7 +68,6 @@ export type SaveDocumentOutput = Readonly<{
 export type SaveDocumentError =
   | DocumentError
   | DocumentRepositoryError
-  | OutboxAppendError
   | PartnerRefError
   | FinancialRefError
   | ContractCategorizationReadError
@@ -198,11 +195,10 @@ export const saveDocument =
         payables: created.value.payables,
       },
       entries,
+      undefined,
+      created.value.events,
     );
     if (!saved.ok) return err(saved.error);
-
-    const published = await deps.outbox.append(created.value.events);
-    if (!published.ok) return err(published.error);
 
     return ok({
       documentId: created.value.document.id,

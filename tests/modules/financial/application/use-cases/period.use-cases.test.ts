@@ -19,7 +19,6 @@ import { createInMemoryReconciliationPeriodStore } from '#src/modules/financial/
 import { createInMemoryReconciliationRepository } from '#src/modules/financial/adapters/persistence/repos/reconciliation-repository.in-memory.ts';
 import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
 import { createInMemoryPayableReconciliationView } from '#src/modules/financial/adapters/persistence/repos/payable-reconciliation-view.in-memory.ts';
-import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
 import { bankStatementParser } from '#src/modules/financial/adapters/statement-parsers/bank-statement-parser.ts';
 import { reconciliationExporter } from '#src/modules/financial/adapters/export/reconciliation-exporter.ts';
 import { closeReconciliationPeriod } from '#src/modules/financial/application/use-cases/close-reconciliation-period.ts';
@@ -82,7 +81,6 @@ describe('financial/application/use-cases/close-reconciliation-period', () => {
       periodStore: createInMemoryReconciliationPeriodStore(),
       statements: repo,
       clock: ClockReal(),
-      outbox: createInMemoryOutbox().port,
     })({ debitAccountRef: ACCOUNT, periodStart: START, periodEnd: END, closedBy: 'u1' });
     assert.equal(r.ok, true, JSON.stringify(r));
     if (r.ok) assert.equal(r.value.status, 'Closed');
@@ -94,7 +92,6 @@ describe('financial/application/use-cases/close-reconciliation-period', () => {
       periodStore: createInMemoryReconciliationPeriodStore(),
       statements: repo,
       clock: ClockReal(),
-      outbox: createInMemoryOutbox().port,
     })({ debitAccountRef: ACCOUNT, periodStart: START, periodEnd: END, closedBy: 'u1' });
     assert.equal(r.ok, false);
     if (!r.ok) assert.equal(r.error, 'period-has-pending-transactions');
@@ -109,7 +106,6 @@ describe('financial/application/use-cases/export-reconciliation', () => {
       periodStore,
       statements: repo,
       clock: ClockReal(),
-      outbox: createInMemoryOutbox().port,
     })({ debitAccountRef: ACCOUNT, periodStart: START, periodEnd: END, closedBy: 'u1' });
     assert.equal(closed.ok, true);
     if (!closed.ok) return;
@@ -150,7 +146,6 @@ describe('financial — guard period-closed (CA4)', () => {
       periodStore,
       statements: createInMemoryBankStatementRepository(new Map()), // período "vazio" p/ poder fechar
       clock: ClockReal(),
-      outbox: createInMemoryOutbox().port,
     })({ debitAccountRef: ACCOUNT, periodStart: START, periodEnd: END, closedBy: 'u1' });
     assert.equal(closed.ok, true);
 
@@ -181,7 +176,6 @@ describe('financial — guard period-closed (CA4)', () => {
       cedenteStore,
       periods: periodStore,
       clock: ClockReal(),
-      outbox: createInMemoryOutbox().port,
     })({ transactionId: String(txId), type: 'FeePenaltyInterest', reconciledBy: 'u1' });
     assert.equal(r.ok, false);
     if (!r.ok) assert.equal(r.error, 'period-closed');
@@ -194,7 +188,6 @@ describe('financial — guard period-closed (CA4)', () => {
       periodStore: store,
       statements: createInMemoryBankStatementRepository(new Map()),
       clock: ClockReal(),
-      outbox: createInMemoryOutbox().port,
     })({ debitAccountRef: ACCOUNT, periodStart: START, periodEnd: END, closedBy: 'u1' });
     if (!r.ok) throw new Error('setup: close');
     return store;
@@ -245,7 +238,6 @@ describe('financial — guard period-closed (CA4)', () => {
       periods: periodStore,
       cedenteStore,
       clock: ClockReal(),
-      outbox: createInMemoryOutbox().port,
     })({ debitAccountRef: ACCOUNT, format: 'CSV', content: csv });
     assert.equal(r.ok, false);
     if (!r.ok) assert.equal(r.error, 'period-closed');
@@ -268,7 +260,6 @@ describe('financial — guard period-closed (CA4)', () => {
       cedenteStore,
       periods: periodStore,
       clock: ClockReal(),
-      outbox: createInMemoryOutbox().port,
     })({
       transactionId: String(txId),
       payableIds: [String(PayableId.generate())],
@@ -303,7 +294,6 @@ describe('financial — guard period-closed (CA4)', () => {
       statements: repo,
       periods: periodStore,
       clock: ClockReal(),
-      outbox: createInMemoryOutbox().port,
     })({ reconciliationId: String(recon.id), undoneBy: 'u2' });
     assert.equal(r.ok, false);
     if (!r.ok) assert.equal(r.error, 'period-closed');

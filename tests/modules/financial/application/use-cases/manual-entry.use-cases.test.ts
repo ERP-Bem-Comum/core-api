@@ -74,17 +74,19 @@ const buildWorld = (txs: readonly ParsedTransaction[]) => {
   const statementRepo = createInMemoryBankStatementRepository(statementStore);
   const cedenteStore = createInMemoryCedenteAccountStore();
   const outbox = createInMemoryOutbox();
-  const reconRepo = createInMemoryReconciliationRepository({
-    payables: new Map(),
-    statements: statementStore,
-  });
+  const reconRepo = createInMemoryReconciliationRepository(
+    {
+      payables: new Map(),
+      statements: statementStore,
+    },
+    outbox.port,
+  );
   const record = recordManualEntry({
     reconciliationRepo: reconRepo,
     statements: statementRepo,
     cedenteStore,
     periods: createInMemoryReconciliationPeriodStore(),
     clock: ClockReal(),
-    outbox: outbox.port,
   });
   return {
     account: account.value,

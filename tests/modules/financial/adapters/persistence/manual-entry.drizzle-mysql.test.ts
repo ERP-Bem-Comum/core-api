@@ -11,7 +11,6 @@ import { eq } from 'drizzle-orm';
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
-import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
 import { createDrizzleReconciliationRepository } from '#src/modules/financial/adapters/persistence/repos/reconciliation-repository.drizzle.ts';
 import { createDrizzleBankStatementRepository } from '#src/modules/financial/adapters/persistence/repos/bank-statement-repository.drizzle.ts';
 import { createDrizzleCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.drizzle.ts';
@@ -108,7 +107,6 @@ if (!process.env['MYSQL_INTEGRATION']) {
         cedenteStore: createDrizzleCedenteAccountStore(handle),
         periods: createDrizzleReconciliationPeriodStore(handle),
         clock: ClockReal(),
-        outbox: createInMemoryOutbox().port,
       });
 
       const r = await record({

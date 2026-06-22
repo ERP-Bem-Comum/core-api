@@ -40,7 +40,6 @@ describe('financial/application/import-bank-statement — guard conta encerrada 
       repo: { has: () => fail('repo.has'), save: () => fail('repo.save') },
       periods: { isClosed: (): Promise<Result<boolean, never>> => Promise.resolve(ok(false)) },
       clock: { now: () => new Date('2026-06-19T00:00:00.000Z') },
-      outbox: { append: () => fail('outbox.append') },
       cedenteStore: {
         findById: (): Promise<Result<unknown, never>> => Promise.resolve(ok(acc)),
       },

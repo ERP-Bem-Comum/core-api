@@ -67,10 +67,8 @@ if (!process.env['MYSQL_INTEGRATION']) {
     // Cria um documento Open (1 título Pai, sem retenção → valor líquido = bruto), promove o título a
     // `Paid` por SQL e devolve { payableId, valueCents }.
     const seedPaidPayable = async (valueCents: number): Promise<string> => {
-      const outbox = createInMemoryOutbox();
       const save = saveDocument({
         repo: createDrizzleDocumentRepository(handle),
-        outbox: outbox.port,
         clock: ClockReal(),
         contractCategorizationReader: createInMemoryContractCategorizationReadStore(),
       });

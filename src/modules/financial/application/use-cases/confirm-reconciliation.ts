@@ -28,7 +28,6 @@ import type {
   ReconciliationPeriodStore,
   ReconciliationPeriodStoreError,
 } from '../ports/reconciliation-period-store.ts';
-import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
 
 export type ConfirmReconciliationDeps = Readonly<{
   reconciliationRepo: Pick<ReconciliationRepository, 'confirm'>;
@@ -37,7 +36,6 @@ export type ConfirmReconciliationDeps = Readonly<{
   cedenteStore: Pick<CedenteAccountStore, 'findById'>;
   periods: Pick<ReconciliationPeriodStore, 'isClosed'>;
   clock: Pick<Clock, 'now'>;
-  outbox: FinancialOutbox;
 }>;
 
 export type ConfirmReconciliationInput = Readonly<{
@@ -65,8 +63,7 @@ export type ConfirmReconciliationError =
   | PayableReconciliationViewError
   | BankStatementRepositoryError
   | CedenteAccountStoreError
-  | ReconciliationPeriodStoreError
-  | OutboxAppendError;
+  | ReconciliationPeriodStoreError;
 
 // Imperative Shell (validar → fetch → domain → persist → publish). Concilia sob comando explícito (R1):
 // guard FR-015 (conta encerrada) → domínio confirm (R2/R3) → unit-of-work atômico no repo → evento.
@@ -113,11 +110,9 @@ export const confirmReconciliation =
     const saved = await deps.reconciliationRepo.confirm(
       confirmed.value.reconciliation,
       transaction.id,
+      confirmed.value.events,
     );
     if (!saved.ok) return err(saved.error);
-
-    const published = await deps.outbox.append(confirmed.value.events);
-    if (!published.ok) return err(published.error);
 
     return ok({
       reconciliationId: confirmed.value.reconciliation.id,

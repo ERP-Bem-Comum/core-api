@@ -6,14 +6,12 @@ import type {
   DocumentRepository,
   DocumentRepositoryError,
 } from '../../domain/document/repository.ts';
-import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
 
-export type CancelDocumentDeps = Readonly<{ repo: DocumentRepository; outbox: FinancialOutbox }>;
+export type CancelDocumentDeps = Readonly<{ repo: DocumentRepository }>;
 export type CancelDocumentCommand = Readonly<{ documentId: string; expectedVersion: number }>;
 export type CancelDocumentError =
   | DocumentError
   | DocumentRepositoryError
-  | OutboxAppendError
   | DocumentId.DocumentIdError;
 
 export const cancelDocument =
@@ -33,10 +31,8 @@ export const cancelDocument =
       if (!draft.ok) return err(draft.error);
       const cancelled = Document.cancelDraft(draft.value);
       if (!cancelled.ok) return err(cancelled.error);
-      const deleted = await deps.repo.delete(id.value, cmd.expectedVersion);
+      const deleted = await deps.repo.delete(id.value, cmd.expectedVersion, cancelled.value.events);
       if (!deleted.ok) return err(deleted.error);
-      const published = await deps.outbox.append(cancelled.value.events);
-      if (!published.ok) return err(published.error);
       return ok(undefined);
     }
 
@@ -48,11 +44,8 @@ export const cancelDocument =
     const cancelled = Document.cancel({ document: open.value, payables: found.value.payables });
     if (!cancelled.ok) return err(cancelled.error);
 
-    const deleted = await deps.repo.delete(id.value, cmd.expectedVersion);
+    const deleted = await deps.repo.delete(id.value, cmd.expectedVersion, cancelled.value.events);
     if (!deleted.ok) return err(deleted.error);
-
-    const published = await deps.outbox.append(cancelled.value.events);
-    if (!published.ok) return err(published.error);
 
     return ok(undefined);
   };
