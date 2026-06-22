@@ -79,8 +79,11 @@ interface ComposeConfig {
 // ─── Config helpers ───────────────────────────────────────────────────────
 
 /**
- * Resolve o compose.yaml com o profile `app` ativo para que o serviço `app`
+ * Resolve o compose.yaml com o profile `app` ativo para que o serviço `http`
  * apareça na config. Retorna null se o comando falhar (Docker CLI ausente).
+ *
+ * Nota: o serviço foi renomeado de `app` → `http` na Fase 4 da reorganização
+ * da raiz (compose.yaml). O profile permanece `app` para ativar o serviço.
  */
 const configWithApp = (): ComposeConfig | null => {
   const r = sh(`docker compose -f "${COMPOSE_YAML}" --profile app config --format json`);
@@ -244,34 +247,37 @@ describe(
   },
 );
 
-// ─── CA-5: serviço `app` tem healthcheck ─────────────────────────────────
-describe('issue #51 — CA-5: serviço app tem healthcheck declarado', { skip }, () => {
-  it('CA-5a: serviço app existe com o profile app ativo', () => {
+// ─── CA-5: serviço `http` (ex-`app`) tem healthcheck ────────────────────
+// Serviço renomeado de `app` → `http` na Fase 4 (compose.yaml). Profile `app`
+// continua ativando o serviço (`profiles: [app]` no compose). O CA-5 verifica
+// o serviço pelo novo nome `http`.
+describe('issue #51 — CA-5: serviço http tem healthcheck declarado', { skip }, () => {
+  it('CA-5a: serviço http existe com o profile app ativo', () => {
     const cfg = configWithApp();
-    assert.ok(cfg?.services?.['app'], `serviço app ausente na config com --profile app`);
+    assert.ok(cfg?.services?.['http'], `serviço http ausente na config com --profile app`);
   });
 
-  it('CA-5b: serviço app tem healthcheck com test declarado', () => {
+  it('CA-5b: serviço http tem healthcheck com test declarado', () => {
     const cfg = configWithApp();
-    const hc = cfg?.services?.['app']?.healthcheck;
+    const hc = cfg?.services?.['http']?.healthcheck;
     assert.ok(
       hc && !hc.disable,
-      `serviço app não tem healthcheck habilitado. healthcheck: ${JSON.stringify(hc)}`,
+      `serviço http não tem healthcheck habilitado. healthcheck: ${JSON.stringify(hc)}`,
     );
     const test = hc?.test;
     const testStr = test === undefined ? '' : typeof test === 'string' ? test : test.join(' ');
-    assert.ok(testStr.length > 0, `healthcheck.test do serviço app está vazio`);
+    assert.ok(testStr.length > 0, `healthcheck.test do serviço http está vazio`);
   });
 
-  it('CA-5c: healthcheck do app aponta para a porta 3000 (/health)', () => {
+  it('CA-5c: healthcheck do http aponta para a porta 3000 (/health)', () => {
     const cfg = configWithApp();
-    const hc = cfg?.services?.['app']?.healthcheck;
+    const hc = cfg?.services?.['http']?.healthcheck;
     const test = hc?.test;
     const testStr = test === undefined ? '' : typeof test === 'string' ? test : test.join(' ');
     assert.match(
       testStr,
       /3000.*health|health.*3000/,
-      `healthcheck do serviço app deveria verificar /health na porta 3000. test: "${testStr}"`,
+      `healthcheck do serviço http deveria verificar /health na porta 3000. test: "${testStr}"`,
     );
   });
 });

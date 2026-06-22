@@ -6,6 +6,13 @@ cli-state.json
 *.log
 .DS_Store
 
+# Worktrees git aninhados — cópias completas de src/tests de outras branches
+# (sessões paralelas). Têm seu próprio HEAD/formatação; nunca formatar pelo pai.
+# Mesma categoria de .claude/worktrees e .agents/worktrees no eslint.config.js.
+.claude/worktrees/
+.agents/worktrees/
+epic/
+
 # Documentação organizacional fica fora — mantemos formatação manual
 .claude/
 .pipeline/

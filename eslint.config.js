@@ -28,6 +28,11 @@ export default tseslint.config(
       // ingere ~1748 .ts extras e estoura o heap do V8 (OOM no `pnpm run lint`).
       '.claude/**',
       '.agents/**',
+      // Worktrees de épico criados na raiz (`epic/<branch>`, convenção do dev):
+      // mesmo caso dos worktrees do Claude — cópia completa de src/ e tests/ de
+      // outra branch. Sem esta exclusão o projectService ingere os .ts extras e
+      // estoura o heap (OOM no lint), além de lintar código de outra branch.
+      'epic/**',
     ],
   },
 

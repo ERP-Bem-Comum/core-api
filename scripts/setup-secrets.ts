@@ -58,6 +58,24 @@ const SECRETS_TO_GENERATE: readonly SecretSpec[] = [
   { name: 'minio_root_password', label: 'MinIO root password (secret key)' },
 ];
 
+// Connection-string secrets — um por módulo com persistência MySQL. Todos apontam
+// para o MESMO database `core` (ADR-0014: isolamento por prefixo de tabela, não por
+// database). Ficam nominalmente separados para permitir divergência futura (extração
+// de serviço, ADR-0006) e para que cada serviço do compose monte só o secret que
+// precisa. O host `mysql` é o nome do serviço no compose; em produção o ERP-INFRA
+// injeta a URL real via Secrets Manager. `contracts_database_url` é também consumido
+// pelo job one-shot `contracts-sweeper` (compose profile `jobs`).
+const DATABASE_URL_SECRETS: readonly string[] = [
+  'contracts_database_url',
+  'auth_database_url',
+  'programs_database_url',
+  'partners_database_url',
+  'financial_database_url',
+  // Consumido pelo job one-shot `migrate` (compose profile `jobs`) — aplica as
+  // migrations dos 6 módulos antes de http/workers. Mesma URL (DB único `core`).
+  'migrate_database_url',
+];
+
 const USAGE = `Uso: pnpm secrets:setup [--random] [--force] [--help]
 
   --random    Gera senhas aleatórias (32 bytes hex). Sem prompt.
@@ -230,6 +248,56 @@ const writeSecret = async (
   return { ok: true, action: 'created' };
 };
 
+/**
+ * Grava um connection-string secret (`<module>_database_url.txt`). Difere de
+ * `writeSecret` em dois pontos: o valor é a URL pronta (não uma senha gerada) e o
+ * modo é 0600 (só dono). A restrição de 0644 dos secrets de senha vem do initdb do
+ * MySQL (lido pelo uid 999 via gosu — ver `writeSecret`); aqui o único consumidor é
+ * o container via `/run/secrets`, montado 0444 pelo Compose, então 0600 no host basta.
+ */
+const writeDatabaseUrlSecret = async (
+  name: string,
+  connectionUrl: string,
+  force: boolean,
+): Promise<WriteResult> => {
+  const file = resolve(SECRETS_DIR, `${name}.txt`);
+
+  if ((await fileExists(file)) && !force) {
+    stderr.write(`  ↷ ${name}.txt já existe (use --force para regenerar)\n`);
+    return { ok: true, action: 'skipped' };
+  }
+
+  try {
+    await writeAtomic(file, connectionUrl, 0o600);
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+
+  stderr.write(`  ✓ ${name}.txt criado (chmod 0600)\n`);
+  return { ok: true, action: 'created' };
+};
+
+type ConnectionUrlResult =
+  | Readonly<{ ok: true; url: string }>
+  | Readonly<{ ok: false; error: string }>;
+
+/**
+ * Compõe a connection string a partir de `mysql_app_password.txt` (já gravado).
+ * Mesma URL para todos os módulos: database único `core` (ADR-0014), escritor
+ * `core_app`, host `mysql` (nome do serviço no compose). Encapsulada num Result
+ * para o caller usar `const` (init-declarations).
+ */
+const tryComposeConnectionUrl = async (): Promise<ConnectionUrlResult> => {
+  const appPwdFile = resolve(SECRETS_DIR, 'mysql_app_password.txt');
+  try {
+    const { readFile } = await import('node:fs/promises');
+    const appPwd = (await readFile(appPwdFile, 'utf8')).trim();
+    return { ok: true, url: `mysql://core_app:${appPwd}@mysql:3306/core` };
+  } catch (e: unknown) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+};
+
 // ─── Main ─────────────────────────────────────────────────────────────────
 const main = async (): Promise<number> => {
   const parsed = parseArgs(argv.slice(2));
@@ -265,27 +333,20 @@ const main = async (): Promise<number> => {
     }
   }
 
-  // Gera contracts_database_url.txt — connection string composta a partir de
-  // mysql_app_password.txt (já escrito acima). O host `mysql` é o nome do
-  // serviço no compose; em produção o ERP-INFRA injeta a URL real via secret.
-  const contractsDbUrlFile = resolve(SECRETS_DIR, 'contracts_database_url.txt');
-  if ((await fileExists(contractsDbUrlFile)) && !parsed.force) {
-    stderr.write('  ↷ contracts_database_url.txt já existe (use --force para regenerar)\n');
-  } else {
-    const appPwdFile = resolve(SECRETS_DIR, 'mysql_app_password.txt');
-    try {
-      const { readFile } = await import('node:fs/promises');
-      const appPwd = (await readFile(appPwdFile, 'utf8')).trim();
-      const connectionUrl = `mysql://core_app:${appPwd}@mysql:3306/core`;
-      // 0600 (só dono): contém a URL completa COM a senha do DB. Os secrets de senha bruta
-      // usam 0644 por restrição do initdb (gosu/uid 999 — ver writeSecret); essa restrição
-      // NÃO se aplica aqui (único consumidor é o container via /run/secrets, montado 0444).
-      await writeAtomic(contractsDbUrlFile, connectionUrl, 0o600);
-      stderr.write('  ✓ contracts_database_url.txt criado (chmod 0600)\n');
-    } catch (e: unknown) {
-      stderr.write(
-        `Erro ao gerar contracts_database_url.txt: ${e instanceof Error ? e.message : String(e)}\n`,
-      );
+  // Connection-string secrets (um por módulo) — compostas a partir de
+  // mysql_app_password.txt (já escrito acima). Mesma URL para todos: o database é
+  // único (`core`, ADR-0014) e o escritor é `core_app`.
+  const urlResult = await tryComposeConnectionUrl();
+  if (!urlResult.ok) {
+    stderr.write(`Erro ao compor as connection strings: ${urlResult.error}\n`);
+    return EXIT_IOERR;
+  }
+  const connectionUrl = urlResult.url;
+
+  for (const name of DATABASE_URL_SECRETS) {
+    const result = await writeDatabaseUrlSecret(name, connectionUrl, parsed.force);
+    if (!result.ok) {
+      stderr.write(`Erro ao gravar ${name}: ${result.error}\n`);
       return EXIT_IOERR;
     }
   }
