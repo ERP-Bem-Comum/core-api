@@ -36,7 +36,7 @@
 // Boundary: todo try/catch converte para Result. Nenhum Error cruza a borda
 //   (.claude/rules/adapters.md §"converter para Result na borda").
 
-import { and, asc, count, eq, gte, lte } from 'drizzle-orm';
+import { and, asc, count, eq, gte, lte, sql } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
@@ -410,13 +410,41 @@ export const createDrizzleDocumentRepository = (
     pageSize: number,
   ): Promise<Result<Page<DocumentListItem>, DocumentRepositoryError>> =>
     safe('findPaged', async () => {
-      const { finDocuments, finSupplierView } = schema;
+      const { finDocuments, finSupplierView, finPayables } = schema;
+
+      // Derivação de conciliação (#204, ADR-0022 — read-model DERIVADO, sem escrita em fin_documents):
+      // por documento, total de títulos pagáveis e quantos estão Reconciled. Subquery agrupada (1 linha
+      // por documento → LEFT JOIN 1:0..1, não multiplica o COUNT). ADR-0020 permite GROUP BY/agregação.
+      const recon = db
+        .select({
+          documentId: finPayables.documentId,
+          total: sql<number>`count(*)`.as('total'),
+          reconciled: sql<number>`sum(${finPayables.status} = 'Reconciled')`.as('reconciled'),
+        })
+        .from(finPayables)
+        .groupBy(finPayables.documentId)
+        .as('recon');
+
+      // Documento conta como Conciliado sse status='Paid' E tem ≥1 título E TODOS Reconciled (FR-004).
+      const isReconciled = sql`${finDocuments.status} = 'Paid' and ${recon.total} is not null and ${recon.total} = ${recon.reconciled}`;
+      // Status exibido: reflete 'Reconciled' quando derivado; senão o status próprio do documento.
+      const displayStatus = sql<string>`case when ${isReconciled} then 'Reconciled' else ${finDocuments.status} end`;
+
+      // Filtro de status: 'Reconciled'/'Paid' usam a derivação; os demais são eq direto.
+      const statusCondition =
+        filter.status === 'Reconciled'
+          ? isReconciled
+          : filter.status === 'Paid'
+            ? sql`${finDocuments.status} = 'Paid' and (${recon.total} is null or ${recon.total} <> ${recon.reconciled})`
+            : filter.status !== undefined
+              ? eq(finDocuments.status, filter.status)
+              : undefined;
 
       // Constrói predicados condicionalmente — filtros ausentes não entram no WHERE.
       // and() com array vazio emite WHERE sem condições (SELECT all), que é o comportamento
       // correto para listagem sem filtro. (operators.mdx §"and")
       const conditions = [
-        filter.status !== undefined ? eq(finDocuments.status, filter.status) : undefined,
+        statusCondition,
         filter.supplierRef !== undefined
           ? eq(finDocuments.supplierRef, filter.supplierRef)
           : undefined,
@@ -431,9 +459,12 @@ export const createDrizzleDocumentRepository = (
 
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
-      // 1. COUNT(*) com o mesmo WHERE — retorna { value: number }[].
-      //    select.mdx §"count": `count()` importado de drizzle-orm retorna number sem cast.
-      const countRows = await db.select({ value: count() }).from(finDocuments).where(whereClause);
+      // 1. COUNT(*) com o mesmo WHERE + LEFT JOIN da derivação (o WHERE pode referenciar `recon`).
+      const countRows = await db
+        .select({ value: count() })
+        .from(finDocuments)
+        .leftJoin(recon, eq(recon.documentId, finDocuments.id))
+        .where(whereClause);
 
       const total = countRows[0]?.value ?? 0;
 
@@ -444,13 +475,13 @@ export const createDrizzleDocumentRepository = (
 
       // 2. SELECT read-model com LIMIT/OFFSET.
       //    Ordenação estável: dueDate ASC (NULLs primeiro), desempate por id ASC.
-      //    Colunas: apenas as necessárias para DocumentListItem.
+      //    `status` é o DERIVADO (displayStatus) — reflete Conciliado sem escrever em fin_documents.
       //    `version` incluída (FR-009): grids do front precisam para ações inline
       //    (PATCH/approve) sem findById extra — Vernon, _Implementing DDD_ (ddd--vernon-livro-vermelho.md:8869).
       const rows = await db
         .select({
           id: finDocuments.id,
-          status: finDocuments.status,
+          status: displayStatus,
           documentNumber: finDocuments.documentNumber,
           type: finDocuments.type,
           supplierRef: finDocuments.supplierRef,
@@ -467,6 +498,7 @@ export const createDrizzleDocumentRepository = (
           supplierDocument: finSupplierView.document,
         })
         .from(finDocuments)
+        .leftJoin(recon, eq(recon.documentId, finDocuments.id))
         .leftJoin(finSupplierView, eq(finDocuments.supplierRef, finSupplierView.supplierRef))
         .where(whereClause)
         .orderBy(asc(finDocuments.dueDate), asc(finDocuments.id))
