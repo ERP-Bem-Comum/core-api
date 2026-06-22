@@ -18,14 +18,14 @@ const pkg = JSON.parse(
 ) as { scripts?: Record<string, string> };
 const script = pkg.scripts?.['test:integration:auth'] ?? '';
 const orchestrator = readFileSync(
-  fileURLToPath(new URL('../../scripts/test-integration.ts', import.meta.url)),
+  fileURLToPath(new URL('../../scripts/ci/test-integration.ts', import.meta.url)),
   'utf-8',
 );
 
 describe('test:integration:auth (orquestrador)', () => {
   it('CA1: o script existe e delega ao orquestrador com a suite auth', () => {
     assert.ok(script.length > 0, 'scripts["test:integration:auth"] ausente no package.json');
-    assert.match(script, /scripts\/test-integration\.ts auth\b/);
+    assert.match(script, /scripts\/ci\/test-integration\.ts auth\b/);
   });
 
   it('CA2: o orquestrador aplica o gate de ambiente (MYSQL_INTEGRATION + concorrência 1)', () => {

@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# scripts/e2e-collaborators.sh — orquestra o smoke E2E da borda /api/v1/collaborators (P4-SMOKE).
+# scripts/e2e/collaborators.sh — orquestra o smoke E2E da borda /api/v1/collaborators (P4-SMOKE).
 #
 # [DEPRECATED] A cobertura de collaborators foi migrada para a colecao Bruno em
 # api-collections/core-api/7-partners/collaborators/ (ADR-0034). Use:

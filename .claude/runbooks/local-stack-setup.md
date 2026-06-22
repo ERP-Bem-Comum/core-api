@@ -51,7 +51,7 @@ O compose do MySQL lê as senhas de **arquivos** em `./secrets/` (não env vars 
 pnpm secrets:setup --random      # senhas aleatórias, sem prompt (ideal para automação/IA)
 ```
 
-Gera (`scripts/setup-secrets.ts`):
+Gera (`scripts/setup/secrets.ts`):
 
 | Arquivo | Para quê |
 | --- | --- |
@@ -261,7 +261,7 @@ o seed jamais é lido. Cada usuário semeado recebe um **Role inline** com exata
 { "users": [ { "email": "...", "password": "...", "permissions": ["resource:action", "..."] } ] }
 ```
 
-**Exemplo real** (de `scripts/e2e-contracts.sh`) — um operador só com contratos:
+**Exemplo real** (de `scripts/e2e/contracts.sh`) — um operador só com contratos:
 
 ```bash
 CORE_API_E2E=1 \
@@ -333,10 +333,10 @@ docker compose --profile app up -d --build      # sobe mysql + minio + app já c
 - `src/modules/auth/domain/authorization/permission-catalog.ts` — catálogo fixo de permissões.
 - `src/modules/auth/adapters/http/e2e-seed.ts` — parser do seed (guarda `CORE_API_E2E` + `AUTH_SEED_JSON`).
 - `src/modules/auth/adapters/http/composition.ts` — bootstrap RBAC (Role inline por usuário semeado).
-- `scripts/e2e-contracts.sh` — exemplo real de `AUTH_SEED_JSON` em uso.
+- `scripts/e2e/contracts.sh` — exemplo real de `AUTH_SEED_JSON` em uso.
 - `handbook/tickets/todo/USR-SEED-PERMISSIONS.md` — gap do admin de dev (`user:*`/`program:*`).
 - `compose.yaml` — serviços minio/mysql, volumes, bootstrap do bucket.
-- `scripts/setup-secrets.ts` — gera os 3 secrets.
+- `scripts/setup/secrets.ts` — gera os secrets.
 - `src/modules/contracts/adapters/storage/s3-config-aws.ts` — envs `S3_*` (canônicas).
 - `src/modules/contracts/adapters/http/composition.ts` — S3 obrigatório no driver mysql.
 - `src/server.ts` — envs de driver/DB por módulo + `PROGRAMS_LOGO_S3_*`.

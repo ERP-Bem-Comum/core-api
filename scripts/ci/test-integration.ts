@@ -1,6 +1,6 @@
 // Orquestrador único dos testes de integração (Fase 1 — repo cleanup).
 // Substitui as ~10 linhas gigantes de `test:integration:*` no package.json por um manifesto
-// declarativo + um runner. Uso: `node scripts/test-integration.ts <suite>`.
+// declarativo + um runner. Uso: `node scripts/ci/test-integration.ts <suite>`.
 //
 // Cada suite declara: serviços Docker a subir (mysql|minio), se cria os secrets de TESTE,
 // a env var de gate (MYSQL_INTEGRATION etc.), a concorrência e os paths de teste.
@@ -178,7 +178,7 @@ const main = (): number => {
   const suite = name === undefined ? undefined : SUITES[name];
   if (suite === undefined) {
     process.stderr.write(
-      `uso: node scripts/test-integration.ts <suite>\nsuites: ${Object.keys(SUITES).join(', ')}\n`,
+      `uso: node scripts/ci/test-integration.ts <suite>\nsuites: ${Object.keys(SUITES).join(', ')}\n`,
     );
     return EX_USAGE;
   }

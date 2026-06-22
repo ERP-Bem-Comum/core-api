@@ -13,7 +13,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
 
-const SCRIPT = fileURLToPath(new URL('../../scripts/only-allow-pnpm.ts', import.meta.url));
+const SCRIPT = fileURLToPath(new URL('../../scripts/ci/only-allow-pnpm.ts', import.meta.url));
 const CWD = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 
 // Controla AMBOS os sinais que o guard inspeciona, sempre sobrescrevendo o que

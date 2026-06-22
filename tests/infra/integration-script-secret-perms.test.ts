@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const PROJECT_ROOT = resolve(HERE, '..', '..');
 const PACKAGE_JSON = join(PROJECT_ROOT, 'package.json');
-const ORCHESTRATOR = join(PROJECT_ROOT, 'scripts', 'test-integration.ts');
+const ORCHESTRATOR = join(PROJECT_ROOT, 'scripts', 'ci', 'test-integration.ts');
 
 // `chmod 600`/`0600` (shell legado) ou `0o600` (orquestrador) mirando os secrets de MySQL.
 const CHMOD_600_SECRETS = /chmod\s+0?600\s+secrets\/mysql_/;

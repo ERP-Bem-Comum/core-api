@@ -516,7 +516,7 @@ services:
       - migrate_database_url
 
 # ────────────────────────────────────────────────────────────────────────────
-# Top-level secrets — populados pelo scripts/setup-secrets.sh.
+# Top-level secrets — populados pelo scripts/setup/secrets.ts (pnpm run secrets:setup).
 # Compose falha se algum arquivo estiver ausente (RED válido em W0 — CA-2).
 # ────────────────────────────────────────────────────────────────────────────
 secrets:

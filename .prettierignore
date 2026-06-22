@@ -22,9 +22,6 @@ epic/
 # Handbook (copiado do monorepo pai; preserva formatação original)
 handbook/
 
-# Portal de docs (Docusaurus) — projeto isolado com formatação própria
-website/
-
 # Lock files são gerados — não formatar
 pnpm-lock.yaml
 package-lock.json
