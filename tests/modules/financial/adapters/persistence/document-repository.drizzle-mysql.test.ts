@@ -254,5 +254,113 @@ if (!process.env['MYSQL_INTEGRATION']) {
         await repo.delete(created.document.id, 1); // versão corrente após o update bem-sucedido
       });
     });
+
+    // #204 — CONCILIADO derivado no grid (read-time sobre fin_payables, sem escrita em fin_documents).
+    // Promove documentos a 'Paid' (simula CNAB/016) e flipa títulos para 'Reconciled' (conciliação),
+    // depois valida que findPaged reflete/filtra o estado derivado (FR-001/003/004/SC-001/003/004).
+    describe('#204 — status Conciliado derivado em findPaged', () => {
+      const REC_SUP = '5a000000-0000-4000-8000-0000000000c1';
+
+      const build = (numero: string): Document.CreateDocumentOutput => {
+        const supplierR = SupplierRef.rehydrate(REC_SUP);
+        if (!supplierR.ok) throw new Error('test setup: supplier');
+        const grossR = Money.fromCents(100000);
+        if (!grossR.ok) throw new Error('test setup: money');
+        const r = Document.create({
+          id: DocumentId.generate(),
+          documentNumber: numero,
+          type: 'NFS-e',
+          supplier: supplierR.value,
+          paymentMethod: 'TED',
+          grossValue: grossR.value,
+          sourceDiscounts: Money.ZERO,
+          discounts: Money.ZERO,
+          penalty: Money.ZERO,
+          interest: Money.ZERO,
+          retentions: [],
+          registeredTaxes: [],
+          dueDate: new Date('2026-07-01'),
+        });
+        if (!r.ok) throw new Error('test setup: create');
+        return r.value;
+      };
+
+      it('Pago + TODOS os títulos Reconciled → grid Reconciled; parcial/sem → Pago; filtro Paid/Reconciled', async () => {
+        const repo = createDrizzleDocumentRepository(handle);
+
+        const full = build('NFS-204-FULL');
+        const partial = build('NFS-204-PART');
+        const paidOnly = build('NFS-204-PAID');
+        for (const d of [full, partial, paidOnly]) {
+          const s = await repo.save({ document: d.document, payables: d.payables }, []);
+          assert.equal(isOk(s), true);
+        }
+
+        const idFull = full.document.id as unknown as string;
+        const idPart = partial.document.id as unknown as string;
+        const idPaid = paidOnly.document.id as unknown as string;
+
+        // Promove os 3 a 'Paid' (simula CNAB/016 — não há rota que o faça no domínio).
+        await handle.db.execute(
+          sql`UPDATE fin_documents SET status='Paid' WHERE id IN (${idFull}, ${idPart}, ${idPaid})`,
+        );
+        // full: TODOS os títulos Reconciled.
+        await handle.db.execute(
+          sql`UPDATE fin_payables SET status='Reconciled' WHERE document_id = ${idFull}`,
+        );
+        // partial: garante ≥2 títulos (Document.create gera 1 pai) inserindo 1 filho; todos Paid,
+        // depois exatamente 1 Reconciled → estado PARCIAL (nem todos reconciliados).
+        await handle.db.execute(
+          sql`UPDATE fin_payables SET status='Paid' WHERE document_id = ${idPart}`,
+        );
+        await handle.db.execute(
+          sql`INSERT INTO fin_payables
+                (id, document_id, kind, retention_type, status, value, due_date, payment_method, created_at)
+              VALUES (${newUuid()}, ${idPart}, 'Child', 'ISS', 'Paid', 100, '2026-07-01', 'TED', NOW(3))`,
+        );
+        await handle.db.execute(
+          sql`UPDATE fin_payables SET status='Reconciled' WHERE document_id = ${idPart} ORDER BY id LIMIT 1`,
+        );
+        // paidOnly: títulos Paid, nenhum reconciliado.
+        await handle.db.execute(
+          sql`UPDATE fin_payables SET status='Paid' WHERE document_id = ${idPaid}`,
+        );
+
+        // Sem filtro de status: full reflete 'Reconciled'; os demais 'Paid'.
+        const all = await repo.findPaged({ supplierRef: REC_SUP }, 1, 50);
+        assert.equal(isOk(all), true);
+        if (all.ok) {
+          const byId = new Map(all.value.items.map((i) => [i.id, i.status]));
+          assert.equal(byId.get(idFull), 'Reconciled', 'full (todos reconciliados) → Reconciled');
+          assert.equal(byId.get(idPart), 'Paid', 'parcial → Paid (FR-004)');
+          assert.equal(byId.get(idPaid), 'Paid', 'sem conciliação → Paid');
+        }
+
+        // Filtro Reconciled → só o full.
+        const recPage = await repo.findPaged({ supplierRef: REC_SUP, status: 'Reconciled' }, 1, 50);
+        assert.equal(isOk(recPage), true);
+        if (recPage.ok) {
+          assert.equal(recPage.value.total, 1);
+          assert.equal(recPage.value.items[0]?.id, idFull);
+        }
+
+        // Filtro Paid → os dois NÃO totalmente reconciliados (exclui o full).
+        const paidPage = await repo.findPaged({ supplierRef: REC_SUP, status: 'Paid' }, 1, 50);
+        assert.equal(isOk(paidPage), true);
+        if (paidPage.ok) {
+          assert.equal(paidPage.value.total, 2);
+          const ids = new Set(paidPage.value.items.map((i) => i.id));
+          assert.equal(ids.has(idFull), false, 'full (Reconciled) não aparece em Paid');
+          assert.equal(ids.has(idPart), true);
+          assert.equal(ids.has(idPaid), true);
+        }
+
+        // cleanup
+        for (const id of [idFull, idPart, idPaid]) {
+          await handle.db.execute(sql`DELETE FROM fin_payables WHERE document_id = ${id}`);
+          await handle.db.execute(sql`DELETE FROM fin_documents WHERE id = ${id}`);
+        }
+      });
+    });
   });
 }

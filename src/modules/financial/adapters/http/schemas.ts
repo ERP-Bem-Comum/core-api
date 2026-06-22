@@ -156,7 +156,8 @@ export const documentIdParamSchema = z.object({
 // ─── GET /documents (lista paginada) ─────────────────────────────────────────
 
 export const listDocumentsQuerySchema = z.object({
-  status: z.enum(['Draft', 'Open', 'Approved']).optional(),
+  // #204: Paid/Reconciled habilitam a fila de conciliação no grid (Reconciled é derivado em leitura).
+  status: z.enum(['Draft', 'Open', 'Approved', 'Paid', 'Reconciled']).optional(),
   supplierRef: z.uuid().optional(),
   type: documentTypeSchema.optional(),
   dueFrom: z.iso.date().optional(),
