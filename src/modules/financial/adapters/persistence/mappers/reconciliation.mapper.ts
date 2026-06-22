@@ -32,7 +32,9 @@ export type ReconciliationMapperError =
   | 'invalid-reconciliation-difference';
 
 const toType = (raw: string): ReconciliationType | null =>
-  raw === 'Individual' || raw === 'Multiple' || raw === 'Partial' ? raw : null;
+  raw === 'Individual' || raw === 'Multiple' || raw === 'Partial' || raw === 'ManualEntry'
+    ? raw
+    : null;
 
 const toStatus = (raw: string): ReconciliationStatus | null =>
   raw === 'Active' || raw === 'Undone' ? raw : null;
