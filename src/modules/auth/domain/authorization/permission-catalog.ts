@@ -51,6 +51,8 @@ const CATALOG_RAW = [
   'program:deactivate',
   'program:read',
   'program:write',
+  // reference:* (modulo financial - dados de referencia de categorizacao, #200)
+  'reference:read',
   // reconciliation:* (modulo financial - conciliacao bancaria, #176)
   'reconciliation:close',
   'reconciliation:import',

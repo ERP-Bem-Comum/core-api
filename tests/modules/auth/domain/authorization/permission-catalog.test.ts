@@ -109,6 +109,14 @@ describe('PermissionCatalog.all', () => {
     }
   });
 
+  it('#200: contem reference:read (dados de referencia de categorizacao — RBAC de /categories,/cost-centers,/programs)', () => {
+    assert.equal(
+      PermissionCatalog.all.includes(parseOrThrow('reference:read')),
+      true,
+      'catalogo deve conter reference:read (exigida pelas rotas de referencia da 020)',
+    );
+  });
+
   it('CA5: contem exatamente o conjunto conhecido do sistema (integridade - sem entrada perdida por typo)', () => {
     // build() filtra entradas invalidas em vez de lancar (rule domain.md: sem throw).
     // Esta verificacao garante que nenhuma permission auditada foi descartada silenciosamente.
@@ -137,6 +145,8 @@ describe('PermissionCatalog.all', () => {
       'program:deactivate',
       'program:read',
       'program:write',
+      // reference:* — modulo financial (dados de referencia de categorizacao, #200)
+      'reference:read',
       'reconciliation:close',
       'reconciliation:import',
       'reconciliation:read',
