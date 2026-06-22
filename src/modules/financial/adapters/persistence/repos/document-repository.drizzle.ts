@@ -61,6 +61,8 @@ import {
   mapRegisteredTaxesToRows,
 } from '../mappers/document.mapper.ts';
 import { mapEntryToRows } from '../mappers/timeline.mapper.ts';
+import { appendFinOutboxInTx } from './fin-outbox-helpers.ts';
+import type { DocumentEvent } from '../../../domain/document/events.ts';
 
 // Wrapper de segurança: captura qualquer exceção de I/O ou violação de
 // constraint (mysql2 lança ER_DUP_ENTRY, ER_DATA_TOO_LONG etc.) e converte
@@ -195,6 +197,7 @@ export const createDrizzleDocumentRepository = (
     aggregate: StoredDocument,
     timelineEntries: readonly FinancialTimelineEntry[],
     expectedVersion?: number,
+    events?: readonly DocumentEvent[],
   ): Promise<Result<void, DocumentRepositoryError>> => {
     // `save` não usa o helper `safe()` porque precisa distinguir dois tipos de falha:
     //   1. 'document-version-conflict' — erro de domínio semântico (affectedRows = 0)
@@ -315,6 +318,10 @@ export const createDrizzleDocumentRepository = (
             await tx.insert(schema.finTimelineFieldChanges).values(changeRows);
           }
         }
+
+        // 5. Outbox (#127): eventos de domínio na MESMA transação (ADR-0015). Falha aqui reverte
+        //    tudo (estado + timeline + outbox) — evento durável SSE estado persistido.
+        await appendFinOutboxInTx(tx, events ?? []);
       });
 
       return ok(undefined);
@@ -338,6 +345,7 @@ export const createDrizzleDocumentRepository = (
   const deleteDoc = async (
     id: DocumentId,
     expectedVersion: number,
+    events?: readonly DocumentEvent[],
   ): Promise<Result<void, DocumentRepositoryError>> => {
     const documentId = id as unknown as string;
     try {
@@ -364,6 +372,9 @@ export const createDrizzleDocumentRepository = (
         if (affectedRows === 0) {
           throw makeVersionConflict(documentId, expectedVersion);
         }
+
+        // Outbox (#127): evento de cancelamento na MESMA transação do DELETE (atomicidade).
+        await appendFinOutboxInTx(tx, events ?? []);
       });
       return ok(undefined);
     } catch (cause) {

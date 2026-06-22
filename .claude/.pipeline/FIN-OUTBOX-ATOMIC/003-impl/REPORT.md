@@ -25,6 +25,21 @@ Achado de processo: `scripts/ci/test-integration.ts` usa lista explícita — o 
 - **Composição**: wiring mysql do `fin_outbox` (remover `createInMemoryOutbox` dos use-cases mysql).
 - Adicionar os 2 testes de atomicidade à lista do runner de integração.
 
+## Fatia A — repo-level GREEN (2026-06-22)
+
+Implementado o threading dos eventos para DENTRO do repo de documentos (atomicidade na tx):
+- **Port** `DocumentRepository`: `save(agg, entries, expectedVersion?, events?)` + `delete(id, version, events?)` — `events` tipado como `DocumentEvent` (domínio, sem importar application). Opcional/trailing → back-compat (callers sem evento não quebram).
+- **Drizzle** (`document-repository.drizzle.ts`): `appendFinOutboxInTx(tx, events ?? [])` como último passo da `db.transaction` do `save` E do `delete` (cancel usa delete).
+- **In-memory** (`document-repository.in-memory.ts`): factory aceita `outbox?` (default interno); `save`/`delete` fazem `outbox.append` ANTES de persistir (falha → não persiste; rollback simulado). Paridade com o Drizzle.
+
+**Verificado**:
+- `document-outbox-atomic.drizzle-mysql.test.ts` (NOVO, no runner): CA2 sucesso (documento + fin_outbox na mesma tx) + CA3 rollback (evento malformado event_type='' → CHECK rejeita → tx reverte, COUNT==baseline). **Integração financial 44/44**.
+- typecheck ✅ · `pnpm test` **3120/0** (sem regressão — use-cases ainda no caminho antigo).
+
+## Restante da Fatia A (ATIVAÇÃO)
+
+Os 7 use-cases ainda chamam `save(sem events)` + `outbox.append` separado. Falta: passar `events` ao `save`/`delete` e **remover** o `outbox.append` + a dep `outbox` (ripple p/ composition + tests que injetam outbox). E o teste de rollback in-memory (outbox injetado que falha). Depois: **Fatia B (conciliação)** + composição mysql.
+
 ## Checkpoint
 
-Fundação (tabela + migration + helper) verde e versionável. Próximo: Fatia A.
+Fundação + Fatia A (repo-level) verdes e versionáveis. Próximo: ativação dos 7 use-cases.

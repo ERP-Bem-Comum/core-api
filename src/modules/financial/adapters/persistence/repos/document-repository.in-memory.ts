@@ -14,7 +14,10 @@ import type {
   DocumentRepositoryError,
 } from '#src/modules/financial/domain/document/repository.ts';
 import type { FinancialTimelineEntry } from '#src/modules/financial/domain/timeline/types.ts';
+import type { DocumentEvent } from '#src/modules/financial/domain/document/events.ts';
 import type { SupplierViewStore } from '#src/modules/financial/application/ports/supplier-view-store.ts';
+import type { FinancialOutbox } from '#src/modules/financial/application/ports/outbox.ts';
+import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
 import type { TimelineStore } from './timeline-repository.in-memory.ts';
 
 // Resolve fornecedor (nome/CNPJ) pelo read-model local — espelha o LEFT JOIN do adapter Drizzle
@@ -99,6 +102,9 @@ type StoreEntry = Readonly<{
 export const createInMemoryDocumentRepository = (
   timelineStore?: TimelineStore,
   supplierViewStore?: SupplierViewStore,
+  // #127: outbox onde os eventos são "publicados" — paridade in-memory da atomicidade do Drizzle.
+  // Default: outbox interno (acumula, nunca falha). Testes injetam um que falha p/ provar rollback.
+  outbox: FinancialOutbox = createInMemoryOutbox().port,
 ): DocumentRepository => {
   const store = new Map<string, StoreEntry>();
   return immutable<DocumentRepository>({
@@ -106,22 +112,30 @@ export const createInMemoryDocumentRepository = (
       aggregate: StoredDocument,
       timelineEntries: readonly FinancialTimelineEntry[],
       expectedVersion?: number,
+      events?: readonly DocumentEvent[],
     ): Promise<Result<void, DocumentRepositoryError>> => {
       const id = aggregate.document.id;
       const existing = store.get(id);
 
-      if (expectedVersion === undefined) {
-        // Caminho de criação: sem checagem de versão, insere com version=0.
-        store.set(id, { aggregate, version: 0 });
-      } else {
+      if (expectedVersion !== undefined) {
         // Caminho de mutação: verificar que a versão armazenada bate com expectedVersion.
-        const storedVersion = existing?.version;
-        if (storedVersion !== expectedVersion) {
+        if (existing?.version !== expectedVersion) {
           // Versão divergiu (outra operação já incrementou) → conflito.
-          return Promise.resolve(err('document-version-conflict'));
+          return err('document-version-conflict');
         }
-        store.set(id, { aggregate, version: expectedVersion + 1 });
       }
+
+      // #127 — atomicidade: publica os eventos ANTES de persistir; falha no outbox → nada persiste
+      // (espelha o rollback da db.transaction do Drizzle).
+      if (events !== undefined && events.length > 0) {
+        const appended = await outbox.append(events);
+        if (!appended.ok) return err('document-repository-failure');
+      }
+
+      store.set(id, {
+        aggregate,
+        version: expectedVersion === undefined ? 0 : expectedVersion + 1,
+      });
 
       // Acumular entries de trilha no store compartilhado (SC-004/NFR-001).
       if (timelineStore !== undefined && timelineEntries.length > 0) {
@@ -151,6 +165,7 @@ export const createInMemoryDocumentRepository = (
     delete: async (
       id: DocumentId,
       expectedVersion: number,
+      events?: readonly DocumentEvent[],
     ): Promise<Result<void, DocumentRepositoryError>> => {
       // Optimistic lock: espelha o DELETE ... WHERE version do adapter Drizzle — affectedRows=0
       // (doc ausente ou versão divergente) → conflito. O use case já tratou not-found via findById.
@@ -158,7 +173,12 @@ export const createInMemoryDocumentRepository = (
       // espelhando o affectedRows=0 do Drizzle (doc ausente OU versão divergente).
       const entry = store.get(id);
       if (entry?.version !== expectedVersion) {
-        return Promise.resolve(err('document-version-conflict'));
+        return err('document-version-conflict');
+      }
+      // #127 — atomicidade: publica antes de remover; falha no outbox → não remove.
+      if (events !== undefined && events.length > 0) {
+        const appended = await outbox.append(events);
+        if (!appended.ok) return err('document-repository-failure');
       }
       store.delete(id);
       // Cascata em memória: remover a trilha junto com o documento (espelha ON DELETE CASCADE do MySQL).

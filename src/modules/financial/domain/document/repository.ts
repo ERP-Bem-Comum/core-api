@@ -1,6 +1,7 @@
 import type { Result } from '../../../../shared/primitives/result.ts';
 import type { DocumentId } from '../shared/document-id.ts';
 import type { Document } from './types.ts';
+import type { DocumentEvent } from './events.ts';
 import type { DocumentListFilter, DocumentListItem, Page } from './query.ts';
 import type { Payables } from '../payable/types.ts';
 import type { FinancialTimelineEntry } from '../timeline/types.ts';
@@ -38,10 +39,14 @@ export type DocumentRepository = Readonly<{
   //   - number     → mutação de documento existente (adjust/approve/undo): o UPDATE exige
   //     WHERE version = expectedVersion. Se affectedRows = 0, retorna
   //     err('document-version-conflict') (FR-009/ADR-0002 da feature 010).
+  // `events` (#127): eventos de domínio gravados no `fin_outbox` NA MESMA transação do agregado
+  //   (atomicidade — ADR-0015; evento durável SSE estado persistido). Opcional/trailing para
+  //   back-compat (callers sem evento — testes de contrato — passam nada; sem append).
   save: (
     aggregate: StoredDocument,
     timelineEntries: readonly FinancialTimelineEntry[],
     expectedVersion?: number,
+    events?: readonly DocumentEvent[],
   ) => Promise<Result<void, DocumentRepositoryError>>;
   // Retorna `LoadedDocument` (StoredDocument + version) para que o cliente HTTP possa
   // participar do optimistic lock (FR-009). A `version` é o token de locking — o caller
@@ -52,6 +57,7 @@ export type DocumentRepository = Readonly<{
   delete: (
     id: DocumentId,
     expectedVersion: number,
+    events?: readonly DocumentEvent[],
   ) => Promise<Result<void, DocumentRepositoryError>>;
   // Read path da listagem paginada (US1) — read-model leve (sem títulos) + total filtrado.
   findPaged: (
