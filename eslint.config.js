@@ -16,9 +16,6 @@ export default tseslint.config(
       // tests/reports/ contém scripts ad-hoc de investigação (probes, dumps),
       // não código de produção/teste.
       'tests/reports/**',
-      // Portal de docs (Docusaurus) — projeto isolado com toolchain própria
-      // (lint/tsconfig próprios). Não é código do core-api.
-      'website/**',
       // specs/ guarda artefatos spec-kit (SDD). Os contracts/*.ts são esboços
       // de ports para documentar design — não entram em nenhum tsconfig.
       'specs/**',
