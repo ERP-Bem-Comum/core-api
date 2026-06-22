@@ -287,7 +287,8 @@ const buildMemoryPools = (config: PartnersCompositionConfig): Pools => {
 const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools> => {
   const writerUrl = config.writerUrl ?? '';
   const clock = ClockReal();
-  const writerR = await openPartnersMysql({ connectionString: writerUrl, applyMigrations: true });
+  // Boot NÃO migra (CORE-MIGRATE-BOOT-INVERT): schema vem do job `migrate` (deploy-safe, M5).
+  const writerR = await openPartnersMysql({ connectionString: writerUrl, applyMigrations: false });
   if (!writerR.ok) {
     throw new Error(`partners-composition: falha ao abrir writer (${writerR.error})`);
   }

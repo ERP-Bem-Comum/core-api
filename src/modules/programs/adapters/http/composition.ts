@@ -70,7 +70,8 @@ const buildMemoryPools = (config: ProgramsCompositionConfig): Pools => ({
 
 const buildMysqlPools = async (config: ProgramsCompositionConfig): Promise<Pools> => {
   const writerUrl = config.writerUrl ?? '';
-  const handleR = await openProgramsMysql({ connectionString: writerUrl, applyMigrations: true });
+  // Boot NÃO migra (CORE-MIGRATE-BOOT-INVERT): schema vem do job `migrate` (deploy-safe, M5).
+  const handleR = await openProgramsMysql({ connectionString: writerUrl, applyMigrations: false });
   if (!handleR.ok) {
     throw new Error(`programs-composition: falha ao abrir writer (${handleR.error})`);
   }

@@ -2,8 +2,9 @@
  * CORE-MIGRATE-JOB — Slice A — Wave W0 (RED)
  *
  * Valida a CONFIG do serviço one-shot `migrate` no compose (CA6/CA7), o secret
- * dedicado (CA8) e um guard de não-regressão do boot (CA9). Sem subir container —
- * só `docker compose config` (resolve profiles/secrets/depends_on).
+ * dedicado (CA8). Sem subir container — só `docker compose config` (resolve
+ * profiles/secrets/depends_on). O guard de não-inversão do boot (ex-CA9) saiu daqui:
+ * o Slice B (CORE-MIGRATE-BOOT-INVERT) inverte esse invariante.
  *
  * Skip-guard (FIN-TEST-INFRA-SKIP-GUARD): pulado sem o plugin `docker compose` no
  * PATH — NUNCA falha por ambiente.
@@ -164,29 +165,4 @@ describe('CORE-MIGRATE-JOB — serviço migrate no compose (W0)', { skip }, () =
       'setup-secrets.ts deveria listar migrate_database_url em DATABASE_URL_SECRETS',
     );
   });
-});
-
-// ─── CA9 — guard de não-regressão (roda sem Docker) ─────────────────────────
-// O Slice A é aditivo: o boot do HTTP CONTINUA migrando (applyMigrations: true) nas
-// 5 compositions. A inversão (→ false) é o Slice B. Este guard quebra se alguém
-// inverter o boot dentro deste ticket.
-describe('CORE-MIGRATE-JOB — guard: Slice A não inverte o boot (CA9)', () => {
-  const COMPOSITIONS = [
-    'src/modules/auth/adapters/http/composition.ts',
-    'src/modules/contracts/adapters/http/composition.ts',
-    'src/modules/financial/adapters/http/composition.ts',
-    'src/modules/partners/adapters/http/composition.ts',
-    'src/modules/programs/adapters/http/composition.ts',
-  ];
-
-  for (const rel of COMPOSITIONS) {
-    it(`CA9: ${rel} mantém applyMigrations: true (boot migra — Slice A)`, () => {
-      const src = readFileSync(join(PROJECT_ROOT, rel), 'utf-8');
-      assert.match(
-        src,
-        /applyMigrations:\s*true/,
-        `${rel} deveria manter applyMigrations: true no Slice A (inversão é o Slice B)`,
-      );
-    });
-  }
 });

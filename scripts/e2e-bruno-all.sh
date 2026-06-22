@@ -54,6 +54,12 @@ SEED_JSON='{"users":[
 echo "[e2e-all] Bootando server (auth/contracts/partners/programs = mysql)..."
 DB="mysql://root:rootpw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core"
 RO="mysql://readonly_bi:ropw-migration-test-only@127.0.0.1:${MYSQL_PORT}/core"
+
+# Provisiona o schema (CORE-MIGRATE-BOOT-INVERT: o server NÃO migra mais no boot).
+echo "[e2e-all] Aplicando migrations (job migrate)..."
+MIGRATE_DATABASE_URL="$DB" \
+  node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/migrate/run.ts || exit 1
+
 AUTH_DRIVER=mysql AUTH_DATABASE_URL="$DB" \
   CONTRACTS_DRIVER=mysql CONTRACTS_DATABASE_URL="$DB" CONTRACTS_READER_URL="$RO" \
   PARTNERS_DRIVER=mysql PARTNERS_DATABASE_URL="$DB" PARTNERS_READER_URL="$RO" \
