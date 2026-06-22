@@ -97,10 +97,10 @@ ENV NODE_ENV=production \
 COPY --from=deps /app/node_modules ./node_modules
 COPY package.json pnpm-lock.yaml ./
 
-# Código de produção. `tsconfig.json` e `drizzle.config.ts` ficam pra suportar
-# `drizzle-kit` se chamado em runtime para migrations.
+# Código de produção. `tsconfig.json` fica pra suportar tooling; os configs do
+# drizzle-kit (dev-only, devDependency) vivem em db/drizzle/ e não vão pro runtime.
 COPY src ./src
-COPY tsconfig.json drizzle.config.ts ./
+COPY tsconfig.json ./
 
 # Usuário não-root com UID explícito (estabilidade entre rebuilds — Docker
 # Building best practices §USER). Sintaxe Debian: groupadd/useradd.

@@ -63,3 +63,6 @@ scripts/etl/archive/
 
 # Artefatos do reporter Bruno (E2E_JSON_REPORT) — contêm tokens efêmeros, não versionar
 test-results/
+
+# Overmind (process manager de dev — Procfile/Fase 3): socket local
+.overmind.sock
