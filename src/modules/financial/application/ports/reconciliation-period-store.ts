@@ -1,5 +1,8 @@
 import type { Result } from '../../../../shared/primitives/result.ts';
-import type { ReconciliationPeriod } from '../../domain/reconciliation/period.ts';
+import type {
+  ReconciliationPeriod,
+  ReconciliationPeriodClosed,
+} from '../../domain/reconciliation/period.ts';
 import type { ReconciliationPeriodId } from '../../domain/reconciliation/reconciliation-period-id.ts';
 
 // Persistência do período (US6) + guard `period-closed` (R18): `isClosed` responde se há um período
@@ -7,7 +10,11 @@ import type { ReconciliationPeriodId } from '../../domain/reconciliation/reconci
 export type ReconciliationPeriodStoreError = 'reconciliation-period-store-failure';
 
 export type ReconciliationPeriodStore = Readonly<{
-  close: (period: ReconciliationPeriod) => Promise<Result<void, ReconciliationPeriodStoreError>>;
+  // `events` (#127): `ReconciliationPeriodClosed` gravado no `fin_outbox` NA MESMA tx (ADR-0015).
+  close: (
+    period: ReconciliationPeriod,
+    events?: readonly ReconciliationPeriodClosed[],
+  ) => Promise<Result<void, ReconciliationPeriodStoreError>>;
   findById: (
     id: ReconciliationPeriodId,
   ) => Promise<Result<ReconciliationPeriod | null, ReconciliationPeriodStoreError>>;

@@ -10,7 +10,6 @@ import process from 'node:process';
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
-import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
 import { createDrizzleBankStatementRepository } from '#src/modules/financial/adapters/persistence/repos/bank-statement-repository.drizzle.ts';
 import { createDrizzleReconciliationPeriodStore } from '#src/modules/financial/adapters/persistence/repos/reconciliation-period-store.drizzle.ts';
 import { reconciliationExporter } from '#src/modules/financial/adapters/export/reconciliation-exporter.ts';
@@ -52,7 +51,6 @@ if (!process.env['MYSQL_INTEGRATION']) {
         periodStore,
         statements,
         clock: ClockReal(),
-        outbox: createInMemoryOutbox().port,
       });
 
       // Período vazio (sem transações) → fecha.

@@ -105,20 +105,22 @@ const paidViewOf = (valueCents: number): PaidPayableView => ({
   dueDate: new Date('2024-05-30T00:00:00.000Z'),
   paymentMethod: 'PIX',
 });
+// #127: os eventos são encaminhados PARA DENTRO do repo (`confirm`/`undo`), não mais a um outbox
+// separado. O fake captura o que o use-case passa no 3º argumento — prova o threading dos eventos.
 const fakeReconRepo = (cap: Captured) => ({
-  confirm: (recon: Reconciliation, txId: string): Promise<Result<void, never>> => {
+  confirm: (
+    recon: Reconciliation,
+    txId: string,
+    events?: readonly unknown[],
+  ): Promise<Result<void, never>> => {
     cap.confirmed.push({ recon, txId });
+    if (events !== undefined) cap.events.push(...events);
     return Promise.resolve(ok(undefined));
   },
   findById: (): Promise<Result<Reconciliation | null, never>> => Promise.resolve(ok(cap.stored)),
-  undo: (recon: Reconciliation): Promise<Result<void, never>> => {
+  undo: (recon: Reconciliation, events?: readonly unknown[]): Promise<Result<void, never>> => {
     cap.undone.push(recon);
-    return Promise.resolve(ok(undefined));
-  },
-});
-const fakeOutbox = (cap: Captured) => ({
-  append: (evs: readonly unknown[]): Promise<Result<void, never>> => {
-    cap.events.push(...evs);
+    if (events !== undefined) cap.events.push(...events);
     return Promise.resolve(ok(undefined));
   },
 });
@@ -137,7 +139,6 @@ const confirmDeps = (
   cedenteStore: fakeCedente(account),
   periods: openPeriods,
   clock,
-  outbox: fakeOutbox(cap),
 });
 
 describe('financial/application/use-cases/confirm-reconciliation', () => {
@@ -253,7 +254,6 @@ describe('financial/application/use-cases/undo-reconciliation', () => {
       statements: fakeStatements(null),
       periods: openPeriods,
       clock,
-      outbox: fakeOutbox(cap),
     })({
       reconciliationId: String(cap.stored.id),
       undoneBy: 'u2',
@@ -272,7 +272,6 @@ describe('financial/application/use-cases/undo-reconciliation', () => {
       statements: fakeStatements(null),
       periods: openPeriods,
       clock,
-      outbox: fakeOutbox(cap),
     })({
       reconciliationId: '22222222-2222-4222-8222-222222222222',
       undoneBy: 'u2',

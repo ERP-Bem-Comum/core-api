@@ -1,21 +1,34 @@
-import { type Result, ok } from '#src/shared/primitives/result.ts';
-import type { ReconciliationPeriod } from '#src/modules/financial/domain/reconciliation/period.ts';
+import { type Result, ok, err } from '#src/shared/primitives/result.ts';
+import type {
+  ReconciliationPeriod,
+  ReconciliationPeriodClosed,
+} from '#src/modules/financial/domain/reconciliation/period.ts';
 import type { ReconciliationPeriodId } from '#src/modules/financial/domain/reconciliation/reconciliation-period-id.ts';
 import type {
   ReconciliationPeriodStore,
   ReconciliationPeriodStoreError,
 } from '#src/modules/financial/application/ports/reconciliation-period-store.ts';
+import type { FinancialOutbox } from '#src/modules/financial/application/ports/outbox.ts';
+import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
 
 export type ReconciliationPeriodStoreMap = Map<string, ReconciliationPeriod>;
 
 export const createInMemoryReconciliationPeriodStore = (
   periods: ReconciliationPeriodStoreMap = new Map<string, ReconciliationPeriod>(),
+  // #127: outbox onde os eventos são "publicados" — paridade in-memory da atomicidade do Drizzle.
+  outbox: FinancialOutbox = createInMemoryOutbox().port,
 ): ReconciliationPeriodStore => ({
   close: async (
     period: ReconciliationPeriod,
+    events?: readonly ReconciliationPeriodClosed[],
   ): Promise<Result<void, ReconciliationPeriodStoreError>> => {
+    // #127 — atomicidade: publica ANTES de persistir; falha no outbox → não persiste.
+    if (events !== undefined && events.length > 0) {
+      const appended = await outbox.append(events);
+      if (!appended.ok) return err('reconciliation-period-store-failure');
+    }
     periods.set(String(period.id), period);
-    return Promise.resolve(ok(undefined));
+    return ok(undefined);
   },
 
   findById: async (

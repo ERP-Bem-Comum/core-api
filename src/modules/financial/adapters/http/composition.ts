@@ -5,10 +5,11 @@
  * (memory | mysql) e instancia os use cases. `FinancialHttpDeps` expõe os use
  * cases prontos — o plugin os invoca sem conhecer a infra.
  *
- * Driver memory (default): in-memory repos + in-memory outbox. Sem DB.
+ * Driver memory (default): in-memory repos. Sem DB.
  * Driver mysql: Drizzle/mysql2 via `openMysqlFinancial`; migrations no boot.
  *
- * O outbox da Fatia 1 é sempre in-memory (worker de delivery é fatia futura).
+ * Outbox (#127): todo evento de domínio é gravado no `fin_outbox` na MESMA tx do agregado, pelos
+ * próprios repos (atomicidade — ADR-0015). Não há outbox no nível da composição.
  */
 
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
@@ -38,7 +39,6 @@ import {
   createInMemoryContractCategorizationReadStore,
   type ContractCategorizationReadPort,
 } from '#src/modules/contracts/public-api/index.ts';
-import { createInMemoryOutbox } from '../outbox/outbox.in-memory.ts';
 import { createInMemoryCategoryReadStore } from '../persistence/repos/category-read.in-memory.ts';
 import { createDrizzleCategoryReadStore } from '../persistence/repos/category-read.drizzle.ts';
 import { REFERENCE_CATEGORY_SEED } from '../persistence/seed/reference-categories.ts';
@@ -337,13 +337,15 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
 };
 
 const makeDeps = (pools: Pools): FinancialHttpDeps => {
-  const outbox = createInMemoryOutbox();
+  // #127: NENHUM use-case recebe mais `outbox` — todo evento de domínio do financial é gravado no
+  // `fin_outbox` na MESMA tx do agregado/unit-of-work (atomicidade — ADR-0015), via os repos
+  // (`save`/`delete`/`confirm`/`confirmManualEntry`/`undo`/`close`). No driver memory cada repo usa
+  // um outbox interno (descartável); no mysql → tabela `fin_outbox`. Sem dual-write.
   const clock = ClockReal();
-  // Deps base (repo + outbox); os 6 use cases mutantes também recebem `clock` para
+  // Deps base (repo + clock); os 6 use cases mutantes recebem `clock` para
   // carimbar `occurredAt` das entries da trilha (timeline-recording.ts).
   const deps = {
     repo: pools.repo,
-    outbox: outbox.port,
     clock,
     contractCategorizationReader: pools.contractCategorizationReader,
   };
@@ -354,7 +356,6 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     cedenteStore: pools.cedenteStore,
     periods: pools.periodStore,
     clock,
-    outbox: outbox.port,
   });
   // Sugestões: instância reusada pela rota por-transação (#121) e pelo lote (#174).
   const suggest = suggestMatches({
@@ -368,7 +369,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     adjustDocument: adjustDocument(deps),
     approveDocument: approveDocument(deps),
     undoApproval: undoApproval(deps),
-    cancelDocument: cancelDocument({ repo: pools.repo, outbox: outbox.port }),
+    cancelDocument: cancelDocument({ repo: pools.repo }),
     submitDraft: submitDraft(deps),
     findDocumentById: pools.repo.findById,
     listDocuments: pools.repo.findPaged,
@@ -379,7 +380,6 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       periods: pools.periodStore,
       cedenteStore: pools.cedenteStore,
       clock,
-      outbox: outbox.port,
     }),
     listStatementTransactions: pools.statementRepo.listTransactions,
     confirmReconciliation: confirmReconciliation({
@@ -389,14 +389,12 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       cedenteStore: pools.cedenteStore,
       periods: pools.periodStore,
       clock,
-      outbox: outbox.port,
     }),
     undoReconciliation: undoReconciliation({
       reconciliationRepo: pools.reconciliationRepo,
       statements: pools.statementRepo,
       periods: pools.periodStore,
       clock,
-      outbox: outbox.port,
     }),
     searchPaidPayables: searchPaidPayables({ payables: pools.payableView }),
     suggestMatches: suggest,
@@ -411,7 +409,6 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       periodStore: pools.periodStore,
       statements: pools.statementRepo,
       clock,
-      outbox: outbox.port,
     }),
     exportReconciliation: exportReconciliation({
       periodStore: pools.periodStore,

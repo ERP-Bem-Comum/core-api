@@ -26,7 +26,6 @@ import {
 import { createInMemoryReconciliationRepository } from '#src/modules/financial/adapters/persistence/repos/reconciliation-repository.in-memory.ts';
 import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
 import { createInMemoryReconciliationPeriodStore } from '#src/modules/financial/adapters/persistence/repos/reconciliation-period-store.in-memory.ts';
-import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
 import { recordManualEntry } from '#src/modules/financial/application/use-cases/record-manual-entry.ts';
 import { confirmBatch } from '#src/modules/financial/application/use-cases/confirm-batch.ts';
 
@@ -114,14 +113,12 @@ before(async () => {
     payables: new Map(),
     statements: statementStore,
   });
-  const outbox = createInMemoryOutbox();
   const record = recordManualEntry({
     reconciliationRepo: reconRepo,
     statements: statementRepo,
     cedenteStore,
     periods: createInMemoryReconciliationPeriodStore(),
     clock: ClockReal(),
-    outbox: outbox.port,
   });
 
   const deps = {

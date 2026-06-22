@@ -1,5 +1,6 @@
 import type { Result } from '../../../../shared/primitives/result.ts';
 import type { BankStatement, StatementTransaction } from '../../domain/statement/types.ts';
+import type { BankStatementEvent } from '../../domain/statement/events.ts';
 
 // Port de persistência do extrato (US1 conciliação). `knownFitids` é a consulta de anti-duplicidade
 // (R5): dado um conjunto de FITID candidatos, devolve os já presentes para a conta-débito — o domínio
@@ -7,7 +8,12 @@ import type { BankStatement, StatementTransaction } from '../../domain/statement
 export type BankStatementRepositoryError = 'bank-statement-repository-failure';
 
 export type BankStatementRepository = Readonly<{
-  save: (statement: BankStatement) => Promise<Result<void, BankStatementRepositoryError>>;
+  // `events` (#127): eventos gravados no `fin_outbox` NA MESMA tx do agregado (atomicidade — ADR-0015).
+  // Opcional/trailing para back-compat (seeds passam nada; sem append).
+  save: (
+    statement: BankStatement,
+    events?: readonly BankStatementEvent[],
+  ) => Promise<Result<void, BankStatementRepositoryError>>;
   knownFitids: (
     debitAccountRef: string,
     fitids: readonly string[],

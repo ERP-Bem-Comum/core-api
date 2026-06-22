@@ -21,7 +21,6 @@ import {
   type BankStatementStore,
 } from '#src/modules/financial/adapters/persistence/repos/bank-statement-repository.in-memory.ts';
 import { createInMemoryReconciliationPeriodStore } from '#src/modules/financial/adapters/persistence/repos/reconciliation-period-store.in-memory.ts';
-import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
 import { reconciliationExporter } from '#src/modules/financial/adapters/export/reconciliation-exporter.ts';
 import { closeReconciliationPeriod } from '#src/modules/financial/application/use-cases/close-reconciliation-period.ts';
 import { exportReconciliation } from '#src/modules/financial/application/use-cases/export-reconciliation.ts';
@@ -99,7 +98,6 @@ before(async () => {
       periodStore,
       statements: statementRepo,
       clock: ClockReal(),
-      outbox: createInMemoryOutbox().port,
     }),
     exportReconciliation: exportReconciliation({
       periodStore,

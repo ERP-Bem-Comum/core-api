@@ -93,12 +93,11 @@ const seedDraft = async (repo: DocumentRepository): Promise<string> => {
 
 describe('financial/application — approveDocument', () => {
   it('aprova um documento Open (pai+filhos Approved) e publica eventos', async () => {
-    const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
+    const repo = createInMemoryDocumentRepository(undefined, undefined, outbox.port);
     const id = await seedOpen(repo);
     const r = await approveDocument({
       repo,
-      outbox: outbox.port,
       clock: ClockFixed(new Date('2026-07-10')),
     })({
       documentId: id,
@@ -115,12 +114,11 @@ describe('financial/application — approveDocument', () => {
   });
 
   it('rejeita aprovar um documento que não está Open (Draft) — invalid-state-transition', async () => {
-    const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
+    const repo = createInMemoryDocumentRepository(undefined, undefined, outbox.port);
     const id = await seedDraft(repo);
     const r = await approveDocument({
       repo,
-      outbox: outbox.port,
       clock: ClockFixed(new Date('2026-07-10')),
     })({
       documentId: id,
@@ -134,10 +132,10 @@ describe('financial/application — approveDocument', () => {
 
 describe('financial/application — undoApproval', () => {
   it('desfaz a aprovação de um documento Approved (volta a Open)', async () => {
-    const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
+    const repo = createInMemoryDocumentRepository(undefined, undefined, outbox.port);
     const id = await seedApproved(repo);
-    const r = await undoApproval({ repo, outbox: outbox.port, clock: CLOCK })({
+    const r = await undoApproval({ repo, clock: CLOCK })({
       documentId: id,
       expectedVersion: 0,
     });
@@ -149,10 +147,10 @@ describe('financial/application — undoApproval', () => {
 
 describe('financial/application — cancelDocument', () => {
   it('cancela um documento Open (hard delete) e publica DocumentCancelled', async () => {
-    const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
+    const repo = createInMemoryDocumentRepository(undefined, undefined, outbox.port);
     const id = await seedOpen(repo);
-    const r = await cancelDocument({ repo, outbox: outbox.port })({
+    const r = await cancelDocument({ repo })({
       documentId: id,
       expectedVersion: 0,
     });
@@ -163,10 +161,10 @@ describe('financial/application — cancelDocument', () => {
   });
 
   it('rejeita cancelar um documento Approved — invalid-state-transition', async () => {
-    const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
+    const repo = createInMemoryDocumentRepository(undefined, undefined, outbox.port);
     const id = await seedApproved(repo);
-    const r = await cancelDocument({ repo, outbox: outbox.port })({
+    const r = await cancelDocument({ repo })({
       documentId: id,
       expectedVersion: 1,
     });
@@ -175,10 +173,10 @@ describe('financial/application — cancelDocument', () => {
   });
 
   it('rejeita cancelar com versão defasada — document-version-conflict (#55)', async () => {
-    const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
+    const repo = createInMemoryDocumentRepository(undefined, undefined, outbox.port);
     const id = await seedOpen(repo); // v0
-    const r = await cancelDocument({ repo, outbox: outbox.port })({
+    const r = await cancelDocument({ repo })({
       documentId: id,
       expectedVersion: 999,
     });
@@ -191,10 +189,10 @@ describe('financial/application — cancelDocument', () => {
 
 describe('financial/application — submitDraft', () => {
   it('submete um rascunho completo (Draft → Open) e gera títulos', async () => {
-    const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
+    const repo = createInMemoryDocumentRepository(undefined, undefined, outbox.port);
     const id = await seedDraft(repo);
-    const r = await submitDraft({ repo, outbox: outbox.port, clock: CLOCK })({ documentId: id });
+    const r = await submitDraft({ repo, clock: CLOCK })({ documentId: id });
     assert.equal(isOk(r), true);
     const found = await repo.findById(id as never);
     if (found.ok) {

@@ -17,7 +17,6 @@ import type {
   ReconciliationPeriodStore,
   ReconciliationPeriodStoreError,
 } from '../ports/reconciliation-period-store.ts';
-import type { FinancialOutbox, OutboxAppendError } from '../ports/outbox.ts';
 
 export type UndoReconciliationDeps = Readonly<{
   reconciliationRepo: Pick<ReconciliationRepository, 'findById' | 'undo'>;
@@ -25,7 +24,6 @@ export type UndoReconciliationDeps = Readonly<{
   statements: Pick<BankStatementRepository, 'findTransaction'>;
   periods: Pick<ReconciliationPeriodStore, 'isClosed'>;
   clock: Pick<Clock, 'now'>;
-  outbox: FinancialOutbox;
 }>;
 
 export type UndoReconciliationInput = Readonly<{
@@ -46,8 +44,7 @@ export type UndoReconciliationError =
   | 'period-closed'
   | ReconciliationRepositoryError
   | BankStatementRepositoryError
-  | ReconciliationPeriodStoreError
-  | OutboxAppendError;
+  | ReconciliationPeriodStoreError;
 
 // Desfaz a conciliação (R7): carrega → domínio `undo` (Active→Undone) → unit-of-work atômico (reverte
 // status de título/transação) → publica `ReconciliationUndone`. Preserva o registro (nunca deleta).
@@ -82,11 +79,11 @@ export const undoReconciliation =
     });
     if (!undone.ok) return err(undone.error);
 
-    const saved = await deps.reconciliationRepo.undo(undone.value.reconciliation);
+    const saved = await deps.reconciliationRepo.undo(
+      undone.value.reconciliation,
+      undone.value.events,
+    );
     if (!saved.ok) return err(saved.error);
-
-    const published = await deps.outbox.append(undone.value.events);
-    if (!published.ok) return err(published.error);
 
     return ok({ reconciliationId: found.value.id, status: 'Undone' });
   };

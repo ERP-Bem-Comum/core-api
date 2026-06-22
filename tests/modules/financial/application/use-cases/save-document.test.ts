@@ -33,11 +33,10 @@ const nfseCommand = () => ({
 
 describe('financial/application — saveDocument', () => {
   it('salva o documento, gera títulos e publica DocumentSaved no outbox', async () => {
-    const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
+    const repo = createInMemoryDocumentRepository(undefined, undefined, outbox.port);
     const result = await saveDocument({
       repo,
-      outbox: outbox.port,
       clock: CLOCK,
       contractCategorizationReader: emptyReader,
     })(nfseCommand());
@@ -58,11 +57,10 @@ describe('financial/application — saveDocument', () => {
   });
 
   it('rejeita fornecedor com formato inválido (não persiste nem publica)', async () => {
-    const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
+    const repo = createInMemoryDocumentRepository(undefined, undefined, outbox.port);
     const result = await saveDocument({
       repo,
-      outbox: outbox.port,
       clock: CLOCK,
       contractCategorizationReader: emptyReader,
     })({
@@ -74,11 +72,10 @@ describe('financial/application — saveDocument', () => {
   });
 
   it('rejeita retenção incompatível com o tipo (Boleto + ISS)', async () => {
-    const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
+    const repo = createInMemoryDocumentRepository(undefined, undefined, outbox.port);
     const result = await saveDocument({
       repo,
-      outbox: outbox.port,
       clock: CLOCK,
       contractCategorizationReader: emptyReader,
     })({
@@ -106,12 +103,11 @@ describe('financial/application — saveDocument', () => {
       centroDeCusto: 'CC-1',
     };
     const reader = createInMemoryContractCategorizationReadStore(new Map([[CONTRACT, view]]));
-    const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
+    const repo = createInMemoryDocumentRepository(undefined, undefined, outbox.port);
     // contractRef setado, mas sem programRef/budgetPlanRef → herda do contrato.
     const result = await saveDocument({
       repo,
-      outbox: outbox.port,
       clock: CLOCK,
       contractCategorizationReader: reader,
     })({ ...nfseCommand(), contractRef: CONTRACT });
@@ -128,11 +124,10 @@ describe('financial/application — saveDocument', () => {
 
   it('#147: persiste costCenterRef informado no comando', async () => {
     const COST_CENTER = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
-    const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
+    const repo = createInMemoryDocumentRepository(undefined, undefined, outbox.port);
     const result = await saveDocument({
       repo,
-      outbox: outbox.port,
       clock: CLOCK,
       contractCategorizationReader: emptyReader,
     })({ ...nfseCommand(), costCenterRef: COST_CENTER });
@@ -147,11 +142,10 @@ describe('financial/application — saveDocument', () => {
   });
 
   it('#147: rejeita costCenterRef com formato inválido (não persiste nem publica)', async () => {
-    const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
+    const repo = createInMemoryDocumentRepository(undefined, undefined, outbox.port);
     const result = await saveDocument({
       repo,
-      outbox: outbox.port,
       clock: CLOCK,
       contractCategorizationReader: emptyReader,
     })({ ...nfseCommand(), costCenterRef: 'not-a-uuid' });
@@ -160,11 +154,10 @@ describe('financial/application — saveDocument', () => {
   });
 
   it('#90: persiste payeeKind informado (financier) no comando', async () => {
-    const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
+    const repo = createInMemoryDocumentRepository(undefined, undefined, outbox.port);
     const result = await saveDocument({
       repo,
-      outbox: outbox.port,
       clock: CLOCK,
       contractCategorizationReader: emptyReader,
     })({ ...nfseCommand(), payeeKind: 'financier' });
@@ -178,11 +171,10 @@ describe('financial/application — saveDocument', () => {
   });
 
   it('#90: payeeKind ausente → default supplier (back-compat)', async () => {
-    const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
+    const repo = createInMemoryDocumentRepository(undefined, undefined, outbox.port);
     const result = await saveDocument({
       repo,
-      outbox: outbox.port,
       clock: CLOCK,
       contractCategorizationReader: emptyReader,
     })(nfseCommand());
@@ -206,11 +198,10 @@ describe('financial/application — saveDocument', () => {
       centroDeCusto: null,
     };
     const reader = createInMemoryContractCategorizationReadStore(new Map([[CONTRACT, view]]));
-    const repo = createInMemoryDocumentRepository();
     const outbox = createInMemoryOutbox();
+    const repo = createInMemoryDocumentRepository(undefined, undefined, outbox.port);
     const result = await saveDocument({
       repo,
-      outbox: outbox.port,
       clock: CLOCK,
       contractCategorizationReader: reader,
     })({ ...nfseCommand(), contractRef: CONTRACT, programRef: FRONT_PROGRAM });

@@ -34,7 +34,6 @@ import {
 import { createInMemoryReconciliationRepository } from '#src/modules/financial/adapters/persistence/repos/reconciliation-repository.in-memory.ts';
 import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
 import { createInMemoryReconciliationPeriodStore } from '#src/modules/financial/adapters/persistence/repos/reconciliation-period-store.in-memory.ts';
-import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
 import { confirmReconciliation } from '#src/modules/financial/application/use-cases/confirm-reconciliation.ts';
 import { undoReconciliation } from '#src/modules/financial/application/use-cases/undo-reconciliation.ts';
 import { searchPaidPayables } from '#src/modules/financial/application/use-cases/search-paid-payables.ts';
@@ -159,7 +158,6 @@ before(async () => {
     statements: statementStore,
   });
   const clock = ClockReal();
-  const outbox = createInMemoryOutbox();
   const periods = createInMemoryReconciliationPeriodStore();
 
   const deps = {
@@ -172,14 +170,12 @@ before(async () => {
       cedenteStore,
       periods,
       clock,
-      outbox: outbox.port,
     }),
     undoReconciliation: undoReconciliation({
       reconciliationRepo: reconRepo,
       statements: statementRepo,
       periods,
       clock,
-      outbox: outbox.port,
     }),
     searchPaidPayables: searchPaidPayables({ payables: payableView }),
   };
