@@ -204,15 +204,25 @@ describe('CONTRACTS-HTTP-READS (C1) — contrato OpenAPI + regressão', () => {
     await teardown();
   });
 
-  it('CA5 (regressão): GET /api/v2/contracts (list) segue 200 com qualquer token válido', async () => {
+  it('CA5 (regressão #202): GET /api/v2/contracts (list) exige contract:read — 403 sem, 200 com', async () => {
     const { app, teardown } = await makeApp();
-    const token = await registerAndLogin(app, PLAIN_EMAIL);
-    const res = await app.inject({
+    // Antes do #202 a listagem retornava 200 para qualquer token valido (vazamento).
+    // Agora exige contract:read, em paridade com /:id, /:id/history e /export.csv.
+    const plain = await registerAndLogin(app, PLAIN_EMAIL);
+    const denied = await app.inject({
       method: 'GET',
       url: '/api/v2/contracts',
-      headers: bearer(token),
+      headers: bearer(plain),
     });
-    assert.equal(res.statusCode, 200);
+    assert.equal(denied.statusCode, 403);
+
+    const reader = await loginSeeded(app, READER_EMAIL);
+    const allowed = await app.inject({
+      method: 'GET',
+      url: '/api/v2/contracts',
+      headers: bearer(reader),
+    });
+    assert.equal(allowed.statusCode, 200);
     await teardown();
   });
 
