@@ -172,5 +172,56 @@ if (!process.env['MYSQL_INTEGRATION']) {
         );
       }
     });
+
+    // ─── #206 — tipo estendido (cartao/outro) + typeLabel ───
+    it('#206: conta type=cartao/outro com typeLabel persiste (CHECK relaxado + coluna type_label)', async () => {
+      const store = createDrizzleCedenteAccountStore(handle);
+
+      const card = create({
+        id: CedenteAccountId.generate(),
+        bankCode: '237',
+        agency: '1234',
+        accountNumber: '900111',
+        accountDigit: '7',
+        convenio: '9999999',
+        document: '12345678000190',
+        type: 'cartao',
+        typeLabel: 'Cartão corporativo Visa',
+      } as never);
+      assert.equal(card.ok, true);
+      if (!card.ok) return;
+      assert.equal((await store.save(card.value)).ok, true);
+      const foundCard = await store.findById(card.value.id);
+      if (foundCard.ok && foundCard.value !== null) {
+        const v = foundCard.value as Record<string, unknown>;
+        assert.equal(v['type'], 'cartao');
+        assert.equal(v['typeLabel'], 'Cartão corporativo Visa');
+      } else {
+        assert.fail('conta cartao não encontrada após save');
+      }
+
+      const other = create({
+        id: CedenteAccountId.generate(),
+        bankCode: '260',
+        agency: '0001',
+        accountNumber: '900222',
+        accountDigit: '8',
+        convenio: '9999999',
+        document: '12345678000190',
+        type: 'outro',
+        typeLabel: 'Conta Mercado Pago',
+      } as never);
+      assert.equal(other.ok, true);
+      if (!other.ok) return;
+      assert.equal((await store.save(other.value)).ok, true);
+      const foundOther = await store.findById(other.value.id);
+      if (foundOther.ok && foundOther.value !== null) {
+        const v = foundOther.value as Record<string, unknown>;
+        assert.equal(v['type'], 'outro');
+        assert.equal(v['typeLabel'], 'Conta Mercado Pago');
+      } else {
+        assert.fail('conta outro não encontrada após save');
+      }
+    });
   });
 }

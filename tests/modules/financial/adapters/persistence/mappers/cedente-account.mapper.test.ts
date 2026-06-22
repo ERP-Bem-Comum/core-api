@@ -40,6 +40,7 @@ const rowOf = (
   nextNsa: account.nextNsa,
   // Extensão conciliação (019) — colunas nullable; default null no fixture.
   type: account.type ?? null,
+  typeLabel: account.typeLabel ?? null,
   nickname: account.nickname ?? null,
   bankName: account.bankName ?? null,
   openingBalanceCents: account.openingBalanceCents ?? null,

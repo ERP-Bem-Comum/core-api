@@ -6,9 +6,17 @@ export type CedenteAccountStatus = 'Active' | 'Closed';
 
 // Tipo de conta bancária (extensão conciliação 019). Opcional no agregado para não quebrar
 // contas criadas pela 016/CNAB, que não o registravam (FR-013).
-export type AccountType = 'corrente' | 'poupanca' | 'investimento';
+// #206: `cartao` (cartão corporativo, concilia como conta) e `outro` (genérico, identificado por
+// `typeLabel`) — o cliente paga por cartão e precisa conciliá-lo.
+export type AccountType = 'corrente' | 'poupanca' | 'investimento' | 'cartao' | 'outro';
 
-export const ACCOUNT_TYPES: readonly AccountType[] = ['corrente', 'poupanca', 'investimento'];
+export const ACCOUNT_TYPES: readonly AccountType[] = [
+  'corrente',
+  'poupanca',
+  'investimento',
+  'cartao',
+  'outro',
+];
 
 export type CedenteAccount = Readonly<{
   id: CedenteAccountId;
@@ -22,6 +30,8 @@ export type CedenteAccount = Readonly<{
   nextNsa: number; // próximo NSA a usar na remessa (016)
   // Extensão conciliação (019) — opcionais (par saldo de abertura é coeso: ambos ou nenhum).
   type?: AccountType;
+  // #206: texto livre p/ identificar a conta quando `type` é `outro` (ou complementar `cartao`).
+  typeLabel?: string;
   nickname?: string;
   bankName?: string;
   openingBalanceCents?: number;
@@ -39,6 +49,7 @@ export type CreateInput = Readonly<{
   status?: CedenteAccountStatus;
   nextNsa?: number;
   type?: AccountType;
+  typeLabel?: string;
   nickname?: string;
   bankName?: string;
   openingBalanceCents?: number;

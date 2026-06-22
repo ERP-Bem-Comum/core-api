@@ -39,6 +39,7 @@ export const create = (input: CreateInput): Result<CedenteAccount, CedenteAccoun
       status: input.status ?? 'Active',
       nextNsa,
       ...(input.type !== undefined ? { type: input.type } : {}),
+      ...(input.typeLabel !== undefined ? { typeLabel: input.typeLabel } : {}),
       ...(input.nickname !== undefined ? { nickname: input.nickname } : {}),
       ...(input.bankName !== undefined ? { bankName: input.bankName } : {}),
       ...(input.openingBalanceCents !== undefined

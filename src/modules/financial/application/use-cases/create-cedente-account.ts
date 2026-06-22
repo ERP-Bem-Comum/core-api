@@ -15,6 +15,7 @@ export type CreateCedenteAccountInput = Readonly<{
   bankCode: string;
   bankName?: string;
   type?: string; // raw — validado pelo domínio (invalid-account-type)
+  typeLabel?: string; // #206: texto livre p/ identificar conta `outro`/`cartao`
   agency: string;
   accountNumber: string;
   accountDigit: string;
@@ -57,6 +58,7 @@ export const createCedenteAccount =
       convenio: input.convenio ?? '',
       document: input.document,
       ...(input.type !== undefined ? { type: input.type as AccountType } : {}),
+      ...(input.typeLabel !== undefined ? { typeLabel: input.typeLabel } : {}),
       ...(input.nickname !== undefined ? { nickname: input.nickname } : {}),
       ...(input.bankName !== undefined ? { bankName: input.bankName } : {}),
       ...(input.openingBalanceCents !== undefined

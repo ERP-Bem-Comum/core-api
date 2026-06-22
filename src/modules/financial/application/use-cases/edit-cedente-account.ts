@@ -20,6 +20,7 @@ export type EditCedenteAccountInput = Readonly<{
   accountDigit?: string;
   type?: string;
   // Sempre editáveis.
+  typeLabel?: string; // #206: texto livre (metadado, não dado bancário travável).
   nickname?: string;
   bankName?: string;
 }>;
@@ -68,6 +69,7 @@ export const editCedenteAccount =
       ...(input.accountNumber !== undefined ? { accountNumber: input.accountNumber } : {}),
       ...(input.accountDigit !== undefined ? { accountDigit: input.accountDigit } : {}),
       ...(input.type !== undefined ? { type: input.type as AccountType } : {}),
+      ...(input.typeLabel !== undefined ? { typeLabel: input.typeLabel } : {}),
       ...(input.nickname !== undefined ? { nickname: input.nickname } : {}),
       ...(input.bankName !== undefined ? { bankName: input.bankName } : {}),
     };

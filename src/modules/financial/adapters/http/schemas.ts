@@ -535,12 +535,14 @@ export const exportReconciliationQuerySchema = z.object({
 
 // ─── Conta-cedente (019 — CRUD + encerrar) ─────────────────────────────────────
 
-const accountTypeSchema = z.enum(['corrente', 'poupanca', 'investimento']);
+const accountTypeSchema = z.enum(['corrente', 'poupanca', 'investimento', 'cartao', 'outro']);
 
 export const createCedenteAccountBodySchema = z.object({
   bankCode: z.string().min(1).max(10),
   bankName: z.string().min(1).max(120).optional(),
   type: accountTypeSchema,
+  // #206: texto livre p/ identificar conta `outro`/`cartao` (opcional).
+  typeLabel: z.string().min(1).max(120).optional(),
   agency: z.string().min(1).max(10),
   accountNumber: z.string().min(1).max(20),
   accountDigit: z.string().max(2),
@@ -559,6 +561,7 @@ export const editCedenteAccountBodySchema = z.object({
   accountNumber: z.string().min(1).max(20).optional(),
   accountDigit: z.string().max(2).optional(),
   type: accountTypeSchema.optional(),
+  typeLabel: z.string().min(1).max(120).optional(),
   nickname: z.string().min(1).max(120).optional(),
   bankName: z.string().min(1).max(120).optional(),
 });
@@ -572,6 +575,7 @@ export const cedenteAccountResponseSchema = z.object({
   bankCode: z.string(),
   bankName: z.string().nullable(),
   type: z.string().nullable(),
+  typeLabel: z.string().nullable(),
   agency: z.string(),
   accountNumber: z.string(),
   accountDigit: z.string(),
