@@ -4,11 +4,11 @@
 
 | Wave | Status | Skill | REPORT | Última atualização |
 | :--- | :--- | :--- | :--- | :--- |
-| W0 | in-progress | tdd-strategist | — | 2026-06-22T19:20:44.868Z |
-| W1 | pending | — | — | — |
-| W2 | pending | — | — | — |
+| W0 | done (RED) | tdd-strategist | 002-tests/REPORT.md | 2026-06-22T21:12:02.626Z |
+| W1 | done (GREEN) | contratos-orchestrator | 003-impl/REPORT.md | 2026-06-22T21:12:03.240Z |
+| W2 | done (APPROVED) | code-reviewer | 004-code-review/REVIEW.md | 2026-06-22T21:12:03.890Z |
 | W3 | pending | — | — | — |
 
 ## Último evento
 
-W0 started (tdd-strategist)
+W2 finished (APPROVED)
