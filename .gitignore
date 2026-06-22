@@ -27,6 +27,10 @@ coverage/
 .claude/worktrees/
 .agents/worktrees/
 
+# Worktrees de épico aninhados na raiz (`epic/<branch>`): têm seu próprio .git
+# pointer e branch; nunca devem ser rastreados pelo checkout pai.
+/epic/
+
 # Memória local de sub-agentes — notas geradas por agents durante a sessão
 # (efêmero, específico da máquina; não é fonte de verdade do projeto)
 .claude/agent-memory/
@@ -41,6 +45,11 @@ handbook/guidelines/
 # Docker Compose secrets — arquivos com senhas locais
 # Pasta secrets/ é versionada (com .gitkeep); apenas os .txt dentro são ignorados
 /secrets/*.txt
+
+# Override local do Compose (lido automaticamente por `docker compose`): cada dev
+# ajusta portas/mounts/profiles da sua máquina sem tocar o compose.yaml versionado.
+/compose.override.yaml
+/compose.override.yml
 
 # Estado local do CLI (memory driver — pode conter dados sensíveis em dev)
 cli-state.json
