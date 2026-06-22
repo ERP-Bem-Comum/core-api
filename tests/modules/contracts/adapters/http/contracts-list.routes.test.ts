@@ -29,7 +29,12 @@ const STRONG = 'Str0ng-Passphrase-2026!';
 const EMAIL = 'operador@example.com';
 
 const makeApp = async () => {
-  const authDeps = await buildAuthHttpDeps({ driver: 'memory' });
+  // #202: a listagem passou a exigir contract:read (paridade com as demais leituras).
+  // O usuario do caminho feliz e semeado com a permissao via seed RBAC.
+  const authDeps = await buildAuthHttpDeps({
+    driver: 'memory',
+    seed: { users: [{ email: EMAIL, password: STRONG, permissions: ['contract:read'] }] },
+  });
   const contractsDeps = await buildContractsHttpDeps({ driver: 'memory' });
   const requireAuth = makeRequireAuth(authDeps.verifyAccessToken);
   const app = await buildApp({
@@ -47,11 +52,7 @@ const makeApp = async () => {
 };
 
 const login = async (app: Awaited<ReturnType<typeof buildApp>>): Promise<string> => {
-  await app.inject({
-    method: 'POST',
-    url: '/api/v2/auth/register',
-    payload: { email: EMAIL, password: STRONG },
-  });
+  // EMAIL e semeado via seed RBAC (com contract:read) — basta logar.
   const res = await app.inject({
     method: 'POST',
     url: '/api/v2/auth/login',

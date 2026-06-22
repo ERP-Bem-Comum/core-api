@@ -177,7 +177,7 @@ const contractsRoutes =
     scope.route({
       method: 'GET',
       url: '/contracts',
-      preHandler: hooks.requireAuth,
+      preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.read)],
       schema: {
         querystring: contractListQuerySchema,
         response: { 200: contractListPagedSchema },
