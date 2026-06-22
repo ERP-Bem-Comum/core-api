@@ -205,6 +205,7 @@ const cedenteAccountToDto = (a: CedenteAccount): CedenteAccountResponseDto => ({
   bankCode: a.bankCode,
   bankName: a.bankName ?? null,
   type: a.type ?? null,
+  typeLabel: a.typeLabel ?? null,
   agency: a.agency,
   accountNumber: a.accountNumber,
   accountDigit: a.accountDigit,
@@ -855,6 +856,7 @@ const financialRoutes =
           accountNumber: b.accountNumber,
           accountDigit: b.accountDigit,
           document: b.document,
+          ...(b.typeLabel !== undefined ? { typeLabel: b.typeLabel } : {}),
           ...(b.bankName !== undefined ? { bankName: b.bankName } : {}),
           ...(b.convenio !== undefined ? { convenio: b.convenio } : {}),
           ...(b.nickname !== undefined ? { nickname: b.nickname } : {}),
@@ -1002,6 +1004,7 @@ const financialRoutes =
           ...(b.accountNumber !== undefined ? { accountNumber: b.accountNumber } : {}),
           ...(b.accountDigit !== undefined ? { accountDigit: b.accountDigit } : {}),
           ...(b.type !== undefined ? { type: b.type } : {}),
+          ...(b.typeLabel !== undefined ? { typeLabel: b.typeLabel } : {}),
           ...(b.nickname !== undefined ? { nickname: b.nickname } : {}),
           ...(b.bankName !== undefined ? { bankName: b.bankName } : {}),
         });

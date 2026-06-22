@@ -131,3 +131,31 @@ describe('financial/domain/cedente/cedente-account — extensão conciliação (
       assert.equal((r.value as { openingBalanceCents?: number }).openingBalanceCents, 150000);
   });
 });
+
+// ─── #206 — tipo estendido (cartão corporativo / outro) + texto livre typeLabel — W0 RED ───
+describe('financial/domain/cedente/cedente-account — tipo estendido (#206)', () => {
+  it('CA1: type=cartao (cartão corporativo) → ok e refletido', () => {
+    const r = create({ ...validInput(), type: 'cartao' } as never);
+    assert.equal(r.ok, true, JSON.stringify(r));
+    if (r.ok) assert.equal((r.value as { type?: string }).type, 'cartao');
+  });
+
+  it('CA1: type=outro + typeLabel (texto livre) → ok e typeLabel refletido', () => {
+    const r = create({
+      ...validInput(),
+      type: 'outro',
+      typeLabel: 'Conta Mercado Pago',
+    } as never);
+    assert.equal(r.ok, true, JSON.stringify(r));
+    if (r.ok) {
+      assert.equal((r.value as { type?: string }).type, 'outro');
+      assert.equal((r.value as { typeLabel?: string }).typeLabel, 'Conta Mercado Pago');
+    }
+  });
+
+  it('CA4: type fora do enum (salario) segue invalid-account-type', () => {
+    const r = create({ ...validInput(), type: 'salario' } as never);
+    assert.equal(isErr(r), true);
+    if (!r.ok) assert.equal(r.error, 'invalid-account-type');
+  });
+});

@@ -520,6 +520,8 @@ export const finCedenteAccounts = mysqlTable(
     nextNsa: int('next_nsa').notNull(),
     // Extensão conciliação (019) — nullable (ALTER ADD COLUMN não-quebrante, migration 0009).
     type: varchar('type', { length: 16 }),
+    // #206: texto livre p/ identificar conta `outro`/`cartao` (nullable; ALTER ADD COLUMN aditivo).
+    typeLabel: varchar('type_label', { length: 120 }),
     nickname: varchar('nickname', { length: 120 }),
     bankName: varchar('bank_name', { length: 120 }),
     openingBalanceCents: bigint('opening_balance_cents', { mode: 'number' }),
@@ -530,7 +532,7 @@ export const finCedenteAccounts = mysqlTable(
     check('fin_cedente_accounts_next_nsa_chk', sql`${t.nextNsa} >= 1`),
     check(
       'fin_cedente_accounts_type_chk',
-      sql`${t.type} IS NULL OR ${t.type} IN ('corrente','poupanca','investimento')`,
+      sql`${t.type} IS NULL OR ${t.type} IN ('corrente','poupanca','investimento','cartao','outro')`,
     ),
     // FR-016: unicidade por chave natural (banco + agência + conta + dígito).
     uniqueIndex('fin_cedente_accounts_natural_key_uq').on(
