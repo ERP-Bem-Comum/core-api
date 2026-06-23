@@ -140,6 +140,7 @@ Um **ADR (Architecture Decision Record)** é um documento curto que captura uma 
 | [0045](./0045-financial-supplier-read-model.md)                | Read-model de fornecedor no `financial` consumido do `par_outbox` (US2 #47) — worker em composition root, upsert com guard de `occurred_at`, backfill one-shot; estende ADR-0015/0022/0043 | Accepted | 2026-06-16 |
 | [0046](./0046-contracts-contractor-ref-integration-events.md)  | Contrato de eventos `contracts → partners` — `contractorRef` aditivo ao wire-format v1 (Opção A) para o read-model `par_contract_count_view` (contagem de contratos nos grids, US6 #46); estende ADR-0022/0043 | Accepted | 2026-06-17 |
 | [0047](./0047-transactional-email-via-producer-domain-event.md) | E-mail transacional como **evento de domínio no outbox do módulo produtor** (atomicidade do disparo na mesma tx; `notifications` vira consumidor) — fecha #134; estende ADR-0015/0010 | Accepted | 2026-06-18 |
+| [0048](./0048-legacy-categorization-installments-mapping.md)    | **Anticorruption Layer** legado↔core (gate Camadas 0–2): reusar a categorização 020 (não portar `CostCenter→Category→SubCategory`/`releaseType`) + mapa `installments→payables` (`SUM(value WHERE PAGO)` → `'Paid'`) + dashboard fatiado; spike #233, conforma ADR-0001/0005/0006/0014 | Proposed | 2026-06-23 |
 
 ---
 
