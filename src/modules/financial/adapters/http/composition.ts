@@ -81,6 +81,7 @@ import { saveDocument } from '../../application/use-cases/save-document.ts';
 import { saveDraft } from '../../application/use-cases/save-draft.ts';
 import { adjustDocument } from '../../application/use-cases/adjust-document.ts';
 import { approveDocument } from '../../application/use-cases/approve-document.ts';
+import { registerManualPayment } from '../../application/use-cases/register-manual-payment.ts';
 import { undoApproval } from '../../application/use-cases/undo-approval.ts';
 import { cancelDocument } from '../../application/use-cases/cancel-document.ts';
 import { submitDraft } from '../../application/use-cases/submit-draft.ts';
@@ -129,6 +130,8 @@ export type FinancialHttpDeps = Readonly<{
   saveDraft: ReturnType<typeof saveDraft>;
   adjustDocument: ReturnType<typeof adjustDocument>;
   approveDocument: ReturnType<typeof approveDocument>;
+  /** Baixa manual de título (#219/#224) — POST /documents/:id/payables/:payableId/manual-payment. */
+  registerManualPayment: ReturnType<typeof registerManualPayment>;
   undoApproval: ReturnType<typeof undoApproval>;
   cancelDocument: ReturnType<typeof cancelDocument>;
   submitDraft: ReturnType<typeof submitDraft>;
@@ -388,6 +391,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     saveDraft: saveDraft(deps),
     adjustDocument: adjustDocument(deps),
     approveDocument: approveDocument(deps),
+    registerManualPayment: registerManualPayment(deps),
     undoApproval: undoApproval(deps),
     cancelDocument: cancelDocument({ repo: pools.repo }),
     submitDraft: submitDraft(deps),
