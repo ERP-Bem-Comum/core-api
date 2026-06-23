@@ -725,3 +725,44 @@ export const statementSuggestionsResponseSchema = z.object({
 });
 
 export type StatementSuggestionsResponseDto = z.infer<typeof statementSuggestionsResponseSchema>;
+
+// ─── Listagem payable-centric (#201/#222) — GET /financial/payable-titles ──────
+// Grid de Contas a Pagar orientado a TÍTULO (pai + filhos como linhas). Distinto da busca de
+// conciliação GET /financial/payables?status=Paid (US2, outro concern/RBAC).
+export const listPayablesQuerySchema = z.object({
+  status: z
+    .enum(['Draft', 'Open', 'Approved', 'Transmitted', 'Refused', 'Paid', 'Reconciled'])
+    .optional(),
+  documentType: documentTypeSchema.optional(),
+  supplierRef: z.uuid().optional(),
+  dueFrom: z.iso.date().optional(),
+  dueTo: z.iso.date().optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export type ListPayablesQuery = z.infer<typeof listPayablesQuerySchema>;
+
+export const payableSummarySchema = z.object({
+  payableId: z.uuid(),
+  documentId: z.uuid(),
+  documentNumber: z.string().nullable(),
+  series: z.string().nullable(),
+  documentType: z.string().nullable(),
+  kind: z.string(), // Parent (líquido) | Child (retenção)
+  retentionType: z.string().nullable(),
+  valueCents: centsStringSchema,
+  dueDate: z.string(),
+  status: z.string(),
+  supplierRef: z.string().nullable(),
+  contractRef: z.string().nullable(),
+});
+
+export type PayableSummaryDto = z.infer<typeof payableSummarySchema>;
+
+export const payableListResponseSchema = z.object({
+  items: z.array(payableSummarySchema),
+  page: z.number().int(),
+  pageSize: z.number().int(),
+  total: z.number().int(),
+});

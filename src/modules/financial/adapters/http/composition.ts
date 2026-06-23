@@ -14,7 +14,13 @@
 
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 
-import { createInMemoryDocumentRepository } from '../persistence/repos/document-repository.in-memory.ts';
+import {
+  createInMemoryDocumentRepository,
+  type DocumentStore,
+} from '../persistence/repos/document-repository.in-memory.ts';
+import { createInMemoryPayableListView } from '../persistence/repos/payable-list-view.in-memory.ts';
+import { createDrizzlePayableListView } from '../persistence/repos/payable-list-view.drizzle.ts';
+import type { PayableListView } from '../../application/ports/payable-list-view.ts';
 import { createInMemorySupplierViewStore } from '../persistence/repos/supplier-view-store.in-memory.ts';
 import {
   createInMemoryTimelineRepository,
@@ -130,6 +136,8 @@ export type FinancialHttpDeps = Readonly<{
   findDocumentById: DocumentRepository['findById'];
   /** Listagem paginada (US1 — read path no writer pool; split reader/writer diferido — ADR-0003). */
   listDocuments: DocumentRepository['findPaged'];
+  /** Listagem payable-centric (#201/#222) — GET /financial/payable-titles (pai+filhos como linhas). */
+  listPayables: PayableListView['findPaged'];
   /** Trilha por-campo (Time Travel) de um documento — consumido pelo GET /documents/:id/timeline. */
   getDocumentTimeline: ReturnType<typeof getDocumentTimeline>;
   /** Importação de extrato bancário (US1 conciliação) — POST /bank-statements. */
@@ -188,6 +196,7 @@ type Pools = Readonly<{
   // mysql: read-port de contracts na MESMA conexão (ctr_* no mesmo DB do monólito).
   contractCategorizationReader: ContractCategorizationReadPort;
   repo: DocumentRepository;
+  payableListView: PayableListView;
   // Repo de LEITURA da trilha. Na escrita, o `save` do DocumentRepository grava a trilha
   // na mesma transação (memory: store compartilhado; mysql: dentro da tx do save).
   timelineRepo: FinancialTimelineRepository;
@@ -244,7 +253,14 @@ const buildMemoryPools = (): Pools => {
   // Read-model de fornecedor (#47/US2): vazio no driver memory (sem consumer) → grid resolve
   // fornecedor como null. Populado de verdade só no driver mysql (worker de projeção + JOIN).
   const supplierViewStore = createInMemorySupplierViewStore();
-  const repo = createInMemoryDocumentRepository(timelineStore, supplierViewStore);
+  // #222: store compartilhado entre o document-repo e o PayableListView in-memory (deriva os títulos).
+  const documentStore: DocumentStore = new Map();
+  const repo = createInMemoryDocumentRepository(
+    timelineStore,
+    supplierViewStore,
+    undefined,
+    documentStore,
+  );
   const timelineRepo = createInMemoryTimelineRepository(timelineStore);
   // Stores compartilhados da conciliação: o reconciliationRepo flipa status no MESMO statementStore
   // (transação) e payableStore (título) lidos pelo statementRepo/payableView (atomicidade em memória).
@@ -270,6 +286,9 @@ const buildMemoryPools = (): Pools => {
     costCenterReader,
     programReader,
     repo,
+    payableListView: createInMemoryPayableListView(() =>
+      [...documentStore.values()].map((e) => e.aggregate),
+    ),
     timelineRepo,
     statementRepo,
     payableView,
@@ -316,6 +335,7 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
   return {
     contractCategorizationReader: contractsReadPort,
     repo: createDrizzleDocumentRepository(handle),
+    payableListView: createDrizzlePayableListView(handle),
     // Leitura da trilha via pool (a escrita é feita dentro da tx do document-repo.save).
     timelineRepo: createDrizzleTimelineRepository(handle),
     statementRepo: createDrizzleBankStatementRepository(handle),
@@ -373,6 +393,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     submitDraft: submitDraft(deps),
     findDocumentById: pools.repo.findById,
     listDocuments: pools.repo.findPaged,
+    listPayables: pools.payableListView.findPaged,
     getDocumentTimeline: getDocumentTimeline({ timelineRepo: pools.timelineRepo }),
     importBankStatement: importBankStatement({
       parser: bankStatementParser,

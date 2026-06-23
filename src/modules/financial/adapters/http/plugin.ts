@@ -57,6 +57,7 @@ import {
   programsToDto,
 } from './dto.ts';
 import type { DocumentListFilter } from '../../domain/document/query.ts';
+import type { PayableListFilter, PayableListItem } from '../../domain/payable/query.ts';
 import type { FinancialHttpDeps } from './composition.ts';
 import {
   createDocumentBodySchema,
@@ -67,6 +68,9 @@ import {
   listDocumentsQuerySchema,
   documentResponseSchema,
   documentListResponseSchema,
+  listPayablesQuerySchema,
+  payableListResponseSchema,
+  type PayableSummaryDto,
   documentTimelineResponseSchema,
   importBankStatementBodySchema,
   importBankStatementResponseSchema,
@@ -200,6 +204,22 @@ const toRegisteredTaxInputs = (
   }));
 
 // Serializa a conta-cedente (019). Money em string (convenção); opcionais → null.
+// #222: item da listagem payable-centric → DTO (centavos em string; data ISO).
+const payableListItemToDto = (it: PayableListItem): PayableSummaryDto => ({
+  payableId: it.payableId,
+  documentId: it.documentId,
+  documentNumber: it.documentNumber,
+  series: it.series,
+  documentType: it.documentType,
+  kind: it.kind,
+  retentionType: it.retentionType,
+  valueCents: String(it.valueCents),
+  dueDate: it.dueDate.toISOString(),
+  status: it.status,
+  supplierRef: it.supplierRef,
+  contractRef: it.contractRef,
+});
+
 const cedenteAccountToDto = (a: CedenteAccount): CedenteAccountResponseDto => ({
   id: String(a.id),
   bankCode: a.bankCode,
@@ -449,6 +469,40 @@ const financialRoutes =
           reply,
           ok({
             items: result.value.items.map(listItemToSummaryDto),
+            page: result.value.page,
+            pageSize: result.value.pageSize,
+            total: result.value.total,
+          }),
+          { ok: 200 },
+        );
+      },
+    });
+
+    // GET /financial/payable-titles — listagem payable-centric (#201/#222): pai + filhos como linhas
+    // pagáveis (status próprio por título). Distinta da busca de conciliação GET /payables?status=Paid.
+    scope.route({
+      method: 'GET',
+      url: '/financial/payable-titles',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        querystring: listPayablesQuerySchema,
+        response: { 200: payableListResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const q = req.query;
+        const filter: PayableListFilter = {
+          ...(q.status !== undefined ? { status: q.status } : {}),
+          ...(q.documentType !== undefined ? { documentType: q.documentType } : {}),
+          ...(q.supplierRef !== undefined ? { supplierRef: q.supplierRef } : {}),
+          ...(q.dueFrom !== undefined ? { dueFrom: new Date(q.dueFrom) } : {}),
+          ...(q.dueTo !== undefined ? { dueTo: new Date(q.dueTo) } : {}),
+        };
+        const result = await deps.listPayables(filter, q.page, q.pageSize);
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(
+          reply,
+          ok({
+            items: result.value.items.map(payableListItemToDto),
             page: result.value.page,
             pageSize: result.value.pageSize,
             total: result.value.total,
