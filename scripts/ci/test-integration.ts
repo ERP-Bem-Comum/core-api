@@ -82,6 +82,7 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/financial/adapters/persistence/bank-statement-repository.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/reconciliation-repository.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/match-suggestion.drizzle-mysql.test.ts',
+    'tests/modules/financial/adapters/persistence/payable-list-view.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/manual-entry.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/reconciliation-period.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/category-read.drizzle-mysql.test.ts',
