@@ -108,6 +108,7 @@ O core-api novo tem a categorização **020** (que **diverge** da hierarquia leg
 | `Categorization` (pivô, FKs) | — | refs no `Document` (`categoryRef`, `costCenterRef`, `programRef`, `budgetPlanRef`) | Core não tem tabela-pivô — refs leves no próprio documento (ADR-0014). |
 | `Program` | — | `Program` (cross-módulo `programs`) | |
 | `BudgetPlan` (agregado) | — | `budgetPlanRef` (no Document) + agregado de planejamento **inexistente** | O agregado de Budget Plan é **Camada 3** (#113). |
+| `Payable.paymentType` (`CONTRACT`/`NO_CONTRACT`/`REFOUND`/`DISTRATO`/`TERMO`/`CARDBILL` — `payables/enums/index.ts:1-8`) | — | **— (sem enum)**; vínculo de contrato inferido por `Document.contractRef` (null/não-null) | Core **não** tem `paymentType`. "Sem contrato" = `contractRef IS NULL`. **Divergência de conjunto (R-5):** no legado `{paymentType=NO_CONTRACT} ⊊ {contractId IS NULL}` (REEMBOLSO/DISTRATO/TERMO/CARDBILL também são sem contrato) → `contractRef IS NULL` **superestima** o relatório "Fornecedores sem Contrato". `payeeKind` ≠ `paymentType` (é tipo de favorecido). |
 
 ### Mapa B — `installments → payables` (granularidade + valor)
 
@@ -158,6 +159,7 @@ ADR-0005 (`0005-thin-bff-gateway.md`) + recomendação do próprio #112: 1 endpo
 2. **`ajuste` / `releaseType` (R-2, MÉDIO).** `Category.group = 'ajuste'` não tem origem legada; `releaseType` (IPCA/CAED) não tem destino no core. Ambos pertencem à **Camada 3** (Budget Plans, #113) e ao agregado de planejamento inexistente. Não impactam Dashboard/Reports.
 3. **Receita/recebíveis (R-3, já registrado em #179).** `Category.group='receita'` existe, mas **não há `receivables`** no core. Os KPIs/relatórios de receita do dashboard ficam parciais até o módulo `receivables` (Posição Recebíveis, Análise de Recebimentos, Fluxo de Caixa — adiados em #179).
 4. **Fronteira de leitura cross-módulo (R-4, MÉDIO).** Dashboard/Reports leem dados do `financial` mas **não podem** ler tabelas `fin_*` direto (ADR-0014). A topologia (read-model próprio via outbox vs. leitura via `financial/public-api`) é **decisão dos tickets de implementação**, não deste spike — registrada para os cards da Camada 2.
+5. **"Sem contrato" — divergência de conjunto (R-5, MÉDIO; afeta DASH/REP "Fornecedores sem Contrato").** O legado distingue `paymentType = NO_CONTRACT` de outros tipos sem contrato (`REFOUND`/`DISTRATO`/`TERMO`/`CARDBILL`); o core só tem `contractRef IS NULL`. Logo `contractRef IS NULL` ⊇ `NO_CONTRACT` legado e **superestima** o relatório de fornecedores sem contrato. Decidir na implementação do `noContractSuppliers`/REP-noContract: (a) aceitar `contractRef IS NULL` como definição nova de "sem contrato" (mais simples, recomendado — alinha com o modelo soberano), ou (b) reintroduzir um discriminador de natureza do pagamento se a paridade exata com o legado for requisito. Não bloqueia a Camada 2; registrar na issue do widget.
 
 ---
 

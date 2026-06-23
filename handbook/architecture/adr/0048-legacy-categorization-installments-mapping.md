@@ -42,6 +42,7 @@ A 020 fica **intocada**. A hierarquia legada de 3 níveis é **achatada** via o 
 | `CostCenterSubCategory` | 3 (folha) | `Category` filha (`parentId` preenchido) | usa a hierarquia opcional da 020 (#147 F3) |
 | `CostCenterSubCategory.releaseType` | 3 | **— (sem equivalente)** | conceito de orçamento/calibração → **Camada 3** (Budget Plans), não de categorização de lançamento |
 | `Categorization` (pivô) | — | refs no `Document` (`categoryRef`, `costCenterRef`, `programRef`, `budgetPlanRef`) | core não tem tabela-pivô; refs leves (ADR-0014) |
+| `Payable.paymentType` (`CONTRACT`/`NO_CONTRACT`/`REFOUND`/`DISTRATO`/`TERMO`/`CARDBILL`) | — | **— (sem enum)**; vínculo de contrato inferido por `Document.contractRef` (null vs não-null) | "sem contrato" = `contractRef IS NULL`. **R-5:** `{contractRef IS NULL} ⊇ {paymentType=NO_CONTRACT}` (legado tem outros tipos sem contrato) → superestima o relatório "Fornecedores sem Contrato". `payeeKind` é tipo de favorecido, **não** de pagamento |
 
 ### D2 — `installments → payables`: equivalência de granularidade e status; **sem parcelamento temporal agora**
 
@@ -88,6 +89,7 @@ Por ADR-0005 (thin BFF) + recomendação do #112: `…/dashboard/kpis`, `…/das
 - **Sem parcelamento temporal:** a migração do dump legado com títulos parcelados exige decisão própria (1 Document/parcela vs. estender o core) — **R-1**, abrir issue antes da migração de histórico. Não bloqueia a Camada 2 sobre dados novos.
 - **Receita parcial:** `Category.group='receita'` existe, mas `receivables` não — KPIs de receita ficam parciais até #179.
 - **Fronteira de leitura:** Dashboard/Reports não podem ler `fin_*` direto (ADR-0014); a topologia (read-model via outbox vs. leitura via `financial/public-api`) é decisão dos tickets de implementação, não deste ADR.
+- **"Sem contrato" diverge em conjunto (R-5):** o core não tem `paymentType`; "sem contrato" = `contractRef IS NULL`, que é um conjunto **maior** que o `NO_CONTRACT` legado (este exclui REEMBOLSO/DISTRATO/TERMO/CARDBILL). O widget/REP "Fornecedores sem Contrato" deve decidir entre adotar `contractRef IS NULL` como definição nova (recomendado) ou reintroduzir um discriminador se exigir paridade exata com o legado.
 
 ---
 
