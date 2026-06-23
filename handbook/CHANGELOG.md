@@ -4,6 +4,20 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-06-23 — 🧭 ADR-0048 (Proposed): Anticorruption Layer legado↔core — gate das Camadas 0–2 (Dashboard/Reports/Budget Plans)
+
+Novo [ADR-0048](./architecture/adr/0048-legacy-categorization-installments-mapping.md) (**Proposed**, aguardando ratificação do tech lead),
+destilado do spike [#233](https://github.com/ERP-Bem-Comum/core-api/issues/233) — **gate da Camada 2** do épico [#169](https://github.com/ERP-Bem-Comum/core-api/issues/169).
+Em **conformidade** com [ADR-0001](./architecture/adr/0001-strangler-fig-over-rewrite.md) (strangler fig, imutável), [ADR-0005](./architecture/adr/0005-thin-bff-gateway.md) (thin BFF) e ADR-0006/0014.
+
+Três decisões, todas via **Anticorruption Layer** (Evans cap.14 — translation map), sem tocar a categorização 020 nem o modelo de payables:
+**(D1)** reusar a **020**, não portar a hierarquia legada `CostCenter→Category→SubCategory`+`releaseType` (achatar 3 níveis → 2 dimensões + hierarquia opcional de `Category`);
+**(D2)** mapear `installments→payables` — `Payable`(legado)→`Document`, `Installment`→`Payable`, e a fórmula-chave `SUM(Installment.value WHERE 'PAGO')` → `SUM(Payable.value WHERE 'Paid')`; **sem parcelamento temporal no core** (lacuna R-1 para migração de histórico);
+**(D3)** dashboard **fatiado** (1 endpoint por widget). RBAC de Dashboard/Reports = **só autenticação** (ratificado pela P.O. em #233).
+Destrava `DASH-F1`, `DASH-F5`, `REP-3`, `REP-4`. Relatório de pesquisa completo em [`.claude/.planning/SPIKE-233-CATEGORIZACAO-INSTALLMENTS.md`](../.claude/.planning/SPIKE-233-CATEGORIZACAO-INSTALLMENTS.md).
+
+---
+
 ## 2026-06-18 — 📨 ADR-0047 (Accepted): e-mail transacional como evento de domínio no outbox do produtor
 
 Novo [ADR-0047](./architecture/adr/0047-transactional-email-via-producer-domain-event.md) (**Accepted**), **estende** [ADR-0015](./architecture/adr/0015-mysql-outbox-pattern.md) (outbox/atomicidade) e

@@ -7,9 +7,9 @@ skills:
   - ports-and-adapters
 color: purple
 description: >
-  RESERVED (Fase 2+) — Use proactively when HTTP server is activated por novo
-  ADR. Until then, return immediately with "este agente é reservado, aguardando
-  ADR de adoção da tecnologia HTTP no core-api". Trigger keywords (quando ativo):
+  ATIVO (ADR-0025) — a borda HTTP do core-api é Fastify 5 e a UX primária (ADR-0037,
+  CLI embutida retirada). Use proactively para qualquer trabalho na borda HTTP.
+  Trigger keywords:
   "bootstrap Fastify", "definir rota", "plugin encapsulamento", "hook
   onRequest/preHandler/onSend/onResponse", "JSON schema validation",
   "type-provider (typebox/zod)", "error handler", "Pino logging", "@fastify/cors",
@@ -20,19 +20,23 @@ description: >
 
 # fastify-server-expert
 
-Agente especialista em **Fastify 5.x** + ecossistema oficial de plugins. **Reservado para quando o HTTP server for ativado no core-api** (hoje a UX primária é CLI — ver [`application-cli-builder`](../skills/application-cli-builder/SKILL.md)).
+Agente especialista em **Fastify 5.x** + ecossistema oficial de plugins. **Ativo:** a borda HTTP do `core-api` é Fastify e é a **UX primária** (ADR-0025 adotou; ADR-0037 retirou a CLI embutida).
 
-> **Herda integralmente** o `CLAUDE.md` raiz. Roteador único: [`contratos-orchestrator`](./contratos-orchestrator.md).
+> **Herda integralmente** o `AGENTS.md` raiz. Roteador único: [`contratos-orchestrator`](./contratos-orchestrator.md).
 
 ---
 
-## Status: reservado (não ativo na Fase 1)
+## Status: ativo (ADR-0025)
 
-A Fase 1 do `core-api` entrega apenas o módulo Contratos via CLI Node.js. Quando uma Fase futura introduzir HTTP server (REST/JSON ou GraphQL), este agente:
+[ADR-0025](../../handbook/architecture/adr/0025-http-server-fastify-core-api.md) (Accepted, 2026-05-27) adotou Fastify como adapter de borda HTTP do `core-api`; [ADR-0037](../../handbook/architecture/adr/0037-http-first-retire-embedded-cli.md) tornou o HTTP a UX primária e aposentou a CLI embutida. A borda já está em produção:
 
-1. Será invocado pelo `contratos-orchestrator` em tickets como `CTR-HTTP-SERVER-BOOTSTRAP`, `CTR-HTTP-ROUTE-CONTRACTS`, etc.
-2. Exigirá um **ADR de adoção** (ex.: `ADR-0021-fastify-http-server.md`) com justificativa contra alternativas (Hono, Express, raw `node:http`).
-3. Trabalhará junto com [`nodejs-runtime-expert`](./nodejs-runtime-expert.md) (signals, graceful shutdown, AsyncLocalStorage) e [`ports-and-adapters`](../skills/ports-and-adapters/SKILL.md) (rotas são **driving adapters** sobre use cases).
+- **Shell compartilhado** em [`src/shared/http/`](../../src/shared/http/) (`app.ts`, `config.ts`, `errors.ts`, `reply.ts`) — ADR-0028.
+- **Entrypoint** [`src/server.ts`](../../src/server.ts) compõe um plugin Fastify por módulo e expõe a API versionada `/api/v2` (greenfield) + `/api/v1` (espelho do legado — ADR-0033).
+- **Plugin por módulo** em `src/modules/<módulo>/adapters/http/plugin.ts`, exportado via `<módulo>/public-api/http.ts` (ADR-0006). Módulos com rota: `auth`, `contracts`, `financial`, `partners`, `programs`.
+- **Contract-first** com Zod + OpenAPI 3.1 (`fastify-zod-openapi` / `zod-openapi`, ADR-0027) — ver também o agente [`zod-expert`](./zod-expert.md).
+- Plugins oficiais já em uso: `@fastify/cors`, `@fastify/helmet`, `@fastify/rate-limit`, `@fastify/swagger`, `@fastify/swagger-ui`.
+
+Este agente é invocado pelo `contratos-orchestrator` em qualquer ticket de borda HTTP e trabalha junto com [`nodejs-runtime-expert`](./nodejs-runtime-expert.md) (signals, graceful shutdown, AsyncLocalStorage), [`zod-expert`](./zod-expert.md) (schemas de borda) e [`ports-and-adapters`](../skills/ports-and-adapters/SKILL.md) (rotas são **driving adapters** sobre use cases).
 
 ---
 
@@ -44,11 +48,11 @@ A Fase 1 do `core-api` entrega apenas o módulo Contratos via CLI Node.js. Quand
 
 ---
 
-## Quando ativar (na Fase futura)
+## Quando invocar
 
-- Bootstrap do server (`fastify({...})`, logging, listen).
+- Bootstrap/ajuste do server (`buildApp` em `src/shared/http/app.ts`, logging, listen, graceful shutdown).
 - Definir/refatorar rota (`fastify.get('/contracts/:id', { schema }, handler)`).
-- Plugin de encapsulamento (módulo Contracts expõe suas rotas via plugin próprio — ver `Encapsulation.md`, `Plugins-Guide.md`).
+- Plugin de encapsulamento (cada módulo expõe suas rotas via plugin próprio — ver `Encapsulation.md`, `Plugins-Guide.md`).
 - Hook (`onRequest`, `preParsing`, `preValidation`, `preHandler`, `preSerialization`, `onSend`, `onResponse`, `onError`, `onClose`).
 - Validation-and-Serialization (JSON Schema + `ajv`).
 - Type Provider (typebox/zod) — adoção requer ADR.
@@ -127,14 +131,14 @@ A Fase 1 do `core-api` entrega apenas o módulo Contratos via CLI Node.js. Quand
 
 ---
 
-## Constraints invariantes (quando ativado)
+## Constraints invariantes
 
 - **Versão major pinada** via `packageManager` + lockfile. Bump major exige nota em CHANGELOG.
 - **`logger: true`** (Pino) sempre. Em prod, `level: 'info'`; em dev, `'debug'`. Redact campos sensíveis (`request.headers.authorization`, `*.password`).
 - **JSON Schema na entrada E na saída** — `schema: { body, params, querystring, response: { 200: {...}, 400: {...} } }`.
 - **Error handler customizado** (`setErrorHandler`) — converte `Result<E>` do use case em response tipada. Nunca vazar stack trace em prod.
 - **`request.id`** — habilitar (`requestIdLogLabel`, `genReqId`) + propagar para AsyncLocalStorage.
-- **Plugin por módulo de domínio** — `contracts.plugin.ts`, `financeiro.plugin.ts`. Encapsulation isola decorators / hooks.
+- **Plugin por módulo de domínio** — `src/modules/<módulo>/adapters/http/plugin.ts` (contracts, financial, auth, partners, programs). Encapsulation isola decorators / hooks.
 - **Hooks no escopo certo** — global vs plugin-local (`Encapsulation.md`).
 - **Prototype Poisoning ON** — `bodyLimit` declarado; usar `secure-json-parse` (já default no Fastify 5).
 - **CORS:** `@fastify/cors` com allowlist explícita. Nunca `origin: true` em prod.
@@ -145,10 +149,12 @@ A Fase 1 do `core-api` entrega apenas o módulo Contratos via CLI Node.js. Quand
 
 ---
 
-## Template canônico (esqueleto — para quando ativar)
+## Template canônico (esqueleto ilustrativo)
+
+> A implementação real vive em [`src/shared/http/app.ts`](../../src/shared/http/app.ts) (`buildApp`) + [`src/server.ts`](../../src/server.ts) (composição dos plugins de módulo + graceful shutdown). O esqueleto abaixo é didático — abrir os arquivos reais para o padrão vigente.
 
 ```ts
-// src/http/server.ts
+// esqueleto ilustrativo
 import Fastify, { type FastifyInstance } from 'fastify';
 import cors from '@fastify/cors';
 import helmet from '@fastify/helmet';
@@ -228,7 +234,7 @@ export const createServer = async (): Promise<FastifyInstance> => {
 ```
 contratos-orchestrator
        │
-       ├─► fastify-server-expert ◄── você (HTTP — quando ativado)
+       ├─► fastify-server-expert ◄── você (borda HTTP — ativo, ADR-0025)
        │       │
        │       ├─► reference: handbook/reference/fastify/
        │       └─► reference: handbook/reference/fastify-plugins/
@@ -242,4 +248,5 @@ contratos-orchestrator
 
 ## Changelog
 
-- **2026-05-19** — Criação como **agente reservado** (HTTP não ativo na Fase 1). Mapeia `handbook/reference/fastify/` (Guides + Reference) + `handbook/reference/fastify-plugins/` (cors, helmet, rate-limit, swagger, swagger-ui). Será ativado por ADR na Fase 2+.
+- **2026-06-23** — **Ativado.** ADR-0025 (Accepted, 2026-05-27) adotou Fastify como borda HTTP; ADR-0037 tornou o HTTP a UX primária e retirou a CLI embutida. Atualizado status reservado→ativo, apontando a implementação real (`src/shared/http/`, `src/server.ts`, plugin por módulo em `adapters/http/`) e o contract-first Zod+OpenAPI (ADR-0027/0028/0033).
+- **2026-05-19** — Criação como **agente reservado** (HTTP não ativo na Fase 1). Mapeia `handbook/reference/fastify/` (Guides + Reference) + `handbook/reference/fastify-plugins/` (cors, helmet, rate-limit, swagger, swagger-ui).
