@@ -766,3 +766,15 @@ export const payableListResponseSchema = z.object({
   pageSize: z.number().int(),
   total: z.number().int(),
 });
+
+// ─── Baixa manual de título (#219/#224) — POST /documents/:id/payables/:payableId/manual-payment ──
+export const documentPayableParamsSchema = z.object({
+  id: z.uuid().meta({ description: 'UUID do documento' }),
+  payableId: z.uuid().meta({ description: 'UUID do título (payable)' }),
+});
+
+export const manualPaymentBodySchema = z.object({
+  version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  // #223: motivo opcional (a trilha já captura quem+quando).
+  reason: z.string().min(1).max(500).optional(),
+});

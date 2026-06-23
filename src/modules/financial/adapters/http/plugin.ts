@@ -65,6 +65,8 @@ import {
   approveBodySchema,
   cancelDocumentBodySchema,
   documentIdParamSchema,
+  documentPayableParamsSchema,
+  manualPaymentBodySchema,
   listDocumentsQuerySchema,
   documentResponseSchema,
   documentListResponseSchema,
@@ -379,6 +381,31 @@ const financialRoutes =
           approvedBy: req.userId,
           // Optimistic lock (FR-009): propaga `body.version` → `cmd.expectedVersion`.
           expectedVersion: req.body.version,
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return loadAndSerialize(deps, reply, req.params.id);
+      },
+    });
+
+    // POST /financial/documents/:id/payables/:payableId/manual-payment — baixa manual de UM título
+    // (Aprovado→Pago, por título — #201/#219). RBAC payable:approve; actor = usuário autenticado.
+    scope.route({
+      method: 'POST',
+      url: '/financial/documents/:id/payables/:payableId/manual-payment',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.payableApprove)],
+      schema: {
+        params: documentPayableParamsSchema,
+        body: manualPaymentBodySchema,
+        response: { 200: documentResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.registerManualPayment({
+          documentId: req.params.id,
+          payableId: req.params.payableId,
+          paidBy: req.userId,
+          // Optimistic lock (FR-009): propaga `body.version` → `cmd.expectedVersion`.
+          expectedVersion: req.body.version,
+          ...(req.body.reason !== undefined ? { reason: req.body.reason } : {}),
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         return loadAndSerialize(deps, reply, req.params.id);
