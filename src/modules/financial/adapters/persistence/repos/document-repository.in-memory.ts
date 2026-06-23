@@ -81,10 +81,14 @@ const toListItem = (entry: StoreEntry): DocumentListItem => ({
 // Entrada interna do store: agrega o documento + a versão corrente.
 // A versão não é exposta pelo domínio (DocumentRepository não tem getVersion()),
 // mas precisa ser rastreada internamente para enforçar o optimistic lock (FR-009).
-type StoreEntry = Readonly<{
+export type StoreEntry = Readonly<{
   aggregate: StoredDocument;
   version: number;
 }>;
+
+// Store compartilhável (#222): o PayableListView in-memory deriva os títulos (pai+filhos) dos mesmos
+// `StoredDocument` guardados aqui. Espelha o padrão do `timelineStore` compartilhado.
+export type DocumentStore = Map<string, StoreEntry>;
 
 // Adapter in-memory (testes + composition root de memória). Guarda o agregado por id branded.
 //
@@ -105,8 +109,9 @@ export const createInMemoryDocumentRepository = (
   // #127: outbox onde os eventos são "publicados" — paridade in-memory da atomicidade do Drizzle.
   // Default: outbox interno (acumula, nunca falha). Testes injetam um que falha p/ provar rollback.
   outbox: FinancialOutbox = createInMemoryOutbox().port,
+  // #222: store compartilhável — quando fornecido, o PayableListView in-memory lê os mesmos documentos.
+  store: DocumentStore = new Map<string, StoreEntry>(),
 ): DocumentRepository => {
-  const store = new Map<string, StoreEntry>();
   return immutable<DocumentRepository>({
     save: async (
       aggregate: StoredDocument,
