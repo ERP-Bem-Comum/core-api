@@ -115,7 +115,7 @@ Carrega **um único** agente por turno.
 | Driver `mysql2` (pool, `caching_sha2_password`, TLS, timeouts)                    | [`mysql2-driver-expert`](./.claude/agents/mysql2-driver-expert.md)             |
 | Docker / Compose / Dockerfile / BuildKit                                          | [`docker-compose-expert`](./.claude/agents/docker-compose-expert.md)           |
 | pnpm / lockfile / supply-chain / corepack                                         | [`pnpm-workspace-expert`](./.claude/agents/pnpm-workspace-expert.md)           |
-| Fastify (HTTP — **reservado, Fase 2+, exige ADR**)                                | [`fastify-server-expert`](./.claude/agents/fastify-server-expert.md)           |
+| Fastify (borda HTTP — **ativo**, ADR-0025; UX primária, ADR-0037)                 | [`fastify-server-expert`](./.claude/agents/fastify-server-expert.md)           |
 | Nodemailer (adapter SMTP — **ativo** desde `CTR-EMAIL-ADAPTER-NODEMAILER`)        | [`nodemailer-email-expert`](./.claude/agents/nodemailer-email-expert.md)       |
 | Segurança backend web (Node/TS/Fastify/pnpm/Magalu)                               | [`security-backend-expert`](./.claude/agents/security-backend-expert.md)       |
 | Segurança frontend web (TanStack Start/React)                                     | [`security-frontend-expert`](./.claude/agents/security-frontend-expert.md)     |
@@ -227,7 +227,7 @@ Pre-commit hook: `.claude/hooks/pre-commit-typecheck.sh` (ativar via `git config
 8. **`import` sem extensão `.ts`** — `NodeNext` exige caminho completo.
 9. **`import` de tipo sem `type`** — `verbatimModuleSyntax` exige `import type { X }` ou `import { type X }`.
 10. **`npm` em qualquer doc, script, PR ou comentário** — sempre `pnpm` (ADR-0012).
-11. **Ativar agentes reservados** (`fastify-server-expert`) sem antes abrir o ADR.
+11. **Ativar um agente marcado como reservado** sem antes abrir o ADR de adoção da tecnologia.
 12. **Citar `.mdx`/`.md` do handbook "de memória"** — abrir o arquivo e citar literalmente.
 13. **Importar de `<module>/domain/` ou `<module>/application/` de outro módulo** — usar exclusivamente `<module>/public-api/` (ADR-0006).
 14. **Dispensar vermelho como "não é meu erro"** — ver §"Política de regressão zero" abaixo. É o anti-padrão mais grave: terminar wave/ticket/turn com falha não-endereçada.
