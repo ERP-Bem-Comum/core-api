@@ -228,6 +228,56 @@ export const approve = (
   );
 };
 
+export type PayPayableManuallyInput = Readonly<{
+  document: ApprovedDocument;
+  payables: Payables;
+  payableId: PayableId.PayableId;
+  by: UserRef;
+  at: Date;
+  reason?: string;
+}>;
+
+export type PayPayableManuallyOutput = Readonly<{
+  document: ApprovedDocument;
+  payables: Payables;
+  events: readonly DocumentEvent[];
+}>;
+
+// #223: baixa manual de UM título (Aprovado→Pago), por título (#201). Relaxa a invariante
+// "payable espelha documento": um título pode ficar Pago enquanto os irmãos seguem Aprovados. O
+// documento permanece Approved (rollup do documento p/ Pago é fatia futura). Só Approved vira Pago.
+export const payPayableManually = (
+  input: PayPayableManuallyInput,
+): Result<PayPayableManuallyOutput, DocumentError> => {
+  const all = [input.payables.parent, ...input.payables.children];
+  const target = all.find((p) => p.id === input.payableId);
+  if (target === undefined) return err('payable-not-found');
+  if (target.status !== 'Approved') return err('payable-not-approved');
+
+  const pay = (p: Payable): Payable =>
+    p.id === input.payableId ? immutable<Payable>({ ...p, status: 'Paid' }) : p;
+
+  const event: DocumentEvent = {
+    type: 'PayableManuallyPaid',
+    documentId: input.document.id,
+    payableId: input.payableId,
+    paidBy: input.by,
+    paidAt: input.at,
+    ...(input.reason !== undefined ? { reason: input.reason } : {}),
+  };
+
+  return ok(
+    immutable<PayPayableManuallyOutput>({
+      document: input.document,
+      payables: immutable<Payables>({
+        parent: pay(input.payables.parent),
+        children: input.payables.children.map(pay),
+      }),
+      events: [event],
+    }),
+  );
+};
+
 export type AdjustDocumentChanges = Readonly<{
   grossValue?: Money;
   sourceDiscounts?: Money;
