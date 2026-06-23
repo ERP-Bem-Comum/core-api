@@ -4,4 +4,7 @@ export type DocumentError =
   | 'net-value-not-positive'
   | 'retention-not-allowed-for-type'
   | 'document-incomplete'
-  | 'invalid-state-transition';
+  | 'invalid-state-transition'
+  // #223: baixa manual por título.
+  | 'payable-not-found'
+  | 'payable-not-approved';

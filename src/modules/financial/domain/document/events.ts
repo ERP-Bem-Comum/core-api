@@ -35,12 +35,24 @@ export type DocumentCancelled = Readonly<{
   payableIds: readonly PayableId[];
 }>;
 
+// #223: baixa manual de um título (Aprovado→Pago), por título (#201). `reason` opcional (a trilha
+// captura quem+quando; o motivo é contexto). Carve-out do #59 (sem CNAB).
+export type PayableManuallyPaid = Readonly<{
+  type: 'PayableManuallyPaid';
+  documentId: DocumentId;
+  payableId: PayableId;
+  paidBy: UserRef;
+  paidAt: Date;
+  reason?: string;
+}>;
+
 export type DocumentEvent =
   | DocumentSaved
   | PayableApproved
   | ApprovalUndone
   | DocumentDraftSaved
-  | DocumentCancelled;
+  | DocumentCancelled
+  | PayableManuallyPaid;
 
 /**
  * Fonte única dos literais de `DocumentEvent['type']` (anti-drift) — consumida pelos
@@ -59,6 +71,7 @@ export const DOCUMENT_EVENT_TYPES = exhaustiveStringUnion<DocumentEvent['type']>
   'ApprovalUndone',
   'DocumentDraftSaved',
   'DocumentCancelled',
+  'PayableManuallyPaid',
 ] as const);
 
 /**
@@ -74,4 +87,5 @@ export const TIMELINE_EVENT_TYPES = exhaustiveStringUnion<TimelineEventType>()([
   'PayableApproved',
   'ApprovalUndone',
   'DocumentDraftSaved',
+  'PayableManuallyPaid',
 ] as const);
