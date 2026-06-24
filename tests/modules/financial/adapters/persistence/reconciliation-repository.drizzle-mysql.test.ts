@@ -27,6 +27,7 @@ import {
   finPayables,
 } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { saveDocument } from '#src/modules/financial/application/use-cases/save-document.ts';
+import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
 import { confirmReconciliation } from '#src/modules/financial/application/use-cases/confirm-reconciliation.ts';
 import { undoReconciliation } from '#src/modules/financial/application/use-cases/undo-reconciliation.ts';
 import { importStatement } from '#src/modules/financial/domain/statement/bank-statement.ts';
@@ -71,6 +72,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
         repo: createDrizzleDocumentRepository(handle),
         clock: ClockReal(),
         contractCategorizationReader: createInMemoryContractCategorizationReadStore(),
+        cedenteAccountStore: createInMemoryCedenteAccountStore(),
       });
       const created = await save({
         documentNumber: `NFS-${newUuid().slice(0, 8)}`,

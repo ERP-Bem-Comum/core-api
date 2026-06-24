@@ -14,6 +14,7 @@ import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persi
 import { createDrizzleDocumentRepository } from '#src/modules/financial/adapters/persistence/repos/document-repository.drizzle.ts';
 import { createDrizzlePayableListView } from '#src/modules/financial/adapters/persistence/repos/payable-list-view.drizzle.ts';
 import { saveDocument } from '#src/modules/financial/application/use-cases/save-document.ts';
+import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
 
 if (!process.env['MYSQL_INTEGRATION']) {
   process.stdout.write('[financial:payable-list-view] MYSQL_INTEGRATION nao definido — pulando.\n');
@@ -42,6 +43,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
         repo: createDrizzleDocumentRepository(handle),
         clock: ClockReal(),
         contractCategorizationReader: createInMemoryContractCategorizationReadStore(),
+        cedenteAccountStore: createInMemoryCedenteAccountStore(),
       });
       const created = await save({
         documentNumber,

@@ -1,4 +1,5 @@
 import type { Money } from '../../../../shared/kernel/money.ts';
+import type { Competencia } from './competencia.ts';
 import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
 import type { SupplierRef } from '#src/modules/partners/public-api/refs.ts';
 import type { DocumentId } from '../shared/document-id.ts';
@@ -75,6 +76,8 @@ export type DocumentCore = Readonly<{
   // aprovação efetiva). A aprovação segue sendo ação separada — este campo é só o destinatário.
   approverRef: UserRef | null;
   accessKey: string | null; // #115: chave de acesso (44 dígitos) da DANFE; null nos demais tipos
+  competencia: Competencia | null; // #197: mês contábil de referência
+  debitAccountRef: string | null; // #197: conta-débito (ref → fin_cedente_accounts)
 }>;
 
 export type OpenDocument = DocumentCore & Readonly<{ status: 'Open' }>;
@@ -109,6 +112,8 @@ export type DraftDocument = Readonly<{
   issueDate: Date | null; // #163: emissão (opcional no rascunho)
   approverRef: UserRef | null; // #148: aprovador pretendido (opcional no rascunho)
   accessKey: string | null; // #115: chave de acesso (opcional no rascunho)
+  competencia: Competencia | null; // #197 (opcional no rascunho)
+  debitAccountRef: string | null; // #197 (opcional no rascunho)
 }>;
 
 export type Document = DraftDocument | OpenDocument | ApprovedDocument;

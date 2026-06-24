@@ -17,6 +17,7 @@ import { createDrizzleSuggestionView } from '#src/modules/financial/adapters/per
 import { createDrizzleRejectedSuggestionRepository } from '#src/modules/financial/adapters/persistence/repos/rejected-suggestion-repository.drizzle.ts';
 import { finPayables } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { saveDocument } from '#src/modules/financial/application/use-cases/save-document.ts';
+import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
 import { newUuid } from '#src/shared/utils/id.ts';
 
 if (!process.env['MYSQL_INTEGRATION']) {
@@ -48,6 +49,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
         repo: createDrizzleDocumentRepository(handle),
         clock: ClockReal(),
         contractCategorizationReader: createInMemoryContractCategorizationReadStore(),
+        cedenteAccountStore: createInMemoryCedenteAccountStore(),
       });
       const created = await save({
         documentNumber,

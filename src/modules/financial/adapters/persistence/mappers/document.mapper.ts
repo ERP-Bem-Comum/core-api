@@ -65,7 +65,10 @@ import type {
 
 // ─── Tipos de erro do mapper ──────────────────────────────────────────────────
 
+import * as Competencia from '#src/modules/financial/domain/document/competencia.ts';
+
 export type DocumentMapperError =
+  | 'mapper-invalid-competencia'
   | 'mapper-invalid-document-id'
   | 'mapper-invalid-supplier-ref'
   | 'mapper-invalid-contract-ref'
@@ -307,6 +310,13 @@ export const mapRowToDocument = (
     const interestR = toMoney(row.interest);
     if (!interestR.ok) return interestR;
 
+    let competencia: Competencia.Competencia | null = null;
+    if (row.competencia != null) {
+      const c = Competencia.fromString(row.competencia);
+      if (!c.ok) return err('mapper-invalid-competencia');
+      competencia = c.value;
+    }
+
     const draft: DraftDocument = {
       id,
       status: 'Draft',
@@ -333,6 +343,8 @@ export const mapRowToDocument = (
       description: row.description ?? null,
       approverRef,
       accessKey: row.accessKey ?? null,
+      competencia,
+      debitAccountRef: row.debitAccountRef ?? null,
     };
     return ok(draft);
   }
@@ -419,6 +431,13 @@ export const mapRowToDocument = (
     programRef = r.value;
   }
 
+  let competencia: Competencia.Competencia | null = null;
+  if (row.competencia != null) {
+    const c = Competencia.fromString(row.competencia);
+    if (!c.ok) return err('mapper-invalid-competencia');
+    competencia = c.value;
+  }
+
   // Núcleo compartilhado entre Open e Approved.
   const core: DocumentCore = {
     id,
@@ -446,6 +465,8 @@ export const mapRowToDocument = (
     issueDate: row.issueDate ?? null,
     approverRef,
     accessKey: row.accessKey ?? null,
+    competencia,
+    debitAccountRef: row.debitAccountRef ?? null,
   };
 
   if (status === 'Approved') {
@@ -585,6 +606,9 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
       dueDate: document.dueDate ?? null,
       issueDate: document.issueDate ?? null,
       accessKey: document.accessKey ?? null,
+      competencia:
+        document.competencia === null ? null : Competencia.toString(document.competencia),
+      debitAccountRef: document.debitAccountRef ?? null,
       readByOcr: false,
       ocrOriginalValue: null,
       divergenceDetected: false,
@@ -623,6 +647,8 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
     dueDate: core.dueDate,
     issueDate: core.issueDate,
     accessKey: core.accessKey,
+    competencia: core.competencia === null ? null : Competencia.toString(core.competencia),
+    debitAccountRef: core.debitAccountRef,
     readByOcr: false,
     ocrOriginalValue: null,
     divergenceDetected: false,

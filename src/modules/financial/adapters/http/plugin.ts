@@ -288,6 +288,8 @@ const financialRoutes =
             issueDate: body.issueDate !== undefined ? new Date(body.issueDate) : null,
             description: body.description ?? null,
             accessKey: body.accessKey ?? null,
+            competencia: body.competencia ?? null,
+            contaDebitoRef: body.contaDebitoRef ?? null,
           });
           if (!result.ok) return sendDomainError(reply, result.error);
           const idStr = String(result.value.documentId);
@@ -324,6 +326,8 @@ const financialRoutes =
           issueDate: body.issueDate !== undefined ? new Date(body.issueDate) : null,
           description: body.description ?? null,
           accessKey: body.accessKey ?? null,
+          competencia: body.competencia ?? null,
+          contaDebitoRef: body.contaDebitoRef ?? null,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         const idStr = String(result.value.documentId);

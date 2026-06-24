@@ -10,6 +10,7 @@ import {
 import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
 import type { FinancialTimelineEntry } from '#src/modules/financial/domain/timeline/types.ts';
 import { saveDocument } from '#src/modules/financial/application/use-cases/save-document.ts';
+import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
 import { createInMemoryContractCategorizationReadStore } from '#src/modules/contracts/public-api/index.ts';
 import { approveDocument } from '#src/modules/financial/application/use-cases/approve-document.ts';
 import { getDocumentTimeline } from '#src/modules/financial/application/use-cases/get-document-timeline.ts';
@@ -46,6 +47,7 @@ const wire = () => {
     repo,
     clock: CLOCK,
     contractCategorizationReader: createInMemoryContractCategorizationReadStore(),
+    cedenteAccountStore: createInMemoryCedenteAccountStore(),
   };
   return {
     save: saveDocument(deps),

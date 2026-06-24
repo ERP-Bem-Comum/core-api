@@ -368,6 +368,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
   // Deps base (repo + clock); os 6 use cases mutantes recebem `clock` para
   // carimbar `occurredAt` das entries da trilha (timeline-recording.ts).
   const deps = {
+    cedenteAccountStore: pools.cedenteStore,
     repo: pools.repo,
     clock,
     contractCategorizationReader: pools.contractCategorizationReader,
