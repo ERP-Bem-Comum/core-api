@@ -586,7 +586,10 @@ export const reconciliationPeriodIdParamSchema = z.object({
 });
 
 export const exportReconciliationQuerySchema = z.object({
-  format: z.enum(['ofx', 'csv']),
+  format: z.enum(['ofx', 'csv', 'csv-nibo']).meta({
+    description:
+      'Formato de exportação: ofx (padrão bancário), csv (genérico), csv-nibo (layout reimportável no Nibo)',
+  }),
 });
 
 // ─── Conta-cedente (019 — CRUD + encerrar) ─────────────────────────────────────

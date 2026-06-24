@@ -10,6 +10,11 @@
  */
 
 import { escapeCsvCell, BOM, LINE_TERMINATOR } from '#src/shared/utils/csv.ts';
+import type {
+  NiboExportRow,
+  NiboTransactionType,
+  NiboExporter,
+} from '#src/modules/financial/application/ports/nibo-exporter.ts';
 
 const SEP = ';';
 
@@ -32,27 +37,8 @@ const NIBO_HEADERS: readonly string[] = [
   'Anotação',
 ];
 
-export type NiboTransactionType = 'Lançamento' | 'Transferência';
-
-export type NiboExportRow = Readonly<{
-  transactionType: NiboTransactionType;
-  contactName: string;
-  description: string;
-  category: string;
-  /** Centavos com sinal: negativo = pagamento/despesa, positivo = recebimento/receita. */
-  valueCents: number;
-  dueDate: Date | null;
-  forecastDate: Date | null;
-  competencia: Date | null;
-  costCenter: string;
-  favorite: 'Sim' | 'Não';
-  contactType: string;
-  reference: string;
-  /** Apelido da conta; em Transferência = conta destino. */
-  account: string;
-  paymentDate: Date | null;
-  annotation: string;
-}>;
+// A projeção (NiboExportRow/NiboTransactionType) vive no port (application); o adapter só serializa.
+export type { NiboExportRow, NiboTransactionType };
 
 /** dd/MM/aaaa (UTC) — formato aceito pelo Nibo na importação CSV; `null` → célula vazia. */
 const fmtDate = (d: Date | null): string => {
@@ -90,3 +76,6 @@ export const toNiboCsv = (rows: readonly NiboExportRow[]): string => {
   const lines = [NIBO_HEADERS.join(SEP), ...rows.map(toNiboLine)];
   return BOM + lines.join(LINE_TERMINATOR) + LINE_TERMINATOR;
 };
+
+// Implementação do port NiboExporter (composição injeta no use-case).
+export const niboExporter: NiboExporter = { export: toNiboCsv };

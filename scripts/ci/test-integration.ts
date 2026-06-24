@@ -93,6 +93,8 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/financial/adapters/persistence/document-outbox-atomic.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/reconciliation-outbox-atomic.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/statement-period-outbox-atomic.drizzle-mysql.test.ts',
+    // #146 — PayableDocumentView (JOIN fin_payables × fin_documents para export CSV-Nibo)
+    'tests/modules/financial/adapters/persistence/payable-document-view.drizzle-mysql.test.ts',
     'tests/workers/supplier-view-projection/projection.integration.test.ts',
   ]),
   'etl:orchestrate': mysqlSuite({ PARTNERS_ETL_INTEGRATION: '1' }, [

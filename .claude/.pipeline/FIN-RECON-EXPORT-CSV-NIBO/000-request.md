@@ -45,12 +45,14 @@ Regra do `EXPORT-ABSTRACTION-DESIGN`: **serialização = util puro + adapter; pr
 **Feito (committado na branch `feat/146-recon-export-nibo`, sem PR):**
 - ✅ Serializador puro `src/modules/financial/adapters/export/nibo-csv.ts` (`toNiboCsv` + `NiboExportRow`). 15 col, `;`+BOM+CRLF, `dd/MM/aaaa`, valor com sinal **raw** (não passa por `escapeCsvCell` — é número controlado; neutralizar quebraria a reimportação Nibo). Texto via `escapeCsvCell` (anti-fórmula).
 - ✅ Teste `tests/modules/financial/adapters/export/nibo-csv.test.ts` (7/7 — CA1-CA4 de layout).
+- ✅ **Read in-module** `PayableDocumentView.findByPayableIds` (port + drizzle join `fin_payables×fin_documents` + in-memory) — 5 testes unit + 4 integração (`MYSQL_INTEGRATION=1`). Via agente `drizzle-orm-expert`.
+- ✅ **Port `NiboExporter`** (`application/ports/nibo-exporter.ts`): DTO `NiboExportRow` movido p/ application; `nibo-csv.ts` re-exporta e expõe `niboExporter` (respeita "application não importa adapters" — `.claude/rules/application.md`).
+- ✅ **Use-case** `export-reconciliation-nibo.ts` (9 deps; ports existentes + read novo) — 10 testes GREEN: A lançamento N:1, B manual #141, C transferência+aplicação #143, CA5 degradação, CA6 erros, Pending ignorada. typecheck+lint+format verdes; suíte 3239/0.
 
-**Pendente (gathering/endpoint — retomar daqui):**
-1. **Read novo (in-module)** `payableId → {documentId, supplierRef, documentNumber, dueDate, categoryRef, costCenterRef, competencia, payeeKind}` — join `fin_payables`+`fin_documents` (drizzle + in-memory). É o único surface novo; sem cross-módulo.
-2. **Use-case** (novo `export-reconciliation-nibo.ts` OU branch no existente): por transação conciliada → `getTransactionReconciliation` → ManualEntry (transfer/aplicação/diferença: dados no próprio `manualEntry`) OU títulos (item.payableId → read #1 → doc) → resolver nomes (categoria/centro via `listCategories`/`listCostCenters`; favorecido via `supplierViewStore.get`; conta via `cedenteStore.findById`) → `NiboExportRow[]` → `toNiboCsv`.
-3. **Formato `'csv-nibo'`** no `ReconciliationExportFormat` + rota `GET /reconciliation-periods/:id/export?format=csv-nibo` + composição.
-4. **Testes:** use-case (gathering: lançamento de título, manual classificado #141, transferência #143) + HTTP (header + 1 linha por tipo).
+**Pendente (endpoint — retomar daqui):**
+1. ~~Read in-module~~ ✅ · 2. ~~Use-case~~ ✅ (ver "Feito" acima).
+3. **Formato `'csv-nibo'`** + rota + composição — agentes `fastify-server-expert` (handler despacha por `format`; `csv-nibo` → `exportReconciliationNibo`) + `zod-expert` (estende `exportReconciliationQuerySchema` p/ `z.enum(['ofx','csv','csv-nibo'])`). Compor `niboExporter` + as 9 deps no `composition.ts`.
+4. **Testes HTTP** (`fastify.inject`): `format=csv-nibo` → 200, content-type `text/csv; charset=utf-8`, cabeçalho 15 colunas, 1 linha por tipo; `format` inválido → 400.
 
 Mapa `payeeKind → Tipo de contato`: supplier→Fornecedor, collaborator→Funcionário, financier→Sócio, act→Fornecedor (confirmar com P.O.).
 
