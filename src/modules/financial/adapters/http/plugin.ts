@@ -679,10 +679,27 @@ const financialRoutes =
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
         const body = req.body;
+        // exactOptionalPropertyTypes: monta a diferença omitindo chaves opcionais ausentes (não
+        // pode passar `categoryRef: undefined`). Mantém valueCents/treatment e só inclui o que veio.
+        const difference =
+          body.difference !== undefined
+            ? {
+                valueCents: body.difference.valueCents,
+                treatment: body.difference.treatment,
+                ...(body.difference.categoryRef !== undefined
+                  ? { categoryRef: body.difference.categoryRef }
+                  : {}),
+                ...(body.difference.costCenterRef !== undefined
+                  ? { costCenterRef: body.difference.costCenterRef }
+                  : {}),
+                ...(body.difference.note !== undefined ? { note: body.difference.note } : {}),
+              }
+            : undefined;
         const result = await deps.confirmReconciliation({
           transactionId: body.transactionId,
           payableIds: body.payableIds,
-          ...(body.difference !== undefined ? { difference: body.difference } : {}),
+          ...(difference !== undefined ? { difference } : {}),
+          ...(body.allocations !== undefined ? { allocations: body.allocations } : {}),
           reconciledBy: req.userId,
         });
         if (!result.ok) return sendDomainError(reply, result.error);

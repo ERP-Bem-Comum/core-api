@@ -1,5 +1,6 @@
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type { Reconciliation } from '#src/modules/financial/domain/reconciliation/types.ts';
+import { deriveReconciledStatus } from '#src/modules/financial/domain/payable/reconciled-status.ts';
 import type { ReconciliationId } from '#src/modules/financial/domain/reconciliation/reconciliation-id.ts';
 import type { ReconciliationEvent } from '#src/modules/financial/domain/reconciliation/events.ts';
 import type { StatementTransactionId } from '#src/modules/financial/domain/statement/statement-transaction-id.ts';
@@ -42,6 +43,22 @@ const flipTransaction = (
   return false;
 };
 
+// #141/#247: soma o valor conciliado contra um título em todas as conciliações ATIVAS (status Active).
+// Espelha o SELECT SUM(reconciled_value_cents) WHERE status='Active' do adapter Drizzle.
+const sumActiveReconciledFor = (
+  reconciliations: ReconciliationStore,
+  payableId: string,
+): number => {
+  let sum = 0;
+  for (const rec of reconciliations.values()) {
+    if (rec.status !== 'Active') continue;
+    for (const item of rec.items) {
+      if (String(item.payableId) === payableId) sum += item.reconciledValueCents;
+    }
+  }
+  return sum;
+};
+
 // Unit-of-work in-memory: espelha a atomicidade do adapter Drizzle sobre stores compartilhados.
 export const createInMemoryReconciliationRepository = (
   stores: InMemoryReconciliationStores,
@@ -79,12 +96,19 @@ export const createInMemoryReconciliationRepository = (
       if (!flipTransaction(statements, String(transactionId), 'Pending', 'Reconciled')) {
         return err('reconciliation-repository-failure');
       }
+      // #141/#247: o status do título é DERIVADO da soma das conciliações ATIVAS (incl. esta). Soma
+      // >= valor → Reconciled; > 0 e < valor → PartiallyReconciled (saldo aberto). Persiste a conciliação
+      // ANTES de somar para incluir os itens novos no acumulado.
+      reconciliations.set(String(reconciliation.id), reconciliation);
       for (const item of reconciliation.items) {
         const rec = payables.get(String(item.payableId));
-        if (rec !== undefined)
-          payables.set(String(item.payableId), { ...rec, status: 'Reconciled' });
+        if (rec === undefined) continue;
+        const reconciledSum = sumActiveReconciledFor(reconciliations, String(item.payableId));
+        payables.set(String(item.payableId), {
+          ...rec,
+          status: deriveReconciledStatus(rec.valueCents, reconciledSum),
+        });
       }
-      reconciliations.set(String(reconciliation.id), reconciliation);
       return ok(undefined);
     },
 
@@ -125,14 +149,22 @@ export const createInMemoryReconciliationRepository = (
     ): Promise<Result<void, ReconciliationRepositoryError>> => {
       const published = await appendOrFail(events);
       if (!published.ok) return published;
+      // Persiste o Undone ANTES de re-derivar: o acumulado ativo passa a excluir esta conciliação.
+      reconciliations.set(String(reconciliation.id), reconciliation);
+      // #141/#247: re-deriva o status do título pelas conciliações ativas restantes. Sem nenhuma
+      // ativa (soma 0) → volta a Paid; senão → Reconciled/PartiallyReconciled conforme a nova soma.
       for (const item of reconciliation.items) {
         const rec = payables.get(String(item.payableId));
-        if (rec?.status === 'Reconciled') {
-          payables.set(String(item.payableId), { ...rec, status: 'Paid' });
-        }
+        if (rec === undefined) continue;
+        if (rec.status !== 'Reconciled' && rec.status !== 'PartiallyReconciled') continue;
+        const reconciledSum = sumActiveReconciledFor(reconciliations, String(item.payableId));
+        payables.set(String(item.payableId), {
+          ...rec,
+          status:
+            reconciledSum <= 0 ? 'Paid' : deriveReconciledStatus(rec.valueCents, reconciledSum),
+        });
       }
       flipTransaction(statements, String(reconciliation.transactionId), 'Reconciled', 'Pending');
-      reconciliations.set(String(reconciliation.id), reconciliation);
       return ok(undefined);
     },
   };

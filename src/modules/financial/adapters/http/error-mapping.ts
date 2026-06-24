@@ -167,6 +167,8 @@ const SLUG_MESSAGES: Record<string, string> = {
   'title-not-paid': 'Só é possível conciliar títulos no estado Pago.',
   'reconciliation-not-balanced':
     'O fechamento não bate: a soma dos títulos mais a diferença deve igualar o valor da transação.',
+  'difference-sign-invalid':
+    'O sinal da diferença é incoerente com o tratamento: desconto/parcial devem ser negativos; juros/multa/tarifa, positivos.',
   'empty-reconciliation': 'Informe ao menos um título para conciliar.',
   'reconciliation-id-invalid': 'Identificador de conciliação inválido.',
   // Lançamento manual / lote (US5).

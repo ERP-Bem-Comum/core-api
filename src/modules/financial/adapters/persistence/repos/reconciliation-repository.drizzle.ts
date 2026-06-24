@@ -3,11 +3,12 @@
 // pela invariante de negócio. UPDATE condicional (`WHERE status=...`) + checagem de affectedRows blinda
 // contra corrida (o snapshot lido pelo use-case pode ter mudado). Boundary: try/catch → Result.
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type { Reconciliation } from '#src/modules/financial/domain/reconciliation/types.ts';
+import { deriveReconciledStatus } from '#src/modules/financial/domain/payable/reconciled-status.ts';
 import type { ReconciliationId } from '#src/modules/financial/domain/reconciliation/reconciliation-id.ts';
 import type { ReconciliationEvent } from '#src/modules/financial/domain/reconciliation/events.ts';
 import type { StatementTransactionId } from '#src/modules/financial/domain/statement/statement-transaction-id.ts';
@@ -56,12 +57,51 @@ export const createDrizzleReconciliationRepository = (
           const itemRows = itemsToRows(reconciliation);
           if (itemRows.length > 0) await tx.insert(finReconciliationItems).values(itemRows);
 
+          // #141/#247: diferença classificada → ManualEntry vinculado (decisão b). Partial não gera.
+          if (reconciliation.manualEntry !== null) {
+            await tx
+              .insert(finManualEntries)
+              .values(manualEntryToRow(reconciliation.id, reconciliation.manualEntry));
+          }
+
+          // #141/#247: status do título DERIVADO da soma das conciliações ATIVAS (incl. esta, já inserida).
+          // Soma >= valor → Reconciled; > 0 e < valor → PartiallyReconciled. Transição válida só a partir
+          // de Paid ou PartiallyReconciled (CA6: 2º parcial fecha um título já PartiallyReconciled).
           for (const item of reconciliation.items) {
+            const valueRows = await tx
+              .select({ value: finPayables.value })
+              .from(finPayables)
+              .where(eq(finPayables.id, String(item.payableId)))
+              .limit(1);
+            const value = valueRows[0]?.value;
+            if (value === undefined) throw new Error('payable-not-found');
+
+            const sumRows = await tx
+              .select({
+                total: sql<number>`coalesce(sum(${finReconciliationItems.reconciledValueCents}), 0)`,
+              })
+              .from(finReconciliationItems)
+              .innerJoin(
+                finReconciliations,
+                eq(finReconciliationItems.reconciliationId, finReconciliations.id),
+              )
+              .where(
+                and(
+                  eq(finReconciliationItems.payableId, String(item.payableId)),
+                  eq(finReconciliations.status, 'Active'),
+                ),
+              );
+            const reconciledSum = sumRows[0]?.total ?? 0;
+            const nextStatus = deriveReconciledStatus(value, reconciledSum);
+
             const res = await tx
               .update(finPayables)
-              .set({ status: 'Reconciled' })
+              .set({ status: nextStatus })
               .where(
-                and(eq(finPayables.id, String(item.payableId)), eq(finPayables.status, 'Paid')),
+                and(
+                  eq(finPayables.id, String(item.payableId)),
+                  inArray(finPayables.status, ['Paid', 'PartiallyReconciled']),
+                ),
               );
             if (affectedRowsOf(res) !== 1) throw new Error('payable-not-paid');
           }
@@ -200,14 +240,43 @@ export const createDrizzleReconciliationRepository = (
             })
             .where(eq(finReconciliations.id, String(reconciliation.id)));
 
+          // #141/#247: re-deriva o status do título pelas conciliações ATIVAS restantes (a desta já foi
+          // marcada Undone acima). Sem ativa (soma 0) → Paid; senão → Reconciled/PartiallyReconciled.
           for (const item of reconciliation.items) {
+            const valueRows = await tx
+              .select({ value: finPayables.value })
+              .from(finPayables)
+              .where(eq(finPayables.id, String(item.payableId)))
+              .limit(1);
+            const value = valueRows[0]?.value;
+            if (value === undefined) continue;
+
+            const sumRows = await tx
+              .select({
+                total: sql<number>`coalesce(sum(${finReconciliationItems.reconciledValueCents}), 0)`,
+              })
+              .from(finReconciliationItems)
+              .innerJoin(
+                finReconciliations,
+                eq(finReconciliationItems.reconciliationId, finReconciliations.id),
+              )
+              .where(
+                and(
+                  eq(finReconciliationItems.payableId, String(item.payableId)),
+                  eq(finReconciliations.status, 'Active'),
+                ),
+              );
+            const reconciledSum = sumRows[0]?.total ?? 0;
+            const nextStatus =
+              reconciledSum <= 0 ? 'Paid' : deriveReconciledStatus(value, reconciledSum);
+
             await tx
               .update(finPayables)
-              .set({ status: 'Paid' })
+              .set({ status: nextStatus })
               .where(
                 and(
                   eq(finPayables.id, String(item.payableId)),
-                  eq(finPayables.status, 'Reconciled'),
+                  inArray(finPayables.status, ['Reconciled', 'PartiallyReconciled']),
                 ),
               );
           }

@@ -47,9 +47,15 @@ export type ReconciliationItem = Readonly<{
 // (`Interest`/`Penalty`/`Fee`, transação > títulos); **negativo** para `Discount` (transação < títulos).
 // Invariante R3: `Σ itens.reconciledValueCents + difference.valueCents === transação`. O lançamento
 // contábil da diferença (LancamentoManual) é orquestrado pelo use-case no #123.
+// #141/#247: a diferença classificada (`Interest|Penalty|Fee|Discount`) pode carregar a classificação
+// contábil (centro de custo / categoria / observação) usada para gerar o `ManualEntry` vinculado. Campos
+// opcionais — `Partial` (saldo aberto) não gera lançamento. Reuso de `ManualEntry` (decisão b, DRY/YAGNI).
 export type Difference = Readonly<{
   valueCents: number;
   treatment: DifferenceTreatment;
+  categoryRef?: string;
+  costCenterRef?: string;
+  note?: string;
 }>;
 
 export type ReconciliationAudit = Readonly<{
@@ -72,12 +78,21 @@ export type Reconciliation = Readonly<{
   audit: ReconciliationAudit;
 }>;
 
+// Alocação parcial por título (#141/#247): valor REAL conciliado contra um título específico. Quando
+// ausente para um título, concilia o valor cheio (`payable.valueCents`) — back-compat (CA1).
+export type ReconciliationAllocation = Readonly<{
+  payableId: PayableId;
+  reconciledValueCents: number;
+}>;
+
 export type ConfirmInput = Readonly<{
   reconciliationId: ReconciliationId;
   transactionId: StatementTransactionId;
   transactionValueCents: number;
   payables: readonly PayableSnapshot[];
   difference?: Difference;
+  // #141/#247: alocação parcial por título. Ausente → conciliação cheia (CA1).
+  allocations?: readonly ReconciliationAllocation[];
   reconciledBy: string;
   occurredAt: Date;
 }>;
