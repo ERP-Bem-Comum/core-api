@@ -219,33 +219,49 @@ type Stores = Readonly<{
   shutdown: () => Promise<void>;
 }>;
 
-// Storage da foto (spec 005 US6): S3/MinIO se as env S3_* estiverem completas; senao in-memory
-// (fallback SEGURO p/ dev/test sem storage — espelha o no-op do mailer). ADR-0019.
+// Storage da foto (spec 005 US6): S3/MinIO se S3_ENDPOINT + S3_BUCKET presentes; senao in-memory
+// (fallback SEGURO p/ dev/test sem storage). ADR-0019.
+// Credenciais: ambas presentes -> estaticas (dev/MinIO/Magalu); ambas ausentes -> provider chain
+// (IAM Role ECS/IMDS — prod AWS). XOR (uma sem a outra) -> erro de config (fall-through p/ in-memory
+// com aviso de config invalida — fail-safe conservador).
 const buildProfilePhotoStorage = (env: Readonly<NodeJS.ProcessEnv>): ProfilePhotoStorage => {
   const endpoint = env['S3_ENDPOINT'];
   const region = env['S3_REGION'];
+  const bucket = env['S3_BUCKET'];
+
+  // Minimo: endpoint + bucket (region tem default us-east-1 no SDK).
+  if (
+    endpoint === undefined ||
+    endpoint.length === 0 ||
+    bucket === undefined ||
+    bucket.length === 0
+  ) {
+    return makeInMemoryProfilePhotoStorage();
+  }
+
   const accessKeyId = env['S3_ACCESS_KEY_ID'];
   const secretAccessKey = env['S3_SECRET_ACCESS_KEY'];
-  const bucket = env['S3_BUCKET'];
-  if (
-    endpoint !== undefined &&
-    region !== undefined &&
-    accessKeyId !== undefined &&
-    secretAccessKey !== undefined &&
-    bucket !== undefined &&
-    endpoint.length > 0 &&
-    bucket.length > 0
-  ) {
-    return createS3ProfilePhotoStorage({
-      endpoint,
-      region,
-      accessKeyId,
-      secretAccessKey,
-      bucket,
-      forcePathStyle: env['S3_FORCE_PATH_STYLE'] !== 'false',
-    });
+  const hasKey = accessKeyId !== undefined && accessKeyId.length > 0;
+  const hasSecret = secretAccessKey !== undefined && secretAccessKey.length > 0;
+
+  // XOR: config pela metade e erro — fall-safe p/ in-memory em vez de montar credencial errada.
+  if (hasKey !== hasSecret) {
+    return makeInMemoryProfilePhotoStorage();
   }
-  return makeInMemoryProfilePhotoStorage();
+
+  // Credenciais: ambas presentes -> estaticas; ambas ausentes -> provider chain.
+  const credentialFields: Readonly<{
+    accessKeyId?: string;
+    secretAccessKey?: string;
+  }> = hasKey && hasSecret ? { accessKeyId, secretAccessKey } : {};
+
+  return createS3ProfilePhotoStorage({
+    endpoint,
+    region: region ?? 'us-east-1',
+    ...credentialFields,
+    bucket,
+    forcePathStyle: env['S3_FORCE_PATH_STYLE'] !== 'false',
+  });
 };
 
 const loadOrGenerateKeys = async (

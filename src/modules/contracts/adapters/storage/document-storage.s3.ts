@@ -52,10 +52,19 @@ export const createS3DocumentStorage = (config: S3StorageConfig): DocumentStorag
   const client = new S3Client({
     endpoint: config.endpoint,
     region: config.region,
-    credentials: {
-      accessKeyId: config.accessKeyId,
-      secretAccessKey: config.secretAccessKey,
-    },
+    // Credenciais injetadas apenas quando presentes (dev/MinIO/Magalu).
+    // Ausentes -> SDK resolve via provider chain (IAM Role ECS/IMDS — prod AWS).
+    // Invariante XOR garantido pelo parser (parseAwsS3Env): se accessKeyId esta presente,
+    // secretAccessKey tambem esta — o ?? '' nunca e acionado em runtime seguro.
+    ...(config.accessKeyId !== undefined
+      ? {
+          credentials: {
+            accessKeyId: config.accessKeyId,
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+            secretAccessKey: config.secretAccessKey!,
+          },
+        }
+      : {}),
     forcePathStyle: config.forcePathStyle,
   });
 

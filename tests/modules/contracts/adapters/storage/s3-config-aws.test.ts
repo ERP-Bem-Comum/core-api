@@ -1,9 +1,9 @@
 /**
- * W0 (RED) - Tests para awsS3Config + parseAwsS3Env.
+ * Tests para awsS3Config + parseAwsS3Env (incluindo suporte a IAM Role — issue #244).
  *
- * Ticket: CTR-STORAGE-S3-ADAPTER.
+ * Ticket: CTR-STORAGE-S3-ADAPTER / IAM-ROLE-S3.
  *
- * Cobre CA-T15..T22:
+ * Cobre CA-T15..T22 (originais) + T23..T25 (IAM Role):
  *   T15 - parseAwsS3Env com env valido retorna ok(S3StorageConfig) defaults inferidos
  *   T16 - S3_ENDPOINT contendo 'localhost' infere forcePathStyle=true
  *   T17 - S3_FORCE_PATH_STYLE='true' override explicito
@@ -12,8 +12,9 @@
  *   T20 - S3_ACCESS_KEY_ID ausente retorna err missing-env field S3_ACCESS_KEY_ID
  *   T21 - S3_BUCKET invalido (UPPERCASE) retorna err invalid-bucket
  *   T22 - awsS3Config(input) direto (sem env) com endpoint customizado
- *
- * Estes tests DEVEM FALHAR em W0 - s3-config-aws.ts ainda nao existe.
+ *   T23 - ambos ausentes (IAM Role) -> config sem accessKeyId/secretAccessKey
+ *   T24 - apenas accessKeyId presente (XOR) -> err missing-env secretAccessKey
+ *   T25 - apenas secretAccessKey presente (XOR) -> err missing-env accessKeyId
  *
  * ASCII puro.
  */
@@ -177,5 +178,75 @@ describe('awsS3Config', () => {
     assert.equal(config.region, 'us-east-1');
     assert.equal(config.bucket, bucket);
     assert.equal(config.forcePathStyle, true, 'localhost -> forcePathStyle inferido true');
+  });
+});
+
+describe('parseAwsS3Env — IAM Role (issue #244)', () => {
+  it('CA-T23: ambos ausentes -> ok sem credenciais (provider chain)', () => {
+    // Arrange — prod-AWS-ECS: sem S3_ACCESS_KEY_ID nem S3_SECRET_ACCESS_KEY
+    const env: NodeJS.ProcessEnv = {
+      S3_REGION: 'us-east-1',
+      S3_BUCKET: 'contracts-documents',
+    };
+
+    // Act
+    const r = parseAwsS3Env(env);
+
+    // Assert
+    assert.equal(r.ok, true, `esperado ok; obtido: ${JSON.stringify(r)}`);
+    if (r.ok) {
+      assert.equal(r.value.accessKeyId, undefined, 'sem credencial estatica em prod IAM Role');
+      assert.equal(r.value.secretAccessKey, undefined, 'sem credencial estatica em prod IAM Role');
+    }
+  });
+
+  it('CA-T24: apenas S3_ACCESS_KEY_ID presente (XOR) -> err missing-env S3_SECRET_ACCESS_KEY', () => {
+    // Arrange — config pela metade (erro de configuracao, nao IAM Role)
+    const env: NodeJS.ProcessEnv = {
+      S3_REGION: 'us-east-1',
+      S3_BUCKET: 'contracts-documents',
+      S3_ACCESS_KEY_ID: 'AKIA-FAKE',
+      // S3_SECRET_ACCESS_KEY ausente intencionalmente
+    };
+
+    // Act
+    const r = parseAwsS3Env(env);
+
+    // Assert
+    assert.equal(r.ok, false);
+    if (!r.ok && r.error.tag === 'missing-env') {
+      assert.equal(
+        r.error.field,
+        'S3_SECRET_ACCESS_KEY',
+        'XOR: access key sem secret e erro de config',
+      );
+    } else {
+      assert.fail(`esperado missing-env S3_SECRET_ACCESS_KEY; obtido: ${JSON.stringify(r)}`);
+    }
+  });
+
+  it('CA-T25: apenas S3_SECRET_ACCESS_KEY presente (XOR) -> err missing-env S3_ACCESS_KEY_ID', () => {
+    // Arrange — config pela metade (erro de configuracao, nao IAM Role)
+    const env: NodeJS.ProcessEnv = {
+      S3_REGION: 'us-east-1',
+      S3_BUCKET: 'contracts-documents',
+      // S3_ACCESS_KEY_ID ausente intencionalmente
+      S3_SECRET_ACCESS_KEY: 'sekret-fake',
+    };
+
+    // Act
+    const r = parseAwsS3Env(env);
+
+    // Assert
+    assert.equal(r.ok, false);
+    if (!r.ok && r.error.tag === 'missing-env') {
+      assert.equal(
+        r.error.field,
+        'S3_ACCESS_KEY_ID',
+        'XOR: secret sem access key e erro de config',
+      );
+    } else {
+      assert.fail(`esperado missing-env S3_ACCESS_KEY_ID; obtido: ${JSON.stringify(r)}`);
+    }
   });
 });
