@@ -163,7 +163,7 @@ export const finDocuments = mysqlTable(
     ),
     check(
       'fin_documents_status_chk',
-      sql`${t.status} IN ('Draft','Open','Approved','Transmitted','Refused','Paid','Reconciled')`,
+      sql`${t.status} IN ('Draft','Open','Approved','Transmitted','Refused','Paid','PartiallyReconciled','Reconciled')`,
     ),
     // Consistência monetária: valores >= 0 (domain/kernel/money.ts rejeita negativos; defesa).
     check('fin_documents_gross_value_chk', sql`${t.grossValue} IS NULL OR ${t.grossValue} >= 0`),
@@ -238,7 +238,7 @@ export const finPayables = mysqlTable(
     ),
     check(
       'fin_payables_status_chk',
-      sql`${t.status} IN ('Draft','Open','Approved','Transmitted','Refused','Paid','Reconciled')`,
+      sql`${t.status} IN ('Draft','Open','Approved','Transmitted','Refused','Paid','PartiallyReconciled','Reconciled')`,
     ),
     check(
       'fin_payables_payment_method_chk',

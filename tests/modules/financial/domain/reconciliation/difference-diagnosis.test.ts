@@ -8,8 +8,8 @@ import * as StatementTransactionId from '#src/modules/financial/domain/statement
 import type { DocumentStatus } from '#src/modules/financial/domain/document/types.ts';
 import { confirm } from '#src/modules/financial/domain/reconciliation/reconciliation.ts';
 
-// W0-DIAGNÓSTICO #141: roda os 4 CAs da issue contra o código ATUAL para medir o delta.
-// CA1/CA2/CA3-classificação devem passar (já modelados); CA4 (saldo parcial) deve FALHAR.
+// #141/#247: suíte de regressão dos 4 CAs da issue contra o NOVO comportamento (conciliação parcial).
+// CA1/CA2/CA3-classificação preservados; CA4 agora concilia o valor REAL alocado (saldo parcial).
 const ACTOR = '11111111-1111-4111-8111-111111111111';
 const WHEN = new Date('2024-05-19T09:00:00.000Z');
 
@@ -24,10 +24,15 @@ type Difference = Readonly<{
   treatment: 'Interest' | 'Penalty' | 'Discount' | 'Fee' | 'Partial';
 }>;
 
+type Snap = ReturnType<typeof snap>;
+
 const input = (
-  payables: readonly ReturnType<typeof snap>[],
+  payables: readonly Snap[],
   transactionValueCents: number,
-  difference?: Difference,
+  opts?: {
+    difference?: Difference;
+    allocations?: readonly { payableId: Snap['id']; reconciledValueCents: number }[];
+  },
 ) => ({
   reconciliationId: ReconciliationId.generate(),
   transactionId: StatementTransactionId.generate(),
@@ -35,7 +40,8 @@ const input = (
   payables,
   reconciledBy: ACTOR,
   occurredAt: WHEN,
-  ...(difference !== undefined ? { difference } : {}),
+  ...(opts?.difference !== undefined ? { difference: opts.difference } : {}),
+  ...(opts?.allocations !== undefined ? { allocations: opts.allocations } : {}),
 });
 
 // Suíte de CARACTERIZAÇÃO do estado atual (Feathers): trava o que já funciona (CA1/CA2/CA3-classif)
@@ -54,7 +60,9 @@ describe('financial/domain/reconciliation — #141 caracterização (verificar+r
   });
 
   it('Issue-CA3 (classificação): diferença Desconto classificada → Partial + treatment preservado', () => {
-    const r = confirm(input([snap(8000)], 7600, { valueCents: -400, treatment: 'Discount' }));
+    const r = confirm(
+      input([snap(8000)], 7600, { difference: { valueCents: -400, treatment: 'Discount' } }),
+    );
     assert.equal(r.ok, true);
     if (r.ok) {
       assert.equal(r.value.reconciliation.type, 'Partial');
@@ -62,12 +70,17 @@ describe('financial/domain/reconciliation — #141 caracterização (verificar+r
     }
   });
 
-  it('Issue-CA4 PENDENTE (caracteriza o atual): título 8000, pago 6000 → hoje concilia INTEGRAL (8000)', () => {
-    // DELTA #141: o CA4 da issue exige conciliar só o valor pago (6000) e manter 2000 do título aberto.
-    // Hoje o domínio concilia o título integral (8000) — comportamento caracterizado abaixo; o saldo
-    // parcial é trabalho de domínio M-L (modelar saldo/estado do título). Ver REPORT do W0 + #141.
-    const r = confirm(input([snap(8000)], 6000, { valueCents: -2000, treatment: 'Partial' }));
+  it('Issue-CA4 (NOVO): título 8000, pago 6000 (Partial) → concilia o valor REAL alocado (6000)', () => {
+    // #247: o CA4 agora concilia só o valor pago (6000); o saldo aberto (2000) deriva o status
+    // PartiallyReconciled do título na persistência. reconciledValueCents reflete o alocado.
+    const p = snap(8000);
+    const r = confirm(
+      input([p], 6000, {
+        difference: { valueCents: -2000, treatment: 'Partial' },
+        allocations: [{ payableId: p.id, reconciledValueCents: 6000 }],
+      }),
+    );
     assert.equal(r.ok, true);
-    if (r.ok) assert.equal(r.value.reconciliation.items[0]?.reconciledValueCents, 8000);
+    if (r.ok) assert.equal(r.value.reconciliation.items[0]?.reconciledValueCents, 6000);
   });
 });

@@ -400,10 +400,25 @@ export type StatementTransactionsResponseDto = z.infer<typeof statementTransacti
 export const confirmReconciliationBodySchema = z.object({
   transactionId: z.uuid(),
   payableIds: z.array(z.uuid()).min(1).max(100),
+  // #141/#247: alocação parcial por título — valor REAL conciliado (saldo aberto deriva PartiallyReconciled).
+  allocations: z
+    .array(
+      z.object({
+        payableId: z.uuid(),
+        reconciledValueCents: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+      }),
+    )
+    .min(1)
+    .max(100)
+    .optional(),
   difference: z
     .object({
       valueCents: z.number().int().min(-Number.MAX_SAFE_INTEGER).max(Number.MAX_SAFE_INTEGER),
       treatment: z.enum(['Interest', 'Penalty', 'Discount', 'Fee', 'Partial']),
+      // #141/#247: classificação contábil da diferença → ManualEntry vinculado (Partial não gera).
+      categoryRef: z.string().min(1).max(64).optional(),
+      costCenterRef: z.string().min(1).max(64).optional(),
+      note: z.string().min(1).max(500).optional(),
     })
     .optional(),
 });

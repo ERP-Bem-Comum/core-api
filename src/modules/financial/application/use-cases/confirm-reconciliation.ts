@@ -4,8 +4,13 @@ import type { Clock } from '../../../../shared/ports/clock.ts';
 import * as ReconciliationId from '../../domain/reconciliation/reconciliation-id.ts';
 import type { ReconciliationId as ReconciliationIdT } from '../../domain/reconciliation/reconciliation-id.ts';
 import { confirm } from '../../domain/reconciliation/reconciliation.ts';
+import * as PayableId from '../../domain/shared/payable-id.ts';
 import type { ReconciliationError } from '../../domain/reconciliation/errors.ts';
-import type { Difference, ReconciliationType } from '../../domain/reconciliation/types.ts';
+import type {
+  Difference,
+  ReconciliationAllocation,
+  ReconciliationType,
+} from '../../domain/reconciliation/types.ts';
 import * as CedenteAccountId from '../../domain/cedente/cedente-account-id.ts';
 import { isClosed } from '../../domain/cedente/cedente-account.ts';
 import type {
@@ -38,10 +43,17 @@ export type ConfirmReconciliationDeps = Readonly<{
   clock: Pick<Clock, 'now'>;
 }>;
 
+// #141/#247: alocação parcial por título vinda da borda (payableId como string; mapeado p/ branded).
+export type ConfirmReconciliationAllocationInput = Readonly<{
+  payableId: string;
+  reconciledValueCents: number;
+}>;
+
 export type ConfirmReconciliationInput = Readonly<{
   transactionId: string;
   payableIds: readonly string[];
   difference?: Difference;
+  allocations?: readonly ConfirmReconciliationAllocationInput[];
   reconciledBy: string;
 }>;
 
@@ -64,6 +76,21 @@ export type ConfirmReconciliationError =
   | BankStatementRepositoryError
   | CedenteAccountStoreError
   | ReconciliationPeriodStoreError;
+
+// #141/#247: traduz a alocação parcial da borda (payableId string) em `ReconciliationAllocation`
+// (PayableId branded). Ausente → undefined (conciliação cheia). Id malformado → payable-not-found.
+const mapAllocations = (
+  raw: readonly ConfirmReconciliationAllocationInput[] | undefined,
+): Result<readonly ReconciliationAllocation[] | undefined, 'payable-not-found'> => {
+  if (raw === undefined) return ok(undefined);
+  const mapped: ReconciliationAllocation[] = [];
+  for (const a of raw) {
+    const pid = PayableId.rehydrate(a.payableId);
+    if (!pid.ok) return err('payable-not-found');
+    mapped.push({ payableId: pid.value, reconciledValueCents: a.reconciledValueCents });
+  }
+  return ok(mapped);
+};
 
 // Imperative Shell (validar → fetch → domain → persist → publish). Concilia sob comando explícito (R1):
 // guard FR-015 (conta encerrada) → domínio confirm (R2/R3) → unit-of-work atômico no repo → evento.
@@ -96,12 +123,18 @@ export const confirmReconciliation =
     if (!snapsR.ok) return err(snapsR.error);
     if (snapsR.value.length !== input.payableIds.length) return err('payable-not-found');
 
+    // #141/#247: mapeia a alocação parcial (payableId string → branded). Id malformado → payable-not-found.
+    const allocationsR = mapAllocations(input.allocations);
+    if (!allocationsR.ok) return err(allocationsR.error);
+    const allocations = allocationsR.value;
+
     const confirmed = confirm({
       reconciliationId: ReconciliationId.generate(),
       transactionId: transaction.id,
       transactionValueCents: transaction.valueCents,
       payables: snapsR.value,
       ...(input.difference !== undefined ? { difference: input.difference } : {}),
+      ...(allocations !== undefined ? { allocations } : {}),
       reconciledBy: input.reconciledBy,
       occurredAt: deps.clock.now(),
     });

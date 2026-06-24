@@ -27,6 +27,8 @@ export type PaymentMethod =
 
 // 7 valores desde já (ADR-0005): só Draft/Open/Approved têm transição nesta fatia;
 // Transmitted/Refused/Paid/Reconciled são reservados (sem transição).
+// PartiallyReconciled (#141/#247): título com pagamento parcial conciliado (saldo aberto remanescente);
+// status DERIVADO da soma conciliada (ver domain/payable/reconciled-status.ts).
 export type DocumentStatus =
   | 'Draft'
   | 'Open'
@@ -34,6 +36,7 @@ export type DocumentStatus =
   | 'Transmitted'
   | 'Refused'
   | 'Paid'
+  | 'PartiallyReconciled'
   | 'Reconciled';
 
 // Tipo do favorecido (#90): o documento aponta para um parceiro (`supplier` — ref por formato, sem
