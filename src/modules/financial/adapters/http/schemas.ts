@@ -775,6 +775,8 @@ export const documentPayableParamsSchema = z.object({
 
 export const manualPaymentBodySchema = z.object({
   version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  // #232: data de pagamento (saída bancária, retroativa). Ausente → backend usa `clock.now()`.
+  paidAt: z.iso.date().optional(),
   // #223: motivo opcional (a trilha já captura quem+quando).
   reason: z.string().min(1).max(500).optional(),
 });

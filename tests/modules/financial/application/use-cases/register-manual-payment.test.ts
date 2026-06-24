@@ -12,6 +12,7 @@ import * as Document from '#src/modules/financial/domain/document/document.ts';
 import { createInMemoryDocumentRepository } from '#src/modules/financial/adapters/persistence/repos/document-repository.in-memory.ts';
 import type { DocumentRepository } from '#src/modules/financial/domain/document/repository.ts';
 import { registerManualPayment } from '#src/modules/financial/application/use-cases/register-manual-payment.ts';
+import type { DocumentEvent } from '#src/modules/financial/domain/document/events.ts';
 
 const SUP = '11111111-1111-4111-8111-111111111111';
 const USER = '22222222-2222-4222-8222-222222222222';
@@ -118,5 +119,73 @@ describe('financial/application — registerManualPayment (#223)', () => {
     });
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'payable-not-found');
+  });
+});
+
+// #232 — a baixa manual deve aceitar `paidAt` (data da saída bancária, retroativa) no command,
+// com fallback `clock.now()` e rejeição de data futura. Ancora o match da conciliação.
+describe('financial/application — registerManualPayment paidAt (#232)', () => {
+  const captureEvents = (
+    repo: DocumentRepository,
+  ): { repo: DocumentRepository; events: DocumentEvent[] } => {
+    const events: DocumentEvent[] = [];
+    const spy: DocumentRepository = {
+      ...repo,
+      save: (agg, entries, expectedVersion, evs) => {
+        if (evs) events.push(...evs);
+        return repo.save(agg, entries, expectedVersion, evs);
+      },
+    };
+    return { repo: spy, events };
+  };
+
+  it('CA1: `paidAt` retroativo do command é gravado no evento PayableManuallyPaid', async () => {
+    const base = createInMemoryDocumentRepository();
+    const seed = await seedApproved(base);
+    const { repo, events } = captureEvents(base);
+    const r = await registerManualPayment({ repo, clock: CLOCK })({
+      documentId: seed.documentId,
+      payableId: seed.parentId,
+      paidBy: USER,
+      expectedVersion: 0,
+      paidAt: '2026-07-12',
+    });
+    assert.equal(isOk(r), true, JSON.stringify(r));
+    const ev = events.find((e) => e.type === 'PayableManuallyPaid');
+    assert.ok(ev, 'evento PayableManuallyPaid emitido');
+    if (ev?.type === 'PayableManuallyPaid') {
+      assert.equal(ev.paidAt.toISOString().slice(0, 10), '2026-07-12');
+    }
+  });
+
+  it('CA2: sem `paidAt` → fallback clock.now()', async () => {
+    const base = createInMemoryDocumentRepository();
+    const seed = await seedApproved(base);
+    const { repo, events } = captureEvents(base);
+    const r = await registerManualPayment({ repo, clock: CLOCK })({
+      documentId: seed.documentId,
+      payableId: seed.parentId,
+      paidBy: USER,
+      expectedVersion: 0,
+    });
+    assert.equal(isOk(r), true, JSON.stringify(r));
+    const ev = events.find((e) => e.type === 'PayableManuallyPaid');
+    if (ev?.type === 'PayableManuallyPaid') {
+      assert.equal(ev.paidAt.toISOString(), '2026-07-15T12:00:00.000Z');
+    }
+  });
+
+  it('CA3: `paidAt` futura → paid-at-in-future', async () => {
+    const repo = createInMemoryDocumentRepository();
+    const seed = await seedApproved(repo);
+    const r = await registerManualPayment({ repo, clock: CLOCK })({
+      documentId: seed.documentId,
+      payableId: seed.parentId,
+      paidBy: USER,
+      expectedVersion: 0,
+      paidAt: '2026-08-01',
+    });
+    assert.equal(isErr(r), true);
+    if (!r.ok) assert.equal(r.error, 'paid-at-in-future');
   });
 });

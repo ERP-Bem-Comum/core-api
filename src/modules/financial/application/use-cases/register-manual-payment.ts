@@ -25,6 +25,8 @@ export type RegisterManualPaymentCommand = Readonly<{
   paidBy: string;
   // Optimistic lock (FR-009): versão lida pelo cliente; repassada ao `repo.save`.
   expectedVersion: number;
+  // #232: data de pagamento (saída bancária, geralmente retroativa). ISO `YYYY-MM-DD`. Ausente → `clock.now()`.
+  paidAt?: string;
   reason?: string;
 }>;
 
@@ -33,7 +35,8 @@ export type RegisterManualPaymentError =
   | DocumentRepositoryError
   | DocumentId.DocumentIdError
   | PayableId.PayableIdError
-  | UserRef.UserRefError;
+  | UserRef.UserRefError
+  | 'paid-at-in-future';
 
 export const registerManualPayment =
   (deps: RegisterManualPaymentDeps) =>
@@ -44,6 +47,12 @@ export const registerManualPayment =
     if (!payableId.ok) return err(payableId.error);
     const by = UserRef.rehydrate(cmd.paidBy);
     if (!by.ok) return err(by.error);
+
+    // #232: usa a data informada (saída bancária, retroativa) ou agora; nunca futura.
+    const at = cmd.paidAt !== undefined ? new Date(cmd.paidAt) : deps.clock.now();
+    if (cmd.paidAt !== undefined && at.getTime() > deps.clock.now().getTime()) {
+      return err('paid-at-in-future');
+    }
 
     const found = await deps.repo.findById(id.value);
     if (!found.ok) return err(found.error);
@@ -57,7 +66,7 @@ export const registerManualPayment =
       payables: found.value.payables,
       payableId: payableId.value,
       by: by.value,
-      at: deps.clock.now(),
+      at,
       ...(cmd.reason !== undefined ? { reason: cmd.reason } : {}),
     });
     if (!paid.ok) return err(paid.error);
