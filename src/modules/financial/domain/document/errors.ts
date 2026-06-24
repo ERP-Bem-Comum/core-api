@@ -10,4 +10,6 @@ export type DocumentError =
   | 'payable-not-approved'
   // #115: chave de acesso da DANFE.
   | 'invalid-access-key'
-  | 'access-key-required-for-danfe';
+  | 'access-key-required-for-danfe'
+  // #197: competência contábil.
+  | 'invalid-competencia';

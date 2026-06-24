@@ -14,6 +14,7 @@ import type {
   OutboxAppendError,
 } from '#src/modules/financial/application/ports/outbox.ts';
 import { saveDocument } from '#src/modules/financial/application/use-cases/save-document.ts';
+import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
 import { cancelDocument } from '#src/modules/financial/application/use-cases/cancel-document.ts';
 import { createInMemoryContractCategorizationReadStore } from '#src/modules/contracts/public-api/index.ts';
 
@@ -88,6 +89,7 @@ describe('financial/application — atomicidade documento+outbox (in-memory)', (
       repo,
       clock: CLOCK,
       contractCategorizationReader: emptyReader,
+      cedenteAccountStore: createInMemoryCedenteAccountStore(),
     })(nfseCommand());
 
     assert.equal(isErr(result), true);

@@ -5,6 +5,7 @@ import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
 import type { SupplierRef } from '#src/modules/partners/public-api/refs.ts';
 import * as PayableId from '../shared/payable-id.ts';
 import type { DocumentId } from '../shared/document-id.ts';
+import type { Competencia } from './competencia.ts';
 import type {
   ContractRef,
   BudgetPlanRef,
@@ -55,6 +56,8 @@ export type CreateDocumentInput = Readonly<{
   issueDate?: Date | null; // #163: data de emissão (opcional no create)
   approverRef?: UserRef | null; // #148: aprovador pretendido (opcional)
   accessKey?: string | null; // #115: chave de acesso (DANFE); já normalizada na borda
+  competencia?: Competencia | null; // #197: mês contábil (VO já validado)
+  debitAccountRef?: string | null; // #197: conta-débito (validada by-identity no use-case)
 }>;
 
 export type CreateDocumentOutput = Readonly<{
@@ -178,6 +181,8 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     issueDate: input.issueDate ?? null,
     approverRef: input.approverRef ?? null,
     accessKey: input.accessKey ?? null,
+    competencia: input.competencia ?? null,
+    debitAccountRef: input.debitAccountRef ?? null,
     status: 'Open',
   });
 
@@ -453,6 +458,8 @@ export const undoApproval = (
     issueDate: d.issueDate,
     approverRef: d.approverRef,
     accessKey: d.accessKey,
+    competencia: d.competencia,
+    debitAccountRef: d.debitAccountRef,
     status: 'Open',
   });
 
@@ -514,6 +521,8 @@ export type SaveDraftInput = Readonly<{
   issueDate?: Date | null; // #163
   approverRef?: UserRef | null; // #148
   accessKey?: string | null; // #115
+  competencia?: Competencia | null; // #197
+  debitAccountRef?: string | null; // #197
 }>;
 
 export type SaveDraftOutput = Readonly<{
@@ -549,6 +558,8 @@ export const saveDraft = (input: SaveDraftInput): Result<SaveDraftOutput, Docume
     issueDate: input.issueDate ?? null,
     approverRef: input.approverRef ?? null,
     accessKey: input.accessKey ?? null,
+    competencia: input.competencia ?? null,
+    debitAccountRef: input.debitAccountRef ?? null,
   });
   const events: readonly DocumentEvent[] = [{ type: 'DocumentDraftSaved', documentId: input.id }];
   return ok(immutable<SaveDraftOutput>({ document, events }));

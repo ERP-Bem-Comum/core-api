@@ -106,6 +106,9 @@ export const createDocumentBodySchema = z.object({
     .string()
     .transform((s) => s.replace(/\D/g, ''))
     .optional(),
+  // #197: competência (YYYY-MM, validada no domínio via VO) + conta-débito (ref → fin_cedente_accounts).
+  competencia: z.string().optional(),
+  contaDebitoRef: z.uuid().optional(),
   asDraft: z.boolean().default(false),
 });
 
@@ -209,6 +212,8 @@ export const documentResponseSchema = z.object({
   issueDate: z.string().nullable(), // #163: data de emissão
   description: z.string().nullable(),
   accessKey: z.string().nullable(), // #115: chave de acesso (DANFE)
+  competencia: z.string().nullable(), // #197: competência YYYY-MM
+  contaDebitoRef: z.string().nullable(), // #197: conta-débito
   payables: z.array(payableResponseSchema),
   version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).meta({
     description:

@@ -15,6 +15,7 @@ import * as DocumentId from '../../domain/shared/document-id.ts';
 import * as Retention from '../../domain/shared/retention.ts';
 import * as RegisteredTax from '../../domain/shared/registered-tax.ts';
 import * as Document from '../../domain/document/document.ts';
+import * as Competencia from '../../domain/document/competencia.ts';
 import type { DocumentType, PaymentMethod, PayeeKind } from '../../domain/document/types.ts';
 import type { DocumentError } from '../../domain/document/errors.ts';
 import type {
@@ -53,6 +54,8 @@ export type SaveDraftCommand = Readonly<{
   description?: string | null;
   approverRef?: string | null; // #148
   accessKey?: string | null; // #115
+  competencia?: string | null; // #197
+  contaDebitoRef?: string | null; // #197
 }>;
 
 export type SaveDraftOutput = Readonly<{ documentId: DocumentId.DocumentId }>;
@@ -123,6 +126,12 @@ export const saveDraft =
     }
 
     const id = DocumentId.generate();
+    let competencia: Competencia.Competencia | null = null;
+    if (cmd.competencia != null) {
+      const c = Competencia.fromString(cmd.competencia);
+      if (!c.ok) return err(c.error);
+      competencia = c.value;
+    }
     // exactOptionalPropertyTypes: só incluir chave quando o valor é definido (não undefined).
     // Campos que são `string | null | undefined` no command devem omitir a chave se undefined,
     // pois SaveDraftInput tipifica cada campo como `?: T | null` (undefined implícito via ?).
@@ -151,6 +160,8 @@ export const saveDraft =
       ...(cmd.description !== undefined ? { description: cmd.description } : {}),
       ...(approverRef.value !== null ? { approverRef: approverRef.value } : {}),
       ...(cmd.accessKey != null ? { accessKey: cmd.accessKey } : {}),
+      ...(competencia !== null ? { competencia } : {}),
+      ...(cmd.contaDebitoRef != null ? { debitAccountRef: cmd.contaDebitoRef } : {}),
     });
     if (!draft.ok) return err(draft.error);
 

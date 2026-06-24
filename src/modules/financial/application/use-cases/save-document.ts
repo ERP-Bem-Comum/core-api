@@ -15,6 +15,8 @@ import * as DocumentId from '../../domain/shared/document-id.ts';
 import * as Retention from '../../domain/shared/retention.ts';
 import * as RegisteredTax from '../../domain/shared/registered-tax.ts';
 import * as Document from '../../domain/document/document.ts';
+import * as Competencia from '../../domain/document/competencia.ts';
+import * as CedenteAccountId from '../../domain/cedente/cedente-account-id.ts';
 import type { DocumentType, PaymentMethod, PayeeKind } from '../../domain/document/types.ts';
 import type { PayableId } from '../../domain/shared/payable-id.ts';
 import type { DocumentError } from '../../domain/document/errors.ts';
@@ -26,6 +28,10 @@ import type {
   ContractCategorizationReadPort,
   ContractCategorizationReadError,
 } from '#src/modules/contracts/public-api/index.ts';
+import type {
+  CedenteAccountStore,
+  CedenteAccountStoreError,
+} from '../ports/cedente-account-store.ts';
 import { buildTimelineEntries } from '../timeline-recording.ts';
 
 export type SaveDocumentDeps = Readonly<{
@@ -33,6 +39,8 @@ export type SaveDocumentDeps = Readonly<{
   clock: Clock;
   // #48: leitura cross-módulo (ADR-0006) p/ herdar a categorização do contrato vinculado.
   contractCategorizationReader: ContractCategorizationReadPort;
+  // #197 (R-1b): valida existência da conta-débito (by-identity em fin_cedente_accounts).
+  cedenteAccountStore: CedenteAccountStore;
 }>;
 
 export type SaveDocumentCommand = Readonly<{
@@ -59,6 +67,8 @@ export type SaveDocumentCommand = Readonly<{
   description?: string | null;
   approverRef?: string | null; // #148: aprovador pretendido
   accessKey?: string | null; // #115: chave de acesso (DANFE)
+  competencia?: string | null; // #197: competência YYYY-MM
+  contaDebitoRef?: string | null; // #197: conta-débito (ref → fin_cedente_accounts)
 }>;
 
 export type SaveDocumentOutput = Readonly<{
@@ -75,7 +85,9 @@ export type SaveDocumentError =
   | Money.MoneyError
   | Retention.RetentionError
   | RegisteredTax.RegisteredTaxError
-  | UserRef.UserRefError;
+  | UserRef.UserRefError
+  | CedenteAccountStoreError
+  | 'cedente-account-not-found';
 
 // Imperative Shell: traduz primitivos → VOs (smart constructors), chama o domínio, persiste e publica.
 // Sequência canônica (.claude/rules/application.md): validar → domain → persist → publish.
@@ -99,6 +111,21 @@ export const saveDocument =
     if (programRef !== null && !programRef.ok) return err(programRef.error);
     const approverRef = cmd.approverRef == null ? null : UserRef.rehydrate(cmd.approverRef);
     if (approverRef !== null && !approverRef.ok) return err(approverRef.error);
+
+    // #197: competência (VO) + conta-débito (existência by-identity em fin_cedente_accounts, R-1b).
+    let competencia: Competencia.Competencia | null = null;
+    if (cmd.competencia != null) {
+      const c = Competencia.fromString(cmd.competencia);
+      if (!c.ok) return err(c.error);
+      competencia = c.value;
+    }
+    if (cmd.contaDebitoRef != null) {
+      const accId = CedenteAccountId.rehydrate(cmd.contaDebitoRef);
+      if (!accId.ok) return err('cedente-account-not-found');
+      const found = await deps.cedenteAccountStore.findById(accId.value);
+      if (!found.ok) return err(found.error);
+      if (found.value === null) return err('cedente-account-not-found');
+    }
 
     // #48: herda programRef/budgetPlanRef do contrato vinculado quando não informados pelo front
     // (pré-fill editável). categoria/centro de custo são rótulos livres do contrato, sem campo-ref
@@ -174,6 +201,8 @@ export const saveDocument =
       description: cmd.description ?? null,
       approverRef: approverRef?.value ?? null,
       accessKey: cmd.accessKey ?? null,
+      competencia,
+      debitAccountRef: cmd.contaDebitoRef ?? null,
     });
     if (!created.ok) return err(created.error);
 

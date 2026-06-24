@@ -157,6 +157,7 @@ const SLUG_MESSAGES: Record<string, string> = {
   'paid-at-in-future': 'A data de pagamento não pode ser futura.',
   'invalid-access-key': 'Chave de acesso inválida: informe os 44 dígitos da DANFE.',
   'access-key-required-for-danfe': 'A chave de acesso (44 dígitos) é obrigatória para DANFE.',
+  'invalid-competencia': 'Competência inválida: informe o mês no formato AAAA-MM.',
   'transaction-already-reconciled': 'A transação já está conciliada.',
   'reconciliation-already-undone': 'A conciliação já foi desfeita.',
   'account-closed': 'A conta-cedente está encerrada: não é possível conciliar.',

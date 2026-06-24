@@ -8,6 +8,7 @@
  */
 
 import type { Document } from '../../domain/document/types.ts';
+import * as Competencia from '../../domain/document/competencia.ts';
 import type { DocumentListItem } from '../../domain/document/query.ts';
 import type { Payables } from '../../domain/payable/types.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
@@ -104,6 +105,9 @@ export const documentToDto = (
       issueDate: document.issueDate !== null ? document.issueDate.toISOString().slice(0, 10) : null,
       description: document.description,
       accessKey: document.accessKey,
+      competencia:
+        document.competencia === null ? null : Competencia.toString(document.competencia),
+      contaDebitoRef: document.debitAccountRef,
       payables: payableItems,
       version,
     };
@@ -131,6 +135,8 @@ export const documentToDto = (
     issueDate: document.issueDate !== null ? document.issueDate.toISOString().slice(0, 10) : null,
     description: document.description,
     accessKey: document.accessKey,
+    competencia: document.competencia === null ? null : Competencia.toString(document.competencia),
+    contaDebitoRef: document.debitAccountRef,
     payables: payableItems,
     version,
   };

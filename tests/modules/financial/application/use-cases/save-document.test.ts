@@ -6,6 +6,7 @@ import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import { createInMemoryDocumentRepository } from '#src/modules/financial/adapters/persistence/repos/document-repository.in-memory.ts';
 import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
 import { saveDocument } from '#src/modules/financial/application/use-cases/save-document.ts';
+import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
 import {
   createInMemoryContractCategorizationReadStore,
   type ContractCategorizationView,
@@ -15,6 +16,7 @@ const SUP = '11111111-1111-4111-8111-111111111111';
 const CLOCK = ClockFixed(new Date('2026-06-15T12:00:00Z'));
 // #48: reader vazio para os fluxos sem contrato (herança é no-op).
 const emptyReader = createInMemoryContractCategorizationReadStore();
+const emptyCedente = createInMemoryCedenteAccountStore();
 
 const nfseCommand = () => ({
   documentNumber: 'NFS-1',
@@ -39,6 +41,7 @@ describe('financial/application — saveDocument', () => {
       repo,
       clock: CLOCK,
       contractCategorizationReader: emptyReader,
+      cedenteAccountStore: emptyCedente,
     })(nfseCommand());
 
     assert.equal(isOk(result), true);
@@ -63,6 +66,7 @@ describe('financial/application — saveDocument', () => {
       repo,
       clock: CLOCK,
       contractCategorizationReader: emptyReader,
+      cedenteAccountStore: emptyCedente,
     })({
       ...nfseCommand(),
       supplierRef: 'not-a-uuid',
@@ -78,6 +82,7 @@ describe('financial/application — saveDocument', () => {
       repo,
       clock: CLOCK,
       contractCategorizationReader: emptyReader,
+      cedenteAccountStore: emptyCedente,
     })({
       documentNumber: 'BOL-1',
       type: 'Boleto',
@@ -110,6 +115,7 @@ describe('financial/application — saveDocument', () => {
       repo,
       clock: CLOCK,
       contractCategorizationReader: reader,
+      cedenteAccountStore: emptyCedente,
     })({ ...nfseCommand(), contractRef: CONTRACT });
     assert.equal(isOk(result), true);
     if (result.ok) {
@@ -130,6 +136,7 @@ describe('financial/application — saveDocument', () => {
       repo,
       clock: CLOCK,
       contractCategorizationReader: emptyReader,
+      cedenteAccountStore: emptyCedente,
     })({ ...nfseCommand(), costCenterRef: COST_CENTER });
     assert.equal(isOk(result), true);
     if (result.ok) {
@@ -148,6 +155,7 @@ describe('financial/application — saveDocument', () => {
       repo,
       clock: CLOCK,
       contractCategorizationReader: emptyReader,
+      cedenteAccountStore: emptyCedente,
     })({ ...nfseCommand(), costCenterRef: 'not-a-uuid' });
     assert.equal(isErr(result), true);
     assert.equal(outbox.all().length, 0);
@@ -160,6 +168,7 @@ describe('financial/application — saveDocument', () => {
       repo,
       clock: CLOCK,
       contractCategorizationReader: emptyReader,
+      cedenteAccountStore: emptyCedente,
     })({ ...nfseCommand(), payeeKind: 'financier' });
     assert.equal(isOk(result), true);
     if (result.ok) {
@@ -177,6 +186,7 @@ describe('financial/application — saveDocument', () => {
       repo,
       clock: CLOCK,
       contractCategorizationReader: emptyReader,
+      cedenteAccountStore: emptyCedente,
     })(nfseCommand());
     assert.equal(isOk(result), true);
     if (result.ok) {
@@ -204,6 +214,7 @@ describe('financial/application — saveDocument', () => {
       repo,
       clock: CLOCK,
       contractCategorizationReader: reader,
+      cedenteAccountStore: emptyCedente,
     })({ ...nfseCommand(), contractRef: CONTRACT, programRef: FRONT_PROGRAM });
     assert.equal(isOk(result), true);
     if (result.ok) {

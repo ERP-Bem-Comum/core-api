@@ -36,6 +36,7 @@ import {
   finStatementTransactions,
 } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { saveDocument } from '#src/modules/financial/application/use-cases/save-document.ts';
+import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
 
 const fitidOf = (raw: string) => {
   const f = Fitid.fromNative(raw);
@@ -70,6 +71,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
         repo: createDrizzleDocumentRepository(handle),
         clock: ClockReal(),
         contractCategorizationReader: createInMemoryContractCategorizationReadStore(),
+        cedenteAccountStore: createInMemoryCedenteAccountStore(),
       });
       const created = await save({
         documentNumber: `NFS-${newUuid().slice(0, 8)}`,
