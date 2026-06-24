@@ -101,6 +101,11 @@ export const createDocumentBodySchema = z.object({
   dueDate: z.iso.date().optional(),
   issueDate: z.iso.date().optional(), // #163: data de emissão (opcional)
   description: z.string().max(500).optional(),
+  // #115: chave de acesso (DANFE). Normaliza removendo não-dígitos; o domínio valida ^\d{44}$ + obrigatoriedade.
+  accessKey: z
+    .string()
+    .transform((s) => s.replace(/\D/g, ''))
+    .optional(),
   asDraft: z.boolean().default(false),
 });
 
@@ -203,6 +208,7 @@ export const documentResponseSchema = z.object({
   dueDate: z.string().nullable(),
   issueDate: z.string().nullable(), // #163: data de emissão
   description: z.string().nullable(),
+  accessKey: z.string().nullable(), // #115: chave de acesso (DANFE)
   payables: z.array(payableResponseSchema),
   version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).meta({
     description:

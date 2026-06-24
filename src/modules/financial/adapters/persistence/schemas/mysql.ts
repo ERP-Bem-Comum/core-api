@@ -122,6 +122,9 @@ export const finDocuments = mysqlTable(
     // Data de EMISSÃO (#163) — capturada no create (OCR/manual); nullable (opcional + back-compat).
     issueDate: date('issue_date', { mode: 'date' }),
 
+    // #115: chave de acesso (44 dígitos) da DANFE; null nos demais tipos.
+    accessKey: varchar('access_key', { length: 44 }),
+
     // Metadados de origem OCR (R-OCR).
     readByOcr: boolean('read_by_ocr').notNull().default(false),
     ocrOriginalValue: bigint('ocr_original_value', { mode: 'number' }),
