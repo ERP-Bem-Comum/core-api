@@ -2,6 +2,7 @@ import type { Result } from '../../../../shared/primitives/result.ts';
 import type {
   ReconciliationPeriod,
   ReconciliationPeriodClosed,
+  ReconciliationPeriodReopened,
 } from '../../domain/reconciliation/period.ts';
 import type { ReconciliationPeriodId } from '../../domain/reconciliation/reconciliation-period-id.ts';
 
@@ -14,6 +15,12 @@ export type ReconciliationPeriodStore = Readonly<{
   close: (
     period: ReconciliationPeriod,
     events?: readonly ReconciliationPeriodClosed[],
+  ) => Promise<Result<void, ReconciliationPeriodStoreError>>;
+  // Reabre (#203): UPDATE status='Open', closed_at=NULL, closed_by=NULL. `events` no `fin_outbox`
+  // NA MESMA tx (ADR-0015). Espelha `close` — sem migration.
+  reopen: (
+    period: ReconciliationPeriod,
+    events?: readonly ReconciliationPeriodReopened[],
   ) => Promise<Result<void, ReconciliationPeriodStoreError>>;
   findById: (
     id: ReconciliationPeriodId,

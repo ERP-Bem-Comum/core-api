@@ -2,6 +2,7 @@ import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type {
   ReconciliationPeriod,
   ReconciliationPeriodClosed,
+  ReconciliationPeriodReopened,
 } from '#src/modules/financial/domain/reconciliation/period.ts';
 import type { ReconciliationPeriodId } from '#src/modules/financial/domain/reconciliation/reconciliation-period-id.ts';
 import type {
@@ -21,6 +22,19 @@ export const createInMemoryReconciliationPeriodStore = (
   close: async (
     period: ReconciliationPeriod,
     events?: readonly ReconciliationPeriodClosed[],
+  ): Promise<Result<void, ReconciliationPeriodStoreError>> => {
+    // #127 — atomicidade: publica ANTES de persistir; falha no outbox → não persiste.
+    if (events !== undefined && events.length > 0) {
+      const appended = await outbox.append(events);
+      if (!appended.ok) return err('reconciliation-period-store-failure');
+    }
+    periods.set(String(period.id), period);
+    return ok(undefined);
+  },
+
+  reopen: async (
+    period: ReconciliationPeriod,
+    events?: readonly ReconciliationPeriodReopened[],
   ): Promise<Result<void, ReconciliationPeriodStoreError>> => {
     // #127 — atomicidade: publica ANTES de persistir; falha no outbox → não persiste.
     if (events !== undefined && events.length > 0) {

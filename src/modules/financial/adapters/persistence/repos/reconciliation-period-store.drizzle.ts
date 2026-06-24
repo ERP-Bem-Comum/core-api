@@ -9,6 +9,7 @@ import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type {
   ReconciliationPeriod,
   ReconciliationPeriodClosed,
+  ReconciliationPeriodReopened,
 } from '#src/modules/financial/domain/reconciliation/period.ts';
 import type { ReconciliationPeriodId } from '#src/modules/financial/domain/reconciliation/reconciliation-period-id.ts';
 import type {
@@ -43,6 +44,27 @@ export const createDrizzleReconciliationPeriodStore = (
         return ok(undefined);
       } catch (cause) {
         logStore('close', cause);
+        return err('reconciliation-period-store-failure');
+      }
+    },
+
+    reopen: async (
+      period: ReconciliationPeriod,
+      events?: readonly ReconciliationPeriodReopened[],
+    ): Promise<Result<void, ReconciliationPeriodStoreError>> => {
+      try {
+        // #203/#127: UPDATE Closed→Open (zera closed_at/closed_by) + `fin_outbox` na MESMA tx
+        // (atomicidade — ADR-0015). Sem migration (reusa as colunas existentes).
+        await db.transaction(async (tx) => {
+          await tx
+            .update(finReconciliationPeriods)
+            .set({ status: 'Open', closedAt: null, closedBy: null })
+            .where(eq(finReconciliationPeriods.id, String(period.id)));
+          await appendFinOutboxInTx(tx, events ?? []);
+        });
+        return ok(undefined);
+      } catch (cause) {
+        logStore('reopen', cause);
         return err('reconciliation-period-store-failure');
       }
     },
