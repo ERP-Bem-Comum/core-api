@@ -533,6 +533,9 @@ export const manualEntryBodySchema = z.object({
   costCenterRef: z.uuid().optional(),
   programRef: z.uuid().optional(),
   description: z.string().min(1).max(500).optional(),
+  // #143: realocação patrimonial — conta de destino (Transfer) e produto livre (Investment/Redemption).
+  destinationAccountRef: z.uuid().optional(),
+  productLabel: z.string().min(1).max(120).optional(),
 });
 
 export type ManualEntryBody = z.infer<typeof manualEntryBodySchema>;

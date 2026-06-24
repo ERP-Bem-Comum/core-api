@@ -839,6 +839,10 @@ const financialRoutes =
           ...(body.costCenterRef !== undefined ? { costCenterRef: body.costCenterRef } : {}),
           ...(body.programRef !== undefined ? { programRef: body.programRef } : {}),
           ...(body.description !== undefined ? { description: body.description } : {}),
+          ...(body.destinationAccountRef !== undefined
+            ? { destinationAccountRef: body.destinationAccountRef }
+            : {}),
+          ...(body.productLabel !== undefined ? { productLabel: body.productLabel } : {}),
           reconciledBy: req.userId,
         });
         if (!result.ok) return sendDomainError(reply, result.error);

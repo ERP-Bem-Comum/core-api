@@ -82,6 +82,8 @@ export const manualEntryToRow = (
   costCenterRef: manualEntry.costCenterRef,
   programRef: manualEntry.programRef,
   description: manualEntry.description,
+  destinationAccountRef: manualEntry.destinationAccountRef,
+  productLabel: manualEntry.productLabel,
 });
 
 export const toDomain = (
