@@ -6,7 +6,7 @@ import { SupplierRef } from '#src/modules/partners/public-api/refs.ts';
 import { DocumentId } from '#src/modules/financial/domain/shared/ids.ts';
 import * as Retention from '#src/modules/financial/domain/shared/retention.ts';
 import * as Document from '#src/modules/financial/domain/document/document.ts';
-import type { StoredDocument } from '#src/modules/financial/domain/document/repository.ts';
+import type { LoadedDocument } from '#src/modules/financial/domain/document/repository.ts';
 import { createInMemoryPayableListView } from '#src/modules/financial/adapters/persistence/repos/payable-list-view.in-memory.ts';
 
 const SUP = '11111111-1111-4111-8111-111111111111';
@@ -26,7 +26,7 @@ const ret = (type: 'ISS' | 'IRRF', valueCents: number): Retention.Retention => {
   return r.value;
 };
 
-const storedNfse = (): StoredDocument => {
+const storedNfse = (): LoadedDocument => {
   const r = Document.create({
     id: DocumentId.generate(),
     documentNumber: 'NF-123',
@@ -43,7 +43,7 @@ const storedNfse = (): StoredDocument => {
     dueDate: new Date('2026-07-01'),
   });
   if (!r.ok) throw new Error('setup: create');
-  return { document: r.value.document, payables: r.value.payables };
+  return { document: r.value.document, payables: r.value.payables, version: 0 };
 };
 
 describe('financial/adapters — payable-list-view.in-memory (#221)', () => {

@@ -30,4 +30,10 @@ export type PayableListItem = Readonly<{
   status: DocumentStatus; // status do TÍTULO (base da baixa/conciliação individual)
   supplierRef: string | null;
   contractRef: string | null;
+  // #229: paridade com o grid por documento — todos derivados do documento pai.
+  issueDate: Date | null;
+  paymentMethod: string | null;
+  version: number; // optimistic lock do documento (ações em massa por título)
+  grossValueCents: number | null;
+  netValueCents: number | null;
 }>;

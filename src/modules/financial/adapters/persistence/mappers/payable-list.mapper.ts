@@ -21,6 +21,11 @@ export type PayableListRow = Readonly<{
   documentType: string | null;
   supplierRef: string | null;
   contractRef: string | null;
+  issueDate: Date | null;
+  paymentMethod: string | null;
+  version: number;
+  grossValueCents: number | null;
+  netValueCents: number | null;
 }>;
 
 export type PayableListMapperError = 'invalid-payable-kind' | 'invalid-payable-status';
@@ -77,5 +82,10 @@ export const rowToPayableListItem = (
     status,
     supplierRef: row.supplierRef,
     contractRef: row.contractRef,
+    issueDate: row.issueDate,
+    paymentMethod: row.paymentMethod,
+    version: row.version,
+    grossValueCents: row.grossValueCents,
+    netValueCents: row.netValueCents,
   });
 };

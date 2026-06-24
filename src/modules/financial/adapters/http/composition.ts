@@ -290,7 +290,7 @@ const buildMemoryPools = (): Pools => {
     programReader,
     repo,
     payableListView: createInMemoryPayableListView(() =>
-      [...documentStore.values()].map((e) => e.aggregate),
+      [...documentStore.values()].map((e) => ({ ...e.aggregate, version: e.version })),
     ),
     timelineRepo,
     statementRepo,

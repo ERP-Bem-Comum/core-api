@@ -128,4 +128,33 @@ describe('financial/http — GET /financial/payables (#222)', () => {
     });
     assert.equal(res.statusCode, 403, res.body);
   });
+
+  // #229: paridade com o grid por documento — issueDate, paymentMethod, version, bruto/líquido + dueDate date-only.
+  it('#229: item expõe issueDate, paymentMethod, version, grossValueCents, netValueCents (dueDate date-only)', async () => {
+    const created = await handle.app.inject({
+      method: 'POST',
+      url: '/api/v2/financial/documents',
+      headers: { authorization: `Bearer ${TOKEN}` },
+      payload: { ...openNfseBody(), documentNumber: 'NFS-229', issueDate: '2026-01-15' },
+    });
+    assert.equal(created.statusCode, 201, created.body);
+
+    const res = await handle.app.inject({
+      method: 'GET',
+      url: '/api/v2/financial/payable-titles',
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as { items: readonly Record<string, unknown>[] };
+    const parent = body.items.find(
+      (i) => i['documentNumber'] === 'NFS-229' && i['kind'] === 'Parent',
+    );
+    assert.ok(parent, 'título pai de NFS-229 presente');
+    assert.equal(parent['issueDate'], '2026-01-15');
+    assert.equal(parent['paymentMethod'], 'PIX');
+    assert.equal(typeof parent['version'], 'number');
+    assert.equal(parent['grossValueCents'], '1000000');
+    assert.equal(typeof parent['netValueCents'], 'string');
+    assert.equal(parent['dueDate'], '2026-12-31'); // date-only, não ISO datetime
+  });
 });
