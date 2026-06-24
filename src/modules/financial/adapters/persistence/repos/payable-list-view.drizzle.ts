@@ -70,6 +70,11 @@ export const createDrizzlePayableListView = (
             documentType: finDocuments.type,
             supplierRef: finDocuments.supplierRef,
             contractRef: finDocuments.contractRef,
+            issueDate: finDocuments.issueDate,
+            paymentMethod: finDocuments.paymentMethod,
+            version: finDocuments.version,
+            grossValueCents: finDocuments.grossValue,
+            netValueCents: finDocuments.netValue,
           })
           .from(finPayables)
           .innerJoin(finDocuments, eq(finPayables.documentId, finDocuments.id))

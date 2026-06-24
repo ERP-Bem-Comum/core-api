@@ -20,6 +20,11 @@ const baseRow = (over: Partial<PayableListRow> = {}): PayableListRow => ({
   documentType: 'NFS-e',
   supplierRef: '33333333-3333-4333-8333-333333333333',
   contractRef: null,
+  issueDate: new Date('2026-06-15T00:00:00.000Z'),
+  paymentMethod: 'PIX',
+  version: 0,
+  grossValueCents: 1000000,
+  netValueCents: 793500,
   ...over,
 });
 

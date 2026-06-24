@@ -756,6 +756,12 @@ export const payableSummarySchema = z.object({
   status: z.string(),
   supplierRef: z.string().nullable(),
   contractRef: z.string().nullable(),
+  // #229: paridade com o grid por documento (derivados do documento pai).
+  issueDate: z.string().nullable(),
+  paymentMethod: z.string().nullable(),
+  version: z.number().int(),
+  grossValueCents: z.string().nullable(),
+  netValueCents: z.string().nullable(),
 });
 
 export type PayableSummaryDto = z.infer<typeof payableSummarySchema>;

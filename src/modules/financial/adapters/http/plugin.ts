@@ -216,10 +216,15 @@ const payableListItemToDto = (it: PayableListItem): PayableSummaryDto => ({
   kind: it.kind,
   retentionType: it.retentionType,
   valueCents: String(it.valueCents),
-  dueDate: it.dueDate.toISOString(),
+  dueDate: it.dueDate.toISOString().slice(0, 10), // #229: date-only (YYYY-MM-DD)
   status: it.status,
   supplierRef: it.supplierRef,
   contractRef: it.contractRef,
+  issueDate: it.issueDate === null ? null : it.issueDate.toISOString().slice(0, 10),
+  paymentMethod: it.paymentMethod,
+  version: it.version,
+  grossValueCents: it.grossValueCents === null ? null : String(it.grossValueCents),
+  netValueCents: it.netValueCents === null ? null : String(it.netValueCents),
 });
 
 const cedenteAccountToDto = (a: CedenteAccount): CedenteAccountResponseDto => ({

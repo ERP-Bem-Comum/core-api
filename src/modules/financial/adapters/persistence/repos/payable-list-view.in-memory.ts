@@ -1,7 +1,7 @@
 import { type Result, ok } from '#src/shared/primitives/result.ts';
 import type { Document } from '#src/modules/financial/domain/document/types.ts';
 import type { Payable } from '#src/modules/financial/domain/payable/types.ts';
-import type { StoredDocument } from '#src/modules/financial/domain/document/repository.ts';
+import type { LoadedDocument } from '#src/modules/financial/domain/document/repository.ts';
 import type {
   PayableListFilter,
   PayableListItem,
@@ -15,7 +15,7 @@ import type {
 // Adapter in-memory do PayableListView (#221): deriva os itens (pai + filhos como linhas) dos
 // `StoredDocument` da fonte injetada — espelha o JOIN do Drizzle sobre o agregado em memória.
 
-const toItem = (doc: Document, p: Payable): PayableListItem => ({
+const toItem = (doc: Document, p: Payable, version: number): PayableListItem => ({
   payableId: String(p.id),
   documentId: String(p.origin),
   documentNumber: doc.documentNumber ?? null,
@@ -28,6 +28,12 @@ const toItem = (doc: Document, p: Payable): PayableListItem => ({
   status: p.status,
   supplierRef: doc.supplier === null ? null : String(doc.supplier),
   contractRef: doc.contractRef === null ? null : String(doc.contractRef),
+  issueDate: doc.issueDate,
+  paymentMethod: doc.paymentMethod,
+  version,
+  grossValueCents: doc.grossValue === null ? null : doc.grossValue.cents,
+  // `netValue` só existe em documento submetido (DocumentCore); rascunho não tem líquido calculado.
+  netValueCents: 'netValue' in doc ? doc.netValue.cents : null,
 });
 
 const matchesFilter = (it: PayableListItem, f: PayableListFilter): boolean => {
@@ -40,7 +46,7 @@ const matchesFilter = (it: PayableListItem, f: PayableListFilter): boolean => {
 };
 
 export const createInMemoryPayableListView = (
-  source: () => readonly StoredDocument[],
+  source: () => readonly LoadedDocument[],
 ): PayableListView => ({
   findPaged: async (
     filter: PayableListFilter,
@@ -51,7 +57,7 @@ export const createInMemoryPayableListView = (
     for (const stored of source()) {
       if (stored.payables === null) continue;
       for (const p of [stored.payables.parent, ...stored.payables.children]) {
-        items.push(toItem(stored.document, p));
+        items.push(toItem(stored.document, p, stored.version));
       }
     }
     const filtered = items.filter((it) => matchesFilter(it, filter));
