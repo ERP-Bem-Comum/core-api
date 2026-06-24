@@ -154,6 +154,7 @@ const SLUG_MESSAGES: Record<string, string> = {
   'opening-balance-requires-date': 'Saldo de abertura e data do saldo devem ser informados juntos.',
   'cedente-account-id-invalid': 'Identificador de conta-cedente inválido.',
   'payable-not-found': 'Um ou mais títulos informados não foram encontrados.',
+  'paid-at-in-future': 'A data de pagamento não pode ser futura.',
   'transaction-already-reconciled': 'A transação já está conciliada.',
   'reconciliation-already-undone': 'A conciliação já foi desfeita.',
   'account-closed': 'A conta-cedente está encerrada: não é possível conciliar.',

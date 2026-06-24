@@ -405,6 +405,8 @@ const financialRoutes =
           paidBy: req.userId,
           // Optimistic lock (FR-009): propaga `body.version` → `cmd.expectedVersion`.
           expectedVersion: req.body.version,
+          // #232: data de pagamento informada pelo operador (ancora o match da conciliação).
+          ...(req.body.paidAt !== undefined ? { paidAt: req.body.paidAt } : {}),
           ...(req.body.reason !== undefined ? { reason: req.body.reason } : {}),
         });
         if (!result.ok) return sendDomainError(reply, result.error);
