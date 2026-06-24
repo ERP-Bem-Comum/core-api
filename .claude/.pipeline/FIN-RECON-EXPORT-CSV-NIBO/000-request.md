@@ -40,5 +40,19 @@ Regra do `EXPORT-ABSTRACTION-DESIGN`: **serialização = util puro + adapter; pr
 ## Fora de escopo / follow-up
 - Validação real contra o `.xlsx` da P.O. (manual, pós-merge). · Datas `Previsto para`/`Anotação` quando não houver fonte → vazias.
 
+## Estado / Retomada (WIP — 2026-06-24)
+
+**Feito (committado na branch `feat/146-recon-export-nibo`, sem PR):**
+- ✅ Serializador puro `src/modules/financial/adapters/export/nibo-csv.ts` (`toNiboCsv` + `NiboExportRow`). 15 col, `;`+BOM+CRLF, `dd/MM/aaaa`, valor com sinal **raw** (não passa por `escapeCsvCell` — é número controlado; neutralizar quebraria a reimportação Nibo). Texto via `escapeCsvCell` (anti-fórmula).
+- ✅ Teste `tests/modules/financial/adapters/export/nibo-csv.test.ts` (7/7 — CA1-CA4 de layout).
+
+**Pendente (gathering/endpoint — retomar daqui):**
+1. **Read novo (in-module)** `payableId → {documentId, supplierRef, documentNumber, dueDate, categoryRef, costCenterRef, competencia, payeeKind}` — join `fin_payables`+`fin_documents` (drizzle + in-memory). É o único surface novo; sem cross-módulo.
+2. **Use-case** (novo `export-reconciliation-nibo.ts` OU branch no existente): por transação conciliada → `getTransactionReconciliation` → ManualEntry (transfer/aplicação/diferença: dados no próprio `manualEntry`) OU títulos (item.payableId → read #1 → doc) → resolver nomes (categoria/centro via `listCategories`/`listCostCenters`; favorecido via `supplierViewStore.get`; conta via `cedenteStore.findById`) → `NiboExportRow[]` → `toNiboCsv`.
+3. **Formato `'csv-nibo'`** no `ReconciliationExportFormat` + rota `GET /reconciliation-periods/:id/export?format=csv-nibo` + composição.
+4. **Testes:** use-case (gathering: lançamento de título, manual classificado #141, transferência #143) + HTTP (header + 1 linha por tipo).
+
+Mapa `payeeKind → Tipo de contato`: supplier→Fornecedor, collaborator→Funcionário, financier→Sócio, act→Fornecedor (confirmar com P.O.).
+
 ## Disciplina
 ESM `.ts`+`import type`; serializador **puro** (sem IO); enriquecimento via ports existentes (sem novo cross-módulo); `domain/` intocado; ADR-0006/0022/0032 + EXPORT-ABSTRACTION-DESIGN. Gate W3 verde; sem regressão. Sem migration.
