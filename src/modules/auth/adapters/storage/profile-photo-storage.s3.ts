@@ -25,8 +25,10 @@ import type {
 export type ProfilePhotoS3Config = Readonly<{
   endpoint: string;
   region: string;
-  accessKeyId: string;
-  secretAccessKey: string;
+  /** Ausente quando SDK deve resolver via provider chain (IAM Role ECS/IMDS — prod AWS). */
+  accessKeyId?: string;
+  /** Ausente quando SDK deve resolver via provider chain (IAM Role ECS/IMDS — prod AWS). */
+  secretAccessKey?: string;
   bucket: string;
   forcePathStyle: boolean;
 }>;
@@ -35,7 +37,18 @@ export const createS3ProfilePhotoStorage = (config: ProfilePhotoS3Config): Profi
   const client = new S3Client({
     endpoint: config.endpoint,
     region: config.region,
-    credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.secretAccessKey },
+    // Credenciais injetadas apenas quando presentes (dev/MinIO/Magalu).
+    // Ausentes -> SDK resolve via provider chain (IAM Role ECS/IMDS — prod AWS).
+    // Invariante XOR: se accessKeyId presente, secretAccessKey tambem esta (garantido pelo caller).
+    ...(config.accessKeyId !== undefined
+      ? {
+          credentials: {
+            accessKeyId: config.accessKeyId,
+            // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+            secretAccessKey: config.secretAccessKey!,
+          },
+        }
+      : {}),
     forcePathStyle: config.forcePathStyle,
   });
 

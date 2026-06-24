@@ -51,30 +51,44 @@ import {
   buildFinancialHttpDeps,
 } from '#src/modules/financial/public-api/http.ts';
 
-// Config S3/MinIO do logo de programa (ADR-0019). Só retorna config quando todas as envs
-// obrigatórias estão presentes; ausência de qualquer uma → undefined (storage in-memory).
+// Config S3/MinIO do logo de programa (ADR-0019 / issue #244 IAM Role).
+// Retorna config quando endpoint + bucket presentes (minimo para S3); credentials opcionais:
+//   ambas presentes -> estaticas (dev/MinIO/Magalu);
+//   ambas ausentes  -> provider chain (IAM Role ECS/IMDS — prod AWS);
+//   XOR             -> undefined (config pela metade, fall-safe para in-memory).
 const readProgramsLogoConfig = (
   env: Readonly<Record<string, string | undefined>>,
 ): LogoS3Config | undefined => {
   const endpoint = env['PROGRAMS_LOGO_S3_ENDPOINT'];
   const region = env['PROGRAMS_LOGO_S3_REGION'];
-  const accessKeyId = env['PROGRAMS_LOGO_S3_ACCESS_KEY_ID'];
-  const secretAccessKey = env['PROGRAMS_LOGO_S3_SECRET_ACCESS_KEY'];
   const bucket = env['PROGRAMS_LOGO_S3_BUCKET'];
+
   if (
     endpoint === undefined ||
-    region === undefined ||
-    accessKeyId === undefined ||
-    secretAccessKey === undefined ||
-    bucket === undefined
+    endpoint.length === 0 ||
+    bucket === undefined ||
+    bucket.length === 0
   ) {
     return undefined;
   }
+
+  const accessKeyId = env['PROGRAMS_LOGO_S3_ACCESS_KEY_ID'];
+  const secretAccessKey = env['PROGRAMS_LOGO_S3_SECRET_ACCESS_KEY'];
+  const hasKey = accessKeyId !== undefined && accessKeyId.length > 0;
+  const hasSecret = secretAccessKey !== undefined && secretAccessKey.length > 0;
+
+  // XOR: config pela metade e erro — fall-safe p/ in-memory.
+  if (hasKey !== hasSecret) {
+    return undefined;
+  }
+
+  const credentialFields: Readonly<{ accessKeyId?: string; secretAccessKey?: string }> =
+    hasKey && hasSecret ? { accessKeyId, secretAccessKey } : {};
+
   return {
     endpoint,
-    region,
-    accessKeyId,
-    secretAccessKey,
+    region: region ?? 'us-east-1',
+    ...credentialFields,
     bucket,
     forcePathStyle: env['PROGRAMS_LOGO_S3_FORCE_PATH_STYLE'] !== 'false',
   };
