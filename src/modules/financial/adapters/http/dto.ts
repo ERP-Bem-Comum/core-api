@@ -38,6 +38,7 @@ import type {
   CostCenterResponseDto,
   ProgramResponseDto,
 } from './schemas.ts';
+import type { PayeeBankBlock } from './payee-bank-composition.ts';
 
 /** Serializa Money (branded { cents: number }) como string de centavos. */
 const moneyToCentsString = (cents: number): string => String(cents);
@@ -70,6 +71,7 @@ export const documentToDto = (
   document: Document,
   payables: Payables | null,
   version: number,
+  payeeBank: PayeeBankBlock | null = null,
 ): DocumentResponseDto => {
   const payableItems =
     payables === null
@@ -111,6 +113,7 @@ export const documentToDto = (
       contaDebitoRef: document.debitAccountRef,
       payables: payableItems,
       version,
+      payeeBank,
     };
   }
 
@@ -141,6 +144,7 @@ export const documentToDto = (
     contaDebitoRef: document.debitAccountRef,
     payables: payableItems,
     version,
+    payeeBank,
   };
 };
 

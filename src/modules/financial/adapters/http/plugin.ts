@@ -151,10 +151,12 @@ const sendDomainError = (reply: FastifyReply, error: string): Promise<void> => {
 
 // Lê o estado pós-mutação do repositório e envia como DTO.
 // `reply` já deve ter o status code correto definido pelo caller (200 ou 201).
+// `composePayee=true` resolve o bloco bancário do favorecido via ADR-0032 (só no GET /:id).
 const loadAndSerialize = async (
   deps: FinancialHttpDeps,
   reply: FastifyReply,
   rawId: string,
+  composePayee = false,
 ): Promise<void> => {
   const idR = DocumentId.rehydrate(rawId);
   if (!idR.ok) return sendDomainError(reply, 'document-id-invalid');
@@ -162,11 +164,17 @@ const loadAndSerialize = async (
   const found = await deps.findDocumentById(idR.value);
   if (!found.ok) return sendDomainError(reply, found.error);
 
-  return sendResult(
-    reply,
-    ok(documentToDto(found.value.document, found.value.payables, found.value.version)),
-    { ok: reply.statusCode === 201 ? 201 : 200 },
-  );
+  const { document, payables, version } = found.value;
+  const payeeBank = composePayee
+    ? await deps.resolvePayeeBank({
+        kind: document.payeeKind ?? null,
+        id: document.supplier !== null ? String(document.supplier) : null,
+      })
+    : null;
+
+  return sendResult(reply, ok(documentToDto(document, payables, version, payeeBank)), {
+    ok: reply.statusCode === 201 ? 201 : 200,
+  });
 };
 
 // ─── Mapeadores de body Zod → command (bridge undefined→null para exactOptionalPropertyTypes) ──
@@ -563,7 +571,7 @@ const financialRoutes =
         response: { 200: documentResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
-        return loadAndSerialize(deps, reply, req.params.id);
+        return loadAndSerialize(deps, reply, req.params.id, true);
       },
     });
 
