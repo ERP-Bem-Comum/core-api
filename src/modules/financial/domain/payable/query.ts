@@ -36,4 +36,5 @@ export type PayableListItem = Readonly<{
   version: number; // optimistic lock do documento (ações em massa por título)
   grossValueCents: number | null;
   netValueCents: number | null;
+  paidAt: Date | null; // #231: data de pagamento do título (null enquanto não pago)
 }>;

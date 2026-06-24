@@ -1,0 +1,1 @@
+ALTER TABLE `fin_payables` ADD `paid_at` date;

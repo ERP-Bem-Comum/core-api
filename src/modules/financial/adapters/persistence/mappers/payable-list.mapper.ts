@@ -26,6 +26,7 @@ export type PayableListRow = Readonly<{
   version: number;
   grossValueCents: number | null;
   netValueCents: number | null;
+  paidAt: Date | null;
 }>;
 
 export type PayableListMapperError = 'invalid-payable-kind' | 'invalid-payable-status';
@@ -87,5 +88,6 @@ export const rowToPayableListItem = (
     version: row.version,
     grossValueCents: row.grossValueCents,
     netValueCents: row.netValueCents,
+    paidAt: row.paidAt,
   });
 };

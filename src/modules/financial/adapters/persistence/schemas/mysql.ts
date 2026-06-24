@@ -218,6 +218,9 @@ export const finPayables = mysqlTable(
     // Método de pagamento herdado do documento.
     paymentMethod: varchar('payment_method', { length: 24 }).notNull(),
 
+    // #231: data de pagamento (preenchida na baixa manual); null enquanto não pago.
+    paidAt: date('paid_at', { mode: 'date' }),
+
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
   },
   (t) => [

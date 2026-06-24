@@ -137,4 +137,29 @@ describe('financial/http — baixa manual de título (#224)', () => {
     });
     assert.equal(res.statusCode, 403, res.body);
   });
+
+  // #231: o paidAt informado na baixa é persistido e exposto no grid por título (âncora do match).
+  it('#231: paidAt da baixa aparece no GET /payable-titles; título não-pago → null', async () => {
+    const { id, parentId, version } = await approveNewDocument();
+    const paid = await handle.app.inject({
+      method: 'POST',
+      url: `/api/v2/financial/documents/${id}/payables/${parentId}/manual-payment`,
+      headers: { authorization: `Bearer ${TOKEN}` },
+      payload: { version, paidAt: '2026-06-10' },
+    });
+    assert.equal(paid.statusCode, 200, paid.body);
+
+    const list = await handle.app.inject({
+      method: 'GET',
+      url: '/api/v2/financial/payable-titles',
+      headers: { authorization: 'Bearer fiscal-document:read' },
+    });
+    assert.equal(list.statusCode, 200, list.body);
+    const body = list.json() as { items: readonly Record<string, unknown>[] };
+    const parent = body.items.find((i) => i['payableId'] === parentId);
+    assert.ok(parent, 'título pai na listagem');
+    assert.equal(parent['paidAt'], '2026-06-10');
+    const child = body.items.find((i) => i['documentId'] === id && i['kind'] === 'Child');
+    assert.equal(child?.['paidAt'], null); // filho segue Aprovado → sem data de pagamento
+  });
 });

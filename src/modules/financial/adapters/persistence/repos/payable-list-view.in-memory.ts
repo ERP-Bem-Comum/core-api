@@ -34,6 +34,7 @@ const toItem = (doc: Document, p: Payable, version: number): PayableListItem => 
   grossValueCents: doc.grossValue === null ? null : doc.grossValue.cents,
   // `netValue` só existe em documento submetido (DocumentCore); rascunho não tem líquido calculado.
   netValueCents: 'netValue' in doc ? doc.netValue.cents : null,
+  paidAt: p.paidAt,
 });
 
 const matchesFilter = (it: PayableListItem, f: PayableListFilter): boolean => {

@@ -762,6 +762,8 @@ export const payableSummarySchema = z.object({
   version: z.number().int(),
   grossValueCents: z.string().nullable(),
   netValueCents: z.string().nullable(),
+  // #231: data de pagamento do título (ancora o match da conciliação); null enquanto não pago.
+  paidAt: z.string().nullable(),
 });
 
 export type PayableSummaryDto = z.infer<typeof payableSummarySchema>;
