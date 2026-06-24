@@ -52,6 +52,7 @@ export type SaveDraftCommand = Readonly<{
   issueDate?: Date | null; // #163
   description?: string | null;
   approverRef?: string | null; // #148
+  accessKey?: string | null; // #115
 }>;
 
 export type SaveDraftOutput = Readonly<{ documentId: DocumentId.DocumentId }>;
@@ -149,6 +150,7 @@ export const saveDraft =
       ...(cmd.issueDate !== undefined ? { issueDate: cmd.issueDate } : {}),
       ...(cmd.description !== undefined ? { description: cmd.description } : {}),
       ...(approverRef.value !== null ? { approverRef: approverRef.value } : {}),
+      ...(cmd.accessKey != null ? { accessKey: cmd.accessKey } : {}),
     });
     if (!draft.ok) return err(draft.error);
 

@@ -332,6 +332,7 @@ export const mapRowToDocument = (
       issueDate: row.issueDate ?? null,
       description: row.description ?? null,
       approverRef,
+      accessKey: row.accessKey ?? null,
     };
     return ok(draft);
   }
@@ -444,6 +445,7 @@ export const mapRowToDocument = (
     dueDate: row.dueDate,
     issueDate: row.issueDate ?? null,
     approverRef,
+    accessKey: row.accessKey ?? null,
   };
 
   if (status === 'Approved') {
@@ -582,6 +584,7 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
       description: document.description ?? null,
       dueDate: document.dueDate ?? null,
       issueDate: document.issueDate ?? null,
+      accessKey: document.accessKey ?? null,
       readByOcr: false,
       ocrOriginalValue: null,
       divergenceDetected: false,
@@ -619,6 +622,7 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
     description: core.description ?? null,
     dueDate: core.dueDate,
     issueDate: core.issueDate,
+    accessKey: core.accessKey,
     readByOcr: false,
     ocrOriginalValue: null,
     divergenceDetected: false,

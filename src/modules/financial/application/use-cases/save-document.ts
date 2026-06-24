@@ -58,6 +58,7 @@ export type SaveDocumentCommand = Readonly<{
   issueDate?: Date | null; // #163
   description?: string | null;
   approverRef?: string | null; // #148: aprovador pretendido
+  accessKey?: string | null; // #115: chave de acesso (DANFE)
 }>;
 
 export type SaveDocumentOutput = Readonly<{
@@ -172,6 +173,7 @@ export const saveDocument =
       issueDate: cmd.issueDate ?? null,
       description: cmd.description ?? null,
       approverRef: approverRef?.value ?? null,
+      accessKey: cmd.accessKey ?? null,
     });
     if (!created.ok) return err(created.error);
 

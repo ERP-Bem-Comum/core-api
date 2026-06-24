@@ -74,6 +74,7 @@ export type DocumentCore = Readonly<{
   // Aprovador PRETENDIDO definido na inclusão (#148). Distinto de `approvedBy` (preenchido na
   // aprovação efetiva). A aprovação segue sendo ação separada — este campo é só o destinatário.
   approverRef: UserRef | null;
+  accessKey: string | null; // #115: chave de acesso (44 dígitos) da DANFE; null nos demais tipos
 }>;
 
 export type OpenDocument = DocumentCore & Readonly<{ status: 'Open' }>;
@@ -107,6 +108,7 @@ export type DraftDocument = Readonly<{
   description: string | null;
   issueDate: Date | null; // #163: emissão (opcional no rascunho)
   approverRef: UserRef | null; // #148: aprovador pretendido (opcional no rascunho)
+  accessKey: string | null; // #115: chave de acesso (opcional no rascunho)
 }>;
 
 export type Document = DraftDocument | OpenDocument | ApprovedDocument;

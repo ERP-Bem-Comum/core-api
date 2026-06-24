@@ -103,6 +103,7 @@ export const documentToDto = (
       dueDate: document.dueDate !== null ? document.dueDate.toISOString().slice(0, 10) : null,
       issueDate: document.issueDate !== null ? document.issueDate.toISOString().slice(0, 10) : null,
       description: document.description,
+      accessKey: document.accessKey,
       payables: payableItems,
       version,
     };
@@ -129,6 +130,7 @@ export const documentToDto = (
     dueDate: document.dueDate.toISOString().slice(0, 10),
     issueDate: document.issueDate !== null ? document.issueDate.toISOString().slice(0, 10) : null,
     description: document.description,
+    accessKey: document.accessKey,
     payables: payableItems,
     version,
   };

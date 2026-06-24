@@ -7,4 +7,7 @@ export type DocumentError =
   | 'invalid-state-transition'
   // #223: baixa manual por título.
   | 'payable-not-found'
-  | 'payable-not-approved';
+  | 'payable-not-approved'
+  // #115: chave de acesso da DANFE.
+  | 'invalid-access-key'
+  | 'access-key-required-for-danfe';

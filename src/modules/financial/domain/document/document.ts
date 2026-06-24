@@ -54,6 +54,7 @@ export type CreateDocumentInput = Readonly<{
   description?: string | null;
   issueDate?: Date | null; // #163: data de emissão (opcional no create)
   approverRef?: UserRef | null; // #148: aprovador pretendido (opcional)
+  accessKey?: string | null; // #115: chave de acesso (DANFE); já normalizada na borda
 }>;
 
 export type CreateDocumentOutput = Readonly<{
@@ -145,6 +146,12 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     paymentMethod: input.paymentMethod,
   });
 
+  // #115: formato (44 dígitos) e obrigatoriedade na DANFE são invariantes do documento submetido.
+  if (input.accessKey != null && !/^\d{44}$/.test(input.accessKey))
+    return err('invalid-access-key');
+  if (input.type === 'DANFE' && (input.accessKey == null || input.accessKey === ''))
+    return err('access-key-required-for-danfe');
+
   const document: OpenDocument = immutable<OpenDocument>({
     id: input.id,
     documentNumber: input.documentNumber,
@@ -170,6 +177,7 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     dueDate: input.dueDate,
     issueDate: input.issueDate ?? null,
     approverRef: input.approverRef ?? null,
+    accessKey: input.accessKey ?? null,
     status: 'Open',
   });
 
@@ -444,6 +452,7 @@ export const undoApproval = (
     dueDate: d.dueDate,
     issueDate: d.issueDate,
     approverRef: d.approverRef,
+    accessKey: d.accessKey,
     status: 'Open',
   });
 
@@ -504,6 +513,7 @@ export type SaveDraftInput = Readonly<{
   description?: string | null;
   issueDate?: Date | null; // #163
   approverRef?: UserRef | null; // #148
+  accessKey?: string | null; // #115
 }>;
 
 export type SaveDraftOutput = Readonly<{
@@ -538,6 +548,7 @@ export const saveDraft = (input: SaveDraftInput): Result<SaveDraftOutput, Docume
     description: input.description ?? null,
     issueDate: input.issueDate ?? null,
     approverRef: input.approverRef ?? null,
+    accessKey: input.accessKey ?? null,
   });
   const events: readonly DocumentEvent[] = [{ type: 'DocumentDraftSaved', documentId: input.id }];
   return ok(immutable<SaveDraftOutput>({ document, events }));

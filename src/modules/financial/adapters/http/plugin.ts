@@ -287,6 +287,7 @@ const financialRoutes =
             dueDate: body.dueDate !== undefined ? new Date(body.dueDate) : null,
             issueDate: body.issueDate !== undefined ? new Date(body.issueDate) : null,
             description: body.description ?? null,
+            accessKey: body.accessKey ?? null,
           });
           if (!result.ok) return sendDomainError(reply, result.error);
           const idStr = String(result.value.documentId);
@@ -322,6 +323,7 @@ const financialRoutes =
           dueDate: new Date(body.dueDate),
           issueDate: body.issueDate !== undefined ? new Date(body.issueDate) : null,
           description: body.description ?? null,
+          accessKey: body.accessKey ?? null,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         const idStr = String(result.value.documentId);

@@ -89,6 +89,7 @@ describe('financial/domain/document — geração de filhos (US2)', () => {
   it('CT-006: DANFE com impostos registrados → só pai, 0 filhos', () => {
     const r = Document.create({
       ...base('DANFE'),
+      accessKey: '1'.repeat(44), // #115: DANFE exige chave de acesso (44 dígitos)
       grossValue: money(500000),
       registeredTaxes: [regTax('ICMS', 90000), regTax('IPI', 25000)],
     });

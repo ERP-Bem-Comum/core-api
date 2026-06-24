@@ -1,0 +1,1 @@
+ALTER TABLE `fin_documents` ADD `access_key` varchar(44);
