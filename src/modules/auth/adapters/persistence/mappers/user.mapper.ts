@@ -11,6 +11,8 @@
 // Tagged errors (Padrao D — payload de evidencia, espelha contract.mapper.ts).
 // ADR-0020: sem JSON, dialeto MySQL unico. ADR-0014: so auth_*.
 
+import process from 'node:process';
+
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
 import * as UserId from '../../../domain/identity/user-id.ts';
 import * as Email from '../../../domain/identity/email.ts';
@@ -65,12 +67,6 @@ export type UserMapperMissingDisabledAt = Readonly<{
 
 // ─── Union ────────────────────────────────────────────────────────────────────
 
-export type UserMapperInvalidProfile = Readonly<{
-  tag: 'UserMapperInvalidProfile';
-  field: string;
-  reason: string;
-}>;
-
 export type UserMapperError =
   | UserMapperInvalidUserId
   | UserMapperInvalidEmail
@@ -78,8 +74,7 @@ export type UserMapperError =
   | UserMapperInvalidStatus
   | UserMapperInvalidRole
   | UserMapperInvalidPermission
-  | UserMapperMissingDisabledAt
-  | UserMapperInvalidProfile;
+  | UserMapperMissingDisabledAt;
 
 // ─── Case constructors ────────────────────────────────────────────────────────
 
@@ -120,22 +115,21 @@ const missingDisabledAt = (userId: string): UserMapperMissingDisabledAt => ({
   userId,
 });
 
-const invalidProfile = (field: string, reason: string): UserMapperInvalidProfile => ({
-  tag: 'UserMapperInvalidProfile',
-  field,
-  reason,
-});
-
-// Reidrata um campo de perfil opcional via smart constructor do VO. NULL no DB -> null no
-// dominio. Valor presente invalido -> erro de mapper (dominio rejeita estado corrompido).
+// Reidrata um campo de perfil OPCIONAL via smart constructor do VO. NULL no DB -> null.
+// Valor presente inválido -> DEGRADA para null + warning (NÃO derruba o mapper): um campo de
+// perfil cosmético corrompido não pode impedir a autenticação (incidente login 500 /
+// UserMapperInvalidProfile). O caller loga o warning com o userId para higienização posterior do
+// dado. Os campos CRÍTICOS (id/email/passwordHash/roles/status) seguem com rejeição estrita.
 const rehydrateProfile = <T>(
   raw: string | null,
   parse: (s: string) => { ok: true; value: T } | { ok: false; error: string },
   field: string,
-): { ok: true; value: T | null } | { ok: false; error: UserMapperInvalidProfile } => {
-  if (raw === null) return { ok: true, value: null };
+): { value: T | null; warning: string | null } => {
+  if (raw === null) return { value: null, warning: null };
   const r = parse(raw);
-  return r.ok ? { ok: true, value: r.value } : { ok: false, error: invalidProfile(field, r.error) };
+  return r.ok
+    ? { value: r.value, warning: null }
+    : { value: null, warning: `${field}: ${r.error}` };
 };
 
 // ─── Tipos de input das queries Q2 e Q3 ──────────────────────────────────────
@@ -208,13 +202,20 @@ export const userFromRows = (
     roles.push(roleR.value);
   }
 
-  // Reidratar perfil administrativo (spec 005). Campos nullable; valor presente invalido -> erro.
+  // Reidratar perfil administrativo (spec 005). Campos opcionais: valor inválido DEGRADA p/ null
+  // + warning (não derruba o login — incidente UserMapperInvalidProfile). Críticos acima seguem estritos.
   const cpfR = rehydrateProfile(userRow.cpf, Cpf.parse, 'cpf');
-  if (!cpfR.ok) return err(cpfR.error);
   const telR = rehydrateProfile(userRow.telephone, Telephone.parse, 'telephone');
-  if (!telR.ok) return err(telR.error);
   const photoR = rehydrateProfile(userRow.imageUrl, ProfilePhotoRef.parse, 'imageUrl');
-  if (!photoR.ok) return err(photoR.error);
+  const profileWarnings = [cpfR.warning, telR.warning, photoR.warning].filter(
+    (w): w is string => w !== null,
+  );
+  if (profileWarnings.length > 0) {
+    // Observabilidade: dado de perfil corrompido no DB foi degradado p/ null (não bloqueia auth).
+    process.stderr.write(
+      `[user-repo:mapper] degraded invalid profile for user ${userRow.id}: ${profileWarnings.join('; ')}\n`,
+    );
+  }
   const profile = {
     name: userRow.name,
     cpf: cpfR.value,
