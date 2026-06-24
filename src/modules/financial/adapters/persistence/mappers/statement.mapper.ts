@@ -54,6 +54,14 @@ export const statementToRow = (statement: BankStatement): NewBankStatementRow =>
   closingBalanceCents: statement.closingBalanceCents,
 });
 
+// Limites espelham os varchar do schema (mysql.ts:589-591). Defesa de borda (#161): texto do parser
+// acima do bound derrubaria o INSERT do extrato inteiro com erro genérico (ER_DATA_TOO_LONG).
+const ENTRY_TYPE_MAX = 16;
+const PAYEE_NAME_MAX = 255;
+const MEMO_MAX = 500;
+const truncate = (value: string, max: number): string =>
+  value.length > max ? value.slice(0, max) : value;
+
 export const transactionsToRows = (statement: BankStatement): NewStatementTransactionRow[] =>
   statement.transactions.map((tx) => ({
     id: tx.id,
@@ -62,9 +70,9 @@ export const transactionsToRows = (statement: BankStatement): NewStatementTransa
     fitid: tx.fitid,
     date: tx.date,
     movement: tx.movement,
-    entryType: tx.entryType,
-    payeeName: tx.payeeName,
-    memo: tx.memo,
+    entryType: truncate(tx.entryType, ENTRY_TYPE_MAX),
+    payeeName: truncate(tx.payeeName, PAYEE_NAME_MAX),
+    memo: truncate(tx.memo, MEMO_MAX),
     valueCents: tx.valueCents,
     balanceAfterCents: tx.balanceAfterCents,
     reconciliationStatus: tx.reconciliationStatus,
