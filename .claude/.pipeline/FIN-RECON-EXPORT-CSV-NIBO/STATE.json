@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "FIN-RECON-EXPORT-CSV-NIBO",
+  "size": "L",
+  "createdAt": "2026-06-24T11:11:12.347Z",
+  "closedAt": "2026-06-24T12:36:37.927Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "drizzle-orm-expert",
+      "startedAt": "2026-06-24T11:35:06.939Z",
+      "finishedAt": "2026-06-24T12:36:35.750Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "drizzle-orm-expert",
+      "startedAt": "2026-06-24T12:36:36.073Z",
+      "finishedAt": "2026-06-24T12:36:36.387Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-06-24T12:36:36.697Z",
+      "finishedAt": "2026-06-24T12:36:37.004Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-06-24T12:36:37.313Z",
+      "finishedAt": "2026-06-24T12:36:37.623Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

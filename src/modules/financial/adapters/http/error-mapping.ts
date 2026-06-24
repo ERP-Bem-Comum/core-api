@@ -72,6 +72,9 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   'category-read-unavailable',
   'cost-center-read-unavailable',
   'program-read-unavailable',
+  // Export Nibo (#146): falhas de read-model/view necessários ao enriquecimento.
+  'payable-document-view-failure',
+  'supplier-view-store-unavailable',
 ]);
 
 // NOTA (019): `cedente-account-not-found` NÃO está em NOT_FOUND_CODES de propósito → default 422.
@@ -183,6 +186,9 @@ const SLUG_MESSAGES: Record<string, string> = {
   'reconciliation-period-not-found': 'Período de conciliação não encontrado.',
   'reconciliation-period-id-invalid': 'Identificador de período inválido.',
   'unsupported-export-format': 'Formato de exportação não suportado (esperado OFX ou CSV).',
+  // Export Nibo (#146): falhas de infraestrutura ocultadas pelo caller como 'internal' (5xx).
+  'payable-document-view-failure': 'Erro ao consultar documentos dos títulos.',
+  'supplier-view-store-unavailable': 'Erro ao consultar read-model de fornecedores.',
 };
 
 /** Mensagem PT-BR ao humano para um slug; fallback por `code` público. Nunca retorna o slug. */

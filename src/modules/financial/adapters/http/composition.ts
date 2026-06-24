@@ -22,6 +22,9 @@ import { createInMemoryPayableListView } from '../persistence/repos/payable-list
 import { createDrizzlePayableListView } from '../persistence/repos/payable-list-view.drizzle.ts';
 import type { PayableListView } from '../../application/ports/payable-list-view.ts';
 import { createInMemorySupplierViewStore } from '../persistence/repos/supplier-view-store.in-memory.ts';
+import { createDrizzleSupplierViewStore } from '../persistence/repos/supplier-view-store.drizzle.ts';
+import { createInMemoryPayableDocumentView } from '../persistence/repos/payable-document-view.in-memory.ts';
+import { createDrizzlePayableDocumentView } from '../persistence/repos/payable-document-view.drizzle.ts';
 import {
   createInMemoryTimelineRepository,
   type TimelineStore,
@@ -64,6 +67,7 @@ import { createDrizzleCostCenterReadStore } from '../persistence/repos/cost-cent
 import { REFERENCE_COST_CENTER_SEED } from '../persistence/seed/reference-cost-centers.ts';
 import * as CostCenter from '../../domain/cost-center/cost-center.ts';
 import * as CostCenterId from '../../domain/cost-center/cost-center-id.ts';
+import * as Competencia from '../../domain/document/competencia.ts';
 import type { CostCenterReadPort } from '../../application/ports/cost-center-read.ts';
 import { createInMemoryProgramReadStore } from '../persistence/repos/program-read.in-memory.ts';
 import { createProgramsApiReadStore } from '../persistence/repos/program-read.from-programs.ts';
@@ -105,6 +109,8 @@ import { confirmBatch } from '../../application/use-cases/confirm-batch.ts';
 import { closeReconciliationPeriod } from '../../application/use-cases/close-reconciliation-period.ts';
 import { reopenReconciliationPeriod } from '../../application/use-cases/reopen-reconciliation-period.ts';
 import { exportReconciliation } from '../../application/use-cases/export-reconciliation.ts';
+import { exportReconciliationNibo } from '../../application/use-cases/export-reconciliation-nibo.ts';
+import { niboExporter } from '../export/nibo-csv.ts';
 import { createCedenteAccount } from '../../application/use-cases/create-cedente-account.ts';
 import { listCedenteAccounts } from '../../application/use-cases/list-cedente-accounts.ts';
 import { listCedenteAccountsWithBalance } from '../../application/use-cases/list-cedente-accounts-with-balance.ts';
@@ -126,6 +132,8 @@ import type { CedenteAccountStore } from '../../application/ports/cedente-accoun
 import type { SuggestionView } from '../../application/ports/suggestion-view.ts';
 import type { RejectedSuggestionRepository } from '../../application/ports/rejected-suggestion-repository.ts';
 import type { ReconciliationPeriodStore } from '../../application/ports/reconciliation-period-store.ts';
+import type { SupplierViewStore } from '../../application/ports/supplier-view-store.ts';
+import type { PayableDocumentView } from '../../application/ports/payable-document-view.ts';
 
 export type FinancialDriver = 'memory' | 'mysql';
 
@@ -183,6 +191,8 @@ export type FinancialHttpDeps = Readonly<{
   reopenReconciliationPeriod: ReturnType<typeof reopenReconciliationPeriod>;
   /** Exporta conciliação OFX/CSV (US6) — GET /reconciliation-periods/:id/export. */
   exportReconciliation: ReturnType<typeof exportReconciliation>;
+  /** Exporta conciliação no layout Nibo CSV (#146) — GET /reconciliation-periods/:id/export/nibo. */
+  exportReconciliationNibo: ReturnType<typeof exportReconciliationNibo>;
   /** Conta-cedente (019) — POST /cedente-accounts. */
   createCedenteAccount: ReturnType<typeof createCedenteAccount>;
   /** Conta-cedente (019) — GET /cedente-accounts. */
@@ -238,6 +248,11 @@ type Pools = Readonly<{
   categoryReader: CategoryReadPort;
   costCenterReader: CostCenterReadPort;
   programReader: ProgramReadPort;
+  // #47/US2: read-model de fornecedor (fin_supplier_view). memory: in-memory vazio; mysql: drizzle.
+  // Exposto nos Pools para que o use-case Nibo (#146) possa resolver nomes de fornecedor.
+  supplierViewStore: SupplierViewStore;
+  // #146: JOIN fin_payables × fin_documents para o export CSV-Nibo.
+  payableDocView: PayableDocumentView;
   // #255: port de leitura do contratado (ADR-0032). memory: injetado ou null; mysql: construído.
   contractorReadPort: ContractorReadPort | null;
   // #207: port de leitura do nome de usuário (ADR-0032). memory: injetado ou null; mysql: construído.
@@ -329,6 +344,33 @@ const buildMemoryPools = (
     payableView,
     reconciliationRepo,
     cedenteStore,
+    // Read-model de fornecedor: in-memory vazio no boot (sem worker de projeção no driver memory).
+    // Exposto para que o use-case Nibo (#146) possa invocar `supplierViewStore.get()`.
+    supplierViewStore,
+    // #146: derivação lazy do JOIN fin_payables × fin_documents via stores compartilhados.
+    // Thunk resolve no momento da chamada — stores mudam após seed (padrão: payable-list-view.in-memory).
+    payableDocView: createInMemoryPayableDocumentView(() => {
+      const rows = [];
+      for (const pay of payableStore.values()) {
+        const entry = documentStore.get(pay.documentId);
+        if (entry === undefined) continue;
+        const doc = entry.aggregate.document;
+        // Draft: campos opcionais podem ser null; payable não nasce de Draft, mas
+        // payableStore pode conter dados de testes — inclui com campos nullable para robustez.
+        rows.push({
+          payableId: pay.id,
+          documentId: pay.documentId,
+          supplierRef: doc.supplier ?? null,
+          documentNumber: doc.documentNumber ?? null,
+          dueDate: doc.dueDate ?? null,
+          categoryRef: doc.categoryRef ?? null,
+          costCenterRef: doc.costCenterRef ?? null,
+          competencia: doc.competencia !== null ? Competencia.toString(doc.competencia) : null,
+          payeeKind: doc.payeeKind ?? null,
+        });
+      }
+      return rows;
+    }),
     suggestionView,
     rejectedSuggestionRepo,
     periodStore,
@@ -415,6 +457,11 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     categoryReader: createDrizzleCategoryReadStore(handle),
     costCenterReader: createDrizzleCostCenterReadStore(handle),
     programReader: createProgramsApiReadStore(programsReadPort),
+    // Read-model de fornecedor: adaptador Drizzle lê fin_supplier_view (populado pelo worker de projeção).
+    // `clock` é criado localmente (mesmo padrão do makeDeps §clock).
+    supplierViewStore: createDrizzleSupplierViewStore(handle, ClockReal()),
+    // #146: JOIN fin_payables × fin_documents via Drizzle (inArray — suggestion-view.drizzle.ts precedente).
+    payableDocView: createDrizzlePayableDocumentView(handle),
     suggestionView: createDrizzleSuggestionView(handle),
     rejectedSuggestionRepo: createDrizzleRejectedSuggestionRepository(handle),
     periodStore: createDrizzleReconciliationPeriodStore(handle),
@@ -515,6 +562,17 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       periodStore: pools.periodStore,
       statements: pools.statementRepo,
       exporter: reconciliationExporter,
+    }),
+    exportReconciliationNibo: exportReconciliationNibo({
+      periodStore: pools.periodStore,
+      statements: pools.statementRepo,
+      reconciliationRepo: pools.reconciliationRepo,
+      payableDocView: pools.payableDocView,
+      categoryRead: pools.categoryReader,
+      costCenterRead: pools.costCenterReader,
+      supplierViewStore: pools.supplierViewStore,
+      cedenteStore: pools.cedenteStore,
+      niboExporter,
     }),
     createCedenteAccount: createCedenteAccount({ cedenteStore: pools.cedenteStore }),
     listCedenteAccounts: listCedenteAccounts({ cedenteStore: pools.cedenteStore }),

@@ -981,7 +981,7 @@ const financialRoutes =
       },
     });
 
-    // GET /financial/reconciliation-periods/:id/export?format=ofx|csv — exporta a conciliação (US6).
+    // GET /financial/reconciliation-periods/:id/export?format=ofx|csv|csv-nibo — exporta a conciliação (US6 + #146).
     scope.route({
       method: 'GET',
       url: '/financial/reconciliation-periods/:id/export',
@@ -992,9 +992,19 @@ const financialRoutes =
         // Resposta é arquivo texto (OFX/CSV) — sem response schema JSON (convenção das rotas não-JSON).
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
+        const { format } = req.query;
+        if (format === 'csv-nibo') {
+          const result = await deps.exportReconciliationNibo({ periodId: req.params.id });
+          if (!result.ok) return sendDomainError(reply, result.error);
+          return reply
+            .code(200)
+            .header('content-type', 'text/csv; charset=utf-8')
+            .send(result.value.content) as unknown as Promise<void>;
+        }
+        // format narrowed to 'ofx' | 'csv' após o branch csv-nibo acima.
         const result = await deps.exportReconciliation({
           periodId: req.params.id,
-          format: req.query.format,
+          format,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         const contentType = result.value.format === 'csv' ? 'text/csv' : 'application/x-ofx';
