@@ -193,6 +193,7 @@ export const documentResponseSchema = z.object({
   id: z.uuid(),
   status: z.string(),
   documentNumber: z.string().nullable(),
+  series: z.string().nullable(), // #95: série (drawer de Detalhe / edição)
   type: z.string().nullable(),
   supplierRef: z.string().nullable(),
   // Tipo do favorecido (#90) — round-trip p/ o front exibir o kind correto.

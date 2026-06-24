@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "FIN-DETAIL-DTO",
+  "size": "S",
+  "createdAt": "2026-06-24T05:37:40.012Z",
+  "closedAt": "2026-06-24T05:42:17.998Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-06-24T05:37:40.314Z",
+      "finishedAt": "2026-06-24T05:38:36.971Z",
+      "rounds": 1,
+      "reportPath": "000-request.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "fastify-server-expert",
+      "startedAt": "2026-06-24T05:42:16.189Z",
+      "finishedAt": "2026-06-24T05:42:16.487Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "fastify-server-expert",
+      "startedAt": "2026-06-24T05:42:16.791Z",
+      "finishedAt": "2026-06-24T05:42:17.091Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "fastify-server-expert",
+      "startedAt": "2026-06-24T05:42:17.395Z",
+      "finishedAt": "2026-06-24T05:42:17.696Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "ALL-GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

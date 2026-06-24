@@ -118,4 +118,24 @@ describe('financial/http — competência + conta-débito (#197)', () => {
     });
     assert.equal(res.statusCode, 422, res.body);
   });
+
+  // #95: série do documento exposta no detalhe (drawer de Detalhe / tela de edição).
+  it('#95: series do documento aparece no GET /:id', async () => {
+    const created = await handle.app.inject({
+      method: 'POST',
+      url: '/api/v2/financial/documents',
+      headers: { authorization: `Bearer ${TOKEN}` },
+      payload: nfseBody({ documentNumber: 'NFS-95', series: '5' }),
+    });
+    assert.equal(created.statusCode, 201, created.body);
+    const id = (created.json() as { id: string }).id;
+
+    const detail = await handle.app.inject({
+      method: 'GET',
+      url: `/api/v2/financial/documents/${id}`,
+      headers: { authorization: `Bearer ${TOKEN}` },
+    });
+    assert.equal(detail.statusCode, 200, detail.body);
+    assert.equal((detail.json() as { series: string | null }).series, '5');
+  });
 });
