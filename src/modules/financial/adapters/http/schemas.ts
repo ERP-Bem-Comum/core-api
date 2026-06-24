@@ -193,6 +193,7 @@ export const documentResponseSchema = z.object({
   id: z.uuid(),
   status: z.string(),
   documentNumber: z.string().nullable(),
+  series: z.string().nullable(), // #95: série (drawer de Detalhe / edição)
   type: z.string().nullable(),
   supplierRef: z.string().nullable(),
   // Tipo do favorecido (#90) — round-trip p/ o front exibir o kind correto.
@@ -219,6 +220,26 @@ export const documentResponseSchema = z.object({
     description:
       'Versão atual do documento (optimistic lock) — reenvie no próximo PATCH/approve/undo-approval',
   }),
+  // #255: bloco bancário do favorecido (composição síncrona ADR-0032). null = não resolvível
+  // (não-supplier, not-found, port ausente, IO ou timeout — degradação graciosa).
+  payeeBank: z
+    .object({
+      bankAccount: z
+        .object({
+          bank: z.string().max(80),
+          agency: z.string().max(10),
+          accountNumber: z.string().max(20),
+          checkDigit: z.string().max(2),
+        })
+        .nullable(),
+      pixKey: z
+        .object({
+          keyType: z.enum(['cpf', 'cnpj', 'email', 'phone', 'random-key']),
+          key: z.string().max(80),
+        })
+        .nullable(),
+    })
+    .nullable(),
 });
 
 export type DocumentResponseDto = z.infer<typeof documentResponseSchema>;

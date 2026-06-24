@@ -45,6 +45,11 @@ import {
   createInMemoryContractCategorizationReadStore,
   type ContractCategorizationReadPort,
 } from '#src/modules/contracts/public-api/index.ts';
+import {
+  buildPartnersReadPort,
+  type ContractorReadPort,
+} from '#src/modules/partners/public-api/index.ts';
+import { composePayeeBank, type PayeeBankBlock } from './payee-bank-composition.ts';
 import { createInMemoryCategoryReadStore } from '../persistence/repos/category-read.in-memory.ts';
 import { createDrizzleCategoryReadStore } from '../persistence/repos/category-read.drizzle.ts';
 import { REFERENCE_CATEGORY_SEED } from '../persistence/seed/reference-categories.ts';
@@ -107,6 +112,7 @@ import { listReconciliationPeriods } from '../../application/use-cases/list-reco
 import { getStatementSuggestions } from '../../application/use-cases/get-statement-suggestions.ts';
 import { createStatementBackedAccountHistory } from '../persistence/repos/cedente-account-history.from-statements.ts';
 import type { DocumentRepository } from '../../domain/document/repository.ts';
+import type { PayeeKind } from '../../domain/document/types.ts';
 import type { FinancialTimelineRepository } from '../../domain/timeline/repository.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
 import type { BankStatementRepository } from '../../application/ports/bank-statement-repository.ts';
@@ -123,6 +129,9 @@ export type FinancialCompositionConfig = Readonly<{
   driver: FinancialDriver;
   /** URL de conexão MySQL (obrigatório para driver mysql). */
   writerUrl?: string;
+  /** Port de leitura de parceiros (ADR-0032 — composição síncrona do bancário do favorecido).
+   *  Injetado em testes; driver mysql constrói automaticamente se ausente. */
+  contractorReadPort?: ContractorReadPort;
 }>;
 
 export type FinancialHttpDeps = Readonly<{
@@ -191,6 +200,11 @@ export type FinancialHttpDeps = Readonly<{
   listCostCenters: CostCenterReadPort['list'];
   /** Programas (020 · US3) — GET /financial/programs (passthrough cross-módulo). */
   listPrograms: ProgramReadPort['list'];
+  /** Composição síncrona do bancário do favorecido (#255 — ADR-0032). */
+  resolvePayeeBank: (ref: {
+    kind: PayeeKind | null;
+    id: string | null;
+  }) => Promise<PayeeBankBlock | null>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -213,6 +227,8 @@ type Pools = Readonly<{
   categoryReader: CategoryReadPort;
   costCenterReader: CostCenterReadPort;
   programReader: ProgramReadPort;
+  // #255: port de leitura do contratado (ADR-0032). memory: injetado ou null; mysql: construído.
+  contractorReadPort: ContractorReadPort | null;
   shutdown: () => Promise<void>;
 }>;
 
@@ -249,7 +265,7 @@ const seededProgramsStub = (): readonly ProgramView[] => [
   { id: '7b000000-0000-4000-8000-000000000003', name: 'Captação de recursos' },
 ];
 
-const buildMemoryPools = (): Pools => {
+const buildMemoryPools = (contractorReadPort: ContractorReadPort | null): Pools => {
   // Store compartilhado entre o document-repo (escreve trilha no save) e o timeline-repo
   // (lê). Garante atomicidade em memória sem tx (timeline-repository.in-memory.ts §store).
   const timelineStore: TimelineStore = new Map<string, FinancialTimelineEntry[]>();
@@ -300,6 +316,7 @@ const buildMemoryPools = (): Pools => {
     suggestionView,
     rejectedSuggestionRepo,
     periodStore,
+    contractorReadPort,
     shutdown: () => Promise.resolve(),
   };
 };
@@ -335,6 +352,21 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     );
   }
   const programsReadPort = programsReadPortR.value;
+  // #255: port de leitura de parceiros (ADR-0032). Injetado tem precedência (testes); o construído
+  // abre pool próprio e é fechado no shutdown.
+  let contractorReadPort: ContractorReadPort | null = config.contractorReadPort ?? null;
+  let closeContractorPort: () => Promise<void> = () => Promise.resolve();
+  if (contractorReadPort === null) {
+    const portR = await buildPartnersReadPort({ connectionString: writerUrl });
+    if (!portR.ok) {
+      await programsReadPort.close();
+      await contractsReadPort.close();
+      await handle.close();
+      throw new Error(`financial-composition: falha ao abrir partners read port (${portR.error})`);
+    }
+    contractorReadPort = portR.value;
+    closeContractorPort = portR.value.close;
+  }
   return {
     contractCategorizationReader: contractsReadPort,
     repo: createDrizzleDocumentRepository(handle),
@@ -351,7 +383,9 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     suggestionView: createDrizzleSuggestionView(handle),
     rejectedSuggestionRepo: createDrizzleRejectedSuggestionRepository(handle),
     periodStore: createDrizzleReconciliationPeriodStore(handle),
+    contractorReadPort,
     shutdown: async () => {
+      await closeContractorPort();
       await programsReadPort.close();
       await contractsReadPort.close();
       await handle.close();
@@ -465,6 +499,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     listCategories: pools.categoryReader.list,
     listCostCenters: pools.costCenterReader.list,
     listPrograms: pools.programReader.list,
+    resolvePayeeBank: (ref) => composePayeeBank(pools.contractorReadPort, ref),
     shutdown: pools.shutdown,
   };
 };
@@ -473,7 +508,7 @@ export const buildFinancialHttpDeps = async (
   config: FinancialCompositionConfig,
 ): Promise<FinancialHttpDeps> => {
   if (config.driver === 'memory') {
-    return makeDeps(buildMemoryPools());
+    return makeDeps(buildMemoryPools(config.contractorReadPort ?? null));
   }
 
   if (config.writerUrl === undefined || config.writerUrl.length === 0) {
