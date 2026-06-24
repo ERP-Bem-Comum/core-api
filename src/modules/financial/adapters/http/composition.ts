@@ -49,7 +49,10 @@ import {
   buildPartnersReadPort,
   type ContractorReadPort,
 } from '#src/modules/partners/public-api/index.ts';
+// #207: read-port cross-módulo do NOME de usuário (ADR-0006 — só via public-api; ADR-0032 — borda).
+import { buildAuthUserReadPort, type AuthUserReadPort } from '#src/modules/auth/public-api/read.ts';
 import { composePayeeBank, type PayeeBankBlock } from './payee-bank-composition.ts';
+import { resolveUserName } from './user-name-composition.ts';
 import { createInMemoryCategoryReadStore } from '../persistence/repos/category-read.in-memory.ts';
 import { createDrizzleCategoryReadStore } from '../persistence/repos/category-read.drizzle.ts';
 import { REFERENCE_CATEGORY_SEED } from '../persistence/seed/reference-categories.ts';
@@ -132,6 +135,9 @@ export type FinancialCompositionConfig = Readonly<{
   /** Port de leitura de parceiros (ADR-0032 — composição síncrona do bancário do favorecido).
    *  Injetado em testes; driver mysql constrói automaticamente se ausente. */
   contractorReadPort?: ContractorReadPort;
+  /** Port de leitura do NOME de usuário (#207 — ADR-0032; nome do executor/closer da conciliação).
+   *  Injetado em testes; driver mysql constrói automaticamente se ausente. */
+  authUserReadPort?: AuthUserReadPort;
 }>;
 
 export type FinancialHttpDeps = Readonly<{
@@ -205,6 +211,8 @@ export type FinancialHttpDeps = Readonly<{
     kind: PayeeKind | null;
     id: string | null;
   }) => Promise<PayeeBankBlock | null>;
+  /** Composição síncrona do NOME de usuário (#207 — ADR-0032). null = não-resolvido (graceful). */
+  resolveUserName: (id: string | null) => Promise<string | null>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -229,6 +237,8 @@ type Pools = Readonly<{
   programReader: ProgramReadPort;
   // #255: port de leitura do contratado (ADR-0032). memory: injetado ou null; mysql: construído.
   contractorReadPort: ContractorReadPort | null;
+  // #207: port de leitura do nome de usuário (ADR-0032). memory: injetado ou null; mysql: construído.
+  authUserReadPort: AuthUserReadPort | null;
   shutdown: () => Promise<void>;
 }>;
 
@@ -265,7 +275,10 @@ const seededProgramsStub = (): readonly ProgramView[] => [
   { id: '7b000000-0000-4000-8000-000000000003', name: 'Captação de recursos' },
 ];
 
-const buildMemoryPools = (contractorReadPort: ContractorReadPort | null): Pools => {
+const buildMemoryPools = (
+  contractorReadPort: ContractorReadPort | null,
+  authUserReadPort: AuthUserReadPort | null,
+): Pools => {
   // Store compartilhado entre o document-repo (escreve trilha no save) e o timeline-repo
   // (lê). Garante atomicidade em memória sem tx (timeline-repository.in-memory.ts §store).
   const timelineStore: TimelineStore = new Map<string, FinancialTimelineEntry[]>();
@@ -317,6 +330,7 @@ const buildMemoryPools = (contractorReadPort: ContractorReadPort | null): Pools 
     rejectedSuggestionRepo,
     periodStore,
     contractorReadPort,
+    authUserReadPort,
     shutdown: () => Promise.resolve(),
   };
 };
@@ -367,6 +381,24 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     contractorReadPort = portR.value;
     closeContractorPort = portR.value.close;
   }
+  // #207: port de leitura do nome de usuário (ADR-0032). Injetado tem precedência (testes); o
+  // construído abre pool próprio (auth_* no mesmo DB do monólito) e é fechado no shutdown.
+  let authUserReadPort: AuthUserReadPort | null = config.authUserReadPort ?? null;
+  let closeAuthUserPort: () => Promise<void> = () => Promise.resolve();
+  if (authUserReadPort === null) {
+    const authPortR = await buildAuthUserReadPort({ connectionString: writerUrl });
+    if (!authPortR.ok) {
+      await closeContractorPort();
+      await programsReadPort.close();
+      await contractsReadPort.close();
+      await handle.close();
+      throw new Error(
+        `financial-composition: falha ao abrir auth user read port (${authPortR.error})`,
+      );
+    }
+    authUserReadPort = authPortR.value;
+    closeAuthUserPort = authPortR.value.close;
+  }
   return {
     contractCategorizationReader: contractsReadPort,
     repo: createDrizzleDocumentRepository(handle),
@@ -384,7 +416,9 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     rejectedSuggestionRepo: createDrizzleRejectedSuggestionRepository(handle),
     periodStore: createDrizzleReconciliationPeriodStore(handle),
     contractorReadPort,
+    authUserReadPort,
     shutdown: async () => {
+      await closeAuthUserPort();
       await closeContractorPort();
       await programsReadPort.close();
       await contractsReadPort.close();
@@ -500,6 +534,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     listCostCenters: pools.costCenterReader.list,
     listPrograms: pools.programReader.list,
     resolvePayeeBank: (ref) => composePayeeBank(pools.contractorReadPort, ref),
+    resolveUserName: (id) => resolveUserName(pools.authUserReadPort, id),
     shutdown: pools.shutdown,
   };
 };
@@ -508,7 +543,9 @@ export const buildFinancialHttpDeps = async (
   config: FinancialCompositionConfig,
 ): Promise<FinancialHttpDeps> => {
   if (config.driver === 'memory') {
-    return makeDeps(buildMemoryPools(config.contractorReadPort ?? null));
+    return makeDeps(
+      buildMemoryPools(config.contractorReadPort ?? null, config.authUserReadPort ?? null),
+    );
   }
 
   if (config.writerUrl === undefined || config.writerUrl.length === 0) {

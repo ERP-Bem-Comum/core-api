@@ -715,6 +715,8 @@ export const transactionReconciliationResponseSchema = z.object({
   type: z.enum(['Individual', 'Multiple', 'Partial', 'ManualEntry']),
   status: z.enum(['Active', 'Undone']),
   reconciledBy: z.string(),
+  // #207: nome de quem executou, resolvido server-side (ADR-0032). null = não-resolvido.
+  reconciledByName: z.string().nullable(),
   reconciledAt: z.iso.datetime(),
   differenceCents: z.string().nullable(),
   items: z.array(z.object({ payableId: z.uuid(), reconciledValueCents: z.string() })),
@@ -738,6 +740,8 @@ const reconciliationPeriodItemSchema = z.object({
   status: z.enum(['Open', 'Closed']),
   closedAt: z.iso.datetime().nullable(),
   closedBy: z.string().nullable(),
+  // #207: nome de quem fechou o período, resolvido server-side (ADR-0032). null = sem closer/não-resolvido.
+  closedByName: z.string().nullable(),
 });
 
 export const reconciliationPeriodsResponseSchema = z.array(reconciliationPeriodItemSchema);

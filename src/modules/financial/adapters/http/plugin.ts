@@ -770,7 +770,13 @@ const financialRoutes =
       handler: async (req, reply) => {
         const result = await deps.getTransactionReconciliation({ transactionId: req.params.id });
         if (!result.ok) return sendDomainError(reply, result.error);
-        return sendResult(reply, ok(transactionReconciliationToDto(result.value)), { ok: 200 });
+        // #207: compõe o nome do executor server-side (ADR-0032). Graceful → null.
+        const reconciledByName = await deps.resolveUserName(result.value.audit.reconciledBy);
+        return sendResult(
+          reply,
+          ok(transactionReconciliationToDto(result.value, reconciledByName)),
+          { ok: 200 },
+        );
       },
     });
 
@@ -886,7 +892,21 @@ const financialRoutes =
           debitAccountRef: req.query.debitAccountRef,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
-        return sendResult(reply, ok(reconciliationPeriodsToDto(result.value)), { ok: 200 });
+        // #207: resolve o nome de cada closer distinto server-side (ADR-0032). Graceful → null.
+        const closerIds = [
+          ...new Set(result.value.flatMap((p) => (p.closedBy !== null ? [p.closedBy] : []))),
+        ];
+        const names = new Map<string, string | null>(
+          await Promise.all(
+            closerIds.map(
+              async (id): Promise<readonly [string, string | null]> => [
+                id,
+                await deps.resolveUserName(id),
+              ],
+            ),
+          ),
+        );
+        return sendResult(reply, ok(reconciliationPeriodsToDto(result.value, names)), { ok: 200 });
       },
     });
 
