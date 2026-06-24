@@ -25,6 +25,7 @@ const baseRow = (over: Partial<PayableListRow> = {}): PayableListRow => ({
   version: 0,
   grossValueCents: 1000000,
   netValueCents: 793500,
+  paidAt: null,
   ...over,
 });
 

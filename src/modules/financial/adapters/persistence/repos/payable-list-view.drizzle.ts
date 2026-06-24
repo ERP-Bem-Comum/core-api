@@ -75,6 +75,7 @@ export const createDrizzlePayableListView = (
             version: finDocuments.version,
             grossValueCents: finDocuments.grossValue,
             netValueCents: finDocuments.netValue,
+            paidAt: finPayables.paidAt,
           })
           .from(finPayables)
           .innerJoin(finDocuments, eq(finPayables.documentId, finDocuments.id))

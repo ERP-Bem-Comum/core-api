@@ -92,6 +92,7 @@ const buildOpenPayables = (params: {
     value: params.netValue,
     dueDate: params.dueDate,
     paymentMethod: params.paymentMethod,
+    paidAt: null,
   });
   const children: readonly Payable[] = params.retentions.map((r) =>
     immutable<Payable>({
@@ -103,6 +104,7 @@ const buildOpenPayables = (params: {
       value: r.value,
       dueDate: params.dueDate,
       paymentMethod: params.paymentMethod,
+      paidAt: null,
     }),
   );
   return immutable<Payables>({ parent, children });
@@ -255,7 +257,7 @@ export const payPayableManually = (
   if (target.status !== 'Approved') return err('payable-not-approved');
 
   const pay = (p: Payable): Payable =>
-    p.id === input.payableId ? immutable<Payable>({ ...p, status: 'Paid' }) : p;
+    p.id === input.payableId ? immutable<Payable>({ ...p, status: 'Paid', paidAt: input.at }) : p;
 
   const event: DocumentEvent = {
     type: 'PayableManuallyPaid',

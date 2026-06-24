@@ -17,6 +17,7 @@ export type Payable = Readonly<{
   value: Money;
   dueDate: Date;
   paymentMethod: PaymentMethod;
+  paidAt: Date | null; // #231: data de pagamento (preenchida na baixa); null enquanto não pago
 }>;
 
 export type Payables = Readonly<{

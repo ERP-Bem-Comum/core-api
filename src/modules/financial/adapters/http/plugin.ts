@@ -225,6 +225,7 @@ const payableListItemToDto = (it: PayableListItem): PayableSummaryDto => ({
   version: it.version,
   grossValueCents: it.grossValueCents === null ? null : String(it.grossValueCents),
   netValueCents: it.netValueCents === null ? null : String(it.netValueCents),
+  paidAt: it.paidAt === null ? null : it.paidAt.toISOString().slice(0, 10),
 });
 
 const cedenteAccountToDto = (a: CedenteAccount): CedenteAccountResponseDto => ({
