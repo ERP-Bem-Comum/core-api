@@ -29,6 +29,7 @@
 
 import process from 'node:process';
 import { randomUUID } from 'node:crypto';
+import { pathToFileURL } from 'node:url';
 import { eq } from 'drizzle-orm';
 
 import { openAuthMysql } from '#src/modules/auth/adapters/persistence/drivers/mysql-driver.ts';
@@ -36,6 +37,9 @@ import { makeArgon2PasswordHasher } from '#src/modules/auth/adapters/crypto/pass
 import * as PasswordPolicy from '#src/modules/auth/domain/credential/password-policy.ts';
 import * as PermissionCatalog from '#src/modules/auth/domain/authorization/permission-catalog.ts';
 import * as schema from '#src/modules/auth/adapters/persistence/schemas/mysql.ts';
+import * as Email from '#src/modules/auth/domain/identity/email.ts';
+import * as Cpf from '#src/modules/auth/domain/identity/cpf.ts';
+import * as Telephone from '#src/modules/auth/domain/identity/telephone.ts';
 
 // ─── Utilitarios ───────────────────────────────────────────────────────────────
 
@@ -121,6 +125,38 @@ export const readEnvConfig = ():
   };
 };
 
+// ─── Validacao de dominio do perfil (VOs — espelha createUserByAdmin) ───────────
+//
+// O seed insere o usuario diretamente; sem isto, email/cpf/telephone CRUS poderiam ser persistidos
+// e depois REJEITADOS pelo read-path (mapper userFromRows) — causa do incidente login 500. Valida
+// pelos MESMOS smart constructors do dominio e devolve os valores NORMALIZADOS (email lowercase/trim)
+// usados no findByEmail (unicidade) + INSERT, garantindo auto-consistencia write<->read.
+
+export type ValidatedAdminProfile = Readonly<{
+  email: string;
+  cpf: string;
+  telephone: string;
+  name: string;
+}>;
+
+export const validateAdminProfile = (
+  config: EnvConfig,
+): { ok: true; value: ValidatedAdminProfile } | { ok: false; error: string } => {
+  const email = Email.parse(config.adminEmail);
+  if (!email.ok) return { ok: false, error: `ADMIN_EMAIL invalido: ${email.error}` };
+  const cpf = Cpf.parse(config.adminCpf);
+  if (!cpf.ok) return { ok: false, error: `ADMIN_CPF invalido: ${cpf.error}` };
+  const telephone = Telephone.parse(config.adminPhone);
+  if (!telephone.ok) return { ok: false, error: `ADMIN_PHONE invalido: ${telephone.error}` };
+  const name = config.adminName.trim();
+  if (name.length === 0) return { ok: false, error: 'ADMIN_NAME vazio (name-required)' };
+
+  return {
+    ok: true,
+    value: { email: email.value, cpf: cpf.value, telephone: telephone.value, name },
+  };
+};
+
 // ─── ER_DUP_ENTRY detection (espelha role-repository.drizzle.ts) ───────────────
 
 const getDupEntryInfo = (e: unknown): { errno: number; sqlMessage: string } | null => {
@@ -162,6 +198,16 @@ const main = async (): Promise<void> => {
   }
 
   const config = envR.value;
+
+  // Validar o perfil via os VOs do dominio ANTES de qualquer escrita (espelha createUserByAdmin).
+  // Falha aqui = nao cria usuario que o read-path (mapper) rejeitaria — incidente login 500.
+  const profileR = validateAdminProfile(config);
+  if (!profileR.ok) {
+    process.stderr.write(`[admin-seed] ${profileR.error}\n`);
+    process.exitCode = 1;
+    return;
+  }
+  const profile = profileR.value;
 
   // 2. Conectar via openAuthMysql (applyMigrations: false — schema ja provisionado por migrations)
   process.stdout.write('[admin-seed] conectando ao banco...\n');
@@ -296,11 +342,11 @@ const main = async (): Promise<void> => {
     });
 
     // 5. Usuario: se ADMIN_EMAIL ja existe -> encerra com aviso (idempotente, exitCode 0).
-    process.stdout.write(`[admin-seed] verificando usuario '${config.adminEmail}'...\n`);
+    process.stdout.write(`[admin-seed] verificando usuario '${profile.email}'...\n`);
     const existingUsers = await db
       .select({ id: schema.authUser.id })
       .from(schema.authUser)
-      .where(eq(schema.authUser.email, config.adminEmail))
+      .where(eq(schema.authUser.email, profile.email))
       .limit(1);
 
     const existingUserRow = existingUsers[0];
@@ -333,12 +379,12 @@ const main = async (): Promise<void> => {
       await db.transaction(async (tx) => {
         await tx.insert(schema.authUser).values({
           id: userId,
-          email: config.adminEmail,
+          email: profile.email,
           passwordHash,
           status: 'active',
-          name: config.adminName,
-          cpf: config.adminCpf,
-          telephone: config.adminPhone,
+          name: profile.name,
+          cpf: profile.cpf,
+          telephone: profile.telephone,
           createdAt: now,
           updatedAt: now,
         });
@@ -371,4 +417,7 @@ const main = async (): Promise<void> => {
   }
 };
 
-void main();
+// Executa main() apenas quando rodado como script (nao quando importado em testes).
+if (process.argv[1] !== undefined && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  void main();
+}
