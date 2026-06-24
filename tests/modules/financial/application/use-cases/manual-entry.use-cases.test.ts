@@ -214,3 +214,81 @@ describe('financial/application/use-cases/confirm-batch', () => {
     if (!r.ok) assert.equal(r.error, 'empty-batch');
   });
 });
+
+describe('financial/application/use-cases/record-manual-entry — realocação (#143)', () => {
+  const destAccount = () => {
+    const id = CedenteAccountId.generate();
+    const acc = createCedente({
+      id,
+      bankCode: '341',
+      agency: '4321',
+      accountNumber: '112233',
+      accountDigit: '2',
+      convenio: '8888888',
+      document: '98765432000199',
+    });
+    if (!acc.ok) throw new Error('setup: dest cedente');
+    return acc.value;
+  };
+
+  it('CA1: Transfer com conta de destino válida → ok', async () => {
+    const w = buildWorld([txOf('f0', 2500)]);
+    await w.cedenteStore.save(w.account);
+    const dest = destAccount();
+    await w.cedenteStore.save(dest);
+    const txId = w.transactionIds[0];
+    if (txId === undefined) throw new Error('setup');
+    const r = await w.record({
+      transactionId: txId,
+      type: 'Transfer',
+      destinationAccountRef: String(dest.id),
+      reconciledBy: 'u1',
+    });
+    assert.equal(r.ok, true, JSON.stringify(r));
+  });
+
+  it('CA1: Transfer com destino = origem → destination-same-as-source', async () => {
+    const w = buildWorld([txOf('f0', 2500)]);
+    await w.cedenteStore.save(w.account);
+    const txId = w.transactionIds[0];
+    if (txId === undefined) throw new Error('setup');
+    const r = await w.record({
+      transactionId: txId,
+      type: 'Transfer',
+      destinationAccountRef: String(w.account.id),
+      reconciledBy: 'u1',
+    });
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'destination-same-as-source');
+  });
+
+  it('CA1: Transfer com destino inexistente → destination-account-not-found', async () => {
+    const w = buildWorld([txOf('f0', 2500)]);
+    await w.cedenteStore.save(w.account);
+    const txId = w.transactionIds[0];
+    if (txId === undefined) throw new Error('setup');
+    const ghost = CedenteAccountId.generate();
+    const r = await w.record({
+      transactionId: txId,
+      type: 'Transfer',
+      destinationAccountRef: String(ghost),
+      reconciledBy: 'u1',
+    });
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'destination-account-not-found');
+  });
+
+  it('CA2: Investment com productLabel → ok', async () => {
+    const w = buildWorld([txOf('f0', 2500)]);
+    await w.cedenteStore.save(w.account);
+    const txId = w.transactionIds[0];
+    if (txId === undefined) throw new Error('setup');
+    const r = await w.record({
+      transactionId: txId,
+      type: 'Investment',
+      productLabel: 'CDB Banco X',
+      reconciledBy: 'u1',
+    });
+    assert.equal(r.ok, true, JSON.stringify(r));
+  });
+});

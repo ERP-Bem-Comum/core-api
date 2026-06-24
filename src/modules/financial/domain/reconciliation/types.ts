@@ -29,6 +29,10 @@ export type ManualEntry = Readonly<{
   costCenterRef: string | null;
   programRef: string | null;
   description: string | null;
+  // #143: realocação patrimonial. `destinationAccountRef` = outra fin_cedente_account (Transfer);
+  // `productLabel` = produto livre (Investment/Redemption). Null nos demais tipos.
+  destinationAccountRef: string | null;
+  productLabel: string | null;
 }>;
 
 // Foto do título no momento da conciliação (referência por identidade — D-AGGREGATES).

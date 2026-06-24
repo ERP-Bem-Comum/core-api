@@ -713,6 +713,9 @@ export const finManualEntries = mysqlTable(
     costCenterRef: varchar('cost_center_ref', { length: 36 }),
     programRef: varchar('program_ref', { length: 36 }),
     description: varchar('description', { length: 500 }),
+    // #143: realocação patrimonial — conta de destino (Transfer) e produto livre (Investment/Redemption).
+    destinationAccountRef: varchar('destination_account_ref', { length: 36 }),
+    productLabel: varchar('product_label', { length: 120 }),
   },
   (t) => [
     foreignKey({

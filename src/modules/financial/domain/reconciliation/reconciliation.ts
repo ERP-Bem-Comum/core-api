@@ -51,6 +51,8 @@ const buildDifferenceManualEntry = (difference: Difference): ManualEntry | null 
     costCenterRef: difference.costCenterRef ?? null,
     programRef: null,
     description: difference.note ?? null,
+    destinationAccountRef: null,
+    productLabel: null,
   });
 };
 

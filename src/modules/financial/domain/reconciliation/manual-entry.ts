@@ -10,7 +10,15 @@ import type { ManualEntry, ManualEntryType, Reconciliation } from './types.ts';
 // Lançamento manual (US5): concilia uma transação SEM título (ex.: tarifa), criando uma `Reconciliation`
 // tipo `ManualEntry` (items vazio) e o registro contábil `ManualEntry` no boundary. Nunca automático (R1).
 
-export type ManualEntryError = 'manual-entry-value-not-positive';
+export type ManualEntryError =
+  | 'manual-entry-value-not-positive'
+  | 'transfer-requires-destination'
+  | 'investment-requires-product'
+  | 'realloc-forbids-supplier';
+
+// #143: tipos de realocação patrimonial (não despesa/receita) — derivado do tipo, sem flag extra.
+export const isCapitalReallocation = (type: ManualEntryType): boolean =>
+  type === 'Transfer' || type === 'Investment' || type === 'Redemption';
 
 export type ConfirmManualEntryInput = Readonly<{
   reconciliationId: ReconciliationId;
@@ -22,6 +30,8 @@ export type ConfirmManualEntryInput = Readonly<{
   costCenterRef?: string;
   programRef?: string;
   description?: string;
+  destinationAccountRef?: string;
+  productLabel?: string;
   reconciledBy: string;
   occurredAt: Date;
 }>;
@@ -37,6 +47,20 @@ export const confirmManualEntry = (
 ): Result<ConfirmManualEntryOutput, ManualEntryError> => {
   if (input.valueCents <= 0) return err('manual-entry-value-not-positive');
 
+  // #143: guards de realocação patrimonial (Transfer/Investment/Redemption).
+  if (isCapitalReallocation(input.type) && input.supplierRef !== undefined) {
+    return err('realloc-forbids-supplier');
+  }
+  if (input.type === 'Transfer' && input.destinationAccountRef === undefined) {
+    return err('transfer-requires-destination');
+  }
+  if (
+    (input.type === 'Investment' || input.type === 'Redemption') &&
+    input.productLabel === undefined
+  ) {
+    return err('investment-requires-product');
+  }
+
   const manualEntry: ManualEntry = immutable<ManualEntry>({
     id: ManualEntryId.generate(),
     type: input.type,
@@ -46,6 +70,8 @@ export const confirmManualEntry = (
     costCenterRef: input.costCenterRef ?? null,
     programRef: input.programRef ?? null,
     description: input.description ?? null,
+    destinationAccountRef: input.destinationAccountRef ?? null,
+    productLabel: input.productLabel ?? null,
   });
 
   const reconciliation: Reconciliation = immutable<Reconciliation>({

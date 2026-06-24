@@ -44,6 +44,8 @@ export type RecordManualEntryInput = Readonly<{
   costCenterRef?: string;
   programRef?: string;
   description?: string;
+  destinationAccountRef?: string;
+  productLabel?: string;
   reconciledBy: string;
 }>;
 
@@ -57,6 +59,8 @@ export type RecordManualEntryError =
   | 'statement-transaction-not-found'
   | 'transaction-already-reconciled'
   | 'cedente-account-not-found'
+  | 'destination-account-not-found'
+  | 'destination-same-as-source'
   | 'account-closed'
   | 'period-closed'
   | ReconciliationRepositoryError
@@ -90,6 +94,16 @@ export const recordManualEntry =
     if (!periodClosedR.ok) return err(periodClosedR.error);
     if (periodClosedR.value) return err('period-closed');
 
+    // #143: conta de destino da realocação (Transfer) — existe + ≠ origem.
+    if (input.destinationAccountRef !== undefined) {
+      if (input.destinationAccountRef === debitAccountRef) return err('destination-same-as-source');
+      const destId = CedenteAccountId.rehydrate(input.destinationAccountRef);
+      if (!destId.ok) return err('destination-account-not-found');
+      const destR = await deps.cedenteStore.findById(destId.value);
+      if (!destR.ok) return err(destR.error);
+      if (destR.value === null) return err('destination-account-not-found');
+    }
+
     const confirmed = confirmManualEntry({
       reconciliationId: ReconciliationId.generate(),
       transactionId: transaction.id,
@@ -100,6 +114,10 @@ export const recordManualEntry =
       ...(input.costCenterRef !== undefined ? { costCenterRef: input.costCenterRef } : {}),
       ...(input.programRef !== undefined ? { programRef: input.programRef } : {}),
       ...(input.description !== undefined ? { description: input.description } : {}),
+      ...(input.destinationAccountRef !== undefined
+        ? { destinationAccountRef: input.destinationAccountRef }
+        : {}),
+      ...(input.productLabel !== undefined ? { productLabel: input.productLabel } : {}),
       reconciledBy: input.reconciledBy,
       occurredAt: deps.clock.now(),
     });
