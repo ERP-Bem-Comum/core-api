@@ -281,15 +281,20 @@ export const accountStatementToDto = (view: StatementView): AccountStatementResp
   })),
 });
 
-/** Serializa o detalhe da conciliação ativa de uma transação (#175). Money em string; data ISO. */
+/**
+ * Serializa o detalhe da conciliação ativa de uma transação (#175). Money em string; data ISO.
+ * `reconciledByName` (#207) é composto server-side na borda (ADR-0032); `null` = não-resolvido.
+ */
 export const transactionReconciliationToDto = (
   r: Reconciliation,
+  reconciledByName: string | null = null,
 ): TransactionReconciliationResponseDto => ({
   id: String(r.id),
   transactionId: String(r.transactionId),
   type: r.type,
   status: r.status,
   reconciledBy: r.audit.reconciledBy,
+  reconciledByName,
   reconciledAt: r.audit.reconciledAt.toISOString(),
   differenceCents: r.difference !== null ? String(r.difference.valueCents) : null,
   items: r.items.map((i) => ({
@@ -298,9 +303,14 @@ export const transactionReconciliationToDto = (
   })),
 });
 
-/** Serializa os períodos de conciliação de uma conta (#173). Datas do intervalo em YYYY-MM-DD. */
+/**
+ * Serializa os períodos de conciliação de uma conta (#173). Datas do intervalo em YYYY-MM-DD.
+ * `closedByName` (#207) é composto server-side na borda (ADR-0032) via `names` (closedBy → nome);
+ * `null` = sem closer ou não-resolvido.
+ */
 export const reconciliationPeriodsToDto = (
   periods: readonly ReconciliationPeriod[],
+  names: ReadonlyMap<string, string | null> = new Map(),
 ): ReconciliationPeriodsResponseDto =>
   periods.map((p) => ({
     id: String(p.id),
@@ -310,6 +320,7 @@ export const reconciliationPeriodsToDto = (
     status: p.status,
     closedAt: p.closedAt !== null ? p.closedAt.toISOString() : null,
     closedBy: p.closedBy,
+    closedByName: p.closedBy !== null ? (names.get(p.closedBy) ?? null) : null,
   }));
 
 /** Serializa os palpites de topo por transação de um extrato (#174). */
