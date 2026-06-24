@@ -23,6 +23,7 @@ import {
 import { createInMemoryReconciliationPeriodStore } from '#src/modules/financial/adapters/persistence/repos/reconciliation-period-store.in-memory.ts';
 import { reconciliationExporter } from '#src/modules/financial/adapters/export/reconciliation-exporter.ts';
 import { closeReconciliationPeriod } from '#src/modules/financial/application/use-cases/close-reconciliation-period.ts';
+import { reopenReconciliationPeriod } from '#src/modules/financial/application/use-cases/reopen-reconciliation-period.ts';
 import { exportReconciliation } from '#src/modules/financial/application/use-cases/export-reconciliation.ts';
 
 const CLOSER = 'reconciliation:close,reconciliation:read';
@@ -99,6 +100,10 @@ before(async () => {
       statements: statementRepo,
       clock: ClockReal(),
     }),
+    reopenReconciliationPeriod: reopenReconciliationPeriod({
+      periodStore,
+      clock: ClockReal(),
+    }),
     exportReconciliation: exportReconciliation({
       periodStore,
       statements: statementRepo,
@@ -161,6 +166,70 @@ describe('financial/http — reconciliation-periods (US6)', () => {
       url: '/api/v2/financial/reconciliation-periods/close',
       headers: { authorization: `Bearer ${READER}` },
       payload: { debitAccountRef: ACCOUNT, periodStart: '2024-07-01', periodEnd: '2024-07-31' },
+    });
+    assert.equal(res.statusCode, 403, res.body);
+  });
+});
+
+// W0 RED (#203) — POST /reconciliation-periods/:id/reopen (Closed → Open). Espelha o close.
+const closeAugust = async (): Promise<string> => {
+  const closed = await handle.app.inject({
+    method: 'POST',
+    url: '/api/v2/financial/reconciliation-periods/close',
+    headers: { authorization: `Bearer ${CLOSER}` },
+    payload: { debitAccountRef: ACCOUNT, periodStart: '2024-08-01', periodEnd: '2024-08-31' },
+  });
+  assert.equal(closed.statusCode, 200, closed.body);
+  return (closed.json() as { periodId: string }).periodId;
+};
+
+describe('financial/http — reconciliation-periods reopen (#203)', () => {
+  it('CA1: período Closed → POST :id/reopen com reconciliation:close → 200 e status Open', async () => {
+    const periodId = await closeAugust();
+    const res = await handle.app.inject({
+      method: 'POST',
+      url: `/api/v2/financial/reconciliation-periods/${periodId}/reopen`,
+      headers: { authorization: `Bearer ${CLOSER}` },
+    });
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as { periodId: string; status: string };
+    assert.equal(body.periodId, periodId);
+    assert.equal(body.status, 'Open');
+  });
+
+  it('CA2: período já Open → reopen → 4xx slug period-not-closed', async () => {
+    const periodId = await closeAugust();
+    // Primeiro reopen leva a Open.
+    const first = await handle.app.inject({
+      method: 'POST',
+      url: `/api/v2/financial/reconciliation-periods/${periodId}/reopen`,
+      headers: { authorization: `Bearer ${CLOSER}` },
+    });
+    assert.equal(first.statusCode, 200, first.body);
+    // Segundo reopen (já Open) → conflito.
+    const second = await handle.app.inject({
+      method: 'POST',
+      url: `/api/v2/financial/reconciliation-periods/${periodId}/reopen`,
+      headers: { authorization: `Bearer ${CLOSER}` },
+    });
+    assert.equal(second.statusCode >= 400 && second.statusCode < 500, true, second.body);
+    assert.equal(second.statusCode, 409, second.body);
+  });
+
+  it('CA3: :id inexistente → reopen → 404', async () => {
+    const res = await handle.app.inject({
+      method: 'POST',
+      url: '/api/v2/financial/reconciliation-periods/00000000-0000-4000-8000-000000000000/reopen',
+      headers: { authorization: `Bearer ${CLOSER}` },
+    });
+    assert.equal(res.statusCode, 404, res.body);
+  });
+
+  it('CA4: sem permissão reconciliation:close → reopen → 403', async () => {
+    const res = await handle.app.inject({
+      method: 'POST',
+      url: '/api/v2/financial/reconciliation-periods/00000000-0000-4000-8000-000000000000/reopen',
+      headers: { authorization: `Bearer ${READER}` },
     });
     assert.equal(res.statusCode, 403, res.body);
   });

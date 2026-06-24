@@ -557,6 +557,12 @@ export const closePeriodResponseSchema = z.object({
   status: z.literal('Closed'),
 });
 
+// Reabertura (#203) — período volta a `Open`. Sem body (id vem no path).
+export const reopenPeriodResponseSchema = z.object({
+  periodId: z.uuid(),
+  status: z.literal('Open'),
+});
+
 export const reconciliationPeriodIdParamSchema = z.object({
   id: z.uuid().meta({ description: 'UUID do período de conciliação' }),
 });

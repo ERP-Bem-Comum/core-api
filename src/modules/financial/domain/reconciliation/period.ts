@@ -6,7 +6,10 @@ import type { ReconciliationPeriodId } from './reconciliation-period-id.ts';
 // feita pela application (repo); aqui só a regra (FR-013: fecha só sem pendências) + range válido.
 
 export type ReconciliationPeriodStatus = 'Open' | 'Closed';
-export type PeriodError = 'invalid-period-range' | 'period-has-pending-transactions';
+export type PeriodError =
+  | 'invalid-period-range'
+  | 'period-has-pending-transactions'
+  | 'period-not-closed';
 
 export type ReconciliationPeriod = Readonly<{
   id: ReconciliationPeriodId;
@@ -42,6 +45,57 @@ export type ClosePeriodOutput = Readonly<{
   period: ReconciliationPeriod;
   events: readonly ReconciliationPeriodClosed[];
 }>;
+
+// Reabertura de período (#203 — desfaz o "selo" contábil). Domínio puro: só transiciona o status.
+// Transações conciliadas permanecem conciliadas; saldos/relatórios derivam do estado atual.
+export type ReconciliationPeriodReopened = Readonly<{
+  type: 'ReconciliationPeriodReopened';
+  periodId: ReconciliationPeriodId;
+  debitAccountRef: string;
+  periodStart: Date;
+  periodEnd: Date;
+  // Auditoria SEM migration: "quem/quando reabriu" vai no evento (não em coluna nova).
+  reopenedBy: string;
+  occurredAt: Date;
+}>;
+
+export type ReopenPeriodInput = Readonly<{
+  reopenedBy: string;
+  occurredAt: Date;
+}>;
+
+export type ReopenPeriodOutput = Readonly<{
+  period: ReconciliationPeriod;
+  events: readonly ReconciliationPeriodReopened[];
+}>;
+
+export const reopenPeriod = (
+  current: ReconciliationPeriod,
+  input: ReopenPeriodInput,
+): Result<ReopenPeriodOutput, PeriodError> => {
+  if (current.status !== 'Closed') return err('period-not-closed');
+
+  const period: ReconciliationPeriod = immutable<ReconciliationPeriod>({
+    ...current,
+    status: 'Open',
+    closedAt: null,
+    closedBy: null,
+  });
+
+  const events: readonly ReconciliationPeriodReopened[] = [
+    {
+      type: 'ReconciliationPeriodReopened',
+      periodId: current.id,
+      debitAccountRef: current.debitAccountRef,
+      periodStart: current.periodStart,
+      periodEnd: current.periodEnd,
+      reopenedBy: input.reopenedBy,
+      occurredAt: input.occurredAt,
+    },
+  ];
+
+  return ok(immutable<ReopenPeriodOutput>({ period, events }));
+};
 
 export const closePeriod = (input: ClosePeriodInput): Result<ClosePeriodOutput, PeriodError> => {
   if (input.periodStart.getTime() > input.periodEnd.getTime()) return err('invalid-period-range');

@@ -14,6 +14,7 @@ import { createDrizzleBankStatementRepository } from '#src/modules/financial/ada
 import { createDrizzleReconciliationPeriodStore } from '#src/modules/financial/adapters/persistence/repos/reconciliation-period-store.drizzle.ts';
 import { reconciliationExporter } from '#src/modules/financial/adapters/export/reconciliation-exporter.ts';
 import { closeReconciliationPeriod } from '#src/modules/financial/application/use-cases/close-reconciliation-period.ts';
+import { reopenReconciliationPeriod } from '#src/modules/financial/application/use-cases/reopen-reconciliation-period.ts';
 import { exportReconciliation } from '#src/modules/financial/application/use-cases/export-reconciliation.ts';
 import { newUuid } from '#src/shared/utils/id.ts';
 
@@ -90,6 +91,53 @@ if (!process.env['MYSQL_INTEGRATION']) {
       });
       assert.equal(exported.ok, true, JSON.stringify(exported));
       if (exported.ok) assert.match(exported.value.content, /data;fitid;movimento/);
+    });
+
+    it('#203: reopen Closed→Open zera closed_at/closed_by; isClosed volta a false; reopen de já-Open → period-not-closed', async () => {
+      const account = newUuid();
+      const start = new Date('2024-09-01T00:00:00.000Z');
+      const end = new Date('2024-09-30T00:00:00.000Z');
+      const statements = createDrizzleBankStatementRepository(handle);
+      const periodStore = createDrizzleReconciliationPeriodStore(handle);
+
+      const closed = await closeReconciliationPeriod({
+        periodStore,
+        statements,
+        clock: ClockReal(),
+      })({
+        debitAccountRef: account,
+        periodStart: start,
+        periodEnd: end,
+        closedBy: newUuid(),
+      });
+      assert.equal(closed.ok, true, JSON.stringify(closed));
+      if (!closed.ok) return;
+
+      const reopen = reopenReconciliationPeriod({ periodStore, clock: ClockReal() });
+      const reopened = await reopen({
+        periodId: String(closed.value.periodId),
+        reopenedBy: newUuid(),
+      });
+      assert.equal(reopened.ok, true, JSON.stringify(reopened));
+      if (reopened.ok) assert.equal(reopened.value.status, 'Open');
+
+      // closed_at/closed_by zerados → status Open persistido.
+      const persisted = await periodStore.findById(closed.value.periodId);
+      assert.equal(persisted.ok && persisted.value?.status === 'Open', true);
+      assert.equal(persisted.ok && persisted.value?.closedAt === null, true);
+      assert.equal(persisted.ok && persisted.value?.closedBy === null, true);
+
+      // Guard R18 não mais ativo no range (período aberto).
+      const inside = await periodStore.isClosed(account, new Date('2024-09-15T00:00:00.000Z'));
+      assert.equal(inside.ok && !inside.value, true);
+
+      // Reabrir período já-aberto → domínio rejeita.
+      const again = await reopen({
+        periodId: String(closed.value.periodId),
+        reopenedBy: newUuid(),
+      });
+      assert.equal(again.ok, false);
+      if (!again.ok) assert.equal(again.error, 'period-not-closed');
     });
   });
 }

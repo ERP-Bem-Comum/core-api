@@ -26,6 +26,8 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'reconciliation-already-undone',
   'account-closed',
   'period-closed',
+  // Reabertura (#203): reabrir período não-fechado é conflito de estado.
+  'period-not-closed',
   // Conta-cedente (019): conflitos de estado/unicidade.
   'cedente-account-already-closed',
   'cedente-account-duplicate',
@@ -175,6 +177,7 @@ const SLUG_MESSAGES: Record<string, string> = {
     'O período tem transações pendentes: concilie ou justifique todas antes de fechar.',
   'invalid-period-range': 'Intervalo de período inválido: a data inicial deve ser ≤ a final.',
   'period-closed': 'O período está fechado: não é possível importar/conciliar/desfazer nele.',
+  'period-not-closed': 'O período não está fechado: não é possível reabri-lo.',
   'reconciliation-period-not-found': 'Período de conciliação não encontrado.',
   'reconciliation-period-id-invalid': 'Identificador de período inválido.',
   'unsupported-export-format': 'Formato de exportação não suportado (esperado OFX ou CSV).',

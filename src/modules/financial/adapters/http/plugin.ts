@@ -95,6 +95,7 @@ import {
   batchResponseSchema,
   closePeriodBodySchema,
   closePeriodResponseSchema,
+  reopenPeriodResponseSchema,
   reconciliationPeriodIdParamSchema,
   exportReconciliationQuerySchema,
   createCedenteAccountBodySchema,
@@ -926,6 +927,29 @@ const financialRoutes =
           periodStart: new Date(body.periodStart),
           periodEnd: new Date(body.periodEnd),
           closedBy: req.userId,
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(
+          reply,
+          ok({ periodId: String(result.value.periodId), status: result.value.status }),
+          { ok: 200 },
+        );
+      },
+    });
+
+    // POST /financial/reconciliation-periods/:id/reopen — reabre o período (#203, Closed → Open).
+    scope.route({
+      method: 'POST',
+      url: '/financial/reconciliation-periods/:id/reopen',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationClose)],
+      schema: {
+        params: reconciliationPeriodIdParamSchema,
+        response: { 200: reopenPeriodResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.reopenReconciliationPeriod({
+          periodId: req.params.id,
+          reopenedBy: req.userId,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(

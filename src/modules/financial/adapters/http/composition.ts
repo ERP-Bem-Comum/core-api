@@ -103,6 +103,7 @@ import { rejectSuggestion } from '../../application/use-cases/reject-suggestion.
 import { recordManualEntry } from '../../application/use-cases/record-manual-entry.ts';
 import { confirmBatch } from '../../application/use-cases/confirm-batch.ts';
 import { closeReconciliationPeriod } from '../../application/use-cases/close-reconciliation-period.ts';
+import { reopenReconciliationPeriod } from '../../application/use-cases/reopen-reconciliation-period.ts';
 import { exportReconciliation } from '../../application/use-cases/export-reconciliation.ts';
 import { createCedenteAccount } from '../../application/use-cases/create-cedente-account.ts';
 import { listCedenteAccounts } from '../../application/use-cases/list-cedente-accounts.ts';
@@ -178,6 +179,8 @@ export type FinancialHttpDeps = Readonly<{
   confirmBatch: ReturnType<typeof confirmBatch>;
   /** Fecha período (US6) — POST /reconciliation-periods/close. */
   closeReconciliationPeriod: ReturnType<typeof closeReconciliationPeriod>;
+  /** Reabre período (#203) — POST /reconciliation-periods/:id/reopen. */
+  reopenReconciliationPeriod: ReturnType<typeof reopenReconciliationPeriod>;
   /** Exporta conciliação OFX/CSV (US6) — GET /reconciliation-periods/:id/export. */
   exportReconciliation: ReturnType<typeof exportReconciliation>;
   /** Conta-cedente (019) — POST /cedente-accounts. */
@@ -502,6 +505,10 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     closeReconciliationPeriod: closeReconciliationPeriod({
       periodStore: pools.periodStore,
       statements: pools.statementRepo,
+      clock,
+    }),
+    reopenReconciliationPeriod: reopenReconciliationPeriod({
+      periodStore: pools.periodStore,
       clock,
     }),
     exportReconciliation: exportReconciliation({
