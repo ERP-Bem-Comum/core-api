@@ -75,6 +75,8 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   // Export Nibo (#146): falhas de read-model/view necessários ao enriquecimento.
   'payable-document-view-failure',
   'supplier-view-store-unavailable',
+  // Alçada do aprovador (#289 — CA9): leitura do `auth` indisponível.
+  'approver-authority-unavailable',
 ]);
 
 // NOTA (019): `cedente-account-not-found` NÃO está em NOT_FOUND_CODES de propósito → default 422.
@@ -189,6 +191,13 @@ const SLUG_MESSAGES: Record<string, string> = {
   // Export Nibo (#146): falhas de infraestrutura ocultadas pelo caller como 'internal' (5xx).
   'payable-document-view-failure': 'Erro ao consultar documentos dos títulos.',
   'supplier-view-store-unavailable': 'Erro ao consultar read-model de fornecedores.',
+  // Alçada do aprovador (#289): create + submit (CA6/CA7). Os 3 primeiros são regra de negócio
+  // (default 422); o 4º é falha de leitura do `auth` (UNAVAILABLE_CODES → 503).
+  'approver-not-found': 'O aprovador informado não foi encontrado.',
+  'approver-missing-permission': 'O aprovador informado não tem permissão de aprovação.',
+  'approver-limit-exceeded': 'O aprovador não possui alçada suficiente para este valor.',
+  'approver-authority-unavailable':
+    'Não foi possível consultar a alçada do aprovador. Tente novamente.',
 };
 
 /** Mensagem PT-BR ao humano para um slug; fallback por `code` público. Nunca retorna o slug. */

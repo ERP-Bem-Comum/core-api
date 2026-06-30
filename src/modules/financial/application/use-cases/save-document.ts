@@ -16,6 +16,7 @@ import * as Retention from '../../domain/shared/retention.ts';
 import * as RegisteredTax from '../../domain/shared/registered-tax.ts';
 import * as Document from '../../domain/document/document.ts';
 import * as Competencia from '../../domain/document/competencia.ts';
+import { checkApprover, type ApprovalError } from '../../domain/document/approval-policy.ts';
 import * as CedenteAccountId from '../../domain/cedente/cedente-account-id.ts';
 import type { DocumentType, PaymentMethod, PayeeKind } from '../../domain/document/types.ts';
 import type { PayableId } from '../../domain/shared/payable-id.ts';
@@ -32,6 +33,10 @@ import type {
   CedenteAccountStore,
   CedenteAccountStoreError,
 } from '../ports/cedente-account-store.ts';
+import type {
+  ApproverAuthorityReader,
+  ApproverAuthorityReadError,
+} from '../ports/approver-authority-reader.ts';
 import { buildTimelineEntries } from '../timeline-recording.ts';
 
 export type SaveDocumentDeps = Readonly<{
@@ -41,6 +46,9 @@ export type SaveDocumentDeps = Readonly<{
   contractCategorizationReader: ContractCategorizationReadPort;
   // #197 (R-1b): valida existência da conta-débito (by-identity em fin_cedente_accounts).
   cedenteAccountStore: CedenteAccountStore;
+  // #289: leitura cross-módulo da alçada do aprovador (auth/public-api). Opt-in — a composição
+  // HTTP sempre injeta; ausente ⇒ gate de alçada não roda (testes de persistência sem aprovador).
+  approverAuthorityReader?: ApproverAuthorityReader;
 }>;
 
 export type SaveDocumentCommand = Readonly<{
@@ -88,7 +96,9 @@ export type SaveDocumentError =
   | RegisteredTax.RegisteredTaxError
   | UserRef.UserRefError
   | CedenteAccountStoreError
-  | 'cedente-account-not-found';
+  | 'cedente-account-not-found'
+  | ApprovalError
+  | ApproverAuthorityReadError;
 
 // Imperative Shell: traduz primitivos → VOs (smart constructors), chama o domínio, persiste e publica.
 // Sequência canônica (.claude/rules/application.md): validar → domain → persist → publish.
@@ -207,6 +217,15 @@ export const saveDocument =
       paymentDetail: cmd.paymentDetail ?? null,
     });
     if (!created.ok) return err(created.error);
+
+    // US1 (#289): valida a alçada do aprovador indicado contra o líquido, antes de persistir.
+    // Gate opt-in: só roda com aprovador informado e reader injetado (composição HTTP sempre injeta).
+    if (approverRef !== null && deps.approverAuthorityReader !== undefined) {
+      const authority = await deps.approverAuthorityReader.get(String(approverRef.value));
+      if (!authority.ok) return err(authority.error);
+      const check = checkApprover(created.value.document.netValue, authority.value);
+      if (!check.ok) return err(check.error);
+    }
 
     // Trilha (Time Travel): marco de criação. before/payablesBefore=null (documento novo);
     // actor=null (criação não carrega autoria nesta fatia). events[0] sempre presente — o
