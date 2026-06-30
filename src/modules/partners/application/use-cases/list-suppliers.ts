@@ -21,11 +21,19 @@ export type SupplierListFilter = Readonly<{
   categories?: readonly string[];
 }>;
 
-// `search` casa name (substring case-insensitive) OU cnpj (só dígitos do termo).
+// `search` casa name / fantasyName / corporateName (substring case-insensitive) OU cnpj (só
+// dígitos do termo). #288: apelido = fantasyName; razão social = corporateName.
 const matchesSearch = (s: Supplier, search: string | undefined): boolean => {
   const q = search?.trim() ?? '';
   if (q === '') return true;
-  if (s.name.toLowerCase().includes(q.toLowerCase())) return true;
+  const term = q.toLowerCase();
+  if (
+    s.name.toLowerCase().includes(term) ||
+    s.fantasyName.toLowerCase().includes(term) ||
+    s.corporateName.toLowerCase().includes(term)
+  ) {
+    return true;
+  }
   const digits = q.replace(/\D/g, '');
   return digits.length > 0 && String(s.cnpj).includes(digits);
 };
