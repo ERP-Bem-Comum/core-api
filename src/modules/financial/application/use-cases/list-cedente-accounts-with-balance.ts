@@ -1,6 +1,7 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
 import type { CedenteAccount } from '../../domain/cedente/types.ts';
+import { isActive } from '../../domain/cedente/cedente-account.ts';
 import { buildStatementView } from '../../domain/statement/statement-view.ts';
 import type {
   CedenteAccountStore,
@@ -31,20 +32,26 @@ type Deps = Readonly<{
   clock: Clock;
 }>;
 
+// `onlyActive` filtra contas encerradas para o seletor "Pagar da Conta" (#293); ausente/false
+// preserva a listagem geral (gestão precisa enxergar contas `Closed`).
+export type ListCedenteAccountsWithBalanceOptions = Readonly<{ onlyActive?: boolean }>;
+
 // Limite inferior fixo: captura todo o histórico de transações da conta (não há "antes do epoch").
 const HISTORY_START = new Date(0);
 
 export const listCedenteAccountsWithBalance =
   (deps: Deps) =>
-  async (): Promise<
-    Result<readonly CedenteAccountWithBalance[], ListCedenteAccountsWithBalanceError>
-  > => {
+  async (
+    options: ListCedenteAccountsWithBalanceOptions = {},
+  ): Promise<Result<readonly CedenteAccountWithBalance[], ListCedenteAccountsWithBalanceError>> => {
     const accounts = await deps.cedenteStore.list();
     if (!accounts.ok) return err(accounts.error);
 
+    const selected = options.onlyActive === true ? accounts.value.filter(isActive) : accounts.value;
+
     const now = deps.clock.now();
     const out: CedenteAccountWithBalance[] = [];
-    for (const account of accounts.value) {
+    for (const account of selected) {
       const opening = account.openingBalanceCents ?? 0;
       const txs = await deps.statements.listTransactionsByPeriod(
         String(account.id),

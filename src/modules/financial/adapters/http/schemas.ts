@@ -676,6 +676,12 @@ export const cedenteAccountListItemSchema = cedenteAccountResponseSchema.extend(
 
 export const cedenteAccountListResponseSchema = z.array(cedenteAccountListItemSchema);
 
+// #293 — `status=active` filtra contas encerradas (seletor "Pagar da Conta"); ausente/`all` mantém
+// a listagem geral (gestão precisa enxergar `Closed`).
+export const cedenteAccountListQuerySchema = z.object({
+  status: z.enum(['active', 'all']).optional(),
+});
+
 export type CedenteAccountResponseDto = z.infer<typeof cedenteAccountResponseSchema>;
 export type CedenteAccountListItemDto = z.infer<typeof cedenteAccountListItemSchema>;
 

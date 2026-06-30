@@ -151,6 +151,8 @@ const SLUG_MESSAGES: Record<string, string> = {
   'statement-transaction-not-found': 'Transação de extrato não encontrada.',
   'reconciliation-not-found': 'Conciliação não encontrada.',
   'cedente-account-not-found': 'Conta-cedente não encontrada.',
+  // #293: não se lança pagamento contra conta encerrada.
+  'cedente-account-closed': 'A conta-cedente está encerrada e não pode ser usada para pagamento.',
   // Conta-cedente (019 — CRUD).
   'cedente-account-duplicate':
     'Já existe uma conta-cedente com esta chave bancária (banco/agência/conta/dígito).',

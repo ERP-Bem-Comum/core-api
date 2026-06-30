@@ -26,8 +26,11 @@ const tx = (movement: 'Credit' | 'Debit', valueCents: number): StatementTransact
   } as StatementTransaction;
 };
 
-const account = (id: string, openingBalanceCents: number | undefined): CedenteAccount =>
-  ({ id, openingBalanceCents }) as unknown as CedenteAccount;
+const account = (
+  id: string,
+  openingBalanceCents: number | undefined,
+  status: 'Active' | 'Closed' = 'Active',
+): CedenteAccount => ({ id, openingBalanceCents, status }) as unknown as CedenteAccount;
 
 describe('financial/application — listCedenteAccountsWithBalance (#89c F1)', () => {
   it('saldo atual = abertura + Σ assinado dos extratos (Credit:+ / Debit:−)', async () => {
@@ -60,5 +63,39 @@ describe('financial/application — listCedenteAccountsWithBalance (#89c F1)', (
       assert.equal(result.value[0]?.currentBalanceCents, 50000);
       assert.equal(result.value[1]?.currentBalanceCents, 0);
     }
+  });
+
+  // #293 (FIN-PAYABLE-ACCOUNT-ACTIVE) — seletor "Pagar da Conta" só lista contas ativas.
+  it('CA1: onlyActive=true exclui contas Closed do seletor', async () => {
+    const result = await listCedenteAccountsWithBalance({
+      cedenteStore: {
+        list: () =>
+          Promise.resolve(
+            ok([account('acc-active', 50000, 'Active'), account('acc-closed', 99999, 'Closed')]),
+          ),
+      },
+      statements: { listTransactionsByPeriod: () => Promise.resolve(ok([])) },
+      clock: CLOCK,
+    })({ onlyActive: true });
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.equal(result.value.length, 1);
+      assert.equal(result.value[0]?.account.id, 'acc-active');
+    }
+  });
+
+  it('CA2: sem flag mantém todas as contas (inclui Closed) — backward-compat', async () => {
+    const result = await listCedenteAccountsWithBalance({
+      cedenteStore: {
+        list: () =>
+          Promise.resolve(
+            ok([account('acc-active', 50000, 'Active'), account('acc-closed', 99999, 'Closed')]),
+          ),
+      },
+      statements: { listTransactionsByPeriod: () => Promise.resolve(ok([])) },
+      clock: CLOCK,
+    })();
+    assert.equal(result.ok, true);
+    if (result.ok) assert.equal(result.value.length, 2);
   });
 });
