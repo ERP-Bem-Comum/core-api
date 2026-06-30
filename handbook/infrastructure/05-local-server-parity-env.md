@@ -329,3 +329,44 @@ docker compose -f compose.yaml -f compose.override.yaml down -v    # ⚠️ apag
 > **Produção ≠ este guia:** em prod não se usa MinIO/Mailpit nem `CORE_API_E2E`. Storage vira AWS S3
 > ou **Magalu Cloud** (`MAGALU_*`), e-mail vira Resend/SES com domínio verificado, segredos vêm de um
 > Secrets Manager (não de `.env` em disco). Ver `02-environments.md` e `03-secrets-catalog.md`.
+
+---
+
+## 9. Pegadinhas conhecidas (validação local) — registrar p/ não reaprender
+
+> Achados ao subir o stack isolado de validação (x99 / `compose.yaml`+`compose.ci.yaml`) na
+> feat `028-fin-approver-limit` (2026-06-30). Servem para qualquer subida local via `secrets:setup`.
+
+### 9.1 `migrate` sai com **exit 78** (`Permission denied` em `/run/secrets/*_database_url`)
+
+**Sintoma:** logo após `secrets:setup`, o job `migrate` (e o `http`/workers) morre com
+`cat: /run/secrets/<x>_database_url: Permission denied` → `[migrate] migrate-database-url-missing` → **exit 78**.
+
+**Causa:** `scripts/setup/secrets.ts` grava os connection-string secrets (`*_database_url.txt`) com modo
+**0600** (`writeDatabaseUrlSecret`, `0o600`). Quando o `secrets:setup` roda como **root** (ex.: `incus
+exec`, CI sem step-down), o arquivo fica `root:root 0600`. O Compose **file-secret (não-Swarm) preserva
+uid/gid/modo do host** ao montar em `/run/secrets/...`, e os containers rodam como o usuário não-root
+**`app` (uid 10001)** — então o `$(cat /run/secrets/...)` do entrypoint não lê. As senhas MySQL
+(`mysql_*_password.txt`) **já são 0644** exatamente por isso (ver o comentário longo em `writeSecret`);
+os DB-URL **não foram** — o comentário em `writeDatabaseUrlSecret` assume "Compose monta 0444", o que só
+vale para **Swarm secrets**, não para file-secrets. É uma **inconsistência latente** do script.
+
+**Workaround (ambiente):** `chmod 644 secrets/*_database_url.txt` antes do `up` (ou rodar `secrets:setup`
+como o mesmo uid do container). **Não** mexe no repo. Só morde quando `uid(host) != uid(app)` **e** o
+arquivo é 0600 — por isso pode passar despercebido quando o gerador roda com o uid certo.
+
+**Fix de raiz (se virar ticket):** alinhar `writeDatabaseUrlSecret` a `writeSecret` (0644) **ou** fazer o
+entrypoint ler o secret ainda como root antes do step-down. Abrir via skill `issue-report` (critério de
+aceite: subir o stack com `secrets:setup` rodado como root → `migrate` verde sem `chmod` manual).
+
+### 9.2 Read ports de `public-api/` **não têm borda HTTP** — curl não valida
+
+Ports de leitura cross-módulo expostos em `<module>/public-api/read.ts` (consumidos por outro módulo,
+ADR-0006) **não têm rota HTTP** — não dá para exercitá-los por `curl` na borda. A cobertura deles é
+**teste de integração Drizzle** contra MySQL real, não E2E HTTP.
+
+Exemplo (feat 028): a projeção **`ApproverAuthorityReadPort`** (`{ canApprove, limitCents }`, via
+`auth/public-api/read.ts`) é o contrato que o **POLICY** consome no `financial`. O round-trip HTTP de
+`/api/v1/roles` valida a **escrita** de `approvalLimitCents` (persiste em `auth_role.approval_limit_cents`),
+mas a **leitura da projeção** só é coberta por `tests/modules/auth/adapters/persistence/approver-authority.drizzle.test.ts`.
+Ao validar localmente, rode esse teste de integração além do round-trip da borda.

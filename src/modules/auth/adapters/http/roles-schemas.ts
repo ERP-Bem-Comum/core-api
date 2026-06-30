@@ -38,6 +38,10 @@ export const roleListItemSchema = z.object({
   name: z.string(),
   active: z.boolean(),
   permissions: z.array(z.string()),
+  // Alçada de aprovação do papel em centavos; null = sem alçada (FIN-APPROVER-LIMIT-AUTH #289).
+  approvalLimitCents: z.number().int().nullable().meta({
+    description: 'Alçada de aprovação do papel em centavos; null = sem alçada.',
+  }),
 });
 
 /** Response 200 do GET /api/v1/roles (todos os papeis com suas permissoes). */
@@ -60,6 +64,19 @@ export const userRoleParamSchema = z.object({
 export const createRoleBodySchema = z.object({
   name: z.string().min(1),
   permissions: z.array(z.string()),
+  // Alçada de aprovação (centavos, 0 <= valor <= MAX_SAFE_INTEGER — teto alinhado ao VO Money,
+  // src/shared/kernel/money.ts). Ausente/null = papel sem alçada (#289).
+  approvalLimitCents: z
+    .number()
+    .int()
+    .min(0)
+    .max(Number.MAX_SAFE_INTEGER)
+    .nullable()
+    .optional()
+    .meta({
+      description:
+        'Alçada de aprovação do papel em centavos (0 a MAX_SAFE_INTEGER, alinhado ao VO Money). Ausente ou null = papel sem alçada (não aprova).',
+    }),
 });
 
 /** Response 201 do POST /api/v1/roles (US5): id do papel criado. */
@@ -75,6 +92,19 @@ export const roleIdParamSchema = z.object({ id: z.string().min(1) });
 export const updateRoleBodySchema = z.object({
   name: z.string().min(1).optional(),
   permissions: z.array(z.string()).optional(),
+  // Alçada de aprovação (centavos, 0 <= valor <= MAX_SAFE_INTEGER — teto alinhado ao VO Money,
+  // src/shared/kernel/money.ts). Presente (incl. null) atualiza/zera; ausente = no-op (#289).
+  approvalLimitCents: z
+    .number()
+    .int()
+    .min(0)
+    .max(Number.MAX_SAFE_INTEGER)
+    .nullable()
+    .optional()
+    .meta({
+      description:
+        'Alçada de aprovação em centavos (0 a MAX_SAFE_INTEGER). Presente (incl. null) atualiza/zera; ausente = no-op.',
+    }),
 });
 
 /** Response 200 do PUT /api/v1/roles/:id (US6): o papel atualizado (mesmo DTO da listagem). */

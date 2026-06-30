@@ -13,15 +13,21 @@ import {
   type AuthMysqlDriverError,
 } from '../adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleUserReadStore } from '../adapters/persistence/repos/user-read.drizzle.ts';
-import type { AuthUserReadPort } from '../application/ports/user-read.ts';
+import type {
+  AuthUserReadPort,
+  ApproverAuthorityReadPort,
+} from '../application/ports/user-read.ts';
 
 export type {
   AuthUserReadPort,
+  ApproverAuthorityReadPort,
   AuthUserReadError,
   AuthUserNameView,
+  ApproverAuthorityView,
 } from '../application/ports/user-read.ts';
 
 export type AuthReadPort = AuthUserReadPort &
+  ApproverAuthorityReadPort &
   Readonly<{
     close: () => Promise<void>;
   }>;

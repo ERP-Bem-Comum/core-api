@@ -268,6 +268,7 @@ export const createDrizzleRoleStore = (
               name: row.name,
               description: row.description,
               status: row.status,
+              approvalLimitCents: row.approvalLimitCents,
               updatedAt: row.updatedAt,
             })
             .where(eq(schema.authRole.id, row.id));
