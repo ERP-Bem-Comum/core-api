@@ -86,6 +86,10 @@ export const runOnce = async <P>(
       });
 
       if (deliveryResult.ok) {
+        // Observabilidade: 1 linha por evento entregue (o resto do worker só loga erros).
+        process.stderr.write(
+          `${taggedLog(deps.tag)}delivered eventId=${row.eventId} (${row.eventType})\n`,
+        );
         const markResult = await ops.markProcessed(row.eventId, deps.clock.now());
         if (!markResult.ok) {
           process.stderr.write(
