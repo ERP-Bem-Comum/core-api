@@ -57,6 +57,9 @@ const SECRETS_TO_GENERATE: readonly SecretSpec[] = [
   // consistência com os outros secrets facilita auditoria de permissões.
   { name: 'minio_root_user', label: 'MinIO root user (access key)' },
   { name: 'minio_root_password', label: 'MinIO root password (secret key)' },
+  // SMTP do worker `email-dispatch`. Em dev é placeholder (mailpit ignora auth); em
+  // produção o ERP-INFRA injeta a credencial SMTP do Amazon SES via Secrets Manager.
+  { name: 'smtp_pass', label: 'SMTP password (SES em prod; placeholder em dev/mailpit)' },
 ];
 
 // Connection-string secrets — um por módulo com persistência MySQL. Todos apontam

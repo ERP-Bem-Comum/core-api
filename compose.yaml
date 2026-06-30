@@ -408,17 +408,30 @@ services:
     <<: *x-worker-base
     profiles:
       - workers
+    # Contrato de e-mail (ADR-0010): provider via env, igual nos 3 ambientes (EMAIL_PROVIDER=smtp).
+    # Defaults apontam para o mailpit local (profile `mail`); QA/PROD sobrescrevem via env/Secrets
+    # Manager — em PROD o host é o Amazon SES (email-smtp.<região>.amazonaws.com). SMTP_PASS é
+    # secret (cat /run/secrets/smtp_pass). Sem estas, o worker aborta no boot com exit 78.
+    environment:
+      EMAIL_PROVIDER: '${EMAIL_PROVIDER:-smtp}'
+      EMAIL_FROM: '${EMAIL_FROM:-Dev <dev@local>}'
+      SMTP_HOST: '${SMTP_HOST:-mailpit}'
+      SMTP_PORT: '${SMTP_PORT:-1025}'
+      SMTP_SECURE: '${SMTP_SECURE:-false}'
+      SMTP_USER: '${SMTP_USER:-dev@local}'
     entrypoint:
       - /bin/sh
       - -c
       - >-
         export AUTH_DATABASE_URL="$(cat /run/secrets/auth_database_url)";
         export PARTNERS_DATABASE_URL="$(cat /run/secrets/partners_database_url)";
+        export SMTP_PASS="$(cat /run/secrets/smtp_pass)";
         exec tini -- node "$0"
       - src/workers/email-dispatch/run.ts
     secrets:
       - auth_database_url
       - partners_database_url
+      - smtp_pass
 
   # ──────────────────────────────────────────────────────────────────────────
   # Job one-shot contracts-sweeper (opt-in via profile `jobs` — ADR-0041).
@@ -542,6 +555,9 @@ secrets:
     file: ./secrets/minio_root_password.txt
   migrate_database_url:
     file: ./secrets/migrate_database_url.txt
+  # SMTP do worker email-dispatch (Amazon SES em prod via Secrets Manager; mailpit em dev).
+  smtp_pass:
+    file: ./secrets/smtp_pass.txt
 
 volumes:
   minio-data:
