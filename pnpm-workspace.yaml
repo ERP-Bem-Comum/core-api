@@ -9,6 +9,15 @@ allowBuilds:
   # as coleções .bru são REST e o `bru run` roda sem ele. Mantido false (explícito/auditável).
   protobufjs: false
 
+# Version overrides para security fixes (Dependabot alerts)
+# - GHSA-67mh-4wv8-2f99: esbuild <=0.24.2 (via @esbuild-kit/core-utils@3.3.2 → esbuild@0.18.20)
+# - GHSA-g7r4-m6w7-qqqr: esbuild >=0.27.3 <0.28.1 (via tsx@4.22.0 → esbuild@0.28.0)
+# Resolve: forçar esbuild >=0.25.0 <0.27.3 || >=0.28.1 em todas as cadeias transitivas.
+# Seguro: drizzle-kit@0.31.10 depende de esbuild@0.25.12 diretamente (compatível).
+# Referência: handbook/reference/pnpm/settings.md:29-98 (section overrides).
+overrides:
+  esbuild: '>=0.25.0 <0.27.3 || >=0.28.1'
+
 # Supply-chain hardening explícito (ADR-0011 / ADR-0029). Mantemos os valores
 # explícitos mesmo quando coincidem com o default do pnpm 11 — explícito é auditável.
 
