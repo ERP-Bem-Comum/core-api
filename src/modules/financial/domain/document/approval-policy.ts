@@ -12,7 +12,8 @@ export type ApproverAuthority = Readonly<{
 export type ApprovalError =
   | 'approver-not-found'
   | 'approver-missing-permission'
-  | 'approver-limit-exceeded';
+  | 'approver-limit-exceeded'
+  | 'no-approver-with-sufficient-limit';
 
 /**
  * Valida o aprovador indicado contra o valor líquido do documento (US1). Função pura.
@@ -28,4 +29,30 @@ export const checkApprover = (
   if (authority.limit === null) return err('approver-limit-exceeded');
   if (Money.greaterThan(netValue, authority.limit)) return err('approver-limit-exceeded');
   return ok(undefined);
+};
+
+/**
+ * US3 (cascata): escolhe o próximo aprovador com alçada suficiente — o de **menor** limite ≥ líquido
+ * (empate estável por ordem de entrada). Função pura. Dois erros (decisão 2 do solicitante):
+ * sem candidato suficiente e `candidates.length <= 1` (só o indicado / vazio) ⇒ `approver-limit-exceeded`
+ * (sem cascata possível, preserva o comportamento do POLICY); `> 1` candidato e nenhum suficiente ⇒
+ * `no-approver-with-sufficient-limit`.
+ */
+export const escalate = (
+  netValue: Money.Money,
+  candidates: readonly ApproverAuthority[],
+): Result<ApproverAuthority, ApprovalError> => {
+  const sufficient = candidates.filter(
+    (c): c is ApproverAuthority & Readonly<{ limit: Money.Money }> =>
+      c.canApprove && c.limit !== null && !Money.greaterThan(netValue, c.limit),
+  );
+  const first = sufficient[0];
+  if (first === undefined) {
+    return err(
+      candidates.length <= 1 ? 'approver-limit-exceeded' : 'no-approver-with-sufficient-limit',
+    );
+  }
+  return ok(
+    sufficient.reduce((best, c) => (Money.greaterThan(best.limit, c.limit) ? c : best), first),
+  );
 };

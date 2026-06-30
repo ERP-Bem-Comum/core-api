@@ -46,13 +46,23 @@ export type PayableManuallyPaid = Readonly<{
   reason?: string;
 }>;
 
+// #289 (CASCADE/US3): a cascata escalou o aprovador indicado p/ outro com alçada suficiente.
+// Não compõe a trilha (não há marco de estado do Document) — vai só pro outbox.
+export type ApproverEscalated = Readonly<{
+  type: 'ApproverEscalated';
+  documentId: string;
+  indicatedApproverRef: UserRef;
+  effectiveApproverRef: UserRef;
+}>;
+
 export type DocumentEvent =
   | DocumentSaved
   | PayableApproved
   | ApprovalUndone
   | DocumentDraftSaved
   | DocumentCancelled
-  | PayableManuallyPaid;
+  | PayableManuallyPaid
+  | ApproverEscalated;
 
 /**
  * Fonte única dos literais de `DocumentEvent['type']` (anti-drift) — consumida pelos
@@ -72,15 +82,21 @@ export const DOCUMENT_EVENT_TYPES = exhaustiveStringUnion<DocumentEvent['type']>
   'DocumentDraftSaved',
   'DocumentCancelled',
   'PayableManuallyPaid',
+  'ApproverEscalated',
 ] as const);
 
 /**
  * Subconjunto dos tipos que aparecem NA TRILHA (#56b): exclui `DocumentCancelled`, inalcançável
- * na leitura — cancelar faz hard-delete + cascade, a trilha some junto. Consumido pelo response
+ * na leitura — cancelar faz hard-delete + cascade, a trilha some junto. Exclui também
+ * `ApproverEscalated` (#289/CASCADE) — não é marco de estado do Document, vai só pro outbox
+ * (sem migration nova: o CHECK `ck_fin_tl_event_type` permanece intocado). Consumido pelo response
  * schema (`z.enum`) e pelo CHECK da tabela de trilha. `Exclude<...>` preserva a exaustividade:
  * adicionar um evento novo à union sem listá-lo aqui QUEBRA `pnpm run typecheck`.
  */
-export type TimelineEventType = Exclude<DocumentEvent['type'], 'DocumentCancelled'>;
+export type TimelineEventType = Exclude<
+  DocumentEvent['type'],
+  'DocumentCancelled' | 'ApproverEscalated'
+>;
 
 export const TIMELINE_EVENT_TYPES = exhaustiveStringUnion<TimelineEventType>()([
   'DocumentSaved',
