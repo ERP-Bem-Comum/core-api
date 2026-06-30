@@ -46,7 +46,10 @@ import { confirmReconciliation } from '#src/modules/financial/application/use-ca
 import { closeReconciliationPeriod } from '#src/modules/financial/application/use-cases/close-reconciliation-period.ts';
 import { listReconciliationPeriods } from '#src/modules/financial/application/use-cases/list-reconciliation-periods.ts';
 import { getTransactionReconciliation } from '#src/modules/financial/application/use-cases/get-transaction-reconciliation.ts';
-import type { AuthUserReadPort } from '#src/modules/auth/public-api/read.ts';
+import type {
+  AuthUserReadPort,
+  ApproverAuthorityReadPort,
+} from '#src/modules/auth/public-api/read.ts';
 
 const WRITER = 'reconciliation:write,reconciliation:read';
 const READER = 'reconciliation:read';
@@ -79,9 +82,14 @@ const fitidOf = (raw: string) => {
   return f.value;
 };
 
-// Fake do AuthUserReadPort: resolve só o TEST_USER_ID; qualquer outro id → ok(null).
-const fakeAuthUserReadPort = (name: string | null): AuthUserReadPort => ({
+// Fake do AuthUserReadPort: resolve só o TEST_USER_ID; qualquer outro id → ok(null). A alçada do
+// aprovador (#289) é irrelevante neste teste (executor/closer, não aprovador) — stub sem alçada.
+const fakeAuthUserReadPort = (
+  name: string | null,
+): AuthUserReadPort & ApproverAuthorityReadPort => ({
   getUserName: (id: string) => Promise.resolve(id === TEST_USER_ID ? ok({ id, name }) : ok(null)),
+  getApproverAuthority: () => Promise.resolve(ok(null)),
+  listApproversWithAuthority: () => Promise.resolve(ok([])),
 });
 
 interface AppHandle {
@@ -91,7 +99,7 @@ interface AppHandle {
 
 // Monta um app com a conciliação semeada + um AuthUserReadPort específico.
 const buildHandle = async (
-  authUserReadPort: AuthUserReadPort | undefined,
+  authUserReadPort: (AuthUserReadPort & ApproverAuthorityReadPort) | undefined,
 ): Promise<{
   handle: AppHandle;
   txId: string;

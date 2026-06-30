@@ -7,14 +7,27 @@ import type {
   DocumentRepository,
   DocumentRepositoryError,
 } from '../../domain/document/repository.ts';
+import { checkApprover, type ApprovalError } from '../../domain/document/approval-policy.ts';
+import type {
+  ApproverAuthorityReader,
+  ApproverAuthorityReadError,
+} from '../ports/approver-authority-reader.ts';
 import { buildTimelineEntries } from '../timeline-recording.ts';
 
 export type SubmitDraftDeps = Readonly<{
   repo: DocumentRepository;
   clock: Clock;
+  // #289 (CA7): leitura cross-módulo da alçada do aprovador (auth/public-api). Opt-in — espelha
+  // o gate de save-document.ts; ausente ⇒ a submissão não valida alçada.
+  approverAuthorityReader?: ApproverAuthorityReader;
 }>;
 export type SubmitDraftCommand = Readonly<{ documentId: string }>;
-export type SubmitDraftError = DocumentError | DocumentRepositoryError | DocumentId.DocumentIdError;
+export type SubmitDraftError =
+  | DocumentError
+  | DocumentRepositoryError
+  | DocumentId.DocumentIdError
+  | ApprovalError
+  | ApproverAuthorityReadError;
 
 export const submitDraft =
   (deps: SubmitDraftDeps) =>
@@ -30,6 +43,15 @@ export const submitDraft =
 
     const submitted = Document.submit(draft.value);
     if (!submitted.ok) return err(submitted.error);
+
+    // CA7 (#289): valida a alçada do aprovador indicado contra o líquido, antes de persistir.
+    // Gate opt-in: só roda com aprovador no rascunho e reader injetado (composição HTTP injeta).
+    if (draft.value.approverRef !== null && deps.approverAuthorityReader !== undefined) {
+      const authority = await deps.approverAuthorityReader.get(String(draft.value.approverRef));
+      if (!authority.ok) return err(authority.error);
+      const check = checkApprover(submitted.value.document.netValue, authority.value);
+      if (!check.ok) return err(check.error);
+    }
 
     // Trilha: marco de submissão. before = rascunho lido (Draft, sem títulos);
     // after = Open com títulos gerados.
