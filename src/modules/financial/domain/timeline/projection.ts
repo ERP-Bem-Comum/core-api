@@ -21,6 +21,8 @@ const documentSnapshot = (d: Document): Readonly<Record<string, string | null>> 
   netValue: d.status === 'Draft' ? null : fromMoney(d.netValue),
   dueDate: fromDate(d.dueDate),
   description: d.description ?? null,
+  // #273: complemento da forma de pagamento — auditado before/after no timeline (CA6.5).
+  paymentDetail: d.paymentDetail ?? null,
 });
 
 const payableSnapshot = (p: Payable): Readonly<Record<string, string | null>> => ({

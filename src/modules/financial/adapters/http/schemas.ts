@@ -151,6 +151,8 @@ export const adjustDocumentBodySchema = z
     retentions: z.array(retentionItemSchema).optional(),
     dueDate: z.iso.date().optional(),
     description: z.string().max(500).nullable().optional(),
+    // #273 US2: complemento da forma de pagamento — null apaga; ausente não altera (CA6).
+    paymentDetail: paymentDetailInput.nullable().optional(),
   })
   .refine((b) => Object.keys(b).filter((k) => k !== 'version').length > 0, {
     message: 'pelo menos um campo além de version deve ser informado',
