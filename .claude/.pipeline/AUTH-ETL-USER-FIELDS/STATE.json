@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "AUTH-ETL-USER-FIELDS",
+  "size": "M",
+  "createdAt": "2026-06-30T04:32:43.633Z",
+  "closedAt": "2026-06-30T05:13:59.171Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-06-30T04:40:25.678Z",
+      "finishedAt": "2026-06-30T04:51:21.407Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "typescript-language-expert",
+      "startedAt": "2026-06-30T04:51:21.723Z",
+      "finishedAt": "2026-06-30T05:05:24.627Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-06-30T05:05:24.942Z",
+      "finishedAt": "2026-06-30T05:11:30.113Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-06-30T05:11:30.430Z",
+      "finishedAt": "2026-06-30T05:13:58.870Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

@@ -324,6 +324,10 @@ export default tseslint.config(
       '@typescript-eslint/strict-boolean-expressions': 'off',
       // init-declarations: testes podem ter let sem init em alguns helpers
       '@typescript-eslint/init-declarations': 'off',
+      // Spy+restore de metodo de objeto (ex.: `const restore = process.stderr.write; ...;
+      // process.stderr.write = restore;`) e idioma de teste: o metodo nunca e chamado
+      // destacado, so reatribuido ao mesmo objeto -> o aviso de `this`-binding e falso-positivo.
+      '@typescript-eslint/unbound-method': 'off',
     },
   },
 

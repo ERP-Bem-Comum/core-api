@@ -13,7 +13,11 @@
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import * as UserId from '#src/modules/auth/domain/identity/user-id.ts';
 
-import type { AuthEtlPort, ProvisionLegacyUserError } from '#src/modules/auth/public-api/etl.ts';
+import type {
+  AuthEtlPort,
+  ProvisionLegacyUserError,
+  ProvisionLegacyUserInput,
+} from '#src/modules/auth/public-api/etl.ts';
 import type {
   LegacyEntityStore,
   ProvisionOutcome,
@@ -89,6 +93,10 @@ export type FakeAuthPort = AuthEtlPort &
   Readonly<{
     readonly provisionedUsers: ReadonlyMap<number, UserId.UserId>;
     readonly provisionCalls: () => number;
+    // AUTH-ETL-USER-FIELDS (#277): espelho dos inputs recebidos, para asseverar que o
+    // orchestrate repassa name/cpf/telephone/collaboratorRef (não só o núcleo).
+    readonly provisionInputs: readonly ProvisionLegacyUserInput[];
+    readonly lastProvisionInput: () => ProvisionLegacyUserInput | undefined;
   }>;
 
 // UUIDs v4 válidos determinísticos (variante 4, version 4) por legacyId.
@@ -103,10 +111,12 @@ const userIdFor = (legacyId: number): UserId.UserId => {
 
 export const makeFakeAuthPort = (): FakeAuthPort => {
   const provisionedUsers = new Map<number, UserId.UserId>();
+  const provisionInputs: ProvisionLegacyUserInput[] = [];
   let calls = 0;
 
   const provisionLegacyUser: AuthEtlPort['provisionLegacyUser'] = (input) => {
     calls += 1;
+    provisionInputs.push(input); // captura para asserts de paridade de perfil (#277)
     const existing = provisionedUsers.get(input.legacyId);
     if (existing !== undefined) {
       return Promise.resolve(ok({ userRef: existing, outcome: 'already-exists' as const }));
@@ -121,6 +131,8 @@ export const makeFakeAuthPort = (): FakeAuthPort => {
     close: () => Promise.resolve(),
     provisionedUsers,
     provisionCalls: () => calls,
+    provisionInputs,
+    lastProvisionInput: () => provisionInputs[provisionInputs.length - 1],
   };
 };
 

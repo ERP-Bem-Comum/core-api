@@ -50,6 +50,15 @@ export type RegisterInput = Readonly<{
   email: Email;
   passwordHash: PasswordHash;
   roles: readonly Role[];
+  // Perfil legado opcional (AUTH-ETL-USER-FIELDS #277): factory de reconstituicao (Evans, DDD,
+  // p.82). Ausente/null no self-register/OIDC -> tudo null (retrocompat, CA4). VOs ja validados;
+  // a parse + DEGRADACAO de cpf/telephone invalido acontece no use case provisionLegacyUser, nao
+  // aqui. `collaboratorRef` (string sem FK, ADR-0006) alimenta `collaboratorId` do agregado.
+  name?: string | null;
+  cpf?: Cpf | null;
+  telephone?: Telephone | null;
+  photo?: ProfilePhotoRef | null;
+  collaboratorRef?: string | null;
 }>;
 
 // Criacao administrativa (spec 005, US3): perfil completo + hash placeholder (sem senha real).
@@ -79,12 +88,13 @@ export const register = (
     email: input.email,
     passwordHash: input.passwordHash,
     roles: dedupeRoles(input.roles),
-    // Perfil vazio na criacao base (self-register/OIDC). create-user-by-admin preenche depois.
-    name: null,
-    cpf: null,
-    telephone: null,
-    photo: null,
-    collaboratorId: null,
+    // Perfil do legado quando presente (ETL #277); default null preserva self-register/OIDC (CA4).
+    // create-user-by-admin continua usando `create` (perfil obrigatorio), nao este caminho.
+    name: input.name ?? null,
+    cpf: input.cpf ?? null,
+    telephone: input.telephone ?? null,
+    photo: input.photo ?? null,
+    collaboratorId: input.collaboratorRef ?? null,
     status: 'active' as const,
   });
   const event: UserRegistered = immutable({

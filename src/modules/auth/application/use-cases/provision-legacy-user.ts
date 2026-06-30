@@ -18,6 +18,8 @@ import type { Clock } from '../../../../shared/ports/clock.ts';
 import type * as Email from '../../domain/identity/email.ts';
 import * as UserId from '../../domain/identity/user-id.ts';
 import * as User from '../../domain/identity/user/user.ts';
+import * as Cpf from '../../domain/identity/cpf.ts';
+import * as Telephone from '../../domain/identity/telephone.ts';
 import type * as Role from '../../domain/authorization/role.ts';
 import * as Password from '../../domain/credential/password-policy.ts';
 import type {
@@ -39,6 +41,14 @@ export type ProvisionLegacyUserInput = Readonly<{
   legacyId: number;
   email: Email.Email;
   massApprove: boolean;
+  // AUTH-ETL-USER-FIELDS (#277): perfil legado (raw, opcional). cpf/telephone sao parseados pelos
+  // VOs do auth aqui dentro (ADR-0006: borda de validacao no auth) e, em falha, DEGRADADOS para
+  // null + warning citando o legacyId (Evans p.82 reconstituicao; espelha o read-mapper do
+  // incidente login-500) — NAO quarentena. name/collaboratorRef passam direto ao register.
+  name?: string | null;
+  cpf?: string | null;
+  telephone?: string | null;
+  collaboratorRef?: string | null;
 }>;
 
 export type ProvisionLegacyUserOutput = Readonly<{
@@ -61,6 +71,33 @@ export type ProvisionLegacyUserDeps = Readonly<{
   // Fonte do segredo random descartado (prod: randomBytes; testes: valor fixo). Nunca persistido em claro.
   secret: () => string;
 }>;
+
+// Degrada um campo de perfil opcional do legado: parseia pelo VO do auth e, em falha, devolve
+// null + warning citando o legacyId (para higienizacao posterior do dado). NAO quarentena: o ETL
+// e uma factory de reconstituicao (Evans, DDD, p.82) e, como o read-mapper do incidente login-500,
+// degrada o campo opcional invalido em vez de rejeitar o registro.
+const degradeCpf = (raw: string | null | undefined, legacyId: number): Cpf.Cpf | null => {
+  if (raw === null || raw === undefined) return null;
+  const parsed = Cpf.parse(raw);
+  if (parsed.ok) return parsed.value;
+  process.stderr.write(
+    `[provision-legacy-user] legacyId=${String(legacyId)} degraded invalid cpf to null: ${parsed.error}\n`,
+  );
+  return null;
+};
+
+const degradeTelephone = (
+  raw: string | null | undefined,
+  legacyId: number,
+): Telephone.Telephone | null => {
+  if (raw === null || raw === undefined) return null;
+  const parsed = Telephone.parse(raw);
+  if (parsed.ok) return parsed.value;
+  process.stderr.write(
+    `[provision-legacy-user] legacyId=${String(legacyId)} degraded invalid telephone to null: ${parsed.error}\n`,
+  );
+  return null;
+};
 
 export const provisionLegacyUser =
   (deps: ProvisionLegacyUserDeps) =>
@@ -88,13 +125,27 @@ export const provisionLegacyUser =
     const hashR = await deps.passwordHasher.hash(passwordR.value);
     if (!hashR.ok) return err(hashR.error);
 
-    // 4. Agregado User (active, sem senha utilizavel ate reset).
+    // 4. Perfil legado (#277): cpf/telephone parseados pelos VOs do auth; invalido DEGRADA p/ null
+    //    + warning (NAO quarentena). name/collaboratorRef passam direto (register default null).
+    const cpf = degradeCpf(input.cpf, input.legacyId);
+    const telephone = degradeTelephone(input.telephone, input.legacyId);
+
+    // 5. Agregado User (active, sem senha utilizavel ate reset).
     const { user } = User.register(
-      { id: UserId.generate(), email: input.email, passwordHash: hashR.value, roles },
+      {
+        id: UserId.generate(),
+        email: input.email,
+        passwordHash: hashR.value,
+        roles,
+        name: input.name ?? null,
+        cpf,
+        telephone,
+        collaboratorRef: input.collaboratorRef ?? null,
+      },
       deps.clock.now(),
     );
 
-    // 5. Persistir com correlacao legacy_id (insert idempotente).
+    // 6. Persistir com correlacao legacy_id (insert idempotente).
     const provisioned = await deps.store.provision(user, input.legacyId);
     if (!provisioned.ok) return err(provisioned.error);
 
