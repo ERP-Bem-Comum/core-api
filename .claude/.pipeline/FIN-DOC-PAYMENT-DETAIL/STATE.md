@@ -1,6 +1,6 @@
 # Estado do Ticket FIN-DOC-PAYMENT-DETAIL
 
-> **Size:** S · **Status:** in-progress · **Created:** 2026-06-29T15:17:16.333Z
+> **Size:** S · **Status:** closed-green · **Created:** 2026-06-29T15:17:16.333Z · **Closed:** 2026-06-30T01:34:42.450Z
 
 | Wave | Status | Skill | REPORT | Última atualização |
 | :--- | :--- | :--- | :--- | :--- |
@@ -11,4 +11,4 @@
 
 ## Último evento
 
-W3 finished (GREEN)
+closed-green
