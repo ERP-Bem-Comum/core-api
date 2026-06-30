@@ -14,7 +14,11 @@ import * as ServiceCategory from '#src/modules/partners/domain/supplier/service-
 import type { ServiceCategory as ServiceCategoryType } from '#src/modules/partners/domain/supplier/service-category.ts';
 import * as PaymentTarget from '#src/modules/partners/domain/shared/payment-target.ts';
 import type { Supplier as SupplierEntity } from '#src/modules/partners/domain/supplier/types.ts';
-import type { BankAccount, PixKey } from '#src/modules/partners/domain/shared/payment-target.ts';
+import type {
+  BankAccount,
+  PixKey,
+  PixKeyType,
+} from '#src/modules/partners/domain/shared/payment-target.ts';
 import type { LegacySupplierRow } from '../legacy/rows.ts';
 import type { QuarantineReason } from '../quarantine/reason.ts';
 import {
@@ -24,6 +28,17 @@ import {
   parseCnpjField,
   statusFromActive,
 } from './shared.ts';
+
+// ACL translator: legacy pix_key_type vocabulary → core PixKeyType (#275, Evans DDD p.226).
+const LEGACY_PIX_KEY_TYPE_MAP: Readonly<Record<string, PixKeyType>> = {
+  CNPJ: 'cnpj',
+  CPF: 'cpf',
+  EMAIL: 'email',
+  CELLPHONE: 'phone',
+  ALEATORY_KEY: 'random-key',
+};
+
+const translatePixKeyType = (raw: string): string => LEGACY_PIX_KEY_TYPE_MAP[raw] ?? raw;
 
 const parseServiceCategory = (raw: string): Result<ServiceCategoryType, QuarantineReason> => {
   const r = ServiceCategory.parse(raw);
@@ -56,7 +71,7 @@ const resolvePaymentTargets = (
 
   if (row.pixInfoKey !== null) {
     const r = PaymentTarget.createPixKey({
-      keyType: row.pixInfoKeyType ?? '',
+      keyType: translatePixKeyType(row.pixInfoKeyType ?? ''),
       key: row.pixInfoKey,
     });
     if (r.ok) pixKey = r.value;
