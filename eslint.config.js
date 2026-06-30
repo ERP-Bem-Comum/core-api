@@ -16,6 +16,9 @@ export default tseslint.config(
       // tests/reports/ contém scripts ad-hoc de investigação (probes, dumps),
       // não código de produção/teste.
       'tests/reports/**',
+      // tools/bugs-scripts/ — scripts de diagnóstico black-box descartáveis
+      // (já gitignored); não entram em nenhum tsconfig (projectService falha).
+      'tools/bugs-scripts/**',
       // specs/ guarda artefatos spec-kit (SDD). Os contracts/*.ts são esboços
       // de ports para documentar design — não entram em nenhum tsconfig.
       'specs/**',
