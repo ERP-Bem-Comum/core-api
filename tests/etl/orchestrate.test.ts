@@ -39,6 +39,7 @@ import {
   financierRow,
   collaboratorRow,
   userRow,
+  VALID_CPF,
   type FakeAuthPort,
   type FakeEntityStore,
 } from './orchestrate.fakes.ts';
@@ -472,5 +473,56 @@ describe('PARTNERS-ETL-ORCHESTRATOR — reason fiel ao erro de port (Obs.2)', ()
     assert.deepEqual(Object.keys(summary).sort(), ['field', 'tag']);
     assert.equal(summary.tag, 'PortError');
     assert.equal(typeof summary.field, 'string');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 9. AUTH-ETL-USER-FIELDS (#277) — paridade de perfil: o orchestrate repassa
+//    name/cpf/telephone (de validated.*) + collaboratorRef resolvido ao auth-port.
+//
+//    RED hoje: `migrateUserRow` (orchestrate.ts :259-263) só passa
+//    { legacyId, email, massApprove } ao provisionLegacyUser — descarta name/cpf/
+//    telephone (já presentes em `validated`) e o collaboratorRef já resolvido.
+//    Como `node --test --experimental-strip-types` NÃO type-checa, o teste CARREGA e
+//    o RED vem das ASSERÇÕES (os campos chegam `undefined` ao auth-port hoje). O gate
+//    `pnpm run typecheck` também fica RED (campos inexistentes em ProvisionLegacyUserInput).
+// ---------------------------------------------------------------------------
+
+describe('AUTH-ETL-USER-FIELDS (#277) — repasse de perfil ao auth-port', () => {
+  it('repassa name/cpf/telephone (validated.*) + collaboratorRef resolvido', async () => {
+    const data = legacyData({
+      collaborators: { rows: [collaboratorRow({ id: 7 })], failures: [] },
+      // userRow default: name 'Usuario W', cpf VALID_CPF, telephone '11977776666'.
+      users: { rows: [userRow({ id: 50, collaboratorId: 7 })], failures: [] },
+    });
+
+    const { report, auth, stores } = await run(data);
+    assert.equal(report.users.migrated, 1);
+
+    const captured = auth.lastProvisionInput();
+    assert.ok(captured, 'auth-port deve ter recebido ao menos 1 input');
+    assert.equal(captured.legacyId, 50);
+    assert.equal(captured.name, 'Usuario W');
+    assert.equal(captured.cpf, VALID_CPF);
+    assert.equal(captured.telephone, '11977776666');
+
+    // collaboratorRef = a CollaboratorId que o store atribuiu ao collaborator legacyId 7.
+    const expectedRef = stores.collaborators.persisted.get(7);
+    assert.ok(expectedRef, 'collaborator 7 deve ter sido migrado e ter ref');
+    assert.equal(captured.collaboratorRef, expectedRef);
+  });
+
+  it('user sem collaborator (collaboratorId=null) → repassa collaboratorRef=null', async () => {
+    const data = legacyData({
+      users: { rows: [userRow({ id: 51, collaboratorId: null })], failures: [] },
+    });
+
+    const { report, auth } = await run(data);
+    assert.equal(report.users.migrated, 1);
+
+    const captured = auth.lastProvisionInput();
+    assert.ok(captured);
+    // assert.equal é strict (import { strict as assert }): undefined !== null -> RED hoje.
+    assert.equal(captured.collaboratorRef, null);
   });
 });

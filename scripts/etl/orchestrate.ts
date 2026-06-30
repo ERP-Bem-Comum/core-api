@@ -260,6 +260,13 @@ const migrateUserRow = async (
     legacyId: validated.legacyId,
     email: emailR.value,
     massApprove: validated.massApprove,
+    // AUTH-ETL-USER-FIELDS (#277): paridade de perfil — repassa name/cpf/telephone (validated.*)
+    // + o collaboratorRef ja resolvido (brand -> string, ref logica sem FK, ADR-0006). O auth
+    // re-parseia/DEGRADA cpf/telephone invalido para null (borda de validacao no auth).
+    name: validated.name,
+    cpf: validated.cpf,
+    telephone: validated.telephone,
+    collaboratorRef: collaboratorRef === null ? null : String(collaboratorRef),
   });
   if (!provisionedUser.ok) {
     // Obs.2: carrega o codigo kebab-case EN REAL do auth-port (ProvisionLegacyUserError),
