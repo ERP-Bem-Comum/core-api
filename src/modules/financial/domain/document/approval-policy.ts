@@ -25,9 +25,11 @@ export const checkApprover = (
 ): Result<void, ApprovalError> => {
   if (authority === null) return err('approver-not-found');
   if (!authority.canApprove) return err('approver-missing-permission');
-  // FR-008 fail-closed: aprovador sem alçada definida não aprova nada.
-  if (authority.limit === null) return err('approver-limit-exceeded');
-  if (Money.greaterThan(netValue, authority.limit)) return err('approver-limit-exceeded');
+  // #299: alçada OPT-IN. `limit === null` = sem limite configurado = aprova (regra binária da P.O.);
+  // o teto só é enforçado quando o papel tem `approval_limit_cents` definido.
+  if (authority.limit !== null && Money.greaterThan(netValue, authority.limit)) {
+    return err('approver-limit-exceeded');
+  }
   return ok(undefined);
 };
 
