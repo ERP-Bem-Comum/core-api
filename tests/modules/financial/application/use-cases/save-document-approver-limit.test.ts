@@ -81,11 +81,21 @@ describe('financial/application — saveDocument valida alçada do aprovador (US
     assert.equal(isOk(result), true);
   });
 
-  it('CA8: sem approverRef → não valida alçada (reader bloqueante é ignorado)', async () => {
+  it('CA8: sem approverRef → não valida alçada (reader nem é consultado)', async () => {
     const outbox = createInMemoryOutbox();
-    // reader que bloquearia (sem alçada), mas o comando não tem approverRef.
+    // sem approverRef → o gate nem consulta o reader.
     const reader = fakeReader({ userId: APPROVER, canApprove: true, limit: null });
     const result = await saveDocument(deps(reader, outbox.port))(nfseCommand());
     assert.equal(isOk(result), true);
+  });
+
+  it('CA6 (#299): aprovador com payable:approve mas SEM limite (limit null) → cria o documento', async () => {
+    const outbox = createInMemoryOutbox();
+    const reader = fakeReader({ userId: APPROVER, canApprove: true, limit: null });
+    const result = await saveDocument(deps(reader, outbox.port))({
+      ...nfseCommand(),
+      approverRef: APPROVER,
+    });
+    assert.equal(isOk(result), true); // opt-in: sem limite = aprova (não fail-closed)
   });
 });

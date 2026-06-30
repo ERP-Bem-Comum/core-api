@@ -39,10 +39,9 @@ describe('financial/domain/document/approval-policy — checkApprover (US1)', ()
     if (!r.ok) assert.equal(r.error, 'approver-missing-permission');
   });
 
-  it('CA3: canApprove sem alçada (limit null) → approver-limit-exceeded (FR-008 fail-closed)', () => {
+  it('CA3 (#299): canApprove sem limite (limit null) → ok — opt-in, não fail-closed', () => {
     const r = checkApprover(money(10000), authority(true, null));
-    assert.equal(r.ok, false);
-    if (!r.ok) assert.equal(r.error, 'approver-limit-exceeded');
+    assert.equal(r.ok, true);
   });
 
   it('CA4: limit < netValue → approver-limit-exceeded', () => {
