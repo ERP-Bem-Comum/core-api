@@ -1,25 +1,39 @@
-import { type Result, ok, err } from '../../../../shared/result.ts';
-import { isValidDate } from '../../../../shared/utils/date.ts';
+import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
-import { AmendmentId, ContractId, type ContractIdError } from '../../domain/shared/ids.ts';
-import { Money, type MoneyError } from '../../domain/shared/money.ts';
+import * as AmendmentId from '../../domain/shared/amendment-id.ts';
+import * as ContractId from '../../domain/shared/contract-id.ts';
+import type { ContractIdError } from '../../domain/shared/contract-id.ts';
+import * as Money from '#src/shared/kernel/money.ts';
+import type { MoneyError } from '#src/shared/kernel/money.ts';
+import * as NonZeroMoney from '#src/shared/kernel/non-zero-money.ts';
+import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import { Amendment } from '../../domain/amendment/amendment.ts';
+import { Contract } from '../../domain/contract/contract.ts';
+import type { ContractNotActive } from '../../domain/contract/errors.ts';
 import type {
-  Amendment as AmendmentEntity,
+  PendingWithoutDocumentAmendment,
   CreateAmendmentInput,
 } from '../../domain/amendment/types.ts';
 import type { AmendmentEvent } from '../../domain/amendment/events.ts';
+import * as AmendmentErrors from '../../domain/amendment/errors.ts';
 import type { AmendmentError } from '../../domain/amendment/errors.ts';
-import type { ContractRepository, ContractRepositoryError } from '../ports/contract-repository.ts';
+import type {
+  ContractRepository,
+  ContractRepositoryError,
+} from '../../domain/contract/repository.ts';
 import type {
   AmendmentRepository,
   AmendmentRepositoryError,
-} from '../ports/amendment-repository.ts';
-import type { EventBus, EventBusError } from '../ports/event-bus.ts';
+} from '../../domain/amendment/repository.ts';
 
+// CA-5+CA-6 (CTR-OUTBOX-INTEGRATION-IN-REPOS):
+//   - eventBus removido de Deps.
+//   - Evento passado como 2º argumento de amendmentRepo.save.
+
+// G3 (CTR-AMENDMENT-SIGNEDAT-AND-NUMBER): `amendmentNumber` NÃO vem do cliente — o backend
+// gera `NN/AAAA` por contrato (ordem de criação). Removido de CommonFields.
 type CommonFields = Readonly<{
   contractId: string;
-  amendmentNumber: string;
   description: string;
 }>;
 
@@ -40,31 +54,32 @@ export type CreateAmendmentError =
   | 'amendment-suppression-exceeds-current-value'
   | MoneyError
   | AmendmentError
+  // RN-CV-01/R3: aditivo só em contrato vigente (Active). Pendente e terminais recusam.
+  | ContractNotActive
   | ContractRepositoryError
-  | AmendmentRepositoryError
-  | EventBusError;
+  | AmendmentRepositoryError;
 
 export type CreateAmendmentOutput = Readonly<{
-  amendment: AmendmentEntity;
+  amendment: PendingWithoutDocumentAmendment;
   event: AmendmentEvent;
 }>;
 
 type Deps = Readonly<{
   contractRepo: ContractRepository;
   amendmentRepo: AmendmentRepository;
-  eventBus: EventBus;
   clock: Clock;
 }>;
 
 const buildDomainInput = (
   cmd: CreateAmendmentCommand,
-  contractId: ContractId,
+  contractId: ContractId.ContractId,
+  amendmentNumber: string,
   createdAt: Date,
 ): Result<CreateAmendmentInput, CreateAmendmentError> => {
   const baseFields = {
     id: AmendmentId.generate(),
     contractId,
-    amendmentNumber: cmd.amendmentNumber,
+    amendmentNumber,
     description: cmd.description,
     createdAt,
   };
@@ -74,14 +89,17 @@ const buildDomainInput = (
     case 'Suppression': {
       const money = Money.fromCents(cmd.impactValueCents);
       if (!money.ok) return money;
-      return ok({ ...baseFields, kind: cmd.kind, impactValue: money.value });
+      // DO D§26 (rota γ): caso de uso é o orquestrador que refina Money → NonZeroMoney.
+      const nonZero = NonZeroMoney.from(money.value);
+      if (!nonZero.ok) return err(AmendmentErrors.amendmentImpactValueZero());
+      return ok({ ...baseFields, kind: cmd.kind, impactValue: nonZero.value });
     }
     case 'TermChange': {
-      const newEnd = new Date(cmd.newEndDate);
-      if (!isValidDate(newEnd)) {
+      const newEnd = PlainDate.from(cmd.newEndDate);
+      if (!newEnd.ok) {
         return err('create-amendment-invalid-new-end-date');
       }
-      return ok({ ...baseFields, kind: 'TermChange', newEndDate: newEnd });
+      return ok({ ...baseFields, kind: 'TermChange', newEndDate: newEnd.value });
     }
     case 'Misc':
       return ok({ ...baseFields, kind: 'Misc' });
@@ -101,29 +119,38 @@ export const createAmendment =
     if (!contractLoad.ok) return contractLoad;
     if (contractLoad.value === null) return err('contract-not-found');
 
-    const domainInput = buildDomainInput(cmd, contractIdResult.value, deps.clock.now());
+    // RN-CV-01/R3 (ADR-0023): aditivo só em contrato vigente. Pendente (sem
+    // efetividade) e terminais (Expired/Terminated) recusam — `parseActive`
+    // garante estaticamente a vigência antes de ler `current*`.
+    const active = Contract.parseActive(contractLoad.value);
+    if (!active.ok) return active;
+
+    // G3: número gerado por contrato (ordem de criação; ano do clock). Transacional no adapter.
+    const now = deps.clock.now();
+    const number = await deps.amendmentRepo.nextAmendmentNumber(
+      contractIdResult.value,
+      now.getFullYear(),
+    );
+    if (!number.ok) return number;
+
+    const domainInput = buildDomainInput(cmd, contractIdResult.value, number.value, now);
     if (!domainInput.ok) return domainInput;
 
-    // Defeito #11: fail-fast em TermChange retroativo (em vez de só detectar na homologação).
+    // Defeito #11: fail-fast em TermChange retroativo.
     if (domainInput.value.kind === 'TermChange') {
-      const currentPeriod = contractLoad.value.currentPeriod;
+      const currentPeriod = active.value.currentPeriod;
       if (currentPeriod.kind === 'Indefinite') {
         return err('create-amendment-cannot-extend-indefinite');
       }
-      if (domainInput.value.newEndDate.getTime() <= currentPeriod.end.getTime()) {
+      if (PlainDate.compare(domainInput.value.newEndDate, currentPeriod.end) <= 0) {
         return err('create-amendment-term-change-not-extending');
       }
     }
 
-    // REGR #7 (2026-05-15): fail-fast em Suppression que excederia o valor
-    // vigente. Sem isso, o aditivo ficava em status `Pending` (persistido +
-    // evento publicado) e só falhava na homologação com
-    // `contract-value-would-go-negative` — UX terrível e leaks de estado
-    // inconsistente. Agora validamos contra `contractLoad.value.currentValue`
-    // já na criação, sem persistir nem publicar evento.
+    // REGR #7: fail-fast em Suppression que excederia o valor vigente.
     if (
       domainInput.value.kind === 'Suppression' &&
-      domainInput.value.impactValue.cents > contractLoad.value.currentValue.cents
+      domainInput.value.impactValue.cents > active.value.currentValue.cents
     ) {
       return err('amendment-suppression-exceeds-current-value');
     }
@@ -131,11 +158,11 @@ export const createAmendment =
     const created = Amendment.create(domainInput.value);
     if (!created.ok) return created;
 
-    const saveResult = await deps.amendmentRepo.save(created.value.amendment);
+    // CA-5: evento passado diretamente no save — persiste state + outbox atomicamente.
+    const saveResult = await deps.amendmentRepo.save(created.value.amendment, [
+      created.value.event,
+    ]);
     if (!saveResult.ok) return saveResult;
-
-    const publishResult = await deps.eventBus.publish(created.value.event);
-    if (!publishResult.ok) return publishResult;
 
     return ok({
       amendment: created.value.amendment,

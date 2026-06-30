@@ -10,12 +10,31 @@ dist/
 coverage/
 .tsbuildinfo
 
+# Dados brutos temporários (ex.: dump IBGE baixado por scripts/data/fetch-*)
+.tmp/
+
 # Configs locais de ferramentas auxiliares (Gemini CLI, MCP, etc — específicas da máquina)
 .gemini/
 
 # Claude Code settings locais — permissions allowlist específica da máquina
 # (versão versionada do projeto é .claude/settings.json se existir)
 .claude/settings.local.json
+.agents/settings.local.json
+
+# Claude Code worktrees — sessões paralelas isoladas via `claude --worktree`
+# Conteúdo gerado automaticamente; doc: handbook/reference/claude-code/worktrees.md
+# Lista de arquivos a copiar para cada worktree novo: .worktreeinclude (versionado)
+.claude/worktrees/
+.agents/worktrees/
+
+# Worktrees de épico aninhados na raiz (`epic/<branch>`): têm seu próprio .git
+# pointer e branch; nunca devem ser rastreados pelo checkout pai.
+/epic/
+
+# Memória local de sub-agentes — notas geradas por agents durante a sessão
+# (efêmero, específico da máquina; não é fonte de verdade do projeto)
+.claude/agent-memory/
+.agents/agent-memory/
 
 # Guidelines locais — material de referência com copyright/restrição de terceiros
 # (PDFs do Bradesco, guias internos não-distribuíveis). Visível para IAs CLI via
@@ -26,6 +45,11 @@ handbook/guidelines/
 # Docker Compose secrets — arquivos com senhas locais
 # Pasta secrets/ é versionada (com .gitkeep); apenas os .txt dentro são ignorados
 /secrets/*.txt
+
+# Override local do Compose (lido automaticamente por `docker compose`): cada dev
+# ajusta portas/mounts/profiles da sua máquina sem tocar o compose.yaml versionado.
+/compose.override.yaml
+/compose.override.yml
 
 # Estado local do CLI (memory driver — pode conter dados sensíveis em dev)
 cli-state.json
@@ -42,3 +66,16 @@ cli-state.json
 
 # Scratch directories de testes E2E — outputs, payloads de injeção, sqlite junk
 tests/reports/e2e-scratch/
+
+# ETL — cold storage (collaborator_history) e dumps locais (PII; nunca versionar)
+scripts/etl/archive/
+
+# Artefatos do reporter Bruno (E2E_JSON_REPORT) — contêm tokens efêmeros, não versionar
+test-results/
+
+# Overmind (process manager de dev — Procfile/Fase 3): socket local
+.overmind.sock
+
+# Scripts de diagnóstico black-box descartáveis (ex.: login-diag) — uso local,
+# nunca versionar; os outputs em out/ podem conter dados de prod (tokens redatados).
+tools/bugs-scripts/

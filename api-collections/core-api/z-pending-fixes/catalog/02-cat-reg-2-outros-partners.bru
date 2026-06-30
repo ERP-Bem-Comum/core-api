@@ -1,0 +1,40 @@
+meta {
+  name: CAT-REG-2 catalogo inclui financier collaborator act geography
+  type: http
+  seq: 2
+}
+
+get {
+  url: {{baseUrl}}/api/v1/permissions
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("CAT-REG-2 — status 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("CAT-REG-2 — catalogo inclui financier:read e financier:write", function () {
+    const ids = res.getBody().items.map((i) => i.id);
+    expect(ids).to.include("financier:read");
+    expect(ids).to.include("financier:write");
+  });
+  test("CAT-REG-2 — catalogo inclui collaborator:read e collaborator:write", function () {
+    const ids = res.getBody().items.map((i) => i.id);
+    expect(ids).to.include("collaborator:read");
+    expect(ids).to.include("collaborator:write");
+  });
+  test("CAT-REG-2 — catalogo inclui act:read e act:write", function () {
+    const ids = res.getBody().items.map((i) => i.id);
+    expect(ids).to.include("act:read");
+    expect(ids).to.include("act:write");
+  });
+  test("CAT-REG-2 — catalogo inclui geography:read e geography:write", function () {
+    const ids = res.getBody().items.map((i) => i.id);
+    expect(ids).to.include("geography:read");
+    expect(ids).to.include("geography:write");
+  });
+}

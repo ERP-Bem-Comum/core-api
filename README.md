@@ -1,80 +1,88 @@
 # core-api — ERP Bem Comum
 
-Modular Monolith que hospeda os módulos de negócio do ERP. **Fase 1: módulo Contracts.** Fases futuras adicionam Financeiro e outros, todos no mesmo processo Node mas com isolamento de pasta e comunicação por eventos (ADR-0014/0015).
+Backend do ERP Bem Comum, modelado como **modular monolith**. Vários módulos de negócio coabitam o mesmo processo Node, isolados por pasta + prefixo de tabela (`ctr_*`, `fin_*`, …) e comunicando-se por **eventos via Outbox** (ADR-0014/0015). Cada módulo é desenhado para poder ser extraído como serviço independente no futuro, sem refactor traumático.
 
-> **Stack:** Node.js 24 LTS · TypeScript 6.0 (roadmap TS 7 — ADR-0009) · ESM (`"type": "module"`, `NodeNext`) · pnpm 10 · Drizzle ORM 0.45 + mysql2 3.22 (MySQL 8.4 — ADR-0020) · CLI como UX primária (HTTP reservado para Fase 2+).
+> **Stack:** Node.js 24 LTS · TypeScript 6.0 (roadmap TS 7 / compilador nativo — ADR-0009) · ESM (`"type": "module"`, `NodeNext`) · pnpm 11 · Drizzle ORM 0.45 + mysql2 3.22 (MySQL 8.4 — ADR-0020) · **borda HTTP Fastify 5** com Zod **contract-first** + OpenAPI 3.1 (ADR-0025/0027) · storage S3/MinIO (ADR-0019) · auth próprio com JWT ES256 via `jose` (ADR-0024).
 >
-> **Source of Truth:** [`./handbook/`](./handbook/) (interno ao repo — `handbook/architecture/adr/` vence tudo). Orquestrador, agentes especialistas e skills em [`./.claude/`](./.claude/README.md).
+> **Source of Truth:** [`handbook/`](./handbook/) (`handbook/architecture/adr/` vence tudo). Contexto canônico em [`AGENTS.md`](./AGENTS.md) (o `CLAUDE.md` é stub que o importa). Orquestrador, agentes e skills em [`./.claude/`](./.claude/).
 >
-> **Regra invariante:** sempre `pnpm`, nunca `npm` (ADR-0012).
+> **Regras invariantes:** sempre `pnpm`, nunca `npm` (ADR-0012) · borda HTTP é a UX primária; **a CLI embutida foi retirada** (ADR-0037) — validação E2E é feita via Bruno (ADR-0034/0038).
+
+---
+
+## 🧩 Módulos
+
+Seis Bounded Contexts sob `src/modules/`, cada um com a mesma anatomia (`domain/` → `application/` → `adapters/` → `public-api/`). A comunicação cross-módulo passa **exclusivamente** por `public-api/` + eventos no Outbox (ADR-0006/0014).
+
+| Módulo                                          | Responsabilidade                                                                                                                                           | Borda HTTP                                       |
+| ----------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------ |
+| [`auth`](./src/modules/auth/)                   | Identidade própria + **RBAC por permissão**, login/refresh (JWT ES256), usuários, papéis, reset de senha, foto de perfil — ADR-0024.                       | `/api/v2/auth`, `/api/v1/{users,me,approvers}`   |
+| [`contracts`](./src/modules/contracts/)         | Gestão de Contratos — agregados `Contract`/`Amendment`/`Document`, ciclo de vida (pending/active/cancelled — ADR-0023/0039), export CSV. Módulo inaugural. | `/api/v2/contracts`                              |
+| [`financial`](./src/modules/financial/)         | Financeiro — títulos/payables, baixa manual, conciliação bancária, remessa CNAB240, extrato/timeline, read-model de fornecedor (ADR-0045).                 | `/api/v2/financial`                              |
+| [`partners`](./src/modules/partners/)           | Registry de parceiros — colaboradores, fornecedores, financiadores, geografia/território (soft-delete ADR-0035), ACT (ADR-0036) — ADR-0031.                | `/api/v1/{collaborators,suppliers,financiers,…}` |
+| [`programs`](./src/modules/programs/)           | Gestão de programas + logo storage S3/MinIO — spec 008, ADR-0033.                                                                                          | `/api/v1/programs`                               |
+| [`notifications`](./src/modules/notifications/) | E-mail transacional — templates + `EmailSender` (Nodemailer/Resend), **consumidor** de eventos de domínio (ADR-0010/0047).                                 | worker `email-dispatch`                          |
 
 ---
 
 ## 🏗️ Estrutura
 
-Identificadores em **EN** (regra invariante de `CLAUDE.md §"Idioma"`). Strings ao humano em PT via dicionário em `cli/formatters/`.
+Identificadores em **EN** (regra invariante de `AGENTS.md §"Idioma"`). Strings ao humano e mensagens de erro formatadas em PT.
 
 ```
 src/
-├── shared/                              Cross-módulo, puro (sem infra)
-│   ├── result.ts                        Result<T, E>
-│   ├── brand.ts                         Brand<T, Tag>
-│   ├── id.ts                            UUID v4 helpers
-│   ├── ports/                           Cross-cutting (Clock, IdGenerator)
-│   ├── adapters/                        Implementações default (SystemClock, etc)
-│   └── utils/
+├── server.ts                            Entrypoint HTTP — compõe os plugins de cada módulo, graceful shutdown
 │
-├── shared-kernel/                       Tipos de domínio compartilhados (CPF, CNPJ, IBGE)
+├── shared/                              Cross-módulo, puro (sem regra de negócio)
+│   ├── primitives/                      Result<T,E>, Brand<T,Tag>, exhaustive, immutable
+│   ├── kernel/                          VOs de domínio compartilhados: cpf, cnpj, money, period, plain-date, user-ref
+│   ├── ports/  adapters/                Cross-cutting (Clock + SystemClock/FixedClock)
+│   ├── http/                            Shell da borda: app.ts, config.ts, errors.ts, reply.ts (ADR-0028)
+│   ├── outbox/                          Worker genérico de Outbox + tipos (ADR-0015)
+│   ├── observability/                   correlation id
+│   ├── runtime/                         last-resort handlers (uncaught/unhandled)
+│   └── utils/                           csv, date, hash, id, string
 │
-└── modules/contracts/                   Bounded Context "Gestão de Contratos"
-    ├── domain/                          PURO — Result<T,E>, branded, Readonly
-    │   ├── shared/                      VOs: Money, Period, ContractId, AmendmentId,
-    │   │                                DocumentId, UserRef, BucketName, StorageKey, StorageRef
-    │   ├── contract/                    Agregado Contract (types, events, errors, contract.ts)
-    │   └── amendment/                   Agregado Amendment (4 kinds × 2 status)
-    │
-    ├── application/
-    │   ├── ports/                       type contracts: ContractRepository,
-    │   │                                AmendmentRepository, EventBus, DocumentStorage
-    │   └── use-cases/                   Factory functions (deps) => (input) => Promise<Result>
-    │                                    createContract, createAmendment,
-    │                                    homologateAmendment, attachSignedDocument,
-    │                                    getContract, listContracts
-    │
-    ├── adapters/                        Implementações concretas
-    │   ├── *.in-memory.ts               Para testes + CLI da P.O.
-    │   └── persistence/                 Drizzle + mysql2 (MySQL 8.4)
-    │       ├── schemas/mysql.ts         mysqlTable, indexes, FKs, CHECKs
-    │       ├── mappers/                 Row ↔ domínio com Result<T, MapperError>
-    │       ├── repos/                   *-repository.drizzle.ts
-    │       ├── drivers/                 mysql-driver.ts (pool + Drizzle wiring)
-    │       └── migrations/mysql/        SQL gerado por `drizzle-kit generate`
-    │
-    ├── cli/                             CLI para P.O. validar regras
-    │   ├── main.ts                      Entrypoint
-    │   ├── registry.ts                  Mapa subcomando → módulo
-    │   ├── context.ts, state.ts         Estado + persistência JSON
-    │   ├── drivers/{memory,mysql}.ts    Backend de persistência
-    │   ├── commands/                    Um arquivo por subcomando
-    │   └── formatters/                  PT-BR para humanos
-    │
-    └── public-api/                      Eventos e commands exportados (cross-módulo via outbox)
+├── modules/<módulo>/                    Bounded Context (auth · contracts · financial · partners · programs · notifications)
+│   ├── domain/                          PURO — Result<T,E>, branded, Readonly, sem infra
+│   ├── application/
+│   │   ├── ports/                       type contracts (Repository, EventBus, Storage, …)
+│   │   └── use-cases/                   factory functions (deps) => (input) => Promise<Result>
+│   ├── adapters/                        Implementações concretas
+│   │   ├── http/                        plugin Fastify, controllers/DTOs, schemas Zod (composition.ts)
+│   │   ├── persistence/                 Drizzle + mysql2 (schemas, mappers c/ Result, repos, drivers, migrations)
+│   │   ├── outbox/                      append transacional de eventos
+│   │   └── storage/, export/, …         conforme o módulo
+│   └── public-api/                      Fronteira cross-módulo: http.ts, events.ts, index.ts, permissions.ts, read.ts, migrate.ts
+│
+├── workers/                             Composition roots de processos longos (ADR-0022/0041)
+│   ├── supplier-view-projection/        fin_supplier_view ← eventos do partners (ADR-0045)
+│   ├── contract-count-projection/       par_contract_count_view ← eventos do contracts (ADR-0046)
+│   └── email-dispatch/                  notifications consome eventos de domínio → EmailSender (ADR-0047)
+│   (+ relays de outbox por módulo: contracts/worker, partners/worker)
+│
+└── jobs/                                Oneshot jobs (ADR-0041)
+    ├── contracts/sweeper/               varredura de ciclo de vida de contratos por tempo
+    ├── financial/supplier-view-backfill/  backfill do read-model de fornecedor
+    └── migrate/                         aplica migrations Drizzle
 
-tests/                                   Espelho de src/ — apenas *.test.ts
-  + *.contract.ts / *.suite.ts           Suítes parametrizadas reutilizáveis (não executadas direto)
+tests/                                   bdd · e2e · modules · workers · jobs · infra · etl · regression · shared · pipeline …
+db/drizzle/                              configs do drizzle-kit por módulo (contracts, auth, partners, programs, financial, notifications)
+scripts/                                 ci · e2e (Bruno) · etl · pipeline · seed · setup
 
 handbook/                                Source of Truth — interno ao repo
-├── architecture/adr/                    ADRs aceitos (IMUTÁVEIS)
-├── reference/                           Docs canônicas de cada tech
-│   ├── typescript/   nodejs/   drizzle/   mysql/   mysql2/
-│   ├── docker/   pnpm/   fastify/   fastify-plugins/   nodemailer/
-└── domain/, domain_questions/, inquiries/
+├── architecture/adr/                    48 ADRs aceitos (IMUTÁVEIS)
+├── reference/<tech>/                    typescript · nodejs · drizzle · mysql · mysql2 · docker · pnpm · fastify
+│                                        · fastify-plugins · nodemailer · zod · bruno · magalu-cloud · claude-code
+├── domain/, domain_questions/, inquiries/, interviews/, research/, reviews/, operations/, …
 
+docs/                                    Doc consolidada IA-friendly (markdown plano) — ver também ./llms.txt
 .claude/
-├── agents/                              10 agentes especialistas
-├── skills/                              19 skills (técnicas/disciplinas)
+├── agents/                              14 agentes especialistas (por tecnologia)
+├── skills/                              42 skills (técnicas/disciplinas)
+├── rules/                               Regras path-scoped (domain, application, adapters, testing, contracts-module, api-collections)
 ├── .pipeline/                           Tickets W0→W3 (histórico auditável)
-└── hooks/                               pre-commit-typecheck.sh
+└── hooks/                               pre-commit-typecheck.sh, block-npm.sh, prettier-write.sh, …
 ```
 
 ### Imports cross-pasta
@@ -83,131 +91,167 @@ handbook/                                Source of Truth — interno ao repo
 
 ```jsonc
 "imports": {
-  "#src/*": "./src/*"
+  "#src/*": "./src/*",
+  "#scripts/*": "./scripts/*"
 }
 ```
 
-Testes referenciam código de produção via `#src/*` — limpo, refatoração-safe, **com extensão `.ts`** (requisito de `NodeNext` + `allowImportingTsExtensions`):
+Imports relativos e via `#src/*` carregam **a extensão `.ts`** (requisito de `NodeNext` + `allowImportingTsExtensions`):
 
 ```ts
-import { Money } from '#src/modules/contracts/domain/shared/money.ts';
+import { Money } from '#src/shared/kernel/money.ts';
 ```
+
+---
+
+## 🌐 Borda HTTP
+
+A UX primária é HTTP (ADR-0037). `src/server.ts` compõe um plugin Fastify por módulo e expõe a API **versionada** (ADR-0033):
+
+- **`/api/v2/…`** — modelo **greenfield** (`auth`, `contracts`, `financial`): plugin direto.
+- **`/api/v1/…`** — **espelho do legado** (`partners`, `programs`, gestão de usuários/acessos): superfície compatível com o sistema antigo durante a estratégia strangler-fig (ADR-0001).
+
+Características da borda:
+
+- **Contract-first com Zod 4 + OpenAPI 3.1** (`fastify-zod-openapi` / `zod-openapi`, ADR-0027): o schema valida a entrada **e** gera o contrato. Swagger UI via `@fastify/swagger`/`@fastify/swagger-ui`.
+- **Hardening** com `@fastify/helmet`, `@fastify/cors`, `@fastify/rate-limit` (limite dedicado para login/refresh).
+- **Auth/RBAC** cross-módulo: `requireAuth` + `authorize`/`hasPermission` exportados pelo `auth` protegem as rotas dos demais módulos.
+- **Read/Write split** (ADR-0026): cada módulo aceita `*_DATABASE_URL` (writer) e `*_READER_URL` (réplica; ausente → reusa o writer).
+- Drivers `memory` | `mysql` por módulo via env (`<MÓDULO>_DRIVER`); ausência de config degrada para in-memory (boot não cai).
 
 ---
 
 ## 🚀 Scripts
 
-> **Sempre `pnpm`, nunca `npm`** (ADR-0012). Versão pinada via `packageManager` + corepack.
+> **Sempre `pnpm`, nunca `npm`** (ADR-0012). Versão pinada via `packageManager` + corepack; há hook `PreToolUse(Bash)` que bloqueia `npm`.
 
 ```bash
 pnpm install                           # respeita pnpm-lock.yaml
 pnpm install --frozen-lockfile         # em CI
 
-# Qualidade
-pnpm run typecheck                     # tsc --noEmit
-pnpm run format                        # prettier --write .
+# Qualidade (parte do gate W3)
+pnpm run typecheck                     # tsc --noEmit (strict completo)
 pnpm run format:check                  # prettier --check .
-pnpm run lint                          # eslint . (flat config)
-pnpm run lint:fix
+pnpm run lint                          # eslint . (flat config, typescript-eslint strict + type-checked)
+pnpm test                              # tests/**/*.test.ts via node:test + --experimental-strip-types
 
-# Testes (Node test runner nativo + --experimental-strip-types)
-pnpm test                              # tests/**/*.test.ts
-pnpm run test:integration              # sobe MySQL via Docker compose + --wait
+# Servidor + processos de background
+pnpm run serve                         # sobe a borda HTTP (node src/server.ts); config via env
+pnpm run dev                           # overmind start — HTTP + workers juntos (Procfile)
+pnpm run worker:outbox                 # relay do outbox de contracts (idem :partners)
+pnpm run worker:email-dispatch         # consumidor de e-mail (notifications)
+pnpm run worker:supplier-projection    # projeção fin_supplier_view
+pnpm run job:migrate                   # aplica migrations
+pnpm run job:contracts:sweep           # oneshot: varredura de ciclo de vida de contratos
 
-# CLI da P.O. — usa o módulo Contracts diretamente
-pnpm run cli:contracts -- --help
-pnpm run cli:contracts -- listar-contratos
-pnpm run cli:contracts -- listar-contratos \
-  --driver mysql --connection-string 'mysql://user:pass@127.0.0.1:3306/core'
+# Testes de integração (sobem MySQL/MinIO via Docker compose --wait) e E2E HTTP (Bruno)
+pnpm run test:integration:financial    # idem :contracts :auth :partners :programs :notifications :storage :etl …
+pnpm run test:e2e:auth                 # coleções .bru (idem :contracts :collaborators)
+pnpm run test:integration:all          # bruno-all.sh
 
-# Migrations (Drizzle Kit)
-pnpm run db:generate                   # gera src/modules/contracts/adapters/persistence/migrations/mysql/
+# Migrations (Drizzle Kit) — uma config por módulo em db/drizzle/
+pnpm run db:generate                   # contracts  (idem :auth :partners :programs :financial :notifications)
 
 # Secrets locais p/ docker-compose
-pnpm run secrets:setup
+pnpm run secrets:setup                 # gera ./secrets/*.txt
+
+# Pipeline fail-first (STATE.json canônico)
+pnpm run pipeline:state init <ticket> --size S
+pnpm run pipeline:status               # dashboard de todos os tickets
+pnpm run pipeline:metrics              # agregações
 ```
 
-Detalhes completos: [`CLAUDE.md §Comandos`](./CLAUDE.md#comandos).
+Detalhes completos: [`AGENTS.md §Comandos essenciais`](./AGENTS.md#comandos-essenciais).
+
+---
+
+## 🐳 Ambiente local (Docker Compose)
+
+`compose.yaml` sobe o stack completo com hardening (`read_only`, `cap_drop`, `security_opt`): **MySQL 8.4**, **MinIO** (storage S3-compat dev, ADR-0019), **Mailpit** (captura de e-mail dev), o serviço `http` e os workers/jobs (`outbox-*`, `*-projection`, `email-dispatch`, `contracts-sweeper`, `migrate`). Variantes: `compose.ci.yaml` (CI) e `compose.etl.yaml` (ETL).
 
 ---
 
 ## 🌊 Como contribuir
 
-Todo trabalho não-trivial passa pela **pipeline 4-wave fail-first** (W0 RED → W1 GREEN → W2 REVIEW → W3 QUALITY), com um ticket em `.claude/.pipeline/<TICKET-ID>/`.
+Todo trabalho não-trivial passa pela **pipeline 4-wave fail-first** (W0 RED → W1 GREEN → W2 REVIEW → W3 QUALITY), com um ticket em `.claude/.pipeline/<TICKET-ID>/` e `STATE.json` canônico. Bug fix trivial (1-3 linhas) ou config pode ir direto.
 
-- [`./.claude/agents/contratos-orchestrator.md`](./.claude/agents/contratos-orchestrator.md) — **ponto de entrada único**: roteia para agente especialista ou skill.
-- [`CLAUDE.md`](./CLAUDE.md) — regras transversais (regra invariante, idioma, hierarquia de fontes).
+- [`./.claude/agents/contratos-orchestrator.md`](./.claude/agents/contratos-orchestrator.md) — **ponto de entrada único**: roteia para agente especialista ou skill e orquestra as waves.
+- [`AGENTS.md`](./AGENTS.md) — regras transversais (idioma, hierarquia de fontes, anti-padrões, política de regressão zero).
 - [`handbook/architecture/adr/`](./handbook/architecture/adr/) — ADRs aceitos (IMUTÁVEIS).
+
+Achado fora do escopo do ticket atual? Não conserte na hora (scope-creep): registre via skill [`issue-report`](./.claude/skills/issue-report/SKILL.md) (ADR-0040).
 
 ---
 
 ## 🤖 Painel de agentes especialistas
 
-Cada agente é ancorado num subdir de [`handbook/reference/`](./handbook/reference/) + ADRs vinculantes, invocado pelo `contratos-orchestrator`.
+Cada agente é ancorado num subdir de [`handbook/reference/`](./handbook/reference/) + ADRs vinculantes, invocado pelo `contratos-orchestrator` (um agente **ou** uma skill por turno).
 
-| Agente                                                                                 | Tecnologia                       | Status            |
-| -------------------------------------------------------------------------------------- | -------------------------------- | ----------------- |
-| [`contratos-orchestrator`](./.claude/agents/contratos-orchestrator.md)                 | Roteamento + pipeline W0→W3      | ✅ ativo          |
-| [`typescript-language-expert`](./.claude/agents/typescript-language-expert.md)         | TypeScript 6 / type system       | ✅ ativo          |
-| [`nodejs-runtime-expert`](./.claude/agents/nodejs-runtime-expert.md)                   | Node 24 / ESM / `node:test`      | ✅ ativo          |
-| [`drizzle-orm-expert`](./.claude/agents/drizzle-orm-expert.md)                         | Drizzle ORM + Drizzle Kit        | ✅ ativo          |
-| [`mysql-database-expert`](./.claude/agents/mysql-database-expert.md)                   | MySQL 8.4 (SQL, índices, locks)  | ✅ ativo          |
-| [`mysql2-driver-expert`](./.claude/agents/mysql2-driver-expert.md)                     | Driver `mysql2` (pool, auth, TLS) | ✅ ativo          |
-| [`docker-compose-expert`](./.claude/agents/docker-compose-expert.md)                   | Docker / Compose / BuildKit      | ✅ ativo          |
-| [`pnpm-workspace-expert`](./.claude/agents/pnpm-workspace-expert.md)                   | pnpm / supply-chain              | ✅ ativo          |
-| [`fastify-server-expert`](./.claude/agents/fastify-server-expert.md)                   | Fastify 5 + plugins              | 🟡 reservado F2+ |
-| [`nodemailer-email-expert`](./.claude/agents/nodemailer-email-expert.md)               | Nodemailer SMTP adapter          | 🟡 reservado F2+ |
+| Agente                                                                         | Tecnologia                          | Status              |
+| ------------------------------------------------------------------------------ | ----------------------------------- | ------------------- |
+| [`contratos-orchestrator`](./.claude/agents/contratos-orchestrator.md)         | Roteamento + pipeline W0→W3         | ✅ ativo            |
+| [`typescript-language-expert`](./.claude/agents/typescript-language-expert.md) | TypeScript 6 / type system          | ✅ ativo            |
+| [`nodejs-runtime-expert`](./.claude/agents/nodejs-runtime-expert.md)           | Node 24 / ESM / `node:test`         | ✅ ativo            |
+| [`drizzle-orm-expert`](./.claude/agents/drizzle-orm-expert.md)                 | Drizzle ORM + Drizzle Kit           | ✅ ativo            |
+| [`mysql-database-expert`](./.claude/agents/mysql-database-expert.md)           | MySQL 8.4 (SQL, índices, locks)     | ✅ ativo            |
+| [`mysql2-driver-expert`](./.claude/agents/mysql2-driver-expert.md)             | Driver `mysql2` (pool, auth, TLS)   | ✅ ativo            |
+| [`docker-compose-expert`](./.claude/agents/docker-compose-expert.md)           | Docker / Compose / BuildKit         | ✅ ativo            |
+| [`pnpm-workspace-expert`](./.claude/agents/pnpm-workspace-expert.md)           | pnpm 11 / supply-chain              | ✅ ativo            |
+| [`fastify-server-expert`](./.claude/agents/fastify-server-expert.md)           | Fastify 5 + plugins                 | ✅ ativo (ADR-0025) |
+| [`zod-expert`](./.claude/agents/zod-expert.md)                                 | Zod 4 (schemas de borda, ADR-0027)  | ✅ ativo            |
+| [`nodemailer-email-expert`](./.claude/agents/nodemailer-email-expert.md)       | Nodemailer SMTP adapter             | ✅ ativo            |
+| [`bruno-api-client-expert`](./.claude/agents/bruno-api-client-expert.md)       | Bruno (`.bru`) — E2E HTTP           | ✅ suporte          |
+| [`security-backend-expert`](./.claude/agents/security-backend-expert.md)       | Segurança backend (Node/TS/Fastify) | ✅ ativo            |
+| [`security-frontend-expert`](./.claude/agents/security-frontend-expert.md)     | Segurança frontend (TanStack/React) | ✅ ativo            |
 
-Skills (19) cobrem disciplinas/técnicas aplicadas: `ts-domain-modeler`, `ports-and-adapters`, `drizzle-schema-author`, `modular-monolith`, `application-cli-builder`, `pipeline-maestro`, `code-reviewer`, `ts-quality-checker`, e as famílias `database-*`, `tdd-*`, `clean-code-*`, `nodejs-*-scripter`/`-process-runner`. Tabela completa em [`CLAUDE.md §Roteamento`](./CLAUDE.md#roteamento-via-contratos-orchestrator).
+As **42 skills** cobrem disciplinas aplicadas: `ts-domain-modeler`, `ports-and-adapters`, `drizzle-schema-author`, `modular-monolith`, `pipeline-maestro`, `code-reviewer`, `ts-quality-checker`, `issue-report`, a família **speckit-\*** (spec-driven), as famílias `database-*`, `tdd-*`, `clean-code-*`, `requirements-*`, `web-security-*`, e os scripters `nodejs-fs-scripter`/`nodejs-process-runner`. Tabela completa em [`AGENTS.md §Roteamento`](./AGENTS.md#roteamento-via-contratos-orchestrator).
 
 ---
 
-## 📐 Regras transversais
+## 📐 Regras transversais (resumo)
 
-- **`throw` proibido** em `domain/` e `application/`. `Result<T, E>` em vez disso (`src/shared/result.ts`).
+- **`throw` proibido** em `domain/` e `application/`. `Result<T, E>` em vez disso (`src/shared/primitives/result.ts`).
 - **Sem `class`, sem `this`** — `Readonly<>` types + funções puras + factory functions com deps injetadas.
-- **Branded types** para IDs e VOs (`ContractId`, `Money`, `Period`, `StorageKey`, …).
-- **Discriminated unions** + `switch` exaustivo com `const _: never = x` no default.
-- **Imutabilidade absoluta** — mudança por cópia (`{ ...prev, status: 'Expired' }`).
-- **`import type`** + extensões `.ts` em imports relativos (NodeNext + `verbatimModuleSyntax`).
-- **Erros são string literal unions** (`'contract-not-active' | 'amendment-pending' | …`), não classes.
+- **Branded types** para IDs e VOs (`ContractId`, `Money`, `Period`, `Cpf`, `Cnpj`, …).
+- **Discriminated unions** + `switch` exaustivo com `const _: never = x` no default (sem `throw`).
+- **Imutabilidade absoluta** — mudança por cópia (`{ ...prev, status: 'Cancelled' }`).
+- **`import type`** + extensões `.ts` em imports relativos (`NodeNext` + `verbatimModuleSyntax`).
+- **Erros são string literal unions** EN kebab-case (`'contract-not-active' | 'amendment-pending'`), não classes.
 - **MySQL 8.4 único** em dev/CI/prod via Docker compose (ADR-0020); lista normativa de features SQL permitidas/proibidas.
-- **Idioma:** código em **EN**; documentação (handbook, ADRs, .claude/, .pipeline/) em **PT**; strings ao humano em **PT** via `cli/formatters/`.
+- **Isolamento de módulo:** importar de outro módulo **só** via `<module>/public-api/` (nunca `domain/`/`application/` alheios) — ADR-0006.
+- **Idioma:** código em **EN**; documentação (handbook, ADRs, `.claude/`, `.pipeline/`) em **PT**; strings ao humano em **PT**.
 
-Lista completa em [`CLAUDE.md §"Regras invariantes de código"`](./CLAUDE.md#regras-invariantes-de-código-não-negociáveis).
+Lista completa em [`AGENTS.md §"Regras invariantes — sintaxe TS"`](./AGENTS.md#regras-invariantes--sintaxe-ts) e nas regras path-scoped de [`.claude/rules/`](./.claude/rules/).
 
 ---
 
-## 📋 Status (2026-05-19)
+## 📋 Status (2026-06-23)
 
-### ✅ Entregue (Fase 1)
+### ✅ Entregue
 
-- Esqueleto: `package.json`, `tsconfig.json` strict completo, ESLint flat config, Prettier.
-- `src/shared/` — `Result`, `Brand`, `id`, ports cross-cutting (`Clock`, `IdGenerator`), `SystemClock`.
-- **Domínio Contracts** completo: VOs (`Money`, `Period`, `ContractId`, `AmendmentId`, `DocumentId`, `UserRef`, `BucketName`, `StorageKey`, `StorageRef`), agregados `Contract` e `Amendment` (4 kinds × 2 status), eventos (`ContractCreated`, `AmendmentHomologated`, …), regras RN-06/07/12.
-- **Application:** ports (`ContractRepository`, `AmendmentRepository`, `EventBus`, `DocumentStorage`) + use cases (`createContract`, `createAmendment`, `homologateAmendment`, `attachSignedDocument`, `getContract`, `listContracts`).
-- **Adapters:** InMemory (testes + CLI) + Drizzle/mysql2 (schemas, mappers com `Result`, repos, driver, migration `0000_*.sql` com CHARSET/COLLATE).
-- **CLI da P.O.** com flag `--driver memory|mysql`, state file JSON, formatters PT-BR.
-- **`.claude/` populado:** 10 agentes especialistas (todos por tecnologia do `handbook/reference/`) + 19 skills + 20+ tickets concluídos em `.pipeline/`.
-- **Docker compose:** MySQL 8.4 + MinIO com healthchecks para `pnpm test:integration`.
+- **6 módulos** com a mesma anatomia (`domain` → `application` → `adapters` → `public-api`): `auth`, `contracts`, `financial`, `partners`, `programs`, `notifications`.
+- **Borda HTTP Fastify** real e versionada (`/api/v2` greenfield + `/api/v1` espelho do legado), contract-first com Zod 4 + OpenAPI 3.1 (ADR-0025/0027/0028/0033). CLI embutida **retirada** (ADR-0037).
+- **Auth & RBAC** próprios — JWT ES256 (`jose`), usuários, papéis/permissões, reset de senha, foto de perfil (ADR-0024).
+- **Financial** — títulos/payables, baixa manual, conciliação bancária, CNAB240, extrato/timeline, read-model de fornecedor.
+- **Eventos cross-módulo** via **Outbox MySQL** (ADR-0015) + **read-models por projeção** idempotente (ADR-0022/0045/0046), processados por **workers dedicados** e **oneshot jobs** (ADR-0041).
+- **Persistência** Drizzle + mysql2 sobre MySQL 8.4 único (ADR-0020), com read/write split (ADR-0026). **Storage** S3 + MinIO via `@aws-sdk/client-s3` (ADR-0019). **E-mail** transacional como evento de domínio (ADR-0047).
+- **E2E HTTP** via **Bruno** (`scripts/e2e/`, ADR-0034/0038); integração via Docker compose `--wait`.
+- **`.claude/` populado:** 14 agentes + 42 skills + tickets W0→W3 em `.pipeline/`; spec-kit em `specs/` (24 features).
 
-### 🟡 Próximas frentes
+### 🟡 Em andamento
 
-- Outbox MySQL (planejamento em `.claude/.planning/OUTBOX-MYSQL.md` — aguarda confirmações).
-- Auditoria de mappers/persistência (relatório em `handbook/reviews/0002`; retomar via ticket `CTR-DB-MAPPER-NO-THROW`).
-- Módulo Financeiro (Fase 2 — reutiliza todas as skills e respeita ADR-0014/0015).
-
-### 🟦 Reservado (Fase 2+, exige ADR de adoção)
-
-- HTTP Server (Fastify) — agente `fastify-server-expert` aguardando.
-- Notificações por email (Nodemailer + `EmailPort` ADR-0010) — agente `nodemailer-email-expert` aguardando.
+- **`024-fin-transactional-outbox`** — outbox transacional do Financeiro (tabela `fin_outbox` espelhando `ctr_outbox`; atomicidade estado+evento na mesma transação, issue #127 / ADR-0015). Ver `specs/024-fin-transactional-outbox/plan.md`.
+- **ADR-0048 (Proposed)** — Anticorruption Layer legado↔core, gate das Camadas 0–2 (spike #233 / épico #169).
 
 ---
 
 ## 📚 Documentação canônica
 
-- **Arquitetura e regras:** [`CLAUDE.md`](./CLAUDE.md)
-- **Decisões formais:** [`handbook/architecture/adr/`](./handbook/architecture/adr/) (ADRs IMUTÁVEIS)
-- **Domínio de negócio:** [`handbook/domain/`](./handbook/domain/) + [`handbook/domain_questions/contratos/`](./handbook/domain_questions/contratos/)
-- **Tecnologias:** [`handbook/reference/<tech>/`](./handbook/reference/) — cada uma com agente especialista próprio
-- **Orquestrador + agentes + skills:** [`.claude/agents/contratos-orchestrator.md`](./.claude/agents/contratos-orchestrator.md)
+- **Contexto do projeto:** [`AGENTS.md`](./AGENTS.md) (fonte única; `CLAUDE.md` é stub que importa) + regras path-scoped em [`.claude/rules/`](./.claude/rules/).
+- **Doc consolidada (humanos + IA):** [`docs/`](./docs/) e [`llms.txt`](./llms.txt).
+- **Decisões formais:** [`handbook/architecture/adr/`](./handbook/architecture/adr/) (48 ADRs IMUTÁVEIS) + [`handbook/CHANGELOG.md`](./handbook/CHANGELOG.md).
+- **Domínio de negócio:** [`handbook/domain/`](./handbook/domain/) + [`handbook/domain_questions/`](./handbook/domain_questions/).
+- **Tecnologias:** [`handbook/reference/<tech>/`](./handbook/reference/) — cada uma com agente especialista próprio.
+- **Orquestrador + agentes + skills:** [`.claude/agents/contratos-orchestrator.md`](./.claude/agents/contratos-orchestrator.md).
+  </content>
+  </invoke>

@@ -3,22 +3,26 @@ import { strict as assert } from 'node:assert';
 
 import { isErr, isOk } from '#src/shared/index.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
-import { InMemoryContractRepository } from '#src/modules/contracts/adapters/contract-repository.in-memory.ts';
-import { InMemoryAmendmentRepository } from '#src/modules/contracts/adapters/amendment-repository.in-memory.ts';
-import { InMemoryEventBus } from '#src/modules/contracts/adapters/event-bus.in-memory.ts';
+import { InMemoryContractRepository } from '#src/modules/contracts/adapters/persistence/repos/contract-repository.in-memory.ts';
+import { InMemoryAmendmentRepository } from '#src/modules/contracts/adapters/persistence/repos/amendment-repository.in-memory.ts';
+import { InMemoryOutbox } from '#src/modules/contracts/adapters/outbox/outbox.in-memory.ts';
 import { createContract } from '#src/modules/contracts/application/use-cases/create-contract.ts';
 import { createAmendment } from '#src/modules/contracts/application/use-cases/create-amendment.ts';
-import { ContractId } from '#src/modules/contracts/domain/shared/ids.ts';
+import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
+
+// W0 RED — CTR-OUTBOX-INTEGRATION-IN-REPOS
+// setup usa InMemoryOutbox injetado nos repos.
+// deps NÃO contém mais eventBus.
+// Assertions de evento inspecionam outbox.all() / outbox.pending().
 
 const setupWithContract = async () => {
-  const contractRepo = InMemoryContractRepository();
-  const amendmentRepo = InMemoryAmendmentRepository();
-  const eventBus = InMemoryEventBus();
+  const outbox = InMemoryOutbox();
+  const contractRepo = InMemoryContractRepository(outbox.port);
+  const amendmentRepo = InMemoryAmendmentRepository(outbox.port);
   const clock = ClockFixed(new Date('2026-03-01'));
 
   const created = await createContract({
     contractRepo: contractRepo.repo,
-    eventBus: eventBus.bus,
     clock,
   })({
     sequentialNumber: '001/2026',
@@ -28,21 +32,23 @@ const setupWithContract = async () => {
     originalValueCents: 10000000,
     originalPeriodStart: '2026-01-01',
     originalPeriodEnd: '2026-12-31',
+    contractorType: 'supplier',
+    contractorId: '55555555-5555-4555-8555-555555555555',
   });
-  if (!created.ok) throw new Error(`fixture broken: ${created.error}`);
+  if (!created.ok) throw new Error(`fixture broken: ${JSON.stringify(created.error)}`);
 
-  eventBus.clear();
+  // Limpa o outbox após setup do contrato para isolar eventos do teste
+  outbox.clear();
 
   return {
     contract: created.value.contract,
     contractRepo,
     amendmentRepo,
-    eventBus,
+    outbox,
     clock,
     deps: {
       contractRepo: contractRepo.repo,
       amendmentRepo: amendmentRepo.repo,
-      eventBus: eventBus.bus,
       clock,
     },
   };
@@ -53,7 +59,6 @@ describe('createAmendment — happy path (Addition)', () => {
     const w = await setupWithContract();
     const r = await createAmendment(w.deps)({
       contractId: w.contract.id as unknown as string,
-      amendmentNumber: 'AD 01-001/2026',
       description: 'Ampliação',
       kind: 'Addition',
       impactValueCents: 500000,
@@ -69,7 +74,9 @@ describe('createAmendment — happy path (Addition)', () => {
     assert.equal(r.value.amendment.signedDocumentRef, null);
     assert.equal(r.value.event.type, 'AmendmentCreated');
     assert.equal(w.amendmentRepo.store().length, 1);
-    assert.equal(w.eventBus.published().length, 1);
+    // CA7 — evento no outbox, não no EventBus
+    assert.equal(w.outbox.all().length, 1);
+    assert.equal(w.outbox.all()[0]?.eventType, 'AmendmentCreated');
   });
 });
 
@@ -78,7 +85,6 @@ describe('createAmendment — happy path (TermChange)', () => {
     const w = await setupWithContract();
     const r = await createAmendment(w.deps)({
       contractId: w.contract.id as unknown as string,
-      amendmentNumber: 'AD 02-001/2026',
       description: 'Prazo',
       kind: 'TermChange',
       newEndDate: '2027-06-30',
@@ -94,7 +100,6 @@ describe('createAmendment — happy path (Misc)', () => {
     const w = await setupWithContract();
     const r = await createAmendment(w.deps)({
       contractId: w.contract.id as unknown as string,
-      amendmentNumber: 'AD 03-001/2026',
       description: 'Cláusula adicional',
       kind: 'Misc',
     });
@@ -109,7 +114,6 @@ describe('createAmendment — validations', () => {
     const w = await setupWithContract();
     const r = await createAmendment(w.deps)({
       contractId: 'not-a-uuid',
-      amendmentNumber: 'AD 01-001/2026',
       description: 'X',
       kind: 'Misc',
     });
@@ -121,7 +125,6 @@ describe('createAmendment — validations', () => {
     const w = await setupWithContract();
     const r = await createAmendment(w.deps)({
       contractId: ContractId.generate() as unknown as string,
-      amendmentNumber: 'AD 01-001/2026',
       description: 'X',
       kind: 'Misc',
     });
@@ -133,7 +136,6 @@ describe('createAmendment — validations', () => {
     const w = await setupWithContract();
     const r = await createAmendment(w.deps)({
       contractId: w.contract.id as unknown as string,
-      amendmentNumber: 'AD 02-001/2026',
       description: 'X',
       kind: 'TermChange',
       newEndDate: 'not-a-date',
@@ -142,31 +144,36 @@ describe('createAmendment — validations', () => {
     if (!r.ok) assert.equal(r.error, 'create-amendment-invalid-new-end-date');
   });
 
+  // CTR-DOMAIN-INVARIANT-CONTEXTUAL CA6 — após W1, o erro vem de NonZeroMoney.from no use case
+  // (não do domínio). Tag externo preservado para compatibilidade.
   it('propagates amendment-impact-value-zero', async () => {
     const w = await setupWithContract();
     const r = await createAmendment(w.deps)({
       contractId: w.contract.id as unknown as string,
-      amendmentNumber: 'AD 01-001/2026',
       description: 'X',
       kind: 'Addition',
       impactValueCents: 0,
     });
     assert.equal(isErr(r), true);
-    if (!r.ok) assert.equal(r.error, 'amendment-impact-value-zero');
+    // CTR-DOMAIN-TAGGED-ERRORS — `AmendmentError` virou tagged record (D22).
+    if (!r.ok && typeof r.error === 'object' && 'tag' in r.error) {
+      assert.equal(r.error.tag, 'AmendmentImpactValueZero');
+    }
   });
 });
 
 describe('createAmendment — side effects on error', () => {
-  it('does not persist amendment on error', async () => {
+  it('does not persist amendment or append to outbox on error', async () => {
     const w = await setupWithContract();
+    // G3: o número é gerado (nunca vazio) — força o erro via `description` em branco.
     await createAmendment(w.deps)({
       contractId: w.contract.id as unknown as string,
-      amendmentNumber: '',
-      description: 'X',
+      description: '',
       kind: 'Misc',
     });
     assert.equal(w.amendmentRepo.store().length, 0);
-    assert.equal(w.eventBus.published().length, 0);
+    // CA7 — sem evento no outbox quando há erro
+    assert.equal(w.outbox.all().length, 0);
   });
 });
 
@@ -177,7 +184,6 @@ describe('createAmendment — TermChange fail-fast (Defeito #11)', () => {
     // currentPeriod do contrato setup: 2026-01-01 a 2026-12-31
     const r = await createAmendment(w.deps)({
       contractId: w.contract.id as unknown as string,
-      amendmentNumber: 'AD 04-001/2026',
       description: 'Prazo retroativo',
       kind: 'TermChange',
       newEndDate: '2026-06-15', // antes do end atual
@@ -191,7 +197,6 @@ describe('createAmendment — TermChange fail-fast (Defeito #11)', () => {
     const w = await setupWithContract();
     const r = await createAmendment(w.deps)({
       contractId: w.contract.id as unknown as string,
-      amendmentNumber: 'AD 04-001/2026',
       description: 'Mesmo prazo',
       kind: 'TermChange',
       newEndDate: '2026-12-31',
@@ -204,7 +209,6 @@ describe('createAmendment — TermChange fail-fast (Defeito #11)', () => {
     const w = await setupWithContract();
     const r = await createAmendment(w.deps)({
       contractId: w.contract.id as unknown as string,
-      amendmentNumber: 'AD 04-001/2026',
       description: 'Prazo estendido',
       kind: 'TermChange',
       newEndDate: '2027-06-30',

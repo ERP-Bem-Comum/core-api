@@ -1,0 +1,32 @@
+meta {
+  name: partners aggregate filtrado por search
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/v1/partners
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{partnersOperatorToken}}
+}
+
+params:query {
+  search: E2E Bruno
+  page: 1
+  limit: 20
+}
+
+tests {
+  test("US-001 — GET /partners?search=... retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("US-001 — body tem items e meta", function () {
+    const body = res.getBody();
+    expect(body).to.have.property("items");
+    expect(body).to.have.property("meta");
+  });
+}

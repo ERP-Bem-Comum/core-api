@@ -1,0 +1,36 @@
+meta {
+  name: PAGE-HARM-1 GET contracts meta canonico (REPROVA ate fix)
+  type: http
+  seq: 1
+  docs: Regressao HTTP-PAGINATION-HARMONIZE — contracts usa { page, limit, total, totalPages } em vez do shape canonico { currentPage, itemsPerPage, totalItems, totalPages }. Reprova ate o fix renomear os campos em contractListMetaSchema.
+}
+
+get {
+  url: {{baseUrl}}/api/v2/contracts?page=1&limit=5
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+tests {
+  test("PAGE-HARM-1 — status 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("PAGE-HARM-1 — body.meta existe", function () {
+    expect(res.getBody().meta).to.be.an("object");
+  });
+  test("PAGE-HARM-1 — meta.currentPage presente (REPROVA ate fix; contracts usa 'page')", function () {
+    expect(res.getBody().meta).to.have.property("currentPage");
+  });
+  test("PAGE-HARM-1 — meta.itemsPerPage presente (REPROVA ate fix; contracts usa 'limit')", function () {
+    expect(res.getBody().meta).to.have.property("itemsPerPage");
+  });
+  test("PAGE-HARM-1 — meta.totalItems presente (REPROVA ate fix; contracts usa 'total')", function () {
+    expect(res.getBody().meta).to.have.property("totalItems");
+  });
+  test("PAGE-HARM-1 — meta.totalPages presente", function () {
+    expect(res.getBody().meta).to.have.property("totalPages");
+  });
+}

@@ -1,0 +1,314 @@
+/**
+ * Schemas Zod das rotas de Colaboradores (ADR-0027) — fonte do contrato + do OpenAPI.
+ * Zod fica só nesta camada de borda; o domínio valida invariantes via smart constructors.
+ *
+ * Lista (P1b): query paginada + multifiltro (subconjunto do legado) e envelope
+ * `{ items, meta }` espelhando `PaginatedCollaborators` (openapi.yaml:2500); item = detalhe.
+ */
+
+import * as z from 'zod/v4';
+
+const LIST_LIMIT_MAX = 100;
+const LIST_LIMIT_DEFAULT = 5; // default do legado (PaginatedEnvelope.Limit).
+
+// Querystring entrega array (param repetido) ou string (1 valor); normaliza p/ array.
+const toArray = (v: unknown): unknown => (v === undefined ? undefined : Array.isArray(v) ? v : [v]);
+
+/**
+ * Query do GET /api/v1/collaborators (subconjunto legado — P1b). `status` = RegistrationStatus;
+ * `active` (0|1) é o soft-delete.
+ *
+ * FR-012 (épico partners-http-gaps): os filtros `programa` e `idade` são DESCARTADOS (fora de
+ * escopo) — `programa` não é conceito do BC do colaborador; `idade` é derivável de `birthDate` no
+ * client. O contrato NÃO os anuncia; chaves desconhecidas são removidas (strip) por este `z.object`.
+ * Guarda: `tests/modules/partners/adapters/http/collaborator-list-filters-contract.test.ts`.
+ */
+export const collaboratorListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  limit: z.coerce.number().int().min(1).max(LIST_LIMIT_MAX).default(LIST_LIMIT_DEFAULT),
+  order: z.enum(['ASC', 'DESC']).default('ASC'),
+  search: z.string().min(1).optional(),
+  active: z.coerce.number().int().min(0).max(1).optional(),
+  status: z.preprocess(toArray, z.array(z.enum(['PreRegistration', 'Complete'])).optional()),
+  occupationAreas: z.preprocess(toArray, z.array(z.enum(['PARC', 'DDI', 'DCE', 'EPV'])).optional()),
+  employmentRelationships: z.preprocess(toArray, z.array(z.enum(['CLT', 'PJ'])).optional()),
+  genderIdentities: z.preprocess(
+    toArray,
+    z
+      .array(
+        z.enum([
+          'PREFIRO_NAO_RESPONDER',
+          'HOMEM_CIS',
+          'HOMEM_TRANS',
+          'MULHER_CIS',
+          'MULHER_TRANS',
+          'TRAVESTI',
+          'NAO_BINARIO',
+          'OUTRO',
+        ]),
+      )
+      .optional(),
+  ),
+  breeds: z.preprocess(
+    toArray,
+    z
+      .array(z.enum(['AMARELO', 'BRANCO', 'PARDO', 'INDIGENA', 'PRETO', 'PREFIRO_NAO_RESPONDER']))
+      .optional(),
+  ),
+  educations: z.preprocess(
+    toArray,
+    z
+      .array(
+        z.enum([
+          'EDUCACAO_INFANTIL',
+          'ENSINO_FUNDAMENTAL',
+          'ENSINO_MEDIO',
+          'ENSINO_SUPERIOR',
+          'POS_GRADUACAO',
+          'MESTRADO',
+          'DOUTORADO',
+        ]),
+      )
+      .optional(),
+  ),
+  disableBy: z.preprocess(
+    toArray,
+    z
+      .array(
+        z.enum([
+          'DESLIGAMENTO_ABC',
+          'FALECIMENTO',
+          'TEMPO_CONTRATO_FINALIZADO',
+          'SOLICITACAO_RESCISAO_CONTRATUAL',
+          'LEGACY_MIGRATION',
+        ]),
+      )
+      .optional(),
+  ),
+  roles: z.preprocess(toArray, z.array(z.string()).optional()),
+  yearOfContract: z.coerce.number().int().min(1900).max(2200).optional(),
+});
+
+export type CollaboratorListQuery = z.infer<typeof collaboratorListQuerySchema>;
+
+/** Param `:id` — UUID do colaborador (core-api). Formato inválido → 400 (Zod, antes do domínio). */
+export const collaboratorIdParamSchema = z.object({
+  id: z.uuid().meta({ description: 'UUID do colaborador (core-api)' }),
+});
+
+/** Query do GET /collaborators/:id/export — US4: por ora só `type=history` (CSV de alterações). */
+export const collaboratorHistoryExportQuerySchema = z.object({
+  type: z.literal('history').meta({ description: 'Tipo de export (alterações = history)' }),
+});
+
+/**
+ * Query do GET /collaborators/export (#126): filtros da lista + `?type=history` opcional.
+ * Sem `type` → CSV da lista (US-002). `type=history` → CSV combinado do histórico do filtro.
+ */
+export const collaboratorExportQuerySchema = collaboratorListQuerySchema.extend({
+  type: z
+    .literal('history')
+    .optional()
+    .meta({ description: 'history → export do histórico do filtro' }),
+});
+
+export type CollaboratorExportQuery = z.infer<typeof collaboratorExportQuerySchema>;
+
+/**
+ * Detalhe do colaborador — espelha o schema `Collaborator` do legado
+ * (handbook/legacy_docs/openapi.yaml:2435). `id` é o UUID do core; `legacyId` é o int
+ * antigo (decisão do dono). `status` carrega o `registrationStatus`; `active` é o soft-delete
+ * (booleano separado). Datas em ISO 8601.
+ */
+// Payment target (US1 feature 015) — espelha o molde de Supplier/Act. `agency` valida no domínio.
+const bankAccountSchema = z.object({
+  bank: z.string(),
+  agency: z.string(),
+  accountNumber: z.string(),
+  checkDigit: z.string(),
+});
+
+const pixKeySchema = z.object({
+  keyType: z.enum(['cpf', 'cnpj', 'email', 'phone', 'random-key']),
+  key: z.string(),
+});
+
+// Território (US3) — uf validada no domínio (catálogo geography); municipality texto livre.
+const territorySchema = z.object({
+  uf: z.string().nullable(),
+  municipality: z.string().nullable(),
+});
+
+export const collaboratorDetailSchema = z.object({
+  id: z.uuid(),
+  legacyId: z.number().int().nullable(),
+  name: z.string(),
+  email: z.string(),
+  cpf: z.string(),
+  rg: z.string().nullable(),
+  occupationArea: z.string(),
+  role: z.string(),
+  startOfContract: z.string(),
+  dateOfBirth: z.string().nullable(),
+  employmentRelationship: z.string(),
+  genderIdentity: z.string().nullable(),
+  race: z.string().nullable(),
+  education: z.string().nullable(),
+  foodCategory: z.string().nullable(),
+  foodCategoryDescription: z.string().nullable(),
+  disableBy: z.string().nullable(),
+  status: z.enum(['PreRegistration', 'Complete']),
+  biography: z.string().nullable(),
+  completeAddress: z.string().nullable(),
+  allergies: z.string().nullable(),
+  telephone: z.string().nullable(),
+  emergencyContactName: z.string().nullable(),
+  emergencyContactTelephone: z.string().nullable(),
+  experienceInThePublicSector: z.boolean().nullable(),
+  sex: z.string().nullable(),
+  maritalStatus: z.string().nullable(),
+  hasChildren: z.boolean().nullable(),
+  childrenCount: z.number().int().nullable(),
+  childrenAges: z.array(z.number().int()).nullable(),
+  isPwd: z.boolean().nullable(),
+  pwdDescription: z.string().nullable(),
+  isOnLeave: z.boolean().nullable(),
+  leaveDuration: z.string().nullable(),
+  leaveRenewable: z.boolean().nullable(),
+  leaveRenewalDuration: z.string().nullable(),
+  publicSectorExperienceDuration: z.string().nullable(),
+  bankAccount: bankAccountSchema.nullable(),
+  pixKey: pixKeySchema.nullable(),
+  territory: territorySchema.nullable(),
+  active: z.boolean(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  contractCount: z
+    .number()
+    .int()
+    .nonnegative()
+    .meta({ description: 'Contratos ativos da contraparte (read-model par_contract_count_view)' }),
+});
+
+export type CollaboratorDetailDto = z.infer<typeof collaboratorDetailSchema>;
+
+/** Meta de paginação legada (nestjs-typeorm-paginate — openapi.yaml:2331). */
+export const collaboratorPaginationMetaSchema = z.object({
+  itemCount: z.number().int().nonnegative().meta({ description: 'Itens na página atual' }),
+  totalItems: z.number().int().nonnegative().meta({ description: 'Total na base (pós-filtro)' }),
+  itemsPerPage: z.number().int().meta({ description: '= limit' }),
+  totalPages: z.number().int().nonnegative(),
+  currentPage: z.number().int().meta({ description: '1-indexed' }),
+});
+
+/** Response paginado do GET /api/v1/collaborators — item = detalhe (inclui contractCount). */
+export const collaboratorPaginatedSchema = z.object({
+  items: z.array(collaboratorDetailSchema),
+  meta: collaboratorPaginationMetaSchema,
+});
+
+export type CollaboratorPaginatedDto = z.infer<typeof collaboratorPaginatedSchema>;
+
+// ─── P2 — escrita ────────────────────────────────────────────────────────────
+
+/**
+ * Body do POST /collaborators (pré-cadastro). Espelha `CreateCollaborator` legado + payment
+ * target (US1). `bankAccount`/`pixKey` OPCIONAIS (omitidos → null); `agency` validada no domínio.
+ */
+export const createCollaboratorBodySchema = z.object({
+  name: z.string().min(1),
+  email: z.string().min(1),
+  cpf: z.string().length(11).meta({ description: 'CPF — 11 dígitos (DV validado no domínio)' }),
+  occupationArea: z.enum(['PARC', 'DDI', 'DCE', 'EPV']),
+  role: z.string().min(1),
+  startOfContract: z.coerce.date().meta({ description: 'Início do contrato (ISO date)' }),
+  employmentRelationship: z.enum(['CLT', 'PJ']),
+  bankAccount: bankAccountSchema.nullable().default(null),
+  pixKey: pixKeySchema.nullable().default(null),
+  territory: territorySchema.nullable().default(null),
+});
+
+export type CreateCollaboratorBody = z.infer<typeof createCollaboratorBodySchema>;
+
+/** Body do PUT /collaborators/:id — substituição total dos cadastrais. Pessoais e banco/PIX não entram aqui. */
+export const updateCollaboratorBodySchema = createCollaboratorBodySchema.omit({
+  bankAccount: true,
+  pixKey: true,
+  territory: true,
+});
+
+export type UpdateCollaboratorBody = z.infer<typeof updateCollaboratorBodySchema>;
+
+/**
+ * Body do PATCH /:id/complete-registration. Campos pessoais — todos nullable, default null
+ * (ausente = não informado). Enums validados no domínio (string aqui). Espelha
+ * `CompleteRegistrationCollaborator` legado.
+ */
+export const completeRegistrationBodySchema = z.object({
+  rg: z.string().nullable().default(null),
+  dateOfBirth: z.coerce.date().nullable().default(null),
+  genderIdentity: z.string().nullable().default(null),
+  race: z.string().nullable().default(null),
+  education: z.string().nullable().default(null),
+  foodCategory: z.string().nullable().default(null),
+  foodCategoryDescription: z.string().nullable().default(null),
+  completeAddress: z.string().nullable().default(null),
+  telephone: z.string().nullable().default(null),
+  emergencyContactName: z.string().nullable().default(null),
+  emergencyContactTelephone: z.string().nullable().default(null),
+  allergies: z.string().nullable().default(null),
+  biography: z.string().nullable().default(null),
+  experienceInThePublicSector: z.boolean().nullable().default(null),
+  // Perfil completo (US2). sex/maritalStatus como string (enum validado no domínio).
+  sex: z.string().nullable().default(null),
+  maritalStatus: z.string().nullable().default(null),
+  hasChildren: z.boolean().nullable().default(null),
+  childrenCount: z.number().int().nonnegative().nullable().default(null),
+  childrenAges: z.array(z.number().int().nonnegative()).nullable().default(null),
+  isPwd: z.boolean().nullable().default(null),
+  pwdDescription: z.string().nullable().default(null),
+  isOnLeave: z.boolean().nullable().default(null),
+  leaveDuration: z.string().nullable().default(null),
+  leaveRenewable: z.boolean().nullable().default(null),
+  leaveRenewalDuration: z.string().nullable().default(null),
+  publicSectorExperienceDuration: z.string().nullable().default(null),
+});
+
+export type CompleteRegistrationBody = z.infer<typeof completeRegistrationBodySchema>;
+
+/**
+ * Autocadastro público (US5). GET usa o token opaco na query; POST estende o
+ * complete-registration com `token` + `cpfPrefix` (revalidação leve de identidade — os 3
+ * primeiros dígitos do CPF, validados no domínio).
+ */
+export const autocadastroQuerySchema = z.object({
+  token: z.string().min(1),
+});
+
+export const autocadastroBodySchema = completeRegistrationBodySchema.extend({
+  token: z.string().min(1),
+  // bound de input (W2/m2): o domínio exige 3 dígitos; o máximo absorve máscara legível.
+  cpfPrefix: z.string().min(1).max(14),
+});
+
+/** Preview de pré-cadastro (GET autocadastro) — só os 3 campos públicos; CPF mascarado (W2/m3). */
+export const autocadastroPreviewSchema = z.object({
+  collaboratorId: z.string(),
+  name: z.string(),
+  cpfMasked: z.string(),
+});
+
+/**
+ * Body do POST /:id/deactivate (P3). `disableBy` = motivo de RH. `LEGACY_MIGRATION` é
+ * marcador de proveniência de ETL — fora da borda humana (valor inválido → 400).
+ */
+export const deactivateCollaboratorBodySchema = z.object({
+  disableBy: z.enum([
+    'DESLIGAMENTO_ABC',
+    'FALECIMENTO',
+    'TEMPO_CONTRATO_FINALIZADO',
+    'SOLICITACAO_RESCISAO_CONTRATUAL',
+  ]),
+});
+
+export type DeactivateCollaboratorBody = z.infer<typeof deactivateCollaboratorBodySchema>;

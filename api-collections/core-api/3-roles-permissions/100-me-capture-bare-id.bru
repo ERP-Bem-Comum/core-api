@@ -1,0 +1,27 @@
+meta {
+  name: US4 me bare (captura bareUserId)
+  type: http
+  seq: 100
+}
+
+get {
+  url: {{baseUrl}}/api/v2/auth/me
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{bareToken}}
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    bru.setVar("bareUserId", res.getBody().userId);
+  }
+}
+
+tests {
+  test("CA — me 200 captura bareUserId", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().userId).to.be.a("string");
+  });
+}

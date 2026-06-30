@@ -2,9 +2,11 @@
 
 # ADR-0012: pnpm como Package Manager (em ambos os projetos: legado e novo)
 
-- **Status:** Accepted
+- **Status:** Superseded by [ADR-0029](./0029-pnpm-11-supply-chain-defaults.md) em 2026-05-30
 - **Date:** 2026-04-28
 - **Deciders:** Arquiteto técnico
+
+> ⚠️ **AVISO:** A escolha de **pnpm como package manager único** permanece válida — o que mudou foi a **major fixada**. O [ADR-0029](./0029-pnpm-11-supply-chain-defaults.md) adota **`pnpm 11.x`** (era `10.x` aqui) para tornar _default_ as proteções de supply-chain (`minimumReleaseAge`, `trustPolicy`, `blockExoticSubdeps`) exigidas pelo [ADR-0011](./0011-supply-chain-hardening.md). As `Configurações padrão` ao final deste ADR (`pnpm@10.0.0`, `engines.pnpm >=10`) estão **desatualizadas** — ver ADR-0029. O restante (por que pnpm e não Bun/npm, migração do legado) continua como evidência válida.
 
 ---
 

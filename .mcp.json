@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "acdg-skills": {
+      "type": "http",
+      "url": "https://mcp.caninhagames.fortal.br/mcp",
+      "headers": {
+        "Authorization": "Bearer 254cc40bdfeb536c6c7da25badc959a91475a96da28c3f40133f8f9abc60deaa"
+      }
+    }
+  },
+  "_fallback": {
+    "acdg-skills": {
+      "descricao": "Fallback LOCAL quando o MCP HTTP acdg-skills está offline (sessões headless/background, sem as tools skills_buscar/skills_citar). Usar as referências canônicas .md destas pastas e citar LITERALMENTE via `grep -n` (>=4 linhas — princípio IX da constituição). NÃO citar de memória (anti-padrão #12). Este bloco é metadado (prefixo _); não é um server MCP.",
+      "path": "/Users/gabriel_aderaldo/Desktop/Projetos/dev/envolve/acdg/skills_base/shared-references",
+      "pathRelativoAoRepo": "../../../acdg/skills_base/shared-references",
+      "areas": ["architecture", "clean-code", "database", "ddd", "requirements", "security", "tdd"]
+    }
+  }
+}

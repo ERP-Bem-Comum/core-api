@@ -1,0 +1,44 @@
+meta {
+  name: INJ-3 XSS em name de POST /users escapado ou 422
+  type: http
+  seq: 12
+}
+
+post {
+  url: {{baseUrl}}/api/v1/users
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+script:pre-request {
+  // Email e CPF unicos para isolar o caso de XSS de conflitos de estado.
+  bru.setVar("xssEmail", "xss_" + Date.now() + "@example.com");
+}
+
+body:json {
+  {
+    "name": "<script>alert(1)</script>",
+    "cpf": "52998224725",
+    "email": "{{xssEmail}}",
+    "telephone": "15997133502"
+  }
+}
+
+tests {
+  // INJ-3 de security-injection.md
+  test("INJ-3 — XSS em name aceito (201) ou rejeitado (422); nunca 500", function () {
+    expect(res.getStatus()).to.not.equal(500);
+    expect([201, 422]).to.include(res.getStatus());
+  });
+  test("INJ-3 — resposta nao reflete script executavel", function () {
+    // O body nao deve conter tag script crua como HTML executavel.
+    const body = JSON.stringify(res.getBody());
+    // JSON encoding de < e > garante que a tag nao executa em cliente.
+    // Nenhum campo deve ser reflexao direta como text/html.
+    expect(body).to.not.contain("<script>alert(1)</script>");
+  });
+}

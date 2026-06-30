@@ -1,0 +1,27 @@
+meta {
+  name: US4 update email em conflito
+  type: http
+  seq: 41
+}
+
+put {
+  url: {{baseUrl}}/api/v1/users/{{userId}}
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+body:json {
+  {
+    "email": "{{adminEmail}}"
+  }
+}
+
+tests {
+  test("CA — trocar para email de outro usuario -> 409", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+}

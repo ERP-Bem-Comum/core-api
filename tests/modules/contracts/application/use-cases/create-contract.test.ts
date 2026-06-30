@@ -3,19 +3,24 @@ import { strict as assert } from 'node:assert';
 
 import { isErr, isOk } from '#src/shared/index.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
-import { InMemoryContractRepository } from '#src/modules/contracts/adapters/contract-repository.in-memory.ts';
-import { InMemoryEventBus } from '#src/modules/contracts/adapters/event-bus.in-memory.ts';
+import { InMemoryContractRepository } from '#src/modules/contracts/adapters/persistence/repos/contract-repository.in-memory.ts';
+import { InMemoryOutbox } from '#src/modules/contracts/adapters/outbox/outbox.in-memory.ts';
 import { createContract } from '#src/modules/contracts/application/use-cases/create-contract.ts';
 
+// W0 RED — CTR-OUTBOX-INTEGRATION-IN-REPOS
+// setup usa InMemoryOutbox + InMemoryContractRepository(outbox.port).
+// deps NÃO contém mais eventBus — use case não publica via EventBus.
+// Assertions de evento inspecionam outbox.all() / outbox.pending().
+
 const setup = () => {
-  const contractRepo = InMemoryContractRepository();
-  const eventBus = InMemoryEventBus();
+  const outbox = InMemoryOutbox();
+  const contractRepo = InMemoryContractRepository(outbox.port);
   const clock = ClockFixed(new Date('2026-01-01'));
   return {
     contractRepo,
-    eventBus,
+    outbox,
     clock,
-    deps: { contractRepo: contractRepo.repo, eventBus: eventBus.bus, clock },
+    deps: { contractRepo: contractRepo.repo, clock },
   };
 };
 
@@ -27,11 +32,13 @@ const validCommand = {
   originalValueCents: 10000000,
   originalPeriodStart: '2026-01-01',
   originalPeriodEnd: '2026-12-31',
+  contractorType: 'supplier',
+  contractorId: '55555555-5555-4555-8555-555555555555',
 };
 
 describe('createContract — happy path', () => {
-  it('creates Active Contract with Fixed period and publishes event', async () => {
-    const { deps, contractRepo, eventBus } = setup();
+  it('creates Active Contract with Fixed period and appends event to outbox', async () => {
+    const { deps, contractRepo, outbox } = setup();
     const r = await createContract(deps)(validCommand);
 
     assert.equal(isOk(r), true);
@@ -42,7 +49,10 @@ describe('createContract — happy path', () => {
     assert.equal(r.value.event.type, 'ContractCreated');
 
     assert.equal(contractRepo.store().length, 1);
-    assert.equal(eventBus.published().length, 1);
+    // CA7 — evento vai para o outbox, não para um EventBus separado
+    assert.equal(outbox.all().length, 1);
+    assert.equal(outbox.pending().length, 1);
+    assert.equal(outbox.all()[0]?.eventType, 'ContractCreated');
   });
 
   it('creates Contract with Indefinite period when originalPeriodEnd is null', async () => {
@@ -123,20 +133,25 @@ describe('createContract — domain error propagation', () => {
     if (!r.ok) assert.equal(r.error, 'period-end-before-start');
   });
 
-  it('propagates contract-sequential-number-required', async () => {
+  // CTR-CONTRACT-SEQUENTIAL-NUMBER: o número vazio/ausente deixa de ser erro — o backend
+  // gera `NNNN/YYYY` pelo ano do clock. O ano exato (TZ-seguro) é coberto no W0
+  // (`contract-sequential-number.test.ts`); aqui basta confirmar que o vazio passou a gerar.
+  it('generates sequentialNumber when empty', async () => {
     const { deps } = setup();
     const r = await createContract(deps)({ ...validCommand, sequentialNumber: '' });
-    assert.equal(isErr(r), true);
-    if (!r.ok) assert.equal(r.error, 'contract-sequential-number-required');
+    assert.equal(isOk(r), true);
+    if (!r.ok) return;
+    assert.match(r.value.contract.sequentialNumber, /^\d{4}\/\d{4}$/);
   });
 });
 
 describe('createContract — side effects on error', () => {
-  it('does not persist or publish on validation error', async () => {
-    const { deps, contractRepo, eventBus } = setup();
+  it('does not persist or append to outbox on validation error', async () => {
+    const { deps, contractRepo, outbox } = setup();
     await createContract(deps)({ ...validCommand, originalValueCents: -1 });
     assert.equal(contractRepo.store().length, 0);
-    assert.equal(eventBus.published().length, 0);
+    // CA7 — sem evento no outbox quando há erro
+    assert.equal(outbox.all().length, 0);
   });
 });
 

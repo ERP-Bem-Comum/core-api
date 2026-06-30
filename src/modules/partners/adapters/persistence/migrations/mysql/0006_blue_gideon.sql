@@ -1,0 +1,21 @@
+CREATE TABLE `par_acts` (
+	`id` varchar(36) NOT NULL,
+	`name` varchar(255) NOT NULL,
+	`email` varchar(255) NOT NULL,
+	`cpf` varchar(11) NOT NULL,
+	`occupation_area` varchar(10) NOT NULL,
+	`role` varchar(255) NOT NULL,
+	`start_of_contract` datetime(3) NOT NULL,
+	`employment_relationship` varchar(5) NOT NULL,
+	`registration_status` varchar(20) NOT NULL,
+	`active` boolean NOT NULL DEFAULT true,
+	`deactivated_at` datetime(3),
+	`created_at` datetime(3) NOT NULL,
+	`updated_at` datetime(3) NOT NULL,
+	`legacy_id` int,
+	CONSTRAINT `par_acts_id` PRIMARY KEY(`id`),
+	CONSTRAINT `par_acts_cpf_idx` UNIQUE(`cpf`),
+	CONSTRAINT `par_acts_email_idx` UNIQUE(`email`),
+	CONSTRAINT `par_acts_legacy_id_idx` UNIQUE(`legacy_id`),
+	CONSTRAINT `par_acts_active_consistency_chk` CHECK((`par_acts`.`active` = FALSE) = (`par_acts`.`deactivated_at` IS NOT NULL))
+);

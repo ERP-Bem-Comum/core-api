@@ -1,0 +1,37 @@
+meta {
+  name: CAT-REG-5 criar role com multiplas permissoes de partners retorna 201
+  type: http
+  seq: 5
+}
+
+post {
+  url: {{baseUrl}}/api/v1/roles
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+script:pre-request {
+  const ts = Date.now();
+  bru.setVar("catReg5RoleName", "RegMulti-" + ts);
+}
+
+body:json {
+  {
+    "name": "{{catReg5RoleName}}",
+    "permissions": ["supplier:read", "geography:write"]
+  }
+}
+
+tests {
+  test("CAT-REG-5 — status 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+  test("CAT-REG-5 — body.id e string nao-vazia", function () {
+    expect(res.getBody().id).to.be.a("string");
+    expect(res.getBody().id.length).to.be.above(0);
+  });
+}

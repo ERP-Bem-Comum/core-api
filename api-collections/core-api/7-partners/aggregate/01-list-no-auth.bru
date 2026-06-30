@@ -1,0 +1,16 @@
+meta {
+  name: partners aggregate sem auth 401
+  type: http
+  seq: 1
+}
+
+get {
+  url: {{baseUrl}}/api/v1/partners
+  auth: none
+}
+
+tests {
+  test("US-001 — GET /partners sem token retorna 401", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}

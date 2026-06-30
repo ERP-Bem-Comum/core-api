@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "CTR-SWEEPER-CRON",
+  "size": "S",
+  "createdAt": "2026-06-16T06:20:26.685Z",
+  "closedAt": "2026-06-16T07:10:23.866Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-06-16T06:22:32.026Z",
+      "finishedAt": "2026-06-16T06:24:29.219Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "docker-compose-expert",
+      "startedAt": "2026-06-16T06:26:21.866Z",
+      "finishedAt": "2026-06-16T06:38:14.106Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-06-16T06:59:52.478Z",
+      "finishedAt": "2026-06-16T07:02:48.403Z",
+      "rounds": 2,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-06-16T07:04:41.031Z",
+      "finishedAt": "2026-06-16T07:10:23.358Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

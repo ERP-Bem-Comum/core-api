@@ -1,0 +1,2 @@
+ALTER TABLE `fin_statement_transactions` MODIFY COLUMN `entry_type` varchar(16) NOT NULL;--> statement-breakpoint
+ALTER TABLE `fin_statement_transactions` ADD CONSTRAINT `fin_statement_transactions_entry_type_chk` CHECK (`fin_statement_transactions`.`entry_type` IN ('PIX','TED','DOC','Fee','Boleto','DARF','Investment','Redemption','Transfer','Other'));

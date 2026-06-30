@@ -2,55 +2,78 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import { isErr, isOk } from '#src/shared/index.ts';
-import { BucketName } from '#src/modules/contracts/domain/shared/bucket-name.ts';
+import { createBucketName } from '#src/modules/contracts/application/ports/document-storage.types.ts';
 
 // Regras canônicas vêm da doc AWS S3:
 // https://docs.aws.amazon.com/AmazonS3/latest/userguide/bucketnamingrules.html
 // Cada teste mapeia para um critério de aceite do 000-request.md.
 
+describe('BucketName — module-as-namespace (Padrão D)', () => {
+  it('createBucketName is exported as a function', () => {
+    // Arrange / Act / Assert
+    assert.equal(typeof createBucketName, 'function');
+  });
+});
+
 describe('BucketName — happy path', () => {
   it('accepts a typical lowercase name with hyphens', () => {
-    const r = BucketName.create('contracts-documents');
+    // Arrange / Act
+    const r = createBucketName('contracts-documents');
+    // Assert
     assert.equal(isOk(r), true);
     if (r.ok) assert.equal(r.value as unknown as string, 'contracts-documents');
   });
 
   it('accepts the minimum length of 3 characters', () => {
-    const r = BucketName.create('abc');
+    // Arrange / Act
+    const r = createBucketName('abc');
+    // Assert
     assert.equal(isOk(r), true);
   });
 
   it('accepts the maximum length of 63 characters', () => {
-    const r = BucketName.create('a'.repeat(63));
+    // Arrange / Act
+    const r = createBucketName('a'.repeat(63));
+    // Assert
     assert.equal(isOk(r), true);
   });
 
   it('accepts digits at both ends', () => {
-    const r = BucketName.create('1bucket9');
+    // Arrange / Act
+    const r = createBucketName('1bucket9');
+    // Assert
     assert.equal(isOk(r), true);
   });
 
   it('accepts names with single dots (FQDN-like)', () => {
-    const r = BucketName.create('contracts.documents.prod');
+    // Arrange / Act
+    const r = createBucketName('contracts.documents.prod');
+    // Assert
     assert.equal(isOk(r), true);
   });
 });
 
 describe('BucketName — length rules', () => {
   it('rejects names shorter than 3 chars', () => {
-    const r = BucketName.create('ab');
+    // Arrange / Act
+    const r = createBucketName('ab');
+    // Assert
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'bucket-name-too-short');
   });
 
   it('rejects empty string as too short', () => {
-    const r = BucketName.create('');
+    // Arrange / Act
+    const r = createBucketName('');
+    // Assert
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'bucket-name-too-short');
   });
 
   it('rejects names longer than 63 chars', () => {
-    const r = BucketName.create('a'.repeat(64));
+    // Arrange / Act
+    const r = createBucketName('a'.repeat(64));
+    // Assert
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'bucket-name-too-long');
   });
@@ -58,25 +81,33 @@ describe('BucketName — length rules', () => {
 
 describe('BucketName — character set', () => {
   it('rejects uppercase letters', () => {
-    const r = BucketName.create('Contracts');
+    // Arrange / Act
+    const r = createBucketName('Contracts');
+    // Assert
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'bucket-name-invalid-chars');
   });
 
   it('rejects underscores', () => {
-    const r = BucketName.create('contract_docs');
+    // Arrange / Act
+    const r = createBucketName('contract_docs');
+    // Assert
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'bucket-name-invalid-chars');
   });
 
   it('rejects spaces', () => {
-    const r = BucketName.create('contract docs');
+    // Arrange / Act
+    const r = createBucketName('contract docs');
+    // Assert
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'bucket-name-invalid-chars');
   });
 
   it('rejects unicode letters (e.g., accented)', () => {
-    const r = BucketName.create('contratoção');
+    // Arrange / Act
+    const r = createBucketName('contratoção');
+    // Assert
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'bucket-name-invalid-chars');
   });
@@ -84,25 +115,33 @@ describe('BucketName — character set', () => {
 
 describe('BucketName — boundary character rules', () => {
   it('rejects names starting with a hyphen', () => {
-    const r = BucketName.create('-contracts');
+    // Arrange / Act
+    const r = createBucketName('-contracts');
+    // Assert
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'bucket-name-must-start-alphanumeric');
   });
 
   it('rejects names ending with a hyphen', () => {
-    const r = BucketName.create('contracts-');
+    // Arrange / Act
+    const r = createBucketName('contracts-');
+    // Assert
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'bucket-name-must-end-alphanumeric');
   });
 
   it('rejects names starting with a dot', () => {
-    const r = BucketName.create('.contracts');
+    // Arrange / Act
+    const r = createBucketName('.contracts');
+    // Assert
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'bucket-name-must-start-alphanumeric');
   });
 
   it('rejects names ending with a dot', () => {
-    const r = BucketName.create('contracts.');
+    // Arrange / Act
+    const r = createBucketName('contracts.');
+    // Assert
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'bucket-name-must-end-alphanumeric');
   });
@@ -110,7 +149,9 @@ describe('BucketName — boundary character rules', () => {
 
 describe('BucketName — consecutive dots', () => {
   it('rejects two consecutive dots', () => {
-    const r = BucketName.create('contracts..docs');
+    // Arrange / Act
+    const r = createBucketName('contracts..docs');
+    // Assert
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'bucket-name-consecutive-dots');
   });
@@ -118,13 +159,17 @@ describe('BucketName — consecutive dots', () => {
 
 describe('BucketName — IP address format', () => {
   it('rejects strings shaped like an IPv4 address', () => {
-    const r = BucketName.create('192.168.1.1');
+    // Arrange / Act
+    const r = createBucketName('192.168.1.1');
+    // Assert
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'bucket-name-ip-address-format');
   });
 
   it('rejects 0.0.0.0', () => {
-    const r = BucketName.create('0.0.0.0');
+    // Arrange / Act
+    const r = createBucketName('0.0.0.0');
+    // Assert
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'bucket-name-ip-address-format');
   });
@@ -132,19 +177,25 @@ describe('BucketName — IP address format', () => {
 
 describe('BucketName — reserved prefixes', () => {
   it('rejects xn-- prefix', () => {
-    const r = BucketName.create('xn--mybucket');
+    // Arrange / Act
+    const r = createBucketName('xn--mybucket');
+    // Assert
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'bucket-name-reserved-prefix');
   });
 
   it('rejects sthree- prefix', () => {
-    const r = BucketName.create('sthree-mybucket');
+    // Arrange / Act
+    const r = createBucketName('sthree-mybucket');
+    // Assert
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'bucket-name-reserved-prefix');
   });
 
   it('rejects sthree-configurator prefix', () => {
-    const r = BucketName.create('sthree-configurator-foo');
+    // Arrange / Act
+    const r = createBucketName('sthree-configurator-foo');
+    // Assert
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'bucket-name-reserved-prefix');
   });
@@ -152,13 +203,17 @@ describe('BucketName — reserved prefixes', () => {
 
 describe('BucketName — reserved suffixes', () => {
   it('rejects -s3alias suffix', () => {
-    const r = BucketName.create('mybucket-s3alias');
+    // Arrange / Act
+    const r = createBucketName('mybucket-s3alias');
+    // Assert
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'bucket-name-reserved-suffix');
   });
 
   it('rejects --ol-s3 suffix', () => {
-    const r = BucketName.create('mybucket--ol-s3');
+    // Arrange / Act
+    const r = createBucketName('mybucket--ol-s3');
+    // Assert
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'bucket-name-reserved-suffix');
   });

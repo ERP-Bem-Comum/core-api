@@ -1,43 +1,92 @@
-import { type Result, ok, err } from '../../../../shared/result.ts';
+import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import { isValidDate } from '../../../../shared/utils/date.ts';
 import { isBlank } from '../../../../shared/utils/string.ts';
-import type { DocumentId, UserRef } from '../shared/ids.ts';
-import type { Amendment as AmendmentEntity, CreateAmendmentInput } from './types.ts';
+import type { DocumentId } from '../shared/ids.ts';
+import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
+import type {
+  Amendment as AmendmentEntity,
+  PendingWithoutDocumentAmendment,
+  PendingWithDocumentAmendment,
+  HomologatedAmendment,
+  CreateAmendmentInput,
+} from './types.ts';
+import { immutable } from '../../../../shared/primitives/immutable.ts';
 import type { AmendmentEvent } from './events.ts';
-import type { AmendmentError } from './errors.ts';
+import * as AmendmentError from './errors.ts';
 
-type CommandOutput = Readonly<{
-  amendment: AmendmentEntity;
-  event: AmendmentEvent;
-}>;
+// ─── Refinement constructors (substituem assertPending — DON'T D§19/§23) ──────
 
-const assertPending = (
-  amendment: AmendmentEntity,
-): Result<AmendmentEntity, 'amendment-not-pending'> =>
-  amendment.status === 'Pending' ? ok(amendment) : err('amendment-not-pending');
+/**
+ * Narrowa para qualquer variante Pending (com ou sem documento).
+ *
+ * DO D§21: `parsePending` em vez de `assertPending` (imperativo).
+ * DON'T D§19: não devolve `AmendmentEntity` cru — refina para a sub-union Pending.
+ */
+const parsePending = (
+  a: AmendmentEntity,
+): Result<
+  PendingWithoutDocumentAmendment | PendingWithDocumentAmendment,
+  AmendmentError.AmendmentNotPending
+> => (a.status === 'Pending' ? ok(a) : err(AmendmentError.amendmentNotPending(a.status)));
 
-const assertValidEventDate = (at: Date): Result<Date, 'amendment-invalid-event-date'> =>
-  isValidDate(at) ? ok(at) : err('amendment-invalid-event-date');
+/**
+ * Narrowa para `PendingWithoutDocumentAmendment` — estado correto para
+ * `attachSignedDocument`. Retorna erro se Homologated ou se já tem documento.
+ */
+const parsePendingWithoutDocument = (
+  a: AmendmentEntity,
+): Result<
+  PendingWithoutDocumentAmendment,
+  AmendmentError.AmendmentNotPending | AmendmentError.AmendmentDocumentAlreadyAttached
+> => {
+  if (a.status !== 'Pending') return err(AmendmentError.amendmentNotPending(a.status));
+  if (a.signedDocumentRef !== null) return err(AmendmentError.amendmentDocumentAlreadyAttached());
+  return ok(a);
+};
 
-const validateCommonInput = (input: CreateAmendmentInput): Result<true, AmendmentError> => {
+/**
+ * Narrowa para `PendingWithDocumentAmendment` — estado correto para `homologate`.
+ * Retorna erro se Homologated ou se ainda não tem documento.
+ */
+const parsePendingWithDocument = (
+  a: AmendmentEntity,
+): Result<
+  PendingWithDocumentAmendment,
+  AmendmentError.AmendmentNotPending | AmendmentError.AmendmentWithoutSignedDocument
+> => {
+  if (a.status !== 'Pending') return err(AmendmentError.amendmentNotPending(a.status));
+  if (a.signedDocumentRef === null) return err(AmendmentError.amendmentWithoutSignedDocument());
+  return ok(a);
+};
+
+// ─── Helpers internos ─────────────────────────────────────────────────────────
+
+const assertValidEventDate = (at: Date): Result<Date, AmendmentError.AmendmentInvalidEventDate> =>
+  isValidDate(at) ? ok(at) : err(AmendmentError.amendmentInvalidEventDate());
+
+const validateCommonInput = (
+  input: CreateAmendmentInput,
+): Result<true, AmendmentError.AmendmentError> => {
   if (isBlank(input.amendmentNumber)) {
-    return err('amendment-number-required');
+    return err(AmendmentError.amendmentNumberRequired());
   }
-  if (isBlank(input.description)) return err('amendment-description-required');
-  if (!isValidDate(input.createdAt)) return err('amendment-invalid-created-at');
+  if (isBlank(input.description)) return err(AmendmentError.amendmentDescriptionRequired());
+  if (!isValidDate(input.createdAt)) return err(AmendmentError.amendmentInvalidCreatedAt());
   return ok(true);
 };
 
-const validateVariantInput = (input: CreateAmendmentInput): Result<true, AmendmentError> => {
+const validateVariantInput = (
+  input: CreateAmendmentInput,
+): Result<true, AmendmentError.AmendmentError> => {
   switch (input.kind) {
     case 'Addition':
     case 'Suppression':
-      if (input.impactValue.cents === 0) return err('amendment-impact-value-zero');
+      // Sem check de cents === 0 — `NonZeroMoney` é garantia estática (DO D§25 + DON'T D§24).
+      // A invariante "impacto não-zero" é codificada no tipo de `input.impactValue`,
+      // não como runtime guard aqui. O caso de uso (rota γ, DO D§26) é o ponto de refinamento.
       return ok(true);
     case 'TermChange':
-      if (!isValidDate(input.newEndDate)) {
-        return err('amendment-invalid-new-end-date');
-      }
+      // `newEndDate` é `PlainDate` — validade da data garantida na construção (VO).
       return ok(true);
     case 'Misc':
       return ok(true);
@@ -45,7 +94,24 @@ const validateVariantInput = (input: CreateAmendmentInput): Result<true, Amendme
   // Exhaustive: TS valida em compile time todas as variantes.
 };
 
-const create = (input: CreateAmendmentInput): Result<CommandOutput, AmendmentError> => {
+// ─── Transições — funções totais sobre tipos refinados (DO D§20) ──────────────
+
+/**
+ * Cria um novo aditivo no estado inicial `PendingWithoutDocumentAmendment`.
+ *
+ * Todo aditivo nasce sem documento assinado — DO D§20 (tipo refinado por estado).
+ * O cast estreito `as PendingWithoutDocumentAmendment` é necessário porque
+ * o spread sobre a if-chain de 4 branches perde o narrowing da variante. O TS
+ * infere o tipo achatado mais largo; o cast reafirma o invariante já garantido
+ * em runtime: exatamente um branch é executado, `status`/`signedDocumentRef`/
+ * `homologatedAt`/`homologatedBy` são fixados como literais `'Pending'`/`null`.
+ */
+const create = (
+  input: CreateAmendmentInput,
+): Result<
+  { amendment: PendingWithoutDocumentAmendment; event: AmendmentEvent },
+  AmendmentError.AmendmentError
+> => {
   const common = validateCommonInput(input);
   if (!common.ok) return common;
   const variant = validateVariantInput(input);
@@ -58,18 +124,25 @@ const create = (input: CreateAmendmentInput): Result<CommandOutput, AmendmentErr
     description: input.description,
     createdAt: input.createdAt,
     status: 'Pending' as const,
-    signedDocumentRef: null,
-    homologatedAt: null,
-    homologatedBy: null,
+    signedDocumentRef: null as null,
+    homologatedAt: null as null,
+    homologatedBy: null as null,
   };
 
-  const amendment = (input.kind === 'Addition'
-    ? { ...base, kind: 'Addition' as const, impactValue: input.impactValue }
-    : input.kind === 'Suppression'
-      ? { ...base, kind: 'Suppression' as const, impactValue: input.impactValue }
-      : input.kind === 'TermChange'
-        ? { ...base, kind: 'TermChange' as const, newEndDate: input.newEndDate }
-        : { ...base, kind: 'Misc' as const }) as unknown as AmendmentEntity;
+  // Cast estreito `as PendingWithoutDocumentAmendment` (NÃO `as unknown as`):
+  // a if-chain garante em runtime exatamente um dos quatro variants. O TS perde
+  // o narrowing porque o tipo "achatado" do `?:` é a união dos branches —
+  // estruturalmente igual a `PendingWithoutDocumentAmendment` mas o compilador
+  // exige a reafirmação. `immutable()` aplica `Object.freeze` shallow (DO B§10).
+  const amendment = immutable(
+    input.kind === 'Addition'
+      ? { ...base, kind: 'Addition' as const, impactValue: input.impactValue }
+      : input.kind === 'Suppression'
+        ? { ...base, kind: 'Suppression' as const, impactValue: input.impactValue }
+        : input.kind === 'TermChange'
+          ? { ...base, kind: 'TermChange' as const, newEndDate: input.newEndDate }
+          : { ...base, kind: 'Misc' as const },
+  ) as PendingWithoutDocumentAmendment;
 
   const event: AmendmentEvent = {
     type: 'AmendmentCreated',
@@ -81,21 +154,34 @@ const create = (input: CreateAmendmentInput): Result<CommandOutput, AmendmentErr
   return ok({ amendment, event });
 };
 
+/**
+ * Anexa documento assinado a um aditivo `PendingWithoutDocumentAmendment`.
+ *
+ * Assinatura refinada — sem runtime check de status (garantido pelo tipo).
+ * Sem runtime check de `signedDocumentRef` (garantido por `null` no tipo).
+ * Retorna `PendingWithDocumentAmendment` — próximo subtipo na state machine.
+ */
 const attachSignedDocument = (
-  amendment: AmendmentEntity,
+  amendment: PendingWithoutDocumentAmendment,
   signedDocumentRef: DocumentId,
-): Result<CommandOutput, AmendmentError> => {
-  const pendingCheck = assertPending(amendment);
-  if (!pendingCheck.ok) return pendingCheck;
+  signedAt: Date,
+): Result<
+  { amendment: PendingWithDocumentAmendment; event: AmendmentEvent },
+  AmendmentError.AmendmentError
+> => {
+  // CTR-AMENDMENT-SIGNEDAT-AND-NUMBER (G2): `signedAt` é data de negócio fornecida
+  // pelo operador no attach. Rejeita data inválida (espelha as transições de Contract).
+  const atCheck = assertValidEventDate(signedAt);
+  if (!atCheck.ok) return atCheck;
 
-  if (amendment.signedDocumentRef !== null) {
-    return err('amendment-document-already-attached');
-  }
-
-  const next = {
+  // Cast estreito: spread sobre PendingWithoutDocumentAmendment perde o literal
+  // `null` de `signedDocumentRef`. Os campos substituídos (`signedDocumentRef: DocumentId`
+  // + `signedAt: Date`) constroem estruturalmente um `PendingWithDocumentAmendment`.
+  const next = immutable({
     ...amendment,
     signedDocumentRef,
-  } as unknown as AmendmentEntity;
+    signedAt,
+  }) as PendingWithDocumentAmendment;
 
   const event: AmendmentEvent = {
     type: 'AmendmentDocumentAttached',
@@ -107,26 +193,32 @@ const attachSignedDocument = (
   return ok({ amendment: next, event });
 };
 
+/**
+ * Homologa um aditivo `PendingWithDocumentAmendment`.
+ *
+ * Assinatura refinada — sem runtime check de status nem de `signedDocumentRef`
+ * (ambos garantidos pelo tipo `PendingWithDocumentAmendment`). Apenas valida
+ * a data do evento (`at`). Retorna `HomologatedAmendment` (estado terminal).
+ */
 const homologate = (
-  amendment: AmendmentEntity,
+  amendment: PendingWithDocumentAmendment,
   by: UserRef,
   at: Date,
-): Result<CommandOutput, AmendmentError> => {
-  const pendingCheck = assertPending(amendment);
-  if (!pendingCheck.ok) return pendingCheck;
+): Result<
+  { amendment: HomologatedAmendment; event: AmendmentEvent },
+  AmendmentError.AmendmentError
+> => {
   const atCheck = assertValidEventDate(at);
   if (!atCheck.ok) return atCheck;
 
-  if (amendment.signedDocumentRef === null) {
-    return err('amendment-without-signed-document');
-  }
-
-  const next = {
+  // Cast estreito: constrói HomologatedAmendment diretamente via spread.
+  // `signedDocumentRef` já é `DocumentId` (não null) em PendingWithDocumentAmendment.
+  const next = immutable({
     ...amendment,
-    status: 'Homologated',
+    status: 'Homologated' as const,
     homologatedAt: at,
     homologatedBy: by,
-  } as unknown as AmendmentEntity;
+  }) as HomologatedAmendment;
 
   const event: AmendmentEvent = {
     type: 'AmendmentHomologated',
@@ -140,6 +232,9 @@ const homologate = (
 
 export const Amendment = {
   create,
+  parsePending,
+  parsePendingWithoutDocument,
+  parsePendingWithDocument,
   attachSignedDocument,
   homologate,
 };

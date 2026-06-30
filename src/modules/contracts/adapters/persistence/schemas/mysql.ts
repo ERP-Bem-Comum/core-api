@@ -1,6 +1,7 @@
 // Schema MySQL — alinhado com ADR-0020 (MySQL como único dialeto).
-// Tipos: varchar/bigint/datetime(3). Sem JSON, sem ENUM, sem AUTO_INCREMENT.
-// Money cents: `bigint`. Dates: `datetime(3)`. Period decomposto em 3 colunas.
+// Tipos: varchar/bigint/datetime(3)/date. Sem JSON, sem ENUM, sem AUTO_INCREMENT.
+// Money cents: `bigint`. Instantes: `datetime(3)`. Datas-calendário (vigência,
+// prazo de aditivo): `date` — VO PlainDate (inquiry 0020). Period decomposto em colunas.
 //
 // Convenção de nomenclatura (ADR-0020 §"Convenção"):
 //   - Tabelas: prefixo `ctr_*` dentro do database `core` — torna o owner
@@ -40,12 +41,17 @@
 
 import {
   bigint,
+  boolean,
+  char,
   check,
+  date,
   datetime,
   foreignKey,
   index,
+  int,
   mysqlTable,
   primaryKey,
+  smallint,
   varchar,
 } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
@@ -57,17 +63,36 @@ export const contracts = mysqlTable(
     sequentialNumber: varchar('sequential_number', { length: 16 }).notNull().unique(),
     title: varchar('title', { length: 255 }).notNull(),
     objective: varchar('objective', { length: 1000 }).notNull(),
-    signedAt: datetime('signed_at', { mode: 'date', fsp: 3 }).notNull(),
+    // ADR-0023: NULL em contrato `Pending` (sem assinatura).
+    signedAt: datetime('signed_at', { mode: 'date', fsp: 3 }),
     originalValueCents: bigint('original_value_cents', { mode: 'number' }).notNull(),
     originalPeriodKind: varchar('original_period_kind', { length: 16 }).notNull(),
-    originalPeriodStart: datetime('original_period_start', { mode: 'date', fsp: 3 }).notNull(),
-    originalPeriodEnd: datetime('original_period_end', { mode: 'date', fsp: 3 }),
-    currentValueCents: bigint('current_value_cents', { mode: 'number' }).notNull(),
-    currentPeriodKind: varchar('current_period_kind', { length: 16 }).notNull(),
-    currentPeriodStart: datetime('current_period_start', { mode: 'date', fsp: 3 }).notNull(),
-    currentPeriodEnd: datetime('current_period_end', { mode: 'date', fsp: 3 }),
+    originalPeriodStart: date('original_period_start', { mode: 'date' }).notNull(),
+    originalPeriodEnd: date('original_period_end', { mode: 'date' }),
+    // ADR-0023: vigência efetiva NULL em `Pending` (derivada só a partir de Active).
+    currentValueCents: bigint('current_value_cents', { mode: 'number' }),
+    currentPeriodKind: varchar('current_period_kind', { length: 16 }),
+    currentPeriodStart: date('current_period_start', { mode: 'date' }),
+    currentPeriodEnd: date('current_period_end', { mode: 'date' }),
     status: varchar('status', { length: 16 }).notNull(),
     endedAt: datetime('ended_at', { mode: 'date', fsp: 3 }),
+    // Motivo do distrato (CTR-HTTP-DISTRATO-DOCUMENTO). Só preenchido em Terminated.
+    terminationReason: varchar('termination_reason', { length: 1000 }),
+    // Contratado (referência cross-módulo a Parceiros) — sem FK física (cross-db, ADR-0014).
+    contractorType: varchar('contractor_type', { length: 16 }).notNull(),
+    contractorId: varchar('contractor_id', { length: 36 }).notNull(),
+    // CTR-NUMBER-PROGRAM: classificação (CT/OS) + metadados de cadastro. `program_id`/`budget_plan_id`
+    // são refs leves (UUID) cross-módulo/cross-BC — sem FK física (ADR-0014). `categorizacao`/
+    // `centro_de_custo` são rótulos livres. classification NOT NULL DEFAULT 'CT' (legado vira CT).
+    classification: varchar('classification', { length: 8 }).notNull().default('CT'),
+    programId: varchar('program_id', { length: 36 }),
+    budgetPlanId: varchar('budget_plan_id', { length: 36 }),
+    categorizacao: varchar('categorizacao', { length: 255 }),
+    centroDeCusto: varchar('centro_de_custo', { length: 255 }),
+    // Metadados de cadastro editáveis (FR-009) — nullable.
+    observations: varchar('observations', { length: 1000 }),
+    email: varchar('email', { length: 255 }),
+    telephone: varchar('telephone', { length: 32 }),
   },
   (t) => [
     // CHECKs de domínio (enums via varchar+CHECK — ADR-0018 §"Features proibidas" baniu ENUM nativo)
@@ -76,10 +101,28 @@ export const contracts = mysqlTable(
       sql`${t.originalPeriodKind} IN ('Fixed','Indefinite')`,
     ),
     check(
+      'ctr_contracts_contractor_type_chk',
+      sql`${t.contractorType} IN ('supplier','financier','collaborator','act')`,
+    ),
+    check(
       'ctr_contracts_current_period_kind_chk',
       sql`${t.currentPeriodKind} IN ('Fixed','Indefinite')`,
     ),
-    check('ctr_contracts_status_chk', sql`${t.status} IN ('Active','Expired','Terminated')`),
+    check(
+      'ctr_contracts_status_chk',
+      sql`${t.status} IN ('Pending','Active','Expired','Terminated','Cancelled')`,
+    ),
+
+    // CTR-NUMBER-PROGRAM: classificação restrita a CT|OS (enum via varchar+CHECK — ADR-0020).
+    check('ctr_contracts_classification_chk', sql`${t.classification} IN ('CT','OS')`),
+
+    // ADR-0023/0039: bicondicional `sem vigência efetiva ⟺ Pending OU Cancelled`.
+    // `Pending` e `Cancelled` (rascunho cancelado) têm assinatura/vigência NULL; os
+    // demais estados têm ambos preenchidos. Espelha o CHECK F-L1 de `ended_at`.
+    check(
+      'ctr_contracts_pending_consistency_chk',
+      sql`(${t.status} IN ('Pending','Cancelled')) = (${t.signedAt} IS NULL AND ${t.currentValueCents} IS NULL AND ${t.currentPeriodKind} IS NULL AND ${t.currentPeriodStart} IS NULL)`,
+    ),
 
     // F-L1: bicondicional entre status terminado e endedAt populado.
     // `(A) = (B)` em MySQL retorna 1 se ambos true ou ambos false.
@@ -93,15 +136,73 @@ export const contracts = mysqlTable(
     // MySQL-idiomático (= entre booleans = bicondicional).
     check(
       'ctr_contracts_ended_at_consistency_chk',
-      sql`(${t.endedAt} IS NOT NULL) = (${t.status} IN ('Expired','Terminated'))`,
+      sql`(${t.endedAt} IS NOT NULL) = (${t.status} IN ('Expired','Terminated','Cancelled'))`,
+    ),
+
+    // Motivo só existe em distrato. Lenient (não bicondicional): Terminated legado pode
+    // ter motivo null (a feature é nova); Expired/Active/Pending nunca têm motivo.
+    check(
+      'ctr_contracts_termination_reason_chk',
+      sql`${t.terminationReason} IS NULL OR ${t.status} = 'Terminated'`,
     ),
 
     // Índices (F-M2 do DB audit): suporta dashboards de "contratos ativos" e
     // relatórios temporais sem full table scan (Ramakrishnan §8.2).
     index('ctr_contracts_status_idx').on(t.status),
     index('ctr_contracts_signed_at_idx').on(t.signedAt),
+    // #116: filtro "contratos do fornecedor" (composto com status p/ os vigentes do contratante).
+    index('ctr_contracts_contractor_idx').on(t.contractorId, t.status),
+
+    // CTR-AUTO-EXPIRE (issue #39): índice composto para o sweep de auto-expiração.
+    // Query alvo: WHERE status='Active' AND current_period_kind='Fixed' AND current_period_end < :cutoff
+    //             ORDER BY current_period_end ASC LIMIT :n
+    //
+    // Ordem das colunas: igualdades primeiro (status, current_period_kind) → range scan em
+    // current_period_end (Refman 8.4 §10.2.1.2 — "The leftmost prefix of an index can be used
+    // for a range scan"). InnoDB usa o índice para filtro + ordenação, evitando filesort.
+    // Seletividade estimada: status='Active' ~40% (4 estados) → current_period_kind='Fixed' ~80%
+    // (Fixed vs Indefinite) → current_period_end < cutoff (range pequeno — contratos vencidos).
+    // O índice cobridor + limit torna o sweep O(k) onde k = batchSize.
+    //
+    // CHARSET/COLLATE (status, current_period_kind): varchar utf8mb4_unicode_ci da tabela-pai.
+    // A migration aplica ENGINE=InnoDB ... utf8mb4_unicode_ci (header §CHARSET/COLLATE).
+    index('ctr_contracts_expirable_idx').on(t.status, t.currentPeriodKind, t.currentPeriodEnd),
   ],
 );
+
+// ─── ctr_contract_seq — contador de numeração sequencial por ano ──────────────
+//
+// CTR-CONTRACT-SEQUENTIAL-NUMBER (opção C): tabela de sequência dedicada, padrão
+// CHILD_CODES do Refman 8.4 §17.7.2.4. O adapter lê `last_seq` com FOR UPDATE e
+// incrementa na mesma transação — uniformidade e monotonicidade por ano sem
+// AUTO_INCREMENT (ADR-0020 §"proibido"). `ctr_contracts.sequential_number`
+// permanece `varchar` (rótulo exibível, heterogêneo para legado); o dump legado
+// reconcilia `last_seq` via batch no ETL, nunca em produção.
+//
+// CHARSET/COLLATE: tabela sem colunas textuais — apenas numéricas; mesmo assim a
+// migration aplica `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
+// por consistência (ver §"CHARSET/COLLATE" do cabeçalho).
+export const ctrContractSeq = mysqlTable('ctr_contract_seq', {
+  // Ano da sequência (PK). SMALLINT UNSIGNED cobre 0..65535 anos.
+  year: smallint('year', { unsigned: true }).primaryKey().notNull(),
+  // Último número emitido no ano; o próximo é `last_seq + 1`.
+  lastSeq: int('last_seq', { unsigned: true }).notNull().default(0),
+});
+
+// ─── ctr_amendment_seq — contador de numeração sequencial do aditivo POR CONTRATO ──
+//
+// CTR-AMENDMENT-SIGNEDAT-AND-NUMBER (G3): tabela de sequência dedicada, padrão CHILD_CODES
+// do Refman 8.4 §17.7.2.4 (mesma abordagem de `ctr_contract_seq`, mas keyed por contrato).
+// O adapter lê `last_seq` com FOR UPDATE e incrementa na mesma transação — número único e
+// monotônico POR CONTRATO sem AUTO_INCREMENT (ADR-0020 §"proibido"). `ctr_amendments.
+// amendment_number` permanece `varchar` (rótulo `NN/AAAA`).
+//
+// CHARSET/COLLATE: `contract_id` é UUID → `COLLATE utf8mb4_bin` na migration (header §CHARSET).
+// Sem FK (espelha `ctr_contract_seq`): contador interno; contratos são imutáveis (nunca apagados).
+export const ctrAmendmentSeq = mysqlTable('ctr_amendment_seq', {
+  contractId: varchar('contract_id', { length: 36 }).primaryKey().notNull(),
+  lastSeq: int('last_seq', { unsigned: true }).notNull().default(0),
+});
 
 export const amendments = mysqlTable(
   'ctr_amendments',
@@ -115,9 +216,13 @@ export const amendments = mysqlTable(
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
     kind: varchar('kind', { length: 16 }).notNull(),
     impactValueCents: bigint('impact_value_cents', { mode: 'number' }),
-    newEndDate: datetime('new_end_date', { mode: 'date', fsp: 3 }),
+    newEndDate: date('new_end_date', { mode: 'date' }),
     status: varchar('status', { length: 16 }).notNull(),
     signedDocumentRef: varchar('signed_document_ref', { length: 36 }),
+    // CTR-AMENDMENT-SIGNEDAT-AND-NUMBER (G2): data de assinatura do aditivo, capturada
+    // junto com o documento assinado. NULL em PendingWithoutDocument; preenchida a partir
+    // de PendingWithDocument (bicondicional com signed_document_ref no CHECK abaixo).
+    signedAt: datetime('signed_at', { mode: 'date', fsp: 3 }),
     homologatedAt: datetime('homologated_at', { mode: 'date', fsp: 3 }),
     homologatedBy: varchar('homologated_by', { length: 36 }),
   },
@@ -128,6 +233,12 @@ export const amendments = mysqlTable(
       sql`${t.kind} IN ('Addition','Suppression','TermChange','Misc')`,
     ),
     check('ctr_amendments_status_chk', sql`${t.status} IN ('Pending','Homologated')`),
+
+    // G2: signed_at e signed_document_ref entram JUNTOS no attach — bicondicional.
+    check(
+      'ctr_amendments_signed_at_consistency_chk',
+      sql`(${t.signedAt} IS NOT NULL) = (${t.signedDocumentRef} IS NOT NULL)`,
+    ),
 
     // F-L2: implicação homologation completeness.
     // `status='Homologated' ⟹ (homologatedAt AND homologatedBy AND signedDocumentRef)`
@@ -185,3 +296,212 @@ export const contractHomologatedAmendments = mysqlTable(
     }),
   ],
 );
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Outbox Pattern (ADR-0015) — Ticket #1 da série CTR-OUTBOX-SCHEMA
+//
+// CHARSET/COLLATE: aplicar manualmente na migration gerada — mesma regra
+// descrita no cabeçalho acima §"CHARSET/COLLATE".
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ─── ctr_outbox — eventos pendentes/em processamento ─────────────────────────
+//
+// Fluxo: `repo.save(aggregate, events)` insere nesta tabela atomicamente com
+// o estado do agregado (ADR-0015 §"Fluxo"). Worker lê WHERE processed_at IS NULL
+// ORDER BY occurred_at LIMIT N FOR UPDATE SKIP LOCKED.
+//
+// payload: VARCHAR(8192) serializado (sem JSON nativo — ADR-0020 §"proibido").
+//   8 KB cobre events atuais com folga (maior ≈ 500 bytes em ContractStateUpdated).
+export const ctrOutbox = mysqlTable(
+  'ctr_outbox',
+  {
+    // UUID v4 do evento — gerado pelo domínio antes do INSERT.
+    eventId: char('event_id', { length: 36 }).primaryKey().notNull(),
+    // ContractId ou AmendmentId (UUID v4).
+    aggregateId: char('aggregate_id', { length: 36 }).notNull(),
+    // 'Contract' | 'Amendment' — controlado por CHECK abaixo.
+    aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
+    // PascalCase EN: ContractCreated, ContractStateUpdated, AmendmentHomologated, …
+    eventType: varchar('event_type', { length: 64 }).notNull(),
+    // Versão do contrato do payload (inicia em 1).
+    schemaVersion: smallint('schema_version').notNull(),
+    // Timestamp do domain event (moment em que ocorreu no domínio).
+    occurredAt: datetime('occurred_at', { mode: 'date', fsp: 3 }).notNull(),
+    // Timestamp do INSERT na outbox (audit trail).
+    enqueuedAt: datetime('enqueued_at', { mode: 'date', fsp: 3 }).notNull(),
+    // NULL = pendente; NOT NULL = worker marcou após delivery OK.
+    processedAt: datetime('processed_at', { mode: 'date', fsp: 3 }),
+    // Número de tentativas de entrega. Default 0; incrementado pelo worker.
+    attempts: smallint('attempts').notNull().default(0),
+    // Payload serializado do evento — VARCHAR, nunca JSON nativo (ADR-0020).
+    payload: varchar('payload', { length: 8192 }).notNull(),
+  },
+  (t) => [
+    // CHECK attempts >= 0 — defesa em profundidade; domínio já garante.
+    check('ctr_outbox_attempts_nonneg_chk', sql`${t.attempts} >= 0`),
+    // CHECK event_type não-vazio — domínio usa PascalCase sem espaço.
+    check('ctr_outbox_event_type_nonempty_chk', sql`CHAR_LENGTH(${t.eventType}) > 0`),
+    // CHECK aggregate_type restrito ao catálogo do módulo Contratos.
+    // 'Document' adicionado em CTR-DOCUMENT-AGGREGATE-PERSISTENCE.
+    check(
+      'ctr_outbox_aggregate_type_chk',
+      sql`${t.aggregateType} IN ('Contract', 'Amendment', 'Document')`,
+    ),
+    // Índice composto (ADR-0015 §"Sobre o índice"):
+    //   processed_at PRIMEIRO → NULLs agrupados → worker faz range scan eficiente.
+    //   Query canônica: WHERE processed_at IS NULL ORDER BY occurred_at LIMIT N.
+    index('ctr_outbox_processed_at_occurred_at_idx').on(t.processedAt, t.occurredAt),
+    // Índice por agregado — suporta auditoria "todos os eventos de contrato X".
+    index('ctr_outbox_aggregate_id_idx').on(t.aggregateId),
+  ],
+);
+
+// ─── ctr_outbox_dead_letter — eventos que falharam N tentativas ───────────────
+//
+// O worker move para cá quando `attempts >= MAX_ATTEMPTS`. A row é uma cópia
+// da outbox original + `failed_at` + `last_error`.
+// Sem FK com `ctr_outbox` — a row original pode ser apagada da outbox.
+export const ctrOutboxDeadLetter = mysqlTable(
+  'ctr_outbox_dead_letter',
+  {
+    eventId: char('event_id', { length: 36 }).primaryKey().notNull(),
+    aggregateId: char('aggregate_id', { length: 36 }).notNull(),
+    aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
+    eventType: varchar('event_type', { length: 64 }).notNull(),
+    schemaVersion: smallint('schema_version').notNull(),
+    occurredAt: datetime('occurred_at', { mode: 'date', fsp: 3 }).notNull(),
+    // Copiado da outbox original (audit: quando foi enfileirado inicialmente).
+    enqueuedAt: datetime('enqueued_at', { mode: 'date', fsp: 3 }).notNull(),
+    // Timestamp do roteamento para dead letter (quando MAX_ATTEMPTS foi atingido).
+    failedAt: datetime('failed_at', { mode: 'date', fsp: 3 }).notNull(),
+    // Número total de tentativas realizadas antes do descarte.
+    attempts: smallint('attempts').notNull(),
+    // Tag + payload do erro tagged (ex.: 'max-retries-exceeded: ...').
+    lastError: varchar('last_error', { length: 2048 }).notNull(),
+    // Payload copiado da outbox original — VARCHAR, nunca JSON nativo (ADR-0020).
+    payload: varchar('payload', { length: 8192 }).notNull(),
+  },
+  (t) => [
+    // Mesma restrição de aggregate_type da tabela principal.
+    // 'Document' adicionado em CTR-DOCUMENT-AGGREGATE-PERSISTENCE.
+    check(
+      'ctr_outbox_dlq_aggregate_type_chk',
+      sql`${t.aggregateType} IN ('Contract', 'Amendment', 'Document')`,
+    ),
+    // Índice por failed_at — suporta monitoramento "eventos mortos nos últimos N dias".
+    index('ctr_outbox_dlq_failed_at_idx').on(t.failedAt),
+  ],
+);
+
+// ─── eventos_processados — idempotência do consumer ───────────────────────────
+//
+// Nota linguística: nome PT-BR é exceção justificada por ADR-0015 §"Idempotência".
+// ctr_documents — agregado DocumentoContratual (CTR-DOCUMENT-AGGREGATE).
+//
+// Parent polimórfico: parent_type ∈ {Contract, Amendment} + parent_id (sem FK,
+// convenção do projeto). Status reservado com 3 valores (Active hoje;
+// LogicallyDeleted/Superseded entram em tickets de lifecycle futuro).
+// Categoria via CHECK constraint (ADR-0020 §"sem ENUM").
+export const ctrDocuments = mysqlTable(
+  'ctr_documents',
+  {
+    id: char('id', { length: 36 }).primaryKey().notNull(),
+    parentType: varchar('parent_type', { length: 16 }).notNull(),
+    parentId: char('parent_id', { length: 36 }).notNull(),
+    categoria: varchar('categoria', { length: 32 }).notNull(),
+    fileName: varchar('file_name', { length: 255 }).notNull(),
+    mimeType: varchar('mime_type', { length: 127 }).notNull(),
+    sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
+    hashSha256: char('hash_sha256', { length: 64 }).notNull(),
+    bucket: varchar('bucket', { length: 63 }).notNull(),
+    storageKey: varchar('storage_key', { length: 1024 }).notNull(),
+    signedElectronically: boolean('signed_electronically').notNull().default(false),
+    version: smallint('version', { unsigned: true }).notNull().default(1),
+    uploadedAt: datetime('uploaded_at', { mode: 'date', fsp: 3 }).notNull(),
+    uploadedBy: char('uploaded_by', { length: 36 }).notNull(),
+    retentionUntil: datetime('retention_until', { mode: 'date', fsp: 3 }),
+    status: varchar('status', { length: 16 }).notNull().default('Active'),
+    // CTR-USECASE-DELETE-DOCUMENT: campos audit de exclusao logica (RN-11).
+    deletedAt: datetime('deleted_at', { mode: 'date', fsp: 3 }),
+    deletedBy: char('deleted_by', { length: 36 }),
+    deletedReason: varchar('deleted_reason', { length: 500 }),
+    // CTR-USECASE-SUPERSEDE-DOCUMENT: campos audit de substituicao (RN-AS-02).
+    supersededAt: datetime('superseded_at', { mode: 'date', fsp: 3 }),
+    supersededBy: char('superseded_by', { length: 36 }),
+    supersededByDocumentId: char('superseded_by_document_id', { length: 36 }),
+  },
+  (t) => [
+    check('ctr_documents_parent_type_chk', sql`${t.parentType} IN ('Contract','Amendment')`),
+    check(
+      'ctr_documents_status_chk',
+      sql`${t.status} IN ('Active','LogicallyDeleted','Superseded')`,
+    ),
+    check(
+      'ctr_documents_categoria_chk',
+      sql`${t.categoria} IN ('signed_contract','signed_amendment','signed_termination','opinion','certificate','justification','technical_attachment','publication','other')`,
+    ),
+    check('ctr_documents_size_chk', sql`${t.sizeBytes} >= 0`),
+    check('ctr_documents_version_chk', sql`${t.version} >= 1`),
+    // CTR-USECASE-DELETE-DOCUMENT: consistencia status='LogicallyDeleted' <=> 3 campos preenchidos.
+    check(
+      'ctr_documents_logically_deleted_chk',
+      sql`${t.status} <> 'LogicallyDeleted'
+          OR (${t.deletedAt} IS NOT NULL AND ${t.deletedBy} IS NOT NULL AND ${t.deletedReason} IS NOT NULL)`,
+    ),
+    // CTR-USECASE-SUPERSEDE-DOCUMENT: consistencia status='Superseded' <=> 3 campos preenchidos.
+    check(
+      'ctr_documents_superseded_chk',
+      sql`${t.status} <> 'Superseded'
+          OR (${t.supersededAt} IS NOT NULL
+              AND ${t.supersededBy} IS NOT NULL
+              AND ${t.supersededByDocumentId} IS NOT NULL)`,
+    ),
+    // Lookup principal: documentos por contrato/aditivo (RN-01: vínculo formal).
+    index('ctr_documents_parent_idx').on(t.parentType, t.parentId),
+    // Dedup / busca por integridade (RN-AS-02).
+    index('ctr_documents_hash_idx').on(t.hashSha256),
+    // Listagem temporal de ativos.
+    index('ctr_documents_status_uploaded_idx').on(t.status, t.uploadedAt),
+  ],
+);
+
+// Tabela cross-módulo (sem prefix `ctr_*` — ADR-0014 §"Exceção linguística").
+//
+// Consumer verifica event_id antes de processar. Se presente → ignorar.
+// INSERT feito na mesma transação que o processamento do evento (idempotência).
+export const eventosProcessados = mysqlTable(
+  'eventos_processados',
+  {
+    // Identificador do consumidor (ex.: 'logger-default', 'financial-module').
+    consumerId: varchar('consumer_id', { length: 64 }).notNull(),
+    // UUID v4 do evento (não é FK — tabela cross-módulo sem acoplamento direto).
+    eventId: char('event_id', { length: 36 }).notNull(),
+    // Timestamp de quando este consumer processou o evento.
+    processedAt: datetime('processed_at', { mode: 'date', fsp: 3 }).notNull(),
+  },
+  (t) => [
+    // PK composta: cada consumer registra o event_id independentemente.
+    primaryKey({ columns: [t.consumerId, t.eventId] }),
+    // Índice temporal — suporta auditoria "eventos processados nas últimas N horas".
+    index('eventos_processados_processed_at_idx').on(t.processedAt),
+  ],
+);
+
+// ─── ctr_job_runs ───────────────────────────────────────────────────────────────
+//
+// Coordenação de jobs one-shot em multi-instância (CTR-SWEEPER-JOB-LOCK / ADR-0041).
+// PK composta (job_name, run_key): a 1ª instância faz `INSERT IGNORE` e roda; as demais batem
+// na PK e desistem. `run_key` é a janela de execução (ex.: a data do sweep diário). Backstop
+// barato sobre o cron singleton; lock de eficiência (jobs já idempotentes) — sem Redis/etcd.
+export const ctrJobRuns = mysqlTable(
+  'ctr_job_runs',
+  {
+    jobName: varchar('job_name', { length: 64 }).notNull(),
+    runKey: varchar('run_key', { length: 64 }).notNull(),
+    startedAt: datetime('started_at', { mode: 'date', fsp: 3 }).notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.jobName, t.runKey] })],
+);
+
+export type JobRunRow = typeof ctrJobRuns.$inferSelect;
+export type NewJobRunRow = typeof ctrJobRuns.$inferInsert;

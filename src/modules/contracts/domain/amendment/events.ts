@@ -1,4 +1,5 @@
-import type { AmendmentId, ContractId, DocumentId, UserRef } from '../shared/ids.ts';
+import type { AmendmentId, ContractId, DocumentId } from '../shared/ids.ts';
+import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
 
 export type AmendmentEvent = Readonly<
   | {

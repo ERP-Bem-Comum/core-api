@@ -1,0 +1,1 @@
+ALTER TABLE `fin_documents` ADD `payment_detail` varchar(255);

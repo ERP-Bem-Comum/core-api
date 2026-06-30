@@ -5,9 +5,10 @@
 import { describe, it, beforeEach } from 'node:test';
 import { strict as assert } from 'node:assert';
 
-import type { AmendmentRepository } from '#src/modules/contracts/application/ports/amendment-repository.ts';
+import type { AmendmentRepository } from '#src/modules/contracts/domain/amendment/repository.ts';
 import type { Amendment } from '#src/modules/contracts/domain/amendment/types.ts';
-import { AmendmentId } from '#src/modules/contracts/domain/shared/ids.ts';
+import * as AmendmentId from '#src/modules/contracts/domain/shared/amendment-id.ts';
+import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 
 import { buildAmendment, buildHomologatedAmendment } from './fixtures.ts';
 
@@ -34,7 +35,7 @@ const expectAmendment = async (
   ctx: string,
 ): Promise<Amendment> => {
   const r = await repo.findById(id);
-  if (!r.ok) throw new Error(`${ctx}: findById falhou — ${r.error}`);
+  if (!r.ok) throw new Error(`${ctx}: findById falhou — ${JSON.stringify(r.error)}`);
   if (r.value === null) throw new Error(`${ctx}: aditivo não encontrado`);
   return r.value;
 };
@@ -85,7 +86,8 @@ export const runAmendmentRepositoryContract = (
           impactValueCents: 500_000,
         });
         await seedFor(a);
-        await repo.save(a);
+        // CA2 — save aceita events como 2º argumento (W0: repo ainda não tem a assinatura nova)
+        await repo.save(a, []);
         const got = await expectAmendment(repo, a.id, 'Addition round-trip');
         assert.equal(got.kind, 'Addition');
         if (got.kind === 'Addition') {
@@ -111,7 +113,8 @@ export const runAmendmentRepositoryContract = (
           impactValueCents: 250_000,
         });
         await seedFor(a);
-        await repo.save(a);
+        // CA2 — save aceita events como 2º argumento (W0: repo ainda não tem a assinatura nova)
+        await repo.save(a, []);
         const got = await expectAmendment(repo, a.id, 'Suppression');
         assert.equal(got.kind, 'Suppression');
         if (got.kind === 'Suppression') {
@@ -130,11 +133,12 @@ export const runAmendmentRepositoryContract = (
           newEndDateISO: '2027-12-31T23:59:59.000Z',
         });
         await seedFor(a);
-        await repo.save(a);
+        // CA2 — save aceita events como 2º argumento (W0: repo ainda não tem a assinatura nova)
+        await repo.save(a, []);
         const got = await expectAmendment(repo, a.id, 'TermChange');
         assert.equal(got.kind, 'TermChange');
         if (got.kind === 'TermChange') {
-          assert.equal(got.newEndDate.toISOString(), '2027-12-31T23:59:59.000Z');
+          assert.equal(PlainDate.toISOString(got.newEndDate), '2027-12-31');
         }
       } finally {
         await cleanup();
@@ -148,7 +152,8 @@ export const runAmendmentRepositoryContract = (
           kind: 'Misc',
         });
         await seedFor(a);
-        await repo.save(a);
+        // CA2 — save aceita events como 2º argumento (W0: repo ainda não tem a assinatura nova)
+        await repo.save(a, []);
         const got = await expectAmendment(repo, a.id, 'Misc');
         assert.equal(got.kind, 'Misc');
       } finally {
@@ -166,7 +171,8 @@ export const runAmendmentRepositoryContract = (
           userRef: '99998888-7777-4666-8555-444433332222',
         });
         await seedFor(a);
-        await repo.save(a);
+        // CA2 — save aceita events como 2º argumento (W0: repo ainda não tem a assinatura nova)
+        await repo.save(a, []);
         const got = await expectAmendment(repo, a.id, 'Homologated');
         assert.equal(got.status, 'Homologated');
         assert.equal(
@@ -192,8 +198,8 @@ export const runAmendmentRepositoryContract = (
         const v1 = buildAmendment({ id, description: 'V1' });
         const v2 = buildAmendment({ id, description: 'V2 atualizado' });
         await seedFor(v1);
-        await repo.save(v1);
-        await repo.save(v2);
+        await repo.save(v1, []);
+        await repo.save(v2, []);
         const got = await expectAmendment(repo, v1.id, 'idempotent');
         assert.equal(got.description, 'V2 atualizado');
       } finally {
@@ -205,7 +211,7 @@ export const runAmendmentRepositoryContract = (
       try {
         const present = buildAmendment({ id: '12345678-1234-4234-8234-123456789012' });
         await seedFor(present);
-        await repo.save(present);
+        await repo.save(present, []);
 
         const absent = await repo.findById(unwrapId('00000000-0000-4000-8000-000000000000'));
         assert.equal(absent.ok, true);

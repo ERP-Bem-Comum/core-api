@@ -1,0 +1,39 @@
+# core-api — ERP Bem Comum
+
+> Backend do ERP Bem Comum: um **modular monolith** em Node.js 24 + TypeScript 6 (ESM, pnpm), com o módulo
+> Contratos completo (domínio puro → application → adapters Drizzle/MySQL 8.4 → borda HTTP Fastify + CLI),
+> mais os módulos auth (identidade & RBAC), financial e notifications. Persistência MySQL única (ADR-0020),
+> eventos via Outbox (ADR-0015), storage S3/MinIO (ADR-0019), borda HTTP com Zod contract-first + OpenAPI
+> 3.1.1 (ADR-0027) e read/write split (ADR-0026).
+
+Esta doc é markdown plano (IA-friendly): leia os arquivos diretamente. A fonte de verdade canônica é o
+`handbook/` (ADRs imutáveis, domínio, reference); quando código e handbook divergem, o handbook vence.
+Idioma: prosa em PT-BR, identificadores de código/rotas/erros em EN.
+
+## Documentação consolidada
+
+- [Índice da doc](docs/README.md): mapa e estado atual do projeto
+- [Arquitetura & ADRs](docs/01-architecture.md): modular monolith, camadas, ports & adapters, índice dos 28 ADRs
+- [API HTTP](docs/02-http-api.md): rotas /api/v2 (auth + contracts), RBAC, dual-pool RW, OpenAPI, envelope de erro
+- [Domínio Contratos](docs/03-domain-contracts.md): agregados Contract/Amendment/Document, estados, eventos, RN
+- [Guia do dev](docs/04-dev-guide.md): comandos pnpm, drivers memory/mysql, Docker, testes/E2E, pipeline W0→W3
+
+## Fonte de verdade (handbook)
+
+- [ADRs aceitos](handbook/architecture/adr/): decisões arquiteturais imutáveis (0001-0028)
+- [Domínio formal](handbook/domain/): context map, máquina de estados, glossário ubíquo
+- [Domínio Contratos (detalhe)](handbook/domain_questions/contratos/): especificação + bounded contexts + RN numeradas
+- [Reference de tecnologia](handbook/reference/): typescript, nodejs, drizzle, mysql, mysql2, docker, pnpm, fastify
+- [CHANGELOG do handbook](handbook/CHANGELOG.md): histórico de ADRs e supersedes
+
+## Guias do projeto (raiz)
+
+- [CLAUDE.md](CLAUDE.md): guia do projeto, hierarquia de regras, comandos essenciais, anti-padrões
+- [Regras por camada](/.claude/rules/): domain, application, adapters, testing, módulo contracts
+- [package.json](package.json): scripts (typecheck, lint, test, cli:*, pipeline:*, test:e2e:*, db:generate)
+
+## Optional
+
+- [Pipeline (tickets W0→W3)](/.claude/.pipeline/): audit trail de cada mudança de produção
+- [Planning & decisões](/.claude/.planning/): épicos, sessões de design (ex.: transporte de upload), débitos técnicos
+- [Contrato REST legado (ACL)](handbook/api_documentations/contracts/openapi.yaml): OpenAPI de referência

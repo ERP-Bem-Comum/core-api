@@ -1,0 +1,3 @@
+ALTER TABLE `fin_cedente_accounts` DROP CONSTRAINT `fin_cedente_accounts_type_chk`;--> statement-breakpoint
+ALTER TABLE `fin_cedente_accounts` ADD `type_label` varchar(120);--> statement-breakpoint
+ALTER TABLE `fin_cedente_accounts` ADD CONSTRAINT `fin_cedente_accounts_type_chk` CHECK (`fin_cedente_accounts`.`type` IS NULL OR `fin_cedente_accounts`.`type` IN ('corrente','poupanca','investimento','cartao','outro'));

@@ -1,0 +1,4 @@
+ALTER TABLE `fin_documents` DROP CONSTRAINT `fin_documents_status_chk`;--> statement-breakpoint
+ALTER TABLE `fin_payables` DROP CONSTRAINT `fin_payables_status_chk`;--> statement-breakpoint
+ALTER TABLE `fin_documents` ADD CONSTRAINT `fin_documents_status_chk` CHECK (`fin_documents`.`status` IN ('Draft','Open','Approved','Transmitted','Refused','Paid','PartiallyReconciled','Reconciled'));--> statement-breakpoint
+ALTER TABLE `fin_payables` ADD CONSTRAINT `fin_payables_status_chk` CHECK (`fin_payables`.`status` IN ('Draft','Open','Approved','Transmitted','Refused','Paid','PartiallyReconciled','Reconciled'));

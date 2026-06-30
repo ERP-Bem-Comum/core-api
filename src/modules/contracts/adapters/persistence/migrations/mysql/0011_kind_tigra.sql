@@ -1,0 +1,6 @@
+ALTER TABLE `ctr_contracts` DROP CONSTRAINT `ctr_contracts_status_chk`;--> statement-breakpoint
+ALTER TABLE `ctr_contracts` DROP CONSTRAINT `ctr_contracts_pending_consistency_chk`;--> statement-breakpoint
+ALTER TABLE `ctr_contracts` DROP CONSTRAINT `ctr_contracts_ended_at_consistency_chk`;--> statement-breakpoint
+ALTER TABLE `ctr_contracts` ADD CONSTRAINT `ctr_contracts_status_chk` CHECK (`ctr_contracts`.`status` IN ('Pending','Active','Expired','Terminated','Cancelled'));--> statement-breakpoint
+ALTER TABLE `ctr_contracts` ADD CONSTRAINT `ctr_contracts_pending_consistency_chk` CHECK ((`ctr_contracts`.`status` IN ('Pending','Cancelled')) = (`ctr_contracts`.`signed_at` IS NULL AND `ctr_contracts`.`current_value_cents` IS NULL AND `ctr_contracts`.`current_period_kind` IS NULL AND `ctr_contracts`.`current_period_start` IS NULL));--> statement-breakpoint
+ALTER TABLE `ctr_contracts` ADD CONSTRAINT `ctr_contracts_ended_at_consistency_chk` CHECK ((`ctr_contracts`.`ended_at` IS NOT NULL) = (`ctr_contracts`.`status` IN ('Expired','Terminated','Cancelled')));

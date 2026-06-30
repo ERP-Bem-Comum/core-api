@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "PRG-PROGRAMS-POLISH",
+  "size": "S",
+  "createdAt": "2026-06-09T19:55:19.915Z",
+  "closedAt": "2026-06-09T20:18:54.024Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "bruno-api-client-expert",
+      "startedAt": "2026-06-09T20:00:42.876Z",
+      "finishedAt": "2026-06-09T20:16:34.921Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "bruno-api-client-expert",
+      "startedAt": "2026-06-09T20:16:35.504Z",
+      "finishedAt": "2026-06-09T20:16:36.053Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-06-09T20:17:36.275Z",
+      "finishedAt": "2026-06-09T20:18:04.283Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-06-09T20:18:04.956Z",
+      "finishedAt": "2026-06-09T20:18:53.117Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

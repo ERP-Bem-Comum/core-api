@@ -1,0 +1,51 @@
+meta {
+  name: LOC-3 POST roles retorna Location (REPROVA ate fix)
+  type: http
+  seq: 3
+  docs: Regressao HTTP-LOCATION-HEADER-201 — auth/roles nao retorna header Location no 201. Reprova ate o fix adicionar .header('location', ...) ao handler.
+}
+
+post {
+  url: {{baseUrl}}/api/v1/roles
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+script:pre-request {
+  // Nome unico por execucao para evitar conflito de unicidade (role:name e unico).
+  bru.setVar("locRoleName", "LOC Papel " + Date.now());
+}
+
+body:json {
+  {
+    "name": "{{locRoleName}}",
+    "permissions": ["role:read"]
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    const loc = res.getHeader("location");
+    const idFromBody = res.getBody() && res.getBody().id;
+    const id = loc ? loc.split("/").pop() : idFromBody;
+    if (id) bru.setVar("locRoleId", id);
+  }
+}
+
+tests {
+  test("LOC-3 — status 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+  test("LOC-3 — header Location presente (REPROVA ate fix)", function () {
+    const loc = res.getHeader("location");
+    expect(loc).to.be.a("string");
+  });
+  test("LOC-3 — Location contem /roles/ (REPROVA ate fix)", function () {
+    const loc = res.getHeader("location");
+    expect(loc).to.include("/roles/");
+  });
+}

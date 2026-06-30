@@ -31,21 +31,21 @@ import { strict as assert } from 'node:assert';
 import { createHash } from 'node:crypto';
 
 import { isErr, isOk } from '#src/shared/index.ts';
-import { BucketName } from '#src/modules/contracts/domain/shared/bucket-name.ts';
-import { StorageKey } from '#src/modules/contracts/domain/shared/storage-key.ts';
-import { StorageRef } from '#src/modules/contracts/domain/shared/storage-ref.ts';
+import * as BucketName from '#src/modules/contracts/application/ports/document-storage.types.ts';
+import * as StorageKey from '#src/modules/contracts/application/ports/document-storage.types.ts';
+import * as StorageRef from '#src/modules/contracts/application/ports/document-storage.types.ts';
 import type { DocumentStorage } from '#src/modules/contracts/application/ports/document-storage.ts';
 
 const sha256Hex = (bytes: Uint8Array): string => createHash('sha256').update(bytes).digest('hex');
 
 const mkBucket = () => {
-  const r = BucketName.create('contracts-documents');
+  const r = BucketName.createBucketName('contracts-documents');
   if (!r.ok) throw new Error(`fixture broken: ${r.error}`);
   return r.value;
 };
 
 const mkKey = (raw: string) => {
-  const r = StorageKey.create(raw);
+  const r = StorageKey.createStorageKey(raw);
   if (!r.ok) throw new Error(`fixture broken: ${r.error}`);
   return r.value;
 };
@@ -56,7 +56,7 @@ const mkRef = (params: {
   bytes: Uint8Array;
   mimeType: string;
 }) => {
-  const r = StorageRef.create({
+  const r = StorageRef.createStorageRef({
     bucket: params.bucket,
     key: params.key,
     hashSha256: sha256Hex(params.bytes),

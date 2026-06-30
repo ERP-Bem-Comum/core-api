@@ -1,0 +1,294 @@
+/**
+ * AUTH-HTTP-ROUTES (H1a) — W0 (RED) — register + login.
+ *
+ * DEVE FALHAR: `buildAuthHttpDeps` e a factory `authHttpPlugin(deps)` ainda não existem
+ * em `#src/modules/auth/public-api/http.ts` (o plugin atual é a sentinela __ping).
+ * GREEN quando o W1 entregar o composition root + as 2 rotas. refresh/logout = H1b.
+ * ASCII puro.
+ */
+
+import { describe, it, before } from 'node:test';
+import { strict as assert } from 'node:assert';
+
+import { buildApp } from '#src/shared/http/app.ts';
+import { authHttpPlugin, buildAuthHttpDeps } from '#src/modules/auth/public-api/http.ts';
+
+const STRONG = 'Str0ng-Passphrase-2026!';
+const EMAIL = 'user@example.com';
+
+const makeApp = async () => {
+  const deps = await buildAuthHttpDeps({ driver: 'memory' });
+  return buildApp({ routes: [authHttpPlugin(deps)] });
+};
+
+describe('AUTH-HTTP-ROUTES (H1a) — register', () => {
+  it('CA1: register email inédito -> 201', async () => {
+    const app = await makeApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/register',
+      payload: { email: EMAIL, password: STRONG },
+    });
+    assert.equal(res.statusCode, 201);
+    await app.close();
+  });
+
+  it('CA2: register email repetido -> 409 email-already-registered', async () => {
+    const app = await makeApp();
+    const body = { email: EMAIL, password: STRONG };
+    await app.inject({ method: 'POST', url: '/api/v2/auth/register', payload: body });
+    const res = await app.inject({ method: 'POST', url: '/api/v2/auth/register', payload: body });
+    assert.equal(res.statusCode, 409);
+    assert.equal(
+      (res.json() as { error: { code: string } }).error.code,
+      'email-already-registered',
+    );
+    await app.close();
+  });
+
+  it('CA3: register body inválido -> 400 (validation)', async () => {
+    const app = await makeApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/register',
+      payload: { email: 123 },
+    });
+    assert.equal(res.statusCode, 400);
+    assert.equal((res.json() as { error: { code: string } }).error.code, 'validation');
+    await app.close();
+  });
+
+  it('CA4: register senha fraca -> 422 (policy)', async () => {
+    const app = await makeApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/register',
+      payload: { email: 'weak@example.com', password: '123' },
+    });
+    assert.equal(res.statusCode, 422);
+    await app.close();
+  });
+});
+
+describe('AUTH-HTTP-ROUTES (H1a) — login', () => {
+  it('CA5: login com credencial válida -> 200 { accessToken, refreshToken, userId }', async () => {
+    const app = await makeApp();
+    await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/register',
+      payload: { email: EMAIL, password: STRONG },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/login',
+      payload: { email: EMAIL, password: STRONG },
+    });
+    assert.equal(res.statusCode, 200);
+    const body = res.json() as { accessToken: string; refreshToken: string; userId: string };
+    assert.ok(body.accessToken.length > 0);
+    assert.ok(body.refreshToken.length > 0);
+    assert.ok(body.userId.length > 0);
+    await app.close();
+  });
+
+  it('CA6: login com senha errada -> 401 invalid-credentials', async () => {
+    const app = await makeApp();
+    await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/register',
+      payload: { email: EMAIL, password: STRONG },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/login',
+      payload: { email: EMAIL, password: 'Wr0ng-Passphrase-2026!' },
+    });
+    assert.equal(res.statusCode, 401);
+    assert.equal((res.json() as { error: { code: string } }).error.code, 'invalid-credentials');
+    await app.close();
+  });
+
+  it('CA6: login com email inexistente -> 401 (mesma resposta, enumeração-safe)', async () => {
+    const app = await makeApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/login',
+      payload: { email: 'ghost@example.com', password: STRONG },
+    });
+    assert.equal(res.statusCode, 401);
+    assert.equal((res.json() as { error: { code: string } }).error.code, 'invalid-credentials');
+    await app.close();
+  });
+});
+
+describe('AUTH-HTTP-ROUTES (H1a) — contrato', () => {
+  it('CA11: /docs/json contém register+login e NÃO contém __ping', async () => {
+    const app = await makeApp();
+    const res = await app.inject({ method: 'GET', url: '/docs/json' });
+    const doc = res.json() as { paths: Record<string, unknown> };
+    assert.ok(Object.prototype.hasOwnProperty.call(doc.paths, '/api/v2/auth/register'));
+    assert.ok(Object.prototype.hasOwnProperty.call(doc.paths, '/api/v2/auth/login'));
+    assert.equal(Object.prototype.hasOwnProperty.call(doc.paths, '/api/v2/auth/__ping'), false);
+    await app.close();
+  });
+
+  it('CA12: resposta de /api/v2/auth/* carrega cache-control: no-store', async () => {
+    const app = await makeApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/register',
+      payload: { email: 'cache@example.com', password: STRONG },
+    });
+    assert.equal(res.headers['cache-control'], 'no-store');
+    await app.close();
+  });
+});
+
+// BE-REC-004: rotas autenticadas de troca de senha e revogacao de todas as sessoes.
+describe('AUTH-HTTP-ROUTES — change-password + revoke-all (BE-REC-004)', () => {
+  const NEW_STRONG = 'New-Str0ng-Phrase-2027!';
+
+  const registerAndLogin = async (
+    app: Awaited<ReturnType<typeof makeApp>>,
+  ): Promise<{ accessToken: string; refreshToken: string }> => {
+    await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/register',
+      payload: { email: EMAIL, password: STRONG },
+    });
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/login',
+      payload: { email: EMAIL, password: STRONG },
+    });
+    return res.json() as { accessToken: string; refreshToken: string };
+  };
+
+  it('change-password autenticado troca a senha -> 204; nova senha loga, antiga falha', async () => {
+    const app = await makeApp();
+    const { accessToken } = await registerAndLogin(app);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/change-password',
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: { currentPassword: STRONG, newPassword: NEW_STRONG },
+    });
+    assert.equal(res.statusCode, 204);
+
+    const withNew = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/login',
+      payload: { email: EMAIL, password: NEW_STRONG },
+    });
+    assert.equal(withNew.statusCode, 200);
+
+    const withOld = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/login',
+      payload: { email: EMAIL, password: STRONG },
+    });
+    assert.equal(withOld.statusCode, 401);
+    await app.close();
+  });
+
+  it('change-password sem Bearer -> 401', async () => {
+    const app = await makeApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/change-password',
+      payload: { currentPassword: STRONG, newPassword: NEW_STRONG },
+    });
+    assert.equal(res.statusCode, 401);
+    await app.close();
+  });
+
+  it('change-password com senha atual errada -> 401', async () => {
+    const app = await makeApp();
+    const { accessToken } = await registerAndLogin(app);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/change-password',
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: { currentPassword: 'Wr0ng-Current-2026!', newPassword: NEW_STRONG },
+    });
+    assert.equal(res.statusCode, 401);
+    await app.close();
+  });
+
+  it('change-password com nova senha na blocklist -> 422 password-too-common', async () => {
+    const app = await makeApp();
+    const { accessToken } = await registerAndLogin(app);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/change-password',
+      headers: { authorization: `Bearer ${accessToken}` },
+      payload: { currentPassword: STRONG, newPassword: 'administrator' },
+    });
+    assert.equal(res.statusCode, 422);
+    assert.equal((res.json() as { error: { code: string } }).error.code, 'password-too-common');
+    await app.close();
+  });
+
+  it('revoke-all autenticado -> 204; o refresh token anterior deixa de valer', async () => {
+    const app = await makeApp();
+    const { accessToken, refreshToken } = await registerAndLogin(app);
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/sessions/revoke-all',
+      headers: { authorization: `Bearer ${accessToken}` },
+    });
+    assert.equal(res.statusCode, 204);
+
+    const refreshed = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/refresh',
+      payload: { refreshToken },
+    });
+    assert.equal(refreshed.statusCode, 401);
+    await app.close();
+  });
+});
+
+// BE-REC-003: solicitação de reset responde 202 uniforme (anti-enumeração).
+describe('AUTH-HTTP-ROUTES — forgot-password (BE-REC-003)', () => {
+  it('responde 202 tanto para conta existente quanto inexistente', async () => {
+    const app = await makeApp();
+    await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/register',
+      payload: { email: EMAIL, password: STRONG },
+    });
+    const exists = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/forgot-password',
+      payload: { email: EMAIL },
+    });
+    assert.equal(exists.statusCode, 202);
+
+    const ghost = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/forgot-password',
+      payload: { email: 'ghost@example.com' },
+    });
+    assert.equal(ghost.statusCode, 202);
+    await app.close();
+  });
+
+  it('reset-password com token inválido -> 400 reset-token-invalid', async () => {
+    const app = await makeApp();
+    const res = await app.inject({
+      method: 'POST',
+      url: '/api/v2/auth/reset-password',
+      payload: { token: 'token-inexistente', newPassword: 'New-Str0ng-Phrase-2027!' },
+    });
+    assert.equal(res.statusCode, 400);
+    assert.equal((res.json() as { error: { code: string } }).error.code, 'reset-token-invalid');
+    await app.close();
+  });
+});
+
+// Sentinela para garantir que o composition memory sobe sem segredo externo (chaves ES256 efêmeras).
+before(() => {
+  assert.equal(typeof buildAuthHttpDeps, 'function');
+  assert.equal(typeof authHttpPlugin, 'function');
+});

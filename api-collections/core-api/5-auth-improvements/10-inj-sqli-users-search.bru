@@ -1,0 +1,31 @@
+meta {
+  name: INJ-1 SQLi no search de /users tratado como literal
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/v1/users?search=' OR 1=1--&pageSize=25
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  // INJ-1 de security-injection.md — expansao de 62-sql-injection-search.bru
+  // com assercion adicional de que nao houve dump da base inteira.
+  test("INJ-1 — SQLi no search nao causa 500 (query parametrizada)", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("INJ-1 — body.items e array", function () {
+    expect(res.getBody().items).to.be.an("array");
+  });
+  test("INJ-1 — body.meta tem totalItems", function () {
+    expect(res.getBody().meta).to.have.property("totalItems");
+  });
+  test("INJ-1 — payload SQLi nao retorna mais que pageSize itens (sem dump)", function () {
+    expect(res.getBody().items.length).to.be.at.most(25);
+  });
+}

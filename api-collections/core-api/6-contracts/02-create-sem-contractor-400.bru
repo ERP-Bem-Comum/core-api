@@ -1,0 +1,37 @@
+meta {
+  name: criar contrato sem contractor retorna 400 (FR-001)
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v2/contracts
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+body:json {
+  {
+    "title": "Contrato sem contratado",
+    "objective": "Objetivo qualquer",
+    "originalValue": { "cents": 50000 },
+    "startDate": "2026-01-01",
+    "endDate": "2026-12-31"
+  }
+}
+
+tests {
+  test("US1-2 — POST /contracts sem contractor retorna 400", function () {
+    expect(res.getStatus()).to.equal(400);
+  });
+
+  test("US1-2 — envelope de erro tem campo error", function () {
+    expect(res.getBody()).to.have.property("error");
+    expect(res.getBody().error).to.have.property("code");
+    expect(res.getBody().error).to.have.property("requestId");
+  });
+}

@@ -1,36 +1,26 @@
-import { type Result, ok, err } from '../../../../shared/result.ts';
-import { isUuidV4, newUuid } from '../../../../shared/id.ts';
-import type { Brand } from '../../../../shared/brand.ts';
+// Barrel — fragmentação do antigo `ids.ts` em 4 módulos (CTR-SHARED-VO-CANONICAL CA-5).
+//
+// Reexporta tipos com nome original e funções com prefixo do VO. Padrão D não
+// permite `import * as` apoiando 4 namespaces colidindo num mesmo barrel — por
+// isso o barrel só expõe funções com nome prefixado.
+//
+// Para consumir as funções no estilo namespace original, importe direto do
+// módulo fragmentado:
+//   import * as ContractId from './contract-id.ts';
+//   ContractId.generate(); ContractId.rehydrate(raw);
+//
+// Para apenas tipos, este barrel é confortável:
+//   import type { ContractId, AmendmentId } from './ids.ts';
 
-export type ContractId = Brand<string, 'ContractId'>;
-export type AmendmentId = Brand<string, 'AmendmentId'>;
-export type DocumentId = Brand<string, 'DocumentId'>;
-export type UserRef = Brand<string, 'UserRef'>;
+export type { ContractId, ContractIdError } from './contract-id.ts';
+export type { AmendmentId, AmendmentIdError } from './amendment-id.ts';
+export type { DocumentId, DocumentIdError } from './document-id.ts';
 
-export type ContractIdError = 'contract-id-invalid';
-export type AmendmentIdError = 'amendment-id-invalid';
-export type DocumentIdError = 'document-id-invalid';
-export type UserRefError = 'user-ref-invalid';
+export { generate as contractIdGenerate, rehydrate as contractIdRehydrate } from './contract-id.ts';
 
-export const ContractId = {
-  generate: (): ContractId => newUuid() as ContractId,
-  rehydrate: (raw: string): Result<ContractId, ContractIdError> =>
-    isUuidV4(raw) ? ok(raw as ContractId) : err('contract-id-invalid'),
-};
+export {
+  generate as amendmentIdGenerate,
+  rehydrate as amendmentIdRehydrate,
+} from './amendment-id.ts';
 
-export const AmendmentId = {
-  generate: (): AmendmentId => newUuid() as AmendmentId,
-  rehydrate: (raw: string): Result<AmendmentId, AmendmentIdError> =>
-    isUuidV4(raw) ? ok(raw as AmendmentId) : err('amendment-id-invalid'),
-};
-
-export const DocumentId = {
-  generate: (): DocumentId => newUuid() as DocumentId,
-  rehydrate: (raw: string): Result<DocumentId, DocumentIdError> =>
-    isUuidV4(raw) ? ok(raw as DocumentId) : err('document-id-invalid'),
-};
-
-export const UserRef = {
-  rehydrate: (raw: string): Result<UserRef, UserRefError> =>
-    isUuidV4(raw) ? ok(raw as UserRef) : err('user-ref-invalid'),
-};
+export { generate as documentIdGenerate, rehydrate as documentIdRehydrate } from './document-id.ts';

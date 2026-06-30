@@ -1,0 +1,32 @@
+meta {
+  name: create program nome invalido 422
+  type: http
+  seq: 13
+}
+
+post {
+  url: {{baseUrl}}/api/v1/programs
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{programsOperatorToken}}
+}
+
+body:json {
+  {
+    "name": "",
+    "sigla": "PRG03",
+    "director": null,
+    "generalCharacteristics": null,
+    "logoKey": null
+  }
+}
+
+tests {
+  test("PRG — POST /programs com nome vazio retorna 422 (domain) ou 400 (zod)", function () {
+    expect([400, 422]).to.include(res.getStatus());
+    expect(res.getStatus()).to.not.equal(500);
+  });
+}

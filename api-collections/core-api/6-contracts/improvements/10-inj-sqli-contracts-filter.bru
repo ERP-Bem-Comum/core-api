@@ -1,0 +1,36 @@
+meta {
+  name: INJ-4 SQLi no filtro de listagem de contracts seguro
+  type: http
+  seq: 10
+}
+
+get {
+  url: {{baseUrl}}/api/v2/contracts?title=' OR 1=1--
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{readerToken}}
+}
+
+tests {
+  // INJ-4 de security-injection.md — filtro de listagem de contracts
+  // tratado como literal pela query parametrizada (Drizzle ORM); nunca 500.
+  test("INJ-4 — SQLi no filtro de contracts nao causa 500", function () {
+    expect(res.getStatus()).to.not.equal(500);
+    expect([200, 422]).to.include(res.getStatus());
+  });
+
+  test("INJ-4 — se 200: body contem items como array", function () {
+    if (res.getStatus() === 200) {
+      expect(res.getBody()).to.have.property("items");
+      expect(res.getBody().items).to.be.an("array");
+    }
+  });
+
+  test("INJ-4 — se 200: meta presente (paginacao coerente)", function () {
+    if (res.getStatus() === 200) {
+      expect(res.getBody()).to.have.property("meta");
+    }
+  });
+}

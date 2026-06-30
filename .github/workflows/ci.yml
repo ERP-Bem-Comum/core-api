@@ -1,0 +1,46 @@
+name: ci
+
+# Gate de qualidade automatizado em PR — espelha o W3 local (AGENTS.md §"Pipeline
+# fail-first"): typecheck + format:check + lint + test (unit). Hoje o W3 só roda na
+# máquina do dev; este workflow torna o gate obrigatório e auditável em todo PR.
+#
+# Roda OFFLINE: os testes de integração (MySQL/MinIO) ficam atrás de opt-in
+# (*_INTEGRATION=1) e NÃO disparam aqui — `pnpm test` puro executa apenas a camada
+# unit. Integração continua via `pnpm run test:integration:*` (precisa de Docker).
+
+on:
+  pull_request:
+    branches: [dev, main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    name: typecheck + format + lint + test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        # ADR-0011 §"Pin de versões" — pin por SHA.
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Node 24 (runtime do --experimental-strip-types)
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '24'
+      - name: Habilita pnpm (corepack lê a versão do packageManager)
+        run: corepack enable
+      - name: Install (frozen-lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Typecheck
+        run: pnpm run typecheck
+      - name: Format check
+        run: pnpm run format:check
+      - name: Lint
+        run: pnpm run lint
+      - name: Test (unit)
+        run: pnpm test

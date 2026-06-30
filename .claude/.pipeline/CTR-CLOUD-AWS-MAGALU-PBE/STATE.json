@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "CTR-CLOUD-AWS-MAGALU-PBE",
+  "size": "XS",
+  "createdAt": "2026-05-22T13:32:49.723Z",
+  "closedAt": "2026-05-22T13:37:45.034Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "main-session",
+      "startedAt": "2026-05-22T13:37:43.032Z",
+      "finishedAt": "2026-05-22T13:37:43.285Z",
+      "rounds": 1,
+      "reportPath": "no-new-tests-doc-refactor",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "main-session",
+      "startedAt": "2026-05-22T13:37:43.542Z",
+      "finishedAt": "2026-05-22T13:37:43.782Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-05-22T13:37:44.029Z",
+      "finishedAt": "2026-05-22T13:37:44.276Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-05-22T13:37:44.518Z",
+      "finishedAt": "2026-05-22T13:37:44.775Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

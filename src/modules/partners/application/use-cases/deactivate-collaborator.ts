@@ -1,0 +1,73 @@
+/**
+ * Use case `deactivateCollaborator` — Active → Inactive (soft-delete; exige `disableBy`).
+ * rehydrate id → `findById` (not-found) → `Collaborator.deactivate(disableBy, now)` → `save`.
+ */
+
+import { type Result, ok, err } from '#src/shared/index.ts';
+import type { Clock } from '#src/shared/ports/clock.ts';
+import * as CollaboratorId from '#src/modules/partners/domain/collaborator/collaborator-id.ts';
+import * as Collaborator from '#src/modules/partners/domain/collaborator/collaborator.ts';
+import type { Collaborator as CollaboratorAggregate } from '#src/modules/partners/domain/collaborator/types.ts';
+import type { CollaboratorEvent } from '#src/modules/partners/domain/collaborator/events.ts';
+import type { CollaboratorError } from '#src/modules/partners/domain/collaborator/errors.ts';
+import type {
+  CollaboratorRepository,
+  CollaboratorRepositoryError,
+} from '#src/modules/partners/domain/collaborator/repository.ts';
+import type {
+  CollaboratorHistoryRepository,
+  CollaboratorHistoryError,
+} from '#src/modules/partners/application/ports/collaborator-history.ts';
+
+export type DeactivateCollaboratorCommand = Readonly<{ collaboratorId: string; disableBy: string }>;
+
+export type DeactivateCollaboratorError =
+  | 'deactivate-collaborator-invalid-id'
+  | 'deactivate-collaborator-not-found'
+  | CollaboratorError
+  | CollaboratorRepositoryError
+  | CollaboratorHistoryError;
+
+// `Collaborator` (não `InactiveCollaborator`): o domínio `Collaborator.deactivate` não
+// estreita o retorno (diferente de `Supplier.deactivate`). Alinhado à assinatura do domínio.
+export type DeactivateCollaboratorOutput = Readonly<{
+  collaborator: CollaboratorAggregate;
+  event: CollaboratorEvent;
+}>;
+
+type Deps = Readonly<{
+  collaboratorRepo: CollaboratorRepository;
+  historyRepo: CollaboratorHistoryRepository;
+  clock: Clock;
+}>;
+
+export const deactivateCollaborator =
+  (deps: Deps) =>
+  async (
+    cmd: DeactivateCollaboratorCommand,
+  ): Promise<Result<DeactivateCollaboratorOutput, DeactivateCollaboratorError>> => {
+    const id = CollaboratorId.rehydrate(cmd.collaboratorId);
+    if (!id.ok) return err('deactivate-collaborator-invalid-id');
+
+    const fetched = await deps.collaboratorRepo.findById(id.value);
+    if (!fetched.ok) return fetched;
+    if (fetched.value === null) return err('deactivate-collaborator-not-found');
+
+    const now = deps.clock.now();
+    const transition = Collaborator.deactivate(fetched.value, cmd.disableBy, now);
+    if (!transition.ok) return transition;
+
+    const saved = await deps.collaboratorRepo.save(transition.value.collaborator);
+    if (!saved.ok) return saved;
+
+    const recorded = await deps.historyRepo.record({
+      collaboratorId: cmd.collaboratorId,
+      eventType: 'CollaboratorDeactivated',
+      before: fetched.value,
+      after: transition.value.collaborator,
+      occurredAt: now,
+    });
+    if (!recorded.ok) return recorded;
+
+    return ok({ collaborator: transition.value.collaborator, event: transition.value.event });
+  };

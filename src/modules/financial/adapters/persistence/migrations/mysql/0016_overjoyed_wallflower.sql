@@ -1,0 +1,1 @@
+ALTER TABLE `fin_documents` ADD `approver_ref` varchar(36);

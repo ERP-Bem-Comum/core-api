@@ -1,0 +1,14 @@
+# Arquivos gitignored que devem ser copiados para todo novo worktree
+# criado via `claude --worktree`. Sintaxe é `.gitignore` style.
+# Doc: handbook/reference/claude-code/worktrees.md
+
+# Docker Compose secrets (gerados localmente por `pnpm run secrets:setup`)
+secrets/*.txt
+
+# Variáveis de ambiente (sempre locais, nunca versionadas)
+.env
+.env.local
+.env.*.local
+
+# Configs locais de outras ferramentas (Gemini CLI, etc.)
+.gemini/

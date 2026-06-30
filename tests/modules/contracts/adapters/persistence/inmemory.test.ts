@@ -1,31 +1,33 @@
 // Roda as suites de contrato contra os adapters InMemory.
-// Quando o W1 entregar o adapter Drizzle/SQLite, criaremos um arquivo
-// análogo `drizzle-sqlite.test.ts` chamando as MESMAS suites — qualquer
-// divergência semântica falha o build.
+// W0 RED — CTR-OUTBOX-INTEGRATION-IN-REPOS:
+//   InMemoryContractRepository e InMemoryAmendmentRepository agora recebem
+//   OutboxPort como argumento. InMemoryOutbox é injetado aqui.
+//   Cada `beforeEach` cria um InMemoryOutbox fresco (estado isolado por teste).
 
-import { InMemoryContractRepository } from '#src/modules/contracts/adapters/contract-repository.in-memory.ts';
-import { InMemoryAmendmentRepository } from '#src/modules/contracts/adapters/amendment-repository.in-memory.ts';
+import { InMemoryContractRepository } from '#src/modules/contracts/adapters/persistence/repos/contract-repository.in-memory.ts';
+import { InMemoryAmendmentRepository } from '#src/modules/contracts/adapters/persistence/repos/amendment-repository.in-memory.ts';
+import { InMemoryOutbox } from '#src/modules/contracts/adapters/outbox/outbox.in-memory.ts';
 
 import { runContractRepositoryContract } from './contract-repository.suite.ts';
 import { runAmendmentRepositoryContract } from './amendment-repository.suite.ts';
 
-// InMemory é síncrono; cada `beforeEach` constrói um handle novo, então não
-// precisamos de teardown — o repo anterior é descartado pelo GC.
-// `await Promise.resolve()` satisfaz a interface async dos factories
-// (que o adapter Drizzle/SQLite vai exigir) sem inventar I/O fake.
+// InMemory é síncrono; cada `beforeEach` constrói handle novo (descartado pelo GC).
+// `await Promise.resolve()` satisfaz a interface async dos factories.
 
 runContractRepositoryContract('InMemory', {
   make: async () => {
     await Promise.resolve();
-    return { repo: InMemoryContractRepository().repo };
+    const outbox = InMemoryOutbox();
+    return { repo: InMemoryContractRepository(outbox.port).repo };
   },
 });
 
 runAmendmentRepositoryContract('InMemory', {
   make: async () => {
     await Promise.resolve();
+    const outbox = InMemoryOutbox();
     return {
-      repo: InMemoryAmendmentRepository().repo,
+      repo: InMemoryAmendmentRepository(outbox.port).repo,
       // InMemory não tem FK — seed é no-op.
       seedContract: async () => {
         await Promise.resolve();

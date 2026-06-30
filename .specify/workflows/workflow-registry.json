@@ -1,0 +1,21 @@
+{
+  "schema_version": "1.0",
+  "workflows": {
+    "speckit": {
+      "name": "Full SDD Cycle",
+      "version": "1.0.0",
+      "description": "Runs specify \u2192 plan \u2192 tasks \u2192 implement with review gates",
+      "source": "bundled",
+      "installed_at": "2026-06-05T17:45:31.086375+00:00",
+      "updated_at": "2026-06-05T17:45:31.086380+00:00"
+    },
+    "core-api-sdd": {
+      "name": "core-api SDD (RED\u2192YELLOW\u2192GREEN, m\u00e1ximo rigor)",
+      "version": "2.0.0",
+      "description": "Pipeline spec-driven da core-api: descoberta \u2192 SPEC \u2192 dom\u00ednio/BCs \u2192 ADRs \u2192 m\u00e9tricas \u2192 plano \u2192 BDD \u2192 TDD (RED) \u2192 implementa\u00e7\u00e3o (YELLOW) \u2192 review \u2192 gate W3 (GREEN). M\u00e1ximo rigor: cada fase consulta a persona-consultora ACDG (prompts MCP /acdg-skills:*) e decis\u00f5es-chave (DDD, ADR, TDD, review) exigem cita\u00e7\u00e3o can\u00f4nica literal (\u22654 linhas) via as tools skills_buscar/skills_citar.",
+      "source": ".specify/workflows/core-api-sdd/workflow.yml",
+      "installed_at": "2026-06-05T17:58:49.968469+00:00",
+      "updated_at": "2026-06-05T17:58:49.968588+00:00"
+    }
+  }
+}

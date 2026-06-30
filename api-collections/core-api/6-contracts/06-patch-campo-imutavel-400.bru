@@ -1,0 +1,33 @@
+meta {
+  name: patch com campo imutavel (originalValue) retorna 400
+  type: http
+  seq: 6
+}
+
+patch {
+  url: {{baseUrl}}/api/v2/contracts/{{contractCreatedId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+body:json {
+  {
+    "originalValue": { "cents": 1 }
+  }
+}
+
+tests {
+  test("US2-2 — PATCH com campo imutavel retorna 400 (Zod strict)", function () {
+    expect(res.getStatus()).to.equal(400);
+  });
+
+  test("US2-2 — envelope de erro tem campo error.code", function () {
+    expect(res.getBody()).to.have.property("error");
+    expect(res.getBody().error).to.have.property("code");
+    expect(res.getBody().error).to.have.property("requestId");
+  });
+}

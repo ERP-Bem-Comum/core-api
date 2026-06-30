@@ -1,0 +1,12 @@
+{
+  "_doc": "SLO do dead-man's switch (ADR-0042 D3 / #72). threshold_days = nº de dias sem ping após o qual o emitter é considerado MORTO e o payload dispara. Lido pelos Auditores (#70 GitHub Actions e #71 ERP-INFRA).",
+  "default_threshold_days": 3,
+  "emitters": [
+    {
+      "id": "sweeper-vps-qa",
+      "threshold_days": 2,
+      "expected_interval_hours": 24,
+      "description": "contracts-sweeper (auto-expire D+1) — cron diário; morto após 2 dias sem ping (1 dia de grace sobre a cadência)"
+    }
+  ]
+}

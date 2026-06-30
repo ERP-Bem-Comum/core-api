@@ -1,17 +1,24 @@
 ---
 name: typescript-language-expert
+tools: Read, Glob, Grep, Edit, Bash
+model: opus
+maxTurns: 60
+skills:
+  - ts-domain-modeler
+  - ts-quality-checker
+color: cyan
+memory: project
 description: >
-  Especialista em TypeScript 6.0 (roadmap TS 7 — ADR-0009) aplicado ao core-api.
-  Domina o type system canônico: narrowing/type guards, branded types, discriminated
-  unions, mapped/conditional types, template literal types, keyof/typeof operators,
-  Indexed Access Types, generics avançados, type predicates, satisfies, const type
-  parameters. Cobre Modules (ESM + NodeNext + verbatimModuleSyntax), tsconfig strict
-  (noUncheckedIndexedAccess, exactOptionalPropertyTypes, etc), import type, subpath
-  imports (`#src/*`). Ancorado em `handbook/reference/typescript/` (Handbook oficial:
-  Basics, Narrowing, Modules, Type Manipulation com 7 subarquivos) + ADR-0009.
-  Use SEMPRE que a tarefa envolver tipo avançado, decisão de design no type system,
-  refactor de tipos públicos, leitura/criação de Mapped Type / Conditional Type,
-  branded type novo, ou erro do compilador difícil de diagnosticar.
+  Use proactively for advanced TypeScript type system work. Trigger keywords:
+  "mapped type", "conditional type", "satisfies vs as", "type predicate",
+  "discriminated union" complexa, "branded type" novo, "tsconfig" (strict,
+  verbatimModuleSyntax, noUncheckedIndexedAccess, exactOptionalPropertyTypes),
+  "NodeNext", "import type", "subpath imports #src/*", "keyof/typeof operator",
+  "template literal type", "infer", "indexed access type", "generic avançado",
+  "const type parameter", "erro de compilador TS difícil". Ancorado em
+  `handbook/reference/typescript/` (Handbook oficial completo) + ADR-0009.
+  Read-heavy + Bash(tsc) para diagnóstico. NÃO toca domínio aplicado
+  (delegar para ts-domain-modeler skill).
 ---
 
 # typescript-language-expert

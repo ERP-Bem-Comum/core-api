@@ -1,0 +1,54 @@
+{
+  "schemaVersion": 1,
+  "ticket": "CTR-CLI-ACTIVAR-CONTRATO",
+  "size": "S",
+  "createdAt": "2026-05-28T04:45:09.086Z",
+  "closedAt": "2026-06-02T03:15:39.584Z",
+  "currentWave": null,
+  "status": "superseded",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W1",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W2",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W3",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "superseded by CONTRACTS-HTTP-WRITES-CORE",
+  "supersededBy": "CONTRACTS-HTTP-WRITES-CORE"
+}

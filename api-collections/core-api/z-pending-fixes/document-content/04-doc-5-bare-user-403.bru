@@ -1,0 +1,20 @@
+meta {
+  name: DOC-5 bareUserToken sem contract:read retorna 403
+  type: http
+  seq: 5
+}
+
+get {
+  url: {{baseUrl}}/api/v2/contracts/{{contractIdForDoc}}/documents/{{documentId}}/content
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{bareUserToken}}
+}
+
+tests {
+  test("DOC-5 — status 403", function () {
+    expect(res.getStatus()).to.equal(403);
+  });
+}

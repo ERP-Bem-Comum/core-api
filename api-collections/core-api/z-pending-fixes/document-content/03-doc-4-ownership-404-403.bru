@@ -1,0 +1,20 @@
+meta {
+  name: DOC-4 documento de outro contrato retorna 404 ou 403
+  type: http
+  seq: 4
+}
+
+get {
+  url: {{baseUrl}}/api/v2/contracts/00000000-0000-4000-a000-999999999999/documents/{{documentId}}/content
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+tests {
+  test("DOC-4 — status 404 ou 403 (sem vazar bytes)", function () {
+    expect([404, 403]).to.include(res.getStatus());
+  });
+}

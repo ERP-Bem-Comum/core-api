@@ -1,0 +1,30 @@
+meta {
+  name: PAG-6d GET /suppliers?page=999999 alem do total
+  type: http
+  seq: 23
+}
+
+get {
+  url: {{baseUrl}}/api/v1/suppliers?page=999999&pageSize=25
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{partnersOperatorToken}}
+}
+
+tests {
+  // PAG-6 variacao page alem do total de failures-pagination-boundary.md
+  test("PAG-6d — page alem do total retorna 200 com items vazio; nunca 500", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getStatus()).to.not.equal(500);
+  });
+  test("PAG-6d — items e array vazio", function () {
+    expect(res.getBody().items).to.be.an("array");
+    expect(res.getBody().items.length).to.equal(0);
+  });
+  test("PAG-6d — meta.totalItems reflete o total real (coerente)", function () {
+    expect(res.getBody().meta).to.have.property("totalItems");
+    expect(res.getBody().meta.totalItems).to.be.at.least(0);
+  });
+}

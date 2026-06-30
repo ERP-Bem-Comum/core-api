@@ -1,0 +1,53 @@
+meta {
+  name: LOC-2 POST users retorna Location (REPROVA ate fix)
+  type: http
+  seq: 2
+  docs: Regressao HTTP-LOCATION-HEADER-201 — auth/users nao retorna header Location no 201. Reprova ate o fix adicionar .header('location', ...) ao handler.
+}
+
+post {
+  url: {{baseUrl}}/api/v1/users
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+script:pre-request {
+  // Email unico por execucao para evitar conflito de unicidade.
+  bru.setVar("locUserEmail", "loc-regression-" + Date.now() + "@example.com");
+}
+
+body:json {
+  {
+    "name": "LOC Regressao User",
+    "cpf": "52998224725",
+    "email": "{{locUserEmail}}",
+    "telephone": "15997133502"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    const loc = res.getHeader("location");
+    const idFromBody = res.getBody() && res.getBody().id;
+    const id = loc ? loc.split("/").pop() : idFromBody;
+    if (id) bru.setVar("locUserId", id);
+  }
+}
+
+tests {
+  test("LOC-2 — status 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+  test("LOC-2 — header Location presente (REPROVA ate fix)", function () {
+    const loc = res.getHeader("location");
+    expect(loc).to.be.a("string");
+  });
+  test("LOC-2 — Location contem /users/ (REPROVA ate fix)", function () {
+    const loc = res.getHeader("location");
+    expect(loc).to.include("/users/");
+  });
+}

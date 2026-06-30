@@ -1,0 +1,16 @@
+meta {
+  name: US2 catalog sem token
+  type: http
+  seq: 91
+}
+
+get {
+  url: {{baseUrl}}/api/v1/permissions
+  auth: none
+}
+
+tests {
+  test("SEC — 401 sem token", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}

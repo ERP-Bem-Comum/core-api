@@ -1,0 +1,29 @@
+meta {
+  name: logo upload tipo nao suportado 415
+  type: http
+  seq: 17
+}
+
+post {
+  url: {{baseUrl}}/api/v1/programs/{{programCreatedId}}/logo
+  body: text
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{programsOperatorToken}}
+}
+
+headers {
+  Content-Type: application/pdf
+}
+
+body:text {
+  fake-pdf-content
+}
+
+tests {
+  test("PRG — POST /programs/:id/logo com tipo nao suportado retorna 415", function () {
+    expect(res.getStatus()).to.equal(415);
+  });
+}

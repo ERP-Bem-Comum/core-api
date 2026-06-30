@@ -1,0 +1,32 @@
+meta {
+  name: reactivate program
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/programs/{{programCreatedId}}/reactivate
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{programsOperatorToken}}
+}
+
+tests {
+  test("PRG — POST /programs/:id/reactivate retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("PRG — status ATIVO apos reativacao", function () {
+    expect(res.getBody().status).to.equal("ATIVO");
+  });
+
+  test("PRG — corpo completo retornado", function () {
+    const body = res.getBody();
+    expect(body).to.have.property("id");
+    expect(body).to.have.property("version");
+    expect(body).to.have.property("status");
+  });
+}

@@ -1,0 +1,32 @@
+meta {
+  name: deactivate program
+  type: http
+  seq: 8
+}
+
+post {
+  url: {{baseUrl}}/api/v1/programs/{{programCreatedId}}/deactivate
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{programsOperatorToken}}
+}
+
+tests {
+  test("PRG — POST /programs/:id/deactivate retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("PRG — status INATIVO apos desativacao", function () {
+    expect(res.getBody().status).to.equal("INATIVO");
+  });
+
+  test("PRG — corpo completo retornado", function () {
+    const body = res.getBody();
+    expect(body).to.have.property("id");
+    expect(body).to.have.property("version");
+    expect(body).to.have.property("status");
+  });
+}

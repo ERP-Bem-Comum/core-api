@@ -1,0 +1,22 @@
+meta {
+  name: reactivate collaborator
+  type: http
+  seq: 10
+}
+
+post {
+  url: {{baseUrl}}/api/v1/collaborators/{{collaboratorCreatedId}}/reactivate
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{partnersOperatorToken}}
+}
+
+tests {
+  // POST reactivate responde 200 sem corpo; a transicao e validada pelo status.
+  test("P3 — POST /collaborators/:id/reactivate retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

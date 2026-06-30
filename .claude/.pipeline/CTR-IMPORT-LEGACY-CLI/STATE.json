@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "CTR-IMPORT-LEGACY-CLI",
+  "size": "M",
+  "createdAt": "2026-05-26T02:29:15.829Z",
+  "closedAt": "2026-05-26T02:44:47.927Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-05-26T02:29:16.160Z",
+      "finishedAt": "2026-05-26T02:32:36.051Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "application-cli-builder",
+      "startedAt": "2026-05-26T02:32:36.373Z",
+      "finishedAt": "2026-05-26T02:41:26.348Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-05-26T02:41:26.690Z",
+      "finishedAt": "2026-05-26T02:43:59.599Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-05-26T02:43:59.912Z",
+      "finishedAt": "2026-05-26T02:44:47.609Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "ALL-GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

@@ -1,0 +1,36 @@
+meta {
+  name: update program version conflict
+  type: http
+  seq: 7
+}
+
+put {
+  url: {{baseUrl}}/api/v1/programs/{{programCreatedId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{programsOperatorToken}}
+}
+
+body:json {
+  {
+    "name": "Programa Conflito",
+    "sigla": "PRG01",
+    "director": null,
+    "generalCharacteristics": null,
+    "logoKey": null,
+    "version": 1
+  }
+}
+
+tests {
+  test("PRG — PUT /programs/:id com version desatualizada retorna 409", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+
+  test("PRG — erro program-version-conflict", function () {
+    expect(res.getBody().error.code).to.equal("program-version-conflict");
+  });
+}

@@ -1,0 +1,34 @@
+meta {
+  name: DIST-4 distrato sem documento assinado retorna 422
+  type: http
+  seq: 7
+}
+
+post {
+  url: {{baseUrl}}/api/v2/contracts/{{contractIdB}}/end
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+body:json {
+  {
+    "kind": "Terminate",
+    "terminatedAt": "2026-06-01",
+    "reason": "Sem documento — deve rejeitar com 422"
+  }
+}
+
+tests {
+  test("DIST-4 — status 422", function () {
+    expect(res.getStatus()).to.equal(422);
+  });
+  test("DIST-4 — error.code === terminate-no-signed-document", function () {
+    const body = res.getBody();
+    const code = (body.error && body.error.code) ?? body.code;
+    expect(code).to.equal("terminate-no-signed-document");
+  });
+}

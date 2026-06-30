@@ -1,0 +1,37 @@
+-- ADR-0020/0014: ENGINE/charset e COLLATE utf8mb4_bin em id/cpf editados à mão
+-- (drizzle-kit 0.45.x não emite charset/collate). Ver schemas/mysql.ts §CHARSET.
+CREATE TABLE `par_collaborators` (
+	`id` varchar(36) COLLATE utf8mb4_bin NOT NULL,
+	`name` varchar(255) NOT NULL,
+	`email` varchar(255) NOT NULL,
+	`cpf` varchar(11) COLLATE utf8mb4_bin NOT NULL,
+	`occupation_area` varchar(10) NOT NULL,
+	`role` varchar(255) NOT NULL,
+	`start_of_contract` datetime(3) NOT NULL,
+	`employment_relationship` varchar(5) NOT NULL,
+	`registration_status` varchar(20) NOT NULL,
+	`rg` varchar(20),
+	`date_of_birth` datetime(3),
+	`gender_identity` varchar(30),
+	`race` varchar(30),
+	`education` varchar(30),
+	`food_category` varchar(20),
+	`food_category_description` varchar(255),
+	`complete_address` varchar(500),
+	`telephone` varchar(30),
+	`emergency_contact_name` varchar(255),
+	`emergency_contact_telephone` varchar(30),
+	`allergies` varchar(500),
+	`biography` varchar(2000),
+	`experience_in_the_public_sector` boolean,
+	`active` boolean NOT NULL DEFAULT true,
+	`disable_by` varchar(40),
+	`deactivated_at` datetime(3),
+	`created_at` datetime(3) NOT NULL,
+	`updated_at` datetime(3) NOT NULL,
+	CONSTRAINT `par_collaborators_id` PRIMARY KEY(`id`),
+	CONSTRAINT `par_collaborators_cpf_idx` UNIQUE(`cpf`),
+	CONSTRAINT `par_collaborators_email_idx` UNIQUE(`email`),
+	CONSTRAINT `par_collaborators_soft_delete_chk` CHECK(((`par_collaborators`.`active` = FALSE) = (`par_collaborators`.`deactivated_at` IS NOT NULL))
+        AND ((`par_collaborators`.`active` = FALSE) = (`par_collaborators`.`disable_by` IS NOT NULL)))
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

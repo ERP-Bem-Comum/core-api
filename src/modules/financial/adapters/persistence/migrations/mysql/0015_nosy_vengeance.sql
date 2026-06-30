@@ -1,0 +1,2 @@
+ALTER TABLE `fin_documents` ADD `payee_kind` varchar(16);--> statement-breakpoint
+ALTER TABLE `fin_documents` ADD CONSTRAINT `fin_documents_payee_kind_chk` CHECK (`fin_documents`.`payee_kind` IS NULL OR `fin_documents`.`payee_kind` IN ('supplier','financier','act','collaborator'));

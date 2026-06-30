@@ -1,0 +1,2 @@
+ALTER TABLE `ctr_documents` DROP CONSTRAINT `ctr_documents_categoria_chk`;--> statement-breakpoint
+ALTER TABLE `ctr_documents` ADD CONSTRAINT `ctr_documents_categoria_chk` CHECK (`ctr_documents`.`categoria` IN ('signed_contract','signed_amendment','signed_termination','opinion','certificate','justification','technical_attachment','publication','other'));

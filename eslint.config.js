@@ -16,6 +16,23 @@ export default tseslint.config(
       // tests/reports/ contém scripts ad-hoc de investigação (probes, dumps),
       // não código de produção/teste.
       'tests/reports/**',
+      // tools/bugs-scripts/ — scripts de diagnóstico black-box descartáveis
+      // (já gitignored); não entram em nenhum tsconfig (projectService falha).
+      'tools/bugs-scripts/**',
+      // specs/ guarda artefatos spec-kit (SDD). Os contracts/*.ts são esboços
+      // de ports para documentar design — não entram em nenhum tsconfig.
+      'specs/**',
+      // Worktrees de sessões paralelas do Claude Code são cópias completas de
+      // src/ e tests/ de outras branches. O .gitignore já as exclui, mas o flat
+      // config do ESLint NÃO lê .gitignore — sem isto o projectService type-aware
+      // ingere ~1748 .ts extras e estoura o heap do V8 (OOM no `pnpm run lint`).
+      '.claude/**',
+      '.agents/**',
+      // Worktrees de épico criados na raiz (`epic/<branch>`, convenção do dev):
+      // mesmo caso dos worktrees do Claude — cópia completa de src/ e tests/ de
+      // outra branch. Sem esta exclusão o projectService ingere os .ts extras e
+      // estoura o heap (OOM no lint), além de lintar código de outra branch.
+      'epic/**',
     ],
   },
 
@@ -48,6 +65,39 @@ export default tseslint.config(
           selector: 'ClassExpression',
           message:
             'Classes são proibidas no projeto — use `type Readonly<{}>` + funções standalone.',
+        },
+      ],
+
+      // Libs proibidas — ADR-0011 §4 (supply-chain hardening).
+      'no-restricted-imports': 'off',
+      '@typescript-eslint/no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: 'axios',
+              message:
+                'Proibida (ADR-0011 §4): supply chain compromise em mar/2026. Use `fetch` global.',
+            },
+            {
+              name: 'request',
+              message: 'Proibida (ADR-0011 §4): deprecated desde 2020. Use `fetch` global.',
+            },
+            {
+              name: 'moment',
+              message: 'Proibida (ADR-0011 §4): manutenção mínima. Use `Intl` ou `date-fns`.',
+            },
+            {
+              name: 'crypto-js',
+              message: 'Proibida (ADR-0011 §4): inativo. Use Web Crypto nativo (`crypto.subtle`).',
+            },
+          ],
+          patterns: [
+            {
+              group: ['lodash', 'lodash/*'],
+              message: 'Proibida (ADR-0011 §4): surface area enorme. O runtime nativo cobre.',
+            },
+          ],
         },
       ],
 
@@ -235,12 +285,30 @@ export default tseslint.config(
   },
 
   // -----------------------------------------------------------
+  // Borda HTTP — adapter Fastify (ADR-0025): tipos externos mutáveis
+  // (FastifyRequest/FastifyReply) e handlers que retornam reply.send()
+  // (promise) sem await. Mesmas folgas dos demais adapters.
+  // ADR-0028: shell transversal em src/shared/http; HTTP de feature em
+  // src/modules/<m>/adapters/http.
+  // -----------------------------------------------------------
+  {
+    files: ['src/shared/http/**/*.ts', 'src/modules/*/adapters/http/**/*.ts'],
+    rules: {
+      '@typescript-eslint/prefer-readonly-parameter-types': 'off',
+      '@typescript-eslint/promise-function-async': 'off',
+      '@typescript-eslint/require-await': 'off',
+    },
+  },
+
+  // -----------------------------------------------------------
   // Testes — node:test design + narrowing depois de cast
   // -----------------------------------------------------------
   {
     files: ['tests/**/*.ts'],
     rules: {
       '@typescript-eslint/no-floating-promises': 'off',
+      // Handlers/fixtures inline podem retornar promise sem async.
+      '@typescript-eslint/promise-function-async': 'off',
       '@typescript-eslint/no-unnecessary-condition': 'off',
       '@typescript-eslint/no-non-null-assertion': 'off',
       '@typescript-eslint/no-unused-expressions': 'off',
@@ -256,6 +324,10 @@ export default tseslint.config(
       '@typescript-eslint/strict-boolean-expressions': 'off',
       // init-declarations: testes podem ter let sem init em alguns helpers
       '@typescript-eslint/init-declarations': 'off',
+      // Spy+restore de metodo de objeto (ex.: `const restore = process.stderr.write; ...;
+      // process.stderr.write = restore;`) e idioma de teste: o metodo nunca e chamado
+      // destacado, so reatribuido ao mesmo objeto -> o aviso de `this`-binding e falso-positivo.
+      '@typescript-eslint/unbound-method': 'off',
     },
   },
 

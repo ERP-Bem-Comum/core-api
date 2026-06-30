@@ -1,0 +1,1 @@
+ALTER TABLE `fin_documents` ADD `competencia` varchar(7);

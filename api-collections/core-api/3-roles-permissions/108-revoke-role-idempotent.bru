@@ -1,0 +1,21 @@
+meta {
+  name: US4 revoke role idempotente
+  type: http
+  seq: 108
+}
+
+delete {
+  url: {{baseUrl}}/api/v1/users/{{bareUserId}}/roles/{{adminRoleId}}
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+tests {
+  test("CA — 200 revoked:true (idempotente)", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().revoked).to.equal(true);
+  });
+}

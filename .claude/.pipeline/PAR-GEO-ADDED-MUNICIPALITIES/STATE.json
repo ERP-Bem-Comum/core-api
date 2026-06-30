@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "PAR-GEO-ADDED-MUNICIPALITIES",
+  "size": "S",
+  "createdAt": "2026-06-09T21:10:01.739Z",
+  "closedAt": "2026-06-09T21:16:47.047Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-06-09T21:10:03.125Z",
+      "finishedAt": "2026-06-09T21:11:41.086Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "ports-and-adapters",
+      "startedAt": "2026-06-09T21:11:41.618Z",
+      "finishedAt": "2026-06-09T21:16:44.289Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-06-09T21:16:44.819Z",
+      "finishedAt": "2026-06-09T21:16:45.335Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-06-09T21:16:45.919Z",
+      "finishedAt": "2026-06-09T21:16:46.485Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

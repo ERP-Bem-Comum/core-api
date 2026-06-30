@@ -1,0 +1,25 @@
+meta {
+  name: deactivate program already inactive
+  type: http
+  seq: 9
+}
+
+post {
+  url: {{baseUrl}}/api/v1/programs/{{programCreatedId}}/deactivate
+  body: none
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{programsOperatorToken}}
+}
+
+tests {
+  test("PRG — desativar programa ja inativo retorna 409", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+
+  test("PRG — erro program-not-active", function () {
+    expect(res.getBody().error.code).to.equal("program-not-active");
+  });
+}

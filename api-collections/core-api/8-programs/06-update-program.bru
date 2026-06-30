@@ -1,0 +1,50 @@
+meta {
+  name: update program
+  type: http
+  seq: 6
+}
+
+put {
+  url: {{baseUrl}}/api/v1/programs/{{programCreatedId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{programsOperatorToken}}
+}
+
+body:json {
+  {
+    "name": "Programa E2E Bruno Atualizado",
+    "sigla": "PRG01",
+    "director": "Novo Diretor E2E",
+    "generalCharacteristics": "Caracteristicas atualizadas pelo runner",
+    "logoKey": null,
+    "version": 1
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    bru.setVar("programCreatedVersion", res.getBody().version);
+  }
+}
+
+tests {
+  test("PRG — PUT /programs/:id retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+
+  test("PRG — nome atualizado no corpo", function () {
+    expect(res.getBody().name).to.equal("Programa E2E Bruno Atualizado");
+  });
+
+  test("PRG — version incrementada apos update", function () {
+    expect(res.getBody().version).to.equal(2);
+  });
+
+  test("PRG — status permanece ATIVO", function () {
+    expect(res.getBody().status).to.equal("ATIVO");
+  });
+}

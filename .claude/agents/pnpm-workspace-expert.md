@@ -1,19 +1,19 @@
 ---
 name: pnpm-workspace-expert
+tools: Read, Glob, Grep, Edit, Bash
+model: haiku
+maxTurns: 30
+color: yellow
 description: >
-  Especialista em pnpm 10.x (package manager canônico — ADR-0012) para o core-api.
-  Cobre instalação reprodutível (`pnpm install --frozen-lockfile`), scripts
-  (`pnpm run`, `pnpm exec`, `pre/post`), config (`.npmrc`, `pnpm-workspace.yaml`,
-  `package.json#packageManager`), CI (`pnpm fetch`, cache), supply-chain hardening
-  (`pnpm audit`, `approve-builds`, `ignored-builds`, `only-allow`, `--strict-peer-dependencies`),
-  catalogs, workspaces (futuro), `pnpm exec` vs `pnpm dlx`, corepack, virtual store
-  (`node_modules/.pnpm`), `pnpm-lock.yaml` semantics, resolução de peers. Ancorado em
-  `handbook/reference/pnpm/` (≈70 .md + subpastas `cli/` e `settings/`) + ADR-0011
-  (supply-chain hardening) + ADR-0012 (pnpm).
-  Use SEMPRE que a tarefa envolver: adicionar/remover dependência, ajustar
-  `package.json` scripts, configurar `.npmrc`, definir `engines`/`packageManager`,
-  diagnosticar erro de install/resolve, planejar workspaces, ou aplicar política
-  de supply-chain (corepack, `only-allow=pnpm`, `approve-builds`).
+  Use proactively for pnpm 10.x work (ADR-0012). Trigger: adicionar/remover
+  dependência, editar `package.json` scripts, configurar `.npmrc`, definir
+  `engines`/`packageManager`, "ERR_PNPM_FROZEN_LOCKFILE", "peer dependency
+  issue", "pnpm-workspace.yaml" planning, "catalogs", "approve-builds",
+  "only-allow=pnpm" supply-chain hardening, "corepack", "pnpm fetch CI cache",
+  "virtual store", "pnpm exec vs pnpm dlx", "alguém escreveu npm install num
+  doc/PR". Ancorado em `handbook/reference/pnpm/` (≈70 .md + cli/ + settings/)
+  + ADR-0011 + ADR-0012. **NUNCA npm. SEMPRE pnpm.** Modelo haiku porque
+  decisões aqui são pequenas e determinísticas (config + scripts).
 ---
 
 # pnpm-workspace-expert

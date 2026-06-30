@@ -10,12 +10,12 @@
 
 | # | Status | Última atualização |
 | :--- | :--- | :--- |
-| Total | 15 | 2026-05-18 |
-| `Decided` | 9 | — |
-| `Pending Response` | 1 | — |
+| Total | 21 | 2026-05-27 |
+| `Decided` | 14 | — |
+| `Pending Response` | 0 | — |
 | `Obsoleta (revisada)` | 1 | — |
-| `Open` | 4 | — |
-| `Deferred` | 0 | — |
+| `Open` | 5 | — |
+| `Deferred` | 1 | — |
 
 ---
 
@@ -35,12 +35,15 @@
 | [0009](./0009-email-strategy-nodemailer-with-adapter.md) | Email — Nodemailer com Service Adapter | [ADR-0010](../architecture/adr/0010-email-port-adapter-pattern.md) | 2026-04-28 |
 | [0010](./0010-mysql-engine-correction.md) | Correção de assunção — engine real é MySQL 8 | [ADR-0013](../architecture/adr/0013-mysql-database-engine.md), [ADR-0014](../architecture/adr/0014-mysql-database-isolation.md), [ADR-0015](../architecture/adr/0015-mysql-outbox-pattern.md) | 2026-04-28 |
 | [0013](./0013-local-dev-simulator-and-ci.md) | Simulador local da cloud (Devbox + Tilt + docker-compose) + CI GitHub Actions | (sem ADR ainda — implementação pendente) | 2026-05-13 |
+| [0003](./0003-multi-cloud-strategy.md) | Estratégia multi-cloud (originalmente AWS+GCP) | [ADR-0021](../architecture/adr/0021-aws-primary-magalu-pbe-supersedes-0007.md) (supersedes [ADR-0007](../architecture/adr/0007-multi-cloud-aws-gcp.md)) | 2026-05-22 |
+| [0017](./0017-timeline-read-model-vs-adr-0020.md) | Timeline read-model vs. ADR-0020 (sem JSON) | [ADR-0022](../architecture/adr/0022-read-models-via-projection-over-event-stream.md) (projeção; outbox é o log append-only) | 2026-05-26 |
+| [0018](./0018-auditlog-transversal-todos-bcs.md) | `AuditLogGenerated` transversal | [ADR-0022](../architecture/adr/0022-read-models-via-projection-over-event-stream.md) — **decided-deferred** (padrão de projeção; materialização espera RBAC) | 2026-05-26 |
+| [0020](./0020-temporal-api-adoption.md) | Adoção do Temporal API (ES2026) | Opção C — VO `PlainDate` agora, `Temporal.PlainDate` nativo no Node 26 LTS; ADR futuro (gatilho 2026-10-28) | 2026-05-26 |
+| [0021](./0021-contract-status-lifecycle-http.md) | Ciclo de vida (status) do Contrato — 3 vs. 5 estados | P.O.: **4 estados** (`Pendente → Em Andamento → Finalizado/Distrato`). **Aciona revisão do agregado `Contract`** (novo estado `Pendente`) + atualização do handbook antes do HTTP | 2026-05-27 |
 
 ### ⏳ Pending Response
 
-| # | Título | Aguardando | Bloqueio |
-| :--- | :--- | :--- | :--- |
-| [0003](./0003-multi-cloud-strategy.md) | Estratégia multi-cloud (AWS + GCP) | Codebit (Maria Isabel) | Bloqueia provisionamento de infra e início real de implementação |
+_Nenhuma._
 
 ### 🟢 Open
 
@@ -50,10 +53,13 @@
 | [0012](./0012-bff-managed-api-gateway-vs-fastify.md) | BFF — AWS API Gateway managed vs. Fastify burro próprio | Banca interna + DevOps + dono do legado | Bloqueia skeleton do `bff-gateway`. Possível supersede do ADR-0005. Legado precisa de `setGlobalPrefix('api/v1')` antes de viabilizar Hipótese A |
 | [0014](./0014-schema-legado-vs-modelo-alvo.md) | Schema legado real vs. modelo alvo do handbook (4 perguntas Q1–Q4) | Banca interna + P.O. | Bloqueia (Q1) revisão do ADR-0017; (Q2) abertura de BC novo de Planejamento Orçamentário; (Q3) política de migração de `contracts`; (Q4) primeiro vertical slice |
 | [0015](./0015-charset-drizzle-roadmap.md) | Charset/collate por tabela via API drizzle-orm — roadmap | Upstream `drizzle-team/drizzle-orm` | Dívida tipográfica não-bloqueante: hoje SQL manual na migration `0000_*.sql` com comentário forte no schema TS. Reabrir quando drizzle-orm suportar `charset`/`collate` table-level + per-column |
+| [0019](./0019-hard-delete-tripwire-sem-superficie.md) | `TentativaDeExclusaoDetectada` — tripwire sem superfície | P.O. + decisão de infra/segurança | Não há comando de deleção física no sistema; melhor prevenir por privilégio MySQL que detectar por evento. Acopla a 0018 + RBAC |
 
 ### 🔵 Deferred
 
-_Nenhuma._
+| # | Título | Quando reabrir | Bloqueio |
+| :--- | :--- | :--- | :--- |
+| [0016](./0016-nodejs-native-eventbus-pubsub-observer.md) | Soluções nativas Node.js para EventBus / Pub-Sub / Observer | Quando surgir o primeiro caso real de evento intra-módulo (provavelmente `ContractCreated` → adapter outbox) | Nenhum — estudo arquivado como watchlist; regra provisória definida na seção 5 |
 
 ---
 
@@ -79,18 +85,30 @@ _Nenhuma._
 ### Stack & Versões
 - [0004 — Node 24 + TypeScript 7](./0004-node-version-and-typescript-future.md)
 - [0006 — pnpm vs Bun](./0006-package-manager-pnpm-vs-bun.md)
+- [0020 — Adoção do Temporal API (ES2026)](./0020-temporal-api-adoption.md)
 
 ### Segurança & Governance
 - [0005 — Supply chain Axios](./0005-supply-chain-axios-and-dependency-hardening.md)
 
 ### Reporting & Auditoria
 - [0011 — Auditoria fiscal cross-período (Strangler Fig)](./0011-auditoria-fiscal-cross-periodo.md)
+- [0018 — AuditLogGenerated transversal a todos os BCs](./0018-auditlog-transversal-todos-bcs.md)
+
+### Segurança & Imutabilidade
+- [0019 — TentativaDeExclusaoDetectada (tripwire sem superfície)](./0019-hard-delete-tripwire-sem-superficie.md)
+
+### Read-models & CQRS
+- [0017 — Timeline (Memória Operacional) read-model vs. ADR-0020](./0017-timeline-read-model-vs-adr-0020.md)
 
 ### Descoberta de Domínio
 - [0014 — Schema legado vs. modelo alvo](./0014-schema-legado-vs-modelo-alvo.md)
+- [0021 — Ciclo de vida (status) do Contrato — 3 vs. 5 estados](./0021-contract-status-lifecycle-http.md)
 
 ### Persistência & Dívida Tipográfica
 - [0015 — Charset/collate por tabela via drizzle-orm](./0015-charset-drizzle-roadmap.md)
+
+### Eventos & Mensageria Intra-Processo
+- [0016 — EventBus / Pub-Sub / Observer nativos do Node.js](./0016-nodejs-native-eventbus-pubsub-observer.md)
 
 ---
 

@@ -1,7 +1,11 @@
-import { type Result, ok, err } from '../../../../shared/result.ts';
-import { ContractId, type ContractIdError } from '../../domain/shared/ids.ts';
+import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
+import * as ContractId from '../../domain/shared/contract-id.ts';
+import type { ContractIdError } from '../../domain/shared/contract-id.ts';
 import type { Contract } from '../../domain/contract/types.ts';
-import type { ContractRepository, ContractRepositoryError } from '../ports/contract-repository.ts';
+import type {
+  ContractRepository,
+  ContractRepositoryError,
+} from '../../domain/contract/repository.ts';
 
 export type GetContractCommand = Readonly<{ contractId: string }>;
 

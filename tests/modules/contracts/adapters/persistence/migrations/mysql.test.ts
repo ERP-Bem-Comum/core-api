@@ -24,7 +24,7 @@ import { fileURLToPath } from 'node:url';
 // ─── Paths ────────────────────────────────────────────────────────────────
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const PROJECT_ROOT = resolve(HERE, '..', '..', '..', '..', '..', '..');
-const DRIZZLE_MYSQL_CONFIG = join(PROJECT_ROOT, 'drizzle.config.ts');
+const DRIZZLE_MYSQL_CONFIG = join(PROJECT_ROOT, 'db/drizzle/contracts.ts');
 const PACKAGE_JSON = join(PROJECT_ROOT, 'package.json');
 const MIGRATIONS_DIR = join(
   PROJECT_ROOT,
@@ -104,7 +104,7 @@ const applyMigration = (): ExecOk => {
 // CTR-CLEANUP-SQLITE (#5): drizzle.mysql.config.ts → drizzle.config.ts;
 // script `db:generate:mysql` → `db:generate` (sem sufixo, dialeto único).
 describe('CTR-DB-MIGRATION-MYSQL — CA-1/2: config files', () => {
-  it('CA-1: drizzle.config.ts existe e tem dialect:mysql + schema/out corretos', () => {
+  it('CA-1: db/drizzle/contracts.ts existe e tem dialect:mysql + schema/out corretos', () => {
     assert.ok(existsSync(DRIZZLE_MYSQL_CONFIG), `arquivo ${DRIZZLE_MYSQL_CONFIG} não encontrado`);
     const content = readFileSync(DRIZZLE_MYSQL_CONFIG, 'utf-8');
     assert.match(content, /dialect:\s*['"]mysql['"]/, 'config sem dialect:mysql');

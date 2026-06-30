@@ -1,0 +1,37 @@
+meta {
+  name: CAT-REG-4 criar role com supplier:read retorna 201
+  type: http
+  seq: 4
+}
+
+post {
+  url: {{baseUrl}}/api/v1/roles
+  body: json
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+}
+
+script:pre-request {
+  const ts = Date.now();
+  bru.setVar("catReg4RoleName", "RegPartners-" + ts);
+}
+
+body:json {
+  {
+    "name": "{{catReg4RoleName}}",
+    "permissions": ["supplier:read"]
+  }
+}
+
+tests {
+  test("CAT-REG-4 — status 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+  test("CAT-REG-4 — body.id e string nao-vazia", function () {
+    expect(res.getBody().id).to.be.a("string");
+    expect(res.getBody().id.length).to.be.above(0);
+  });
+}

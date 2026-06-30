@@ -1,0 +1,114 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "env": {
+    "BASH_DEFAULT_TIMEOUT_MS": "300000"
+  },
+  "attribution": {
+    "commit": ""
+  },
+  "permissions": {
+    "deny": [
+      "Read(./.env)",
+      "Read(./.env.*)",
+      "Read(./secrets/**)",
+      "Bash(curl *)",
+      "Bash(wget *)",
+      "Bash(npm *)",
+      "Skill(maestro:*)",
+      "mcp__plugin_maestro_maestro__*"
+    ]
+  },
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/inject-ticket-context.sh",
+            "timeout": 10,
+            "statusMessage": "Detectando ticket ativo da pipeline..."
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-npm.sh",
+            "if": "Bash(npm *)",
+            "statusMessage": "Verificando comando npm (proibido)..."
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-cross-project-docker.sh",
+            "timeout": 10,
+            "statusMessage": "Verificando isolamento Docker core-api <-> legacy..."
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/prettier-write.sh",
+            "timeout": 30,
+            "statusMessage": "Aplicando Prettier no arquivo tocado..."
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/stop-typecheck.sh",
+            "timeout": 90,
+            "statusMessage": "Rodando typecheck em background...",
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "contratos-orchestrator",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/subagent-stop-validate.sh",
+            "timeout": 15,
+            "statusMessage": "Validando fechamento da wave pelo sub-agent..."
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/session-start-context.sh",
+            "timeout": 10,
+            "statusMessage": "Carregando contexto do projeto..."
+          }
+        ]
+      }
+    ]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "${CLAUDE_PROJECT_DIR}/.claude/statusline.sh",
+    "padding": 1
+  },
+  "outputStyle": "erp-contracts",
+  "enabledPlugins": {
+    "chrome-devtools-mcp@claude-plugins-official": true
+  }
+}

@@ -1,0 +1,34 @@
+meta {
+  name: update collaborator
+  type: http
+  seq: 8
+}
+
+put {
+  url: {{baseUrl}}/api/v1/collaborators/{{collaboratorCreatedId}}
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{partnersOperatorToken}}
+}
+
+body:json {
+  {
+    "name": "Colab E2E Bruno Atualizado",
+    "cpf": "50000000132",
+    "email": "colab-e2e-bruno-updated@example.com",
+    "occupationArea": "DDI",
+    "role": "Analista E2E Senior",
+    "startOfContract": "2024-02-01",
+    "employmentRelationship": "PJ"
+  }
+}
+
+tests {
+  // PUT total responde 200 sem corpo (reply.code(200).send()); a edicao e validada pelo status.
+  test("P3 — PUT /collaborators/:id retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+}

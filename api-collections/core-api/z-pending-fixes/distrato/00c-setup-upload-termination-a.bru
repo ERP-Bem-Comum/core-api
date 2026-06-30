@@ -1,0 +1,29 @@
+meta {
+  name: setup upload signed_termination para contrato A
+  type: http
+  seq: 2
+}
+
+post {
+  url: {{baseUrl}}/api/v2/contracts/{{contractIdA}}/documents?categoria=signed_termination&fileName=termination.pdf&mimeType=application/pdf&signedElectronically=true
+  body: file
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{contractsOperatorToken}}
+}
+
+headers {
+  Content-Type: application/octet-stream
+}
+
+body:file {
+  file: @file(assets/sample.pdf) @contentType(application/octet-stream)
+}
+
+tests {
+  test("SETUP — upload signed_termination para contrato A (201)", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+}

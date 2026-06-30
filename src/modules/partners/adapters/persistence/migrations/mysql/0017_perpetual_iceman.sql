@@ -1,0 +1,14 @@
+-- Migration: 0017 — alarga food_category de varchar(20) → varchar(30)
+-- Issue #274: 'PREFIRO_NAO_RESPONDER' tem 21 chars; varchar(20) causava 1406 no ETL.
+-- Alinhado com gender_identity/race/education (todas varchar(30)).
+-- Sem hint de ALGORITHM (deixa o servidor escolher o melhor disponível).
+-- VALIDADO EMPIRICAMENTE no MySQL 8.4.9 (VM de validação com dump de prod): este
+-- widening de VARCHAR NÃO aceita ALGORITHM=INSTANT nem ALGORITHM=INPLACE (ambos →
+-- ERROR 1845), ao contrário do que a Table 17.17 do Refman sugere — testado também
+-- em latin1 (mesmo erro), logo não é questão de charset. O ALTER sem hint funciona
+-- (servidor usa o melhor algoritmo possível, aqui COPY) e foi o que migrou os 5
+-- colaboradores antes quarentenados. par_collaborators é tabela pequena (cadastro
+-- de colaboradores) → o rebuild via COPY é rápido e aceitável.
+-- ⚠️ Em tabela grande de prod, aplicar via pt-online-schema-change / gh-ost.
+-- 20→30 = 80→120 bytes utf8mb4 (≤255 → mesmo length-byte); widening não trunca dados.
+ALTER TABLE `par_collaborators` MODIFY COLUMN `food_category` varchar(30);

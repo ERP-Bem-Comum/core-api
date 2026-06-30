@@ -3,20 +3,19 @@ import { strict as assert } from 'node:assert';
 
 import { isErr, isOk } from '#src/shared/index.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
-import { InMemoryContractRepository } from '#src/modules/contracts/adapters/contract-repository.in-memory.ts';
-import { InMemoryEventBus } from '#src/modules/contracts/adapters/event-bus.in-memory.ts';
+import { InMemoryContractRepository } from '#src/modules/contracts/adapters/persistence/repos/contract-repository.in-memory.ts';
+import { InMemoryOutbox } from '#src/modules/contracts/adapters/outbox/outbox.in-memory.ts';
 import { createContract } from '#src/modules/contracts/application/use-cases/create-contract.ts';
 import { listContracts } from '#src/modules/contracts/application/use-cases/list-contracts.ts';
 import { getContract } from '#src/modules/contracts/application/use-cases/get-contract.ts';
-import { ContractId } from '#src/modules/contracts/domain/shared/ids.ts';
+import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
 
 const setupWithContracts = async (n: number) => {
-  const contractRepo = InMemoryContractRepository();
-  const eventBus = InMemoryEventBus();
+  const outbox = InMemoryOutbox();
+  const contractRepo = InMemoryContractRepository(outbox.port);
   const clock = ClockFixed(new Date('2026-01-01'));
   const create = createContract({
     contractRepo: contractRepo.repo,
-    eventBus: eventBus.bus,
     clock,
   });
 
@@ -30,8 +29,10 @@ const setupWithContracts = async (n: number) => {
       originalValueCents: 1000000 * i,
       originalPeriodStart: '2026-01-01',
       originalPeriodEnd: '2026-12-31',
+      contractorType: 'supplier',
+      contractorId: '55555555-5555-4555-8555-555555555555',
     });
-    if (!r.ok) throw new Error(`fixture broken: ${r.error}`);
+    if (!r.ok) throw new Error(`fixture broken: ${JSON.stringify(r.error)}`);
     created.push(r.value.contract);
   }
 
@@ -39,18 +40,25 @@ const setupWithContracts = async (n: number) => {
 };
 
 describe('listContracts', () => {
-  it('returns empty array when no contracts exist', async () => {
+  // CTR-HTTP-CONTRACT-LIST-FILTERS — listContracts agora é paginado: recebe
+  // ListContractsQuery e retorna { items, meta }.
+  const Q = { page: 1, limit: 50, order: 'ASC' } as const;
+
+  it('returns empty items when no contracts exist', async () => {
     const repo = InMemoryContractRepository();
-    const r = await listContracts({ contractRepo: repo.repo })();
+    const r = await listContracts({ contractRepo: repo.repo })(Q);
     assert.equal(isOk(r), true);
-    if (r.ok) assert.equal(r.value.length, 0);
+    if (r.ok) assert.equal(r.value.items.length, 0);
   });
 
   it('returns all contracts when present', async () => {
     const w = await setupWithContracts(3);
-    const r = await listContracts({ contractRepo: w.contractRepo.repo })();
+    const r = await listContracts({ contractRepo: w.contractRepo.repo })(Q);
     assert.equal(isOk(r), true);
-    if (r.ok) assert.equal(r.value.length, 3);
+    if (r.ok) {
+      assert.equal(r.value.items.length, 3);
+      assert.equal(r.value.meta.totalItems, 3);
+    }
   });
 });
 

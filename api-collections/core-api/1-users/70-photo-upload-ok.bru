@@ -1,0 +1,37 @@
+meta {
+  name: US6 upload foto (ok)
+  type: http
+  seq: 70
+}
+
+put {
+  url: {{baseUrl}}/api/v1/users/{{userId}}/photo?mimeType=image/jpeg
+  body: file
+  auth: none
+}
+
+headers {
+  Authorization: Bearer {{adminToken}}
+  Content-Type: application/octet-stream
+}
+
+body:file {
+  file: @file(assets/sample.jpg) @contentType(application/octet-stream)
+}
+
+script:post-response {
+  if (res.getStatus() === 200) {
+    bru.setVar("photoUrl", res.getBody().imageUrl);
+  }
+}
+
+tests {
+  test("CA — 200 e imageUrl retornada", function () {
+    expect(res.getStatus()).to.equal(200);
+    expect(res.getBody().imageUrl).to.be.a("string");
+    expect(res.getBody().imageUrl).to.not.be.empty;
+  });
+  test("SEC — resposta nao expoe passwordHash", function () {
+    expect(JSON.stringify(res.getBody())).to.not.contain("passwordHash");
+  });
+}

@@ -1,0 +1,62 @@
+{
+  "version": "7",
+  "dialect": "mysql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "5",
+      "when": 1779923701019,
+      "tag": "0000_charming_mastermind",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "5",
+      "when": 1780161147339,
+      "tag": "0001_luxuriant_triton",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1780163995266,
+      "tag": "0002_sweet_the_watchers",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1780388926049,
+      "tag": "0003_lowly_arclight",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1780822935661,
+      "tag": "0004_gray_ben_urich",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1780826474694,
+      "tag": "0005_old_black_panther",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1780848120912,
+      "tag": "0006_outstanding_xavin",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "5",
+      "when": 1781787758937,
+      "tag": "0007_careless_orphan",
+      "breakpoints": true
+    }
+  ]
+}
