@@ -345,6 +345,7 @@ export const mapRowToDocument = (
       accessKey: row.accessKey ?? null,
       competencia,
       debitAccountRef: row.debitAccountRef ?? null,
+      paymentDetail: row.paymentDetail ?? null,
     };
     return ok(draft);
   }
@@ -467,6 +468,7 @@ export const mapRowToDocument = (
     accessKey: row.accessKey ?? null,
     competencia,
     debitAccountRef: row.debitAccountRef ?? null,
+    paymentDetail: row.paymentDetail ?? null,
   };
 
   if (status === 'Approved') {
@@ -609,6 +611,7 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
       competencia:
         document.competencia === null ? null : Competencia.toString(document.competencia),
       debitAccountRef: document.debitAccountRef ?? null,
+      paymentDetail: document.paymentDetail ?? null,
       readByOcr: false,
       ocrOriginalValue: null,
       divergenceDetected: false,
@@ -649,6 +652,7 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
     accessKey: core.accessKey,
     competencia: core.competencia === null ? null : Competencia.toString(core.competencia),
     debitAccountRef: core.debitAccountRef,
+    paymentDetail: core.paymentDetail ?? null,
     readByOcr: false,
     ocrOriginalValue: null,
     divergenceDetected: false,

@@ -56,6 +56,7 @@ export type SaveDraftCommand = Readonly<{
   accessKey?: string | null; // #115
   competencia?: string | null; // #197
   contaDebitoRef?: string | null; // #197
+  paymentDetail?: string | null; // #273
 }>;
 
 export type SaveDraftOutput = Readonly<{ documentId: DocumentId.DocumentId }>;
@@ -162,6 +163,7 @@ export const saveDraft =
       ...(cmd.accessKey != null ? { accessKey: cmd.accessKey } : {}),
       ...(competencia !== null ? { competencia } : {}),
       ...(cmd.contaDebitoRef != null ? { debitAccountRef: cmd.contaDebitoRef } : {}),
+      ...(cmd.paymentDetail !== undefined ? { paymentDetail: cmd.paymentDetail } : {}),
     });
     if (!draft.ok) return err(draft.error);
 

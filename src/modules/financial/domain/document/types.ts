@@ -81,6 +81,7 @@ export type DocumentCore = Readonly<{
   accessKey: string | null; // #115: chave de acesso (44 dígitos) da DANFE; null nos demais tipos
   competencia: Competencia | null; // #197: mês contábil de referência
   debitAccountRef: string | null; // #197: conta-débito (ref → fin_cedente_accounts)
+  paymentDetail: string | null; // #273: complemento da forma de pagamento (linha digitável, referência de câmbio etc.)
 }>;
 
 export type OpenDocument = DocumentCore & Readonly<{ status: 'Open' }>;
@@ -117,6 +118,7 @@ export type DraftDocument = Readonly<{
   accessKey: string | null; // #115: chave de acesso (opcional no rascunho)
   competencia: Competencia | null; // #197 (opcional no rascunho)
   debitAccountRef: string | null; // #197 (opcional no rascunho)
+  paymentDetail: string | null; // #273 (opcional no rascunho)
 }>;
 
 export type Document = DraftDocument | OpenDocument | ApprovedDocument;

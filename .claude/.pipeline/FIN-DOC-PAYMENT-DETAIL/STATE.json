@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "FIN-DOC-PAYMENT-DETAIL",
+  "size": "S",
+  "createdAt": "2026-06-29T15:17:16.333Z",
+  "closedAt": "2026-06-30T01:34:42.450Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-06-29T15:18:05.693Z",
+      "finishedAt": "2026-06-29T15:32:15.216Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "drizzle-orm-expert",
+      "startedAt": "2026-06-29T15:56:43.622Z",
+      "finishedAt": "2026-06-29T16:08:43.022Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-06-29T23:51:10.699Z",
+      "finishedAt": "2026-06-29T23:55:30.095Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-06-30T00:02:43.110Z",
+      "finishedAt": "2026-06-30T00:09:22.472Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

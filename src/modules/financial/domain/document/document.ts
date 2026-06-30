@@ -58,6 +58,7 @@ export type CreateDocumentInput = Readonly<{
   accessKey?: string | null; // #115: chave de acesso (DANFE); já normalizada na borda
   competencia?: Competencia | null; // #197: mês contábil (VO já validado)
   debitAccountRef?: string | null; // #197: conta-débito (validada by-identity no use-case)
+  paymentDetail?: string | null; // #273: complemento da forma de pagamento
 }>;
 
 export type CreateDocumentOutput = Readonly<{
@@ -183,6 +184,7 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     accessKey: input.accessKey ?? null,
     competencia: input.competencia ?? null,
     debitAccountRef: input.debitAccountRef ?? null,
+    paymentDetail: input.paymentDetail ?? null,
     status: 'Open',
   });
 
@@ -460,6 +462,7 @@ export const undoApproval = (
     accessKey: d.accessKey,
     competencia: d.competencia,
     debitAccountRef: d.debitAccountRef,
+    paymentDetail: d.paymentDetail,
     status: 'Open',
   });
 
@@ -523,6 +526,7 @@ export type SaveDraftInput = Readonly<{
   accessKey?: string | null; // #115
   competencia?: Competencia | null; // #197
   debitAccountRef?: string | null; // #197
+  paymentDetail?: string | null; // #273
 }>;
 
 export type SaveDraftOutput = Readonly<{
@@ -560,6 +564,7 @@ export const saveDraft = (input: SaveDraftInput): Result<SaveDraftOutput, Docume
     accessKey: input.accessKey ?? null,
     competencia: input.competencia ?? null,
     debitAccountRef: input.debitAccountRef ?? null,
+    paymentDetail: input.paymentDetail ?? null,
   });
   const events: readonly DocumentEvent[] = [{ type: 'DocumentDraftSaved', documentId: input.id }];
   return ok(immutable<SaveDraftOutput>({ document, events }));
@@ -601,6 +606,7 @@ export const submit = (draft: DraftDocument): Result<CreateDocumentOutput, Docum
     dueDate,
     description: draft.description,
     approverRef: draft.approverRef,
+    paymentDetail: draft.paymentDetail,
   });
 };
 

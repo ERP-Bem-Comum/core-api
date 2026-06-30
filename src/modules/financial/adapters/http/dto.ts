@@ -111,6 +111,7 @@ export const documentToDto = (
       competencia:
         document.competencia === null ? null : Competencia.toString(document.competencia),
       contaDebitoRef: document.debitAccountRef,
+      paymentDetail: document.paymentDetail,
       payables: payableItems,
       version,
       payeeBank,
@@ -142,6 +143,7 @@ export const documentToDto = (
     accessKey: document.accessKey,
     competencia: document.competencia === null ? null : Competencia.toString(document.competencia),
     contaDebitoRef: document.debitAccountRef,
+    paymentDetail: document.paymentDetail,
     payables: payableItems,
     version,
     payeeBank,

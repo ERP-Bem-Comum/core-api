@@ -69,6 +69,7 @@ export type SaveDocumentCommand = Readonly<{
   accessKey?: string | null; // #115: chave de acesso (DANFE)
   competencia?: string | null; // #197: competência YYYY-MM
   contaDebitoRef?: string | null; // #197: conta-débito (ref → fin_cedente_accounts)
+  paymentDetail?: string | null; // #273: complemento da forma de pagamento
 }>;
 
 export type SaveDocumentOutput = Readonly<{
@@ -203,6 +204,7 @@ export const saveDocument =
       accessKey: cmd.accessKey ?? null,
       competencia,
       debitAccountRef: cmd.contaDebitoRef ?? null,
+      paymentDetail: cmd.paymentDetail ?? null,
     });
     if (!created.ok) return err(created.error);
 

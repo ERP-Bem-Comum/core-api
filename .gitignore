@@ -75,3 +75,7 @@ test-results/
 
 # Overmind (process manager de dev — Procfile/Fase 3): socket local
 .overmind.sock
+
+# Scripts de diagnóstico black-box descartáveis (ex.: login-diag) — uso local,
+# nunca versionar; os outputs em out/ podem conter dados de prod (tokens redatados).
+tools/bugs-scripts/
