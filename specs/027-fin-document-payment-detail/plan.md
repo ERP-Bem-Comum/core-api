@@ -30,19 +30,19 @@ Adicionar um atributo textual opcional `paymentDetail` ao agregado `Document` (C
 
 ## Constitution Check
 
-*GATE: Must pass before Phase 0 research. Re-check after Phase 1 design.*
+_GATE: Must pass before Phase 0 research. Re-check after Phase 1 design._
 
-| Princípio | Avaliação |
-|---|---|
-| I. TDD W0→W3 | ✅ ticket `FIN-DOC-PAYMENT-DETAIL`, size **S**; W0 RED antes de tocar `src/` |
-| II. Regressão zero | ✅ back-compat por coluna nullable; nenhuma regressão prevista |
-| III. pnpm | ✅ `pnpm run db:generate`, `pnpm test`; nunca npm |
-| IV. Modular monolith + isolamento | ✅ só `fin_*`; sem import cross-módulo; sem leitura cruzada |
-| V. Domínio puro | ✅ `paymentDetail: string \| null` em `Readonly<{...}>`; sem classe/throw; leitura sempre válida (sem novo `DocumentMapperError`) |
-| VI. MySQL 8 + Drizzle, migration gerada | ✅ coluna em `schema.ts` → `db:generate` → migration `0026`; sem JSON/ENUM/trigger/proc |
-| VII. HTTP-first, CLI aposentada | ✅ estende rotas Fastify existentes (create/patch/detail); sem `cli:*` |
-| VIII. TS strict + ESM + idioma | ✅ bridge `?? null` resolve `undefined↔null` sob `exactOptionalPropertyTypes`; `import type`; código EN / docs PT |
-| IX. Citação canônica ≥4 linhas | ✅ Vernon p.292 (atributo vs VO) + OWASP Input Validation (XSS) — ver `research.md` |
+| Princípio                               | Avaliação                                                                                                                         |
+| --------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| I. TDD W0→W3                            | ✅ ticket `FIN-DOC-PAYMENT-DETAIL`, size **S**; W0 RED antes de tocar `src/`                                                      |
+| II. Regressão zero                      | ✅ back-compat por coluna nullable; nenhuma regressão prevista                                                                    |
+| III. pnpm                               | ✅ `pnpm run db:generate`, `pnpm test`; nunca npm                                                                                 |
+| IV. Modular monolith + isolamento       | ✅ só `fin_*`; sem import cross-módulo; sem leitura cruzada                                                                       |
+| V. Domínio puro                         | ✅ `paymentDetail: string \| null` em `Readonly<{...}>`; sem classe/throw; leitura sempre válida (sem novo `DocumentMapperError`) |
+| VI. MySQL 8 + Drizzle, migration gerada | ✅ coluna em `schema.ts` → `db:generate` → migration `0026`; sem JSON/ENUM/trigger/proc                                           |
+| VII. HTTP-first, CLI aposentada         | ✅ estende rotas Fastify existentes (create/patch/detail); sem `cli:*`                                                            |
+| VIII. TS strict + ESM + idioma          | ✅ bridge `?? null` resolve `undefined↔null` sob `exactOptionalPropertyTypes`; `import type`; código EN / docs PT                 |
+| IX. Citação canônica ≥4 linhas          | ✅ Vernon p.292 (atributo vs VO) + OWASP Input Validation (XSS) — ver `research.md`                                               |
 
 **Resultado**: PASS, sem violações. Complexity Tracking vazio.
 
@@ -96,7 +96,7 @@ tests/modules/financial/
 - **Mudanças de schema**: [x] colunas (1) · [ ] tabelas · [ ] índices · [ ] FKs
 - **Prefixo de isolamento correto?** Sim — `fin_documents` (ADR-0014).
 - **Outbox**: não — atributo local, sem evento cross-BC.
-- **Comando**: editar `schemas/mysql.ts` (`paymentDetail: varchar('payment_detail', { length: 255 })`) → `pnpm run db:generate` → versionar `0026_*.sql`. Auditar o SQL: deve ser `ALTER TABLE \`fin_documents\` ADD \`payment_detail\` varchar(255);` (sem index, sem COLLATE explícito — herda `utf8mb4_unicode_ci` da tabela; só UUID usa `utf8mb4_bin`).
+- **Comando**: editar `schemas/mysql.ts` (`paymentDetail: varchar('payment_detail', { length: 255 })`) → `pnpm run db:generate` → versionar `0026_*.sql`. Auditar o SQL: deve ser `ALTER TABLE \`fin_documents\` ADD \`payment_detail\` varchar(255);`(sem index, sem COLLATE explícito — herda`utf8mb4_unicode_ci`da tabela; só UUID usa`utf8mb4_bin`).
 - **Restrições MySQL 8 (ADR-0020)**: respeitadas — `varchar` permitido; sem JSON/ENUM/CHECK/trigger/proc. `ALTER ADD COLUMN` é `ALGORITHM=INSTANT` por default no MySQL 8.4 (lock-free, back-compat; row-version counter de `fin_documents` = 8/64).
 
 ## Contrato HTTP (ADR-0025/0027)

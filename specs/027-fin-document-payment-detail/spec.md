@@ -8,7 +8,7 @@
 
 **Input**: Sub-issue da #89 (Lançar Documento — capacidades de backend pendentes). Gap registrado em comentário da P.O.: o front captura um complemento editável da forma de pagamento (linha digitável/código de barras de boleto, identificador de cartão corporativo, referência de câmbio, ou texto livre para "Outro"), mas o lançamento do documento **descarta** o valor porque o campo não existe no backend.
 
-## User Scenarios & Testing *(mandatory)*
+## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Registrar o complemento da forma de pagamento (Priority: P1)
 
@@ -49,7 +49,7 @@ Após lançar o documento, o operador percebe que digitou a linha digitável err
 - **Caracteres de controle**: quebras de linha e demais caracteres de controle são rejeitados (evitam poluição de trilha de auditoria/logs e corrupção de armazenamento).
 - **Exibição segura**: o complemento é texto livre fornecido pelo usuário; ao ser exibido, deve ser tratado como texto puro (a renderização é responsabilidade do consumidor da API, que deve aplicar codificação de saída adequada e nunca renderizar como HTML cru).
 
-## Requirements *(mandatory)*
+## Requirements _(mandatory)_
 
 ### Functional Requirements
 
@@ -63,11 +63,11 @@ Após lançar o documento, o operador percebe que digitou a linha digitável err
 - **FR-008**: O sistema MUST tratar o complemento como dado operacional (não credencial de autenticação); ele não recebe o mesmo tratamento de ocultação aplicado a segredos.
 - **FR-009**: Usuários MUST poder corrigir ou remover o complemento após o lançamento, via atualização do documento (incluindo torná-lo "não informado"). A trilha de auditoria do documento MUST registrar os valores anterior e novo do complemento nessas alterações.
 
-### Key Entities *(include if feature involves data)*
+### Key Entities _(include if feature involves data)_
 
 - **Documento (Contas a Pagar)**: agregado já existente do módulo Financeiro. Ganha um atributo simples e opcional — o complemento da forma de pagamento — sem identidade própria e sem comportamento associado (atributo textual, não um conceito de domínio independente).
 
-## Success Criteria *(mandatory)*
+## Success Criteria _(mandatory)_
 
 ### Measurable Outcomes
 
@@ -77,11 +77,11 @@ Após lançar o documento, o operador percebe que digitou a linha digitável err
 - **SC-004**: O complemento não aparece em nenhuma resposta de listagem de documentos (0 ocorrências).
 - **SC-005**: 100% dos documentos criados antes desta capacidade permanecem consultáveis sem erro.
 
-## Impacto Arquitetural (core-api) *(obrigatório se a feature toca `src/`)*
+## Impacto Arquitetural (core-api) _(obrigatório se a feature toca `src/`)_
 
 - **Bounded Contexts afetados**: [ ] Contratos (`ctr_*`) · [x] Financeiro (`fin_*`) · [ ] Auth (`auth_*`) · [ ] Parceiros (`partners_*`)
   - Toca apenas o BC Financeiro — sem cruzamento de isolamento (ADR-0014).
-- **Novos agregados / Value Objects?**: Nenhum. O complemento é um **atributo primitivo simples** do agregado Documento, não um Value Object — alinhado a Vernon, *Implementing DDD*, p.292 ("truly simple attributes that really don't need any special treatment... a Meaningful Whole"), validado via MCP DDD antes desta spec. Não exige smart constructor próprio.
+- **Novos agregados / Value Objects?**: Nenhum. O complemento é um **atributo primitivo simples** do agregado Documento, não um Value Object — alinhado a Vernon, _Implementing DDD_, p.292 ("truly simple attributes that really don't need any special treatment... a Meaningful Whole"), validado via MCP DDD antes desta spec. Não exige smart constructor próprio.
 - **Novos eventos de domínio (outbox)?**: Nenhum.
 - **Novos subcomandos de CLI?**: N/A (CLI embutida retirada — ADR-0037).
 - **Borda HTTP envolvida?**: Sim — estende rotas já existentes do documento (lançamento e detalhe). Fastify ativo por ADR-0025/0037; sem nova rota, sem novo ADR.

@@ -10,7 +10,7 @@ Fase 0 do `/speckit-plan`. Todas as decisões foram **pré-validadas antes da sp
 
 **Rationale**: o complemento é texto livre heterogêneo (linha digitável, id de cartão, ref. de câmbio, observação) sem comportamento, sem invariante de domínio verificável a priori e sem relação com outros atributos da entidade. Envolvê-lo em VO seria over-engineering.
 
-**Citação canônica** (Princípio IX — Vernon, *Implementing Domain-Driven Design*, p.292, `shared-references/ddd/ddd--vernon-livro-vermelho.md:5379`):
+**Citação canônica** (Princípio IX — Vernon, _Implementing Domain-Driven Design_, p.292, `shared-references/ddd/ddd--vernon-livro-vermelho.md:5379`):
 
 > "By now you may have begun to think that everything looks like a Value Object. [...] Where you might use a little caution is when there are truly simple attributes that really don't need any special treatment. Perhaps those are Booleans or any numeric value that is really self-contained, needing no additional functional support, and is related to no other attributes in the same Entity. On their own the simple attributes are a Meaningful Whole."
 
@@ -23,6 +23,7 @@ Fase 0 do `/speckit-plan`. Todas as decisões foram **pré-validadas antes da sp
 **Decisão**: `z.string().trim().min(1).max(255).regex(/^[^\x00-\x1F\x7F]*$/).optional()` no create; idem `.nullable().optional()` no patch.
 
 **Rationale**:
+
 - `.trim().min(1)` — `""`/whitespace-only são inválidos (400); ausência (`undefined`) = "não informado". Elimina ambiguidade `null` vs `""` no read-model (achado `zod-expert` Minor 1/2).
 - `.max(255)` — bound contra abuso, casa com `varchar(255)`. Usos conhecidos cabem com folga (linha digitável ~47–54; código de barras 44; câmbio < 100).
 - `.regex(/^[^\x00-\x1F\x7F]*$/)` — rejeita caracteres de controle: CR/LF evitam **log injection** quando `LOG_LEVEL=debug` serializa o body; NUL corrompe `varchar` utf8mb4 (achado `security-backend-expert` M1). Não toca acentos/dígitos/pontuação.
@@ -49,6 +50,7 @@ Fase 0 do `/speckit-plan`. Todas as decisões foram **pré-validadas antes da sp
 **Decisão**: coluna `payment_detail varchar(255)` (nullable, sem default, sem CHECK, sem index, sem COLLATE explícito) em `fin_documents`; migration `0026` gerada por `db:generate` (`ALTER TABLE ADD COLUMN`).
 
 **Rationale** (`drizzle-orm-expert`, veredito SÓLIDA):
+
 - `varchar(255)` é o canônico de "texto livre curto" (ADR-0018); sem CHECK porque o conteúdo é heterogêneo; sem index porque não há query por esse campo.
 - Sem `COLLATE` explícito — herda `utf8mb4_unicode_ci` da tabela; só colunas UUID recebem `utf8mb4_bin` (precedente `debit_account_ref`).
 - `ALTER ADD COLUMN` é `ALGORITHM=INSTANT` por default no MySQL 8.4 (Refman 8.4 §17): metadata-only, lock-free, concurrent DML permitido, back-compat (linhas existentes leem `NULL`). Row-version counter de `fin_documents` = 8/64 após esta migration — margem confortável.

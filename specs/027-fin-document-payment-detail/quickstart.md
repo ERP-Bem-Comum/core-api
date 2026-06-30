@@ -14,6 +14,7 @@ pnpm run test:integration       # round-trip Drizzle-MySQL (Docker) — coluna i
 ```
 
 Suites RED esperadas:
+
 - `tests/modules/financial/domain/...` — `Document.create` com/sem `paymentDetail`.
 - `tests/modules/financial/adapters/http/...` — `fastify.inject` no create/patch/detail + rejeições 400 + ausência na listagem.
 - `tests/modules/financial/adapters/persistence/...` — insert→select preserva; linha legada lê `null`.

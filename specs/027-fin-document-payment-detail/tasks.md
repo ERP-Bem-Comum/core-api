@@ -28,7 +28,7 @@
 - [ ] T004 Adicionar `paymentDetail: string | null` a `DocumentCore` **e** `DraftDocument` em `src/modules/financial/domain/document/types.ts`
 - [ ] T005 Adicionar `paymentDetail?: string | null` ao `SaveDocumentCommand` e propagar `paymentDetail: cmd.paymentDetail ?? null` em `Document.create(...)` em `src/modules/financial/application/use-cases/save-document.ts`
 - [ ] T006 Adicionar coluna `paymentDetail: varchar('payment_detail', { length: 255 })` à tabela `fin_documents` em `src/modules/financial/adapters/persistence/schemas/mysql.ts`
-- [ ] T007 Gerar a migration com `pnpm run db:generate` e auditar o SQL (`ALTER TABLE \`fin_documents\` ADD \`payment_detail\` varchar(255);` — sem index/COLLATE) em `src/modules/financial/adapters/persistence/migrations/mysql/0026_*.sql`
+- [ ] T007 Gerar a migration com `pnpm run db:generate` e auditar o SQL (`ALTER TABLE \`fin*documents\` ADD \`payment_detail\` varchar(255);`— sem index/COLLATE) em`src/modules/financial/adapters/persistence/migrations/mysql/0026*\*.sql`
 - [ ] T008 Propagar `paymentDetail ?? null` nos 4 pontos do mapper (`mapRowToDocument` Draft + core; `mapDocumentToRow` Draft + Open/Approved) em `src/modules/financial/adapters/persistence/mappers/document.mapper.ts`
 
 **Checkpoint**: T002–T003 passam a GREEN. Domínio + persistência prontos para as bordas.
