@@ -181,7 +181,8 @@ export const parCollaborators = mysqlTable(
     genderIdentity: varchar('gender_identity', { length: 30 }),
     race: varchar('race', { length: 30 }),
     education: varchar('education', { length: 30 }),
-    foodCategory: varchar('food_category', { length: 20 }),
+    // varchar(30) alinhado com gender_identity/race/education (#274 — 'PREFIRO_NAO_RESPONDER' = 21 chars)
+    foodCategory: varchar('food_category', { length: 30 }),
     foodCategoryDescription: varchar('food_category_description', { length: 255 }),
     completeAddress: varchar('complete_address', { length: 500 }),
     telephone: varchar('telephone', { length: 30 }),
