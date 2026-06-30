@@ -382,6 +382,8 @@ const financialRoutes =
             : {}),
           ...(body.dueDate !== undefined ? { dueDate: new Date(body.dueDate) } : {}),
           ...(body.description !== undefined ? { description: body.description } : {}),
+          // #273 US2: null apaga; undefined preserva (exactOptionalPropertyTypes).
+          ...(body.paymentDetail !== undefined ? { paymentDetail: body.paymentDetail } : {}),
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         return loadAndSerialize(deps, reply, req.params.id);

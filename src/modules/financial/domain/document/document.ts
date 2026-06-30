@@ -304,6 +304,7 @@ export type AdjustDocumentChanges = Readonly<{
   retentions?: readonly Retention[];
   dueDate?: Date;
   description?: string | null;
+  paymentDetail?: string | null;
 }>;
 
 export type AdjustDocumentInput = Readonly<{
@@ -361,6 +362,8 @@ export const adjust = (input: AdjustDocumentInput): Result<AdjustDocumentOutput,
     netValue: net.value,
     dueDate,
     description: c.description ?? d.description,
+    // null apaga (undefined preserva): semântica correta p/ CA6.2 mesmo no caminho completo.
+    paymentDetail: c.paymentDetail !== undefined ? c.paymentDetail : d.paymentDetail,
     status: 'Open',
   });
 
@@ -378,6 +381,7 @@ export type EditMetadataInput = Readonly<{
   payables: Payables;
   dueDate?: Date;
   description?: string | null;
+  paymentDetail?: string | null;
 }>;
 
 export type EditMetadataOutput = Readonly<{
@@ -395,6 +399,8 @@ export const editMetadata = (
   const d = input.document;
   const dueDate = input.dueDate ?? d.dueDate;
   const description = input.description !== undefined ? input.description : d.description;
+  // null apaga (undefined preserva) — mesma semântica que description neste caminho.
+  const paymentDetail = input.paymentDetail !== undefined ? input.paymentDetail : d.paymentDetail;
 
   const propagate = (p: Payable): Payable => immutable<Payable>({ ...p, dueDate });
   const payables = immutable<Payables>({
@@ -402,7 +408,12 @@ export const editMetadata = (
     children: input.payables.children.map(propagate),
   });
 
-  const document = immutable<OpenDocument | ApprovedDocument>({ ...d, dueDate, description });
+  const document = immutable<OpenDocument | ApprovedDocument>({
+    ...d,
+    dueDate,
+    description,
+    paymentDetail,
+  });
   const payableIds = [payables.parent.id, ...payables.children.map((c) => c.id)];
   const events: readonly DocumentEvent[] = [
     { type: 'DocumentSaved', documentId: d.id, payableIds },
