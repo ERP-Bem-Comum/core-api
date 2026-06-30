@@ -13,7 +13,7 @@ import type {
   CostCenterRef,
   ProgramRef,
 } from '../shared/refs.ts';
-import type { Retention, RetentionType } from '../shared/retention.ts';
+import type { Retention } from '../shared/retention.ts';
 import type { RegisteredTax } from '../shared/registered-tax.ts';
 import type {
   DocumentType,
@@ -28,6 +28,7 @@ import type { Payable, Payables } from '../payable/types.ts';
 import type { DocumentEvent } from './events.ts';
 import type { DocumentError } from './errors.ts';
 import { computeNetValue } from './financial-data.ts';
+import { allowedRetentionsFor } from './document-type-metadata.ts';
 
 // Padrão D (module-as-namespace): consumir com `import * as Document from './document.ts'`.
 
@@ -67,16 +68,10 @@ export type CreateDocumentOutput = Readonly<{
   events: readonly DocumentEvent[];
 }>;
 
-// Retenções permitidas por tipo de documento (R8): só NFS-e e RPA geram filhos.
-const EMPTY_RETENTIONS: ReadonlySet<RetentionType> = new Set();
-const ALLOWED_RETENTIONS: Readonly<Partial<Record<DocumentType, ReadonlySet<RetentionType>>>> = {
-  'NFS-e': new Set<RetentionType>(['ISS', 'IRRF', 'INSS', 'CSRF']),
-  RPA: new Set<RetentionType>(['ISS', 'IRRF', 'INSS', 'CSRF']),
-};
-
+// Retenções permitidas por tipo (R8): fonte única em document-type-metadata.ts (#292).
 const retentionsAllowed = (type: DocumentType, retentions: readonly Retention[]): boolean => {
-  const allowed = ALLOWED_RETENTIONS[type] ?? EMPTY_RETENTIONS;
-  return retentions.every((r) => allowed.has(r.type));
+  const allowed = allowedRetentionsFor(type);
+  return retentions.every((r) => allowed.includes(r.type));
 };
 
 // Gera os títulos em `Open`: 1 pai (valor líquido) + 1 filho por retenção. Usado por create e adjust
