@@ -198,6 +198,8 @@ const SLUG_MESSAGES: Record<string, string> = {
   'approver-limit-exceeded': 'O aprovador não possui alçada suficiente para este valor.',
   'approver-authority-unavailable':
     'Não foi possível consultar a alçada do aprovador. Tente novamente.',
+  // Cascata de alçada (#289 — CASCADE/US3, CA7): regra de negócio (default 422), não vaza o slug.
+  'no-approver-with-sufficient-limit': 'Nenhum aprovador com alçada suficiente para este valor.',
 };
 
 /** Mensagem PT-BR ao humano para um slug; fallback por `code` público. Nunca retorna o slug. */
