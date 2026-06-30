@@ -713,6 +713,25 @@ export const programListResponseSchema = z.array(programResponseSchema);
 
 export type ProgramResponseDto = z.infer<typeof programResponseSchema>;
 
+// Catálogo estático de metadados por tipo de documento (#292) — GET /financial/document-types/metadata.
+// Domínio puro (document-type-metadata.ts), sem persistência; fonte única das retenções permitidas.
+export const documentTypeMetadataResponseSchema = z.object({
+  type: documentTypeSchema.meta({ description: 'Tipo do documento fiscal' }),
+  allowedRetentions: z
+    .array(retentionTypeSchema)
+    .meta({ description: 'Retenções permitidas para este tipo (vazio = nenhuma)' }),
+  accessKeyRequired: z
+    .boolean()
+    .meta({ description: 'Se a chave de acesso (44 dígitos) é exigida para este tipo' }),
+  suggestedPaymentMethod: paymentMethodSchema
+    .nullable()
+    .meta({ description: 'Forma de pagamento sugerida; null = sem sugestão fixa' }),
+});
+
+export const documentTypeMetadataListResponseSchema = z.array(documentTypeMetadataResponseSchema);
+
+export type DocumentTypeMetadataResponseDto = z.infer<typeof documentTypeMetadataResponseSchema>;
+
 // ─── Read-model do extrato por conta + período (#139) ──────────────────────────
 
 export const accountStatementQuerySchema = z.object({

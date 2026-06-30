@@ -38,6 +38,7 @@ import { writeErrorStatus, toPublicCode, toPublicMessage } from './error-mapping
 import * as DocumentId from '../../domain/shared/document-id.ts';
 import * as CedenteAccountId from '../../domain/cedente/cedente-account-id.ts';
 import type { CedenteAccount } from '../../domain/cedente/types.ts';
+import { allMetadata } from '../../domain/document/document-type-metadata.ts';
 import type { RetentionInput } from '../../domain/shared/retention.ts';
 import type { RegisteredTaxInput } from '../../domain/shared/registered-tax.ts';
 import { FINANCIAL_PERMISSION } from '../../public-api/permissions.ts';
@@ -55,6 +56,7 @@ import {
   categoriesToDto,
   costCentersToDto,
   programsToDto,
+  documentTypeMetadataToDto,
 } from './dto.ts';
 import type { DocumentListFilter } from '../../domain/document/query.ts';
 import type { PayableListFilter, PayableListItem } from '../../domain/payable/query.ts';
@@ -106,6 +108,7 @@ import {
   categoryListResponseSchema,
   costCenterListResponseSchema,
   programListResponseSchema,
+  documentTypeMetadataListResponseSchema,
   type CedenteAccountResponseDto,
   accountStatementQuerySchema,
   accountStatementResponseSchema,
@@ -1097,6 +1100,20 @@ const financialRoutes =
         const result = await deps.listPrograms();
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(reply, ok(programsToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /financial/document-types/metadata — catálogo estático por tipo de documento (#292,
+    // reference:read). Domínio PURO (sem I/O): não usa `deps`/port, só `allMetadata()`.
+    scope.route({
+      method: 'GET',
+      url: '/financial/document-types/metadata',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.referenceRead)],
+      schema: {
+        response: { 200: documentTypeMetadataListResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) => {
+        return sendResult(reply, ok(documentTypeMetadataToDto(allMetadata())), { ok: 200 });
       },
     });
 

@@ -19,6 +19,7 @@ import type { Reconciliation } from '../../domain/reconciliation/types.ts';
 import type { ReconciliationPeriod } from '../../domain/reconciliation/period.ts';
 import type { Category } from '../../domain/category/category.ts';
 import type { CostCenter } from '../../domain/cost-center/cost-center.ts';
+import type { DocumentTypeMetadata } from '../../domain/document/document-type-metadata.ts';
 import type { ProgramView } from '../../application/ports/program-read.ts';
 import type { PaidPayableView } from '../../application/ports/payable-reconciliation-view.ts';
 import type { MatchSuggestion } from '../../application/use-cases/suggest-matches.ts';
@@ -37,6 +38,7 @@ import type {
   CategoryResponseDto,
   CostCenterResponseDto,
   ProgramResponseDto,
+  DocumentTypeMetadataResponseDto,
 } from './schemas.ts';
 import type { PayeeBankBlock } from './payee-bank-composition.ts';
 
@@ -60,6 +62,20 @@ export const costCentersToDto = (costCenters: readonly CostCenter[]): CostCenter
 /** Programas (020 · US3) → DTO lean `{ id, name }` (passthrough da fonte canônica). */
 export const programsToDto = (programs: readonly ProgramView[]): ProgramResponseDto[] =>
   programs.map((p) => ({ id: p.id, name: p.name }));
+
+/**
+ * Catálogo de metadados por tipo de documento (#292) → DTO. Identidade tipada: os campos do
+ * domínio puro (`DocumentTypeMetadata`) já são serializáveis (strings/boolean/array/null).
+ */
+export const documentTypeMetadataToDto = (
+  list: readonly DocumentTypeMetadata[],
+): DocumentTypeMetadataResponseDto[] =>
+  list.map((m) => ({
+    type: m.type,
+    allowedRetentions: [...m.allowedRetentions],
+    accessKeyRequired: m.accessKeyRequired,
+    suggestedPaymentMethod: m.suggestedPaymentMethod,
+  }));
 
 /**
  * Mapeia um StoredDocument (Document + Payables | null) para o DTO de resposta completo.
