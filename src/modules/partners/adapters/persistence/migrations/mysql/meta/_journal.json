@@ -120,6 +120,13 @@
       "when": 1781793356466,
       "tag": "0016_natural_pyro",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "5",
+      "when": 1782791347489,
+      "tag": "0017_perpetual_iceman",
+      "breakpoints": true
     }
   ]
 }
