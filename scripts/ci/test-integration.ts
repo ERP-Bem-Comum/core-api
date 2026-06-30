@@ -55,6 +55,7 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/auth/adapters/persistence/user-repository.drizzle.test.ts',
     'tests/modules/auth/adapters/persistence/user-query.drizzle.test.ts',
     'tests/modules/auth/adapters/persistence/role-repository.drizzle.test.ts',
+    'tests/modules/auth/adapters/persistence/approver-authority.drizzle.test.ts',
     'tests/modules/auth/adapters/persistence/schema-hardening.test.ts',
     'tests/modules/auth/public-api/auth-etl-port.integration.test.ts',
   ]),

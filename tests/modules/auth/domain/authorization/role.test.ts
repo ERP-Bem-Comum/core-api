@@ -117,3 +117,79 @@ describe('Role.hasPermission / grant / revoke', () => {
     assert.equal(next.permissions.length, 1);
   });
 });
+
+// W0 (RED) — FIN-APPROVER-LIMIT-AUTH (#289): alcada de aprovacao no papel.
+// DEVEM FALHAR ate W1 — approvalLimit/setApprovalLimit/role-approval-limit-invalid inexistentes.
+describe('Role.approvalLimit (alcada do papel — FIN-APPROVER-LIMIT-AUTH)', () => {
+  it('CA1: create com approvalLimitCents define a alcada em Money (cents)', () => {
+    const r = Role.create({
+      id: RoleId.generate(),
+      name: 'Gerente',
+      permissions: [],
+      approvalLimitCents: 100000,
+    });
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.value.approvalLimit?.cents, 100000);
+  });
+
+  it('CA2: create sem approvalLimitCents -> approvalLimit null (papel sem alcada)', () => {
+    const r = Role.create({ id: RoleId.generate(), name: 'Gerente', permissions: [] });
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.value.approvalLimit, null);
+  });
+
+  it('CA2: create com approvalLimitCents null -> approvalLimit null', () => {
+    const r = Role.create({
+      id: RoleId.generate(),
+      name: 'Gerente',
+      permissions: [],
+      approvalLimitCents: null,
+    });
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.value.approvalLimit, null);
+  });
+
+  it('CA3: create com approvalLimitCents negativo -> err role-approval-limit-invalid', () => {
+    const r = Role.create({
+      id: RoleId.generate(),
+      name: 'Gerente',
+      permissions: [],
+      approvalLimitCents: -1,
+    });
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'role-approval-limit-invalid');
+  });
+
+  it('CA4: setApprovalLimit define e depois zera a alcada', () => {
+    const base = Role.create({ id: RoleId.generate(), name: 'Gerente', permissions: [] });
+    assert.equal(base.ok, true);
+    if (!base.ok) return;
+    const set = Role.setApprovalLimit(base.value, 50000);
+    assert.equal(set.ok, true);
+    if (set.ok) assert.equal(set.value.approvalLimit?.cents, 50000);
+    const cleared = Role.setApprovalLimit(base.value, null);
+    assert.equal(cleared.ok, true);
+    if (cleared.ok) assert.equal(cleared.value.approvalLimit, null);
+  });
+
+  it('CA4: setApprovalLimit negativo -> err role-approval-limit-invalid', () => {
+    const base = Role.create({ id: RoleId.generate(), name: 'Gerente', permissions: [] });
+    assert.equal(base.ok, true);
+    if (!base.ok) return;
+    const r = Role.setApprovalLimit(base.value, -5);
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'role-approval-limit-invalid');
+  });
+
+  it('CA5: rehydrate preserva a alcada persistida', () => {
+    const r = Role.rehydrate({
+      id: RoleId.generate(),
+      name: 'Gerente',
+      permissions: [],
+      status: 'active',
+      approvalLimitCents: 250000,
+    });
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.value.approvalLimit?.cents, 250000);
+  });
+});

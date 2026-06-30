@@ -94,7 +94,13 @@ export const roleFromRows = (
   // Role.rehydrate reconstroi do banco com status; nao revalida o catalogo (banco e a fonte).
   // status do CHECK constraint auth_role_status_chk: 'archived' explicito, senao 'active'.
   const status = roleRow.status === 'archived' ? 'archived' : 'active';
-  const roleR = Role.rehydrate({ id: idR.value, name: roleRow.name, permissions, status });
+  const roleR = Role.rehydrate({
+    id: idR.value,
+    name: roleRow.name,
+    permissions,
+    status,
+    approvalLimitCents: roleRow.approvalLimitCents,
+  });
   if (!roleR.ok) return err(invalidRole(roleRow.id, roleR.error));
 
   return ok(roleR.value);
@@ -111,6 +117,7 @@ export const roleToInsert = (role: Role.Role, now: Date): NewRoleRow => ({
   name: role.name,
   description: null,
   status: role.status,
+  approvalLimitCents: role.approvalLimit === null ? null : role.approvalLimit.cents,
   createdAt: now,
   updatedAt: now,
 });

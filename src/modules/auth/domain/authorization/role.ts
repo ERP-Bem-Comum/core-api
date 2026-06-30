@@ -15,6 +15,7 @@ import type { RoleId } from './role-id.ts';
 import type { Permission } from './permission.ts';
 import * as RoleName from './role-name.ts';
 import * as PermissionCatalog from './permission-catalog.ts';
+import * as Money from '../../../../shared/kernel/money.ts';
 
 export type RoleStatus = 'active' | 'archived';
 
@@ -23,14 +24,21 @@ export type Role = Readonly<{
   name: RoleName.RoleName;
   permissions: readonly Permission[];
   status: RoleStatus;
+  // Alcada de aprovacao (limite monetario do papel). null = papel sem alcada (nao aprova). FIN-APPROVER-LIMIT-AUTH (#289).
+  approvalLimit: Money.Money | null;
 }>;
 
-export type RoleError = 'role-name-invalid' | 'role-permission-not-in-catalog' | 'role-in-use';
+export type RoleError =
+  | 'role-name-invalid'
+  | 'role-permission-not-in-catalog'
+  | 'role-in-use'
+  | 'role-approval-limit-invalid';
 
 export type CreateRoleInput = Readonly<{
   id: RoleId;
   name: string;
   permissions: readonly Permission[];
+  approvalLimitCents?: number | null;
 }>;
 
 export type RehydrateRoleInput = Readonly<{
@@ -38,6 +46,7 @@ export type RehydrateRoleInput = Readonly<{
   name: string;
   permissions: readonly Permission[];
   status: RoleStatus;
+  approvalLimitCents?: number | null;
 }>;
 
 const dedupe = (permissions: readonly Permission[]): readonly Permission[] => [
@@ -47,6 +56,16 @@ const dedupe = (permissions: readonly Permission[]): readonly Permission[] => [
 const outOfCatalog = (permissions: readonly Permission[]): boolean =>
   permissions.some((p) => !PermissionCatalog.isInCatalog(p));
 
+// Resolve o limite de alcada: undefined/null => sem alcada; senao Money (>=0 inteiro).
+const resolveApprovalLimit = (
+  cents: number | null | undefined,
+): Result<Money.Money | null, RoleError> => {
+  if (cents === null || cents === undefined) return ok(null);
+  const m = Money.fromCents(cents);
+  if (!m.ok) return err('role-approval-limit-invalid');
+  return ok(m.value);
+};
+
 /**
  * Cria um papel novo (nasce `active`). Valida o nome via RoleName; o conjunto de
  * permissoes NAO e validado contra o catalogo aqui (responsabilidade de setPermissions
@@ -55,12 +74,15 @@ const outOfCatalog = (permissions: readonly Permission[]): boolean =>
 export const create = (input: CreateRoleInput): Result<Role, RoleError> => {
   const nameR = RoleName.create(input.name);
   if (!nameR.ok) return err('role-name-invalid');
+  const limitR = resolveApprovalLimit(input.approvalLimitCents);
+  if (!limitR.ok) return err(limitR.error);
   return ok(
     immutable({
       id: input.id,
       name: nameR.value,
       permissions: dedupe(input.permissions),
       status: 'active',
+      approvalLimit: limitR.value,
     }),
   );
 };
@@ -72,14 +94,24 @@ export const create = (input: CreateRoleInput): Result<Role, RoleError> => {
 export const rehydrate = (input: RehydrateRoleInput): Result<Role, RoleError> => {
   const nameR = RoleName.create(input.name);
   if (!nameR.ok) return err('role-name-invalid');
+  const limitR = resolveApprovalLimit(input.approvalLimitCents);
+  if (!limitR.ok) return err(limitR.error);
   return ok(
     immutable({
       id: input.id,
       name: nameR.value,
       permissions: dedupe(input.permissions),
       status: input.status,
+      approvalLimit: limitR.value,
     }),
   );
+};
+
+/** Define (ou zera, com null) a alcada de aprovacao do papel. cents < 0 => erro. */
+export const setApprovalLimit = (role: Role, cents: number | null): Result<Role, RoleError> => {
+  const limitR = resolveApprovalLimit(cents);
+  if (!limitR.ok) return err(limitR.error);
+  return ok(immutable({ ...role, approvalLimit: limitR.value }));
 };
 
 export const rename = (role: Role, rawName: string): Result<Role, RoleError> => {

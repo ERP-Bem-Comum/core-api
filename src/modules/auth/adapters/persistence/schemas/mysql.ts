@@ -29,6 +29,7 @@
 //   auth_role_permission → auth_user_role → auth_refresh_token.
 
 import {
+  bigint,
   char,
   check,
   datetime,
@@ -85,6 +86,9 @@ export const authRole = mysqlTable(
     // 'active' | 'archived' — VARCHAR+CHECK (ADR-0020, sem ENUM nativo). Espelha auth_user.status.
     // 'archived' ⇒ papel não-atribuível (ciclo de vida, FR-012). Default 'active' p/ linhas existentes.
     status: varchar('status', { length: 16 }).notNull().default('active'),
+    // Alçada de aprovação em centavos (BIGINT NULL). null = papel sem alçada (não aprova).
+    // Sem CHECK/index: domínio valida >= 0 (Money); ALTER ADD fica INSTANT (8.4). FIN-APPROVER-LIMIT-AUTH (#289).
+    approvalLimitCents: bigint('approval_limit_cents', { mode: 'number' }),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
   },

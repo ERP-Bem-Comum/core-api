@@ -1,0 +1,1 @@
+ALTER TABLE `auth_role` ADD `approval_limit_cents` bigint;
