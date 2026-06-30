@@ -57,7 +57,11 @@ WORKDIR /app
 # ────────────────────────────────────────────────────────────────────────────
 FROM base AS deps
 
-COPY package.json pnpm-lock.yaml ./
+# pnpm-workspace.yaml é necessário aqui: carrega `overrides` (security fixes —
+# Dependabot/esbuild) que o `--frozen-lockfile` valida contra o lock. Sem ele o
+# build falha com ERR_PNPM_LOCKFILE_CONFIG_MISMATCH (override no lock sem config).
+# pnpm 11 ignora package.json#pnpm.overrides quando há pnpm-workspace.yaml.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # --frozen-lockfile (ADR-0011) + --ignore-scripts (zero allowlist necessária
 # após remoção de better-sqlite3 — `mysql2` e `drizzle-orm` são JS puros).
