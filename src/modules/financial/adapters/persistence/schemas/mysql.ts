@@ -146,6 +146,11 @@ export const finDocuments = mysqlTable(
     // Aprovador PRETENDIDO definido na inclusão (#148) — cross-BC (auth), sem FK física. Nullable
     // (opcional + back-compat). Distinto de approved_by (efetivado na aprovação).
     approverRef: varchar('approver_ref', { length: 36 }),
+
+    // #273: complemento da forma de pagamento (texto livre opaco — linha digitável de boleto,
+    // id de cartão corporativo, referência de câmbio). Nullable + sem CHECK (string livre).
+    // ADR-0018 §"Texto livre curto" → varchar(255). Migration 0026 (ALTER ADD COLUMN, INSTANT).
+    paymentDetail: varchar('payment_detail', { length: 255 }),
   },
   (t) => [
     // CHECKs de domínio (defesa em profundidade — ADR-0018 §"Features proibidas"):

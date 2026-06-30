@@ -72,6 +72,23 @@ const paymentMethodSchema = z.enum([
   'Outro',
 ]);
 
+// ─── Fragmento reutilizável — paymentDetail ──────────────────────────────────
+//
+// #273: complemento da forma de pagamento (linha digitável, id de cartão corporativo, referência
+// de câmbio). Texto livre opaco — não interpretado pelo backend.
+// Regras (data-model.md §"Regras de validação"):
+//   .trim()  → remove espaços nas pontas (nunca-armazena whitespace puro)
+//   .min(1)  → campo presente mas vazio é inválido (pós-trim)
+//   .max(255)→ espelha varchar(255) no banco (ADR-0018 §"Texto livre curto")
+//   .regex   → bloqueia caracteres de controle (\x00-\x1F, \x7F) — sem CR/LF/NUL (OWASP Input Validation)
+const paymentDetailInput = z
+  .string()
+  .trim()
+  .min(1)
+  .max(255)
+  // eslint-disable-next-line no-control-regex -- a rejeição de caracteres de controle é o objetivo (segurança: log injection via CR/LF, NUL em varchar)
+  .regex(/^[^\x00-\x1F\x7F]*$/, 'caracteres de controle não são permitidos');
+
 // ─── POST /documents (saveDocument) ─────────────────────────────────────────
 
 /**
@@ -109,6 +126,8 @@ export const createDocumentBodySchema = z.object({
   // #197: competência (YYYY-MM, validada no domínio via VO) + conta-débito (ref → fin_cedente_accounts).
   competencia: z.string().optional(),
   contaDebitoRef: z.uuid().optional(),
+  // #273: complemento da forma de pagamento (linha digitável, referência de câmbio etc.). Opcional na criação.
+  paymentDetail: paymentDetailInput.optional(),
   asDraft: z.boolean().default(false),
 });
 
@@ -215,6 +234,7 @@ export const documentResponseSchema = z.object({
   accessKey: z.string().nullable(), // #115: chave de acesso (DANFE)
   competencia: z.string().nullable(), // #197: competência YYYY-MM
   contaDebitoRef: z.string().nullable(), // #197: conta-débito
+  paymentDetail: z.string().nullable(), // #273: complemento da forma de pagamento
   payables: z.array(payableResponseSchema),
   version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).meta({
     description:

@@ -299,6 +299,7 @@ const financialRoutes =
             accessKey: body.accessKey ?? null,
             competencia: body.competencia ?? null,
             contaDebitoRef: body.contaDebitoRef ?? null,
+            paymentDetail: body.paymentDetail ?? null,
           });
           if (!result.ok) return sendDomainError(reply, result.error);
           const idStr = String(result.value.documentId);
@@ -337,6 +338,7 @@ const financialRoutes =
           accessKey: body.accessKey ?? null,
           competencia: body.competencia ?? null,
           contaDebitoRef: body.contaDebitoRef ?? null,
+          paymentDetail: body.paymentDetail ?? null,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         const idStr = String(result.value.documentId);
