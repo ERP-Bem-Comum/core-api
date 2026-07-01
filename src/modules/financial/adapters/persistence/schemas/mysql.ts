@@ -537,13 +537,26 @@ export const finPayableView = mysqlTable(
   },
   (t) => [
     index('fin_payable_view_status_idx').on(t.status),
-    index('fin_payable_view_cost_center_idx').on(t.costCenterRef),
-    index('fin_payable_view_category_idx').on(t.categoryRef),
-    index('fin_payable_view_program_idx').on(t.programRef),
-    index('fin_payable_view_supplier_idx').on(t.supplierRef),
+    index('fin_payable_view_cost_center_ref_idx').on(t.costCenterRef),
+    index('fin_payable_view_category_ref_idx').on(t.categoryRef),
+    index('fin_payable_view_program_ref_idx').on(t.programRef),
+    index('fin_payable_view_supplier_ref_idx').on(t.supplierRef),
     index('fin_payable_view_due_date_idx').on(t.dueDate),
+    // Enums de domínio → varchar + CHECK (ADR-0020; mysqlEnum proibido). Espelha fin_payables_*_chk.
+    check('fin_payable_view_kind_chk', sql`${t.kind} IN ('Parent','Child')`),
+    check(
+      'fin_payable_view_status_chk',
+      sql`${t.status} IN ('Open','Approved','Paid','Cancelled')`,
+    ),
+    check(
+      'fin_payable_view_retention_type_chk',
+      sql`${t.retentionType} IS NULL OR ${t.retentionType} IN ('ISS','IRRF','INSS','CSRF')`,
+    ),
   ],
 );
+
+export type PayableViewRow = typeof finPayableView.$inferSelect;
+export type NewPayableViewRow = typeof finPayableView.$inferInsert;
 
 // ─── fin_cedente_accounts ─────────────────────────────────────────────────────
 //

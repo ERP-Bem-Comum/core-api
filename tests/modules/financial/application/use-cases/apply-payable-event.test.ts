@@ -108,4 +108,25 @@ describe('financial/application — applyPayableEvent projeta fin_payable_view (
     const l = await store.list();
     if (l.ok) assert.equal(l.value.length, 0);
   });
+
+  // M1 (W2): descarte de rascunho emite DocumentCancelled com payableIds VAZIO (cancelDraft) —
+  // é operação válida → no-op no read-model, NÃO payload-invalid (evitar retry/DLQ inócuo).
+  it('M1: DocumentCancelled com payableIds vazio (descarte de rascunho) → ok, no-op', async () => {
+    const store = createInMemoryPayableViewStore();
+    const r = await applyPayableEvent({ store })({
+      eventType: 'DocumentCancelled',
+      payload: JSON.stringify({ documentId: DOC, payableIds: [] }),
+    });
+    assert.equal(r.ok, true);
+  });
+
+  // m4 (W2): array de ids populado com entrada não-string = payload corrompido → rejeita (não dropa).
+  it('m4: payableIds com entrada não-string → payload-invalid', async () => {
+    const store = createInMemoryPayableViewStore();
+    const r = await applyPayableEvent({ store })({
+      eventType: 'DocumentCancelled',
+      payload: JSON.stringify({ documentId: DOC, payableIds: ['ok', 123] }),
+    });
+    assert.equal(r.ok, false);
+  });
 });

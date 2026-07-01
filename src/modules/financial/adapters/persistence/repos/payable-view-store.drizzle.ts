@@ -17,10 +17,8 @@ import type {
   PayableViewStore,
   PayableViewStoreError,
 } from '#src/modules/financial/application/ports/payable-view-store.ts';
-import type {
-  PayableView,
-  PayableViewStatus,
-} from '#src/modules/financial/domain/payable-view/types.ts';
+import type { PayableView } from '#src/modules/financial/domain/payable-view/types.ts';
+import { rowToPayableView } from '#src/modules/financial/adapters/persistence/mappers/payable-view.mapper.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { finPayableView } from '../schemas/mysql.ts';
 
@@ -29,9 +27,6 @@ const logStore = (op: string, cause: unknown): void => {
 };
 
 const incoming = (column: string): ReturnType<typeof sql.raw> => sql.raw(`values(\`${column}\`)`);
-
-const toStatus = (raw: string): PayableViewStatus =>
-  raw === 'Approved' || raw === 'Paid' || raw === 'Cancelled' ? raw : 'Open';
 
 export const createDrizzlePayableViewStore = (
   handle: FinancialMysqlHandle, // eslint-disable-line @typescript-eslint/prefer-readonly-parameter-types
@@ -103,22 +98,17 @@ export const createDrizzlePayableViewStore = (
     list: async (): Promise<Result<readonly PayableView[], PayableViewStoreError>> => {
       try {
         const dbRows = await db.select().from(finPayableView);
-        return ok(
-          dbRows.map((row) => ({
-            payableId: row.payableId,
-            documentId: row.documentId,
-            kind: row.kind === 'Child' ? 'Child' : 'Parent',
-            retentionType: row.retentionType,
-            supplierRef: row.supplierRef,
-            contractRef: row.contractRef,
-            categoryRef: row.categoryRef,
-            costCenterRef: row.costCenterRef,
-            programRef: row.programRef,
-            valueCents: row.valueCents,
-            dueDate: row.dueDate,
-            status: toStatus(row.status),
-          })),
-        );
+        const out: PayableView[] = [];
+        for (const row of dbRows) {
+          // Mapper valida os enums vindos do banco; corrupção → erro (não reclassifica).
+          const mapped = rowToPayableView(row);
+          if (!mapped.ok) {
+            logStore('list:map', mapped.error);
+            return err('payable-view-row-invalid');
+          }
+          out.push(mapped.value);
+        }
+        return ok(out);
       } catch (cause) {
         logStore('list', cause);
         return err('payable-view-store-unavailable');

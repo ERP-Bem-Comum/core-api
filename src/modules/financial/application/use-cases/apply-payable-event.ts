@@ -53,11 +53,13 @@ const parseSnapshotRow = (
   const status = p.status;
   if (
     payableId === null ||
+    payableId === '' ||
     kind === null ||
     valueCentsStr === null ||
     !/^\d+$/.test(valueCentsStr) ||
     !Number.isSafeInteger(Number(valueCentsStr)) ||
     dueDate === null ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(dueDate) ||
     (status !== 'Open' && status !== 'Approved' && status !== 'Paid' && status !== 'Cancelled')
   ) {
     return null;
@@ -98,9 +100,12 @@ const parsePayableIds = (raw: string): Result<readonly string[], PayloadError> =
   const parsed = safeJsonParse(raw);
   if (!parsed.ok) return parsed;
   const obj = parsed.value;
+  // Chave presente como array → usa mesmo vazio (M1: DocumentCancelled de descarte de rascunho
+  // carrega `[]` — no-op válido, não payload-invalid). Entrada não-string = corrompido → rejeita (m4).
   if (Array.isArray(obj.payableIds)) {
     const ids = obj.payableIds.filter((v): v is string => typeof v === 'string');
-    if (ids.length > 0) return ok(ids);
+    if (ids.length === obj.payableIds.length) return ok(ids);
+    return err('payable-event-payload-invalid');
   }
   const single = asString(obj.payableId);
   if (single !== null) return ok([single]);

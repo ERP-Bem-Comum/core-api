@@ -1,7 +1,7 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "79a89e82-bed8-4d8e-9efa-ca269551fed8",
+  "id": "5746f477-29c8-48d3-8235-1d0f184181bb",
   "prevId": "f6abcf90-3f66-46b8-be57-eeaa322bfc1c",
   "tables": {
     "fin_bank_statements": {
@@ -1119,23 +1119,23 @@
           "columns": ["status"],
           "isUnique": false
         },
-        "fin_payable_view_cost_center_idx": {
-          "name": "fin_payable_view_cost_center_idx",
+        "fin_payable_view_cost_center_ref_idx": {
+          "name": "fin_payable_view_cost_center_ref_idx",
           "columns": ["cost_center_ref"],
           "isUnique": false
         },
-        "fin_payable_view_category_idx": {
-          "name": "fin_payable_view_category_idx",
+        "fin_payable_view_category_ref_idx": {
+          "name": "fin_payable_view_category_ref_idx",
           "columns": ["category_ref"],
           "isUnique": false
         },
-        "fin_payable_view_program_idx": {
-          "name": "fin_payable_view_program_idx",
+        "fin_payable_view_program_ref_idx": {
+          "name": "fin_payable_view_program_ref_idx",
           "columns": ["program_ref"],
           "isUnique": false
         },
-        "fin_payable_view_supplier_idx": {
-          "name": "fin_payable_view_supplier_idx",
+        "fin_payable_view_supplier_ref_idx": {
+          "name": "fin_payable_view_supplier_ref_idx",
           "columns": ["supplier_ref"],
           "isUnique": false
         },
@@ -1153,7 +1153,20 @@
         }
       },
       "uniqueConstraints": {},
-      "checkConstraint": {}
+      "checkConstraint": {
+        "fin_payable_view_kind_chk": {
+          "name": "fin_payable_view_kind_chk",
+          "value": "`fin_payable_view`.`kind` IN ('Parent','Child')"
+        },
+        "fin_payable_view_status_chk": {
+          "name": "fin_payable_view_status_chk",
+          "value": "`fin_payable_view`.`status` IN ('Open','Approved','Paid','Cancelled')"
+        },
+        "fin_payable_view_retention_type_chk": {
+          "name": "fin_payable_view_retention_type_chk",
+          "value": "`fin_payable_view`.`retention_type` IS NULL OR `fin_payable_view`.`retention_type` IN ('ISS','IRRF','INSS','CSRF')"
+        }
+      }
     },
     "fin_payables": {
       "name": "fin_payables",
