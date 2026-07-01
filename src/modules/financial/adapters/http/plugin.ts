@@ -105,6 +105,7 @@ import {
   cedenteAccountIdParamSchema,
   cedenteAccountResponseSchema,
   cedenteAccountListResponseSchema,
+  cedenteAccountListQuerySchema,
   categoryListResponseSchema,
   costCenterListResponseSchema,
   programListResponseSchema,
@@ -1123,11 +1124,15 @@ const financialRoutes =
       url: '/financial/cedente-accounts',
       preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.bankAccountRead)],
       schema: {
+        querystring: cedenteAccountListQuerySchema,
         response: { 200: cedenteAccountListResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
-      handler: async (_req, reply) => {
+      handler: async (req, reply) => {
         // #89c F1: saldo atual (abertura + Σ extratos) por conta junto da listagem.
-        const result = await deps.listCedenteAccountsWithBalance();
+        // #293: `?status=active` filtra contas encerradas para o seletor "Pagar da Conta".
+        const result = await deps.listCedenteAccountsWithBalance({
+          onlyActive: req.query.status === 'active',
+        });
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(
           reply,

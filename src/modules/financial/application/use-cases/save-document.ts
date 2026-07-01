@@ -22,6 +22,7 @@ import {
   type ApprovalError,
 } from '../../domain/document/approval-policy.ts';
 import * as CedenteAccountId from '../../domain/cedente/cedente-account-id.ts';
+import { isActive } from '../../domain/cedente/cedente-account.ts';
 import type { DocumentType, PaymentMethod, PayeeKind } from '../../domain/document/types.ts';
 import type { PayableId } from '../../domain/shared/payable-id.ts';
 import type { DocumentEvent } from '../../domain/document/events.ts';
@@ -102,6 +103,7 @@ export type SaveDocumentError =
   | UserRef.UserRefError
   | CedenteAccountStoreError
   | 'cedente-account-not-found'
+  | 'cedente-account-closed'
   | ApprovalError
   | ApproverAuthorityReadError;
 
@@ -141,6 +143,7 @@ export const saveDocument =
       const found = await deps.cedenteAccountStore.findById(accId.value);
       if (!found.ok) return err(found.error);
       if (found.value === null) return err('cedente-account-not-found');
+      if (!isActive(found.value)) return err('cedente-account-closed');
     }
 
     // #48: herda programRef/budgetPlanRef do contrato vinculado quando não informados pelo front
