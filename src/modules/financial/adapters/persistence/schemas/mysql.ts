@@ -533,6 +533,9 @@ export const finPayableView = mysqlTable(
     valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
     dueDate: date('due_date', { mode: 'string' }).notNull(),
     status: varchar('status', { length: 12 }).notNull(), // Open|Approved|Paid|Cancelled
+    // #239: conta-débito (de qual conta cedente saiu) + data do pagamento (só quando Paid).
+    debitAccountRef: varchar('debit_account_ref', { length: 36 }),
+    paidAt: date('paid_at', { mode: 'string' }),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
   },
   (t) => [
@@ -542,6 +545,8 @@ export const finPayableView = mysqlTable(
     index('fin_payable_view_program_ref_idx').on(t.programRef),
     index('fin_payable_view_supplier_ref_idx').on(t.supplierRef),
     index('fin_payable_view_due_date_idx').on(t.dueDate),
+    // #239: widget "Últimos pagamentos" ordena por paid_at desc.
+    index('fin_payable_view_paid_at_idx').on(t.paidAt),
     // Enums de domínio → varchar + CHECK (ADR-0020; mysqlEnum proibido). Espelha fin_payables_*_chk.
     check('fin_payable_view_kind_chk', sql`${t.kind} IN ('Parent','Child')`),
     check(

@@ -28,6 +28,8 @@ export type DocumentSaved = Readonly<{
   categoryRef: string | null;
   costCenterRef: string | null;
   programRef: string | null;
+  // #239: conta-débito (de qual conta cedente o pagamento sai) — p/ o widget "Últimos pagamentos".
+  debitAccountRef: string | null;
   payables: readonly PayableSnapshot[];
 }>;
 

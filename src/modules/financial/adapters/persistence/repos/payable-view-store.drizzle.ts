@@ -8,7 +8,7 @@
 //
 // Boundary: todo try/catch converte para Result (.claude/rules/adapters.md).
 
-import { inArray, sql } from 'drizzle-orm';
+import { inArray, sql, eq, and, desc, isNotNull } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
@@ -55,11 +55,14 @@ export const createDrizzlePayableViewStore = (
               valueCents: r.valueCents,
               dueDate: r.dueDate,
               status: r.status,
+              debitAccountRef: r.debitAccountRef,
+              paidAt: r.paidAt,
               updatedAt: now,
             })),
           )
           .onDuplicateKeyUpdate({
-            // `status` fica de fora de propósito (dono dos eventos de transição).
+            // `status` e `paid_at` ficam de fora de propósito (donos dos eventos de transição /
+            // markPaid — reprocessar DocumentSaved não regride status nem apaga a data de pagamento).
             set: {
               documentId: incoming('document_id'),
               kind: incoming('kind'),
@@ -71,6 +74,7 @@ export const createDrizzlePayableViewStore = (
               programRef: incoming('program_ref'),
               valueCents: incoming('value_cents'),
               dueDate: incoming('due_date'),
+              debitAccountRef: incoming('debit_account_ref'),
               updatedAt: incoming('updated_at'),
             },
           });
@@ -95,6 +99,20 @@ export const createDrizzlePayableViewStore = (
       }
     },
 
+    markPaid: async (payableIds, paidAt): Promise<Result<void, PayableViewStoreError>> => {
+      if (payableIds.length === 0) return ok(undefined);
+      try {
+        await db
+          .update(finPayableView)
+          .set({ status: 'Paid', paidAt, updatedAt: clock.now() })
+          .where(inArray(finPayableView.payableId, [...payableIds]));
+        return ok(undefined);
+      } catch (cause) {
+        logStore('markPaid', cause);
+        return err('payable-view-store-unavailable');
+      }
+    },
+
     list: async (): Promise<Result<readonly PayableView[], PayableViewStoreError>> => {
       try {
         const dbRows = await db.select().from(finPayableView);
@@ -111,6 +129,32 @@ export const createDrizzlePayableViewStore = (
         return ok(out);
       } catch (cause) {
         logStore('list', cause);
+        return err('payable-view-store-unavailable');
+      }
+    },
+
+    listRecentPaid: async (
+      limit,
+    ): Promise<Result<readonly PayableView[], PayableViewStoreError>> => {
+      try {
+        const dbRows = await db
+          .select()
+          .from(finPayableView)
+          .where(and(eq(finPayableView.status, 'Paid'), isNotNull(finPayableView.paidAt)))
+          .orderBy(desc(finPayableView.paidAt))
+          .limit(limit);
+        const out: PayableView[] = [];
+        for (const row of dbRows) {
+          const mapped = rowToPayableView(row);
+          if (!mapped.ok) {
+            logStore('listRecentPaid:map', mapped.error);
+            return err('payable-view-row-invalid');
+          }
+          out.push(mapped.value);
+        }
+        return ok(out);
+      } catch (cause) {
+        logStore('listRecentPaid', cause);
         return err('payable-view-store-unavailable');
       }
     },

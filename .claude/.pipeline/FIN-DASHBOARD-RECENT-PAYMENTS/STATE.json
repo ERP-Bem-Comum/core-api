@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "FIN-DASHBOARD-RECENT-PAYMENTS",
+  "size": "L",
+  "createdAt": "2026-07-01T04:15:07.464Z",
+  "closedAt": null,
+  "currentWave": "W1",
+  "status": "in-progress",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-01T04:16:19.798Z",
+      "finishedAt": "2026-07-01T04:17:15.759Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "in-progress",
+      "agent": "ts-domain-modeler",
+      "startedAt": "2026-07-01T04:17:16.073Z",
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W2",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W3",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "W1 started (ts-domain-modeler)"
+}

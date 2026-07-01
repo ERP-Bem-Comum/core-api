@@ -22,10 +22,10 @@ export type ApplyPayableEventError = 'payable-event-payload-invalid' | PayableVi
 
 type Deps = Readonly<{ store: PayableViewStore }>;
 
-// Eventos que transicionam o status de um título já projetado.
+// Eventos que só transicionam o status de um título já projetado. `PayableManuallyPaid` NÃO está
+// aqui: além do status, grava `paid_at` (via `markPaid`) — #239.
 const STATUS_BY_EVENT: Readonly<Record<string, PayableViewStatus>> = {
   PayableApproved: 'Approved',
-  PayableManuallyPaid: 'Paid',
   DocumentCancelled: 'Cancelled',
   ApprovalUndone: 'Open',
 };
@@ -84,6 +84,9 @@ const parseSnapshotRow = (
     dueDate,
     // #307 (m2): snapshot carrega DocumentStatus (8); mapeia p/ os 4 do read-model.
     status: documentStatusToViewStatus(rawStatus),
+    // #239: conta-débito vem do documento (top-level refs); paidAt só na baixa (PayableManuallyPaid).
+    debitAccountRef: asString(refs.debitAccountRef),
+    paidAt: null,
   };
 };
 
@@ -119,6 +122,21 @@ const parsePayableIds = (raw: string): Result<readonly string[], PayloadError> =
   return err('payable-event-payload-invalid');
 };
 
+// #239: baixa manual — extrai payableIds + a data do pagamento (YYYY-MM-DD do ISO do evento).
+const parsePaid = (
+  raw: string,
+): Result<{ payableIds: readonly string[]; paidAt: string }, PayloadError> => {
+  const ids = parsePayableIds(raw);
+  if (!ids.ok) return ids;
+  const parsed = safeJsonParse(raw);
+  if (!parsed.ok) return parsed;
+  const paidAtRaw = asString(parsed.value.paidAt);
+  if (paidAtRaw === null || paidAtRaw.length < 10) return err('payable-event-payload-invalid');
+  const paidAt = paidAtRaw.slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(paidAt)) return err('payable-event-payload-invalid');
+  return ok({ payableIds: ids.value, paidAt });
+};
+
 export const applyPayableEvent =
   (deps: Deps) =>
   async (input: ApplyPayableEventInput): Promise<Result<void, ApplyPayableEventError>> => {
@@ -126,6 +144,11 @@ export const applyPayableEvent =
       const rows = parseDocumentSaved(input.payload);
       if (!rows.ok) return err(rows.error);
       return deps.store.upsert(rows.value);
+    }
+    if (input.eventType === 'PayableManuallyPaid') {
+      const paid = parsePaid(input.payload);
+      if (!paid.ok) return err(paid.error);
+      return deps.store.markPaid(paid.value.payableIds, paid.value.paidAt);
     }
     const status = STATUS_BY_EVENT[input.eventType];
     if (status === undefined) return ok(undefined); // fora do contrato → skip

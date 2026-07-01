@@ -13,5 +13,12 @@ export type PayableViewStore = Readonly<{
     payableIds: readonly string[],
     status: PayableViewStatus,
   ) => Promise<Result<void, PayableViewStoreError>>;
+  // #239: baixa — status='Paid' + data do pagamento (YYYY-MM-DD).
+  markPaid: (
+    payableIds: readonly string[],
+    paidAt: string,
+  ) => Promise<Result<void, PayableViewStoreError>>;
   list: () => Promise<Result<readonly PayableView[], PayableViewStoreError>>;
+  // #239: widget "Últimos pagamentos" — Top-N pagos por `paidAt` desc.
+  listRecentPaid: (limit: number) => Promise<Result<readonly PayableView[], PayableViewStoreError>>;
 }>;

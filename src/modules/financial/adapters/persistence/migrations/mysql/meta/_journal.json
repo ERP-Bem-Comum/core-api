@@ -204,6 +204,13 @@
       "when": 1782876445198,
       "tag": "0028_useful_giant_man",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "5",
+      "when": 1782879803751,
+      "tag": "0029_complete_risque",
+      "breakpoints": true
     }
   ]
 }

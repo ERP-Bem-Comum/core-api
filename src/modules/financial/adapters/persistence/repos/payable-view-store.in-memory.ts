@@ -14,10 +14,16 @@ export const createInMemoryPayableViewStore = (): PayableViewStore => {
       incoming: readonly PayableView[],
     ): Promise<Result<void, PayableViewStoreError>> => {
       for (const row of incoming) {
-        // `status` é dono dos eventos de transição: no reprocesso do DocumentSaved preserva o
-        // status já projetado (não regride a Open). Linha nova entra com o status do snapshot.
+        // `status` e `paidAt` são donos dos eventos de transição: no reprocesso do DocumentSaved
+        // preserva o já projetado (não regride status nem apaga paidAt). Linha nova: status do
+        // snapshot + paidAt null.
         const existing = rows.get(row.payableId);
-        rows.set(row.payableId, existing === undefined ? row : { ...row, status: existing.status });
+        rows.set(
+          row.payableId,
+          existing === undefined
+            ? row
+            : { ...row, status: existing.status, paidAt: existing.paidAt },
+        );
       }
       return Promise.resolve(ok(undefined));
     },
@@ -33,7 +39,30 @@ export const createInMemoryPayableViewStore = (): PayableViewStore => {
       return Promise.resolve(ok(undefined));
     },
 
+    markPaid: async (
+      payableIds: readonly string[],
+      paidAt: string,
+    ): Promise<Result<void, PayableViewStoreError>> => {
+      for (const id of payableIds) {
+        const existing = rows.get(id);
+        if (existing !== undefined) rows.set(id, { ...existing, status: 'Paid', paidAt });
+      }
+      return Promise.resolve(ok(undefined));
+    },
+
     list: async (): Promise<Result<readonly PayableView[], PayableViewStoreError>> =>
       Promise.resolve(ok([...rows.values()])),
+
+    listRecentPaid: async (
+      limit: number,
+    ): Promise<Result<readonly PayableView[], PayableViewStoreError>> =>
+      Promise.resolve(
+        ok(
+          [...rows.values()]
+            .filter((r) => r.status === 'Paid' && r.paidAt !== null)
+            .sort((a, b) => (b.paidAt ?? '').localeCompare(a.paidAt ?? ''))
+            .slice(0, limit),
+        ),
+      ),
   };
 };
