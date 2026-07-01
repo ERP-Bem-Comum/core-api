@@ -36,5 +36,7 @@ export const rowToPayableView = (
     valueCents: row.valueCents,
     dueDate: row.dueDate,
     status: row.status,
+    debitAccountRef: row.debitAccountRef,
+    paidAt: row.paidAt,
   });
 };

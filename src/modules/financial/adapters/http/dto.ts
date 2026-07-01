@@ -20,6 +20,7 @@ import type { ReconciliationPeriod } from '../../domain/reconciliation/period.ts
 import type { Category } from '../../domain/category/category.ts';
 import type { CostCenter } from '../../domain/cost-center/cost-center.ts';
 import type { DocumentTypeMetadata } from '../../domain/document/document-type-metadata.ts';
+import type { PayableView } from '../../domain/payable-view/types.ts';
 import type { ProgramView } from '../../application/ports/program-read.ts';
 import type { PaidPayableView } from '../../application/ports/payable-reconciliation-view.ts';
 import type { MatchSuggestion } from '../../application/use-cases/suggest-matches.ts';
@@ -39,6 +40,7 @@ import type {
   CostCenterResponseDto,
   ProgramResponseDto,
   DocumentTypeMetadataResponseDto,
+  RecentPaymentDto,
 } from './schemas.ts';
 import type { PayeeBankBlock } from './payee-bank-composition.ts';
 
@@ -75,6 +77,19 @@ export const documentTypeMetadataToDto = (
     allowedRetentions: [...m.allowedRetentions],
     accessKeyRequired: m.accessKeyRequired,
     suggestedPaymentMethod: m.suggestedPaymentMethod,
+  }));
+
+/** Widget "Últimos pagamentos" (#239) → DTO lean Top-N pagos `{payableId, documentId, supplierRef,
+ * debitAccountRef, valueCents, paidAt}`. Nunca expõe o resto da linha do read-model (kind, status,
+ * category/costCenter/programRef, dueDate — não pedidos pelo widget). */
+export const recentPaymentsToDto = (views: readonly PayableView[]): RecentPaymentDto[] =>
+  views.map((v) => ({
+    payableId: v.payableId,
+    documentId: v.documentId,
+    supplierRef: v.supplierRef,
+    debitAccountRef: v.debitAccountRef,
+    valueCents: moneyToCentsString(v.valueCents),
+    paidAt: v.paidAt,
   }));
 
 /**

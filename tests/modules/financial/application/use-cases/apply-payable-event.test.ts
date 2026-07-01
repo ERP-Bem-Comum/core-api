@@ -37,8 +37,14 @@ const documentSaved = () =>
     ],
   });
 
+// #239: PayableManuallyPaid carrega paidAt (o evento real sempre tem); os demais ignoram.
 const statusEvent = (payableId: string) =>
-  JSON.stringify({ documentId: DOC, payableId, payableIds: [payableId] });
+  JSON.stringify({
+    documentId: DOC,
+    payableId,
+    payableIds: [payableId],
+    paidAt: '2026-06-20T12:00:00.000Z',
+  });
 
 describe('financial/application — applyPayableEvent projeta fin_payable_view (#235)', () => {
   it('CA2: DocumentSaved cria uma linha por título com refs/valor/dueDate/status=Open', async () => {

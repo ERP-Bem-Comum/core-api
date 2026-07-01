@@ -23,6 +23,9 @@ import { createDrizzlePayableListView } from '../persistence/repos/payable-list-
 import type { PayableListView } from '../../application/ports/payable-list-view.ts';
 import { createInMemorySupplierViewStore } from '../persistence/repos/supplier-view-store.in-memory.ts';
 import { createDrizzleSupplierViewStore } from '../persistence/repos/supplier-view-store.drizzle.ts';
+// #239: read-model de payables (Top-5 "Últimos pagamentos") — molde de supplier-view-store acima.
+import { createInMemoryPayableViewStore } from '../persistence/repos/payable-view-store.in-memory.ts';
+import { createDrizzlePayableViewStore } from '../persistence/repos/payable-view-store.drizzle.ts';
 import { createInMemoryPayableDocumentView } from '../persistence/repos/payable-document-view.in-memory.ts';
 import { createDrizzlePayableDocumentView } from '../persistence/repos/payable-document-view.drizzle.ts';
 import {
@@ -140,6 +143,8 @@ import type { RejectedSuggestionRepository } from '../../application/ports/rejec
 import type { ReconciliationPeriodStore } from '../../application/ports/reconciliation-period-store.ts';
 import type { SupplierViewStore } from '../../application/ports/supplier-view-store.ts';
 import type { PayableDocumentView } from '../../application/ports/payable-document-view.ts';
+// #239: read-model de payables — GET /financial/dashboard/recent-payments (Top-5 pagos).
+import type { PayableViewStore } from '../../application/ports/payable-view-store.ts';
 
 export type FinancialDriver = 'memory' | 'mysql';
 
@@ -153,6 +158,11 @@ export type FinancialCompositionConfig = Readonly<{
   /** Port de leitura do NOME de usuário + alçada do aprovador (#207/#289 — ADR-0032).
    *  Injetado em testes; driver mysql constrói automaticamente se ausente. */
   authUserReadPort?: AuthUserReadPort & ApproverAuthorityReadPort;
+  /** Read-model de payables (#239 — widget "Últimos pagamentos"). Em produção é alimentado de forma
+   *  ASSÍNCRONA pelo worker `payable-view-projection` (ADR-0022) — não pelas rotas de escrita deste
+   *  composition root. Injetado em testes HTTP para semear dados determinísticos via `applyPayableEvent`;
+   *  ambos os drivers constroem uma store vazia automaticamente se ausente. */
+  payableViewStore?: PayableViewStore;
 }>;
 
 export type FinancialHttpDeps = Readonly<{
@@ -225,6 +235,8 @@ export type FinancialHttpDeps = Readonly<{
   listCostCenters: CostCenterReadPort['list'];
   /** Programas (020 · US3) — GET /financial/programs (passthrough cross-módulo). */
   listPrograms: ProgramReadPort['list'];
+  /** #239 · Últimos pagamentos — GET /financial/dashboard/recent-payments. */
+  listRecentPaid: PayableViewStore['listRecentPaid'];
   /** Composição síncrona do bancário do favorecido (#255 — ADR-0032). */
   resolvePayeeBank: (ref: {
     kind: PayeeKind | null;
@@ -259,6 +271,9 @@ type Pools = Readonly<{
   supplierViewStore: SupplierViewStore;
   // #146: JOIN fin_payables × fin_documents para o export CSV-Nibo.
   payableDocView: PayableDocumentView;
+  // #239: read-model de payables (Top-5 "Últimos pagamentos"). memory: vazio no boot (sem worker de
+  // projeção síncrono — injetável em testes via config.payableViewStore); mysql: drizzle.
+  payableViewStore: PayableViewStore;
   // #255: port de leitura do contratado (ADR-0032). memory: injetado ou null; mysql: construído.
   contractorReadPort: ContractorReadPort | null;
   // #207/#289: port de leitura do nome de usuário + alçada do aprovador (ADR-0032). memory:
@@ -303,6 +318,9 @@ const seededProgramsStub = (): readonly ProgramView[] => [
 const buildMemoryPools = (
   contractorReadPort: ContractorReadPort | null,
   authUserReadPort: (AuthUserReadPort & ApproverAuthorityReadPort) | null,
+  // #239: injetável em testes (semear via applyPayableEvent); vazio por padrão — em produção quem
+  // popula é o worker payable-view-projection (async), não este composition root (ADR-0022).
+  payableViewStore: PayableViewStore = createInMemoryPayableViewStore(),
 ): Pools => {
   // Store compartilhado entre o document-repo (escreve trilha no save) e o timeline-repo
   // (lê). Garante atomicidade em memória sem tx (timeline-repository.in-memory.ts §store).
@@ -381,6 +399,7 @@ const buildMemoryPools = (
     suggestionView,
     rejectedSuggestionRepo,
     periodStore,
+    payableViewStore,
     contractorReadPort,
     authUserReadPort,
     shutdown: () => Promise.resolve(),
@@ -471,6 +490,8 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     supplierViewStore: createDrizzleSupplierViewStore(handle, ClockReal()),
     // #146: JOIN fin_payables × fin_documents via Drizzle (inArray — suggestion-view.drizzle.ts precedente).
     payableDocView: createDrizzlePayableDocumentView(handle),
+    // #239: injetado tem precedência (testes); mysql constrói o adapter Drizzle por padrão.
+    payableViewStore: config.payableViewStore ?? createDrizzlePayableViewStore(handle, ClockReal()),
     suggestionView: createDrizzleSuggestionView(handle),
     rejectedSuggestionRepo: createDrizzleRejectedSuggestionRepository(handle),
     periodStore: createDrizzleReconciliationPeriodStore(handle),
@@ -614,6 +635,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     listCategories: pools.categoryReader.list,
     listCostCenters: pools.costCenterReader.list,
     listPrograms: pools.programReader.list,
+    listRecentPaid: pools.payableViewStore.listRecentPaid,
     resolvePayeeBank: (ref) => composePayeeBank(pools.contractorReadPort, ref),
     resolveUserName: (id) => resolveUserName(pools.authUserReadPort, id),
     shutdown: pools.shutdown,
@@ -625,7 +647,11 @@ export const buildFinancialHttpDeps = async (
 ): Promise<FinancialHttpDeps> => {
   if (config.driver === 'memory') {
     return makeDeps(
-      buildMemoryPools(config.contractorReadPort ?? null, config.authUserReadPort ?? null),
+      buildMemoryPools(
+        config.contractorReadPort ?? null,
+        config.authUserReadPort ?? null,
+        config.payableViewStore,
+      ),
     );
   }
 

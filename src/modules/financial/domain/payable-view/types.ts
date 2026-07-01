@@ -53,4 +53,8 @@ export type PayableView = Readonly<{
   valueCents: number; // centavos (convenção Money do codebase — bigint(mode:'number'))
   dueDate: string; // ISO YYYY-MM-DD
   status: PayableViewStatus;
+  // #239: conta-débito (de qual conta cedente o pagamento sai) + data do pagamento (YYYY-MM-DD).
+  // `paidAt` só preenchido quando status='Paid' (via PayableManuallyPaid).
+  debitAccountRef: string | null;
+  paidAt: string | null;
 }>;

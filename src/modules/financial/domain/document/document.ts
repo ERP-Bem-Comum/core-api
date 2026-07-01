@@ -118,6 +118,7 @@ type DocumentRefsSource = Readonly<{
   categoryRef: CategoryRef | null;
   costCenterRef: CostCenterRef | null;
   programRef: ProgramRef | null;
+  debitAccountRef: string | null;
 }>;
 
 const payableSnapshot = (p: Payable): PayableSnapshot => ({
@@ -144,6 +145,7 @@ const documentSavedEvents = (
       categoryRef: document.categoryRef,
       costCenterRef: document.costCenterRef,
       programRef: document.programRef,
+      debitAccountRef: document.debitAccountRef,
       payables: all.map(payableSnapshot),
     },
   ];
