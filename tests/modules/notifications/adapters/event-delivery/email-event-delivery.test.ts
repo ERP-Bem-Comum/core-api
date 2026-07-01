@@ -106,6 +106,17 @@ describe('notifications EmailEventDelivery (CA3/CA4/CA6/CA8)', () => {
     assert.equal(sent.length, 1);
     assert.equal(String(sent[0]?.to[0]), 'joana@example.com');
     assert.ok(sent[0]?.textBody.includes('https://app.local/activate?token=xyz'));
+    // assunto (copy do modelo antigo, novo layout)
+    assert.equal(sent[0]?.subject, 'Bem Comum - Seja Bem-vindo ao ERP!');
+    const html = sent[0]?.htmlBody ?? '';
+    // layout de marca RESTRITO (tabelas + inline) — mesmo do Cadastro de Colaborador
+    assert.ok(html.includes('<table'));
+    assert.ok(html.includes('#33609C')); // azul da marca
+    assert.ok(html.includes('https://app.local/images/logo-bem-comum-email.png')); // logo derivado
+    assert.ok(html.includes('Criar senha')); // CTA
+    assert.ok(html.includes('Ol&aacute;')); // acento como entidade
+    assert.ok(html.includes('Seja bem-vindo ao ERP')); // copy do modelo antigo
+    assert.ok(html.includes('href="https://app.local/activate?token=xyz"')); // botao -> ativacao
   });
 
   it('CA8 — convite: nome escapado no HTML (anti-XSS) e link presente', async () => {

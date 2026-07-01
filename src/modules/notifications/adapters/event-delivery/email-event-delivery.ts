@@ -47,38 +47,15 @@ const resetTemplate = (
     `(expira em breve):\n\n${event.resetUrl}\n\nSe voce nao solicitou, ignore este e-mail.`,
 });
 
-// UserInvited — espelha invite-mailer.email.ts (texto + HTML com escapeHtml no nome).
-const inviteTemplate = (
-  event: Readonly<{ activationUrl: string; recipientName: string }>,
-): Readonly<{ subject: string; textBody: string; htmlBody: string }> => {
-  const textBody =
-    `Ola, ${event.recipientName}!\n\n` +
-    'Uma conta foi criada para voce no sistema Bem Comum.\n\n' +
-    'Para definir sua senha e ativar o acesso, clique no link abaixo ' +
-    '(valido por tempo limitado):\n\n' +
-    `${event.activationUrl}\n\n` +
-    'Se voce nao esperava este convite, ignore este e-mail. ' +
-    'Nenhuma acao e necessaria - a conta permanecera inativa.';
+// ─── layout de marca compartilhado (HTML RESTRITO: tabelas + CSS inline — diretriz do tech lead) ──
 
-  const safeName = escapeHtml(event.recipientName);
-  const htmlBody =
-    `<p>Ola, ${safeName}!</p>` +
-    '<p>Uma conta foi criada para voce no sistema <strong>Bem Comum</strong>.</p>' +
-    '<p>Para definir sua senha e ativar o acesso, clique no link abaixo ' +
-    '(valido por tempo limitado):</p>' +
-    `<p><a href="${event.activationUrl}">Ativar minha conta</a></p>` +
-    '<p>Se voce nao esperava este convite, ignore este e-mail.</p>';
-
-  return { subject: 'Bem-vindo ao Bem Comum - ative seu acesso', textBody, htmlBody };
-};
-
-// Logo hospedado no web-app (mesma origem do link de autocadastro). E-mail nao embute imagem
-// (base64 e bloqueado no Gmail) -> URL publica. Deriva do proprio autocadastroUrl (zero config nova);
-// URL malformada -> null (fallback textual). Path do asset: web-app public/images/.
+// Logo hospedado no web-app (mesma origem do link do e-mail). E-mail nao embute imagem (base64 e
+// bloqueado no Gmail) -> URL publica derivada do proprio link (zero config); URL malformada -> null
+// (fallback textual). Asset: web-app public/images/logo-bem-comum-email.png.
 const EMAIL_LOGO_PATH = '/images/logo-bem-comum-email.png';
-const emailLogoUrl = (autocadastroUrl: string): string | null => {
+const emailLogoUrl = (linkUrl: string): string | null => {
   try {
-    return new URL(autocadastroUrl).origin + EMAIL_LOGO_PATH;
+    return new URL(linkUrl).origin + EMAIL_LOGO_PATH;
   } catch {
     return null;
   }
@@ -87,30 +64,34 @@ const emailLogoUrl = (autocadastroUrl: string): string | null => {
 const BRAND_BLUE = '#33609C';
 const FONT_STACK = "'Nunito','Helvetica Neue',Helvetica,Arial,sans-serif";
 
-// CollaboratorInvited (partners) — convite de autocadastro de colaborador. HTML de marca RESTRITO
-// (tabelas + CSS inline; diretriz do tech lead), acentos como entidades (a prova de cliente), nome
-// escapado (anti-XSS). Espelha o invite-mailer do partners (collaborator-invite-mailer.email.ts).
-const collaboratorInviteTemplate = (
-  event: Readonly<{ autocadastroUrl: string; recipientName: string }>,
-): Readonly<{ subject: string; textBody: string; htmlBody: string }> => {
-  const textBody =
-    `Ola, ${event.recipientName}!\n\n` +
-    'Voce foi convidado a completar seu cadastro de Colaborador no sistema Bem Comum.\n\n' +
-    'Para preencher seus dados, clique no link abaixo (valido por tempo limitado):\n\n' +
-    `${event.autocadastroUrl}\n\n` +
-    'Se voce nao esperava este convite, ignore este e-mail.';
+// Paragrafo do corpo (estilo unico; o ultimo antes do botao ganha folga maior).
+const bodyP = (innerHtml: string, last = false): string =>
+  `<p style="margin:0 0 ${last ? '26' : '16'}px 0;font-size:15px;line-height:1.65;` +
+  `color:#4B5563;">${innerHtml}</p>`;
 
-  const safeName = escapeHtml(event.recipientName);
-  const safeUrl = escapeHtml(event.autocadastroUrl);
-  const logoUrl = emailLogoUrl(event.autocadastroUrl);
+// Realce de termo-chave no azul da marca (dentro do corpo).
+const hl = (text: string): string => `<strong style="color:${BRAND_BLUE};">${text}</strong>`;
+
+// Layout de marca compartilhado por todos os e-mails transacionais: faixa + logo, saudacao, corpo,
+// botao CTA table-based (Outlook-safe), nota + rodape. `safeName`/`ctaUrl` ja escapados pelo chamador
+// (anti-XSS); `bodyHtml` e conteudo CONFIAVEL (montado pelo template, acentos como entidades).
+const brandedEmailHtml = (
+  parts: Readonly<{
+    logoUrl: string | null;
+    safeName: string;
+    bodyHtml: string;
+    ctaLabel: string;
+    ctaUrl: string;
+  }>,
+): string => {
   const logoBlock =
-    logoUrl === null
+    parts.logoUrl === null
       ? `<div style="font-family:${FONT_STACK};font-size:22px;font-weight:800;` +
         `color:${BRAND_BLUE};">Bem Comum</div>`
-      : `<img src="${logoUrl}" width="180" alt="Bem Comum" ` +
+      : `<img src="${parts.logoUrl}" width="180" alt="Bem Comum" ` +
         'style="display:block;width:180px;max-width:180px;height:auto;border:0;" />';
 
-  const htmlBody =
+  return (
     '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" ' +
     'style="margin:0;padding:0;background-color:#E8EEF0;"><tr>' +
     '<td align="center" style="padding:32px 16px;">' +
@@ -124,19 +105,15 @@ const collaboratorInviteTemplate = (
     'background-color:#EDF1F4;">&nbsp;</div></td></tr>' +
     `<tr><td style="padding:30px 40px 8px 40px;font-family:${FONT_STACK};">` +
     '<p style="margin:0 0 18px 0;font-size:19px;line-height:1.4;font-weight:700;' +
-    `color:#1E2A3A;">Ol&aacute;, ${safeName}!</p>` +
-    '<p style="margin:0 0 16px 0;font-size:15px;line-height:1.65;color:#4B5563;">' +
-    'Voc&ecirc; foi convidado a completar seu cadastro de ' +
-    `<strong style="color:${BRAND_BLUE};">Colaborador</strong> no sistema Bem Comum.</p>` +
-    '<p style="margin:0 0 26px 0;font-size:15px;line-height:1.65;color:#4B5563;">' +
-    'Para preencher seus dados, clique no bot&atilde;o abaixo ' +
-    '(v&aacute;lido por tempo limitado):</p></td></tr>' +
+    `color:#1E2A3A;">Ol&aacute;, ${parts.safeName}!</p>` +
+    parts.bodyHtml +
+    '</td></tr>' +
     '<tr><td align="center" style="padding:0 40px 30px 40px;">' +
     '<table role="presentation" cellpadding="0" cellspacing="0"><tr>' +
     `<td align="center" style="border-radius:8px;background-color:${BRAND_BLUE};">` +
-    `<a href="${safeUrl}" target="_blank" style="display:inline-block;padding:14px 30px;` +
+    `<a href="${parts.ctaUrl}" target="_blank" style="display:inline-block;padding:14px 30px;` +
     `font-family:${FONT_STACK};font-size:15px;font-weight:700;color:#FFFFFF;` +
-    'text-decoration:none;border-radius:8px;">Completar meu cadastro</a>' +
+    `text-decoration:none;border-radius:8px;">${parts.ctaLabel}</a>` +
     '</td></tr></table></td></tr>' +
     `<tr><td style="padding:0 40px 28px 40px;font-family:${FONT_STACK};">` +
     '<div style="height:1px;line-height:1px;font-size:0;background-color:#EDF1F4;' +
@@ -149,13 +126,71 @@ const collaboratorInviteTemplate = (
     `<td align="center" style="padding:18px 40px 6px 40px;font-family:${FONT_STACK};">` +
     '<p style="margin:0;font-size:12px;line-height:1.5;color:#A7B0BC;">' +
     'Bem Comum &middot; este &eacute; um e-mail autom&aacute;tico, n&atilde;o responda.' +
-    '</p></td></tr></table></td></tr></table>';
+    '</p></td></tr></table></td></tr></table>'
+  );
+};
 
-  return {
-    subject: 'Bem Comum - Complete seu Cadastro de Colaborador',
-    textBody,
-    htmlBody,
-  };
+// UserInvited — conta criada; define a senha do 1o acesso. Novo layout de marca + copy do modelo
+// antigo ("Bem-vindo ao ERP! ... criar uma senha para o primeiro acesso").
+const inviteTemplate = (
+  event: Readonly<{ activationUrl: string; recipientName: string }>,
+): Readonly<{ subject: string; textBody: string; htmlBody: string }> => {
+  const textBody =
+    `Ola, ${event.recipientName}!\n\n` +
+    'Seja bem-vindo ao ERP Bem Comum! Agora falta pouco para voce ter acesso a plataforma.\n\n' +
+    'Basta clicar no link abaixo e criar uma senha para o seu primeiro acesso ' +
+    '(valido por tempo limitado):\n\n' +
+    `${event.activationUrl}\n\n` +
+    'Se voce nao esperava este convite, ignore este e-mail.';
+
+  const htmlBody = brandedEmailHtml({
+    logoUrl: emailLogoUrl(event.activationUrl),
+    safeName: escapeHtml(event.recipientName),
+    bodyHtml:
+      bodyP(
+        `Seja bem-vindo ao ERP ${hl('Bem Comum')}! Agora falta pouco para voc&ecirc; ` +
+        'ter acesso &agrave; plataforma.',
+      ) +
+      bodyP(
+        'Basta clicar no bot&atilde;o abaixo e criar uma senha para o seu primeiro acesso ' +
+        '(v&aacute;lido por tempo limitado):',
+        true,
+      ),
+    ctaLabel: 'Criar senha',
+    ctaUrl: escapeHtml(event.activationUrl),
+  });
+
+  return { subject: 'Bem Comum - Seja Bem-vindo ao ERP!', textBody, htmlBody };
+};
+
+// CollaboratorInvited (partners) — convite de autocadastro de colaborador (mesmo layout de marca).
+const collaboratorInviteTemplate = (
+  event: Readonly<{ autocadastroUrl: string; recipientName: string }>,
+): Readonly<{ subject: string; textBody: string; htmlBody: string }> => {
+  const textBody =
+    `Ola, ${event.recipientName}!\n\n` +
+    'Voce foi convidado a completar seu cadastro de Colaborador no sistema Bem Comum.\n\n' +
+    'Para preencher seus dados, clique no link abaixo (valido por tempo limitado):\n\n' +
+    `${event.autocadastroUrl}\n\n` +
+    'Se voce nao esperava este convite, ignore este e-mail.';
+
+  const htmlBody = brandedEmailHtml({
+    logoUrl: emailLogoUrl(event.autocadastroUrl),
+    safeName: escapeHtml(event.recipientName),
+    bodyHtml:
+      bodyP(
+        `Voc&ecirc; foi convidado a completar seu cadastro de ${hl('Colaborador')} ` +
+        'no sistema Bem Comum.',
+      ) +
+      bodyP(
+        'Para preencher seus dados, clique no bot&atilde;o abaixo (v&aacute;lido por tempo limitado):',
+        true,
+      ),
+    ctaLabel: 'Completar meu cadastro',
+    ctaUrl: escapeHtml(event.autocadastroUrl),
+  });
+
+  return { subject: 'Bem Comum - Complete seu Cadastro de Colaborador', textBody, htmlBody };
 };
 
 // ─── union multi-fonte (auth + partners) ──────────────────────────────────────
