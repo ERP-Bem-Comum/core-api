@@ -14,6 +14,7 @@ import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/out
 import { saveDocument } from '#src/modules/financial/application/use-cases/save-document.ts';
 import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
 import { createInMemoryContractCategorizationReadStore } from '#src/modules/contracts/public-api/index.ts';
+import type { DocumentSaved } from '#src/modules/financial/domain/document/events.ts';
 
 const SUP = '11111111-1111-4111-8111-111111111111';
 const CLOCK = ClockFixed(new Date('2026-06-15T12:00:00Z'));
@@ -36,25 +37,6 @@ const nfseCommand = () => ({
   dueDate: new Date('2026-07-01'),
 });
 
-type EnrichedPayable = Readonly<{
-  payableId: string;
-  kind: 'Parent' | 'Child';
-  retentionType: string | null;
-  valueCents: string;
-  dueDate: string;
-  status: string;
-}>;
-type EnrichedDocumentSaved = Readonly<{
-  type: 'DocumentSaved';
-  documentId: unknown;
-  supplierRef: string | null;
-  contractRef: string | null;
-  categoryRef: string | null;
-  costCenterRef: string | null;
-  programRef: string | null;
-  payables: readonly EnrichedPayable[];
-}>;
-
 describe('financial/application — DocumentSaved enriquecido para projeção (#235 · CA1)', () => {
   it('CA1: DocumentSaved carrega refs do documento + snapshot por título', async () => {
     const outbox = createInMemoryOutbox();
@@ -67,9 +49,7 @@ describe('financial/application — DocumentSaved enriquecido para projeção (#
     })(nfseCommand());
 
     assert.equal(result.ok, true);
-    const saved = outbox.all().find((e) => e.type === 'DocumentSaved') as
-      | EnrichedDocumentSaved
-      | undefined;
+    const saved = outbox.all().find((e): e is DocumentSaved => e.type === 'DocumentSaved');
     assert.ok(saved, 'esperava DocumentSaved no outbox');
 
     // refs do documento (uma vez)
@@ -77,7 +57,6 @@ describe('financial/application — DocumentSaved enriquecido para projeção (#
     assert.equal(saved.contractRef, null);
 
     // snapshot por título: 1 pai (77500, Open) + 3 filhos
-    assert.ok(Array.isArray(saved.payables), 'DocumentSaved.payables deve ser array (snapshot)');
     assert.equal(saved.payables.length, 4);
     const parent = saved.payables.find((p) => p.kind === 'Parent');
     assert.ok(parent, 'esperava título pai no snapshot');

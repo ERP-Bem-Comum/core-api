@@ -512,6 +512,39 @@ export const finSupplierView = mysqlTable('fin_supplier_view', {
   updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
 });
 
+// ─── fin_payable_view ─────────────────────────────────────────────────────────
+//
+// #235 (FND-RM-a) — read-model de payables do Dashboard/Reports (Camada 0). Projeção
+// evento-carregada (ADR-0022) alimentada pelo consumer `payable-view-projection` a partir dos
+// eventos enriquecidos do `financial` (DocumentSaved + transições). PK = payableId (UUID v4).
+// Sem FK cross-aggregate (refs por identidade). `kind`/`status` = varchar (ENUM proibido, ADR-0020).
+export const finPayableView = mysqlTable(
+  'fin_payable_view',
+  {
+    payableId: varchar('payable_id', { length: 36 }).primaryKey().notNull(),
+    documentId: varchar('document_id', { length: 36 }).notNull(),
+    kind: varchar('kind', { length: 10 }).notNull(), // Parent | Child
+    retentionType: varchar('retention_type', { length: 10 }),
+    supplierRef: varchar('supplier_ref', { length: 36 }),
+    contractRef: varchar('contract_ref', { length: 36 }),
+    categoryRef: varchar('category_ref', { length: 36 }),
+    costCenterRef: varchar('cost_center_ref', { length: 36 }),
+    programRef: varchar('program_ref', { length: 36 }),
+    valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
+    dueDate: date('due_date', { mode: 'string' }).notNull(),
+    status: varchar('status', { length: 12 }).notNull(), // Open|Approved|Paid|Cancelled
+    updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
+  },
+  (t) => [
+    index('fin_payable_view_status_idx').on(t.status),
+    index('fin_payable_view_cost_center_idx').on(t.costCenterRef),
+    index('fin_payable_view_category_idx').on(t.categoryRef),
+    index('fin_payable_view_program_idx').on(t.programRef),
+    index('fin_payable_view_supplier_idx').on(t.supplierRef),
+    index('fin_payable_view_due_date_idx').on(t.dueDate),
+  ],
+);
+
 // ─── fin_cedente_accounts ─────────────────────────────────────────────────────
 //
 // Conta-cedente: conta-débito Bradesco da organização (D-CEDENTE), seedável via config. Liga
