@@ -129,4 +129,35 @@ describe('financial/application — applyPayableEvent projeta fin_payable_view (
     });
     assert.equal(r.ok, false);
   });
+
+  // m2 (#307): status do snapshot é DocumentStatus (8 valores); mapa explícito → PayableViewStatus.
+  // Reconciled é settled → 'Paid' (não mais rejeitado silenciosamente).
+  it('m2: snapshot com DocumentStatus fora dos 4 read-model (Reconciled) → mapeado a Paid', async () => {
+    const store = createInMemoryPayableViewStore();
+    const payload = JSON.stringify({
+      documentId: DOC,
+      supplierRef: SUP,
+      contractRef: null,
+      categoryRef: null,
+      costCenterRef: null,
+      programRef: null,
+      payables: [
+        {
+          payableId: P1,
+          kind: 'Parent',
+          retentionType: null,
+          valueCents: '77500',
+          dueDate: '2026-07-01',
+          status: 'Reconciled',
+        },
+      ],
+    });
+    const r = await applyPayableEvent({ store })({ eventType: 'DocumentSaved', payload });
+    assert.equal(r.ok, true);
+    const l = await store.list();
+    if (l.ok) {
+      assert.equal(l.value.length, 1);
+      assert.equal(l.value[0]?.status, 'Paid');
+    }
+  });
 });
