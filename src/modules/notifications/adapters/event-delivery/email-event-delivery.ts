@@ -35,17 +35,7 @@ const CONSUMER_ID = 'notifications-email-dispatch';
 const escapeHtml = (raw: string): string =>
   raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
-// ─── templates (migrados dos mailers atuais — CA8) ──────────────────────────────
-
-// PasswordResetRequested — espelha password-reset-mailer.email.ts.
-const resetTemplate = (
-  event: Readonly<{ resetUrl: string }>,
-): Readonly<{ subject: string; textBody: string }> => ({
-  subject: 'Recuperacao de senha',
-  textBody:
-    'Recebemos um pedido de redefinicao de senha. Acesse o link para continuar ' +
-    `(expira em breve):\n\n${event.resetUrl}\n\nSe voce nao solicitou, ignore este e-mail.`,
-});
+// ─── templates de e-mail transacional (layout de marca compartilhado, definido abaixo) ──────────
 
 // ─── layout de marca compartilhado (HTML RESTRITO: tabelas + CSS inline — diretriz do tech lead) ──
 
@@ -72,16 +62,22 @@ const bodyP = (innerHtml: string, last = false): string =>
 // Realce de termo-chave no azul da marca (dentro do corpo).
 const hl = (text: string): string => `<strong style="color:${BRAND_BLUE};">${text}</strong>`;
 
+// Saudacao "Ola, <nome>!" (nome ja escapado). Nota de rodape dos CONVITES (colaborador/usuario).
+const greetName = (safeName: string): string => `Ol&aacute;, ${safeName}!`;
+const INVITE_FOOTNOTE =
+  'Se voc&ecirc; n&atilde;o esperava este convite, pode ignorar este e-mail com seguran&ccedil;a.';
+
 // Layout de marca compartilhado por todos os e-mails transacionais: faixa + logo, saudacao, corpo,
 // botao CTA table-based (Outlook-safe), nota + rodape. `safeName`/`ctaUrl` ja escapados pelo chamador
 // (anti-XSS); `bodyHtml` e conteudo CONFIAVEL (montado pelo template, acentos como entidades).
 const brandedEmailHtml = (
   parts: Readonly<{
     logoUrl: string | null;
-    safeName: string;
+    greetingHtml: string;
     bodyHtml: string;
     ctaLabel: string;
     ctaUrl: string;
+    footnoteHtml: string;
   }>,
 ): string => {
   const logoBlock =
@@ -105,7 +101,7 @@ const brandedEmailHtml = (
     'background-color:#EDF1F4;">&nbsp;</div></td></tr>' +
     `<tr><td style="padding:30px 40px 8px 40px;font-family:${FONT_STACK};">` +
     '<p style="margin:0 0 18px 0;font-size:19px;line-height:1.4;font-weight:700;' +
-    `color:#1E2A3A;">Ol&aacute;, ${parts.safeName}!</p>` +
+    `color:#1E2A3A;">${parts.greetingHtml}</p>` +
     parts.bodyHtml +
     '</td></tr>' +
     '<tr><td align="center" style="padding:0 40px 30px 40px;">' +
@@ -119,8 +115,7 @@ const brandedEmailHtml = (
     '<div style="height:1px;line-height:1px;font-size:0;background-color:#EDF1F4;' +
     'margin-bottom:18px;">&nbsp;</div>' +
     '<p style="margin:0;font-size:13px;line-height:1.6;color:#9AA4B0;">' +
-    'Se voc&ecirc; n&atilde;o esperava este convite, pode ignorar este e-mail ' +
-    'com seguran&ccedil;a.</p></td></tr></table>' +
+    `${parts.footnoteHtml}</p></td></tr></table>` +
     '<table role="presentation" width="600" cellpadding="0" cellspacing="0" ' +
     'style="width:600px;max-width:600px;"><tr>' +
     `<td align="center" style="padding:18px 40px 6px 40px;font-family:${FONT_STACK};">` +
@@ -145,7 +140,7 @@ const inviteTemplate = (
 
   const htmlBody = brandedEmailHtml({
     logoUrl: emailLogoUrl(event.activationUrl),
-    safeName: escapeHtml(event.recipientName),
+    greetingHtml: greetName(escapeHtml(event.recipientName)),
     bodyHtml:
       bodyP(
         `Seja bem-vindo ao ERP ${hl('Bem Comum')}! Agora falta pouco para voc&ecirc; ` +
@@ -158,6 +153,7 @@ const inviteTemplate = (
       ),
     ctaLabel: 'Criar senha',
     ctaUrl: escapeHtml(event.activationUrl),
+    footnoteHtml: INVITE_FOOTNOTE,
   });
 
   return { subject: 'Bem Comum - Seja Bem-vindo ao ERP!', textBody, htmlBody };
@@ -176,7 +172,7 @@ const collaboratorInviteTemplate = (
 
   const htmlBody = brandedEmailHtml({
     logoUrl: emailLogoUrl(event.autocadastroUrl),
-    safeName: escapeHtml(event.recipientName),
+    greetingHtml: greetName(escapeHtml(event.recipientName)),
     bodyHtml:
       bodyP(
         `Voc&ecirc; foi convidado a completar seu cadastro de ${hl('Colaborador')} ` +
@@ -188,9 +184,43 @@ const collaboratorInviteTemplate = (
       ),
     ctaLabel: 'Completar meu cadastro',
     ctaUrl: escapeHtml(event.autocadastroUrl),
+    footnoteHtml: INVITE_FOOTNOTE,
   });
 
   return { subject: 'Bem Comum - Complete seu Cadastro de Colaborador', textBody, htmlBody };
+};
+
+// PasswordResetRequested — pedido de recuperacao de senha (mesmo layout de marca). O evento NAO carrega
+// nome -> saudacao sem nome; a nota e "nao solicitou" (nao "nao esperava convite").
+const resetTemplate = (
+  event: Readonly<{ resetUrl: string }>,
+): Readonly<{ subject: string; textBody: string; htmlBody: string }> => {
+  const textBody =
+    'Ola,\n\n' +
+    'Recebemos um pedido para redefinir a sua senha de acesso ao ERP Bem Comum.\n\n' +
+    'Para criar uma nova senha, clique no link abaixo (valido por tempo limitado):\n\n' +
+    `${event.resetUrl}\n\n` +
+    'Se voce nao solicitou esta redefinicao, ignore este e-mail - sua senha atual continua valida.';
+
+  const htmlBody = brandedEmailHtml({
+    logoUrl: emailLogoUrl(event.resetUrl),
+    greetingHtml: 'Ol&aacute;,',
+    bodyHtml:
+      bodyP(
+        `Recebemos um pedido para redefinir a sua senha de acesso ao ERP ${hl('Bem Comum')}.`,
+      ) +
+      bodyP(
+        'Para criar uma nova senha, clique no bot&atilde;o abaixo (v&aacute;lido por tempo limitado):',
+        true,
+      ),
+    ctaLabel: 'Redefinir senha',
+    ctaUrl: escapeHtml(event.resetUrl),
+    footnoteHtml:
+      'Se voc&ecirc; n&atilde;o solicitou esta redefini&ccedil;&atilde;o, pode ignorar este e-mail ' +
+      '&mdash; sua senha atual continua v&aacute;lida.',
+  });
+
+  return { subject: 'Bem Comum - Recuperar Senha', textBody, htmlBody };
 };
 
 // ─── union multi-fonte (auth + partners) ──────────────────────────────────────
@@ -221,7 +251,13 @@ const buildMessage = (
       if (!subject.ok) {
         return err(deliveryUnavailable(`invalid-subject:${subject.error}`));
       }
-      return ok({ from, to: [to.value], subject: subject.value, textBody: tpl.textBody });
+      return ok({
+        from,
+        to: [to.value],
+        subject: subject.value,
+        textBody: tpl.textBody,
+        htmlBody: tpl.htmlBody,
+      });
     }
     case 'UserInvited': {
       const tpl = inviteTemplate(event);

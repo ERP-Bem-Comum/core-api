@@ -92,6 +92,16 @@ describe('notifications EmailEventDelivery (CA3/CA4/CA6/CA8)', () => {
     assert.equal(sent.length, 1);
     assert.equal(String(sent[0]?.to[0]), 'user@example.com');
     assert.ok(sent[0]?.textBody.includes('https://app.local/reset?token=abc'));
+    // agora tambem HTML de marca (mesmo layout dos convites), sem nome + nota "nao solicitou"
+    assert.equal(sent[0]?.subject, 'Bem Comum - Recuperar Senha');
+    const html = sent[0]?.htmlBody ?? '';
+    assert.ok(html.includes('<table'));
+    assert.ok(html.includes('#33609C'));
+    assert.ok(html.includes('https://app.local/images/logo-bem-comum-email.png'));
+    assert.ok(html.includes('Redefinir senha')); // CTA
+    assert.ok(html.includes('Ol&aacute;,')); // saudacao sem nome
+    assert.ok(html.includes('n&atilde;o solicitou')); // nota especifica do reset
+    assert.ok(html.includes('href="https://app.local/reset?token=abc"'));
   });
 
   it('CA4 — UserInvited -> envia e-mail de convite com link + nome', async () => {
