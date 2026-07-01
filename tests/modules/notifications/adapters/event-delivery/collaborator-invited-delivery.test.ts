@@ -72,10 +72,45 @@ describe('createEmailEventDelivery multi-fonte (CA4/CA7)', () => {
     assert.equal(sent.length, 1);
     // o link de autocadastro deve estar no corpo do e-mail
     assert.equal(sent[0]?.textBody.includes('https://app.local/autocadastro?token=abc'), true);
-    // anti-XSS: o nome do destinatario e escapado no HTML
-    if (sent[0]?.htmlBody !== undefined) {
-      assert.equal(sent[0].htmlBody.includes('<script>'), false);
+    // assunto (title case, diretriz do cliente)
+    assert.equal(sent[0]?.subject, 'Bem Comum - Complete seu Cadastro de Colaborador');
+    const html = sent[0]?.htmlBody;
+    assert.notEqual(html, undefined);
+    if (html !== undefined) {
+      // anti-XSS: o nome do destinatario e escapado no HTML (nunca a tag crua)
+      assert.equal(html.includes('<script>'), false);
+      assert.equal(html.includes('Fulano &lt;script&gt;'), true);
+      // HTML de marca RESTRITO: tabelas + CSS inline (diretriz do tech lead)
+      assert.equal(html.includes('<table'), true);
+      assert.equal(html.includes('style="'), true);
+      assert.equal(html.includes('#33609C'), true); // azul da marca
+      // logo hospedado, URL derivada da mesma origem do autocadastroUrl
+      assert.equal(html.includes('https://app.local/images/logo-bem-comum-email.png'), true);
+      // CTA + acentos como entidades (a prova de cliente de e-mail)
+      assert.equal(html.includes('Completar meu cadastro'), true);
+      assert.equal(html.includes('Ol&aacute;'), true);
+      // o link do botao deve apontar pro autocadastro
+      assert.equal(html.includes('href="https://app.local/autocadastro?token=abc"'), true);
     }
+  });
+
+  it('logo degrada p/ texto quando o autocadastroUrl e malformado (sem throw)', async () => {
+    const sender = createInMemoryEmailSender();
+    const delivery = createEmailEventDelivery({ emailSender: sender, from: from() });
+    const r = await delivery.deliver(
+      collaboratorInvitedRow({
+        payload: JSON.stringify({
+          email: 'colaborador@example.com',
+          autocadastroUrl: 'nao-e-uma-url',
+          recipientName: 'Fulano',
+          occurredAt: AT.toISOString(),
+        }),
+      }),
+    );
+    assert.equal(r.ok, true);
+    const html = sender.getSent()[0]?.htmlBody ?? '';
+    assert.equal(html.includes('<img'), false); // sem logo
+    assert.equal(html.includes('Bem Comum'), true); // fallback textual
   });
 
   it('CA7 — a MESMA delivery continua entregando PasswordResetRequested (auth_outbox)', async () => {

@@ -72,30 +72,90 @@ const inviteTemplate = (
   return { subject: 'Bem-vindo ao Bem Comum - ative seu acesso', textBody, htmlBody };
 };
 
-// CollaboratorInvited (partners) — convite de autocadastro de colaborador (texto + HTML com
-// escapeHtml no nome). Espelha o invite-mailer do partners (collaborator-invite-mailer.email.ts).
+// Logo hospedado no web-app (mesma origem do link de autocadastro). E-mail nao embute imagem
+// (base64 e bloqueado no Gmail) -> URL publica. Deriva do proprio autocadastroUrl (zero config nova);
+// URL malformada -> null (fallback textual). Path do asset: web-app public/images/.
+const EMAIL_LOGO_PATH = '/images/logo-bem-comum-email.png';
+const emailLogoUrl = (autocadastroUrl: string): string | null => {
+  try {
+    return new URL(autocadastroUrl).origin + EMAIL_LOGO_PATH;
+  } catch {
+    return null;
+  }
+};
+
+const BRAND_BLUE = '#33609C';
+const FONT_STACK = "'Nunito','Helvetica Neue',Helvetica,Arial,sans-serif";
+
+// CollaboratorInvited (partners) — convite de autocadastro de colaborador. HTML de marca RESTRITO
+// (tabelas + CSS inline; diretriz do tech lead), acentos como entidades (a prova de cliente), nome
+// escapado (anti-XSS). Espelha o invite-mailer do partners (collaborator-invite-mailer.email.ts).
 const collaboratorInviteTemplate = (
   event: Readonly<{ autocadastroUrl: string; recipientName: string }>,
 ): Readonly<{ subject: string; textBody: string; htmlBody: string }> => {
   const textBody =
     `Ola, ${event.recipientName}!\n\n` +
-    'Voce foi convidado a completar seu cadastro de colaborador no sistema Bem Comum.\n\n' +
-    'Para preencher seus dados e ativar o acesso, clique no link abaixo ' +
-    '(valido por tempo limitado):\n\n' +
+    'Voce foi convidado a completar seu cadastro de Colaborador no sistema Bem Comum.\n\n' +
+    'Para preencher seus dados, clique no link abaixo (valido por tempo limitado):\n\n' +
     `${event.autocadastroUrl}\n\n` +
     'Se voce nao esperava este convite, ignore este e-mail.';
 
   const safeName = escapeHtml(event.recipientName);
-  const htmlBody =
-    `<p>Ola, ${safeName}!</p>` +
-    '<p>Voce foi convidado a completar seu cadastro de colaborador no sistema ' +
-    '<strong>Bem Comum</strong>.</p>' +
-    '<p>Para preencher seus dados e ativar o acesso, clique no link abaixo ' +
-    '(valido por tempo limitado):</p>' +
-    `<p><a href="${event.autocadastroUrl}">Completar meu cadastro</a></p>` +
-    '<p>Se voce nao esperava este convite, ignore este e-mail.</p>';
+  const safeUrl = escapeHtml(event.autocadastroUrl);
+  const logoUrl = emailLogoUrl(event.autocadastroUrl);
+  const logoBlock =
+    logoUrl === null
+      ? `<div style="font-family:${FONT_STACK};font-size:22px;font-weight:800;` +
+        `color:${BRAND_BLUE};">Bem Comum</div>`
+      : `<img src="${logoUrl}" width="180" alt="Bem Comum" ` +
+        'style="display:block;width:180px;max-width:180px;height:auto;border:0;" />';
 
-  return { subject: 'Bem Comum - complete seu cadastro de colaborador', textBody, htmlBody };
+  const htmlBody =
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" ' +
+    'style="margin:0;padding:0;background-color:#E8EEF0;"><tr>' +
+    '<td align="center" style="padding:32px 16px;">' +
+    '<table role="presentation" width="600" cellpadding="0" cellspacing="0" ' +
+    'style="width:600px;max-width:600px;background-color:#FFFFFF;border:1px solid #E3E9EE;' +
+    'border-radius:14px;overflow:hidden;">' +
+    `<tr><td style="height:5px;line-height:5px;font-size:0;background-color:${BRAND_BLUE};">` +
+    '&nbsp;</td></tr>' +
+    `<tr><td align="center" style="padding:34px 40px 22px 40px;">${logoBlock}</td></tr>` +
+    '<tr><td style="padding:0 40px;"><div style="height:1px;line-height:1px;font-size:0;' +
+    'background-color:#EDF1F4;">&nbsp;</div></td></tr>' +
+    `<tr><td style="padding:30px 40px 8px 40px;font-family:${FONT_STACK};">` +
+    '<p style="margin:0 0 18px 0;font-size:19px;line-height:1.4;font-weight:700;' +
+    `color:#1E2A3A;">Ol&aacute;, ${safeName}!</p>` +
+    '<p style="margin:0 0 16px 0;font-size:15px;line-height:1.65;color:#4B5563;">' +
+    'Voc&ecirc; foi convidado a completar seu cadastro de ' +
+    `<strong style="color:${BRAND_BLUE};">Colaborador</strong> no sistema Bem Comum.</p>` +
+    '<p style="margin:0 0 26px 0;font-size:15px;line-height:1.65;color:#4B5563;">' +
+    'Para preencher seus dados, clique no bot&atilde;o abaixo ' +
+    '(v&aacute;lido por tempo limitado):</p></td></tr>' +
+    '<tr><td align="center" style="padding:0 40px 30px 40px;">' +
+    '<table role="presentation" cellpadding="0" cellspacing="0"><tr>' +
+    `<td align="center" style="border-radius:8px;background-color:${BRAND_BLUE};">` +
+    `<a href="${safeUrl}" target="_blank" style="display:inline-block;padding:14px 30px;` +
+    `font-family:${FONT_STACK};font-size:15px;font-weight:700;color:#FFFFFF;` +
+    'text-decoration:none;border-radius:8px;">Completar meu cadastro</a>' +
+    '</td></tr></table></td></tr>' +
+    `<tr><td style="padding:0 40px 28px 40px;font-family:${FONT_STACK};">` +
+    '<div style="height:1px;line-height:1px;font-size:0;background-color:#EDF1F4;' +
+    'margin-bottom:18px;">&nbsp;</div>' +
+    '<p style="margin:0;font-size:13px;line-height:1.6;color:#9AA4B0;">' +
+    'Se voc&ecirc; n&atilde;o esperava este convite, pode ignorar este e-mail ' +
+    'com seguran&ccedil;a.</p></td></tr></table>' +
+    '<table role="presentation" width="600" cellpadding="0" cellspacing="0" ' +
+    'style="width:600px;max-width:600px;"><tr>' +
+    `<td align="center" style="padding:18px 40px 6px 40px;font-family:${FONT_STACK};">` +
+    '<p style="margin:0;font-size:12px;line-height:1.5;color:#A7B0BC;">' +
+    'Bem Comum &middot; este &eacute; um e-mail autom&aacute;tico, n&atilde;o responda.' +
+    '</p></td></tr></table></td></tr></table>';
+
+  return {
+    subject: 'Bem Comum - Complete seu Cadastro de Colaborador',
+    textBody,
+    htmlBody,
+  };
 };
 
 // ─── union multi-fonte (auth + partners) ──────────────────────────────────────
