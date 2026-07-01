@@ -8,6 +8,14 @@
 
 **Input**: User description: transferência/aplicação/resgate A→B em 1 lançamento — cria contrapartida pendente na conta de destino e casa as duas pernas na conciliação (issue #269, evolução da #143).
 
+## Clarifications
+
+### Session 2026-07-01 (defaults recomendados — Gabriel delegou a decisão)
+
+- **Q1 — Ciclo de vida da contrapartida não casada (FR-011):** MVP = **pendente indefinidamente**, sem job de expiração (YAGNI). É limpa apenas por casamento (US2) ou por desfazer a conciliação de origem (US3). Auto-expiração e descarte manual ficam como follow-up. ⚠️ **A confirmar com a P.O.** se o acúmulo de pendências antigas vira problema operacional — se sim, abre-se follow-up para expiração/descarte.
+- **Q2 — Tolerância de casamento (FR-008):** **valor exato + proximidade de data** (janela default ~5 dias corridos), reusando a lógica de score já existente (`match-score.ts`). Sem tolerância de valor (tarifa/IOF) neste MVP.
+- **Q3 — Escopo de tipos (FR-009):** **só Transferência conta↔conta** nesta feature. Aplicação/Resgate (corrente↔aplicação) fica para follow-up (mesmo mecanismo, sinal oposto).
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Contrapartida esperada surge na conta de destino (Priority: P1)
@@ -59,9 +67,9 @@ Se o operador **desfizer** a conciliação da perna de origem (A), o sistema dev
 
 ### Edge Cases
 
-- **Extrato de B nunca chega:** a contrapartida esperada fica pendente indefinidamente? Expira após um prazo? Exige descarte manual? → ver [NEEDS CLARIFICATION] em FR-011.
+- **Extrato de B nunca chega:** a contrapartida esperada fica pendente indefinidamente (FR-011, Q1); limpa só por casamento ou por desfazer a origem. Sem job de expiração no MVP.
 - **Import antes do registro manual:** o crédito real de B é importado **antes** de o operador registrar a transferência em A — não há contrapartida esperada ainda; o casamento das pernas não acende (comportamento atual: casa transação×título normalmente). Fora do escopo desta feature.
-- **Valor divergente por tarifa:** a entrada real em B vem com valor levemente diferente (tarifa/IOF) — a tolerância de casamento define se ainda sugere → ver [NEEDS CLARIFICATION] em FR-008.
+- **Valor divergente por tarifa:** a entrada real em B vem com valor levemente diferente (tarifa/IOF) — no MVP o casamento exige valor exato (FR-008, Q2), então não sugere; o operador concilia manualmente. Tolerância de valor = follow-up.
 - **Múltiplas transferências de mesmo valor/data:** duas transferências A→B de R$ 1.000 no mesmo dia geram duas contrapartidas esperadas — o casamento deve evitar ambiguidade (empate estável / sugerir a mais antiga não consumida).
 - **Conta de destino encerrada:** registrar transferência para conta `Closed` — comportamento atual já valida existência; encerrada não deve receber contrapartida (fail-closed).
 
@@ -76,10 +84,10 @@ Se o operador **desfizer** a conciliação da perna de origem (A), o sistema dev
 - **FR-005**: Ao importar o extrato da conta de destino, o motor de sugestão MUST considerar o casamento **transação real × contrapartida esperada** (além do atual transação × título).
 - **FR-006**: A sugestão de casamento das duas pernas MUST ser rotulada de forma que o operador entenda tratar-se da outra perna da transferência de origem.
 - **FR-007**: Ao confirmar o casamento, o sistema MUST deixar as **duas pernas conciliadas e vinculadas** e MUST NÃO criar lançamento duplicado (dedup: a transação real **consome** a contrapartida esperada em vez de gerar uma segunda).
-- **FR-008**: O casamento transação×contrapartida MUST usar uma tolerância de [NEEDS CLARIFICATION: janela de data e tolerância de valor — casar só valor exato + data exata? valor exato + data dentro de N dias? aceitar pequena diferença de valor por tarifa?].
-- **FR-009**: O escopo dos tipos cobertos MUST ser [NEEDS CLARIFICATION: só Transferência conta↔conta, ou também Aplicação/Resgate (corrente↔aplicação) já nesta feature? A perna de destino tem sinal oposto em todos].
+- **FR-008**: O casamento transação×contrapartida MUST usar **valor exato + proximidade de data** (janela default ~5 dias corridos), reusando a lógica de score existente (`match-score.ts`); sem tolerância de valor por tarifa/IOF neste MVP (Q2).
+- **FR-009**: O escopo MUST cobrir **apenas Transferência conta↔conta** nesta feature; Aplicação/Resgate (corrente↔aplicação) fica para follow-up com o mesmo mecanismo (Q3).
 - **FR-010**: Ao **desfazer** a conciliação da perna de origem, o sistema MUST tratar a contrapartida esperada correspondente — removê-la se pendente, ou reabrir/desfazer o par de forma consistente se já casada — sem deixar dado órfão nem contagem dobrada.
-- **FR-011**: O ciclo de vida da contrapartida esperada não casada MUST ser [NEEDS CLARIFICATION: expira após prazo? fica pendente indefinidamente? pode ser descartada manualmente pelo operador?].
+- **FR-011**: A contrapartida esperada não casada MUST permanecer **pendente indefinidamente** (sem expiração automática neste MVP); é limpa apenas por casamento (US2) ou por desfazer a conciliação de origem (US3). Auto-expiração/descarte manual = follow-up, a confirmar com a P.O. (Q1).
 - **FR-012**: A criação, o casamento e o desfazer da contrapartida MUST emitir eventos de domínio para a trilha de auditoria/outbox, mantendo o módulo como **produtor** de eventos (não altera o padrão de mensageria).
 
 ### Key Entities *(include if feature involves data)*
