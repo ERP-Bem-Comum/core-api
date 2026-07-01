@@ -577,7 +577,12 @@ export const saveDraft = (input: SaveDraftInput): Result<SaveDraftOutput, Docume
 };
 
 // Submissão (US7): Draft → Open. Exige os campos obrigatórios preenchidos; delega a geração de títulos a `create`.
-export const submit = (draft: DraftDocument): Result<CreateDocumentOutput, DocumentError> => {
+// `approverRefOverride` (#297): quando presente, substitui o aprovador do rascunho — usado pela
+// cascata de alçada no submit para reencaminhar ao próximo aprovador apto (paridade com o create).
+export const submit = (
+  draft: DraftDocument,
+  approverRefOverride?: UserRef,
+): Result<CreateDocumentOutput, DocumentError> => {
   const { documentNumber, type, supplier, paymentMethod, grossValue, dueDate } = draft;
   if (
     documentNumber === null ||
@@ -611,7 +616,7 @@ export const submit = (draft: DraftDocument): Result<CreateDocumentOutput, Docum
     registeredTaxes: draft.registeredTaxes,
     dueDate,
     description: draft.description,
-    approverRef: draft.approverRef,
+    approverRef: approverRefOverride ?? draft.approverRef,
     paymentDetail: draft.paymentDetail,
   });
 };
