@@ -5,10 +5,29 @@ import { exhaustiveStringUnion } from '../../../../shared/primitives/exhaustive.
 
 // Eventos de domínio (EN passado). `occurredAt`/actor são carimbados na borda/use case
 // (Functional Core síncrono não conhece relógio).
+
+// #235: snapshot projetável de um título — valores JSON-safe (cents string, dueDate ISO) para
+// alimentar a projeção do read-model fin_payable_view (ADR-0022 — projeção evento-carregada).
+export type PayableSnapshot = Readonly<{
+  payableId: string;
+  kind: 'Parent' | 'Child';
+  retentionType: string | null;
+  valueCents: string;
+  dueDate: string;
+  status: string;
+}>;
+
 export type DocumentSaved = Readonly<{
   type: 'DocumentSaved';
   documentId: DocumentId;
   payableIds: readonly PayableId[];
+  // #235: refs do documento (uma vez) + snapshot por título — enriquecimento aditivo p/ a projeção.
+  supplierRef: string;
+  contractRef: string | null;
+  categoryRef: string | null;
+  costCenterRef: string | null;
+  programRef: string | null;
+  payables: readonly PayableSnapshot[];
 }>;
 
 export type PayableApproved = Readonly<{
@@ -22,6 +41,8 @@ export type PayableApproved = Readonly<{
 export type ApprovalUndone = Readonly<{
   type: 'ApprovalUndone';
   documentId: DocumentId;
+  // #235: os títulos que voltam a `Open` — a projeção reverte o status no read-model.
+  payableIds: readonly PayableId[];
 }>;
 
 export type DocumentDraftSaved = Readonly<{

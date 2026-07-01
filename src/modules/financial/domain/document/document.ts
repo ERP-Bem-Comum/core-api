@@ -25,7 +25,7 @@ import type {
   Document,
 } from './types.ts';
 import type { Payable, Payables } from '../payable/types.ts';
-import type { DocumentEvent } from './events.ts';
+import type { DocumentEvent, PayableSnapshot } from './events.ts';
 import type { DocumentError } from './errors.ts';
 import { computeNetValue } from './financial-data.ts';
 import { allowedRetentionsFor } from './document-type-metadata.ts';
@@ -110,16 +110,44 @@ const buildOpenPayables = (params: {
   return immutable<Payables>({ parent, children });
 };
 
+// #235: refs necessárias ao snapshot de projeção — subset estrutural de Open/ApprovedDocument.
+type DocumentRefsSource = Readonly<{
+  id: DocumentId;
+  supplier: SupplierRef;
+  contractRef: ContractRef | null;
+  categoryRef: CategoryRef | null;
+  costCenterRef: CostCenterRef | null;
+  programRef: ProgramRef | null;
+}>;
+
+const payableSnapshot = (p: Payable): PayableSnapshot => ({
+  payableId: p.id,
+  kind: p.kind,
+  retentionType: p.retentionType,
+  valueCents: String(p.value.cents),
+  dueDate: p.dueDate.toISOString().slice(0, 10),
+  status: p.status,
+});
+
 const documentSavedEvents = (
-  documentId: DocumentId,
+  document: DocumentRefsSource,
   payables: Payables,
-): readonly DocumentEvent[] => [
-  {
-    type: 'DocumentSaved',
-    documentId,
-    payableIds: [payables.parent.id, ...payables.children.map((c) => c.id)],
-  },
-];
+): readonly DocumentEvent[] => {
+  const all = [payables.parent, ...payables.children];
+  return [
+    {
+      type: 'DocumentSaved',
+      documentId: document.id,
+      payableIds: all.map((p) => p.id),
+      supplierRef: document.supplier,
+      contractRef: document.contractRef,
+      categoryRef: document.categoryRef,
+      costCenterRef: document.costCenterRef,
+      programRef: document.programRef,
+      payables: all.map(payableSnapshot),
+    },
+  ];
+};
 
 // Salva o documento (Fato Gerador) e gera os títulos em `Open`: 1 pai (líquido) + 1 filho por retenção
 // (apenas NFS-e/RPA — R8). Retenção em tipo não permitido é rejeitada.
@@ -187,7 +215,7 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     immutable<CreateDocumentOutput>({
       document,
       payables,
-      events: documentSavedEvents(input.id, payables),
+      events: documentSavedEvents(document, payables),
     }),
   );
 };
@@ -366,7 +394,7 @@ export const adjust = (input: AdjustDocumentInput): Result<AdjustDocumentOutput,
     immutable<AdjustDocumentOutput>({
       document,
       payables,
-      events: documentSavedEvents(d.id, payables),
+      events: documentSavedEvents(document, payables),
     }),
   );
 };
@@ -409,10 +437,7 @@ export const editMetadata = (
     description,
     paymentDetail,
   });
-  const payableIds = [payables.parent.id, ...payables.children.map((c) => c.id)];
-  const events: readonly DocumentEvent[] = [
-    { type: 'DocumentSaved', documentId: d.id, payableIds },
-  ];
+  const events = documentSavedEvents(document, payables);
 
   return ok(immutable<EditMetadataOutput>({ document, payables, events }));
 };
@@ -472,7 +497,13 @@ export const undoApproval = (
     status: 'Open',
   });
 
-  const events: readonly DocumentEvent[] = [{ type: 'ApprovalUndone', documentId: d.id }];
+  const events: readonly DocumentEvent[] = [
+    {
+      type: 'ApprovalUndone',
+      documentId: d.id,
+      payableIds: [payables.parent.id, ...payables.children.map((c) => c.id)],
+    },
+  ];
 
   return ok(immutable<UndoApprovalOutput>({ document, payables, events }));
 };
