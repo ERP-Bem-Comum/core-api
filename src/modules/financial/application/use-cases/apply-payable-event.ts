@@ -8,7 +8,12 @@
  * (o worker faz retry/DLQ — at-least-once).
  */
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
-import type { PayableView, PayableViewStatus } from '../../domain/payable-view/types.ts';
+import {
+  type PayableView,
+  type PayableViewStatus,
+  isDocumentStatus,
+  documentStatusToViewStatus,
+} from '../../domain/payable-view/types.ts';
 import type { PayableViewStore, PayableViewStoreError } from '../ports/payable-view-store.ts';
 
 export type ApplyPayableEventInput = Readonly<{ eventType: string; payload: string }>;
@@ -50,7 +55,7 @@ const parseSnapshotRow = (
   const kind = p.kind === 'Parent' || p.kind === 'Child' ? p.kind : null;
   const valueCentsStr = asString(p.valueCents);
   const dueDate = asString(p.dueDate);
-  const status = p.status;
+  const rawStatus = asString(p.status);
   if (
     payableId === null ||
     payableId === '' ||
@@ -60,7 +65,8 @@ const parseSnapshotRow = (
     !Number.isSafeInteger(Number(valueCentsStr)) ||
     dueDate === null ||
     !/^\d{4}-\d{2}-\d{2}$/.test(dueDate) ||
-    (status !== 'Open' && status !== 'Approved' && status !== 'Paid' && status !== 'Cancelled')
+    rawStatus === null ||
+    !isDocumentStatus(rawStatus)
   ) {
     return null;
   }
@@ -76,7 +82,8 @@ const parseSnapshotRow = (
     programRef: asString(refs.programRef),
     valueCents: Number(valueCentsStr),
     dueDate,
-    status,
+    // #307 (m2): snapshot carrega DocumentStatus (8); mapeia p/ os 4 do read-model.
+    status: documentStatusToViewStatus(rawStatus),
   };
 };
 

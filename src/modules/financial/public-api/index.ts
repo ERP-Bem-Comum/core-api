@@ -23,3 +23,15 @@ export type {
   SupplierViewStore,
   SupplierViewStoreError,
 } from '../application/ports/supplier-view-store.ts';
+
+// Read-model de payables (Camada 0 do Dashboard/Reports, #235): consumido pelo worker de projeção
+// `payable-view-projection` (composition root), que aplica os eventos do `fin_outbox` no read-model.
+export { applyPayableEvent } from '../application/use-cases/apply-payable-event.ts';
+export type {
+  ApplyPayableEventInput,
+  ApplyPayableEventError,
+} from '../application/use-cases/apply-payable-event.ts';
+export type {
+  PayableViewStore,
+  PayableViewStoreError,
+} from '../application/ports/payable-view-store.ts';

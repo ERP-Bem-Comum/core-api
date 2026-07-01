@@ -388,6 +388,22 @@ services:
       - partners_database_url
       - financial_database_url
 
+  # #307 — projeção do read-model de payables (Camada 0 Dashboard/Reports). 1 pool (financial:
+  # outbox + read-model). Single-instance (FIFO por agregado — ver runbook payable-view-projection).
+  payable-projection:
+    <<: *x-worker-base
+    profiles:
+      - workers
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        export FINANCIAL_DATABASE_URL="$(cat /run/secrets/financial_database_url)";
+        exec tini -- node "$0"
+      - src/workers/payable-view-projection/run.ts
+    secrets:
+      - financial_database_url
+
   contract-count-projection:
     <<: *x-worker-base
     profiles:

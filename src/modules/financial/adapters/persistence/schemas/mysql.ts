@@ -958,3 +958,38 @@ export const finOutbox = mysqlTable(
 
 export type FinOutboxRow = typeof finOutbox.$inferSelect;
 export type NewFinOutboxRow = typeof finOutbox.$inferInsert;
+
+// ─── fin_outbox_dead_letter ───────────────────────────────────────────────────
+//
+// #307: DLQ do `fin_outbox` (o financial nunca teve consumidor; esta é a 1ª). Mirror de
+// `ctr_outbox_dead_letter`. O worker move a row pra cá após `maxAttempts` (ou payload corrupto);
+// `failed_at` + `last_error` guardam o contexto da falha. Sem `processed_at` (é terminal).
+export const finOutboxDeadLetter = mysqlTable(
+  'fin_outbox_dead_letter',
+  {
+    eventId: varchar('event_id', { length: 36 }).primaryKey().notNull(),
+    aggregateId: varchar('aggregate_id', { length: 36 }).notNull(),
+    aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
+    eventType: varchar('event_type', { length: 64 }).notNull(),
+    schemaVersion: int('schema_version').notNull(),
+    occurredAt: datetime('occurred_at', { mode: 'date', fsp: 3 }).notNull(),
+    enqueuedAt: datetime('enqueued_at', { mode: 'date', fsp: 3 }).notNull(),
+    failedAt: datetime('failed_at', { mode: 'date', fsp: 3 }).notNull(),
+    attempts: int('attempts').notNull(),
+    lastError: varchar('last_error', { length: 2048 }).notNull(),
+    payload: varchar('payload', { length: 8192 }).notNull(),
+  },
+  (t) => [
+    check('fin_outbox_dl_attempts_nonneg_chk', sql`${t.attempts} >= 0`),
+    // Paridade com `ctr_outbox_dead_letter` + defesa em profundidade contra writers diretos futuros
+    // (ex.: borda admin de DLQ). Espelha o CHECK da tabela-fonte `fin_outbox`.
+    check(
+      'fin_outbox_dl_aggregate_type_chk',
+      sql`${t.aggregateType} IN ('Document', 'Reconciliation', 'Statement', 'ReconciliationPeriod')`,
+    ),
+    index('fin_outbox_dl_failed_at_idx').on(t.failedAt),
+  ],
+);
+
+export type FinOutboxDeadLetterRow = typeof finOutboxDeadLetter.$inferSelect;
+export type NewFinOutboxDeadLetterRow = typeof finOutboxDeadLetter.$inferInsert;

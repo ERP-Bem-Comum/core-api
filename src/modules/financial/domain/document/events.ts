@@ -1,5 +1,6 @@
 import type { DocumentId } from '../shared/document-id.ts';
 import type { PayableId } from '../shared/payable-id.ts';
+import type { DocumentStatus } from './types.ts';
 import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
 import { exhaustiveStringUnion } from '../../../../shared/primitives/exhaustive.ts';
 
@@ -14,7 +15,7 @@ export type PayableSnapshot = Readonly<{
   retentionType: string | null;
   valueCents: string;
   dueDate: string;
-  status: string;
+  status: DocumentStatus;
 }>;
 
 export type DocumentSaved = Readonly<{
