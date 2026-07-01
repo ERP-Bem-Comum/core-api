@@ -732,6 +732,24 @@ export const documentTypeMetadataListResponseSchema = z.array(documentTypeMetada
 
 export type DocumentTypeMetadataResponseDto = z.infer<typeof documentTypeMetadataResponseSchema>;
 
+// Widget "Últimos pagamentos" (#239, reference:read) — GET /financial/dashboard/recent-payments.
+// Top-5 títulos Pagos por data de pagamento desc. `valueCents` como string de centavos (convenção de
+// Money do módulo — bigint não é JSON-safe; espelha `paidPayablesToDto`). Refs estrangeiras
+// (supplier/debit) como `z.string()`: o read-model NÃO revalida UUID na leitura (evita 500 na
+// serialização de resposta se o payload do evento sofrer drift). IDs próprios seguem `z.uuid()`.
+export const recentPaymentSchema = z.object({
+  payableId: z.uuid(),
+  documentId: z.uuid(),
+  supplierRef: z.string().nullable(),
+  debitAccountRef: z.string().nullable(),
+  valueCents: centsStringSchema,
+  paidAt: z.iso.date().nullable(),
+});
+
+export const recentPaymentsResponseSchema = z.array(recentPaymentSchema);
+
+export type RecentPaymentDto = z.infer<typeof recentPaymentSchema>;
+
 // ─── Read-model do extrato por conta + período (#139) ──────────────────────────
 
 export const accountStatementQuerySchema = z.object({

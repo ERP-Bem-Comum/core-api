@@ -13,6 +13,7 @@
  *   DELETE /financial/documents/:id                  fiscal-document:cancel → cancelDocument (204)
  *   GET    /financial/documents                      fiscal-document:read   → listDocuments
  *   GET    /financial/documents/:id                  fiscal-document:read   → findDocumentById
+ *   GET    /financial/dashboard/recent-payments      reference:read         → listRecentPaid (#239)
  *
  * Mapa erro→HTTP (financial-http.md §Status codes):
  *   400 schema/ref inválida         Zod + financial-ref-invalid + document-id-invalid
@@ -57,6 +58,7 @@ import {
   costCentersToDto,
   programsToDto,
   documentTypeMetadataToDto,
+  recentPaymentsToDto,
 } from './dto.ts';
 import type { DocumentListFilter } from '../../domain/document/query.ts';
 import type { PayableListFilter, PayableListItem } from '../../domain/payable/query.ts';
@@ -109,6 +111,7 @@ import {
   costCenterListResponseSchema,
   programListResponseSchema,
   documentTypeMetadataListResponseSchema,
+  recentPaymentsResponseSchema,
   type CedenteAccountResponseDto,
   accountStatementQuerySchema,
   accountStatementResponseSchema,
@@ -1114,6 +1117,23 @@ const financialRoutes =
       } satisfies FastifyZodOpenApiSchema,
       handler: async (_req, reply) => {
         return sendResult(reply, ok(documentTypeMetadataToDto(allMetadata())), { ok: 200 });
+      },
+    });
+
+    // GET /financial/dashboard/recent-payments — widget "Últimos pagamentos" (#239, reference:read).
+    // Top-5 títulos Pagos, ordenados por data de pagamento (paidAt) desc. Read-model `fin_payable_view`
+    // (#235/ADR-0022) alimentado assincronamente pelo worker payable-view-projection.
+    scope.route({
+      method: 'GET',
+      url: '/financial/dashboard/recent-payments',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.referenceRead)],
+      schema: {
+        response: { 200: recentPaymentsResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) => {
+        const result = await deps.listRecentPaid(5);
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(recentPaymentsToDto(result.value)), { ok: 200 });
       },
     });
 
