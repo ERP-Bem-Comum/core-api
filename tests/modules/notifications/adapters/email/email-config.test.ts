@@ -235,3 +235,118 @@ describe('resolveFrom', () => {
     assert.equal(resolveFrom('reset', r.value), undefined);
   });
 });
+
+// ---------------------------------------------------------------------------
+// NOTIF-EMAIL-FROM-DOMAIN-ALLOWLIST (W0/RED) - allowlist de dominio do remetente.
+//
+// Guarda-corpo do incidente prod 2026-07-02 (#331): e-mails saiam com
+// From: ...@codebit.dev (identidade SES de TESTE da software house). Nova env
+// EMAIL_FROM_ALLOWED_DOMAINS (CSV): quando PRESENTE, o dominio (apos o @,
+// case-insensitive) de TODO remetente resolvivel (EMAIL_FROM + overrides por
+// fluxo + aliases legados quando usados) deve pertencer a lista, senao a config
+// e' invalida e o boot falha (mesmo fail-fast ja existente). Quando AUSENTE:
+// comportamento atual preservado (dev/Mailpit/testes).
+//
+// Formato de erro DECIDIDO (espelha o padrao real de EmailConfigError):
+//   Readonly<{ tag: 'from-domain-not-allowed'; field: string; domain: string }>
+//     - `field`  = nome da env do remetente rejeitado. Espelha o variant
+//                  'invalid-from' (email-config.ts:59, `field: string`), alimentado
+//                  pelo mesmo `field` de parseOptionalFrom (email-config.ts:98/107).
+//     - `domain` = dominio rejeitado, ja normalizado (lower-case). Espelha o
+//                  variant 'invalid-provider' (email-config.ts:53, `raw: string`),
+//                  que carrega o valor ofensor no erro.
+//   tag em EN kebab-case (regra de idioma AGENTS.md), passado presente do padrao.
+//
+// RED classico por comportamento inexistente: a env ainda nao e' lida. Casos que
+// esperam rejeicao fora da lista falham (config hoje aceita qualquer dominio) e
+// casos com display name falham (address.ts:18 hoje rejeita o formato com nome).
+// CA3 e' um compat guard (verde em W0 e W1): "ausente = sem efeito" nao pode ser
+// RED pois o comportamento atual ja e' o desejado; existe para travar regressao.
+// Os testes acima (NOTIF-EMAIL-DEPLOY-CONFIG) seguem verdes - sem duplicacao.
+// ---------------------------------------------------------------------------
+
+describe('parseEmailConfig - allowlist de dominio do remetente (EMAIL_FROM_ALLOWED_DOMAINS)', () => {
+  it('CA1 (incidente codebit.dev): allowlist presente rejeita remetente fora da lista, nomeando env e dominio', () => {
+    const r = parseEmailConfig({
+      EMAIL_PROVIDER: 'memory',
+      EMAIL_FROM_ALLOWED_DOMAINS: 'abemcomum.org',
+      EMAIL_FROM: 'no-reply@codebit.dev',
+    });
+
+    assert.equal(r.ok, false);
+    if (!r.ok && r.error.tag === 'from-domain-not-allowed') {
+      assert.equal(r.error.field, 'EMAIL_FROM');
+      assert.equal(r.error.domain, 'codebit.dev');
+    } else {
+      assert.fail(
+        `esperado from-domain-not-allowed nomeando EMAIL_FROM/codebit.dev; obtido: ${JSON.stringify(r)}`,
+      );
+    }
+  });
+
+  it('CA2: aceita remetente com display name cujo dominio esta na allowlist', () => {
+    const r = parseEmailConfig({
+      EMAIL_PROVIDER: 'memory',
+      EMAIL_FROM_ALLOWED_DOMAINS: 'abemcomum.org',
+      EMAIL_FROM: 'Bem Comum <no-reply@abemcomum.org>',
+    });
+
+    assert.equal(r.ok, true);
+  });
+
+  it('CA2: match do dominio e case-insensitive (remetente e allowlist em caixas divergentes)', () => {
+    const r = parseEmailConfig({
+      EMAIL_PROVIDER: 'memory',
+      EMAIL_FROM_ALLOWED_DOMAINS: 'abemcomum.org',
+      EMAIL_FROM: 'Bem Comum <No-Reply@ABEMCOMUM.ORG>',
+    });
+
+    assert.equal(r.ok, true);
+  });
+
+  it('CA3 [compat guard]: allowlist ausente preserva o comportamento atual (qualquer dominio aceito)', () => {
+    const r = parseEmailConfig({
+      EMAIL_PROVIDER: 'memory',
+      EMAIL_FROM: 'no-reply@codebit.dev',
+    });
+
+    assert.equal(r.ok, true);
+  });
+
+  it('CA4: a checagem cobre todos os remetentes resolviveis (override por fluxo fora da lista falha)', () => {
+    const r = parseEmailConfig({
+      EMAIL_PROVIDER: 'memory',
+      EMAIL_FROM_ALLOWED_DOMAINS: 'abemcomum.org',
+      EMAIL_FROM: 'no-reply@abemcomum.org',
+      EMAIL_FROM_INVITE: 'x@outro.dev',
+    });
+
+    assert.equal(r.ok, false);
+    if (!r.ok && r.error.tag === 'from-domain-not-allowed') {
+      assert.equal(r.error.field, 'EMAIL_FROM_INVITE');
+      assert.equal(r.error.domain, 'outro.dev');
+    } else {
+      assert.fail(
+        `esperado from-domain-not-allowed nomeando EMAIL_FROM_INVITE/outro.dev; obtido: ${JSON.stringify(r)}`,
+      );
+    }
+  });
+
+  it('CA5: CSV multi-dominio com espacos - aceita entradas da lista (trim) e rejeita dominio de fora', () => {
+    const allowed = 'abemcomum.org, mail.abemcomum.org';
+
+    const accepted = parseEmailConfig({
+      EMAIL_PROVIDER: 'memory',
+      EMAIL_FROM_ALLOWED_DOMAINS: allowed,
+      EMAIL_FROM: 'no-reply@mail.abemcomum.org',
+    });
+    assert.equal(accepted.ok, true);
+
+    const rejected = parseEmailConfig({
+      EMAIL_PROVIDER: 'memory',
+      EMAIL_FROM_ALLOWED_DOMAINS: allowed,
+      EMAIL_FROM: 'no-reply@codebit.dev',
+    });
+    assert.equal(rejected.ok, false);
+  });
+});

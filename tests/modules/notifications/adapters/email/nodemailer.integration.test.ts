@@ -56,6 +56,7 @@ const etherealConfig = async (): Promise<SmtpConfig> => {
     pass: account.pass,
     pool: false, // integration test: connection unica
     maxConnections: 1,
+    requireTLS: false, // Ethereal de teste: sem exigir STARTTLS
   };
 };
 
@@ -132,6 +133,7 @@ describe('createNodemailerEmailSender (integration)', () => {
       pass: 'p',
       pool: false,
       maxConnections: 1,
+      requireTLS: false,
     };
     const sender = createNodemailerEmailSender(config);
 

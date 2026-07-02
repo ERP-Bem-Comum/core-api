@@ -128,3 +128,108 @@ describe('parseSmtpConfig', () => {
     }
   });
 });
+
+/**
+ * W0 (RED) - NOTIF-SMTP-REQUIRETLS: STARTTLS obrigatorio (hardening).
+ *
+ * Novo campo `requireTLS` em SmtpConfig, derivado da env SMTP_REQUIRE_TLS.
+ *
+ * Contrato (decidido no W0, ver 002-tests/REPORT.md secao "Decisao CA4"):
+ *   - SMTP_REQUIRE_TLS === 'false'  -> requireTLS = false (opt-out explicito)
+ *   - qualquer outro valor / ausente -> requireTLS = default fail-secure = !secure
+ *       (true quando SMTP_SECURE=false; false quando SMTP_SECURE=true)
+ *
+ * Rationale do fail-secure tolerante: espelha o parsing booleano JA existente
+ * nesta funcao (SMTP_POOL linha 75, SMTP_SECURE linha 80) que NUNCA rejeita valor
+ * malformado - so a string exata decide, resto cai no default. Como e um controle
+ * de seguranca, o default e seguro: um typo nunca desativa a exigencia de TLS.
+ *
+ * Estes tests DEVEM FALHAR em W0 - o campo requireTLS ainda nao existe em SmtpConfig
+ * (r.value.requireTLS === undefined em runtime).
+ *
+ * ASCII puro.
+ */
+describe('parseSmtpConfig - requireTLS (NOTIF-SMTP-REQUIRETLS)', () => {
+  it('CA1: SMTP_SECURE=false e SMTP_REQUIRE_TLS ausente -> requireTLS=true (default fail-secure)', () => {
+    // Arrange - baseEnv() ja tem SMTP_SECURE='false' e nenhum SMTP_REQUIRE_TLS.
+
+    // Act
+    const r = parseSmtpConfig(baseEnv());
+
+    // Assert
+    assert.equal(r.ok, true);
+    if (r.ok) {
+      assert.equal(r.value.requireTLS, true, 'default fail-secure quando secure=false');
+    }
+  });
+
+  it('CA2: SMTP_REQUIRE_TLS=false explicito -> requireTLS=false (opt-out consciente, dev/Mailpit)', () => {
+    // Arrange
+    const env = baseEnv();
+    env['SMTP_REQUIRE_TLS'] = 'false';
+
+    // Act
+    const r = parseSmtpConfig(env);
+
+    // Assert
+    assert.equal(r.ok, true);
+    if (r.ok) {
+      assert.equal(r.value.requireTLS, false);
+    }
+  });
+
+  it('CA3: SMTP_SECURE=true (465) e SMTP_REQUIRE_TLS ausente -> secure=true e requireTLS=false (nao interfere)', () => {
+    // Arrange
+    const env = baseEnv();
+    env['SMTP_SECURE'] = 'true';
+    env['SMTP_PORT'] = '465';
+
+    // Act
+    const r = parseSmtpConfig(env);
+
+    // Assert
+    assert.equal(r.ok, true);
+    if (r.ok) {
+      assert.equal(r.value.secure, true, 'comportamento atual do secure preservado');
+      assert.equal(r.value.requireTLS, false, 'fail-secure default so aplica quando secure=false');
+    }
+  });
+
+  it('CA4: SMTP_REQUIRE_TLS malformado -> tolerante fail-secure (ok, requireTLS=true, sem rejeitar)', () => {
+    // Arrange
+    const env = baseEnv();
+    env['SMTP_REQUIRE_TLS'] = 'banana';
+
+    // Act
+    const r = parseSmtpConfig(env);
+
+    // Assert
+    assert.equal(
+      r.ok,
+      true,
+      'env booleana nao e rejeitada (padrao SMTP_POOL linha 75 / SMTP_SECURE linha 80)',
+    );
+    if (r.ok) {
+      assert.equal(
+        r.value.requireTLS,
+        true,
+        'so a string exata "false" desativa; typo mantem TLS exigido (fail-secure)',
+      );
+    }
+  });
+
+  it('CA4 (boundary): SMTP_REQUIRE_TLS=FALSE (maiusculo) nao desativa (match exato, como SMTP_POOL)', () => {
+    // Arrange
+    const env = baseEnv();
+    env['SMTP_REQUIRE_TLS'] = 'FALSE';
+
+    // Act
+    const r = parseSmtpConfig(env);
+
+    // Assert
+    assert.equal(r.ok, true);
+    if (r.ok) {
+      assert.equal(r.value.requireTLS, true, 'apenas "false" minusculo e opt-out');
+    }
+  });
+});
