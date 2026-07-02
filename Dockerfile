@@ -99,7 +99,10 @@ ENV NODE_ENV=production \
 
 # Copia node_modules do estágio deps.
 COPY --from=deps /app/node_modules ./node_modules
-COPY package.json pnpm-lock.yaml ./
+# pnpm-workspace.yaml também no runtime: `pnpm <script>` (ex.: `pnpm seed:admin` no deploy)
+# roda o deps-status-check do pnpm 11, que revalida `overrides` (esbuild) contra o lock. Sem
+# o workspace aqui, `overrides` fica vazio vs. lock → ERR_PNPM_LOCKFILE_CONFIG_MISMATCH.
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # Código de produção. `tsconfig.json` fica pra suportar tooling; os configs do
 # drizzle-kit (dev-only, devDependency) vivem em db/drizzle/ e não vão pro runtime.
