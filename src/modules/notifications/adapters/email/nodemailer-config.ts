@@ -14,6 +14,7 @@
  *   SMTP_PASS       required
  *   SMTP_POOL       opcional, default true; 'false' desliga
  *   SMTP_MAX_CONNS  opcional, default 5; int >= 1
+ *   SMTP_REQUIRE_TLS opcional, default fail-secure (!secure); so 'false' desativa
  *
  * ASCII puro.
  */
@@ -28,6 +29,7 @@ export type SmtpConfig = Readonly<{
   pass: string;
   pool: boolean;
   maxConnections: number;
+  requireTLS: boolean;
 }>;
 
 export type SmtpConfigError =
@@ -74,13 +76,18 @@ export const parseSmtpConfig = (
 
   const pool = env['SMTP_POOL'] === 'false' ? false : DEFAULT_POOL;
 
+  const secure = env['SMTP_SECURE'] === 'true';
+  // Fail-secure: so a string exata 'false' desativa; qualquer typo mantem TLS exigido.
+  const requireTLS = env['SMTP_REQUIRE_TLS'] === 'false' ? false : !secure;
+
   return ok({
     host: env['SMTP_HOST'] ?? '',
     port,
-    secure: env['SMTP_SECURE'] === 'true',
+    secure,
     user: env['SMTP_USER'] ?? '',
     pass: env['SMTP_PASS'] ?? '',
     pool,
     maxConnections,
+    requireTLS,
   });
 };

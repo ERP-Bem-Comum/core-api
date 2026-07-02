@@ -15,6 +15,11 @@
  *   AUTH_RESET_FROM         alias legado (deprecado) de EMAIL_FROM_RESET.
  *   AUTH_INVITE_FROM        alias legado (deprecado) de EMAIL_FROM_INVITE.
  *   EMAIL_SANDBOX_TO        caixa de redirecionamento em nao-prod (decorator withSandboxRedirect).
+ *   EMAIL_FROM_ALLOWED_DOMAINS  CSV de dominios permitidos no remetente (guarda-corpo).
+ *                               Presente -> todo remetente resolvivel (global + por fluxo +
+ *                               aliases legados quando usados) deve ter dominio na lista, senao
+ *                               config invalida (fail-fast de boot). Ausente -> sem verificacao.
+ *                               Comparacao pelo dominio apos o @, case-insensitive.
  *
  * ASCII puro.
  */
@@ -56,7 +61,8 @@ export type EmailConfigError =
       provider: EmailProvider;
       reason: SmtpConfigError | ResendConfigError;
     }>
-  | Readonly<{ tag: 'invalid-from'; field: string; reason: EmailAddressError }>;
+  | Readonly<{ tag: 'invalid-from'; field: string; reason: EmailAddressError }>
+  | Readonly<{ tag: 'from-domain-not-allowed'; field: string; domain: string }>;
 
 const PROVIDERS: readonly EmailProvider[] = ['smtp', 'resend', 'memory'];
 
@@ -77,15 +83,50 @@ const resolveProviderName = (
   return ok(raw);
 };
 
+// Extrai o endereco interno de um remetente com display name ("Nome <local@dominio>").
+// Sem display name, devolve o proprio valor (comportamento atual preservado). O VO
+// EmailAddress (address.ts) e' usado por outros fluxos (destinatarios) e nao suporta a
+// forma com nome; a extracao vive aqui para nao alargar o VO (evita scope-creep).
+const DISPLAY_NAME_RE = /^[^<>]*<([^<>]+)>$/;
+const extractAddress = (raw: string): string => {
+  const inner = DISPLAY_NAME_RE.exec(raw.trim())?.[1];
+  return inner !== undefined ? inner.trim() : raw;
+};
+
+// Dominio (apos o @, lower-case) de um endereco ja validado pelo EMAIL_REGEX (um unico @).
+const domainOf = (address: string): string =>
+  address.slice(address.lastIndexOf('@') + 1).toLowerCase();
+
+// CSV -> dominios normalizados (trim, lower-case, sem vazios). Ausente/vazio -> [].
+const parseAllowedDomains = (raw: string | undefined): readonly string[] => {
+  if (raw === undefined) return [];
+  return raw
+    .split(',')
+    .map((d) => d.trim().toLowerCase())
+    .filter((d) => d.length > 0);
+};
+
 // Parseia um remetente opcional (vazio -> undefined; presente e malformado -> err).
-const parseOptionalFrom = (
+// Suporta display name: valida o endereco interno mas preserva o valor original (o
+// call-site usa o resultado direto como header From, ver worker email-dispatch). Quando
+// a allowlist esta presente, exige que o dominio do endereco interno pertenca a ela.
+const parseFromField = (
   field: string,
   raw: string | undefined,
+  allowedDomains: readonly string[],
 ): Result<EmailAddress | undefined, EmailConfigError> => {
   if (!present(raw)) return ok(undefined);
-  const parsed = parseEmailAddress(raw);
+  const address = extractAddress(raw);
+  const parsed = parseEmailAddress(address);
   if (!parsed.ok) return err({ tag: 'invalid-from', field, reason: parsed.error });
-  return ok(parsed.value);
+  const domain = domainOf(address);
+  if (allowedDomains.length > 0 && !allowedDomains.includes(domain)) {
+    return err({ tag: 'from-domain-not-allowed', field, domain });
+  }
+  // Sem display name, address === raw e devolvemos o valor ja marcado (parsed.value).
+  // Com display name, preservamos o raw ("Nome <addr>"); o endereco interno ja foi
+  // validado acima, entao a reafirmacao de marca e' segura.
+  return ok(address === raw ? parsed.value : (raw as EmailAddress));
 };
 
 export const parseEmailConfig = (
@@ -94,29 +135,37 @@ export const parseEmailConfig = (
   const providerName = resolveProviderName(env);
   if (!providerName.ok) return providerName;
 
+  // Allowlist de dominio do remetente (guarda-corpo). Presente -> valida cada
+  // remetente resolvivel; ausente ([]) -> nenhuma verificacao (comportamento atual).
+  const allowedDomains = parseAllowedDomains(env['EMAIL_FROM_ALLOWED_DOMAINS']);
+
   // Remetentes: global + por tipo (novos) com fallback ao alias legado.
-  const globalFrom = parseOptionalFrom('EMAIL_FROM', env['EMAIL_FROM']);
+  const globalFrom = parseFromField('EMAIL_FROM', env['EMAIL_FROM'], allowedDomains);
   if (!globalFrom.ok) return globalFrom;
 
-  const resetFrom = parseOptionalFrom(
+  const resetFrom = parseFromField(
     'EMAIL_FROM_RESET',
     env['EMAIL_FROM_RESET'] ?? env['AUTH_RESET_FROM'],
+    allowedDomains,
   );
   if (!resetFrom.ok) return resetFrom;
 
-  const inviteFrom = parseOptionalFrom(
+  const inviteFrom = parseFromField(
     'EMAIL_FROM_INVITE',
     env['EMAIL_FROM_INVITE'] ?? env['AUTH_INVITE_FROM'],
+    allowedDomains,
   );
   if (!inviteFrom.ok) return inviteFrom;
 
-  const notificationFrom = parseOptionalFrom(
+  const notificationFrom = parseFromField(
     'EMAIL_FROM_NOTIFICATION',
     env['EMAIL_FROM_NOTIFICATION'],
+    allowedDomains,
   );
   if (!notificationFrom.ok) return notificationFrom;
 
-  const sandboxTo = parseOptionalFrom('EMAIL_SANDBOX_TO', env['EMAIL_SANDBOX_TO']);
+  // EMAIL_SANDBOX_TO e' destinatario (nao remetente): fora da allowlist ([]).
+  const sandboxTo = parseFromField('EMAIL_SANDBOX_TO', env['EMAIL_SANDBOX_TO'], []);
   if (!sandboxTo.ok) return sandboxTo;
 
   const from: FromMap = {

@@ -9,6 +9,7 @@ import process from 'node:process';
 
 import { buildApp } from '#src/shared/http/app.ts';
 import { readHttpConfig } from '#src/shared/http/config.ts';
+import { readEmailLinkBaseUrls } from '#src/shared/http/email-link-base-urls.ts';
 import {
   installLastResortHandlers,
   processLastResortDeps,
@@ -110,14 +111,21 @@ const main = async (): Promise<void> => {
           timeWindow: process.env['AUTH_LOGIN_RATE_LIMIT_WINDOW'] ?? '1 minute',
         }
       : undefined;
-  // BE-REC-003: origem confiável do link de reset (nunca header Host). Ausente → default (dev).
-  const resetBaseUrl = process.env['AUTH_RESET_BASE_URL'];
+  // BE-REC-003 + #331/#332: origem confiável dos links de e-mail (nunca header Host).
+  // Inválida, ou ausente em produção → boot falha (EX_CONFIG), nunca link localhost/relativo.
+  const emailLinkUrls = readEmailLinkBaseUrls(process.env);
+  if (!emailLinkUrls.ok) {
+    for (const message of emailLinkUrls.error) process.stderr.write(`server: ${message}\n`);
+    process.exit(78);
+  }
+  const { resetBaseUrl, activationBaseUrl, selfRegistrationBaseUrl } = emailLinkUrls.value;
   const authDeps = await buildAuthHttpDeps({
     driver: authDriver,
     ...(authConnString !== undefined ? { connectionString: authConnString } : {}),
     ...(authSeed !== undefined ? { seed: authSeed } : {}),
     ...(sensitiveRateLimit !== undefined ? { sensitiveRateLimit } : {}),
-    ...(resetBaseUrl !== undefined && resetBaseUrl.length > 0 ? { resetBaseUrl } : {}),
+    ...(resetBaseUrl !== undefined ? { resetBaseUrl } : {}),
+    ...(activationBaseUrl !== undefined ? { activationBaseUrl } : {}),
   });
 
   // CTR-NUMBER-PROGRAM: read port de programs (ADR-0006/0014) p/ contracts compor o bloco
@@ -166,8 +174,18 @@ const main = async (): Promise<void> => {
           driver: 'mysql',
           ...(partnersWriterUrl !== undefined ? { writerUrl: partnersWriterUrl } : {}),
           ...(partnersReaderUrl !== undefined ? { readerUrl: partnersReaderUrl } : {}),
+          // campo legado PT do partners — rename rastreado na issue #333
+          ...(selfRegistrationBaseUrl !== undefined
+            ? { autocadastroBaseUrl: selfRegistrationBaseUrl }
+            : {}),
         }
-      : { driver: 'memory' },
+      : {
+          driver: 'memory',
+          // campo legado PT do partners — rename rastreado na issue #333
+          ...(selfRegistrationBaseUrl !== undefined
+            ? { autocadastroBaseUrl: selfRegistrationBaseUrl }
+            : {}),
+        },
   );
 
   // Módulo programs (spec 008, ADR-0033) → /api/v1/programs. Logo storage S3/MinIO (ADR-0019)
