@@ -4,7 +4,7 @@
  * Costura `read -> map -> write -> reconcile` sobre o `LegacyData` (ja lido pelo READER),
  * usando EXCLUSIVAMENTE os ports entregues (`AuthEtlPort` + `PartnersEtlPort`, ADR-0006).
  * Sem I/O direto: recebe os ports + um `QuarantineSink` injetaveis, para ser testavel com
- * fakes in-memory (sem Docker). O wiring real (driver, withLegacyMysql, flags, SIGTERM)
+ * fakes in-memory (sem Docker). O wiring real (driver, reader do legado, flags, SIGTERM)
  * vive em `main.ts`.
  *
  * Invariantes:

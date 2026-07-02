@@ -1,15 +1,15 @@
 /**
  * Entrypoint do ETL Parceiros (PARTNERS-ETL-ORCHESTRATOR, slice 3b-ii) - wiring real.
  *
- * `runEtl({ dumpPath, connectionString, dryRun })` cabeia tudo:
- *   1. `withLegacyMysql(dump, fn)` sobe o MySQL efemero legado, restaura o dump e roda `fn`.
- *   2. dentro de `fn`: `readLegacyData()` (READER) -> `orchestrate(deps)(data)` (logica pura).
+ * `runEtl({ connectionString, dryRun })` cabeia tudo:
+ *   1. `readLegacyData()` (READER) le o legado direto pela ETL_LEGACY_CONNECTION_STRING.
+ *   2. `orchestrate(deps)(data)` (logica pura) costura read -> map -> write -> reconcile.
  *   3. ports de ESCRITA: `buildAuthEtlPort` + `buildPartnersEtlPort` (core-api destino).
  *   4. quarentena dupla (D12): resumo PII-free versionavel + detalhe com PII (gitignored).
  *
- * O caminho real e exercido SO pela integracao gated (`PARTNERS_ETL_INTEGRATION=1`). Sem o
- * opt-in, a suite skipa (o import resolve agora que este modulo existe). NUNCA roda contra o
- * dump de producao: o dump default e o sintetico de testes. ASCII puro.
+ * Sem Docker/dump (ETL-LEGACY-DIRECT-CONNECTION): a URL do legado aponta para o vivo, uma
+ * replica, ou um snapshot restaurado pela infra. O caminho real e exercido SO pela integracao
+ * gated (`PARTNERS_ETL_INTEGRATION=1` + `ETL_LEGACY_CONNECTION_STRING`). ASCII puro.
  *
  * Lint estrito em scripts/: `node:child_process`/`fs` via funcoes async, callbacks com `{ }`,
  * `import type` para tipos, params readonly, booleans explicitos.
@@ -36,7 +36,6 @@ import {
   type BuildPartnersEtlPortError,
 } from '#src/modules/partners/public-api/etl.ts';
 
-import { withLegacyMysql, type RestoreError } from '#scripts/etl/legacy/restore.ts';
 import { readLegacyData } from '#scripts/etl/legacy/reader.ts';
 import { toSummary, describeReason } from '#scripts/etl/quarantine/reason.ts';
 import {
@@ -47,21 +46,17 @@ import {
   type ReconciliationReport,
 } from '#scripts/etl/orchestrate.ts';
 
-// Dump sintetico (dados fake) — JAMAIS o de producao.
-const DEFAULT_DUMP = 'tests/etl/fixtures/legacy-mini.sql';
 // Quarentena: detalhe COM PII fica em .tmp/ (gitignored); resumo PII-free ao lado.
 const QUARANTINE_DIR = '.tmp/etl-quarantine';
 const SUMMARY_PATH = `${QUARANTINE_DIR}/quarantine.summary.jsonl`;
 const DETAIL_PATH = `${QUARANTINE_DIR}/quarantine.detail.jsonl`;
 
 export type RunEtlOptions = Readonly<{
-  dumpPath: string;
   connectionString: string;
   dryRun: boolean;
 }>;
 
 export type RunEtlError =
-  | Readonly<{ kind: 'restore'; detail: RestoreError }>
   | Readonly<{ kind: 'auth-port'; detail: BuildAuthEtlPortError }>
   | Readonly<{ kind: 'partners-port'; detail: BuildPartnersEtlPortError }>
   | Readonly<{ kind: 'orchestrate'; detail: OrchestrateError }>;
@@ -113,14 +108,14 @@ export const runEtl = async (
   const partnersPort: PartnersEtlPort = partnersPortR.value;
 
   try {
-    // withLegacyMysql sobe o efemero, restaura o dump e roda a costura com o ciclo vivo.
-    const restored = await withLegacyMysql(opts.dumpPath, async () => {
-      const data = await readLegacyData();
-      return orchestrate({ authPort, partnersPort, quarantineSink, dryRun: opts.dryRun })(data);
-    });
-    if (!restored.ok) return err({ kind: 'restore', detail: restored.error });
-
-    const report = restored.value;
+    // Le o legado direto pela ETL_LEGACY_CONNECTION_STRING (sem Docker/dump) e costura a migracao.
+    const data = await readLegacyData();
+    const report = await orchestrate({
+      authPort,
+      partnersPort,
+      quarantineSink,
+      dryRun: opts.dryRun,
+    })(data);
     if (!report.ok) return err({ kind: 'orchestrate', detail: report.error });
     return ok(report.value);
   } finally {
@@ -134,26 +129,14 @@ export const runEtl = async (
 // ---------------------------------------------------------------------------
 
 const parseArgs = (argv: readonly string[]): RunEtlOptions => {
-  let dumpPath = DEFAULT_DUMP;
   let dryRun = false;
-  for (let i = 0; i < argv.length; i += 1) {
-    const token = argv[i];
-    if (token === '--dry-run') {
-      dryRun = true;
-    } else if (token === '--dump') {
-      const next = argv[i + 1];
-      if (next !== undefined) {
-        dumpPath = next;
-        i += 1;
-      }
-    } else if (token?.startsWith('--dump=') === true) {
-      dumpPath = token.slice('--dump='.length);
-    }
+  for (const token of argv) {
+    if (token === '--dry-run') dryRun = true;
   }
   const connectionString =
     process.env['ETL_CORE_CONNECTION_STRING'] ??
     'mysql://root:rootpw-migration-test-only@127.0.0.1:3307/core';
-  return { dumpPath, connectionString, dryRun };
+  return { connectionString, dryRun };
 };
 
 const formatReport = (report: Readonly<ReconciliationReport>): string => {
@@ -170,9 +153,9 @@ const formatReport = (report: Readonly<ReconciliationReport>): string => {
   ].join('\n');
 };
 
-// Shutdown best-effort do entrypoint: `runEtl` ja fecha os dois ports no seu `finally`
-// e `withLegacyMysql` derruba o container efemero; aqui so cedemos um tick para drenar
-// o stderr antes do `exit`. Async genuino (await) — satisfaz require-await + promise-async.
+// Shutdown best-effort do entrypoint: `runEtl` ja fecha os dois ports no seu `finally`;
+// aqui so cedemos um tick para drenar o stderr antes do `exit`. Async genuino (await) —
+// satisfaz require-await + promise-async.
 const lastResortShutdown = async (): Promise<void> => {
   await Promise.resolve();
 };

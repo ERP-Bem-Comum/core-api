@@ -1,8 +1,8 @@
 /**
  * Diagnóstico pré-go-live do ETL Parceiros (Achado 1 — HANDOFF §11).
  *
- * Conta, no dump LEGADO de produção, duplicatas das chaves que o DESTINO (core-api) impõe como
- * UNIQUE — `cnpj`/`cpf`/`email`. O legado não tinha essas constraints; duplicatas fariam o 2º
+ * Conta, no LEGADO, duplicatas das chaves que o DESTINO (core-api) impõe como UNIQUE —
+ * `cnpj`/`cpf`/`email`. O legado não tinha essas constraints; duplicatas fariam o 2º
  * registro cair em quarentena / `partners-etl-store-integrity-violation` na migração real (a ordem
  * de PK decide qual sobrevive). Este script revela o volume ANTES do go-live.
  *
@@ -10,33 +10,15 @@
  * NUNCA imprime o valor de cnpj/cpf/email. Para resolver os grupos, rode a query detalhada
  * localmente (fora deste script) — os valores são PII e não devem sair em log compartilhável.
  *
- * Uso: `PROD_DUMP=/caminho/dump_prod.sql pnpm run etl:check-duplicates`
- * Requer Docker (sobe MySQL efêmero via `withLegacyMysql`, com teardown garantido).
+ * Uso: `ETL_LEGACY_CONNECTION_STRING=mysql://etl_ro:***@host:3306/legacy pnpm run etl:check-duplicates`
+ * Sem Docker (ETL-LEGACY-DIRECT-CONNECTION): conecta direto no legado pela mesma URL do reader.
  */
 
 import process from 'node:process';
 
-import { createConnection, type Connection, type RowDataPacket } from 'mysql2/promise';
+import type { RowDataPacket } from 'mysql2/promise';
 
-import { withLegacyMysql } from '../legacy/restore.ts';
-
-// O dump de PRODUÇÃO (mysqldump real) carrega `CREATE DATABASE`+`USE` do banco de origem, então as
-// tabelas NÃO ficam no DB `legacy` da fixture sintética — ficam em `abc-erp-financeiro-prod`. Conecta
-// como root (o `etl_ro` só tem grant em `legacy`). `LEGACY_DUMP_DB` permite override.
-const DUMP_DB = process.env['LEGACY_DUMP_DB'] ?? 'abc-erp-financeiro-prod';
-const EPHEMERAL_ROOT_PW = 'etl-ephemeral-local-only'; // = ROOT_PW de restore.ts (efêmero, local-only)
-
-const connectDumpDb = async (): Promise<Connection> =>
-  createConnection({
-    host: '127.0.0.1',
-    port: Number(process.env['ETL_MYSQL_PORT'] ?? 3309),
-    user: 'root',
-    password: EPHEMERAL_ROOT_PW,
-    database: DUMP_DB,
-    multipleStatements: false,
-    dateStrings: false,
-    timezone: 'Z',
-  });
+import { connectReadonly } from '../legacy/connect.ts';
 
 type Normalize = 'digits' | 'email';
 
@@ -78,12 +60,10 @@ type DupRow = RowDataPacket &
   Readonly<{ total: number | string; dupGroups: number | string; dupRows: number | string }>;
 
 const runChecks = async (): Promise<number> => {
-  const conn = await connectDumpDb();
+  const conn = await connectReadonly();
   let entitiesWithDup = 0;
   try {
-    process.stdout.write(
-      '=== Duplicatas de chaves UNIQUE do destino no dump legado (PII-free) ===\n\n',
-    );
+    process.stdout.write('=== Duplicatas de chaves UNIQUE do destino no legado (PII-free) ===\n\n');
     for (const check of CHECKS) {
       const key = keyExpr(check.column, check.normalize);
       const sql =
@@ -117,18 +97,14 @@ const runChecks = async (): Promise<number> => {
 };
 
 const main = async (): Promise<number> => {
-  const dumpPath = process.env['PROD_DUMP'];
-  if (dumpPath === undefined || dumpPath.trim() === '') {
+  const legacyConn = process.env['ETL_LEGACY_CONNECTION_STRING'];
+  if (legacyConn === undefined || legacyConn.trim() === '') {
     process.stderr.write(
-      'Defina PROD_DUMP=<caminho do dump .sql> (read-only, PII — nunca commitar).\n',
+      'Defina ETL_LEGACY_CONNECTION_STRING=<url do legado> (read-only, PII — nunca commitar).\n',
     );
     return 2;
   }
-  const result = await withLegacyMysql(dumpPath, runChecks);
-  if (!result.ok) {
-    process.stderr.write(`Falha ao restaurar/consultar o dump: ${JSON.stringify(result.error)}\n`);
-    return 1;
-  }
+  await runChecks();
   return 0;
 };
 
