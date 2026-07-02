@@ -169,6 +169,8 @@ export const supplierRow = (over: Partial<LegacySupplierRow> = {}): LegacySuppli
   bancaryInfoDv: '1',
   pixInfoKeyType: null,
   pixInfoKey: null,
+  serviceEvaluation: null,
+  commentEvaluation: null,
   createdAt: NOW,
   updatedAt: UPDATED,
   ...over,

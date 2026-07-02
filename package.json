@@ -54,6 +54,8 @@
     "test:integration:financial": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts financial",
     "test:integration:etl": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts etl",
     "test:integration:etl:orchestrate": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts etl:orchestrate",
+    "test:integration:etl:contracts": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts etl:contracts",
+    "test:integration:etl:financial": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts etl:financial",
     "etl:check-duplicates": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/etl/diagnostics/check-duplicates.ts",
     "serve": "node --experimental-strip-types --enable-source-maps --no-warnings src/server.ts",
     "dev": "overmind start",

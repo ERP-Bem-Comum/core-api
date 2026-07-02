@@ -37,7 +37,7 @@ export type LegacyData = Readonly<{
   users: TableRead<LegacyUserRow>;
 }>;
 
-const decodeAll = <T>(
+export const decodeAll = <T>(
   raws: readonly Readonly<Record<string, unknown>>[],
   decode: (raw: Readonly<Record<string, unknown>>) => Result<T, readonly QuarantineReason[]>,
 ): TableRead<T> => {

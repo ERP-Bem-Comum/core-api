@@ -62,6 +62,17 @@ describe(
       assert.equal(inactive.active, 0);
       assert.ok(inactive.createdAt instanceof Date);
 
+      // ETL-SUPPLIER-RATING-MAPPING: avaliação decodificada de verdade (backstop contra
+      // typo de coluna — nNum/nStr toleram ausência devolvendo null em silêncio).
+      const ratedSupplier = data.suppliers.rows.find((s) => s.id === 1);
+      assert.ok(ratedSupplier);
+      assert.equal(ratedSupplier.serviceEvaluation, 5);
+      assert.equal(ratedSupplier.commentEvaluation, 'Otimo fornecedor');
+      const unratedSupplier = data.suppliers.rows.find((s) => s.id === 2);
+      assert.ok(unratedSupplier);
+      assert.equal(unratedSupplier.serviceEvaluation, null);
+      assert.equal(unratedSupplier.commentEvaluation, null);
+
       // D11: collaborator_history exportado para cold storage.
       assert.equal(archived, 2);
     });

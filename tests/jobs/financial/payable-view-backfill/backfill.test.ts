@@ -23,6 +23,9 @@ const record = (payableId: string, status: PayableView['status'] = 'Open'): Paya
   valueCents: 77500,
   dueDate: '2026-07-01',
   status,
+  // #239: campos adicionados à view (conta-débito + data de pagamento).
+  debitAccountRef: null,
+  paidAt: null,
 });
 
 describe('jobs/payable-view-backfill — backfillPayableViews (#236)', () => {

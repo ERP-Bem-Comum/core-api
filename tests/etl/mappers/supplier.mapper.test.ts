@@ -24,6 +24,8 @@ const base = (over: Partial<LegacySupplierRow> = {}): LegacySupplierRow => ({
   bancaryInfoDv: '1',
   pixInfoKeyType: null,
   pixInfoKey: null,
+  serviceEvaluation: null,
+  commentEvaluation: null,
   createdAt: NOW,
   updatedAt: UPDATED,
   ...over,
@@ -139,5 +141,87 @@ describe('mapLegacySupplierRow — tradução de pix_key_type legado (#275)', ()
     );
     assert.ok(!r.ok);
     assert.ok(r.error.some((e) => e.tag === 'EnumUnknown' && e.field === 'pix_key_type'));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// ETL-SUPPLIER-RATING-MAPPING: serviceEvaluation/commentEvaluation → avaliação.
+// Mapa (decisão D2 da migração, 2026-07-02): 5→OTIMO, 4→BOM, 3→REGULAR,
+// 2→REGULAR, 1→RUIM, null→null; fora de 1..5 → quarentena EnumUnknown.
+// ---------------------------------------------------------------------------
+describe('mapLegacySupplierRow — avaliação de serviço (ETL-SUPPLIER-RATING-MAPPING)', () => {
+  const rated = (
+    serviceEvaluation: number | null,
+    commentEvaluation: string | null = null,
+  ): LegacySupplierRow => ({ ...base(), serviceEvaluation, commentEvaluation });
+
+  const cases: readonly (readonly [number, string])[] = [
+    [5, 'OTIMO'],
+    [4, 'BOM'],
+    [3, 'REGULAR'],
+    [2, 'REGULAR'],
+    [1, 'RUIM'],
+  ];
+
+  for (const [evaluation, expected] of cases) {
+    it(`serviceEvaluation=${String(evaluation)} → serviceRating=${expected}`, () => {
+      const r = mapLegacySupplierRow(rated(evaluation));
+      assert.ok(r.ok, `esperava ok p/ evaluation=${String(evaluation)}`);
+      assert.equal(r.value.aggregate.serviceRating, expected);
+    });
+  }
+
+  it('serviceEvaluation=null → serviceRating=null (não avaliado)', () => {
+    const r = mapLegacySupplierRow(rated(null));
+    assert.ok(r.ok);
+    assert.equal(r.value.aggregate.serviceRating, null);
+  });
+
+  it('commentEvaluation preservado em ratingComment', () => {
+    const r = mapLegacySupplierRow(rated(5, 'Excelente prestador'));
+    assert.ok(r.ok);
+    assert.equal(r.value.aggregate.ratingComment, 'Excelente prestador');
+  });
+
+  it('commentEvaluation em branco → ratingComment=null (normalização no ACL)', () => {
+    const r = mapLegacySupplierRow(rated(5, '   '));
+    assert.ok(r.ok);
+    assert.equal(r.value.aggregate.ratingComment, null);
+  });
+
+  it('comentário sem nota → ratingComment preservado, serviceRating=null', () => {
+    const r = mapLegacySupplierRow(rated(null, 'Comentário órfão'));
+    assert.ok(r.ok);
+    assert.equal(r.value.aggregate.serviceRating, null);
+    assert.equal(r.value.aggregate.ratingComment, 'Comentário órfão');
+  });
+
+  it('serviceEvaluation fora de 1..5 → quarentena EnumUnknown em service_evaluation', () => {
+    for (const invalid of [0, 6, -1]) {
+      const r = mapLegacySupplierRow(rated(invalid));
+      assert.ok(!r.ok, `esperava quarentena p/ evaluation=${String(invalid)}`);
+      assert.ok(r.error.some((e) => e.tag === 'EnumUnknown' && e.field === 'service_evaluation'));
+    }
+  });
+
+  it('quarentena carrega o valor tentado (attempted) — vai ao detalhe da DLQ', () => {
+    const r = mapLegacySupplierRow(rated(6));
+    assert.ok(!r.ok);
+    const reason = r.error.find((e) => e.tag === 'EnumUnknown' && e.field === 'service_evaluation');
+    assert.ok(reason !== undefined && 'attempted' in reason);
+    assert.equal(reason.attempted, '6');
+  });
+
+  it('não-inteiro (4.5) → EnumUnknown (lookup estrito do mapa)', () => {
+    const r = mapLegacySupplierRow(rated(4.5));
+    assert.ok(!r.ok);
+    assert.ok(r.error.some((e) => e.tag === 'EnumUnknown' && e.field === 'service_evaluation'));
+  });
+
+  it('acúmulo cruzado: e-mail inválido + nota inválida → ambos os reasons na MESMA quarentena', () => {
+    const r = mapLegacySupplierRow({ ...base(), email: 'sem-arroba', serviceEvaluation: 9 });
+    assert.ok(!r.ok);
+    assert.ok(r.error.some((e) => e.field === 'email'));
+    assert.ok(r.error.some((e) => e.tag === 'EnumUnknown' && e.field === 'service_evaluation'));
   });
 });
