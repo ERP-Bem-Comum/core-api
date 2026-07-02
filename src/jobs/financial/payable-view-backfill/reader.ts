@@ -51,6 +51,8 @@ async function readAll(
       valueCents: finPayables.value,
       dueDate: finPayables.dueDate,
       status: finPayables.status,
+      paidAt: finPayables.paidAt,
+      debitAccountRef: finDocuments.debitAccountRef,
       supplierRef: finDocuments.supplierRef,
       contractRef: finDocuments.contractRef,
       categoryRef: finDocuments.categoryRef,
@@ -80,6 +82,9 @@ async function readAll(
       valueCents: row.valueCents,
       dueDate: toIsoDate(row.dueDate),
       status: documentStatusToViewStatus(row.status),
+      // #239: colunas adicionadas à view; backfill repõe da fonte de verdade.
+      debitAccountRef: row.debitAccountRef,
+      paidAt: row.paidAt instanceof Date ? toIsoDate(row.paidAt) : null,
     });
   }
   return { records, skipped, total: rows.length };

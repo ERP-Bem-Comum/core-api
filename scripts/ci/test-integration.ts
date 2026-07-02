@@ -101,6 +101,12 @@ const SUITES: Readonly<Record<string, Suite>> = {
   'etl:orchestrate': mysqlSuite({ PARTNERS_ETL_INTEGRATION: '1' }, [
     'tests/etl/orchestrate.integration.test.ts',
   ]),
+  'etl:contracts': mysqlSuite({ PARTNERS_ETL_INTEGRATION: '1' }, [
+    'tests/etl/contracts/writer.integration.test.ts',
+  ]),
+  'etl:financial': mysqlSuite({ PARTNERS_ETL_INTEGRATION: '1' }, [
+    'tests/etl/financial/writer.integration.test.ts',
+  ]),
   storage: {
     services: ['minio'],
     secrets: false,
@@ -140,8 +146,13 @@ const SUITES: Readonly<Record<string, Suite>> = {
     services: [],
     secrets: false,
     env: { PARTNERS_ETL_INTEGRATION: '1' },
-    concurrency1: false,
-    paths: ['tests/etl/legacy/reader.integration.test.ts'],
+    // Os dois readers sobem o MESMO MySQL efêmero (container/porta fixos do
+    // compose.etl.yaml) — rodar em paralelo colide; serializa (ETL-CONTRACTS-WRITER).
+    concurrency1: true,
+    paths: [
+      'tests/etl/legacy/reader.integration.test.ts',
+      'tests/etl/contracts/reader.integration.test.ts',
+    ],
   },
 };
 

@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "ETL-FINANCIAL-WRITER",
+  "size": "L",
+  "createdAt": "2026-07-02T15:00:53.216Z",
+  "closedAt": "2026-07-02T16:08:56.727Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-02T15:03:36.811Z",
+      "finishedAt": "2026-07-02T15:04:54.661Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "mysql-database-expert",
+      "startedAt": "2026-07-02T15:11:16.909Z",
+      "finishedAt": "2026-07-02T15:34:38.283Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-02T15:34:38.632Z",
+      "finishedAt": "2026-07-02T16:06:23.816Z",
+      "rounds": 2,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-02T16:06:24.123Z",
+      "finishedAt": "2026-07-02T16:08:56.420Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

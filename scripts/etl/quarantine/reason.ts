@@ -18,7 +18,11 @@ export type QuarantineReason =
   // Falha de um port (persistencia/auth/rehydrate na borda do orquestrador). `portError`
   // carrega o codigo kebab-case EN do erro REAL do port (ex.: 'partners-etl-store-unavailable').
   // Codigo EN, nunca dado de linha — PII-free, seguro no resumo versionavel.
-  | Readonly<{ tag: 'PortError'; field: string; portError: string }>;
+  | Readonly<{ tag: 'PortError'; field: string; portError: string }>
+  // Exclusao DELIBERADA por decisao registrada (allowlist explicita por legacy_id —
+  // decisao (c) 2026-07-02). `decisionRef` aponta o documento/issue da decisao; e
+  // PII-free por construcao (referencia, nunca dado de linha).
+  | Readonly<{ tag: 'ExcludedByDecision'; field: string; decisionRef: string }>;
 
 export type QuarantineSummary = Readonly<{ tag: QuarantineReason['tag']; field: string }>;
 
@@ -47,6 +51,8 @@ export const describeReason = (reason: QuarantineReason): string => {
       return `Data inválida no campo ${reason.field}`;
     case 'PortError':
       return `Falha de port na etapa ${reason.field}: ${reason.portError}`;
+    case 'ExcludedByDecision':
+      return `Excluído por decisão registrada (${reason.decisionRef})`;
     default: {
       const _exhaustive: never = reason;
       return _exhaustive;

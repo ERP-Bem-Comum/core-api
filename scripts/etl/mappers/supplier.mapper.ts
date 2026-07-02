@@ -12,6 +12,7 @@ import * as SupplierId from '#src/modules/partners/domain/supplier/supplier-id.t
 import * as Supplier from '#src/modules/partners/domain/supplier/supplier.ts';
 import * as ServiceCategory from '#src/modules/partners/domain/supplier/service-category.ts';
 import type { ServiceCategory as ServiceCategoryType } from '#src/modules/partners/domain/supplier/service-category.ts';
+import type { ServiceRating as ServiceRatingType } from '#src/modules/partners/domain/supplier/service-rating.ts';
 import * as PaymentTarget from '#src/modules/partners/domain/shared/payment-target.ts';
 import type { Supplier as SupplierEntity } from '#src/modules/partners/domain/supplier/types.ts';
 import type {
@@ -39,6 +40,36 @@ const LEGACY_PIX_KEY_TYPE_MAP: Readonly<Record<string, PixKeyType>> = {
 };
 
 const translatePixKeyType = (raw: string): string => LEGACY_PIX_KEY_TYPE_MAP[raw] ?? raw;
+
+// ACL translator: nota 1..5 do legado (`serviceEvaluation`) → ServiceRating do core
+// (ETL-SUPPLIER-RATING-MAPPING; decisão D2 do mapa de migração 2026-07-02:
+// 5→OTIMO, 4→BOM, 3/2→REGULAR, 1→RUIM, null→não avaliado). Fora de 1..5 → quarentena
+// (nunca dropa em silêncio).
+const LEGACY_SERVICE_RATING_MAP: Readonly<Record<number, ServiceRatingType>> = {
+  1: 'RUIM',
+  2: 'REGULAR',
+  3: 'REGULAR',
+  4: 'BOM',
+  5: 'OTIMO',
+};
+
+const translateServiceRating = (
+  raw: number | null,
+): Result<ServiceRatingType | null, QuarantineReason> => {
+  if (raw === null) return ok(null);
+  const rating = LEGACY_SERVICE_RATING_MAP[raw];
+  return rating !== undefined
+    ? ok(rating)
+    : err({ tag: 'EnumUnknown', field: 'service_evaluation', attempted: String(raw) });
+};
+
+// Comentário legado: branco → null. Normalização é do ACL — `rehydrate` confia no
+// estado que recebe (só register/edit normalizam no domínio).
+const normalizeLegacyComment = (raw: string | null): string | null => {
+  if (raw === null) return null;
+  const trimmed = raw.trim();
+  return trimmed === '' ? null : trimmed;
+};
 
 const parseServiceCategory = (raw: string): Result<ServiceCategoryType, QuarantineReason> => {
   const r = ServiceCategory.parse(raw);
@@ -104,10 +135,15 @@ export const mapLegacySupplierRow = (row: LegacySupplierRow): MapperResult<Suppl
   ]);
 
   const targets = resolvePaymentTargets(row);
+  const rating = translateServiceRating(row.serviceEvaluation);
 
-  // Acumula erros de campos escalares + destino de pagamento numa única quarentena.
-  if (!fields.ok || !targets.ok) {
-    const all = [...(fields.ok ? [] : fields.error), ...(targets.ok ? [] : targets.error)];
+  // Acumula erros de campos escalares + destino de pagamento + avaliação numa única quarentena.
+  if (!fields.ok || !targets.ok || !rating.ok) {
+    const all = [
+      ...(fields.ok ? [] : fields.error),
+      ...(targets.ok ? [] : targets.error),
+      ...(rating.ok ? [] : [rating.error]),
+    ];
     return err(all);
   }
 
@@ -125,9 +161,9 @@ export const mapLegacySupplierRow = (row: LegacySupplierRow): MapperResult<Suppl
     serviceCategory,
     bankAccount: targets.value.bankAccount,
     pixKey: targets.value.pixKey,
-    // Legado não possui avaliação de prestador (campo nativo do core-api).
-    serviceRating: null,
-    ratingComment: null,
+    // Avaliação do legado (`serviceEvaluation`/`commentEvaluation`) traduzida pelo ACL acima.
+    serviceRating: rating.value,
+    ratingComment: normalizeLegacyComment(row.commentEvaluation),
     status,
     deactivatedAt,
   });

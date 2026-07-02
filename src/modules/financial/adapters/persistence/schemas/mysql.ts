@@ -151,6 +151,12 @@ export const finDocuments = mysqlTable(
     // id de cartão corporativo, referência de câmbio). Nullable + sem CHECK (string livre).
     // ADR-0018 §"Texto livre curto" → varchar(255). Migration 0026 (ALTER ADD COLUMN, INSTANT).
     paymentDetail: varchar('payment_detail', { length: 255 }),
+
+    // Correlação ETL (ETL-FINANCIAL-WRITER, padrão par_*/auth_user): id do payable no
+    // legado. NULL = documento nativo do core-api; não-NULL = migrado. UNIQUE garante
+    // idempotência da carga (identifierCode legado NÃO é único: 37 distintos em 52 —
+    // por isso a correlação é por legacy_id, nunca por document_number).
+    legacyId: int('legacy_id'),
   },
   (t) => [
     // CHECKs de domínio (defesa em profundidade — ADR-0018 §"Features proibidas"):
@@ -191,6 +197,8 @@ export const finDocuments = mysqlTable(
     index('fin_documents_issue_date_idx').on(t.issueDate),
     // document_number: busca por nota fiscal / nº do documento.
     index('fin_documents_doc_number_idx').on(t.documentNumber),
+    // Idempotência da ETL (múltiplos NULL convivem no InnoDB — precedente par_*).
+    uniqueIndex('fin_documents_legacy_id_uq').on(t.legacyId),
   ],
 );
 
