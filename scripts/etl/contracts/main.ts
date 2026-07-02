@@ -1,9 +1,9 @@
 /**
  * Entrypoint do ETL de CONTRATOS (+ programas) — ETL-CONTRACTS-WRITER, wiring real.
  *
- * `runContractsEtl({ dumpPath, connectionString, dryRun })`:
- *   1. `withLegacyMysql(dump, fn)` sobe o MySQL efêmero, restaura o dump e roda `fn`;
- *   2. dentro de `fn`: `readLegacyContractsData()` → programas (use case `createProgram`,
+ * `runContractsEtl({ connectionString, dryRun })`:
+ *   1. `readLegacyContractsData()` lê o legado direto pela ETL_LEGACY_CONNECTION_STRING (sem Docker);
+ *   2. programas (use case `createProgram`,
  *      idempotente por sigla) → contratos (Contract.create/terminate → repo.save,
  *      idempotente por `findBySequentialNumber`) → reconcile do `ctr_contract_seq`
  *      (GREATEST por ano — batch do ETL pré-autorizado pelo schema, mysql.ts §ctr_contract_seq);
@@ -54,7 +54,6 @@ import { createDrizzleContractRepository } from '#src/modules/contracts/adapters
 import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
 import type { ContractEvent } from '#src/modules/contracts/domain/contract/events.ts';
 
-import { withLegacyMysql, type RestoreError } from '#scripts/etl/legacy/restore.ts';
 import { readLegacyContractsData } from '#scripts/etl/contracts/reader.ts';
 import {
   mapLegacyContractRow,
@@ -68,15 +67,12 @@ import {
   type QuarantineReason,
 } from '#scripts/etl/quarantine/reason.ts';
 
-// Dump sintético (dados fake) — JAMAIS o de produção.
-const DEFAULT_DUMP = 'tests/etl/fixtures/legacy-mini.sql';
 const OUT_DIR = '.tmp/etl-contracts';
 const SUMMARY_PATH = `${OUT_DIR}/quarantine.summary.jsonl`;
 const DETAIL_PATH = `${OUT_DIR}/quarantine.detail.jsonl`;
 const DEPARA_PATH = `${OUT_DIR}/de-para.jsonl`;
 
 export type RunContractsEtlOptions = Readonly<{
-  dumpPath: string;
   connectionString: string;
   dryRun: boolean;
 }>;
@@ -95,7 +91,6 @@ export type ContractsEtlReport = Readonly<{
 }>;
 
 export type RunContractsEtlError =
-  | Readonly<{ kind: 'restore'; detail: RestoreError }>
   | Readonly<{ kind: 'partners-port'; detail: BuildPartnersEtlPortError }>
   | Readonly<{ kind: 'programs-driver'; detail: string }>
   | Readonly<{ kind: 'contracts-driver'; detail: string }>;
@@ -181,252 +176,248 @@ export const runContractsEtl = async (
   const contractsHandle: MysqlHandle = contractsR.value;
 
   try {
-    const restored = await withLegacyMysql(opts.dumpPath, async () => {
-      const data = await readLegacyContractsData();
-      const programRepo = createDrizzleProgramRepository(programsHandle);
-      const contractRepo = createDrizzleContractRepository(contractsHandle);
-      const clock = ClockReal();
+    // Le o legado direto pela ETL_LEGACY_CONNECTION_STRING (sem Docker/dump).
+    const data = await readLegacyContractsData();
+    const programRepo = createDrizzleProgramRepository(programsHandle);
+    const contractRepo = createDrizzleContractRepository(contractsHandle);
+    const clock = ClockReal();
 
-      // ── Programas ──────────────────────────────────────────────────────────
-      let pMigrated = 0;
-      let pQuarantined = 0;
-      let pExisting = 0;
-      const programRefByLegacyId = new Map<number, string>();
+    // ── Programas ──────────────────────────────────────────────────────────
+    let pMigrated = 0;
+    let pQuarantined = 0;
+    let pExisting = 0;
+    const programRefByLegacyId = new Map<number, string>();
 
-      for (const failure of data.programs.failures) {
+    for (const failure of data.programs.failures) {
+      pQuarantined += 1;
+      await sink.quarantine('programs', failure.legacyId, failure.errors);
+    }
+
+    for (const row of data.programs.rows) {
+      const plan = mapLegacyProgramRow(row);
+      if (!plan.ok) {
         pQuarantined += 1;
-        await sink.quarantine('programs', failure.legacyId, failure.errors);
+        await sink.quarantine('programs', row.id, plan.error);
+        continue;
       }
-
-      for (const row of data.programs.rows) {
-        const plan = mapLegacyProgramRow(row);
-        if (!plan.ok) {
-          pQuarantined += 1;
-          await sink.quarantine('programs', row.id, plan.error);
-          continue;
-        }
-        if (opts.dryRun) {
-          pMigrated += 1;
-          programRefByLegacyId.set(plan.value.legacyId, `dry-run-program-${String(row.id)}`);
-          continue;
-        }
-        const created = await createProgram({ programRepo, clock })(plan.value.cmd);
-        if (created.ok) {
-          pMigrated += 1;
-          programRefByLegacyId.set(plan.value.legacyId, String(created.value.program.id));
+      if (opts.dryRun) {
+        pMigrated += 1;
+        programRefByLegacyId.set(plan.value.legacyId, `dry-run-program-${String(row.id)}`);
+        continue;
+      }
+      const created = await createProgram({ programRepo, clock })(plan.value.cmd);
+      if (created.ok) {
+        pMigrated += 1;
+        programRefByLegacyId.set(plan.value.legacyId, String(created.value.program.id));
+        await sink.depara({
+          entity: 'program',
+          legacyId: plan.value.legacyId,
+          newId: String(created.value.program.id),
+          programNumber: created.value.program.programNumber,
+          ...plan.value.artifact,
+        });
+      } else if (created.error === 'program-sigla-duplicated') {
+        // Idempotência por chave natural (sigla): re-run reaproveita o existente.
+        const existing = await programRepo.findBySigla(plan.value.cmd.sigla);
+        if (existing.ok && existing.value !== null) {
+          pExisting += 1;
+          programRefByLegacyId.set(plan.value.legacyId, String(existing.value.id));
+          // De-para REGENERADO em re-run (W2 issue 2).
           await sink.depara({
             entity: 'program',
             legacyId: plan.value.legacyId,
-            newId: String(created.value.program.id),
-            programNumber: created.value.program.programNumber,
-            ...plan.value.artifact,
-          });
-        } else if (created.error === 'program-sigla-duplicated') {
-          // Idempotência por chave natural (sigla): re-run reaproveita o existente.
-          const existing = await programRepo.findBySigla(plan.value.cmd.sigla);
-          if (existing.ok && existing.value !== null) {
-            pExisting += 1;
-            programRefByLegacyId.set(plan.value.legacyId, String(existing.value.id));
-            // De-para REGENERADO em re-run (W2 issue 2).
-            await sink.depara({
-              entity: 'program',
-              legacyId: plan.value.legacyId,
-              newId: String(existing.value.id),
-              programNumber: existing.value.programNumber,
-              alreadyExisted: true,
-              ...plan.value.artifact,
-            });
-          } else {
-            pQuarantined += 1;
-            await sink.quarantine('programs', row.id, [
-              { tag: 'PortError', field: 'program_lookup', portError: 'program-sigla-duplicated' },
-            ]);
-          }
-        } else {
-          pQuarantined += 1;
-          await sink.quarantine('programs', row.id, [
-            { tag: 'PortError', field: 'program_save', portError: created.error },
-          ]);
-        }
-      }
-
-      // ── Remap de fornecedores (via porta pública do partners) ─────────────
-      // Falha de PORT (infra) ≠ ausência (dado): port com erro entra em
-      // `supplierLookupFailed` e os contratos daquele fornecedor quarentenam como
-      // PortError — nunca mascarado como RequiredFieldMissing (W2 issue 1).
-      const supplierRefByLegacyId = new Map<number, string>();
-      const supplierLookupFailed = new Map<number, string>();
-      const uniqueSupplierIds = new Set<number>();
-      for (const row of data.contracts.rows) {
-        if (row.supplierId !== null) uniqueSupplierIds.add(row.supplierId);
-      }
-      for (const legacyId of uniqueSupplierIds) {
-        const found = await partnersPort.suppliers.findByLegacyId(legacyId);
-        if (!found.ok) {
-          supplierLookupFailed.set(legacyId, portCode(found.error));
-        } else if (found.value !== null) {
-          supplierRefByLegacyId.set(legacyId, String(found.value));
-        }
-        // ok+null (ausente de verdade) → mapper quarantena RequiredFieldMissing supplier_ref
-      }
-
-      const refs: ContractMapRefs = { supplierRefByLegacyId, programRefByLegacyId };
-
-      // ── Contratos ──────────────────────────────────────────────────────────
-      let cMigrated = 0;
-      let cQuarantined = 0;
-      let cExisting = 0;
-      const maxSeqByYear = new Map<number, number>();
-
-      for (const failure of data.contracts.failures) {
-        cQuarantined += 1;
-        await sink.quarantine('contracts', failure.legacyId, failure.errors);
-      }
-
-      for (const row of data.contracts.rows) {
-        // Infra indisponível no remap → PortError (antes do mapper, que só vê dados).
-        if (row.supplierId !== null && supplierLookupFailed.has(row.supplierId)) {
-          cQuarantined += 1;
-          await sink.quarantine('contracts', row.id, [
-            {
-              tag: 'PortError',
-              field: 'supplier_lookup',
-              portError: supplierLookupFailed.get(row.supplierId) ?? 'unknown-port-error',
-            },
-          ]);
-          continue;
-        }
-
-        const plan = mapLegacyContractRow(row, refs);
-        if (!plan.ok) {
-          cQuarantined += 1;
-          await sink.quarantine('contracts', row.id, plan.error);
-          continue;
-        }
-
-        // Reconcile do contador considera todo número lógico MATERIALIZADO no destino.
-        const parts = sequentialParts(row.contractCode);
-
-        if (opts.dryRun) {
-          cMigrated += 1;
-          if (parts !== null) {
-            maxSeqByYear.set(parts.year, Math.max(maxSeqByYear.get(parts.year) ?? 0, parts.seq));
-          }
-          continue;
-        }
-
-        const found = await contractRepo.findBySequentialNumber(
-          plan.value.createInput.sequentialNumber,
-        );
-        if (!found.ok) {
-          cQuarantined += 1;
-          await sink.quarantine('contracts', row.id, [
-            { tag: 'PortError', field: 'contract_lookup', portError: portCode(found.error) },
-          ]);
-          continue;
-        }
-        if (found.value !== null) {
-          cExisting += 1;
-          if (parts !== null) {
-            maxSeqByYear.set(parts.year, Math.max(maxSeqByYear.get(parts.year) ?? 0, parts.seq));
-          }
-          // De-para REGENERADO em re-run (W2 issue 2): artefato reprodutível sempre.
-          await sink.depara({
-            entity: 'contract',
-            legacyId: plan.value.legacyId,
-            newId: String(found.value.id),
-            sequentialNumber: plan.value.createInput.sequentialNumber,
-            status: found.value.status,
+            newId: String(existing.value.id),
+            programNumber: existing.value.programNumber,
             alreadyExisted: true,
             ...plan.value.artifact,
           });
-          continue;
-        }
-
-        const created = Contract.create(plan.value.createInput);
-        if (!created.ok) {
-          cQuarantined += 1;
-          await sink.quarantine('contracts', row.id, [
-            { tag: 'PortError', field: 'contract_create', portError: created.error.tag },
+        } else {
+          pQuarantined += 1;
+          await sink.quarantine('programs', row.id, [
+            { tag: 'PortError', field: 'program_lookup', portError: 'program-sigla-duplicated' },
           ]);
-          continue;
         }
+      } else {
+        pQuarantined += 1;
+        await sink.quarantine('programs', row.id, [
+          { tag: 'PortError', field: 'program_save', portError: created.error },
+        ]);
+      }
+    }
 
-        let finalContract: Parameters<typeof contractRepo.save>[0] = created.value.contract;
-        const events: ContractEvent[] = [created.value.event];
-        if (plan.value.terminate !== null) {
-          const ended = Contract.terminate(created.value.contract, plan.value.terminate.at);
-          if (!ended.ok) {
-            cQuarantined += 1;
-            await sink.quarantine('contracts', row.id, [
-              { tag: 'PortError', field: 'contract_terminate', portError: ended.error.tag },
-            ]);
-            continue;
-          }
-          finalContract = ended.value.contract;
-          events.push(ended.value.event);
-        }
+    // ── Remap de fornecedores (via porta pública do partners) ─────────────
+    // Falha de PORT (infra) ≠ ausência (dado): port com erro entra em
+    // `supplierLookupFailed` e os contratos daquele fornecedor quarentenam como
+    // PortError — nunca mascarado como RequiredFieldMissing (W2 issue 1).
+    const supplierRefByLegacyId = new Map<number, string>();
+    const supplierLookupFailed = new Map<number, string>();
+    const uniqueSupplierIds = new Set<number>();
+    for (const row of data.contracts.rows) {
+      if (row.supplierId !== null) uniqueSupplierIds.add(row.supplierId);
+    }
+    for (const legacyId of uniqueSupplierIds) {
+      const found = await partnersPort.suppliers.findByLegacyId(legacyId);
+      if (!found.ok) {
+        supplierLookupFailed.set(legacyId, portCode(found.error));
+      } else if (found.value !== null) {
+        supplierRefByLegacyId.set(legacyId, String(found.value));
+      }
+      // ok+null (ausente de verdade) → mapper quarantena RequiredFieldMissing supplier_ref
+    }
 
-        const saved = await contractRepo.save(finalContract, events);
-        if (!saved.ok) {
-          cQuarantined += 1;
-          await sink.quarantine('contracts', row.id, [
-            { tag: 'PortError', field: 'contract_save', portError: portCode(saved.error) },
-          ]);
-          continue;
-        }
+    const refs: ContractMapRefs = { supplierRefByLegacyId, programRefByLegacyId };
 
+    // ── Contratos ──────────────────────────────────────────────────────────
+    let cMigrated = 0;
+    let cQuarantined = 0;
+    let cExisting = 0;
+    const maxSeqByYear = new Map<number, number>();
+
+    for (const failure of data.contracts.failures) {
+      cQuarantined += 1;
+      await sink.quarantine('contracts', failure.legacyId, failure.errors);
+    }
+
+    for (const row of data.contracts.rows) {
+      // Infra indisponível no remap → PortError (antes do mapper, que só vê dados).
+      if (row.supplierId !== null && supplierLookupFailed.has(row.supplierId)) {
+        cQuarantined += 1;
+        await sink.quarantine('contracts', row.id, [
+          {
+            tag: 'PortError',
+            field: 'supplier_lookup',
+            portError: supplierLookupFailed.get(row.supplierId) ?? 'unknown-port-error',
+          },
+        ]);
+        continue;
+      }
+
+      const plan = mapLegacyContractRow(row, refs);
+      if (!plan.ok) {
+        cQuarantined += 1;
+        await sink.quarantine('contracts', row.id, plan.error);
+        continue;
+      }
+
+      // Reconcile do contador considera todo número lógico MATERIALIZADO no destino.
+      const parts = sequentialParts(row.contractCode);
+
+      if (opts.dryRun) {
         cMigrated += 1;
         if (parts !== null) {
           maxSeqByYear.set(parts.year, Math.max(maxSeqByYear.get(parts.year) ?? 0, parts.seq));
         }
+        continue;
+      }
+
+      const found = await contractRepo.findBySequentialNumber(
+        plan.value.createInput.sequentialNumber,
+      );
+      if (!found.ok) {
+        cQuarantined += 1;
+        await sink.quarantine('contracts', row.id, [
+          { tag: 'PortError', field: 'contract_lookup', portError: portCode(found.error) },
+        ]);
+        continue;
+      }
+      if (found.value !== null) {
+        cExisting += 1;
+        if (parts !== null) {
+          maxSeqByYear.set(parts.year, Math.max(maxSeqByYear.get(parts.year) ?? 0, parts.seq));
+        }
+        // De-para REGENERADO em re-run (W2 issue 2): artefato reprodutível sempre.
         await sink.depara({
           entity: 'contract',
           legacyId: plan.value.legacyId,
-          newId: String(finalContract.id),
+          newId: String(found.value.id),
           sequentialNumber: plan.value.createInput.sequentialNumber,
-          status: finalContract.status,
+          status: found.value.status,
+          alreadyExisted: true,
           ...plan.value.artifact,
         });
+        continue;
       }
 
-      // ── Reconcile do ctr_contract_seq (decisão a — bloqueante de cut-over) ─
-      const seqReconciled: Readonly<{ year: number; lastSeq: number }>[] = [];
-      if (!opts.dryRun) {
-        const { ctrContractSeq } = contractsHandle.schema;
-        for (const [year, lastSeq] of maxSeqByYear) {
-          await contractsHandle.db
-            .insert(ctrContractSeq)
-            .values({ year, lastSeq })
-            .onDuplicateKeyUpdate({
-              set: { lastSeq: sql`GREATEST(${ctrContractSeq.lastSeq}, ${lastSeq})` },
-            });
-          seqReconciled.push({ year, lastSeq });
+      const created = Contract.create(plan.value.createInput);
+      if (!created.ok) {
+        cQuarantined += 1;
+        await sink.quarantine('contracts', row.id, [
+          { tag: 'PortError', field: 'contract_create', portError: created.error.tag },
+        ]);
+        continue;
+      }
+
+      let finalContract: Parameters<typeof contractRepo.save>[0] = created.value.contract;
+      const events: ContractEvent[] = [created.value.event];
+      if (plan.value.terminate !== null) {
+        const ended = Contract.terminate(created.value.contract, plan.value.terminate.at);
+        if (!ended.ok) {
+          cQuarantined += 1;
+          await sink.quarantine('contracts', row.id, [
+            { tag: 'PortError', field: 'contract_terminate', portError: ended.error.tag },
+          ]);
+          continue;
         }
-      } else {
-        for (const [year, lastSeq] of maxSeqByYear) seqReconciled.push({ year, lastSeq });
+        finalContract = ended.value.contract;
+        events.push(ended.value.event);
       }
 
-      const report: ContractsEtlReport = {
-        programs: {
-          read: data.programs.rows.length + data.programs.failures.length,
-          migrated: pMigrated,
-          quarantined: pQuarantined,
-          alreadyExists: pExisting,
-        },
-        contracts: {
-          read: data.contracts.rows.length + data.contracts.failures.length,
-          migrated: cMigrated,
-          quarantined: cQuarantined,
-          alreadyExists: cExisting,
-        },
-        seqReconciled,
-      };
-      return report;
-    });
+      const saved = await contractRepo.save(finalContract, events);
+      if (!saved.ok) {
+        cQuarantined += 1;
+        await sink.quarantine('contracts', row.id, [
+          { tag: 'PortError', field: 'contract_save', portError: portCode(saved.error) },
+        ]);
+        continue;
+      }
 
-    if (!restored.ok) return err({ kind: 'restore', detail: restored.error });
-    return ok(restored.value);
+      cMigrated += 1;
+      if (parts !== null) {
+        maxSeqByYear.set(parts.year, Math.max(maxSeqByYear.get(parts.year) ?? 0, parts.seq));
+      }
+      await sink.depara({
+        entity: 'contract',
+        legacyId: plan.value.legacyId,
+        newId: String(finalContract.id),
+        sequentialNumber: plan.value.createInput.sequentialNumber,
+        status: finalContract.status,
+        ...plan.value.artifact,
+      });
+    }
+
+    // ── Reconcile do ctr_contract_seq (decisão a — bloqueante de cut-over) ─
+    const seqReconciled: Readonly<{ year: number; lastSeq: number }>[] = [];
+    if (!opts.dryRun) {
+      const { ctrContractSeq } = contractsHandle.schema;
+      for (const [year, lastSeq] of maxSeqByYear) {
+        await contractsHandle.db
+          .insert(ctrContractSeq)
+          .values({ year, lastSeq })
+          .onDuplicateKeyUpdate({
+            set: { lastSeq: sql`GREATEST(${ctrContractSeq.lastSeq}, ${lastSeq})` },
+          });
+        seqReconciled.push({ year, lastSeq });
+      }
+    } else {
+      for (const [year, lastSeq] of maxSeqByYear) seqReconciled.push({ year, lastSeq });
+    }
+
+    const report: ContractsEtlReport = {
+      programs: {
+        read: data.programs.rows.length + data.programs.failures.length,
+        migrated: pMigrated,
+        quarantined: pQuarantined,
+        alreadyExists: pExisting,
+      },
+      contracts: {
+        read: data.contracts.rows.length + data.contracts.failures.length,
+        migrated: cMigrated,
+        quarantined: cQuarantined,
+        alreadyExists: cExisting,
+      },
+      seqReconciled,
+    };
+    return ok(report);
   } finally {
     await contractsHandle.close();
     await programsHandle.close();
@@ -439,26 +430,14 @@ export const runContractsEtl = async (
 // ---------------------------------------------------------------------------
 
 const parseArgs = (argv: readonly string[]): RunContractsEtlOptions => {
-  let dumpPath = DEFAULT_DUMP;
   let dryRun = false;
-  for (let i = 0; i < argv.length; i += 1) {
-    const token = argv[i];
-    if (token === '--dry-run') {
-      dryRun = true;
-    } else if (token === '--dump') {
-      const next = argv[i + 1];
-      if (next !== undefined) {
-        dumpPath = next;
-        i += 1;
-      }
-    } else if (token?.startsWith('--dump=') === true) {
-      dumpPath = token.slice('--dump='.length);
-    }
+  for (const token of argv) {
+    if (token === '--dry-run') dryRun = true;
   }
   const connectionString =
     process.env['ETL_CORE_CONNECTION_STRING'] ??
     'mysql://root:rootpw-migration-test-only@127.0.0.1:3307/core';
-  return { dumpPath, connectionString, dryRun };
+  return { connectionString, dryRun };
 };
 
 const formatReport = (report: Readonly<ContractsEtlReport>): string => {

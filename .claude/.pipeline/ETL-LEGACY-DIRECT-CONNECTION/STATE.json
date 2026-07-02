@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "ETL-LEGACY-DIRECT-CONNECTION",
+  "size": "M",
+  "createdAt": "2026-07-02T17:50:40.106Z",
+  "closedAt": "2026-07-02T18:26:40.725Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-02T17:51:30.629Z",
+      "finishedAt": "2026-07-02T17:54:44.521Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "nodejs-runtime-expert",
+      "startedAt": "2026-07-02T17:57:23.827Z",
+      "finishedAt": "2026-07-02T18:18:58.279Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-02T18:19:34.022Z",
+      "finishedAt": "2026-07-02T18:21:24.915Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-02T18:23:51.791Z",
+      "finishedAt": "2026-07-02T18:26:40.658Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

@@ -37,6 +37,16 @@ const mysqlSuite = (env: Readonly<Record<string, string>>, paths: readonly strin
   paths,
 });
 
+// ETL sem Docker (ETL-LEGACY-DIRECT-CONNECTION): legado e core-api ficam em DBs distintos do
+// MESMO MySQL de teste (compose.yaml). A fixture SINTÉTICA é carregada via mysql2 no `before`
+// de cada suite (helper load-fixture) — sem `compose.etl.yaml`. root já tem DROP/CREATE DATABASE.
+const ETL_TEST_MYSQL_PORT = process.env['MYSQL_PORT'] ?? '3306';
+const ETL_DB_ENV: Readonly<Record<string, string>> = {
+  PARTNERS_ETL_INTEGRATION: '1',
+  ETL_LEGACY_CONNECTION_STRING: `mysql://root:rootpw-migration-test-only@127.0.0.1:${ETL_TEST_MYSQL_PORT}/legacy`,
+  ETL_CORE_CONNECTION_STRING: `mysql://root:rootpw-migration-test-only@127.0.0.1:${ETL_TEST_MYSQL_PORT}/core`,
+};
+
 const SUITES: Readonly<Record<string, Suite>> = {
   contracts: mysqlSuite({ MYSQL_INTEGRATION: '1' }, [
     'tests/modules/contracts/adapters/persistence/migrations/*.test.ts',
@@ -98,15 +108,9 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/financial/adapters/persistence/payable-document-view.drizzle-mysql.test.ts',
     'tests/workers/supplier-view-projection/projection.integration.test.ts',
   ]),
-  'etl:orchestrate': mysqlSuite({ PARTNERS_ETL_INTEGRATION: '1' }, [
-    'tests/etl/orchestrate.integration.test.ts',
-  ]),
-  'etl:contracts': mysqlSuite({ PARTNERS_ETL_INTEGRATION: '1' }, [
-    'tests/etl/contracts/writer.integration.test.ts',
-  ]),
-  'etl:financial': mysqlSuite({ PARTNERS_ETL_INTEGRATION: '1' }, [
-    'tests/etl/financial/writer.integration.test.ts',
-  ]),
+  'etl:orchestrate': mysqlSuite(ETL_DB_ENV, ['tests/etl/orchestrate.integration.test.ts']),
+  'etl:contracts': mysqlSuite(ETL_DB_ENV, ['tests/etl/contracts/writer.integration.test.ts']),
+  'etl:financial': mysqlSuite(ETL_DB_ENV, ['tests/etl/financial/writer.integration.test.ts']),
   storage: {
     services: ['minio'],
     secrets: false,
@@ -143,11 +147,11 @@ const SUITES: Readonly<Record<string, Suite>> = {
     paths: ['tests/modules/notifications/**/*.test.ts'],
   },
   etl: {
-    services: [],
-    secrets: false,
-    env: { PARTNERS_ETL_INTEGRATION: '1' },
-    // Os dois readers sobem o MESMO MySQL efêmero (container/porta fixos do
-    // compose.etl.yaml) — rodar em paralelo colide; serializa (ETL-CONTRACTS-WRITER).
+    services: ['mysql'],
+    secrets: true,
+    env: ETL_DB_ENV,
+    // Os dois readers recriam o MESMO DB `legacy` (load-fixture) no MySQL de teste —
+    // rodar em paralelo colide; serializa (ETL-CONTRACTS-WRITER).
     concurrency1: true,
     paths: [
       'tests/etl/legacy/reader.integration.test.ts',

@@ -1,8 +1,8 @@
 /**
  * Entrypoint do ETL FINANCEIRO (ETL-FINANCIAL-WRITER) — wiring real.
  *
- * `runFinancialEtl({ dumpPath, connectionString, contractsDeparaPath, cedenteDocument, dryRun })`:
- *   1. `withLegacyMysql` sobe o legado efêmero; `readLegacyFinancialData()` lê
+ * `runFinancialEtl({ connectionString, contractsDeparaPath, cedenteDocument, dryRun })`:
+ *   1. `readLegacyFinancialData()` lê o legado direto pela ETL_LEGACY_CONNECTION_STRING (sem Docker);
  *      accounts/payables/approvals (+collaborators/users p/ o join do aprovador — D11/F1);
  *   2. CEDENTES via use case `createCedenteAccount` (idempotente por chave natural);
  *   3. APROVADOR: `approvals.collaboratorId → email → users` → `authPort.provisionLegacyUser`
@@ -60,7 +60,6 @@ import { approveDocument } from '#src/modules/financial/application/use-cases/ap
 import { createCedenteAccount } from '#src/modules/financial/application/use-cases/create-cedente-account.ts';
 import type { ContractCategorizationReadPort } from '#src/modules/contracts/public-api/index.ts';
 
-import { withLegacyMysql, type RestoreError } from '#scripts/etl/legacy/restore.ts';
 import { readLegacyFinancialData } from '#scripts/etl/financial/reader.ts';
 import {
   mapLegacyAccountRow,
@@ -73,8 +72,6 @@ import {
   type QuarantineReason,
 } from '#scripts/etl/quarantine/reason.ts';
 
-// Dump sintético (dados fake) — JAMAIS o de produção.
-const DEFAULT_DUMP = 'tests/etl/fixtures/legacy-mini.sql';
 const DEFAULT_CONTRACTS_DEPARA = '.tmp/etl-contracts/de-para.jsonl';
 const OUT_DIR = '.tmp/etl-financial';
 const SUMMARY_PATH = `${OUT_DIR}/quarantine.summary.jsonl`;
@@ -82,7 +79,6 @@ const DETAIL_PATH = `${OUT_DIR}/quarantine.detail.jsonl`;
 const DEPARA_PATH = `${OUT_DIR}/de-para.jsonl`;
 
 export type RunFinancialEtlOptions = Readonly<{
-  dumpPath: string;
   connectionString: string;
   contractsDeparaPath: string;
   /** CNPJ/identificação do cedente (D6) — obrigatório no domínio; placeholder auditado no lab. */
@@ -105,7 +101,6 @@ export type FinancialEtlReport = Readonly<{
 }>;
 
 export type RunFinancialEtlError =
-  | Readonly<{ kind: 'restore'; detail: RestoreError }>
   | Readonly<{ kind: 'auth-port'; detail: BuildAuthEtlPortError }>
   | Readonly<{ kind: 'partners-port'; detail: BuildPartnersEtlPortError }>
   | Readonly<{ kind: 'financial-port'; detail: BuildFinancialEtlPortError }>
@@ -229,540 +224,536 @@ export const runFinancialEtl = async (
   const finHandle: FinancialMysqlHandle = finHandleR.value;
 
   try {
-    const restored = await withLegacyMysql(opts.dumpPath, async () => {
-      const data = await readLegacyFinancialData();
-      const documentRepo = createDrizzleDocumentRepository(finHandle);
-      const cedenteStore = createDrizzleCedenteAccountStore(finHandle);
+    // Le o legado direto pela ETL_LEGACY_CONNECTION_STRING (sem Docker/dump).
+    const data = await readLegacyFinancialData();
+    const documentRepo = createDrizzleDocumentRepository(finHandle);
+    const cedenteStore = createDrizzleCedenteAccountStore(finHandle);
 
-      // ── Cedentes (accounts) ────────────────────────────────────────────────
-      let aMigrated = 0;
-      let aQuarantined = 0;
-      let aExisting = 0;
-      const cedenteRefByLegacyId = new Map<number, string>();
+    // ── Cedentes (accounts) ────────────────────────────────────────────────
+    let aMigrated = 0;
+    let aQuarantined = 0;
+    let aExisting = 0;
+    const cedenteRefByLegacyId = new Map<number, string>();
 
-      for (const failure of data.accounts.failures) {
+    for (const failure of data.accounts.failures) {
+      aQuarantined += 1;
+      await sink.quarantine('accounts', failure.legacyId, failure.errors);
+    }
+
+    for (const row of data.accounts.rows) {
+      const plan = mapLegacyAccountRow(row);
+      if (!plan.ok) {
         aQuarantined += 1;
-        await sink.quarantine('accounts', failure.legacyId, failure.errors);
+        await sink.quarantine('accounts', row.id, plan.error);
+        continue;
       }
-
-      for (const row of data.accounts.rows) {
-        const plan = mapLegacyAccountRow(row);
-        if (!plan.ok) {
-          aQuarantined += 1;
-          await sink.quarantine('accounts', row.id, plan.error);
-          continue;
-        }
-        if (opts.dryRun) {
-          aMigrated += 1;
-          cedenteRefByLegacyId.set(row.id, `dry-run-cedente-${String(row.id)}`);
-          continue;
-        }
-        const created = await createCedenteAccount({ cedenteStore })({
-          ...plan.value.input,
-          document: opts.cedenteDocument,
+      if (opts.dryRun) {
+        aMigrated += 1;
+        cedenteRefByLegacyId.set(row.id, `dry-run-cedente-${String(row.id)}`);
+        continue;
+      }
+      const created = await createCedenteAccount({ cedenteStore })({
+        ...plan.value.input,
+        document: opts.cedenteDocument,
+      });
+      if (created.ok) {
+        aMigrated += 1;
+        cedenteRefByLegacyId.set(row.id, String(created.value.id));
+        await sink.depara({
+          entity: 'cedente-account',
+          legacyId: row.id,
+          newId: String(created.value.id),
+          nickname: plan.value.input.nickname,
         });
-        if (created.ok) {
-          aMigrated += 1;
-          cedenteRefByLegacyId.set(row.id, String(created.value.id));
+      } else if (created.error === 'cedente-account-duplicate') {
+        // Idempotência por chave natural: resolve o id existente p/ o remap.
+        const found = await cedenteStore.findByNaturalKey({
+          bankCode: plan.value.input.bankCode,
+          agency: plan.value.input.agency,
+          accountNumber: plan.value.input.accountNumber,
+          accountDigit: plan.value.input.accountDigit,
+        });
+        if (found.ok && found.value !== null) {
+          aExisting += 1;
+          cedenteRefByLegacyId.set(row.id, String(found.value.id));
           await sink.depara({
             entity: 'cedente-account',
             legacyId: row.id,
-            newId: String(created.value.id),
+            newId: String(found.value.id),
             nickname: plan.value.input.nickname,
+            alreadyExisted: true,
           });
-        } else if (created.error === 'cedente-account-duplicate') {
-          // Idempotência por chave natural: resolve o id existente p/ o remap.
-          const found = await cedenteStore.findByNaturalKey({
-            bankCode: plan.value.input.bankCode,
-            agency: plan.value.input.agency,
-            accountNumber: plan.value.input.accountNumber,
-            accountDigit: plan.value.input.accountDigit,
-          });
-          if (found.ok && found.value !== null) {
-            aExisting += 1;
-            cedenteRefByLegacyId.set(row.id, String(found.value.id));
-            await sink.depara({
-              entity: 'cedente-account',
-              legacyId: row.id,
-              newId: String(found.value.id),
-              nickname: plan.value.input.nickname,
-              alreadyExisted: true,
-            });
-          } else {
-            aQuarantined += 1;
-            await sink.quarantine('accounts', row.id, [
-              { tag: 'PortError', field: 'cedente_lookup', portError: 'cedente-account-duplicate' },
-            ]);
-          }
         } else {
           aQuarantined += 1;
           await sink.quarantine('accounts', row.id, [
-            { tag: 'PortError', field: 'cedente_save', portError: portCode(created.error) },
+            { tag: 'PortError', field: 'cedente_lookup', portError: 'cedente-account-duplicate' },
           ]);
         }
+      } else {
+        aQuarantined += 1;
+        await sink.quarantine('accounts', row.id, [
+          { tag: 'PortError', field: 'cedente_save', portError: portCode(created.error) },
+        ]);
       }
+    }
 
-      // ── Aprovador (D11/F1) — GENERALIZADO por payable (W2 issue 3) ─────────
-      // approvals.userId é NULL em 100% do dump; identidade = collaboratorId → email → user.
-      // E-mail ambíguo entre users → fail-closed (join deve ser determinístico — W2 issue 6).
-      const approvedAtByPayableId = new Map<number, Date>();
-      const approvalCollabByPayableId = new Map<number, number | null>();
-      const approverByCollaboratorId = new Map<number, string>();
+    // ── Aprovador (D11/F1) — GENERALIZADO por payable (W2 issue 3) ─────────
+    // approvals.userId é NULL em 100% do dump; identidade = collaboratorId → email → user.
+    // E-mail ambíguo entre users → fail-closed (join deve ser determinístico — W2 issue 6).
+    const approvedAtByPayableId = new Map<number, Date>();
+    const approvalCollabByPayableId = new Map<number, number | null>();
+    const approverByCollaboratorId = new Map<number, string>();
 
-      const usersByEmail = new Map<string, (typeof data.users.rows)[number]>();
-      const ambiguousEmails = new Set<string>();
-      for (const u of data.users.rows) {
-        const key = u.email.trim().toLowerCase();
-        if (usersByEmail.has(key)) ambiguousEmails.add(key);
-        else usersByEmail.set(key, u);
+    const usersByEmail = new Map<string, (typeof data.users.rows)[number]>();
+    const ambiguousEmails = new Set<string>();
+    for (const u of data.users.rows) {
+      const key = u.email.trim().toLowerCase();
+      if (usersByEmail.has(key)) ambiguousEmails.add(key);
+      else usersByEmail.set(key, u);
+    }
+    const collaboratorsById = new Map<number, (typeof data.collaborators.rows)[number]>();
+    for (const c of data.collaborators.rows) collaboratorsById.set(c.id, c);
+
+    for (const approval of data.approvals.rows) {
+      if (approval.approved !== 1) continue;
+      const prev = approvedAtByPayableId.get(approval.payableId);
+      if (prev === undefined || approval.createdAt.getTime() > prev.getTime()) {
+        approvedAtByPayableId.set(approval.payableId, approval.createdAt);
+        approvalCollabByPayableId.set(approval.payableId, approval.collaboratorId);
       }
-      const collaboratorsById = new Map<number, (typeof data.collaborators.rows)[number]>();
-      for (const c of data.collaborators.rows) collaboratorsById.set(c.id, c);
+      if (approval.collaboratorId === null) continue;
+      if (opts.dryRun || approverByCollaboratorId.has(approval.collaboratorId)) continue;
 
-      for (const approval of data.approvals.rows) {
-        if (approval.approved !== 1) continue;
-        const prev = approvedAtByPayableId.get(approval.payableId);
-        if (prev === undefined || approval.createdAt.getTime() > prev.getTime()) {
-          approvedAtByPayableId.set(approval.payableId, approval.createdAt);
-          approvalCollabByPayableId.set(approval.payableId, approval.collaboratorId);
-        }
-        if (approval.collaboratorId === null) continue;
-        if (opts.dryRun || approverByCollaboratorId.has(approval.collaboratorId)) continue;
-
-        const collaborator = collaboratorsById.get(approval.collaboratorId);
-        if (collaborator === undefined) continue; // join falhou → payable quarentena adiante
-        const emailKey = collaborator.email.trim().toLowerCase();
-        if (ambiguousEmails.has(emailKey)) continue; // fail-closed: ambiguidade nunca resolve
-        const user = usersByEmail.get(emailKey);
-        if (user === undefined) continue;
-        const emailR = Email.parse(user.email);
-        if (!emailR.ok) continue;
-        const provisioned = await authPort.provisionLegacyUser({
-          legacyId: user.id,
-          email: emailR.value,
-          massApprove: user.massApprovalPermission === 1,
-          name: user.name,
-          cpf: user.cpf,
-          telephone: user.telephone,
-          collaboratorRef: null,
-        });
-        if (provisioned.ok) {
-          approverByCollaboratorId.set(approval.collaboratorId, String(provisioned.value.userRef));
-        }
-      }
-
-      // Aprovador POR PAYABLE (a approval vencedora define quem aprovou aquele título).
-      const approverRefByPayableId = new Map<number, string>();
-      for (const [payableId, collabId] of approvalCollabByPayableId) {
-        if (collabId === null) continue;
-        const ref = approverByCollaboratorId.get(collabId);
-        if (ref !== undefined) approverRefByPayableId.set(payableId, ref);
-      }
-
-      // Extras do artefato (W2 issue 2): categorização legada + conferência de installments.
-      const categorizationByPayableId = new Map<number, Readonly<Record<string, unknown>>>();
-      for (const c of data.categorization.rows) {
-        if (c.payableRelationalId !== null) {
-          categorizationByPayableId.set(c.payableRelationalId, {
-            legacyCostCenterId: c.costCenterId,
-            legacyCategoryId: c.categoryId,
-            legacySubCategoryId: c.subCategoryId,
-            legacyProgramId: c.programId,
-            legacyBudgetPlanId: c.budgetPlanId,
-          });
-        }
-      }
-      const installmentsByPayableId = new Map<number, { count: number; sumCents: number }>();
-      for (const inst of data.installments.rows) {
-        if (inst.payableId === null) continue;
-        const agg = installmentsByPayableId.get(inst.payableId) ?? { count: 0, sumCents: 0 };
-        agg.count += 1;
-        agg.sumCents += Math.round(inst.value * 100);
-        installmentsByPayableId.set(inst.payableId, agg);
-      }
-      const extrasFor = (payableId: number): Readonly<Record<string, unknown>> => ({
-        legacyCategorization: categorizationByPayableId.get(payableId) ?? null,
-        legacyInstallments: installmentsByPayableId.get(payableId) ?? null,
+      const collaborator = collaboratorsById.get(approval.collaboratorId);
+      if (collaborator === undefined) continue; // join falhou → payable quarentena adiante
+      const emailKey = collaborator.email.trim().toLowerCase();
+      if (ambiguousEmails.has(emailKey)) continue; // fail-closed: ambiguidade nunca resolve
+      const user = usersByEmail.get(emailKey);
+      if (user === undefined) continue;
+      const emailR = Email.parse(user.email);
+      if (!emailR.ok) continue;
+      const provisioned = await authPort.provisionLegacyUser({
+        legacyId: user.id,
+        email: emailR.value,
+        massApprove: user.massApprovalPermission === 1,
+        name: user.name,
+        cpf: user.cpf,
+        telephone: user.telephone,
+        collaboratorRef: null,
       });
-
-      // ── Remap de fornecedores (porta pública do partners) ─────────────────
-      const supplierRefByLegacyId = new Map<number, string>();
-      const supplierLookupFailed = new Map<number, string>();
-      const uniqueSupplierIds = new Set<number>();
-      for (const row of data.payables.rows) {
-        if (row.supplierId !== null) uniqueSupplierIds.add(row.supplierId);
+      if (provisioned.ok) {
+        approverByCollaboratorId.set(approval.collaboratorId, String(provisioned.value.userRef));
       }
-      for (const legacyId of uniqueSupplierIds) {
-        const found = await partnersPort.suppliers.findByLegacyId(legacyId);
-        if (!found.ok) supplierLookupFailed.set(legacyId, portCode(found.error));
-        else if (found.value !== null) supplierRefByLegacyId.set(legacyId, String(found.value));
+    }
+
+    // Aprovador POR PAYABLE (a approval vencedora define quem aprovou aquele título).
+    const approverRefByPayableId = new Map<number, string>();
+    for (const [payableId, collabId] of approvalCollabByPayableId) {
+      if (collabId === null) continue;
+      const ref = approverByCollaboratorId.get(collabId);
+      if (ref !== undefined) approverRefByPayableId.set(payableId, ref);
+    }
+
+    // Extras do artefato (W2 issue 2): categorização legada + conferência de installments.
+    const categorizationByPayableId = new Map<number, Readonly<Record<string, unknown>>>();
+    for (const c of data.categorization.rows) {
+      if (c.payableRelationalId !== null) {
+        categorizationByPayableId.set(c.payableRelationalId, {
+          legacyCostCenterId: c.costCenterId,
+          legacyCategoryId: c.categoryId,
+          legacySubCategoryId: c.subCategoryId,
+          legacyProgramId: c.programId,
+          legacyBudgetPlanId: c.budgetPlanId,
+        });
       }
+    }
+    const installmentsByPayableId = new Map<number, { count: number; sumCents: number }>();
+    for (const inst of data.installments.rows) {
+      if (inst.payableId === null) continue;
+      const agg = installmentsByPayableId.get(inst.payableId) ?? { count: 0, sumCents: 0 };
+      agg.count += 1;
+      agg.sumCents += Math.round(inst.value * 100);
+      installmentsByPayableId.set(inst.payableId, agg);
+    }
+    const extrasFor = (payableId: number): Readonly<Record<string, unknown>> => ({
+      legacyCategorization: categorizationByPayableId.get(payableId) ?? null,
+      legacyInstallments: installmentsByPayableId.get(payableId) ?? null,
+    });
 
-      const refs: PayableMapRefs = {
-        supplierRefByLegacyId,
-        contractRefByLegacyId,
-        cedenteRefByLegacyId,
-        approvedAtByPayableId,
-      };
+    // ── Remap de fornecedores (porta pública do partners) ─────────────────
+    const supplierRefByLegacyId = new Map<number, string>();
+    const supplierLookupFailed = new Map<number, string>();
+    const uniqueSupplierIds = new Set<number>();
+    for (const row of data.payables.rows) {
+      if (row.supplierId !== null) uniqueSupplierIds.add(row.supplierId);
+    }
+    for (const legacyId of uniqueSupplierIds) {
+      const found = await partnersPort.suppliers.findByLegacyId(legacyId);
+      if (!found.ok) supplierLookupFailed.set(legacyId, portCode(found.error));
+      else if (found.value !== null) supplierRefByLegacyId.set(legacyId, String(found.value));
+    }
 
-      // ── Payables → Documentos ──────────────────────────────────────────────
-      let pMigrated = 0;
-      let pQuarantined = 0;
-      let pExisting = 0;
-      let kOpen = 0;
-      let kApproved = 0;
-      let kDraft = 0;
-      let migratedNetCents = 0;
+    const refs: PayableMapRefs = {
+      supplierRefByLegacyId,
+      contractRefByLegacyId,
+      cedenteRefByLegacyId,
+      approvedAtByPayableId,
+    };
 
-      for (const failure of data.payables.failures) {
+    // ── Payables → Documentos ──────────────────────────────────────────────
+    let pMigrated = 0;
+    let pQuarantined = 0;
+    let pExisting = 0;
+    let kOpen = 0;
+    let kApproved = 0;
+    let kDraft = 0;
+    let migratedNetCents = 0;
+
+    for (const failure of data.payables.failures) {
+      pQuarantined += 1;
+      await sink.quarantine('payables', failure.legacyId, failure.errors);
+    }
+
+    for (const row of data.payables.rows) {
+      // Infra ≠ dado: falha de PORT no remap → PortError, antes do mapper.
+      if (row.supplierId !== null && supplierLookupFailed.has(row.supplierId)) {
         pQuarantined += 1;
-        await sink.quarantine('payables', failure.legacyId, failure.errors);
+        await sink.quarantine('payables', row.id, [
+          {
+            tag: 'PortError',
+            field: 'supplier_lookup',
+            portError: supplierLookupFailed.get(row.supplierId) ?? 'unknown-port-error',
+          },
+        ]);
+        continue;
       }
 
-      for (const row of data.payables.rows) {
-        // Infra ≠ dado: falha de PORT no remap → PortError, antes do mapper.
-        if (row.supplierId !== null && supplierLookupFailed.has(row.supplierId)) {
+      const plan = mapLegacyPayableRow(row, refs);
+      if (!plan.ok) {
+        pQuarantined += 1;
+        await sink.quarantine('payables', row.id, plan.error);
+        continue;
+      }
+
+      // Aprovador é pré-condição p/ planos approved (D11) — resolvido POR PAYABLE.
+      const approvedByRef =
+        plan.value.kind === 'approved' ? (approverRefByPayableId.get(row.id) ?? null) : null;
+      if (plan.value.kind === 'approved' && !opts.dryRun && approvedByRef === null) {
+        pQuarantined += 1;
+        await sink.quarantine('payables', row.id, [
+          { tag: 'PortError', field: 'approver_ref', portError: 'approver-join-unresolved' },
+        ]);
+        continue;
+      }
+
+      if (opts.dryRun) {
+        pMigrated += 1;
+        if (plan.value.kind === 'open') kOpen += 1;
+        else if (plan.value.kind === 'approved') kApproved += 1;
+        else kDraft += 1;
+        continue;
+      }
+
+      // Idempotência por legacy_id (identifierCode NÃO é único — 37/52).
+      const existing = await finPort.documents.findDocumentByLegacyId(row.id);
+      if (!existing.ok) {
+        pQuarantined += 1;
+        await sink.quarantine('payables', row.id, [
+          { tag: 'PortError', field: 'document_lookup', portError: portCode(existing.error) },
+        ]);
+        continue;
+      }
+      if (existing.value !== null) {
+        // Re-run parcial: plano approved sobre doc Open → retoma o approve com a
+        // version REAL (nunca 0 hardcoded).
+        if (plan.value.kind === 'approved' && existing.value.status === 'Open') {
+          const resumed = await approveDocument({
+            repo: documentRepo,
+            clock: ClockFixed(plan.value.approvedAt ?? row.updatedAt),
+          })({
+            documentId: existing.value.id,
+            approvedBy: approvedByRef ?? '',
+            expectedVersion: existing.value.version,
+          });
+          if (!resumed.ok) {
+            pQuarantined += 1;
+            await sink.quarantine('payables', row.id, [
+              {
+                tag: 'PortError',
+                field: 'document_resume_approve',
+                portError: portCode(resumed.error),
+              },
+            ]);
+            continue;
+          }
+        }
+        pExisting += 1;
+        // Divergência plano×destino (W2 issue 8b): ex. F4 corrigida na origem sobre doc
+        // que ficou Draft num run anterior — sinalizada, nunca silenciosa.
+        const expectedStatus =
+          plan.value.kind === 'approved'
+            ? 'Approved'
+            : plan.value.kind === 'open'
+              ? 'Open'
+              : 'Draft';
+        const statusAfter =
+          plan.value.kind === 'approved' && existing.value.status === 'Open'
+            ? 'Approved'
+            : existing.value.status;
+        await sink.depara({
+          entity: 'document',
+          legacyId: row.id,
+          newId: existing.value.id,
+          kind: plan.value.kind,
+          alreadyExisted: true,
+          statusDestino: statusAfter,
+          statusDivergence: statusAfter !== expectedStatus,
+          ...extrasFor(row.id),
+          ...plan.value.artifact,
+        });
+        continue;
+      }
+
+      // Janela save→mark (W2 issue 1): run parcial pode ter deixado doc órfão
+      // (legacy_id NULL). ADOTA (marca) em vez de criar — zero duplicata/outbox.
+      const planNumber =
+        plan.value.kind === 'draft'
+          ? (plan.value.draft?.documentNumber ?? null)
+          : (plan.value.doc?.documentNumber ?? null);
+      const planSupplier =
+        plan.value.kind === 'draft'
+          ? (plan.value.draft?.supplierRef ?? null)
+          : (plan.value.doc?.supplierRef ?? null);
+      const planGross =
+        plan.value.kind === 'draft'
+          ? (plan.value.draft?.grossValueCents ?? null)
+          : (plan.value.doc?.grossValueCents ?? null);
+      // (drafts sem documentNumber pulam a adoção — janela teórica residual; inócua:
+      // 52/52 payables do dump têm identifierCode.)
+      if (planNumber !== null) {
+        const orphan = await finPort.documents.findOrphanCandidate(
+          planNumber,
+          planSupplier,
+          planGross,
+        );
+        if (!orphan.ok) {
           pQuarantined += 1;
           await sink.quarantine('payables', row.id, [
-            {
-              tag: 'PortError',
-              field: 'supplier_lookup',
-              portError: supplierLookupFailed.get(row.supplierId) ?? 'unknown-port-error',
-            },
+            { tag: 'PortError', field: 'orphan_lookup', portError: portCode(orphan.error) },
           ]);
           continue;
         }
-
-        const plan = mapLegacyPayableRow(row, refs);
-        if (!plan.ok) {
-          pQuarantined += 1;
-          await sink.quarantine('payables', row.id, plan.error);
-          continue;
-        }
-
-        // Aprovador é pré-condição p/ planos approved (D11) — resolvido POR PAYABLE.
-        const approvedByRef =
-          plan.value.kind === 'approved' ? (approverRefByPayableId.get(row.id) ?? null) : null;
-        if (plan.value.kind === 'approved' && !opts.dryRun && approvedByRef === null) {
-          pQuarantined += 1;
-          await sink.quarantine('payables', row.id, [
-            { tag: 'PortError', field: 'approver_ref', portError: 'approver-join-unresolved' },
-          ]);
-          continue;
-        }
-
-        if (opts.dryRun) {
-          pMigrated += 1;
-          if (plan.value.kind === 'open') kOpen += 1;
-          else if (plan.value.kind === 'approved') kApproved += 1;
-          else kDraft += 1;
-          continue;
-        }
-
-        // Idempotência por legacy_id (identifierCode NÃO é único — 37/52).
-        const existing = await finPort.documents.findDocumentByLegacyId(row.id);
-        if (!existing.ok) {
-          pQuarantined += 1;
-          await sink.quarantine('payables', row.id, [
-            { tag: 'PortError', field: 'document_lookup', portError: portCode(existing.error) },
-          ]);
-          continue;
-        }
-        if (existing.value !== null) {
-          // Re-run parcial: plano approved sobre doc Open → retoma o approve com a
-          // version REAL (nunca 0 hardcoded).
-          if (plan.value.kind === 'approved' && existing.value.status === 'Open') {
+        if (orphan.value !== null) {
+          const adopted = await finPort.documents.markDocumentLegacyId(orphan.value.id, row.id);
+          if (!adopted.ok) {
+            pQuarantined += 1;
+            await sink.quarantine('payables', row.id, [
+              { tag: 'PortError', field: 'orphan_adopt', portError: portCode(adopted.error) },
+            ]);
+            continue;
+          }
+          // Convergência no MESMO run (W2 R2 sug.1): órfão Open com plano approved
+          // recebe o resume-approve imediatamente (version real do órfão).
+          let adoptedStatus = orphan.value.status;
+          if (plan.value.kind === 'approved' && orphan.value.status === 'Open') {
             const resumed = await approveDocument({
               repo: documentRepo,
               clock: ClockFixed(plan.value.approvedAt ?? row.updatedAt),
             })({
-              documentId: existing.value.id,
+              documentId: orphan.value.id,
               approvedBy: approvedByRef ?? '',
-              expectedVersion: existing.value.version,
+              expectedVersion: orphan.value.version,
             });
-            if (!resumed.ok) {
-              pQuarantined += 1;
-              await sink.quarantine('payables', row.id, [
-                {
-                  tag: 'PortError',
-                  field: 'document_resume_approve',
-                  portError: portCode(resumed.error),
-                },
-              ]);
-              continue;
-            }
+            if (resumed.ok) adoptedStatus = 'Approved';
           }
-          pExisting += 1;
-          // Divergência plano×destino (W2 issue 8b): ex. F4 corrigida na origem sobre doc
-          // que ficou Draft num run anterior — sinalizada, nunca silenciosa.
-          const expectedStatus =
+          const expectedAdopted =
             plan.value.kind === 'approved'
               ? 'Approved'
               : plan.value.kind === 'open'
                 ? 'Open'
                 : 'Draft';
-          const statusAfter =
-            plan.value.kind === 'approved' && existing.value.status === 'Open'
-              ? 'Approved'
-              : existing.value.status;
+          pExisting += 1;
           await sink.depara({
             entity: 'document',
             legacyId: row.id,
-            newId: existing.value.id,
+            newId: orphan.value.id,
             kind: plan.value.kind,
-            alreadyExisted: true,
-            statusDestino: statusAfter,
-            statusDivergence: statusAfter !== expectedStatus,
+            adoptedOrphan: true,
+            statusDestino: adoptedStatus,
+            statusDivergence: adoptedStatus !== expectedAdopted,
             ...extrasFor(row.id),
             ...plan.value.artifact,
           });
           continue;
         }
+      }
 
-        // Janela save→mark (W2 issue 1): run parcial pode ter deixado doc órfão
-        // (legacy_id NULL). ADOTA (marca) em vez de criar — zero duplicata/outbox.
-        const planNumber =
-          plan.value.kind === 'draft'
-            ? (plan.value.draft?.documentNumber ?? null)
-            : (plan.value.doc?.documentNumber ?? null);
-        const planSupplier =
-          plan.value.kind === 'draft'
-            ? (plan.value.draft?.supplierRef ?? null)
-            : (plan.value.doc?.supplierRef ?? null);
-        const planGross =
-          plan.value.kind === 'draft'
-            ? (plan.value.draft?.grossValueCents ?? null)
-            : (plan.value.doc?.grossValueCents ?? null);
-        // (drafts sem documentNumber pulam a adoção — janela teórica residual; inócua:
-        // 52/52 payables do dump têm identifierCode.)
-        if (planNumber !== null) {
-          const orphan = await finPort.documents.findOrphanCandidate(
-            planNumber,
-            planSupplier,
-            planGross,
-          );
-          if (!orphan.ok) {
-            pQuarantined += 1;
-            await sink.quarantine('payables', row.id, [
-              { tag: 'PortError', field: 'orphan_lookup', portError: portCode(orphan.error) },
-            ]);
-            continue;
-          }
-          if (orphan.value !== null) {
-            const adopted = await finPort.documents.markDocumentLegacyId(orphan.value.id, row.id);
-            if (!adopted.ok) {
-              pQuarantined += 1;
-              await sink.quarantine('payables', row.id, [
-                { tag: 'PortError', field: 'orphan_adopt', portError: portCode(adopted.error) },
-              ]);
-              continue;
-            }
-            // Convergência no MESMO run (W2 R2 sug.1): órfão Open com plano approved
-            // recebe o resume-approve imediatamente (version real do órfão).
-            let adoptedStatus = orphan.value.status;
-            if (plan.value.kind === 'approved' && orphan.value.status === 'Open') {
-              const resumed = await approveDocument({
-                repo: documentRepo,
-                clock: ClockFixed(plan.value.approvedAt ?? row.updatedAt),
-              })({
-                documentId: orphan.value.id,
-                approvedBy: approvedByRef ?? '',
-                expectedVersion: orphan.value.version,
-              });
-              if (resumed.ok) adoptedStatus = 'Approved';
-            }
-            const expectedAdopted =
-              plan.value.kind === 'approved'
-                ? 'Approved'
-                : plan.value.kind === 'open'
-                  ? 'Open'
-                  : 'Draft';
-            pExisting += 1;
-            await sink.depara({
-              entity: 'document',
-              legacyId: row.id,
-              newId: orphan.value.id,
-              kind: plan.value.kind,
-              adoptedOrphan: true,
-              statusDestino: adoptedStatus,
-              statusDivergence: adoptedStatus !== expectedAdopted,
-              ...extrasFor(row.id),
-              ...plan.value.artifact,
-            });
-            continue;
-          }
-        }
-
-        // Nasce pelo domínio — Clock histórico POR DOCUMENTO nos DOIS use cases.
-        // (IIFE devolve o documentId ou null; quarentena/contadores tratados dentro.)
-        type BornOutcome =
-          | Readonly<{ born: 'quarantined' }>
-          | Readonly<{ born: 'draft' | 'open' | 'approved'; documentId: string }>;
-        const outcome = await (async (): Promise<BornOutcome> => {
-          if (plan.value.kind === 'draft') {
-            const draft = plan.value.draft;
-            const saved = await saveDraft({
-              repo: documentRepo,
-              clock: ClockFixed(plan.value.createdAtLegacy),
-            })({
-              documentNumber: draft?.documentNumber ?? null,
-              type: draft?.type ?? null,
-              supplierRef: draft?.supplierRef ?? null,
-              paymentMethod: draft?.paymentMethod ?? null,
-              grossValueCents: draft?.grossValueCents ?? null,
-              dueDate: draft?.dueDate ?? null,
-              contractRef: draft?.contractRef ?? null,
-              contaDebitoRef: draft?.contaDebitoRef ?? null,
-              competencia: draft?.competencia ?? null,
-              paymentDetail: draft?.paymentDetail ?? null,
-              description: draft?.description ?? null,
-            });
-            if (!saved.ok) {
-              await sink.quarantine('payables', row.id, [
-                { tag: 'PortError', field: 'save_draft', portError: portCode(saved.error) },
-              ]);
-              return { born: 'quarantined' };
-            }
-            return { born: 'draft', documentId: saved.value.documentId };
-          }
-
-          const doc = plan.value.doc;
-          if (doc === null) {
-            await sink.quarantine('payables', row.id, [
-              { tag: 'PortError', field: 'plan_invariant', portError: 'doc-fields-missing' },
-            ]);
-            return { born: 'quarantined' };
-          }
-          const saved = await saveDocument({
+      // Nasce pelo domínio — Clock histórico POR DOCUMENTO nos DOIS use cases.
+      // (IIFE devolve o documentId ou null; quarentena/contadores tratados dentro.)
+      type BornOutcome =
+        | Readonly<{ born: 'quarantined' }>
+        | Readonly<{ born: 'draft' | 'open' | 'approved'; documentId: string }>;
+      const outcome = await (async (): Promise<BornOutcome> => {
+        if (plan.value.kind === 'draft') {
+          const draft = plan.value.draft;
+          const saved = await saveDraft({
             repo: documentRepo,
             clock: ClockFixed(plan.value.createdAtLegacy),
-            contractCategorizationReader: stubCategorizationReader,
-            cedenteAccountStore: cedenteStore,
           })({
-            documentNumber: doc.documentNumber,
-            type: doc.type,
-            supplierRef: doc.supplierRef,
-            paymentMethod: doc.paymentMethod,
-            grossValueCents: doc.grossValueCents,
-            dueDate: doc.dueDate,
-            contractRef: doc.contractRef,
-            contaDebitoRef: doc.contaDebitoRef,
-            competencia: doc.competencia,
-            paymentDetail: doc.paymentDetail,
-            description: doc.description,
+            documentNumber: draft?.documentNumber ?? null,
+            type: draft?.type ?? null,
+            supplierRef: draft?.supplierRef ?? null,
+            paymentMethod: draft?.paymentMethod ?? null,
+            grossValueCents: draft?.grossValueCents ?? null,
+            dueDate: draft?.dueDate ?? null,
+            contractRef: draft?.contractRef ?? null,
+            contaDebitoRef: draft?.contaDebitoRef ?? null,
+            competencia: draft?.competencia ?? null,
+            paymentDetail: draft?.paymentDetail ?? null,
+            description: draft?.description ?? null,
           });
           if (!saved.ok) {
             await sink.quarantine('payables', row.id, [
-              { tag: 'PortError', field: 'save_document', portError: portCode(saved.error) },
+              { tag: 'PortError', field: 'save_draft', portError: portCode(saved.error) },
             ]);
             return { born: 'quarantined' };
           }
-
-          if (plan.value.kind === 'approved') {
-            const approved = await approveDocument({
-              repo: documentRepo,
-              clock: ClockFixed(plan.value.approvedAt ?? row.updatedAt),
-            })({
-              documentId: saved.value.documentId,
-              approvedBy: approvedByRef ?? '',
-              expectedVersion: 0,
-            });
-            if (!approved.ok) {
-              await sink.quarantine('payables', row.id, [
-                {
-                  tag: 'PortError',
-                  field: 'approve_document',
-                  portError: portCode(approved.error),
-                },
-              ]);
-              return { born: 'quarantined' };
-            }
-            return { born: 'approved', documentId: saved.value.documentId };
-          }
-          return { born: 'open', documentId: saved.value.documentId };
-        })();
-
-        if (outcome.born === 'quarantined') {
-          pQuarantined += 1;
-          continue;
+          return { born: 'draft', documentId: saved.value.documentId };
         }
-        const documentId = outcome.documentId;
 
-        const marked = await finPort.documents.markDocumentLegacyId(documentId, row.id);
-        if (!marked.ok) {
-          // Doc existe sem correlação — inconsistência CRÍTICA p/ re-run; reportar alto.
-          pQuarantined += 1;
+        const doc = plan.value.doc;
+        if (doc === null) {
           await sink.quarantine('payables', row.id, [
-            { tag: 'PortError', field: 'mark_legacy_id', portError: portCode(marked.error) },
+            { tag: 'PortError', field: 'plan_invariant', portError: 'doc-fields-missing' },
           ]);
-          continue;
+          return { born: 'quarantined' };
+        }
+        const saved = await saveDocument({
+          repo: documentRepo,
+          clock: ClockFixed(plan.value.createdAtLegacy),
+          contractCategorizationReader: stubCategorizationReader,
+          cedenteAccountStore: cedenteStore,
+        })({
+          documentNumber: doc.documentNumber,
+          type: doc.type,
+          supplierRef: doc.supplierRef,
+          paymentMethod: doc.paymentMethod,
+          grossValueCents: doc.grossValueCents,
+          dueDate: doc.dueDate,
+          contractRef: doc.contractRef,
+          contaDebitoRef: doc.contaDebitoRef,
+          competencia: doc.competencia,
+          paymentDetail: doc.paymentDetail,
+          description: doc.description,
+        });
+        if (!saved.ok) {
+          await sink.quarantine('payables', row.id, [
+            { tag: 'PortError', field: 'save_document', portError: portCode(saved.error) },
+          ]);
+          return { born: 'quarantined' };
         }
 
-        // Contadores/soma só APÓS o mark (W2 issue 5): quarentena pós-mark não conta
-        // em byKind nem na soma líquida — o relatório fica internamente consistente.
-        pMigrated += 1;
-        if (outcome.born === 'draft') {
-          kDraft += 1;
-        } else {
-          if (outcome.born === 'approved') kApproved += 1;
-          else kOpen += 1;
-          migratedNetCents += Math.round(row.liquidValue * 100);
+        if (plan.value.kind === 'approved') {
+          const approved = await approveDocument({
+            repo: documentRepo,
+            clock: ClockFixed(plan.value.approvedAt ?? row.updatedAt),
+          })({
+            documentId: saved.value.documentId,
+            approvedBy: approvedByRef ?? '',
+            expectedVersion: 0,
+          });
+          if (!approved.ok) {
+            await sink.quarantine('payables', row.id, [
+              {
+                tag: 'PortError',
+                field: 'approve_document',
+                portError: portCode(approved.error),
+              },
+            ]);
+            return { born: 'quarantined' };
+          }
+          return { born: 'approved', documentId: saved.value.documentId };
         }
+        return { born: 'open', documentId: saved.value.documentId };
+      })();
+
+      if (outcome.born === 'quarantined') {
+        pQuarantined += 1;
+        continue;
+      }
+      const documentId = outcome.documentId;
+
+      const marked = await finPort.documents.markDocumentLegacyId(documentId, row.id);
+      if (!marked.ok) {
+        // Doc existe sem correlação — inconsistência CRÍTICA p/ re-run; reportar alto.
+        pQuarantined += 1;
+        await sink.quarantine('payables', row.id, [
+          { tag: 'PortError', field: 'mark_legacy_id', portError: portCode(marked.error) },
+        ]);
+        continue;
+      }
+
+      // Contadores/soma só APÓS o mark (W2 issue 5): quarentena pós-mark não conta
+      // em byKind nem na soma líquida — o relatório fica internamente consistente.
+      pMigrated += 1;
+      if (outcome.born === 'draft') {
+        kDraft += 1;
+      } else {
+        if (outcome.born === 'approved') kApproved += 1;
+        else kOpen += 1;
+        migratedNetCents += Math.round(row.liquidValue * 100);
+      }
+      await sink.depara({
+        entity: 'document',
+        legacyId: row.id,
+        newId: documentId,
+        kind: plan.value.kind,
+        draftReason: plan.value.draftReason,
+        ...extrasFor(row.id),
+        ...plan.value.artifact,
+      });
+    }
+
+    // Aprovações ÓRFÃS (F2 — W2 issue 2a): registro de aprovação cujo payable NÃO está
+    // APROVADO no legado (aprovado e revertido sem trilha). Preservadas no de-para.
+    const legacyStatusById = new Map<number, string>();
+    for (const r of data.payables.rows) legacyStatusById.set(r.id, r.payableStatus);
+    for (const [payableId, at] of approvedAtByPayableId) {
+      if (legacyStatusById.get(payableId) !== 'APROVADO') {
         await sink.depara({
-          entity: 'document',
-          legacyId: row.id,
-          newId: documentId,
-          kind: plan.value.kind,
-          draftReason: plan.value.draftReason,
-          ...extrasFor(row.id),
-          ...plan.value.artifact,
+          entity: 'orphan-approval',
+          payableLegacyId: payableId,
+          approvedAtLegacy: at.toISOString(),
+          collaboratorId: approvalCollabByPayableId.get(payableId) ?? null,
         });
       }
+    }
 
-      // Aprovações ÓRFÃS (F2 — W2 issue 2a): registro de aprovação cujo payable NÃO está
-      // APROVADO no legado (aprovado e revertido sem trilha). Preservadas no de-para.
-      const legacyStatusById = new Map<number, string>();
-      for (const r of data.payables.rows) legacyStatusById.set(r.id, r.payableStatus);
-      for (const [payableId, at] of approvedAtByPayableId) {
-        if (legacyStatusById.get(payableId) !== 'APROVADO') {
-          await sink.depara({
-            entity: 'orphan-approval',
-            payableLegacyId: payableId,
-            approvedAtLegacy: at.toISOString(),
-            collaboratorId: approvalCollabByPayableId.get(payableId) ?? null,
-          });
-        }
-      }
+    // Falhas de decode das tabelas de artefato: reportadas (nunca silêncio), sem tally.
+    for (const failure of data.categorization.failures) {
+      await sink.quarantine('categorization', failure.legacyId, failure.errors);
+    }
+    for (const failure of data.installments.failures) {
+      await sink.quarantine('installments', failure.legacyId, failure.errors);
+    }
 
-      // Falhas de decode das tabelas de artefato: reportadas (nunca silêncio), sem tally.
-      for (const failure of data.categorization.failures) {
-        await sink.quarantine('categorization', failure.legacyId, failure.errors);
-      }
-      for (const failure of data.installments.failures) {
-        await sink.quarantine('installments', failure.legacyId, failure.errors);
-      }
-
-      const report: FinancialEtlReport = {
-        accounts: {
-          read: data.accounts.rows.length + data.accounts.failures.length,
-          migrated: aMigrated,
-          quarantined: aQuarantined,
-          alreadyExists: aExisting,
-        },
-        payables: {
-          read: data.payables.rows.length + data.payables.failures.length,
-          migrated: pMigrated,
-          quarantined: pQuarantined,
-          alreadyExists: pExisting,
-        },
-        byKind: { open: kOpen, approved: kApproved, draft: kDraft },
-        migratedNetCents,
-      };
-      return report;
-    });
-
-    if (!restored.ok) return err({ kind: 'restore', detail: restored.error });
-    return ok(restored.value);
+    const report: FinancialEtlReport = {
+      accounts: {
+        read: data.accounts.rows.length + data.accounts.failures.length,
+        migrated: aMigrated,
+        quarantined: aQuarantined,
+        alreadyExists: aExisting,
+      },
+      payables: {
+        read: data.payables.rows.length + data.payables.failures.length,
+        migrated: pMigrated,
+        quarantined: pQuarantined,
+        alreadyExists: pExisting,
+      },
+      byKind: { open: kOpen, approved: kApproved, draft: kDraft },
+      migratedNetCents,
+    };
+    return ok(report);
   } finally {
     await finHandle.close();
     await finPort.close();
@@ -776,21 +767,12 @@ export const runFinancialEtl = async (
 // ---------------------------------------------------------------------------
 
 const parseArgs = (argv: readonly string[]): RunFinancialEtlOptions => {
-  let dumpPath = DEFAULT_DUMP;
   let contractsDeparaPath = DEFAULT_CONTRACTS_DEPARA;
   let dryRun = false;
   for (let i = 0; i < argv.length; i += 1) {
     const token = argv[i];
     if (token === '--dry-run') {
       dryRun = true;
-    } else if (token === '--dump') {
-      const next = argv[i + 1];
-      if (next !== undefined) {
-        dumpPath = next;
-        i += 1;
-      }
-    } else if (token?.startsWith('--dump=') === true) {
-      dumpPath = token.slice('--dump='.length);
     } else if (token === '--contracts-depara') {
       const next = argv[i + 1];
       if (next !== undefined) {
@@ -806,7 +788,7 @@ const parseArgs = (argv: readonly string[]): RunFinancialEtlOptions => {
     'mysql://root:rootpw-migration-test-only@127.0.0.1:3307/core';
   // D6: identificação do cedente não existe no legado — placeholder auditado no lab.
   const cedenteDocument = process.env['ETL_CEDENTE_DOCUMENT'] ?? 'PENDENTE-D6';
-  return { dumpPath, connectionString, contractsDeparaPath, cedenteDocument, dryRun };
+  return { connectionString, contractsDeparaPath, cedenteDocument, dryRun };
 };
 
 const formatReport = (report: Readonly<FinancialEtlReport>): string => {
