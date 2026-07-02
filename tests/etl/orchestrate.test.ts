@@ -15,6 +15,9 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
+import { ok } from '#src/shared/primitives/result.ts';
+import { ClockReal } from '#src/shared/adapters/clock-real.ts';
+import type { ProgramsEtlPort } from '#src/modules/programs/public-api/etl.ts';
 import type { LegacyData, TableRead, DecodeFailure } from '#scripts/etl/legacy/reader.ts';
 import { type QuarantineReason, toSummary } from '#scripts/etl/quarantine/reason.ts';
 import { isBalanced } from '#scripts/etl/reconcile.ts';
@@ -66,11 +69,22 @@ import * as UserRefVo from '#src/shared/kernel/user-ref.ts';
 const emptyRead = <T>(): TableRead<T> => ({ rows: [], failures: [] });
 
 const legacyData = (over: Partial<LegacyData> = {}): LegacyData => ({
+  programs: emptyRead(),
   financiers: emptyRead(),
   suppliers: emptyRead(),
   collaborators: emptyRead(),
   users: emptyRead(),
   ...over,
+});
+
+// Programs não é exercitado por estes testes (dados de programs vazios) — mas o orquestrador
+// agora exige um ProgramsEtlPort + Clock. Fake mínimo: store que nunca é chamado de verdade.
+const emptyProgramsPort = (): ProgramsEtlPort => ({
+  programs: {
+    findByLegacyId: () => Promise.resolve(ok(null)),
+    provision: () => Promise.resolve(ok('created' as const)),
+  },
+  close: () => Promise.resolve(),
 });
 
 type CollectingSink = QuarantineSink & Readonly<{ records: readonly QuarantineRecord[] }>;
@@ -139,8 +153,10 @@ const run = async <Auth extends AuthEtlPort = FakeAuthPort>(
   const result = await orchestrate({
     authPort: auth,
     partnersPort: partnersPortFrom(stores),
+    programsPort: emptyProgramsPort(),
     quarantineSink: sink,
     dryRun: opts.dryRun ?? false,
+    clock: ClockReal(),
   })(data);
   assert.ok(
     result.ok,
@@ -154,9 +170,16 @@ const run = async <Auth extends AuthEtlPort = FakeAuthPort>(
 // ---------------------------------------------------------------------------
 
 describe('PARTNERS-ETL-ORCHESTRATOR — ordem de migração', () => {
-  it('MIGRATION_ORDER é suppliers → financiers → collaborators → users (users por último)', () => {
-    const expected: readonly EntityName[] = ['suppliers', 'financiers', 'collaborators', 'users'];
+  it('MIGRATION_ORDER é programs → suppliers → financiers → collaborators → users (programs raiz primeiro, users por último)', () => {
+    const expected: readonly EntityName[] = [
+      'programs',
+      'suppliers',
+      'financiers',
+      'collaborators',
+      'users',
+    ];
     assert.deepEqual([...MIGRATION_ORDER], [...expected]);
+    assert.equal(MIGRATION_ORDER[0], 'programs');
     assert.equal(MIGRATION_ORDER[MIGRATION_ORDER.length - 1], 'users');
   });
 });

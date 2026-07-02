@@ -18,7 +18,11 @@ export type QuarantineReason =
   // Falha de um port (persistencia/auth/rehydrate na borda do orquestrador). `portError`
   // carrega o codigo kebab-case EN do erro REAL do port (ex.: 'partners-etl-store-unavailable').
   // Codigo EN, nunca dado de linha — PII-free, seguro no resumo versionavel.
-  | Readonly<{ tag: 'PortError'; field: string; portError: string }>;
+  | Readonly<{ tag: 'PortError'; field: string; portError: string }>
+  // Rejeicao do dominio ao reconstruir o agregado via smart constructor (ex.: Program.create /
+  // Program.deactivate). `code` carrega o erro kebab-case EN do dominio (ex.: 'program-name-required',
+  // 'program-sigla-invalid'). Codigo EN, nunca dado de linha — PII-free, seguro no resumo versionavel.
+  | Readonly<{ tag: 'DomainRejected'; field: string; code: string }>;
 
 export type QuarantineSummary = Readonly<{ tag: QuarantineReason['tag']; field: string }>;
 
@@ -47,6 +51,8 @@ export const describeReason = (reason: QuarantineReason): string => {
       return `Data inválida no campo ${reason.field}`;
     case 'PortError':
       return `Falha de port na etapa ${reason.field}: ${reason.portError}`;
+    case 'DomainRejected':
+      return `Domínio rejeitou o campo ${reason.field}: ${reason.code}`;
     default: {
       const _exhaustive: never = reason;
       return _exhaustive;

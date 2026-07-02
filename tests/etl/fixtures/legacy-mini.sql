@@ -4,6 +4,25 @@
 
 SET NAMES utf8mb4;
 
+CREATE TABLE `programs` (
+  `id` int NOT NULL AUTO_INCREMENT,
+  `createdAt` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `updatedAt` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
+  `name` varchar(255) NOT NULL,
+  `abbreviation` varchar(255) NOT NULL,
+  `director` varchar(255) NOT NULL,
+  `description` longtext NOT NULL,
+  `logo` varchar(255) DEFAULT NULL,
+  `active` tinyint NOT NULL DEFAULT '1',
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `IDX_programs_abbreviation` (`abbreviation`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+-- 2 programas 100% migráveis (name >= 2, sigla [A-Z0-9]{2,20}). BETA é inativo (active=0) e sem
+-- logo — cobre o caminho deactivate + logoKey nulo. Siglas distintas (prg_programs_sigla_uq).
+INSERT INTO `programs` VALUES
+  (1,'2024-01-01 12:00:00','2024-01-02 12:00:00','Programa Alfa','ALFA','Diretor Um','Descricao do programa Alfa','https://legacy.example/logo-alfa.png',1),
+  (2,'2024-01-01 12:00:00','2024-01-02 12:00:00','Programa Beta','BETA','Diretor Dois','Descricao do programa Beta',NULL,0);
+
 CREATE TABLE `financiers` (
   `id` int NOT NULL AUTO_INCREMENT,
   `name` varchar(255) NOT NULL,

@@ -11,6 +11,7 @@
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type { QuarantineReason } from '../quarantine/reason.ts';
 import type {
+  LegacyProgramRow,
   LegacyFinancierRow,
   LegacySupplierRow,
   LegacyCollaboratorRow,
@@ -85,6 +86,24 @@ const makeReader = (raw: RawRow): Reader => {
 
 const finish = <T>(row: T, errors: readonly QuarantineReason[]): DecodeResult<T> =>
   errors.length > 0 ? err(errors) : ok(row);
+
+export const decodeProgramRow = (raw: RawRow): DecodeResult<LegacyProgramRow> => {
+  const d = makeReader(raw);
+  const row: LegacyProgramRow = {
+    id: d.reqNum('id'),
+    name: d.reqStr('name'),
+    abbreviation: d.reqStr('abbreviation'),
+    // director/description NOT NULL no dump, mas nullable no destino → nStr (nunca quarentena
+    // por ausência; o mapper trata trim/empty → null).
+    director: d.nStr('director'),
+    description: d.nStr('description'),
+    logo: d.nStr('logo'),
+    active: d.reqNum('active'),
+    createdAt: d.reqDate('createdAt'),
+    updatedAt: d.reqDate('updatedAt'),
+  };
+  return finish(row, d.errors);
+};
 
 export const decodeFinancierRow = (raw: RawRow): DecodeResult<LegacyFinancierRow> => {
   const d = makeReader(raw);

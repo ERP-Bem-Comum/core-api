@@ -37,6 +37,9 @@ export const programs = mysqlTable(
     version: int('version').notNull(),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
+    // Correlação ETL (idempotência): id de origem no legado (`programs.id`, int).
+    // NULL = registro nativo; não-NULL = migrado. Espelha as tabelas par_* do partners.
+    legacyId: int('legacy_id'),
   },
   (t) => [
     check('prg_programs_status_chk', sql`${t.status} IN ('ATIVO','INATIVO')`),
@@ -45,8 +48,13 @@ export const programs = mysqlTable(
     uniqueIndex('prg_programs_sigla_uq').on(t.sigla),
     index('prg_programs_status_idx').on(t.status),
     index('prg_programs_name_idx').on(t.name),
+    // UNIQUE(legacy_id) — idempotência da ETL (múltiplos NULL convivem no InnoDB).
+    uniqueIndex('prg_programs_legacy_id_idx').on(t.legacyId),
   ],
 );
+
+export type ProgramRow = typeof programs.$inferSelect;
+export type NewProgramRow = typeof programs.$inferInsert;
 
 export const prgOutbox = mysqlTable(
   'prg_outbox',

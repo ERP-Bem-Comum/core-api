@@ -9,12 +9,14 @@
 import type { RowDataPacket } from 'mysql2/promise';
 import { connectReadonly } from './connect.ts';
 import {
+  decodeProgramRow,
   decodeFinancierRow,
   decodeSupplierRow,
   decodeCollaboratorRow,
   decodeUserRow,
 } from './decode.ts';
 import type {
+  LegacyProgramRow,
   LegacyFinancierRow,
   LegacySupplierRow,
   LegacyCollaboratorRow,
@@ -31,6 +33,7 @@ export type DecodeFailure = Readonly<{
 export type TableRead<T> = Readonly<{ rows: readonly T[]; failures: readonly DecodeFailure[] }>;
 
 export type LegacyData = Readonly<{
+  programs: TableRead<LegacyProgramRow>;
   financiers: TableRead<LegacyFinancierRow>;
   suppliers: TableRead<LegacySupplierRow>;
   collaborators: TableRead<LegacyCollaboratorRow>;
@@ -60,6 +63,7 @@ export const readLegacyData = async (): Promise<LegacyData> => {
       return raws;
     };
     return {
+      programs: decodeAll(await select('programs'), decodeProgramRow),
       financiers: decodeAll(await select('financiers'), decodeFinancierRow),
       suppliers: decodeAll(await select('suppliers'), decodeSupplierRow),
       collaborators: decodeAll(await select('collaborators'), decodeCollaboratorRow),

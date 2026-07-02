@@ -20,6 +20,7 @@ import { mkdir, appendFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
+import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import {
   installLastResortHandlers,
   processLastResortDeps,
@@ -35,6 +36,11 @@ import {
   type PartnersEtlPort,
   type BuildPartnersEtlPortError,
 } from '#src/modules/partners/public-api/etl.ts';
+import {
+  buildProgramsEtlPort,
+  type ProgramsEtlPort,
+  type BuildProgramsEtlPortError,
+} from '#src/modules/programs/public-api/etl.ts';
 
 import { withLegacyMysql, type RestoreError } from '#scripts/etl/legacy/restore.ts';
 import { readLegacyData } from '#scripts/etl/legacy/reader.ts';
@@ -64,6 +70,7 @@ export type RunEtlError =
   | Readonly<{ kind: 'restore'; detail: RestoreError }>
   | Readonly<{ kind: 'auth-port'; detail: BuildAuthEtlPortError }>
   | Readonly<{ kind: 'partners-port'; detail: BuildPartnersEtlPortError }>
+  | Readonly<{ kind: 'programs-port'; detail: BuildProgramsEtlPortError }>
   | Readonly<{ kind: 'orchestrate'; detail: OrchestrateError }>;
 
 // ---------------------------------------------------------------------------
@@ -112,11 +119,26 @@ export const runEtl = async (
   }
   const partnersPort: PartnersEtlPort = partnersPortR.value;
 
+  const programsPortR = await buildProgramsEtlPort({ connectionString: opts.connectionString });
+  if (!programsPortR.ok) {
+    await partnersPort.close();
+    await authPort.close();
+    return err({ kind: 'programs-port', detail: programsPortR.error });
+  }
+  const programsPort: ProgramsEtlPort = programsPortR.value;
+
   try {
     // withLegacyMysql sobe o efemero, restaura o dump e roda a costura com o ciclo vivo.
     const restored = await withLegacyMysql(opts.dumpPath, async () => {
       const data = await readLegacyData();
-      return orchestrate({ authPort, partnersPort, quarantineSink, dryRun: opts.dryRun })(data);
+      return orchestrate({
+        authPort,
+        partnersPort,
+        programsPort,
+        quarantineSink,
+        dryRun: opts.dryRun,
+        clock: ClockReal(),
+      })(data);
     });
     if (!restored.ok) return err({ kind: 'restore', detail: restored.error });
 
@@ -124,6 +146,7 @@ export const runEtl = async (
     if (!report.ok) return err({ kind: 'orchestrate', detail: report.error });
     return ok(report.value);
   } finally {
+    await programsPort.close();
     await partnersPort.close();
     await authPort.close();
   }
@@ -162,6 +185,7 @@ const formatReport = (report: Readonly<ReconciliationReport>): string => {
     `quarantined=${String(tally.quarantined)} alreadyExists=${String(tally.alreadyExists)}`;
   return [
     'ETL Parceiros — reconciliacao:',
+    line('programs', report.programs),
     line('suppliers', report.suppliers),
     line('financiers', report.financiers),
     line('collaborators', report.collaborators),

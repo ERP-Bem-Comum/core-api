@@ -23,7 +23,9 @@
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 
 import type { AuthEtlPort } from '#src/modules/auth/public-api/etl.ts';
-import type { PartnersEtlPort, LegacyEntityStore } from '#src/modules/partners/public-api/etl.ts';
+import type { PartnersEtlPort, ProvisionOutcome } from '#src/modules/partners/public-api/etl.ts';
+import type { ProgramsEtlPort } from '#src/modules/programs/public-api/etl.ts';
+import type { Clock } from '#src/shared/ports/clock.ts';
 
 import * as Email from '#src/modules/auth/domain/identity/email.ts';
 import * as UserRefVo from '#src/shared/kernel/user-ref.ts';
@@ -35,6 +37,7 @@ import type { UserProfile as UserProfileEntity } from '#src/modules/partners/dom
 import type { LegacyData, TableRead } from '#scripts/etl/legacy/reader.ts';
 import type { LegacyUserRow } from '#scripts/etl/legacy/rows.ts';
 import type { QuarantineReason } from '#scripts/etl/quarantine/reason.ts';
+import { mapLegacyProgramRow } from '#scripts/etl/mappers/program.mapper.ts';
 import { mapLegacySupplierRow } from '#scripts/etl/mappers/supplier.mapper.ts';
 import { mapLegacyFinancierRow } from '#scripts/etl/mappers/financier.mapper.ts';
 import { mapLegacyCollaboratorRow } from '#scripts/etl/mappers/collaborator.mapper.ts';
@@ -53,9 +56,11 @@ import {
 // Tipos publicos do orquestrador.
 // ---------------------------------------------------------------------------
 
-export type EntityName = 'suppliers' | 'financiers' | 'collaborators' | 'users';
+export type EntityName = 'programs' | 'suppliers' | 'financiers' | 'collaborators' | 'users';
 
 export const MIGRATION_ORDER: readonly EntityName[] = [
+  // programs e raiz (sem FK de entrada), migra primeiro.
+  'programs',
   'suppliers',
   'financiers',
   'collaborators',
@@ -73,6 +78,7 @@ export type QuarantineSink = Readonly<{
 }>;
 
 export type ReconciliationReport = Readonly<{
+  programs: EntityTally;
   suppliers: EntityTally;
   financiers: EntityTally;
   collaborators: EntityTally;
@@ -87,8 +93,12 @@ export type OrchestrateError = 'orchestrate-aborted';
 export type OrchestrateDeps = Readonly<{
   authPort: AuthEtlPort;
   partnersPort: PartnersEtlPort;
+  programsPort: ProgramsEtlPort;
   quarantineSink: QuarantineSink;
   dryRun: boolean;
+  // Clock injetado — fallback do mapper de programs quando a data legada (createdAt/updatedAt)
+  // estiver ausente/inválida. Mantém a lógica pura/determinística nos testes.
+  clock: Clock;
 }>;
 
 // ---------------------------------------------------------------------------
@@ -97,6 +107,7 @@ export type OrchestrateDeps = Readonly<{
 // ---------------------------------------------------------------------------
 
 interface Acc {
+  programs: EntityTally;
   suppliers: EntityTally;
   financiers: EntityTally;
   collaborators: EntityTally;
@@ -145,21 +156,40 @@ const drainDecodeFailures = async <T>(
 
 type MigrateOutcome<Ref> = Readonly<{ tally: EntityTally; ref: Ref | null; inactive: boolean }>;
 
+// Store estrutural generico no codigo de erro (E): aceita tanto o LegacyEntityStore do partners
+// (PartnersEtlStoreError) quanto o do programs (ProgramsEtlStoreError) — que sao unioes de string
+// disjuntas. O orquestrador so precisa da forma { findByLegacyId, provision }; o codigo de erro
+// (kebab EN) vira `portError` na quarentena. E extends string mantem o portError PII-free.
+type EtlStore<A, Ref, E extends string> = Readonly<{
+  findByLegacyId: (legacyId: number) => Promise<Result<Ref | null, E>>;
+  provision: (aggregate: A, legacyId: number) => Promise<Result<ProvisionOutcome, E>>;
+}>;
+
 // Obs.1 (review round 1): o store e parametrizado pelo MESMO par <A, Ref> do mapper, em vez
 // da uniao dos 3 stores. Antes, `AggregateStore` (uniao) forcava `provision(arg)` a `never` e
 // `findByLegacyId` a alargar para `Ref` — exigindo `as never`/`as Ref|null`. Casando A e Ref
 // com o store concreto no call site, o agregado e a ref ficam ligados por tipo e os casts somem.
-type MigrateArgs<Row extends Readonly<{ id: number; active: number }>, A, Ref> = Readonly<{
+type MigrateArgs<
+  Row extends Readonly<{ id: number; active: number }>,
+  A,
+  Ref,
+  E extends string,
+> = Readonly<{
   table: EntityName;
   row: Readonly<Row>;
   map: (row: Readonly<Row>) => MapperResult<A>;
-  store: LegacyEntityStore<A, Ref>;
+  store: EtlStore<A, Ref, E>;
   tally: EntityTally;
 }>;
 
-const migrateAggregateRow = async <Row extends Readonly<{ id: number; active: number }>, A, Ref>(
+const migrateAggregateRow = async <
+  Row extends Readonly<{ id: number; active: number }>,
+  A,
+  Ref,
+  E extends string,
+>(
   deps: Readonly<OrchestrateDeps>,
-  args: MigrateArgs<Row, A, Ref>,
+  args: MigrateArgs<Row, A, Ref, E>,
 ): Promise<MigrateOutcome<Ref>> => {
   const { table, row, map, store, tally } = args;
   const counted = countRead(tally);
@@ -336,6 +366,7 @@ export const orchestrate =
   (deps: OrchestrateDeps) =>
   async (data: Readonly<LegacyData>): Promise<Result<ReconciliationReport, OrchestrateError>> => {
     const acc: Acc = {
+      programs: emptyTally(),
       suppliers: emptyTally(),
       financiers: emptyTally(),
       collaborators: emptyTally(),
@@ -343,6 +374,26 @@ export const orchestrate =
       inactiveLegacyMarked: 0,
       collaboratorRefs: new Map<number, CollaboratorId>(),
     };
+
+    // 0. programs — entidade raiz (sem FK de entrada), migra primeiro. O mapper reconstroi via
+    // Program.create (+ deactivate se inativo); precisa do clock injetado (fallback de data).
+    acc.programs = await drainDecodeFailures(
+      deps.quarantineSink,
+      'programs',
+      data.programs,
+      acc.programs,
+    );
+    for (const row of data.programs.rows) {
+      const outcome = await migrateAggregateRow(deps, {
+        table: 'programs',
+        row,
+        map: (r) => mapLegacyProgramRow(r, deps.clock),
+        store: deps.programsPort.programs,
+        tally: acc.programs,
+      });
+      acc.programs = outcome.tally;
+      if (outcome.inactive) acc.inactiveLegacyMarked += 1;
+    }
 
     // 1. suppliers
     acc.suppliers = await drainDecodeFailures(
@@ -411,6 +462,7 @@ export const orchestrate =
     }
 
     return ok({
+      programs: acc.programs,
       suppliers: acc.suppliers,
       financiers: acc.financiers,
       collaborators: acc.collaborators,

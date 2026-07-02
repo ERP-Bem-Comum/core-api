@@ -8,6 +8,22 @@
  * ⚠️ `users.password` é DELIBERADAMENTE OMITIDO — nunca lido/decodificado (D6 + segurança).
  */
 
+// Programa (legado `programs`). É entidade raiz (sem FK de entrada). `abbreviation` UNIQUE no
+// legado; `director`/`description` são NOT NULL no dump mas o domínio do core os aceita nulos —
+// por isso decodificamos como nullable (nStr), evitando quarentena espúria de linha com valor
+// ausente/vazio. Nenhuma coluna secreta (diferente de `users.password`).
+export type LegacyProgramRow = Readonly<{
+  id: number;
+  name: string;
+  abbreviation: string;
+  director: string | null;
+  description: string | null;
+  logo: string | null;
+  active: number;
+  createdAt: Date;
+  updatedAt: Date;
+}>;
+
 export type LegacyFinancierRow = Readonly<{
   id: number;
   name: string;
