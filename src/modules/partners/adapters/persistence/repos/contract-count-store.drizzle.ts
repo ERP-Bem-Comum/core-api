@@ -7,6 +7,11 @@
  * `count = count + ?` (ON DUPLICATE KEY UPDATE, permitido ADR-0020). SELECT-then-INSERT na mesma tx
  * (o worker é sequencial, sem corrida; effectively-once — dedup sobre at-least-once, Vernon p.412). Boundary:
  * try/catch → Result.
+ *
+ * `setCount` (#110/PAR-CONTRACT-COUNT-BACKFILL) grava o valor **absoluto**, não delta — usado pelo
+ * job de backfill/reconciliação. `ON DUPLICATE KEY UPDATE activeCount = <literal>` fora de transação
+ * (sem dedup por eventId — não é aplicação de evento de domínio; idempotente por construção, Sam
+ * Newman, *Building Microservices*, p.500: re-executar converge ao mesmo estado).
  */
 
 import { eq, inArray, sql } from 'drizzle-orm';
@@ -70,6 +75,16 @@ export const createDrizzleContractCountStore = (
           .where(eq(schema.parContractCountView.contractorRef, contractorRef))
           .limit(1);
         return rows[0]?.activeCount ?? 0;
+      }),
+
+    // Absoluto (não soma) — backfill/reconciliação (#110/#129). ON DUPLICATE KEY UPDATE com valor
+    // literal (não `sql\`... + ...\``), idempotente por natureza: não registra eventId (não é evento).
+    setCount: async ({ contractorRef, activeCount }) =>
+      safe('setCount', async () => {
+        await db
+          .insert(schema.parContractCountView)
+          .values({ contractorRef, activeCount })
+          .onDuplicateKeyUpdate({ set: { activeCount } });
       }),
 
     getCounts: async (contractorRefs) =>

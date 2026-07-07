@@ -76,6 +76,9 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/partners/adapters/persistence/repos/collaborator-repository.drizzle.test.ts',
     'tests/modules/partners/adapters/persistence/repos/collaborator-invite-token-repository.drizzle.test.ts',
     'tests/modules/partners/adapters/persistence/repos/contract-count-store.drizzle.test.ts',
+    // Backfill e2e ctr_contracts (read via public-api) → par_contract_count_view (#110). Aplica as
+    // migrations de ambos os módulos no mesmo MySQL de teste; cobre a query GROUP BY + idempotência.
+    'tests/jobs/partners/contract-count-backfill.integration.test.ts',
     'tests/modules/partners/adapters/persistence/repos/user-profile-repository.drizzle.test.ts',
     'tests/modules/partners/public-api/partners-etl-port.integration.test.ts',
     'tests/modules/partners/public-api/partners-etl-store-integrity.integration.test.ts',
