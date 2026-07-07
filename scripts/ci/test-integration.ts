@@ -77,6 +77,8 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/partners/adapters/persistence/repos/collaborator-invite-token-repository.drizzle.test.ts',
     'tests/modules/partners/adapters/persistence/repos/contract-count-store.drizzle.test.ts',
     'tests/modules/partners/adapters/persistence/repos/user-profile-repository.drizzle.test.ts',
+    // Batch reader e2e (#356): getSuppliersView WHERE IN contra MySQL real (CA7 anti-N+1).
+    'tests/modules/partners/adapters/persistence/repos/suppliers-batch-reader.drizzle.test.ts',
     'tests/modules/partners/public-api/partners-etl-port.integration.test.ts',
     'tests/modules/partners/public-api/partners-etl-store-integrity.integration.test.ts',
     'tests/modules/partners/public-api/partners-read-port.integration.test.ts',
