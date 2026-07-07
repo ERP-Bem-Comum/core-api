@@ -4,6 +4,14 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-07-07 — 🔀 ADR-0049 (Proposed): fronteira de responsabilidade core-api ↔ BFF (Domain API + Experience API)
+
+Novo [ADR-0049](./architecture/adr/0049-core-api-bff-boundary.md) (**Proposed**), **estado-alvo** do [ADR-0032](./architecture/adr/0032-transient-http-composition-read-until-bff.md) (composição transitória — a "rota gorda" é removida quando esta fronteira entra). Formaliza a inversão de responsabilidade decidida no refinement de 2026-07-07: **core-api = Domain API** (expõe dado cru já autorizado; dono de invariante, integração externa, agregação no banco e authz/multi-tenant) e **BFF = Experience API** (server-side TanStack Start, um por front) que compõe view-models por tela.
+
+Régua normativa: *"o banco agrega → core-api; monta/formata o que já veio → BFF"*. Define o **contrato core↔BFF** (recursos por agregado em unidades canônicas + read-models [ADR-0022](./architecture/adr/0022-read-models-via-projection-over-event-stream.md) + endpoints **batch-by-id** contra N+1; contract-first Zod/OpenAPI [ADR-0027](./architecture/adr/0027-zod-openapi-contract-first-http-edge.md)), a **fronteira de authz/PII** (minimização e multi-tenant ficam no core por escopo, nunca delegados ao BFF — #53/#238), invariantes MUST/MUST NOT, e um **Apêndice A** que fundamenta *por que a agregação fica no banco* por citação literal do MySQL 8.4 Reference Manual (`10-optimization.part01.md` L697/L1089/L2154/L2164/L3537/L3560). Rollout faseado (só cards novos + apresentação pura); topologia híbrida (core sai da borda pública após o go-live). Rastreado em [#348](https://github.com/ERP-Bem-Comum/core-api/issues/348); fundação em [#349](https://github.com/ERP-Bem-Comum/core-api/issues/349) (camada BFF) e [#350](https://github.com/ERP-Bem-Comum/core-api/issues/350) (batch-by-id).
+
+---
+
 ## 2026-06-23 — 🧭 ADR-0048 (Proposed): Anticorruption Layer legado↔core — gate das Camadas 0–2 (Dashboard/Reports/Budget Plans)
 
 Novo [ADR-0048](./architecture/adr/0048-legacy-categorization-installments-mapping.md) (**Proposed**, aguardando ratificação do tech lead),
