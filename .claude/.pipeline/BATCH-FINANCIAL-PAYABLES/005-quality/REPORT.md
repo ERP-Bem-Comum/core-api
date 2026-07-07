@@ -33,11 +33,34 @@ mesmo do fix (todo o código versionado já estava formatado).
   `drizzle-orm-expert` (PKs em `finPayables.id`/`finDocuments.id`/`finSupplierView.supplierRef`, sem N+1,
   sem índice ausente). `EXPLAIN` real exige MySQL (Docker — **sem OK do Gabriel**, por regra do guia §Integração).
 
-## Pendências antes do PR (não bloqueiam o gate)
+## Validação de integração ao vivo — x99 (MySQL 8.4 real) ✅
 
-- **Coleção Bruno de smoke** (item do #357 + guia §doc `bruno-api-client-expert`) — a fazer.
-- **Integração ao vivo**: `pnpm run test:integration:financial` (Docker) quando o Gabriel autorizar.
+Autorizada pelo Gabriel (substituiu a coleção Bruno). Rodada via runner oficial numa **worktree git
+isolada** no x99 (não tocou o working tree/WIP do Gabriel), com o `compose.yaml` adaptado dele
+(`no-new-privileges` desabilitado — bug runc/kernel 6.17 no host) e node via nvm + corepack pnpm 11.
+
+```
+pnpm run test:integration:financial  →  tests 62 · pass 62 · fail 0 · duração 43s
+
+▶ PayableSummaryByIdsView — Drizzle + MySQL (integração) (#357)
+  ✔ CI1: refs vazio → ok([])
+  ✔ CI2: supplierRef com linha em fin_supplier_view → LEFT JOIN resolve supplierName/supplierDocument
+  ✔ CI3: supplierRef SEM linha → degradação graciosa (null)
+  ✔ CI4: ref inexistente OMITIDA (missing derivado na borda)
+```
+
+O **LEFT JOIN** contra `fin_supplier_view` (ressalva Major do W2) está validado empiricamente contra
+MySQL real. Correção adicional: o teste `*.drizzle-mysql` estava **órfão** do manifesto
+`scripts/ci/test-integration.ts` (suite `financial`) — registrado neste ticket, senão nunca rodaria no CI.
+
+> **Pendência operacional (cleanup x99):** o `docker compose down` do runner não removeu o container
+> `core-api-mysql` (docker-snap do Ubuntu Core exige `sudo` p/ `rm` — permission denied). Cleanup manual
+> do Gabriel: `sudo docker rm -f core-api-mysql && sudo docker volume rm core-api-mysql-data`.
+
+## Pendências (não bloqueiam o gate)
+
 - **Decisão #362** (minimização `supplierDocument`) — needs-decision do épico #350.
+- Coleção Bruno de smoke: **dispensada** pelo Gabriel em favor da validação de integração ao vivo acima.
 
 ## Waves
 

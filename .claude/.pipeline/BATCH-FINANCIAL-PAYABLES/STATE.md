@@ -1,6 +1,6 @@
 # Estado do Ticket BATCH-FINANCIAL-PAYABLES
 
-> **Size:** M · **Status:** in-progress · **Created:** 2026-07-07T21:32:23.257Z
+> **Size:** M · **Status:** closed-green · **Created:** 2026-07-07T21:32:23.257Z · **Closed:** 2026-07-07T23:28:04.890Z
 
 | Wave | Status | Skill | REPORT | Última atualização |
 | :--- | :--- | :--- | :--- | :--- |
@@ -11,4 +11,4 @@
 
 ## Último evento
 
-W3 finished (GREEN)
+closed-green
