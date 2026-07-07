@@ -903,6 +903,37 @@ export const payableListResponseSchema = z.object({
   total: z.number().int(),
 });
 
+// ─── Resolução em lote (#357, ADR-0049) — POST /financial/payables:batch ──────
+// Destrava o match card da Conciliação (#172) em 1 hop: payableId[] → resumo do título,
+// já com supplierName/supplierDocument (fin_supplier_view). Subset de payableSummarySchema
+// (sem `series`/`kind`/`retentionType`/`issueDate`/`version`/`grossValueCents`/`netValueCents`/`paidAt`
+// — o batch é focado no que o match card consome) + os 2 campos de fornecedor.
+export const payablesBatchBodySchema = z.object({
+  refs: z.array(z.uuid()).min(1).max(200),
+});
+
+export const payableBatchItemSchema = z.object({
+  ref: z.uuid(),
+  documentId: z.uuid(),
+  documentNumber: z.string().nullable(),
+  documentType: z.string().nullable(),
+  valueCents: centsStringSchema,
+  dueDate: z.string(),
+  status: z.string(),
+  paymentMethod: z.string().nullable(),
+  supplierRef: z.string().nullable(),
+  supplierName: z.string().nullable(),
+  supplierDocument: z.string().nullable(),
+});
+
+export type PayableBatchItemDto = z.infer<typeof payableBatchItemSchema>;
+
+export const payablesBatchResponseSchema = z.object({
+  items: z.array(payableBatchItemSchema),
+  // UUIDs válidos sem registro correspondente — o lote não aborta por isso (degradação graciosa).
+  missing: z.array(z.uuid()),
+});
+
 // ─── Baixa manual de título (#219/#224) — POST /documents/:id/payables/:payableId/manual-payment ──
 export const documentPayableParamsSchema = z.object({
   id: z.uuid().meta({ description: 'UUID do documento' }),

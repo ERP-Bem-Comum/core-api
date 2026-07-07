@@ -77,6 +77,8 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   'supplier-view-store-unavailable',
   // Alçada do aprovador (#289 — CA9): leitura do `auth` indisponível.
   'approver-authority-unavailable',
+  // Resolução em lote (#357): falha ao ler o JOIN fin_payables × fin_documents × fin_supplier_view.
+  'payable-summary-by-ids-view-failure',
 ]);
 
 // NOTA (019): `cedente-account-not-found` NÃO está em NOT_FOUND_CODES de propósito → default 422.
@@ -202,6 +204,9 @@ const SLUG_MESSAGES: Record<string, string> = {
     'Não foi possível consultar a alçada do aprovador. Tente novamente.',
   // Cascata de alçada (#289 — CASCADE/US3, CA7): regra de negócio (default 422), não vaza o slug.
   'no-approver-with-sufficient-limit': 'Nenhum aprovador com alçada suficiente para este valor.',
+  // Resolução em lote (#357): infraestrutura oculta pelo caller como 'internal' (5xx) — nunca chega
+  // a este texto na prática (branch >=500 do sendDomainError), mantido por consistência de padrão.
+  'payable-summary-by-ids-view-failure': 'Erro ao consultar resumo de títulos em lote.',
 };
 
 /** Mensagem PT-BR ao humano para um slug; fallback por `code` público. Nunca retorna o slug. */

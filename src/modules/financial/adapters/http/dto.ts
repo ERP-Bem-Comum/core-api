@@ -23,6 +23,8 @@ import type { DocumentTypeMetadata } from '../../domain/document/document-type-m
 import type { PayableView } from '../../domain/payable-view/types.ts';
 import type { ProgramView } from '../../application/ports/program-read.ts';
 import type { PaidPayableView } from '../../application/ports/payable-reconciliation-view.ts';
+// #357: resumo de título em lote (POST /financial/payables:batch — ADR-0049).
+import type { PayableSummaryRow } from '../../application/ports/payable-summary-by-ids-view.ts';
 import type { MatchSuggestion } from '../../application/use-cases/suggest-matches.ts';
 import type { GetStatementSuggestionsOutput } from '../../application/use-cases/get-statement-suggestions.ts';
 import type {
@@ -41,6 +43,7 @@ import type {
   ProgramResponseDto,
   DocumentTypeMetadataResponseDto,
   RecentPaymentDto,
+  PayableBatchItemDto,
 } from './schemas.ts';
 import type { PayeeBankBlock } from './payee-bank-composition.ts';
 
@@ -91,6 +94,22 @@ export const recentPaymentsToDto = (views: readonly PayableView[]): RecentPaymen
     valueCents: moneyToCentsString(v.valueCents),
     paidAt: v.paidAt,
   }));
+
+/** #357: item de POST /financial/payables:batch — resumo de título p/ o match card da Conciliação
+ * (#172), sem N+1. `ref` = payableId (o BFF casa a resposta por `ref`, não por posição no array). */
+export const payableBatchItemToDto = (row: PayableSummaryRow): PayableBatchItemDto => ({
+  ref: row.payableId,
+  documentId: row.documentId,
+  documentNumber: row.documentNumber,
+  documentType: row.documentType,
+  valueCents: moneyToCentsString(row.valueCents),
+  dueDate: row.dueDate.toISOString().slice(0, 10),
+  status: row.status,
+  paymentMethod: row.paymentMethod,
+  supplierRef: row.supplierRef,
+  supplierName: row.supplierName,
+  supplierDocument: row.supplierDocument,
+});
 
 /**
  * Mapeia um StoredDocument (Document + Payables | null) para o DTO de resposta completo.

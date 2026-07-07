@@ -14,6 +14,7 @@
  *   GET    /financial/documents                      fiscal-document:read   → listDocuments
  *   GET    /financial/documents/:id                  fiscal-document:read   → findDocumentById
  *   GET    /financial/dashboard/recent-payments      reference:read         → listRecentPaid (#239)
+ *   POST   /financial/payables:batch                 fiscal-document:read   → getPayablesSummaryByIds (#357)
  *
  * Mapa erro→HTTP (financial-http.md §Status codes):
  *   400 schema/ref inválida         Zod + financial-ref-invalid + document-id-invalid
@@ -59,6 +60,7 @@ import {
   programsToDto,
   documentTypeMetadataToDto,
   recentPaymentsToDto,
+  payableBatchItemToDto,
 } from './dto.ts';
 import type { DocumentListFilter } from '../../domain/document/query.ts';
 import type { PayableListFilter, PayableListItem } from '../../domain/payable/query.ts';
@@ -77,6 +79,8 @@ import {
   listPayablesQuerySchema,
   payableListResponseSchema,
   type PayableSummaryDto,
+  payablesBatchBodySchema,
+  payablesBatchResponseSchema,
   documentTimelineResponseSchema,
   importBankStatementBodySchema,
   importBankStatementResponseSchema,
@@ -570,6 +574,32 @@ const financialRoutes =
           }),
           { ok: 200 },
         );
+      },
+    });
+
+    // POST /financial/payables:batch — resolve payableId[] em lote (#357, ADR-0049). Custom method
+    // AIP-136: find-my-way trata ':' como início de parâmetro, então `/payables:batch` cru capturaria
+    // qualquer `/payables*` (ex.: POST /payablesXYZ → 200). A regex `^:batch$` fixa o literal e devolve
+    // 404 p/ paths irmãos fora do custom method (ver 000-request.md §Decisão de roteamento). Declarada
+    // como rota estática, antes de eventuais `/:id` irmãs.
+    scope.route({
+      method: 'POST',
+      url: '/financial/payables:action(^:batch$)',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        body: payablesBatchBodySchema,
+        response: { 200: payablesBatchResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const { refs } = req.body;
+        const result = await deps.getPayablesSummaryByIds(refs);
+        if (!result.ok) return sendDomainError(reply, result.error);
+        const rows = result.value;
+        const found = new Set(rows.map((r) => r.payableId));
+        const missing = refs.filter((ref) => !found.has(ref));
+        return sendResult(reply, ok({ items: rows.map(payableBatchItemToDto), missing }), {
+          ok: 200,
+        });
       },
     });
 
