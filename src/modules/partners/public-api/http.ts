@@ -15,6 +15,8 @@ export { collaboratorsHttpPlugin } from '../adapters/http/plugin.ts';
 export type { CollaboratorsHttpHooks } from '../adapters/http/plugin.ts';
 export { suppliersHttpPlugin } from '../adapters/http/supplier-plugin.ts';
 export type { SuppliersHttpHooks } from '../adapters/http/supplier-plugin.ts';
+export { suppliersBatchHttpPlugin } from '../adapters/http/supplier-batch-plugin.ts';
+export type { SuppliersBatchHttpHooks } from '../adapters/http/supplier-batch-plugin.ts';
 export { financiersHttpPlugin } from '../adapters/http/financier-plugin.ts';
 export type { FinanciersHttpHooks } from '../adapters/http/financier-plugin.ts';
 export { partnerGeographyHttpPlugin } from '../adapters/http/partner-geography-plugin.ts';
