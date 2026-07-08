@@ -45,12 +45,21 @@ Correção = rodar o **backfill** (cobre pré-existentes) **e** garantir o **wor
   idempotência, config (env), como rodar (local + Docker), diagnóstico do #111, validação (CA1), relacionados.
   Atende o item de DoD "documentar como acionar o backfill localmente".
 
-## Pendente (exige ambiente — aguarda OK do Gabriel)
+## Validação ao vivo no x99 — RESOLVIDA (2026-07-08)
 
-- Rodar o diagnóstico (§6) no ambiente (x99 / Docker local) → confirmar causa-raiz.
-- Disparar o backfill idempotente + confirmar worker ativo.
-- Validar **CA1** ao vivo (`GET /api/v1/financial/documents` com `supplierName`/`supplierDocument` não-nulos)
-  e/ou `MYSQL_INTEGRATION=1 pnpm run test:integration:financial`.
+MySQL 8.4.10 subido no x99 (`docker run` avulso, sem bind-mount — ver [[mac-dev-x99-docker-runner-tunnel]]),
+alcançado do Mac por túnel SSH (`ssh -L 3306`). Evidências:
+
+- **Testes de integração 7/7 GREEN** (`MYSQL_INTEGRATION=1`, `applyMigrations:true` no x99):
+  - `document-supplier-view-join.drizzle-mysql.test.ts` — CA1: grid traz nome/CNPJ quando a view tem o `supplierRef`, **null quando não**.
+  - `supplier-view-store.drizzle-mysql.test.ts` — 5/5: idempotência + guard de recência (`occurredAt`).
+  - `projection.integration.test.ts` — e2e `par_outbox → fin_supplier_view` (worker).
+- **Backfill job real (`run.ts`) end-to-end:** semeado 1 fornecedor em `par_suppliers` (partners) → `TRUNCATE fin_supplier_view` (0) → `pnpm run job:financial:supplier-view-backfill` (2 pools, mesmo `core`) → **`concluído — 1 aplicados, 0 falhas`** → `fin_supplier_view` = 1 linha com `name`/`document` corretos. **CA1 comprovado ao vivo.**
+- **CA2 (idempotência) ao vivo:** 2ª execução do backfill → view segue com **1 linha** (sem duplicar).
+- Nota: o mapper do partners valida a leitura — o seed exige `id` UUID v4, `cnpj` com DV válido, `service_category` do enum (`service-category.ts`), e alvo de pagamento (banco OU pix, CHECK `par_suppliers_payment_target_chk`).
+
+**O que resta é operacional/deploy (fora do código):** disparar o mesmo backfill no ambiente de produção
+(via `docker compose --profile jobs run --rm supplier-view-backfill` ou `pnpm run job:...`) — o runbook cobre.
 
 ## Decisão sobre CA3 (quarentena)
 
