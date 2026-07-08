@@ -1,0 +1,26 @@
+meta {
+  name: BGP-PEND-5 detalhe do plano criado deveria retornar 200
+  type: http
+  seq: 6
+  docs: EXPECTED-FAIL — depende de 02-create-ok ter capturado budgetPlansPlanId. CA4 da issue #315 (cabecalho + budgets vazios + totalInCents).
+}
+
+get {
+  url: {{baseUrl}}/api/v2/budget-plans/{{budgetPlansPlanId}}
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{budgetPlansOperatorToken}}
+}
+
+tests {
+  test("BGP-PEND-5 — GET /budget-plans/:id retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("BGP-PEND-5 — budgets vazio e totalInCents 0 na criacao", function () {
+    const body = res.getBody();
+    expect(body.budgets).to.deep.equal([]);
+    expect(body.totalInCents).to.equal(0);
+  });
+}

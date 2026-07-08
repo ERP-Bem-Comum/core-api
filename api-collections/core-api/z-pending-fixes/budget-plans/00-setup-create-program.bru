@@ -1,0 +1,40 @@
+meta {
+  name: BGP-PEND-0 setup — cria Program ATIVO real
+  type: http
+  seq: 1
+}
+
+post {
+  url: {{baseUrl}}/api/v1/programs
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{programsOperatorToken}}
+}
+
+body:json {
+  {
+    "name": "Programa BGP Pending Fix",
+    "sigla": "BGPPF",
+    "director": "Diretor E2E",
+    "generalCharacteristics": "Programa criado para expor o gap de composicao memory do budget-plans",
+    "logoKey": null
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setVar("budgetPlansProgramRef", res.getBody().id);
+  }
+}
+
+tests {
+  test("BGP-PEND-0 — POST /programs retorna 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+  test("BGP-PEND-0 — programa criado ATIVO", function () {
+    expect(res.getBody().status).to.equal("ATIVO");
+  });
+}

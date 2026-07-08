@@ -24,6 +24,9 @@ const CATALOG_RAW = [
   // bank-account:* (modulo financial - conta-cedente, #138)
   'bank-account:read',
   'bank-account:write',
+  // budget-plan:* (modulo budget-plans - plano orcamentario, #315)
+  'budget-plan:read',
+  'budget-plan:write',
   // collaborator:* (modulo partners - colaboradores)
   'collaborator:read',
   'collaborator:write',

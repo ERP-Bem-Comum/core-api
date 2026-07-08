@@ -1,0 +1,28 @@
+meta {
+  name: BGP lista 200 (envelope items/total)
+  type: http
+  seq: 6
+}
+
+get {
+  url: {{baseUrl}}/api/v2/budget-plans?year=1901
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{budgetPlansOperatorToken}}
+}
+
+tests {
+  test("BGP — GET /budget-plans retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("BGP — envelope tem items (array) e total (numero)", function () {
+    const body = res.getBody();
+    expect(body.items).to.be.an("array");
+    expect(body.total).to.be.a("number");
+  });
+  test("BGP — filtro ?year=1901 nao quebra (nenhum plano legitimo nesse ano)", function () {
+    expect(res.getBody().total).to.equal(0);
+  });
+}

@@ -72,6 +72,7 @@
     "db:generate:programs": "drizzle-kit generate --config db/drizzle/programs.ts",
     "db:generate:financial": "drizzle-kit generate --config db/drizzle/financial.ts",
     "db:generate:notifications": "drizzle-kit generate --config db/drizzle/notifications.ts",
+    "db:generate:budget-plans": "drizzle-kit generate --config db/drizzle/budget-plans.ts",
     "db:seed:partners": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/seed/partners.ts",
     "seed:admin": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/seed/admin-user.ts"
   },

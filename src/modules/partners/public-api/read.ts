@@ -14,7 +14,9 @@ import {
   type PartnersMysqlDriverError,
 } from '../adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleContractorReadStore } from '../adapters/persistence/repos/contractor-read.drizzle.ts';
+import { createDrizzleGeographyReadStore } from '../adapters/persistence/repos/geography-read.drizzle.ts';
 import type { ContractorReadPort } from '../application/ports/contractor-read.ts';
+import type { PartnerGeographyReadPort } from '../application/ports/geography-read.ts';
 
 export type {
   ContractorReadPort,
@@ -27,8 +29,18 @@ export type {
   ActView,
   ContractorView,
 } from './contractor-view.mapper.ts';
+export type {
+  PartnerGeographyReadPort,
+  PartnerGeographyReadError,
+  PartnerStateView,
+  PartnerMunicipalityView,
+} from '../application/ports/geography-read.ts';
 
+// Extensão ADITIVA (precedente: AuthUserReadPort #207) — ContractorReadPort intacto,
+// PartnerGeographyReadPort somado via intersecção. Consumidores existentes (financial)
+// não quebram; quem precisa das "redes" (budget-plans) usa os métodos novos.
 export type PartnersReadPort = ContractorReadPort &
+  PartnerGeographyReadPort &
   Readonly<{
     close: () => Promise<void>;
   }>;
@@ -48,10 +60,12 @@ export const buildPartnersReadPort = async (
   if (!handleR.ok) return err(handleR.error);
   const handle = handleR.value;
 
-  const store = createDrizzleContractorReadStore(handle);
+  const contractorStore = createDrizzleContractorReadStore(handle);
+  const geographyStore = createDrizzleGeographyReadStore(handle);
 
   return ok({
-    ...store,
+    ...contractorStore,
+    ...geographyStore,
     close: async () => handle.close(),
   });
 };

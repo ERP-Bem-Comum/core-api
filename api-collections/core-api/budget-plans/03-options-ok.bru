@@ -1,0 +1,30 @@
+meta {
+  name: BGP options 200 (programs/years/redes)
+  type: http
+  seq: 3
+  docs: Não assume nenhum Program pré-existente — em modo memory o programCatalog do módulo budget-plans é próprio (não enxerga /api/v1/programs, ver z-pending-fixes/budget-plans). Só valida a forma do envelope e que `years` inclui o ano corrente/seguinte (CA5 parcial).
+}
+
+get {
+  url: {{baseUrl}}/api/v2/budget-plans/options
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{budgetPlansOperatorToken}}
+}
+
+tests {
+  test("BGP — GET /budget-plans/options retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("BGP — envelope tem programs/years/redes", function () {
+    const body = res.getBody();
+    expect(body.programs).to.be.an("array");
+    expect(body.years).to.be.an("array");
+    expect(body.redes).to.be.an("array");
+  });
+  test("BGP — years inclui pelo menos 2 anos (corrente + seguinte)", function () {
+    expect(res.getBody().years.length).to.be.at.least(2);
+  });
+}

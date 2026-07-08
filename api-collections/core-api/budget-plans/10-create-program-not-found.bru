@@ -1,0 +1,32 @@
+meta {
+  name: BGP create programa inexistente
+  type: http
+  seq: 10
+  docs: UUID v4 sintaticamente valido mas que nao corresponde a nenhum Program — 404 program-not-found e' o comportamento correto do contrato mesmo fora do gap de composicao memory (qualquer ref e' "nao encontrada" hoje, ver z-pending-fixes/budget-plans), entao este caso permanece no smoke principal.
+}
+
+post {
+  url: {{baseUrl}}/api/v2/budget-plans
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{budgetPlansOperatorToken}}
+}
+
+body:json {
+  {
+    "year": 2026,
+    "programRef": "99999999-9999-4999-8999-999999999999"
+  }
+}
+
+tests {
+  test("BGP — POST /budget-plans com programRef inexistente retorna 404", function () {
+    expect(res.getStatus()).to.equal(404);
+  });
+  test("BGP — erro tem code program-not-found", function () {
+    expect(res.getBody().error.code).to.equal("program-not-found");
+  });
+}
