@@ -1,0 +1,32 @@
+meta {
+  name: BGP-PEND-3 create duplicado (mesmo ano+programa) deveria retornar 409
+  type: http
+  seq: 4
+  docs: EXPECTED-FAIL — depende de 02-create-ok ter criado o plano raiz primeiro (mesmo bloqueado pelo gap, ver folder.bru). Repete o mesmo payload de 02.
+}
+
+post {
+  url: {{baseUrl}}/api/v2/budget-plans
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{budgetPlansOperatorToken}}
+}
+
+body:json {
+  {
+    "year": 2031,
+    "programRef": "{{budgetPlansProgramRef}}"
+  }
+}
+
+tests {
+  test("BGP-PEND-3 — POST /budget-plans duplicado retorna 409", function () {
+    expect(res.getStatus()).to.equal(409);
+  });
+  test("BGP-PEND-3 — erro tem code budget-plan-already-exists", function () {
+    expect(res.getBody().error.code).to.equal("budget-plan-already-exists");
+  });
+}

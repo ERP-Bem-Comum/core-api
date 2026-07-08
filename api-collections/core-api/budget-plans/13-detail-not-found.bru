@@ -1,0 +1,23 @@
+meta {
+  name: BGP detalhe id inexistente
+  type: http
+  seq: 13
+}
+
+get {
+  url: {{baseUrl}}/api/v2/budget-plans/00000000-0000-4000-8000-000000000000
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{budgetPlansOperatorToken}}
+}
+
+tests {
+  test("BGP — GET /budget-plans/:id inexistente retorna 404", function () {
+    expect(res.getStatus()).to.equal(404);
+  });
+  test("BGP — erro tem code budget-plan-not-found", function () {
+    expect(res.getBody().error.code).to.equal("budget-plan-not-found");
+  });
+}

@@ -52,6 +52,10 @@ import {
   financialHttpPlugin,
   buildFinancialHttpDeps,
 } from '#src/modules/financial/public-api/http.ts';
+import {
+  budgetPlansHttpPlugin,
+  buildBudgetPlansHttpDeps,
+} from '#src/modules/budget-plans/public-api/http.ts';
 
 // Config S3/MinIO do logo de programa (ADR-0019 / issue #244 IAM Role).
 // Retorna config quando endpoint + bucket presentes (minimo para S3); credentials opcionais:
@@ -218,6 +222,16 @@ const main = async (): Promise<void> => {
       : { driver: 'memory' },
   );
 
+  // Módulo budget-plans (BGP-PLAN-CRUD, issue #315) → /api/v2/budget-plans. Greenfield V2
+  // (plugin direto). Driver mysql só com BUDGET_PLANS_DRIVER=mysql + BUDGET_PLANS_DATABASE_URL
+  // (uma connection string: bgp_* + read ports prg_*/par_* — ADR-0014); senão in-memory (degradado).
+  const budgetPlansWriterUrl = process.env['BUDGET_PLANS_DATABASE_URL'];
+  const budgetPlansDeps = await buildBudgetPlansHttpDeps(
+    process.env['BUDGET_PLANS_DRIVER'] === 'mysql' && budgetPlansWriterUrl !== undefined
+      ? { driver: 'mysql', connectionString: budgetPlansWriterUrl }
+      : { driver: 'memory' },
+  );
+
   // requireAuth do auth (cross-módulo via public-api, ADR-0006/0024) protege as rotas de contracts.
   const requireAuth = makeRequireAuth(authDeps.verifyAccessToken);
 
@@ -232,6 +246,7 @@ const main = async (): Promise<void> => {
         requireAuth,
         authorize: authDeps.authorize,
       }),
+      budgetPlansHttpPlugin(budgetPlansDeps, { requireAuth, authorize: authDeps.authorize }),
       // Espelho do legado (ADR-0033) → /api/v1.
       {
         plugin: collaboratorsHttpPlugin(partnersDeps, {
@@ -358,6 +373,7 @@ const main = async (): Promise<void> => {
     await partnersDeps.shutdown();
     await programsDeps.shutdown();
     await financialDeps.shutdown();
+    await budgetPlansDeps.shutdown();
     // CTR-NUMBER-PROGRAM: fecha o pool do read port de programs injetado em contracts.
     if (programsReadPort !== undefined) await programsReadPort.close();
     app.log.info('Servidor encerrado.');
