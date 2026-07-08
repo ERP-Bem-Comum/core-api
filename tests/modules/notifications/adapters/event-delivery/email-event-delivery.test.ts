@@ -67,6 +67,19 @@ const makeDelivery = (sender: EmailSender) => {
 };
 
 describe('notifications EmailEventDelivery (CA3/CA4/CA6/CA8)', () => {
+  it('CA5 [#133] — rate-limited do sender -> deliver retorna ok (descarte anti-flood, nao retry/DLQ)', async () => {
+    const sender: EmailSender = {
+      send: () => Promise.resolve(err({ tag: 'rate-limited', reason: 'over per-window limit' })),
+    };
+    const delivery = makeDelivery(sender);
+    const r = await delivery.deliver(row());
+    assert.equal(
+      isOk(r),
+      true,
+      'rate-limited deve ser PROCESSADO (ok), nao DeliveryError (retry/DLQ)',
+    );
+  });
+
   it('CA3 — PasswordResetRequested -> envia e-mail de reset com o link e marca ok', async () => {
     // Arrange
     const sender = createInMemoryEmailSender();

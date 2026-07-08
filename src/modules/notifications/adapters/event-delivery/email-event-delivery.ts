@@ -11,6 +11,8 @@
 //
 // ADR-0006 (Result na borda), ADR-0010 (Email Port/Adapter), ADR-0047 (consumidor do evento).
 
+import process from 'node:process';
+
 import { ok, err } from '#src/shared/primitives/result.ts';
 import type { Result } from '#src/shared/primitives/result.ts';
 import type { EventDelivery, DeliveryError, OutboxRow } from '#src/shared/outbox/index.ts';
@@ -201,6 +203,15 @@ export const createEmailEventDelivery = (
 
     const sent = await deps.emailSender.send(message.value);
     if (sent.ok) return ok(undefined);
+    // rate-limited (#133): descarte anti-flood — a row e PROCESSADA (nao retry, nao DLQ). O e-mail
+    // excedente e intencionalmente suprimido; nao ha o que reentregar (a janela precisa passar).
+    // M4: sinal observavel do descarte (sem endereco — anti-vazamento), distinto do "delivered" do worker.
+    if (sent.error.tag === 'rate-limited') {
+      process.stderr.write(
+        `[email-event-delivery] rate-limited: e-mail suprimido eventId=${row.eventId} type=${row.eventType}\n`,
+      );
+      return ok(undefined);
+    }
     return err(deliveryUnavailable(`email-send-failed:${sent.error.tag}:${sent.error.reason}`));
   },
 });

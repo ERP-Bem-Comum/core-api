@@ -62,7 +62,9 @@ export type EmailConfigError =
       reason: SmtpConfigError | ResendConfigError;
     }>
   | Readonly<{ tag: 'invalid-from'; field: string; reason: EmailAddressError }>
-  | Readonly<{ tag: 'from-domain-not-allowed'; field: string; domain: string }>;
+  | Readonly<{ tag: 'from-domain-not-allowed'; field: string; domain: string }>
+  // rate-limit (#133 M3): env presente porem malformado — boot falha alto (fail-loud, nao desliga em silencio).
+  | Readonly<{ tag: 'invalid-rate-limit'; reason: string }>;
 
 const PROVIDERS: readonly EmailProvider[] = ['smtp', 'resend', 'memory'];
 
