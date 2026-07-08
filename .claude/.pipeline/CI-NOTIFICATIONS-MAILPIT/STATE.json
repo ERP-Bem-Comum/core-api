@@ -3,51 +3,51 @@
   "ticket": "CI-NOTIFICATIONS-MAILPIT",
   "size": "M",
   "createdAt": "2026-07-02T15:43:04.312Z",
-  "closedAt": null,
-  "currentWave": "W0",
-  "status": "in-progress",
+  "closedAt": "2026-07-08T08:56:50.925Z",
+  "currentWave": null,
+  "status": "closed-green",
   "waves": [
     {
       "id": "W0",
-      "status": "in-progress",
+      "status": "done",
       "agent": "tdd-strategist",
       "startedAt": "2026-07-02T15:43:04.619Z",
-      "finishedAt": null,
+      "finishedAt": "2026-07-08T08:36:38.460Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
     },
     {
       "id": "W1",
-      "status": "pending",
-      "agent": null,
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "agent": "nodejs-runtime-expert",
+      "startedAt": "2026-07-08T08:36:38.793Z",
+      "finishedAt": "2026-07-08T08:50:52.819Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
     },
     {
       "id": "W2",
-      "status": "pending",
-      "agent": null,
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-08T08:56:49.373Z",
+      "finishedAt": "2026-07-08T08:56:49.773Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
     },
     {
       "id": "W3",
-      "status": "pending",
-      "agent": null,
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-08T08:56:50.154Z",
+      "finishedAt": "2026-07-08T08:56:50.540Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "ALL-GREEN"
     }
   ],
   "blockers": [],
-  "lastEvent": "W0 started (tdd-strategist)"
+  "lastEvent": "closed-green"
 }
