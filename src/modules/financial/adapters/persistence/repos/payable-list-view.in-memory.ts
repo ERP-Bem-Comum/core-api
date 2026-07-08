@@ -46,6 +46,22 @@ const matchesFilter = (it: PayableListItem, f: PayableListFilter): boolean => {
   return true;
 };
 
+// Derivação canônica `LoadedDocument[] → PayableListItem[]` (pai + filhos como linhas), extraída
+// de `findPaged` para reuso (#357 — `payable-summary-by-ids-view.in-memory.ts` reaproveita esta
+// mesma derivação em vez de reimplementar o loop sobre payables.parent/children).
+export const derivePayableListItems = (
+  documents: readonly LoadedDocument[],
+): readonly PayableListItem[] => {
+  const items: PayableListItem[] = [];
+  for (const stored of documents) {
+    if (stored.payables === null) continue;
+    for (const p of [stored.payables.parent, ...stored.payables.children]) {
+      items.push(toItem(stored.document, p, stored.version));
+    }
+  }
+  return items;
+};
+
 export const createInMemoryPayableListView = (
   source: () => readonly LoadedDocument[],
 ): PayableListView => ({
@@ -54,13 +70,7 @@ export const createInMemoryPayableListView = (
     page: number,
     pageSize: number,
   ): Promise<Result<Page<PayableListItem>, PayableListViewError>> => {
-    const items: PayableListItem[] = [];
-    for (const stored of source()) {
-      if (stored.payables === null) continue;
-      for (const p of [stored.payables.parent, ...stored.payables.children]) {
-        items.push(toItem(stored.document, p, stored.version));
-      }
-    }
+    const items = derivePayableListItems(source());
     const filtered = items.filter((it) => matchesFilter(it, filter));
     // dueDate ASC, desempate por payableId ASC — mesma semântica do Drizzle.
     const sorted = [...filtered].sort((a, b) => {

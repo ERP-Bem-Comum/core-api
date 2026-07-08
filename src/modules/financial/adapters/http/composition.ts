@@ -18,7 +18,10 @@ import {
   createInMemoryDocumentRepository,
   type DocumentStore,
 } from '../persistence/repos/document-repository.in-memory.ts';
-import { createInMemoryPayableListView } from '../persistence/repos/payable-list-view.in-memory.ts';
+import {
+  createInMemoryPayableListView,
+  derivePayableListItems,
+} from '../persistence/repos/payable-list-view.in-memory.ts';
 import { createDrizzlePayableListView } from '../persistence/repos/payable-list-view.drizzle.ts';
 import type { PayableListView } from '../../application/ports/payable-list-view.ts';
 import { createInMemorySupplierViewStore } from '../persistence/repos/supplier-view-store.in-memory.ts';
@@ -28,6 +31,13 @@ import { createInMemoryPayableViewStore } from '../persistence/repos/payable-vie
 import { createDrizzlePayableViewStore } from '../persistence/repos/payable-view-store.drizzle.ts';
 import { createInMemoryPayableDocumentView } from '../persistence/repos/payable-document-view.in-memory.ts';
 import { createDrizzlePayableDocumentView } from '../persistence/repos/payable-document-view.drizzle.ts';
+// #357: resumo de título em lote — POST /financial/payables:batch (ADR-0049).
+import {
+  createInMemoryPayableSummaryByIdsView,
+  payableListItemToSummaryRow,
+} from '../persistence/repos/payable-summary-by-ids-view.in-memory.ts';
+import { createDrizzlePayableSummaryByIdsView } from '../persistence/repos/payable-summary-by-ids-view.drizzle.ts';
+import type { PayableSummaryByIdsView } from '../../application/ports/payable-summary-by-ids-view.ts';
 import {
   createInMemoryTimelineRepository,
   type TimelineStore,
@@ -130,7 +140,7 @@ import { getTransactionReconciliation } from '../../application/use-cases/get-tr
 import { listReconciliationPeriods } from '../../application/use-cases/list-reconciliation-periods.ts';
 import { getStatementSuggestions } from '../../application/use-cases/get-statement-suggestions.ts';
 import { createStatementBackedAccountHistory } from '../persistence/repos/cedente-account-history.from-statements.ts';
-import type { DocumentRepository } from '../../domain/document/repository.ts';
+import type { DocumentRepository, LoadedDocument } from '../../domain/document/repository.ts';
 import type { PayeeKind } from '../../domain/document/types.ts';
 import type { FinancialTimelineRepository } from '../../domain/timeline/repository.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
@@ -237,6 +247,8 @@ export type FinancialHttpDeps = Readonly<{
   listPrograms: ProgramReadPort['list'];
   /** #239 · Últimos pagamentos — GET /financial/dashboard/recent-payments. */
   listRecentPaid: PayableViewStore['listRecentPaid'];
+  /** #357 · Resolução em lote de payableId[] — POST /financial/payables:batch (ADR-0049). */
+  getPayablesSummaryByIds: PayableSummaryByIdsView['getPayablesSummaryByIds'];
   /** Composição síncrona do bancário do favorecido (#255 — ADR-0032). */
   resolvePayeeBank: (ref: {
     kind: PayeeKind | null;
@@ -271,6 +283,8 @@ type Pools = Readonly<{
   supplierViewStore: SupplierViewStore;
   // #146: JOIN fin_payables × fin_documents para o export CSV-Nibo.
   payableDocView: PayableDocumentView;
+  // #357: JOIN fin_payables × fin_documents × fin_supplier_view p/ POST /financial/payables:batch.
+  payableSummaryByIdsView: PayableSummaryByIdsView;
   // #239: read-model de payables (Top-5 "Últimos pagamentos"). memory: vazio no boot (sem worker de
   // projeção síncrono — injetável em testes via config.payableViewStore); mysql: drizzle.
   payableViewStore: PayableViewStore;
@@ -355,15 +369,17 @@ const buildMemoryPools = (
   const categoryReader = createInMemoryCategoryReadStore(seededCategories());
   const costCenterReader = createInMemoryCostCenterReadStore(seededCostCenters());
   const programReader = createInMemoryProgramReadStore(seededProgramsStub());
+  // Fonte compartilhada `documentStore → LoadedDocument[]` (payableListView e payableSummaryByIdsView
+  // derivam da MESMA leitura — evita duplicar a montagem entre os dois pools, #357 W2 refactor).
+  const documentSource = (): readonly LoadedDocument[] =>
+    [...documentStore.values()].map((e) => ({ ...e.aggregate, version: e.version }));
   return {
     contractCategorizationReader: createInMemoryContractCategorizationReadStore(),
     categoryReader,
     costCenterReader,
     programReader,
     repo,
-    payableListView: createInMemoryPayableListView(() =>
-      [...documentStore.values()].map((e) => ({ ...e.aggregate, version: e.version })),
-    ),
+    payableListView: createInMemoryPayableListView(documentSource),
     timelineRepo,
     statementRepo,
     payableView,
@@ -396,6 +412,15 @@ const buildMemoryPools = (
       }
       return rows;
     }),
+    // #357: derivação lazy do JOIN fin_payables × fin_documents × fin_supplier_view via documentStore
+    // (payableStore é da conciliação — não veria o payable recém-criado no create; documentStore é
+    // onde saveDocument grava). Reusa `derivePayableListItems` (mesmo loop de payableListView acima)
+    // + `payableListItemToSummaryRow` — PayableSummaryRow é subset de PayableListItem;
+    // supplierName/supplierDocument = null no driver memory (read-model de fornecedor vazio sem
+    // worker — mesma nota de payable-list-view.in-memory §toItem).
+    payableSummaryByIdsView: createInMemoryPayableSummaryByIdsView(() =>
+      derivePayableListItems(documentSource()).map(payableListItemToSummaryRow),
+    ),
     suggestionView,
     rejectedSuggestionRepo,
     periodStore,
@@ -490,6 +515,8 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     supplierViewStore: createDrizzleSupplierViewStore(handle, ClockReal()),
     // #146: JOIN fin_payables × fin_documents via Drizzle (inArray — suggestion-view.drizzle.ts precedente).
     payableDocView: createDrizzlePayableDocumentView(handle),
+    // #357: JOIN fin_payables × fin_documents × fin_supplier_view via Drizzle.
+    payableSummaryByIdsView: createDrizzlePayableSummaryByIdsView(handle),
     // #239: injetado tem precedência (testes); mysql constrói o adapter Drizzle por padrão.
     payableViewStore: config.payableViewStore ?? createDrizzlePayableViewStore(handle, ClockReal()),
     suggestionView: createDrizzleSuggestionView(handle),
@@ -636,6 +663,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     listCostCenters: pools.costCenterReader.list,
     listPrograms: pools.programReader.list,
     listRecentPaid: pools.payableViewStore.listRecentPaid,
+    getPayablesSummaryByIds: pools.payableSummaryByIdsView.getPayablesSummaryByIds,
     resolvePayeeBank: (ref) => composePayeeBank(pools.contractorReadPort, ref),
     resolveUserName: (id) => resolveUserName(pools.authUserReadPort, id),
     shutdown: pools.shutdown,
