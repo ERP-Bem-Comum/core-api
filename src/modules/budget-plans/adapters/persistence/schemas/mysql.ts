@@ -111,9 +111,82 @@ export const bgpOutbox = mysqlTable(
   ],
 );
 
+// ─── bgp_cost_centers ───────────────────────────────────────────────────────
+// Raiz da árvore de custos (Fatia 2/US2). Adjacency por FK (3 tabelas tipadas por
+// nível), NÃO tabela única auto-referenciada. `direction` (A PAGAR/A RECEBER) só
+// existe na raiz. Reescrita por inteiro (replace-all) a cada `save` da estrutura.
+export const costCenters = mysqlTable(
+  'bgp_cost_centers',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    budgetPlanId: varchar('budget_plan_id', { length: 36 }).notNull(),
+    name: varchar('name', { length: 255 }).notNull(),
+    direction: varchar('direction', { length: 16 }).notNull(),
+  },
+  (t) => [
+    check('bgp_cost_centers_direction_chk', sql`${t.direction} IN ('A PAGAR','A RECEBER')`),
+    // FK intra-módulo → agregado raiz (ON DELETE CASCADE — apaga a árvore quando o plano cai).
+    // O índice implícito da FK já cobre `findByBudgetPlanId` (WHERE budget_plan_id) — sem índice redundante.
+    foreignKey({
+      name: 'bgp_cost_centers_budget_plan_id_fk',
+      columns: [t.budgetPlanId],
+      foreignColumns: [budgetPlans.id],
+    }).onDelete('cascade'),
+  ],
+);
+
+// ─── bgp_categories ─────────────────────────────────────────────────────────
+// Nível intermediário. Sem `direction`/`launch_type` (herdados só na raiz/folha).
+export const categories = mysqlTable(
+  'bgp_categories',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    costCenterId: varchar('cost_center_id', { length: 36 }).notNull(),
+    name: varchar('name', { length: 255 }).notNull(),
+  },
+  (t) => [
+    // O índice implícito da FK já cobre a reconstrução (`WHERE cost_center_id IN (...)`) — sem índice redundante.
+    foreignKey({
+      name: 'bgp_categories_cost_center_id_fk',
+      columns: [t.costCenterId],
+      foreignColumns: [costCenters.id],
+    }).onDelete('cascade'),
+  ],
+);
+
+// ─── bgp_subcategories ──────────────────────────────────────────────────────
+// Folha da árvore. `launch_type` (modelo de lançamento, US3) só existe aqui.
+export const subcategories = mysqlTable(
+  'bgp_subcategories',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    categoryId: varchar('category_id', { length: 36 }).notNull(),
+    name: varchar('name', { length: 255 }).notNull(),
+    launchType: varchar('launch_type', { length: 24 }).notNull(),
+  },
+  (t) => [
+    check(
+      'bgp_subcategories_launch_type_chk',
+      sql`${t.launchType} IN ('IPCA','CAED','DESPESAS_PESSOAIS','DESPESAS_LOGISTICAS')`,
+    ),
+    // O índice implícito da FK já cobre a reconstrução (`WHERE category_id IN (...)`) — sem índice redundante.
+    foreignKey({
+      name: 'bgp_subcategories_category_id_fk',
+      columns: [t.categoryId],
+      foreignColumns: [categories.id],
+    }).onDelete('cascade'),
+  ],
+);
+
 export type BudgetPlanRow = typeof budgetPlans.$inferSelect;
 export type NewBudgetPlanRow = typeof budgetPlans.$inferInsert;
 export type BudgetRow = typeof budgets.$inferSelect;
 export type NewBudgetRow = typeof budgets.$inferInsert;
 export type BgpOutboxRow = typeof bgpOutbox.$inferSelect;
 export type NewBgpOutboxRow = typeof bgpOutbox.$inferInsert;
+export type CostCenterRow = typeof costCenters.$inferSelect;
+export type NewCostCenterRow = typeof costCenters.$inferInsert;
+export type CategoryRow = typeof categories.$inferSelect;
+export type NewCategoryRow = typeof categories.$inferInsert;
+export type SubcategoryRow = typeof subcategories.$inferSelect;
+export type NewSubcategoryRow = typeof subcategories.$inferInsert;

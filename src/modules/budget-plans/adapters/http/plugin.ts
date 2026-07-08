@@ -39,6 +39,7 @@ import {
   budgetPlanListItemToDto,
   budgetPlanDetailToDto,
 } from './budget-plan-dto.ts';
+import { costStructureToDto } from './cost-structure-dto.ts';
 import {
   createBudgetPlanBodySchema,
   listBudgetPlansQuerySchema,
@@ -47,6 +48,10 @@ import {
   budgetPlanDetailSchema,
   budgetPlanOptionsSchema,
   createBudgetPlanResponseSchema,
+  addCostCenterBodySchema,
+  addCategoryBodySchema,
+  addSubcategoryBodySchema,
+  costStructureTreeSchema,
 } from './schemas.ts';
 import { BUDGET_PLAN_PERMISSION } from '../../public-api/permissions.ts';
 
@@ -69,6 +74,16 @@ const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
   'program-catalog-unavailable': 503,
   'partner-network-unavailable': 503,
   'outbox-append-failed': 503,
+  // Árvore de custos (Fatia 2/US2). Plano APROVADO bloqueia escrita -> 409; nó órfão/nome
+  // vazio -> 400; direção/lançamento inválidos -> 422; infra da árvore -> 503.
+  'budget-plan-not-editable': 409,
+  'cost-node-parent-not-found': 400,
+  'cost-node-name-required': 400,
+  'cost-node-invalid-direction': 422,
+  'cost-node-invalid-launch-type': 422,
+  'cost-center-id-invalid': 422,
+  'category-id-invalid': 422,
+  'cost-structure-repo-unavailable': 503,
 };
 
 const writeErrorStatus = (code: string): number => WRITE_ERROR_STATUS[code] ?? 422;
@@ -157,6 +172,87 @@ const budgetPlansRoutes =
         const result = await deps.getBudgetPlan(req.params.id);
         if (!result.ok) return sendWriteError(reply, result.error);
         return sendResult(reply, ok(budgetPlanDetailToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /budget-plans/:id/cost-structure — árvore de custos do plano (CA1). Árvore vazia
+    // é válida (plano sem nós). Segmento extra evita colisão com /budget-plans/:id.
+    scope.route({
+      method: 'GET',
+      url: '/budget-plans/:id/cost-structure',
+      preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.read)],
+      schema: {
+        params: budgetPlanIdParamSchema,
+        response: { 200: costStructureTreeSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.getCostStructure(req.params.id);
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return sendResult(reply, ok(costStructureToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // POST /budget-plans/:id/cost-structure/cost-centers — adiciona raiz (CA2). 201 + árvore.
+    scope.route({
+      method: 'POST',
+      url: '/budget-plans/:id/cost-structure/cost-centers',
+      preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.write)],
+      schema: {
+        params: budgetPlanIdParamSchema,
+        body: addCostCenterBodySchema,
+        response: { 201: costStructureTreeSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.addCostCenter({
+          budgetPlanId: req.params.id,
+          name: req.body.name,
+          direction: req.body.direction,
+        });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return sendResult(reply, ok(costStructureToDto(result.value)), { ok: 201 });
+      },
+    });
+
+    // POST /budget-plans/:id/cost-structure/categories — adiciona categoria a um cost-center (CA2).
+    scope.route({
+      method: 'POST',
+      url: '/budget-plans/:id/cost-structure/categories',
+      preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.write)],
+      schema: {
+        params: budgetPlanIdParamSchema,
+        body: addCategoryBodySchema,
+        response: { 201: costStructureTreeSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.addCategory({
+          budgetPlanId: req.params.id,
+          costCenterId: req.body.costCenterId,
+          name: req.body.name,
+        });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return sendResult(reply, ok(costStructureToDto(result.value)), { ok: 201 });
+      },
+    });
+
+    // POST /budget-plans/:id/cost-structure/subcategories — adiciona folha a uma categoria (CA2).
+    scope.route({
+      method: 'POST',
+      url: '/budget-plans/:id/cost-structure/subcategories',
+      preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.write)],
+      schema: {
+        params: budgetPlanIdParamSchema,
+        body: addSubcategoryBodySchema,
+        response: { 201: costStructureTreeSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.addSubcategory({
+          budgetPlanId: req.params.id,
+          categoryId: req.body.categoryId,
+          name: req.body.name,
+          launchType: req.body.launchType,
+        });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return sendResult(reply, ok(costStructureToDto(result.value)), { ok: 201 });
       },
     });
   };

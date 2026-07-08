@@ -10,14 +10,22 @@ import { buildProgramsReadPort } from '#src/modules/programs/public-api/read.ts'
 import { buildPartnersReadPort } from '#src/modules/partners/public-api/read.ts';
 
 import { InMemoryBudgetPlanRepository } from '../persistence/repos/budget-plan-repository.in-memory.ts';
+import { InMemoryCostStructureRepository } from '../persistence/repos/cost-structure-repository.in-memory.ts';
 import { InMemoryProgramCatalog } from '../catalog/program-catalog.in-memory.ts';
 import { InMemoryPartnerNetwork } from '../network/partner-network.in-memory.ts';
 import { ProgramCatalogFromPrograms } from '../catalog/program-catalog.from-programs.ts';
 import { PartnerNetworkFromPartners } from '../network/partner-network.from-partners.ts';
 import { openBudgetPlansMysql } from '../persistence/drivers/mysql-driver.ts';
 import { createDrizzleBudgetPlanRepository } from '../persistence/repos/budget-plan-repository.drizzle.ts';
+import { createDrizzleCostStructureRepository } from '../persistence/repos/cost-structure-repository.drizzle.ts';
 
+import * as BudgetPlanId from '../../domain/shared/budget-plan-id.ts';
+import { ProgramRef } from '../../domain/shared/refs.ts';
+import * as PlanVersion from '../../domain/budget-plan/version.ts';
+import type { BudgetPlan as BudgetPlanEntity } from '../../domain/budget-plan/types.ts';
+import type { BudgetPlanStatus } from '../../domain/budget-plan/status.ts';
 import type { BudgetPlanRepository } from '../../domain/budget-plan/repository.ts';
+import type { CostStructureRepository } from '../../domain/cost-structure/repository.ts';
 import type {
   ProgramCatalogPort,
   ProgramSnapshot,
@@ -27,12 +35,60 @@ import { createBudgetPlan } from '../../application/use-cases/create-budget-plan
 import { listBudgetPlans } from '../../application/use-cases/list-budget-plans.ts';
 import { getBudgetPlan } from '../../application/use-cases/get-budget-plan.ts';
 import { getBudgetPlanOptions } from '../../application/use-cases/get-budget-plan-options.ts';
+import { getCostStructure } from '../../application/use-cases/get-cost-structure.ts';
+import { addCostCenter } from '../../application/use-cases/add-cost-center.ts';
+import { addCategory } from '../../application/use-cases/add-category.ts';
+import { addSubcategory } from '../../application/use-cases/add-subcategory.ts';
 
 export type BudgetPlansSeed = Readonly<{
   programs?: readonly ProgramSnapshot[];
   partnerStates?: readonly Readonly<{ ref: string; name: string; uf: string }>[];
   partnerMunicipalities?: readonly Readonly<{ ref: string; name: string; uf: string }>[];
+  // Planos pré-existentes (dev/testes). Habilita cenários que o agregado não produz —
+  // ex.: plano APROVADO p/ exercitar o bloqueio de escrita da árvore (CA3) na borda.
+  plans?: readonly Readonly<{
+    id: string;
+    year: number;
+    programRef: string;
+    status: BudgetPlanStatus;
+  }>[];
 }>;
+
+// Timestamp fixo dos planos semeados — irrelevante para os cenários da árvore de custos.
+const PLAN_SEED_AT = new Date('2026-01-01T00:00:00.000Z');
+
+const seedPlans = async (
+  planRepo: BudgetPlanRepository,
+  plans: readonly Readonly<{
+    id: string;
+    year: number;
+    programRef: string;
+    status: BudgetPlanStatus;
+  }>[],
+): Promise<void> => {
+  for (const p of plans) {
+    const id = BudgetPlanId.rehydrate(p.id);
+    if (!id.ok) throw new Error(`budget-plans-composition: seed plan id inválido (${p.id})`);
+    const programRef = ProgramRef.rehydrate(p.programRef);
+    if (!programRef.ok) {
+      throw new Error(`budget-plans-composition: seed programRef inválido (${p.programRef})`);
+    }
+    const plan: BudgetPlanEntity = {
+      id: id.value,
+      year: p.year,
+      programRef: programRef.value,
+      version: PlanVersion.initial(),
+      status: p.status,
+      budgets: [],
+      createdAt: PLAN_SEED_AT,
+      updatedAt: PLAN_SEED_AT,
+    };
+    const saved = await planRepo.save(plan, []);
+    if (!saved.ok) {
+      throw new Error(`budget-plans-composition: seed plan save falhou (${saved.error})`);
+    }
+  }
+};
 
 export type BudgetPlansCompositionConfig =
   | Readonly<{
@@ -49,20 +105,35 @@ export type BudgetPlansHttpDeps = Readonly<{
   listBudgetPlans: ReturnType<typeof listBudgetPlans>;
   getBudgetPlan: ReturnType<typeof getBudgetPlan>;
   getBudgetPlanOptions: ReturnType<typeof getBudgetPlanOptions>;
+  getCostStructure: ReturnType<typeof getCostStructure>;
+  addCostCenter: ReturnType<typeof addCostCenter>;
+  addCategory: ReturnType<typeof addCategory>;
+  addSubcategory: ReturnType<typeof addSubcategory>;
   shutdown: () => Promise<void>;
 }>;
 
 type Pools = Readonly<{
   planRepo: BudgetPlanRepository;
+  costStructureRepo: CostStructureRepository;
   programCatalog: ProgramCatalogPort;
   partnerNetwork: PartnerNetworkPort;
   shutdown: () => Promise<void>;
 }>;
 
-const buildMemoryPools = (seed: BudgetPlansSeed | undefined): Pools => {
+const buildMemoryPools = async (seed: BudgetPlansSeed | undefined): Promise<Pools> => {
   const { repo: planRepo } = InMemoryBudgetPlanRepository();
+  await seedPlans(planRepo, seed?.plans ?? []);
+
+  // O writer atômico da árvore lê o status por FORA da árvore — aqui derivado do planRepo
+  // (espelha o `SELECT status FOR UPDATE` do adapter drizzle). Plano ausente -> null.
+  const costStructureRepo = InMemoryCostStructureRepository(async (id) => {
+    const found = await planRepo.findById(id);
+    return found.ok && found.value !== null ? found.value.status : null;
+  }).repo;
+
   return {
     planRepo,
+    costStructureRepo,
     programCatalog: InMemoryProgramCatalog(seed?.programs ?? []),
     partnerNetwork: InMemoryPartnerNetwork({
       states: seed?.partnerStates ?? [],
@@ -101,6 +172,7 @@ const buildMysqlPools = async (connectionString: string): Promise<Pools> => {
 
   return {
     planRepo: createDrizzleBudgetPlanRepository(handle),
+    costStructureRepo: createDrizzleCostStructureRepository(handle),
     programCatalog: ProgramCatalogFromPrograms(programsPort),
     partnerNetwork: PartnerNetworkFromPartners(partnersPort),
     shutdown: async () => {
@@ -113,12 +185,16 @@ const buildMysqlPools = async (connectionString: string): Promise<Pools> => {
 
 const makeDeps = (pools: Pools): BudgetPlansHttpDeps => {
   const clock = ClockReal();
-  const { planRepo, programCatalog, partnerNetwork } = pools;
+  const { planRepo, costStructureRepo, programCatalog, partnerNetwork } = pools;
   return {
     createBudgetPlan: createBudgetPlan({ planRepo, programCatalog, clock }),
     listBudgetPlans: listBudgetPlans({ planRepo, programCatalog }),
     getBudgetPlan: getBudgetPlan({ planRepo, programCatalog }),
     getBudgetPlanOptions: getBudgetPlanOptions({ planRepo, programCatalog, partnerNetwork, clock }),
+    getCostStructure: getCostStructure({ costStructureRepo, planRepo }),
+    addCostCenter: addCostCenter({ costStructureRepo }),
+    addCategory: addCategory({ costStructureRepo }),
+    addSubcategory: addSubcategory({ costStructureRepo }),
     shutdown: pools.shutdown,
   };
 };
@@ -127,7 +203,7 @@ export const buildBudgetPlansHttpDeps = async (
   config: BudgetPlansCompositionConfig,
 ): Promise<BudgetPlansHttpDeps> => {
   if (config.driver === 'memory') {
-    return makeDeps(buildMemoryPools(config.seed));
+    return makeDeps(await buildMemoryPools(config.seed));
   }
   return makeDeps(await buildMysqlPools(config.connectionString));
 };

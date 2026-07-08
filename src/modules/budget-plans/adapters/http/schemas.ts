@@ -127,3 +127,70 @@ export const createBudgetPlanResponseSchema = z.object({
 });
 
 export type CreateBudgetPlanResponseDto = z.infer<typeof createBudgetPlanResponseSchema>;
+
+// ─── Árvore de custos (Fatia 2/US2, BDG-COST-STRUCTURE) ──────────────────────────────
+// Valores de fio idênticos ao domínio (cost-direction.ts / launch-type.ts). Zod só na borda:
+// o domínio recebe a string crua e re-valida via `parse` (invalid-direction/launch-type -> 422).
+const costDirectionSchema = z
+  .enum(['A PAGAR', 'A RECEBER'])
+  .meta({ description: 'Direcionamento do centro de custo' });
+const launchTypeSchema = z
+  .enum(['IPCA', 'CAED', 'DESPESAS_PESSOAIS', 'DESPESAS_LOGISTICAS'])
+  .meta({ description: 'Modelo de lançamento da subcategoria' });
+
+// Teto de `name` casado com a coluna `varchar(255)` das 3 tabelas bgp_* — barra input
+// ilimitado na borda antes de persistir (molde de financial/contracts).
+const NODE_NAME_MAX = 255;
+
+/** Body do POST .../cost-structure/cost-centers. */
+export const addCostCenterBodySchema = z.object({
+  name: z.string().min(1).max(NODE_NAME_MAX),
+  direction: costDirectionSchema,
+});
+
+export type AddCostCenterBody = z.infer<typeof addCostCenterBodySchema>;
+
+/** Body do POST .../cost-structure/categories. */
+export const addCategoryBodySchema = z.object({
+  costCenterId: z.uuid(),
+  name: z.string().min(1).max(NODE_NAME_MAX),
+});
+
+export type AddCategoryBody = z.infer<typeof addCategoryBodySchema>;
+
+/** Body do POST .../cost-structure/subcategories. */
+export const addSubcategoryBodySchema = z.object({
+  categoryId: z.uuid(),
+  name: z.string().min(1).max(NODE_NAME_MAX),
+  launchType: launchTypeSchema,
+});
+
+export type AddSubcategoryBody = z.infer<typeof addSubcategoryBodySchema>;
+
+// Response: árvore FIXA de 3 níveis (cost-center -> category -> subcategory).
+const subcategoryNodeSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  launchType: launchTypeSchema,
+});
+
+const categoryNodeSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  subcategories: z.array(subcategoryNodeSchema),
+});
+
+const costCenterNodeSchema = z.object({
+  id: z.uuid(),
+  name: z.string(),
+  direction: costDirectionSchema,
+  categories: z.array(categoryNodeSchema),
+});
+
+/** Response (GET árvore + 201 dos 3 POSTs): a árvore inteira após a operação. */
+export const costStructureTreeSchema = z.object({
+  budgetPlanId: z.uuid(),
+  costCenters: z.array(costCenterNodeSchema),
+});
+
+export type CostStructureTreeDto = z.infer<typeof costStructureTreeSchema>;
