@@ -140,9 +140,14 @@ describe('withRateLimit — decorator anti-flood do EmailSender (#133)', () => {
   });
 });
 
-describe('rateLimitConfigFromEnv — fail-loud (#133 M3)', () => {
-  it('off quando EMAIL_RATE_LIMIT_MAX ausente', () => {
-    assert.equal(rateLimitConfigFromEnv({}).kind, 'off');
+describe('rateLimitConfigFromEnv — secure-by-default + fail-loud (#133 M3)', () => {
+  it('LIGADO com defaults quando ausente (secure-by-default: 10/hora por destinatario)', () => {
+    const c = rateLimitConfigFromEnv({});
+    assert.equal(c.kind, 'on');
+    if (c.kind === 'on') {
+      assert.equal(c.policy.maxPerWindow, 10);
+      assert.equal(c.policy.windowMs, 3_600_000);
+    }
   });
   it('on com policy quando valido (window default 1h)', () => {
     const c = rateLimitConfigFromEnv({ EMAIL_RATE_LIMIT_MAX: '5' });
@@ -152,7 +157,7 @@ describe('rateLimitConfigFromEnv — fail-loud (#133 M3)', () => {
       assert.equal(c.policy.windowMs, 3_600_000);
     }
   });
-  it('invalid (nao off) quando presente porem malformado', () => {
+  it('invalid (boot falha, nao desliga em silencio) quando presente porem malformado', () => {
     assert.equal(rateLimitConfigFromEnv({ EMAIL_RATE_LIMIT_MAX: '0' }).kind, 'invalid');
     assert.equal(rateLimitConfigFromEnv({ EMAIL_RATE_LIMIT_MAX: 'abc' }).kind, 'invalid');
     assert.equal(

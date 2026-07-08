@@ -46,11 +46,11 @@ export const buildEmailSender = (
     config.value.sandboxTo !== undefined ? withSandboxRedirect(base, config.value.sandboxTo) : base;
 
   // Rate-limit (#133) e o decorator MAIS EXTERNO: conta o destinatario REAL, antes de o sandbox
-  // reescrever o `to`. Config presente-porem-invalida FALHA O BOOT (M3, fail-loud — nao desliga em silencio).
+  // reescrever o `to`. LIGADO por padrao (secure-by-default) — o env so ajusta o numero; config
+  // presente-porem-invalida FALHA O BOOT (M3, fail-loud — nao desliga em silencio).
   const rl = rateLimitConfigFromEnv(env);
   if (rl.kind === 'invalid') return err({ tag: 'invalid-rate-limit', reason: rl.reason });
-  const sender =
-    rl.kind === 'on' ? withRateLimit(sandboxed, rl.policy, () => Date.now()) : sandboxed;
+  const sender = withRateLimit(sandboxed, rl.policy, () => Date.now());
 
   return ok(sender);
 };

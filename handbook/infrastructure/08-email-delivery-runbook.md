@@ -68,6 +68,11 @@ SMTP_PORT=587
 SMTP_SECURE=false                         # false p/ 587 (STARTTLS); true p/ 465
 SMTP_USER=no-reply@dominio
 SMTP_PASS=<secret>
+# Rate-limit anti-flood por destinatário (#133) — LIGADO por padrão (secure-by-default).
+# Ausentes = 10 e-mails/destinatário/hora. Só AJUSTE o número; não há como desligar por env.
+# Valor inválido (0/negativo/não-inteiro) FAZ O BOOT FALHAR (fail-loud).
+EMAIL_RATE_LIMIT_MAX=10                    # inteiro > 0 (por destinatário, por janela)
+EMAIL_RATE_LIMIT_WINDOW_MS=3600000        # janela em ms (default 1h)
 EMAIL_FROM="Bem Comum <no-reply@dominio>"
 # Fontes do worker (auth obrigatório; partners opcional)
 AUTH_DATABASE_URL=mysql://...

@@ -84,27 +84,31 @@ export const withRateLimit = (
   };
 };
 
-/** Estado da config de rate-limit a partir do ambiente (fail-loud: `invalid` != `off`). */
+/** Estado da config de rate-limit a partir do ambiente (SEMPRE ligado; `invalid` faz o boot falhar). */
 export type RateLimitConfig =
-  | Readonly<{ kind: 'off' }>
   | Readonly<{ kind: 'on'; policy: RateLimitPolicy }>
   | Readonly<{ kind: 'invalid'; reason: string }>;
 
-// off  = EMAIL_RATE_LIMIT_MAX ausente (rate-limit desligado por opcao).
-// on   = valores validos.
-// invalid = presente porem malformado — o boot deve tratar (nao desligar em silencio; #133 M3, CWE-636).
+// Defaults SECURE-BY-DEFAULT (#133): 10 e-mails por destinatario por hora — folgado para uso legitimo
+// (reset/convite), corta flood. Por-destinatario, nao global.
+const DEFAULT_MAX_PER_WINDOW = 10;
+const DEFAULT_WINDOW_MS = 3_600_000; // 1h
+
+// LIGADO por padrao: EMAIL_RATE_LIMIT_MAX/_WINDOW_MS ausentes usam os defaults (nao desliga).
+// O deploy so AJUSTA o numero. Valor presente-porem-invalido (0/negativo/nao-inteiro) => `invalid` =>
+// boot falha alto (fail-loud, #133 M3, CWE-636). Nao ha opt-out por env (anti-abuso sempre ativo).
 export const rateLimitConfigFromEnv = (
   env: Readonly<Record<string, string | undefined>>,
 ): RateLimitConfig => {
   const maxRaw = env['EMAIL_RATE_LIMIT_MAX'];
-  if (maxRaw === undefined || maxRaw.trim().length === 0) return { kind: 'off' };
-  const maxPerWindow = Number(maxRaw);
+  const maxPerWindow =
+    maxRaw !== undefined && maxRaw.trim().length > 0 ? Number(maxRaw) : DEFAULT_MAX_PER_WINDOW;
   if (!Number.isInteger(maxPerWindow) || maxPerWindow <= 0) {
-    return { kind: 'invalid', reason: `EMAIL_RATE_LIMIT_MAX invalido: ${maxRaw}` };
+    return { kind: 'invalid', reason: `EMAIL_RATE_LIMIT_MAX invalido: ${String(maxRaw)}` };
   }
   const windowRaw = env['EMAIL_RATE_LIMIT_WINDOW_MS'];
   const windowMs =
-    windowRaw !== undefined && windowRaw.trim().length > 0 ? Number(windowRaw) : 3_600_000;
+    windowRaw !== undefined && windowRaw.trim().length > 0 ? Number(windowRaw) : DEFAULT_WINDOW_MS;
   if (!Number.isInteger(windowMs) || windowMs <= 0) {
     return { kind: 'invalid', reason: `EMAIL_RATE_LIMIT_WINDOW_MS invalido: ${String(windowRaw)}` };
   }
