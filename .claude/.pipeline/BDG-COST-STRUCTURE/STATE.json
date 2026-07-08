@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "BDG-COST-STRUCTURE",
+  "size": "M",
+  "createdAt": "2026-07-08T10:24:03.813Z",
+  "closedAt": null,
+  "currentWave": "W1",
+  "status": "in-progress",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-08T10:24:04.213Z",
+      "finishedAt": "2026-07-08T10:32:53.323Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "in-progress",
+      "agent": "ts-domain-modeler",
+      "startedAt": "2026-07-08T10:32:53.723Z",
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W2",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W3",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "W1 started (ts-domain-modeler)"
+}
