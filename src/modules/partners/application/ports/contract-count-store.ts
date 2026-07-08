@@ -17,6 +17,14 @@ export type ContractCountStore = Readonly<{
   ) => Promise<Result<void, ContractCountStoreError>>;
   getCount: (contractorRef: string) => Promise<Result<number, ContractCountStoreError>>;
   /**
+   * Define a contagem **absoluta** de um `contractorRef` (recomputada da fonte da verdade). Idempotente
+   * por natureza — re-executar com o mesmo valor converge ao mesmo estado (≠ `applyDelta`, que soma).
+   * Usado pelo backfill/reconciliação (#110/#129); não registra `eventId` (não é um evento de domínio).
+   */
+  setCount: (
+    input: Readonly<{ contractorRef: string; activeCount: number }>,
+  ) => Promise<Result<void, ContractCountStoreError>>;
+  /**
    * Batch: contagem de vários refs numa única leitura (anti-N+1 nos grids paginados). O map só
    * traz os refs presentes no read-model; ausentes resolvem a `0` no chamador (CA2 da #105).
    */

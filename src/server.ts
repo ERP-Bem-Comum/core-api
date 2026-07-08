@@ -31,6 +31,7 @@ import {
 import {
   collaboratorsHttpPlugin,
   suppliersHttpPlugin,
+  suppliersBatchHttpPlugin,
   financiersHttpPlugin,
   partnerGeographyHttpPlugin,
   actHttpPlugin,
@@ -226,6 +227,11 @@ const main = async (): Promise<void> => {
       authHttpPlugin(authDeps),
       contractsHttpPlugin(contractsDeps, { requireAuth, authorize: authDeps.authorize }),
       financialHttpPlugin(financialDeps, { requireAuth, authorize: authDeps.authorize }),
+      // Resolução em lote de fornecedores (#356; ADR-0049 §3) → /api/v2/partners/suppliers:batch.
+      suppliersBatchHttpPlugin(partnersDeps, {
+        requireAuth,
+        authorize: authDeps.authorize,
+      }),
       // Espelho do legado (ADR-0033) → /api/v1.
       {
         plugin: collaboratorsHttpPlugin(partnersDeps, {

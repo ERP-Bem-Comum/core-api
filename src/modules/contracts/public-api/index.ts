@@ -118,3 +118,15 @@ export type {
   ContractCategorizationReadError,
   ContractCategorizationView,
 } from './read.ts';
+
+// #110 — PAR-CONTRACT-COUNT-BACKFILL: public-api de leitura da contagem de contratos vivos por
+// contraparte (consumida pelo job de backfill do partners, ADR-0006).
+export { buildContractsContractCountReadPort, makeInMemoryContractCountRead } from './read.ts';
+export type {
+  ContractsContractCountReadPort,
+  BuildContractsContractCountReadPortOptions,
+  BuildContractsContractCountReadPortError,
+  ContractCountReadPort,
+  ContractCountReadError,
+  ContractCountByContractor,
+} from './read.ts';
