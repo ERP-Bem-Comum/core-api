@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "FIN-SUPPLIER-VIEW-BACKFILL-RERUN",
+  "size": "S",
+  "createdAt": "2026-07-08T03:59:03.295Z",
+  "closedAt": null,
+  "currentWave": "W0",
+  "status": "in-progress",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "in-progress",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-08T04:00:01.196Z",
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W1",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W2",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W3",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "W0 started (tdd-strategist)"
+}
