@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "CI-NOTIFICATIONS-MAILPIT",
+  "size": "M",
+  "createdAt": "2026-07-02T15:43:04.312Z",
+  "closedAt": null,
+  "currentWave": "W0",
+  "status": "in-progress",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "in-progress",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-02T15:43:04.619Z",
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W1",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W2",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W3",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "W0 started (tdd-strategist)"
+}
