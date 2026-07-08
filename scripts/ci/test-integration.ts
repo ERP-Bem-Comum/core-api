@@ -15,7 +15,7 @@ import process from 'node:process';
 const EX_USAGE = 64; // sysexits.h — uso inválido.
 
 type Suite = Readonly<{
-  services: readonly ('mysql' | 'minio')[];
+  services: readonly ('mysql' | 'minio' | 'mailpit')[];
   secrets: boolean; // cria os secrets de teste do MySQL
   env: Readonly<Record<string, string>>;
   concurrency1: boolean; // --test-concurrency=1
@@ -147,9 +147,21 @@ const SUITES: Readonly<Record<string, Suite>> = {
     paths: ['tests/infra/mysql-compose.test.ts'],
   },
   notifications: {
-    services: [],
+    // sobe o Mailpit do compose (profile `mail`; nomeá-lo no `up` ativa o profile) — SMTP efêmero.
+    services: ['mailpit'],
     secrets: false,
-    env: { NOTIFICATIONS_INTEGRATION: '1' },
+    env: {
+      NOTIFICATIONS_INTEGRATION: '1',
+      EMAIL_PROVIDER: 'smtp',
+      SMTP_HOST: '127.0.0.1',
+      SMTP_PORT: '1025',
+      SMTP_SECURE: 'false',
+      SMTP_REQUIRE_TLS: 'false',
+      // Mailpit aceita qualquer credencial (MP_SMTP_AUTH_ACCEPT_ANY) — valores dummy.
+      SMTP_USER: 'ci',
+      SMTP_PASS: 'ci',
+      EMAIL_FROM: 'CI <ci@local>',
+    },
     concurrency1: false,
     paths: ['tests/modules/notifications/**/*.test.ts'],
   },
