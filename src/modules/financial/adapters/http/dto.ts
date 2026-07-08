@@ -25,6 +25,7 @@ import type { ProgramView } from '../../application/ports/program-read.ts';
 import type { PaidPayableView } from '../../application/ports/payable-reconciliation-view.ts';
 // #357: resumo de título em lote (POST /financial/payables:batch — ADR-0049).
 import type { PayableSummaryRow } from '../../application/ports/payable-summary-by-ids-view.ts';
+import type { DocumentSummaryRow } from '../../application/ports/document-summary-by-ids-view.ts';
 import type { MatchSuggestion } from '../../application/use-cases/suggest-matches.ts';
 import type { GetStatementSuggestionsOutput } from '../../application/use-cases/get-statement-suggestions.ts';
 import type {
@@ -44,6 +45,7 @@ import type {
   DocumentTypeMetadataResponseDto,
   RecentPaymentDto,
   PayableBatchItemDto,
+  DocumentBatchItemDto,
 } from './schemas.ts';
 import type { PayeeBankBlock } from './payee-bank-composition.ts';
 
@@ -109,6 +111,21 @@ export const payableBatchItemToDto = (row: PayableSummaryRow): PayableBatchItemD
   supplierRef: row.supplierRef,
   supplierName: row.supplierName,
   supplierDocument: row.supplierDocument,
+});
+
+/** #358: item de POST /financial/documents:batch — resumo do documento p/ refs auxiliares do drawer
+ * de Detalhe (#95), sem N+1. `ref` = documentId (o BFF casa por `ref`, não por posição). netValueCents
+ * e dueDate nullable (Draft). */
+export const documentBatchItemToDto = (row: DocumentSummaryRow): DocumentBatchItemDto => ({
+  ref: row.documentId,
+  documentNumber: row.documentNumber,
+  type: row.type,
+  status: row.status,
+  supplierRef: row.supplierRef,
+  supplierName: row.supplierName,
+  supplierDocument: row.supplierDocument,
+  netValueCents: row.netValueCents !== null ? moneyToCentsString(row.netValueCents) : null,
+  dueDate: row.dueDate !== null ? row.dueDate.toISOString().slice(0, 10) : null,
 });
 
 /**

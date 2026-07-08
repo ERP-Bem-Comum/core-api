@@ -934,6 +934,35 @@ export const payablesBatchResponseSchema = z.object({
   missing: z.array(z.uuid()),
 });
 
+// ─── Resolução em lote (#358, ADR-0049) — POST /financial/documents:batch ─────
+// Destrava o drawer de Detalhe (#95): documentId[] → resumo do documento (refs auxiliares em 1 hop),
+// já com supplierName/supplierDocument (fin_supplier_view). Subset de documentSummarySchema (linha 270)
+// — sem series/grossValueCents/paymentMethod/contractRef/issueDate/version (fora do que o drawer resolve
+// via batch). `ref` = documentId. Espelha o slice de payables (#357) trocando payable→documento.
+export const documentsBatchBodySchema = z.object({
+  refs: z.array(z.uuid()).min(1).max(200),
+});
+
+export const documentBatchItemSchema = z.object({
+  ref: z.uuid(),
+  documentNumber: z.string().nullable(),
+  type: z.string().nullable(),
+  status: z.string(),
+  supplierRef: z.string().nullable(),
+  supplierName: z.string().nullable(),
+  supplierDocument: z.string().nullable(),
+  netValueCents: centsStringSchema.nullable(),
+  dueDate: z.string().nullable(),
+});
+
+export type DocumentBatchItemDto = z.infer<typeof documentBatchItemSchema>;
+
+export const documentsBatchResponseSchema = z.object({
+  items: z.array(documentBatchItemSchema),
+  // UUIDs válidos sem registro correspondente — o lote não aborta por isso (degradação graciosa).
+  missing: z.array(z.uuid()),
+});
+
 // ─── Baixa manual de título (#219/#224) — POST /documents/:id/payables/:payableId/manual-payment ──
 export const documentPayableParamsSchema = z.object({
   id: z.uuid().meta({ description: 'UUID do documento' }),

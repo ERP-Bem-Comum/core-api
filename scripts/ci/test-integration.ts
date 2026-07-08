@@ -113,6 +113,7 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/financial/adapters/persistence/payable-document-view.drizzle-mysql.test.ts',
     // #357 — PayableSummaryByIdsView (JOIN fin_payables × fin_documents × fin_supplier_view p/ payables:batch)
     'tests/modules/financial/adapters/persistence/payable-summary-by-ids-view.drizzle-mysql.test.ts',
+    'tests/modules/financial/adapters/persistence/document-summary-by-ids-view.drizzle-mysql.test.ts',
     'tests/workers/supplier-view-projection/projection.integration.test.ts',
   ]),
   'etl:orchestrate': mysqlSuite(ETL_DB_ENV, ['tests/etl/orchestrate.integration.test.ts']),

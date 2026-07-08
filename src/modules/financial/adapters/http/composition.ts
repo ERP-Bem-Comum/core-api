@@ -38,6 +38,13 @@ import {
 } from '../persistence/repos/payable-summary-by-ids-view.in-memory.ts';
 import { createDrizzlePayableSummaryByIdsView } from '../persistence/repos/payable-summary-by-ids-view.drizzle.ts';
 import type { PayableSummaryByIdsView } from '../../application/ports/payable-summary-by-ids-view.ts';
+// #358: resumo de documento em lote — POST /financial/documents:batch (ADR-0049).
+import {
+  createInMemoryDocumentSummaryByIdsView,
+  loadedDocumentToSummaryRow,
+} from '../persistence/repos/document-summary-by-ids-view.in-memory.ts';
+import { createDrizzleDocumentSummaryByIdsView } from '../persistence/repos/document-summary-by-ids-view.drizzle.ts';
+import type { DocumentSummaryByIdsView } from '../../application/ports/document-summary-by-ids-view.ts';
 import {
   createInMemoryTimelineRepository,
   type TimelineStore,
@@ -249,6 +256,8 @@ export type FinancialHttpDeps = Readonly<{
   listRecentPaid: PayableViewStore['listRecentPaid'];
   /** #357 · Resolução em lote de payableId[] — POST /financial/payables:batch (ADR-0049). */
   getPayablesSummaryByIds: PayableSummaryByIdsView['getPayablesSummaryByIds'];
+  /** #358 · Resolução em lote de documentId[] — POST /financial/documents:batch (ADR-0049). */
+  getDocumentsSummaryByIds: DocumentSummaryByIdsView['getDocumentsSummaryByIds'];
   /** Composição síncrona do bancário do favorecido (#255 — ADR-0032). */
   resolvePayeeBank: (ref: {
     kind: PayeeKind | null;
@@ -285,6 +294,8 @@ type Pools = Readonly<{
   payableDocView: PayableDocumentView;
   // #357: JOIN fin_payables × fin_documents × fin_supplier_view p/ POST /financial/payables:batch.
   payableSummaryByIdsView: PayableSummaryByIdsView;
+  // #358: SELECT fin_documents ⟕ recon ⟕ fin_supplier_view p/ POST /financial/documents:batch.
+  documentSummaryByIdsView: DocumentSummaryByIdsView;
   // #239: read-model de payables (Top-5 "Últimos pagamentos"). memory: vazio no boot (sem worker de
   // projeção síncrono — injetável em testes via config.payableViewStore); mysql: drizzle.
   payableViewStore: PayableViewStore;
@@ -421,6 +432,11 @@ const buildMemoryPools = (
     payableSummaryByIdsView: createInMemoryPayableSummaryByIdsView(() =>
       derivePayableListItems(documentSource()).map(payableListItemToSummaryRow),
     ),
+    // #358: derivação lazy do resumo de documento via documentSource (mesma fonte do payableListView).
+    // status cru + supplier null no driver memory (paridade com o grid in-memory `toListItem`).
+    documentSummaryByIdsView: createInMemoryDocumentSummaryByIdsView(() =>
+      documentSource().map(loadedDocumentToSummaryRow),
+    ),
     suggestionView,
     rejectedSuggestionRepo,
     periodStore,
@@ -517,6 +533,7 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     payableDocView: createDrizzlePayableDocumentView(handle),
     // #357: JOIN fin_payables × fin_documents × fin_supplier_view via Drizzle.
     payableSummaryByIdsView: createDrizzlePayableSummaryByIdsView(handle),
+    documentSummaryByIdsView: createDrizzleDocumentSummaryByIdsView(handle),
     // #239: injetado tem precedência (testes); mysql constrói o adapter Drizzle por padrão.
     payableViewStore: config.payableViewStore ?? createDrizzlePayableViewStore(handle, ClockReal()),
     suggestionView: createDrizzleSuggestionView(handle),
@@ -664,6 +681,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     listPrograms: pools.programReader.list,
     listRecentPaid: pools.payableViewStore.listRecentPaid,
     getPayablesSummaryByIds: pools.payableSummaryByIdsView.getPayablesSummaryByIds,
+    getDocumentsSummaryByIds: pools.documentSummaryByIdsView.getDocumentsSummaryByIds,
     resolvePayeeBank: (ref) => composePayeeBank(pools.contractorReadPort, ref),
     resolveUserName: (id) => resolveUserName(pools.authUserReadPort, id),
     shutdown: pools.shutdown,
