@@ -10,6 +10,7 @@ import {
   buildRawContentPdf,
   buildMultiStreamPdf,
   buildQuadraticScanBytes,
+  buildHostileToUnicodePdf,
 } from './pdf-builder.ts';
 
 type RetentionExpect = Readonly<{
@@ -129,6 +130,13 @@ export const MULTI_STREAM_BOMB = {
 // F4 — input acima de MAX_BYTES (8 MiB).
 export const OVERSIZE_INPUT = {
   bytes: (): Uint8Array => new Uint8Array(8 * 1024 * 1024 + 1),
+} as const;
+
+// #389 — CMap /ToUnicode hostil: bfchar aponta para codepoint > 0x10FFFF. Sem guarda de faixa,
+// parseToUnicode lançaria RangeError atravessando a borda do port (CWE-248). Esperado: Result
+// (mapeamento inválido ignorado → sem texto útil → scanned-unsupported), nunca exceção vazada.
+export const HOSTILE_TOUNICODE = {
+  bytes: (): Uint8Array => buildHostileToUnicodePdf('FFFFFF'),
 } as const;
 
 // --- #386 Fatia 1: PDF real (operador TJ, reconstrução de linha, DANFE) --------

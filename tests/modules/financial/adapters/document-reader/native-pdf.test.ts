@@ -21,6 +21,7 @@ import {
   FRAGMENTED_KEYWORD,
   DANFE_NATIVE,
   PENDING_AMPLIFY,
+  HOSTILE_TOUNICODE,
 } from './_fixtures/pdf-fixtures.ts';
 
 describe('financial/adapters/document-reader/native-pdf', () => {
@@ -184,6 +185,16 @@ describe('financial/adapters/document-reader/native-pdf', () => {
     // Sem o teto, 300k operandos acumulados explodiriam heap/tempo; com o teto, termina rápido.
     assert.ok(elapsed < 2000, `esperado < 2s, foi ${elapsed.toFixed(0)}ms`);
     // Sem texto mostrado (nenhum Tj/TJ) → sem conteúdo útil.
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'scanned-unsupported');
+  });
+
+  // --- #389: CMap /ToUnicode hostil não pode vazar RangeError pela borda do port ------
+  it('#389: CMap /ToUnicode com codepoint > 0x10FFFF → Result (não vaza RangeError)', async () => {
+    const reader = createNativePdfDocumentReader();
+    // Sem a guarda de faixa, parseToUnicode lançaria RangeError não capturado (CWE-248),
+    // que atravessa readNative → read e falsifica o contrato "reader só devolve Result".
+    const r = await reader.read({ bytes: HOSTILE_TOUNICODE.bytes() });
     assert.equal(r.ok, false);
     if (!r.ok) assert.equal(r.error, 'scanned-unsupported');
   });

@@ -281,6 +281,10 @@ export const finPayables = mysqlTable(
       'fin_payables_child_retention_chk',
       sql`(${t.kind} = 'Child') = (${t.retentionType} IS NOT NULL)`,
     ),
+    // #383: consistência status/paid_at — todo título 'Paid' tem data de pagamento. O invariante já
+    // vale no domínio (payPayableManually seta status+paidAt na mesma cópia); reafirmado no banco
+    // como defesa em profundidade contra linha inconsistente vinda de ETL/UPDATE manual.
+    check('fin_payables_paid_at_chk', sql`${t.status} <> 'Paid' OR ${t.paidAt} IS NOT NULL`),
 
     // FK intra-módulo (ON DELETE CASCADE — boundary do agregado).
     foreignKey({
