@@ -187,8 +187,10 @@ export const documentIdParamSchema = z.object({
 export const listDocumentsQuerySchema = z.object({
   // #204: Paid/Reconciled habilitam a fila de conciliação no grid (Reconciled é derivado em leitura).
   status: z.enum(['Draft', 'Open', 'Approved', 'Paid', 'Reconciled']).optional(),
-  supplierRef: z.uuid().optional(),
-  type: documentTypeSchema.optional(),
+  // #164: aceitam valor único (retrocompat) OU lista (?type=a&type=b) — Fastify entrega array em repetição.
+  // .max(50) espelha o teto dos demais arrays de input do arquivo (anti-amplificação de IN — CWE-770).
+  supplierRef: z.union([z.uuid(), z.array(z.uuid()).max(50)]).optional(),
+  type: z.union([documentTypeSchema, z.array(documentTypeSchema).max(50)]).optional(),
   dueFrom: z.iso.date().optional(),
   dueTo: z.iso.date().optional(),
   issuedFrom: z.iso.date().optional(), // #163: filtro por emissão (janela inclusiva)
@@ -203,11 +205,41 @@ export const listDocumentsQuerySchema = z.object({
     // eslint-disable-next-line no-control-regex -- rejeição de control chars é o objetivo (defesa em profundidade)
     .regex(/^[^\x00-\x1F\x7F]*$/, 'caracteres de controle não são permitidos')
     .optional(),
+  // #164: filtros adicionais + ordenação.
+  contractRef: z.uuid().optional(),
+  programRef: z.uuid().optional(),
+  valorMin: z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  valorMax: z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  sort: z.enum(['dueDate', 'netValue', 'supplierName']).optional(),
+  order: z.enum(['asc', 'desc']).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 
 export type ListDocumentsQuery = z.infer<typeof listDocumentsQuerySchema>;
+
+// ─── PATCH /documents/due-date (alteração de vencimento em lote — #162) ─────────
+
+export const bulkUpdateDueDateBodySchema = z.object({
+  items: z
+    .array(
+      z.object({ id: z.uuid(), version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER) }),
+    )
+    .min(1)
+    .max(100),
+  dueDate: z.iso.date(),
+});
+
+export type BulkUpdateDueDateBody = z.infer<typeof bulkUpdateDueDateBodySchema>;
+
+export const bulkUpdateDueDateResponseSchema = z.object({
+  results: z.array(
+    z.object({
+      documentId: z.uuid(),
+      outcome: z.enum(['ok', 'not-found', 'version-conflict', 'invalid-state', 'error']),
+    }),
+  ),
+});
 
 // ─── Responses ───────────────────────────────────────────────────────────────
 

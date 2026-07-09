@@ -31,6 +31,8 @@ import { documentRepositoryContract } from './document-repository.suite.ts';
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleDocumentRepository } from '#src/modules/financial/adapters/persistence/repos/document-repository.drizzle.ts';
 import { createDrizzleTimelineRepository } from '#src/modules/financial/adapters/persistence/repos/timeline-repository.drizzle.ts';
+import { bulkUpdateDueDate } from '#src/modules/financial/application/use-cases/bulk-update-due-date.ts';
+import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import { finSupplierView } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 
@@ -498,6 +500,198 @@ if (!process.env['MYSQL_INTEGRATION']) {
 
         await handle.db.execute(sql`DELETE FROM fin_payables WHERE document_id = ${docId}`);
         await handle.db.execute(sql`DELETE FROM fin_documents WHERE id = ${docId}`);
+      });
+    });
+
+    // #164 — filtros (valor/contrato/programa) + ordenação por supplierName (LEFT JOIN fin_supplier_view).
+    describe('#164 — filtros avançados + ordenação em findPaged', () => {
+      const F_SUP_A = '5a000000-0000-4000-8000-0000000000e1';
+      const F_SUP_B = '5a000000-0000-4000-8000-0000000000e2';
+
+      const buildDoc = (
+        num: string,
+        sup: string,
+        grossCents: number,
+      ): Document.CreateDocumentOutput => {
+        const supplierR = SupplierRef.rehydrate(sup);
+        if (!supplierR.ok) throw new Error('setup: supplier');
+        const grossR = Money.fromCents(grossCents);
+        if (!grossR.ok) throw new Error('setup: money');
+        const r = Document.create({
+          id: DocumentId.generate(),
+          documentNumber: num,
+          type: 'NFS-e',
+          supplier: supplierR.value,
+          paymentMethod: 'PIX',
+          grossValue: grossR.value,
+          sourceDiscounts: Money.ZERO,
+          discounts: Money.ZERO,
+          penalty: Money.ZERO,
+          interest: Money.ZERO,
+          retentions: [],
+          registeredTaxes: [],
+          dueDate: new Date('2026-10-31'),
+        });
+        if (!r.ok) throw new Error('setup: create');
+        return r.value;
+      };
+
+      it('CA5: netValue range + sort=supplierName; LEFT JOIN não duplica count/paginação', async () => {
+        const repo = createDrizzleDocumentRepository(handle);
+        const now = new Date();
+        // Fornecedores no read-model: "Alpha" (SUP_A) e "Zeta" (SUP_B) — testam sort por nome.
+        await handle.db.insert(finSupplierView).values([
+          {
+            supplierRef: F_SUP_A,
+            name: 'Alpha Comercio',
+            document: '11111111000191',
+            occurredAt: now,
+            updatedAt: now,
+          },
+          {
+            supplierRef: F_SUP_B,
+            name: 'Zeta Servicos',
+            document: '22222222000192',
+            occurredAt: now,
+            updatedAt: now,
+          },
+        ]);
+        const docs = [
+          buildDoc('F164-A1', F_SUP_A, 300000),
+          buildDoc('F164-Z1', F_SUP_B, 700000),
+          buildDoc('F164-A2', F_SUP_A, 1500000), // fora da faixa
+        ];
+        for (const d of docs) {
+          const s = await repo.save({ document: d.document, payables: d.payables }, []);
+          assert.equal(isOk(s), true);
+        }
+        const ids = docs.map((d) => d.document.id as unknown as string);
+
+        // Faixa 200k–800k → só A1 (300k) e Z1 (700k); A2 (1.5M) fora.
+        const ranged = await repo.findPaged(
+          { valorMin: 200000, valorMax: 800000, sort: 'supplierName', order: 'asc' },
+          1,
+          100,
+        );
+        assert.equal(isOk(ranged), true, JSON.stringify(ranged));
+        if (ranged.ok) {
+          const mine = ranged.value.items.filter((i) => ids.includes(i.id));
+          assert.equal(mine.length, 2, 'faixa 200k–800k traz A1 e Z1 (sem duplicar pelo JOIN)');
+          // sort=supplierName asc → Alpha antes de Zeta.
+          assert.equal(mine[0]?.supplierName, 'Alpha Comercio');
+          assert.equal(mine[1]?.supplierName, 'Zeta Servicos');
+        }
+
+        // inArray (multi-valor) + sort=netValue desc contra MySQL real (SQL não coberto pelo in-memory).
+        const multi = await repo.findPaged(
+          { supplierRefs: [F_SUP_A, F_SUP_B], types: ['NFS-e'], sort: 'netValue', order: 'desc' },
+          1,
+          100,
+        );
+        assert.equal(isOk(multi), true, JSON.stringify(multi));
+        if (multi.ok) {
+          const mine = multi.value.items.filter((i) => ids.includes(i.id));
+          assert.equal(mine.length, 3, 'supplierRefs (inArray) traz os 3 dos dois fornecedores');
+          const nets = mine.map((i) => i.netValue?.cents ?? 0);
+          assert.deepEqual(
+            nets,
+            [...nets].sort((a, b) => b - a),
+            'sort=netValue desc contra MySQL',
+          );
+        }
+
+        // cleanup
+        for (const id of ids) {
+          await handle.db.execute(sql`DELETE FROM fin_payables WHERE document_id = ${id}`);
+          await handle.db.execute(sql`DELETE FROM fin_documents WHERE id = ${id}`);
+        }
+        await handle.db.execute(
+          sql`DELETE FROM fin_supplier_view WHERE supplier_ref IN (${F_SUP_A}, ${F_SUP_B})`,
+        );
+      });
+    });
+
+    // #162 — vencimento em lote (falha parcial por item) contra MySQL real.
+    describe('#162 — bulkUpdateDueDate (lote misto ok+conflito)', () => {
+      const B_SUP = '5a000000-0000-4000-8000-0000000000f1';
+
+      const buildDoc = (num: string): Document.CreateDocumentOutput => {
+        const supplierR = SupplierRef.rehydrate(B_SUP);
+        if (!supplierR.ok) throw new Error('setup: supplier');
+        const grossR = Money.fromCents(200000);
+        if (!grossR.ok) throw new Error('setup: money');
+        const r = Document.create({
+          id: DocumentId.generate(),
+          documentNumber: num,
+          type: 'NFS-e',
+          supplier: supplierR.value,
+          paymentMethod: 'PIX',
+          grossValue: grossR.value,
+          sourceDiscounts: Money.ZERO,
+          discounts: Money.ZERO,
+          penalty: Money.ZERO,
+          interest: Money.ZERO,
+          retentions: [],
+          registeredTaxes: [],
+          dueDate: new Date('2026-09-30'),
+        });
+        if (!r.ok) throw new Error('setup: create');
+        return r.value;
+      };
+
+      it('CA5: lote misto — item stale → version-conflict; válido → aplicado (real MySQL)', async () => {
+        const repo = createDrizzleDocumentRepository(handle);
+        const run = bulkUpdateDueDate({ repo, clock: ClockReal() });
+        const a = buildDoc('BULK-X-A');
+        const b = buildDoc('BULK-X-B');
+        for (const d of [a, b]) {
+          const s = await repo.save({ document: d.document, payables: d.payables }, []);
+          assert.equal(isOk(s), true);
+        }
+        const idA = a.document.id as unknown as string;
+        const idB = b.document.id as unknown as string;
+
+        // Bump de A (0→1) via um lote isolado.
+        const first = await run({
+          items: [{ documentId: idA, expectedVersion: 0 }],
+          dueDate: new Date('2027-02-02'),
+        });
+        assert.equal(isOk(first), true);
+
+        // Lote misto: A com v0 (stale) + B com v0 (válido) + id fantasma.
+        const ghost = '00000000-0000-4000-8000-0000000000ff';
+        const mixed = await run({
+          items: [
+            { documentId: idA, expectedVersion: 0 },
+            { documentId: idB, expectedVersion: 0 },
+            { documentId: ghost, expectedVersion: 0 },
+          ],
+          dueDate: new Date('2027-05-05'),
+        });
+        assert.equal(isOk(mixed), true);
+        if (mixed.ok) {
+          const byId = new Map(mixed.value.map((r) => [r.documentId, r.outcome]));
+          assert.equal(byId.get(idA), 'version-conflict', 'A stale → conflito');
+          assert.equal(byId.get(idB), 'ok', 'B válido → aplicado');
+          assert.equal(byId.get(ghost), 'not-found', 'fantasma → not-found');
+        }
+
+        // B mudou para 2027-05-05; A permaneceu em 2027-02-02 (conflito não aplica).
+        const listed = await repo.findPaged({ supplierRef: B_SUP }, 1, 100);
+        assert.equal(isOk(listed), true);
+        if (listed.ok) {
+          const dueById = new Map(
+            listed.value.items.map((i) => [i.id, i.dueDate?.toISOString().slice(0, 10)]),
+          );
+          assert.equal(dueById.get(idB), '2027-05-05');
+          assert.equal(dueById.get(idA), '2027-02-02');
+        }
+
+        // cleanup
+        for (const id of [idA, idB]) {
+          await handle.db.execute(sql`DELETE FROM fin_payables WHERE document_id = ${id}`);
+          await handle.db.execute(sql`DELETE FROM fin_documents WHERE id = ${id}`);
+        }
       });
     });
   });

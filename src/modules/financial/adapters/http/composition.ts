@@ -125,6 +125,7 @@ import { createDocumentReader } from '../document-reader/create-document-reader.
 import * as DocumentIdVo from '../../domain/shared/document-id.ts';
 import { parseAwsS3Env } from '#src/modules/contracts/public-api/index.ts';
 import { adjustDocument } from '../../application/use-cases/adjust-document.ts';
+import { bulkUpdateDueDate } from '../../application/use-cases/bulk-update-due-date.ts';
 import { approveDocument } from '../../application/use-cases/approve-document.ts';
 import { registerManualPayment } from '../../application/use-cases/register-manual-payment.ts';
 import { undoApproval } from '../../application/use-cases/undo-approval.ts';
@@ -194,6 +195,7 @@ export type FinancialHttpDeps = Readonly<{
   saveDraft: ReturnType<typeof saveDraft>;
   ingestDocument: ReturnType<typeof ingestDocument>; // #62: ingestão (leitura + storage + rascunho)
   adjustDocument: ReturnType<typeof adjustDocument>;
+  bulkUpdateDueDate: ReturnType<typeof bulkUpdateDueDate>; // #162: vencimento em lote
   approveDocument: ReturnType<typeof approveDocument>;
   /** Baixa manual de título (#219/#224) — POST /documents/:id/payables/:payableId/manual-payment. */
   registerManualPayment: ReturnType<typeof registerManualPayment>;
@@ -617,6 +619,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       idGen: DocumentIdVo.generate,
     }),
     adjustDocument: adjustDocument(deps),
+    bulkUpdateDueDate: bulkUpdateDueDate(deps), // #162: mesmas deps (repo + clock) do adjust
     approveDocument: approveDocument(deps),
     registerManualPayment: registerManualPayment(deps),
     undoApproval: undoApproval(deps),

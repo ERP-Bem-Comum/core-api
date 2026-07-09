@@ -70,6 +70,8 @@ import type { FinancialHttpDeps } from './composition.ts';
 import {
   createDocumentBodySchema,
   adjustDocumentBodySchema,
+  bulkUpdateDueDateBodySchema,
+  bulkUpdateDueDateResponseSchema,
   approveBodySchema,
   cancelDocumentBodySchema,
   documentIdParamSchema,
@@ -438,6 +440,28 @@ const financialRoutes =
       },
     });
 
+    // PATCH /financial/documents/due-date — alteração de vencimento em LOTE (#162).
+    // Rota ESTÁTICA: no find-my-way precede `/:id` (não é sombreada pelo parametrico).
+    // Falha PARCIAL por item — sempre 200 com o mapa de resultados; 400 só p/ payload inválido.
+    scope.route({
+      method: 'PATCH',
+      url: '/financial/documents/due-date',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.write)],
+      schema: {
+        body: bulkUpdateDueDateBodySchema,
+        response: { 200: bulkUpdateDueDateResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const body = req.body;
+        const result = await deps.bulkUpdateDueDate({
+          items: body.items.map((i) => ({ documentId: i.id, expectedVersion: i.version })),
+          dueDate: new Date(body.dueDate),
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok({ results: result.value }), { ok: 200 });
+      },
+    });
+
     // PATCH /financial/documents/:id — ajusta documento Open.
     scope.route({
       method: 'PATCH',
@@ -598,15 +622,32 @@ const financialRoutes =
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
         const q = req.query;
+        // #164: type/supplierRef aceitam single (retrocompat) ou lista → normaliza para o campo certo.
+        const supplierFilter = Array.isArray(q.supplierRef)
+          ? { supplierRefs: q.supplierRef }
+          : q.supplierRef !== undefined
+            ? { supplierRef: q.supplierRef }
+            : {};
+        const typeFilter = Array.isArray(q.type)
+          ? { types: q.type }
+          : q.type !== undefined
+            ? { type: q.type }
+            : {};
         const filter: DocumentListFilter = {
           ...(q.status !== undefined ? { status: q.status } : {}),
-          ...(q.supplierRef !== undefined ? { supplierRef: q.supplierRef } : {}),
-          ...(q.type !== undefined ? { type: q.type } : {}),
+          ...supplierFilter,
+          ...typeFilter,
           ...(q.dueFrom !== undefined ? { dueFrom: new Date(q.dueFrom) } : {}),
           ...(q.dueTo !== undefined ? { dueTo: new Date(q.dueTo) } : {}),
           ...(q.issuedFrom !== undefined ? { issuedFrom: new Date(q.issuedFrom) } : {}),
           ...(q.issuedTo !== undefined ? { issuedTo: new Date(q.issuedTo) } : {}),
           ...(q.q !== undefined ? { q: q.q } : {}), // #167: busca textual (já trimada pelo schema)
+          ...(q.contractRef !== undefined ? { contractRef: q.contractRef } : {}),
+          ...(q.programRef !== undefined ? { programRef: q.programRef } : {}),
+          ...(q.valorMin !== undefined ? { valorMin: q.valorMin } : {}),
+          ...(q.valorMax !== undefined ? { valorMax: q.valorMax } : {}),
+          ...(q.sort !== undefined ? { sort: q.sort } : {}),
+          ...(q.order !== undefined ? { order: q.order } : {}),
         };
         const result = await deps.listDocuments(filter, q.page, q.pageSize);
         if (!result.ok) return sendDomainError(reply, result.error);
