@@ -61,7 +61,12 @@ const parseToUnicode = (cmap: string): ReadonlyMap<number, string> => {
     const body = block[1] ?? '';
     for (let p = pair.exec(body); p !== null; p = pair.exec(body)) {
       if (p[1] === undefined || p[2] === undefined) continue;
-      map.set(Number.parseInt(p[1], 16), String.fromCodePoint(Number.parseInt(p[2], 16)));
+      // #389 (CWE-248): guarda de faixa — um codepoint > 0x10FFFF faria String.fromCodePoint lançar
+      // RangeError não capturado, vazando pela borda do port. Fail-closed: ignora o mapeamento inválido
+      // (o `?? ''` do decodeHex trata o código sem entrada como vazio, coerente com o resto do arquivo).
+      const cp = Number.parseInt(p[2], 16);
+      if (cp > 0x10ffff) continue;
+      map.set(Number.parseInt(p[1], 16), String.fromCodePoint(cp));
     }
   }
   return map;

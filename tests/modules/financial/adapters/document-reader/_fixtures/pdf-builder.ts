@@ -188,6 +188,40 @@ export const buildRawContentPdf = (rawContent: string): Uint8Array => {
   ]);
 };
 
+// #389 — CMap /ToUnicode HOSTIL: um `bfchar` mapeia um código para codepoint FORA da faixa Unicode
+// (> 0x10FFFF). Sem guarda de faixa, o `String.fromCodePoint(cp)` do parseToUnicode lança um
+// `RangeError` NÃO capturado que atravessa a borda do port (viola o contrato Result — CWE-248).
+// `destHex` é o codepoint de destino em hex (ex.: 'FFFFFF' = 16777215 > 0x10FFFF).
+export const buildHostileToUnicodePdf = (destHex: string): Uint8Array => {
+  const content = deflateSync(Buffer.from('BT\n/F1 12 Tf\n72 760 Td\n<0001> Tj\nET', LATIN1));
+  const cmap = deflateSync(
+    Buffer.from(
+      `/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CMapType 2 def\n` +
+        `1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n` +
+        `1 beginbfchar\n<0001> <${destHex}>\nendbfchar\nendcmap\nend\nend`,
+      LATIN1,
+    ),
+  );
+  return assemblePdf([
+    Buffer.from('<< /Type /Catalog /Pages 2 0 R >>', LATIN1),
+    Buffer.from('<< /Type /Pages /Kids [3 0 R] /Count 1 >>', LATIN1),
+    Buffer.from(
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+      LATIN1,
+    ),
+    streamObject(content),
+    Buffer.from(
+      '<< /Type /Font /Subtype /Type0 /BaseFont /AAAAAA+Arial /Encoding /Identity-H /DescendantFonts [6 0 R] /ToUnicode 7 0 R >>',
+      LATIN1,
+    ),
+    Buffer.from(
+      '<< /Type /Font /Subtype /CIDFontType2 /BaseFont /AAAAAA+Arial /CIDSystemInfo << /Registry (Adobe) /Ordering (Identity) /Supplement 0 >> >>',
+      LATIN1,
+    ),
+    streamObject(cmap),
+  ]);
+};
+
 // PDF com N streams FlateDecode, cada um inflando `inflatedEach` bytes (amplificação — F3).
 export const buildMultiStreamPdf = (streamCount: number, inflatedEach: number): Uint8Array => {
   const one = deflateSync(Buffer.alloc(inflatedEach, 0x20));

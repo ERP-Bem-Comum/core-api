@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "FIN-READER-TOUNI-GUARD",
+  "size": "S",
+  "createdAt": "2026-07-09T21:14:20.837Z",
+  "closedAt": "2026-07-09T21:22:35.946Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-09T21:15:34.976Z",
+      "finishedAt": "2026-07-09T21:15:35.292Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "nodejs-runtime-expert",
+      "startedAt": "2026-07-09T21:15:35.603Z",
+      "finishedAt": "2026-07-09T21:15:35.908Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "security-backend-expert",
+      "startedAt": "2026-07-09T21:15:36.217Z",
+      "finishedAt": "2026-07-09T21:19:23.006Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-09T21:19:23.328Z",
+      "finishedAt": "2026-07-09T21:22:35.636Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}
