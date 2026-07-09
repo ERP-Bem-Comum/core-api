@@ -95,6 +95,8 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/budget-plans/adapters/persistence/cost-structure.drizzle-mysql.test.ts',
     // #317 — BudgetResultRepository (add/list/delete) contra MySQL real.
     'tests/modules/budget-plans/adapters/persistence/budget-result.drizzle-mysql.test.ts',
+    // #318 — ciclo de vida: FK auto-ref parent_id (0004) + listChildren + findRoot + alocação de versão.
+    'tests/modules/budget-plans/adapters/persistence/plan-lifecycle.drizzle-mysql.test.ts',
   ]),
   financial: mysqlSuite({ MYSQL_INTEGRATION: '1' }, [
     'tests/modules/financial/adapters/persistence/document-repository.drizzle-mysql.test.ts',

@@ -39,9 +39,9 @@
     },
     {
       "id": "W3",
-      "status": "pending",
-      "agent": null,
-      "startedAt": null,
+      "status": "in-progress",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-09T14:41:01.261Z",
       "finishedAt": null,
       "rounds": 1,
       "reportPath": null,
@@ -49,5 +49,5 @@
     }
   ],
   "blockers": [],
-  "lastEvent": "W2 finished (APPROVED)"
+  "lastEvent": "W3 started (ts-quality-checker)"
 }
