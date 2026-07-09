@@ -39,8 +39,10 @@ const enrichWithSupplierView = async (
 
 const matchesFilter = (doc: Document, f: DocumentListFilter): boolean => {
   if (f.status !== undefined && doc.status !== f.status) return false;
-  if (f.type !== undefined && doc.type !== f.type) return false;
-  if (f.supplierRef !== undefined) {
+  // #164: multi tem precedência sobre o single (espelha o ternário do adapter Drizzle) — o single
+  // só se aplica quando o multi correspondente está ausente, evitando divergência de contrato entre adapters.
+  if (f.types === undefined && f.type !== undefined && doc.type !== f.type) return false;
+  if (f.supplierRefs === undefined && f.supplierRef !== undefined) {
     if (doc.supplier === null || String(doc.supplier) !== f.supplierRef) return false;
   }
   if (f.dueFrom !== undefined && (doc.dueDate === null || doc.dueDate < f.dueFrom)) return false;
@@ -55,6 +57,26 @@ const matchesFilter = (doc: Document, f: DocumentListFilter): boolean => {
   if (f.q !== undefined) {
     const needle = f.q.toUpperCase();
     if (!(doc.documentNumber ?? '').toUpperCase().includes(needle)) return false;
+  }
+  // #164: multi-valor (precedência sobre o single, garantida pelo handler), contrato/programa e faixa de valor.
+  if (f.supplierRefs !== undefined) {
+    if (doc.supplier === null || !f.supplierRefs.includes(String(doc.supplier))) return false;
+  }
+  if (f.types !== undefined) {
+    if (doc.type === null || !f.types.includes(doc.type)) return false;
+  }
+  if (f.contractRef !== undefined) {
+    if (doc.contractRef === null || String(doc.contractRef) !== f.contractRef) return false;
+  }
+  if (f.programRef !== undefined) {
+    if (doc.programRef === null || String(doc.programRef) !== f.programRef) return false;
+  }
+  if (f.valorMin !== undefined || f.valorMax !== undefined) {
+    // netValue só existe em documento submetido (DocumentCore); rascunho fica fora da faixa.
+    const net = 'netValue' in doc ? doc.netValue.cents : null;
+    if (net === null) return false;
+    if (f.valorMin !== undefined && net < f.valorMin) return false;
+    if (f.valorMax !== undefined && net > f.valorMax) return false;
   }
   return true;
 };
@@ -209,20 +231,26 @@ export const createInMemoryDocumentRepository = (
         matchesFilter(e.aggregate.document, filter),
       );
 
-      // Ordena com mesma semântica do Drizzle adapter: dueDate ASC, NULLs primeiro,
-      // desempate por id ASC.
-      // Justificativa NULLs-primeiro: MySQL 8.4 Refman §11.4.2 —
-      //   "NULL values are considered lower than any non-NULL value".
+      // #164: ordenação configurável. Default dueDate ASC, NULLs primeiro (MySQL 8.4 Refman §11.4.2),
+      // desempate por id ASC. `supplierName` não é resolvido em memória (só na página, após o filtro),
+      // então cai no dueDate — a ordenação por nome é validada no adapter Drizzle (x99).
       // Cópia defensiva ([...matched]) evita mutação do array temporário via sort() in-place.
+      const sortKey = filter.sort ?? 'dueDate';
+      const orderMul = filter.order === 'desc' ? -1 : 1;
+      const primaryOf = (d: Document): number | null =>
+        sortKey === 'netValue'
+          ? 'netValue' in d
+            ? d.netValue.cents
+            : null
+          : d.dueDate === null
+            ? null
+            : d.dueDate.getTime();
       const sorted = [...matched].sort((a, b) => {
-        const dueDateA = a.aggregate.document.dueDate;
-        const dueDateB = b.aggregate.document.dueDate;
-        // Ambos NULL → igual; NULL < non-NULL (NULL vem primeiro).
-        if (dueDateA === null && dueDateB === null) return 0;
-        if (dueDateA === null) return -1;
-        if (dueDateB === null) return 1;
-        const diff = dueDateA.getTime() - dueDateB.getTime();
-        if (diff !== 0) return diff;
+        const pa = primaryOf(a.aggregate.document);
+        const pb = primaryOf(b.aggregate.document);
+        // Ambos NULL → igual; NULL vem primeiro (independe da direção, como o default do adapter real).
+        const c = pa === null && pb === null ? 0 : pa === null ? -1 : pb === null ? 1 : pa - pb;
+        if (c !== 0) return c * orderMul;
         // Tie-breaker: id ASC (string compare — UUIDs v4, comprimento fixo 36).
         const idA = a.aggregate.document.id;
         const idB = b.aggregate.document.id;

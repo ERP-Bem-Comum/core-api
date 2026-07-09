@@ -235,4 +235,93 @@ describe('FIN-LISTAGEM-TIMELINE — GET /api/v2/financial/documents (listagem re
     assert.equal(pct.statusCode, 200, pct.body);
     assert.equal((pct.json() as { total: number }).total, 0, '% deve ser literal, não coringa');
   });
+
+  // ── #164/FIN-DOC-LIST-FILTERS: valor/contrato/programa/multi-valor + ordenação ────
+  it('CA1 (#164): valorMin/valorMax filtra por valor líquido (faixa inclusiva)', async () => {
+    const SUP = newUuidLike('f1');
+    await post(
+      nfseBody({ documentNumber: 'VAL-100', supplierRef: SUP, grossValueCents: '100000' }),
+    );
+    await post(
+      nfseBody({ documentNumber: 'VAL-500', supplierRef: SUP, grossValueCents: '500000' }),
+    );
+    await post(
+      nfseBody({ documentNumber: 'VAL-900', supplierRef: SUP, grossValueCents: '900000' }),
+    );
+
+    const res = await list(`?supplierRef=${SUP}&valorMin=200000&valorMax=600000&pageSize=100`);
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as { items: { documentNumber: string | null }[]; total: number };
+    assert.equal(body.total, 1, 'só o de 500.000 entra na faixa 200k–600k');
+    assert.equal(body.items[0]?.documentNumber, 'VAL-500');
+  });
+
+  it('CA2 (#164): contractRef/programRef filtram; UUID malformado → 400', async () => {
+    const SUP = newUuidLike('f2');
+    const CONTRACT = newUuidLike('c1');
+    const PROGRAM = newUuidLike('c2');
+    await post(nfseBody({ documentNumber: 'CTR-1', supplierRef: SUP, contractRef: CONTRACT }));
+    await post(nfseBody({ documentNumber: 'PRG-1', supplierRef: SUP, programRef: PROGRAM }));
+
+    const byContract = await list(`?contractRef=${CONTRACT}&pageSize=100`);
+    assert.equal(byContract.statusCode, 200, byContract.body);
+    assert.ok((byContract.json() as { total: number }).total >= 1, 'filtra por contrato');
+
+    const byProgram = await list(`?programRef=${PROGRAM}&pageSize=100`);
+    assert.equal(byProgram.statusCode, 200, byProgram.body);
+    assert.ok((byProgram.json() as { total: number }).total >= 1, 'filtra por programa');
+
+    assert.equal((await list('?contractRef=not-a-uuid')).statusCode, 400);
+  });
+
+  it('CA3 (#164): type multi-valor retorna união; valor único segue funcionando', async () => {
+    const SUP = newUuidLike('f3');
+    await post(nfseBody({ documentNumber: 'MULTI-NFSE', supplierRef: SUP, type: 'NFS-e' }));
+    await post(nfseBody({ documentNumber: 'MULTI-BOLETO', supplierRef: SUP, type: 'Boleto' }));
+
+    const multi = await list(`?supplierRef=${SUP}&type=NFS-e&type=Boleto&pageSize=100`);
+    assert.equal(multi.statusCode, 200, multi.body);
+    const body = multi.json() as { items: { type: string | null }[]; total: number };
+    assert.equal(body.total, 2, 'união dos dois tipos');
+    const types = new Set(body.items.map((i) => i.type));
+    assert.ok(types.has('NFS-e') && types.has('Boleto'));
+  });
+
+  it('CA4 (#164): sort=netValue&order=desc ordena por líquido desc; sort inválido → 400', async () => {
+    const SUP = newUuidLike('f4');
+    await post(
+      nfseBody({ documentNumber: 'SORT-300', supplierRef: SUP, grossValueCents: '300000' }),
+    );
+    await post(
+      nfseBody({ documentNumber: 'SORT-700', supplierRef: SUP, grossValueCents: '700000' }),
+    );
+    await post(
+      nfseBody({ documentNumber: 'SORT-100', supplierRef: SUP, grossValueCents: '100000' }),
+    );
+
+    const res = await list(`?supplierRef=${SUP}&sort=netValue&order=desc&pageSize=100`);
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as { items: { netValueCents: string | null }[] };
+    const vals = body.items.map((i) => Number(i.netValueCents));
+    const sortedDesc = [...vals].sort((a, b) => b - a);
+    assert.deepEqual(vals, sortedDesc, 'itens em ordem decrescente de líquido');
+
+    assert.equal((await list('?sort=foo')).statusCode, 400, 'sort fora do enum → 400');
+  });
+
+  it('CA3b (#164): supplierRef multi-valor retorna união (paridade com type)', async () => {
+    const A = newUuidLike('f5');
+    const B = newUuidLike('f6');
+    await post(nfseBody({ documentNumber: 'SUPMULTI-A', supplierRef: A }));
+    await post(nfseBody({ documentNumber: 'SUPMULTI-B', supplierRef: B }));
+
+    const res = await list(`?supplierRef=${A}&supplierRef=${B}&pageSize=100`);
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as { items: { supplierRef: string | null }[]; total: number };
+    assert.ok(body.total >= 2, 'união dos dois fornecedores');
+    assert.ok(
+      body.items.every((i) => i.supplierRef === A || i.supplierRef === B),
+      'só os dois fornecedores solicitados',
+    );
+  });
 });

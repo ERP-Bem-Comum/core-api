@@ -4,10 +4,14 @@ import type { DocumentStatus, DocumentType, PaymentMethod } from './types.ts';
 // Tipos de leitura (read path) da listagem paginada — US1. `type` é match livre (string) pois
 // a query da borda aceita qualquer texto; os demais filtros são tipados.
 
+// #164: dimensão de ordenação da listagem (mapeada p/ coluna no adapter).
+export type DocumentListSort = 'dueDate' | 'netValue' | 'supplierName';
+export type DocumentListOrder = 'asc' | 'desc';
+
 export type DocumentListFilter = Readonly<{
   status?: DocumentStatus;
-  supplierRef?: string;
-  type?: string;
+  supplierRef?: string; // single (retrocompat)
+  type?: string; // single (retrocompat)
   dueFrom?: Date;
   dueTo?: Date; // janela inclusiva
   issuedFrom?: Date; // #163: filtro por emissão (janela inclusiva)
@@ -15,6 +19,15 @@ export type DocumentListFilter = Readonly<{
   // #167: busca textual — contains (case-insensitive) em documentNumber + nome/CNPJ do fornecedor
   // (fin_supplier_view via LEFT JOIN). No driver memory o fornecedor pode vir null (read-model vazio).
   q?: string;
+  // #164: filtros adicionais + multi-valor + ordenação.
+  supplierRefs?: readonly string[]; // multi (união); tem precedência sobre `supplierRef` quando presente
+  types?: readonly string[]; // multi (união); tem precedência sobre `type` quando presente
+  contractRef?: string;
+  programRef?: string;
+  valorMin?: number; // faixa de valor líquido (cents), inclusiva
+  valorMax?: number;
+  sort?: DocumentListSort; // default: dueDate
+  order?: DocumentListOrder; // default: asc
 }>;
 
 // Read-model leve da listagem (FR-004 — payload enxuto, sem títulos/retenções). Evita

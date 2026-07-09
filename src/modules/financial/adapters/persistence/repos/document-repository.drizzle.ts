@@ -36,7 +36,7 @@
 // Boundary: todo try/catch converte para Result. Nenhum Error cruza a borda
 //   (.claude/rules/adapters.md §"converter para Result na borda").
 
-import { and, asc, count, eq, gte, like, lte, or, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, like, lte, or, sql } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
@@ -460,10 +460,25 @@ export const createDrizzleDocumentRepository = (
       // correto para listagem sem filtro. (operators.mdx §"and")
       const conditions = [
         statusCondition,
-        filter.supplierRef !== undefined
-          ? eq(finDocuments.supplierRef, filter.supplierRef)
+        // #164: multi-valor tem precedência sobre o single (retrocompat) quando presente.
+        filter.supplierRefs !== undefined
+          ? inArray(finDocuments.supplierRef, filter.supplierRefs)
+          : filter.supplierRef !== undefined
+            ? eq(finDocuments.supplierRef, filter.supplierRef)
+            : undefined,
+        filter.types !== undefined
+          ? inArray(finDocuments.type, filter.types)
+          : filter.type !== undefined
+            ? eq(finDocuments.type, filter.type)
+            : undefined,
+        filter.contractRef !== undefined
+          ? eq(finDocuments.contractRef, filter.contractRef)
           : undefined,
-        filter.type !== undefined ? eq(finDocuments.type, filter.type) : undefined,
+        filter.programRef !== undefined
+          ? eq(finDocuments.programRef, filter.programRef)
+          : undefined,
+        filter.valorMin !== undefined ? gte(finDocuments.netValue, filter.valorMin) : undefined,
+        filter.valorMax !== undefined ? lte(finDocuments.netValue, filter.valorMax) : undefined,
         filter.dueFrom !== undefined ? gte(finDocuments.dueDate, filter.dueFrom) : undefined,
         filter.dueTo !== undefined ? lte(finDocuments.dueDate, filter.dueTo) : undefined,
         filter.issuedFrom !== undefined
@@ -528,7 +543,17 @@ export const createDrizzleDocumentRepository = (
         .leftJoin(recon, eq(recon.documentId, finDocuments.id))
         .leftJoin(finSupplierView, eq(finDocuments.supplierRef, finSupplierView.supplierRef))
         .where(whereClause)
-        .orderBy(asc(finDocuments.dueDate), asc(finDocuments.id))
+        // #164: ordenação configurável (default dueDate asc); desempate estável por id asc.
+        .orderBy(
+          (filter.order === 'desc' ? desc : asc)(
+            filter.sort === 'netValue'
+              ? finDocuments.netValue
+              : filter.sort === 'supplierName'
+                ? finSupplierView.name
+                : finDocuments.dueDate,
+          ),
+          asc(finDocuments.id),
+        )
         .limit(pageSize)
         .offset((page - 1) * pageSize);
 
