@@ -72,16 +72,18 @@ const login = async (app: App): Promise<string> => {
   return (res.json() as { accessToken: string }).accessToken;
 };
 
-const createPlan = async (app: App, token: string): Promise<string> => {
+const createPlanYear = async (app: App, token: string, year: number): Promise<string> => {
   const res = await app.inject({
     method: 'POST',
     url: '/api/v2/budget-plans',
     headers: { authorization: `Bearer ${token}` },
-    payload: { year: 2026, programRef: PROGRAM_ETI },
+    payload: { year, programRef: PROGRAM_ETI },
   });
   assert.equal(res.statusCode, 201, res.body);
   return (res.json() as { id: string }).id;
 };
+
+const createPlan = (app: App, token: string): Promise<string> => createPlanYear(app, token, 2026);
 
 const approve = (app: App, token: string, id: string) =>
   app.inject({
@@ -185,6 +187,30 @@ describe('POST /budget-plans/:id/scenery (CA4)', () => {
       payload: { name: '   ' },
     });
     assert.equal(res.statusCode, 400, res.body);
+    await teardown();
+  });
+});
+
+describe('GET /budget-plans/:id/insights (CA3)', () => {
+  it('compara o total do plano com os anos anteriores do mesmo programa', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app);
+    await createPlanYear(app, token, 2025);
+    const plan2026 = await createPlanYear(app, token, 2026);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/api/v2/budget-plans/${plan2026}/insights`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as {
+      current: { year: number };
+      previousYears: { year: number }[];
+    };
+    assert.equal(body.current.year, 2026);
+    assert.equal(body.previousYears.length, 1);
+    assert.equal(body.previousYears[0]?.year, 2025);
     await teardown();
   });
 });

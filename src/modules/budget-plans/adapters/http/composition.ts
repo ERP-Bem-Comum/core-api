@@ -56,6 +56,7 @@ import { deleteBudget } from '../../application/use-cases/delete-budget.ts';
 import { startCalibration } from '../../application/use-cases/start-calibration.ts';
 import { createScenery } from '../../application/use-cases/create-scenery.ts';
 import { approveBudgetPlan } from '../../application/use-cases/approve-budget-plan.ts';
+import { getBudgetPlanInsights } from '../../application/use-cases/get-budget-plan-insights.ts';
 
 export type BudgetPlansSeed = Readonly<{
   programs?: readonly ProgramSnapshot[];
@@ -140,6 +141,7 @@ export type BudgetPlansHttpDeps = Readonly<{
   startCalibration: ReturnType<typeof startCalibration>;
   createScenery: ReturnType<typeof createScenery>;
   approveBudgetPlan: ReturnType<typeof approveBudgetPlan>;
+  getBudgetPlanInsights: ReturnType<typeof getBudgetPlanInsights>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -243,6 +245,7 @@ const makeDeps = (pools: Pools): BudgetPlansHttpDeps => {
     startCalibration: startCalibration({ planRepo, costStructureRepo, budgetResultRepo, clock }),
     createScenery: createScenery({ planRepo, costStructureRepo, budgetResultRepo, clock }),
     approveBudgetPlan: approveBudgetPlan({ planRepo, clock }),
+    getBudgetPlanInsights: getBudgetPlanInsights({ planRepo }),
     shutdown: pools.shutdown,
   };
 };

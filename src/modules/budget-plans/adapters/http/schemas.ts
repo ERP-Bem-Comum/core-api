@@ -149,6 +149,16 @@ export const lifecyclePlanResponseSchema = z.object({
 export type SceneryBody = z.infer<typeof sceneryBodySchema>;
 export type LifecyclePlanResponseDto = z.infer<typeof lifecyclePlanResponseSchema>;
 
+const yearTotalSchema = z.object({ year: z.number().int(), totalInCents: z.number().int() });
+
+/** Resposta do GET /budget-plans/:id/insights (CA3): total do plano vs. anos anteriores. */
+export const budgetPlanInsightsResponseSchema = z.object({
+  current: yearTotalSchema,
+  previousYears: z.array(yearTotalSchema),
+});
+
+export type BudgetPlanInsightsResponseDto = z.infer<typeof budgetPlanInsightsResponseSchema>;
+
 // ─── Árvore de custos (Fatia 2/US2, BDG-COST-STRUCTURE) ──────────────────────────────
 // Valores de fio idênticos ao domínio (cost-direction.ts / launch-type.ts). Zod só na borda:
 // o domínio recebe a string crua e re-valida via `parse` (invalid-direction/launch-type -> 422).

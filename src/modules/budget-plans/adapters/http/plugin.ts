@@ -65,6 +65,7 @@ import {
   budgetDeleteParamSchema,
   sceneryBodySchema,
   lifecyclePlanResponseSchema,
+  budgetPlanInsightsResponseSchema,
 } from './schemas.ts';
 import { budgetResultToDto } from './budget-result-dto.ts';
 import { budgetToDto } from './budget-dto.ts';
@@ -518,6 +519,22 @@ const budgetPlansRoutes =
         const result = await deps.approveBudgetPlan({ planId: req.params.id });
         if (!result.ok) return sendWriteError(reply, result.error);
         return sendResult(reply, ok(lifecyclePlanToDto(result.value.plan)), { ok: 200 });
+      },
+    });
+
+    // GET /budget-plans/:id/insights — comparação ano-a-ano dos totais planejados (CA3).
+    scope.route({
+      method: 'GET',
+      url: '/budget-plans/:id/insights',
+      preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.read)],
+      schema: {
+        params: budgetPlanIdParamSchema,
+        response: { 200: budgetPlanInsightsResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.getBudgetPlanInsights(req.params.id);
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return sendResult(reply, ok(result.value), { ok: 200 });
       },
     });
   };
