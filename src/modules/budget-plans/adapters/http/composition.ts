@@ -18,6 +18,12 @@ import { PartnerNetworkFromPartners } from '../network/partner-network.from-part
 import { openBudgetPlansMysql } from '../persistence/drivers/mysql-driver.ts';
 import { createDrizzleBudgetPlanRepository } from '../persistence/repos/budget-plan-repository.drizzle.ts';
 import { createDrizzleCostStructureRepository } from '../persistence/repos/cost-structure-repository.drizzle.ts';
+import { InMemoryBudgetResultRepository } from '../persistence/repos/budget-result-repository.in-memory.ts';
+import { InMemoryBudgetExistsReader } from '../persistence/repos/budget-exists-reader.in-memory.ts';
+import { InMemorySubcategoryLaunchTypeReader } from '../persistence/repos/subcategory-launch-type-reader.in-memory.ts';
+import { createDrizzleBudgetResultRepository } from '../persistence/repos/budget-result-repository.drizzle.ts';
+import { createDrizzleBudgetExistsReader } from '../persistence/repos/budget-exists-reader.drizzle.ts';
+import { createDrizzleSubcategoryLaunchTypeReader } from '../persistence/repos/subcategory-launch-type-reader.drizzle.ts';
 
 import * as BudgetPlanId from '../../domain/shared/budget-plan-id.ts';
 import { ProgramRef } from '../../domain/shared/refs.ts';
@@ -26,11 +32,15 @@ import type { BudgetPlan as BudgetPlanEntity } from '../../domain/budget-plan/ty
 import type { BudgetPlanStatus } from '../../domain/budget-plan/status.ts';
 import type { BudgetPlanRepository } from '../../domain/budget-plan/repository.ts';
 import type { CostStructureRepository } from '../../domain/cost-structure/repository.ts';
+import type { BudgetResultRepository } from '../../domain/budget-result/repository.ts';
+import type { LaunchType } from '../../domain/cost-structure/launch-type.ts';
 import type {
   ProgramCatalogPort,
   ProgramSnapshot,
 } from '../../application/ports/program-catalog.ts';
 import type { PartnerNetworkPort } from '../../application/ports/partner-network.ts';
+import type { SubcategoryLaunchTypeReader } from '../../application/ports/subcategory-launch-type-reader.ts';
+import type { BudgetExistsReader } from '../../application/ports/budget-exists-reader.ts';
 import { createBudgetPlan } from '../../application/use-cases/create-budget-plan.ts';
 import { listBudgetPlans } from '../../application/use-cases/list-budget-plans.ts';
 import { getBudgetPlan } from '../../application/use-cases/get-budget-plan.ts';
@@ -39,6 +49,10 @@ import { getCostStructure } from '../../application/use-cases/get-cost-structure
 import { addCostCenter } from '../../application/use-cases/add-cost-center.ts';
 import { addCategory } from '../../application/use-cases/add-category.ts';
 import { addSubcategory } from '../../application/use-cases/add-subcategory.ts';
+import { addBudgetResult } from '../../application/use-cases/add-budget-result.ts';
+import { getBudgetResults } from '../../application/use-cases/get-budget-results.ts';
+import { addBudget } from '../../application/use-cases/add-budget.ts';
+import { deleteBudget } from '../../application/use-cases/delete-budget.ts';
 
 export type BudgetPlansSeed = Readonly<{
   programs?: readonly ProgramSnapshot[];
@@ -52,6 +66,11 @@ export type BudgetPlansSeed = Readonly<{
     programRef: string;
     status: BudgetPlanStatus;
   }>[];
+  // Driver memory: alimenta os readers do lançamento (US3) — no mysql eles leem bgp_budgets/
+  // bgp_subcategories reais. `budgetsExisting` = ids que o budgetReader dá como existentes;
+  // `subcategoryLaunchTypes` = mapa subcategoryId -> launchType do subcategoryReader.
+  budgetsExisting?: readonly string[];
+  subcategoryLaunchTypes?: Readonly<Record<string, LaunchType>>;
 }>;
 
 // Timestamp fixo dos planos semeados — irrelevante para os cenários da árvore de custos.
@@ -109,12 +128,19 @@ export type BudgetPlansHttpDeps = Readonly<{
   addCostCenter: ReturnType<typeof addCostCenter>;
   addCategory: ReturnType<typeof addCategory>;
   addSubcategory: ReturnType<typeof addSubcategory>;
+  addBudgetResult: ReturnType<typeof addBudgetResult>;
+  getBudgetResults: ReturnType<typeof getBudgetResults>;
+  addBudget: ReturnType<typeof addBudget>;
+  deleteBudget: ReturnType<typeof deleteBudget>;
   shutdown: () => Promise<void>;
 }>;
 
 type Pools = Readonly<{
   planRepo: BudgetPlanRepository;
   costStructureRepo: CostStructureRepository;
+  budgetResultRepo: BudgetResultRepository;
+  subcategoryReader: SubcategoryLaunchTypeReader;
+  budgetReader: BudgetExistsReader;
   programCatalog: ProgramCatalogPort;
   partnerNetwork: PartnerNetworkPort;
   shutdown: () => Promise<void>;
@@ -134,6 +160,9 @@ const buildMemoryPools = async (seed: BudgetPlansSeed | undefined): Promise<Pool
   return {
     planRepo,
     costStructureRepo,
+    budgetResultRepo: InMemoryBudgetResultRepository().repo,
+    subcategoryReader: InMemorySubcategoryLaunchTypeReader(seed?.subcategoryLaunchTypes ?? {}),
+    budgetReader: InMemoryBudgetExistsReader(seed?.budgetsExisting ?? []),
     programCatalog: InMemoryProgramCatalog(seed?.programs ?? []),
     partnerNetwork: InMemoryPartnerNetwork({
       states: seed?.partnerStates ?? [],
@@ -173,6 +202,9 @@ const buildMysqlPools = async (connectionString: string): Promise<Pools> => {
   return {
     planRepo: createDrizzleBudgetPlanRepository(handle),
     costStructureRepo: createDrizzleCostStructureRepository(handle),
+    budgetResultRepo: createDrizzleBudgetResultRepository(handle),
+    subcategoryReader: createDrizzleSubcategoryLaunchTypeReader(handle),
+    budgetReader: createDrizzleBudgetExistsReader(handle),
     programCatalog: ProgramCatalogFromPrograms(programsPort),
     partnerNetwork: PartnerNetworkFromPartners(partnersPort),
     shutdown: async () => {
@@ -185,7 +217,8 @@ const buildMysqlPools = async (connectionString: string): Promise<Pools> => {
 
 const makeDeps = (pools: Pools): BudgetPlansHttpDeps => {
   const clock = ClockReal();
-  const { planRepo, costStructureRepo, programCatalog, partnerNetwork } = pools;
+  const { planRepo, costStructureRepo, budgetResultRepo, subcategoryReader, budgetReader } = pools;
+  const { programCatalog, partnerNetwork } = pools;
   return {
     createBudgetPlan: createBudgetPlan({ planRepo, programCatalog, clock }),
     listBudgetPlans: listBudgetPlans({ planRepo, programCatalog }),
@@ -195,6 +228,10 @@ const makeDeps = (pools: Pools): BudgetPlansHttpDeps => {
     addCostCenter: addCostCenter({ costStructureRepo }),
     addCategory: addCategory({ costStructureRepo }),
     addSubcategory: addSubcategory({ costStructureRepo }),
+    addBudgetResult: addBudgetResult({ budgetResultRepo, subcategoryReader, budgetReader }),
+    getBudgetResults: getBudgetResults({ budgetResultRepo }),
+    addBudget: addBudget({ planRepo, clock }),
+    deleteBudget: deleteBudget({ planRepo, budgetResultRepo, clock }),
     shutdown: pools.shutdown,
   };
 };

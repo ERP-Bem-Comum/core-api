@@ -73,7 +73,25 @@ const addBudget = (
   });
 };
 
+// Remove um orçamento (Rede) do plano. Ausência do budget -> budget-not-found (CA4).
+const removeBudget = (
+  plan: BudgetPlanEntity,
+  budgetId: BudgetId,
+  now: Date,
+): Result<Readonly<{ plan: BudgetPlanEntity }>, BudgetPlanError> => {
+  if (!plan.budgets.some((b) => String(b.id) === String(budgetId))) {
+    return err('budget-not-found');
+  }
+  return ok({
+    plan: {
+      ...plan,
+      budgets: plan.budgets.filter((b) => String(b.id) !== String(budgetId)),
+      updatedAt: now,
+    },
+  });
+};
+
 const total = (plan: BudgetPlanEntity): Money.Money =>
   plan.budgets.reduce((acc, b) => Money.add(acc, b.value), Money.ZERO);
 
-export const BudgetPlan = { create, addBudget, total } as const;
+export const BudgetPlan = { create, addBudget, removeBudget, total } as const;

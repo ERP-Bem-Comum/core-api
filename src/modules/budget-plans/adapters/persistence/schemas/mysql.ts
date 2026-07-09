@@ -178,6 +178,34 @@ export const subcategories = mysqlTable(
   ],
 );
 
+// ─── bgp_budget_results ─────────────────────────────────────────────────────
+// Lançamento calculado (US3/#317). Valor derivado server-side (fonte única, FR-003) por
+// (budget, subcategoria). `value_cents` = Money cents (ADR-0020 §"Mapeamentos": bigint, nunca
+// decimal/JSON). `model` replica o launchType da subcategoria — VARCHAR+CHECK, sem ENUM nativo
+// (ADR-0020 §"Lista normativa"). SEM FK física para bgp_budgets/bgp_subcategories: ambas são
+// reescritas por replace-all e BudgetResult é agregado próprio — refs por identidade, molde de
+// fin_reconciliation_items.payable_id (ver 001-research/DESIGN-DECISIONS.md D1).
+export const budgetResults = mysqlTable(
+  'bgp_budget_results',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    budgetId: varchar('budget_id', { length: 36 }).notNull(),
+    subcategoryId: varchar('subcategory_id', { length: 36 }).notNull(),
+    model: varchar('model', { length: 24 }).notNull(),
+    valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
+  },
+  (t) => [
+    check(
+      'bgp_budget_results_model_chk',
+      sql`${t.model} IN ('IPCA','CAED','DESPESAS_PESSOAIS','DESPESAS_LOGISTICAS')`,
+    ),
+    // Sem FK -> índices explícitos (não há índice implícito). Query CA3 "por budget" + delete CA4.
+    index('bgp_budget_results_budget_id_idx').on(t.budgetId),
+    // Query CA3 "por subcategoria" (WHERE subcategory_id).
+    index('bgp_budget_results_subcategory_id_idx').on(t.subcategoryId),
+  ],
+);
+
 export type BudgetPlanRow = typeof budgetPlans.$inferSelect;
 export type NewBudgetPlanRow = typeof budgetPlans.$inferInsert;
 export type BudgetRow = typeof budgets.$inferSelect;
@@ -190,3 +218,5 @@ export type CategoryRow = typeof categories.$inferSelect;
 export type NewCategoryRow = typeof categories.$inferInsert;
 export type SubcategoryRow = typeof subcategories.$inferSelect;
 export type NewSubcategoryRow = typeof subcategories.$inferInsert;
+export type BudgetResultRow = typeof budgetResults.$inferSelect;
+export type NewBudgetResultRow = typeof budgetResults.$inferInsert;

@@ -52,6 +52,7 @@
     "test:integration:auth": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts auth",
     "test:integration:partners": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts partners",
     "test:integration:programs": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts programs",
+    "test:integration:budget-plans": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts budget-plans",
     "test:integration:financial": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts financial",
     "test:integration:etl": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts etl",
     "test:integration:etl:orchestrate": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts etl:orchestrate",

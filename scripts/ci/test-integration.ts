@@ -90,6 +90,12 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/programs/adapters/persistence/drizzle-mysql.test.ts',
     'tests/modules/programs/adapters/persistence/program-list-read.drizzle-mysql.test.ts',
   ]),
+  'budget-plans': mysqlSuite({ MYSQL_INTEGRATION: '1' }, [
+    // #316 — árvore de custos (estava órfã: escrita na Fatia 2 mas nunca registrada no runner).
+    'tests/modules/budget-plans/adapters/persistence/cost-structure.drizzle-mysql.test.ts',
+    // #317 — BudgetResultRepository (add/list/delete) contra MySQL real.
+    'tests/modules/budget-plans/adapters/persistence/budget-result.drizzle-mysql.test.ts',
+  ]),
   financial: mysqlSuite({ MYSQL_INTEGRATION: '1' }, [
     'tests/modules/financial/adapters/persistence/document-repository.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/supplier-view-store.drizzle-mysql.test.ts',

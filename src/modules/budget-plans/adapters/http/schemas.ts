@@ -194,3 +194,142 @@ export const costStructureTreeSchema = z.object({
 });
 
 export type CostStructureTreeDto = z.infer<typeof costStructureTreeSchema>;
+
+// ─── budget-results (US3/#317) ───────────────────────────────────────────────
+// Cada modelo é uma rota própria (o `model` é fixado pela rota, como o releaseType do legado);
+// o body traz só os campos de cálculo. Chaves desconhecidas (ex.: `justification` do legado) são
+// descartadas (z.object default = strip).
+//
+// ⚠️ Bounds são de SANIDADE DE NEGÓCIO por campo — NÃO garantem, sozinhos, ausência de overflow: os
+// campos alimentam PRODUTOS (logística multiplica 4 fatores), e nenhum teto por-campo único cabe em
+// todas as aridades (revisão zod-expert, 004-code-review). O overflow real (resultado > MAX_SAFE_INTEGER)
+// é barrado no domínio por `Money.fromCents` (`money-exceeds-safe-integer`), mapeado a 422 no plugin.
+const MAX_CENTS = 10_000_000_000; // R$ 100 mi (valor unitário)
+const MAX_COUNT = 100_000;
+const MAX_PERCENT = 1_000;
+
+const centsField = z.number().int().min(0).max(MAX_CENTS);
+const countField = z.number().int().min(0).max(MAX_COUNT);
+const percentField = z.number().min(0).max(MAX_PERCENT);
+// IPCA aceita valor negativo (deflação — histórico IBGE); o domínio barra só se o resultado final < 0.
+const ipcaField = z.number().min(-100).max(MAX_PERCENT);
+
+const budgetResultTargetSchema = z.object({
+  budgetId: z.uuid(),
+  subcategoryId: z.uuid(),
+});
+
+/** POST /budget-results/ipca — baseValueInCents * (1 + ipca/100). */
+export const ipcaBudgetResultBodySchema = budgetResultTargetSchema.extend({
+  baseValueInCents: centsField,
+  ipca: ipcaField.meta({ description: 'IPCA em % (aceita negativo — deflação)' }),
+});
+
+/** POST /budget-results/caed — numberOfEnrollments * baseValueInCents (unitário). */
+export const caedBudgetResultBodySchema = budgetResultTargetSchema.extend({
+  numberOfEnrollments: countField,
+  baseValueInCents: centsField.meta({ description: 'Valor unitário em centavos' }),
+});
+
+/** POST /budget-results/personal-expenses — folha (NÃO multiplica por quantidade — metadado). */
+export const personalExpensesBudgetResultBodySchema = budgetResultTargetSchema.extend({
+  salaryInCents: centsField,
+  salaryAdjustment: percentField.meta({ description: 'Reajuste salarial em %' }),
+  inssEmployer: percentField.meta({ description: 'INSS patronal em % sobre o salário ajustado' }),
+  inss: percentField.meta({ description: 'INSS em % sobre o salário ajustado' }),
+  fgtsCharges: percentField.meta({ description: 'Encargos de FGTS em %' }),
+  pisCharges: percentField.meta({ description: 'PIS em %' }),
+  foodVoucherInCents: centsField,
+  transportationVouchersInCents: centsField,
+  healthInsuranceInCents: centsField,
+  lifeInsuranceInCents: centsField,
+  holidaysAndChargesInCents: centsField,
+  allowanceInCents: centsField,
+  thirteenthInCents: centsField,
+  fgtsInCents: centsField,
+});
+
+/** POST /budget-results/logistics-expenses — viagem. */
+export const logisticsExpensesBudgetResultBodySchema = budgetResultTargetSchema.extend({
+  numberOfPeople: countField,
+  totalTrips: countField,
+  airfareInCents: centsField.meta({
+    description: 'Passagem em centavos — NÃO multiplica por diária',
+  }),
+  dailyAccommodation: countField.meta({ description: 'Nº de diárias de hospedagem' }),
+  accommodationInCents: centsField.meta({ description: 'Hospedagem por diária, em centavos' }),
+  dailyFood: countField.meta({ description: 'Nº de diárias de alimentação' }),
+  foodInCents: centsField.meta({ description: 'Alimentação por diária, em centavos' }),
+  dailyTransport: countField.meta({ description: 'Nº de diárias de transporte' }),
+  transportInCents: centsField.meta({ description: 'Transporte por diária, em centavos' }),
+  dailyCarAndFuel: countField.meta({ description: 'Nº de diárias de carro/combustível' }),
+  carAndFuelInCents: centsField.meta({
+    description: 'Carro e combustível por diária, em centavos',
+  }),
+});
+
+/** Response 201 dos POSTs de lançamento: o resultado calculado (valor em centavos). */
+export const budgetResultResponseSchema = z.object({
+  id: z.uuid(),
+  budgetId: z.uuid(),
+  subcategoryId: z.uuid(),
+  model: launchTypeSchema,
+  valueInCents: z.number().int(),
+});
+
+/** Param do GET por orçamento (CA3). */
+export const budgetResultByBudgetParamSchema = z.object({
+  budgetId: z.uuid().meta({ description: 'UUID v4 do orçamento (Rede)' }),
+});
+
+/** Response do GET por orçamento: lançamentos + soma (base de "Calculando Gastos"). */
+export const budgetResultsListResponseSchema = z.object({
+  items: z.array(budgetResultResponseSchema),
+  totalInCents: z.number().int(),
+});
+
+export type BudgetResultsListDto = z.infer<typeof budgetResultsListResponseSchema>;
+export type IpcaBudgetResultBody = z.infer<typeof ipcaBudgetResultBodySchema>;
+export type CaedBudgetResultBody = z.infer<typeof caedBudgetResultBodySchema>;
+export type PersonalExpensesBudgetResultBody = z.infer<
+  typeof personalExpensesBudgetResultBodySchema
+>;
+export type LogisticsExpensesBudgetResultBody = z.infer<
+  typeof logisticsExpensesBudgetResultBodySchema
+>;
+export type BudgetResultResponseDto = z.infer<typeof budgetResultResponseSchema>;
+
+// ─── budgets (orçamento por Rede — parte 1/US3) ──────────────────────────────
+const partnerKindSchema = z
+  .enum(['state', 'municipality'])
+  .meta({ description: 'Rede: estado (state) XOR município (municipality)' });
+
+// Teto do TOTAL alocado a uma Rede inteira — grandeza distinta do valor unitário de linha
+// (`centsField`); não é multiplicado por outros fatores (vai direto a Money.fromCents).
+const BUDGET_TOTAL_MAX_CENTS = 1_000_000_000_000; // R$ 10 bi
+const budgetTotalCentsField = z.number().int().min(0).max(BUDGET_TOTAL_MAX_CENTS);
+
+/** POST /budget-plans/:id/budgets — adiciona um orçamento por Rede ao plano. */
+export const addBudgetBodySchema = z.object({
+  partnerKind: partnerKindSchema,
+  partnerRef: z
+    .uuid()
+    .meta({ description: 'UUID do parceiro — estado ou município conforme partnerKind' }),
+  valueInCents: budgetTotalCentsField,
+});
+
+/** Response 201 do POST budget — mesma forma aninhada de `budgetDetailItemSchema` (partner:{kind,ref}). */
+export const budgetResponseSchema = z.object({
+  id: z.uuid(),
+  partner: z.object({ kind: partnerKindSchema, ref: z.uuid() }),
+  valueInCents: z.number().int(),
+});
+
+/** Param do DELETE /budget-plans/:id/budgets/:budgetId (CA4). */
+export const budgetDeleteParamSchema = z.object({
+  id: z.uuid().meta({ description: 'UUID v4 do plano orçamentário' }),
+  budgetId: z.uuid().meta({ description: 'UUID v4 do orçamento (Rede)' }),
+});
+
+export type AddBudgetBody = z.infer<typeof addBudgetBodySchema>;
+export type BudgetResponseDto = z.infer<typeof budgetResponseSchema>;

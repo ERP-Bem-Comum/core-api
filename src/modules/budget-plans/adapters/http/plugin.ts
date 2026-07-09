@@ -52,7 +52,19 @@ import {
   addCategoryBodySchema,
   addSubcategoryBodySchema,
   costStructureTreeSchema,
+  ipcaBudgetResultBodySchema,
+  caedBudgetResultBodySchema,
+  personalExpensesBudgetResultBodySchema,
+  logisticsExpensesBudgetResultBodySchema,
+  budgetResultResponseSchema,
+  budgetResultByBudgetParamSchema,
+  budgetResultsListResponseSchema,
+  addBudgetBodySchema,
+  budgetResponseSchema,
+  budgetDeleteParamSchema,
 } from './schemas.ts';
+import { budgetResultToDto } from './budget-result-dto.ts';
+import { budgetToDto } from './budget-dto.ts';
 import { BUDGET_PLAN_PERMISSION } from '../../public-api/permissions.ts';
 
 export type BudgetPlansHttpHooks = Readonly<{
@@ -84,6 +96,19 @@ const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
   'cost-center-id-invalid': 422,
   'category-id-invalid': 422,
   'cost-structure-repo-unavailable': 503,
+  // Lançamento calculado (US3/#317). Modelo incompatível com a subcategoria -> 400 (CA2);
+  // orçamento/subcategoria ausentes -> 404; overflow/negativo do Money -> 422 (default);
+  // infra de repo/reader -> 503.
+  'calc-model-mismatch': 400,
+  'budget-not-found': 404,
+  'subcategory-not-found': 404,
+  'budget-id-invalid': 422,
+  'subcategory-id-invalid': 422,
+  'budget-plan-invalid-money': 422,
+  'budget-result-repo-unavailable': 503,
+  'budget-result-corrupt': 503,
+  'subcategory-reader-unavailable': 503,
+  'budget-reader-unavailable': 503,
 };
 
 const writeErrorStatus = (code: string): number => WRITE_ERROR_STATUS[code] ?? 422;
@@ -253,6 +278,186 @@ const budgetPlansRoutes =
         });
         if (!result.ok) return sendWriteError(reply, result.error);
         return sendResult(reply, ok(costStructureToDto(result.value)), { ok: 201 });
+      },
+    });
+
+    // POST /budget-plans/budget-results/{modelo} — lança e calcula (US3/CA1+CA2). O `model` é fixado
+    // pela rota (como o releaseType do legado); o body traz só os campos do cálculo. 201 + resultado.
+    scope.route({
+      method: 'POST',
+      url: '/budget-plans/budget-results/ipca',
+      preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.write)],
+      schema: {
+        body: ipcaBudgetResultBodySchema,
+        response: { 201: budgetResultResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.addBudgetResult({
+          budgetId: req.body.budgetId,
+          subcategoryId: req.body.subcategoryId,
+          input: {
+            kind: 'IPCA',
+            baseValueInCents: req.body.baseValueInCents,
+            ipca: req.body.ipca,
+          },
+        });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return sendResult(reply, ok(budgetResultToDto(result.value)), { ok: 201 });
+      },
+    });
+
+    scope.route({
+      method: 'POST',
+      url: '/budget-plans/budget-results/caed',
+      preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.write)],
+      schema: {
+        body: caedBudgetResultBodySchema,
+        response: { 201: budgetResultResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.addBudgetResult({
+          budgetId: req.body.budgetId,
+          subcategoryId: req.body.subcategoryId,
+          input: {
+            kind: 'CAED',
+            numberOfEnrollments: req.body.numberOfEnrollments,
+            baseValueInCents: req.body.baseValueInCents,
+          },
+        });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return sendResult(reply, ok(budgetResultToDto(result.value)), { ok: 201 });
+      },
+    });
+
+    scope.route({
+      method: 'POST',
+      url: '/budget-plans/budget-results/personal-expenses',
+      preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.write)],
+      schema: {
+        body: personalExpensesBudgetResultBodySchema,
+        response: { 201: budgetResultResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const b = req.body;
+        const result = await deps.addBudgetResult({
+          budgetId: b.budgetId,
+          subcategoryId: b.subcategoryId,
+          input: {
+            kind: 'DESPESAS_PESSOAIS',
+            salaryInCents: b.salaryInCents,
+            salaryAdjustment: b.salaryAdjustment,
+            inssEmployer: b.inssEmployer,
+            inss: b.inss,
+            fgtsCharges: b.fgtsCharges,
+            pisCharges: b.pisCharges,
+            foodVoucherInCents: b.foodVoucherInCents,
+            transportationVouchersInCents: b.transportationVouchersInCents,
+            healthInsuranceInCents: b.healthInsuranceInCents,
+            lifeInsuranceInCents: b.lifeInsuranceInCents,
+            holidaysAndChargesInCents: b.holidaysAndChargesInCents,
+            allowanceInCents: b.allowanceInCents,
+            thirteenthInCents: b.thirteenthInCents,
+            fgtsInCents: b.fgtsInCents,
+          },
+        });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return sendResult(reply, ok(budgetResultToDto(result.value)), { ok: 201 });
+      },
+    });
+
+    scope.route({
+      method: 'POST',
+      url: '/budget-plans/budget-results/logistics-expenses',
+      preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.write)],
+      schema: {
+        body: logisticsExpensesBudgetResultBodySchema,
+        response: { 201: budgetResultResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const b = req.body;
+        const result = await deps.addBudgetResult({
+          budgetId: b.budgetId,
+          subcategoryId: b.subcategoryId,
+          input: {
+            kind: 'DESPESAS_LOGISTICAS',
+            numberOfPeople: b.numberOfPeople,
+            totalTrips: b.totalTrips,
+            airfareInCents: b.airfareInCents,
+            dailyAccommodation: b.dailyAccommodation,
+            accommodationInCents: b.accommodationInCents,
+            dailyFood: b.dailyFood,
+            foodInCents: b.foodInCents,
+            dailyTransport: b.dailyTransport,
+            transportInCents: b.transportInCents,
+            dailyCarAndFuel: b.dailyCarAndFuel,
+            carAndFuelInCents: b.carAndFuelInCents,
+          },
+        });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return sendResult(reply, ok(budgetResultToDto(result.value)), { ok: 201 });
+      },
+    });
+
+    // GET /budget-plans/budget-results/by-budget/:budgetId — lançamentos + soma do orçamento (CA3).
+    // Router find-my-way casa segmento estático (`by-budget`) antes de paramétrico, e o param `:id`
+    // de /budget-plans/:id é `z.uuid()` (rejeita "budget-results" com 400) — sem ambiguidade real.
+    scope.route({
+      method: 'GET',
+      url: '/budget-plans/budget-results/by-budget/:budgetId',
+      preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.read)],
+      schema: {
+        params: budgetResultByBudgetParamSchema,
+        response: { 200: budgetResultsListResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.getBudgetResults(req.params.budgetId);
+        if (!result.ok) return sendWriteError(reply, result.error);
+        const items = result.value.items.map(budgetResultToDto);
+        // Total somado no domínio (Money.add) — a borda só serializa os centavos.
+        return sendResult(reply, ok({ items, totalInCents: result.value.total.cents }), {
+          ok: 200,
+        });
+      },
+    });
+
+    // POST /budget-plans/:id/budgets — adiciona um orçamento por Rede ao plano (parte 1/US3). 201.
+    scope.route({
+      method: 'POST',
+      url: '/budget-plans/:id/budgets',
+      preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.write)],
+      schema: {
+        params: budgetPlanIdParamSchema,
+        body: addBudgetBodySchema,
+        response: { 201: budgetResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.addBudget({
+          budgetPlanId: req.params.id,
+          partnerKind: req.body.partnerKind,
+          partnerRef: req.body.partnerRef,
+          valueInCents: req.body.valueInCents,
+        });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return sendResult(reply, ok(budgetToDto(result.value)), { ok: 201 });
+      },
+    });
+
+    // DELETE /budget-plans/:id/budgets/:budgetId — remove o orçamento + resultados dependentes (CA4). 204.
+    scope.route({
+      method: 'DELETE',
+      url: '/budget-plans/:id/budgets/:budgetId',
+      preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.write)],
+      schema: {
+        params: budgetDeleteParamSchema,
+        // 204 sem body → sem response schema (convenção das rotas 204 deste projeto).
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.deleteBudget({
+          budgetPlanId: req.params.id,
+          budgetId: req.params.budgetId,
+        });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return reply.code(204).send() as unknown as Promise<void>;
       },
     });
   };
