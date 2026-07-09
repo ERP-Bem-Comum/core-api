@@ -27,8 +27,9 @@ import {
 import { sql } from 'drizzle-orm';
 
 // ─── bgp_budget_plans ───────────────────────────────────────────────────────
-// Agregado raiz. Plano orçamentário único por (year, programRef) — cenários/calibrações
-// filhas (Fatia 4) não entram nesta tabela; quando existirem, este UNIQUE será revisto.
+// Árvore de planos (US4/#318, legado @Tree): raiz + calibrações/cenários filhos na MESMA tabela.
+// `parent_id` (auto-ref) NULL na raiz; `scenario_name` NULL exceto em cenários. `parent_id` sem FK
+// física — soft ref auto-referente validada no domínio (molde D1 do #317; evita onDelete auto-ref).
 export const budgetPlans = mysqlTable(
   'bgp_budget_plans',
   {
@@ -38,6 +39,8 @@ export const budgetPlans = mysqlTable(
     versionMajor: int('version_major').notNull(),
     versionMinor: int('version_minor').notNull(),
     status: varchar('status', { length: 16 }).notNull(),
+    parentId: varchar('parent_id', { length: 36 }), // nullable: raiz = null
+    scenarioName: varchar('scenario_name', { length: 255 }), // nullable: só cenários preenchem
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
   },
@@ -46,11 +49,18 @@ export const budgetPlans = mysqlTable(
       'bgp_budget_plans_status_chk',
       sql`${t.status} IN ('RASCUNHO','EM_CALIBRACAO','APROVADO')`,
     ),
-    // Invariante do domínio (BudgetPlan.create): plano raiz único por Ano+Programa.
-    // Cobre também `WHERE year = ?` isolado (leftmost prefix) — sem índice extra.
-    uniqueIndex('bgp_budget_plans_year_program_ref_uq').on(t.year, t.programRef),
+    // Unicidade por VERSÃO (US4): pai e filhos compartilham (year, programRef); a versão distingue.
+    // Molde do legado UNIQUE (year, programId, version, parentId).
+    uniqueIndex('bgp_budget_plans_year_program_ref_version_uq').on(
+      t.year,
+      t.programRef,
+      t.versionMajor,
+      t.versionMinor,
+    ),
     // Índice: filtro `listPaged({ status })`.
     index('bgp_budget_plans_status_idx').on(t.status),
+    // Índice: buscar filhos de um plano (US4 — árvore, promoção, guard "calibração aberta").
+    index('bgp_budget_plans_parent_id_idx').on(t.parentId),
   ],
 );
 

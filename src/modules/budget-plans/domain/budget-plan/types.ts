@@ -24,6 +24,10 @@ export type BudgetPlan = Readonly<{
   version: PlanVersion;
   status: BudgetPlanStatus;
   budgets: readonly Budget[];
+  // Árvore de planos (US4, legado @Tree): raiz tem parentId=null e scenarioName=null; calibração/cenário
+  // são filhos derivados. scenarioName != null identifica um cenário (calibração mantém null).
+  parentId: BudgetPlanId | null;
+  scenarioName: string | null;
   createdAt: Date;
   updatedAt: Date;
 }>;

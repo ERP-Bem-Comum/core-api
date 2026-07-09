@@ -99,6 +99,8 @@ const seedPlans = async (
       version: PlanVersion.initial(),
       status: p.status,
       budgets: [],
+      parentId: null,
+      scenarioName: null,
       createdAt: PLAN_SEED_AT,
       updatedAt: PLAN_SEED_AT,
     };

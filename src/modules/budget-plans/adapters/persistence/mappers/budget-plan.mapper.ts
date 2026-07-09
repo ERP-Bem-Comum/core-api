@@ -36,6 +36,8 @@ export const budgetPlanToInsert = (plan: BudgetPlan): NewBudgetPlanRow => ({
   versionMajor: plan.version.major,
   versionMinor: plan.version.minor,
   status: plan.status,
+  parentId: plan.parentId === null ? null : String(plan.parentId),
+  scenarioName: plan.scenarioName,
   createdAt: plan.createdAt,
   updatedAt: plan.updatedAt,
 });
@@ -90,6 +92,13 @@ export const budgetPlanFromRow = (
 
   if (!isBudgetPlanStatus(row.status)) return err('budget-plan-mapper-invalid-status');
 
+  let parentId: BudgetPlanId.BudgetPlanId | null = null;
+  if (row.parentId !== null) {
+    const rehydrated = BudgetPlanId.rehydrate(row.parentId);
+    if (!rehydrated.ok) return err('budget-plan-mapper-invalid-id');
+    parentId = rehydrated.value;
+  }
+
   const budgets: Budget[] = [];
   for (const budgetRow of budgetRows) {
     const mapped = budgetFromRow(budgetRow);
@@ -104,6 +113,8 @@ export const budgetPlanFromRow = (
     version: { major: row.versionMajor, minor: row.versionMinor },
     status: row.status,
     budgets,
+    parentId,
+    scenarioName: row.scenarioName,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   });

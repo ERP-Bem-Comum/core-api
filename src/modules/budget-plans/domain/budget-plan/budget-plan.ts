@@ -42,6 +42,8 @@ const create = (
     version: PlanVersion.initial(),
     status: 'RASCUNHO',
     budgets: [],
+    parentId: null,
+    scenarioName: null,
     createdAt: input.now,
     updatedAt: input.now,
   };
@@ -91,7 +93,72 @@ const removeBudget = (
   });
 };
 
+// US4 — deriva um filho EM_CALIBRACAO de um plano APROVADO (versão editável; o aprovado é preservado —
+// nenhuma mutação nele). Versão: calibração incrementa o major (comentário version.ts).
+const startCalibration = (
+  parent: BudgetPlanEntity,
+  childId: BudgetPlanId,
+  now: Date,
+): Result<Readonly<{ plan: BudgetPlanEntity }>, BudgetPlanError> => {
+  if (parent.status !== 'APROVADO') return err('budget-plan-not-approved');
+  if (parent.scenarioName !== null) return err('budget-plan-is-scenario');
+  return ok({
+    plan: {
+      ...parent,
+      id: childId,
+      status: 'EM_CALIBRACAO',
+      version: { major: parent.version.major + 1, minor: 0 },
+      parentId: parent.id,
+      scenarioName: null,
+      createdAt: now,
+      updatedAt: now,
+    },
+  });
+};
+
+// US4 — deriva um cenário RASCUNHO de um plano não-aprovado (versão paralela nomeada). Cenário
+// incrementa o minor. Um plano APROVADO não gera cenário; um cenário não gera outro cenário.
+const createScenery = (
+  parent: BudgetPlanEntity,
+  childId: BudgetPlanId,
+  name: string,
+  now: Date,
+): Result<Readonly<{ plan: BudgetPlanEntity }>, BudgetPlanError> => {
+  if (parent.status === 'APROVADO') return err('budget-plan-already-approved');
+  if (parent.scenarioName !== null) return err('budget-plan-is-scenario');
+  return ok({
+    plan: {
+      ...parent,
+      id: childId,
+      status: 'RASCUNHO',
+      version: { major: parent.version.major, minor: parent.version.minor + 1 },
+      parentId: parent.id,
+      scenarioName: name,
+      createdAt: now,
+      updatedAt: now,
+    },
+  });
+};
+
+// US4 — aprova o plano (bloqueia edição via guard de status a jusante). A promoção ao pai, quando o
+// plano é um filho, é orquestrada no application (W1-D), não no agregado.
+const approve = (
+  plan: BudgetPlanEntity,
+  now: Date,
+): Result<Readonly<{ plan: BudgetPlanEntity }>, BudgetPlanError> => {
+  if (plan.status === 'APROVADO') return err('budget-plan-already-approved');
+  return ok({ plan: { ...plan, status: 'APROVADO', updatedAt: now } });
+};
+
 const total = (plan: BudgetPlanEntity): Money.Money =>
   plan.budgets.reduce((acc, b) => Money.add(acc, b.value), Money.ZERO);
 
-export const BudgetPlan = { create, addBudget, removeBudget, total } as const;
+export const BudgetPlan = {
+  create,
+  addBudget,
+  removeBudget,
+  startCalibration,
+  createScenery,
+  approve,
+  total,
+} as const;
