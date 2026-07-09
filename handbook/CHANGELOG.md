@@ -4,6 +4,12 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-07-08 — 🔀 ADR-0050 (Accepted): leitura de documento fiscal em cascata (nativo-first) — supersedes ADR-0034
+
+Novo [ADR-0050](./architecture/adr/0050-document-reader-cascade-supersedes-0034.md) (**Accepted**), que **supersede** o [ADR-0034](./architecture/adr/0034-ocr-port-adapter.md) (OCR como Port/Adapter). Reorienta a leitura de documento fiscal de "OCR-engine-first" para uma **cascata nativo-first**: `XML estruturado → parser de texto nativo (in-house, node:zlib) → OCR self-hosted (microserviço externo, escaneado, adiado) → exceção manual`. Fundamentado em benchmark real do dono (parser nativo: **12/12 campos, ~10 ms CPU, 0 alucinação**; amostra 100% PDF nativo), varredura byte-level empírica (docs fiscais BR = xref clássico + FlateDecode, sem `/Encrypt`/`/ObjStm`) e pesquisa multi-fonte (LGPD bloqueia cloud OCR; `fast-xml-parser` já no lockfile; `mupdf` AGPL descartado). Muda o port de `OcrPort.extract(pdfUrl)` para **`DocumentReaderPort.read(bytes)`** — recebe bytes (anti-SSRF), nunca URL de input. Grounding DDD: ACL (Evans p.224) + Ports & Adapters (Vernon p.182). Pesquisa consolidada em `specs/034-fin-documento-reader/research.md`. Issues: [#62](https://github.com/ERP-Bem-Comum/core-api/issues/62), [#145](https://github.com/ERP-Bem-Comum/core-api/issues/145), [#290](https://github.com/ERP-Bem-Comum/core-api/issues/290).
+
+---
+
 ## 2026-07-07 — 🔀 ADR-0049 (Proposed): fronteira de responsabilidade core-api ↔ BFF (Domain API + Experience API)
 
 Novo [ADR-0049](./architecture/adr/0049-core-api-bff-boundary.md) (**Proposed**), **estado-alvo** do [ADR-0032](./architecture/adr/0032-transient-http-composition-read-until-bff.md) (composição transitória — a "rota gorda" é removida quando esta fronteira entra). Formaliza a inversão de responsabilidade decidida no refinement de 2026-07-07: **core-api = Domain API** (expõe dado cru já autorizado; dono de invariante, integração externa, agregação no banco e authz/multi-tenant) e **BFF = Experience API** (server-side TanStack Start, um por front) que compõe view-models por tela.
