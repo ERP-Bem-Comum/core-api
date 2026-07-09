@@ -1,0 +1,1 @@
+ALTER TABLE `fin_payables` ADD CONSTRAINT `fin_payables_paid_at_chk` CHECK (`fin_payables`.`status` <> 'Paid' OR `fin_payables`.`paid_at` IS NOT NULL);
