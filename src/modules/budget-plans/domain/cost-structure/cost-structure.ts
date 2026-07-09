@@ -100,3 +100,40 @@ export const addSubcategory = (
   }));
   return ok({ ...structure, costCenters });
 };
+
+// US4/W1-C — clonagem profunda pai→filho. Reconstrói a árvore com novos ids (id-factory injetado —
+// mantém a pureza; o domínio não gera uuid) preservando nomes/direção/launchType. Devolve o mapa
+// oldSubcatId→newSubcatId para remapear os budget_results (o legado casa por nome; por id é mais robusto).
+export type CloneIdFactory = Readonly<{
+  costCenter: () => CostCenterId;
+  category: () => CategoryId;
+  subcategory: () => SubcategoryId;
+}>;
+
+export type ClonedCostStructure = Readonly<{
+  structure: CostStructure;
+  subcategoryIdMap: ReadonlyMap<string, SubcategoryId>;
+}>;
+
+export const clone = (
+  source: CostStructure,
+  targetPlanId: BudgetPlanId,
+  ids: CloneIdFactory,
+): ClonedCostStructure => {
+  const subcategoryIdMap = new Map<string, SubcategoryId>();
+  const costCenters: readonly CostCenter[] = source.costCenters.map((cc: CostCenter) => ({
+    id: ids.costCenter(),
+    name: cc.name,
+    direction: cc.direction,
+    categories: cc.categories.map((cat: Category) => ({
+      id: ids.category(),
+      name: cat.name,
+      subcategories: cat.subcategories.map((sub: Subcategory) => {
+        const newId = ids.subcategory();
+        subcategoryIdMap.set(String(sub.id), newId);
+        return { id: newId, name: sub.name, launchType: sub.launchType };
+      }),
+    })),
+  }));
+  return { structure: { budgetPlanId: targetPlanId, costCenters }, subcategoryIdMap };
+};
