@@ -38,6 +38,7 @@ import {
   createBudgetPlanToDto,
   budgetPlanListItemToDto,
   budgetPlanDetailToDto,
+  lifecyclePlanToDto,
 } from './budget-plan-dto.ts';
 import { costStructureToDto } from './cost-structure-dto.ts';
 import {
@@ -62,6 +63,8 @@ import {
   addBudgetBodySchema,
   budgetResponseSchema,
   budgetDeleteParamSchema,
+  sceneryBodySchema,
+  lifecyclePlanResponseSchema,
 } from './schemas.ts';
 import { budgetResultToDto } from './budget-result-dto.ts';
 import { budgetToDto } from './budget-dto.ts';
@@ -109,6 +112,11 @@ const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
   'budget-result-corrupt': 503,
   'subcategory-reader-unavailable': 503,
   'budget-reader-unavailable': 503,
+  // Ciclo de vida (US4). Transição inválida p/ o estado atual -> 409; nome de cenário vazio -> 400.
+  'budget-plan-not-approved': 409,
+  'budget-plan-is-scenario': 409,
+  'budget-plan-already-approved': 409,
+  'scenario-name-required': 400,
 };
 
 const writeErrorStatus = (code: string): number => WRITE_ERROR_STATUS[code] ?? 422;
@@ -458,6 +466,58 @@ const budgetPlansRoutes =
         });
         if (!result.ok) return sendWriteError(reply, result.error);
         return reply.code(204).send() as unknown as Promise<void>;
+      },
+    });
+
+    // POST /budget-plans/:id/start-calibration — deriva calibração (filho EM_CALIBRACAO) do APROVADO (CA1).
+    scope.route({
+      method: 'POST',
+      url: '/budget-plans/:id/start-calibration',
+      preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.write)],
+      schema: {
+        params: budgetPlanIdParamSchema,
+        response: { 201: lifecyclePlanResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.startCalibration({ parentPlanId: req.params.id });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return sendResult(reply, ok(lifecyclePlanToDto(result.value.plan)), { ok: 201 });
+      },
+    });
+
+    // POST /budget-plans/:id/scenery — deriva cenário (filho RASCUNHO nomeado) de plano não-aprovado (CA4).
+    scope.route({
+      method: 'POST',
+      url: '/budget-plans/:id/scenery',
+      preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.write)],
+      schema: {
+        params: budgetPlanIdParamSchema,
+        body: sceneryBodySchema,
+        response: { 201: lifecyclePlanResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.createScenery({
+          parentPlanId: req.params.id,
+          name: req.body.name,
+        });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return sendResult(reply, ok(lifecyclePlanToDto(result.value.plan)), { ok: 201 });
+      },
+    });
+
+    // POST /budget-plans/:id/approve — aprova o plano (→ APROVADO; bloqueia edição) (CA2).
+    scope.route({
+      method: 'POST',
+      url: '/budget-plans/:id/approve',
+      preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.write)],
+      schema: {
+        params: budgetPlanIdParamSchema,
+        response: { 200: lifecyclePlanResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.approveBudgetPlan({ planId: req.params.id });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return sendResult(reply, ok(lifecyclePlanToDto(result.value.plan)), { ok: 200 });
       },
     });
   };

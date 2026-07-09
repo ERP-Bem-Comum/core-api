@@ -128,6 +128,27 @@ export const createBudgetPlanResponseSchema = z.object({
 
 export type CreateBudgetPlanResponseDto = z.infer<typeof createBudgetPlanResponseSchema>;
 
+// ─── ciclo de vida (US4) ─────────────────────────────────────────────────────
+/** Body do POST /budget-plans/:id/scenery — nome do cenário. */
+export const sceneryBodySchema = z.object({
+  name: z.string().trim().min(1).max(255).meta({ description: 'Nome do cenário' }),
+});
+
+/** Resposta das transições (start-calibration/scenery/approve): o plano resultante + árvore. */
+export const lifecyclePlanResponseSchema = z.object({
+  id: z.uuid(),
+  year: z.number().int(),
+  programRef: z.uuid(),
+  status: budgetPlanStatusSchema,
+  version: z.string(),
+  scenarioName: z.string().nullable(),
+  parentId: z.uuid().nullable(),
+  totalInCents: z.number().int(),
+});
+
+export type SceneryBody = z.infer<typeof sceneryBodySchema>;
+export type LifecyclePlanResponseDto = z.infer<typeof lifecyclePlanResponseSchema>;
+
 // ─── Árvore de custos (Fatia 2/US2, BDG-COST-STRUCTURE) ──────────────────────────────
 // Valores de fio idênticos ao domínio (cost-direction.ts / launch-type.ts). Zod só na borda:
 // o domínio recebe a string crua e re-valida via `parse` (invalid-direction/launch-type -> 422).

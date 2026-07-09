@@ -5,6 +5,7 @@
 
 import { BudgetPlan } from '#src/modules/budget-plans/domain/budget-plan/budget-plan.ts';
 import * as PlanVersion from '#src/modules/budget-plans/domain/budget-plan/version.ts';
+import type { BudgetPlan as BudgetPlanEntity } from '#src/modules/budget-plans/domain/budget-plan/types.ts';
 import type { CreateBudgetPlanOutcome } from '#src/modules/budget-plans/application/use-cases/create-budget-plan.ts';
 import type { BudgetPlanListItem } from '#src/modules/budget-plans/application/use-cases/list-budget-plans.ts';
 import type { BudgetPlanDetail } from '#src/modules/budget-plans/application/use-cases/get-budget-plan.ts';
@@ -12,7 +13,20 @@ import type {
   CreateBudgetPlanResponseDto,
   BudgetPlanListItemDto,
   BudgetPlanDetailDto,
+  LifecyclePlanResponseDto,
 } from './schemas.ts';
+
+/** Resposta das transições de ciclo de vida (US4): plano resultante + total. */
+export const lifecyclePlanToDto = (plan: BudgetPlanEntity): LifecyclePlanResponseDto => ({
+  id: String(plan.id),
+  year: plan.year,
+  programRef: String(plan.programRef),
+  status: plan.status,
+  version: PlanVersion.format(plan.version),
+  scenarioName: plan.scenarioName,
+  parentId: plan.parentId === null ? null : String(plan.parentId),
+  totalInCents: BudgetPlan.total(plan).cents,
+});
 
 /** Resposta do POST /budget-plans (cabeçalho recém-criado, sem budgets — nasce vazio). */
 export const createBudgetPlanToDto = (
