@@ -23,6 +23,11 @@ export type BudgetPlanPage = Readonly<{
 
 export type BudgetPlanRepository = Readonly<{
   findById: (id: BudgetPlanId) => Promise<Result<BudgetPlan | null, BudgetPlanRepositoryError>>;
+  // Filhos diretos (calibrações/cenários) de um plano — base da alocação de versão + guards de
+  // cardinalidade (US4). Vazio se o plano não tem filhos.
+  listChildren: (
+    parentId: BudgetPlanId,
+  ) => Promise<Result<readonly BudgetPlan[], BudgetPlanRepositoryError>>;
   // Unicidade do plano RAIZ por (year, programRef) — invariante portada do legado.
   // Cenários/calibrações (filhos, Fatia 4) não entram nesta consulta.
   findRootByYearAndProgram: (

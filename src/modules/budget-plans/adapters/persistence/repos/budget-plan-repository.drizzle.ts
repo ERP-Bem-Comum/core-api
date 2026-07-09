@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, inArray, sql, type SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, inArray, isNull, sql, type SQL } from 'drizzle-orm';
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import process from 'node:process';
 import type { BudgetPlan } from '#src/modules/budget-plans/domain/budget-plan/types.ts';
@@ -75,6 +75,20 @@ export const createDrizzleBudgetPlanRepository = (
         return hydrate(row, await budgetsOf(row.id));
       }),
 
+    listChildren: async (parentId) =>
+      safe('listChildren', async () => {
+        const rows = await db
+          .select()
+          .from(schema.budgetPlans)
+          .where(eq(schema.budgetPlans.parentId, parentId as unknown as string));
+        const children: BudgetPlan[] = [];
+        for (const row of rows) {
+          children.push(hydrate(row, await budgetsOf(row.id)));
+        }
+        return children;
+      }),
+
+    // Só a RAIZ (parent_id IS NULL) — pós-US4 a família compartilha (year, program_ref).
     findRootByYearAndProgram: async (year, programRef) =>
       safe('findRootByYearAndProgram', async () => {
         const rows = await db
@@ -82,6 +96,7 @@ export const createDrizzleBudgetPlanRepository = (
           .from(schema.budgetPlans)
           .where(
             and(
+              isNull(schema.budgetPlans.parentId),
               eq(schema.budgetPlans.year, year),
               eq(schema.budgetPlans.programRef, programRef as unknown as string),
             ),

@@ -28,8 +28,9 @@ import { sql } from 'drizzle-orm';
 
 // ─── bgp_budget_plans ───────────────────────────────────────────────────────
 // Árvore de planos (US4/#318, legado @Tree): raiz + calibrações/cenários filhos na MESMA tabela.
-// `parent_id` (auto-ref) NULL na raiz; `scenario_name` NULL exceto em cenários. `parent_id` sem FK
-// física — soft ref auto-referente validada no domínio (molde D1 do #317; evita onDelete auto-ref).
+// `parent_id` (auto-ref) NULL na raiz; `scenario_name` NULL exceto em cenários. FK auto-referente
+// `onDelete('restrict')` (W2/drizzle: bgp_budget_plans NÃO é replace-all — é SELECT-then-UPDATE-or-INSERT;
+// diferente da D1 do #317, aqui a FK intra-módulo é segura e correta).
 export const budgetPlans = mysqlTable(
   'bgp_budget_plans',
   {
@@ -50,7 +51,6 @@ export const budgetPlans = mysqlTable(
       sql`${t.status} IN ('RASCUNHO','EM_CALIBRACAO','APROVADO')`,
     ),
     // Unicidade por VERSÃO (US4): pai e filhos compartilham (year, programRef); a versão distingue.
-    // Molde do legado UNIQUE (year, programId, version, parentId).
     uniqueIndex('bgp_budget_plans_year_program_ref_version_uq').on(
       t.year,
       t.programRef,
@@ -59,8 +59,15 @@ export const budgetPlans = mysqlTable(
     ),
     // Índice: filtro `listPaged({ status })`.
     index('bgp_budget_plans_status_idx').on(t.status),
-    // Índice: buscar filhos de um plano (US4 — árvore, promoção, guard "calibração aberta").
+    // Índice: buscar filhos de um plano (US4 — árvore, alocação de versão, guard cardinalidade).
+    // O índice implícito da FK abaixo cobriria, mas mantido explícito para clareza.
     index('bgp_budget_plans_parent_id_idx').on(t.parentId),
+    // FK auto-referente: filho aponta para o pai na MESMA tabela. restrict — não há delete de plano.
+    foreignKey({
+      name: 'bgp_budget_plans_parent_id_fk',
+      columns: [t.parentId],
+      foreignColumns: [t.id],
+    }).onDelete('restrict'),
   ],
 );
 

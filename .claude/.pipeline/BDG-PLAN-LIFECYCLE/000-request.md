@@ -41,7 +41,9 @@ A research revelou que o `000-request` acima estava impreciso. Decisões do Gabr
 
 - **CA3 "Planejado × Realizado" SAI da US4** → é o módulo `reports` (**spec 032**) no legado; Realizado vem da
   conciliação e exige `financial/public-api/read.ts` + query nova — entra junto com a 032, não aqui.
-- **Lifecycle portado FIEL ao legado:** árvore de planos (`parentId`) + clonagem profunda + promoção ao pai.
+- **Lifecycle portado FIEL ao legado:** árvore de planos (`parentId`) + clonagem profunda. **Promoção (decisão
+  2026-07-09, W2): semântica limpa** — aprovar o filho o torna a versão vigente; o pai fica como histórico.
+  NÃO replicamos o `copy` do legado (que apaga+reclona o pai e deixa pai+filho ambos APROVADO duplicados).
 - **CA3 redefinido** = **insights ano-a-ano** (o `/insights` real do legado: compara totais planejados entre anos; autocontido).
 
 ### Fatiamento interno (fiel, incremental)
@@ -50,10 +52,11 @@ A research revelou que o `000-request` acima estava impreciso. Decisões do Gabr
    version minor+1, máx. 2), `approve` (→APROVADO). Guards de transição. **Sem persistência/clonagem ainda.**
 2. **W1-B — Persistência da árvore**: `+parentId`/`scenario_name` no schema `bgp_budget_plans` (migration) + repo.
 3. **W1-C — Clonagem profunda**: copiar cost-structure + budgets + budget_results do pai→filho (casar subcategoria por nome).
-4. **W1-D — Aprovar + promoção ao pai** + borda HTTP (scenery/start-calibration/approve) + insights ano-a-ano.
+4. **W1-D — Aprovar (semântica limpa)** + borda HTTP (scenery/start-calibration/approve) + insights ano-a-ano.
 
 ### CAs revisados
-- **CA1** `start-calibration` em `APROVADO` → filho `EM_CALIBRACAO` editável (version major+1); aprovado intacto.
-- **CA2** `approve` de filho `EM_CALIBRACAO` válido → `APROVADO` + promove ao pai; transição inválida → erro/400.
+- **CA1** `start-calibration` em `APROVADO` → filho `EM_CALIBRACAO` editável (version major+1, alocada do máx da família);
+  aprovado intacto; bloqueia se já há calibração aberta.
+- **CA2** `approve` de plano não-aprovado → `APROVADO` (filho aprovado vira vigente — sem mutação do pai); já-aprovado → 409.
 - **CA3** `GET /:id/insights` → comparação ano-a-ano de totais planejados (autocontido). Planejado×Realizado → spec 032.
 - **CA4 (novo)** `scenery` → filho `RASCUNHO` (version minor+1), máx. 2 por plano em calibração.

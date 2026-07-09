@@ -93,21 +93,31 @@ const removeBudget = (
   });
 };
 
-// US4 — deriva um filho EM_CALIBRACAO de um plano APROVADO (versão editável; o aprovado é preservado —
-// nenhuma mutação nele). Versão: calibração incrementa o major (comentário version.ts).
+// Legado: no máx. 2 cenários por plano em calibração.
+const MAX_SCENERIES = 2;
+
+// US4 — deriva um filho EM_CALIBRACAO de um plano APROVADO (o aprovado é preservado). A versão é
+// alocada a partir do MAIOR major existente na família (+1) — não da leitura estática do pai — para
+// que duas calibrações nunca colidam na UNIQUE (year, program_ref, version). `children` = filhos atuais.
 const startCalibration = (
   parent: BudgetPlanEntity,
+  children: readonly BudgetPlanEntity[],
   childId: BudgetPlanId,
   now: Date,
 ): Result<Readonly<{ plan: BudgetPlanEntity }>, BudgetPlanError> => {
   if (parent.status !== 'APROVADO') return err('budget-plan-not-approved');
   if (parent.scenarioName !== null) return err('budget-plan-is-scenario');
+  // Legado: não abrir nova calibração enquanto há uma calibração (filho não-cenário) em aberto.
+  if (children.some((c) => c.scenarioName === null && c.status === 'EM_CALIBRACAO')) {
+    return err('budget-plan-calibration-open');
+  }
+  const nextMajor = Math.max(parent.version.major, ...children.map((c) => c.version.major)) + 1;
   return ok({
     plan: {
       ...parent,
       id: childId,
       status: 'EM_CALIBRACAO',
-      version: { major: parent.version.major + 1, minor: 0 },
+      version: { major: nextMajor, minor: 0 },
       budgets: [], // clonados com novos ids na orquestração (evita colisão de PK)
       parentId: parent.id,
       scenarioName: null,
@@ -117,25 +127,32 @@ const startCalibration = (
   });
 };
 
-// US4 — deriva um cenário RASCUNHO de um plano não-aprovado (versão paralela nomeada). Cenário
-// incrementa o minor. Um plano APROVADO não gera cenário; um cenário não gera outro cenário.
+// US4 — deriva um cenário RASCUNHO de um plano não-aprovado (versão paralela nomeada). Minor alocado
+// a partir do MAIOR minor dos irmãos do mesmo major (+1) — evita colisão entre 2 cenários. Máx. 2.
 const createScenery = (
   parent: BudgetPlanEntity,
-  childId: BudgetPlanId,
-  name: string,
+  children: readonly BudgetPlanEntity[],
+  spec: Readonly<{ id: BudgetPlanId; name: string }>,
   now: Date,
 ): Result<Readonly<{ plan: BudgetPlanEntity }>, BudgetPlanError> => {
   if (parent.status === 'APROVADO') return err('budget-plan-already-approved');
   if (parent.scenarioName !== null) return err('budget-plan-is-scenario');
+  if (children.filter((c) => c.scenarioName !== null).length >= MAX_SCENERIES) {
+    return err('budget-plan-scenery-limit');
+  }
+  const siblingMinors = children
+    .filter((c) => c.version.major === parent.version.major)
+    .map((c) => c.version.minor);
+  const nextMinor = Math.max(parent.version.minor, ...siblingMinors) + 1;
   return ok({
     plan: {
       ...parent,
-      id: childId,
+      id: spec.id,
       status: 'RASCUNHO',
-      version: { major: parent.version.major, minor: parent.version.minor + 1 },
+      version: { major: parent.version.major, minor: nextMinor },
       budgets: [], // clonados com novos ids na orquestração (evita colisão de PK)
       parentId: parent.id,
-      scenarioName: name,
+      scenarioName: spec.name,
       createdAt: now,
       updatedAt: now,
     },

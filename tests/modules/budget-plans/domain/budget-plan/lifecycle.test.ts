@@ -32,9 +32,9 @@ const makePlan = (over: Partial<BudgetPlanEntity>): BudgetPlanEntity => {
 };
 
 describe('BudgetPlan.startCalibration (US4/CA1)', () => {
-  it('APROVADO → filho EM_CALIBRACAO, version major+1, parentId = pai, aprovado intacto', () => {
+  it('APROVADO sem filhos → filho EM_CALIBRACAO, version major+1, aprovado intacto', () => {
     const parent = makePlan({ status: 'APROVADO', version: { major: 3, minor: 0 } });
-    const r = BudgetPlan.startCalibration(parent, BudgetPlanId.generate(), NOW);
+    const r = BudgetPlan.startCalibration(parent, [], BudgetPlanId.generate(), NOW);
     assert.ok(isOk(r));
     assert.equal(r.value.plan.status, 'EM_CALIBRACAO');
     assert.equal(r.value.plan.version.major, 4);
@@ -44,9 +44,36 @@ describe('BudgetPlan.startCalibration (US4/CA1)', () => {
     assert.equal(parent.status, 'APROVADO'); // pai imutável
   });
 
+  it('aloca major a partir do MAIOR existente na família (+1), não da leitura do pai', () => {
+    const parent = makePlan({ status: 'APROVADO', version: { major: 3, minor: 0 } });
+    // já houve calibração 4.0 (fechada); a nova deve ser 5.0, não 4.0 (Blocker corrigido)
+    const oldCalib = makePlan({
+      status: 'APROVADO',
+      version: { major: 4, minor: 0 },
+      parentId: parent.id,
+    });
+    const r = BudgetPlan.startCalibration(parent, [oldCalib], BudgetPlanId.generate(), NOW);
+    assert.ok(isOk(r));
+    assert.equal(r.value.plan.version.major, 5);
+  });
+
+  it('calibração já aberta → budget-plan-calibration-open', () => {
+    const parent = makePlan({ status: 'APROVADO', version: { major: 3, minor: 0 } });
+    const open = makePlan({
+      status: 'EM_CALIBRACAO',
+      version: { major: 4, minor: 0 },
+      parentId: parent.id,
+      scenarioName: null,
+    });
+    const r = BudgetPlan.startCalibration(parent, [open], BudgetPlanId.generate(), NOW);
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'budget-plan-calibration-open');
+  });
+
   it('plano não-APROVADO → budget-plan-not-approved', () => {
     const r = BudgetPlan.startCalibration(
       makePlan({ status: 'RASCUNHO' }),
+      [],
       BudgetPlanId.generate(),
       NOW,
     );
@@ -56,29 +83,75 @@ describe('BudgetPlan.startCalibration (US4/CA1)', () => {
 
   it('cenário não inicia calibração → budget-plan-is-scenario', () => {
     const parent = makePlan({ status: 'APROVADO', scenarioName: 'Cenário A' });
-    const r = BudgetPlan.startCalibration(parent, BudgetPlanId.generate(), NOW);
+    const r = BudgetPlan.startCalibration(parent, [], BudgetPlanId.generate(), NOW);
     assert.ok(isErr(r));
     assert.equal(r.error, 'budget-plan-is-scenario');
   });
 });
 
 describe('BudgetPlan.createScenery (US4/CA4)', () => {
-  it('não-APROVADO → filho RASCUNHO, version minor+1, scenarioName preenchido', () => {
+  it('sem cenários → filho RASCUNHO, minor+1, scenarioName preenchido', () => {
     const parent = makePlan({ status: 'EM_CALIBRACAO', version: { major: 4, minor: 0 } });
-    const r = BudgetPlan.createScenery(parent, BudgetPlanId.generate(), 'Otimista', NOW);
+    const r = BudgetPlan.createScenery(
+      parent,
+      [],
+      { id: BudgetPlanId.generate(), name: 'Otimista' },
+      NOW,
+    );
     assert.ok(isOk(r));
     assert.equal(r.value.plan.status, 'RASCUNHO');
     assert.equal(r.value.plan.version.major, 4);
     assert.equal(r.value.plan.version.minor, 1);
     assert.equal(r.value.plan.scenarioName, 'Otimista');
-    assert.equal(String(r.value.plan.parentId), String(parent.id));
+  });
+
+  it('2º cenário aloca minor a partir do irmão (não colide com o 1º)', () => {
+    const parent = makePlan({ status: 'EM_CALIBRACAO', version: { major: 4, minor: 0 } });
+    const first = makePlan({
+      status: 'RASCUNHO',
+      version: { major: 4, minor: 1 },
+      parentId: parent.id,
+      scenarioName: 'A',
+    });
+    const r = BudgetPlan.createScenery(
+      parent,
+      [first],
+      { id: BudgetPlanId.generate(), name: 'B' },
+      NOW,
+    );
+    assert.ok(isOk(r));
+    assert.equal(r.value.plan.version.minor, 2); // Blocker corrigido: 2, não 1
+  });
+
+  it('máx 2 cenários → budget-plan-scenery-limit', () => {
+    const parent = makePlan({ status: 'EM_CALIBRACAO', version: { major: 4, minor: 0 } });
+    const s1 = makePlan({
+      status: 'RASCUNHO',
+      version: { major: 4, minor: 1 },
+      parentId: parent.id,
+      scenarioName: 'A',
+    });
+    const s2 = makePlan({
+      status: 'RASCUNHO',
+      version: { major: 4, minor: 2 },
+      parentId: parent.id,
+      scenarioName: 'B',
+    });
+    const r = BudgetPlan.createScenery(
+      parent,
+      [s1, s2],
+      { id: BudgetPlanId.generate(), name: 'C' },
+      NOW,
+    );
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'budget-plan-scenery-limit');
   });
 
   it('APROVADO não gera cenário → budget-plan-already-approved', () => {
     const r = BudgetPlan.createScenery(
       makePlan({ status: 'APROVADO' }),
-      BudgetPlanId.generate(),
-      'X',
+      [],
+      { id: BudgetPlanId.generate(), name: 'X' },
       NOW,
     );
     assert.ok(isErr(r));

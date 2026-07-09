@@ -6,9 +6,9 @@
 | :--- | :--- | :--- | :--- | :--- |
 | W0 | done (RED) | tdd-strategist | 002-tests/REPORT.md | 2026-07-09T13:26:49.515Z |
 | W1 | done (GREEN) | ts-domain-modeler | 003-impl/REPORT.md | 2026-07-09T14:08:57.252Z |
-| W2 | pending | — | — | — |
+| W2 | done (APPROVED) | code-reviewer | 004-code-review/REVIEW.md | 2026-07-09T14:38:13.781Z |
 | W3 | pending | — | — | — |
 
 ## Último evento
 
-W1 finished (GREEN)
+W2 finished (APPROVED)

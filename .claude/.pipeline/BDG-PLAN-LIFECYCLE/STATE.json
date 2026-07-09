@@ -4,7 +4,7 @@
   "size": "L",
   "createdAt": "2026-07-09T13:11:18.709Z",
   "closedAt": null,
-  "currentWave": "W2",
+  "currentWave": "W3",
   "status": "in-progress",
   "waves": [
     {
@@ -29,13 +29,13 @@
     },
     {
       "id": "W2",
-      "status": "pending",
-      "agent": null,
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-09T14:11:12.164Z",
+      "finishedAt": "2026-07-09T14:38:13.781Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
     },
     {
       "id": "W3",
@@ -49,5 +49,5 @@
     }
   ],
   "blockers": [],
-  "lastEvent": "W1 finished (GREEN)"
+  "lastEvent": "W2 finished (APPROVED)"
 }

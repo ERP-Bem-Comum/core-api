@@ -33,8 +33,16 @@ export const startCalibration =
     if (!found.ok) return found;
     if (found.value === null) return err('budget-plan-not-found');
 
+    const children = await deps.planRepo.listChildren(parentId.value);
+    if (!children.ok) return children;
+
     const now = deps.clock.now();
-    const derived = BudgetPlan.startCalibration(found.value, BudgetPlanId.generate(), now);
+    const derived = BudgetPlan.startCalibration(
+      found.value,
+      children.value,
+      BudgetPlanId.generate(),
+      now,
+    );
     if (!derived.ok) return derived;
 
     return clonePlanContent(deps)(found.value, derived.value.plan, now);

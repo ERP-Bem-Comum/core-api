@@ -189,6 +189,31 @@ describe('POST /budget-plans/:id/scenery (CA4)', () => {
     assert.equal(res.statusCode, 400, res.body);
     await teardown();
   });
+
+  it('2 cenários do MESMO pai não colidem (v1.1, v1.2); o 3º -> 409 (máx 2) — Blocker corrigido e2e', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app);
+    const planId = await createPlan(app, token);
+    const scenery = (name: string) =>
+      app.inject({
+        method: 'POST',
+        url: `/api/v2/budget-plans/${planId}/scenery`,
+        headers: { authorization: `Bearer ${token}` },
+        payload: { name },
+      });
+
+    const a = await scenery('A');
+    assert.equal(a.statusCode, 201, a.body);
+    assert.equal((a.json() as { version: string }).version, '1.1');
+
+    const b = await scenery('B');
+    assert.equal(b.statusCode, 201, b.body); // não colide (era o Blocker)
+    assert.equal((b.json() as { version: string }).version, '1.2');
+
+    const c = await scenery('C');
+    assert.equal(c.statusCode, 409, c.body); // máx 2
+    await teardown();
+  });
 });
 
 describe('GET /budget-plans/:id/insights (CA3)', () => {

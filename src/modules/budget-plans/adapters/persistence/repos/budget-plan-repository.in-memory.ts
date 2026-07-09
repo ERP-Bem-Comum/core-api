@@ -31,10 +31,19 @@ export const InMemoryBudgetPlanRepository = (
   const repo: BudgetPlanRepository = {
     findById: async (id) => ok(map.get(id) ?? null),
 
+    listChildren: async (parentId) =>
+      ok(
+        [...map.values()].filter(
+          (p) => p.parentId !== null && String(p.parentId) === String(parentId),
+        ),
+      ),
+
+    // Só a RAIZ (parentId === null) — pós-US4, (year, programRef) é compartilhado pela família.
     findRootByYearAndProgram: async (year, programRef) =>
       ok(
         [...map.values()].find(
-          (p) => p.year === year && String(p.programRef) === String(programRef),
+          (p) =>
+            p.parentId === null && p.year === year && String(p.programRef) === String(programRef),
         ) ?? null,
       ),
 

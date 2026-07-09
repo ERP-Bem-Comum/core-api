@@ -6,18 +6,11 @@
  * schemas.ts, validação na borda, domínio recebe primitivos. RBAC: requireAuth (401) +
  * authorize(permission) (403) por rota.
  *
- * 4 rotas sob `/budget-plans`:
- *   POST /budget-plans          budget-plan:write  → createBudgetPlan (201)
- *   GET  /budget-plans          budget-plan:read   → listBudgetPlans
- *   GET  /budget-plans/options  budget-plan:read   → getBudgetPlanOptions (ANTES de /:id)
- *   GET  /budget-plans/:id      budget-plan:read   → getBudgetPlan
- *
- * Mapa erro->HTTP (000-request.md):
- *   budget-plan-ref-invalid / budget-plan-id-invalid / program-not-active -> 422
- *   program-not-found / budget-plan-not-found                            -> 404
- *   budget-plan-already-exists                                          -> 409
- *   repo/catálogo/outbox indisponível                                    -> 503
- *   body malformado (Zod)                                                -> 400 (error handler central)
+ * Rotas sob `/budget-plans` (cada uma com comentário inline): plano (CRUD — #315), árvore de custos
+ * (#316), budget-results + budgets (US3/#317) e ciclo de vida (US4/#318 — start-calibration/scenery/
+ * approve/insights). O mapa erro→HTTP canônico é `WRITE_ERROR_STATUS` abaixo (fonte única). Router
+ * find-my-way casa segmento estático antes de paramétrico (rotas estáticas coexistem com `/:id`).
+ * RBAC: requireAuth (401) + authorize(permission) (403) por rota; body malformado (Zod) → 400.
  */
 
 import type { FastifyPluginAsync, FastifyReply, preHandlerAsyncHookHandler } from 'fastify';
@@ -117,6 +110,8 @@ const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
   'budget-plan-not-approved': 409,
   'budget-plan-is-scenario': 409,
   'budget-plan-already-approved': 409,
+  'budget-plan-calibration-open': 409,
+  'budget-plan-scenery-limit': 409,
   'scenario-name-required': 400,
 };
 

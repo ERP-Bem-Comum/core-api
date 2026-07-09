@@ -140,7 +140,7 @@ export const lifecyclePlanResponseSchema = z.object({
   year: z.number().int(),
   programRef: z.uuid(),
   status: budgetPlanStatusSchema,
-  version: z.string(),
+  version: z.string().meta({ description: 'Versão do plano (major.minor)', example: '2.0' }),
   scenarioName: z.string().nullable(),
   parentId: z.uuid().nullable(),
   totalInCents: z.number().int(),
@@ -154,7 +154,8 @@ const yearTotalSchema = z.object({ year: z.number().int(), totalInCents: z.numbe
 /** Resposta do GET /budget-plans/:id/insights (CA3): total do plano vs. anos anteriores. */
 export const budgetPlanInsightsResponseSchema = z.object({
   current: yearTotalSchema,
-  previousYears: z.array(yearTotalSchema),
+  // Teto alinhado ao LOOKBACK_LIMIT do use case (contrato como fonte única do limite).
+  previousYears: z.array(yearTotalSchema).max(100),
 });
 
 export type BudgetPlanInsightsResponseDto = z.infer<typeof budgetPlanInsightsResponseSchema>;

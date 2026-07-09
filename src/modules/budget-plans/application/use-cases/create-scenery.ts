@@ -37,8 +37,16 @@ export const createScenery =
     if (!found.ok) return found;
     if (found.value === null) return err('budget-plan-not-found');
 
+    const children = await deps.planRepo.listChildren(parentId.value);
+    if (!children.ok) return children;
+
     const now = deps.clock.now();
-    const derived = BudgetPlan.createScenery(found.value, BudgetPlanId.generate(), name, now);
+    const derived = BudgetPlan.createScenery(
+      found.value,
+      children.value,
+      { id: BudgetPlanId.generate(), name },
+      now,
+    );
     if (!derived.ok) return derived;
 
     return clonePlanContent(deps)(found.value, derived.value.plan, now);
