@@ -3,9 +3,9 @@
   "ticket": "BDG-PLAN-LIFECYCLE",
   "size": "L",
   "createdAt": "2026-07-09T13:11:18.709Z",
-  "closedAt": null,
-  "currentWave": "W3",
-  "status": "in-progress",
+  "closedAt": "2026-07-09T14:55:48.275Z",
+  "currentWave": null,
+  "status": "closed-green",
   "waves": [
     {
       "id": "W0",
@@ -39,15 +39,15 @@
     },
     {
       "id": "W3",
-      "status": "in-progress",
+      "status": "done",
       "agent": "ts-quality-checker",
       "startedAt": "2026-07-09T14:41:01.261Z",
-      "finishedAt": null,
+      "finishedAt": "2026-07-09T14:55:47.954Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
     }
   ],
   "blockers": [],
-  "lastEvent": "W3 started (ts-quality-checker)"
+  "lastEvent": "closed-green"
 }
