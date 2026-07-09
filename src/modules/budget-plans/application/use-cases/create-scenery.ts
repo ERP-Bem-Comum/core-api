@@ -10,22 +10,26 @@ import {
   type ClonePlanContentError,
 } from './clone-plan-content.ts';
 
-export type StartCalibrationCommand = Readonly<{ parentPlanId: string }>;
+export type CreateSceneryCommand = Readonly<{ parentPlanId: string; name: string }>;
 
-export type StartCalibrationError =
+export type CreateSceneryError =
   | BudgetPlanId.BudgetPlanIdError
   | 'budget-plan-not-found'
+  | 'scenario-name-required'
   | BudgetPlanError
   | ClonePlanContentError;
 
-export type StartCalibrationDeps = ClonePlanContentDeps & Readonly<{ clock: Clock }>;
+export type CreateSceneryDeps = ClonePlanContentDeps & Readonly<{ clock: Clock }>;
 
-// US4/CA1 — deriva uma calibração (filho EM_CALIBRACAO) de um plano APROVADO e clona o conteúdo inteiro.
-export const startCalibration =
-  (deps: StartCalibrationDeps) =>
+// US4/CA4 — deriva um cenário (filho RASCUNHO nomeado) de um plano não-aprovado e clona o conteúdo inteiro.
+export const createScenery =
+  (deps: CreateSceneryDeps) =>
   async (
-    cmd: StartCalibrationCommand,
-  ): Promise<Result<Readonly<{ plan: BudgetPlanEntity }>, StartCalibrationError>> => {
+    cmd: CreateSceneryCommand,
+  ): Promise<Result<Readonly<{ plan: BudgetPlanEntity }>, CreateSceneryError>> => {
+    const name = cmd.name.trim();
+    if (name.length === 0) return err('scenario-name-required');
+
     const parentId = BudgetPlanId.rehydrate(cmd.parentPlanId);
     if (!parentId.ok) return parentId;
 
@@ -34,7 +38,7 @@ export const startCalibration =
     if (found.value === null) return err('budget-plan-not-found');
 
     const now = deps.clock.now();
-    const derived = BudgetPlan.startCalibration(found.value, BudgetPlanId.generate(), now);
+    const derived = BudgetPlan.createScenery(found.value, BudgetPlanId.generate(), name, now);
     if (!derived.ok) return derived;
 
     return clonePlanContent(deps)(found.value, derived.value.plan, now);
