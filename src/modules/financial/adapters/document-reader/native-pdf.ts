@@ -20,6 +20,11 @@ import {
 } from './pdf-lowlevel.ts';
 
 const MAX_OPERAND = 4096; // teto por operando de texto (nenhum campo fiscal real passa disso)
+// #386 F1 (anti-amplificação, CWE-400/789): teto de operandos acumulados entre dois flushes
+// (Tj/TJ/posição). Sem isso, um content-stream com milhões de `()`/`<>` sem mostrar texto faria
+// `pending` crescer sem limite (KB de payload → centenas de MB de heap). Nenhuma linha fiscal real
+// tem tantos runs entre flushes; operandos acima do teto são descartados (o excedente não é texto útil).
+const MAX_PENDING_OPERANDS = 2048;
 
 // Reader nativo de PDF de texto (FIN-DOC-READER-NATIVE, ADR-0050). Caminho principal 100% `node:zlib`.
 // Extrai texto do content-stream (WinAnsi direto; Identity-H via CMap `/ToUnicode`) e estrutura por
@@ -62,13 +67,39 @@ const parseToUnicode = (cmap: string): ReadonlyMap<number, string> => {
   return map;
 };
 
-// Tokenizer char-a-char O(n) — SEM regex de backtracking (anti-ReDoS, F1). Cada operando de string
-// de um `Tj` vira uma linha: literal `(...)` (com escape + parênteses balanceados) ou hex `<...>`,
-// cada um limitado a MAX_OPERAND.
+// Tokenizer char-a-char O(n) — SEM regex de backtracking (anti-ReDoS, F1). Coleta operandos de string
+// (`(...)` literal balanceado ou `<...>` hex, cada um ≤ MAX_OPERAND) em `pending` e os aplica no operador
+// de mostrar texto: `Tj` (1 operando) e **`TJ`** (array `[ ... ]`, N operandos + kerning numérico ignorado).
+// Reconstrução de linha (#386): operadores de posição (`Td`/`TD`/`T*`/`Tm`) e `BT`/`ET` fecham a linha
+// corrente; runs de texto entre eles são CONCATENADOS na mesma linha (desfaz a fragmentação 1-linha-por-Tj).
+interface Operand {
+  readonly kind: 'lit' | 'hex';
+  readonly value: string;
+}
 const extractText = (content: string, toUnicode: ReadonlyMap<number, string> | null): string => {
   const lines: string[] = [];
+  let line = '';
+  const pending: Operand[] = [];
   const n = content.length;
-  let pending: { readonly kind: 'lit' | 'hex'; readonly value: string } | null = null;
+
+  const decode = (op: Operand): string =>
+    op.kind === 'lit'
+      ? decodeLiteral(op.value)
+      : toUnicode !== null
+        ? decodeHex(op.value, toUnicode)
+        : '';
+  const show = (): void => {
+    for (const op of pending) line += decode(op);
+    pending.length = 0;
+  };
+  const flushLine = (): void => {
+    pending.length = 0;
+    if (line !== '') {
+      lines.push(line);
+      line = '';
+    }
+  };
+
   let i = 0;
   while (i < n) {
     const ch = content[i];
@@ -95,7 +126,7 @@ const extractText = (content: string, toUnicode: ReadonlyMap<number, string> | n
         buf += c;
         j += 1;
       }
-      pending = { kind: 'lit', value: buf };
+      if (pending.length < MAX_PENDING_OPERANDS) pending.push({ kind: 'lit', value: buf });
       i = j;
     } else if (ch === '<' && content[i + 1] !== '<') {
       let j = i + 1;
@@ -108,17 +139,28 @@ const extractText = (content: string, toUnicode: ReadonlyMap<number, string> | n
         buf += c;
         j += 1;
       }
-      pending = { kind: 'hex', value: buf };
+      if (pending.length < MAX_PENDING_OPERANDS) pending.push({ kind: 'hex', value: buf });
       i = j + 1;
-    } else if (ch === 'T' && content[i + 1] === 'j' && pending !== null) {
-      if (pending.kind === 'lit') lines.push(decodeLiteral(pending.value));
-      else if (toUnicode !== null) lines.push(decodeHex(pending.value, toUnicode));
-      pending = null;
+    } else if (ch === 'T' && (content[i + 1] === 'j' || content[i + 1] === 'J')) {
+      show(); // Tj (1 operando) | TJ (N operandos do array [...])
+      i += 2;
+    } else if (
+      ch === 'T' &&
+      (content[i + 1] === 'd' ||
+        content[i + 1] === 'D' ||
+        content[i + 1] === '*' ||
+        content[i + 1] === 'm')
+    ) {
+      flushLine(); // posicionamento → nova linha
+      i += 2;
+    } else if ((ch === 'B' || ch === 'E') && content[i + 1] === 'T') {
+      flushLine(); // BT/ET → fronteira de bloco de texto
       i += 2;
     } else {
       i += 1;
     }
   }
+  flushLine();
   return lines.join('\n');
 };
 
@@ -136,6 +178,9 @@ const detectType = (text: string): DocumentType | undefined => {
   if (/NFS-e|NOTA FISCAL DE SERVI/i.test(text)) return 'NFS-e';
   if (/RECIBO DE PAGAMENTO A AUT|\bRPA\b/i.test(text)) return 'RPA';
   if (/BOLETO/i.test(text)) return 'Boleto';
+  // #386: NF-e/NFC-e/NFCom (DANFE/DANFCOM) — documento auxiliar da nota fiscal eletrônica.
+  if (/DANFE|DANFCOM|DOCUMENTO AUXILIAR DA NOTA FISCAL|NOTA FISCAL ELETR|\bNFC?-?e\b/i.test(text))
+    return 'DANFE';
   return undefined;
 };
 
@@ -161,7 +206,11 @@ const parseRetentions = (text: string, baseCents: number): readonly Retention.Re
 };
 
 const structure = (text: string): Result<DocumentReaderResult, DocumentReaderError> => {
-  const type = detectType(text);
+  // #386: classifica sobre texto com whitespace normalizado — PDFs reais fragmentam por posição
+  // (palavra-por-`Td`), então a reconstrução de linha não garante âncoras contíguas. Colapsar
+  // espaços/quebras torna `detectType` robusto à fragmentação sem depender de layout perfeito.
+  const normalized = text.replace(/\s+/g, ' ');
+  const type = detectType(normalized);
   if (type === undefined) return err('malformed-document');
 
   const documentNumber = group1(text, /N[uú]mero[^:\n]*:\s*(\S+)/i);

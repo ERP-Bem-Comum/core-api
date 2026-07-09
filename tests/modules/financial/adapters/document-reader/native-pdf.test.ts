@@ -17,6 +17,10 @@ import {
   QUADRATIC_SCAN,
   MULTI_STREAM_BOMB,
   OVERSIZE_INPUT,
+  TJ_ARRAY_NFSE,
+  FRAGMENTED_KEYWORD,
+  DANFE_NATIVE,
+  PENDING_AMPLIFY,
 } from './_fixtures/pdf-fixtures.ts';
 
 describe('financial/adapters/document-reader/native-pdf', () => {
@@ -138,5 +142,49 @@ describe('financial/adapters/document-reader/native-pdf', () => {
     const r = await reader.read({ bytes: OVERSIZE_INPUT.bytes() });
     assert.equal(r.ok, false);
     if (!r.ok) assert.equal(r.error, 'source-too-large');
+  });
+
+  // --- #386 Fatia 1: PDF real (TJ, reconstrução de linha, DANFE) ---------------
+  it('CA1 (#386): operador TJ (array) → extrai texto e classifica (hoje scanned-unsupported)', async () => {
+    const reader = createNativePdfDocumentReader();
+    const exp = TJ_ARRAY_NFSE.expected;
+    const r = await reader.read({ bytes: TJ_ARRAY_NFSE.bytes() });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    if (!r.ok) return;
+    assert.equal(r.value.type, exp.type);
+    assert.equal(r.value.documentNumber, exp.documentNumber);
+    assert.equal(r.value.grossValue?.cents, exp.grossValueCents);
+  });
+
+  it('CA2 (#386): reconstrução de linha — palavra-chave fragmentada em 2 Tj na mesma linha', async () => {
+    const reader = createNativePdfDocumentReader();
+    const r = await reader.read({ bytes: FRAGMENTED_KEYWORD.bytes() });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    if (!r.ok) return;
+    assert.equal(r.value.type, 'NFS-e');
+    // "Valor Tot"+"al: R$ 700,00" reconstruídos na mesma linha → gross casa.
+    assert.equal(r.value.grossValue?.cents, FRAGMENTED_KEYWORD.expected.grossValueCents);
+  });
+
+  it('CA3 (#386): detectType classifica DANFE (hoje malformed-document)', async () => {
+    const reader = createNativePdfDocumentReader();
+    const exp = DANFE_NATIVE.expected;
+    const r = await reader.read({ bytes: DANFE_NATIVE.bytes() });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    if (!r.ok) return;
+    assert.equal(r.value.type, 'DANFE');
+    assert.equal(r.value.grossValue?.cents, exp.grossValueCents);
+  });
+
+  it('F5 (#386): muitos operandos sem Tj → teto MAX_PENDING_OPERANDS contém amplificação (termina rápido)', async () => {
+    const reader = createNativePdfDocumentReader();
+    const t0 = performance.now();
+    const r = await reader.read({ bytes: PENDING_AMPLIFY.bytes() });
+    const elapsed = performance.now() - t0;
+    // Sem o teto, 300k operandos acumulados explodiriam heap/tempo; com o teto, termina rápido.
+    assert.ok(elapsed < 2000, `esperado < 2s, foi ${elapsed.toFixed(0)}ms`);
+    // Sem texto mostrado (nenhum Tj/TJ) → sem conteúdo útil.
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'scanned-unsupported');
   });
 });

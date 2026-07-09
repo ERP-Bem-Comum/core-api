@@ -19,7 +19,7 @@ type RetentionExpect = Readonly<{
   valueCents: number;
 }>;
 export type NativeExpect = Readonly<{
-  type: 'NFS-e' | 'RPA' | 'Boleto';
+  type: 'NFS-e' | 'RPA' | 'Boleto' | 'DANFE';
   documentNumber?: string;
   competence?: Readonly<{ year: number; month: number }>;
   legalName?: string;
@@ -129,4 +129,47 @@ export const MULTI_STREAM_BOMB = {
 // F4 — input acima de MAX_BYTES (8 MiB).
 export const OVERSIZE_INPUT = {
   bytes: (): Uint8Array => new Uint8Array(8 * 1024 * 1024 + 1),
+} as const;
+
+// --- #386 Fatia 1: PDF real (operador TJ, reconstrução de linha, DANFE) --------
+
+// TJ (array) com strings literais — modo dominante em PDFs reais (DANFCOM usa 112 TJ / 0 Tj).
+// Hoje o reader ignora TJ → texto vazio → 'scanned-unsupported'.
+export const TJ_ARRAY_NFSE = {
+  bytes: (): Uint8Array =>
+    buildRawContentPdf(
+      'BT /F1 12 Tf 72 760 Td [(NOTA FISCAL DE SERVICOS ELETRONICA)] TJ ' +
+        '0 -18 Td [(Numero da Nota: )-3(9998887776)] TJ ' +
+        '0 -18 Td [(Valor Total: R$ )-2(500,00)] TJ ET',
+    ),
+  expected: { type: 'NFS-e', documentNumber: '9998887776', grossValueCents: 50000 },
+} as const;
+
+// Palavra-chave FRAGMENTADA em 2 Tj na MESMA linha (sem Td entre eles) — fragmentação real.
+// Hoje: 1-linha-por-Tj quebra "Valor Tot|al" → gross não casa. Após reconstrução → casa.
+export const FRAGMENTED_KEYWORD = {
+  bytes: (): Uint8Array =>
+    buildRawContentPdf(
+      'BT /F1 12 Tf 72 760 Td (NOTA FISCAL DE SERVICOS) Tj ' +
+        '0 -18 Td (Valor Tot) Tj (al: R$ 700,00) Tj ET',
+    ),
+  expected: { type: 'NFS-e', grossValueCents: 70000 },
+} as const;
+
+// DANFE (NF-e) — hoje detectType não cobre → 'malformed-document'.
+export const DANFE_NATIVE = {
+  bytes: (): Uint8Array =>
+    buildNativePdf([
+      'DANFE - Documento Auxiliar da Nota Fiscal Eletronica',
+      'Numero: 000000123',
+      'Valor Total: R$ 250,00',
+    ]),
+  expected: { type: 'DANFE', documentNumber: '000000123', grossValueCents: 25000 },
+} as const;
+
+// F5 (#386) — amplificação por operandos: muitos '()' SEM Tj/TJ/posição entre eles. Sem o teto
+// MAX_PENDING_OPERANDS, `pending` cresceria sem limite (KB → centenas de MB de heap). Com o teto,
+// o reader termina rápido e devolve Result (sem texto útil → scanned-unsupported).
+export const PENDING_AMPLIFY = {
+  bytes: (): Uint8Array => buildRawContentPdf(`BT /F1 12 Tf 72 760 Td ${'() '.repeat(300000)} ET`),
 } as const;
