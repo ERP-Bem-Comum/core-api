@@ -59,7 +59,11 @@ import {
   sceneryBodySchema,
   lifecyclePlanResponseSchema,
   budgetPlanInsightsResponseSchema,
+  consolidatedQuerySchema,
+  consolidatedResultResponseSchema,
+  csvResponse,
 } from './schemas.ts';
+import { sectionsToCsv } from './budget-plan-csv.ts';
 import { budgetResultToDto } from './budget-result-dto.ts';
 import { budgetToDto } from './budget-dto.ts';
 import { BUDGET_PLAN_PERMISSION } from '../../public-api/permissions.ts';
@@ -113,6 +117,8 @@ const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
   'budget-plan-calibration-open': 409,
   'budget-plan-scenery-limit': 409,
   'scenario-name-required': 400,
+  // Consolidado + CSV (US5/#319). Export de plano não-aprovado -> 409 (precondição de estado).
+  'plan-not-approved-for-consolidation': 409,
 };
 
 const writeErrorStatus = (code: string): number => WRITE_ERROR_STATUS[code] ?? 422;
@@ -123,6 +129,14 @@ const sendWriteError = (reply: FastifyReply, code: string): Promise<void> => {
     .code(writeErrorStatus(code))
     .send(toErrorEnvelope(code, code, requestId)) as unknown as Promise<void>;
 };
+
+// CSV inline (US5): download síncrono na própria response (sem e-mail/FS, ≠ legado). A string já
+// carrega BOM + CRLF (util canônico); `charset=utf-8` + attachment fecham o contrato de download.
+const sendCsv = (reply: FastifyReply, csv: string, fileName: string): Promise<void> =>
+  reply
+    .header('content-type', 'text/csv; charset=utf-8')
+    .header('content-disposition', `attachment; filename="${fileName}"`)
+    .send(csv) as unknown as Promise<void>;
 
 const budgetPlansRoutes =
   (deps: BudgetPlansHttpDeps, hooks: BudgetPlansHttpHooks): FastifyPluginAsyncZodOpenApi =>
@@ -185,6 +199,64 @@ const budgetPlansRoutes =
         const result = await deps.getBudgetPlanOptions();
         if (!result.ok) return sendWriteError(reply, result.error);
         return sendResult(reply, ok(result.value), { ok: 200 });
+      },
+    });
+
+    // GET /budget-plans/consolidated-result — Consolidado ABC (JSON): total + resumo da vigente
+    // aprovada de cada família (Ano × Programa). Segmento estático — find-my-way o prioriza sobre
+    // /budget-plans/:id independentemente da ordem de registro.
+    scope.route({
+      method: 'GET',
+      url: '/budget-plans/consolidated-result',
+      preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.read)],
+      schema: {
+        querystring: consolidatedQuerySchema,
+        response: { 200: consolidatedResultResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const q = req.query;
+        const result = await deps.getConsolidatedResult({
+          year: q.year,
+          ...(q.programRef !== undefined ? { programRef: q.programRef } : {}),
+        });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return sendResult(reply, ok(result.value), { ok: 200 });
+      },
+    });
+
+    // GET /budget-plans/consolidated-result/csv — CSV server-side do consolidado, inline (CA2).
+    scope.route({
+      method: 'GET',
+      url: '/budget-plans/consolidated-result/csv',
+      preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.read)],
+      schema: {
+        querystring: consolidatedQuerySchema,
+        response: { 200: csvResponse('Consolidado ABC em CSV (RFC 4180; ; como separador)') },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const q = req.query;
+        const result = await deps.getConsolidatedExport({
+          year: q.year,
+          ...(q.programRef !== undefined ? { programRef: q.programRef } : {}),
+        });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return sendCsv(reply, sectionsToCsv(result.value), `consolidado-${q.year}.csv`);
+      },
+    });
+
+    // GET /budget-plans/:id/generate-csv — CSV server-side de um plano APROVADO, inline (CA3).
+    scope.route({
+      method: 'GET',
+      url: '/budget-plans/:id/generate-csv',
+      preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.read)],
+      schema: {
+        params: budgetPlanIdParamSchema,
+        response: { 200: csvResponse('Plano orçamentário em CSV (RFC 4180; ; como separador)') },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.getPlanExport({ planId: req.params.id });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return sendCsv(reply, sectionsToCsv([result.value]), `plano-${req.params.id}.csv`);
       },
     });
 

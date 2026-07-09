@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "BDG-CONSOLIDATED-CSV",
+  "size": "M",
+  "createdAt": "2026-07-09T15:21:02.911Z",
+  "closedAt": "2026-07-09T16:31:20.026Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-09T15:26:32.033Z",
+      "finishedAt": "2026-07-09T15:42:20.479Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "ts-domain-modeler",
+      "startedAt": "2026-07-09T15:42:20.798Z",
+      "finishedAt": "2026-07-09T15:56:46.116Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-09T15:56:46.447Z",
+      "finishedAt": "2026-07-09T16:16:59.672Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-09T16:16:59.985Z",
+      "finishedAt": "2026-07-09T16:31:19.709Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

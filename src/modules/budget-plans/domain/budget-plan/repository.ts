@@ -21,6 +21,14 @@ export type BudgetPlanPage = Readonly<{
   total: number;
 }>;
 
+// Consolidado ABC (US5): TODOS os planos APROVADOS de um ano, opcionalmente de um programa — raiz E
+// calibrações/cenários aprovados. A vigência por família (year × programRef) é resolvida a jusante
+// por `selectCurrentApprovedByFamily` (a versão aprovada mais recente vence). ORDER BY id.
+export type ListApprovedByYearQuery = Readonly<{
+  year: number;
+  programRef?: ProgramRef;
+}>;
+
 export type BudgetPlanRepository = Readonly<{
   findById: (id: BudgetPlanId) => Promise<Result<BudgetPlan | null, BudgetPlanRepositoryError>>;
   // Filhos diretos (calibrações/cenários) de um plano — base da alocação de versão + guards de
@@ -37,6 +45,10 @@ export type BudgetPlanRepository = Readonly<{
   listPaged: (
     query: ListBudgetPlansQuery,
   ) => Promise<Result<BudgetPlanPage, BudgetPlanRepositoryError>>;
+  // Planos aprovados de um ano [, programa] — base do Consolidado ABC (US5); vigência resolvida a jusante.
+  listApprovedByYear: (
+    query: ListApprovedByYearQuery,
+  ) => Promise<Result<readonly BudgetPlan[], BudgetPlanRepositoryError>>;
   // Anos distintos com plano existente (alimenta o options).
   listYears: () => Promise<Result<readonly number[], BudgetPlanRepositoryError>>;
   save: (

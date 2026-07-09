@@ -56,6 +56,21 @@ export const InMemoryBudgetPlanRepository = (
       return ok({ items, total: filtered.length });
     },
 
+    listApprovedByYear: async (query) =>
+      ok(
+        [...map.values()]
+          .filter(
+            (p) =>
+              p.status === 'APROVADO' &&
+              p.year === query.year &&
+              (query.programRef === undefined || String(p.programRef) === String(query.programRef)),
+          )
+          // ORDER BY id ASC — comparação binária (espelha utf8mb4_bin do MySQL, não localeCompare).
+          .toSorted((a, b) =>
+            String(a.id) < String(b.id) ? -1 : String(a.id) > String(b.id) ? 1 : 0,
+          ),
+      ),
+
     listYears: async () =>
       ok([...new Set([...map.values()].map((p) => p.year))].toSorted((a, b) => a - b)),
 

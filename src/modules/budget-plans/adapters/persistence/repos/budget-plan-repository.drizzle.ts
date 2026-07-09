@@ -62,6 +62,26 @@ export const createDrizzleBudgetPlanRepository = (
   ): Promise<readonly Readonly<typeof schema.budgets.$inferSelect>[]> =>
     db.select().from(schema.budgets).where(eq(schema.budgets.budgetPlanId, budgetPlanId));
 
+  // Hidratação em lote (evita N+1): 1 SELECT de budgets via inArray para o conjunto de planos.
+  // Compartilhada por listPaged + listApprovedByYear.
+  const hydrateWithBudgets = async (
+    planRows: readonly Readonly<typeof schema.budgetPlans.$inferSelect>[],
+  ): Promise<BudgetPlan[]> => {
+    if (planRows.length === 0) return [];
+    const ids = planRows.map((r) => r.id);
+    const budgetRows = await db
+      .select()
+      .from(schema.budgets)
+      .where(inArray(schema.budgets.budgetPlanId, ids));
+    const budgetsByPlan = new Map<string, (typeof budgetRows)[number][]>();
+    for (const b of budgetRows) {
+      const arr = budgetsByPlan.get(b.budgetPlanId) ?? [];
+      arr.push(b);
+      budgetsByPlan.set(b.budgetPlanId, arr);
+    }
+    return planRows.map((row) => hydrate(row, budgetsByPlan.get(row.id) ?? []));
+  };
+
   return {
     findById: async (id) =>
       safe('findById', async () => {
@@ -126,22 +146,26 @@ export const createDrizzleBudgetPlanRepository = (
           .offset(offset);
 
         if (planRows.length === 0) return { items: [], total };
+        return { items: await hydrateWithBudgets(planRows), total };
+      }),
 
-        const ids = planRows.map((r) => r.id);
-        const budgetRows = await db
-          .select()
-          .from(schema.budgets)
-          .where(inArray(schema.budgets.budgetPlanId, ids));
-
-        const budgetsByPlan = new Map<string, (typeof budgetRows)[number][]>();
-        for (const b of budgetRows) {
-          const arr = budgetsByPlan.get(b.budgetPlanId) ?? [];
-          arr.push(b);
-          budgetsByPlan.set(b.budgetPlanId, arr);
+    // Todos os APROVADOS do ano [, programa] — raiz E calibrações/cenários; ORDER BY id (a vigência
+    // por família é resolvida a jusante por selectCurrentApprovedByFamily). US5 (decisão Vigente).
+    listApprovedByYear: async (query) =>
+      safe('listApprovedByYear', async () => {
+        const clauses: SQL[] = [
+          eq(schema.budgetPlans.status, 'APROVADO'),
+          eq(schema.budgetPlans.year, query.year),
+        ];
+        if (query.programRef !== undefined) {
+          clauses.push(eq(schema.budgetPlans.programRef, query.programRef as unknown as string));
         }
-
-        const items = planRows.map((row) => hydrate(row, budgetsByPlan.get(row.id) ?? []));
-        return { items, total };
+        const planRows = await db
+          .select()
+          .from(schema.budgetPlans)
+          .where(and(...clauses))
+          .orderBy(asc(schema.budgetPlans.id));
+        return hydrateWithBudgets(planRows);
       }),
 
     listYears: async () =>

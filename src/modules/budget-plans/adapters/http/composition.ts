@@ -57,6 +57,9 @@ import { startCalibration } from '../../application/use-cases/start-calibration.
 import { createScenery } from '../../application/use-cases/create-scenery.ts';
 import { approveBudgetPlan } from '../../application/use-cases/approve-budget-plan.ts';
 import { getBudgetPlanInsights } from '../../application/use-cases/get-budget-plan-insights.ts';
+import { getConsolidatedResult } from '../../application/use-cases/get-consolidated-result.ts';
+import { getPlanExport } from '../../application/use-cases/get-plan-export.ts';
+import { getConsolidatedExport } from '../../application/use-cases/get-consolidated-export.ts';
 
 export type BudgetPlansSeed = Readonly<{
   programs?: readonly ProgramSnapshot[];
@@ -142,6 +145,9 @@ export type BudgetPlansHttpDeps = Readonly<{
   createScenery: ReturnType<typeof createScenery>;
   approveBudgetPlan: ReturnType<typeof approveBudgetPlan>;
   getBudgetPlanInsights: ReturnType<typeof getBudgetPlanInsights>;
+  getConsolidatedResult: ReturnType<typeof getConsolidatedResult>;
+  getPlanExport: ReturnType<typeof getPlanExport>;
+  getConsolidatedExport: ReturnType<typeof getConsolidatedExport>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -246,6 +252,21 @@ const makeDeps = (pools: Pools): BudgetPlansHttpDeps => {
     createScenery: createScenery({ planRepo, costStructureRepo, budgetResultRepo, clock }),
     approveBudgetPlan: approveBudgetPlan({ planRepo, clock }),
     getBudgetPlanInsights: getBudgetPlanInsights({ planRepo }),
+    getConsolidatedResult: getConsolidatedResult({ planRepo, programCatalog }),
+    getPlanExport: getPlanExport({
+      planRepo,
+      costStructureRepo,
+      budgetResultRepo,
+      programCatalog,
+      partnerNetwork,
+    }),
+    getConsolidatedExport: getConsolidatedExport({
+      planRepo,
+      costStructureRepo,
+      budgetResultRepo,
+      programCatalog,
+      partnerNetwork,
+    }),
     shutdown: pools.shutdown,
   };
 };

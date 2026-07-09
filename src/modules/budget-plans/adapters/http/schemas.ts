@@ -365,3 +365,47 @@ export const budgetDeleteParamSchema = z.object({
 
 export type AddBudgetBody = z.infer<typeof addBudgetBodySchema>;
 export type BudgetResponseDto = z.infer<typeof budgetResponseSchema>;
+
+// ─── Consolidado ABC + CSV (US5/#319) ────────────────────────────────────────
+// `year` obrigatório (dimensão primária, paridade legado); `programRef` opcional estreita a 1 programa.
+// A mesma query serve ao JSON (/consolidated-result) e ao CSV (/consolidated-result/csv).
+export const consolidatedQuerySchema = z.object({
+  year: z.coerce
+    .number()
+    .int()
+    .min(YEAR_FILTER_MIN)
+    .max(YEAR_FILTER_MAX)
+    .meta({ description: 'Ano base do consolidado (obrigatório)' }),
+  programRef: z
+    .uuid()
+    .optional()
+    .meta({ description: 'UUID do programa — estreita o consolidado a 1 programa (opcional)' }),
+});
+
+export type ConsolidatedQuery = z.infer<typeof consolidatedQuerySchema>;
+
+/** Resumo por plano no consolidado (id + programa + versão VIGENTE + total em centavos). */
+const consolidatedPlanSummarySchema = z.object({
+  id: z.uuid(),
+  programName: z.string(),
+  programAbbreviation: z.string(),
+  version: z.number().int().meta({ description: 'Versão major da vigente aprovada da família' }),
+  totalCents: z.number().int().nonnegative().meta({ description: 'Total do plano em centavos' }),
+});
+
+/** Response do GET /consolidated-result — total agregado + resumo por família (vigente aprovada). */
+export const consolidatedResultResponseSchema = z.object({
+  year: z.number().int(),
+  totalCents: z.number().int().nonnegative().meta({ description: 'Soma dos totais em centavos' }),
+  plans: z.array(consolidatedPlanSummarySchema),
+});
+
+export type ConsolidatedResultDto = z.infer<typeof consolidatedResultResponseSchema>;
+
+// Documenta o content-type real das rotas CSV no OpenAPI sem forçar serialização JSON (padrão do
+// módulo contracts — ADR-0027 §doc viva). Sem `response` schema, o Swagger não veria `200 → text/csv`.
+export const csvResponse = (
+  description: string,
+): { content: Record<string, { schema: z.ZodType }> } => ({
+  content: { 'text/csv': { schema: z.string().meta({ description }) } },
+});
