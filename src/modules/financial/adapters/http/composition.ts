@@ -110,6 +110,13 @@ import {
 
 import { saveDocument } from '../../application/use-cases/save-document.ts';
 import { saveDraft } from '../../application/use-cases/save-draft.ts';
+import { ingestDocument } from '../../application/use-cases/ingest-document.ts';
+import type { SourceFileStoragePort } from '../../application/ports/source-file-storage.ts';
+import { createInMemorySourceFileStorage } from '../storage/source-file-storage.in-memory.ts';
+import { createS3SourceFileStorage } from '../storage/source-file-storage.s3.ts';
+import { createDocumentReader } from '../document-reader/create-document-reader.ts';
+import * as DocumentIdVo from '../../domain/shared/document-id.ts';
+import { parseAwsS3Env } from '#src/modules/contracts/public-api/index.ts';
 import { adjustDocument } from '../../application/use-cases/adjust-document.ts';
 import { approveDocument } from '../../application/use-cases/approve-document.ts';
 import { registerManualPayment } from '../../application/use-cases/register-manual-payment.ts';
@@ -178,6 +185,7 @@ export type FinancialCompositionConfig = Readonly<{
 export type FinancialHttpDeps = Readonly<{
   saveDocument: ReturnType<typeof saveDocument>;
   saveDraft: ReturnType<typeof saveDraft>;
+  ingestDocument: ReturnType<typeof ingestDocument>; // #62: ingestão (leitura + storage + rascunho)
   adjustDocument: ReturnType<typeof adjustDocument>;
   approveDocument: ReturnType<typeof approveDocument>;
   /** Baixa manual de título (#219/#224) — POST /documents/:id/payables/:payableId/manual-payment. */
@@ -264,6 +272,7 @@ type Pools = Readonly<{
   // mysql: read-port de contracts na MESMA conexão (ctr_* no mesmo DB do monólito).
   contractCategorizationReader: ContractCategorizationReadPort;
   repo: DocumentRepository;
+  documentStorage: SourceFileStoragePort; // #62: storage do comprovante-fonte
   payableListView: PayableListView;
   // Repo de LEITURA da trilha. Na escrita, o `save` do DocumentRepository grava a trilha
   // na mesma transação (memory: store compartilhado; mysql: dentro da tx do save).
@@ -375,6 +384,7 @@ const buildMemoryPools = (
     [...documentStore.values()].map((e) => ({ ...e.aggregate, version: e.version }));
   return {
     contractCategorizationReader: createInMemoryContractCategorizationReadStore(),
+    documentStorage: createInMemorySourceFileStorage(),
     categoryReader,
     costCenterReader,
     programReader,
@@ -429,6 +439,15 @@ const buildMemoryPools = (
     authUserReadPort,
     shutdown: () => Promise.resolve(),
   };
+};
+
+// #62: storage do comprovante no driver mysql — S3 se o env estiver configurado, senão in-memory
+// (boot não quebra sem S3; o deploy real provê as credenciais via env/IAM Role).
+const buildDocumentStorage = (): SourceFileStoragePort => {
+  const s3 = parseAwsS3Env(process.env);
+  return s3.ok
+    ? createS3SourceFileStorage({ s3: s3.value, keyPrefix: 'financial-documents' })
+    : createInMemorySourceFileStorage();
 };
 
 const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pools> => {
@@ -500,6 +519,7 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
   return {
     contractCategorizationReader: contractsReadPort,
     repo: createDrizzleDocumentRepository(handle),
+    documentStorage: buildDocumentStorage(),
     payableListView: createDrizzlePayableListView(handle),
     // Leitura da trilha via pool (a escrita é feita dentro da tx do document-repo.save).
     timelineRepo: createDrizzleTimelineRepository(handle),
@@ -569,9 +589,16 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     suggestions: pools.suggestionView,
     rejected: pools.rejectedSuggestionRepo,
   });
+  const saveDraftUseCase = saveDraft(deps);
   return {
     saveDocument: saveDocument(deps),
-    saveDraft: saveDraft(deps),
+    saveDraft: saveDraftUseCase,
+    ingestDocument: ingestDocument({
+      reader: createDocumentReader(),
+      storage: pools.documentStorage,
+      saveDraft: saveDraftUseCase,
+      idGen: DocumentIdVo.generate,
+    }),
     adjustDocument: adjustDocument(deps),
     approveDocument: approveDocument(deps),
     registerManualPayment: registerManualPayment(deps),
