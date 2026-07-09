@@ -4,7 +4,7 @@
   "size": "L",
   "createdAt": "2026-07-09T13:11:18.709Z",
   "closedAt": null,
-  "currentWave": "W1",
+  "currentWave": "W2",
   "status": "in-progress",
   "waves": [
     {
@@ -19,13 +19,13 @@
     },
     {
       "id": "W1",
-      "status": "in-progress",
+      "status": "done",
       "agent": "ts-domain-modeler",
       "startedAt": "2026-07-09T13:26:49.902Z",
-      "finishedAt": null,
+      "finishedAt": "2026-07-09T14:08:57.252Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
     },
     {
       "id": "W2",
@@ -49,5 +49,5 @@
     }
   ],
   "blockers": [],
-  "lastEvent": "W1 started (ts-domain-modeler)"
+  "lastEvent": "W1 finished (GREEN)"
 }
