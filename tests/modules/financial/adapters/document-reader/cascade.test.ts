@@ -79,4 +79,35 @@ describe('financial/adapters/document-reader/cascade', () => {
       assert.equal(r.error, 'scanned-unsupported');
     }
   });
+
+  it('F4: XML rejeita por source-too-large → terminal (nativo NÃO é consultado)', async () => {
+    // Arrange
+    let nativeCalls = 0;
+    const xml = failing('source-too-large');
+    const native: DocumentReaderPort = {
+      read: () => {
+        nativeCalls += 1;
+        return Promise.resolve(ok({ resolvedVia: 'native-text' }));
+      },
+    };
+    const cascade = createCascadeReader({ xml, native });
+    // Act
+    const r = await cascade.read(BYTES);
+    // Assert — erro de recurso é terminal; não empurra os bytes gigantes ao nativo.
+    assert.equal(nativeCalls, 0);
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'source-too-large');
+  });
+
+  it('F5: erro de recurso do nativo (decompression-limit-exceeded) é propagado, não mascarado', async () => {
+    // Arrange
+    const xml = failing('malformed-document');
+    const native = failing('decompression-limit-exceeded');
+    const cascade = createCascadeReader({ xml, native });
+    // Act
+    const r = await cascade.read(BYTES);
+    // Assert — preserva o sinal de bomba (telemetria), não vira scanned-unsupported.
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'decompression-limit-exceeded');
+  });
 });

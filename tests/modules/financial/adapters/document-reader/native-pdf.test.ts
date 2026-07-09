@@ -1,0 +1,142 @@
+import { describe, it } from 'node:test';
+import { strict as assert } from 'node:assert';
+
+// W0 RED: o adapter nativo ainda não existe (value import → ERR_MODULE_NOT_FOUND em runtime).
+import { createNativePdfDocumentReader } from '#src/modules/financial/adapters/document-reader/native-pdf.ts';
+import {
+  NFSE_NATIVE,
+  RPA_NATIVE,
+  BOLETO_IDENTITY_H,
+  ENCRYPTED_PDF,
+  OBJSTM_PDF,
+  BOMB_PDF,
+  IMAGE_ONLY_PDF,
+  EMPTY_PDF,
+  GARBAGE,
+  REDOS_UNBALANCED,
+  QUADRATIC_SCAN,
+  MULTI_STREAM_BOMB,
+  OVERSIZE_INPUT,
+} from './_fixtures/pdf-fixtures.ts';
+
+describe('financial/adapters/document-reader/native-pdf', () => {
+  it('CA1: NFS-e nativa (WinAnsi) → campos + ISS para os VOs (resolvedVia=native-text)', async () => {
+    const reader = createNativePdfDocumentReader();
+    const exp = NFSE_NATIVE.expected;
+    const r = await reader.read({ bytes: NFSE_NATIVE.bytes() });
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    const res = r.value;
+    assert.equal(res.resolvedVia, 'native-text');
+    assert.equal(res.type, exp.type);
+    assert.equal(res.documentNumber, exp.documentNumber);
+    assert.equal(res.competence?.year, exp.competence?.year);
+    assert.equal(res.competence?.month, exp.competence?.month);
+    assert.equal(res.supplier?.legalName, exp.legalName);
+    assert.equal(res.supplier?.taxId, exp.taxId);
+    assert.equal(res.grossValue?.cents, exp.grossValueCents);
+    const iss = res.retentions?.[0];
+    assert.equal(iss?.type, 'ISS');
+    assert.equal(iss?.value.cents, 5000);
+    assert.equal(iss?.rateBps, 500);
+  });
+
+  it('CA2: RPA nativa → bruto + 3 retenções; bruto − Σretenções = líquido', async () => {
+    const reader = createNativePdfDocumentReader();
+    const r = await reader.read({ bytes: RPA_NATIVE.bytes() });
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    const res = r.value;
+    assert.equal(res.type, 'RPA');
+    assert.equal(res.grossValue?.cents, 100000);
+    const rets = res.retentions ?? [];
+    assert.equal(rets.length, 3);
+    const byType = new Map(rets.map((x) => [x.type, x.value.cents]));
+    assert.equal(byType.get('INSS'), 11000);
+    assert.equal(byType.get('IRRF'), 7500);
+    assert.equal(byType.get('ISS'), 5000);
+    const totalRet = rets.reduce((acc, x) => acc + x.value.cents, 0);
+    assert.equal((res.grossValue?.cents ?? 0) - totalRet, RPA_NATIVE.netValueCents);
+  });
+
+  it('CA3: boleto Identity-H → valor via CMap /ToUnicode SEM garbling', async () => {
+    const reader = createNativePdfDocumentReader();
+    const r = await reader.read({ bytes: BOLETO_IDENTITY_H.bytes() });
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    assert.equal(r.value.type, 'Boleto');
+    // Sem parsear o ToUnicode o valor viria garbled/ausente; 123456 prova o caminho Identity-H.
+    assert.equal(r.value.grossValue?.cents, BOLETO_IDENTITY_H.expected.grossValueCents);
+  });
+
+  it('CA4: PDF cifrado (/Encrypt) → err(unsupported-pdf-structure)', async () => {
+    const reader = createNativePdfDocumentReader();
+    const r = await reader.read({ bytes: ENCRYPTED_PDF.bytes() });
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'unsupported-pdf-structure');
+  });
+
+  it('CA4: PDF com object stream (/ObjStm) → err(unsupported-pdf-structure)', async () => {
+    const reader = createNativePdfDocumentReader();
+    const r = await reader.read({ bytes: OBJSTM_PDF.bytes() });
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'unsupported-pdf-structure');
+  });
+
+  it('CA5: bomba de descompressão → err(decompression-limit-exceeded)', async () => {
+    const reader = createNativePdfDocumentReader();
+    const r = await reader.read({ bytes: BOMB_PDF.bytes() });
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'decompression-limit-exceeded');
+  });
+
+  it('CA6: PDF só-imagem (sem texto) → err(scanned-unsupported)', async () => {
+    const reader = createNativePdfDocumentReader();
+    const r = await reader.read({ bytes: IMAGE_ONLY_PDF.bytes() });
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'scanned-unsupported');
+  });
+
+  it('CA7: bytes vazios → err(empty-input); lixo não-PDF → err(malformed-document)', async () => {
+    const reader = createNativePdfDocumentReader();
+    const empty = await reader.read({ bytes: EMPTY_PDF.bytes() });
+    assert.equal(empty.ok, false);
+    if (!empty.ok) assert.equal(empty.error, 'empty-input');
+    const garbage = await reader.read({ bytes: GARBAGE.bytes() });
+    assert.equal(garbage.ok, false);
+    if (!garbage.ok) assert.equal(garbage.error, 'malformed-document');
+  });
+
+  // --- Regressão de segurança (W2 — security-backend-expert) -------------------
+
+  it('F1: parênteses sem fechar NÃO travam o tokenizer (O(n), termina < 2s)', async () => {
+    const reader = createNativePdfDocumentReader();
+    const start = performance.now();
+    const r = await reader.read({ bytes: REDOS_UNBALANCED.bytes() });
+    const elapsed = performance.now() - start;
+    assert.equal(r.ok, false); // sem campos fiscais reconhecíveis
+    assert.ok(elapsed < 2000, `tokenizer levou ${elapsed.toFixed(0)}ms (esperado O(n) < 2s)`);
+  });
+
+  it('F2: muitas ocorrências de "stream" varrem em O(n) (< 2s), não O(n²)', async () => {
+    const reader = createNativePdfDocumentReader();
+    const start = performance.now();
+    await reader.read({ bytes: QUADRATIC_SCAN.bytes() });
+    const elapsed = performance.now() - start;
+    assert.ok(elapsed < 2000, `extractStreams levou ${elapsed.toFixed(0)}ms (esperado O(n) < 2s)`);
+  });
+
+  it('F3: N streams somando acima do teto agregado → err(decompression-limit-exceeded)', async () => {
+    const reader = createNativePdfDocumentReader();
+    const r = await reader.read({ bytes: MULTI_STREAM_BOMB.bytes() });
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'decompression-limit-exceeded');
+  });
+
+  it('F4: input acima de MAX_BYTES → err(source-too-large) (guard antes do parse)', async () => {
+    const reader = createNativePdfDocumentReader();
+    const r = await reader.read({ bytes: OVERSIZE_INPUT.bytes() });
+    assert.equal(r.ok, false);
+    if (!r.ok) assert.equal(r.error, 'source-too-large');
+  });
+});
