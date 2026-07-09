@@ -606,6 +606,7 @@ const financialRoutes =
           ...(q.dueTo !== undefined ? { dueTo: new Date(q.dueTo) } : {}),
           ...(q.issuedFrom !== undefined ? { issuedFrom: new Date(q.issuedFrom) } : {}),
           ...(q.issuedTo !== undefined ? { issuedTo: new Date(q.issuedTo) } : {}),
+          ...(q.q !== undefined ? { q: q.q } : {}), // #167: busca textual (já trimada pelo schema)
         };
         const result = await deps.listDocuments(filter, q.page, q.pageSize);
         if (!result.ok) return sendDomainError(reply, result.error);

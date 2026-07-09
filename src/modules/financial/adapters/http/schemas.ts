@@ -193,6 +193,16 @@ export const listDocumentsQuerySchema = z.object({
   dueTo: z.iso.date().optional(),
   issuedFrom: z.iso.date().optional(), // #163: filtro por emissão (janela inclusiva)
   issuedTo: z.iso.date().optional(),
+  // #167: busca textual (fornecedor / nº documento / CNPJ) — trimada, 1..100 chars.
+  // .regex bloqueia caracteres de controle (mesmo guard de `paymentDetailInput`, OWASP Input Validation).
+  q: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    // eslint-disable-next-line no-control-regex -- rejeição de control chars é o objetivo (defesa em profundidade)
+    .regex(/^[^\x00-\x1F\x7F]*$/, 'caracteres de controle não são permitidos')
+    .optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
