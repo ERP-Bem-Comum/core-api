@@ -25,6 +25,7 @@ export type MatchInput = Readonly<{
   payableValueCents: number;
   transactionDate: Date;
   payableDueDate: Date;
+  paidAt: Date | null;
   memo: string;
   documentNumber: string | null;
   supplierOpenCount: number;
@@ -135,8 +136,9 @@ const payeeMatches = (payeeName: string, supplierName: string): boolean => {
   return hits / supplier.length >= PAYEE_MATCH_MIN_RATIO;
 };
 
-// Data TOLERANTE: o pagamento (transação) raramente cai no dia EXATO do vencimento — aceita ±N dias.
-// Comparação por número do dia em UTC (imune a fuso). Mantém o sinal como corroboração (não é o âncora).
+// Data TOLERANTE: o débito bancário casa com a BAIXA do título, não com o vencimento — aceita ±N dias
+// em torno da data-âncora (paidAt quando existe; ver evaluateCriteria). Comparação por número do dia em
+// UTC (imune a fuso). Mantém o sinal como corroboração (não é o âncora do match).
 const DATE_TOLERANCE_DAYS = 5;
 const MS_PER_DAY = 86_400_000;
 const utcDayNumber = (d: Date): number =>
@@ -148,12 +150,14 @@ const dateWithinTolerance = (a: Date, b: Date): boolean =>
 // `payeeMatch` e `dateD0` são TOLERANTES (extrato real de bancos diferentes: descrição livre + data ≠ D0);
 // a precisão vem da CORROBORAÇÃO — `exactValue` (40) sozinho segue < 50 (banda baixa, filtrado); só ativa
 // com um 2º sinal (payee/data/memo). Ver #272.
+// `dateD0` ancora na DATA DE PAGAMENTO (`paidAt`) quando registrada — o débito do extrato casa com a baixa,
+// não com o vencimento; sem baixa, cai no `payableDueDate` como rede (mesma tolerância ±5d). Ver #272 ponto 2.
 export const evaluateCriteria = (input: MatchInput): MatchCriteria => {
   const doc = input.documentNumber === null ? '' : input.documentNumber.trim().toUpperCase();
   return {
     payeeMatch: input.supplierName !== null && payeeMatches(input.payeeName, input.supplierName),
     exactValue: input.transactionValueCents === input.payableValueCents,
-    dateD0: dateWithinTolerance(input.transactionDate, input.payableDueDate),
+    dateD0: dateWithinTolerance(input.transactionDate, input.paidAt ?? input.payableDueDate),
     memoRef: memoMentions(input.memo, doc),
     supplierOpenCount: input.supplierOpenCount,
   };

@@ -71,6 +71,7 @@ export const suggestMatches =
         payableValueCents: candidate.valueCents,
         transactionDate: tx.date,
         payableDueDate: candidate.dueDate,
+        paidAt: candidate.paidAt,
         memo: tx.memo,
         documentNumber: candidate.documentNumber,
         supplierOpenCount:
