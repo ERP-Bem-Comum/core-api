@@ -12,6 +12,7 @@ import {
   type FinancialRefError,
 } from '../../domain/shared/refs.ts';
 import * as DocumentId from '../../domain/shared/document-id.ts';
+import * as SourceFileRef from '../../domain/document/source-file-ref.ts';
 import * as Retention from '../../domain/shared/retention.ts';
 import * as RegisteredTax from '../../domain/shared/registered-tax.ts';
 import * as Document from '../../domain/document/document.ts';
@@ -31,6 +32,8 @@ export type SaveDraftDeps = Readonly<{
 
 // Campos opcionais para o rascunho — qualquer campo pode ser nulo/omitido (US7).
 export type SaveDraftCommand = Readonly<{
+  // #62: id fornecido pelo ingest (para casar a key do storage); ausente → gerado.
+  id?: DocumentId.DocumentId;
   documentNumber?: string | null;
   series?: string | null;
   type?: DocumentType | null;
@@ -57,11 +60,13 @@ export type SaveDraftCommand = Readonly<{
   competencia?: string | null; // #197
   contaDebitoRef?: string | null; // #197
   paymentDetail?: string | null; // #273
+  sourceFile?: SourceFileRef.SourceFileRefInput | null; // #62: comprovante-fonte (crus → VO no use case)
 }>;
 
 export type SaveDraftOutput = Readonly<{ documentId: DocumentId.DocumentId }>;
 
 export type SaveDraftError =
+  | SourceFileRef.SourceFileRefError
   | DocumentError
   | DocumentRepositoryError
   | PartnerRefError
@@ -126,12 +131,18 @@ export const saveDraft =
       registeredTaxes.push(built.value);
     }
 
-    const id = DocumentId.generate();
+    const id = cmd.id ?? DocumentId.generate();
     let competencia: Competencia.Competencia | null = null;
     if (cmd.competencia != null) {
       const c = Competencia.fromString(cmd.competencia);
       if (!c.ok) return err(c.error);
       competencia = c.value;
+    }
+    let sourceFileRef: SourceFileRef.SourceFileRef | null = null;
+    if (cmd.sourceFile != null) {
+      const sf = SourceFileRef.create(cmd.sourceFile);
+      if (!sf.ok) return err(sf.error);
+      sourceFileRef = sf.value;
     }
     // exactOptionalPropertyTypes: só incluir chave quando o valor é definido (não undefined).
     // Campos que são `string | null | undefined` no command devem omitir a chave se undefined,
@@ -164,6 +175,7 @@ export const saveDraft =
       ...(competencia !== null ? { competencia } : {}),
       ...(cmd.contaDebitoRef != null ? { debitAccountRef: cmd.contaDebitoRef } : {}),
       ...(cmd.paymentDetail !== undefined ? { paymentDetail: cmd.paymentDetail } : {}),
+      ...(sourceFileRef !== null ? { sourceFileRef } : {}),
     });
     if (!draft.ok) return err(draft.error);
 

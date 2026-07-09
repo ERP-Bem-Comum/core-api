@@ -51,10 +51,21 @@ const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
   'unsupported-export-format',
   // Conta-cedente (019): id malformado.
   'cedente-account-id-invalid',
+  // #62 ingestão: magic-bytes mentido / entrada vazia.
+  'document-magic-bytes-mismatch',
+  'empty-input',
+]);
+
+// #62 ingestão: entrada grande demais / bomba de descompressão → 413 Payload Too Large.
+const PAYLOAD_TOO_LARGE_CODES: ReadonlySet<string> = new Set([
+  'source-too-large',
+  'decompression-limit-exceeded',
 ]);
 
 const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   'document-repository-failure',
+  // #62 ingestão: falha ao gravar o comprovante no storage.
+  'source-file-upload-failed',
   'timeline-repository-failure',
   'outbox-append-failed',
   'bank-statement-repository-failure',
@@ -91,6 +102,7 @@ export const writeErrorStatus = (code: string): number => {
   if (NOT_FOUND_CODES.has(code)) return 404;
   if (CONFLICT_CODES.has(code)) return 409;
   if (BAD_REQUEST_CODES.has(code)) return 400;
+  if (PAYLOAD_TOO_LARGE_CODES.has(code)) return 413;
   if (UNAVAILABLE_CODES.has(code)) return 503;
   return 422;
 };
@@ -107,7 +119,7 @@ export const toPublicCode = (code: string): PublicErrorCode => {
   if (UNAVAILABLE_CODES.has(code)) return 'internal';
   if (NOT_FOUND_CODES.has(code)) return 'not-found';
   if (CONFLICT_CODES.has(code)) return 'conflict';
-  if (BAD_REQUEST_CODES.has(code)) return 'bad-request';
+  if (BAD_REQUEST_CODES.has(code) || PAYLOAD_TOO_LARGE_CODES.has(code)) return 'bad-request';
   return 'unprocessable';
 };
 

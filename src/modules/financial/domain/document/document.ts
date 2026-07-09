@@ -15,6 +15,7 @@ import type {
 } from '../shared/refs.ts';
 import type { Retention } from '../shared/retention.ts';
 import type { RegisteredTax } from '../shared/registered-tax.ts';
+import type { SourceFileRef } from './source-file-ref.ts';
 import type {
   DocumentType,
   PaymentMethod,
@@ -60,6 +61,7 @@ export type CreateDocumentInput = Readonly<{
   competencia?: Competencia | null; // #197: mês contábil (VO já validado)
   debitAccountRef?: string | null; // #197: conta-débito (validada by-identity no use-case)
   paymentDetail?: string | null; // #273: complemento da forma de pagamento
+  sourceFileRef?: SourceFileRef | null; // #62: comprovante-fonte guardado no storage
 }>;
 
 export type CreateDocumentOutput = Readonly<{
@@ -210,6 +212,7 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     competencia: input.competencia ?? null,
     debitAccountRef: input.debitAccountRef ?? null,
     paymentDetail: input.paymentDetail ?? null,
+    sourceFileRef: input.sourceFileRef ?? null,
     status: 'Open',
   });
 
@@ -496,6 +499,7 @@ export const undoApproval = (
     competencia: d.competencia,
     debitAccountRef: d.debitAccountRef,
     paymentDetail: d.paymentDetail,
+    sourceFileRef: d.sourceFileRef,
     status: 'Open',
   });
 
@@ -566,6 +570,7 @@ export type SaveDraftInput = Readonly<{
   competencia?: Competencia | null; // #197
   debitAccountRef?: string | null; // #197
   paymentDetail?: string | null; // #273
+  sourceFileRef?: SourceFileRef | null; // #62
 }>;
 
 export type SaveDraftOutput = Readonly<{
@@ -604,6 +609,7 @@ export const saveDraft = (input: SaveDraftInput): Result<SaveDraftOutput, Docume
     competencia: input.competencia ?? null,
     debitAccountRef: input.debitAccountRef ?? null,
     paymentDetail: input.paymentDetail ?? null,
+    sourceFileRef: input.sourceFileRef ?? null,
   });
   const events: readonly DocumentEvent[] = [{ type: 'DocumentDraftSaved', documentId: input.id }];
   return ok(immutable<SaveDraftOutput>({ document, events }));
@@ -651,6 +657,7 @@ export const submit = (
     description: draft.description,
     approverRef: approverRefOverride ?? draft.approverRef,
     paymentDetail: draft.paymentDetail,
+    sourceFileRef: draft.sourceFileRef, // #62: o documento submetido mantém o comprovante-fonte
   });
 };
 

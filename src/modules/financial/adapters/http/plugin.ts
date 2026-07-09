@@ -128,6 +128,9 @@ import {
   reconciliationPeriodsQuerySchema,
   reconciliationPeriodsResponseSchema,
   statementSuggestionsResponseSchema,
+  ingestDocumentQuerySchema,
+  octetStreamIngestBody,
+  ingestDocumentResponseSchema,
 } from './schemas.ts';
 
 export type FinancialHttpHooks = Readonly<{
@@ -269,11 +272,83 @@ const cedenteAccountToDto = (a: CedenteAccount): CedenteAccountResponseDto => ({
   openingBalanceDate: a.openingBalanceDate ?? null,
 });
 
+// #62: upload seguro da ingestão (portado de contracts/http/plugin.ts:125-167). bodyLimit por rota
+// (não vaza o global de 1 MiB); magic-bytes contra mimeType mentido; sanitização anti header-injection.
+const MAX_INGEST_BYTES = 20 * 1024 * 1024; // 20 MiB
+const PDF_MAGIC = Buffer.from('%PDF');
+const XML_MIMES: ReadonlySet<string> = new Set(['text/xml', 'application/xml']);
+// Sniff de conteúdo vs mimeType declarado (M2, CWE-434): PDF começa com `%PDF`; XML, com `<` (após
+// BOM/whitespace). Bloqueia upload de blob arbitrário com Content-Type mentido.
+const magicBytesMatch = (mimeType: string, bytes: Buffer): boolean => {
+  if (mimeType === 'application/pdf') return bytes.subarray(0, 4).equals(PDF_MAGIC);
+  if (XML_MIMES.has(mimeType)) {
+    let i = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? 3 : 0; // pula BOM UTF-8
+    while (i < bytes.length) {
+      const b = bytes[i];
+      if (b !== 0x20 && b !== 0x09 && b !== 0x0a && b !== 0x0d) break; // pula whitespace
+      i += 1;
+    }
+    return bytes[i] === 0x3c; // '<'
+  }
+  return true;
+};
+// eslint-disable-next-line no-control-regex
+const FILENAME_UNSAFE = /["\\\r\n\x00-\x1F\x7F]/g;
+const sanitizeFilename = (name: string): string => {
+  const cleaned = name.replace(FILENAME_UNSAFE, '_').trim();
+  return cleaned.length > 0 ? cleaned : 'document';
+};
+
 // ─── Rotas ───────────────────────────────────────────────────────────────────
 
 const financialRoutes =
   (deps: FinancialHttpDeps, hooks: FinancialHttpHooks): FastifyPluginAsyncZodOpenApi =>
   async (scope) => {
+    // #62 (M1): parser + rota de ingest ISOLADOS num sub-scope — o parser octet-stream (bodyLimit
+    // 20 MiB) fica encapsulado aqui e NÃO vaza para as demais rotas de /financial. Sem isolamento, o
+    // Parsing (que ocorre ANTES do preHandler no lifecycle do Fastify) alocaria 20 MiB pré-auth em
+    // qualquer POST /financial/* com Content-Type: application/octet-stream.
+    await scope.register(async (ingestScope: typeof scope) => {
+      ingestScope.addContentTypeParser(
+        'application/octet-stream',
+        { parseAs: 'buffer', bodyLimit: MAX_INGEST_BYTES },
+        (_req, body, done) => {
+          done(null, body);
+        },
+      );
+
+      // #62: POST /financial/documents/ingest — lê o PDF/XML, guarda o comprovante-fonte, cria
+      // rascunho pré-preenchido (humano confere/submete). Upload seguro: magic-bytes + mime allowlist + auth.
+      ingestScope.route({
+        method: 'POST',
+        url: '/financial/documents/ingest',
+        preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.write)],
+        schema: {
+          querystring: ingestDocumentQuerySchema,
+          body: octetStreamIngestBody(),
+          response: { 201: ingestDocumentResponseSchema },
+        } satisfies FastifyZodOpenApiSchema,
+        handler: async (req, reply) => {
+          const bytes = req.body as unknown as Buffer;
+          const q = req.query;
+          if (!magicBytesMatch(q.mimeType, bytes)) {
+            return sendDomainError(reply, 'document-magic-bytes-mismatch');
+          }
+          const result = await deps.ingestDocument({
+            bytes, // Buffer é Uint8Array — sem cópia extra (m2)
+            fileName: sanitizeFilename(q.fileName),
+            mimeType: q.mimeType,
+            uploadedBy: req.userId,
+          });
+          if (!result.ok) return sendDomainError(reply, result.error);
+          return reply.code(201).send({
+            documentId: String(result.value.documentId),
+            resolvedVia: result.value.resolvedVia,
+          }) as unknown as Promise<void>;
+        },
+      });
+    });
+
     // POST /financial/documents — cria documento (Open ou Draft).
     scope.route({
       method: 'POST',

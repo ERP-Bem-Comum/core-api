@@ -976,3 +976,39 @@ export const manualPaymentBodySchema = z.object({
   // #223: motivo opcional (a trilha já captura quem+quando).
   reason: z.string().min(1).max(500).optional(),
 });
+
+// ─── #62 Ingestão de documento (POST /documents/ingest) ──────────────────────
+
+/** Allowlist de mimeType do ingest — PDF (parser nativo) + XML (NFS-e/NF-e). */
+export const INGEST_MIME_ALLOWLIST = ['application/pdf', 'text/xml', 'application/xml'] as const;
+
+/** Query de `POST /documents/ingest` — metadados do upload (o corpo é o binário). */
+export const ingestDocumentQuerySchema = z.object({
+  fileName: z
+    .string()
+    .min(1)
+    .max(255)
+    .regex(/^[^/\\:*?"<>|]+$/, 'fileName contém caractere inválido')
+    // m1: veta os segmentos de traversal `.`/`..` na borda (400 limpo, não 503 do adapter).
+    .refine((f) => f !== '.' && f !== '..', 'fileName inválido'),
+  mimeType: z.enum(INGEST_MIME_ALLOWLIST),
+});
+
+/** Corpo binário (Buffer em runtime via addContentTypeParser); documentado como binário no OpenAPI. */
+export const octetStreamIngestBody = (): { content: Record<string, { schema: z.ZodType }> } => ({
+  content: {
+    'application/octet-stream': {
+      schema: z.instanceof(Buffer).meta({
+        type: 'string',
+        format: 'binary',
+        description: 'Bytes do documento fiscal (PDF/XML)',
+      }),
+    },
+  },
+});
+
+/** Resposta 201 do ingest. */
+export const ingestDocumentResponseSchema = z.object({
+  documentId: z.string(),
+  resolvedVia: z.enum(['xml', 'native-text']).nullable(),
+});
