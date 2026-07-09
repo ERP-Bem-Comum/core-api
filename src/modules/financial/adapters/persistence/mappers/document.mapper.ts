@@ -66,9 +66,11 @@ import type {
 // ─── Tipos de erro do mapper ──────────────────────────────────────────────────
 
 import * as Competencia from '#src/modules/financial/domain/document/competencia.ts';
+import * as SourceFileRef from '#src/modules/financial/domain/document/source-file-ref.ts';
 
 export type DocumentMapperError =
   | 'mapper-invalid-competencia'
+  | 'mapper-invalid-source-file'
   | 'mapper-invalid-document-id'
   | 'mapper-invalid-supplier-ref'
   | 'mapper-invalid-contract-ref'
@@ -206,6 +208,47 @@ export type MapDocumentInput = Readonly<{
   registeredTaxRows: readonly Readonly<RegisteredTaxRow>[];
 }>;
 
+// Reidrata o comprovante-fonte (#62) das colunas source_file_* — todas nulas → null; presentes → VO.
+const rehydrateSourceFile = (
+  row: MapDocumentInput['documentRow'],
+): Result<SourceFileRef.SourceFileRef | null, DocumentMapperError> => {
+  if (row.sourceFileBucket == null) {
+    // bucket NULL mas alguma irmã preenchida = escrita parcial corrompida → erro, não perda silenciosa.
+    const anyPresent = [
+      row.sourceFileKey,
+      row.sourceFileHashSha256,
+      row.sourceFileSizeBytes,
+      row.sourceFileMime,
+    ].some((v) => v != null);
+    return anyPresent ? err('mapper-invalid-source-file') : ok(null);
+  }
+  const sf = SourceFileRef.create({
+    bucket: row.sourceFileBucket,
+    key: row.sourceFileKey ?? '',
+    hashSha256: row.sourceFileHashSha256 ?? '',
+    sizeBytes: row.sourceFileSizeBytes ?? 0,
+    mimeType: row.sourceFileMime ?? '',
+  });
+  return sf.ok ? ok(sf.value) : err('mapper-invalid-source-file');
+};
+
+// Colunas source_file_* a partir do VO (#62) — null quando ausente.
+const sourceFileCols = (
+  ref: SourceFileRef.SourceFileRef | null,
+): Readonly<{
+  sourceFileBucket: string | null;
+  sourceFileKey: string | null;
+  sourceFileHashSha256: string | null;
+  sourceFileSizeBytes: number | null;
+  sourceFileMime: string | null;
+}> => ({
+  sourceFileBucket: ref?.bucket ?? null,
+  sourceFileKey: ref?.key ?? null,
+  sourceFileHashSha256: ref?.hashSha256 ?? null,
+  sourceFileSizeBytes: ref?.sizeBytes ?? null,
+  sourceFileMime: ref?.mimeType ?? null,
+});
+
 export const mapRowToDocument = (
   input: MapDocumentInput,
 ): Result<Document, DocumentMapperError> => {
@@ -317,6 +360,9 @@ export const mapRowToDocument = (
       competencia = c.value;
     }
 
+    const sourceFileR = rehydrateSourceFile(row);
+    if (!sourceFileR.ok) return sourceFileR;
+
     const draft: DraftDocument = {
       id,
       status: 'Draft',
@@ -346,6 +392,7 @@ export const mapRowToDocument = (
       competencia,
       debitAccountRef: row.debitAccountRef ?? null,
       paymentDetail: row.paymentDetail ?? null,
+      sourceFileRef: sourceFileR.value,
     };
     return ok(draft);
   }
@@ -439,6 +486,9 @@ export const mapRowToDocument = (
     competencia = c.value;
   }
 
+  const coreSourceFileR = rehydrateSourceFile(row);
+  if (!coreSourceFileR.ok) return coreSourceFileR;
+
   // Núcleo compartilhado entre Open e Approved.
   const core: DocumentCore = {
     id,
@@ -469,6 +519,7 @@ export const mapRowToDocument = (
     competencia,
     debitAccountRef: row.debitAccountRef ?? null,
     paymentDetail: row.paymentDetail ?? null,
+    sourceFileRef: coreSourceFileR.value,
   };
 
   if (status === 'Approved') {
@@ -612,6 +663,7 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
         document.competencia === null ? null : Competencia.toString(document.competencia),
       debitAccountRef: document.debitAccountRef ?? null,
       paymentDetail: document.paymentDetail ?? null,
+      ...sourceFileCols(document.sourceFileRef),
       readByOcr: false,
       ocrOriginalValue: null,
       divergenceDetected: false,
@@ -653,6 +705,7 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
     competencia: core.competencia === null ? null : Competencia.toString(core.competencia),
     debitAccountRef: core.debitAccountRef,
     paymentDetail: core.paymentDetail ?? null,
+    ...sourceFileCols(core.sourceFileRef),
     readByOcr: false,
     ocrOriginalValue: null,
     divergenceDetected: false,

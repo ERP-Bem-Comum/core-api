@@ -218,6 +218,20 @@
       "when": 1783005154499,
       "tag": "0030_adorable_zaladane",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "5",
+      "when": 1783604121439,
+      "tag": "0031_fat_beast",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "5",
+      "when": 1783604979208,
+      "tag": "0032_many_supernaut",
+      "breakpoints": true
     }
   ]
 }

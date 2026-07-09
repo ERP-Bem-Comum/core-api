@@ -128,6 +128,13 @@ export const finDocuments = mysqlTable(
     // #197: competência contábil (mês de referência) 'YYYY-MM'; conta-débito reusa debit_account_ref.
     competencia: varchar('competencia', { length: 7 }),
 
+    // #62: comprovante-fonte (PDF/XML lido) guardado no storage — todas nullable (opcional + back-compat).
+    sourceFileBucket: varchar('source_file_bucket', { length: 63 }),
+    sourceFileKey: varchar('source_file_key', { length: 1024 }),
+    sourceFileHashSha256: varchar('source_file_hash_sha256', { length: 64 }),
+    sourceFileSizeBytes: bigint('source_file_size_bytes', { mode: 'number' }),
+    sourceFileMime: varchar('source_file_mime', { length: 127 }),
+
     // Metadados de origem OCR (R-OCR).
     readByOcr: boolean('read_by_ocr').notNull().default(false),
     ocrOriginalValue: bigint('ocr_original_value', { mode: 'number' }),
@@ -185,6 +192,17 @@ export const finDocuments = mysqlTable(
     check('fin_documents_interest_chk', sql`${t.interest} >= 0`),
     // Optimistic lock: versão nunca negativa.
     check('fin_documents_version_chk', sql`${t.version} >= 0`),
+
+    // #62: comprovante-fonte é all-or-nothing (defesa em profundidade — o mapper já reidrata via VO).
+    check(
+      'fin_documents_source_file_all_or_none_chk',
+      sql`(${t.sourceFileBucket} IS NULL AND ${t.sourceFileKey} IS NULL AND ${t.sourceFileHashSha256} IS NULL AND ${t.sourceFileSizeBytes} IS NULL AND ${t.sourceFileMime} IS NULL) OR (${t.sourceFileBucket} IS NOT NULL AND ${t.sourceFileKey} IS NOT NULL AND ${t.sourceFileHashSha256} IS NOT NULL AND ${t.sourceFileSizeBytes} IS NOT NULL AND ${t.sourceFileMime} IS NOT NULL)`,
+    ),
+    // #62: tamanho do comprovante nunca não-positivo (paridade com as bigint irmãs).
+    check(
+      'fin_documents_source_file_size_bytes_chk',
+      sql`${t.sourceFileSizeBytes} IS NULL OR ${t.sourceFileSizeBytes} > 0`,
+    ),
 
     // Índices (data-model.md §"Índices"):
     // supplier_ref: query "documentos por fornecedor" (relatório de contas a pagar).
