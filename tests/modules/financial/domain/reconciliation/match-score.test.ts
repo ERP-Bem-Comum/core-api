@@ -105,7 +105,7 @@ describe('financial/domain/reconciliation — MatchScore (VO + score)', () => {
     assert.equal(MatchScore.evaluateCriteria(matchInput({ documentNumber: null })).memoRef, false);
   });
 
-  it('evaluateCriteria: payeeMatch normaliza (case/espaços); dateD0 por dia UTC', () => {
+  it('evaluateCriteria: payeeMatch normaliza (case/espaços); dateD0 mesmo dia', () => {
     assert.equal(
       MatchScore.evaluateCriteria(
         matchInput({ payeeName: '  fornecedor   x ', supplierName: 'FORNECEDOR X' }),
@@ -118,6 +118,63 @@ describe('financial/domain/reconciliation — MatchScore (VO + score)', () => {
         matchInput({ payableDueDate: new Date('2024-05-18T23:59:00.000Z') }),
       ).dateD0,
       true,
+    );
+  });
+
+  it('evaluateCriteria: payeeMatch TOLERANTE (#272) — casa fornecedor dentro da descrição livre do extrato', () => {
+    // Extrato de banco: descrição livre com prefixo/ruído + acento no cadastro → ainda casa.
+    assert.equal(
+      MatchScore.evaluateCriteria(
+        matchInput({
+          payeeName: 'TED 33994 PADARIA BARTOLOMEU LTDA',
+          supplierName: 'Padaria Bartolomeu',
+        }),
+      ).payeeMatch,
+      true,
+    );
+    assert.equal(
+      MatchScore.evaluateCriteria(
+        matchInput({ payeeName: 'PAG BOLETO FORNECEDOR X', supplierName: 'Fornecedor X' }),
+      ).payeeMatch,
+      true,
+    );
+    // Anti-ruído: um único sobrenome comum NÃO basta (maioria dos tokens exigida).
+    assert.equal(
+      MatchScore.evaluateCriteria(
+        matchInput({ payeeName: 'TED JOAO SILVA', supplierName: 'Comercial Silva Souza' }),
+      ).payeeMatch,
+      false,
+    );
+    // Sufixo societário é ruído (LTDA/EIRELI) e não conta como token de casamento.
+    assert.equal(
+      MatchScore.evaluateCriteria(
+        matchInput({ payeeName: 'ALGUMA EMPRESA LTDA', supplierName: 'Outra Coisa Ltda' }),
+      ).payeeMatch,
+      false,
+    );
+  });
+
+  it('evaluateCriteria: dateD0 TOLERANTE (#272) — pagamento dentro de ±5 dias do vencimento', () => {
+    // Pagou 3 dias depois do vencimento → ainda corrobora.
+    assert.equal(
+      MatchScore.evaluateCriteria(
+        matchInput({ payableDueDate: new Date('2024-05-15T00:00:00.000Z') }),
+      ).dateD0,
+      true,
+    );
+    // Pagou 5 dias antes → borda inclusiva.
+    assert.equal(
+      MatchScore.evaluateCriteria(
+        matchInput({ payableDueDate: new Date('2024-05-23T00:00:00.000Z') }),
+      ).dateD0,
+      true,
+    );
+    // 6 dias fora da janela → não corrobora.
+    assert.equal(
+      MatchScore.evaluateCriteria(
+        matchInput({ payableDueDate: new Date('2024-05-24T00:00:00.000Z') }),
+      ).dateD0,
+      false,
     );
   });
 });
