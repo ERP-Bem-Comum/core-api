@@ -2,8 +2,10 @@ name: deploy-qa
 
 # Build da imagem de QA do core-api e publicação no GitHub Container Registry.
 # Dispara em push na branch `dev` (a branch de QA deste repo). O deploy na VPS é
-# feito pelo Watchtower (pull-based): quando a tag :qa muda no ghcr, a VPS atualiza
-# o container sozinha. Build pesado roda aqui no runner (a VPS de QA não compila —
+# push-based: após o build, este workflow entra na tailnet (Tailscale) e roda o
+# `deploy.sh` na VPS via Tailscale SSH. A VPS de QA não tem mais IPv4 público
+# (migrou p/ rede privada + IPv6 + Tailscale), por isso o runner alcança o host pelo
+# IP da tailnet. Build pesado roda aqui no runner (a VPS de QA não compila —
 # ver ERP-INFRA/platform/vps-qa).
 #
 # Versões das actions conferidas na doc oficial (jun/2026):
@@ -77,14 +79,21 @@ jobs:
     needs: build-push
     runs-on: ubuntu-latest
     steps:
-      - name: Deploy QA via SSH (forced command na VPS)
-        env:
-          SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+      # A VPS de QA só é alcançável pela tailnet (não tem mais IPv4 público). O runner
+      # entra na Tailscale com um auth key que carrega a tag:ci; a policy `ssh` da tailnet
+      # concede `tag:ci → tag:cd-target` como `ubuntu` (action accept), então o deploy roda
+      # via Tailscale SSH — autenticação por identidade da tailnet, sem chave SSH.
+      # O auth key (secret TS_AUTHKEY) é reusable+ephemeral e expira a cada 90 dias:
+      # renovar via `POST /api/v2/tailnet/-/keys` (tags:["tag:ci"]) + `gh secret set TS_AUTHKEY`.
+      # Pin por SHA (ADR-0011 §"Pin de versões").
+      - name: Conecta na tailnet (Tailscale)
+        uses: tailscale/github-action@780049a30b6ff5c378a9e7b389d15ece7a204888 # v4.1.3
+        with:
+          authkey: ${{ secrets.TS_AUTHKEY }}
+          ping: 100.91.155.0
+
+      - name: Deploy QA via Tailscale SSH (roda deploy.sh no host)
         run: |
-          mkdir -p ~/.ssh && chmod 700 ~/.ssh
-          printf '%s\n' "$SSH_KEY" > ~/.ssh/deploy_key
-          chmod 600 ~/.ssh/deploy_key
-          # A chave está travada (forced command) p/ rodar só /opt/erp-qa/deploy.sh.
           # Se um container não ficar healthy, deploy.sh sai != 0 e este job fica vermelho.
-          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes -o StrictHostKeyChecking=accept-new \
-            ubuntu@201.23.88.74 deploy
+          # Host = erp-bem-comum-qa na tailnet (100.91.155.0); IPv4 público 201.23.88.74 aposentado.
+          tailscale ssh ubuntu@100.91.155.0 /opt/erp-qa/deploy.sh
