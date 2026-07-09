@@ -1,6 +1,6 @@
 # Estado do Ticket FIN-MATCH-PAIDAT
 
-> **Size:** S · **Status:** in-progress · **Created:** 2026-07-09T17:17:04.863Z
+> **Size:** S · **Status:** closed-green · **Created:** 2026-07-09T17:17:04.863Z · **Closed:** 2026-07-09T17:39:35.729Z
 
 | Wave | Status | Skill | REPORT | Última atualização |
 | :--- | :--- | :--- | :--- | :--- |
@@ -11,4 +11,4 @@
 
 ## Último evento
 
-W3 finished (GREEN)
+closed-green
