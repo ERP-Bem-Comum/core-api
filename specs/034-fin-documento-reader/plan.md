@@ -34,15 +34,17 @@ export type DocumentReaderPort = Readonly<{
 }>;
 
 // domain/document-reader/types.ts  (campos only — minimização LGPD)
+// ATUALIZADO na fatia 1 (FIN-DOC-READER-PORT, W2 round 2): identificadores em EN (ADR-0023/0039),
+// valores em Money VO (ADR-0018) e REUSO dos VOs canônicos do agregado Document (sem redefinir/degradar).
 export type DocumentReaderResult = Readonly<{
   resolvedVia: 'xml' | 'native-text';
-  tipo?: DocumentType;
-  numero?: string;
-  competencia?: string;
-  dataEmissao?: string;
-  fornecedor?: Readonly<{ razaoSocial: string; documento: string }>; // CNPJ/CPF
-  valorBrutoCents?: number;
-  retencoes?: readonly Readonly<{ tipo: string; valorCents: number }>[];
+  type?: DocumentType; // reusa domain/document/types.ts (7 espécies)
+  documentNumber?: string;
+  competence?: Competencia; // reusa domain/document/competencia.ts (VO)
+  issueDate?: Date;
+  supplier?: Readonly<{ legalName: string; taxId: string }>; // SupplierIdentity — CNPJ/CPF
+  grossValue?: Money; // reusa shared/kernel/money.ts (VO validado)
+  retentions?: readonly Retention[]; // reusa domain/shared/retention.ts (VO: type/base/rateBps/value)
 }>;
 
 // domain/document-reader/errors.ts
