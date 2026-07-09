@@ -3,9 +3,9 @@
   "ticket": "FIN-DOC-SOURCE-FILE-REF",
   "size": "M",
   "createdAt": "2026-07-09T13:19:54.705Z",
-  "closedAt": null,
+  "closedAt": "2026-07-09T16:11:52.998Z",
   "currentWave": null,
-  "status": "in-progress",
+  "status": "closed-green",
   "waves": [
     {
       "id": "W0",
@@ -49,5 +49,5 @@
     }
   ],
   "blockers": [],
-  "lastEvent": "W3 finished (GREEN)"
+  "lastEvent": "closed-green"
 }

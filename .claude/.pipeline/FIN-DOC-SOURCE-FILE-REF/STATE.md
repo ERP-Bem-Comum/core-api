@@ -1,6 +1,6 @@
 # Estado do Ticket FIN-DOC-SOURCE-FILE-REF
 
-> **Size:** M · **Status:** in-progress · **Created:** 2026-07-09T13:19:54.705Z
+> **Size:** M · **Status:** closed-green · **Created:** 2026-07-09T13:19:54.705Z · **Closed:** 2026-07-09T16:11:52.998Z
 
 | Wave | Status | Skill | REPORT | Última atualização |
 | :--- | :--- | :--- | :--- | :--- |
@@ -11,4 +11,4 @@
 
 ## Último evento
 
-W3 finished (GREEN)
+closed-green
