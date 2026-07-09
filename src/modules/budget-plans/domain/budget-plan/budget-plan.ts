@@ -108,6 +108,7 @@ const startCalibration = (
       id: childId,
       status: 'EM_CALIBRACAO',
       version: { major: parent.version.major + 1, minor: 0 },
+      budgets: [], // clonados com novos ids na orquestração (evita colisão de PK)
       parentId: parent.id,
       scenarioName: null,
       createdAt: now,
@@ -132,6 +133,7 @@ const createScenery = (
       id: childId,
       status: 'RASCUNHO',
       version: { major: parent.version.major, minor: parent.version.minor + 1 },
+      budgets: [], // clonados com novos ids na orquestração (evita colisão de PK)
       parentId: parent.id,
       scenarioName: name,
       createdAt: now,

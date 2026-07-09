@@ -51,3 +51,19 @@ export const create = (
     value: value.value,
   });
 };
+
+export type CloneBudgetResultParams = Readonly<{
+  id: BudgetResultId;
+  budgetId: BudgetId;
+  subcategoryId: SubcategoryId;
+}>;
+
+// US4 — clona um lançamento para outro orçamento/subcategoria (derivação de plano filho). Copia
+// model + value SEM recalcular: o valor do pai é preservado (não re-derivado da fórmula).
+export const clone = (source: BudgetResult, params: CloneBudgetResultParams): BudgetResult => ({
+  id: params.id,
+  budgetId: params.budgetId,
+  subcategoryId: params.subcategoryId,
+  model: source.model,
+  value: source.value,
+});
