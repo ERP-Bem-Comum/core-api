@@ -12,8 +12,8 @@ export const createInMemorySourceFileStorage = (
   return {
     upload: async (input) => {
       const key = `financial/${String(input.documentId)}/${input.fileName}`;
-      store.set(key, input.bytes);
       const hashSha256 = createHash('sha256').update(input.bytes).digest('hex');
+      // F2: valida a key ANTES de gravar (mesma ordem do adapter S3 — não replicar padrão inseguro).
       const ref = SourceFileRef.create({
         bucket,
         key,
@@ -21,7 +21,13 @@ export const createInMemorySourceFileStorage = (
         sizeBytes: input.bytes.length,
         mimeType: input.mimeType,
       });
-      return ref.ok ? ok(ref.value) : err('source-file-upload-failed');
+      if (!ref.ok) return err('source-file-upload-failed');
+      store.set(key, input.bytes);
+      return ok(ref.value);
+    },
+    remove: async (ref) => {
+      store.delete(ref.key);
+      return ok(undefined);
     },
   };
 };

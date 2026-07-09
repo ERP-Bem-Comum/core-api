@@ -34,13 +34,17 @@ export type IngestDocumentOutput = Readonly<{
 
 export type IngestDocumentError = DocumentReaderError | SourceFileStorageError | SaveDraftError;
 
-// Erros de RECURSO do reader = rejeição total (não guarda nada). Erros de LEITURA (escaneado/
-// não-suportado/malformado) NÃO abortam: guarda o PDF e cria rascunho vazio p/ preenchimento manual.
-const RESOURCE_ERRORS: readonly DocumentReaderError[] = [
-  'decompression-limit-exceeded',
-  'source-too-large',
-  'empty-input',
-];
+// Classificação EXAUSTIVA (F6): o compilador quebra se um novo `DocumentReaderError` não for
+// classificado aqui — evita fail-open (erro de recurso novo cair silenciosamente no "guarda mesmo
+// assim"). RECURSO = rejeita sem guardar; LEITURA = guarda o PDF + rascunho vazio (preenchimento manual).
+const READER_ERROR_CLASS: Record<DocumentReaderError, 'resource' | 'read'> = {
+  'decompression-limit-exceeded': 'resource',
+  'source-too-large': 'resource',
+  'empty-input': 'resource',
+  'scanned-unsupported': 'read',
+  'unsupported-pdf-structure': 'read',
+  'malformed-document': 'read',
+};
 
 export const ingestDocument =
   (deps: IngestDocumentDeps) =>
@@ -51,7 +55,7 @@ export const ingestDocument =
     const documentId = deps.idGen();
 
     const read = await deps.reader.read({ bytes: cmd.bytes, declaredMime: cmd.mimeType });
-    if (!read.ok && RESOURCE_ERRORS.includes(read.error)) return err(read.error);
+    if (!read.ok && READER_ERROR_CLASS[read.error] === 'resource') return err(read.error);
     const readResult = read.ok ? read.value : null;
 
     const stored = await deps.storage.upload({
@@ -74,7 +78,11 @@ export const ingestDocument =
         mimeType: stored.value.mimeType,
       },
     });
-    if (!saved.ok) return err(saved.error);
+    if (!saved.ok) {
+      // F4: o rascunho falhou → remove o comprovante órfão (best-effort; não mascara o erro do save).
+      await deps.storage.remove(stored.value);
+      return err(saved.error);
+    }
 
     return ok({
       documentId,

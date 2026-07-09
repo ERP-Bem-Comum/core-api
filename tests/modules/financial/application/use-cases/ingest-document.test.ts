@@ -8,6 +8,7 @@ import * as Retention from '#src/modules/financial/domain/shared/retention.ts';
 import * as SourceFileRef from '#src/modules/financial/domain/document/source-file-ref.ts';
 import * as DocumentId from '#src/modules/financial/domain/shared/document-id.ts';
 import { createMockDocumentReader } from '#src/modules/financial/adapters/document-reader/mock.ts';
+import { createInMemorySourceFileStorage } from '#src/modules/financial/adapters/storage/source-file-storage.in-memory.ts';
 import type { DocumentReaderResult } from '#src/modules/financial/domain/document-reader/types.ts';
 // W0 RED: mapper e use case ainda não existem (value imports → ERR_MODULE_NOT_FOUND).
 import { readerResultToDraft } from '#src/modules/financial/application/document-reader-to-draft.ts';
@@ -50,16 +51,21 @@ const STORED = must(
   }),
 );
 
-// Spy de storage: registra chamadas e devolve um Result configurável.
+// Spy de storage: registra chamadas (upload/remove) e devolve um Result configurável.
 const storageSpy = (behavior: Result<SourceFileRef.SourceFileRef, 'source-file-upload-failed'>) => {
   const calls: SourceFileUploadInput[] = [];
+  const removeCalls: SourceFileRef.SourceFileRef[] = [];
   const port: SourceFileStoragePort = {
     upload: (input) => {
       calls.push(input);
       return Promise.resolve(behavior);
     },
+    remove: (ref) => {
+      removeCalls.push(ref);
+      return Promise.resolve(ok(undefined));
+    },
   };
-  return { calls, port };
+  return { calls, removeCalls, port };
 };
 
 // Spy de saveDraft: captura o command e devolve ok(documentId).
@@ -160,5 +166,32 @@ describe('financial/application/use-cases/ingest-document', () => {
     const r = await ingest(INPUT);
     assert.equal(r.ok, false);
     assert.equal(save.commands.length, 0);
+  });
+
+  it('F1/F2: fileName com path-traversal → err e NÃO grava (validação antes do write)', async () => {
+    const storage = createInMemorySourceFileStorage();
+    const r = await storage.upload({
+      documentId: DocumentId.generate(),
+      bytes: new Uint8Array([0x25, 0x50, 0x44, 0x46]),
+      mimeType: 'application/pdf',
+      fileName: '../../evil',
+    });
+    assert.equal(r.ok, false); // key rejeitada antes do store.set
+  });
+
+  it('F4: saveDraft falha após upload → remove o comprovante órfão (best-effort)', async () => {
+    const storage = storageSpy(ok(STORED));
+    const failingSaveDraft = (): Promise<Result<SaveDraftOutput, SaveDraftError>> =>
+      Promise.resolve(err('document-repository-failure'));
+    const ingest = ingestDocument({
+      reader: createMockDocumentReader({ result: SEED }),
+      storage: storage.port,
+      saveDraft: failingSaveDraft,
+      idGen: DocumentId.generate,
+    });
+    const r = await ingest(INPUT);
+    assert.equal(r.ok, false);
+    assert.equal(storage.calls.length, 1); // guardou
+    assert.equal(storage.removeCalls.length, 1); // e removeu o órfão
   });
 });

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { ok, err } from '../../../../shared/primitives/result.ts';
 import type { S3StorageConfig } from '#src/modules/contracts/public-api/index.ts';
 import * as SourceFileRef from '../../domain/document/source-file-ref.ts';
@@ -38,18 +38,8 @@ export const createS3SourceFileStorage = (
       const key = `${config.keyPrefix}/${String(input.documentId)}/${input.fileName}`;
       const bytes = input.bytes.slice();
       const hashSha256 = createHash('sha256').update(bytes).digest('hex');
-      try {
-        await client.send(
-          new PutObjectCommand({
-            Bucket: bucket,
-            Key: key,
-            Body: bytes,
-            ContentType: input.mimeType,
-          }),
-        );
-      } catch {
-        return err('source-file-upload-failed');
-      }
+      // F1 (CWE-22): valida a key (anti-traversal do fileName) ANTES de gravar — nunca escreve com
+      // key hostil. F3 (CWE-354): ChecksumSHA256 dá integridade pós-upload (defesa em profundidade).
       const ref = SourceFileRef.create({
         bucket,
         key,
@@ -57,7 +47,29 @@ export const createS3SourceFileStorage = (
         sizeBytes: bytes.length,
         mimeType: input.mimeType,
       });
-      return ref.ok ? ok(ref.value) : err('source-file-upload-failed');
+      if (!ref.ok) return err('source-file-upload-failed');
+      try {
+        await client.send(
+          new PutObjectCommand({
+            Bucket: bucket,
+            Key: key,
+            Body: bytes,
+            ContentType: input.mimeType,
+            ChecksumSHA256: Buffer.from(hashSha256, 'hex').toString('base64'),
+          }),
+        );
+      } catch {
+        return err('source-file-upload-failed');
+      }
+      return ok(ref.value);
+    },
+    remove: async (ref) => {
+      try {
+        await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: ref.key }));
+        return ok(undefined);
+      } catch {
+        return err('source-file-upload-failed');
+      }
     },
   };
 };

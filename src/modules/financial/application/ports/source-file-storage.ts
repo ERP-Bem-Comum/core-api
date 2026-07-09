@@ -18,4 +18,6 @@ export type SourceFileStorageError = 'source-file-upload-failed';
 export type SourceFileStoragePort = Readonly<{
   // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types -- bytes: Uint8Array sem variant readonly no TS 6
   upload: (input: SourceFileUploadInput) => Promise<Result<SourceFileRef, SourceFileStorageError>>;
+  // Compensação (F4): remove um comprovante já gravado quando o rascunho falha depois (best-effort).
+  remove: (ref: SourceFileRef) => Promise<Result<void, SourceFileStorageError>>;
 }>;
