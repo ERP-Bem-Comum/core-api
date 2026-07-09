@@ -19,6 +19,7 @@ const matchInput = (over: Partial<MatchInput> = {}): MatchInput => ({
   payableValueCents: 1000,
   transactionDate: D,
   payableDueDate: D,
+  paidAt: null,
   memo: 'pagamento ref NF-001',
   documentNumber: 'NF-001',
   supplierOpenCount: 0,
@@ -173,6 +174,56 @@ describe('financial/domain/reconciliation — MatchScore (VO + score)', () => {
     assert.equal(
       MatchScore.evaluateCriteria(
         matchInput({ payableDueDate: new Date('2024-05-24T00:00:00.000Z') }),
+      ).dateD0,
+      false,
+    );
+  });
+
+  it('CA1 (#272 ponto 2): dateD0 casa pela DATA DE PAGAMENTO (paidAt) quando presente', () => {
+    // Débito bancário casa com a BAIXA, não com o vencimento: paidAt a +2d da transação (dentro ±5d),
+    // vencimento MUITO fora da janela → dateD0 corrobora pelo paidAt.
+    assert.equal(
+      MatchScore.evaluateCriteria(
+        matchInput({
+          transactionDate: new Date('2024-05-18T00:00:00.000Z'),
+          paidAt: new Date('2024-05-20T00:00:00.000Z'),
+          payableDueDate: new Date('2024-08-01T00:00:00.000Z'),
+        }),
+      ).dateD0,
+      true,
+    );
+    // paidAt TEM PRECEDÊNCIA sobre o vencimento: baixa fora da janela → false mesmo com vencimento no dia.
+    assert.equal(
+      MatchScore.evaluateCriteria(
+        matchInput({
+          transactionDate: new Date('2024-05-18T00:00:00.000Z'),
+          paidAt: new Date('2024-08-01T00:00:00.000Z'),
+          payableDueDate: new Date('2024-05-18T00:00:00.000Z'),
+        }),
+      ).dateD0,
+      false,
+    );
+  });
+
+  it('CA2 (#272 ponto 2): paidAt null → fallback para o vencimento (comportamento preservado)', () => {
+    // Sem baixa registrada, o critério cai no vencimento com a mesma tolerância ±5d.
+    assert.equal(
+      MatchScore.evaluateCriteria(
+        matchInput({
+          transactionDate: new Date('2024-05-18T00:00:00.000Z'),
+          paidAt: null,
+          payableDueDate: new Date('2024-05-20T00:00:00.000Z'),
+        }),
+      ).dateD0,
+      true,
+    );
+    assert.equal(
+      MatchScore.evaluateCriteria(
+        matchInput({
+          transactionDate: new Date('2024-05-18T00:00:00.000Z'),
+          paidAt: null,
+          payableDueDate: new Date('2024-08-01T00:00:00.000Z'),
+        }),
       ).dateD0,
       false,
     );
