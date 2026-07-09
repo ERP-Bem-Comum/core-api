@@ -51,6 +51,12 @@ const nfseBody = (overrides: Record<string, unknown> = {}): Record<string, unkno
   ...overrides,
 });
 
+// UUID v4 válido e determinístico a partir de um seed hex curto (evita colisão de supplierRef entre casos).
+const newUuidLike = (seed: string): string => {
+  const h = (seed + '0'.repeat(8)).slice(0, 8);
+  return `${h}-0000-4000-8000-000000000000`;
+};
+
 interface AppHandle {
   app: Awaited<ReturnType<typeof buildApp>>;
   teardown: () => Promise<void>;
@@ -171,5 +177,62 @@ describe('FIN-LISTAGEM-TIMELINE — GET /api/v2/financial/documents (listagem re
     assert.ok(item, 'deve haver item');
     assert.equal(item.series, null);
     assert.equal(item.contractRef, null);
+  });
+
+  // ── #167/FIN-DOC-SEARCH: busca textual `q` (driver memory → só documentNumber) ────
+  it('CA1 (#167): q filtra por documentNumber (contains, case-insensitive)', async () => {
+    await post(nfseBody({ documentNumber: 'QSEARCH-ALPHA-001', supplierRef: newUuidLike('a1') }));
+    await post(nfseBody({ documentNumber: 'QSEARCH-BETA-002', supplierRef: newUuidLike('b2') }));
+
+    const res = await list('?q=alpha&pageSize=100');
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as { items: { documentNumber: string | null }[]; total: number };
+    assert.ok(body.total >= 1, 'deve achar o ALPHA');
+    assert.ok(
+      body.items.every((i) => (i.documentNumber ?? '').toUpperCase().includes('ALPHA')),
+      'todos os itens devem conter ALPHA no documentNumber',
+    );
+    assert.ok(
+      !body.items.some((i) => (i.documentNumber ?? '').includes('BETA')),
+      'BETA não pode aparecer',
+    );
+  });
+
+  it('CA2 (#167): q combina com status (AND); q ausente = inalterado', async () => {
+    const num = 'QCOMBO-777';
+    await post(nfseBody({ documentNumber: num, supplierRef: newUuidLike('c7') }));
+
+    const open = await list(`?q=QCOMBO&status=Open&pageSize=100`);
+    assert.equal(open.statusCode, 200, open.body);
+    assert.ok((open.json() as { total: number }).total >= 1, 'q+status=Open deve achar');
+
+    const paid = await list(`?q=QCOMBO&status=Paid&pageSize=100`);
+    assert.equal(paid.statusCode, 200, paid.body);
+    assert.equal(
+      (paid.json() as { total: number }).total,
+      0,
+      'q+status=Paid não deve achar (é Open)',
+    );
+  });
+
+  it('CA3 (#167): q trimado; vazio/só-espaços → 400; wildcards são literais (escapados)', async () => {
+    await post(nfseBody({ documentNumber: 'QTRIM-500', supplierRef: newUuidLike('d5') }));
+
+    // trim nas bordas
+    const trimmed = await list(`?q=${encodeURIComponent('  QTRIM  ')}&pageSize=100`);
+    assert.equal(trimmed.statusCode, 200, trimmed.body);
+    assert.ok(
+      (trimmed.json() as { total: number }).total >= 1,
+      'termo com espaços deve ser trimado',
+    );
+
+    // vazio e só-espaços → 400 (min 1 após trim)
+    assert.equal((await list('?q=')).statusCode, 400);
+    assert.equal((await list(`?q=${encodeURIComponent('   ')}`)).statusCode, 400);
+
+    // wildcard `%` é literal (escapado): nenhum documentNumber contém '%' → total 0
+    const pct = await list(`?q=${encodeURIComponent('%')}&pageSize=100`);
+    assert.equal(pct.statusCode, 200, pct.body);
+    assert.equal((pct.json() as { total: number }).total, 0, '% deve ser literal, não coringa');
   });
 });

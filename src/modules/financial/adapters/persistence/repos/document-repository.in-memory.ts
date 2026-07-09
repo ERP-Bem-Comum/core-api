@@ -49,6 +49,13 @@ const matchesFilter = (doc: Document, f: DocumentListFilter): boolean => {
     return false;
   if (f.issuedTo !== undefined && (doc.issueDate === null || doc.issueDate > f.issuedTo))
     return false;
+  // #167: busca textual — contains case-insensitive. No driver memory o fornecedor só é resolvido
+  // (enrichWithSupplierView) na página, após o filtro, então aqui casa apenas por documentNumber;
+  // o match por nome/CNPJ é servido pelo adapter Drizzle (validado no x99).
+  if (f.q !== undefined) {
+    const needle = f.q.toUpperCase();
+    if (!(doc.documentNumber ?? '').toUpperCase().includes(needle)) return false;
+  }
   return true;
 };
 

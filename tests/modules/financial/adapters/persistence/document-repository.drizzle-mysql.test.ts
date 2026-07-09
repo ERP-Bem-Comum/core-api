@@ -31,6 +31,7 @@ import { documentRepositoryContract } from './document-repository.suite.ts';
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleDocumentRepository } from '#src/modules/financial/adapters/persistence/repos/document-repository.drizzle.ts';
 import { createDrizzleTimelineRepository } from '#src/modules/financial/adapters/persistence/repos/timeline-repository.drizzle.ts';
+import { finSupplierView } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 
 // Gate de integração: sem a env var, o describe() não é registrado e o runner
@@ -360,6 +361,143 @@ if (!process.env['MYSQL_INTEGRATION']) {
           await handle.db.execute(sql`DELETE FROM fin_payables WHERE document_id = ${id}`);
           await handle.db.execute(sql`DELETE FROM fin_documents WHERE id = ${id}`);
         }
+      });
+    });
+
+    // #167 — busca textual `q` (LEFT JOIN fin_supplier_view): nome do fornecedor + CNPJ + documentNumber.
+    describe('#167 — busca textual q (nome/CNPJ/documentNumber) em findPaged', () => {
+      const Q_SUP = '5a000000-0000-4000-8000-0000000000d1';
+
+      it('CA4: q casa por nome do fornecedor, CNPJ e documentNumber; LEFT JOIN não duplica count', async () => {
+        const repo = createDrizzleDocumentRepository(handle);
+        const supplierR = SupplierRef.rehydrate(Q_SUP);
+        if (!supplierR.ok) throw new Error('test setup: supplier');
+        const grossR = Money.fromCents(500000);
+        if (!grossR.ok) throw new Error('test setup: money');
+        const documentNumber = `NF-QSRCH-${newUuid().slice(0, 6)}`;
+        const created = Document.create({
+          id: DocumentId.generate(),
+          documentNumber,
+          type: 'NFS-e',
+          supplier: supplierR.value,
+          paymentMethod: 'PIX',
+          grossValue: grossR.value,
+          sourceDiscounts: Money.ZERO,
+          discounts: Money.ZERO,
+          penalty: Money.ZERO,
+          interest: Money.ZERO,
+          retentions: [],
+          registeredTaxes: [],
+          dueDate: new Date('2026-11-30'),
+        });
+        if (!created.ok) throw new Error('test setup: create');
+        const docId = created.value.document.id as unknown as string;
+        const saved = await repo.save(
+          { document: created.value.document, payables: created.value.payables },
+          [],
+        );
+        assert.equal(isOk(saved), true);
+
+        // Semeia o read-model de fornecedor (normalmente populado pelo worker) p/ exercitar o LEFT JOIN.
+        const now = new Date();
+        await handle.db.insert(finSupplierView).values({
+          supplierRef: Q_SUP,
+          name: 'Padaria Bartolomeu LTDA',
+          document: '12345678000199',
+          occurredAt: now,
+          updatedAt: now,
+        });
+
+        const byName = await repo.findPaged({ q: 'bartolomeu' }, 1, 100);
+        assert.equal(isOk(byName), true, JSON.stringify(byName));
+        if (byName.ok) {
+          const mine = byName.value.items.filter((i) => i.id === docId);
+          assert.equal(
+            mine.length,
+            1,
+            'q por nome deve achar o documento sem duplicar (count/JOIN)',
+          );
+          assert.equal(mine[0]?.supplierName, 'Padaria Bartolomeu LTDA');
+        }
+
+        const byCnpj = await repo.findPaged({ q: '12345678' }, 1, 100);
+        assert.equal(isOk(byCnpj), true);
+        if (byCnpj.ok)
+          assert.ok(
+            byCnpj.value.items.some((i) => i.id === docId),
+            'q por CNPJ deve achar',
+          );
+
+        const byNumber = await repo.findPaged({ q: documentNumber.slice(3) }, 1, 100);
+        assert.equal(isOk(byNumber), true);
+        if (byNumber.ok)
+          assert.ok(
+            byNumber.value.items.some((i) => i.id === docId),
+            'q por documentNumber deve achar',
+          );
+
+        const none = await repo.findPaged({ q: `zzz-nao-existe-${docId.slice(0, 8)}` }, 1, 100);
+        assert.equal(isOk(none), true);
+        if (none.ok)
+          assert.ok(!none.value.items.some((i) => i.id === docId), 'termo ausente não deve achar');
+
+        // cleanup
+        await handle.db.execute(sql`DELETE FROM fin_supplier_view WHERE supplier_ref = ${Q_SUP}`);
+        await handle.db.execute(sql`DELETE FROM fin_payables WHERE document_id = ${docId}`);
+        await handle.db.execute(sql`DELETE FROM fin_documents WHERE id = ${docId}`);
+      });
+
+      it('CA3 (x99): wildcard `%` no termo é literal (escapado) contra o motor MySQL real', async () => {
+        const repo = createDrizzleDocumentRepository(handle);
+        const supplierR = SupplierRef.rehydrate(Q_SUP);
+        if (!supplierR.ok) throw new Error('test setup: supplier');
+        const grossR = Money.fromCents(500000);
+        if (!grossR.ok) throw new Error('test setup: money');
+        // documentNumber com `%` literal — só deve casar busca que contenha esse literal, não `q='%'` coringa.
+        const documentNumber = `NF-PCT-50%-${newUuid().slice(0, 6)}`;
+        const created = Document.create({
+          id: DocumentId.generate(),
+          documentNumber,
+          type: 'NFS-e',
+          supplier: supplierR.value,
+          paymentMethod: 'PIX',
+          grossValue: grossR.value,
+          sourceDiscounts: Money.ZERO,
+          discounts: Money.ZERO,
+          penalty: Money.ZERO,
+          interest: Money.ZERO,
+          retentions: [],
+          registeredTaxes: [],
+          dueDate: new Date('2026-11-30'),
+        });
+        if (!created.ok) throw new Error('test setup: create');
+        const docId = created.value.document.id as unknown as string;
+        const saved = await repo.save(
+          { document: created.value.document, payables: created.value.payables },
+          [],
+        );
+        assert.equal(isOk(saved), true);
+
+        // Busca pelo literal "50%" → acha (contains real).
+        const literal = await repo.findPaged({ q: '50%' }, 1, 100);
+        assert.equal(isOk(literal), true);
+        if (literal.ok)
+          assert.ok(
+            literal.value.items.some((i) => i.id === docId),
+            'q="50%" deve casar pelo literal',
+          );
+
+        // Busca por "%" isolado → NÃO deve virar coringa (senão casaria todo documentNumber).
+        const wildcard = await repo.findPaged({ q: '%' }, 1, 100);
+        assert.equal(isOk(wildcard), true);
+        if (wildcard.ok)
+          assert.ok(
+            wildcard.value.items.every((i) => (i.documentNumber ?? '').includes('%')),
+            'q="%" deve ser literal: só casa documentNumber que realmente contém "%"',
+          );
+
+        await handle.db.execute(sql`DELETE FROM fin_payables WHERE document_id = ${docId}`);
+        await handle.db.execute(sql`DELETE FROM fin_documents WHERE id = ${docId}`);
       });
     });
   });

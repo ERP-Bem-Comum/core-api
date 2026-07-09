@@ -12,6 +12,9 @@ export type DocumentListFilter = Readonly<{
   dueTo?: Date; // janela inclusiva
   issuedFrom?: Date; // #163: filtro por emissão (janela inclusiva)
   issuedTo?: Date;
+  // #167: busca textual — contains (case-insensitive) em documentNumber + nome/CNPJ do fornecedor
+  // (fin_supplier_view via LEFT JOIN). No driver memory o fornecedor pode vir null (read-model vazio).
+  q?: string;
 }>;
 
 // Read-model leve da listagem (FR-004 — payload enxuto, sem títulos/retenções). Evita
