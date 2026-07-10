@@ -22,6 +22,9 @@ import {
   DANFE_NATIVE,
   PENDING_AMPLIFY,
   HOSTILE_TOUNICODE,
+  SHORT_LENGTH_FLATE,
+  ZERO_LENGTH_FLATE,
+  TRUNCATED_DEFLATE,
 } from './_fixtures/pdf-fixtures.ts';
 
 describe('financial/adapters/document-reader/native-pdf', () => {
@@ -197,5 +200,36 @@ describe('financial/adapters/document-reader/native-pdf', () => {
     const r = await reader.read({ bytes: HOSTILE_TOUNICODE.bytes() });
     assert.equal(r.ok, false);
     if (!r.ok) assert.equal(r.error, 'scanned-unsupported');
+  });
+
+  // --- #388 2a: stream FlateDecode com /Length errado/truncado (PDFsharp) ------------
+  it('#388 2a: /Length Flate curto → recupera via endstream recovery e classifica (hoje malformed)', async () => {
+    const reader = createNativePdfDocumentReader();
+    const exp = SHORT_LENGTH_FLATE.expected;
+    const r = await reader.read({ bytes: SHORT_LENGTH_FLATE.bytes() });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    if (!r.ok) return;
+    assert.equal(r.value.type, exp.type);
+    assert.equal(r.value.documentNumber, exp.documentNumber);
+    assert.equal(r.value.grossValue?.cents, exp.grossValueCents);
+  });
+
+  it('#388 2a: /Length declarado=0 → recupera via endstream (pdf.js recovery), não Z_SYNC_FLUSH', async () => {
+    const reader = createNativePdfDocumentReader();
+    const exp = ZERO_LENGTH_FLATE.expected;
+    const r = await reader.read({ bytes: ZERO_LENGTH_FLATE.bytes() });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    if (!r.ok) return;
+    assert.equal(r.value.type, exp.type);
+    assert.equal(r.value.grossValue?.cents, exp.grossValueCents);
+  });
+
+  it('#388 2a: deflate truncado no arquivo (/Length correto) → recupera via Z_SYNC_FLUSH (rede final)', async () => {
+    const reader = createNativePdfDocumentReader();
+    const r = await reader.read({ bytes: TRUNCATED_DEFLATE.bytes() });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    if (!r.ok) return;
+    assert.equal(r.value.type, 'NFS-e');
+    assert.equal(r.value.grossValue?.cents, TRUNCATED_DEFLATE.expected.grossValueCents);
   });
 });

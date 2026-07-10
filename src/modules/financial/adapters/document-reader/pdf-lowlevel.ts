@@ -1,4 +1,4 @@
-import { inflateSync, inflateRawSync } from 'node:zlib';
+import { inflateSync, inflateRawSync, constants as zlibConstants } from 'node:zlib';
 import { ok, err } from '../../../../shared/primitives/result.ts';
 import type { Result } from '../../../../shared/primitives/result.ts';
 
@@ -37,10 +37,11 @@ export const detectStructure = (bytes: Uint8Array): Result<true, PdfStructureErr
 // de corrupção de dados; tenta zlib e, se for formato raw, inflateRaw.
 export const inflateGuarded = (data: Uint8Array): Result<Uint8Array, InflateError> => {
   const attempt = (
-    fn: (d: Uint8Array, o: { maxOutputLength: number }) => Buffer,
+    fn: (d: Uint8Array, o: { maxOutputLength: number; finishFlush?: number }) => Buffer,
+    opts: { finishFlush?: number } = {},
   ): Result<Uint8Array, InflateError> | 'format-error' => {
     try {
-      return ok(new Uint8Array(fn(data, { maxOutputLength: MAX_INFLATE })));
+      return ok(new Uint8Array(fn(data, { maxOutputLength: MAX_INFLATE, ...opts })));
     } catch (e) {
       if ((e as NodeJS.ErrnoException).code === 'ERR_BUFFER_TOO_LARGE') {
         return err('decompression-limit-exceeded');
@@ -52,6 +53,15 @@ export const inflateGuarded = (data: Uint8Array): Result<Uint8Array, InflateErro
   if (asZlib !== 'format-error') return asZlib;
   const asRaw = attempt(inflateRawSync);
   if (asRaw !== 'format-error') return asRaw;
+  // 3º fallback (#388 2a): stream FlateDecode com `/Length` declarado curto (ex.: PDFsharp) — o fim do
+  // fluxo é cortado por `extractStreams`, então inflateSync/Raw dão 'unexpected end of file'. `finishFlush:
+  // Z_SYNC_FLUSH` infla os blocos completos sem exigir o marcador de fim (Zlib.md:415-437). Aceita só
+  // resultado NÃO-VAZIO (Zlib.md:439-443 — validar dado truncado); vazio → corrupção real, fail-closed.
+  const asSyncFlush = attempt(inflateSync, { finishFlush: zlibConstants.Z_SYNC_FLUSH });
+  if (asSyncFlush !== 'format-error') {
+    if (asSyncFlush.ok && asSyncFlush.value.length === 0) return err('malformed-document');
+    return asSyncFlush;
+  }
   return err('malformed-document');
 };
 
@@ -76,7 +86,13 @@ export const extractStreams = (bytes: Uint8Array): readonly PdfStream[] => {
     if (text[dataStart] === '\n') dataStart += 1;
     const lenMatch = /\/Length\s+(\d+)/.exec(dict);
     const len = lenMatch?.[1] !== undefined ? Number(lenMatch[1]) : -1;
-    if (len >= 0) {
+    // #388 2a: o `/Length` declarado pode estar ERRADO (pdf.js parser.js `#findStreamLength`: "the Length
+    // entry can be completely wrong, e.g. zero for non-empty streams"). Fonte de verdade = keyword
+    // `endstream`. Confia no `/Length` só quando ele termina exatamente em `endstream`; senão faz recovery
+    // buscando o `endstream` real (recupera o deflate COMPLETO — inflateSync valida o checksum normalmente).
+    const endsAtLen =
+      len >= 0 && /^\s*endstream/.test(text.slice(dataStart + len, dataStart + len + 16));
+    if (endsAtLen) {
       streams.push({ dict, data: bytes.subarray(dataStart, dataStart + len) });
       i = dataStart + len;
     } else {

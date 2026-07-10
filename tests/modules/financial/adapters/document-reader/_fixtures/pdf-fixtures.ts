@@ -11,6 +11,8 @@ import {
   buildMultiStreamPdf,
   buildQuadraticScanBytes,
   buildHostileToUnicodePdf,
+  buildShortLengthFlatePdf,
+  buildTruncatedDeflatePdf,
 } from './pdf-builder.ts';
 
 type RetentionExpect = Readonly<{
@@ -137,6 +139,53 @@ export const OVERSIZE_INPUT = {
 // (mapeamento inválido ignorado → sem texto útil → scanned-unsupported), nunca exceção vazada.
 export const HOSTILE_TOUNICODE = {
   bytes: (): Uint8Array => buildHostileToUnicodePdf('FFFFFF'),
+} as const;
+
+// #388 2a — stream FlateDecode com `/Length` curto (corta 4 bytes finais). Hoje o inflateGuarded
+// falha (inflateSync/Raw → 'unexpected end of file') → malformed-document; após Z_SYNC_FLUSH (com
+// validação) o texto é recuperado 100% e a NFS-e classifica.
+export const SHORT_LENGTH_FLATE = {
+  bytes: (): Uint8Array =>
+    buildShortLengthFlatePdf(
+      [
+        'PREFEITURA - NOTA FISCAL DE SERVICOS ELETRONICA NFS-e',
+        'Numero da Nota: 0000000462171',
+        'Valor Total dos Servicos: R$ 1.500,00',
+      ],
+      4,
+    ),
+  expected: { type: 'NFS-e', documentNumber: '0000000462171', grossValueCents: 150000 },
+} as const;
+
+// #388 2a — /Length declarado = 0 (pdf.js: "the Length entry can be completely wrong, e.g. zero for
+// non-empty streams"). O Z_SYNC_FLUSH sozinho NÃO recupera (0 bytes fatiados ao /Length); só o recovery
+// por 'endstream' no extractStreams alcança o deflate completo. shortBy enorme → declaredLen colapsa a 0.
+export const ZERO_LENGTH_FLATE = {
+  bytes: (): Uint8Array =>
+    buildShortLengthFlatePdf(
+      [
+        'PREFEITURA - NOTA FISCAL DE SERVICOS ELETRONICA NFS-e',
+        'Numero da Nota: 0000000999999',
+        'Valor Total dos Servicos: R$ 2.000,00',
+      ],
+      100000,
+    ),
+  expected: { type: 'NFS-e', documentNumber: '0000000999999', grossValueCents: 200000 },
+} as const;
+
+// #388 2a — deflate truncado no arquivo (/Length correto p/ os bytes escritos, mas o deflate está
+// incompleto): o endstream-recovery não alcança mais bytes; só o Z_SYNC_FLUSH recupera. Cobre a rede final.
+export const TRUNCATED_DEFLATE = {
+  bytes: (): Uint8Array =>
+    buildTruncatedDeflatePdf(
+      [
+        'PREFEITURA - NOTA FISCAL DE SERVICOS ELETRONICA NFS-e',
+        'Numero da Nota: 0000000777777',
+        'Valor Total dos Servicos: R$ 3.000,00',
+      ],
+      4,
+    ),
+  expected: { type: 'NFS-e', grossValueCents: 300000 },
 } as const;
 
 // --- #386 Fatia 1: PDF real (operador TJ, reconstrução de linha, DANFE) --------
