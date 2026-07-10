@@ -23,7 +23,7 @@ const STRONG = 'Str0ng-Passphrase-2026!';
 const WRITER_EMAIL = 'budget.writer@example.com';
 
 const PROGRAM_ETI = '11111111-1111-4111-8111-111111111111';
-const STATE_REF = '55555555-5555-4555-8555-555555555555';
+const STATE_REF = 'CE';
 const MISSING_BUDGET = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 
 const makeApp = async () => {

@@ -20,7 +20,7 @@ import { deleteBudget } from '#src/modules/budget-plans/application/use-cases/de
 
 const NOW = new Date('2026-07-09T12:00:00.000Z');
 const PROGRAM = '11111111-1111-4111-8111-111111111111';
-const STATE = '55555555-5555-4555-8555-555555555555';
+const STATE = 'CE';
 
 const seedPlanWithBudget = async (
   planStore: ReturnType<typeof InMemoryBudgetPlanRepository>,

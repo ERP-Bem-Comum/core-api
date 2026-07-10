@@ -15,7 +15,7 @@ import { selectCurrentApprovedByFamily } from '#src/modules/budget-plans/domain/
 const NOW = new Date('2026-07-09T12:00:00.000Z');
 const PROGRAM_ETI = '11111111-1111-4111-8111-111111111111';
 const PROGRAM_PARC = '22222222-2222-4222-8222-222222222222';
-const STATE_CE = '44444444-4444-4444-8444-444444444444';
+const STATE_CE = 'CE';
 
 const plan = (
   spec: Readonly<{ program: string; version: PlanVersion; cents: number }>,
