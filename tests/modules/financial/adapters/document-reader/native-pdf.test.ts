@@ -25,6 +25,7 @@ import {
   SHORT_LENGTH_FLATE,
   ZERO_LENGTH_FLATE,
   TRUNCATED_DEFLATE,
+  FRAGMENTED_HYPHEN,
 } from './_fixtures/pdf-fixtures.ts';
 
 describe('financial/adapters/document-reader/native-pdf', () => {
@@ -231,5 +232,17 @@ describe('financial/adapters/document-reader/native-pdf', () => {
     if (!r.ok) return;
     assert.equal(r.value.type, 'NFS-e');
     assert.equal(r.value.grossValue?.cents, TRUNCATED_DEFLATE.expected.grossValueCents);
+  });
+
+  // --- #388 2b: fragmentação Td/Tj quebra token hifenizado (NFS-e → NFS- e) --------
+  it('#388 2b: token hifenizado fragmentado por Td ty=0 → reconstrói e classifica (hoje malformed)', async () => {
+    const reader = createNativePdfDocumentReader();
+    const exp = FRAGMENTED_HYPHEN.expected;
+    const r = await reader.read({ bytes: FRAGMENTED_HYPHEN.bytes() });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    if (!r.ok) return;
+    assert.equal(r.value.type, exp.type);
+    assert.equal(r.value.documentNumber, exp.documentNumber);
+    assert.equal(r.value.grossValue?.cents, exp.grossValueCents);
   });
 });

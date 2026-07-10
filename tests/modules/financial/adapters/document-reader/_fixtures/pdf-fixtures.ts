@@ -188,6 +188,19 @@ export const TRUNCATED_DEFLATE = {
   expected: { type: 'NFS-e', grossValueCents: 300000 },
 } as const;
 
+// #388 2b — token hifenizado fragmentado: "NFS-e" emitido em 2 Tj ("NFS-" | "e Servico") com Td de
+// avanço horizontal (ty=0) entre eles, e as demais linhas separadas por Td com ty!=0. Hoje o flushLine
+// cego quebra a linha no ty=0 → normalização vira "NFS- e" → detectType /NFS-e/ NÃO casa (malformed).
+// Após reconstrução por ΔTd (ty=0 → mesma linha) + normalização de hífen (`-\s+`→`-`) → casa.
+export const FRAGMENTED_HYPHEN = {
+  bytes: (): Uint8Array =>
+    buildRawContentPdf(
+      'BT /F1 12 Tf 100 700 Td (Documento Auxiliar NFS-) Tj 25 0 Td (e Servico) Tj ' +
+        '0 -18 Td (Numero da Nota: 0000000888888) Tj 0 -18 Td (Valor Total: R$ 700,00) Tj ET',
+    ),
+  expected: { type: 'NFS-e', documentNumber: '0000000888888', grossValueCents: 70000 },
+} as const;
+
 // --- #386 Fatia 1: PDF real (operador TJ, reconstrução de linha, DANFE) --------
 
 // TJ (array) com strings literais — modo dominante em PDFs reais (DANFCOM usa 112 TJ / 0 Tj).

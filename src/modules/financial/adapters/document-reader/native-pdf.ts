@@ -106,6 +106,7 @@ const extractText = (content: string, toUnicode: ReadonlyMap<number, string> | n
   };
 
   let i = 0;
+  let lastNum = 0; // #388 2b: último operando numérico visto (o ty do próximo Td/TD)
   while (i < n) {
     const ch = content[i];
     if (ch === '(') {
@@ -149,18 +150,42 @@ const extractText = (content: string, toUnicode: ReadonlyMap<number, string> | n
     } else if (ch === 'T' && (content[i + 1] === 'j' || content[i + 1] === 'J')) {
       show(); // Tj (1 operando) | TJ (N operandos do array [...])
       i += 2;
-    } else if (
-      ch === 'T' &&
-      (content[i + 1] === 'd' ||
-        content[i + 1] === 'D' ||
-        content[i + 1] === '*' ||
-        content[i + 1] === 'm')
-    ) {
-      flushLine(); // posicionamento → nova linha
+    } else if (ch === 'T' && (content[i + 1] === 'd' || content[i + 1] === 'D')) {
+      // #388 2b: Td/TD movem o cursor por (tx, ty) = (n1, n2). ty≈0 → mesmo baseline (avanço
+      // horizontal): separa palavras com um espaço mas NÃO fecha a linha — preserva token hifenizado
+      // e mantém rótulo+valor na mesma linha (os regexes de campo usam `[^:\n]`). ty≠0 → nova linha.
+      if (Math.abs(lastNum) < 0.01) {
+        if (line !== '') line += ' ';
+      } else {
+        flushLine();
+      }
+      i += 2;
+    } else if (ch === 'T' && (content[i + 1] === '*' || content[i + 1] === 'm')) {
+      flushLine(); // T* (próxima linha) | Tm (reset da matriz de texto) → fronteira de linha
       i += 2;
     } else if ((ch === 'B' || ch === 'E') && content[i + 1] === 'T') {
       flushLine(); // BT/ET → fronteira de bloco de texto
       i += 2;
+    } else if (
+      ch === '-' ||
+      ch === '+' ||
+      ch === '.' ||
+      (ch !== undefined && ch >= '0' && ch <= '9')
+    ) {
+      // #388 2b: coleta operando numérico (fora de string) p/ tx/ty do próximo Td. Mantém só os 2
+      // últimos (n1=penúltimo, n2=último); operandos de outros operadores são empurrados para fora.
+      let j = i;
+      let buf = '';
+      while (j < n) {
+        const c = content[j];
+        if (c === undefined || !(c === '-' || c === '+' || c === '.' || (c >= '0' && c <= '9')))
+          break;
+        buf += c;
+        j += 1;
+      }
+      const v = Number.parseFloat(buf);
+      if (!Number.isNaN(v)) lastNum = v;
+      i = j > i ? j : i + 1;
     } else {
       i += 1;
     }
@@ -214,7 +239,9 @@ const structure = (text: string): Result<DocumentReaderResult, DocumentReaderErr
   // #386: classifica sobre texto com whitespace normalizado — PDFs reais fragmentam por posição
   // (palavra-por-`Td`), então a reconstrução de linha não garante âncoras contíguas. Colapsar
   // espaços/quebras torna `detectType` robusto à fragmentação sem depender de layout perfeito.
-  const normalized = text.replace(/\s+/g, ' ');
+  // #388 2b: cola o token quando um hífen fica seguido de espaço espúrio — a fragmentação `NFS-`|`e`
+  // (Td entre eles) vira "NFS- e" após o colapso, e `detectType /NFS-e/` não casaria.
+  const normalized = text.replace(/\s+/g, ' ').replace(/-\s+/g, '-');
   const type = detectType(normalized);
   if (type === undefined) return err('malformed-document');
 
