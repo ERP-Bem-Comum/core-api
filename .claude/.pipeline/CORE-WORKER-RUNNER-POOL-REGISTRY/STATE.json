@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "CORE-WORKER-RUNNER-POOL-REGISTRY",
+  "size": "L",
+  "createdAt": "2026-07-10T20:09:18.672Z",
+  "closedAt": null,
+  "currentWave": "W1",
+  "status": "in-progress",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-10T20:10:57.214Z",
+      "finishedAt": "2026-07-10T20:13:06.581Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "in-progress",
+      "agent": "ports-and-adapters",
+      "startedAt": "2026-07-10T20:17:43.407Z",
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W2",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W3",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "W1 started (ports-and-adapters)"
+}
