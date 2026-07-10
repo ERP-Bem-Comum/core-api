@@ -22,7 +22,7 @@ export type SupplierIdentity = Readonly<{
 // opcionais (readers parciais devolvem só o que conseguiram extrair). Valores monetários são `Money`
 // (VO validado, ADR-0018), compet./tipo/retenções reusam os VOs canônicos do agregado `Document`.
 export type DocumentReaderResult = Readonly<{
-  resolvedVia: 'xml' | 'native-text';
+  resolvedVia: 'xml' | 'native-text' | 'unpdf';
   type?: DocumentType;
   documentNumber?: string;
   competence?: Competencia;

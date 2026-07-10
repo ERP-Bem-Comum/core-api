@@ -1052,5 +1052,5 @@ export const octetStreamIngestBody = (): { content: Record<string, { schema: z.Z
 /** Resposta 201 do ingest. */
 export const ingestDocumentResponseSchema = z.object({
   documentId: z.string(),
-  resolvedVia: z.enum(['xml', 'native-text']).nullable(),
+  resolvedVia: z.enum(['xml', 'native-text', 'unpdf']).nullable(),
 });
