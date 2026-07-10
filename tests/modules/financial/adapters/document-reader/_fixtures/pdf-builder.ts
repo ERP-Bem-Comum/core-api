@@ -230,6 +230,130 @@ export const buildIdentityHPdf = (lines: readonly string[]): Uint8Array => {
   ]);
 };
 
+// #388 2c — PDF com DUAS fontes Type0/Identity-H, cada uma com seu CMap /ToUnicode e GIDs DISJUNTOS
+// (F1 usa 1..k1; F2 usa k1+1..). O content-stream alterna a fonte via `Tf`. O reader que usa só o
+// PRIMEIRO CMap (`find(beginbfchar)`) decodifica apenas a fonte 1 → texto incompleto. Mesclar todos os
+// CMaps num único mapa (códigos disjuntos → sem colisão) recupera ambas as fontes.
+export const buildMultiFontIdentityHPdf = (
+  run1: readonly string[],
+  run2: readonly string[],
+): Uint8Array => {
+  const uniq = (lines: readonly string[]): string[] => [
+    ...new Set(Array.from(lines.join('\n')).filter((c) => c !== '\n')),
+  ];
+  const chars1 = uniq(run1);
+  const chars2 = uniq(run2);
+  const gid1 = new Map<string, number>();
+  chars1.forEach((c, k) => {
+    gid1.set(c, k + 1);
+  });
+  const gid2 = new Map<string, number>();
+  chars2.forEach((c, k) => {
+    gid2.set(c, chars1.length + k + 1); // GIDs disjuntos de gid1
+  });
+
+  const showLine = (line: string, gid: ReadonlyMap<string, number>): string =>
+    `<${Array.from(line)
+      .map((c) => hex4(gid.get(c) ?? 0))
+      .join('')}> Tj`;
+
+  const ops: string[] = ['BT', '72 760 Td', '/F1 12 Tf'];
+  run1.forEach((line, k) => {
+    if (k > 0) ops.push('0 -18 Td');
+    ops.push(showLine(line, gid1));
+  });
+  ops.push('/F2 12 Tf');
+  run2.forEach((line) => {
+    ops.push('0 -18 Td');
+    ops.push(showLine(line, gid2));
+  });
+  ops.push('ET');
+  const content = deflateSync(Buffer.from(ops.join('\n'), LATIN1));
+
+  const cmapOf = (chars: readonly string[], gid: ReadonlyMap<string, number>): Buffer => {
+    const bfchar = chars
+      .map((c) => `<${hex4(gid.get(c) ?? 0)}> <${hex4(c.codePointAt(0) ?? 0)}>`)
+      .join('\n');
+    return deflateSync(
+      Buffer.from(
+        `/CIDInit /ProcSet findresource begin\n12 dict begin\nbegincmap\n/CMapType 2 def\n` +
+          `1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n` +
+          `${chars.length} beginbfchar\n${bfchar}\nendbfchar\nendcmap\nend\nend`,
+        LATIN1,
+      ),
+    );
+  };
+
+  return assemblePdf([
+    Buffer.from('<< /Type /Catalog /Pages 2 0 R >>', LATIN1),
+    Buffer.from('<< /Type /Pages /Kids [3 0 R] /Count 1 >>', LATIN1),
+    Buffer.from(
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 8 0 R >> >> >>',
+      LATIN1,
+    ),
+    streamObject(content),
+    Buffer.from(
+      '<< /Type /Font /Subtype /Type0 /BaseFont /AAAAAA+Arial /Encoding /Identity-H /DescendantFonts [6 0 R] /ToUnicode 7 0 R >>',
+      LATIN1,
+    ),
+    Buffer.from('<< /Type /Font /Subtype /CIDFontType2 /BaseFont /AAAAAA+Arial >>', LATIN1),
+    streamObject(cmapOf(chars1, gid1)),
+    Buffer.from(
+      '<< /Type /Font /Subtype /Type0 /BaseFont /BBBBBB+Verdana /Encoding /Identity-H /DescendantFonts [9 0 R] /ToUnicode 10 0 R >>',
+      LATIN1,
+    ),
+    Buffer.from('<< /Type /Font /Subtype /CIDFontType2 /BaseFont /BBBBBB+Verdana >>', LATIN1),
+    streamObject(cmapOf(chars2, gid2)),
+  ]);
+};
+
+// #388 2c — 2 fontes cujos CMaps /ToUnicode COLIDEM: o MESMO código (0006) mapeia para chars diferentes
+// ('X' na fonte 1, 'O' na fonte 2). Sob "último vence", o content de F1 "BOLET"+<0006> viraria "BOLETO"
+// (tipo Boleto FALSO). O merge fail-closed dropa o código ambíguo → "BOLET" → não classifica. Prova o
+// invariante #62 (char faltante > char errado). GIDs: B=0001 O=0002 L=0003 E=0004 T=0005 X=0006.
+export const buildCollidingCMapPdf = (): Uint8Array => {
+  const content = deflateSync(
+    Buffer.from(
+      'BT 72 760 Td /F1 12 Tf <000100020003000400050006> Tj /F2 12 Tf <0006> Tj ET',
+      LATIN1,
+    ),
+  );
+  const mkCmap = (body: string): Buffer =>
+    deflateSync(
+      Buffer.from(
+        `begincmap\n1 begincodespacerange\n<0000> <FFFF>\nendcodespacerange\n${body}\nendcmap`,
+        LATIN1,
+      ),
+    );
+  // F1: B O L E T X. <0042>=B <004F>=O <004C>=L <0045>=E <0054>=T <0058>=X
+  const cmap1 = mkCmap(
+    '6 beginbfchar\n<0001> <0042>\n<0002> <004F>\n<0003> <004C>\n<0004> <0045>\n<0005> <0054>\n<0006> <0058>\nendbfchar',
+  );
+  // F2: 0006 → O (COLIDE com F1 0006=X). <004F>=O
+  const cmap2 = mkCmap('1 beginbfchar\n<0006> <004F>\nendbfchar');
+  return assemblePdf([
+    Buffer.from('<< /Type /Catalog /Pages 2 0 R >>', LATIN1),
+    Buffer.from('<< /Type /Pages /Kids [3 0 R] /Count 1 >>', LATIN1),
+    Buffer.from(
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 8 0 R >> >> >>',
+      LATIN1,
+    ),
+    streamObject(content),
+    Buffer.from(
+      '<< /Type /Font /Subtype /Type0 /Encoding /Identity-H /DescendantFonts [6 0 R] /ToUnicode 7 0 R >>',
+      LATIN1,
+    ),
+    Buffer.from('<< /Type /Font /Subtype /CIDFontType2 /BaseFont /AAAAAA+A >>', LATIN1),
+    streamObject(cmap1),
+    Buffer.from(
+      '<< /Type /Font /Subtype /Type0 /Encoding /Identity-H /DescendantFonts [9 0 R] /ToUnicode 10 0 R >>',
+      LATIN1,
+    ),
+    Buffer.from('<< /Type /Font /Subtype /CIDFontType2 /BaseFont /BBBBBB+B >>', LATIN1),
+    streamObject(cmap2),
+  ]);
+};
+
 // --- Fixtures adversariais (testes de regressão de segurança) ------------------
 
 // Content-stream CRU (sem escape) — para forjar payloads hostis (ex.: parênteses sem fechar, F1).

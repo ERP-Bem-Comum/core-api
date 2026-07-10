@@ -72,6 +72,25 @@ const parseToUnicode = (cmap: string): ReadonlyMap<number, string> => {
   return map;
 };
 
+// #388 2c: mescla os CMaps /ToUnicode de TODAS as fontes num único mapa código→char. Um PDF pode ter
+// várias fontes Type0, cada uma com seu CMap; usar só o 1º decodificava apenas a 1ª fonte. Fontes de
+// subset distintas usam faixas de código (GID) disjuntas — medido 0 colisões no DANFCOM real.
+// COLISÃO (mesmo código → chars diferentes em fontes distintas): fail-closed — o código ambíguo é
+// DROPADO (vira char faltante via o `?? ''` do decodeHex), nunca "adivinha" o char de uma das fontes.
+// Char faltante degrada para revisão manual; char ERRADO seria alucinação de valor fiscal (invariante #62).
+const mergeToUnicode = (cmaps: readonly string[]): ReadonlyMap<number, string> => {
+  const merged = new Map<number, string>();
+  const ambiguous = new Set<number>();
+  for (const cmap of cmaps)
+    for (const [code, ch] of parseToUnicode(cmap)) {
+      const prev = merged.get(code);
+      if (prev === undefined) merged.set(code, ch);
+      else if (prev !== ch) ambiguous.add(code);
+    }
+  for (const code of ambiguous) merged.delete(code);
+  return merged;
+};
+
 // Tokenizer char-a-char O(n) — SEM regex de backtracking (anti-ReDoS, F1). Coleta operandos de string
 // (`(...)` literal balanceado ou `<...>` hex, cada um ≤ MAX_OPERAND) em `pending` e os aplica no operador
 // de mostrar texto: `Tj` (1 operando) e **`TJ`** (array `[ ... ]`, N operandos + kerning numérico ignorado).
@@ -294,8 +313,8 @@ const readNative = (bytes: Uint8Array): Result<DocumentReaderResult, DocumentRea
     inflated.push(latin1(r.value));
   }
 
-  const cmap = inflated.find((t) => t.includes('beginbfchar'));
-  const toUnicode = cmap !== undefined ? parseToUnicode(cmap) : null;
+  const cmapStreams = inflated.filter((t) => t.includes('beginbfchar'));
+  const toUnicode = cmapStreams.length > 0 ? mergeToUnicode(cmapStreams) : null;
   const text = inflated
     .filter((t) => !t.includes('beginbfchar'))
     .map((c) => extractText(c, toUnicode))
