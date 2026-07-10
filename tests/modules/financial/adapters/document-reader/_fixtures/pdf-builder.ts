@@ -74,6 +74,61 @@ export const buildNativePdf = (lines: readonly string[]): Uint8Array => {
   ]);
 };
 
+// #388 2a — PDF com stream FlateDecode cujo `/Length` declarado é CURTO (corta os bytes finais do
+// deflate — ex.: o adler32 do zlib). Gerador real: PDFsharp 6.2.2. O `extractStreams` fatia ao `/Length`
+// curto → `inflateSync`/`inflateRawSync` falham ('unexpected end of file'). Só `finishFlush:
+// Z_SYNC_FLUSH` (validando o resultado) recupera o texto. `shortBy` = bytes cortados no fim
+// (4 → o deflate está completo, falta só o checksum → Z_SYNC_FLUSH recupera 100%).
+export const buildShortLengthFlatePdf = (lines: readonly string[], shortBy: number): Uint8Array => {
+  const compressed = deflateSync(winAnsiContent(lines));
+  const declaredLen = Math.max(0, compressed.length - shortBy); // /Length MENTE (curto)
+  const streamObj = Buffer.concat([
+    Buffer.from(`<< /Length ${declaredLen} /Filter /FlateDecode >>\nstream\n`, LATIN1),
+    compressed, // bytes completos no arquivo; extractStreams corta ao declaredLen
+    Buffer.from('\nendstream', LATIN1),
+  ]);
+  return assemblePdf([
+    Buffer.from('<< /Type /Catalog /Pages 2 0 R >>', LATIN1),
+    Buffer.from('<< /Type /Pages /Kids [3 0 R] /Count 1 >>', LATIN1),
+    Buffer.from(
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+      LATIN1,
+    ),
+    streamObj,
+    Buffer.from(
+      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+      LATIN1,
+    ),
+  ]);
+};
+
+// #388 2a — deflate GENUINAMENTE truncado no ARQUIVO (o gerador escreveu bytes incompletos, não só um
+// `/Length` errado): o recovery por `endstream` não alcança mais bytes; só `finishFlush: Z_SYNC_FLUSH`
+// recupera. `/Length` declarado = tamanho do deflate truncado (bate com `endstream`). `cut` = bytes
+// cortados do fim (4 → falta só o checksum → recupera 100%).
+export const buildTruncatedDeflatePdf = (lines: readonly string[], cut: number): Uint8Array => {
+  const compressed = deflateSync(winAnsiContent(lines));
+  const truncated = compressed.subarray(0, Math.max(1, compressed.length - cut));
+  const streamObj = Buffer.concat([
+    Buffer.from(`<< /Length ${truncated.length} /Filter /FlateDecode >>\nstream\n`, LATIN1),
+    truncated,
+    Buffer.from('\nendstream', LATIN1),
+  ]);
+  return assemblePdf([
+    Buffer.from('<< /Type /Catalog /Pages 2 0 R >>', LATIN1),
+    Buffer.from('<< /Type /Pages /Kids [3 0 R] /Count 1 >>', LATIN1),
+    Buffer.from(
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>',
+      LATIN1,
+    ),
+    streamObj,
+    Buffer.from(
+      '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>',
+      LATIN1,
+    ),
+  ]);
+};
+
 // PDF cifrado (CA4): trailer com /Encrypt → estrutura não-suportada (fora do v1).
 export const buildEncryptedPdf = (): Uint8Array => {
   const pdf = buildNativePdf(['documento cifrado']);
