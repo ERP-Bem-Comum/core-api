@@ -3,23 +3,26 @@ import type {
   DocumentReaderPort,
   DocumentReaderInput,
 } from '../../application/ports/document-reader.ts';
+import type { DocumentReaderResult } from '../../domain/document-reader/types.ts';
 
-// Readers injetados na cascata (fatia 1 — CA4). Na fatia 1 podem ser stubs/mocks;
-// os readers reais (XML/nativo) entram em FIN-DOC-READER-XML / FIN-DOC-READER-NATIVE.
+// Readers injetados na cascata. XML (topo, estruturado) → nativo (texto in-house) → `fallback` (unpdf,
+// ADR-0050) → `scanned-unsupported`.
 export type CascadeReaders = Readonly<{
   xml: DocumentReaderPort;
   native: DocumentReaderPort;
+  fallback: DocumentReaderPort;
 }>;
 
-// Precedência XML > nativo > `scanned-unsupported`, com SHORT-CIRCUIT: se o XML resolve,
-// o nativo nem é consultado (ADR-0050, degrau da cascata).
-//
-// Erros de RECURSO são terminais (F4/F5): se o XML já rejeitou o input por `source-too-large`,
-// NÃO empurramos os mesmos bytes gigantes ao nativo; e um erro de recurso do nativo
-// (`decompression-limit-exceeded`/`source-too-large`) é propagado — não mascarado como
-// `scanned-unsupported` — para preservar o sinal de abuso na borda (telemetria/rate-limit).
+// Erros de RECURSO são terminais (F4/F5): se um degrau já rejeitou o input por `source-too-large`/
+// `decompression-limit-exceeded`, NÃO empurramos os mesmos bytes ao próximo, e o erro é propagado —
+// não mascarado como `scanned-unsupported` — para preservar o sinal de abuso na borda.
 const isResourceError = (e: string): boolean =>
   e === 'source-too-large' || e === 'decompression-limit-exceeded';
+
+// #396: o nativo "bateu a métrica" (ADR-0050) quando classificou E extraiu ao menos um campo-âncora
+// (número OU valor). Só `type`, sem campos (layout tabular real) → aciona o fallback `unpdf`.
+const hasFields = (r: DocumentReaderResult): boolean =>
+  r.documentNumber !== undefined || r.grossValue !== undefined;
 
 export const createCascadeReader = (readers: CascadeReaders): DocumentReaderPort => ({
   // `bytes: Uint8Array` não tem variant readonly nativo no TS 6 (ver port document-reader.ts).
@@ -30,9 +33,15 @@ export const createCascadeReader = (readers: CascadeReaders): DocumentReaderPort
     if (isResourceError(viaXml.error)) return viaXml;
 
     const viaNative = await readers.native.read(input);
-    if (viaNative.ok) return viaNative;
-    if (isResourceError(viaNative.error)) return viaNative;
+    if (viaNative.ok && hasFields(viaNative.value)) return viaNative;
+    if (!viaNative.ok && isResourceError(viaNative.error)) return viaNative;
 
+    // Nativo não resolveu OU classificou sem campos → fallback `unpdf` (ADR-0050, in-house-first).
+    const viaFallback = await readers.fallback.read(input);
+    if (viaFallback.ok) return viaFallback;
+    if (isResourceError(viaFallback.error)) return viaFallback;
+    // Fallback falhou: se o nativo ao menos CLASSIFICOU (type sem campos), devolve-o — melhor que nada.
+    if (viaNative.ok) return viaNative;
     return err('scanned-unsupported');
   },
 });

@@ -28,7 +28,7 @@ export type IngestDocumentCommand = Readonly<{
 
 export type IngestDocumentOutput = Readonly<{
   documentId: DocumentId;
-  resolvedVia: 'xml' | 'native-text' | null;
+  resolvedVia: 'xml' | 'native-text' | 'unpdf' | null;
   sourceFile: SourceFileRef;
 }>;
 

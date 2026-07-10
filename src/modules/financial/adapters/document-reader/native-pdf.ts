@@ -254,7 +254,13 @@ const parseRetentions = (text: string, baseCents: number): readonly Retention.Re
   return out;
 };
 
-const structure = (text: string): Result<DocumentReaderResult, DocumentReaderError> => {
+// #396: exportado + `resolvedVia` parametrizado para o fallback `unpdf` reusar a MESMA extração de
+// campos (regex) sobre o texto linearizado que o unpdf produz. O decode muda (in-house vs lib); a
+// estruturação (detectType + campos) é única.
+export const structureText = (
+  text: string,
+  resolvedVia: DocumentReaderResult['resolvedVia'],
+): Result<DocumentReaderResult, DocumentReaderError> => {
   // #386: classifica sobre texto com whitespace normalizado — PDFs reais fragmentam por posição
   // (palavra-por-`Td`), então a reconstrução de linha não garante âncoras contíguas. Colapsar
   // espaços/quebras torna `detectType` robusto à fragmentação sem depender de layout perfeito.
@@ -265,7 +271,9 @@ const structure = (text: string): Result<DocumentReaderResult, DocumentReaderErr
   if (type === undefined) return err('malformed-document');
 
   const documentNumber = group1(text, /N[uú]mero[^:\n]*:\s*(\S+)/i);
-  const legalName = group1(text, /Prestador:\s*(.+)/i)?.trim();
+  // #396 F2 (CWE-20): terminador `[^:\n]+` (não `.+`) — o unpdf colapsa `\n` em espaço, então `.+`
+  // engoliria o documento inteiro após "Prestador:", contaminando o legalName e estourando `description`.
+  const legalName = group1(text, /Prestador:\s*([^:\n]+)/i)?.trim();
   const taxId = group1(text, /CNPJ:\s*(\d+)/i) ?? group1(text, /CPF:\s*(\d+)/i);
   const supplier: SupplierIdentity | undefined =
     legalName !== undefined && taxId !== undefined ? { legalName, taxId } : undefined;
@@ -274,7 +282,11 @@ const structure = (text: string): Result<DocumentReaderResult, DocumentReaderErr
   const grossRaw =
     group1(text, /Valor Total[^:\n]*:\s*R\$\s*([\d.,]+)/i) ??
     group1(text, /Valor Bruto:\s*R\$\s*([\d.,]+)/i) ??
-    group1(text, /Valor do Documento:\s*R\$\s*([\d.,]+)/i);
+    group1(text, /Valor do Documento:\s*R\$\s*([\d.,]+)/i) ??
+    // #396: rótulos inequívocos de valor total em layouts reais (via texto linearizado do unpdf).
+    // Conservador por design (rótulo específico) — a acurácia contra gabarito da P.O. valida o #62.
+    group1(text, /VALOR TOTAL DO SERVI[ÇC]O\s*=\s*R\$\s*([\d.,]+)/i) ??
+    group1(text, /Valor a Pagar\s*R\$\s*([\d.,]+)/i);
   const grossCents = grossRaw !== undefined ? parseBrCents(grossRaw) : undefined;
   let grossValue: Money.Money | undefined = undefined;
   if (grossCents !== undefined) {
@@ -286,7 +298,7 @@ const structure = (text: string): Result<DocumentReaderResult, DocumentReaderErr
   const retentions = grossCents !== undefined ? parseRetentions(text, grossCents) : [];
 
   return ok({
-    resolvedVia: 'native-text',
+    resolvedVia,
     type,
     ...(documentNumber !== undefined ? { documentNumber } : {}),
     ...(competence !== undefined ? { competence } : {}),
@@ -322,7 +334,7 @@ const readNative = (bytes: Uint8Array): Result<DocumentReaderResult, DocumentRea
     .trim();
 
   if (text === '') return err('scanned-unsupported');
-  return structure(text);
+  return structureText(text, 'native-text');
 };
 
 export const createNativePdfDocumentReader = (): DocumentReaderPort => ({
