@@ -60,7 +60,7 @@ export const runBudgetPlanRepositoryContract = (
 
       const moneyR = Money.fromCents(150_000);
       assert.ok(isOk(moneyR));
-      const stateRef = PartnerStateRef.rehydrate(randomUUID());
+      const stateRef = PartnerStateRef.rehydrate('CE');
       assert.ok(isOk(stateRef));
 
       const withBudget = BudgetPlan.addBudget(
@@ -183,7 +183,7 @@ export const runBudgetPlanRepositoryContract = (
 
       const moneyR = Money.fromCents(50_000);
       assert.ok(isOk(moneyR));
-      const municipalityRef = PartnerMunicipalityRef.rehydrate(randomUUID());
+      const municipalityRef = PartnerMunicipalityRef.rehydrate('2304400');
       assert.ok(isOk(municipalityRef));
       const withBudget = BudgetPlan.addBudget(
         plan,

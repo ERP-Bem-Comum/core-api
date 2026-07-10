@@ -26,7 +26,7 @@ import { BUDGET_PLAN_CSV_HEADER } from '#src/modules/budget-plans/adapters/http/
 const STRONG = 'Str0ng-Passphrase-2026!';
 const WRITER = 'consolidated.writer@example.com';
 const PROGRAM_ETI = '11111111-1111-4111-8111-111111111111';
-const STATE_CE = '44444444-4444-4444-8444-444444444444';
+const STATE_CE = 'CE';
 
 const makeApp = async () => {
   const authDeps = await buildAuthHttpDeps({

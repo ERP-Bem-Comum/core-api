@@ -22,6 +22,16 @@ const LIST_LIMIT_DEFAULT = 20;
 
 const budgetPlanStatusSchema = z.enum(['RASCUNHO', 'EM_CALIBRACAO', 'APROVADO']);
 
+// Chave natural da Rede (parceiro): UF de 2 letras (estado) XOR código IBGE de 7 dígitos
+// (município). NÃO é UUID — identidade oficial, única e estável do catálogo de geografia
+// (ver domain/shared/refs.ts). Valida o formato certo em vez de exigir UUID indevido.
+const networkRefSchema = z
+  .string()
+  .regex(
+    /^([A-Z]{2}|[0-9]{7})$/,
+    'ref de rede inválida: use UF (2 letras) ou código IBGE (7 dígitos)',
+  );
+
 /** Body do POST /budget-plans. */
 export const createBudgetPlanBodySchema = z.object({
   year: z.number().int().min(YEAR_MIN).max(YEAR_MAX),
@@ -73,7 +83,7 @@ export const budgetDetailItemSchema = z.object({
   id: z.uuid(),
   partner: z.object({
     kind: z.enum(['state', 'municipality']),
-    ref: z.uuid(),
+    ref: networkRefSchema,
   }),
   valueInCents: z.number().int(),
 });
@@ -107,7 +117,7 @@ export const budgetPlanOptionsSchema = z.object({
   redes: z.array(
     z.object({
       kind: z.enum(['state', 'municipality']),
-      ref: z.uuid(),
+      ref: networkRefSchema,
       name: z.string(),
       uf: z.string(),
     }),
@@ -344,16 +354,16 @@ const budgetTotalCentsField = z.number().int().min(0).max(BUDGET_TOTAL_MAX_CENTS
 /** POST /budget-plans/:id/budgets — adiciona um orçamento por Rede ao plano. */
 export const addBudgetBodySchema = z.object({
   partnerKind: partnerKindSchema,
-  partnerRef: z
-    .uuid()
-    .meta({ description: 'UUID do parceiro — estado ou município conforme partnerKind' }),
+  partnerRef: networkRefSchema.meta({
+    description: 'Ref da rede: UF (estado, 2 letras) ou código IBGE (município, 7 dígitos)',
+  }),
   valueInCents: budgetTotalCentsField,
 });
 
 /** Response 201 do POST budget — mesma forma aninhada de `budgetDetailItemSchema` (partner:{kind,ref}). */
 export const budgetResponseSchema = z.object({
   id: z.uuid(),
-  partner: z.object({ kind: partnerKindSchema, ref: z.uuid() }),
+  partner: z.object({ kind: partnerKindSchema, ref: networkRefSchema }),
   valueInCents: z.number().int(),
 });
 
