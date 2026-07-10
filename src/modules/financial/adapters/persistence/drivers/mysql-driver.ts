@@ -114,6 +114,18 @@ const applyMigrationsTo = async (
   }
 };
 
+// Handle sobre um pool EXTERNO (PoolRegistry) — NÃO é dono do pool: `close` é no-op (o registry
+// faz o `end`). Usado pelo worker-runner p/ compartilhar 1 pool entre workers do mesmo RDS (#407).
+export const openMysqlFinancialOnPool = (
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+  pool: Pool,
+): FinancialMysqlHandle => ({
+  db: drizzle(pool, { schema, mode: 'default' }),
+  schema,
+  // eslint-disable-next-line @typescript-eslint/promise-function-async
+  close: () => Promise.resolve(),
+});
+
 export const openMysqlFinancial = async (
   opts: FinancialMysqlConnectOptions,
 ): Promise<Result<FinancialMysqlHandle, FinancialMysqlDriverError>> => {

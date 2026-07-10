@@ -104,6 +104,18 @@ const createPoolSafe = (
   }
 };
 
+// Handle sobre um pool EXTERNO (PoolRegistry) — NÃO é dono do pool: `close` é no-op (o registry
+// faz o `end`). Usado pelo worker-runner p/ compartilhar 1 pool entre workers do mesmo RDS (#407).
+export const openPartnersMysqlOnPool = (
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+  pool: Pool,
+): PartnersMysqlHandle => ({
+  db: drizzle(pool, { schema, mode: 'default' }),
+  schema,
+  // eslint-disable-next-line @typescript-eslint/promise-function-async
+  close: () => Promise.resolve(),
+});
+
 export const openPartnersMysql = async (
   opts: PartnersMysqlConnectOptions,
 ): Promise<Result<PartnersMysqlHandle, PartnersMysqlDriverError>> => {

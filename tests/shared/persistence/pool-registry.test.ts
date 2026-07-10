@@ -68,3 +68,39 @@ describe('PoolRegistry — dedup por connection-string (CORE-WORKER-RUNNER-POOL-
     await again.closeAll();
   });
 });
+
+// CA-9 — dedup REAL de conexões contra o RDS: N "workers" na MESMA connection-string compartilham
+// UM pool (não N pools). É o núcleo do ganho da issue #407 contra o Incident-0001. Opt-in
+// MYSQL_INTEGRATION=1, validar no x99 (memory validate-mysql-always-x99-never-mac-docker).
+const integrationEnabled = (): boolean => process.env['MYSQL_INTEGRATION'] === '1';
+const EFFECT_CONN =
+  process.env['MYSQL_TEST_URL'] ?? 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+
+describe('PoolRegistry — dedup real de conexões (CA-9)', { skip: !integrationEnabled() }, () => {
+  it('CA-9: 3 getOrCreate na MESMA url → 1 pool; conexões vêm do pool único (não 3×)', async () => {
+    const registry = createPoolRegistry({ connectionLimit: 4 });
+    const p1 = registry.getOrCreate(EFFECT_CONN);
+    const p2 = registry.getOrCreate(EFFECT_CONN);
+    const p3 = registry.getOrCreate(EFFECT_CONN);
+    assert.ok(p1.ok && p2.ok && p3.ok);
+    if (!p1.ok || !p2.ok || !p3.ok) return;
+    // Dedup: as 3 "montagens de worker" recebem a MESMA referência de pool.
+    assert.equal(p1.value, p2.value);
+    assert.equal(p2.value, p3.value);
+    try {
+      // Adquire 4 conexões concorrentes via o pool único — todas resolvem (1 pool serve os 3 workers).
+      const conns = await Promise.all([0, 1, 2, 3].map(() => p1.value.getConnection()));
+      const [rows] = await conns[0]!.query('SELECT 1 AS ok');
+      assert.ok(Array.isArray(rows), 'o pool deve conectar ao RDS de verdade');
+      for (const c of conns) c.release();
+      // 1 pool → conexões vivas ≤ connectionLimit (4), não 3×4.
+      const core = (
+        p1.value as unknown as { pool: { _allConnections: { toArray: () => readonly unknown[] } } }
+      ).pool;
+      const alive = core._allConnections.toArray().length;
+      assert.ok(alive <= 4, `esperava ≤ connectionLimit(4) — 1 pool, não 3×; veio ${alive}`);
+    } finally {
+      await registry.closeAll();
+    }
+  });
+});
