@@ -26,6 +26,8 @@ import {
   ZERO_LENGTH_FLATE,
   TRUNCATED_DEFLATE,
   FRAGMENTED_HYPHEN,
+  MULTI_FONT_TYPE0,
+  COLLIDING_CMAP,
 } from './_fixtures/pdf-fixtures.ts';
 
 describe('financial/adapters/document-reader/native-pdf', () => {
@@ -244,5 +246,23 @@ describe('financial/adapters/document-reader/native-pdf', () => {
     assert.equal(r.value.type, exp.type);
     assert.equal(r.value.documentNumber, exp.documentNumber);
     assert.equal(r.value.grossValue?.cents, exp.grossValueCents);
+  });
+
+  // --- #388 2c: múltiplas fontes Type0, cada uma com seu CMap /ToUnicode ------------
+  it('#388 2c: 2 fontes Type0 (CMaps distintos) → mescla CMaps e classifica (hoje malformed)', async () => {
+    const reader = createNativePdfDocumentReader();
+    const exp = MULTI_FONT_TYPE0.expected;
+    const r = await reader.read({ bytes: MULTI_FONT_TYPE0.bytes() });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    if (!r.ok) return;
+    assert.equal(r.value.type, exp.type);
+    assert.equal(r.value.grossValue?.cents, exp.grossValueCents);
+  });
+
+  it('#388 2c: CMaps colidem (código→char diferente) → fail-closed dropa, não inventa tipo (#62)', async () => {
+    const reader = createNativePdfDocumentReader();
+    // Sob "último vence" viraria "BOLETO" (Boleto falso). Fail-closed dropa o código ambíguo → "BOLET".
+    const r = await reader.read({ bytes: COLLIDING_CMAP.bytes() });
+    assert.equal(r.ok, false);
   });
 });

@@ -13,6 +13,8 @@ import {
   buildHostileToUnicodePdf,
   buildShortLengthFlatePdf,
   buildTruncatedDeflatePdf,
+  buildMultiFontIdentityHPdf,
+  buildCollidingCMapPdf,
 } from './pdf-builder.ts';
 
 type RetentionExpect = Readonly<{
@@ -200,6 +202,19 @@ export const FRAGMENTED_HYPHEN = {
     ),
   expected: { type: 'NFS-e', documentNumber: '0000000888888', grossValueCents: 70000 },
 } as const;
+
+// #388 2c — 2 fontes Type0/Identity-H com CMaps /ToUnicode separados (GIDs disjuntos). O reader que usa
+// só o 1º CMap (`find(beginbfchar)`) decodifica apenas a fonte 1 → "NOTA FISCAL DE" (âncora incompleta)
+// → malformed. Mesclar todos os CMaps (0 colisões, medido no DANFCOM real) recupera as 2 fontes.
+export const MULTI_FONT_TYPE0 = {
+  bytes: (): Uint8Array =>
+    buildMultiFontIdentityHPdf(['NOTA FISCAL DE'], ['SERVICOS NFS-e', 'Valor Total: R$ 400,00']),
+  expected: { type: 'NFS-e', grossValueCents: 40000 },
+} as const;
+
+// #388 2c — CMaps que COLIDEM (mesmo código → char diferente). Sob "último vence" viraria "BOLETO"
+// (tipo falso); o merge fail-closed dropa o código ambíguo → "BOLET" → não classifica (invariante #62).
+export const COLLIDING_CMAP = { bytes: (): Uint8Array => buildCollidingCMapPdf() } as const;
 
 // --- #386 Fatia 1: PDF real (operador TJ, reconstrução de linha, DANFE) --------
 
