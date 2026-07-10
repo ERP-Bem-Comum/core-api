@@ -121,6 +121,19 @@ const createPoolSafe = (opts: MysqlConnectOptions): Result<Pool, MysqlDriverErro
   }
 };
 
+// Handle sobre um pool EXTERNO (PoolRegistry) — NÃO é dono do pool: `close` é no-op (o registry
+// faz o `end`). Usado pelo worker-runner p/ compartilhar 1 pool entre workers do mesmo RDS/db
+// `core` (issue #407). Sem smoke aqui — o composition root (run.ts) faz 1 smoke por pool.
+export const openMysqlOnPool = (
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+  pool: Pool,
+): MysqlHandle => ({
+  db: drizzle(pool, { schema, mode: 'default' }),
+  schema,
+  // eslint-disable-next-line @typescript-eslint/promise-function-async
+  close: () => Promise.resolve(),
+});
+
 export const openMysql = async (
   opts: MysqlConnectOptions,
 ): Promise<Result<MysqlHandle, MysqlDriverError>> => {
