@@ -13,6 +13,10 @@ import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
+import {
+  buildPoolOptions as buildSharedPoolOptions,
+  type PoolConfigError,
+} from '#src/shared/persistence/mysql-pool-config.ts';
 import * as schema from '../schemas/mysql.ts';
 
 export type NotificationsMysqlConnectOptions = Readonly<{
@@ -20,6 +24,8 @@ export type NotificationsMysqlConnectOptions = Readonly<{
   applyMigrations?: boolean;
   poolLimit?: number;
   idleTimeoutMs?: number;
+  // Override do teto de conexões ociosas mantidas. Default derivado (< connectionLimit).
+  maxIdle?: number;
 }>;
 
 export type NotificationsMysqlHandle = Readonly<{
@@ -31,28 +37,25 @@ export type NotificationsMysqlHandle = Readonly<{
 export type NotificationsMysqlDriverError =
   | 'notifications-mysql-driver-connection-string-invalid'
   | 'notifications-mysql-driver-connect-failed'
-  | 'notifications-mysql-driver-migrate-failed';
+  | 'notifications-mysql-driver-migrate-failed'
+  | 'notifications-mysql-driver-pool-config-invalid';
 
 const CONNECTION_STRING_RE = /^mysql:\/\/[^/@\s]+(?::[^/@\s]*)?@[^/\s]+\/[^/?\s]+/;
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const MIGRATIONS_FOLDER = resolve(HERE, '..', 'migrations', 'mysql');
 
-const DEFAULT_POOL_LIMIT = 10;
-const DEFAULT_IDLE_TIMEOUT_MS = 270_000;
-
+// Delega ao builder compartilhado (src/shared/persistence/mysql-pool-config.ts), que garante
+// `maxIdle < connectionLimit` por construção — sem isso o `idleTimeout` é inerte (Incident-0001).
 export const buildNotificationsPoolOptions = (
   opts: NotificationsMysqlConnectOptions,
-): PoolOptions => ({
-  uri: opts.connectionString,
-  connectionLimit: opts.poolLimit ?? DEFAULT_POOL_LIMIT,
-  waitForConnections: true,
-  queueLimit: 0,
-  enableKeepAlive: true,
-  keepAliveInitialDelay: 10_000,
-  idleTimeout: opts.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
-  timezone: 'Z',
-});
+): Result<PoolOptions, PoolConfigError> =>
+  buildSharedPoolOptions({
+    connectionString: opts.connectionString,
+    ...(opts.poolLimit !== undefined ? { connectionLimit: opts.poolLimit } : {}),
+    ...(opts.idleTimeoutMs !== undefined ? { idleTimeoutMs: opts.idleTimeoutMs } : {}),
+    ...(opts.maxIdle !== undefined ? { maxIdle: opts.maxIdle } : {}),
+  });
 
 const validateConnectionString = (s: string): Result<true, NotificationsMysqlDriverError> =>
   CONNECTION_STRING_RE.test(s)
@@ -90,8 +93,13 @@ const applyMigrationsTo = async (
 const createPoolSafe = (
   opts: NotificationsMysqlConnectOptions,
 ): Result<Pool, NotificationsMysqlDriverError> => {
+  const cfg = buildNotificationsPoolOptions(opts);
+  if (!cfg.ok) {
+    process.stderr.write(`[notifications-mysql-driver:pool-config] ${cfg.error}\n`);
+    return err('notifications-mysql-driver-pool-config-invalid');
+  }
   try {
-    return ok(createPool(buildNotificationsPoolOptions(opts)));
+    return ok(createPool(cfg.value));
   } catch (cause) {
     process.stderr.write(`[notifications-mysql-driver:createPool] ${String(cause)}\n`);
     return err('notifications-mysql-driver-connect-failed');

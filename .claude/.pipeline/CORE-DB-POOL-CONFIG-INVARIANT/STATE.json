@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "CORE-DB-POOL-CONFIG-INVARIANT",
+  "size": "M",
+  "createdAt": "2026-07-10T18:54:31.276Z",
+  "closedAt": "2026-07-10T19:52:04.432Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-10T19:09:02.412Z",
+      "finishedAt": "2026-07-10T19:14:14.374Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "mysql2-driver-expert",
+      "startedAt": "2026-07-10T19:46:13.080Z",
+      "finishedAt": "2026-07-10T19:46:13.492Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-10T19:46:14.020Z",
+      "finishedAt": "2026-07-10T19:46:14.402Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-10T19:46:14.782Z",
+      "finishedAt": "2026-07-10T19:46:15.211Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}
