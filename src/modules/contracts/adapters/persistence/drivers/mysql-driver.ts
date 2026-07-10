@@ -20,6 +20,10 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
+import {
+  buildPoolOptions as buildSharedPoolOptions,
+  type PoolConfigError,
+} from '../../../../../shared/persistence/mysql-pool-config.ts';
 import * as schema from '../schemas/mysql.ts';
 
 export type MysqlConnectOptions = Readonly<{
@@ -27,8 +31,10 @@ export type MysqlConnectOptions = Readonly<{
   // M5 — prod-safe default. Omitido = `false` (NÃO aplica). Dev/CI passam `true`.
   applyMigrations?: boolean;
   poolLimit?: number;
-  // H3 — override do `idleTimeout` (ms). Default = `DEFAULT_IDLE_TIMEOUT_MS`.
+  // H3 — override do `idleTimeout` (ms). Default no builder compartilhado.
   idleTimeoutMs?: number;
+  // Override do teto de conexões ociosas mantidas. Default derivado (< connectionLimit).
+  maxIdle?: number;
 }>;
 
 export type MysqlHandle = Readonly<{
@@ -40,7 +46,8 @@ export type MysqlHandle = Readonly<{
 export type MysqlDriverError =
   | 'mysql-driver-connection-string-invalid'
   | 'mysql-driver-connect-failed'
-  | 'mysql-driver-migrate-failed';
+  | 'mysql-driver-migrate-failed'
+  | 'mysql-driver-pool-config-invalid';
 
 // Validação leve da connection string. `mysql2` aceita a URI nativamente, então
 // só rejeitamos formatos manifestamente errados — o driver real cuida do resto.
@@ -52,26 +59,15 @@ const CONNECTION_STRING_RE = /^mysql:\/\/[^/@\s]+(?::[^/@\s]*)?@[^/\s]+\/[^/?\s]
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const MIGRATIONS_FOLDER = resolve(HERE, '..', 'migrations', 'mysql');
 
-const DEFAULT_POOL_LIMIT = 10;
-// H3 — derivado de `(wait_timeout=300s − 30s) × 90% ≈ 243s`, arredondado para o
-// canônico da best-practice [03] §"Pool–MySQL alignment" (270_000 ms = 4 min 30 s).
-const DEFAULT_IDLE_TIMEOUT_MS = 270_000;
-
-// Função pura que materializa as opções do pool `mysql2`. Extraída para permitir
-// teste estrutural sem container (CA-9/CA-10 do CTR-DB-DRIVER-POOL-TUNING).
-export const buildPoolOptions = (opts: MysqlConnectOptions): PoolOptions => ({
-  uri: opts.connectionString,
-  connectionLimit: opts.poolLimit ?? DEFAULT_POOL_LIMIT,
-  waitForConnections: true,
-  queueLimit: 0,
-  enableKeepAlive: true,
-  keepAliveInitialDelay: 10_000,
-  // H3 — fechar conexão ociosa ANTES do servidor (`wait_timeout`) matar.
-  idleTimeout: opts.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
-  // M2 — UTC fixo no round-trip Date↔DATETIME(3); blinda contra drift entre
-  // container UTC e RDS `America/Sao_Paulo`.
-  timezone: 'Z',
-});
+// Delega ao builder compartilhado (src/shared/persistence/mysql-pool-config.ts), que garante
+// `maxIdle < connectionLimit` por construção — sem isso o `idleTimeout` é inerte (Incident-0001).
+export const buildPoolOptions = (opts: MysqlConnectOptions): Result<PoolOptions, PoolConfigError> =>
+  buildSharedPoolOptions({
+    connectionString: opts.connectionString,
+    ...(opts.poolLimit !== undefined ? { connectionLimit: opts.poolLimit } : {}),
+    ...(opts.idleTimeoutMs !== undefined ? { idleTimeoutMs: opts.idleTimeoutMs } : {}),
+    ...(opts.maxIdle !== undefined ? { maxIdle: opts.maxIdle } : {}),
+  });
 
 const validateConnectionString = (s: string): Result<true, MysqlDriverError> => {
   if (!CONNECTION_STRING_RE.test(s)) return err('mysql-driver-connection-string-invalid');
@@ -112,8 +108,13 @@ const applyMigrationsTo = async (
 };
 
 const createPoolSafe = (opts: MysqlConnectOptions): Result<Pool, MysqlDriverError> => {
+  const cfg = buildPoolOptions(opts);
+  if (!cfg.ok) {
+    process.stderr.write(`[mysql-driver:pool-config] ${cfg.error}\n`);
+    return err('mysql-driver-pool-config-invalid');
+  }
   try {
-    return ok(createPool(buildPoolOptions(opts)));
+    return ok(createPool(cfg.value));
   } catch (cause) {
     process.stderr.write(`[mysql-driver:createPool] ${String(cause)}\n`);
     return err('mysql-driver-connect-failed');

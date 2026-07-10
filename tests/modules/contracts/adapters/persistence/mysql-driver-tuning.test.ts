@@ -48,34 +48,46 @@ const resetCoreDatabase = (): void => {
 // ─── CA-9 — defaults estruturais do pool ──────────────────────────────────
 describe('CTR-DB-DRIVER-POOL-TUNING — CA-9: defaults do pool (estrutural)', () => {
   it('CA-9.1: buildPoolOptions inclui timezone="Z" (audit §M2)', () => {
-    const opts = buildPoolOptions({ connectionString: VALID_CONN });
-    assert.equal(opts.timezone, 'Z');
+    const r = buildPoolOptions({ connectionString: VALID_CONN });
+    assert.ok(r.ok);
+    if (!r.ok) return;
+    assert.equal(r.value.timezone, 'Z');
   });
 
   it('CA-9.2: buildPoolOptions inclui idleTimeout=270_000 (audit §H3, best-practice 03)', () => {
-    const opts = buildPoolOptions({ connectionString: VALID_CONN });
-    assert.equal(opts.idleTimeout, 270_000);
+    const r = buildPoolOptions({ connectionString: VALID_CONN });
+    assert.ok(r.ok);
+    if (!r.ok) return;
+    assert.equal(r.value.idleTimeout, 270_000);
   });
 
-  it('CA-9.3: defaults preservados — enableKeepAlive, keepAliveInitialDelay, waitForConnections', () => {
-    const opts = buildPoolOptions({ connectionString: VALID_CONN });
-    assert.equal(opts.enableKeepAlive, true);
-    assert.equal(opts.keepAliveInitialDelay, 10_000);
-    assert.equal(opts.waitForConnections, true);
-    assert.equal(opts.queueLimit, 0);
+  it('CA-9.3: defaults preservados — enableKeepAlive, keepAliveInitialDelay, waitForConnections + invariante maxIdle', () => {
+    const r = buildPoolOptions({ connectionString: VALID_CONN });
+    assert.ok(r.ok);
+    if (!r.ok) return;
+    assert.equal(r.value.enableKeepAlive, true);
+    assert.equal(r.value.keepAliveInitialDelay, 10_000);
+    assert.equal(r.value.waitForConnections, true);
+    assert.equal(r.value.queueLimit, 0);
+    // Incident-0001: sem maxIdle < connectionLimit, o idleTimeout acima seria INERTE.
+    assert.ok(r.value.maxIdle! < r.value.connectionLimit!);
   });
 });
 
 // ─── CA-10 — idleTimeoutMs custom ─────────────────────────────────────────
 describe('CTR-DB-DRIVER-POOL-TUNING — CA-10: override de idleTimeoutMs', () => {
   it('CA-10.1: caller passa idleTimeoutMs e o valor vence o default', () => {
-    const opts = buildPoolOptions({ connectionString: VALID_CONN, idleTimeoutMs: 60_000 });
-    assert.equal(opts.idleTimeout, 60_000);
+    const r = buildPoolOptions({ connectionString: VALID_CONN, idleTimeoutMs: 60_000 });
+    assert.ok(r.ok);
+    if (!r.ok) return;
+    assert.equal(r.value.idleTimeout, 60_000);
   });
 
   it('CA-10.2: idleTimeoutMs omitido cai no default 270_000', () => {
-    const opts = buildPoolOptions({ connectionString: VALID_CONN });
-    assert.equal(opts.idleTimeout, 270_000);
+    const r = buildPoolOptions({ connectionString: VALID_CONN });
+    assert.ok(r.ok);
+    if (!r.ok) return;
+    assert.equal(r.value.idleTimeout, 270_000);
   });
 });
 

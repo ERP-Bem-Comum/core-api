@@ -10,6 +10,10 @@ import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
+import {
+  buildPoolOptions as buildSharedPoolOptions,
+  type PoolConfigError,
+} from '#src/shared/persistence/mysql-pool-config.ts';
 import * as schema from '../schemas/mysql.ts';
 
 export type BudgetPlansMysqlConnectOptions = Readonly<{
@@ -17,6 +21,8 @@ export type BudgetPlansMysqlConnectOptions = Readonly<{
   applyMigrations?: boolean;
   poolLimit?: number;
   idleTimeoutMs?: number;
+  // Override do teto de conexões ociosas mantidas. Default derivado (< connectionLimit).
+  maxIdle?: number;
 }>;
 
 export type BudgetPlansMysqlHandle = Readonly<{
@@ -28,26 +34,25 @@ export type BudgetPlansMysqlHandle = Readonly<{
 export type BudgetPlansMysqlDriverError =
   | 'budget-plans-mysql-driver-connection-string-invalid'
   | 'budget-plans-mysql-driver-connect-failed'
-  | 'budget-plans-mysql-driver-migrate-failed';
+  | 'budget-plans-mysql-driver-migrate-failed'
+  | 'budget-plans-mysql-driver-pool-config-invalid';
 
 const CONNECTION_STRING_RE = /^mysql:\/\/[^/@\s]+(?::[^/@\s]*)?@[^/\s]+\/[^/?\s]+/;
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const MIGRATIONS_FOLDER = resolve(HERE, '..', 'migrations', 'mysql');
 
-const DEFAULT_POOL_LIMIT = 10;
-const DEFAULT_IDLE_TIMEOUT_MS = 270_000;
-
-export const buildBudgetPlansPoolOptions = (opts: BudgetPlansMysqlConnectOptions): PoolOptions => ({
-  uri: opts.connectionString,
-  connectionLimit: opts.poolLimit ?? DEFAULT_POOL_LIMIT,
-  waitForConnections: true,
-  queueLimit: 0,
-  enableKeepAlive: true,
-  keepAliveInitialDelay: 10_000,
-  idleTimeout: opts.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
-  timezone: 'Z',
-});
+// Delega ao builder compartilhado (src/shared/persistence/mysql-pool-config.ts), que garante
+// `maxIdle < connectionLimit` por construção — sem isso o `idleTimeout` é inerte (Incident-0001).
+export const buildBudgetPlansPoolOptions = (
+  opts: BudgetPlansMysqlConnectOptions,
+): Result<PoolOptions, PoolConfigError> =>
+  buildSharedPoolOptions({
+    connectionString: opts.connectionString,
+    ...(opts.poolLimit !== undefined ? { connectionLimit: opts.poolLimit } : {}),
+    ...(opts.idleTimeoutMs !== undefined ? { idleTimeoutMs: opts.idleTimeoutMs } : {}),
+    ...(opts.maxIdle !== undefined ? { maxIdle: opts.maxIdle } : {}),
+  });
 
 const validateConnectionString = (s: string): Result<true, BudgetPlansMysqlDriverError> =>
   CONNECTION_STRING_RE.test(s)
@@ -83,8 +88,13 @@ const applyMigrationsTo = async (
 const createPoolSafe = (
   opts: BudgetPlansMysqlConnectOptions,
 ): Result<Pool, BudgetPlansMysqlDriverError> => {
+  const cfg = buildBudgetPlansPoolOptions(opts);
+  if (!cfg.ok) {
+    process.stderr.write(`[budget-plans-mysql-driver:pool-config] ${cfg.error}\n`);
+    return err('budget-plans-mysql-driver-pool-config-invalid');
+  }
   try {
-    return ok(createPool(buildBudgetPlansPoolOptions(opts)));
+    return ok(createPool(cfg.value));
   } catch (cause) {
     process.stderr.write(`[budget-plans-mysql-driver:createPool] ${String(cause)}\n`);
     return err('budget-plans-mysql-driver-connect-failed');

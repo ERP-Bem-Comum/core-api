@@ -21,6 +21,10 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
+import {
+  buildPoolOptions as buildSharedPoolOptions,
+  type PoolConfigError,
+} from '../../../../../shared/persistence/mysql-pool-config.ts';
 import * as schema from '../schemas/mysql.ts';
 
 export type FinancialMysqlConnectOptions = Readonly<{
@@ -28,6 +32,8 @@ export type FinancialMysqlConnectOptions = Readonly<{
   applyMigrations?: boolean;
   poolLimit?: number;
   idleTimeoutMs?: number;
+  // Override do teto de conexões ociosas mantidas. Default derivado (< connectionLimit).
+  maxIdle?: number;
 }>;
 
 export type FinancialMysqlHandle = Readonly<{
@@ -39,28 +45,25 @@ export type FinancialMysqlHandle = Readonly<{
 export type FinancialMysqlDriverError =
   | 'financial-mysql-driver-connection-string-invalid'
   | 'financial-mysql-driver-connect-failed'
-  | 'financial-mysql-driver-migrate-failed';
+  | 'financial-mysql-driver-migrate-failed'
+  | 'financial-mysql-driver-pool-config-invalid';
 
 const CONNECTION_STRING_RE = /^mysql:\/\/[^/@\s]+(?::[^/@\s]*)?@[^/\s]+\/[^/?\s]+/;
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const MIGRATIONS_FOLDER = resolve(HERE, '..', 'migrations', 'mysql');
 
-const DEFAULT_POOL_LIMIT = 10;
-// H3: (wait_timeout=300s − 30s) × 90% ≈ 243s → arredondado para 270 000 ms (4 min 30 s).
-const DEFAULT_IDLE_TIMEOUT_MS = 270_000;
-
-export const buildPoolOptions = (opts: FinancialMysqlConnectOptions): PoolOptions => ({
-  uri: opts.connectionString,
-  connectionLimit: opts.poolLimit ?? DEFAULT_POOL_LIMIT,
-  waitForConnections: true,
-  queueLimit: 0,
-  enableKeepAlive: true,
-  keepAliveInitialDelay: 10_000,
-  idleTimeout: opts.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
-  // M2 — UTC fixo blinda Date↔DATETIME(3) contra drift de fuso horário.
-  timezone: 'Z',
-});
+// Delega ao builder compartilhado (src/shared/persistence/mysql-pool-config.ts), que garante
+// `maxIdle < connectionLimit` por construção — sem isso o `idleTimeout` é inerte (Incident-0001).
+export const buildPoolOptions = (
+  opts: FinancialMysqlConnectOptions,
+): Result<PoolOptions, PoolConfigError> =>
+  buildSharedPoolOptions({
+    connectionString: opts.connectionString,
+    ...(opts.poolLimit !== undefined ? { connectionLimit: opts.poolLimit } : {}),
+    ...(opts.idleTimeoutMs !== undefined ? { idleTimeoutMs: opts.idleTimeoutMs } : {}),
+    ...(opts.maxIdle !== undefined ? { maxIdle: opts.maxIdle } : {}),
+  });
 
 const validateConnectionString = (s: string): Result<true, FinancialMysqlDriverError> => {
   if (!CONNECTION_STRING_RE.test(s)) return err('financial-mysql-driver-connection-string-invalid');
@@ -81,8 +84,13 @@ const smokeCheck = async (pool: Pool): Promise<Result<true, FinancialMysqlDriver
 const createPoolSafe = (
   opts: FinancialMysqlConnectOptions,
 ): Result<Pool, FinancialMysqlDriverError> => {
+  const cfg = buildPoolOptions(opts);
+  if (!cfg.ok) {
+    process.stderr.write(`[financial-mysql-driver:pool-config] ${cfg.error}\n`);
+    return err('financial-mysql-driver-pool-config-invalid');
+  }
   try {
-    return ok(createPool(buildPoolOptions(opts)));
+    return ok(createPool(cfg.value));
   } catch (cause) {
     process.stderr.write(`[financial-mysql-driver:createPool] ${String(cause)}\n`);
     return err('financial-mysql-driver-connect-failed');
