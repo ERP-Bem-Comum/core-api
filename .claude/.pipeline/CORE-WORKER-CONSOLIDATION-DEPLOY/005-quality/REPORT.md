@@ -16,10 +16,26 @@
 - **Teste de infra deste ticket** (`tests/infra/worker-runner-compose.test.ts`): **skip** — Docker CLI ausente neste Mac (skip-guard `FIN-TEST-INFRA-SKIP-GUARD`). Roda de verdade no CI/x99 (com `docker compose`). Prova estrutural do RED→GREEN via parse do compose (W0/W1 REPORTs).
 - **`native-pdf-real.local.test.ts` (5 `todo`, #388)**: aparecem sob "✖ failing tests" no output do runner, mas são `{ todo }` — não incrementam `fail` nem afetam o exit code (confirmado: `node --test <arquivo>` → **exit 0**). Documentam o gap conhecido do reader PDF (#388, hex Identity-H sem /ToUnicode); LOCAIS-only (fixtures reais gitignored por LGPD). **Alheios a este ticket, e corretamente gateados** — não há regressão (política de regressão zero satisfeita: gate mede o certo).
 
-## Pendências fora do gate local (rastreadas)
+## Validação x99 do compose consolidado (FEITA — 2026-07-12)
 
-- **Validação x99 do compose consolidado**: subir os 3 grupos via `docker compose --profile workers up` no x99 e provar isolamento (1 loop falha → irmãos seguem) + shutdown (SIGTERM drena). A validação x99 do **runner** já foi feita (2026-07-10, runbook ERP-INFRA); falta a do **compose** especificamente. Exige Docker (x99, nunca Docker local no Mac).
+Rodada no x99 (`docker compose v5.1.4`, Ubuntu Core) contra o `compose.yaml` da branch (extraído via `git show` para `/tmp`, sem tocar o `~/core-api` do Gabriel). As 6 CAs reproduzidas contra o config real:
+
+```
+CA-1  (workers+app) − (app) = worker-email, worker-outbox, worker-projections  ✓
+CA-6  sem profile → nenhum worker ativo (opt-in)                                ✓
+CA-1b sem serviços legados                                                       ✓
+CA-2  os 3 rodam src/workers/runner/run.ts (não standalone/server)              ✓
+CA-3  WORKER_GROUP = outbox/projections/email                                    ✓
+CA-4  secrets por grupo (outbox=2, projections=3, email=3)                       ✓
+CA-5  hardening (cap_drop ALL, read_only, no-new-privileges, depends_on mysql)   ✓
+```
+
+**Defeito encontrado e corrigido:** o teste original usava só `--profile workers`, que faz `docker compose config` falhar com *"worker-email depends on undefined service http"* — os workers herdam `depends_on: http` (profile `app`) do `x-worker-base`. Corrigido: o teste ativa `--profile workers --profile app` e isola os workers pela diferença `(workers+app) − (app)`. Sem essa correção o teste quebraria no CI. Runtime dos grupos (boot/isolamento/shutdown) já validado no runbook ERP-INFRA (2026-07-10).
+
+## Pendências fora do gate (rastreadas)
+
 - **Cutover em prod** (ops): registrar os 3 taskdefs + drenar os 5 serviços antigos — runbook `ERP-INFRA/docs/runbooks/worker-consolidation-407.md` §5.
+- **Backfill do `fin_payable_view`** antes de ativar `projections` (payable entra em prod pela 1ª vez).
 
 ## Veredito
 

@@ -85,8 +85,15 @@ interface ComposeConfig {
   readonly secrets?: Readonly<Record<string, unknown>>;
 }
 
+// Os workers herdam `depends_on: http` (profile `app`) via x-worker-base. `docker compose config`
+// valida depends_on contra o conjunto de serviços ativos → resolver só com `--profile workers`
+// falha ("depends on undefined service http"). Ativa-se `app` junto e isolam-se os workers pela
+// diferença (workers+app) − (app).
+const WORKER_PROFILES = '--profile workers --profile app';
+const APP_PROFILE = '--profile app';
+
 const configWithWorkers = (): ComposeConfig | null => {
-  const r = sh(`docker compose -f "${COMPOSE_YAML}" --profile workers config --format json`);
+  const r = sh(`docker compose -f "${COMPOSE_YAML}" ${WORKER_PROFILES} config --format json`);
   if (r.code !== 0) return null;
   try {
     return JSON.parse(r.stdout) as ComposeConfig;
@@ -123,8 +130,8 @@ const envValue = (svc: ComposeService | undefined, key: string): string | undefi
 
 describe('CORE-WORKER-CONSOLIDATION-DEPLOY — 6→3 workers no compose (W0)', { skip }, () => {
   it('CA-1: profile workers ativa exatamente os 3 serviços de grupo', () => {
-    const workerOnly = activeServices('--profile workers').filter(
-      (s) => !activeServices('').includes(s),
+    const workerOnly = activeServices(WORKER_PROFILES).filter(
+      (s) => !activeServices(APP_PROFILE).includes(s),
     );
     assert.deepEqual(
       [...workerOnly].sort(),
@@ -134,7 +141,7 @@ describe('CORE-WORKER-CONSOLIDATION-DEPLOY — 6→3 workers no compose (W0)', {
   });
 
   it('CA-1b: nenhum nome de worker standalone sobrevive', () => {
-    const all = activeServices('--profile workers');
+    const all = activeServices(WORKER_PROFILES);
     for (const legacy of LEGACY_WORKERS) {
       assert.ok(!all.includes(legacy), `serviço legado ${legacy} ainda existe no compose`);
     }
