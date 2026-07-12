@@ -152,7 +152,7 @@ const budgetPlansRoutes =
         response: { 201: createBudgetPlanResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
-        const result = await deps.createBudgetPlan(req.body);
+        const result = await deps.createBudgetPlan({ ...req.body, updatedByRef: req.userId });
         if (!result.ok) return sendWriteError(reply, result.error);
         return sendResult(reply, ok(createBudgetPlanToDto(result.value)), { ok: 201 });
       },
@@ -530,6 +530,7 @@ const budgetPlansRoutes =
           partnerKind: req.body.partnerKind,
           partnerRef: req.body.partnerRef,
           valueInCents: req.body.valueInCents,
+          updatedByRef: req.userId,
         });
         if (!result.ok) return sendWriteError(reply, result.error);
         return sendResult(reply, ok(budgetToDto(result.value)), { ok: 201 });
@@ -549,6 +550,7 @@ const budgetPlansRoutes =
         const result = await deps.deleteBudget({
           budgetPlanId: req.params.id,
           budgetId: req.params.budgetId,
+          updatedByRef: req.userId,
         });
         if (!result.ok) return sendWriteError(reply, result.error);
         return reply.code(204).send() as unknown as Promise<void>;
@@ -565,7 +567,10 @@ const budgetPlansRoutes =
         response: { 201: lifecyclePlanResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
-        const result = await deps.startCalibration({ parentPlanId: req.params.id });
+        const result = await deps.startCalibration({
+          parentPlanId: req.params.id,
+          updatedByRef: req.userId,
+        });
         if (!result.ok) return sendWriteError(reply, result.error);
         return sendResult(reply, ok(lifecyclePlanToDto(result.value.plan)), { ok: 201 });
       },
@@ -585,6 +590,7 @@ const budgetPlansRoutes =
         const result = await deps.createScenery({
           parentPlanId: req.params.id,
           name: req.body.name,
+          updatedByRef: req.userId,
         });
         if (!result.ok) return sendWriteError(reply, result.error);
         return sendResult(reply, ok(lifecyclePlanToDto(result.value.plan)), { ok: 201 });
@@ -601,7 +607,10 @@ const budgetPlansRoutes =
         response: { 200: lifecyclePlanResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
-        const result = await deps.approveBudgetPlan({ planId: req.params.id });
+        const result = await deps.approveBudgetPlan({
+          planId: req.params.id,
+          updatedByRef: req.userId,
+        });
         if (!result.ok) return sendWriteError(reply, result.error);
         return sendResult(reply, ok(lifecyclePlanToDto(result.value.plan)), { ok: 200 });
       },

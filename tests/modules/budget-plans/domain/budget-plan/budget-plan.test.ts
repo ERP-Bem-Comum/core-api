@@ -10,6 +10,7 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { isOk, isErr } from '#src/shared/index.ts';
 import * as Money from '#src/shared/kernel/money.ts';
+import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '#src/modules/budget-plans/domain/shared/budget-plan-id.ts';
 import * as BudgetId from '#src/modules/budget-plans/domain/shared/budget-id.ts';
 import {
@@ -23,6 +24,13 @@ import * as PlanVersion from '#src/modules/budget-plans/domain/budget-plan/versi
 import type { BudgetPartner } from '#src/modules/budget-plans/domain/budget-plan/types.ts';
 
 const NOW = new Date('2026-07-02T12:00:00.000Z');
+
+// Ator padrão dos testes (BGP-UPDATED-BY-AUDIT/#373).
+const ACTOR = (() => {
+  const r = UserRef.rehydrate('00000000-0000-4000-8000-000000000001');
+  assert.ok(isOk(r));
+  return r.value;
+})();
 
 const PROGRAM_REF_RAW = '11111111-1111-4111-8111-111111111111';
 const STATE_CE_RAW = 'CE';
@@ -57,6 +65,7 @@ const validInput = (over: Partial<CreateBudgetPlanInput> = {}): CreateBudgetPlan
   year: 2026,
   programRef: programRef(),
   now: NOW,
+  actor: ACTOR,
   ...over,
 });
 
@@ -109,12 +118,14 @@ describe('BudgetPlan.addBudget', () => {
       p0,
       { id: BudgetId.generate(), partner: statePartner(), value: cents(50_000) },
       NOW,
+      ACTOR,
     );
     assert.ok(isOk(r1));
     const r2 = BudgetPlan.addBudget(
       r1.value.plan,
       { id: BudgetId.generate(), partner: municipalityPartner(), value: cents(30_000) },
       NOW,
+      ACTOR,
     );
     assert.ok(isOk(r2));
     assert.equal(r2.value.plan.budgets.length, 2);
@@ -127,12 +138,14 @@ describe('BudgetPlan.addBudget', () => {
       p0,
       { id: BudgetId.generate(), partner: statePartner(), value: cents(50_000) },
       NOW,
+      ACTOR,
     );
     assert.ok(isOk(r1));
     const dup = BudgetPlan.addBudget(
       r1.value.plan,
       { id: BudgetId.generate(), partner: statePartner(), value: cents(10_000) },
       NOW,
+      ACTOR,
     );
     assert.ok(isErr(dup));
     assert.equal(dup.error, 'budget-plan-duplicate-partner');
@@ -144,12 +157,14 @@ describe('BudgetPlan.addBudget', () => {
       p0,
       { id: BudgetId.generate(), partner: municipalityPartner(), value: cents(20_000) },
       NOW,
+      ACTOR,
     );
     assert.ok(isOk(r1));
     const dup = BudgetPlan.addBudget(
       r1.value.plan,
       { id: BudgetId.generate(), partner: municipalityPartner(), value: cents(5_000) },
       NOW,
+      ACTOR,
     );
     assert.ok(isErr(dup));
     assert.equal(dup.error, 'budget-plan-duplicate-partner');

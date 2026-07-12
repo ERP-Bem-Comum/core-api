@@ -1,5 +1,6 @@
 import { type Result, err } from '../../../../shared/primitives/result.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
+import * as UserRef from '../../../../shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '../../domain/shared/budget-plan-id.ts';
 import { BudgetPlan } from '../../domain/budget-plan/budget-plan.ts';
 import type { BudgetPlan as BudgetPlanEntity } from '../../domain/budget-plan/types.ts';
@@ -9,13 +10,14 @@ import type {
   BudgetPlanRepositoryError,
 } from '../../domain/budget-plan/repository.ts';
 
-export type ApproveBudgetPlanCommand = Readonly<{ planId: string }>;
+export type ApproveBudgetPlanCommand = Readonly<{ planId: string; updatedByRef: string }>;
 
 export type ApproveBudgetPlanError =
   | BudgetPlanId.BudgetPlanIdError
   | 'budget-plan-not-found'
   | BudgetPlanError
-  | BudgetPlanRepositoryError;
+  | BudgetPlanRepositoryError
+  | UserRef.UserRefError;
 
 export type ApproveBudgetPlanDeps = Readonly<{
   planRepo: BudgetPlanRepository;
@@ -34,11 +36,14 @@ export const approveBudgetPlan =
     const planId = BudgetPlanId.rehydrate(cmd.planId);
     if (!planId.ok) return planId;
 
+    const actor = UserRef.rehydrate(cmd.updatedByRef);
+    if (!actor.ok) return actor;
+
     const found = await deps.planRepo.findById(planId.value);
     if (!found.ok) return found;
     if (found.value === null) return err('budget-plan-not-found');
 
-    const approved = BudgetPlan.approve(found.value, deps.clock.now());
+    const approved = BudgetPlan.approve(found.value, deps.clock.now(), actor.value);
     if (!approved.ok) return approved;
 
     const saved = await deps.planRepo.save(approved.value.plan, []);

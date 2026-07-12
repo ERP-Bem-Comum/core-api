@@ -5,6 +5,7 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk, isErr } from '#src/shared/index.ts';
+import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import { BudgetPlan } from '#src/modules/budget-plans/domain/budget-plan/budget-plan.ts';
 import * as BudgetPlanId from '#src/modules/budget-plans/domain/shared/budget-plan-id.ts';
 import { ProgramRef } from '#src/modules/budget-plans/domain/shared/refs.ts';
@@ -12,6 +13,13 @@ import type { BudgetPlan as BudgetPlanEntity } from '#src/modules/budget-plans/d
 
 const NOW = new Date('2026-07-09T12:00:00.000Z');
 const PROGRAM = '11111111-1111-4111-8111-111111111111';
+
+// Ator padrão dos testes (BGP-UPDATED-BY-AUDIT/#373).
+const ACTOR = (() => {
+  const r = UserRef.rehydrate('00000000-0000-4000-8000-000000000001');
+  assert.ok(isOk(r));
+  return r.value;
+})();
 
 const makePlan = (over: Partial<BudgetPlanEntity>): BudgetPlanEntity => {
   const programRef = ProgramRef.rehydrate(PROGRAM);
@@ -34,7 +42,10 @@ const makePlan = (over: Partial<BudgetPlanEntity>): BudgetPlanEntity => {
 describe('BudgetPlan.startCalibration (US4/CA1)', () => {
   it('APROVADO sem filhos → filho EM_CALIBRACAO, version major+1, aprovado intacto', () => {
     const parent = makePlan({ status: 'APROVADO', version: { major: 3, minor: 0 } });
-    const r = BudgetPlan.startCalibration(parent, [], BudgetPlanId.generate(), NOW);
+    const r = BudgetPlan.startCalibration(parent, [], BudgetPlanId.generate(), {
+      now: NOW,
+      actor: ACTOR,
+    });
     assert.ok(isOk(r));
     assert.equal(r.value.plan.status, 'EM_CALIBRACAO');
     assert.equal(r.value.plan.version.major, 4);
@@ -52,7 +63,10 @@ describe('BudgetPlan.startCalibration (US4/CA1)', () => {
       version: { major: 4, minor: 0 },
       parentId: parent.id,
     });
-    const r = BudgetPlan.startCalibration(parent, [oldCalib], BudgetPlanId.generate(), NOW);
+    const r = BudgetPlan.startCalibration(parent, [oldCalib], BudgetPlanId.generate(), {
+      now: NOW,
+      actor: ACTOR,
+    });
     assert.ok(isOk(r));
     assert.equal(r.value.plan.version.major, 5);
   });
@@ -65,7 +79,10 @@ describe('BudgetPlan.startCalibration (US4/CA1)', () => {
       parentId: parent.id,
       scenarioName: null,
     });
-    const r = BudgetPlan.startCalibration(parent, [open], BudgetPlanId.generate(), NOW);
+    const r = BudgetPlan.startCalibration(parent, [open], BudgetPlanId.generate(), {
+      now: NOW,
+      actor: ACTOR,
+    });
     assert.ok(isErr(r));
     assert.equal(r.error, 'budget-plan-calibration-open');
   });
@@ -75,7 +92,7 @@ describe('BudgetPlan.startCalibration (US4/CA1)', () => {
       makePlan({ status: 'RASCUNHO' }),
       [],
       BudgetPlanId.generate(),
-      NOW,
+      { now: NOW, actor: ACTOR },
     );
     assert.ok(isErr(r));
     assert.equal(r.error, 'budget-plan-not-approved');
@@ -83,7 +100,10 @@ describe('BudgetPlan.startCalibration (US4/CA1)', () => {
 
   it('cenário não inicia calibração → budget-plan-is-scenario', () => {
     const parent = makePlan({ status: 'APROVADO', scenarioName: 'Cenário A' });
-    const r = BudgetPlan.startCalibration(parent, [], BudgetPlanId.generate(), NOW);
+    const r = BudgetPlan.startCalibration(parent, [], BudgetPlanId.generate(), {
+      now: NOW,
+      actor: ACTOR,
+    });
     assert.ok(isErr(r));
     assert.equal(r.error, 'budget-plan-is-scenario');
   });
@@ -96,7 +116,7 @@ describe('BudgetPlan.createScenery (US4/CA4)', () => {
       parent,
       [],
       { id: BudgetPlanId.generate(), name: 'Otimista' },
-      NOW,
+      { now: NOW, actor: ACTOR },
     );
     assert.ok(isOk(r));
     assert.equal(r.value.plan.status, 'RASCUNHO');
@@ -117,7 +137,7 @@ describe('BudgetPlan.createScenery (US4/CA4)', () => {
       parent,
       [first],
       { id: BudgetPlanId.generate(), name: 'B' },
-      NOW,
+      { now: NOW, actor: ACTOR },
     );
     assert.ok(isOk(r));
     assert.equal(r.value.plan.version.minor, 2); // Blocker corrigido: 2, não 1
@@ -141,7 +161,7 @@ describe('BudgetPlan.createScenery (US4/CA4)', () => {
       parent,
       [s1, s2],
       { id: BudgetPlanId.generate(), name: 'C' },
-      NOW,
+      { now: NOW, actor: ACTOR },
     );
     assert.ok(isErr(r));
     assert.equal(r.error, 'budget-plan-scenery-limit');
@@ -152,7 +172,7 @@ describe('BudgetPlan.createScenery (US4/CA4)', () => {
       makePlan({ status: 'APROVADO' }),
       [],
       { id: BudgetPlanId.generate(), name: 'X' },
-      NOW,
+      { now: NOW, actor: ACTOR },
     );
     assert.ok(isErr(r));
     assert.equal(r.error, 'budget-plan-already-approved');
@@ -161,13 +181,13 @@ describe('BudgetPlan.createScenery (US4/CA4)', () => {
 
 describe('BudgetPlan.approve (US4/CA2)', () => {
   it('EM_CALIBRACAO → APROVADO', () => {
-    const r = BudgetPlan.approve(makePlan({ status: 'EM_CALIBRACAO' }), NOW);
+    const r = BudgetPlan.approve(makePlan({ status: 'EM_CALIBRACAO' }), NOW, ACTOR);
     assert.ok(isOk(r));
     assert.equal(r.value.plan.status, 'APROVADO');
   });
 
   it('já APROVADO → budget-plan-already-approved', () => {
-    const r = BudgetPlan.approve(makePlan({ status: 'APROVADO' }), NOW);
+    const r = BudgetPlan.approve(makePlan({ status: 'APROVADO' }), NOW, ACTOR);
     assert.ok(isErr(r));
     assert.equal(r.error, 'budget-plan-already-approved');
   });

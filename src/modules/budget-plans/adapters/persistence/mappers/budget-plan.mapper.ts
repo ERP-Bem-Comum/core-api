@@ -1,5 +1,6 @@
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import * as Money from '#src/shared/kernel/money.ts';
+import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '#src/modules/budget-plans/domain/shared/budget-plan-id.ts';
 import * as BudgetId from '#src/modules/budget-plans/domain/shared/budget-id.ts';
 import {
@@ -22,7 +23,8 @@ export type BudgetPlanMapperError =
   | 'budget-plan-mapper-invalid-budget-id'
   | 'budget-plan-mapper-invalid-partner-kind'
   | 'budget-plan-mapper-invalid-partner-ref'
-  | 'budget-plan-mapper-invalid-money';
+  | 'budget-plan-mapper-invalid-money'
+  | 'budget-plan-mapper-invalid-updated-by';
 
 type BudgetPlanRow = typeof schema.budgetPlans.$inferSelect;
 type NewBudgetPlanRow = typeof schema.budgetPlans.$inferInsert;
@@ -40,6 +42,7 @@ export const budgetPlanToInsert = (plan: BudgetPlan): NewBudgetPlanRow => ({
   scenarioName: plan.scenarioName,
   createdAt: plan.createdAt,
   updatedAt: plan.updatedAt,
+  updatedBy: plan.updatedByRef === null ? null : String(plan.updatedByRef),
 });
 
 export const budgetToInsert = (
@@ -106,6 +109,15 @@ export const budgetPlanFromRow = (
     budgets.push(mapped.value);
   }
 
+  // Autoria da última escrita (BGP-UPDATED-BY-AUDIT/#373) — molde `financial.approvedBy`.
+  // Nullable: linhas legadas não têm autor conhecido; presente exige UserRef válido (UUID v4).
+  let updatedByRef = null;
+  if (row.updatedBy !== null) {
+    const rehydrated = UserRef.rehydrate(row.updatedBy);
+    if (!rehydrated.ok) return err('budget-plan-mapper-invalid-updated-by');
+    updatedByRef = rehydrated.value;
+  }
+
   return ok({
     id: id.value,
     year: row.year,
@@ -117,5 +129,6 @@ export const budgetPlanFromRow = (
     scenarioName: row.scenarioName,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
+    updatedByRef,
   });
 };

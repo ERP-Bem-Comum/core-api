@@ -7,6 +7,7 @@ import { strict as assert } from 'node:assert';
 import { isOk, isErr } from '#src/shared/index.ts';
 import * as Money from '#src/shared/kernel/money.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
+import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '#src/modules/budget-plans/domain/shared/budget-plan-id.ts';
 import * as BudgetId from '#src/modules/budget-plans/domain/shared/budget-id.ts';
 import * as SubcategoryId from '#src/modules/budget-plans/domain/cost-structure/subcategory-id.ts';
@@ -21,6 +22,13 @@ import { deleteBudget } from '#src/modules/budget-plans/application/use-cases/de
 const NOW = new Date('2026-07-09T12:00:00.000Z');
 const PROGRAM = '11111111-1111-4111-8111-111111111111';
 const STATE = 'CE';
+// Ator padrão dos testes (BGP-UPDATED-BY-AUDIT/#373).
+const ACTOR_REF = '00000000-0000-4000-8000-000000000001';
+const ACTOR = (() => {
+  const r = UserRef.rehydrate(ACTOR_REF);
+  assert.ok(isOk(r));
+  return r.value;
+})();
 
 const seedPlanWithBudget = async (
   planStore: ReturnType<typeof InMemoryBudgetPlanRepository>,
@@ -33,6 +41,7 @@ const seedPlanWithBudget = async (
     year: 2026,
     programRef: programRef.value,
     now: NOW,
+    actor: ACTOR,
   });
   assert.ok(isOk(created));
   const stateRef = PartnerStateRef.rehydrate(STATE);
@@ -44,6 +53,7 @@ const seedPlanWithBudget = async (
     created.value.plan,
     { id: budgetId, partner: { kind: 'state', ref: stateRef.value }, value: money.value },
     NOW,
+    ACTOR,
   );
   assert.ok(isOk(withBudget));
   assert.ok(isOk(await planStore.repo.save(withBudget.value.plan, [])));
@@ -71,7 +81,7 @@ describe('deleteBudget (use case) — CA4', () => {
       planRepo: planStore.repo,
       budgetResultRepo: resultStore.repo,
       clock,
-    })({ budgetPlanId: String(planId), budgetId: String(budgetId) });
+    })({ budgetPlanId: String(planId), budgetId: String(budgetId), updatedByRef: ACTOR_REF });
     assert.ok(isOk(r));
 
     const list = await resultStore.repo.listByBudgetId(budgetId);
@@ -81,6 +91,7 @@ describe('deleteBudget (use case) — CA4', () => {
     const plan = await planStore.repo.findById(planId);
     assert.ok(isOk(plan));
     assert.equal(plan.value?.budgets.length, 0);
+    assert.equal(plan.value?.updatedByRef, ACTOR_REF, 'CA6: removeBudget seta updatedByRef');
   });
 
   it('budget inexistente -> budget-not-found', async () => {
@@ -93,7 +104,11 @@ describe('deleteBudget (use case) — CA4', () => {
       planRepo: planStore.repo,
       budgetResultRepo: resultStore.repo,
       clock,
-    })({ budgetPlanId: String(planId), budgetId: String(BudgetId.generate()) });
+    })({
+      budgetPlanId: String(planId),
+      budgetId: String(BudgetId.generate()),
+      updatedByRef: ACTOR_REF,
+    });
     assert.ok(isErr(r));
     assert.equal(r.error, 'budget-not-found');
   });

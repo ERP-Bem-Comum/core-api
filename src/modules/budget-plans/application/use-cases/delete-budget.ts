@@ -1,5 +1,6 @@
 import { type Result, err } from '../../../../shared/primitives/result.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
+import * as UserRef from '../../../../shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '../../domain/shared/budget-plan-id.ts';
 import * as BudgetId from '../../domain/shared/budget-id.ts';
 import { BudgetPlan } from '../../domain/budget-plan/budget-plan.ts';
@@ -13,7 +14,11 @@ import type {
   BudgetResultRepositoryError,
 } from '../../domain/budget-result/repository.ts';
 
-export type DeleteBudgetCommand = Readonly<{ budgetPlanId: string; budgetId: string }>;
+export type DeleteBudgetCommand = Readonly<{
+  budgetPlanId: string;
+  budgetId: string;
+  updatedByRef: string;
+}>;
 
 export type DeleteBudgetError =
   | BudgetPlanId.BudgetPlanIdError
@@ -21,7 +26,8 @@ export type DeleteBudgetError =
   | 'budget-plan-not-found'
   | BudgetPlanError
   | BudgetPlanRepositoryError
-  | BudgetResultRepositoryError;
+  | BudgetResultRepositoryError
+  | UserRef.UserRefError;
 
 export type DeleteBudgetDeps = Readonly<{
   planRepo: BudgetPlanRepository;
@@ -41,11 +47,19 @@ export const deleteBudget =
     const budgetId = BudgetId.rehydrate(cmd.budgetId);
     if (!budgetId.ok) return budgetId;
 
+    const actor = UserRef.rehydrate(cmd.updatedByRef);
+    if (!actor.ok) return actor;
+
     const found = await deps.planRepo.findById(planId.value);
     if (!found.ok) return found;
     if (found.value === null) return err('budget-plan-not-found');
 
-    const removed = BudgetPlan.removeBudget(found.value, budgetId.value, deps.clock.now());
+    const removed = BudgetPlan.removeBudget(
+      found.value,
+      budgetId.value,
+      deps.clock.now(),
+      actor.value,
+    );
     if (!removed.ok) return removed;
 
     const saved = await deps.planRepo.save(removed.value.plan, []);

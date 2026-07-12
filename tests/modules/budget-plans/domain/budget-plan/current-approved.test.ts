@@ -43,6 +43,7 @@ const plan = (
     scenarioName: null,
     createdAt: NOW,
     updatedAt: NOW,
+    updatedByRef: null,
   };
 };
 

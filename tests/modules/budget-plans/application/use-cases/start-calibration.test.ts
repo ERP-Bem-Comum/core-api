@@ -7,6 +7,7 @@ import { strict as assert } from 'node:assert';
 import { isOk, isErr } from '#src/shared/index.ts';
 import * as Money from '#src/shared/kernel/money.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
+import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '#src/modules/budget-plans/domain/shared/budget-plan-id.ts';
 import * as BudgetId from '#src/modules/budget-plans/domain/shared/budget-id.ts';
 import * as CostCenterId from '#src/modules/budget-plans/domain/cost-structure/cost-center-id.ts';
@@ -25,6 +26,13 @@ import { startCalibration } from '#src/modules/budget-plans/application/use-case
 const NOW = new Date('2026-07-09T12:00:00.000Z');
 const PROGRAM = '11111111-1111-4111-8111-111111111111';
 const STATE = 'CE';
+// Ator padrão dos testes (BGP-UPDATED-BY-AUDIT/#373).
+const ACTOR_REF = '00000000-0000-4000-8000-000000000001';
+const ACTOR = (() => {
+  const r = UserRef.rehydrate(ACTOR_REF);
+  assert.ok(isOk(r));
+  return r.value;
+})();
 
 const buildDeps = () => ({
   planStore: InMemoryBudgetPlanRepository(),
@@ -43,6 +51,7 @@ const seedApprovedPlan = async (deps: ReturnType<typeof buildDeps>) => {
     year: 2026,
     programRef: programRef.value,
     now: NOW,
+    actor: ACTOR,
   });
   assert.ok(isOk(created));
   const stateRef = PartnerStateRef.rehydrate(STATE);
@@ -55,10 +64,11 @@ const seedApprovedPlan = async (deps: ReturnType<typeof buildDeps>) => {
     plan,
     { id: budgetId, partner: { kind: 'state', ref: stateRef.value }, value: money.value },
     NOW,
+    ACTOR,
   );
   assert.ok(isOk(withBudget));
   plan = withBudget.value.plan;
-  const approved = BudgetPlan.approve(plan, NOW);
+  const approved = BudgetPlan.approve(plan, NOW, ACTOR);
   assert.ok(isOk(approved));
   assert.ok(isOk(await deps.planStore.repo.save(approved.value.plan, [])));
 
@@ -111,7 +121,7 @@ describe('startCalibration (use case) — US4 orquestração da clonagem', () =>
       costStructureRepo: deps.costStore.repo,
       budgetResultRepo: deps.resultStore.repo,
       clock: deps.clock,
-    })({ parentPlanId: String(planId) });
+    })({ parentPlanId: String(planId), updatedByRef: ACTOR_REF });
 
     assert.ok(isOk(r));
     const child = r.value.plan;
@@ -119,6 +129,7 @@ describe('startCalibration (use case) — US4 orquestração da clonagem', () =>
     assert.equal(String(child.parentId), String(planId));
     assert.equal(child.version.major, 2); // pai versão 1.0 (create) → calibração 2.0
     assert.notEqual(String(child.id), String(planId));
+    assert.equal(child.updatedByRef, ACTOR_REF, 'CA6: derivador seta updatedByRef');
 
     // budget clonado (novo id, mesmo valor)
     assert.equal(child.budgets.length, 1);
@@ -157,6 +168,7 @@ describe('startCalibration (use case) — US4 orquestração da clonagem', () =>
       year: 2026,
       programRef: programRef.value,
       now: NOW,
+      actor: ACTOR,
     });
     assert.ok(isOk(created));
     assert.ok(isOk(await deps.planStore.repo.save(created.value.plan, []))); // RASCUNHO
@@ -166,7 +178,7 @@ describe('startCalibration (use case) — US4 orquestração da clonagem', () =>
       costStructureRepo: deps.costStore.repo,
       budgetResultRepo: deps.resultStore.repo,
       clock: deps.clock,
-    })({ parentPlanId: String(planId) });
+    })({ parentPlanId: String(planId), updatedByRef: ACTOR_REF });
     assert.ok(isErr(r));
     assert.equal(r.error, 'budget-plan-not-approved');
   });

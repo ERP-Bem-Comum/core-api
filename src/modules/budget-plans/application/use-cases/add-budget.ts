@@ -1,6 +1,7 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import * as Money from '../../../../shared/kernel/money.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
+import * as UserRef from '../../../../shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '../../domain/shared/budget-plan-id.ts';
 import * as BudgetId from '../../domain/shared/budget-id.ts';
 import { PartnerStateRef, PartnerMunicipalityRef } from '../../domain/shared/refs.ts';
@@ -17,6 +18,7 @@ export type AddBudgetCommand = Readonly<{
   partnerKind: 'state' | 'municipality';
   partnerRef: string;
   valueInCents: number;
+  updatedByRef: string;
 }>;
 
 export type AddBudgetError =
@@ -25,7 +27,8 @@ export type AddBudgetError =
   | 'budget-plan-invalid-money'
   | 'budget-plan-not-found'
   | BudgetPlanError
-  | BudgetPlanRepositoryError;
+  | BudgetPlanRepositoryError
+  | UserRef.UserRefError;
 
 export type AddBudgetDeps = Readonly<{
   planRepo: BudgetPlanRepository;
@@ -59,6 +62,9 @@ export const addBudget =
     const partner = resolvePartner(cmd.partnerKind, cmd.partnerRef);
     if (!partner.ok) return partner;
 
+    const actor = UserRef.rehydrate(cmd.updatedByRef);
+    if (!actor.ok) return actor;
+
     const found = await deps.planRepo.findById(planId.value);
     if (!found.ok) return found;
     if (found.value === null) return err('budget-plan-not-found');
@@ -68,6 +74,7 @@ export const addBudget =
       found.value,
       { id: budgetId, partner: partner.value, value: value.value },
       deps.clock.now(),
+      actor.value,
     );
     if (!added.ok) return added;
 

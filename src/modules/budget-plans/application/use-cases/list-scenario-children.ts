@@ -21,6 +21,7 @@ export type BudgetPlanChildView = Readonly<{
   scenarioName: string | null;
   status: BudgetPlanStatus;
   totalInCents: number;
+  updatedByRef: string | null;
 }>;
 
 export type ListScenarioChildrenResult = Readonly<{
@@ -42,6 +43,7 @@ const toChildView = (plan: BudgetPlanEntity): BudgetPlanChildView => ({
   scenarioName: plan.scenarioName,
   status: plan.status,
   totalInCents: BudgetPlan.total(plan).cents,
+  updatedByRef: plan.updatedByRef === null ? null : String(plan.updatedByRef),
 });
 
 // Ordena por versão ascendente comparando os inteiros major/minor ANTES de formatar
