@@ -19,7 +19,7 @@
 #
 # Profiles opt-in:
 #   docker compose --profile app up -d         # adiciona o serviço `http` (servidor HTTP)
-#   docker compose --profile workers up -d     # adiciona os 5 workers long-running
+#   docker compose --profile workers up -d     # adiciona os 3 workers consolidados (grupos)
 #   docker compose --profile jobs up -d        # adiciona jobs one-shot (sweeper, backfill)
 #   docker compose --profile mail up -d        # adiciona mailpit (SMTP fake)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -36,7 +36,7 @@ name: core-api-dev
 #
 # x-app-build  — bloco build+image comum a TODOS os services da imagem
 #                core-api (http, workers, jobs).
-# x-worker-base — base para os 5 workers long-running (restart+hardening+net+dep).
+# x-worker-base — base para os 3 workers consolidados por grupo (restart+hardening+net+dep).
 # x-job-base  — base para jobs one-shot (no restart, hardening máximo).
 # ─────────────────────────────────────────────────────────────────────────────
 
@@ -329,106 +329,85 @@ services:
         condition: service_completed_successfully
 
   # ──────────────────────────────────────────────────────────────────────────
-  # Workers long-running (opt-in via profile `workers`).
+  # Workers long-running CONSOLIDADOS (opt-in via profile `workers`) — #407.
   #
-  # Todos usam x-worker-base: imagem core-api:dev, restart unless-stopped,
-  # hardening (no-new-privileges, cap_drop ALL, read_only, tmpfs /tmp),
-  # network core-api, depends_on mysql healthy + http healthy (schema migrado).
+  # Os 6 workers standalone viraram 3 processos por AFINIDADE, cada um rodando o
+  # worker-runner (src/workers/runner/run.ts) selecionado por WORKER_GROUP. O
+  # runner monta as factories do grupo sobre UM PoolRegistry (dedup por
+  # connection-string) e roda os loops em Promise.allSettled — um worker que
+  # rejeita não derruba os irmãos; SIGTERM/SIGINT abortam todos e o registry
+  # drena os pools (graceful shutdown).
   #
-  # Injeção de DATABASE_URL via wrapper sh + $(cat /run/secrets/...) + exec tini.
-  # $0 recebe o run.ts via `command` do Compose (behavior de `exec` com sh -c).
-  # NODE_OPTIONS="--experimental-strip-types --no-warnings" é herdado do ENV da imagem.
+  # Como todas as *_DATABASE_URL apontam para o MESMO RDS/db `core` (ADR-0014
+  # isola por prefixo de tabela, não por conexão), cada grupo colapsa em 1 pool:
+  # 9 pools/6 processos → 3 pools/3 processos contra max_connections=60
+  # (Incident-0001, causa #2 — proliferação de pools).
   #
-  # read_only: true — strip-types não grava em disco; mysql2 é JS puro (sem escrita);
-  # nenhum worker precisa escrever no rootfs. tmpfs /tmp é defensivo (libs que
-  # criam arquivos temporários em /tmp continuam funcionando).
+  # Todos herdam x-worker-base: imagem core-api:dev, restart unless-stopped,
+  # hardening (no-new-privileges, cap_drop ALL, read_only, tmpfs /tmp), network
+  # core-api, depends_on mysql+http healthy (schema migrado). WORKER_GROUP via
+  # environment; DATABASE_URLs injetadas por wrapper sh + $(cat /run/secrets/...)
+  # + exec tini. NODE_OPTIONS="--experimental-strip-types --no-warnings" herdado
+  # do ENV da imagem. read_only: strip-types não grava em disco; mysql2 é JS puro.
   # ──────────────────────────────────────────────────────────────────────────
 
-  outbox-contracts:
+  # Grupo A — outbox (contracts + partners). 1 pool compartilhado.
+  worker-outbox:
     <<: *x-worker-base
     profiles:
       - workers
-    entrypoint:
-      - /bin/sh
-      - -c
-      - >-
-        export CONTRACTS_DATABASE_URL="$(cat /run/secrets/contracts_database_url)";
-        exec tini -- node "$0"
-      - src/modules/contracts/worker/run.ts
-    secrets:
-      - contracts_database_url
-
-  outbox-partners:
-    <<: *x-worker-base
-    profiles:
-      - workers
-    entrypoint:
-      - /bin/sh
-      - -c
-      - >-
-        export PARTNERS_DATABASE_URL="$(cat /run/secrets/partners_database_url)";
-        exec tini -- node "$0"
-      - src/modules/partners/worker/run.ts
-    secrets:
-      - partners_database_url
-
-  supplier-projection:
-    <<: *x-worker-base
-    profiles:
-      - workers
-    entrypoint:
-      - /bin/sh
-      - -c
-      - >-
-        export PARTNERS_DATABASE_URL="$(cat /run/secrets/partners_database_url)";
-        export FINANCIAL_DATABASE_URL="$(cat /run/secrets/financial_database_url)";
-        exec tini -- node "$0"
-      - src/workers/supplier-view-projection/run.ts
-    secrets:
-      - partners_database_url
-      - financial_database_url
-
-  # #307 — projeção do read-model de payables (Camada 0 Dashboard/Reports). 1 pool (financial:
-  # outbox + read-model). Single-instance (FIFO por agregado — ver runbook payable-view-projection).
-  payable-projection:
-    <<: *x-worker-base
-    profiles:
-      - workers
-    entrypoint:
-      - /bin/sh
-      - -c
-      - >-
-        export FINANCIAL_DATABASE_URL="$(cat /run/secrets/financial_database_url)";
-        exec tini -- node "$0"
-      - src/workers/payable-view-projection/run.ts
-    secrets:
-      - financial_database_url
-
-  contract-count-projection:
-    <<: *x-worker-base
-    profiles:
-      - workers
-    entrypoint:
-      - /bin/sh
-      - -c
-      - >-
-        export CONTRACTS_DATABASE_URL="$(cat /run/secrets/contracts_database_url)";
-        export PARTNERS_DATABASE_URL="$(cat /run/secrets/partners_database_url)";
-        exec tini -- node "$0"
-      - src/workers/contract-count-projection/run.ts
-    secrets:
-      - contracts_database_url
-      - partners_database_url
-
-  email-dispatch:
-    <<: *x-worker-base
-    profiles:
-      - workers
-    # Contrato de e-mail (ADR-0010): provider via env, igual nos 3 ambientes (EMAIL_PROVIDER=smtp).
-    # Defaults apontam para o mailpit local (profile `mail`); QA/PROD sobrescrevem via env/Secrets
-    # Manager — em PROD o host é o Amazon SES (email-smtp.<região>.amazonaws.com). SMTP_PASS é
-    # secret (cat /run/secrets/smtp_pass). Sem estas, o worker aborta no boot com exit 78.
     environment:
+      WORKER_GROUP: outbox
+      # Consumer-id por GRUPO (espelha o taskdef Fargate erp-prod-worker-outbox): label de
+      # observabilidade compartilhado por contracts+partners. O claim do outbox é por-linha
+      # (lock na tabela), não por consumer — compartilhar o id não afeta a corretude.
+      OUTBOX_CONSUMER_ID: worker-outbox
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        export CONTRACTS_DATABASE_URL="$(cat /run/secrets/contracts_database_url)";
+        export PARTNERS_DATABASE_URL="$(cat /run/secrets/partners_database_url)";
+        exec tini -- node "$0"
+      - src/workers/runner/run.ts
+    secrets:
+      - contracts_database_url
+      - partners_database_url
+
+  # Grupo B — projeções (supplier-view + payable-view + contract-count). 1 pool.
+  # Single-instance por loop (FIFO por agregado — ver runbooks das projeções).
+  worker-projections:
+    <<: *x-worker-base
+    profiles:
+      - workers
+    environment:
+      WORKER_GROUP: projections
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        export CONTRACTS_DATABASE_URL="$(cat /run/secrets/contracts_database_url)";
+        export PARTNERS_DATABASE_URL="$(cat /run/secrets/partners_database_url)";
+        export FINANCIAL_DATABASE_URL="$(cat /run/secrets/financial_database_url)";
+        exec tini -- node "$0"
+      - src/workers/runner/run.ts
+    secrets:
+      - contracts_database_url
+      - partners_database_url
+      - financial_database_url
+
+  # Grupo C — email-dispatch (isolado: SMTP externo pode travar/bloquear). 1 pool
+  # (auth [+ partners, multi-fonte ADR-0047]). Contrato de e-mail (ADR-0010):
+  # provider via env, igual nos 3 ambientes (EMAIL_PROVIDER=smtp). Defaults →
+  # mailpit local (profile `mail`); QA/PROD sobrescrevem via env/Secrets Manager —
+  # em PROD o host é o Amazon SES (email-smtp.<região>.amazonaws.com). SMTP_PASS é
+  # secret. Sem as envs de e-mail, o runner aborta o worker no boot (fail-loud).
+  worker-email:
+    <<: *x-worker-base
+    profiles:
+      - workers
+    environment:
+      WORKER_GROUP: email
       EMAIL_PROVIDER: '${EMAIL_PROVIDER:-smtp}'
       EMAIL_FROM: '${EMAIL_FROM:-Dev <dev@local>}'
       SMTP_HOST: '${SMTP_HOST:-mailpit}'
@@ -446,7 +425,7 @@ services:
         export PARTNERS_DATABASE_URL="$(cat /run/secrets/partners_database_url)";
         export SMTP_PASS="$(cat /run/secrets/smtp_pass)";
         exec tini -- node "$0"
-      - src/workers/email-dispatch/run.ts
+      - src/workers/runner/run.ts
     secrets:
       - auth_database_url
       - partners_database_url
