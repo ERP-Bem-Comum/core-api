@@ -112,15 +112,17 @@ const activeServices = (profileFlag: string): readonly string[] => {
     .filter(Boolean);
 };
 
-const asArr = (v: readonly string[] | string | undefined): readonly string[] =>
-  v === undefined ? [] : typeof v === 'string' ? [v] : v;
+// `docker compose config --format json` emite campos AUSENTES como `null` (não undefined) —
+// ex.: um serviço só com `entrypoint` traz `command: null`. Trata-se null junto de undefined.
+const asArr = (v: readonly string[] | string | null | undefined): readonly string[] =>
+  v === undefined || v === null ? [] : typeof v === 'string' ? [v] : v;
 
 const secretNames = (svc: ComposeService | undefined): readonly string[] =>
   (svc?.secrets ?? []).map((s) => (typeof s === 'string' ? s : (s.source ?? '')));
 
 const envValue = (svc: ComposeService | undefined, key: string): string | undefined => {
   const env = svc?.environment;
-  if (env === undefined) return undefined;
+  if (env === undefined || env === null) return undefined;
   if (Array.isArray(env)) {
     const hit = (env as readonly string[]).find((e) => e.startsWith(`${key}=`));
     return hit === undefined ? undefined : hit.slice(key.length + 1);
