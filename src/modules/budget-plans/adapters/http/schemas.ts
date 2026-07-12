@@ -66,6 +66,8 @@ export const budgetPlanListItemSchema = z.object({
   programName: z.string(),
   totalInCents: z.number().int(),
   updatedAt: z.string(),
+  partnersCount: z.number().int().nonnegative(),
+  networkKind: z.enum(['state', 'municipality', 'mixed']).nullable(),
 });
 
 export type BudgetPlanListItemDto = z.infer<typeof budgetPlanListItemSchema>;

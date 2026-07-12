@@ -1,13 +1,14 @@
 # BGP-ITEM-PROJECTIONS — escopo
 
-> Issues **#372** + **#373** (batch — mesmo GET, campos já carregados no agregado). Módulo **`budget-plans`**. Size **S**.
+> Issue **#372** (projeção de dado já carregado no agregado). Módulo **`budget-plans`**. Size **S**.
+>
+> **CORREÇÃO DE ESCOPO (2026-07-12):** o **#373** (`updatedByRef`) foi **REMOVIDO** deste ticket. `updatedByRef`/`updated_by` NÃO existe no agregado `BudgetPlan` nem na tabela (`grep` confirmou) — não é "dado já carregado", é auditoria que exige **migration** (coluna `updated_by`) + **captura do ator** em toda mutação (create/scenery/calibration/approve) + campo no agregado. Fora do escopo "sem migration" de um ticket S. **#373 vira ticket próprio** (`BGP-UPDATED-BY-AUDIT`, size M+, com migration).
 
 ## Contexto
-No item de `GET /budget-plans`, dois dados já presentes no agregado não são projetados no DTO:
-- **#372** — `partnersCount` + `networkKind` (rede) por item.
-- **#373** — `updatedByRef` (auditoria "atualizado por") — hoje só `updatedAt`.
+No item de `GET /budget-plans`, dados já presentes no agregado (`plan.budgets`) não são projetados no DTO:
+- **#372** — `partnersCount` (= `plan.budgets.length`) + `networkKind` (de `plan.budgets[].partner.kind`) por item.
 
-Ambos são **projeção de dado já carregado** (sem nova query pesada, sem nova migration).
+É **projeção de dado já carregado** (o `toItem` já carrega `budgets[]` para calcular `totalInCents` e os descarta) — sem query nova, sem migration.
 
 ## Escopo (in)
 1. Projetar `partnersCount` e `networkKind` no item de lista (#372).
@@ -19,9 +20,9 @@ Ambos são **projeção de dado já carregado** (sem nova query pesada, sem nova
 - Endpoint de detalhe (só o item de lista + plano).
 
 ## Critérios de aceite
-- **CA1** Item de `GET /budget-plans` expõe `partnersCount` (número) e `networkKind` (#372).
-- **CA2** Plano expõe `updatedByRef` (id de quem atualizou) além de `updatedAt` (#373); nunca atualizado → null coerente.
-- **CA3** Response validado contra schema; adição não quebra consumidores atuais.
+- **CA1** Item de `GET /budget-plans` expõe `partnersCount` (número = qtd de budgets) por item.
+- **CA2** Item expõe `networkKind` derivado de `plan.budgets[].partner.kind`: só `state` → `'state'`; só `municipality` → `'municipality'`; ambos os tipos → `'mixed'`; sem budgets → `null`.
+- **CA3** Response validado contra schema; adição é aditiva (não quebra consumidores atuais).
 
 ## Pipeline (agentes por wave)
 | Wave | Atividade | Especialista |
@@ -35,4 +36,4 @@ Ambos são **projeção de dado já carregado** (sem nova query pesada, sem nova
 - **`Explore`** sobre o mapper de `GET /budget-plans` (confirmar que `partnersCount`/`networkKind`/`updatedByRef` já vêm do agregado).
 
 ## DoD
-Gate W3 verde. Campos projetados no GET. Fecha #372 e #373.
+Gate W3 verde. `partnersCount` + `networkKind` projetados no item do GET. **Fecha #372.** O #373 (`updatedByRef`) fica aberto e será tratado em ticket próprio `BGP-UPDATED-BY-AUDIT` (migration + captura do ator).

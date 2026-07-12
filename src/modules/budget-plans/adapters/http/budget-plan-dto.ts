@@ -50,6 +50,8 @@ export const budgetPlanListItemToDto = (item: BudgetPlanListItem): BudgetPlanLis
   programName: item.programName,
   totalInCents: item.totalInCents,
   updatedAt: item.updatedAt.toISOString(),
+  partnersCount: item.partnersCount,
+  networkKind: item.networkKind,
 });
 
 /** Detalhe completo (GET /budget-plans/:id). */
