@@ -147,6 +147,7 @@ Do `security-backend-expert` (CWE-400 / CWE-770 / OWASP API4:2023 — Unrestrict
 - [ ] Adotar o construtor único nos 7 drivers (elimina a duplicação que propagou o bug).
 
 ### 6.3 Follow-ups estruturais (tickets separados)
+- [x] **Consolidação dos workers** (6→3 processos, 9→3 pools) — [#407](https://github.com/ERP-Bem-Comum/core-api/issues/407): worker-runner por afinidade (`WORKER_GROUP=outbox|projections|email`) com 1 `PoolRegistry` (dedup por connection-string) por grupo. Fatia 1 (código, `CORE-WORKER-RUNNER-POOL-REGISTRY`) + Fatia 2 (deploy — compose + taskdefs Fargate, `CORE-WORKER-CONSOLIDATION-DEPLOY`). Como todas as `*_DATABASE_URL` colapsam no mesmo RDS/db `core` (ADR-0014), cada grupo = 1 pool.
 - [ ] **Consolidação de pools** (14→~7): injetar os read-ports já existentes em `server.ts` em vez de reabrir pool por read-port.
 - [ ] **Connection budget** como conceito de 1ª classe: `connectionLimit` derivado de `RDS max_connections / N_pools / N_tasks`, com folga p/ DBA/ETL.
 - [ ] **`queueLimit` finito + fail-fast 503** (`Retry-After`) + timeout de aquisição na aplicação.
