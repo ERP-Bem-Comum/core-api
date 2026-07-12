@@ -30,7 +30,12 @@ CA-4  secrets por grupo (outbox=2, projections=3, email=3)                      
 CA-5  hardening (cap_drop ALL, read_only, no-new-privileges, depends_on mysql)   ✓
 ```
 
-**Defeito encontrado e corrigido:** o teste original usava só `--profile workers`, que faz `docker compose config` falhar com *"worker-email depends on undefined service http"* — os workers herdam `depends_on: http` (profile `app`) do `x-worker-base`. Corrigido: o teste ativa `--profile workers --profile app` e isola os workers pela diferença `(workers+app) − (app)`. Sem essa correção o teste quebraria no CI. Runtime dos grupos (boot/isolamento/shutdown) já validado no runbook ERP-INFRA (2026-07-10).
+**Dois defeitos no teste (pegos só com Docker real — skipavam no Mac), corrigidos:**
+
+1. **`--profile workers` sozinho** faz `docker compose config` falhar com *"worker-email depends on undefined service http"* — os workers herdam `depends_on: http` (profile `app`) do `x-worker-base`. Fix: ativa `--profile workers --profile app` e isola os workers por `(workers+app) − (app)` (commit `c3fecd70`).
+2. **`command: null`** — `docker compose config --format json` (v5.1.4) emite campos ausentes como `null`, não `undefined`; `?.` não short-circuita em campo-existente-com-null → `asArr(null)` fazia `[...null]` estourar (`TypeError`). Fix: `asArr`/`envValue` tratam null junto de undefined (commit `1241c8d5`).
+
+Sem esses fixes o teste quebraria no CI. **Teste real rodado no x99** (worktree isolado, node v24.13.0, docker compose v5.1.4): **15 pass · 0 fail** (CA-1..CA-6 × 3 grupos). Runtime dos grupos (boot/isolamento/shutdown) já validado no runbook ERP-INFRA (2026-07-10).
 
 ## Pendências fora do gate (rastreadas)
 
