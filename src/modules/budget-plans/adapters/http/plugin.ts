@@ -58,6 +58,7 @@ import {
   budgetDeleteParamSchema,
   sceneryBodySchema,
   lifecyclePlanResponseSchema,
+  budgetPlanChildrenResponseSchema,
   budgetPlanInsightsResponseSchema,
   consolidatedQuerySchema,
   consolidatedResultResponseSchema,
@@ -290,6 +291,23 @@ const budgetPlansRoutes =
         const result = await deps.getCostStructure(req.params.id);
         if (!result.ok) return sendWriteError(reply, result.error);
         return sendResult(reply, ok(costStructureToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /budget-plans/:id/children — filhos diretos (cenários/calibrações), ordenados por
+    // versão ascendente (#401). Plano sem filhos -> 200 + items:[]; :id inexistente -> 404.
+    scope.route({
+      method: 'GET',
+      url: '/budget-plans/:id/children',
+      preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.read)],
+      schema: {
+        params: budgetPlanIdParamSchema,
+        response: { 200: budgetPlanChildrenResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.listScenarioChildren(req.params.id);
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return sendResult(reply, ok(result.value), { ok: 200 });
       },
     });
 
