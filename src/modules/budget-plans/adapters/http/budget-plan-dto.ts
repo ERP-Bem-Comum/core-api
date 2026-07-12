@@ -50,6 +50,7 @@ export const budgetPlanListItemToDto = (item: BudgetPlanListItem): BudgetPlanLis
   programName: item.programName,
   totalInCents: item.totalInCents,
   updatedAt: item.updatedAt.toISOString(),
+  updatedByRef: item.updatedByRef,
   partnersCount: item.partnersCount,
   networkKind: item.networkKind,
 });
@@ -67,4 +68,5 @@ export const budgetPlanDetailToDto = (detail: BudgetPlanDetail): BudgetPlanDetai
   totalInCents: detail.totalInCents,
   createdAt: detail.createdAt.toISOString(),
   updatedAt: detail.updatedAt.toISOString(),
+  updatedByRef: detail.updatedByRef,
 });

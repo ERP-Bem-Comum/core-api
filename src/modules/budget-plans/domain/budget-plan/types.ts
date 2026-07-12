@@ -1,4 +1,5 @@
 import type { Money } from '../../../../shared/kernel/money.ts';
+import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
 import type { BudgetPlanId } from '../shared/budget-plan-id.ts';
 import type { BudgetId } from '../shared/budget-id.ts';
 import type { ProgramRef, PartnerStateRef, PartnerMunicipalityRef } from '../shared/refs.ts';
@@ -30,4 +31,7 @@ export type BudgetPlan = Readonly<{
   scenarioName: string | null;
   createdAt: Date;
   updatedAt: Date;
+  // Autoria da última escrita (BGP-UPDATED-BY-AUDIT/#373) — espelha `updatedAt`, mesmas 6
+  // transições do header. Nullable: linhas legadas (pré-#373) não têm autor conhecido (D3).
+  updatedByRef: UserRef | null;
 }>;

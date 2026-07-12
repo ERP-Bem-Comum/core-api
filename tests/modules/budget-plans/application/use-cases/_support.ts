@@ -20,6 +20,8 @@ export const PROGRAM_INACTIVE_REF = '33333333-3333-4333-8333-333333333333';
 export const PROGRAM_UNKNOWN_REF = '99999999-9999-4999-8999-999999999999';
 export const STATE_CE_REF = 'CE';
 export const MUN_FORTALEZA_REF = '2304400';
+// Ator padrão dos testes (BGP-UPDATED-BY-AUDIT/#373) — UUID v4 fixo, sem significado além de validar.
+export const ACTOR_REF = '00000000-0000-4000-8000-000000000001';
 
 export const seedPrograms = [
   { ref: PROGRAM_ETI_REF, name: 'Ensino em Tempo Integral', abbreviation: 'ETI', active: true },
@@ -52,9 +54,13 @@ export const makeDeps = (): Deps => ({
 
 export const createPlanOrFail = async (
   deps: Deps,
-  cmd: Readonly<{ year: number; programRef: string }>,
+  cmd: Readonly<{ year: number; programRef: string; updatedByRef?: string }>,
 ) => {
-  const r = await createBudgetPlan(deps)(cmd);
+  const r = await createBudgetPlan(deps)({
+    year: cmd.year,
+    programRef: cmd.programRef,
+    updatedByRef: cmd.updatedByRef ?? ACTOR_REF,
+  });
   assert.ok(isOk(r), `createBudgetPlan falhou: ${JSON.stringify(r)}`);
   return r.value.plan;
 };

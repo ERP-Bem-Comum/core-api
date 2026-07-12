@@ -7,6 +7,7 @@ import { strict as assert } from 'node:assert';
 
 import { isOk, isErr } from '#src/shared/index.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
+import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '#src/modules/budget-plans/domain/shared/budget-plan-id.ts';
 import * as CostCenterId from '#src/modules/budget-plans/domain/cost-structure/cost-center-id.ts';
 import * as CategoryId from '#src/modules/budget-plans/domain/cost-structure/category-id.ts';
@@ -21,6 +22,13 @@ import { createScenery } from '#src/modules/budget-plans/application/use-cases/c
 
 const NOW = new Date('2026-07-09T12:00:00.000Z');
 const PROGRAM = '11111111-1111-4111-8111-111111111111';
+// Ator padrão dos testes (BGP-UPDATED-BY-AUDIT/#373).
+const ACTOR_REF = '00000000-0000-4000-8000-000000000001';
+const ACTOR = (() => {
+  const r = UserRef.rehydrate(ACTOR_REF);
+  assert.ok(isOk(r));
+  return r.value;
+})();
 
 const buildDeps = () => ({
   planStore: InMemoryBudgetPlanRepository(),
@@ -38,11 +46,12 @@ const seedPlanWithTree = async (deps: ReturnType<typeof buildDeps>, approve: boo
     year: 2026,
     programRef: programRef.value,
     now: NOW,
+    actor: ACTOR,
   });
   assert.ok(isOk(created));
   let plan = created.value.plan; // RASCUNHO
   if (approve) {
-    const approved = BudgetPlan.approve(plan, NOW);
+    const approved = BudgetPlan.approve(plan, NOW, ACTOR);
     assert.ok(isOk(approved));
     plan = approved.value.plan;
   }
@@ -83,13 +92,14 @@ describe('createScenery (use case) — US4/CA4', () => {
       costStructureRepo: deps.costStore.repo,
       budgetResultRepo: deps.resultStore.repo,
       clock: deps.clock,
-    })({ parentPlanId: String(planId), name: 'Otimista' });
+    })({ parentPlanId: String(planId), name: 'Otimista', updatedByRef: ACTOR_REF });
 
     assert.ok(isOk(r));
     assert.equal(r.value.plan.status, 'RASCUNHO');
     assert.equal(r.value.plan.scenarioName, 'Otimista');
     assert.equal(r.value.plan.version.minor, 1);
     assert.equal(String(r.value.plan.parentId), String(planId));
+    assert.equal(r.value.plan.updatedByRef, ACTOR_REF, 'CA6: derivador seta updatedByRef');
 
     const childStruct = await deps.costStore.repo.findByBudgetPlanId(r.value.plan.id);
     assert.ok(isOk(childStruct));
@@ -104,7 +114,7 @@ describe('createScenery (use case) — US4/CA4', () => {
       costStructureRepo: deps.costStore.repo,
       budgetResultRepo: deps.resultStore.repo,
       clock: deps.clock,
-    })({ parentPlanId: String(planId), name: '   ' });
+    })({ parentPlanId: String(planId), name: '   ', updatedByRef: ACTOR_REF });
     assert.ok(isErr(r));
     assert.equal(r.error, 'scenario-name-required');
   });
@@ -117,7 +127,7 @@ describe('createScenery (use case) — US4/CA4', () => {
       costStructureRepo: deps.costStore.repo,
       budgetResultRepo: deps.resultStore.repo,
       clock: deps.clock,
-    })({ parentPlanId: String(planId), name: 'X' });
+    })({ parentPlanId: String(planId), name: 'X', updatedByRef: ACTOR_REF });
     assert.ok(isErr(r));
     assert.equal(r.error, 'budget-plan-already-approved');
   });

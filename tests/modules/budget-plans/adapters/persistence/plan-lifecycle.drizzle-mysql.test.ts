@@ -7,6 +7,7 @@ import { strict as assert } from 'node:assert';
 import { isNotNull } from 'drizzle-orm';
 
 import { isOk } from '#src/shared/index.ts';
+import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import * as BudgetPlanId from '#src/modules/budget-plans/domain/shared/budget-plan-id.ts';
 import { ProgramRef } from '#src/modules/budget-plans/domain/shared/refs.ts';
@@ -22,6 +23,13 @@ import { createScenery } from '#src/modules/budget-plans/application/use-cases/c
 const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
 const NOW = new Date('2026-07-09T12:00:00.000Z');
 const PROGRAM = '11111111-1111-4111-8111-111111111111';
+// Ator padrão dos testes (BGP-UPDATED-BY-AUDIT/#373).
+const ACTOR_REF = '00000000-0000-4000-8000-000000000001';
+const ACTOR = (() => {
+  const r = UserRef.rehydrate(ACTOR_REF);
+  assert.ok(isOk(r));
+  return r.value;
+})();
 
 const integrationEnabled = (): boolean => process.env.MYSQL_INTEGRATION === '1';
 
@@ -67,11 +75,12 @@ if (integrationEnabled()) {
       year: 2026,
       programRef: programRef.value,
       now: NOW,
+      actor: ACTOR,
     });
     assert.ok(isOk(created));
     let plan = created.value.plan;
     if (approve) {
-      const a = BudgetPlan.approve(plan, NOW);
+      const a = BudgetPlan.approve(plan, NOW, ACTOR);
       assert.ok(isOk(a));
       plan = a.value.plan;
     }
@@ -91,7 +100,10 @@ if (integrationEnabled()) {
       clock: ClockFixed(NOW),
     };
 
-    const r = await startCalibration(deps)({ parentPlanId: String(rootId) });
+    const r = await startCalibration(deps)({
+      parentPlanId: String(rootId),
+      updatedByRef: ACTOR_REF,
+    });
     assert.ok(isOk(r));
     assert.equal(r.value.plan.status, 'EM_CALIBRACAO');
     assert.equal(String(r.value.plan.parentId), String(rootId)); // FK auto-ref persistiu
@@ -120,11 +132,19 @@ if (integrationEnabled()) {
       clock: ClockFixed(NOW),
     };
 
-    const a = await createScenery(deps)({ parentPlanId: String(rootId), name: 'A' });
+    const a = await createScenery(deps)({
+      parentPlanId: String(rootId),
+      name: 'A',
+      updatedByRef: ACTOR_REF,
+    });
     assert.ok(isOk(a));
     assert.equal(a.value.plan.version.minor, 1);
 
-    const b = await createScenery(deps)({ parentPlanId: String(rootId), name: 'B' });
+    const b = await createScenery(deps)({
+      parentPlanId: String(rootId),
+      name: 'B',
+      updatedByRef: ACTOR_REF,
+    });
     assert.ok(isOk(b)); // não colide na UNIQUE (year, program_ref, version) — Blocker corrigido
     assert.equal(b.value.plan.version.minor, 2);
   });

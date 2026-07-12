@@ -7,6 +7,7 @@ import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';
 import * as Money from '#src/shared/kernel/money.ts';
+import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '#src/modules/budget-plans/domain/shared/budget-plan-id.ts';
 import * as BudgetId from '#src/modules/budget-plans/domain/shared/budget-id.ts';
 import { ProgramRef, PartnerStateRef } from '#src/modules/budget-plans/domain/shared/refs.ts';
@@ -24,6 +25,12 @@ const PROGRAM_ETI = '11111111-1111-4111-8111-111111111111';
 const PROGRAM_PARC = '22222222-2222-4222-8222-222222222222';
 const PROGRAM_OTHER = '33333333-3333-4333-8333-333333333333';
 const STATE_CE = 'CE';
+// Ator padrão dos testes (BGP-UPDATED-BY-AUDIT/#373).
+const ACTOR = (() => {
+  const r = UserRef.rehydrate('00000000-0000-4000-8000-000000000001');
+  assert.ok(isOk(r));
+  return r.value;
+})();
 
 const integrationEnabled = (): boolean => process.env.MYSQL_INTEGRATION === '1';
 
@@ -80,6 +87,7 @@ if (integrationEnabled()) {
       year: spec.year,
       programRef: programRef.value,
       now: NOW,
+      actor: ACTOR,
     });
     assert.ok(isOk(created));
     const withBudget = BudgetPlan.addBudget(
@@ -90,6 +98,7 @@ if (integrationEnabled()) {
         value: money.value,
       },
       NOW,
+      ACTOR,
     );
     assert.ok(isOk(withBudget));
     return {

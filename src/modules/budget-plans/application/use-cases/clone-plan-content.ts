@@ -1,4 +1,5 @@
 import { type Result, ok } from '../../../../shared/primitives/result.ts';
+import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
 import * as BudgetId from '../../domain/shared/budget-id.ts';
 import * as CostCenterId from '../../domain/cost-structure/cost-center-id.ts';
 import * as CategoryId from '../../domain/cost-structure/category-id.ts';
@@ -37,13 +38,15 @@ export type ClonePlanContentDeps = Readonly<{
 // US4 — clona o conteúdo inteiro pai→filho (compartilhado por startCalibration e createScenery): budgets
 // (novos ids), árvore de custos (CostStructure.clone) e budget_results (remapeados via os mapas; copia
 // valor, não recalcula). Persiste tudo. Não transacional cross-repo (molde do legado — filho descartável
-// até a aprovação). `childHeader` é o filho JÁ derivado pelo domínio, nascido sem budgets.
+// até a aprovação). `childHeader` é o filho JÁ derivado pelo domínio, nascido sem budgets. `actor` é o
+// derivador (BGP-UPDATED-BY-AUDIT/#373) — mesmo ator que originou a derivação (D5).
 export const clonePlanContent =
   (deps: ClonePlanContentDeps) =>
   async (
     parent: BudgetPlanEntity,
     childHeader: BudgetPlanEntity,
     now: Date,
+    actor: UserRef,
   ): Promise<Result<Readonly<{ plan: BudgetPlanEntity }>, ClonePlanContentError>> => {
     // budgets (novos ids) → budgetIdMap
     const budgetIdMap = new Map<string, BudgetId.BudgetId>();
@@ -55,6 +58,7 @@ export const clonePlanContent =
         child,
         { id: newBudgetId, partner: budget.partner, value: budget.value },
         now,
+        actor,
       );
       if (!added.ok) return added;
       child = added.value.plan;

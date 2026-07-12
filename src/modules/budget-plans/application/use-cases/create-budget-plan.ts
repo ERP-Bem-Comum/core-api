@@ -1,5 +1,6 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
+import * as UserRef from '../../../../shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '../../domain/shared/budget-plan-id.ts';
 import { ProgramRef, type BudgetPlanRefError } from '../../domain/shared/refs.ts';
 import { BudgetPlan } from '../../domain/budget-plan/budget-plan.ts';
@@ -15,6 +16,7 @@ import type { ProgramCatalogPort, ProgramCatalogError } from '../ports/program-c
 export type CreateBudgetPlanCommand = Readonly<{
   year: number;
   programRef: string;
+  updatedByRef: string;
 }>;
 
 export type CreateBudgetPlanError =
@@ -24,7 +26,8 @@ export type CreateBudgetPlanError =
   | 'program-not-active'
   | 'budget-plan-already-exists'
   | ProgramCatalogError
-  | BudgetPlanRepositoryError;
+  | BudgetPlanRepositoryError
+  | UserRef.UserRefError;
 
 export type CreateBudgetPlanDeps = Readonly<{
   planRepo: BudgetPlanRepository;
@@ -46,6 +49,9 @@ export const createBudgetPlan =
     const programRef = ProgramRef.rehydrate(cmd.programRef);
     if (!programRef.ok) return programRef;
 
+    const actor = UserRef.rehydrate(cmd.updatedByRef);
+    if (!actor.ok) return actor;
+
     const program = await deps.programCatalog.getByRef(programRef.value);
     if (!program.ok) return program;
     if (program.value === null) return err('program-not-found');
@@ -56,6 +62,7 @@ export const createBudgetPlan =
       year: cmd.year,
       programRef: programRef.value,
       now: deps.clock.now(),
+      actor: actor.value,
     });
     if (!created.ok) return created;
 

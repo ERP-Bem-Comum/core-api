@@ -8,6 +8,7 @@ import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';
 import * as Money from '#src/shared/kernel/money.ts';
+import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '#src/modules/budget-plans/domain/shared/budget-plan-id.ts';
 import * as BudgetId from '#src/modules/budget-plans/domain/shared/budget-id.ts';
 import { ProgramRef, PartnerStateRef } from '#src/modules/budget-plans/domain/shared/refs.ts';
@@ -17,6 +18,13 @@ import type { BudgetPlanRepository } from '#src/modules/budget-plans/domain/budg
 import { getConsolidatedResult } from '#src/modules/budget-plans/application/use-cases/get-consolidated-result.ts';
 
 import { makeDeps, NOW, PROGRAM_ETI_REF, PROGRAM_PARC_REF, STATE_CE_REF } from './_support.ts';
+
+// Ator padrão dos testes (BGP-UPDATED-BY-AUDIT/#373).
+const ACTOR = (() => {
+  const r = UserRef.rehydrate('00000000-0000-4000-8000-000000000001');
+  assert.ok(isOk(r));
+  return r.value;
+})();
 
 const seedApprovedRoot = async (
   planRepo: BudgetPlanRepository,
@@ -29,6 +37,7 @@ const seedApprovedRoot = async (
     year: spec.year,
     programRef: programRef.value,
     now: NOW,
+    actor: ACTOR,
   });
   assert.ok(isOk(created));
   const stateRef = PartnerStateRef.rehydrate(STATE_CE_REF);
@@ -43,9 +52,10 @@ const seedApprovedRoot = async (
       value: money.value,
     },
     NOW,
+    ACTOR,
   );
   assert.ok(isOk(withBudget));
-  const approved = BudgetPlan.approve(withBudget.value.plan, NOW);
+  const approved = BudgetPlan.approve(withBudget.value.plan, NOW, ACTOR);
   assert.ok(isOk(approved));
   const saved = await planRepo.save(approved.value.plan, []);
   assert.ok(isOk(saved));
@@ -106,6 +116,7 @@ describe('getConsolidatedResult — agrega raízes aprovadas por Ano × Programa
       year: 2026,
       programRef: programRef.value,
       now: NOW,
+      actor: ACTOR,
     });
     assert.ok(isOk(rascunho));
     await deps.planRepo.save(rascunho.value.plan, []); // fica RASCUNHO

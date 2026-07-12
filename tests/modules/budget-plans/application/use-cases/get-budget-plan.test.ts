@@ -10,6 +10,7 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { isOk, isErr } from '#src/shared/index.ts';
 import * as Money from '#src/shared/kernel/money.ts';
+import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import * as BudgetId from '#src/modules/budget-plans/domain/shared/budget-id.ts';
 import {
   PartnerStateRef,
@@ -22,11 +23,18 @@ import {
   createPlanOrFail,
   NOW,
   PROGRAM_ETI_REF,
+  ACTOR_REF,
   STATE_CE_REF,
   MUN_FORTALEZA_REF,
 } from './_support.ts';
 
 const UUID_INEXISTENTE = '00000000-0000-4000-8000-000000000000';
+
+const ACTOR = (() => {
+  const r = UserRef.rehydrate(ACTOR_REF);
+  assert.ok(isOk(r));
+  return r.value;
+})();
 
 const cents = (raw: number) => {
   const r = Money.fromCents(raw);
@@ -52,6 +60,7 @@ describe('getBudgetPlan', () => {
         value: cents(50_000),
       },
       NOW,
+      ACTOR,
     );
     assert.ok(isOk(b1));
     const b2 = BudgetPlan.addBudget(
@@ -62,6 +71,7 @@ describe('getBudgetPlan', () => {
         value: cents(30_000),
       },
       NOW,
+      ACTOR,
     );
     assert.ok(isOk(b2));
     const saved = await deps.planRepo.save(b2.value.plan, []);

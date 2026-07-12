@@ -28,6 +28,7 @@ export type BudgetPlanListItem = Readonly<{
   programName: string;
   totalInCents: number;
   updatedAt: Date;
+  updatedByRef: string | null;
   partnersCount: number;
   networkKind: 'state' | 'municipality' | 'mixed' | null;
 }>;
@@ -70,6 +71,7 @@ const toItem = (plan: BudgetPlanEntity, programName: string): BudgetPlanListItem
   programName,
   totalInCents: BudgetPlan.total(plan).cents,
   updatedAt: plan.updatedAt,
+  updatedByRef: plan.updatedByRef === null ? null : String(plan.updatedByRef),
   partnersCount: plan.budgets.length,
   networkKind: deriveNetworkKind(plan.budgets),
 });

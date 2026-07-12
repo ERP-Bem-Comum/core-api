@@ -8,6 +8,7 @@ import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';
 import * as Money from '#src/shared/kernel/money.ts';
+import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '#src/modules/budget-plans/domain/shared/budget-plan-id.ts';
 import * as BudgetId from '#src/modules/budget-plans/domain/shared/budget-id.ts';
 import * as CostCenterId from '#src/modules/budget-plans/domain/cost-structure/cost-center-id.ts';
@@ -36,6 +37,13 @@ import {
   PROGRAM_PARC_REF,
   STATE_CE_REF,
 } from './_support.ts';
+
+// Ator padrão dos testes (BGP-UPDATED-BY-AUDIT/#373).
+const ACTOR = (() => {
+  const r = UserRef.rehydrate('00000000-0000-4000-8000-000000000001');
+  assert.ok(isOk(r));
+  return r.value;
+})();
 
 const makeExportDeps = () => {
   const { repo: planRepo } = InMemoryBudgetPlanRepository();
@@ -72,6 +80,7 @@ const seedPlanWithTree = async (
     year: 2026,
     programRef: programRef.value,
     now: NOW,
+    actor: ACTOR,
   });
   assert.ok(isOk(created));
   const stateRef = PartnerStateRef.rehydrate(STATE_CE_REF);
@@ -83,11 +92,12 @@ const seedPlanWithTree = async (
     created.value.plan,
     { id: budgetId, partner: { kind: 'state', ref: stateRef.value }, value: value.value },
     NOW,
+    ACTOR,
   );
   assert.ok(isOk(withBudget));
   let plan = withBudget.value.plan;
   if (spec.approve) {
-    const approved = BudgetPlan.approve(plan, NOW);
+    const approved = BudgetPlan.approve(plan, NOW, ACTOR);
     assert.ok(isOk(approved));
     plan = approved.value.plan;
   }

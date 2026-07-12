@@ -111,6 +111,7 @@ const seedPlans = async (
       scenarioName: null,
       createdAt: PLAN_SEED_AT,
       updatedAt: PLAN_SEED_AT,
+      updatedByRef: null,
     };
     const saved = await planRepo.save(plan, []);
     if (!saved.ok) {

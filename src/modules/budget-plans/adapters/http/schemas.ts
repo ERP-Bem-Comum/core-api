@@ -66,6 +66,7 @@ export const budgetPlanListItemSchema = z.object({
   programName: z.string(),
   totalInCents: z.number().int(),
   updatedAt: z.string(),
+  updatedByRef: z.uuid().nullable(),
   partnersCount: z.number().int().nonnegative(),
   networkKind: z.enum(['state', 'municipality', 'mixed']).nullable(),
 });
@@ -102,6 +103,7 @@ export const budgetPlanDetailSchema = z.object({
   totalInCents: z.number().int(),
   createdAt: z.string(),
   updatedAt: z.string(),
+  updatedByRef: z.uuid().nullable(),
 });
 
 export type BudgetPlanDetailDto = z.infer<typeof budgetPlanDetailSchema>;
@@ -169,6 +171,7 @@ export const budgetPlanChildSchema = z.object({
   scenarioName: z.string().nullable(),
   status: budgetPlanStatusSchema,
   totalInCents: z.number().int(),
+  updatedByRef: z.uuid().nullable(),
 });
 
 /** Response do GET /budget-plans/:id/children — filhos diretos, ordenados por versão ascendente. */

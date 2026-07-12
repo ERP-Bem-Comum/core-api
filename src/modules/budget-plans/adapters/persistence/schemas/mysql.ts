@@ -44,6 +44,11 @@ export const budgetPlans = mysqlTable(
     scenarioName: varchar('scenario_name', { length: 255 }), // nullable: só cenários preenchem
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
+    // Autoria da última escrita (BGP-UPDATED-BY-AUDIT/#373). Nullable: linhas legadas
+    // (migrations 0000-0004) não têm valor; UUID do usuário (auth), soft FK cross-módulo
+    // sem `references()` (ADR-0014) — molde `financial.approvedBy`. Mapper que preenche
+    // é fase B do ticket.
+    updatedBy: varchar('updated_by', { length: 36 }),
   },
   (t) => [
     check(

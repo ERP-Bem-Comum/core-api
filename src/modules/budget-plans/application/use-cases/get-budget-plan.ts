@@ -27,6 +27,7 @@ export type BudgetPlanDetail = Readonly<{
   totalInCents: number;
   createdAt: Date;
   updatedAt: Date;
+  updatedByRef: string | null;
 }>;
 
 export type GetBudgetPlanError =
@@ -57,6 +58,7 @@ const toDetail = (plan: BudgetPlanEntity, programName: string): BudgetPlanDetail
   totalInCents: BudgetPlan.total(plan).cents,
   createdAt: plan.createdAt,
   updatedAt: plan.updatedAt,
+  updatedByRef: plan.updatedByRef === null ? null : String(plan.updatedByRef),
 });
 
 export const getBudgetPlan =

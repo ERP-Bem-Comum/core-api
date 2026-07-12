@@ -1,5 +1,6 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import * as Money from '../../../../shared/kernel/money.ts';
+import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
 import type { BudgetPlanId } from '../shared/budget-plan-id.ts';
 import type { BudgetId } from '../shared/budget-id.ts';
 import type { ProgramRef } from '../shared/refs.ts';
@@ -17,6 +18,7 @@ export type CreateBudgetPlanInput = Readonly<{
   year: number;
   programRef: ProgramRef;
   now: Date;
+  actor: UserRef;
 }>;
 
 export type AddBudgetInput = Readonly<{
@@ -46,6 +48,7 @@ const create = (
     scenarioName: null,
     createdAt: input.now,
     updatedAt: input.now,
+    updatedByRef: input.actor,
   };
   return ok({
     plan,
@@ -65,13 +68,14 @@ const addBudget = (
   plan: BudgetPlanEntity,
   input: AddBudgetInput,
   now: Date,
+  actor: UserRef,
 ): Result<Readonly<{ plan: BudgetPlanEntity }>, BudgetPlanError> => {
   if (plan.budgets.some((b) => samePartner(b.partner, input.partner))) {
     return err('budget-plan-duplicate-partner');
   }
   const budget: Budget = { id: input.id, partner: input.partner, value: input.value };
   return ok({
-    plan: { ...plan, budgets: [...plan.budgets, budget], updatedAt: now },
+    plan: { ...plan, budgets: [...plan.budgets, budget], updatedAt: now, updatedByRef: actor },
   });
 };
 
@@ -80,6 +84,7 @@ const removeBudget = (
   plan: BudgetPlanEntity,
   budgetId: BudgetId,
   now: Date,
+  actor: UserRef,
 ): Result<Readonly<{ plan: BudgetPlanEntity }>, BudgetPlanError> => {
   if (!plan.budgets.some((b) => String(b.id) === String(budgetId))) {
     return err('budget-not-found');
@@ -89,6 +94,7 @@ const removeBudget = (
       ...plan,
       budgets: plan.budgets.filter((b) => String(b.id) !== String(budgetId)),
       updatedAt: now,
+      updatedByRef: actor,
     },
   });
 };
@@ -103,7 +109,7 @@ const startCalibration = (
   parent: BudgetPlanEntity,
   children: readonly BudgetPlanEntity[],
   childId: BudgetPlanId,
-  now: Date,
+  audit: Readonly<{ now: Date; actor: UserRef }>,
 ): Result<Readonly<{ plan: BudgetPlanEntity }>, BudgetPlanError> => {
   if (parent.status !== 'APROVADO') return err('budget-plan-not-approved');
   if (parent.scenarioName !== null) return err('budget-plan-is-scenario');
@@ -121,8 +127,9 @@ const startCalibration = (
       budgets: [], // clonados com novos ids na orquestração (evita colisão de PK)
       parentId: parent.id,
       scenarioName: null,
-      createdAt: now,
-      updatedAt: now,
+      createdAt: audit.now,
+      updatedAt: audit.now,
+      updatedByRef: audit.actor,
     },
   });
 };
@@ -133,7 +140,7 @@ const createScenery = (
   parent: BudgetPlanEntity,
   children: readonly BudgetPlanEntity[],
   spec: Readonly<{ id: BudgetPlanId; name: string }>,
-  now: Date,
+  audit: Readonly<{ now: Date; actor: UserRef }>,
 ): Result<Readonly<{ plan: BudgetPlanEntity }>, BudgetPlanError> => {
   if (parent.status === 'APROVADO') return err('budget-plan-already-approved');
   if (parent.scenarioName !== null) return err('budget-plan-is-scenario');
@@ -153,8 +160,9 @@ const createScenery = (
       budgets: [], // clonados com novos ids na orquestração (evita colisão de PK)
       parentId: parent.id,
       scenarioName: spec.name,
-      createdAt: now,
-      updatedAt: now,
+      createdAt: audit.now,
+      updatedAt: audit.now,
+      updatedByRef: audit.actor,
     },
   });
 };
@@ -164,9 +172,10 @@ const createScenery = (
 const approve = (
   plan: BudgetPlanEntity,
   now: Date,
+  actor: UserRef,
 ): Result<Readonly<{ plan: BudgetPlanEntity }>, BudgetPlanError> => {
   if (plan.status === 'APROVADO') return err('budget-plan-already-approved');
-  return ok({ plan: { ...plan, status: 'APROVADO', updatedAt: now } });
+  return ok({ plan: { ...plan, status: 'APROVADO', updatedAt: now, updatedByRef: actor } });
 };
 
 const total = (plan: BudgetPlanEntity): Money.Money =>

@@ -4,6 +4,7 @@ import { randomUUID } from 'node:crypto';
 
 import { isOk } from '#src/shared/primitives/result.ts';
 import * as Money from '#src/shared/kernel/money.ts';
+import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '#src/modules/budget-plans/domain/shared/budget-plan-id.ts';
 import * as BudgetId from '#src/modules/budget-plans/domain/shared/budget-id.ts';
 import {
@@ -19,6 +20,13 @@ export interface BudgetPlanRepoFactory {
 }
 
 const NOW = new Date('2026-07-02T12:00:00.000Z');
+
+// Ator padrão dos testes (BGP-UPDATED-BY-AUDIT/#373).
+const ACTOR = (() => {
+  const r = UserRef.rehydrate('00000000-0000-4000-8000-000000000001');
+  assert.ok(isOk(r));
+  return r.value;
+})();
 
 const mkProgramRef = () => {
   const r = ProgramRef.rehydrate(randomUUID());
@@ -50,6 +58,7 @@ export const runBudgetPlanRepositoryContract = (
         year: over.year ?? 2026,
         programRef: over.programRef ?? mkProgramRef(),
         now: NOW,
+        actor: ACTOR,
       });
       assert.ok(isOk(created));
       return created.value;
@@ -71,6 +80,7 @@ export const runBudgetPlanRepositoryContract = (
           value: moneyR.value,
         },
         NOW,
+        ACTOR,
       );
       assert.ok(isOk(withBudget));
 
@@ -193,6 +203,7 @@ export const runBudgetPlanRepositoryContract = (
           value: moneyR.value,
         },
         NOW,
+        ACTOR,
       );
       assert.ok(isOk(withBudget));
       assert.ok(isOk(await repo.save(withBudget.value.plan, [])));
