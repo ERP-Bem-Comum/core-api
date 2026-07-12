@@ -1,7 +1,7 @@
 import { type Result, ok } from '../../../../shared/primitives/result.ts';
 import { ProgramRef, type BudgetPlanRefError } from '../../domain/shared/refs.ts';
 import { BudgetPlan } from '../../domain/budget-plan/budget-plan.ts';
-import type { BudgetPlan as BudgetPlanEntity } from '../../domain/budget-plan/types.ts';
+import type { BudgetPlan as BudgetPlanEntity, Budget } from '../../domain/budget-plan/types.ts';
 import type { BudgetPlanStatus } from '../../domain/budget-plan/status.ts';
 import * as PlanVersion from '../../domain/budget-plan/version.ts';
 import type {
@@ -28,6 +28,8 @@ export type BudgetPlanListItem = Readonly<{
   programName: string;
   totalInCents: number;
   updatedAt: Date;
+  partnersCount: number;
+  networkKind: 'state' | 'municipality' | 'mixed' | null;
 }>;
 
 export type ListBudgetPlansError =
@@ -45,6 +47,20 @@ export type BudgetPlanListPage = Readonly<{
   total: number;
 }>;
 
+/**
+ * Deriva o tipo de Rede do plano a partir dos `kind` distintos em `budgets[].partner`
+ * (projeção de apresentação — não é regra de domínio): sem budgets -> null; 1 kind único ->
+ * esse kind; 2 kinds (state + municipality) -> 'mixed'.
+ */
+const deriveNetworkKind = (
+  budgets: readonly Budget[],
+): 'state' | 'municipality' | 'mixed' | null => {
+  const kinds = new Set(budgets.map((budget) => budget.partner.kind));
+  if (kinds.size === 0) return null;
+  if (kinds.size > 1) return 'mixed';
+  return [...kinds][0] ?? null;
+};
+
 const toItem = (plan: BudgetPlanEntity, programName: string): BudgetPlanListItem => ({
   id: String(plan.id),
   year: plan.year,
@@ -54,6 +70,8 @@ const toItem = (plan: BudgetPlanEntity, programName: string): BudgetPlanListItem
   programName,
   totalInCents: BudgetPlan.total(plan).cents,
   updatedAt: plan.updatedAt,
+  partnersCount: plan.budgets.length,
+  networkKind: deriveNetworkKind(plan.budgets),
 });
 
 export const listBudgetPlans =
