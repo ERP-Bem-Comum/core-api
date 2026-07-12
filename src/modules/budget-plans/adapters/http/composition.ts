@@ -44,6 +44,7 @@ import type { BudgetExistsReader } from '../../application/ports/budget-exists-r
 import { createBudgetPlan } from '../../application/use-cases/create-budget-plan.ts';
 import { listBudgetPlans } from '../../application/use-cases/list-budget-plans.ts';
 import { getBudgetPlan } from '../../application/use-cases/get-budget-plan.ts';
+import { listScenarioChildren } from '../../application/use-cases/list-scenario-children.ts';
 import { getBudgetPlanOptions } from '../../application/use-cases/get-budget-plan-options.ts';
 import { getCostStructure } from '../../application/use-cases/get-cost-structure.ts';
 import { addCostCenter } from '../../application/use-cases/add-cost-center.ts';
@@ -132,6 +133,7 @@ export type BudgetPlansHttpDeps = Readonly<{
   createBudgetPlan: ReturnType<typeof createBudgetPlan>;
   listBudgetPlans: ReturnType<typeof listBudgetPlans>;
   getBudgetPlan: ReturnType<typeof getBudgetPlan>;
+  listScenarioChildren: ReturnType<typeof listScenarioChildren>;
   getBudgetPlanOptions: ReturnType<typeof getBudgetPlanOptions>;
   getCostStructure: ReturnType<typeof getCostStructure>;
   addCostCenter: ReturnType<typeof addCostCenter>;
@@ -239,6 +241,7 @@ const makeDeps = (pools: Pools): BudgetPlansHttpDeps => {
     createBudgetPlan: createBudgetPlan({ planRepo, programCatalog, clock }),
     listBudgetPlans: listBudgetPlans({ planRepo, programCatalog }),
     getBudgetPlan: getBudgetPlan({ planRepo, programCatalog }),
+    listScenarioChildren: listScenarioChildren({ planRepo }),
     getBudgetPlanOptions: getBudgetPlanOptions({ planRepo, programCatalog, partnerNetwork, clock }),
     getCostStructure: getCostStructure({ costStructureRepo, planRepo }),
     addCostCenter: addCostCenter({ costStructureRepo }),

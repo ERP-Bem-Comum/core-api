@@ -159,6 +159,24 @@ export const lifecyclePlanResponseSchema = z.object({
 export type SceneryBody = z.infer<typeof sceneryBodySchema>;
 export type LifecyclePlanResponseDto = z.infer<typeof lifecyclePlanResponseSchema>;
 
+// ─── filhos/cenários (#401, BGP-SCENARIO-CHILDREN) ────────────────────────────
+/** Item de um plano-filho (cenário/calibração) na listagem de GET /budget-plans/:id/children. */
+export const budgetPlanChildSchema = z.object({
+  id: z.uuid(),
+  version: z.string(),
+  scenarioName: z.string().nullable(),
+  status: budgetPlanStatusSchema,
+  totalInCents: z.number().int(),
+});
+
+/** Response do GET /budget-plans/:id/children — filhos diretos, ordenados por versão ascendente. */
+export const budgetPlanChildrenResponseSchema = z.object({
+  items: z.array(budgetPlanChildSchema),
+});
+
+export type BudgetPlanChildDto = z.infer<typeof budgetPlanChildSchema>;
+export type BudgetPlanChildrenResponseDto = z.infer<typeof budgetPlanChildrenResponseSchema>;
+
 const yearTotalSchema = z.object({ year: z.number().int(), totalInCents: z.number().int() });
 
 /** Resposta do GET /budget-plans/:id/insights (CA3): total do plano vs. anos anteriores. */
