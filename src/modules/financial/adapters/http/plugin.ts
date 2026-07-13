@@ -8,6 +8,7 @@
  * Rotas (todas sob /financial/documents):
  *   POST   /financial/documents                      fiscal-document:write  → saveDocument | saveDraft
  *   PATCH  /financial/documents/:id                  fiscal-document:write  → adjustDocument
+ *   PATCH  /financial/documents/:id/payables/:pid    fiscal-document:write  → updatePayableDueDate (#270)
  *   POST   /financial/documents/:id/approve          payable:approve        → approveDocument
  *   POST   /financial/documents/:id/undo-approval    payable:approve        → undoApproval
  *   DELETE /financial/documents/:id                  fiscal-document:cancel → cancelDocument (204)
@@ -77,6 +78,7 @@ import {
   documentIdParamSchema,
   documentPayableParamsSchema,
   manualPaymentBodySchema,
+  updatePayableDueDateBodySchema,
   listDocumentsQuerySchema,
   documentResponseSchema,
   documentListResponseSchema,
@@ -547,6 +549,30 @@ const financialRoutes =
           // #232: data de pagamento informada pelo operador (ancora o match da conciliação).
           ...(req.body.paidAt !== undefined ? { paidAt: req.body.paidAt } : {}),
           ...(req.body.reason !== undefined ? { reason: req.body.reason } : {}),
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return loadAndSerialize(deps, reply, req.params.id);
+      },
+    });
+
+    // PATCH /financial/documents/:id/payables/:payableId — vencimento de UM título isolado (#270).
+    // Não propaga ao documento-pai nem aos irmãos (contrasta com PATCH /documents/:id → editMetadata).
+    scope.route({
+      method: 'PATCH',
+      url: '/financial/documents/:id/payables/:payableId',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.write)],
+      schema: {
+        params: documentPayableParamsSchema,
+        body: updatePayableDueDateBodySchema,
+        response: { 200: documentResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.updatePayableDueDate({
+          documentId: req.params.id,
+          payableId: req.params.payableId,
+          // Optimistic lock (FR-009): propaga `body.version` → `cmd.expectedVersion`.
+          expectedVersion: req.body.version,
+          dueDate: new Date(req.body.dueDate),
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         return loadAndSerialize(deps, reply, req.params.id);

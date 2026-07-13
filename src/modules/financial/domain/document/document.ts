@@ -323,6 +323,47 @@ export const payPayableManually = (
   );
 };
 
+export type UpdatePayableDueDateInput = Readonly<{
+  document: OpenDocument | ApprovedDocument;
+  payables: Payables;
+  payableId: PayableId.PayableId;
+  dueDate: Date;
+}>;
+
+export type UpdatePayableDueDateOutput = Readonly<{
+  document: OpenDocument | ApprovedDocument;
+  payables: Payables;
+  events: readonly DocumentEvent[];
+}>;
+
+// #270: altera o vencimento de UM título isolado — sem propagar ao documento-pai nem aos irmãos
+// (contrasta com `editMetadata`, que leva o dueDate a TODOS os payables). O documento permanece
+// intacto; só o título alvo recebe o novo `dueDate`. Reemite `DocumentSaved` (reprojeta o read-model
+// com o snapshot atualizado), como `editMetadata`/`adjust` — sem evento novo nem migration.
+export const updatePayableDueDate = (
+  input: UpdatePayableDueDateInput,
+): Result<UpdatePayableDueDateOutput, DocumentError> => {
+  const all = [input.payables.parent, ...input.payables.children];
+  const target = all.find((p) => p.id === input.payableId);
+  if (target === undefined) return err('payable-not-found');
+
+  const retime = (p: Payable): Payable =>
+    p.id === input.payableId ? immutable<Payable>({ ...p, dueDate: input.dueDate }) : p;
+
+  const payables = immutable<Payables>({
+    parent: retime(input.payables.parent),
+    children: input.payables.children.map(retime),
+  });
+
+  return ok(
+    immutable<UpdatePayableDueDateOutput>({
+      document: input.document,
+      payables,
+      events: documentSavedEvents(input.document, payables),
+    }),
+  );
+};
+
 export type AdjustDocumentChanges = Readonly<{
   grossValue?: Money;
   sourceDiscounts?: Money;

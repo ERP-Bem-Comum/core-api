@@ -128,6 +128,7 @@ import { adjustDocument } from '../../application/use-cases/adjust-document.ts';
 import { bulkUpdateDueDate } from '../../application/use-cases/bulk-update-due-date.ts';
 import { approveDocument } from '../../application/use-cases/approve-document.ts';
 import { registerManualPayment } from '../../application/use-cases/register-manual-payment.ts';
+import { updatePayableDueDate } from '../../application/use-cases/update-payable-due-date.ts';
 import { undoApproval } from '../../application/use-cases/undo-approval.ts';
 import { cancelDocument } from '../../application/use-cases/cancel-document.ts';
 import { submitDraft } from '../../application/use-cases/submit-draft.ts';
@@ -199,6 +200,8 @@ export type FinancialHttpDeps = Readonly<{
   approveDocument: ReturnType<typeof approveDocument>;
   /** Baixa manual de título (#219/#224) — POST /documents/:id/payables/:payableId/manual-payment. */
   registerManualPayment: ReturnType<typeof registerManualPayment>;
+  /** Vencimento de título isolado (#270) — PATCH /documents/:id/payables/:payableId. */
+  updatePayableDueDate: ReturnType<typeof updatePayableDueDate>;
   undoApproval: ReturnType<typeof undoApproval>;
   cancelDocument: ReturnType<typeof cancelDocument>;
   submitDraft: ReturnType<typeof submitDraft>;
@@ -622,6 +625,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     bulkUpdateDueDate: bulkUpdateDueDate(deps), // #162: mesmas deps (repo + clock) do adjust
     approveDocument: approveDocument(deps),
     registerManualPayment: registerManualPayment(deps),
+    updatePayableDueDate: updatePayableDueDate(deps), // #270: mesmas deps (repo + clock)
     undoApproval: undoApproval(deps),
     cancelDocument: cancelDocument({ repo: pools.repo }),
     submitDraft: submitDraft(deps),
