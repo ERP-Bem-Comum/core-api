@@ -10,9 +10,16 @@ Exercita o fluxo A→B fim a fim (driver memory, `fastify.inject` — sem MySQL)
 ## Passos
 
 1. **Registrar a transferência (US1)** — `POST /financial/reconciliations/manual-entry`
+
    ```json
-   { "transactionId": "<tx-A>", "type": "Transfer", "destinationAccountRef": "<conta-B>", "reconciledBy": "<user>" }
+   {
+     "transactionId": "<tx-A>",
+     "type": "Transfer",
+     "destinationAccountRef": "<conta-B>",
+     "reconciledBy": "<user>"
+   }
    ```
+
    → 201; a perna de A fica conciliada **e** surge uma contrapartida `Pending` de sinal oposto na conta B.
 
 2. **Ver a contrapartida esperada em B** — `GET /financial/cedente-accounts/<conta-B>/suggestions`

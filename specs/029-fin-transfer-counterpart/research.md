@@ -5,15 +5,17 @@
 **Decision:** modelar como **agregado próprio** do `financial` — `ExpectedCounterpart` (tabela `fin_expected_counterpart`), com ciclo de vida próprio `Pending → Matched | Discarded`. **Não** reusar `StatementTransaction` marcada como "esperada/pendente".
 
 **Rationale:**
+
 - A contrapartida é uma **expectativa**, não um **fato** de extrato. `StatementTransaction` (`domain/statement/types.ts`) exige `fitid` (nativo OFX ou sintético CSV) e nasce de um import real (`BankStatement`); injetar transações sintéticas polui o modelo de fatos e ameaça a **dedup de import por `fitid`**.
 - A contrapartida tem **invariantes e ciclo de vida distintos** do extrato (valor = espelho da origem, sinal oposto, vínculo à perna A, estados Pending/Matched/Discarded). Pela regra de Vernon, isso define um **agregado separado** — o cluster se dá pelas invariantes verdadeiras, não pela proximidade de tabela:
 
 > "When trying to discover the Aggregates in a Bounded Context, we must understand the model's true invariants. Only with that knowledge can we determine which objects should be clustered into a given Aggregate. An invariant is a business rule that must always be consistent."
-> — Vaughn Vernon, *Implementing Domain-Driven Design*, p. 450 (`ddd--vernon-livro-vermelho.md:8985`)
+> — Vaughn Vernon, _Implementing Domain-Driven Design_, p. 450 (`ddd--vernon-livro-vermelho.md:8985`)
 
 - O casamento vira **transação real (fato) consome a contrapartida (expectativa)** — dedup por consumo, sem uma segunda transação. Mantém `BankStatement` puro (só dados importados) e isola o novo conceito.
 
 **Alternatives considered:**
+
 - **(B) `StatementTransaction` com flag `expected/pending`** — rejeitada: polui o agregado de fatos, exige `fitid` sintético, arrisca a dedup de import, e mistura duas invariantes num agregado só.
 - **(C) manter só metadado na `Reconciliation` de origem (status quo)** — rejeitada: não dá presença consultável na conta B (sem fila/seletor), não há o que o motor de sugestão case, e o import de B geraria duplicidade.
 

@@ -16,7 +16,7 @@
 - **Q2 — Tolerância de casamento (FR-008):** **valor exato + proximidade de data** (janela default ~5 dias corridos), reusando a lógica de score já existente (`match-score.ts`). Sem tolerância de valor (tarifa/IOF) neste MVP.
 - **Q3 — Escopo de tipos (FR-009):** **só Transferência conta↔conta** nesta feature. Aplicação/Resgate (corrente↔aplicação) fica para follow-up (mesmo mecanismo, sinal oposto).
 
-## User Scenarios & Testing *(mandatory)*
+## User Scenarios & Testing _(mandatory)_
 
 ### User Story 1 - Contrapartida esperada surge na conta de destino (Priority: P1)
 
@@ -73,7 +73,7 @@ Se o operador **desfizer** a conciliação da perna de origem (A), o sistema dev
 - **Múltiplas transferências de mesmo valor/data:** duas transferências A→B de R$ 1.000 no mesmo dia geram duas contrapartidas esperadas — o casamento deve evitar ambiguidade (empate estável / sugerir a mais antiga não consumida).
 - **Conta de destino encerrada:** registrar transferência para conta `Closed` — comportamento atual já valida existência; encerrada não deve receber contrapartida (fail-closed).
 
-## Requirements *(mandatory)*
+## Requirements _(mandatory)_
 
 ### Functional Requirements
 
@@ -90,13 +90,13 @@ Se o operador **desfizer** a conciliação da perna de origem (A), o sistema dev
 - **FR-011**: A contrapartida esperada não casada MUST permanecer **pendente indefinidamente** (sem expiração automática neste MVP); é limpa apenas por casamento (US2) ou por desfazer a conciliação de origem (US3). Auto-expiração/descarte manual = follow-up, a confirmar com a P.O. (Q1).
 - **FR-012**: A criação, o casamento e o desfazer da contrapartida MUST emitir eventos de domínio para a trilha de auditoria/outbox, mantendo o módulo como **produtor** de eventos (não altera o padrão de mensageria).
 
-### Key Entities *(include if feature involves data)*
+### Key Entities _(include if feature involves data)_
 
 - **Contrapartida esperada (Expected Counterpart)**: representa a perna esperada de uma transferência na conta de destino. Atributos essenciais: conta de destino, valor, sinal (oposto ao da origem), data aproximada, vínculo à perna/transferência de origem, estado (pendente / casada / descartada). Relaciona-se 1:1 com a perna de origem e, quando casada, com a transação real importada.
 - **Vínculo entre pernas (Transfer Link)**: a relação de auditoria que liga a perna de origem (conta A) à perna de destino (conta B) após o casamento — permite navegar A↔B.
 - **Transação de extrato (existente)**: a transação real importada na conta de destino que, ao casar, consome a contrapartida esperada.
 
-## Success Criteria *(mandatory)*
+## Success Criteria _(mandatory)_
 
 ### Measurable Outcomes
 

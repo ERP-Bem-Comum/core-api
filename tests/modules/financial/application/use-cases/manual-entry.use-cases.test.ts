@@ -17,6 +17,7 @@ import {
   type BankStatementStore,
 } from '#src/modules/financial/adapters/persistence/repos/bank-statement-repository.in-memory.ts';
 import { createInMemoryReconciliationRepository } from '#src/modules/financial/adapters/persistence/repos/reconciliation-repository.in-memory.ts';
+import { createInMemoryExpectedCounterpartStore } from '#src/modules/financial/adapters/persistence/repos/expected-counterpart-store.in-memory.ts';
 import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
 import { createInMemoryReconciliationPeriodStore } from '#src/modules/financial/adapters/persistence/repos/reconciliation-period-store.in-memory.ts';
 import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
@@ -87,6 +88,7 @@ const buildWorld = (txs: readonly ParsedTransaction[]) => {
     cedenteStore,
     periods: createInMemoryReconciliationPeriodStore(),
     clock: ClockReal(),
+    expectedCounterpartStore: createInMemoryExpectedCounterpartStore(),
   });
   return {
     account: account.value,

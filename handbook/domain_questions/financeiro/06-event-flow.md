@@ -28,6 +28,9 @@ Esta matriz é o "mapa de fofocas" do sistema. Ela mostra como um evento dispara
 | `AprovacaoDesfeita` | **Títulos** | — | Título pai volta para `Aberto`. Filhos perdem aprovação automaticamente. Se houver alteração de valores, filhos sofrem hard delete. |
 | `TituloResetado` | **Títulos** | — | Título `Recusado` volta para `Aprovado` para nova tentativa de remessa. |
 | `DocumentoReaberto` | **Documentos** | **Títulos** | Cancela títulos em aberto que ainda não foram transmitidos. |
+| `ContrapartidaTransferenciaCriada` (`TransferCounterpartCreated`) | **Submódulo Conciliação** | — (trilha/outbox) | Transferência A→B com destino: cria a **contrapartida esperada** (Pending, sinal oposto, valor da origem) na conta de destino, vinculada à perna de origem (#269 · US1). |
+| `ContrapartidaTransferenciaCasada` (`TransferCounterpartMatched`) | **Submódulo Conciliação** | — (trilha/outbox) | Extrato da conta de destino casa transação real × contrapartida: consome (dedup, sem 2ª) + vincula A↔B (#269 · US2, próxima fatia). |
+| `ContrapartidaTransferenciaDescartada` (`TransferCounterpartDiscarded`) | **Submódulo Conciliação** | — (trilha/outbox) | Desfazer a conciliação de origem descarta a contrapartida pendente ou reabre a já casada (#269 · US3, próxima fatia). |
 
 ## 3. Categorias de Fluxo
 
@@ -70,6 +73,24 @@ Esta matriz é o "mapa de fofocas" do sistema. Ela mostra como um evento dispara
 * **Lançamento Manual**: Tarifa/juros/multa → `LancamentoManualCriado` → `TituloConciliado`.
 * **Conciliação em Lote**: Sistema identifica padrão → `LoteSugerido` → Operador confirma → N × `TituloConciliado`.
 * **Desfazimento**: Clicar em conciliada → modal detalhes → `ConciliacaoDesfeita` → título volta para `Pago`.
+
+### I. Fluxo de Contrapartida de Transferência (#269)
+
+Uma transferência entre contas (A→B) é registrada em **1 lançamento** (não 2 conciliações soltas). A perna esperada nasce sozinha na conta de destino e se casa com o extrato real quando ele chega.
+
+* **Criação**: `record-manual-entry(type=Transfer, destino=B)` → `ContrapartidaTransferenciaCriada` (contrapartida `Pending` em B, sinal oposto ao da origem).
+* **Casamento**: extrato de B importado → `MatchSugerido` (transação × contrapartida) → operador confirma → `ContrapartidaTransferenciaCasada` (consome a contrapartida, vincula A↔B, sem duplicar).
+* **Desfazimento**: `ConciliacaoDesfeita` na origem → `ContrapartidaTransferenciaDescartada` (descarta se `Pending`, reabre se `Matched`).
+
+Contrato dos eventos (EN-passado, payload `camelCase`; `valueCents` em centavos; ids como string no wire — ADR-0015/0020):
+
+```
+TransferCounterpartCreated   { counterpartId, destinationAccountRef, originAccountRef, originReconciliationRef, valueCents, movement, expectedDate }
+TransferCounterpartMatched   { counterpartId, matchedTransactionRef, destinationAccountRef }
+TransferCounterpartDiscarded { counterpartId, reason: 'undo-origin' | 'manual' }
+```
+
+Fonte de verdade do tipo: `src/modules/financial/domain/expected-counterpart/events.ts`. Módulo permanece **produtor** (sem novo consumidor cross-módulo).
 
 ## 4. Integração com Sistemas Externos
 

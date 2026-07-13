@@ -50,20 +50,20 @@ Contrato registrado em `handbook/architecture/` no W1 do FIN-COUNTERPART-CREATE.
 
 ## Tabela `fin_expected_counterpart` (Drizzle → `db:generate`)
 
-| Coluna | Tipo MySQL | Nota |
-| :-- | :-- | :-- |
-| `id` | `varchar(36)` PK | uuid |
-| `destination_account_ref` | `varchar(36)` | FK lógica → `fin_cedente_accounts.id` |
-| `origin_account_ref` | `varchar(36)` | conta A |
-| `origin_reconciliation_ref` | `varchar(36)` | vínculo à perna de origem |
-| `origin_transaction_ref` | `varchar(36)` | transação de A conciliada |
-| `type` | `varchar(20)` | `'Transfer'` (sem ENUM — ADR-0020) |
-| `movement` | `varchar(10)` | `'Debit'`/`'Credit'` |
-| `value_cents` | `bigint` | espelho da origem |
-| `expected_date` | `date` | ~ data da origem |
-| `status` | `varchar(12)` | `'Pending'`/`'Matched'`/`'Discarded'` |
-| `matched_transaction_ref` | `varchar(36)` NULL | transação real de B |
-| `created_at` / `updated_at` | `datetime` | auditoria |
+| Coluna                      | Tipo MySQL         | Nota                                  |
+| :-------------------------- | :----------------- | :------------------------------------ |
+| `id`                        | `varchar(36)` PK   | uuid                                  |
+| `destination_account_ref`   | `varchar(36)`      | FK lógica → `fin_cedente_accounts.id` |
+| `origin_account_ref`        | `varchar(36)`      | conta A                               |
+| `origin_reconciliation_ref` | `varchar(36)`      | vínculo à perna de origem             |
+| `origin_transaction_ref`    | `varchar(36)`      | transação de A conciliada             |
+| `type`                      | `varchar(20)`      | `'Transfer'` (sem ENUM — ADR-0020)    |
+| `movement`                  | `varchar(10)`      | `'Debit'`/`'Credit'`                  |
+| `value_cents`               | `bigint`           | espelho da origem                     |
+| `expected_date`             | `date`             | ~ data da origem                      |
+| `status`                    | `varchar(12)`      | `'Pending'`/`'Matched'`/`'Discarded'` |
+| `matched_transaction_ref`   | `varchar(36)` NULL | transação real de B                   |
+| `created_at` / `updated_at` | `datetime`         | auditoria                             |
 
 Índices: `(destination_account_ref, status)` — fila/seletor de B; `(origin_reconciliation_ref)` — tratamento no undo.
 

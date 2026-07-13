@@ -8,7 +8,7 @@
 
 Ao conciliar uma transferência A→B (via `record-manual-entry` com `destinationAccountRef`, tipo `Transfer`), criar na conta de destino uma **Contrapartida Esperada** — novo agregado do `financial` (`fin_expected_counterpart`) com ciclo de vida próprio (`Pending → Matched | Discarded`). Ao importar o extrato de B, o motor de sugestão passa a casar **transação real × contrapartida esperada** (valor exato + janela de data, reusando `match-score`); confirmar consome a contrapartida (dedup — sem duplicar) e vincula as duas pernas. Desfazer a origem trata a contrapartida (descarta se Pending, reabre se Matched). Módulo produtor: eventos `TransferCounterpartCreated/Matched/Discarded` via outbox.
 
-**Decisão central (research.md):** a contrapartida é **agregado próprio**, não uma `StatementTransaction` marcada — ela é uma *expectativa*, não um *fato* de extrato (sem `fitid`), com invariantes/ciclo distintos (Vernon, *IDDD*, p.450 — "Model True Invariants in Consistency Boundaries").
+**Decisão central (research.md):** a contrapartida é **agregado próprio**, não uma `StatementTransaction` marcada — ela é uma _expectativa_, não um _fato_ de extrato (sem `fitid`), com invariantes/ciclo distintos (Vernon, _IDDD_, p.450 — "Model True Invariants in Consistency Boundaries").
 
 ## Technical Context
 
@@ -24,19 +24,19 @@ Ao conciliar uma transferência A→B (via `record-manual-entry` com `destinatio
 
 ## Constitution Check
 
-*GATE: passa antes da Fase 0; re-checado após Fase 1.*
+_GATE: passa antes da Fase 0; re-checado após Fase 1._
 
-| Princípio | Status | Nota |
-| :-- | :-- | :-- |
-| I. Pipeline W0→W3 fail-first | ✅ | 3 tickets (US1/US2/US3), cada um W0 RED antes de `src/` |
-| II. Regressão zero | ✅ | reusa reconciliation/statement; guards de não-regressão no W0 (transferência sem destino segue igual) |
-| III. pnpm único | ✅ | sem `npm`; sem nova dependência |
-| IV. Modular Monolith / isolamento | ✅ | só `fin_*`; sem cruzar BC; eventos via outbox (produtor) |
-| V. Domínio puro | ✅ | novo agregado = funções + `Readonly` + smart constructor + `Result`; status = union EN kebab |
-| VI. MySQL 8 + Drizzle, migration gerada | ✅ | `fin_expected_counterpart` via `db:generate`; movement/status = `varchar` (não ENUM), cents = `bigint` |
-| VII. HTTP-first, CLI aposentada | ✅ | evolui rotas de conciliação existentes (Fastify+Zod); sem CLI nova |
-| VIII. TS strict + idioma | ✅ | `import type`, `.ts`, `#src/*`; código EN, docs/commits PT |
-| IX. Citação canônica das decisões-chave | ✅ | fronteira de agregado citada (Vernon, p.450) — ver research.md |
+| Princípio                               | Status | Nota                                                                                                   |
+| :-------------------------------------- | :----- | :----------------------------------------------------------------------------------------------------- |
+| I. Pipeline W0→W3 fail-first            | ✅     | 3 tickets (US1/US2/US3), cada um W0 RED antes de `src/`                                                |
+| II. Regressão zero                      | ✅     | reusa reconciliation/statement; guards de não-regressão no W0 (transferência sem destino segue igual)  |
+| III. pnpm único                         | ✅     | sem `npm`; sem nova dependência                                                                        |
+| IV. Modular Monolith / isolamento       | ✅     | só `fin_*`; sem cruzar BC; eventos via outbox (produtor)                                               |
+| V. Domínio puro                         | ✅     | novo agregado = funções + `Readonly` + smart constructor + `Result`; status = union EN kebab           |
+| VI. MySQL 8 + Drizzle, migration gerada | ✅     | `fin_expected_counterpart` via `db:generate`; movement/status = `varchar` (não ENUM), cents = `bigint` |
+| VII. HTTP-first, CLI aposentada         | ✅     | evolui rotas de conciliação existentes (Fastify+Zod); sem CLI nova                                     |
+| VIII. TS strict + idioma                | ✅     | `import type`, `.ts`, `#src/*`; código EN, docs/commits PT                                             |
+| IX. Citação canônica das decisões-chave | ✅     | fronteira de agregado citada (Vernon, p.450) — ver research.md                                         |
 
 **Sem violações → sem Complexity Tracking.**
 
@@ -97,6 +97,7 @@ tests/modules/financial/                 # espelho: domain + application(in-memo
 ## Contrato HTTP (Fase 2+)
 
 Ver [contracts/http.md](./contracts/http.md). Resumo:
+
 - `record-manual-entry` (POST existente): comportamento estendido — cria a contrapartida quando `type=Transfer` + `destinationAccountRef` (sem novo campo de request).
 - `get-statement-suggestions` / `suggest-matches`: response passa a incluir sugestões do tipo **contrapartida** (novo `kind`), rotuladas com a conta de origem.
 - `confirm-reconciliation`: aceita confirmar um par transação×contrapartida.

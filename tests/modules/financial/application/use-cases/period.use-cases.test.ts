@@ -17,6 +17,7 @@ import {
 } from '#src/modules/financial/adapters/persistence/repos/bank-statement-repository.in-memory.ts';
 import { createInMemoryReconciliationPeriodStore } from '#src/modules/financial/adapters/persistence/repos/reconciliation-period-store.in-memory.ts';
 import { createInMemoryReconciliationRepository } from '#src/modules/financial/adapters/persistence/repos/reconciliation-repository.in-memory.ts';
+import { createInMemoryExpectedCounterpartStore } from '#src/modules/financial/adapters/persistence/repos/expected-counterpart-store.in-memory.ts';
 import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
 import { createInMemoryPayableReconciliationView } from '#src/modules/financial/adapters/persistence/repos/payable-reconciliation-view.in-memory.ts';
 import { bankStatementParser } from '#src/modules/financial/adapters/statement-parsers/bank-statement-parser.ts';
@@ -176,6 +177,7 @@ describe('financial — guard period-closed (CA4)', () => {
       cedenteStore,
       periods: periodStore,
       clock: ClockReal(),
+      expectedCounterpartStore: createInMemoryExpectedCounterpartStore(),
     })({ transactionId: String(txId), type: 'FeePenaltyInterest', reconciledBy: 'u1' });
     assert.equal(r.ok, false);
     if (!r.ok) assert.equal(r.error, 'period-closed');

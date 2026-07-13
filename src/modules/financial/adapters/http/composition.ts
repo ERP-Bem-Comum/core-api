@@ -58,6 +58,7 @@ import {
   type PayableStore,
 } from '../persistence/repos/payable-reconciliation-view.in-memory.ts';
 import { createInMemoryReconciliationRepository } from '../persistence/repos/reconciliation-repository.in-memory.ts';
+import { createInMemoryExpectedCounterpartStore } from '../persistence/repos/expected-counterpart-store.in-memory.ts';
 import { createInMemoryCedenteAccountStore } from '../persistence/repos/cedente-account-store.in-memory.ts';
 import { createInMemorySuggestionView } from '../persistence/repos/suggestion-view.in-memory.ts';
 import { createInMemoryRejectedSuggestionRepository } from '../persistence/repos/rejected-suggestion-repository.in-memory.ts';
@@ -104,6 +105,7 @@ import { createDrizzleTimelineRepository } from '../persistence/repos/timeline-r
 import { createDrizzleBankStatementRepository } from '../persistence/repos/bank-statement-repository.drizzle.ts';
 import { createDrizzlePayableReconciliationView } from '../persistence/repos/payable-reconciliation-view.drizzle.ts';
 import { createDrizzleReconciliationRepository } from '../persistence/repos/reconciliation-repository.drizzle.ts';
+import { createDrizzleExpectedCounterpartStore } from '../persistence/repos/expected-counterpart-store.drizzle.ts';
 import { createDrizzleCedenteAccountStore } from '../persistence/repos/cedente-account-store.drizzle.ts';
 import { createDrizzleSuggestionView } from '../persistence/repos/suggestion-view.drizzle.ts';
 import { createDrizzleRejectedSuggestionRepository } from '../persistence/repos/rejected-suggestion-repository.drizzle.ts';
@@ -164,6 +166,7 @@ import type { BankStatementRepository } from '../../application/ports/bank-state
 import type { PayableReconciliationView } from '../../application/ports/payable-reconciliation-view.ts';
 import type { ReconciliationRepository } from '../../application/ports/reconciliation-repository.ts';
 import type { CedenteAccountStore } from '../../application/ports/cedente-account-store.ts';
+import type { ExpectedCounterpartStore } from '../../application/ports/expected-counterpart-store.ts';
 import type { SuggestionView } from '../../application/ports/suggestion-view.ts';
 import type { RejectedSuggestionRepository } from '../../application/ports/rejected-suggestion-repository.ts';
 import type { ReconciliationPeriodStore } from '../../application/ports/reconciliation-period-store.ts';
@@ -295,6 +298,8 @@ type Pools = Readonly<{
   payableView: PayableReconciliationView;
   reconciliationRepo: ReconciliationRepository;
   cedenteStore: CedenteAccountStore;
+  // #269: contrapartida esperada de transferência A→B (Pending → Matched | Discarded).
+  expectedCounterpartStore: ExpectedCounterpartStore;
   suggestionView: SuggestionView;
   rejectedSuggestionRepo: RejectedSuggestionRepository;
   periodStore: ReconciliationPeriodStore;
@@ -387,6 +392,8 @@ const buildMemoryPools = (
     statements: statementStore,
   });
   const cedenteStore = createInMemoryCedenteAccountStore();
+  // #269: contrapartida esperada (vazia no boot; nasce ao conciliar uma transferência A→B).
+  const expectedCounterpartStore = createInMemoryExpectedCounterpartStore();
   // Match/sugestão (US2): stores dedicados (vazios no boot; testes semeiam). mysql faz JOIN real.
   const suggestionView = createInMemorySuggestionView();
   const rejectedSuggestionRepo = createInMemoryRejectedSuggestionRepository();
@@ -411,6 +418,7 @@ const buildMemoryPools = (
     payableView,
     reconciliationRepo,
     cedenteStore,
+    expectedCounterpartStore,
     // Read-model de fornecedor: in-memory vazio no boot (sem worker de projeção no driver memory).
     // Exposto para que o use-case Nibo (#146) possa invocar `supplierViewStore.get()`.
     supplierViewStore,
@@ -548,6 +556,7 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     payableView: createDrizzlePayableReconciliationView(handle),
     reconciliationRepo: createDrizzleReconciliationRepository(handle),
     cedenteStore: createDrizzleCedenteAccountStore(handle),
+    expectedCounterpartStore: createDrizzleExpectedCounterpartStore(handle),
     categoryReader: createDrizzleCategoryReadStore(handle),
     costCenterReader: createDrizzleCostCenterReadStore(handle),
     programReader: createProgramsApiReadStore(programsReadPort),
@@ -604,6 +613,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     cedenteStore: pools.cedenteStore,
     periods: pools.periodStore,
     clock,
+    expectedCounterpartStore: pools.expectedCounterpartStore,
   });
   // Sugestões: instância reusada pela rota por-transação (#121) e pelo lote (#174).
   const suggest = suggestMatches({
