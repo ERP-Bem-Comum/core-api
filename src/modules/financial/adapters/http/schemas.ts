@@ -1070,6 +1070,13 @@ export const manualPaymentBodySchema = z.object({
   reason: z.string().min(1).max(500).optional(),
 });
 
+// ─── Vencimento de título isolado (#270) — PATCH /documents/:id/payables/:payableId ──────────────
+export const updatePayableDueDateBodySchema = z.object({
+  version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  // Novo vencimento do título alvo (date-only `YYYY-MM-DD`). Não propaga ao documento-pai nem aos irmãos.
+  dueDate: z.iso.date(),
+});
+
 // ─── #62 Ingestão de documento (POST /documents/ingest) ──────────────────────
 
 /** Allowlist de mimeType do ingest — PDF (parser nativo) + XML (NFS-e/NF-e). */
