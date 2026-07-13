@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "FIN-COUNTERPART-UNDO",
+  "size": "M",
+  "createdAt": "2026-07-13T17:32:06.868Z",
+  "closedAt": null,
+  "currentWave": null,
+  "status": "open",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W1",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W2",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W3",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "init"
+}

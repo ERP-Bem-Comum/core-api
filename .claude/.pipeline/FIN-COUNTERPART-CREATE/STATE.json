@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "FIN-COUNTERPART-CREATE",
+  "size": "M",
+  "createdAt": "2026-07-13T17:32:06.223Z",
+  "closedAt": null,
+  "currentWave": "W1",
+  "status": "in-progress",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-13T17:35:58.615Z",
+      "finishedAt": "2026-07-13T17:39:43.889Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W2",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    },
+    {
+      "id": "W3",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "W0 finished (RED)"
+}
