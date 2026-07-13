@@ -313,20 +313,21 @@ if (!process.env['MYSQL_INTEGRATION']) {
         );
         // partial: garante ≥2 títulos (Document.create gera 1 pai) inserindo 1 filho; todos Paid,
         // depois exatamente 1 Reconciled → estado PARCIAL (nem todos reconciliados).
+        // paid_at é obrigatório junto de status='Paid' (CHECK fin_payables_paid_at_chk, #231/#232).
         await handle.db.execute(
-          sql`UPDATE fin_payables SET status='Paid' WHERE document_id = ${idPart}`,
+          sql`UPDATE fin_payables SET status='Paid', paid_at='2026-07-01' WHERE document_id = ${idPart}`,
         );
         await handle.db.execute(
           sql`INSERT INTO fin_payables
-                (id, document_id, kind, retention_type, status, value, due_date, payment_method, created_at)
-              VALUES (${newUuid()}, ${idPart}, 'Child', 'ISS', 'Paid', 100, '2026-07-01', 'TED', NOW(3))`,
+                (id, document_id, kind, retention_type, status, value, due_date, payment_method, paid_at, created_at)
+              VALUES (${newUuid()}, ${idPart}, 'Child', 'ISS', 'Paid', 100, '2026-07-01', 'TED', '2026-07-01', NOW(3))`,
         );
         await handle.db.execute(
           sql`UPDATE fin_payables SET status='Reconciled' WHERE document_id = ${idPart} ORDER BY id LIMIT 1`,
         );
         // paidOnly: títulos Paid, nenhum reconciliado.
         await handle.db.execute(
-          sql`UPDATE fin_payables SET status='Paid' WHERE document_id = ${idPaid}`,
+          sql`UPDATE fin_payables SET status='Paid', paid_at='2026-07-01' WHERE document_id = ${idPaid}`,
         );
 
         // Sem filtro de status: full reflete 'Reconciled'; os demais 'Paid'.
