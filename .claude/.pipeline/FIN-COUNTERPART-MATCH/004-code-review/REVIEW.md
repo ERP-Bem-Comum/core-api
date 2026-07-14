@@ -16,9 +16,9 @@ Nenhuma.
 
 ### 🟡 Importante (registrar)
 
-#### Issue 1 — Borda: endpoints dedicados vs. `kind` unificado do spec
+#### Issue 1 — Borda: endpoints dedicados vs. `kind` unificado do spec — **RESOLVIDO**
 
-`contracts/http.md` previa que a rota de suggestions existente ganhasse `kind: 'payable' | 'counterpart'` e que o confirm aceitasse `target`. A implementação usa **endpoints dedicados** (`GET .../counterpart-suggestions`, `POST /reconciliations/counterpart`) — escolha de **menor risco** (não altera o contrato de suggestions/confirm de título já consumido) e mais limpa (o confirm de contrapartida é outro use-case, com outro result). **Ação:** confirmar alinhamento com o front já mergeado (#404) — se o front espera o `kind` unificado, é um adaptador de borda pequeno (chamar os 2 use-cases e mesclar). Não bloqueia o backend.
+`contracts/http.md` previa `kind: 'payable' | 'counterpart'` na rota de suggestions existente + `target` no confirm. A implementação usa **endpoints dedicados**. **Verificado contra o contrato real do front** (`web-app/specs/034-bank-reconciliation/contracts/server-fns.md` #4): o front consome `GET .../suggestions` → `{ suggestions: [{payableId, score, band, criteria}] }` **sem `kind`**, com parsing exaustivo; e **não há spec/server-function de front para a contrapartida** (US2 não construído). Conclusão: o `kind` unificado teria **quebrado** o contrato vigente do front — os **endpoints dedicados são a escolha correta e de menor risco**. `contracts/http.md` (§2/§3) atualizado para o contrato entregue. Sem ação de front além do consumo US2 (não iniciado).
 
 ### 🔵 Sugestão
 
