@@ -43,3 +43,8 @@ export type {
   SupplierWithoutContractRow,
   SuppliersWithoutContractReader,
 } from './suppliers-without-contract-projection.ts';
+
+// Reader boot-scoped da "Posição de Pagamentos" (#243 REP-4 — read-only). Agrega fin_payable_view
+// por Fornecedor×CentroCusto×Categoria em 3 baldes. Consumido pelo `reports` via ACL.
+export { openPaymentPositionReader } from './payment-position-projection.ts';
+export type { PaymentPositionRow, PaymentPositionReader } from './payment-position-projection.ts';

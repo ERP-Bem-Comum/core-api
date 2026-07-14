@@ -48,3 +48,28 @@ export const suppliersWithoutContractResponseSchema = z
 export type SuppliersWithoutContractResponseDto = z.infer<
   typeof suppliersWithoutContractResponseSchema
 >;
+
+// REP-4 (#243) — "Posição de Pagamentos": linha por Fornecedor×CentroCusto×Categoria com 3 baldes.
+export const paymentPositionRowSchema = z
+  .object({
+    supplierRef: z.string().nullable(),
+    supplierName: z.string().nullable(),
+    costCenterRef: z.string().nullable(),
+    costCenterName: z.string().nullable(),
+    categoryRef: z.string().nullable(),
+    categoryName: z.string().nullable(),
+    pendingCents: z.number(),
+    paidCents: z.number(),
+    overdueCents: z.number(),
+  })
+  .strict();
+
+export type PaymentPositionRowDto = z.infer<typeof paymentPositionRowSchema>;
+
+export const paymentPositionResponseSchema = z
+  .object({
+    positions: z.array(paymentPositionRowSchema),
+  })
+  .strict();
+
+export type PaymentPositionResponseDto = z.infer<typeof paymentPositionResponseSchema>;
