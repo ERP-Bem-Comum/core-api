@@ -123,9 +123,17 @@ const fakeReconRepo = (cap: Captured) => ({
     if (events !== undefined) cap.events.push(...events);
     return Promise.resolve(ok(undefined));
   },
+  // #269/US3: não exercitado nestes testes (sem contrapartida) — stubs para o Pick expandido.
+  findActiveByTransaction: (): Promise<Result<Reconciliation | null, never>> =>
+    Promise.resolve(ok(null)),
+  undoCounterpartOrigin: (): Promise<Result<void, never>> => Promise.resolve(ok(undefined)),
 });
 // Período nunca fechado nestes testes (guard R18 do #125 é no-op aqui).
 const openPeriods = { isClosed: (): Promise<Result<boolean, never>> => Promise.resolve(ok(false)) };
+// #269/US3: sem contrapartida para a origem → o undo segue o caminho normal.
+const noCounterpart = {
+  findByOriginReconciliation: (): Promise<Result<null, never>> => Promise.resolve(ok(null)),
+};
 
 const confirmDeps = (
   cap: Captured,
@@ -254,6 +262,7 @@ describe('financial/application/use-cases/undo-reconciliation', () => {
       statements: fakeStatements(null),
       periods: openPeriods,
       clock,
+      expectedCounterpartStore: noCounterpart,
     })({
       reconciliationId: String(cap.stored.id),
       undoneBy: 'u2',
@@ -272,6 +281,7 @@ describe('financial/application/use-cases/undo-reconciliation', () => {
       statements: fakeStatements(null),
       periods: openPeriods,
       clock,
+      expectedCounterpartStore: noCounterpart,
     })({
       reconciliationId: '22222222-2222-4222-8222-222222222222',
       undoneBy: 'u2',

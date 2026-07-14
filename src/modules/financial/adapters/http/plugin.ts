@@ -53,6 +53,7 @@ import {
   statementTransactionsToDto,
   paidPayablesToDto,
   suggestionsToDto,
+  counterpartSuggestionsToDto,
   accountStatementToDto,
   transactionReconciliationToDto,
   reconciliationPeriodsToDto,
@@ -103,6 +104,9 @@ import {
   paidPayablesResponseSchema,
   statementTransactionIdParamSchema,
   suggestionsResponseSchema,
+  counterpartSuggestionsResponseSchema,
+  confirmCounterpartBodySchema,
+  confirmCounterpartResponseSchema,
   rejectSuggestionBodySchema,
   rejectSuggestionResponseSchema,
   manualEntryBodySchema,
@@ -984,6 +988,51 @@ const financialRoutes =
         const result = await deps.suggestMatches(req.params.id);
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(reply, ok(suggestionsToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /financial/statement-transactions/:id/counterpart-suggestions — casa a transação real de B
+    // com a contrapartida esperada da transferência (#269/US2, read; R1).
+    scope.route({
+      method: 'GET',
+      url: '/financial/statement-transactions/:id/counterpart-suggestions',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationRead)],
+      schema: {
+        params: statementTransactionIdParamSchema,
+        response: { 200: counterpartSuggestionsResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.suggestCounterpartMatches(req.params.id);
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(counterpartSuggestionsToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // POST /financial/reconciliations/counterpart — confirma o casamento transação×contrapartida:
+    // concilia a perna de B (ManualEntry Transfer) e consome a contrapartida (#269/US2).
+    scope.route({
+      method: 'POST',
+      url: '/financial/reconciliations/counterpart',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationWrite)],
+      schema: {
+        body: confirmCounterpartBodySchema,
+        response: { 201: confirmCounterpartResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.confirmCounterpartMatch({
+          transactionId: req.body.transactionId,
+          counterpartId: req.body.counterpartId,
+          reconciledBy: req.userId,
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(
+          reply,
+          ok({
+            reconciliationId: String(result.value.reconciliationId),
+            counterpartId: result.value.counterpartId,
+          }),
+          { ok: 201 },
+        );
       },
     });
 

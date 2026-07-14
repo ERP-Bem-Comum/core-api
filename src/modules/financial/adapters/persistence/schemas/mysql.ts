@@ -844,6 +844,45 @@ export const finReconciliationPeriods = mysqlTable(
   ],
 );
 
+// ─── fin_expected_counterpart ──────────────────────────────────────────────────
+//
+// Contrapartida esperada de uma transferência A→B (#269). A perna esperada na conta de DESTINO —
+// agregado próprio (não uma StatementTransaction marcada; Vernon IDDD p.450). `destination/origin_account_ref`,
+// `origin_reconciliation_ref` e `origin_transaction_ref` referenciam outros agregados POR IDENTIDADE
+// (sem FK cross-aggregate — D-AGGREGATES/Evans). `type`/`movement`/`status` enum varchar+CHECK (ADR-0020);
+// cents = bigint; `expected_date` date-only. Índices: `(destination_account_ref, status)` = fila/seletor
+// de B; `(origin_reconciliation_ref)` = tratamento no undo da origem (US3).
+// ⚠️ CHARSET/COLLATE manual na migration: id/*_ref em utf8mb4_bin.
+export const finExpectedCounterpart = mysqlTable(
+  'fin_expected_counterpart',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    destinationAccountRef: varchar('destination_account_ref', { length: 36 }).notNull(),
+    originAccountRef: varchar('origin_account_ref', { length: 36 }).notNull(),
+    originReconciliationRef: varchar('origin_reconciliation_ref', { length: 36 }).notNull(),
+    originTransactionRef: varchar('origin_transaction_ref', { length: 36 }).notNull(),
+    type: varchar('type', { length: 20 }).notNull(),
+    movement: varchar('movement', { length: 8 }).notNull(),
+    valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
+    expectedDate: date('expected_date', { mode: 'date' }).notNull(),
+    status: varchar('status', { length: 12 }).notNull(),
+    matchedTransactionRef: varchar('matched_transaction_ref', { length: 36 }),
+    createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
+    updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
+  },
+  (t) => [
+    check('fin_expected_counterpart_type_chk', sql`${t.type} IN ('Transfer')`),
+    check('fin_expected_counterpart_movement_chk', sql`${t.movement} IN ('Debit','Credit')`),
+    check(
+      'fin_expected_counterpart_status_chk',
+      sql`${t.status} IN ('Pending','Matched','Discarded')`,
+    ),
+    check('fin_expected_counterpart_value_chk', sql`${t.valueCents} > 0`),
+    index('fin_expected_counterpart_destination_status_idx').on(t.destinationAccountRef, t.status),
+    index('fin_expected_counterpart_origin_reconciliation_idx').on(t.originReconciliationRef),
+  ],
+);
+
 // ─── Tipos gerados pelo schema (consumidos pelos mappers) ─────────────────────
 //
 // `$inferSelect` = shape da row lida do banco (SELECT *).
@@ -895,6 +934,9 @@ export type NewManualEntryRow = typeof finManualEntries.$inferInsert;
 
 export type ReconciliationPeriodRow = typeof finReconciliationPeriods.$inferSelect;
 export type NewReconciliationPeriodRow = typeof finReconciliationPeriods.$inferInsert;
+
+export type ExpectedCounterpartRow = typeof finExpectedCounterpart.$inferSelect;
+export type NewExpectedCounterpartRow = typeof finExpectedCounterpart.$inferInsert;
 
 // ─── fin_categories ───────────────────────────────────────────────────────────
 //
@@ -959,9 +1001,9 @@ export const finOutbox = mysqlTable(
   {
     // UUID v4 do evento — gerado pelo domínio antes do INSERT (idempotência via PK).
     eventId: varchar('event_id', { length: 36 }).primaryKey().notNull(),
-    // id do agregado dono (documento / conciliação / extrato / período).
+    // id do agregado dono (documento / conciliação / extrato / período / contrapartida).
     aggregateId: varchar('aggregate_id', { length: 36 }).notNull(),
-    // 'Document' | 'Reconciliation' | 'Statement' | 'ReconciliationPeriod' — CHECK abaixo.
+    // 'Document' | 'Reconciliation' | 'Statement' | 'ReconciliationPeriod' | 'ExpectedCounterpart' — CHECK abaixo.
     aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
     // PascalCase EN: DocumentSaved, PayableReconciled, …
     eventType: varchar('event_type', { length: 64 }).notNull(),
@@ -983,7 +1025,7 @@ export const finOutbox = mysqlTable(
     check('fin_outbox_event_type_nonempty_chk', sql`CHAR_LENGTH(${t.eventType}) > 0`),
     check(
       'fin_outbox_aggregate_type_chk',
-      sql`${t.aggregateType} IN ('Document', 'Reconciliation', 'Statement', 'ReconciliationPeriod')`,
+      sql`${t.aggregateType} IN ('Document', 'Reconciliation', 'Statement', 'ReconciliationPeriod', 'ExpectedCounterpart')`,
     ),
     // Índice do worker (ADR-0015): processed_at PRIMEIRO → NULLs agrupados → range scan eficiente.
     index('fin_outbox_processed_at_occurred_at_idx').on(t.processedAt, t.occurredAt),

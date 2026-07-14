@@ -590,6 +590,37 @@ export const suggestionsResponseSchema = z.object({
 
 export type SuggestionsResponseDto = z.infer<typeof suggestionsResponseSchema>;
 
+// ─── Contrapartida de transferência (US2 · #269) ─────────────────────────────
+// GET /statement-transactions/:id/counterpart-suggestions + POST /reconciliations/counterpart.
+
+const counterpartSuggestionSchema = z.object({
+  counterpartId: z.uuid(),
+  originAccountRef: z.uuid(),
+  valueCents: centsStringSchema,
+  expectedDate: z.string(),
+  score: z.number().int().min(0).max(100),
+});
+
+export const counterpartSuggestionsResponseSchema = z.object({
+  suggestions: z.array(counterpartSuggestionSchema),
+});
+
+export type CounterpartSuggestionsResponseDto = z.infer<
+  typeof counterpartSuggestionsResponseSchema
+>;
+
+export const confirmCounterpartBodySchema = z.object({
+  transactionId: z.uuid(),
+  counterpartId: z.uuid(),
+});
+
+export type ConfirmCounterpartBody = z.infer<typeof confirmCounterpartBodySchema>;
+
+export const confirmCounterpartResponseSchema = z.object({
+  reconciliationId: z.uuid(),
+  counterpartId: z.uuid(),
+});
+
 // ─── POST /statement-transactions/:id/reject-suggestion (rejectSuggestion, US2) ──
 
 export const rejectSuggestionBodySchema = z.object({

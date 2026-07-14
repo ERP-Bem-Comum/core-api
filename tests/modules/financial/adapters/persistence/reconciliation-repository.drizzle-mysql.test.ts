@@ -21,6 +21,7 @@ import { createDrizzleBankStatementRepository } from '#src/modules/financial/ada
 import { createDrizzleCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.drizzle.ts';
 import { createDrizzlePayableReconciliationView } from '#src/modules/financial/adapters/persistence/repos/payable-reconciliation-view.drizzle.ts';
 import { createDrizzleReconciliationRepository } from '#src/modules/financial/adapters/persistence/repos/reconciliation-repository.drizzle.ts';
+import { createDrizzleExpectedCounterpartStore } from '#src/modules/financial/adapters/persistence/repos/expected-counterpart-store.drizzle.ts';
 import { createDrizzleReconciliationPeriodStore } from '#src/modules/financial/adapters/persistence/repos/reconciliation-period-store.drizzle.ts';
 import {
   finCedenteAccounts,
@@ -87,9 +88,10 @@ if (!process.env['MYSQL_INTEGRATION']) {
       });
       if (!created.ok) throw new Error(`setup: saveDocument ${created.error}`);
       const payableId = String(created.value.payableIds[0]);
+      // paid_at obrigatório junto de status='Paid' (CHECK fin_payables_paid_at_chk, #383).
       await handle.db
         .update(finPayables)
-        .set({ status: 'Paid' })
+        .set({ status: 'Paid', paidAt: new Date('2026-07-01T00:00:00.000Z') })
         .where(eq(finPayables.id, payableId));
       return payableId;
     };
@@ -157,6 +159,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       periods: createDrizzleReconciliationPeriodStore(handle),
       clock: ClockReal(),
       outbox: createInMemoryOutbox().port,
+      expectedCounterpartStore: createDrizzleExpectedCounterpartStore(handle),
     });
 
     it('CA11: confirm grava e flipa título+transação na mesma tx; undo reverte tudo', async () => {
