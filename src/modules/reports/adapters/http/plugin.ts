@@ -5,6 +5,7 @@
  * Rotas:
  *  - GET /reports/team — projeção "Equipe ABC" (9 colunas LGPD-safe, REP-1 · #238).
  *  - GET /reports/suppliers-without-contract — agregação de payables sem contrato (REP-2 · #240).
+ *  - GET /reports/payment-position — posição de pagamentos por fornecedor×CC×categoria (REP-4 · #243).
  */
 
 import type { FastifyPluginAsync, preHandlerAsyncHookHandler } from 'fastify';
@@ -20,8 +21,12 @@ import { COLLABORATOR_PERMISSION } from '#src/modules/partners/public-api/permis
 import { FINANCIAL_PERMISSION } from '#src/modules/financial/public-api/permissions.ts';
 
 import type { ReportsHttpDeps } from './composition.ts';
-import { teamToDto, suppliersWithoutContractToDto } from './dto.ts';
-import { teamReportResponseSchema, suppliersWithoutContractResponseSchema } from './schemas.ts';
+import { teamToDto, suppliersWithoutContractToDto, paymentPositionToDto } from './dto.ts';
+import {
+  teamReportResponseSchema,
+  suppliersWithoutContractResponseSchema,
+  paymentPositionResponseSchema,
+} from './schemas.ts';
 
 export type ReportsHttpHooks = Readonly<{
   requireAuth: preHandlerAsyncHookHandler;
@@ -64,6 +69,25 @@ const reportsRoutes =
           });
         }
         return sendResult(reply, ok(suppliersWithoutContractToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /reports/payment-position — posição por fornecedor×CC×categoria (3 baldes).
+    scope.route({
+      method: 'GET',
+      url: '/reports/payment-position',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        response: { 200: paymentPositionResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) => {
+        const result = await deps.listPaymentPosition();
+        if (!result.ok) {
+          return sendResult(reply, result, {
+            errors: { 'payment-position-read-unavailable': 503 },
+          });
+        }
+        return sendResult(reply, ok(paymentPositionToDto(result.value)), { ok: 200 });
       },
     });
   };
