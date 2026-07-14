@@ -32,6 +32,14 @@ export type {
 export { listSuppliersForProjection } from './supplier-projection.ts';
 export type { SupplierProjectionRecord } from './supplier-projection.ts';
 
+// Reader boot-scoped de collaborators para projeção cross-módulo (REPORTS-TEAM-ABC #238 —
+// read-only). Pool aberto uma vez (não por requisição) — ver incidente RDS 0001.
+export { openCollaboratorProjectionReader } from './collaborator-projection.ts';
+export type {
+  CollaboratorTeamProjection,
+  CollaboratorProjectionReader,
+} from './collaborator-projection.ts';
+
 // US6b: projeção da contagem de contratos por contraparte (consome ctr_outbox via contracts/public-api).
 export { applyContractCountEvent } from '../application/use-cases/apply-contract-count-event.ts';
 export type {

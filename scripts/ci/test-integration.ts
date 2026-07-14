@@ -83,6 +83,8 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // Batch reader e2e (#356): getSuppliersView WHERE IN contra MySQL real (CA7 anti-N+1).
     'tests/modules/partners/adapters/persistence/repos/suppliers-batch-reader.drizzle.test.ts',
     'tests/modules/partners/public-api/partners-etl-port.integration.test.ts',
+    // #238 REP-1: projeção de collaborators p/ o módulo reports (9 colunas LGPD-safe)
+    'tests/modules/partners/public-api/collaborator-projection.drizzle-mysql.test.ts',
     'tests/modules/partners/public-api/partners-etl-store-integrity.integration.test.ts',
     'tests/modules/partners/public-api/partners-read-port.integration.test.ts',
   ]),

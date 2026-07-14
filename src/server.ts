@@ -56,6 +56,7 @@ import {
   budgetPlansHttpPlugin,
   buildBudgetPlansHttpDeps,
 } from '#src/modules/budget-plans/public-api/http.ts';
+import { reportsHttpPlugin, buildReportsHttpDeps } from '#src/modules/reports/public-api/http.ts';
 
 // Config S3/MinIO do logo de programa (ADR-0019 / issue #244 IAM Role).
 // Retorna config quando endpoint + bucket presentes (minimo para S3); credentials opcionais:
@@ -232,6 +233,20 @@ const main = async (): Promise<void> => {
       : { driver: 'memory' },
   );
 
+  // Módulo reports (REPORTS-TEAM-ABC, issue #238) → /api/v2/reports. Greenfield V2 (plugin
+  // direto). Read-only, sem writer próprio — lê a projeção de collaborators do `partners`
+  // (ADR-0006/0014). REPORTS_DATABASE_URL ausente → fallback ao PARTNERS_DATABASE_URL já usado
+  // pelo módulo partners (mesmo database `core`, prefixo `par_*`).
+  const reportsWriterUrl = process.env['REPORTS_DATABASE_URL'] ?? partnersWriterUrl;
+  const reportsDeps = await buildReportsHttpDeps(
+    process.env['REPORTS_DRIVER'] === 'mysql'
+      ? {
+          driver: 'mysql',
+          ...(reportsWriterUrl !== undefined ? { writerUrl: reportsWriterUrl } : {}),
+        }
+      : { driver: 'memory' },
+  );
+
   // requireAuth do auth (cross-módulo via public-api, ADR-0006/0024) protege as rotas de contracts.
   const requireAuth = makeRequireAuth(authDeps.verifyAccessToken);
 
@@ -247,6 +262,8 @@ const main = async (): Promise<void> => {
         authorize: authDeps.authorize,
       }),
       budgetPlansHttpPlugin(budgetPlansDeps, { requireAuth, authorize: authDeps.authorize }),
+      // Relatórios (REPORTS-TEAM-ABC #238) → /api/v2/reports/team. Greenfield V2 (plugin direto).
+      reportsHttpPlugin(reportsDeps, { requireAuth, authorize: authDeps.authorize }),
       // Espelho do legado (ADR-0033) → /api/v1.
       {
         plugin: collaboratorsHttpPlugin(partnersDeps, {
@@ -374,6 +391,7 @@ const main = async (): Promise<void> => {
     await programsDeps.shutdown();
     await financialDeps.shutdown();
     await budgetPlansDeps.shutdown();
+    await reportsDeps.shutdown();
     // CTR-NUMBER-PROGRAM: fecha o pool do read port de programs injetado em contracts.
     if (programsReadPort !== undefined) await programsReadPort.close();
     app.log.info('Servidor encerrado.');
