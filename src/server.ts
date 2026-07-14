@@ -233,16 +233,18 @@ const main = async (): Promise<void> => {
       : { driver: 'memory' },
   );
 
-  // Módulo reports (REPORTS-TEAM-ABC, issue #238) → /api/v2/reports. Greenfield V2 (plugin
-  // direto). Read-only, sem writer próprio — lê a projeção de collaborators do `partners`
-  // (ADR-0006/0014). REPORTS_DATABASE_URL ausente → fallback ao PARTNERS_DATABASE_URL já usado
-  // pelo módulo partners (mesmo database `core`, prefixo `par_*`).
-  const reportsWriterUrl = process.env['REPORTS_DATABASE_URL'] ?? partnersWriterUrl;
+  // Módulo reports (épico Relatórios #114) → /api/v2/reports. Greenfield V2 (plugin direto).
+  // Read-only, sem writer próprio — lê projeções via public-api (ADR-0006/0014): REP-1 (#238) do
+  // `partners` (par_*) e REP-2 (#240) do `financial` (fin_*). Cada URL cai no *_DATABASE_URL do
+  // módulo-fonte (mesmo database `core`, prefixos isolados) quando o override específico falta.
+  const reportsPartnersUrl = process.env['REPORTS_DATABASE_URL'] ?? partnersWriterUrl;
+  const reportsFinancialUrl = process.env['REPORTS_FINANCIAL_DATABASE_URL'] ?? financialWriterUrl;
   const reportsDeps = await buildReportsHttpDeps(
     process.env['REPORTS_DRIVER'] === 'mysql'
       ? {
           driver: 'mysql',
-          ...(reportsWriterUrl !== undefined ? { writerUrl: reportsWriterUrl } : {}),
+          ...(reportsPartnersUrl !== undefined ? { partnersUrl: reportsPartnersUrl } : {}),
+          ...(reportsFinancialUrl !== undefined ? { financialUrl: reportsFinancialUrl } : {}),
         }
       : { driver: 'memory' },
   );

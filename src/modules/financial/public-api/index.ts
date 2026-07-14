@@ -35,3 +35,11 @@ export type {
   PayableViewStore,
   PayableViewStoreError,
 } from '../application/ports/payable-view-store.ts';
+
+// Reader boot-scoped da agregação "Fornecedores sem Contrato" (#240 REP-2 — read-only). Pool
+// aberto uma vez (não por requisição). Consumido pelo módulo `reports` via ACL.
+export { openSuppliersWithoutContractReader } from './suppliers-without-contract-projection.ts';
+export type {
+  SupplierWithoutContractRow,
+  SuppliersWithoutContractReader,
+} from './suppliers-without-contract-projection.ts';
