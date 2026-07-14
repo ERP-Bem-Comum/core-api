@@ -62,6 +62,8 @@ export const categoriesToDto = (categories: readonly Category[]): CategoryRespon
     group: c.group,
     // Hierarquia (#147 F3): parentId branded é string em runtime — atribuição direta.
     parentId: c.parentId,
+    // #341: centro de custo da categoria (Centro→Categoria). Branded string em runtime.
+    costCenterId: c.costCenterId,
   }));
 
 /** Centros de custo de referência (020 · US2) → DTO lean `{ id, code, name }`. */

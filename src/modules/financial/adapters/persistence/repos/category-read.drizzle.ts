@@ -4,6 +4,7 @@ import process from 'node:process';
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import * as Category from '#src/modules/financial/domain/category/category.ts';
 import * as CategoryId from '#src/modules/financial/domain/category/category-id.ts';
+import * as CostCenterId from '#src/modules/financial/domain/cost-center/cost-center-id.ts';
 import type {
   CategoryReadError,
   CategoryReadPort,
@@ -32,6 +33,7 @@ export const createDrizzleCategoryReadStore = (
             group: finCategories.group,
             active: finCategories.active,
             parentId: finCategories.parentId,
+            costCenterId: finCategories.costCenterId,
           })
           .from(finCategories)
           .where(eq(finCategories.active, true))
@@ -47,12 +49,19 @@ export const createDrizzleCategoryReadStore = (
             if (!pR.ok) return err('category-read-unavailable');
             parentId = pR.value;
           }
+          let costCenterId: CostCenterId.CostCenterId | null = null;
+          if (row.costCenterId !== null) {
+            const ccR = CostCenterId.rehydrate(row.costCenterId);
+            if (!ccR.ok) return err('category-read-unavailable');
+            costCenterId = ccR.value;
+          }
           const catR = Category.create({
             id: idR.value,
             name: row.name,
             group: row.group,
             active: row.active,
             parentId,
+            costCenterId,
           });
           if (!catR.ok) return err('category-read-unavailable');
           out.push(catR.value);

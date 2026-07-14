@@ -1,38 +1,36 @@
-# FIN-REFERENCE-HIERARCHY-3LEVEL — escopo
+# FIN-REFERENCE-HIERARCHY-3LEVEL — escopo (#341)
 
-> Issue **#341** — `Hierarquia canônica Centro de Custo → Categoria → Subcategoria (3 níveis, legado)`. Módulo **`financial`/reference**. Size **L**. **Enabler cross-módulo**.
+> Issue **#341** — hierarquia canônica Centro de Custo → Categoria → Subcategoria (3 níveis) no reference do `financial`. Módulo **`financial`**. Size **M** (reduzido de L após decisão de escopo).
 
-## Contexto
-`FIN-CATEGORY-HIERARCHY` (#147) entregou apenas **2 níveis** (`parentId` categoria→subcategoria) como capacidade, sem taxonomia. A #341 pede a **hierarquia canônica de 3 níveis** com **Centro de Custo no topo** (Centro → Categoria → Subcategoria), semeada a partir do **legado**, servindo de referência para todos os módulos (budget-plans, financial).
+## Decisão de ownership (Gabriel, 2026-07-13)
+
+Mapa do estado real (via Explore): o `budget-plans` já owna a árvore 3-níveis (`bgp_cost_centers → bgp_categories[cost_center_id] → bgp_subcategories`) **por-plano** (`budget_plan_id`); o `financial` tem taxonomia paralela FLAT (`fin_categories` só com `parentId` do #147, sem `costCenterId`; `fin_cost_centers` flat). Não há taxonomia canônica global.
+
+**Escolha = A (Financial ganha `costCenterId`):** pragmático, satisfaz o aceite (costCenterId + árvore navegável + cascata no front) e desbloqueia o front, sem o refactor XL de "budget-plans owner + financial espelha via public-api" (bloqueado pelo escopo per-plano do budget-plans). `budget-plans` fica **intocado**. Duplicação de dado aceita por ora; **budget-plans = owner conceitual** (documentar). Unificação canônica = follow-up/ADR.
 
 ## Escopo (in)
-1. Modelar **Centro de Custo** como nível-raiz da hierarquia de referência (ou relacionar categoria a Centro), 3 níveis canônicos.
-2. Schema + migration (prefixo de reference), respeitando ADR-0018/0020 (varchar(36) UUID, sem ENUM, FK auto-referente/nível).
-3. **Seed do legado**: portar a taxonomia real (ETL/ACL — traduzir enums divergentes, não relaxar o VO).
-4. Expor leitura da árvore de 3 níveis via read (endpoint de reference) para consumo cross-módulo (public-api, ADR-0006).
+1. **Schema:** `fin_categories` += `cost_center_id varchar(36)` NULL (soft ref a `fin_cost_centers`, sem FK física — ADR-0014, igual ao `parent_id`) + índice. Migration gerada.
+2. **Domínio:** `Category` += `costCenterId: CostCenterId | null`; `CreateInput` aceita `costCenterId?`; smart constructor default null.
+3. **Read + borda:** `category-read.drizzle` seleciona/rehidrata `cost_center_id`; `categoriesToDto` + `categoryResponseSchema` (Zod) expõem `costCenterId` (nullable). Back-compat total.
+4. **Seed:** `ReferenceCategorySeed` += `costCenterId?`; adapters/mapper propagam. (Popular a taxonomia real do legado = **follow-up**; aqui só a capacidade + o shape.)
+5. **Doc:** nota curta — `budget-plans` é o owner conceitual; o financial reference carrega `costCenterId` espelhando a estrutura (cascata Centro→Cat→Subcat via `costCenterId` + `parentId`).
 
 ## Fora de escopo
-- Regras de orçamento que consomem a hierarquia (só a referência canônica aqui).
-- Edição de taxonomia pela UI (seed/dado, não código).
+- Seed real do legado (ETL/ACL) → follow-up. Refactor de ownership canônico → follow-up/ADR. Endpoint consolidado `/financial/references` (segue 3 rotas). `budget-plans` (intocado).
 
 ## Critérios de aceite
-- **CA1** Hierarquia de 3 níveis (Centro → Categoria → Subcategoria) modelada e persistida; nível-raiz = Centro de Custo.
-- **CA2** Seed do legado carrega a taxonomia real (validado no x99); enums divergentes traduzidos via ACL.
-- **CA3** Leitura da árvore exposta (read-model) consumível por outros módulos só via public-api.
-- **CA4** Back-compat: categorias 2-níveis pré-existentes continuam coerentes.
+- **CA1** `fin_categories.cost_center_id` (NULL) persiste; `Category` domínio expõe `costCenterId`; read + DTO + schema Zod expõem `costCenterId` (nullable).
+- **CA2** Cascata navegável: com `costCenterId` (top-level) + `parentId` (subcategoria) no payload, o front monta Centro→Categoria→Subcategoria.
+- **CA3** Back-compat: categorias pré-existentes (sem `cost_center_id`) leem como `costCenterId: null`, sem quebrar consumidores atuais.
+- **CA4** Migration valida no MySQL 8.4 real (OrbStack); read retorna `costCenterId`.
 
-## Pipeline (agentes por wave)
-| Wave | Atividade | Especialista |
+## Pipeline
+| Wave | Skill/agente | Atividade |
 | :-- | :-- | :-- |
-| W0 | RED (árvore 3 níveis + seed legado) | skill **`tdd-strategist`** |
-| W1 | schema + migration + seed + read | skill **`drizzle-schema-author`** + skill **`database-engineer`** + skill **`modular-monolith`** (fronteira/public-api) |
-| W2 | audit (schema + ACL do seed) | skill **`code-reviewer`** + agente **`mysql-database-expert`** |
-| W3 | gate + migration no MySQL real (x99) | skill **`ts-quality-checker`** |
-
-## Research (agentes + MCPs)
-- **`mysql-database-expert`**: modelagem da árvore (adjacency list vs path), índice, `ALTER` válido no MySQL 8.4 (gotcha widening VARCHAR sem ALGORITHM).
-- **`acdg-skills`** (MCP): hierarquia de referência / Bounded Context (Evans p.226 ACL).
-- **`Explore`** sobre `../../ERP-BACKEND` (taxonomia legada) + `FIN-CATEGORY-HIERARCHY` (#147) entregue.
+| W0 | `tdd-strategist` | RED — domínio `Category` c/ costCenterId + read expõe costCenterId |
+| W1 | `drizzle-schema-author` + `ts-domain-modeler` | schema+migration + domínio + read adapter + DTO/schema + seed shape |
+| W2 | `code-reviewer` | audit read-only |
+| W3 | `ts-quality-checker` | gate + integração MySQL (OrbStack) |
 
 ## DoD
-Gate W3 verde. Árvore canônica de 3 níveis + seed do legado validado no x99. Fecha #341 e habilita frentes de orçamento.
+Gate W3 verde + migration validada no OrbStack + read retornando `costCenterId`. Entrega a capacidade completa da cascata 3-níveis no reference do financial.

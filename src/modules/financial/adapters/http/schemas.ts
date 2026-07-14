@@ -792,6 +792,8 @@ export const categoryResponseSchema = z.object({
   group: z.enum(['despesa', 'receita', 'ajuste']),
   // Hierarquia auto-referente (#147 F3): pai (subcategoria). null = top-level. UUID v4 (espelha id).
   parentId: z.uuid().nullable(),
+  // #341: nível Centro de Custo → Categoria. null = sem centro. Front cascateia com costCenterId + parentId.
+  costCenterId: z.uuid().nullable(),
 });
 
 export const categoryListResponseSchema = z.array(categoryResponseSchema);

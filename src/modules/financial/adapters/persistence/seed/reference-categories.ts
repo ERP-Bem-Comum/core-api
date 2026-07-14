@@ -5,11 +5,14 @@
 
 // `parentId` (#147 F3) opcional: quando a P.O. fornecer a taxonomia de subcategorias, basta
 // apontar para o `id` da categoria-pai aqui (sem mudança de código). Ausente = top-level.
+// `costCenterId` (#341) opcional: quando a taxonomia real do legado for portada, aponta para o `id`
+// do centro de custo (nível Centro→Categoria) — sem mudança de código. Ausente = sem centro.
 export type ReferenceCategorySeed = Readonly<{
   id: string;
   name: string;
   group: string;
   parentId?: string;
+  costCenterId?: string;
 }>;
 
 export const REFERENCE_CATEGORY_SEED: readonly ReferenceCategorySeed[] = [
