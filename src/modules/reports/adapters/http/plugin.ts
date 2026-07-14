@@ -1,0 +1,55 @@
+/**
+ * Plugin HTTP do módulo Reports (ADR-0006/0025/0027/0033). Encapsula `/reports`; registrado
+ * DIRETO pelo root sob `/api/v2` (greenfield). Espelha `programs/adapters/http/plugin.ts`.
+ *
+ * 1 rota: GET /reports/team — projeção "Equipe ABC" (9 colunas LGPD-safe, REP-1 · #238).
+ */
+
+import type { FastifyPluginAsync, preHandlerAsyncHookHandler } from 'fastify';
+import type {
+  FastifyPluginAsyncZodOpenApi,
+  FastifyZodOpenApiSchema,
+  FastifyZodOpenApiTypeProvider,
+} from 'fastify-zod-openapi';
+
+import { ok } from '#src/shared/primitives/result.ts';
+import { sendResult } from '#src/shared/http/reply.ts';
+import { COLLABORATOR_PERMISSION } from '#src/modules/partners/public-api/permissions.ts';
+
+import type { ReportsHttpDeps } from './composition.ts';
+import { teamToDto } from './dto.ts';
+import { teamReportResponseSchema } from './schemas.ts';
+
+export type ReportsHttpHooks = Readonly<{
+  requireAuth: preHandlerAsyncHookHandler;
+  authorize: (permissionName: string) => preHandlerAsyncHookHandler;
+}>;
+
+const reportsRoutes =
+  (deps: ReportsHttpDeps, hooks: ReportsHttpHooks): FastifyPluginAsyncZodOpenApi =>
+  async (scope) => {
+    // GET /reports/team — projeção Equipe ABC.
+    scope.route({
+      method: 'GET',
+      url: '/reports/team',
+      preHandler: [hooks.requireAuth, hooks.authorize(COLLABORATOR_PERMISSION.read)],
+      schema: {
+        response: { 200: teamReportResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) => {
+        const result = await deps.listTeam();
+        if (!result.ok) {
+          return sendResult(reply, result, { errors: { 'team-report-read-unavailable': 503 } });
+        }
+        return sendResult(reply, ok(teamToDto(result.value)), { ok: 200 });
+      },
+    });
+  };
+
+export const reportsHttpPlugin =
+  (deps: ReportsHttpDeps, hooks: ReportsHttpHooks): FastifyPluginAsync =>
+  async (app) => {
+    await app
+      .withTypeProvider<FastifyZodOpenApiTypeProvider>()
+      .register(reportsRoutes(deps, hooks));
+  };
