@@ -193,5 +193,24 @@ export const createInMemoryReconciliationRepository = (
       flipTransaction(statements, String(reconciliation.transactionId), 'Reconciled', 'Pending');
       return ok(undefined);
     },
+
+    undoCounterpartOrigin: async (
+      origin: Reconciliation,
+      counterpart: ExpectedCounterpart,
+      matchedLeg: Reconciliation | null,
+      events?: readonly FinancialAppendableEvent[],
+    ): Promise<Result<void, ReconciliationRepositoryError>> => {
+      // #269/US3: A → Undone + contrapartida (Discarded/Pending) + (opcional) B → Undone, atômico.
+      const published = await appendOrFail(events);
+      if (!published.ok) return published;
+      reconciliations.set(String(origin.id), origin);
+      flipTransaction(statements, String(origin.transactionId), 'Reconciled', 'Pending');
+      expectedCounterparts.set(String(counterpart.id), counterpart);
+      if (matchedLeg !== null) {
+        reconciliations.set(String(matchedLeg.id), matchedLeg);
+        flipTransaction(statements, String(matchedLeg.transactionId), 'Reconciled', 'Pending');
+      }
+      return ok(undefined);
+    },
   };
 };

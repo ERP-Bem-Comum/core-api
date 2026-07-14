@@ -18,6 +18,7 @@ import { createDrizzleBankStatementRepository } from '#src/modules/financial/ada
 import { createDrizzleReconciliationRepository } from '#src/modules/financial/adapters/persistence/repos/reconciliation-repository.drizzle.ts';
 import {
   finOutbox,
+  finReconciliations,
   finStatementTransactions,
 } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { newUuid } from '#src/shared/utils/id.ts';
@@ -26,10 +27,12 @@ import { importStatement } from '#src/modules/financial/domain/statement/bank-st
 import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
 import * as ReconciliationId from '#src/modules/financial/domain/reconciliation/reconciliation-id.ts';
 import { confirmManualEntry } from '#src/modules/financial/domain/reconciliation/manual-entry.ts';
+import { undo } from '#src/modules/financial/domain/reconciliation/reconciliation.ts';
 import * as ExpectedCounterpartId from '#src/modules/financial/domain/expected-counterpart/expected-counterpart-id.ts';
 import {
   create,
   match,
+  discard,
 } from '#src/modules/financial/domain/expected-counterpart/expected-counterpart.ts';
 
 const buildCounterpart = () => {
@@ -218,6 +221,113 @@ if (!process.env['MYSQL_INTEGRATION']) {
         obRows.some((r) => r.eventType === 'TransferCounterpartMatched'),
         true,
         'evento Matched no outbox',
+      );
+    });
+
+    it('CA1(US3): undoCounterpartOrigin atômico — A Undone + contrapartida Discarded + outbox', async () => {
+      const statementRepo = createDrizzleBankStatementRepository(handle);
+      const counterpartStore = createDrizzleExpectedCounterpartStore(handle);
+      const reconRepo = createDrizzleReconciliationRepository(handle);
+
+      const day = new Date('2026-07-03T00:00:00.000Z');
+      const accountA = CedenteAccountId.generate();
+      const fitid = Fitid.fromNative(`fA-${newUuid()}`);
+      if (!fitid.ok) throw new Error('setup: fitid');
+      const imported = importStatement(
+        {
+          debitAccountRef: String(accountA),
+          period: { start: day, end: day },
+          file: { name: 'a.ofx', format: 'OFX', hash: newUuid() },
+          openingBalanceCents: 0,
+          closingBalanceCents: 0,
+          transactions: [
+            {
+              fitid: fitid.value,
+              date: day,
+              movement: 'Debit',
+              entryType: 'TED',
+              payeeName: 'TRANSF',
+              memo: 't',
+              valueCents: 150000,
+              balanceAfterCents: 0,
+            },
+          ],
+          occurredAt: day,
+        },
+        new Set(),
+      );
+      if (!imported.ok) throw new Error('setup: importStatement');
+      const txA = imported.value.statement.transactions[0];
+      if (txA === undefined) throw new Error('setup: tx');
+      assert.equal((await statementRepo.save(imported.value.statement)).ok, true);
+
+      // Perna A: ManualEntry Transfer → tx A Reconciled.
+      const legA = confirmManualEntry({
+        reconciliationId: ReconciliationId.generate(),
+        transactionId: txA.id,
+        type: 'Transfer',
+        valueCents: 150000,
+        destinationAccountRef: String(CedenteAccountId.generate()),
+        reconciledBy: newUuid(),
+        occurredAt: day,
+      });
+      if (!legA.ok) throw new Error('setup: legA');
+      assert.equal(
+        (await reconRepo.confirmManualEntry(legA.value.reconciliation, txA.id, legA.value.events))
+          .ok,
+        true,
+      );
+
+      // Contrapartida Pending vinculada à origem A.
+      const created = create({
+        id: ExpectedCounterpartId.generate(),
+        destinationAccountRef: CedenteAccountId.generate(),
+        originAccountRef: accountA,
+        originReconciliationRef: legA.value.reconciliation.id,
+        originTransactionRef: String(txA.id),
+        originMovement: 'Debit',
+        valueCents: 150000n,
+        expectedDate: day,
+      });
+      if (!created.ok) throw new Error('setup: counterpart');
+      assert.equal((await counterpartStore.save(created.value.counterpart)).ok, true);
+
+      // Undo da origem: A → Undone + contrapartida → Discarded, atômico.
+      const undoneA = undo(legA.value.reconciliation, { undoneBy: newUuid(), occurredAt: day });
+      if (!undoneA.ok) throw new Error('setup: undoA');
+      const discarded = discard(created.value.counterpart);
+      if (!discarded.ok) throw new Error('setup: discard');
+      const saved = await reconRepo.undoCounterpartOrigin(
+        undoneA.value.reconciliation,
+        discarded.value.counterpart,
+        null,
+        [...undoneA.value.events, ...discarded.value.events],
+      );
+      assert.equal(saved.ok, true, JSON.stringify(saved));
+
+      const cp = await counterpartStore.findById(created.value.counterpart.id);
+      assert.equal(cp.ok && cp.value?.status === 'Discarded', true, 'contrapartida descartada');
+
+      const txRows = await handle.db
+        .select()
+        .from(finStatementTransactions)
+        .where(eq(finStatementTransactions.id, String(txA.id)));
+      assert.equal(txRows[0]?.reconciliationStatus, 'Pending', 'perna A desfeita');
+
+      const recRows = await handle.db
+        .select()
+        .from(finReconciliations)
+        .where(eq(finReconciliations.id, String(legA.value.reconciliation.id)));
+      assert.equal(recRows[0]?.status, 'Undone');
+
+      const obRows = await handle.db
+        .select()
+        .from(finOutbox)
+        .where(eq(finOutbox.aggregateId, String(created.value.counterpart.id)));
+      assert.equal(
+        obRows.some((r) => r.eventType === 'TransferCounterpartDiscarded'),
+        true,
+        'evento Discarded no outbox',
       );
     });
   });

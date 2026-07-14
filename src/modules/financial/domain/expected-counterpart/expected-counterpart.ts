@@ -9,6 +9,7 @@ import type {
   ExpectedCounterpartEvent,
   TransferCounterpartCreated,
   TransferCounterpartMatched,
+  TransferCounterpartDiscarded,
 } from './events.ts';
 
 // US1 (#269): cria a contrapartida esperada na conta de destino de uma transferência A→B. A perna
@@ -96,4 +97,37 @@ export const match = (
   };
 
   return ok({ counterpart: matched, events: [event] });
+};
+
+// US3 (#269): desfazer a conciliação de origem (A) trata a contrapartida em B. `discard` (Pending →
+// Discarded, terminal) quando a contrapartida nunca foi casada; `reopen` (Matched → Pending, libera
+// novo match) quando a perna casada de B é desfeita junto.
+export const discard = (
+  counterpart: ExpectedCounterpart,
+): Result<MatchExpectedCounterpartOutput, ExpectedCounterpartError> => {
+  if (counterpart.status !== 'Pending') return err('counterpart-not-pending');
+
+  const discarded = immutable<ExpectedCounterpart>({ ...counterpart, status: 'Discarded' });
+  const event: TransferCounterpartDiscarded = {
+    type: 'TransferCounterpartDiscarded',
+    counterpartId: discarded.id,
+    reason: 'undo-origin',
+  };
+  return ok({ counterpart: discarded, events: [event] });
+};
+
+export const reopen = (
+  counterpart: ExpectedCounterpart,
+): Result<MatchExpectedCounterpartOutput, ExpectedCounterpartError> => {
+  if (counterpart.status !== 'Matched') return err('counterpart-not-matched');
+
+  // Volta a Pending e solta a transação real que a consumira — a perna B pode ser re-conciliada.
+  const reopened = immutable<ExpectedCounterpart>({
+    ...counterpart,
+    status: 'Pending',
+    matchedTransactionRef: null,
+  });
+  // Reabertura não tem evento próprio no contrato (Created/Matched/Discarded); o ReconciliationUndone
+  // da perna B (desfeita no mesmo undo) carrega a trilha de auditoria.
+  return ok({ counterpart: reopened, events: [] });
 };

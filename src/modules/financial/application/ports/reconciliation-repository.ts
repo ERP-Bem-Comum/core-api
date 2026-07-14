@@ -51,4 +51,13 @@ export type ReconciliationRepository = Readonly<{
     reconciliation: Reconciliation,
     events?: readonly ReconciliationEvent[],
   ) => Promise<Result<void, ReconciliationRepositoryError>>;
+  // #269/US3: desfaz a perna de ORIGEM (A) + trata a contrapartida (Discarded ou reaberta Pending) +
+  // desfaz a perna B casada (`matchedLeg`, só no caso Matched) — na MESMA tx (atômico). `origin`/`matchedLeg`
+  // já vêm `Undone` do domínio; `Reconciled→Pending` nas transações de A (e B).
+  undoCounterpartOrigin: (
+    origin: Reconciliation,
+    counterpart: ExpectedCounterpart,
+    matchedLeg: Reconciliation | null,
+    events?: readonly FinancialAppendableEvent[],
+  ) => Promise<Result<void, ReconciliationRepositoryError>>;
 }>;

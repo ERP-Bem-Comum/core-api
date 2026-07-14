@@ -30,4 +30,5 @@ export type ExpectedCounterpartError =
   | 'counterpart-value-invalid'
   | 'counterpart-same-account'
   | 'counterpart-not-pending'
+  | 'counterpart-not-matched'
   | 'counterpart-already-matched';

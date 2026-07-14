@@ -675,6 +675,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       statements: pools.statementRepo,
       periods: pools.periodStore,
       clock,
+      expectedCounterpartStore: pools.expectedCounterpartStore,
     }),
     searchPaidPayables: searchPaidPayables({ payables: pools.payableView }),
     suggestMatches: suggest,

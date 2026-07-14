@@ -292,10 +292,13 @@ describe('financial — guard period-closed (CA4)', () => {
       reconciliationRepo: {
         findById: () => Promise.resolve(ok(recon)),
         undo: () => Promise.resolve(ok(undefined)),
+        findActiveByTransaction: () => Promise.resolve(ok(null)),
+        undoCounterpartOrigin: () => Promise.resolve(ok(undefined)),
       },
       statements: repo,
       periods: periodStore,
       clock: ClockReal(),
+      expectedCounterpartStore: { findByOriginReconciliation: () => Promise.resolve(ok(null)) },
     })({ reconciliationId: String(recon.id), undoneBy: 'u2' });
     assert.equal(r.ok, false);
     if (!r.ok) assert.equal(r.error, 'period-closed');

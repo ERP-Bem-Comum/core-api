@@ -356,5 +356,56 @@ export const createDrizzleReconciliationRepository = (
         return err('reconciliation-repository-failure');
       }
     },
+
+    undoCounterpartOrigin: async (
+      origin: Reconciliation,
+      counterpart: ExpectedCounterpart,
+      matchedLeg: Reconciliation | null,
+      events?: readonly FinancialAppendableEvent[],
+    ): Promise<Result<void, ReconciliationRepositoryError>> => {
+      const undoLeg = async (
+        // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+        tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+        leg: Reconciliation,
+      ): Promise<void> => {
+        await tx
+          .update(finReconciliations)
+          .set({
+            status: leg.status,
+            undoneAt: leg.audit.undoneAt,
+            undoneBy: leg.audit.undoneBy,
+            undoReason: leg.audit.undoReason,
+          })
+          .where(eq(finReconciliations.id, String(leg.id)));
+        await tx
+          .update(finStatementTransactions)
+          .set({ reconciliationStatus: 'Pending' })
+          .where(
+            and(
+              eq(finStatementTransactions.id, String(leg.transactionId)),
+              eq(finStatementTransactions.reconciliationStatus, 'Reconciled'),
+            ),
+          );
+      };
+      try {
+        await db.transaction(async (tx) => {
+          await undoLeg(tx, origin);
+          await tx
+            .update(finExpectedCounterpart)
+            .set({
+              status: counterpart.status,
+              matchedTransactionRef: counterpart.matchedTransactionRef,
+              updatedAt: new Date(),
+            })
+            .where(eq(finExpectedCounterpart.id, String(counterpart.id)));
+          if (matchedLeg !== null) await undoLeg(tx, matchedLeg);
+          await appendFinOutboxInTx(tx, events ?? []);
+        });
+        return ok(undefined);
+      } catch (cause) {
+        logStore('undoCounterpartOrigin', cause);
+        return err('reconciliation-repository-failure');
+      }
+    },
   };
 };
