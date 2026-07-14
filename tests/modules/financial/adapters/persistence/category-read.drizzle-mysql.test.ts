@@ -9,6 +9,8 @@ import process from 'node:process';
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleCategoryReadStore } from '#src/modules/financial/adapters/persistence/repos/category-read.drizzle.ts';
+import { finCategories } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
+import { newUuid } from '#src/shared/utils/id.ts';
 
 const GROUPS = ['despesa', 'receita', 'ajuste'] as const;
 const GROUP_RANK: Record<(typeof GROUPS)[number], number> = { ajuste: 0, despesa: 1, receita: 2 };
@@ -65,6 +67,38 @@ if (!process.env['MYSQL_INTEGRATION']) {
         const ids = new Set(r.value.map((c) => String(c.id)));
         assert.ok(ids.has('f1ca7e90-0000-4000-8000-000000000001'), 'id fixo (Aluguel) presente');
         assert.ok(ids.has('f1ca7e90-0000-4000-8000-000000000006'), 'id fixo (Doações) presente');
+      }
+    });
+
+    it('#341/CA1+CA4: list() retorna cost_center_id (migration 0035) — e null nas pré-existentes', async () => {
+      const catId = newUuid();
+      const ccId = newUuid();
+      await handle.db.insert(finCategories).values({
+        id: catId,
+        name: 'Categoria 341',
+        group: 'despesa',
+        active: true,
+        parentId: null,
+        costCenterId: ccId,
+      });
+
+      const store = createDrizzleCategoryReadStore(handle);
+      const r = await store.list();
+      assert.equal(r.ok, true);
+      if (r.ok) {
+        const cat = r.value.find((c) => String(c.id) === catId);
+        assert.ok(cat, 'categoria com cost_center_id presente');
+        assert.equal(
+          String(cat.costCenterId),
+          ccId,
+          'read retorna o centro de custo (Centro→Categoria)',
+        );
+
+        // Back-compat: categoria do seed 0012 (sem cost_center_id) → null.
+        const seedCat = r.value.find(
+          (c) => String(c.id) === 'f1ca7e90-0000-4000-8000-000000000001',
+        );
+        assert.equal(seedCat?.costCenterId, null, 'categoria pré-#341 lê costCenterId null');
       }
     });
   });

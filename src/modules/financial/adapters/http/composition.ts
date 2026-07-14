@@ -346,7 +346,20 @@ const seededCategories = (): readonly Category.Category[] =>
       if (!pR.ok) return [];
       parentId = pR.value;
     }
-    const r = Category.create({ id: idR.value, name: s.name, group: s.group, parentId });
+    // #341: costCenterId opcional no seed (nível Centro→Categoria). Centro inválido → descarta (defensivo).
+    let costCenterId: CostCenterId.CostCenterId | null = null;
+    if (s.costCenterId !== undefined) {
+      const ccR = CostCenterId.rehydrate(s.costCenterId);
+      if (!ccR.ok) return [];
+      costCenterId = ccR.value;
+    }
+    const r = Category.create({
+      id: idR.value,
+      name: s.name,
+      group: s.group,
+      parentId,
+      costCenterId,
+    });
     return r.ok ? [r.value] : [];
   });
 

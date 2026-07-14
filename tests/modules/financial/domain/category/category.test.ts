@@ -6,6 +6,7 @@ import { strict as assert } from 'node:assert';
 // (D3 / research.md:18-21 — union EN-fechada, espelha o VO `entry-type` do statement #159).
 import * as Category from '#src/modules/financial/domain/category/category.ts';
 import * as CategoryId from '#src/modules/financial/domain/category/category-id.ts';
+import * as CostCenterId from '#src/modules/financial/domain/cost-center/cost-center-id.ts';
 
 const GROUPS = ['despesa', 'receita', 'ajuste'] as const;
 
@@ -55,5 +56,27 @@ describe('financial/domain/category — smart constructor', () => {
     const r = Category.create({ id: CategoryId.generate(), name: 'Doações', group: 'receita' });
     assert.equal(r.ok, true);
     if (r.ok) assert.equal(r.value.active, true);
+  });
+});
+
+// #341: nível Centro de Custo → Categoria (3 níveis com o parentId do #147).
+describe('financial/domain/category — costCenterId (hierarquia 3 níveis · #341)', () => {
+  it('CA1: create com costCenterId → categoria vinculada ao centro de custo', () => {
+    const cc = CostCenterId.generate();
+    const r = Category.create({
+      id: CategoryId.generate(),
+      name: 'Aluguel',
+      group: 'despesa',
+      costCenterId: cc,
+    });
+    assert.equal(r.ok, true);
+    if (r.ok)
+      assert.equal(r.value.costCenterId, cc, 'carrega o centro de custo (Centro→Categoria)');
+  });
+
+  it('CA3: costCenterId assume null quando omitido (back-compat)', () => {
+    const r = Category.create({ id: CategoryId.generate(), name: 'Aluguel', group: 'despesa' });
+    assert.equal(r.ok, true);
+    if (r.ok) assert.equal(r.value.costCenterId, null, 'categoria pré-#341 lê como null');
   });
 });

@@ -956,12 +956,17 @@ export const finCategories = mysqlTable(
     // Hierarquia auto-referente (#147 F3): pai da categoria (subcategoria). Nullable = top-level.
     // Sem FK física (mesma tabela; validação de existência é do seed) — ADR-0014.
     parentId: varchar('parent_id', { length: 36 }),
+    // #341: nível Centro de Custo → Categoria. Soft ref a fin_cost_centers (sem FK — ADR-0014, igual
+    // ao parent_id). Nullable = categoria sem centro (back-compat pré-#341). Cascata no front:
+    // costCenterId (top-level) + parentId (subcategoria).
+    costCenterId: varchar('cost_center_id', { length: 36 }),
   },
   (t) => [
     check('fin_categories_group_chk', sql`${t.group} IN ('despesa','receita','ajuste')`),
     index('fin_categories_group_name_idx').on(t.group, t.name),
     index('fin_categories_active_idx').on(t.active),
     index('fin_categories_parent_id_idx').on(t.parentId),
+    index('fin_categories_cost_center_id_idx').on(t.costCenterId),
   ],
 );
 
