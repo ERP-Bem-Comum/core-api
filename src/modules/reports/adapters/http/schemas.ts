@@ -25,3 +25,26 @@ export const teamReportResponseSchema = z.object({
 });
 
 export type TeamReportResponseDto = z.infer<typeof teamReportResponseSchema>;
+
+// REP-2 (#240) — "Fornecedores sem Contrato": agregação por fornecedor.
+// `.strict()` — fail-loud se o mapper de DTO vazar campo extra (alinha ao padrão do `financial`).
+export const supplierWithoutContractSchema = z
+  .object({
+    supplierRef: z.string(),
+    name: z.string().nullable(),
+    totalCents: z.number(),
+    payableCount: z.number(),
+  })
+  .strict();
+
+export type SupplierWithoutContractDto = z.infer<typeof supplierWithoutContractSchema>;
+
+export const suppliersWithoutContractResponseSchema = z
+  .object({
+    suppliers: z.array(supplierWithoutContractSchema),
+  })
+  .strict();
+
+export type SuppliersWithoutContractResponseDto = z.infer<
+  typeof suppliersWithoutContractResponseSchema
+>;

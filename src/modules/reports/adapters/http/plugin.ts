@@ -2,7 +2,9 @@
  * Plugin HTTP do módulo Reports (ADR-0006/0025/0027/0033). Encapsula `/reports`; registrado
  * DIRETO pelo root sob `/api/v2` (greenfield). Espelha `programs/adapters/http/plugin.ts`.
  *
- * 1 rota: GET /reports/team — projeção "Equipe ABC" (9 colunas LGPD-safe, REP-1 · #238).
+ * Rotas:
+ *  - GET /reports/team — projeção "Equipe ABC" (9 colunas LGPD-safe, REP-1 · #238).
+ *  - GET /reports/suppliers-without-contract — agregação de payables sem contrato (REP-2 · #240).
  */
 
 import type { FastifyPluginAsync, preHandlerAsyncHookHandler } from 'fastify';
@@ -15,10 +17,11 @@ import type {
 import { ok } from '#src/shared/primitives/result.ts';
 import { sendResult } from '#src/shared/http/reply.ts';
 import { COLLABORATOR_PERMISSION } from '#src/modules/partners/public-api/permissions.ts';
+import { FINANCIAL_PERMISSION } from '#src/modules/financial/public-api/permissions.ts';
 
 import type { ReportsHttpDeps } from './composition.ts';
-import { teamToDto } from './dto.ts';
-import { teamReportResponseSchema } from './schemas.ts';
+import { teamToDto, suppliersWithoutContractToDto } from './dto.ts';
+import { teamReportResponseSchema, suppliersWithoutContractResponseSchema } from './schemas.ts';
 
 export type ReportsHttpHooks = Readonly<{
   requireAuth: preHandlerAsyncHookHandler;
@@ -42,6 +45,25 @@ const reportsRoutes =
           return sendResult(reply, result, { errors: { 'team-report-read-unavailable': 503 } });
         }
         return sendResult(reply, ok(teamToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /reports/suppliers-without-contract — agregação por fornecedor (payables sem contrato).
+    scope.route({
+      method: 'GET',
+      url: '/reports/suppliers-without-contract',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        response: { 200: suppliersWithoutContractResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) => {
+        const result = await deps.listSuppliersWithoutContract();
+        if (!result.ok) {
+          return sendResult(reply, result, {
+            errors: { 'suppliers-without-contract-read-unavailable': 503 },
+          });
+        }
+        return sendResult(reply, ok(suppliersWithoutContractToDto(result.value)), { ok: 200 });
       },
     });
   };
