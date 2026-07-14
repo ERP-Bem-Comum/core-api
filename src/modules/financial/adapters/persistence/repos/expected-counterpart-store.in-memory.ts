@@ -14,11 +14,12 @@ import type {
 // Adapter in-memory do ExpectedCounterpartStore (#269, testes / boot sem DB). Paridade da atomicidade
 // do Drizzle: publica os eventos no outbox ANTES de mutar o store; falha no outbox → nada muda (espelha
 // reconciliation-repository.in-memory §appendOrFail). Default: outbox interno (acumula, nunca falha).
+// `store` é injetável (Map) para COMPARTILHAR com o reconciliation-repo in-memory — a US2 (`match`) muta
+// a contrapartida na mesma unit-of-work que a perna de B (paridade da tx atômica do Drizzle).
 export const createInMemoryExpectedCounterpartStore = (
+  store: Map<string, ExpectedCounterpart> = new Map(),
   outbox: FinancialOutbox = createInMemoryOutbox().port,
 ): ExpectedCounterpartStore => {
-  const store = new Map<string, ExpectedCounterpart>();
-
   return {
     save: async (
       counterpart: ExpectedCounterpart,

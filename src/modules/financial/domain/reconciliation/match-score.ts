@@ -143,7 +143,8 @@ const DATE_TOLERANCE_DAYS = 5;
 const MS_PER_DAY = 86_400_000;
 const utcDayNumber = (d: Date): number =>
   Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / MS_PER_DAY);
-const dateWithinTolerance = (a: Date, b: Date): boolean =>
+// Exportada para reuso no casamento de contrapartida (#269/US2): mesma janela ±5d, evita duplicar a constante.
+export const dateWithinTolerance = (a: Date, b: Date): boolean =>
   Math.abs(utcDayNumber(a) - utcDayNumber(b)) <= DATE_TOLERANCE_DAYS;
 
 // Avalia os critérios a partir dos dados crus (transação × título candidato). Pura.

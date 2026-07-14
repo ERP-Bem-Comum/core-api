@@ -3,6 +3,8 @@ import type { Reconciliation } from '../../domain/reconciliation/types.ts';
 import type { ReconciliationId } from '../../domain/reconciliation/reconciliation-id.ts';
 import type { ReconciliationEvent } from '../../domain/reconciliation/events.ts';
 import type { StatementTransactionId } from '../../domain/statement/statement-transaction-id.ts';
+import type { ExpectedCounterpart } from '../../domain/expected-counterpart/types.ts';
+import type { FinancialAppendableEvent } from './outbox.ts';
 
 // Port da conciliação (US2/US3/US4). `confirm`/`undo` são unit-of-work ATÔMICOS (uma transação):
 // cruzam agregados dentro do mesmo bounded context — conciliação + status do título + status da
@@ -26,6 +28,15 @@ export type ReconciliationRepository = Readonly<{
     reconciliation: Reconciliation,
     transactionId: StatementTransactionId,
     events?: readonly ReconciliationEvent[],
+  ) => Promise<Result<void, ReconciliationRepositoryError>>;
+  // #269/US2: casa a perna de B com a contrapartida esperada — INSERT reconciliação `ManualEntry`/Transfer
+  // (perna B) + `Pending→Reconciled` na transação de B + `Pending→Matched` na contrapartida — na MESMA tx
+  // (atômico; ManualEntry-espelho da perna A). `events` mistura `ManualEntryRecorded` + `TransferCounterpartMatched`.
+  confirmCounterpartMatch: (
+    reconciliation: Reconciliation,
+    counterpart: ExpectedCounterpart,
+    transactionId: StatementTransactionId,
+    events?: readonly FinancialAppendableEvent[],
   ) => Promise<Result<void, ReconciliationRepositoryError>>;
   findById: (
     id: ReconciliationId,

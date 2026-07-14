@@ -5,7 +5,11 @@ import type { ReconciliationId } from '#src/modules/financial/domain/reconciliat
 import type { Movement } from '#src/modules/financial/domain/statement/types.ts';
 import type { ExpectedCounterpartId } from './expected-counterpart-id.ts';
 import type { ExpectedCounterpart, ExpectedCounterpartError } from './types.ts';
-import type { ExpectedCounterpartEvent, TransferCounterpartCreated } from './events.ts';
+import type {
+  ExpectedCounterpartEvent,
+  TransferCounterpartCreated,
+  TransferCounterpartMatched,
+} from './events.ts';
 
 // US1 (#269): cria a contrapartida esperada na conta de destino de uma transferência A→B. A perna
 // esperada tem movimento OPOSTO ao da origem (Debit em A → Credit esperado em B) e espelha o valor.
@@ -62,4 +66,34 @@ export const create = (
   };
 
   return ok({ counterpart, events: [created] });
+};
+
+export type MatchExpectedCounterpartOutput = Readonly<{
+  counterpart: ExpectedCounterpart;
+  events: readonly ExpectedCounterpartEvent[];
+}>;
+
+// US2 (#269): consome a contrapartida quando o extrato real da conta de destino casa. Exige `Pending`
+// (Matched/Discarded são terminais → `counterpart-not-pending`). Grava a transação real que a consumiu
+// (`matchedTransactionRef`) — dedup e vínculo A↔B (originReconciliationRef=A, matchedTransactionRef=B).
+export const match = (
+  counterpart: ExpectedCounterpart,
+  matchedTransactionRef: string,
+): Result<MatchExpectedCounterpartOutput, ExpectedCounterpartError> => {
+  if (counterpart.status !== 'Pending') return err('counterpart-not-pending');
+
+  const matched = immutable<ExpectedCounterpart>({
+    ...counterpart,
+    status: 'Matched',
+    matchedTransactionRef,
+  });
+
+  const event: TransferCounterpartMatched = {
+    type: 'TransferCounterpartMatched',
+    counterpartId: matched.id,
+    matchedTransactionRef,
+    destinationAccountRef: matched.destinationAccountRef,
+  };
+
+  return ok({ counterpart: matched, events: [event] });
 };

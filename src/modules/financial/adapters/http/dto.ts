@@ -27,6 +27,7 @@ import type { PaidPayableView } from '../../application/ports/payable-reconcilia
 import type { PayableSummaryRow } from '../../application/ports/payable-summary-by-ids-view.ts';
 import type { DocumentSummaryRow } from '../../application/ports/document-summary-by-ids-view.ts';
 import type { MatchSuggestion } from '../../application/use-cases/suggest-matches.ts';
+import type { CounterpartSuggestion } from '../../application/use-cases/suggest-counterpart-matches.ts';
 import type { GetStatementSuggestionsOutput } from '../../application/use-cases/get-statement-suggestions.ts';
 import type {
   AccountStatementResponseDto,
@@ -39,6 +40,7 @@ import type {
   PaidPayablesResponseDto,
   StatementTransactionsResponseDto,
   SuggestionsResponseDto,
+  CounterpartSuggestionsResponseDto,
   CategoryResponseDto,
   CostCenterResponseDto,
   ProgramResponseDto,
@@ -317,6 +319,19 @@ export const suggestionsToDto = (
       result: c.result,
       detail: c.detail,
     })),
+  })),
+});
+
+/** Serializa as sugestões de contrapartida (US2 · #269). Money em string; data em ISO (convenção). */
+export const counterpartSuggestionsToDto = (
+  suggestions: readonly CounterpartSuggestion[],
+): CounterpartSuggestionsResponseDto => ({
+  suggestions: suggestions.map((s) => ({
+    counterpartId: s.counterpartId,
+    originAccountRef: s.originAccountRef,
+    valueCents: String(s.valueCents),
+    expectedDate: s.expectedDate.toISOString(),
+    score: s.score,
   })),
 });
 

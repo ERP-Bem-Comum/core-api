@@ -4,11 +4,15 @@ import { deriveReconciledStatus } from '#src/modules/financial/domain/payable/re
 import type { ReconciliationId } from '#src/modules/financial/domain/reconciliation/reconciliation-id.ts';
 import type { ReconciliationEvent } from '#src/modules/financial/domain/reconciliation/events.ts';
 import type { StatementTransactionId } from '#src/modules/financial/domain/statement/statement-transaction-id.ts';
+import type { ExpectedCounterpart } from '#src/modules/financial/domain/expected-counterpart/types.ts';
 import type {
   ReconciliationRepository,
   ReconciliationRepositoryError,
 } from '#src/modules/financial/application/ports/reconciliation-repository.ts';
-import type { FinancialOutbox } from '#src/modules/financial/application/ports/outbox.ts';
+import type {
+  FinancialOutbox,
+  FinancialAppendableEvent,
+} from '#src/modules/financial/application/ports/outbox.ts';
 import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
 import type { BankStatementStore } from './bank-statement-repository.in-memory.ts';
 import type { PayableStore } from './payable-reconciliation-view.in-memory.ts';
@@ -19,6 +23,9 @@ export type InMemoryReconciliationStores = Readonly<{
   reconciliations?: ReconciliationStore;
   payables: PayableStore;
   statements: BankStatementStore;
+  // #269/US2: Map de contrapartidas COMPARTILHADO com o expected-counterpart-store in-memory — o
+  // `confirmCounterpartMatch` muta a contrapartida (→Matched) na mesma unit-of-work da perna de B.
+  expectedCounterparts?: Map<string, ExpectedCounterpart>;
 }>;
 
 // Flipa o status de uma transação no statementStore compartilhado (reconstruindo o statement imutável).
@@ -68,11 +75,13 @@ export const createInMemoryReconciliationRepository = (
 ): ReconciliationRepository => {
   const reconciliations = stores.reconciliations ?? new Map<string, Reconciliation>();
   const { payables, statements } = stores;
+  const expectedCounterparts =
+    stores.expectedCounterparts ?? new Map<string, ExpectedCounterpart>();
 
   // #127 — atomicidade: publica os eventos ANTES de mutar os stores; falha no outbox → nada muda
   // (espelha o rollback da unit-of-work do Drizzle). No-op quando não há eventos (callers de seed).
   const appendOrFail = async (
-    events: readonly ReconciliationEvent[] | undefined,
+    events: readonly FinancialAppendableEvent[] | undefined,
   ): Promise<Result<void, ReconciliationRepositoryError>> => {
     if (events === undefined || events.length === 0) return ok(undefined);
     const appended = await outbox.append(events);
@@ -124,6 +133,23 @@ export const createInMemoryReconciliationRepository = (
         return err('reconciliation-repository-failure');
       }
       reconciliations.set(String(reconciliation.id), reconciliation);
+      return ok(undefined);
+    },
+
+    confirmCounterpartMatch: async (
+      reconciliation: Reconciliation,
+      counterpart: ExpectedCounterpart,
+      transactionId: StatementTransactionId,
+      events?: readonly FinancialAppendableEvent[],
+    ): Promise<Result<void, ReconciliationRepositoryError>> => {
+      // #269/US2: perna B (ManualEntry/Transfer) + contrapartida→Matched na MESMA unit-of-work.
+      const published = await appendOrFail(events);
+      if (!published.ok) return published;
+      if (!flipTransaction(statements, String(transactionId), 'Pending', 'Reconciled')) {
+        return err('reconciliation-repository-failure');
+      }
+      reconciliations.set(String(reconciliation.id), reconciliation);
+      expectedCounterparts.set(String(counterpart.id), counterpart);
       return ok(undefined);
     },
 

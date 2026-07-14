@@ -140,6 +140,8 @@ import { confirmReconciliation } from '../../application/use-cases/confirm-recon
 import { undoReconciliation } from '../../application/use-cases/undo-reconciliation.ts';
 import { searchPaidPayables } from '../../application/use-cases/search-paid-payables.ts';
 import { suggestMatches } from '../../application/use-cases/suggest-matches.ts';
+import { suggestCounterpartMatches } from '../../application/use-cases/suggest-counterpart-matches.ts';
+import { confirmCounterpartMatch } from '../../application/use-cases/confirm-counterpart-match.ts';
 import { rejectSuggestion } from '../../application/use-cases/reject-suggestion.ts';
 import { recordManualEntry } from '../../application/use-cases/record-manual-entry.ts';
 import { confirmBatch } from '../../application/use-cases/confirm-batch.ts';
@@ -167,6 +169,7 @@ import type { PayableReconciliationView } from '../../application/ports/payable-
 import type { ReconciliationRepository } from '../../application/ports/reconciliation-repository.ts';
 import type { CedenteAccountStore } from '../../application/ports/cedente-account-store.ts';
 import type { ExpectedCounterpartStore } from '../../application/ports/expected-counterpart-store.ts';
+import type { ExpectedCounterpart } from '../../domain/expected-counterpart/types.ts';
 import type { SuggestionView } from '../../application/ports/suggestion-view.ts';
 import type { RejectedSuggestionRepository } from '../../application/ports/rejected-suggestion-repository.ts';
 import type { ReconciliationPeriodStore } from '../../application/ports/reconciliation-period-store.ts';
@@ -228,6 +231,10 @@ export type FinancialHttpDeps = Readonly<{
   searchPaidPayables: ReturnType<typeof searchPaidPayables>;
   /** Sugestões de match (US2, read-model) — GET /statement-transactions/:id/suggestions. */
   suggestMatches: ReturnType<typeof suggestMatches>;
+  /** Sugestões de contrapartida (#269/US2) — GET /statement-transactions/:id/counterpart-suggestions. */
+  suggestCounterpartMatches: ReturnType<typeof suggestCounterpartMatches>;
+  /** Confirma casamento de contrapartida (#269/US2) — POST /reconciliations/counterpart. */
+  confirmCounterpartMatch: ReturnType<typeof confirmCounterpartMatch>;
   /** Rejeita uma sugestão (US2) — POST /statement-transactions/:id/reject-suggestion. */
   rejectSuggestion: ReturnType<typeof rejectSuggestion>;
   /** Lançamento manual (US5) — POST /statement-transactions/:id/manual-entry. */
@@ -387,13 +394,17 @@ const buildMemoryPools = (
   const payableStore: PayableStore = new Map();
   const statementRepo = createInMemoryBankStatementRepository(statementStore);
   const payableView = createInMemoryPayableReconciliationView(payableStore);
+  // #269: Map de contrapartidas COMPARTILHADO entre o reconRepo e o store — o `confirmCounterpartMatch`
+  // muta a contrapartida (→Matched) na mesma unit-of-work da perna de B (paridade da tx atômica do Drizzle).
+  const expectedCounterpartMap = new Map<string, ExpectedCounterpart>();
   const reconciliationRepo = createInMemoryReconciliationRepository({
     payables: payableStore,
     statements: statementStore,
+    expectedCounterparts: expectedCounterpartMap,
   });
   const cedenteStore = createInMemoryCedenteAccountStore();
   // #269: contrapartida esperada (vazia no boot; nasce ao conciliar uma transferência A→B).
-  const expectedCounterpartStore = createInMemoryExpectedCounterpartStore();
+  const expectedCounterpartStore = createInMemoryExpectedCounterpartStore(expectedCounterpartMap);
   // Match/sugestão (US2): stores dedicados (vazios no boot; testes semeiam). mysql faz JOIN real.
   const suggestionView = createInMemorySuggestionView();
   const rejectedSuggestionRepo = createInMemoryRejectedSuggestionRepository();
@@ -667,6 +678,18 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     }),
     searchPaidPayables: searchPaidPayables({ payables: pools.payableView }),
     suggestMatches: suggest,
+    suggestCounterpartMatches: suggestCounterpartMatches({
+      statements: pools.statementRepo,
+      expectedCounterpartStore: pools.expectedCounterpartStore,
+    }),
+    confirmCounterpartMatch: confirmCounterpartMatch({
+      statements: pools.statementRepo,
+      cedenteStore: pools.cedenteStore,
+      periods: pools.periodStore,
+      expectedCounterpartStore: pools.expectedCounterpartStore,
+      reconciliationRepo: pools.reconciliationRepo,
+      clock,
+    }),
     getStatementSuggestions: getStatementSuggestions({
       listStatementTransactions: pools.statementRepo.listTransactions,
       suggestMatches: suggest,

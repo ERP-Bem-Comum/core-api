@@ -12,12 +12,15 @@ import { deriveReconciledStatus } from '#src/modules/financial/domain/payable/re
 import type { ReconciliationId } from '#src/modules/financial/domain/reconciliation/reconciliation-id.ts';
 import type { ReconciliationEvent } from '#src/modules/financial/domain/reconciliation/events.ts';
 import type { StatementTransactionId } from '#src/modules/financial/domain/statement/statement-transaction-id.ts';
+import type { ExpectedCounterpart } from '#src/modules/financial/domain/expected-counterpart/types.ts';
 import type {
   ReconciliationRepository,
   ReconciliationRepositoryError,
 } from '#src/modules/financial/application/ports/reconciliation-repository.ts';
+import type { FinancialAppendableEvent } from '#src/modules/financial/application/ports/outbox.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import {
+  finExpectedCounterpart,
   finManualEntries,
   finPayables,
   finReconciliationItems,
@@ -157,6 +160,59 @@ export const createDrizzleReconciliationRepository = (
         return ok(undefined);
       } catch (cause) {
         logStore('confirmManualEntry', cause);
+        return err('reconciliation-repository-failure');
+      }
+    },
+
+    confirmCounterpartMatch: async (
+      reconciliation: Reconciliation,
+      counterpart: ExpectedCounterpart,
+      transactionId: StatementTransactionId,
+      events?: readonly FinancialAppendableEvent[],
+    ): Promise<Result<void, ReconciliationRepositoryError>> => {
+      const manualEntry = reconciliation.manualEntry;
+      if (manualEntry === null) return err('reconciliation-repository-failure');
+      try {
+        await db.transaction(async (tx) => {
+          // Perna B: Reconciliation ManualEntry/Transfer (espelho da perna A) + o lançamento contábil.
+          await tx.insert(finReconciliations).values(reconciliationToRow(reconciliation));
+          await tx
+            .insert(finManualEntries)
+            .values(manualEntryToRow(reconciliation.id, manualEntry));
+
+          const txRes = await tx
+            .update(finStatementTransactions)
+            .set({ reconciliationStatus: 'Reconciled' })
+            .where(
+              and(
+                eq(finStatementTransactions.id, String(transactionId)),
+                eq(finStatementTransactions.reconciliationStatus, 'Pending'),
+              ),
+            );
+          if (affectedRowsOf(txRes) !== 1) throw new Error('transaction-not-pending');
+
+          // Consome a contrapartida (Pending → Matched) — UPDATE condicional blinda contra corrida.
+          const cpRes = await tx
+            .update(finExpectedCounterpart)
+            .set({
+              status: counterpart.status,
+              matchedTransactionRef: counterpart.matchedTransactionRef,
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(finExpectedCounterpart.id, String(counterpart.id)),
+                eq(finExpectedCounterpart.status, 'Pending'),
+              ),
+            );
+          if (affectedRowsOf(cpRes) !== 1) throw new Error('counterpart-not-pending');
+
+          // #127: estado + eventos na MESMA tx (atomicidade — ADR-0015). Falha aqui reverte tudo.
+          await appendFinOutboxInTx(tx, events ?? []);
+        });
+        return ok(undefined);
+      } catch (cause) {
+        logStore('confirmCounterpartMatch', cause);
         return err('reconciliation-repository-failure');
       }
     },

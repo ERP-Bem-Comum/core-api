@@ -28,6 +28,8 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'period-closed',
   // Reabertura (#203): reabrir período não-fechado é conflito de estado.
   'period-not-closed',
+  // Contrapartida de transferência (#269/US2): casar uma contrapartida não-pendente é conflito de estado.
+  'counterpart-not-pending',
   // Conta-cedente (019): conflitos de estado/unicidade.
   'cedente-account-already-closed',
   'cedente-account-duplicate',
@@ -77,6 +79,8 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   // Match/sugestão (US2).
   'suggestion-view-failure',
   'rejected-suggestion-repository-failure',
+  // Contrapartida de transferência (#269/US2): store indisponível.
+  'expected-counterpart-store-unavailable',
   // Período (US6).
   'reconciliation-period-store-failure',
   // Dados de referência (020): reader indisponível → 503 (contracts/categorization-read.md).
@@ -192,6 +196,14 @@ const SLUG_MESSAGES: Record<string, string> = {
     'O sinal da diferença é incoerente com o tratamento: desconto/parcial devem ser negativos; juros/multa/tarifa, positivos.',
   'empty-reconciliation': 'Informe ao menos um título para conciliar.',
   'reconciliation-id-invalid': 'Identificador de conciliação inválido.',
+  // Contrapartida de transferência (#269/US2).
+  'counterpart-not-found': 'A contrapartida esperada informada não foi encontrada.',
+  'counterpart-not-pending': 'A contrapartida esperada já foi casada ou descartada.',
+  'counterpart-account-mismatch':
+    'A transação não pertence à conta de destino da contrapartida esperada.',
+  'counterpart-value-mismatch': 'O valor da transação não confere com o da contrapartida esperada.',
+  'counterpart-value-invalid': 'O valor da contrapartida esperada deve ser positivo.',
+  'counterpart-same-account': 'A conta de destino não pode ser igual à de origem.',
   // Lançamento manual / lote (US5).
   'manual-entry-value-not-positive': 'O valor do lançamento manual deve ser positivo.',
   'empty-batch': 'Informe ao menos uma transação para o lote.',
