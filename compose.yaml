@@ -276,6 +276,9 @@ services:
     container_name: core-api-http
     profiles:
       - app
+    # ⚠️ TODO módulo registrado no server.ts precisa do seu `*_DRIVER` AQUI. O server degrada para
+    # in-memory EM SILÊNCIO quando o driver falta (HTTP 200 com lista vazia, sem log) — foi o que
+    # deixou budget-plans (#374) e reports (#444) mudos em produção. Ver #456 (fail-fast no boot).
     environment:
       NODE_ENV: development
       AUTH_DRIVER: mysql
@@ -283,6 +286,10 @@ services:
       CONTRACTS_DRIVER: mysql
       PARTNERS_DRIVER: mysql
       FINANCIAL_DRIVER: mysql
+      BUDGET_PLANS_DRIVER: mysql
+      # reports é read-only e não tem writer próprio: as URLs dele caem no *_DATABASE_URL do
+      # módulo-fonte (server.ts:247-249) — basta o driver, sem secret novo.
+      REPORTS_DRIVER: mysql
     # Injeção de DATABASE_URL via $(cat) — padrão ADR-0011. tini permanece PID 1.
     # `exec tini -- node src/server.ts` substitui o sh pelo processo node após
     # exportar as envs, mantendo sinalização correta (SIGTERM → Node → graceful).
@@ -295,6 +302,7 @@ services:
         export CONTRACTS_DATABASE_URL="$(cat /run/secrets/contracts_database_url)";
         export PARTNERS_DATABASE_URL="$(cat /run/secrets/partners_database_url)";
         export FINANCIAL_DATABASE_URL="$(cat /run/secrets/financial_database_url)";
+        export BUDGET_PLANS_DATABASE_URL="$(cat /run/secrets/budget_plans_database_url)";
         exec tini -- node src/server.ts
     secrets:
       - auth_database_url
@@ -302,6 +310,7 @@ services:
       - contracts_database_url
       - partners_database_url
       - financial_database_url
+      - budget_plans_database_url
     ports:
       - '${HTTP_PORT:-3000}:3000'
     # CA5 (issue #51): healthcheck explícito no compose — endpoint /health está em
@@ -547,6 +556,8 @@ secrets:
     file: ./secrets/partners_database_url.txt
   financial_database_url:
     file: ./secrets/financial_database_url.txt
+  budget_plans_database_url:
+    file: ./secrets/budget_plans_database_url.txt
   minio_root_user:
     file: ./secrets/minio_root_user.txt
   minio_root_password:
