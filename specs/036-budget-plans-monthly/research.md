@@ -116,7 +116,7 @@ O `:74` diz _"Os 4 modelos de cálculo reproduzem o legado (teste de paridade co
 
 ---
 
-## D6 — 🔴 A clarification pendente da 030 volta a ser bloqueante
+## D6 — ✅ A clarification da 030 foi RESOLVIDA (P.O., #460)
 
 `specs/030-budget-plans-reproducao/spec.md:37`:
 
@@ -124,7 +124,7 @@ O `:74` diz _"Os 4 modelos de cálculo reproduzem o legado (teste de paridade co
 
 **Por que volta a ser bloqueante:** o FR-008 mantém o cálculo **persistindo**. Uma divergência de fórmula **corrompe dado real** — e agora 12× por conta, não 1×. Se o cálculo fosse preview (a leitura errada que a spec 036 descartou), uma divergência seria cosmética.
 
-**Não bloqueia o `/speckit-tasks`**, mas **bloqueia o W1** do ticket que tocar `DESPESAS_PESSOAIS`. Encaminhamento: confirmar com a P.O. **antes** da fatia de cálculo — é a mesma pergunta de 2026-07-01, ainda sem resposta.
+**RESOLVIDA em 2026-07-15 (#460): (A) — a Qtd é metadado, não multiplica.** Segue o legado; o front é que se ajusta (web-app PR #241). **O backend já estava certo** — a quantidade nunca foi parâmetro do `CalcModelInput`. A trava entrou como teste de paridade contra o print do legado (Qtd 1, R$ 34.336,73 → anual R$ 412.040,76) em `calc-model.test.ts`. **Não bloqueia mais nada.** A spec 030 `:74` não muda: a paridade de fórmula continua valendo para este modelo.
 
 ---
 

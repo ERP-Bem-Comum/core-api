@@ -34,9 +34,11 @@ Como planejador, monto a árvore Centro de Custo → Categoria → Subcategoria 
 
 Como planejador, lanço valores por subcategoria usando um dos 4 modelos, com o **backend como fonte única** do cálculo.
 **Aceite:** `POST /budget-results/{modelo}` calcula/persiste em centavos batendo com a fórmula legada; GETs alimentam a planilha "Calculando Gastos" e a base do ano anterior.
-**🔴 Clarification pendente — BLOQUEANTE:** na folha (`DESPESAS_PESSOAIS`) a UI mostra "Qtd de {subcategoria}", mas a fórmula legada **não multiplica por quantidade** (metadado) — confirmar antes do W1.
+**✅ Clarification RESOLVIDA (P.O., 2026-07-15 — #460):** na folha (`DESPESAS_PESSOAIS`) a UI mostrava "Qtd de {subcategoria}", mas a fórmula legada **não multiplica por quantidade**. Decisão: **(A) — a Qtd é metadado. Segue o legado; o front é que se ajusta** (web-app PR #241). **O backend já estava correto e não muda.**
 
-> **Agravada pela feature 036 (#413, 2026-07-15):** com o Orçamento mensal, o cálculo passa a persistir **12× por conta** (um por mês do exercício). Uma divergência de fórmula deixa de ser cosmética e **corrompe dado real, multiplicado por 12**. Aberta desde 2026-07-01. Ver [`specs/036-budget-plans-monthly/research.md`](../036-budget-plans-monthly/research.md) §D6.
+> **Evidência (investigação do legado):** 2 dos 4 modelos multiplicam por contagem (`CAED`, `DESPESAS_LOGISTICAS`) e a folha deliberadamente não; o campo se chama `numberOfFinancialDirectors` e nenhum cálculo o lê; o import de Excel do legado força `= 1` nos 4 lugares onde o toca — logo **o cenário `Qtd > 1` nunca foi exercitado**. Paridade contra o print (Qtd 1, salário R$ 34.336,73 → mensal R$ 34.336,73, anual R$ 412.040,76) está travada em `calc-model.test.ts`.
+>
+> **A decisão fecha a ambiguidade, não a correção:** se o negócio quiser "3 pessoas = 3 salários", é o ramo (B) do #460, com plano de recálculo. Hoje **paridade ganha**.
 
 ### US4 — Ciclo de vida `[P2]` · ticket `BDG-PLAN-LIFECYCLE` · #318
 
