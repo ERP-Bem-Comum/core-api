@@ -75,6 +75,10 @@ const DATABASE_URL_SECRETS: readonly string[] = [
   'programs_database_url',
   'partners_database_url',
   'financial_database_url',
+  // #374 — o `http` monta este secret e exporta BUDGET_PLANS_DATABASE_URL. Sem ele o módulo
+  // budget-plans degrada para in-memory EM SILÊNCIO e o dado some no restart. `reports` não
+  // aparece aqui de propósito: é read-only e reusa as URLs dos módulos-fonte (server.ts:247-249).
+  'budget_plans_database_url',
   // Consumido pelo job one-shot `migrate` (compose profile `jobs`) — aplica as
   // migrations dos 6 módulos antes de http/workers. Mesma URL (DB único `core`).
   'migrate_database_url',
