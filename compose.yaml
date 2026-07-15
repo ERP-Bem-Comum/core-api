@@ -336,6 +336,11 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
+      # #462: o catálogo de permissões tem que estar sincronizado ANTES do http atender.
+      # Falhar o boot é o comportamento desejado: subir com catálogo defasado significa
+      # responder 403 mudo — o sintoma que o job existe para matar.
+      sync-permissions:
+        condition: service_completed_successfully
 
   # ──────────────────────────────────────────────────────────────────────────
   # Workers long-running CONSOLIDADOS (opt-in via profile `workers`) — #407.
@@ -534,6 +539,49 @@ services:
       - src/jobs/migrate/run.ts
     secrets:
       - migrate_database_url
+
+  # ──────────────────────────────────────────────────────────────────────────
+  # Job one-shot sync-permissions (#462) — roda como o `migrate`, entre ele e o http.
+  #
+  # Reconcilia o PermissionCatalog (código) com o banco. Sem ele, permissão nova nunca
+  # chega a um ambiente já provisionado e vira 403 mudo — o módulo sobe conectado e
+  # nega. O QA media 42 de um catálogo de 44. Idempotente: re-rodar é seguro.
+  #
+  # Reusa o secret `auth_database_url` (o job lê AUTH_DATABASE_URL — a mesma URL do
+  # módulo auth). Sem secret novo; nada a acrescentar no secrets:setup.
+  #
+  # `depends_on` explícito porque SOBRESCREVE o do x-job-base (o merge `<<:` não
+  # funde chaves): precisa de mysql healthy E do migrate completo — sincronizar não
+  # migra (a porta abre com applyMigrations:false; sem schema, deve falhar alto).
+  #
+  # Profiles espelham o migrate (app/workers/jobs): o `http` o exige, então ele
+  # precisa ser ativado nos mesmos cenários em que o http sobe.
+  #
+  # SEM container_name fixo — mesmo motivo do migrate (nome fixo aborta o próximo run).
+  #
+  # Disparo avulso: docker compose --profile jobs run --rm sync-permissions
+  # ──────────────────────────────────────────────────────────────────────────
+  sync-permissions:
+    <<: *x-job-base
+    profiles:
+      - app
+      - workers
+      - jobs
+    depends_on:
+      mysql:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    # $0 = src/jobs/auth/sync-permissions/run.ts (4º elemento do array entrypoint do wrapper sh).
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        export AUTH_DATABASE_URL="$(cat /run/secrets/auth_database_url)";
+        exec tini -- node "$0"
+      - src/jobs/auth/sync-permissions/run.ts
+    secrets:
+      - auth_database_url
 
 # ────────────────────────────────────────────────────────────────────────────
 # Top-level secrets — populados pelo scripts/setup/secrets.ts (pnpm run secrets:setup).
