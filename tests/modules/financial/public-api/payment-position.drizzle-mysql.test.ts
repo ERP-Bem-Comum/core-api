@@ -10,6 +10,7 @@
 import { describe, it, before, after, beforeEach } from 'node:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
+import { inArray } from 'drizzle-orm';
 
 import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
@@ -46,11 +47,17 @@ if (!process.env['MYSQL_INTEGRATION']) {
     });
 
     beforeEach(async () => {
-      // Agregação de estado absoluto → dona das próprias precondições.
+      // Read-models sem seed de migration → o teste é dono da tabela inteira.
       await handle.db.delete(handle.schema.finPayableView);
       await handle.db.delete(handle.schema.finSupplierView);
-      await handle.db.delete(handle.schema.finCostCenters);
-      await handle.db.delete(handle.schema.finCategories);
+      // `fin_cost_centers`/`fin_categories` TÊM seed (migrations 0013/0012) do qual outros testes da
+      // suíte dependem — limpar só os ids deste teste, nunca a tabela.
+      await handle.db
+        .delete(handle.schema.finCostCenters)
+        .where(inArray(handle.schema.finCostCenters.id, [CC1]));
+      await handle.db
+        .delete(handle.schema.finCategories)
+        .where(inArray(handle.schema.finCategories.id, [CAT1]));
     });
 
     const payable = (over: {
