@@ -55,6 +55,7 @@ import {
 import {
   budgetPlansHttpPlugin,
   buildBudgetPlansHttpDeps,
+  parseE2eBudgetPlansSeed,
 } from '#src/modules/budget-plans/public-api/http.ts';
 import { reportsHttpPlugin, buildReportsHttpDeps } from '#src/modules/reports/public-api/http.ts';
 
@@ -227,10 +228,14 @@ const main = async (): Promise<void> => {
   // (plugin direto). Driver mysql só com BUDGET_PLANS_DRIVER=mysql + BUDGET_PLANS_DATABASE_URL
   // (uma connection string: bgp_* + read ports prg_*/par_* — ADR-0014); senão in-memory (degradado).
   const budgetPlansWriterUrl = process.env['BUDGET_PLANS_DATABASE_URL'];
+  // Seed de catálogo via env — inerte fora de E2E/dev (guarda dupla CORE_API_E2E +
+  // BUDGET_PLANS_SEED_JSON). Malformado sob a flag → boot falha (o throw propaga p/ main().catch).
+  // Só o ramo memory consome; o mysql lê prg_*/par_* real.
+  const budgetPlansSeed = parseE2eBudgetPlansSeed(process.env);
   const budgetPlansDeps = await buildBudgetPlansHttpDeps(
     process.env['BUDGET_PLANS_DRIVER'] === 'mysql' && budgetPlansWriterUrl !== undefined
       ? { driver: 'mysql', connectionString: budgetPlansWriterUrl }
-      : { driver: 'memory' },
+      : { driver: 'memory', ...(budgetPlansSeed !== undefined ? { seed: budgetPlansSeed } : {}) },
   );
 
   // Módulo reports (épico Relatórios #114) → /api/v2/reports. Greenfield V2 (plugin direto).
