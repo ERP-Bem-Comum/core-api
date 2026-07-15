@@ -147,8 +147,8 @@ Modular monolith — módulo `budget-plans` (ADR-0006). Código em `src/modules/
 
 - [x] T031 [P] Atualizar `specs/030-budget-plans-reproducao/spec.md:74` (Success Criteria): paridade de **fórmula** continua exigida; paridade de **grão** foi **abandonada** (FR-013 — o legado orça em categoria × mês, esta feature em subcategoria × mês). **O `FR-003` fica INTACTO** — o FR-008 preserva o cálculo como fonte única
 - [x] T032 [P] Anotar em `specs/030-budget-plans-reproducao/spec.md:37` que a clarification (folha × qtd) **voltou a ser bloqueante** por causa desta feature, com link para [research.md §D6](./research.md)
-- [ ] T033 Rodar o [quickstart.md](./quickstart.md) de ponta a ponta contra MySQL real e conferir as 8 provas (com atenção à #5: 12 × 3.670,92 = 44.051,04)
-- [ ] T034 Abrir PR para `dev` referenciando **#413** e **#454** (guarda-chuva dos 3 buracos de contrato), registrando que os 4 formulários deixaram de ser órfãos
+- [x] T033 **Quickstart ponta a ponta EXECUTADO** contra MySQL 8.4 real (2026-07-15): plano → estrutura → orçamento Rede CE → 12 meses → grid → `?month=3` → recálculo → reabertura. **Todas as 8 provas verdes**, incluindo a da P.O. (12 × R.670,92 = **R.051,04**) e as 12 linhas exatas no banco após recálculo. Registrado no PR #459
+- [x] T034 **PR #459 aberto** para `dev`, referenciando #413 e #454 — registra que os 4 formulários de "Calculando Gastos" deixaram de ser órfãos
 
 ---
 
