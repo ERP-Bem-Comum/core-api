@@ -43,21 +43,25 @@ Modular monolith — módulo `budget-plans` (ADR-0006). Código em `src/modules/
 
 ## Phase 2: Foundational (BLOQUEIA todas as user stories)
 
-**Purpose**: o VO `ExerciseMonth` e o `month` no agregado. Nenhuma US existe sem isto.
+**Purpose**: o VO `ExerciseMonth`. **Só o VO** — ver a correção abaixo.
 
 **Ticket**: `BGP-MONTH-VO` (S) — W0 → W3 completo.
 
+> ⚠️ **Fatiamento corrigido no W1 (2026-07-15).** O escopo original incluía `month` no agregado `BudgetResult`. **Não é isolável:** o `budgetResultFromRow` monta o agregado **a partir da row**, então `month` obrigatório exige a **coluna** — que só existe na Phase 3. O typecheck reprovou em **7 call sites** (mapper, use case e 5 testes): é **mudança de assinatura transversal** (mesma lição do #373).
+>
+> **`month` no agregado + CA3/CA4/CA5 desceram para a Phase 3** (`BGP-MONTH-PERSIST`), junto do schema/mapper/repo que o exigem. Rejeitado: `month` opcional (fura o CA4/FR-005), default no mapper (inventa dado), e typecheck vermelho entre fatias (viola o gate W3 e a §II).
+
 ### W0 — RED (falha por inexistência da API)
 
-- [ ] T004 Escrever `tests/modules/budget-plans/domain/shared/exercise-month.test.ts`: `parse` aceita 1..12; rejeita **0**, **13**, **−1**, **3.5**, **NaN**, `Infinity` → `err('exercise-month-invalid')`; `rehydrate` idem. Deve falhar: o arquivo `exercise-month.ts` não existe
-- [ ] T005 [P] Estender `tests/modules/budget-plans/domain/budget-result/budget-result.test.ts`: `BudgetResult.create` exige `month`; dois results com mesmo `(budgetId, subcategoryId)` e meses diferentes são entidades distintas. Deve falhar: `create` não aceita `month`
-- [ ] T006 Registrar W0 RED: `pnpm run pipeline:state wave-start BGP-MONTH-VO W0 --agent tdd-strategist` e `wave-finish ... --outcome RED --report 002-tests/REPORT.md`
+- [x] T004 Escrever `tests/modules/budget-plans/domain/shared/exercise-month.test.ts`: `parse` aceita 1..12; rejeita **0**, **13**, **−1**, **99**, **3.5**, **NaN**, **±Infinity** → `err('exercise-month-invalid')`; `rehydrate` idem (não confia no banco). **RED confirmado**: `ERR_MODULE_NOT_FOUND`
+- [x] T005 ~~Estender `budget-result.test.ts`~~ → **movida para a Phase 3 (T012a)** — ver correção acima
+- [x] T006 Registrar W0 RED no pipeline (`wave-start --agent tdd-strategist` → `wave-finish --outcome RED`)
 
 ### W1 — GREEN (mínimo)
 
-- [ ] T007 Criar `src/modules/budget-plans/domain/shared/exercise-month.ts`: branded type `ExerciseMonth`, `parse(raw: number): Result<ExerciseMonth, ExerciseMonthError>`, `rehydrate`, erro `'exercise-month-invalid'` (EN kebab). **Zero throw, zero class** (constituição §V)
-- [ ] T008 Adicionar `month: ExerciseMonth` ao agregado em `src/modules/budget-plans/domain/budget-result/budget-result.ts` e ao input de `BudgetResult.create`. **Manter `model`** — segue descrevendo como o valor foi produzido
-- [ ] T009 Rodar W1 até GREEN e registrar (`wave-start`/`wave-finish --outcome GREEN`)
+- [x] T007 Criar `src/modules/budget-plans/domain/shared/exercise-month.ts`: branded `ExerciseMonth`, `parse`, `rehydrate`, erro `'exercise-month-invalid'` (EN kebab). **Zero throw, zero class** (§V). `Number.isInteger` já barra NaN/Infinity/fração
+- [x] T008 ~~`month` no agregado~~ → **movida para a Phase 3 (T014a)** — ver correção acima
+- [x] T009 W1 GREEN registrado — **6/6 pass · typecheck limpo** (a prova de que a fatia é isolável)
 
 ### W2/W3
 
@@ -78,11 +82,13 @@ Modular monolith — módulo `budget-plans` (ADR-0006). Código em `src/modules/
 
 ### W0 — RED · persistência
 
+- [ ] T012a [US1] **(herdada da Phase 2)** Estender `tests/modules/budget-plans/domain/budget-result/budget-result.test.ts`: `create` exige `month` (CA3); mesma conta em meses distintos → entidades distintas (CA5); `clone` **preserva o mês**; 12 × R$ 3.670,92 = **R$ 44.051,04** (prova da P.O., #454). Deve falhar: `create` não aceita `month`
 - [ ] T012 [US1] Escrever `tests/modules/budget-plans/adapters/persistence/repos/budget-result-repository.drizzle-mysql.test.ts`: **(a)** recalcular o mesmo `(budget, subcategoria, month)` **atualiza** — segue 1 linha, `id` preservado, `value_cents`/`model` novos; **(b)** 12 meses coexistem; **(c)** `SUM(value_cents)` = valor × 12; **(d)** mês fora de 1..12 é barrado pelo CHECK. Deve falhar: não existe `month` nem `save`
 - [ ] T013 [P] [US1] Estender `tests/modules/budget-plans/adapters/persistence/repos/*.in-memory*` (ou o teste de paridade): in-memory replica a chave `(budgetId, subcategoryId, month)` e a semântica de upsert — **paridade in-memory ↔ drizzle**
 
 ### W1 — GREEN · persistência
 
+- [ ] T014a [US1] **(herdada da Phase 2)** Adicionar `month: ExerciseMonth` ao agregado em `src/modules/budget-plans/domain/budget-result/budget-result.ts` (`BudgetResult`, `CreateBudgetResultParams`, `create`) **e ao `clone`** (copia o mês da origem — clonar move de orçamento, nunca de mês). **Manter `model`**. ⚠️ Isto quebra **7 call sites** de uma vez (mapper, `add-budget-result`, 5 testes) — é esperado: a dimensão é obrigatória (CA4). Ajustá-los faz parte desta fatia
 - [ ] T014 [US1] Alterar `src/modules/budget-plans/adapters/persistence/schemas/mysql.ts` (bloco `bgp_budget_results`, ~:203-229): **+** `month: tinyint('month').notNull()`; **+** `check('bgp_budget_results_month_chk', sql\`${t.month} BETWEEN 1 AND 12\`)`; **+** `uniqueIndex('bgp_budget_results_budget_subcategory_month_uq').on(t.budgetId, t.subcategoryId, t.month)`; **−** `index('bgp_budget_results_budget_id_idx')`(**redundante** — o UNIQUE é índice de prefixo). Manter`subcategory_id_idx` e a ausência de FK
 - [ ] T015 [US1] Gerar a migration: `pnpm run db:generate:budget-plans` e versionar o arquivo. **NUNCA escrever à mão** (constituição §VI). Conferir o SQL emitido: `NOT NULL` sem default é seguro — zero linhas em todos os ambientes
 - [ ] T016 [US1] Atualizar `src/modules/budget-plans/adapters/persistence/mappers/budget-result.mapper.ts`: `budgetResultToInsert` inclui `month`; `budgetResultFromRow` faz `ExerciseMonth.rehydrate` e devolve `err('budget-result-corrupt')` se a row vier fora de 1..12
