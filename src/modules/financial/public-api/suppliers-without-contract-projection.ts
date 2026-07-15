@@ -2,11 +2,16 @@
  * Reader boot-scoped da agregação "Fornecedores sem Contrato" (REPORTS-SUPPLIERS-NO-CONTRACT ·
  * #240 REP-2) — public-api do financial.
  *
- * Agrega o read-model `fin_payable_view` (#235) por fornecedor: soma `value_cents` e conta os
- * títulos com `contract_ref IS NULL` (superset — inclui reembolso/distrato/etc., divergência
- * documentada) e `supplier_ref IS NOT NULL`, **todos os status** (inclusive Cancelled). LEFT JOIN
- * `fin_supplier_view` (#47) para o nome — `name` fica `null` enquanto o fornecedor não foi
- * projetado (consistência eventual, ADR-0043).
+ * Devolve os **CANDIDATOS** do relatório, não a resposta final: agrega o read-model
+ * `fin_payable_view` (#235) por fornecedor, somando `value_cents` e contando os títulos com
+ * `contract_ref IS NULL`, `supplier_ref IS NOT NULL` e `kind = 'Parent'` (#437), em **todos os
+ * status** (inclusive Cancelled). LEFT JOIN `fin_supplier_view` (#47) para o nome — `name` fica
+ * `null` enquanto o fornecedor não foi projetado (consistência eventual, ADR-0043).
+ *
+ * `contract_ref IS NULL` é filtro de LINHA (barato, reduz o conjunto) — não decide se o fornecedor
+ * tem contrato. Essa pergunta vive em `ctr_contracts` e é respondida pelo `reports`, que subtrai os
+ * contratantes com contrato Active EM MEMÓRIA: o JOIN `fin_*` × `ctr_*` é proibido (ADR-0006
+ * `:150`/`:154`, ADR-0014 `:130`).
  *
  * **Boot-scoped:** pool aberto uma vez, reusado, fechado no `close()` — nunca por requisição
  * (F1 do W2 do #238 / incidente RDS 0001). Molde: `openCollaboratorProjectionReader`.
@@ -56,7 +61,16 @@ export const openSuppliersWithoutContractReader = async (
           })
           .from(finPayableView)
           .leftJoin(finSupplierView, eq(finPayableView.supplierRef, finSupplierView.supplierRef))
-          .where(and(isNull(finPayableView.contractRef), isNotNull(finPayableView.supplierRef)))
+          .where(
+            and(
+              isNull(finPayableView.contractRef),
+              isNotNull(finPayableView.supplierRef),
+              // Filhos de retenção (ISS/IRRF/INSS/CSRF) carregam o supplier_ref do fornecedor
+              // (`apply-payable-event.ts`), então inflariam soma e contagem. Só o pai representa o
+              // documento: 1 NFS-e = 1, e `totalCents` = líquido ao fornecedor.
+              eq(finPayableView.kind, 'Parent'),
+            ),
+          )
           .groupBy(finPayableView.supplierRef, finSupplierView.name);
 
         const items: SupplierWithoutContractRow[] = [];
