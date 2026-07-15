@@ -293,9 +293,14 @@ const percentField = z.number().min(0).max(MAX_PERCENT);
 // IPCA aceita valor negativo (deflação — histórico IBGE); o domínio barra só se o resultado final < 0.
 const ipcaField = z.number().min(-100).max(MAX_PERCENT);
 
+// Alvo do lançamento calculado: (orçamento, subcategoria, MÊS do exercício) — #413. O mês é
+// herdado pelos 4 modelos via .extend(). Sem ele, os 12 POSTs de uma conta colidiriam na mesma
+// chave — era o que deixava os formulários de "Calculando Gastos" órfãos (#454).
+// z.int() e não z.coerce: o body é JSON (o front envia número); coerção mascararia "banana" → NaN.
 const budgetResultTargetSchema = z.object({
   budgetId: z.uuid(),
   subcategoryId: z.uuid(),
+  month: z.int().min(1).max(12).meta({ description: 'Mês do exercício (1..12)' }),
 });
 
 /** POST /budget-results/ipca — baseValueInCents * (1 + ipca/100). */

@@ -1,5 +1,6 @@
 import { type Result, ok } from '../../../../shared/primitives/result.ts';
 import * as BudgetId from '../../domain/shared/budget-id.ts';
+import * as ExerciseMonth from '../../domain/shared/exercise-month.ts';
 import * as SubcategoryId from '../../domain/cost-structure/subcategory-id.ts';
 import * as BudgetResultId from '../../domain/budget-result/budget-result-id.ts';
 import * as BudgetResult from '../../domain/budget-result/budget-result.ts';
@@ -17,12 +18,15 @@ import type { BudgetExistsReader, BudgetExistsReadError } from '../ports/budget-
 export type AddBudgetResultCommand = Readonly<{
   budgetId: string;
   subcategoryId: string;
+  // Mês do exercício (1..12) — #413. Validado pelo VO; a borda também barra via Zod.
+  month: number;
   input: CalcModelInput;
 }>;
 
 export type AddBudgetResultError =
   | BudgetId.BudgetIdError
   | SubcategoryId.SubcategoryIdError
+  | ExerciseMonth.ExerciseMonthError
   | BudgetExistsReadError
   | SubcategoryLaunchTypeReadError
   | BudgetResult.BudgetResultError
@@ -47,6 +51,9 @@ export const addBudgetResult =
     const subcategoryId = SubcategoryId.rehydrate(cmd.subcategoryId);
     if (!subcategoryId.ok) return subcategoryId;
 
+    const month = ExerciseMonth.parse(cmd.month);
+    if (!month.ok) return month;
+
     const budgetExists = await deps.budgetReader.exists(budgetId.value);
     if (!budgetExists.ok) return budgetExists;
 
@@ -57,13 +64,17 @@ export const addBudgetResult =
       id: BudgetResultId.generate(),
       budgetId: budgetId.value,
       subcategoryId: subcategoryId.value,
+      month: month.value,
       input: cmd.input,
       subcategoryLaunchType: launchType.value,
     });
     if (!result.ok) return result;
 
-    const saved = await deps.budgetResultRepo.add(result.value);
+    // Upsert por (budget, subcategoria, mês): recalcular o mesmo mês atualiza o valor. O id gerado
+    // acima só vale para a primeira gravação — no recálculo o adapter preserva o id existente e o
+    // devolve. Retornar `result.value` aqui faria a response anunciar um id inexistente.
+    const saved = await deps.budgetResultRepo.save(result.value);
     if (!saved.ok) return saved;
 
-    return ok(result.value);
+    return ok(saved.value);
   };

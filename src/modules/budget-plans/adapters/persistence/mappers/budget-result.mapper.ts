@@ -1,6 +1,7 @@
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import * as Money from '#src/shared/kernel/money.ts';
 import * as BudgetId from '#src/modules/budget-plans/domain/shared/budget-id.ts';
+import * as ExerciseMonth from '#src/modules/budget-plans/domain/shared/exercise-month.ts';
 import * as SubcategoryId from '#src/modules/budget-plans/domain/cost-structure/subcategory-id.ts';
 import * as BudgetResultId from '#src/modules/budget-plans/domain/budget-result/budget-result-id.ts';
 import { isLaunchType } from '#src/modules/budget-plans/domain/cost-structure/launch-type.ts';
@@ -18,6 +19,7 @@ export const budgetResultToInsert = (result: BudgetResult): NewBudgetResultRow =
   id: result.id as unknown as string,
   budgetId: result.budgetId as unknown as string,
   subcategoryId: result.subcategoryId as unknown as string,
+  month: result.month as unknown as number,
   model: result.model,
   valueCents: result.value.cents,
 });
@@ -34,6 +36,10 @@ export const budgetResultFromRow = (
   const subcategoryId = SubcategoryId.rehydrate(row.subcategoryId);
   if (!subcategoryId.ok) return err('budget-result-corrupt');
 
+  // Mês fora de 1..12 é corrupção — o domínio não confia no banco, mesmo com o CHECK no lugar.
+  const month = ExerciseMonth.rehydrate(row.month);
+  if (!month.ok) return err('budget-result-corrupt');
+
   if (!isLaunchType(row.model)) return err('budget-result-corrupt');
 
   const value = Money.fromCents(row.valueCents);
@@ -43,6 +49,7 @@ export const budgetResultFromRow = (
     id: id.value,
     budgetId: budgetId.value,
     subcategoryId: subcategoryId.value,
+    month: month.value,
     model: row.model,
     value: value.value,
   });

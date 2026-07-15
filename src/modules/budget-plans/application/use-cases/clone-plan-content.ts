@@ -86,7 +86,7 @@ export const clonePlanContent =
       for (const result of results.value) {
         const newSubcatId = clonedStructure.subcategoryIdMap.get(String(result.subcategoryId));
         if (newSubcatId === undefined) continue;
-        const addedResult = await deps.budgetResultRepo.add(
+        const addedResult = await deps.budgetResultRepo.save(
           BudgetResult.clone(result, {
             id: BudgetResultId.generate(),
             budgetId: newBudgetId,

@@ -43,6 +43,13 @@
       "when": 1783825976828,
       "tag": "0005_neat_jack_power",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "5",
+      "when": 1784142666965,
+      "tag": "0006_same_jigsaw",
+      "breakpoints": true
     }
   ]
 }

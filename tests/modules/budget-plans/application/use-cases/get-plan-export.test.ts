@@ -11,6 +11,7 @@ import * as Money from '#src/shared/kernel/money.ts';
 import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '#src/modules/budget-plans/domain/shared/budget-plan-id.ts';
 import * as BudgetId from '#src/modules/budget-plans/domain/shared/budget-id.ts';
+import * as ExerciseMonth from '#src/modules/budget-plans/domain/shared/exercise-month.ts';
 import * as CostCenterId from '#src/modules/budget-plans/domain/cost-structure/cost-center-id.ts';
 import * as CategoryId from '#src/modules/budget-plans/domain/cost-structure/category-id.ts';
 import * as SubcategoryId from '#src/modules/budget-plans/domain/cost-structure/subcategory-id.ts';
@@ -43,6 +44,13 @@ const ACTOR = (() => {
   const r = UserRef.rehydrate('00000000-0000-4000-8000-000000000001');
   assert.ok(isOk(r));
   return r.value;
+})();
+
+// #413 — mês do exercício nas fixtures (o VO tem suíte própria; aqui mês inválido é erro de teste).
+const FIXTURE_MONTH = (() => {
+  const m = ExerciseMonth.parse(1);
+  assert.ok(isOk(m));
+  return m.value;
 })();
 
 const makeExportDeps = () => {
@@ -131,10 +139,11 @@ const seedPlanWithTree = async (
     id: BudgetResultId.generate(),
     budgetId,
     subcategoryId: sub1,
+    month: FIXTURE_MONTH,
     model: 'DESPESAS_PESSOAIS',
     value: value.value,
   };
-  assert.ok(isOk(await deps.budgetResultRepo.add(result)));
+  assert.ok(isOk(await deps.budgetResultRepo.save(result)));
 
   return { plan, subcategoryIds: [String(sub1), String(sub2)], budgetId: String(budgetId) };
 };

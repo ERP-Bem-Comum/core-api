@@ -21,6 +21,7 @@ import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '#src/modules/budget-plans/domain/shared/budget-plan-id.ts';
 import * as BudgetId from '#src/modules/budget-plans/domain/shared/budget-id.ts';
+import * as ExerciseMonth from '#src/modules/budget-plans/domain/shared/exercise-month.ts';
 import * as SubcategoryId from '#src/modules/budget-plans/domain/cost-structure/subcategory-id.ts';
 import { ProgramRef, PartnerStateRef } from '#src/modules/budget-plans/domain/shared/refs.ts';
 import { BudgetPlan } from '#src/modules/budget-plans/domain/budget-plan/budget-plan.ts';
@@ -32,6 +33,14 @@ import * as BudgetResultId from '#src/modules/budget-plans/domain/budget-result/
 import { InMemoryBudgetPlanRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-plan-repository.in-memory.ts';
 import { InMemoryBudgetResultRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-result-repository.in-memory.ts';
 import { deleteBudget } from '#src/modules/budget-plans/application/use-cases/delete-budget.ts';
+
+// #413 — mês do exercício nas fixtures. O VO tem suíte própria (exercise-month.test.ts); aqui um
+// mês inválido seria erro de teste, não de domínio.
+const FIXTURE_MONTH = (() => {
+  const m = ExerciseMonth.parse(1);
+  if (!m.ok) throw new Error('fixture inválida: mês');
+  return m.value;
+})();
 
 const NOW = new Date('2026-07-09T12:00:00.000Z');
 const PROGRAM = '11111111-1111-4111-8111-111111111111';
@@ -73,6 +82,7 @@ const build = () => {
     id: BudgetResultId.generate(),
     budgetId,
     subcategoryId: SubcategoryId.generate(),
+    month: FIXTURE_MONTH,
     input: { kind: 'IPCA', baseValueInCents: 100000, ipca: 4.5 },
     subcategoryLaunchType: 'IPCA',
   });
@@ -125,7 +135,7 @@ const seed = async (fake: ReturnType<typeof makeAtomicFakeRepo>) => {
   const { planWithBudget, planId, budgetId, result } = build();
   // Semeia via os stores internos (nao pelo wrapper `save`) para nao inflar `saveCalls`.
   assert.ok(isOk(await fake.planStore.repo.save(planWithBudget, [])));
-  assert.ok(isOk(await fake.resultStore.repo.add(result)));
+  assert.ok(isOk(await fake.resultStore.repo.save(result)));
   return { planId, budgetId };
 };
 
@@ -181,7 +191,7 @@ describe('deleteBudget (use case) — BGP-DELETE-BUDGET-ATOMIC #377', () => {
     const resultStore = InMemoryBudgetResultRepository();
     const { planWithBudget, budgetId, result } = build();
     assert.ok(isOk(await planStore.repo.save(planWithBudget, [])));
-    assert.ok(isOk(await resultStore.repo.add(result)));
+    assert.ok(isOk(await resultStore.repo.save(result)));
 
     // Um save generico do plano (ex.: addBudget/createScenery/approve editando o agregado) NAO pode
     // tocar bgp_budget_results — so `removeBudget` apaga resultados. Guard-rail: verde agora e apos W1.

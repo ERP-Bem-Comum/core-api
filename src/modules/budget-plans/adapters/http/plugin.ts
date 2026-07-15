@@ -392,6 +392,7 @@ const budgetPlansRoutes =
         const result = await deps.addBudgetResult({
           budgetId: req.body.budgetId,
           subcategoryId: req.body.subcategoryId,
+          month: req.body.month,
           input: {
             kind: 'IPCA',
             baseValueInCents: req.body.baseValueInCents,
@@ -415,6 +416,7 @@ const budgetPlansRoutes =
         const result = await deps.addBudgetResult({
           budgetId: req.body.budgetId,
           subcategoryId: req.body.subcategoryId,
+          month: req.body.month,
           input: {
             kind: 'CAED',
             numberOfEnrollments: req.body.numberOfEnrollments,
@@ -439,6 +441,7 @@ const budgetPlansRoutes =
         const result = await deps.addBudgetResult({
           budgetId: b.budgetId,
           subcategoryId: b.subcategoryId,
+          month: b.month,
           input: {
             kind: 'DESPESAS_PESSOAIS',
             salaryInCents: b.salaryInCents,
@@ -475,6 +478,7 @@ const budgetPlansRoutes =
         const result = await deps.addBudgetResult({
           budgetId: b.budgetId,
           subcategoryId: b.subcategoryId,
+          month: b.month,
           input: {
             kind: 'DESPESAS_LOGISTICAS',
             numberOfPeople: b.numberOfPeople,

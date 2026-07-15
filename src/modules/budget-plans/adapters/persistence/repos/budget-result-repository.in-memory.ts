@@ -11,10 +11,28 @@ export type InMemoryBudgetResultRepositoryHandle = Readonly<{
 export const InMemoryBudgetResultRepository = (): InMemoryBudgetResultRepositoryHandle => {
   let store: BudgetResult[] = [];
 
+  // Paridade com o drizzle (ON DUPLICATE KEY UPDATE sobre a UNIQUE): a chave natural é
+  // (budgetId, subcategoryId, month) — #413.
+  const sameTarget = (a: BudgetResult, b: BudgetResult): boolean =>
+    String(a.budgetId) === String(b.budgetId) &&
+    String(a.subcategoryId) === String(b.subcategoryId) &&
+    a.month === b.month;
+
   const repo: BudgetResultRepository = {
-    add: async (result: BudgetResult) => {
-      store.push(result);
-      return ok(undefined);
+    // Devolve o PERSISTIDO (não a entrada): no recálculo o id do chamador é descartado — mesma
+    // semântica do ON DUPLICATE KEY UPDATE no drizzle (paridade).
+    save: async (result: BudgetResult) => {
+      const existing = store.findIndex((r) => sameTarget(r, result));
+      if (existing === -1) {
+        store.push(result);
+        return ok(result);
+      }
+      // Recálculo: sobrescreve valor/modelo e PRESERVA o id da linha existente.
+      const previous = store[existing];
+      if (previous === undefined) return ok(result);
+      const merged: BudgetResult = { ...result, id: previous.id };
+      store[existing] = merged;
+      return ok(merged);
     },
 
     listByBudgetId: async (budgetId: BudgetId) =>

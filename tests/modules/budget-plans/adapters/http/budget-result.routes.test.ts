@@ -98,6 +98,8 @@ const registerAndLogin = async (app: App, email: string): Promise<string> => {
 const ipcaPayload = (over: Record<string, unknown> = {}): Record<string, unknown> => ({
   budgetId: BUDGET_ID,
   subcategoryId: SUB_IPCA,
+  // #413 — o alvo do lançamento inclui o mês do exercício.
+  month: 1,
   baseValueInCents: 100000,
   ipca: 4.5,
   ...over,
@@ -211,6 +213,7 @@ describe('POST /budget-plans/budget-results/logistics-expenses', () => {
       payload: {
         budgetId: BUDGET_ID,
         subcategoryId: SUB_LOG,
+        month: 1,
         numberOfPeople: 2,
         totalTrips: 3,
         airfareInCents: 50000,
