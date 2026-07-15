@@ -48,3 +48,12 @@ export type {
 // por Fornecedor×CentroCusto×Categoria em 3 baldes. Consumido pelo `reports` via ACL.
 export { openPaymentPositionReader } from './payment-position-projection.ts';
 export type { PaymentPositionRow, PaymentPositionReader } from './payment-position-projection.ts';
+
+// Reader boot-scoped da "Análise de Planejamento" (#114 REP-3 — read-only). Agrega fin_payable_view
+// por categoria×CC×mês num período. Consumido pelo `reports` via ACL.
+export { openPayablesAnalysisReader } from './payables-analysis-projection.ts';
+export type {
+  PayablesAnalysisRow,
+  PayablesAnalysisFilter,
+  PayablesAnalysisReader,
+} from './payables-analysis-projection.ts';

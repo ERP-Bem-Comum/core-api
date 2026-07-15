@@ -135,6 +135,8 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/financial/public-api/suppliers-without-contract.drizzle-mysql.test.ts',
     // #243 REP-4: "posição de pagamentos" (fin_payable_view × cost_center × categoria, 3 baldes)
     'tests/modules/financial/public-api/payment-position.drizzle-mysql.test.ts',
+    // REP-3 #114: "análise de planejamento" (fin_payable_view por categoria×CC×mês, DATE_FORMAT)
+    'tests/modules/financial/public-api/payables-analysis.drizzle-mysql.test.ts',
     'tests/workers/supplier-view-projection/projection.integration.test.ts',
   ]),
   'etl:orchestrate': mysqlSuite(ETL_DB_ENV, ['tests/etl/orchestrate.integration.test.ts']),

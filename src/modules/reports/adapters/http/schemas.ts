@@ -73,3 +73,47 @@ export const paymentPositionResponseSchema = z
   .strict();
 
 export type PaymentPositionResponseDto = z.infer<typeof paymentPositionResponseSchema>;
+
+// REP-3 (#114) — "Análise de Planejamento". Query de filtro (período half-open + status opcional).
+export const analysisQuerySchema = z
+  .object({
+    dueStart: z.iso.date(), // 'YYYY-MM-DD' inclusivo
+    dueEnd: z.iso.date(), // 'YYYY-MM-DD' exclusivo
+    status: z.string().min(1).optional(),
+  })
+  .strict();
+
+export type AnalysisQueryDto = z.infer<typeof analysisQuerySchema>;
+
+const analysisMonthItemSchema = z.object({ monthYear: z.string(), total: z.number() }).strict();
+const analysisCostCenterItemSchema = z
+  .object({ id: z.string().nullable(), name: z.string().nullable(), total: z.number() })
+  .strict();
+
+const analysisGroupSchema = z
+  .object({
+    id: z.string().nullable(),
+    name: z.string().nullable(),
+    total: z.number(),
+    itens: z.array(analysisMonthItemSchema),
+    costCenters: z.array(analysisCostCenterItemSchema),
+  })
+  .strict();
+
+export const analysisReportResponseSchema = z
+  .object({
+    totalValueOfPeriod: z.number(),
+    data: z.array(analysisGroupSchema),
+  })
+  .strict();
+
+export type AnalysisReportResponseDto = z.infer<typeof analysisReportResponseSchema>;
+
+// analysis/chart — array de resumo por categoria.
+export const analysisChartItemSchema = z
+  .object({ id: z.string().nullable(), name: z.string().nullable(), total: z.number() })
+  .strict();
+
+export const analysisChartResponseSchema = z.array(analysisChartItemSchema);
+
+export type AnalysisChartResponseDto = z.infer<typeof analysisChartResponseSchema>;
