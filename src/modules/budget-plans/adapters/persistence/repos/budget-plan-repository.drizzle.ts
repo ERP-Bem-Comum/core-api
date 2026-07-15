@@ -40,6 +40,10 @@ const listWhere = (query: ListBudgetPlansQuery): SQL | undefined => {
   if (query.programRef !== undefined) {
     clauses.push(eq(schema.budgetPlans.programRef, query.programRef as unknown as string));
   }
+  // Só raízes (parent_id IS NULL) — usa o índice bgp_budget_plans_parent_id_idx.
+  if (query.rootsOnly === true) {
+    clauses.push(isNull(schema.budgetPlans.parentId));
+  }
   return clauses.length === 0 ? undefined : and(...clauses);
 };
 

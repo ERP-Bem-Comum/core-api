@@ -104,6 +104,9 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/budget-plans/adapters/persistence/plan-lifecycle.drizzle-mysql.test.ts',
     // #319 — Consolidado ABC: listApprovedByYear (WHERE status/year/program + ORDER BY id) + vigente por família.
     'tests/modules/budget-plans/adapters/persistence/consolidated.drizzle-mysql.test.ts',
+    // #423 — contrato do BudgetPlanRepository contra MySQL real (estava órfão: nunca registrado). Cobre
+    // listPaged rootsOnly=true (parent_id IS NULL) + upsert/listYears/ordenação sobre FK auto-referente.
+    'tests/modules/budget-plans/adapters/persistence/drizzle-mysql.test.ts',
   ]),
   financial: mysqlSuite({ MYSQL_INTEGRATION: '1' }, [
     'tests/modules/financial/adapters/persistence/document-repository.drizzle-mysql.test.ts',

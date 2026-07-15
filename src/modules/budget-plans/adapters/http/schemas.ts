@@ -40,13 +40,16 @@ export const createBudgetPlanBodySchema = z.object({
 
 export type CreateBudgetPlanBody = z.infer<typeof createBudgetPlanBodySchema>;
 
-/** Query do GET /budget-plans (page/limit/year/status/programRef). */
+/** Query do GET /budget-plans (page/limit/year/status/programRef/rootsOnly). */
 export const listBudgetPlansQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   limit: z.coerce.number().int().min(1).max(LIST_LIMIT_MAX).default(LIST_LIMIT_DEFAULT),
   year: z.coerce.number().int().min(YEAR_FILTER_MIN).max(YEAR_FILTER_MAX).optional(),
   status: budgetPlanStatusSchema.optional(),
   programRef: z.uuid().optional(),
+  // Coerção ESTRITA (só 'true'/'false') — z.coerce.boolean() mapearia qualquer string não-vazia
+  // (ex.: 'banana') para true; aqui um valor não-booleano vira 400. Ausente = lista completa flat.
+  rootsOnly: z.stringbool().optional(),
 });
 
 export type ListBudgetPlansQuery = z.infer<typeof listBudgetPlansQuerySchema>;
@@ -69,6 +72,8 @@ export const budgetPlanListItemSchema = z.object({
   updatedByRef: z.uuid().nullable(),
   partnersCount: z.number().int().nonnegative(),
   networkKind: z.enum(['state', 'municipality', 'mixed']).nullable(),
+  parentId: z.uuid().nullable(),
+  scenarioName: z.string().nullable(),
 });
 
 export type BudgetPlanListItemDto = z.infer<typeof budgetPlanListItemSchema>;

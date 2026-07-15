@@ -17,6 +17,7 @@ export type ListBudgetPlansInput = Readonly<{
   year?: number;
   status?: BudgetPlanStatus;
   programRef?: string;
+  rootsOnly?: boolean;
 }>;
 
 export type BudgetPlanListItem = Readonly<{
@@ -31,6 +32,8 @@ export type BudgetPlanListItem = Readonly<{
   updatedByRef: string | null;
   partnersCount: number;
   networkKind: 'state' | 'municipality' | 'mixed' | null;
+  parentId: string | null;
+  scenarioName: string | null;
 }>;
 
 export type ListBudgetPlansError =
@@ -74,6 +77,8 @@ const toItem = (plan: BudgetPlanEntity, programName: string): BudgetPlanListItem
   updatedByRef: plan.updatedByRef === null ? null : String(plan.updatedByRef),
   partnersCount: plan.budgets.length,
   networkKind: deriveNetworkKind(plan.budgets),
+  parentId: plan.parentId === null ? null : String(plan.parentId),
+  scenarioName: plan.scenarioName,
 });
 
 export const listBudgetPlans =
@@ -94,6 +99,7 @@ export const listBudgetPlans =
       ...(input.year !== undefined ? { year: input.year } : {}),
       ...(input.status !== undefined ? { status: input.status } : {}),
       ...(programRefFilter !== undefined ? { programRef: programRefFilter } : {}),
+      ...(input.rootsOnly !== undefined ? { rootsOnly: input.rootsOnly } : {}),
     };
 
     const page = await deps.planRepo.listPaged(query);
