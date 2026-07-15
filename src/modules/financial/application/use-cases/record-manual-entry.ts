@@ -143,16 +143,21 @@ export const recordManualEntry =
     );
     if (!saved.ok) return err(saved.error);
 
-    // #269/US1: transferência A→B com destino → nasce a contrapartida esperada (Pending, sinal oposto,
-    // valor da transação) na conta de destino, vinculada à perna de origem. Fora de Transfer ou sem
-    // destino: nada criado (guard de não-regressão — comportamento atual preservado).
-    if (input.type === 'Transfer' && destinationAccountId !== null) {
+    // #269/US1 + #428: transferência/aplicação/resgate A→B com destino → nasce a contrapartida esperada
+    // (Pending, sinal oposto, valor da transação) na conta de destino, vinculada à perna de origem, com o
+    // tipo e o produto do lançamento. Fora dos 3 tipos ou sem destino: nada criado (guard de não-regressão).
+    if (
+      (input.type === 'Transfer' || input.type === 'Investment' || input.type === 'Redemption') &&
+      destinationAccountId !== null
+    ) {
       const counterpart = ExpectedCounterpart.create({
         id: ExpectedCounterpartId.generate(),
         destinationAccountRef: destinationAccountId,
         originAccountRef: accId.value,
         originReconciliationRef: confirmed.value.reconciliation.id,
         originTransactionRef: String(transaction.id),
+        type: input.type,
+        ...(input.productLabel !== undefined ? { productLabel: input.productLabel } : {}),
         originMovement: transaction.movement,
         valueCents: BigInt(transaction.valueCents),
         expectedDate: transaction.date,

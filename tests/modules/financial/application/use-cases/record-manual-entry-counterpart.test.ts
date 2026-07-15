@@ -1,10 +1,17 @@
 /**
- * W0 RED — FIN-COUNTERPART-CREATE (US1 · spec 029 · #269). Application: `recordManualEntry` passa a
- * criar a Contrapartida Esperada no destino quando `type='Transfer'` + `destinationAccountRef`.
- * RED por inexistência do store da contrapartida + da integração no use-case.
+ * W0 RED — FIN-COUNTERPART-INVESTMENT-REDEMPTION (#428). Estende a criação da contrapartida esperada
+ * de só `type='Transfer'` para `Investment` (Aplicação) e `Redemption` (Resgate) quando há
+ * `destinationAccountRef`. O movimento esperado no destino segue agnóstico ao tipo
+ * (`opposite(transaction.movement)`) — muda só a abrangência do guard e o `type` propagado.
  *
- * CA1: Transfer+destino → 1 contrapartida Pending em B (movement oposto, valor da transação).
- * CA2: sem destino OU type≠Transfer → nenhuma contrapartida (guard de não-regressão).
+ * RED por: hoje `record-manual-entry.ts:149` só cria a contrapartida quando `type==='Transfer'`
+ * (Investment/Redemption caem no guard e NÃO criam) e `expected-counterpart.ts:50` hardcoda
+ * `type:'Transfer'`. As asserções novas de Investment/Redemption falham por essa semântica ausente.
+ *
+ * CA1(#428): Investment + destino → contrapartida Pending type=Investment, movement oposto, valor espelhado.
+ * CA2(#428): Redemption + destino → contrapartida Pending type=Redemption, movement oposto.
+ * CA3(#428, não-regressão): Transfer continua criando; Payment/FeePenaltyInterest (e qualquer tipo sem
+ *   destino) NÃO criam.
  */
 
 import { describe, it } from 'node:test';
@@ -15,7 +22,7 @@ import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente
 import { create as createCedente } from '#src/modules/financial/domain/cedente/cedente-account.ts';
 import * as Fitid from '#src/modules/financial/domain/statement/fitid.ts';
 import { importStatement } from '#src/modules/financial/domain/statement/bank-statement.ts';
-import type { ParsedTransaction } from '#src/modules/financial/domain/statement/types.ts';
+import type { ParsedTransaction, Movement } from '#src/modules/financial/domain/statement/types.ts';
 import {
   createInMemoryBankStatementRepository,
   type BankStatementStore,
@@ -33,10 +40,14 @@ const fitidOf = (raw: string) => {
   if (!f.ok) throw new Error('setup: fitid');
   return f.value;
 };
-const txOf = (raw: string, valueCents: number): ParsedTransaction => ({
+const txOf = (
+  raw: string,
+  valueCents: number,
+  movement: Movement = 'Debit',
+): ParsedTransaction => ({
   fitid: fitidOf(raw),
   date: D,
-  movement: 'Debit',
+  movement,
   entryType: 'Fee',
   payeeName: 'BANCO',
   memo: 'transf',
@@ -100,8 +111,8 @@ const buildWorld = (txs: readonly ParsedTransaction[]) => {
   };
 };
 
-describe('financial/application — recordManualEntry cria contrapartida (US1 · #269)', () => {
-  it('CA1: Transfer + destino → 1 contrapartida Pending em B (movement oposto, valor da transação)', async () => {
+describe('financial/application — recordManualEntry cria contrapartida (Transfer/Investment/Redemption · #428)', () => {
+  it('CA3(não-regressão): Transfer + destino → 1 contrapartida Pending em B (movement oposto, valor da transação)', async () => {
     const w = buildWorld([txOf('f0', 2500)]);
     const dest = cedente('341', '112233');
     await w.cedenteStore.save(w.account);
@@ -123,12 +134,76 @@ describe('financial/application — recordManualEntry cria contrapartida (US1 ·
     assert.equal(pending.value.length, 1, 'contrapartida criada no destino');
     const cp = pending.value[0]!;
     assert.equal(cp.status, 'Pending');
+    assert.equal(cp.type, 'Transfer', 'tipo espelha o lançamento');
     assert.equal(cp.movement, 'Credit', 'oposto ao Debit da origem');
     assert.equal(cp.valueCents, 2500n, 'espelha o valor da transação');
     assert.equal(String(cp.destinationAccountRef), String(dest.id));
   });
 
-  it('CA2: sem destinationAccountRef → nenhuma contrapartida (não-regressão)', async () => {
+  it('CA1(#428): Investment + destino → 1 contrapartida Pending type=Investment (movement oposto)', async () => {
+    // Origem Debit (aplica: sai da corrente) → destino espera Credit.
+    const w = buildWorld([txOf('f0', 2500, 'Debit')]);
+    const dest = cedente('341', '112233');
+    await w.cedenteStore.save(w.account);
+    await w.cedenteStore.save(dest);
+    const txId = w.transactionIds[0];
+    if (txId === undefined) throw new Error('setup');
+
+    const r = await w.record({
+      transactionId: txId,
+      type: 'Investment',
+      productLabel: 'CDB',
+      destinationAccountRef: String(dest.id),
+      reconciledBy: 'u1',
+    });
+    assert.equal(r.ok, true, JSON.stringify(r));
+
+    const pending = await w.counterpartStore.listPendingByAccount(dest.id);
+    assert.equal(pending.ok, true);
+    if (!pending.ok) return;
+    assert.equal(pending.value.length, 1, 'Investment com destino cria contrapartida em B');
+    const cp = pending.value[0]!;
+    assert.equal(cp.status, 'Pending');
+    assert.equal(
+      cp.type,
+      'Investment',
+      'contrapartida herda o tipo do lançamento (não Transfer fixo)',
+    );
+    assert.equal(cp.movement, 'Credit', 'oposto ao Debit da origem');
+    assert.equal(cp.valueCents, 2500n, 'espelha o valor da transação');
+    assert.equal(String(cp.destinationAccountRef), String(dest.id));
+  });
+
+  it('CA2(#428): Redemption + destino → 1 contrapartida Pending type=Redemption (origem Credit → movement Debit)', async () => {
+    // Resgate: entra na corrente → transação Credit → destino espera Debit (direção oposta).
+    const w = buildWorld([txOf('f0', 7000, 'Credit')]);
+    const dest = cedente('341', '445566');
+    await w.cedenteStore.save(w.account);
+    await w.cedenteStore.save(dest);
+    const txId = w.transactionIds[0];
+    if (txId === undefined) throw new Error('setup');
+
+    const r = await w.record({
+      transactionId: txId,
+      type: 'Redemption',
+      productLabel: 'Tesouro',
+      destinationAccountRef: String(dest.id),
+      reconciledBy: 'u1',
+    });
+    assert.equal(r.ok, true, JSON.stringify(r));
+
+    const pending = await w.counterpartStore.listPendingByAccount(dest.id);
+    assert.equal(pending.ok, true);
+    if (!pending.ok) return;
+    assert.equal(pending.value.length, 1, 'Redemption com destino cria contrapartida em B');
+    const cp = pending.value[0]!;
+    assert.equal(cp.status, 'Pending');
+    assert.equal(cp.type, 'Redemption', 'contrapartida herda o tipo do lançamento');
+    assert.equal(cp.movement, 'Debit', 'oposto ao Credit da origem');
+    assert.equal(cp.valueCents, 7000n, 'espelha o valor da transação');
+  });
+
+  it('CA3(não-regressão): sem destinationAccountRef → nenhuma contrapartida', async () => {
     const w = buildWorld([txOf('f0', 2500)]);
     await w.cedenteStore.save(w.account);
     const txId = w.transactionIds[0];
@@ -149,9 +224,9 @@ describe('financial/application — recordManualEntry cria contrapartida (US1 ·
     );
   });
 
-  it('CA2: type≠Transfer (mesmo com destino) → nenhuma contrapartida', async () => {
+  it('CA3(não-regressão): Payment mesmo COM destino → nenhuma contrapartida (fora dos 3 tipos)', async () => {
     const w = buildWorld([txOf('f0', 2500)]);
-    const dest = cedente('341', '112233');
+    const dest = cedente('341', '778899');
     await w.cedenteStore.save(w.account);
     await w.cedenteStore.save(dest);
     const txId = w.transactionIds[0];
@@ -159,14 +234,17 @@ describe('financial/application — recordManualEntry cria contrapartida (US1 ·
 
     const r = await w.record({
       transactionId: txId,
-      type: 'Investment',
-      productLabel: 'CDB',
+      type: 'Payment',
       destinationAccountRef: String(dest.id),
       reconciledBy: 'u1',
     });
-    // Independente do outcome do lançamento, a contrapartida NÃO nasce fora de Transfer.
+    // O lançamento pode ser aceito, mas a contrapartida só nasce em Transfer/Investment/Redemption.
     const pending = await w.counterpartStore.listPendingByAccount(dest.id);
-    assert.equal(pending.ok && pending.value.length === 0, true, 'só Transfer cria contrapartida');
+    assert.equal(
+      pending.ok && pending.value.length === 0,
+      true,
+      'Payment não gera contrapartida esperada',
+    );
     assert.equal(typeof r.ok, 'boolean');
   });
 });

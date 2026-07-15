@@ -62,7 +62,10 @@ const cedente = (acc: string) => {
   return r.value;
 };
 
-const buildWorld = async () => {
+const buildWorld = async (
+  counterpartType: 'Transfer' | 'Investment' | 'Redemption' = 'Transfer',
+  productLabel: string | null = null,
+) => {
   const accountB = cedente('112233');
   const originAccountA = CedenteAccountId.generate();
   const imported = importStatement(
@@ -93,6 +96,10 @@ const buildWorld = async () => {
     originAccountRef: originAccountA,
     originReconciliationRef: ReconciliationId.generate(),
     originTransactionRef: newUuid(),
+    // #428: a contrapartida carrega o tipo real (Transfer/Investment/Redemption) + o productLabel da
+    // operação de origem (nulo para Transfer; preenchido para Investment/Redemption).
+    type: counterpartType,
+    productLabel,
     originMovement: 'Debit',
     valueCents: 150000n,
     expectedDate: D,
@@ -161,5 +168,36 @@ describe('financial/application — confirmCounterpartMatch (US2 · #269)', () =
     assert.equal(r.ok, false);
     if (r.ok) return;
     assert.equal(r.error, 'counterpart-not-found');
+  });
+
+  it('CA4(#428): perna espelho B nasce com o tipo REAL da contrapartida (Investment), não Transfer fixo', async () => {
+    // Contrapartida Investment em B. Ao confirmar o match, a perna B (ManualEntry) deve carregar o
+    // tipo real da contrapartida — hoje `confirm-counterpart-match.ts:122` crava `type:'Transfer'`.
+    const w = await buildWorld('Investment', 'CDB Banco X');
+
+    const r = await w.confirm({
+      transactionId: w.txId,
+      counterpartId: String(w.counterpartId),
+      reconciledBy: 'u1',
+    });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    if (!r.ok) return;
+
+    // A perna B fica registrada como Reconciliation ManualEntry; seu `manualEntry.type` deve espelhar
+    // o tipo da contrapartida (Investment), não o 'Transfer' fixo.
+    const legB = await w.reconRepo.findById(r.value.reconciliationId);
+    assert.equal(legB.ok, true, JSON.stringify(legB));
+    if (!legB.ok || legB.value === null) return;
+    assert.equal(
+      legB.value.manualEntry?.type,
+      'Investment',
+      'perna espelho B herda o tipo real da contrapartida',
+    );
+    // Trava contra o remendo (placeholder): a perna B carrega o productLabel REAL da origem, não vazio.
+    assert.equal(
+      legB.value.manualEntry?.productLabel,
+      'CDB Banco X',
+      'perna espelho B herda o productLabel real (não placeholder)',
+    );
   });
 });

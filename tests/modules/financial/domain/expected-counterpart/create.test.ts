@@ -1,8 +1,14 @@
 /**
- * W0 RED — FIN-COUNTERPART-CREATE (US1 · spec 029 · #269). Domínio: `ExpectedCounterpart.create` —
- * contrapartida esperada na conta de destino de uma transferência A→B. RED por inexistência do agregado.
+ * W0 RED — FIN-COUNTERPART-INVESTMENT-REDEMPTION (#428). Domínio: `ExpectedCounterpart.create` passa a
+ * RECEBER e PROPAGAR o `type` (Transfer | Investment | Redemption) — hoje ignora o input e hardcoda
+ * `type:'Transfer'` (`expected-counterpart.ts:50`). O movimento continua agnóstico ao tipo
+ * (`opposite(originMovement)`); muda só a propagação do rótulo do tipo ao agregado.
  *
- * CA3: valor>0, destino≠origem, status Pending, movement OPOSTO ao da origem, evento TransferCounterpartCreated.
+ * RED por: `create` não aceita `type` no input e crava 'Transfer' → as asserções de Investment/Redemption
+ * (`c.type === 'Investment' | 'Redemption'`) falham. Transfer + validações continuam verdes (não-regressão).
+ *
+ * CA(#269): valor>0, destino≠origem, status Pending, movement OPOSTO ao da origem, evento TransferCounterpartCreated.
+ * CA(#428): `type` do input propaga para o agregado (Transfer/Investment/Redemption).
  */
 
 import { describe, it } from 'node:test';
@@ -24,14 +30,16 @@ const baseInput = (
   originAccountRef: CedenteAccountId.generate(),
   originReconciliationRef: ReconciliationId.generate(),
   originTransactionRef: 'tx-A-1',
+  // #428: `create` passa a receber o tipo do lançamento; default Transfer p/ os casos legados.
+  type: 'Transfer',
   originMovement: 'Debit',
   valueCents: 150000n,
   expectedDate: EXPECTED_DATE,
   ...over,
 });
 
-describe('financial/domain — ExpectedCounterpart.create (#269)', () => {
-  it('CA3: cria contrapartida Pending com movement oposto (origem Debit → Credit) + evento', () => {
+describe('financial/domain — ExpectedCounterpart.create (Transfer/Investment/Redemption · #428)', () => {
+  it('CA(#269): cria contrapartida Pending com movement oposto (origem Debit → Credit) + evento', () => {
     const r = ExpectedCounterpart.create(baseInput({ originMovement: 'Debit' }));
     assert.equal(r.ok, true);
     if (!r.ok) return;
@@ -46,6 +54,31 @@ describe('financial/domain — ExpectedCounterpart.create (#269)', () => {
     const ev = r.value.events[0];
     assert.ok(ev !== undefined, 'emite evento');
     assert.equal(ev.type, 'TransferCounterpartCreated');
+  });
+
+  it('CA(#428): Investment → propaga type=Investment ao agregado (movement oposto agnóstico)', () => {
+    const r = ExpectedCounterpart.create(
+      baseInput({ type: 'Investment', originMovement: 'Debit' }),
+    );
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+
+    const c = r.value.counterpart;
+    assert.equal(c.type, 'Investment', 'create propaga o tipo do input (não crava Transfer)');
+    assert.equal(c.movement, 'Credit', 'oposto ao Debit da origem — agnóstico ao tipo');
+    assert.equal(c.status, 'Pending');
+  });
+
+  it('CA(#428): Redemption → propaga type=Redemption (origem Credit → movement Debit)', () => {
+    const r = ExpectedCounterpart.create(
+      baseInput({ type: 'Redemption', originMovement: 'Credit' as Movement }),
+    );
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+
+    const c = r.value.counterpart;
+    assert.equal(c.type, 'Redemption', 'create propaga o tipo do input');
+    assert.equal(c.movement, 'Debit', 'oposto ao Credit da origem');
   });
 
   it('movement oposto na direção inversa (origem Credit → Debit)', () => {

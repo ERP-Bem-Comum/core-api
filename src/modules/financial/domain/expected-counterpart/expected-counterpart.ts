@@ -4,7 +4,11 @@ import type { CedenteAccountId } from '#src/modules/financial/domain/cedente/ced
 import type { ReconciliationId } from '#src/modules/financial/domain/reconciliation/reconciliation-id.ts';
 import type { Movement } from '#src/modules/financial/domain/statement/types.ts';
 import type { ExpectedCounterpartId } from './expected-counterpart-id.ts';
-import type { ExpectedCounterpart, ExpectedCounterpartError } from './types.ts';
+import type {
+  ExpectedCounterpart,
+  ExpectedCounterpartError,
+  ExpectedCounterpartType,
+} from './types.ts';
 import type {
   ExpectedCounterpartEvent,
   TransferCounterpartCreated,
@@ -14,6 +18,8 @@ import type {
 
 // US1 (#269): cria a contrapartida esperada na conta de destino de uma transferência A→B. A perna
 // esperada tem movimento OPOSTO ao da origem (Debit em A → Credit esperado em B) e espelha o valor.
+// #428: `type` e `productLabel` propagam do lançamento de origem — Transfer/Investment/Redemption geram
+// a perna esperada. `type` default 'Transfer' e `productLabel` default null preservam os callers legados.
 
 export type CreateExpectedCounterpartInput = Readonly<{
   id: ExpectedCounterpartId;
@@ -21,6 +27,8 @@ export type CreateExpectedCounterpartInput = Readonly<{
   originAccountRef: CedenteAccountId;
   originReconciliationRef: ReconciliationId;
   originTransactionRef: string;
+  type?: ExpectedCounterpartType;
+  productLabel?: string | null;
   originMovement: Movement;
   valueCents: bigint;
   expectedDate: Date;
@@ -47,7 +55,8 @@ export const create = (
     originAccountRef: input.originAccountRef,
     originReconciliationRef: input.originReconciliationRef,
     originTransactionRef: input.originTransactionRef,
-    type: 'Transfer',
+    type: input.type ?? 'Transfer',
+    productLabel: input.productLabel ?? null,
     movement: opposite(input.originMovement),
     valueCents: input.valueCents,
     expectedDate: input.expectedDate,

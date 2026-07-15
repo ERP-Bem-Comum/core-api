@@ -35,6 +35,11 @@ import {
   discard,
 } from '#src/modules/financial/domain/expected-counterpart/expected-counterpart.ts';
 
+// `valueCents` é bigint no agregado relido → JSON.stringify cru lança "Do not know how to serialize a
+// BigInt". Serializa bigint como string só para a mensagem de erro do assert.
+const j = (v: unknown): string =>
+  JSON.stringify(v, (_k: string, val: unknown) => (typeof val === 'bigint' ? val.toString() : val));
+
 const buildCounterpart = () => {
   const r = create({
     id: ExpectedCounterpartId.generate(),
@@ -47,6 +52,28 @@ const buildCounterpart = () => {
     expectedDate: new Date('2026-07-01T00:00:00.000Z'),
   });
   if (!r.ok) throw new Error('test setup: counterpart');
+  return r.value;
+};
+
+// #428: contrapartida com tipo Investment/Redemption. `create` passa a receber o `type`; a persistência
+// exige a migration do CHECK `fin_expected_counterpart_type_chk` (+ Investment/+Redemption) e o mapper
+// `toType` aceitando os 3 — senão o save viola o CHECK ou `toDomain` rejeita `invalid-expected-counterpart-type`.
+const buildTypedCounterpart = (
+  type: 'Investment' | 'Redemption',
+  originMovement: 'Debit' | 'Credit',
+) => {
+  const r = create({
+    id: ExpectedCounterpartId.generate(),
+    destinationAccountRef: CedenteAccountId.generate(),
+    originAccountRef: CedenteAccountId.generate(),
+    originReconciliationRef: ReconciliationId.generate(),
+    originTransactionRef: newUuid(),
+    type,
+    originMovement,
+    valueCents: 150000n,
+    expectedDate: new Date('2026-07-04T00:00:00.000Z'),
+  });
+  if (!r.ok) throw new Error('test setup: typed counterpart');
   return r.value;
 };
 
@@ -83,7 +110,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const cp = built.counterpart;
 
       const saved = await store.save(cp, built.events);
-      assert.equal(saved.ok, true, JSON.stringify(saved));
+      assert.equal(saved.ok, true, j(saved));
 
       const pending = await store.listPendingByAccount(cp.destinationAccountRef);
       assert.equal(pending.ok, true);
@@ -125,6 +152,56 @@ if (!process.env['MYSQL_INTEGRATION']) {
         );
       assert.equal(rows.length, 1, 'exatamente 1 evento no outbox');
       assert.equal(rows[0]?.eventType, 'TransferCounterpartCreated');
+    });
+
+    it('CA5(#428): round-trip Investment — save + findById sem invalid-expected-counterpart-type', async () => {
+      const store = createDrizzleExpectedCounterpartStore(handle);
+      const built = buildTypedCounterpart('Investment', 'Debit');
+      const cp = built.counterpart;
+
+      const saved = await store.save(cp, built.events);
+      assert.equal(saved.ok, true, j(saved));
+
+      const byId = await store.findById(cp.id);
+      assert.equal(byId.ok, true, j(byId));
+      if (byId.ok) {
+        assert.ok(byId.value, 'contrapartida Investment persistida e relida');
+        assert.equal(
+          byId.value.type,
+          'Investment',
+          'tipo Investment sobrevive ao round-trip (CHECK ampliado + mapper toType)',
+        );
+        assert.equal(byId.value.movement, 'Credit', 'oposto ao Debit da origem');
+      }
+
+      // Também aparece na fila de pendentes do destino (índice destination_account_ref, status).
+      const pending = await store.listPendingByAccount(cp.destinationAccountRef);
+      assert.equal(pending.ok, true);
+      if (pending.ok) {
+        assert.ok(
+          pending.value.some((c) => String(c.id) === String(cp.id) && c.type === 'Investment'),
+          'Investment aparece como pendente no destino',
+        );
+      }
+    });
+
+    it('CA5(#428): round-trip Redemption — origem Credit → movement Debit; sem rejeição de tipo', async () => {
+      const store = createDrizzleExpectedCounterpartStore(handle);
+      const built = buildTypedCounterpart('Redemption', 'Credit');
+      const cp = built.counterpart;
+
+      const saved = await store.save(cp, built.events);
+      assert.equal(saved.ok, true, j(saved));
+
+      const byId = await store.findById(cp.id);
+      assert.equal(
+        byId.ok && byId.value?.type === 'Redemption',
+        true,
+        'tipo Redemption round-trip (CHECK + mapper)',
+      );
+      if (byId.ok && byId.value) {
+        assert.equal(byId.value.movement, 'Debit', 'oposto ao Credit da origem');
+      }
     });
 
     it('CA2: confirmCounterpartMatch atômico — perna B Reconciled + contrapartida Matched + outbox', async () => {
@@ -198,7 +275,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
         txB.id,
         [...legB.value.events, ...matched.value.events],
       );
-      assert.equal(saved.ok, true, JSON.stringify(saved));
+      assert.equal(saved.ok, true, j(saved));
 
       // contrapartida → Matched (grava a transação real)
       const cp = await counterpartStore.findById(created.value.counterpart.id);
@@ -303,7 +380,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
         null,
         [...undoneA.value.events, ...discarded.value.events],
       );
-      assert.equal(saved.ok, true, JSON.stringify(saved));
+      assert.equal(saved.ok, true, j(saved));
 
       const cp = await counterpartStore.findById(created.value.counterpart.id);
       assert.equal(cp.ok && cp.value?.status === 'Discarded', true, 'contrapartida descartada');
