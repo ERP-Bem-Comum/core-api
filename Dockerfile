@@ -99,9 +99,11 @@ ENV NODE_ENV=production \
 
 # Copia node_modules do estágio deps.
 COPY --from=deps /app/node_modules ./node_modules
-# pnpm-workspace.yaml também no runtime: `pnpm <script>` (ex.: `pnpm seed:admin` no deploy)
-# roda o deps-status-check do pnpm 11, que revalida `overrides` (esbuild) contra o lock. Sem
-# o workspace aqui, `overrides` fica vazio vs. lock → ERR_PNPM_LOCKFILE_CONFIG_MISMATCH.
+# pnpm-workspace.yaml também no runtime: `pnpm <script>` (ex.: `pnpm job:auth:sync-permissions`
+# no deploy) roda o deps-status-check do pnpm 11, que revalida `overrides` (esbuild) contra o lock.
+# Sem o workspace aqui, `overrides` fica vazio vs. lock → ERR_PNPM_LOCKFILE_CONFIG_MISMATCH.
+# (O exemplo era `pnpm seed:admin` — comando que não existe na imagem, já que `scripts/` não é
+# copiado. Era o sintoma do #462: a intenção estava documentada e quebrada.)
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # Código de produção. `tsconfig.json` fica pra suportar tooling; os configs do
