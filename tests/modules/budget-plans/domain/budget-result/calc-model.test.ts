@@ -56,6 +56,46 @@ describe('CalcModel.calculate — paridade 1:1 com o legado (#317, CA1)', () => 
     assert.equal(r.value.cents, 658400);
   });
 
+  // CA1 do #460 — paridade contra o SISTEMA legado em produção (print da P.O., 2026-07-15), não
+  // contra fórmula recalculada à mão: "Diretora Adjunta EpV", Qtd 1, salário R$ 34.336,73 →
+  // Custo Mensal R$ 34.336,73 (o salário puro) e anual R$ 412.040,76 (= × 12).
+  //
+  // A P.O. decidiu (#460): a "Qtd de {subcategoria}" é METADADO — não multiplica. Segue o legado.
+  // Evidência que sustenta: (a) 2 dos 4 modelos multiplicam por contagem (CAED e DESPESAS_LOGISTICAS)
+  // e a folha deliberadamente não; (b) o campo se chama `numberOfFinancialDirectors` e no legado
+  // aparece só em DTO/repositório — nenhum cálculo o lê; (c) o import de Excel do legado força `= 1`
+  // nos 4 lugares onde toca o campo.
+  //
+  // Este teste é a trava: a quantidade NÃO É PARÂMETRO deste input (`CalcModelInput` não a declara),
+  // logo o valor é sempre o de UMA pessoa. O front chegou a multiplicar e tinha teste protegendo o
+  // bug (web-app PR #241) — a mesma tela mostrava um número, o backend gravava outro.
+  it('DESPESAS_PESSOAIS: paridade com o print do legado — Qtd é metadado, o valor é o do salário', () => {
+    const salarioMensalInCents = 3_433_673; // R$ 34.336,73
+    const r = CalcModel.calculate({
+      kind: 'DESPESAS_PESSOAIS',
+      salaryInCents: salarioMensalInCents,
+      salaryAdjustment: 0,
+      inssEmployer: 0,
+      inss: 0,
+      fgtsCharges: 0,
+      pisCharges: 0,
+      foodVoucherInCents: 0,
+      transportationVouchersInCents: 0,
+      healthInsuranceInCents: 0,
+      lifeInsuranceInCents: 0,
+      holidaysAndChargesInCents: 0,
+      allowanceInCents: 0,
+      thirteenthInCents: 0,
+      fgtsInCents: 0,
+    });
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    // Custo Mensal do print: o salário puro — NÃO multiplicado por nenhuma quantidade.
+    assert.equal(r.value.cents, salarioMensalInCents);
+    // Anual do grid do legado: R$ 412.040,76 (o mensal × 12 — #413 lança mês a mês).
+    assert.equal(r.value.cents * 12, 41_204_076);
+  });
+
   it('DESPESAS_LOGISTICAS: passagem × (pessoas×viagens); demais × diária respectiva', () => {
     // trips        = 2 * 3 = 6
     // airfare      = 6 * 50000                    = 300000   (sem diária)
