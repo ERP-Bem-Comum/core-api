@@ -14,6 +14,7 @@
 export { budgetPlansHttpPlugin } from '../adapters/http/plugin.ts';
 export type { BudgetPlansHttpHooks } from '../adapters/http/plugin.ts';
 export { buildBudgetPlansHttpDeps } from '../adapters/http/composition.ts';
+export { parseE2eBudgetPlansSeed } from '../adapters/http/e2e-seed.ts';
 export type {
   BudgetPlansHttpDeps,
   BudgetPlansCompositionConfig,

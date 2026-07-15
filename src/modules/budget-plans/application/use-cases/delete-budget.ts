@@ -9,10 +9,6 @@ import type {
   BudgetPlanRepository,
   BudgetPlanRepositoryError,
 } from '../../domain/budget-plan/repository.ts';
-import type {
-  BudgetResultRepository,
-  BudgetResultRepositoryError,
-} from '../../domain/budget-result/repository.ts';
 
 export type DeleteBudgetCommand = Readonly<{
   budgetPlanId: string;
@@ -26,18 +22,16 @@ export type DeleteBudgetError =
   | 'budget-plan-not-found'
   | BudgetPlanError
   | BudgetPlanRepositoryError
-  | BudgetResultRepositoryError
   | UserRef.UserRefError;
 
 export type DeleteBudgetDeps = Readonly<{
   planRepo: BudgetPlanRepository;
-  budgetResultRepo: BudgetResultRepository;
   clock: Clock;
 }>;
 
-// CA4: remove o orçamento do plano e, na sequência, seus resultados dependentes (delete explícito,
-// D2 — sem FK cascade). Se o delete dos resultados falhar após o save, eles ficam órfãos até um
-// retry — aceitável (dois repos, sem tx cross-agregado); documentado em DESIGN-DECISIONS.md.
+// CA4: remove o orçamento do plano e seus resultados dependentes ATOMICAMENTE — o `removeBudget`
+// persiste o plano-sem-o-budget e apaga os bgp_budget_results na mesma transação (rollback total se
+// algo falha). Fecha o gap dos 2 awaits antigos que deixava resultados órfãos (D2, resolvido).
 export const deleteBudget =
   (deps: DeleteBudgetDeps) =>
   async (cmd: DeleteBudgetCommand): Promise<Result<void, DeleteBudgetError>> => {
@@ -62,8 +56,5 @@ export const deleteBudget =
     );
     if (!removed.ok) return removed;
 
-    const saved = await deps.planRepo.save(removed.value.plan, []);
-    if (!saved.ok) return saved;
-
-    return deps.budgetResultRepo.deleteByBudgetId(budgetId.value);
+    return deps.planRepo.removeBudget(removed.value.plan, budgetId.value, []);
   };

@@ -107,6 +107,9 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // #423 — contrato do BudgetPlanRepository contra MySQL real (estava órfão: nunca registrado). Cobre
     // listPaged rootsOnly=true (parent_id IS NULL) + upsert/listYears/ordenação sobre FK auto-referente.
     'tests/modules/budget-plans/adapters/persistence/drizzle-mysql.test.ts',
+    // #377 BGP-DELETE-BUDGET-ATOMIC — removeBudget atômico: upsert do plano + delete dos
+    // bgp_budget_results na MESMA tx; caminho feliz + rollback (evento malformado reverte tudo).
+    'tests/modules/budget-plans/adapters/persistence/remove-budget-atomic.drizzle-mysql.test.ts',
   ]),
   financial: mysqlSuite({ MYSQL_INTEGRATION: '1' }, [
     'tests/modules/financial/adapters/persistence/document-repository.drizzle-mysql.test.ts',

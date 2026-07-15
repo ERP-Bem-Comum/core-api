@@ -8,6 +8,7 @@ import type {
   ListBudgetPlansQuery,
   BudgetPlanPage,
 } from '#src/modules/budget-plans/domain/budget-plan/repository.ts';
+import type { BudgetPlansModuleEvent } from '#src/modules/budget-plans/public-api/events.ts';
 import type { BudgetPlansMysqlHandle } from '../drivers/mysql-driver.ts';
 import * as schema from '../schemas/mysql.ts';
 import {
@@ -54,6 +55,41 @@ const hydrate = (
   const mapped = budgetPlanFromRow(row, budgetRows);
   if (!mapped.ok) throw new Error(`budget-plan-mapper: ${mapped.error}`);
   return mapped.value;
+};
+
+type Db = BudgetPlansMysqlHandle['db'];
+type Tx = Parameters<Parameters<Db['transaction']>[0]>[0];
+
+// Upsert do plano DENTRO de uma tx: trava o cabeçalho (`SELECT id ... FOR UPDATE`), UPDATE-ou-INSERT
+// do plano, replace-all dos budgets (coleção pequena, molde do legado) e append no outbox — tudo no
+// MESMO commit. Compartilhado por `save` e `removeBudget` (que soma o delete dos results na mesma tx).
+const upsertPlanInTx = async (
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+  tx: Tx,
+  plan: BudgetPlan,
+  events: readonly BudgetPlansModuleEvent[],
+): Promise<void> => {
+  const row = budgetPlanToInsert(plan);
+  const existing = await tx
+    .select({ id: schema.budgetPlans.id })
+    .from(schema.budgetPlans)
+    .where(eq(schema.budgetPlans.id, row.id))
+    .for('update');
+
+  if (existing.length > 0) {
+    await tx.update(schema.budgetPlans).set(row).where(eq(schema.budgetPlans.id, row.id));
+  } else {
+    await tx.insert(schema.budgetPlans).values(row);
+  }
+
+  // Entidade filha reescrita por inteiro (delete+insert) — coleção pequena, sem diff incremental.
+  await tx.delete(schema.budgets).where(eq(schema.budgets.budgetPlanId, row.id));
+  if (plan.budgets.length > 0) {
+    const budgetRows = plan.budgets.map((b) => budgetToInsert(b, plan.id));
+    await tx.insert(schema.budgets).values(budgetRows);
+  }
+
+  await appendOutboxInTx(tx, schema, events);
 };
 
 export const createDrizzleBudgetPlanRepository = (
@@ -184,28 +220,20 @@ export const createDrizzleBudgetPlanRepository = (
     save: async (plan, events) =>
       safe('save', async () => {
         await db.transaction(async (tx) => {
-          const row = budgetPlanToInsert(plan);
-          const existing = await tx
-            .select({ id: schema.budgetPlans.id })
-            .from(schema.budgetPlans)
-            .where(eq(schema.budgetPlans.id, row.id))
-            .for('update');
+          await upsertPlanInTx(tx, plan, events);
+        });
+      }),
 
-          if (existing.length > 0) {
-            await tx.update(schema.budgetPlans).set(row).where(eq(schema.budgetPlans.id, row.id));
-          } else {
-            await tx.insert(schema.budgetPlans).values(row);
-          }
-
-          // Entidade filha reescrita por inteiro (delete+insert) — coleção pequena,
-          // sem necessidade de diff incremental (molde do plano orçamentário legado).
-          await tx.delete(schema.budgets).where(eq(schema.budgets.budgetPlanId, row.id));
-          if (plan.budgets.length > 0) {
-            const budgetRows = plan.budgets.map((b) => budgetToInsert(b, plan.id));
-            await tx.insert(schema.budgets).values(budgetRows);
-          }
-
-          await appendOutboxInTx(tx, schema, events);
+    // Remoção atômica: upsert do plano-sem-o-budget + delete dos resultados dependentes na MESMA tx.
+    // Se o delete (ou o upsert/outbox) falha, a tx faz rollback total — nada órfão, nada removido.
+    removeBudget: async (plan, budgetId, events) =>
+      safe('removeBudget', async () => {
+        await db.transaction(async (tx) => {
+          await upsertPlanInTx(tx, plan, events);
+          // bgp_budget_results sem FK cascade (D1: o pai sofre replace-all) — delete explícito na tx.
+          await tx
+            .delete(schema.budgetResults)
+            .where(eq(schema.budgetResults.budgetId, budgetId as unknown as string));
         });
       }),
   };

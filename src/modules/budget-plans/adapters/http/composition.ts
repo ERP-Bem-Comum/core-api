@@ -171,7 +171,10 @@ type Pools = Readonly<{
 }>;
 
 const buildMemoryPools = async (seed: BudgetPlansSeed | undefined): Promise<Pools> => {
-  const { repo: planRepo } = InMemoryBudgetPlanRepository();
+  // Store de results compartilhado com o planRepo: o removeBudget atômico apaga os results daquele
+  // budget no MESMO store que o budgetResultRepo lê/escreve (espelha a tx única do adapter mysql).
+  const budgetResultRepo = InMemoryBudgetResultRepository().repo;
+  const { repo: planRepo } = InMemoryBudgetPlanRepository(undefined, budgetResultRepo);
   await seedPlans(planRepo, seed?.plans ?? []);
 
   // O writer atômico da árvore lê o status por FORA da árvore — aqui derivado do planRepo
@@ -184,7 +187,7 @@ const buildMemoryPools = async (seed: BudgetPlansSeed | undefined): Promise<Pool
   return {
     planRepo,
     costStructureRepo,
-    budgetResultRepo: InMemoryBudgetResultRepository().repo,
+    budgetResultRepo,
     subcategoryReader: InMemorySubcategoryLaunchTypeReader(seed?.subcategoryLaunchTypes ?? {}),
     budgetReader: InMemoryBudgetExistsReader(seed?.budgetsExisting ?? []),
     programCatalog: InMemoryProgramCatalog(seed?.programs ?? []),
@@ -274,7 +277,7 @@ const makeDeps = (pools: Pools): BudgetPlansHttpDeps => {
     addBudgetResult: addBudgetResult({ budgetResultRepo, subcategoryReader, budgetReader }),
     getBudgetResults: getBudgetResults({ budgetResultRepo }),
     addBudget: addBudget({ planRepo, clock }),
-    deleteBudget: deleteBudget({ planRepo, budgetResultRepo, clock }),
+    deleteBudget: deleteBudget({ planRepo, clock }),
     startCalibration: startCalibration({ planRepo, costStructureRepo, budgetResultRepo, clock }),
     createScenery: createScenery({ planRepo, costStructureRepo, budgetResultRepo, clock }),
     approveBudgetPlan: approveBudgetPlan({ planRepo, clock }),

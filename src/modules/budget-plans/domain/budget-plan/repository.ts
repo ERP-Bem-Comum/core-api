@@ -1,5 +1,6 @@
 import type { Result } from '../../../../shared/primitives/result.ts';
 import type { BudgetPlanId } from '../shared/budget-plan-id.ts';
+import type { BudgetId } from '../shared/budget-id.ts';
 import type { ProgramRef } from '../shared/refs.ts';
 import type { BudgetPlan } from './types.ts';
 import type { BudgetPlanStatus } from './status.ts';
@@ -54,6 +55,14 @@ export type BudgetPlanRepository = Readonly<{
   listYears: () => Promise<Result<readonly number[], BudgetPlanRepositoryError>>;
   save: (
     plan: BudgetPlan,
+    events: readonly BudgetPlansModuleEvent[],
+  ) => Promise<Result<void, BudgetPlanRepositoryError>>;
+  // Remoção atômica de um orçamento: persiste o plano-sem-o-budget E apaga os bgp_budget_results
+  // daquele budgetId na MESMA operação (mesma transação no adapter mysql). Rollback total se algo
+  // falha — fecha o gap dos 2 awaits (save + deleteByBudgetId) que deixava resultados órfãos.
+  removeBudget: (
+    plan: BudgetPlan,
+    budgetId: BudgetId,
     events: readonly BudgetPlansModuleEvent[],
   ) => Promise<Result<void, BudgetPlanRepositoryError>>;
 }>;

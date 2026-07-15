@@ -3,9 +3,12 @@ import type { BudgetPlan } from '../../../domain/budget-plan/types.ts';
 import type { BudgetPlanId } from '../../../domain/shared/budget-plan-id.ts';
 import type {
   BudgetPlanRepository,
+  BudgetPlanRepositoryError,
   ListBudgetPlansQuery,
   BudgetPlanPage,
 } from '../../../domain/budget-plan/repository.ts';
+import type { BudgetResultRepository } from '../../../domain/budget-result/repository.ts';
+import type { BudgetPlansModuleEvent } from '../../../public-api/events.ts';
 import type { OutboxPort } from '../../../application/ports/outbox.ts';
 import { InMemoryOutbox } from '../../outbox/outbox.in-memory.ts';
 
@@ -26,8 +29,23 @@ export type InMemoryBudgetPlanRepositoryHandle = Readonly<{
 
 export const InMemoryBudgetPlanRepository = (
   outbox: OutboxPort = InMemoryOutbox().port,
+  // Store de resultados co-localizado: no in-memory a "transação" do removeBudget é save + delete no
+  // mesmo tick. Ausente (boot/testes sem lançamentos) -> o delete dos results é no-op.
+  budgetResultRepo?: BudgetResultRepository,
 ): InMemoryBudgetPlanRepositoryHandle => {
   const map = new Map<BudgetPlanId, BudgetPlan>();
+
+  const save = async (
+    plan: BudgetPlan,
+    events: readonly BudgetPlansModuleEvent[],
+  ): Promise<Result<void, BudgetPlanRepositoryError>> => {
+    map.set(plan.id, plan);
+    if (events.length > 0) {
+      const appended = await outbox.append(events);
+      if (!appended.ok) return err(appended.error);
+    }
+    return ok(undefined);
+  };
 
   const repo: BudgetPlanRepository = {
     findById: async (id) => ok(map.get(id) ?? null),
@@ -75,11 +93,17 @@ export const InMemoryBudgetPlanRepository = (
     listYears: async () =>
       ok([...new Set([...map.values()].map((p) => p.year))].toSorted((a, b) => a - b)),
 
-    save: async (plan, events) => {
-      map.set(plan.id, plan);
-      if (events.length > 0) {
-        const appended = await outbox.append(events);
-        if (!appended.ok) return err(appended.error);
+    save,
+
+    // Remoção atômica (mesmo tick): persiste o plano-sem-o-budget e, se o save deu certo, apaga os
+    // results daquele budgetId no store co-localizado. Espelha a tx única do adapter mysql.
+    removeBudget: async (plan, budgetId, events) => {
+      const saved = await save(plan, events);
+      if (!saved.ok) return saved;
+      if (budgetResultRepo !== undefined) {
+        const deleted = await budgetResultRepo.deleteByBudgetId(budgetId);
+        // Store in-memory nunca falha; mapeia p/ erro de infra do port por completude de tipos.
+        if (!deleted.ok) return err('budget-plan-repo-unavailable');
       }
       return ok(undefined);
     },
