@@ -6,6 +6,7 @@
  *  - GET /reports/team — projeção "Equipe ABC" (9 colunas LGPD-safe, REP-1 · #238).
  *  - GET /reports/suppliers-without-contract — agregação de payables sem contrato (REP-2 · #240).
  *  - GET /reports/payment-position — posição de pagamentos por fornecedor×CC×categoria (REP-4 · #243).
+ *  - GET /reports/analysis/payables + /reports/analysis/chart — análise de planejamento (REP-3 · #114).
  */
 
 import type { FastifyPluginAsync, preHandlerAsyncHookHandler } from 'fastify';
@@ -19,14 +20,31 @@ import { ok } from '#src/shared/primitives/result.ts';
 import { sendResult } from '#src/shared/http/reply.ts';
 import { COLLABORATOR_PERMISSION } from '#src/modules/partners/public-api/permissions.ts';
 import { FINANCIAL_PERMISSION } from '#src/modules/financial/public-api/permissions.ts';
+import type { AnalysisFilter } from '../../application/ports/analysis-read.ts';
 
 import type { ReportsHttpDeps } from './composition.ts';
-import { teamToDto, suppliersWithoutContractToDto, paymentPositionToDto } from './dto.ts';
+import {
+  teamToDto,
+  suppliersWithoutContractToDto,
+  paymentPositionToDto,
+  analysisToReport,
+  analysisToChart,
+} from './dto.ts';
 import {
   teamReportResponseSchema,
   suppliersWithoutContractResponseSchema,
   paymentPositionResponseSchema,
+  analysisQuerySchema,
+  analysisReportResponseSchema,
+  analysisChartResponseSchema,
+  type AnalysisQueryDto,
 } from './schemas.ts';
+
+const toAnalysisFilter = (q: AnalysisQueryDto): AnalysisFilter => ({
+  dueStart: q.dueStart,
+  dueEnd: q.dueEnd,
+  ...(q.status !== undefined ? { status: q.status } : {}),
+});
 
 export type ReportsHttpHooks = Readonly<{
   requireAuth: preHandlerAsyncHookHandler;
@@ -93,6 +111,42 @@ const reportsRoutes =
           });
         }
         return sendResult(reply, ok(paymentPositionToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /reports/analysis/payables — AnalysisReport aninhado (categoria → mês + CC), filtro período.
+    scope.route({
+      method: 'GET',
+      url: '/reports/analysis/payables',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        querystring: analysisQuerySchema,
+        response: { 200: analysisReportResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.listAnalysis(toAnalysisFilter(req.query));
+        if (!result.ok) {
+          return sendResult(reply, result, { errors: { 'analysis-read-unavailable': 503 } });
+        }
+        return sendResult(reply, ok(analysisToReport(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /reports/analysis/chart — resumo por categoria (mesmo filtro de período).
+    scope.route({
+      method: 'GET',
+      url: '/reports/analysis/chart',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        querystring: analysisQuerySchema,
+        response: { 200: analysisChartResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.listAnalysis(toAnalysisFilter(req.query));
+        if (!result.ok) {
+          return sendResult(reply, result, { errors: { 'analysis-read-unavailable': 503 } });
+        }
+        return sendResult(reply, ok(analysisToChart(result.value)), { ok: 200 });
       },
     });
   };

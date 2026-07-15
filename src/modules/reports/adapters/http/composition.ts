@@ -5,7 +5,8 @@
  *  - REP-2 "Fornecedores sem Contrato" (#240/#437) ← `financial` (candidatos: payables
  *    `contract_ref IS NULL`, `kind='Parent'`) MENOS `contracts` (contratantes com contrato Active),
  *    subtraídos em memória pelo use-case `listSuppliersWithoutActiveContract`;
- *  - REP-4 "Posição de Pagamentos" (#243) ← `financial` (fornecedor×CC×categoria, 3 baldes).
+ *  - REP-4 "Posição de Pagamentos" (#243) ← `financial` (fornecedor×CC×categoria, 3 baldes);
+ *  - REP-3 "Análise de Planejamento" (#114) ← `financial` (categoria×CC×mês num período).
  *
  * Pools abertos UMA vez no boot (não por requisição — F1 do W2 #238 / incidente RDS 0001),
  * fechados no `shutdown()`. Molde: `buildPartnersReadPort`.
@@ -16,6 +17,7 @@ import { openCollaboratorProjectionReader } from '#src/modules/partners/public-a
 import {
   openSuppliersWithoutContractReader,
   openPaymentPositionReader,
+  openPayablesAnalysisReader,
 } from '#src/modules/financial/public-api/index.ts';
 import { buildContractsActiveContractorReadPort } from '#src/modules/contracts/public-api/index.ts';
 import { TeamReportReadFromPartners } from '../persistence/team-report-read.partners.ts';
@@ -30,6 +32,8 @@ import {
   listSuppliersWithoutActiveContract,
   type ListSuppliersWithoutActiveContractError,
 } from '../../application/use-cases/list-suppliers-without-active-contract.ts';
+import { AnalysisReadFromFinancial } from '../persistence/analysis-read.financial.ts';
+import { InMemoryAnalysisRead } from '../persistence/analysis-read.in-memory.ts';
 import type { TeamReportReadPort } from '../../application/ports/team-report-read.ts';
 import type {
   SupplierWithoutContract,
@@ -37,6 +41,7 @@ import type {
 } from '../../application/ports/suppliers-without-contract-read.ts';
 import type { ActiveContractorReadPort } from '../../application/ports/active-contractor-read.ts';
 import type { PaymentPositionReadPort } from '../../application/ports/payment-position-read.ts';
+import type { AnalysisReadPort } from '../../application/ports/analysis-read.ts';
 
 export type ReportsDriver = 'memory' | 'mysql';
 
@@ -56,6 +61,7 @@ export type ReportsHttpDeps = Readonly<{
     Result<readonly SupplierWithoutContract[], ListSuppliersWithoutActiveContractError>
   >;
   listPaymentPosition: PaymentPositionReadPort['list'];
+  listAnalysis: AnalysisReadPort['list'];
   shutdown: () => Promise<void>;
 }>;
 
@@ -67,6 +73,7 @@ export const buildReportsHttpDeps = async (
     const suppliers: SuppliersWithoutContractReadPort = InMemorySuppliersWithoutContractRead();
     const activeContractors: ActiveContractorReadPort = InMemoryActiveContractorRead();
     const position: PaymentPositionReadPort = InMemoryPaymentPositionRead();
+    const analysis: AnalysisReadPort = InMemoryAnalysisRead();
     return {
       listTeam: team.list,
       listSuppliersWithoutContract: listSuppliersWithoutActiveContract({
@@ -74,6 +81,7 @@ export const buildReportsHttpDeps = async (
         activeContractorsRead: activeContractors,
       }),
       listPaymentPosition: position.list,
+      listAnalysis: analysis.list,
       shutdown: () => Promise.resolve(),
     };
   }
@@ -134,12 +142,25 @@ export const buildReportsHttpDeps = async (
   }
   const contractorsReader = contractorsReaderR.value;
 
+  const analysisReaderR = await openPayablesAnalysisReader({ connectionString: financialUrl });
+  if (!analysisReaderR.ok) {
+    await teamReader.close();
+    await suppliersReader.close();
+    await positionReader.close();
+    await contractorsReader.close();
+    throw new Error(
+      `reports-composition: falha ao abrir reader (analysis) do financial: ${analysisReaderR.error}`,
+    );
+  }
+  const analysisReader = analysisReaderR.value;
+
   const teamPort = TeamReportReadFromPartners(teamReader.list);
   const suppliersPort = SuppliersWithoutContractReadFromFinancial(suppliersReader.list);
   const contractorsPort = ActiveContractorReadFromContracts(
     contractorsReader.listContractorsWithActiveContract,
   );
   const positionPort = PaymentPositionReadFromFinancial(positionReader.list);
+  const analysisPort = AnalysisReadFromFinancial(analysisReader.list);
 
   return {
     listTeam: teamPort.list,
@@ -148,11 +169,13 @@ export const buildReportsHttpDeps = async (
       activeContractorsRead: contractorsPort,
     }),
     listPaymentPosition: positionPort.list,
+    listAnalysis: analysisPort.list,
     shutdown: async () => {
       await teamReader.close();
       await suppliersReader.close();
       await positionReader.close();
       await contractorsReader.close();
+      await analysisReader.close();
     },
   };
 };
