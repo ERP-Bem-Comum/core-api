@@ -140,6 +140,9 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/financial/public-api/payment-position.drizzle-mysql.test.ts',
     // REP-3 #114: "análise de planejamento" (fin_payable_view por categoria×CC×mês, DATE_FORMAT)
     'tests/modules/financial/public-api/payables-analysis.drizzle-mysql.test.ts',
+    // #416 BGP-INSIGHTS-REALIZED: "realizado por plano" (Σ reconciled_value_cents Active, JOIN 3-hop
+    // fin_reconciliation_items → fin_reconciliations → fin_payables → fin_documents.budget_plan_ref)
+    'tests/modules/financial/public-api/realized-by-plan.drizzle-mysql.test.ts',
     'tests/workers/supplier-view-projection/projection.integration.test.ts',
   ]),
   'etl:orchestrate': mysqlSuite(ETL_DB_ENV, ['tests/etl/orchestrate.integration.test.ts']),

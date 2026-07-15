@@ -120,6 +120,8 @@ const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
   'scenario-name-required': 400,
   // Consolidado + CSV (US5/#319). Export de plano não-aprovado -> 409 (precondição de estado).
   'plan-not-approved-for-consolidation': 409,
+  // Insights com Realizado (#416): reader do financial indisponível -> 503 (fail-closed).
+  'realized-by-plan-read-unavailable': 503,
 };
 
 const writeErrorStatus = (code: string): number => WRITE_ERROR_STATUS[code] ?? 422;
@@ -617,7 +619,8 @@ const budgetPlansRoutes =
       },
     });
 
-    // GET /budget-plans/:id/insights — comparação ano-a-ano dos totais planejados (CA3).
+    // GET /budget-plans/:id/insights — Planejado × Realizado ano-a-ano + networksCount (#416). O
+    // Realizado (conciliado) vem do financial via reader/ACL; sem mapper (a forma do use case = DTO).
     scope.route({
       method: 'GET',
       url: '/budget-plans/:id/insights',

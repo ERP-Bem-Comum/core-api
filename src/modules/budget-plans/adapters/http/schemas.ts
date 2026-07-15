@@ -187,13 +187,22 @@ export const budgetPlanChildrenResponseSchema = z.object({
 export type BudgetPlanChildDto = z.infer<typeof budgetPlanChildSchema>;
 export type BudgetPlanChildrenResponseDto = z.infer<typeof budgetPlanChildrenResponseSchema>;
 
-const yearTotalSchema = z.object({ year: z.number().int(), totalInCents: z.number().int() });
+// Planejado (`totalInCents`) + Realizado (`realizedInCents` — Σ conciliado do plano; #416). Aditivo.
+const yearTotalSchema = z.object({
+  year: z.number().int(),
+  totalInCents: z.number().int(),
+  realizedInCents: z.number().int(),
+});
 
-/** Resposta do GET /budget-plans/:id/insights (CA3): total do plano vs. anos anteriores. */
+/**
+ * Resposta do GET /budget-plans/:id/insights: Planejado × Realizado do plano vs. anos anteriores,
+ * + `networksCount` (nº de Redes do plano — o front calcula a média por Estado).
+ */
 export const budgetPlanInsightsResponseSchema = z.object({
   current: yearTotalSchema,
   // Teto alinhado ao LOOKBACK_LIMIT do use case (contrato como fonte única do limite).
   previousYears: z.array(yearTotalSchema).max(100),
+  networksCount: z.number().int().nonnegative(),
 });
 
 export type BudgetPlanInsightsResponseDto = z.infer<typeof budgetPlanInsightsResponseSchema>;
