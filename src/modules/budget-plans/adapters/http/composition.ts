@@ -8,6 +8,7 @@
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import { buildProgramsReadPort } from '#src/modules/programs/public-api/read.ts';
 import { buildPartnersReadPort } from '#src/modules/partners/public-api/read.ts';
+import { openRealizedByPlanReader } from '#src/modules/financial/public-api/index.ts';
 
 import { InMemoryBudgetPlanRepository } from '../persistence/repos/budget-plan-repository.in-memory.ts';
 import { InMemoryCostStructureRepository } from '../persistence/repos/cost-structure-repository.in-memory.ts';
@@ -15,6 +16,8 @@ import { InMemoryProgramCatalog } from '../catalog/program-catalog.in-memory.ts'
 import { InMemoryPartnerNetwork } from '../network/partner-network.in-memory.ts';
 import { ProgramCatalogFromPrograms } from '../catalog/program-catalog.from-programs.ts';
 import { PartnerNetworkFromPartners } from '../network/partner-network.from-partners.ts';
+import { RealizedByPlanReadFromFinancial } from '../persistence/realized-by-plan-reader.financial.ts';
+import { InMemoryRealizedByPlanReader } from '../persistence/realized-by-plan-reader.in-memory.ts';
 import { openBudgetPlansMysql } from '../persistence/drivers/mysql-driver.ts';
 import { createDrizzleBudgetPlanRepository } from '../persistence/repos/budget-plan-repository.drizzle.ts';
 import { createDrizzleCostStructureRepository } from '../persistence/repos/cost-structure-repository.drizzle.ts';
@@ -41,6 +44,7 @@ import type {
 import type { PartnerNetworkPort } from '../../application/ports/partner-network.ts';
 import type { SubcategoryLaunchTypeReader } from '../../application/ports/subcategory-launch-type-reader.ts';
 import type { BudgetExistsReader } from '../../application/ports/budget-exists-reader.ts';
+import type { RealizedByPlanReader } from '../../application/ports/realized-by-plan-reader.ts';
 import { createBudgetPlan } from '../../application/use-cases/create-budget-plan.ts';
 import { listBudgetPlans } from '../../application/use-cases/list-budget-plans.ts';
 import { getBudgetPlan } from '../../application/use-cases/get-budget-plan.ts';
@@ -162,6 +166,7 @@ type Pools = Readonly<{
   budgetReader: BudgetExistsReader;
   programCatalog: ProgramCatalogPort;
   partnerNetwork: PartnerNetworkPort;
+  realizedReader: RealizedByPlanReader;
   shutdown: () => Promise<void>;
 }>;
 
@@ -187,6 +192,8 @@ const buildMemoryPools = async (seed: BudgetPlansSeed | undefined): Promise<Pool
       states: seed?.partnerStates ?? [],
       municipalities: seed?.partnerMunicipalities ?? [],
     }),
+    // Sem lastro de conciliação no driver memory → Realizado 0 para todo plano (CA1 do #416).
+    realizedReader: InMemoryRealizedByPlanReader(),
     shutdown: () => Promise.resolve(),
   };
 };
@@ -218,6 +225,20 @@ const buildMysqlPools = async (connectionString: string): Promise<Pools> => {
   }
   const partnersPort = partnersPortR.value;
 
+  // Reader do Realizado (conciliado) do `financial` via ACL — pool boot-scoped, fechado no shutdown
+  // (incidente RDS 0001). Mesma connection string: fin_* convive com bgp_*/prg_*/par_* no mesmo
+  // database (ADR-0014 — isolamento por prefixo), como os read ports de programs/partners acima.
+  const realizedReaderR = await openRealizedByPlanReader({ connectionString });
+  if (!realizedReaderR.ok) {
+    await partnersPort.close();
+    await programsPort.close();
+    await handle.close();
+    throw new Error(
+      `budget-plans-composition: falha ao abrir reader (realized) do financial (${realizedReaderR.error})`,
+    );
+  }
+  const financialRealizedReader = realizedReaderR.value;
+
   return {
     planRepo: createDrizzleBudgetPlanRepository(handle),
     costStructureRepo: createDrizzleCostStructureRepository(handle),
@@ -226,7 +247,9 @@ const buildMysqlPools = async (connectionString: string): Promise<Pools> => {
     budgetReader: createDrizzleBudgetExistsReader(handle),
     programCatalog: ProgramCatalogFromPrograms(programsPort),
     partnerNetwork: PartnerNetworkFromPartners(partnersPort),
+    realizedReader: RealizedByPlanReadFromFinancial(financialRealizedReader.getByPlans),
     shutdown: async () => {
+      await financialRealizedReader.close();
       await partnersPort.close();
       await programsPort.close();
       await handle.close();
@@ -237,7 +260,7 @@ const buildMysqlPools = async (connectionString: string): Promise<Pools> => {
 const makeDeps = (pools: Pools): BudgetPlansHttpDeps => {
   const clock = ClockReal();
   const { planRepo, costStructureRepo, budgetResultRepo, subcategoryReader, budgetReader } = pools;
-  const { programCatalog, partnerNetwork } = pools;
+  const { programCatalog, partnerNetwork, realizedReader } = pools;
   return {
     createBudgetPlan: createBudgetPlan({ planRepo, programCatalog, clock }),
     listBudgetPlans: listBudgetPlans({ planRepo, programCatalog }),
@@ -255,7 +278,7 @@ const makeDeps = (pools: Pools): BudgetPlansHttpDeps => {
     startCalibration: startCalibration({ planRepo, costStructureRepo, budgetResultRepo, clock }),
     createScenery: createScenery({ planRepo, costStructureRepo, budgetResultRepo, clock }),
     approveBudgetPlan: approveBudgetPlan({ planRepo, clock }),
-    getBudgetPlanInsights: getBudgetPlanInsights({ planRepo }),
+    getBudgetPlanInsights: getBudgetPlanInsights({ planRepo, realizedReader }),
     getConsolidatedResult: getConsolidatedResult({ planRepo, programCatalog }),
     getPlanExport: getPlanExport({
       planRepo,

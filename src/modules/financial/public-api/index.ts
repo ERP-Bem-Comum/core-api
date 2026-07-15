@@ -57,3 +57,9 @@ export type {
   PayablesAnalysisFilter,
   PayablesAnalysisReader,
 } from './payables-analysis-projection.ts';
+
+// Reader boot-scoped do "Realizado por Plano" (#416 — read-only). Soma reconciled_value_cents das
+// reconciliações Active por budget_plan_ref (JOIN 3-hop intra-financial). Consumido pelo
+// `budget-plans` (insights) via ACL.
+export { openRealizedByPlanReader } from './realized-by-plan-projection.ts';
+export type { RealizedByPlanReader } from './realized-by-plan-projection.ts';
