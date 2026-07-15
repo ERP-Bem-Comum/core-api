@@ -862,6 +862,8 @@ export const finExpectedCounterpart = mysqlTable(
     originReconciliationRef: varchar('origin_reconciliation_ref', { length: 36 }).notNull(),
     originTransactionRef: varchar('origin_transaction_ref', { length: 36 }).notNull(),
     type: varchar('type', { length: 20 }).notNull(),
+    // #428: produto da operação (Investment/Redemption); NULL para Transfer. Espelhado na perna B.
+    productLabel: varchar('product_label', { length: 120 }),
     movement: varchar('movement', { length: 8 }).notNull(),
     valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
     expectedDate: date('expected_date', { mode: 'date' }).notNull(),
@@ -871,7 +873,10 @@ export const finExpectedCounterpart = mysqlTable(
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
   },
   (t) => [
-    check('fin_expected_counterpart_type_chk', sql`${t.type} IN ('Transfer')`),
+    check(
+      'fin_expected_counterpart_type_chk',
+      sql`${t.type} IN ('Transfer','Investment','Redemption')`,
+    ),
     check('fin_expected_counterpart_movement_chk', sql`${t.movement} IN ('Debit','Credit')`),
     check(
       'fin_expected_counterpart_status_chk',

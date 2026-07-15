@@ -114,13 +114,16 @@ export const confirmCounterpartMatch =
     const matched = match(counterpart, String(transaction.id));
     if (!matched.ok) return err(matched.error);
 
-    // Perna B: ManualEntry Transfer (espelho da perna A) — o destino aponta de volta para a conta A.
+    // Perna B: ManualEntry espelho da perna A — o destino aponta de volta para a conta A. #428: herda o
+    // tipo REAL da contrapartida (Transfer/Investment/Redemption) e o `productLabel` da operação de origem
+    // (exigido pelo guard `investment-requires-product` para Investment/Redemption); nulo → não propaga.
     const legB = confirmManualEntry({
       reconciliationId: ReconciliationId.generate(),
       transactionId: transaction.id,
-      type: 'Transfer',
+      type: counterpart.type,
       valueCents: transaction.valueCents,
       destinationAccountRef: String(counterpart.originAccountRef),
+      ...(counterpart.productLabel !== null ? { productLabel: counterpart.productLabel } : {}),
       reconciledBy: input.reconciledBy,
       occurredAt: deps.clock.now(),
     });

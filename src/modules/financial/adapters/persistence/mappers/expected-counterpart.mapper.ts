@@ -29,7 +29,8 @@ export type ExpectedCounterpartMapperError =
 const toStatus = (raw: string): ExpectedCounterpartStatus | null =>
   raw === 'Pending' || raw === 'Matched' || raw === 'Discarded' ? raw : null;
 
-const toType = (raw: string): ExpectedCounterpartType | null => (raw === 'Transfer' ? raw : null);
+const toType = (raw: string): ExpectedCounterpartType | null =>
+  raw === 'Transfer' || raw === 'Investment' || raw === 'Redemption' ? raw : null;
 
 const toMovement = (raw: string): Movement | null =>
   raw === 'Debit' || raw === 'Credit' ? raw : null;
@@ -41,6 +42,7 @@ export const toRow = (c: ExpectedCounterpart, now: Date): NewExpectedCounterpart
   originReconciliationRef: String(c.originReconciliationRef),
   originTransactionRef: c.originTransactionRef,
   type: c.type,
+  productLabel: c.productLabel,
   movement: c.movement,
   valueCents: Number(c.valueCents),
   expectedDate: c.expectedDate,
@@ -77,6 +79,7 @@ export const toDomain = (
       originReconciliationRef: reconciliation.value,
       originTransactionRef: row.originTransactionRef,
       type,
+      productLabel: row.productLabel,
       movement,
       valueCents: BigInt(row.valueCents),
       expectedDate: row.expectedDate,
