@@ -15,6 +15,7 @@ const matchesQuery = (p: BudgetPlan, query: ListBudgetPlansQuery): boolean => {
   if (query.programRef !== undefined && String(p.programRef) !== String(query.programRef)) {
     return false;
   }
+  if (query.rootsOnly === true && p.parentId !== null) return false;
   return true;
 };
 

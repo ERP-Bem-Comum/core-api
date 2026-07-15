@@ -14,6 +14,7 @@ export type ListBudgetPlansQuery = Readonly<{
   year?: number;
   status?: BudgetPlanStatus;
   programRef?: ProgramRef;
+  rootsOnly?: boolean; // quando true, só planos raiz (parent_id IS NULL) — cenários fora
 }>;
 
 export type BudgetPlanPage = Readonly<{

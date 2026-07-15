@@ -53,6 +53,8 @@ export const budgetPlanListItemToDto = (item: BudgetPlanListItem): BudgetPlanLis
   updatedByRef: item.updatedByRef,
   partnersCount: item.partnersCount,
   networkKind: item.networkKind,
+  parentId: item.parentId,
+  scenarioName: item.scenarioName,
 });
 
 /** Detalhe completo (GET /budget-plans/:id). */

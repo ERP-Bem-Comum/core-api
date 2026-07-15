@@ -176,6 +176,7 @@ const budgetPlansRoutes =
           ...(q.year !== undefined ? { year: q.year } : {}),
           ...(q.status !== undefined ? { status: q.status } : {}),
           ...(q.programRef !== undefined ? { programRef: q.programRef } : {}),
+          ...(q.rootsOnly !== undefined ? { rootsOnly: q.rootsOnly } : {}),
         };
         const result = await deps.listBudgetPlans(input);
         if (!result.ok) return sendWriteError(reply, result.error);

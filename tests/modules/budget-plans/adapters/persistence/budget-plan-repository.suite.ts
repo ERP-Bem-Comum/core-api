@@ -159,6 +159,40 @@ export const runBudgetPlanRepositoryContract = (
       assert.equal(String(filtered.value.items[0]?.programRef), String(ref));
     });
 
+    // BGP-LIST-NEST-SCENARIOS — W0 (RED) — issue #423 / CA3 + CA5 (MySQL real via drizzle-mysql.test.ts).
+    // DEVE FALHAR: listPaged ainda não conhece `rootsOnly`; sem o filtro isNull(parentId) o cenário
+    // (filho) aparece na lista. Cria a RAIZ e um cenário derivado (parentId = raiz) e exige que
+    // rootsOnly=true retorne só a raiz (parent_id IS NULL).
+    it('listPaged: rootsOnly=true retorna só planos raiz (parent_id IS NULL)', async () => {
+      const programRef = mkProgramRef();
+      const { plan: root, event } = createPlan({ year: 2026, programRef });
+      assert.ok(isOk(await repo.save(root, [event])));
+
+      // Cenário (filho RASCUNHO) derivado da raiz — parentId aponta para a raiz. Salvo APÓS a raiz
+      // (a FK auto-referente do drizzle exige o pai existente).
+      const scenery = BudgetPlan.createScenery(
+        root,
+        [],
+        { id: BudgetPlanId.generate(), name: 'Otimista' },
+        { now: NOW, actor: ACTOR },
+      );
+      assert.ok(isOk(scenery));
+      assert.ok(isOk(await repo.save(scenery.value.plan, [])));
+
+      const all = await repo.listPaged({ page: 1, limit: 50 });
+      assert.ok(isOk(all));
+      assert.equal(all.value.total, 2, 'sem filtro: raiz + cenário');
+
+      const rootsOnly = await repo.listPaged({ page: 1, limit: 50, rootsOnly: true });
+      assert.ok(isOk(rootsOnly));
+      assert.equal(rootsOnly.value.total, 1, 'rootsOnly: só a raiz');
+      assert.equal(rootsOnly.value.items.length, 1);
+      const item = rootsOnly.value.items[0];
+      assert.ok(item);
+      assert.equal(item.parentId, null, 'o único item retornado é raiz (parentId null)');
+      assert.equal(String(item.id), String(root.id));
+    });
+
     it('listPaged: ordena por updatedAt DESC', async () => {
       const { plan: older, event: e1 } = createPlan({ year: 2010 });
       assert.ok(isOk(await repo.save(older, [e1])));
