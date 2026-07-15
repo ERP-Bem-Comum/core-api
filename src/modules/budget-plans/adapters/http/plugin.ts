@@ -52,6 +52,7 @@ import {
   logisticsExpensesBudgetResultBodySchema,
   budgetResultResponseSchema,
   budgetResultByBudgetParamSchema,
+  budgetResultByBudgetQuerySchema,
   budgetResultsListResponseSchema,
   addBudgetBodySchema,
   budgetResponseSchema,
@@ -508,10 +509,12 @@ const budgetPlansRoutes =
       preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.read)],
       schema: {
         params: budgetResultByBudgetParamSchema,
+        querystring: budgetResultByBudgetQuerySchema,
         response: { 200: budgetResultsListResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
-        const result = await deps.getBudgetResults(req.params.budgetId);
+        // `month` ausente = ano inteiro (#413). O total devolvido acompanha o recorte.
+        const result = await deps.getBudgetResults(req.params.budgetId, req.query.month);
         if (!result.ok) return sendWriteError(reply, result.error);
         const items = result.value.items.map(budgetResultToDto);
         // Total somado no domínio (Money.add) — a borda só serializa os centavos.

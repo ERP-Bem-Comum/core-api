@@ -268,6 +268,109 @@ describe('GET /budget-plans/budget-results/by-budget/:budgetId', () => {
     await teardown();
   });
 
+  // ─── #413 · US2: o mês na leitura ─────────────────────────────────────────
+
+  it('CA1: o item da lista traz o mês do lançamento', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    await app.inject({
+      method: 'POST',
+      url: IPCA_URL,
+      headers: { authorization: `Bearer ${token}` },
+      payload: ipcaPayload({ month: 3 }),
+    });
+
+    const res = await app.inject({
+      method: 'GET',
+      url: byBudgetUrl(BUDGET_ID),
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as { items: { month: number }[] };
+    assert.equal(body.items[0]?.month, 3);
+    await teardown();
+  });
+
+  it('CA2: a 201 do POST devolve o mês', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    const res = await app.inject({
+      method: 'POST',
+      url: IPCA_URL,
+      headers: { authorization: `Bearer ${token}` },
+      payload: ipcaPayload({ month: 7 }),
+    });
+    assert.equal(res.statusCode, 201, res.body);
+    const body = res.json() as { month: number };
+    assert.equal(body.month, 7);
+    await teardown();
+  });
+
+  it('CA3: ?month=3 filtra só março', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    for (const m of [2, 3, 4]) {
+      await app.inject({
+        method: 'POST',
+        url: IPCA_URL,
+        headers: { authorization: `Bearer ${token}` },
+        payload: ipcaPayload({ month: m }),
+      });
+    }
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `${byBudgetUrl(BUDGET_ID)}?month=3`,
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as { items: { month: number }[]; totalInCents: number };
+    assert.equal(body.items.length, 1);
+    assert.equal(body.items[0]?.month, 3);
+    assert.equal(body.totalInCents, 104500, 'o total acompanha o recorte pedido');
+    await teardown();
+  });
+
+  it('CA4: ?month inválido -> 400 (Zod)', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    for (const raw of ['banana', '0', '13', '3.5', '-1']) {
+      const res = await app.inject({
+        method: 'GET',
+        url: `${byBudgetUrl(BUDGET_ID)}?month=${raw}`,
+        headers: { authorization: `Bearer ${token}` },
+      });
+      assert.equal(res.statusCode, 400, `month=${raw} deveria ser 400 — body: ${res.body}`);
+    }
+    await teardown();
+  });
+
+  it('CA5/CA6: sem ?month, devolve o ano inteiro e soma o anual (3.670,92 × 12)', async () => {
+    const { app, teardown } = await makeApp();
+    const token = await login(app, WRITER_EMAIL);
+    for (const m of [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]) {
+      await app.inject({
+        method: 'POST',
+        url: IPCA_URL,
+        headers: { authorization: `Bearer ${token}` },
+        payload: ipcaPayload({ month: m, baseValueInCents: 367092, ipca: 0 }),
+      });
+    }
+
+    const res = await app.inject({
+      method: 'GET',
+      url: byBudgetUrl(BUDGET_ID),
+      headers: { authorization: `Bearer ${token}` },
+    });
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as { items: { month: number }[]; totalInCents: number };
+    assert.equal(body.items.length, 12, 'o grid carrega o ano inteiro numa ida');
+    assert.equal(body.totalInCents, 4405104, 'anual = soma dos 12 meses (prova da P.O., #454)');
+    const meses = body.items.map((i) => i.month).sort((a, b) => a - b);
+    assert.deepEqual(meses, [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    await teardown();
+  });
+
   it('orçamento sem lançamentos -> 200 + lista vazia', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, WRITER_EMAIL);

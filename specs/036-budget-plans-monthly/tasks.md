@@ -33,9 +33,9 @@ Modular monolith — módulo `budget-plans` (ADR-0006). Código em `src/modules/
 
 **Purpose**: abrir os tickets de pipeline. Nenhum código.
 
-- [ ] T001 Abrir ticket com `pnpm run pipeline:state init BGP-MONTH-VO --size S` e escrever o escopo em `.claude/.pipeline/BGP-MONTH-VO/000-request.md` (VO `ExerciseMonth` + `month` no agregado)
-- [ ] T002 [P] Abrir ticket com `pnpm run pipeline:state init BGP-MONTH-PERSIST --size M` e escrever o escopo em `.claude/.pipeline/BGP-MONTH-PERSIST/000-request.md` (schema + migration + mapper + repos; **incluir o achado do bug de contagem em dobro**)
-- [ ] T003 [P] Abrir ticket com `pnpm run pipeline:state init BGP-MONTH-HTTP --size S` e escrever o escopo em `.claude/.pipeline/BGP-MONTH-HTTP/000-request.md` (`month` no contrato + use cases)
+- [x] T001 Abrir ticket com `pnpm run pipeline:state init BGP-MONTH-VO --size S` e escrever o escopo em `.claude/.pipeline/BGP-MONTH-VO/000-request.md` (VO `ExerciseMonth` + `month` no agregado)
+- [x] T002 [P] Abrir ticket com `pnpm run pipeline:state init BGP-MONTH-PERSIST --size M` e escrever o escopo em `.claude/.pipeline/BGP-MONTH-PERSIST/000-request.md` (schema + migration + mapper + repos; **incluir o achado do bug de contagem em dobro**)
+- [x] T003 [P] Abrir ticket com `pnpm run pipeline:state init BGP-MONTH-HTTP --size S` e escrever o escopo em `.claude/.pipeline/BGP-MONTH-HTTP/000-request.md` (`month` no contrato + use cases)
 
 > ⚠️ Antes de criar: conferir se o nome do ticket já existe em `.claude/.pipeline/` (pode colidir com um fechado).
 
@@ -65,8 +65,8 @@ Modular monolith — módulo `budget-plans` (ADR-0006). Código em `src/modules/
 
 ### W2/W3
 
-- [ ] T010 W2 code review (read-only, máx 3 rounds) → `004-code-review/REVIEW.md`
-- [ ] T011 W3 gate: `pnpm run typecheck` + `pnpm run format:check` + `pnpm run lint` + `pnpm test` — todos verdes; contagem de testes ≥ baseline (regressão zero, §II). `pipeline:state close BGP-MONTH-VO`
+- [x] T010 W2 code review (read-only, máx 3 rounds) → `004-code-review/REVIEW.md`
+- [x] T011 W3 gate: `pnpm run typecheck` + `pnpm run format:check` + `pnpm run lint` + `pnpm test` — todos verdes; contagem de testes ≥ baseline (regressão zero, §II). `pipeline:state close BGP-MONTH-VO`
 
 **Checkpoint**: `ExerciseMonth` existe e o agregado carrega `month`. Nada persiste ainda.
 
@@ -82,29 +82,29 @@ Modular monolith — módulo `budget-plans` (ADR-0006). Código em `src/modules/
 
 ### W0 — RED · persistência
 
-- [ ] T012a [US1] **(herdada da Phase 2)** Estender `tests/modules/budget-plans/domain/budget-result/budget-result.test.ts`: `create` exige `month` (CA3); mesma conta em meses distintos → entidades distintas (CA5); `clone` **preserva o mês**; 12 × R$ 3.670,92 = **R$ 44.051,04** (prova da P.O., #454). Deve falhar: `create` não aceita `month`
-- [ ] T012 [US1] Escrever `tests/modules/budget-plans/adapters/persistence/repos/budget-result-repository.drizzle-mysql.test.ts`: **(a)** recalcular o mesmo `(budget, subcategoria, month)` **atualiza** — segue 1 linha, `id` preservado, `value_cents`/`model` novos; **(b)** 12 meses coexistem; **(c)** `SUM(value_cents)` = valor × 12; **(d)** mês fora de 1..12 é barrado pelo CHECK. Deve falhar: não existe `month` nem `save`
-- [ ] T013 [P] [US1] Estender `tests/modules/budget-plans/adapters/persistence/repos/*.in-memory*` (ou o teste de paridade): in-memory replica a chave `(budgetId, subcategoryId, month)` e a semântica de upsert — **paridade in-memory ↔ drizzle**
+- [x] T012a [US1] **(herdada da Phase 2)** Estender `tests/modules/budget-plans/domain/budget-result/budget-result.test.ts`: `create` exige `month` (CA3); mesma conta em meses distintos → entidades distintas (CA5); `clone` **preserva o mês**; 12 × R$ 3.670,92 = **R$ 44.051,04** (prova da P.O., #454). Deve falhar: `create` não aceita `month`
+- [x] T012 [US1] Escrever `tests/modules/budget-plans/adapters/persistence/repos/budget-result-repository.drizzle-mysql.test.ts`: **(a)** recalcular o mesmo `(budget, subcategoria, month)` **atualiza** — segue 1 linha, `id` preservado, `value_cents`/`model` novos; **(b)** 12 meses coexistem; **(c)** `SUM(value_cents)` = valor × 12; **(d)** mês fora de 1..12 é barrado pelo CHECK. Deve falhar: não existe `month` nem `save`
+- [x] T013 [P] [US1] Estender `tests/modules/budget-plans/adapters/persistence/repos/*.in-memory*` (ou o teste de paridade): in-memory replica a chave `(budgetId, subcategoryId, month)` e a semântica de upsert — **paridade in-memory ↔ drizzle**
 
 ### W1 — GREEN · persistência
 
-- [ ] T014a [US1] **(herdada da Phase 2)** Adicionar `month: ExerciseMonth` ao agregado em `src/modules/budget-plans/domain/budget-result/budget-result.ts` (`BudgetResult`, `CreateBudgetResultParams`, `create`) **e ao `clone`** (copia o mês da origem — clonar move de orçamento, nunca de mês). **Manter `model`**. ⚠️ Isto quebra **7 call sites** de uma vez (mapper, `add-budget-result`, 5 testes) — é esperado: a dimensão é obrigatória (CA4). Ajustá-los faz parte desta fatia
-- [ ] T014 [US1] Alterar `src/modules/budget-plans/adapters/persistence/schemas/mysql.ts` (bloco `bgp_budget_results`, ~:203-229): **+** `month: tinyint('month').notNull()`; **+** `check('bgp_budget_results_month_chk', sql\`${t.month} BETWEEN 1 AND 12\`)`; **+** `uniqueIndex('bgp_budget_results_budget_subcategory_month_uq').on(t.budgetId, t.subcategoryId, t.month)`; **−** `index('bgp_budget_results_budget_id_idx')`(**redundante** — o UNIQUE é índice de prefixo). Manter`subcategory_id_idx` e a ausência de FK
-- [ ] T015 [US1] Gerar a migration: `pnpm run db:generate:budget-plans` e versionar o arquivo. **NUNCA escrever à mão** (constituição §VI). Conferir o SQL emitido: `NOT NULL` sem default é seguro — zero linhas em todos os ambientes
-- [ ] T016 [US1] Atualizar `src/modules/budget-plans/adapters/persistence/mappers/budget-result.mapper.ts`: `budgetResultToInsert` inclui `month`; `budgetResultFromRow` faz `ExerciseMonth.rehydrate` e devolve `err('budget-result-corrupt')` se a row vier fora de 1..12
-- [ ] T017 [US1] Trocar `add` → `save` em `src/modules/budget-plans/domain/budget-result/repository.ts` (port) e nos **dois** adapters: `budget-result-repository.drizzle.ts` usa **`.onDuplicateKeyUpdate({ set: { valueCents, model } })`** (atômico; ADR-0020 permite; padrão já usado em `payable-view-store`/`supplier-view-store`); `budget-result-repository.in-memory.ts` faz o mesmo por chave composta
+- [x] T014a [US1] **(herdada da Phase 2)** Adicionar `month: ExerciseMonth` ao agregado em `src/modules/budget-plans/domain/budget-result/budget-result.ts` (`BudgetResult`, `CreateBudgetResultParams`, `create`) **e ao `clone`** (copia o mês da origem — clonar move de orçamento, nunca de mês). **Manter `model`**. ⚠️ Isto quebra **7 call sites** de uma vez (mapper, `add-budget-result`, 5 testes) — é esperado: a dimensão é obrigatória (CA4). Ajustá-los faz parte desta fatia
+- [x] T014 [US1] Alterar `src/modules/budget-plans/adapters/persistence/schemas/mysql.ts` (bloco `bgp_budget_results`, ~:203-229): **+** `month: tinyint('month').notNull()`; **+** `check('bgp_budget_results_month_chk', sql\`${t.month} BETWEEN 1 AND 12\`)`; **+** `uniqueIndex('bgp_budget_results_budget_subcategory_month_uq').on(t.budgetId, t.subcategoryId, t.month)`; **−** `index('bgp_budget_results_budget_id_idx')`(**redundante** — o UNIQUE é índice de prefixo). Manter`subcategory_id_idx` e a ausência de FK
+- [x] T015 [US1] Gerar a migration: `pnpm run db:generate:budget-plans` e versionar o arquivo. **NUNCA escrever à mão** (constituição §VI). Conferir o SQL emitido: `NOT NULL` sem default é seguro — zero linhas em todos os ambientes
+- [x] T016 [US1] Atualizar `src/modules/budget-plans/adapters/persistence/mappers/budget-result.mapper.ts`: `budgetResultToInsert` inclui `month`; `budgetResultFromRow` faz `ExerciseMonth.rehydrate` e devolve `err('budget-result-corrupt')` se a row vier fora de 1..12
+- [x] T017 [US1] Trocar `add` → `save` em `src/modules/budget-plans/domain/budget-result/repository.ts` (port) e nos **dois** adapters: `budget-result-repository.drizzle.ts` usa **`.onDuplicateKeyUpdate({ set: { valueCents, model } })`** (atômico; ADR-0020 permite; padrão já usado em `payable-view-store`/`supplier-view-store`); `budget-result-repository.in-memory.ts` faz o mesmo por chave composta
 
 ### W0/W1 — borda (escrita)
 
-- [ ] T018 [US1] Escrever `tests/modules/budget-plans/adapters/http/*.http.test.ts` (RED, via `fastify.inject`): POST nos 4 modelos com `month` → **201** com `month` no body; **400** para `month` 0/13/−1/3.5/ausente; **403** `budget-plan-not-editable` em plano Aprovado; repetir o POST **atualiza** (não duplica). ⚠️ **`personal-expenses` depende da clarification da 030 `:37`** — ver Bloqueios
-- [ ] T019 [US1] Adicionar `month: z.int().min(1).max(12)` a `budgetResultTargetSchema` em `src/modules/budget-plans/adapters/http/schemas.ts` (~:282). Os 4 POSTs herdam por `.extend()` — **não** tocar nos inputs de cada modelo. `z.int()`, **não** `z.coerce` (body é JSON)
-- [ ] T020 [US1] Propagar `month` em `src/modules/budget-plans/application/use-cases/add-budget-result.ts`: `+month` no command, `ExerciseMonth.parse` na validação, repassar ao `BudgetResult.create` e ao `repo.save`. Manter a sequência canônica (validar → fetch → domain → persist)
-- [ ] T021 [US1] Incluir `month` no DTO de saída (`budgetResultToDto`, `budgetResultResponseSchema`)
+- [x] T018 [US1] Escrever `tests/modules/budget-plans/adapters/http/*.http.test.ts` (RED, via `fastify.inject`): POST nos 4 modelos com `month` → **201** com `month` no body; **400** para `month` 0/13/−1/3.5/ausente; **403** `budget-plan-not-editable` em plano Aprovado; repetir o POST **atualiza** (não duplica). ⚠️ **`personal-expenses` depende da clarification da 030 `:37`** — ver Bloqueios
+- [x] T019 [US1] Adicionar `month: z.int().min(1).max(12)` a `budgetResultTargetSchema` em `src/modules/budget-plans/adapters/http/schemas.ts` (~:282). Os 4 POSTs herdam por `.extend()` — **não** tocar nos inputs de cada modelo. `z.int()`, **não** `z.coerce` (body é JSON)
+- [x] T020 [US1] Propagar `month` em `src/modules/budget-plans/application/use-cases/add-budget-result.ts`: `+month` no command, `ExerciseMonth.parse` na validação, repassar ao `BudgetResult.create` e ao `repo.save`. Manter a sequência canônica (validar → fetch → domain → persist)
+- [x] T021 [US1] Incluir `month` no DTO de saída (`budgetResultToDto`, `budgetResultResponseSchema`)
 
 ### Gates
 
-- [ ] T022 [US1] W2 code review dos dois tickets (máx 3 rounds cada) → `004-code-review/REVIEW.md`
-- [ ] T023 [US1] W3 gate + **validação com MySQL real** (OrbStack ou QA — x99 offline): a migration aplica, o UNIQUE existe (`SHOW INDEX ... LIKE '%month_uq'`), o upsert atualiza. `pipeline:state close` nos dois tickets
+- [x] T022 [US1] W2 code review dos dois tickets (máx 3 rounds cada) → `004-code-review/REVIEW.md`
+- [x] T023 [US1] W3 gate + **validação com MySQL real** (OrbStack ou QA — x99 offline): a migration aplica, o UNIQUE existe (`SHOW INDEX ... LIKE '%month_uq'`), o upsert atualiza. `pipeline:state close` nos dois tickets
 
 **Checkpoint**: 🎯 **MVP entregue.** Os 4 formulários de "Calculando Gastos" deixam de ser órfãos — cada um grava no mês para o qual foi rodado.
 
@@ -118,10 +118,10 @@ Modular monolith — módulo `budget-plans` (ADR-0006). Código em `src/modules/
 
 **Ticket**: `BGP-MONTH-HTTP` (S, parte de leitura).
 
-- [ ] T024 [US2] Escrever o teste RED da leitura em `tests/modules/budget-plans/adapters/http/*.http.test.ts`: `GET /budget-plans/budget-results/by-budget/:budgetId` devolve `month` em cada item; `?month=3` filtra; `?month=banana` → **400**
-- [ ] T025 [US2] Devolver `month` em `src/modules/budget-plans/application/use-cases/get-budget-results.ts` (a soma `Money.add` já existe e passa a totalizar o ano — não duplicar a lógica na borda)
-- [ ] T026 [US2] Aceitar `?month=` opcional na query da rota `by-budget` em `src/modules/budget-plans/adapters/http/plugin.ts` (~:505) com `z.coerce.number().int().min(1).max(12)` — `z.coerce` **aqui sim** (query é string), seguindo `listBudgetPlansQuerySchema`
-- [ ] T027 [US2] W2 + W3 do `BGP-MONTH-HTTP`; `pipeline:state close`
+- [x] T024 [US2] Escrever o teste RED da leitura em `tests/modules/budget-plans/adapters/http/*.http.test.ts`: `GET /budget-plans/budget-results/by-budget/:budgetId` devolve `month` em cada item; `?month=3` filtra; `?month=banana` → **400**
+- [x] T025 [US2] Devolver `month` em `src/modules/budget-plans/application/use-cases/get-budget-results.ts` (a soma `Money.add` já existe e passa a totalizar o ano — não duplicar a lógica na borda)
+- [x] T026 [US2] Aceitar `?month=` opcional na query da rota `by-budget` em `src/modules/budget-plans/adapters/http/plugin.ts` (~:505) com `z.coerce.number().int().min(1).max(12)` — `z.coerce` **aqui sim** (query é string), seguindo `listBudgetPlansQuerySchema`
+- [x] T027 [US2] W2 + W3 do `BGP-MONTH-HTTP`; `pipeline:state close`
 
 > **Sem paginação e sem filtro obrigatório**: o grid é **por rede** → pior caso realista ≈ **1.9k itens** (158 subcategorias × 12). Uma ida traz o ano e o **passador de mês é client-side** (research §D4).
 
@@ -135,9 +135,9 @@ Modular monolith — módulo `budget-plans` (ADR-0006). Código em `src/modules/
 
 **Independent Test**: informar valores mensais e conferir que o anual apresentado em cada visão é a soma exata dos meses.
 
-- [ ] T028 [US3] Escrever teste de não-regressão: `getBudgetResults` devolve `totalInCents` = soma dos 12 meses (a soma vive no domínio via `Money.add` — `get-budget-results.ts:19-20`); **reproduzir a prova da P.O.**: 12 × R$ 3.670,92 = **R$ 44.051,04** (SC-005)
-- [ ] T029 [P] [US3] Rodar a suíte do Consolidado ABC (US5/#319) e do Insight (#416) contra um plano com 12 meses e conferir que **nada regride** — nenhum consumidor assume "1 linha por (budget, subcategoria)"
-- [ ] T030 [US3] ⚠️ **Investigar e registrar** (não corrigir aqui): `BudgetPlan.total` (`domain/budget-plan/budget-plan.ts:181`) soma **`plan.budgets`** (`bgp_budgets.value_cents`), enquanto `getBudgetResults.total` soma os **budget_results**. São **fontes distintas** e podem divergir — questão **pré-existente**, não introduzida pelo mês. Se divergirem, abrir issue via skill `issue-report` (ADR-0040), **sem** scope-creep
+- [x] T028 [US3] Teste de não-regressão do total — **coberto pelo CA6 do `BGP-MONTH-HTTP`**: `GET by-budget` com 12 meses devolve `totalInCents` = **4.405.104** (prova da P.O., #454). A soma vive no domínio (`Money.add`), não na borda
+- [x] T029 [P] [US3] Consolidado ABC (#319) e Insight (#416) **não regridem** com 12 linhas por conta — suíte completa verde (4076 testes, 0 falhas). Nenhum consumidor assumia "1 linha por (budget, subcategoria)"
+- [x] T030 [US3] ⚠️ **Investigado — divergência CONFIRMADA e registrada na issue #458** (não corrigida aqui, sem scope-creep): `BudgetPlan.total` soma o `valueInCents` **informado** no `POST /budgets`; `getBudgetResults.total` soma os lançamentos **calculados**. São fontes independentes, sem invariante ligando — "Por Rede" e "Calculando Gastos" podem mostrar números diferentes. Viola o FR-007/SC-002. **Pré-existente**; o #413 tornou evidente. Exige decisão da P.O. (total derivado × teto)
 
 **Checkpoint**: FR-007 e SC-002 verificados — uma fonte por número, sem divergência entre telas.
 
@@ -145,8 +145,8 @@ Modular monolith — módulo `budget-plans` (ADR-0006). Código em `src/modules/
 
 ## Phase 6: Polish & dívida documental
 
-- [ ] T031 [P] Atualizar `specs/030-budget-plans-reproducao/spec.md:74` (Success Criteria): paridade de **fórmula** continua exigida; paridade de **grão** foi **abandonada** (FR-013 — o legado orça em categoria × mês, esta feature em subcategoria × mês). **O `FR-003` fica INTACTO** — o FR-008 preserva o cálculo como fonte única
-- [ ] T032 [P] Anotar em `specs/030-budget-plans-reproducao/spec.md:37` que a clarification (folha × qtd) **voltou a ser bloqueante** por causa desta feature, com link para [research.md §D6](./research.md)
+- [x] T031 [P] Atualizar `specs/030-budget-plans-reproducao/spec.md:74` (Success Criteria): paridade de **fórmula** continua exigida; paridade de **grão** foi **abandonada** (FR-013 — o legado orça em categoria × mês, esta feature em subcategoria × mês). **O `FR-003` fica INTACTO** — o FR-008 preserva o cálculo como fonte única
+- [x] T032 [P] Anotar em `specs/030-budget-plans-reproducao/spec.md:37` que a clarification (folha × qtd) **voltou a ser bloqueante** por causa desta feature, com link para [research.md §D6](./research.md)
 - [ ] T033 Rodar o [quickstart.md](./quickstart.md) de ponta a ponta contra MySQL real e conferir as 8 provas (com atenção à #5: 12 × 3.670,92 = 44.051,04)
 - [ ] T034 Abrir PR para `dev` referenciando **#413** e **#454** (guarda-chuva dos 3 buracos de contrato), registrando que os 4 formulários deixaram de ser órfãos
 

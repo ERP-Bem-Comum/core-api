@@ -34,7 +34,9 @@ Como planejador, monto a árvore Centro de Custo → Categoria → Subcategoria 
 
 Como planejador, lanço valores por subcategoria usando um dos 4 modelos, com o **backend como fonte única** do cálculo.
 **Aceite:** `POST /budget-results/{modelo}` calcula/persiste em centavos batendo com a fórmula legada; GETs alimentam a planilha "Calculando Gastos" e a base do ano anterior.
-**⚠️ Clarification pendente:** na folha (`DESPESAS_PESSOAIS`) a UI mostra "Qtd de {subcategoria}", mas a fórmula legada **não multiplica por quantidade** (metadado) — confirmar antes do W1.
+**🔴 Clarification pendente — BLOQUEANTE:** na folha (`DESPESAS_PESSOAIS`) a UI mostra "Qtd de {subcategoria}", mas a fórmula legada **não multiplica por quantidade** (metadado) — confirmar antes do W1.
+
+> **Agravada pela feature 036 (#413, 2026-07-15):** com o Orçamento mensal, o cálculo passa a persistir **12× por conta** (um por mês do exercício). Uma divergência de fórmula deixa de ser cosmética e **corrompe dado real, multiplicado por 12**. Aberta desde 2026-07-01. Ver [`specs/036-budget-plans-monthly/research.md`](../036-budget-plans-monthly/research.md) §D6.
 
 ### US4 — Ciclo de vida `[P2]` · ticket `BDG-PLAN-LIFECYCLE` · #318
 
@@ -71,7 +73,7 @@ Como gestor, compartilho o consolidado externamente **com segurança**.
 
 ## Success Criteria
 
-- Os 4 modelos de cálculo reproduzem o legado (teste de paridade contra Apêndice B).
+- Os 4 modelos de cálculo reproduzem a **fórmula** do legado (teste de paridade contra Apêndice B). **A paridade de _grão_ não é mais exigida** — desde a feature 036 (#413) o orçado é lançado em **rede × subcategoria × mês**, enquanto o legado orça em `costCenter + categoria × mês`. A decisão da P.O. ("orçado conta a conta", #454) prevalece sobre a reprodução do grão; a fórmula continua idêntica. Ver [`036-budget-plans-monthly/spec.md`](../036-budget-plans-monthly/spec.md) FR-013.
 - CSV do consolidado bate com `HANDBOOK-plano-orcamentario-consolidado-abc-export-exemplo.csv`.
 - Front v2 liga cada page ao endpoint real, encerrando o zero-mock do #113.
 
