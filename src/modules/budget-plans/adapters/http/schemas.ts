@@ -293,9 +293,14 @@ const percentField = z.number().min(0).max(MAX_PERCENT);
 // IPCA aceita valor negativo (deflação — histórico IBGE); o domínio barra só se o resultado final < 0.
 const ipcaField = z.number().min(-100).max(MAX_PERCENT);
 
+// Alvo do lançamento calculado: (orçamento, subcategoria, MÊS do exercício) — #413. O mês é
+// herdado pelos 4 modelos via .extend(). Sem ele, os 12 POSTs de uma conta colidiriam na mesma
+// chave — era o que deixava os formulários de "Calculando Gastos" órfãos (#454).
+// z.int() e não z.coerce: o body é JSON (o front envia número); coerção mascararia "banana" → NaN.
 const budgetResultTargetSchema = z.object({
   budgetId: z.uuid(),
   subcategoryId: z.uuid(),
+  month: z.int().min(1).max(12).meta({ description: 'Mês do exercício (1..12)' }),
 });
 
 /** POST /budget-results/ipca — baseValueInCents * (1 + ipca/100). */
@@ -352,6 +357,7 @@ export const budgetResultResponseSchema = z.object({
   id: z.uuid(),
   budgetId: z.uuid(),
   subcategoryId: z.uuid(),
+  month: z.int().min(1).max(12).meta({ description: 'Mês do exercício (1..12)' }),
   model: launchTypeSchema,
   valueInCents: z.number().int(),
 });
@@ -359,6 +365,24 @@ export const budgetResultResponseSchema = z.object({
 /** Param do GET por orçamento (CA3). */
 export const budgetResultByBudgetParamSchema = z.object({
   budgetId: z.uuid().meta({ description: 'UUID v4 do orçamento (Rede)' }),
+});
+
+/**
+ * Query do GET por orçamento (#413). `month` é OPCIONAL: ausente = ano inteiro — o grid carrega os
+ * 12 meses numa ida e o passador de mês é client-side (research §D4; ~1.9k itens no pior caso).
+ *
+ * `z.coerce` AQUI (query é string), ao contrário do body dos POSTs, que é JSON e usa `z.int()`.
+ * A coerção roda ANTES da validação: "banana" → NaN e "3.5" → 3.5 são ambos barrados pelo
+ * int/min/max — nenhum vira mês silenciosamente.
+ */
+export const budgetResultByBudgetQuerySchema = z.object({
+  month: z.coerce
+    .number()
+    .int()
+    .min(1)
+    .max(12)
+    .optional()
+    .meta({ description: 'Filtra por mês do exercício (1..12); ausente = ano inteiro' }),
 });
 
 /** Response do GET por orçamento: lançamentos + soma (base de "Calculando Gastos"). */

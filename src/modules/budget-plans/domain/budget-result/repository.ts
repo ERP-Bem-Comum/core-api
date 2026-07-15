@@ -8,7 +8,14 @@ export type BudgetResultRepositoryError =
   | 'budget-result-corrupt';
 
 export type BudgetResultRepository = Readonly<{
-  add: (result: BudgetResult) => Promise<Result<void, BudgetResultRepositoryError>>;
+  // Upsert por (budgetId, subcategoryId, month) — #413. Recalcular o mesmo mês ATUALIZA o valor;
+  // não acrescenta linha. Chamava-se `add` (INSERT puro), mas a semântica deixou de ser
+  // "acrescentar" quando o mês virou identidade: sem isso, recalcular contava EM DOBRO.
+  //
+  // Devolve o registro EFETIVAMENTE PERSISTIDO, não a entrada: no recálculo o upsert preserva o id
+  // da linha existente, então o id de quem chamou é descartado. Quem devolvesse a entrada faria a
+  // response 201 anunciar um id que não existe no banco.
+  save: (result: BudgetResult) => Promise<Result<BudgetResult, BudgetResultRepositoryError>>;
   // CA3 (leitura por orçamento) + round-trip. Ordem determinística (por id) fica a cargo do adapter.
   listByBudgetId: (
     budgetId: BudgetId,

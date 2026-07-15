@@ -27,6 +27,7 @@ describe('addBudgetResult (use case)', () => {
     })({
       budgetId: String(budgetId),
       subcategoryId: String(subId),
+      month: 1,
       input: { kind: 'IPCA', baseValueInCents: 100000, ipca: 4.5 },
     });
 
@@ -49,6 +50,7 @@ describe('addBudgetResult (use case)', () => {
     })({
       budgetId: String(budgetId),
       subcategoryId: String(subId),
+      month: 1,
       input: { kind: 'CAED', numberOfEnrollments: 30, baseValueInCents: 5000 },
     });
 
@@ -66,6 +68,7 @@ describe('addBudgetResult (use case)', () => {
     })({
       budgetId: String(BudgetId.generate()),
       subcategoryId: UUID_VALIDO,
+      month: 1,
       input: { kind: 'IPCA', baseValueInCents: 100000, ipca: 4.5 },
     });
     assert.ok(isErr(r));
@@ -83,6 +86,7 @@ describe('addBudgetResult (use case)', () => {
     })({
       budgetId: String(budgetId),
       subcategoryId: UUID_VALIDO,
+      month: 1,
       input: { kind: 'IPCA', baseValueInCents: 100000, ipca: 4.5 },
     });
     assert.ok(isErr(r));
@@ -98,6 +102,7 @@ describe('addBudgetResult (use case)', () => {
     })({
       budgetId: 'nao-e-uuid',
       subcategoryId: UUID_VALIDO,
+      month: 1,
       input: { kind: 'IPCA', baseValueInCents: 100000, ipca: 4.5 },
     });
     assert.ok(isErr(r));

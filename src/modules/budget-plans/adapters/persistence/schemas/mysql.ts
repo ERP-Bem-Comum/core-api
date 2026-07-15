@@ -21,6 +21,7 @@ import {
   int,
   mysqlTable,
   smallint,
+  tinyint,
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/mysql-core';
@@ -201,18 +202,24 @@ export const subcategories = mysqlTable(
 );
 
 // ─── bgp_budget_results ─────────────────────────────────────────────────────
-// Lançamento calculado (US3/#317). Valor derivado server-side (fonte única, FR-003) por
-// (budget, subcategoria). `value_cents` = Money cents (ADR-0020 §"Mapeamentos": bigint, nunca
-// decimal/JSON). `model` replica o launchType da subcategoria — VARCHAR+CHECK, sem ENUM nativo
-// (ADR-0020 §"Lista normativa"). SEM FK física para bgp_budgets/bgp_subcategories: ambas são
-// reescritas por replace-all e BudgetResult é agregado próprio — refs por identidade, molde de
+// Lançamento calculado (US3/#317) por (budget, subcategoria, MÊS do exercício — #413). Valor
+// derivado server-side (fonte única, FR-003). `value_cents` = Money cents (ADR-0020 §"Mapeamentos":
+// bigint, nunca decimal/JSON). `model` replica o launchType da subcategoria — VARCHAR+CHECK, sem
+// ENUM nativo (ADR-0020 §"Lista normativa"). SEM FK física para bgp_budgets/bgp_subcategories: ambas
+// são reescritas por replace-all e BudgetResult é agregado próprio — refs por identidade, molde de
 // fin_reconciliation_items.payable_id (ver 001-research/DESIGN-DECISIONS.md D1).
+//
+// #413 — o mês é LINHA, não coluna: 12 colunas (jan_cents…dez_cents) seria repeating group (viola a
+// 1NF), exigiria DDL para mudar o calendário e tiraria `month` do índice. JSON de 12 posições é
+// PROIBIDO (ADR-0020 veta JSON nativo). O anual é SUM(value_cents), nunca um valor armazenado.
 export const budgetResults = mysqlTable(
   'bgp_budget_results',
   {
     id: varchar('id', { length: 36 }).primaryKey().notNull(),
     budgetId: varchar('budget_id', { length: 36 }).notNull(),
     subcategoryId: varchar('subcategory_id', { length: 36 }).notNull(),
+    // Mês do exercício (1..12) — TINYINT basta e sem DEFAULT: greenfield (nenhum ambiente tem plano).
+    month: tinyint('month').notNull(),
     model: varchar('model', { length: 24 }).notNull(),
     valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
   },
@@ -221,9 +228,18 @@ export const budgetResults = mysqlTable(
       'bgp_budget_results_model_chk',
       sql`${t.model} IN ('IPCA','CAED','DESPESAS_PESSOAIS','DESPESAS_LOGISTICAS')`,
     ),
-    // Sem FK -> índices explícitos (não há índice implícito). Query CA3 "por budget" + delete CA4.
-    index('bgp_budget_results_budget_id_idx').on(t.budgetId),
-    // Query CA3 "por subcategoria" (WHERE subcategory_id).
+    check('bgp_budget_results_month_chk', sql`${t.month} BETWEEN 1 AND 12`),
+    // #413 — identidade de negócio do lançamento. É o que torna o recálculo idempotente
+    // (ON DUPLICATE KEY UPDATE) e o que impede a MESMA conta/mês virar 2 linhas — defeito que
+    // existia antes desta chave e fazia o total por Rede contar EM DOBRO.
+    // Serve também de índice de prefixo para `WHERE budget_id = ?` (query CA3 + delete CA4),
+    // por isso o antigo bgp_budget_results_budget_id_idx foi removido: era redundante.
+    uniqueIndex('bgp_budget_results_budget_subcategory_month_uq').on(
+      t.budgetId,
+      t.subcategoryId,
+      t.month,
+    ),
+    // Query CA3 "por subcategoria" (WHERE subcategory_id) — não coberta pelo prefixo do UNIQUE.
     index('bgp_budget_results_subcategory_id_idx').on(t.subcategoryId),
   ],
 );

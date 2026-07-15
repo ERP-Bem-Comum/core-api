@@ -20,6 +20,7 @@ import { isOk } from '#src/shared/index.ts';
 import * as Money from '#src/shared/kernel/money.ts';
 import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import * as BudgetId from '#src/modules/budget-plans/domain/shared/budget-id.ts';
+import * as ExerciseMonth from '#src/modules/budget-plans/domain/shared/exercise-month.ts';
 import * as SubcategoryId from '#src/modules/budget-plans/domain/cost-structure/subcategory-id.ts';
 import * as BudgetResultId from '#src/modules/budget-plans/domain/budget-result/budget-result-id.ts';
 import * as BudgetPlanId from '#src/modules/budget-plans/domain/shared/budget-plan-id.ts';
@@ -32,6 +33,13 @@ import { openBudgetPlansMysql } from '#src/modules/budget-plans/adapters/persist
 import type { BudgetPlansMysqlHandle } from '#src/modules/budget-plans/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleBudgetPlanRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-plan-repository.drizzle.ts';
 import { createDrizzleBudgetResultRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-result-repository.drizzle.ts';
+
+// #413 — mês do exercício nas fixtures (o VO tem suíte própria; aqui mês inválido é erro de teste).
+const FIXTURE_MONTH = (() => {
+  const m = ExerciseMonth.parse(1);
+  if (!m.ok) throw new Error('fixture inválida: mês');
+  return m.value;
+})();
 
 const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
 
@@ -113,11 +121,12 @@ if (integrationEnabled()) {
       id: BudgetResultId.generate(),
       budgetId,
       subcategoryId: SubcategoryId.generate(),
+      month: FIXTURE_MONTH,
       input: { kind: 'IPCA', baseValueInCents: 100000, ipca: 4.5 },
       subcategoryLaunchType: 'IPCA',
     });
     assert.ok(isOk(resultR));
-    assert.ok(isOk(await resultRepo.add(resultR.value)));
+    assert.ok(isOk(await resultRepo.save(resultR.value)));
 
     const removed = BudgetPlan.removeBudget(planWithBudget, budgetId, NOW, ACTOR);
     assert.ok(isOk(removed));

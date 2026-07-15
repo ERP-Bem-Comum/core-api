@@ -34,7 +34,11 @@ Como planejador, monto a árvore Centro de Custo → Categoria → Subcategoria 
 
 Como planejador, lanço valores por subcategoria usando um dos 4 modelos, com o **backend como fonte única** do cálculo.
 **Aceite:** `POST /budget-results/{modelo}` calcula/persiste em centavos batendo com a fórmula legada; GETs alimentam a planilha "Calculando Gastos" e a base do ano anterior.
-**⚠️ Clarification pendente:** na folha (`DESPESAS_PESSOAIS`) a UI mostra "Qtd de {subcategoria}", mas a fórmula legada **não multiplica por quantidade** (metadado) — confirmar antes do W1.
+**✅ Clarification RESOLVIDA (P.O., 2026-07-15 — #460):** na folha (`DESPESAS_PESSOAIS`) a UI mostrava "Qtd de {subcategoria}", mas a fórmula legada **não multiplica por quantidade**. Decisão: **(A) — a Qtd é metadado. Segue o legado; o front é que se ajusta** (web-app PR #241). **O backend já estava correto e não muda.**
+
+> **Evidência (investigação do legado):** 2 dos 4 modelos multiplicam por contagem (`CAED`, `DESPESAS_LOGISTICAS`) e a folha deliberadamente não; o campo se chama `numberOfFinancialDirectors` e nenhum cálculo o lê; o import de Excel do legado força `= 1` nos 4 lugares onde o toca — logo **o cenário `Qtd > 1` nunca foi exercitado**. Paridade contra o print (Qtd 1, salário R$ 34.336,73 → mensal R$ 34.336,73, anual R$ 412.040,76) está travada em `calc-model.test.ts`.
+>
+> **A decisão fecha a ambiguidade, não a correção:** se o negócio quiser "3 pessoas = 3 salários", é o ramo (B) do #460, com plano de recálculo. Hoje **paridade ganha**.
 
 ### US4 — Ciclo de vida `[P2]` · ticket `BDG-PLAN-LIFECYCLE` · #318
 
@@ -71,7 +75,7 @@ Como gestor, compartilho o consolidado externamente **com segurança**.
 
 ## Success Criteria
 
-- Os 4 modelos de cálculo reproduzem o legado (teste de paridade contra Apêndice B).
+- Os 4 modelos de cálculo reproduzem a **fórmula** do legado (teste de paridade contra Apêndice B). **A paridade de _grão_ não é mais exigida** — desde a feature 036 (#413) o orçado é lançado em **rede × subcategoria × mês**, enquanto o legado orça em `costCenter + categoria × mês`. A decisão da P.O. ("orçado conta a conta", #454) prevalece sobre a reprodução do grão; a fórmula continua idêntica. Ver [`036-budget-plans-monthly/spec.md`](../036-budget-plans-monthly/spec.md) FR-013.
 - CSV do consolidado bate com `HANDBOOK-plano-orcamentario-consolidado-abc-export-exemplo.csv`.
 - Front v2 liga cada page ao endpoint real, encerrando o zero-mock do #113.
 

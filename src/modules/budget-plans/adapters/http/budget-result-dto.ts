@@ -10,6 +10,8 @@ export const budgetResultToDto = (result: BudgetResult): BudgetResultResponseDto
   id: String(result.id),
   budgetId: String(result.budgetId),
   subcategoryId: String(result.subcategoryId),
+  // #413 — sem o mês na saída o front não monta o grid: o dado existiria no banco e sumiria na borda.
+  month: result.month,
   model: result.model,
   valueInCents: result.value.cents,
 });

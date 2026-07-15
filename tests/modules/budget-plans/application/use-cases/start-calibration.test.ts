@@ -10,6 +10,7 @@ import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '#src/modules/budget-plans/domain/shared/budget-plan-id.ts';
 import * as BudgetId from '#src/modules/budget-plans/domain/shared/budget-id.ts';
+import * as ExerciseMonth from '#src/modules/budget-plans/domain/shared/exercise-month.ts';
 import * as CostCenterId from '#src/modules/budget-plans/domain/cost-structure/cost-center-id.ts';
 import * as CategoryId from '#src/modules/budget-plans/domain/cost-structure/category-id.ts';
 import * as SubcategoryId from '#src/modules/budget-plans/domain/cost-structure/subcategory-id.ts';
@@ -22,6 +23,13 @@ import { InMemoryBudgetPlanRepository } from '#src/modules/budget-plans/adapters
 import { InMemoryCostStructureRepository } from '#src/modules/budget-plans/adapters/persistence/repos/cost-structure-repository.in-memory.ts';
 import { InMemoryBudgetResultRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-result-repository.in-memory.ts';
 import { startCalibration } from '#src/modules/budget-plans/application/use-cases/start-calibration.ts';
+
+// #413 — mês do exercício nas fixtures (o VO tem suíte própria; aqui mês inválido é erro de teste).
+const FIXTURE_MONTH = (() => {
+  const m = ExerciseMonth.parse(1);
+  if (!m.ok) throw new Error('fixture inválida: mês');
+  return m.value;
+})();
 
 const NOW = new Date('2026-07-09T12:00:00.000Z');
 const PROGRAM = '11111111-1111-4111-8111-111111111111';
@@ -102,11 +110,12 @@ const seedApprovedPlan = async (deps: ReturnType<typeof buildDeps>) => {
     id: BudgetResultId.generate(),
     budgetId,
     subcategoryId: subA,
+    month: FIXTURE_MONTH,
     input: { kind: 'IPCA', baseValueInCents: 100000, ipca: 4.5 },
     subcategoryLaunchType: 'IPCA',
   });
   assert.ok(isOk(res));
-  assert.ok(isOk(await deps.resultStore.repo.add(res.value)));
+  assert.ok(isOk(await deps.resultStore.repo.save(res.value)));
 
   return { planId, budgetId, subA };
 };

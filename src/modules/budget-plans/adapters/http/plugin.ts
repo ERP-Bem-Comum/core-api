@@ -52,6 +52,7 @@ import {
   logisticsExpensesBudgetResultBodySchema,
   budgetResultResponseSchema,
   budgetResultByBudgetParamSchema,
+  budgetResultByBudgetQuerySchema,
   budgetResultsListResponseSchema,
   addBudgetBodySchema,
   budgetResponseSchema,
@@ -392,6 +393,7 @@ const budgetPlansRoutes =
         const result = await deps.addBudgetResult({
           budgetId: req.body.budgetId,
           subcategoryId: req.body.subcategoryId,
+          month: req.body.month,
           input: {
             kind: 'IPCA',
             baseValueInCents: req.body.baseValueInCents,
@@ -415,6 +417,7 @@ const budgetPlansRoutes =
         const result = await deps.addBudgetResult({
           budgetId: req.body.budgetId,
           subcategoryId: req.body.subcategoryId,
+          month: req.body.month,
           input: {
             kind: 'CAED',
             numberOfEnrollments: req.body.numberOfEnrollments,
@@ -439,6 +442,7 @@ const budgetPlansRoutes =
         const result = await deps.addBudgetResult({
           budgetId: b.budgetId,
           subcategoryId: b.subcategoryId,
+          month: b.month,
           input: {
             kind: 'DESPESAS_PESSOAIS',
             salaryInCents: b.salaryInCents,
@@ -475,6 +479,7 @@ const budgetPlansRoutes =
         const result = await deps.addBudgetResult({
           budgetId: b.budgetId,
           subcategoryId: b.subcategoryId,
+          month: b.month,
           input: {
             kind: 'DESPESAS_LOGISTICAS',
             numberOfPeople: b.numberOfPeople,
@@ -504,10 +509,12 @@ const budgetPlansRoutes =
       preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.read)],
       schema: {
         params: budgetResultByBudgetParamSchema,
+        querystring: budgetResultByBudgetQuerySchema,
         response: { 200: budgetResultsListResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
-        const result = await deps.getBudgetResults(req.params.budgetId);
+        // `month` ausente = ano inteiro (#413). O total devolvido acompanha o recorte.
+        const result = await deps.getBudgetResults(req.params.budgetId, req.query.month);
         if (!result.ok) return sendWriteError(reply, result.error);
         const items = result.value.items.map(budgetResultToDto);
         // Total somado no domínio (Money.add) — a borda só serializa os centavos.
