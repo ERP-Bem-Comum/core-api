@@ -130,3 +130,14 @@ export type {
   ContractCountReadError,
   ContractCountByContractor,
 } from './read.ts';
+
+// #437 — REPORTS-SUPPLIERS-NO-ACTIVE-CONTRACT: public-api de leitura dos contratantes com contrato
+// Active (consumida pelo relatório "Fornecedores sem Contrato" do reports, ADR-0006).
+export { buildContractsActiveContractorReadPort } from './read.ts';
+export type {
+  ContractsActiveContractorReadPort,
+  BuildContractsActiveContractorReadPortOptions,
+  BuildContractsActiveContractorReadPortError,
+  ActiveContractorReadPort,
+  ActiveContractorReadError,
+} from './read.ts';

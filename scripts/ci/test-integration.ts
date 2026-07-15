@@ -58,6 +58,9 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/contracts/adapters/persistence/repos/outbox-repository.drizzle.test.ts',
     'tests/modules/contracts/adapters/persistence/repos/find-expirable.mysql.test.ts',
     'tests/modules/contracts/adapters/persistence/job-run.drizzle-mysql.test.ts',
+    // #437: contratantes com contrato Active (public-api) — fonte do anti-join do relatório
+    // "Fornecedores sem Contrato" no módulo reports.
+    'tests/modules/contracts/public-api/active-contractor-read.drizzle-mysql.test.ts',
     'tests/modules/contracts/worker/outbox-worker.integration.test.ts',
   ]),
   auth: mysqlSuite({ MYSQL_INTEGRATION: '1' }, [

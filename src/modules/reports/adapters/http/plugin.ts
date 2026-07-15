@@ -65,7 +65,12 @@ const reportsRoutes =
         const result = await deps.listSuppliersWithoutContract();
         if (!result.ok) {
           return sendResult(reply, result, {
-            errors: { 'suppliers-without-contract-read-unavailable': 503 },
+            errors: {
+              'suppliers-without-contract-read-unavailable': 503,
+              // Fail-closed (#437): sem o conjunto de contratantes ativos não há como subtrair —
+              // 503 em vez de 200 com a lista não-subtraída (que exporia quem tem contrato).
+              'active-contractor-read-unavailable': 503,
+            },
           });
         }
         return sendResult(reply, ok(suppliersWithoutContractToDto(result.value)), { ok: 200 });
