@@ -65,4 +65,17 @@ export type BudgetPlanRepository = Readonly<{
     budgetId: BudgetId,
     events: readonly BudgetPlansModuleEvent[],
   ) => Promise<Result<void, BudgetPlanRepositoryError>>;
+  // Exclusão do plano INTEIRO (#453) — atômica. `bgp_budgets` e a árvore de custo saem por FK
+  // CASCADE, mas `bgp_budget_results` NÃO tem FK: sem delete explícito, os resultados sobrevivem
+  // apontando para um budget que não existe mais — lixo que ainda soma no total por Rede.
+  //
+  // Recebe o ID, não o agregado: nada aqui depende do estado em memória, e pedir o plano inteiro
+  // deixaria os adapters livres para divergir conforme a frescura da cópia recebida.
+  //
+  // A guarda (status/filhos) é do domínio. `budget-plan-has-children` também sai daqui porque a
+  // guarda roda fora da transação: numa corrida, quem barra é a FK RESTRICT do `parent_id` — e isso
+  // é 409 (retry nunca passa), não 503.
+  remove: (
+    planId: BudgetPlanId,
+  ) => Promise<Result<void, BudgetPlanRepositoryError | 'budget-plan-has-children'>>;
 }>;

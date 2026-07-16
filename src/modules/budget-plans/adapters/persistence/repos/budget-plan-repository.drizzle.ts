@@ -30,6 +30,40 @@ const safe = async <T>(
   }
 };
 
+// ER_ROW_IS_REFERENCED_2 (1451) na FK auto-referente `parent_id` — o banco recusando apagar um plano
+// que ainda tem filho. O errno real vem em `cause` (o Drizzle envolve o erro do mysql2).
+const isParentRestrictViolation = (e: unknown): boolean => {
+  for (const c of [e, e instanceof Error ? e.cause : undefined]) {
+    if (typeof c !== 'object' || c === null) continue;
+    const obj = c as Record<string, unknown>;
+    if (obj['errno'] === 1451) {
+      const msg = typeof obj['sqlMessage'] === 'string' ? obj['sqlMessage'] : '';
+      // Só a FK de parent_id é RESTRICT nas tabelas do plano; as demais são CASCADE.
+      return msg.includes('bgp_budget_plans_parent_id_fk');
+    }
+  }
+  return false;
+};
+
+// #453 — `remove` precisa distinguir dois vermelhos que o `safe` genérico achataria em 503:
+// infra fora do ar (503, retry resolve) × plano com filho (409, retry NUNCA resolve).
+//
+// O caso real é TOCTOU: a guarda de domínio já checou `listChildren`, mas um `createScenery`
+// concorrente pode entrar entre a checagem e o delete. A integridade se preserva sozinha (RESTRICT
+// + rollback); o que estava errado era mandar o cliente tentar de novo para sempre.
+const safeRemove = async (
+  op: () => Promise<void>,
+): Promise<Result<void, BudgetPlanRepositoryError | 'budget-plan-has-children'>> => {
+  try {
+    await op();
+    return ok(undefined);
+  } catch (cause) {
+    if (isParentRestrictViolation(cause)) return err('budget-plan-has-children');
+    process.stderr.write(`[budget-plan-repo:remove] ${String(cause)}\n`);
+    return err('budget-plan-repo-unavailable');
+  }
+};
+
 const listWhere = (query: ListBudgetPlansQuery): SQL | undefined => {
   const clauses: SQL[] = [];
   if (query.year !== undefined) {
@@ -234,6 +268,45 @@ export const createDrizzleBudgetPlanRepository = (
           await tx
             .delete(schema.budgetResults)
             .where(eq(schema.budgetResults.budgetId, budgetId as unknown as string));
+        });
+      }),
+
+    // #453 — exclusão do plano inteiro, numa tx só.
+    //
+    // 1) `FOR UPDATE` no cabeçalho ANTES de qualquer leitura. Sem ele, o SELECT dos budgets é
+    //    leitura consistente (snapshot) e um `addBudget` concorrente escaparia: apagaríamos os
+    //    results do budget antigo, o DELETE do plano (current read) levaria os DOIS por CASCADE, e
+    //    o result do budget novo sobreviveria órfão — somando no total por Rede. Mesma trava que o
+    //    `upsertPlanInTx` já usa; este era o único caminho de escrita do módulo sem ela.
+    // 2) A ORDEM importa: results ANTES do plano. Invertido, o CASCADE já teria levado os
+    //    bgp_budgets e não haveria mais budget_id para achar os results (que não têm FK).
+    // 3) `inArray` escopado aos budgets DESTE plano — nunca delete global.
+    //    bgp_budgets e cost_centers → categories → subcategories saem por FK CASCADE.
+    remove: async (planId) =>
+      safeRemove(async () => {
+        const id = planId as unknown as string;
+        await db.transaction(async (tx) => {
+          await tx
+            .select({ id: schema.budgetPlans.id })
+            .from(schema.budgetPlans)
+            .where(eq(schema.budgetPlans.id, id))
+            .for('update');
+
+          const budgetRows = await tx
+            .select({ id: schema.budgets.id })
+            .from(schema.budgets)
+            .where(eq(schema.budgets.budgetPlanId, id));
+
+          if (budgetRows.length > 0) {
+            await tx.delete(schema.budgetResults).where(
+              inArray(
+                schema.budgetResults.budgetId,
+                budgetRows.map((b) => b.id),
+              ),
+            );
+          }
+
+          await tx.delete(schema.budgetPlans).where(eq(schema.budgetPlans.id, id));
         });
       }),
   };
