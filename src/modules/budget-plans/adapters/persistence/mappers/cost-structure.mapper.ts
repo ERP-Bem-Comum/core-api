@@ -42,17 +42,22 @@ export const costStructureToRows = (structure: CostStructure): CostStructureRows
 
   const budgetPlanId = structure.budgetPlanId as unknown as string;
   for (const cc of structure.costCenters) {
+    // `active` grava a intenção do PRÓPRIO nó — nunca o efetivo (que é derivado na leitura por
+    // `withInheritedActive`). Se o efetivo viesse parar aqui, reativar o pai não teria como saber
+    // quem havia sido desativado à mão.
     costCenterRows.push({
       id: cc.id as unknown as string,
       budgetPlanId,
       name: cc.name,
       direction: cc.direction,
+      active: cc.active,
     });
     for (const cat of cc.categories) {
       categoryRows.push({
         id: cat.id as unknown as string,
         costCenterId: cc.id as unknown as string,
         name: cat.name,
+        active: cat.active,
       });
       for (const sub of cat.subcategories) {
         subcategoryRows.push({
@@ -60,6 +65,7 @@ export const costStructureToRows = (structure: CostStructure): CostStructureRows
           categoryId: cat.id as unknown as string,
           name: sub.name,
           launchType: sub.launchType,
+          active: sub.active,
         });
       }
     }
@@ -88,7 +94,7 @@ const subcategoryFromRow = (
   if (!id.ok) return err('cost-structure-mapper-invalid-subcategory-id');
   const launchType = LaunchType.parse(row.launchType);
   if (!launchType.ok) return err('cost-structure-mapper-invalid-launch-type');
-  return ok({ id: id.value, name: row.name, launchType: launchType.value });
+  return ok({ id: id.value, name: row.name, launchType: launchType.value, active: row.active });
 };
 
 const categoryFromRow = (
@@ -104,7 +110,7 @@ const categoryFromRow = (
     if (!sub.ok) return sub;
     subcategories.push(sub.value);
   }
-  return ok({ id: id.value, name: row.name, subcategories });
+  return ok({ id: id.value, name: row.name, active: row.active, subcategories });
 };
 
 const costCenterFromRow = (
@@ -123,7 +129,13 @@ const costCenterFromRow = (
     if (!cat.ok) return cat;
     categories.push(cat.value);
   }
-  return ok({ id: id.value, name: row.name, direction: direction.value, categories });
+  return ok({
+    id: id.value,
+    name: row.name,
+    direction: direction.value,
+    active: row.active,
+    categories,
+  });
 };
 
 export const costStructureFromRows = (

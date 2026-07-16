@@ -45,6 +45,8 @@ import {
   addCostCenterBodySchema,
   addCategoryBodySchema,
   addSubcategoryBodySchema,
+  patchCostNodeBodySchema,
+  costNodeParamSchema,
   costStructureTreeSchema,
   ipcaBudgetResultBodySchema,
   caedBudgetResultBodySchema,
@@ -121,6 +123,10 @@ const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
   'scenario-name-required': 400,
   // Exclusão do plano (#453): filhos saem antes do pai -> 409 (precondição de estado, não input).
   'budget-plan-has-children': 409,
+  // Editar/desativar nó (#454 gap 3). Nó ausente -> 404 (o recurso do PATCH não existe);
+  // PATCH sem campo -> 400 (pedido malformado, não no-op de sucesso).
+  'cost-node-not-found': 404,
+  'cost-node-patch-empty': 400,
   // Consolidado + CSV (US5/#319). Export de plano não-aprovado -> 409 (precondição de estado).
   'plan-not-approved-for-consolidation': 409,
   // Insights com Realizado (#416): reader do financial indisponível -> 503 (fail-closed).
@@ -398,6 +404,37 @@ const budgetPlansRoutes =
         return sendResult(reply, ok(costStructureToDto(result.value)), { ok: 201 });
       },
     });
+
+    // PATCH /budget-plans/:id/cost-structure/{nível}/:nodeId — renomear e/ou (des)ativar (#454 gap 3).
+    // 200 + árvore. O nível vem do path; o body é { name?, active? }. Não há DELETE de nó: os
+    // lançamentos apontam para subcategoria sem FK, e apagar deixaria histórico órfão.
+    for (const { url, level } of [
+      { url: '/budget-plans/:id/cost-structure/cost-centers/:nodeId', level: 'cost-center' },
+      { url: '/budget-plans/:id/cost-structure/categories/:nodeId', level: 'category' },
+      { url: '/budget-plans/:id/cost-structure/subcategories/:nodeId', level: 'subcategory' },
+    ] as const) {
+      scope.route({
+        method: 'PATCH',
+        url,
+        preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.write)],
+        schema: {
+          params: costNodeParamSchema,
+          body: patchCostNodeBodySchema,
+          response: { 200: costStructureTreeSchema },
+        } satisfies FastifyZodOpenApiSchema,
+        handler: async (req, reply) => {
+          const result = await deps.patchCostNode({
+            budgetPlanId: req.params.id,
+            level,
+            nodeId: req.params.nodeId,
+            ...(req.body.name === undefined ? {} : { name: req.body.name }),
+            ...(req.body.active === undefined ? {} : { active: req.body.active }),
+          });
+          if (!result.ok) return sendWriteError(reply, result.error);
+          return sendResult(reply, ok(costStructureToDto(result.value)), { ok: 200 });
+        },
+      });
+    }
 
     // POST /budget-plans/budget-results/{modelo} — lança e calcula (US3/CA1+CA2). O `model` é fixado
     // pela rota (como o releaseType do legado); o body traz só os campos do cálculo. 201 + resultado.

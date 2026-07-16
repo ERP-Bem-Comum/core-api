@@ -246,16 +246,43 @@ export const addSubcategoryBodySchema = z.object({
 
 export type AddSubcategoryBody = z.infer<typeof addSubcategoryBodySchema>;
 
+/**
+ * Body do PATCH .../cost-structure/{cost-centers,categories,subcategories}/:nodeId (#454 gap 3).
+ *
+ * Ambos opcionais (é PATCH), mas **não** ambos ausentes: `{}` é pedido malformado, não no-op de
+ * sucesso — o use case devolve `cost-node-patch-empty` → 400.
+ *
+ * `name` usa a MESMA regra do add (min 1, teto NODE_NAME_MAX): editar não pode aceitar o que criar
+ * recusa. `active: false` desativa; `true` reativa (o front tem switch, não botão).
+ */
+export const patchCostNodeBodySchema = z.object({
+  name: z.string().min(1).max(NODE_NAME_MAX).optional(),
+  active: z.boolean().optional(),
+});
+
+export type PatchCostNodeBody = z.infer<typeof patchCostNodeBodySchema>;
+
+/** Params do PATCH: o plano e o nó. O NÍVEL vem do path da rota, não do body. */
+export const costNodeParamSchema = z.object({
+  id: z.uuid().meta({ description: 'UUID v4 do plano orçamentário' }),
+  nodeId: z.uuid().meta({ description: 'UUID v4 do nó (centro, categoria ou subcategoria)' }),
+});
+
 // Response: árvore FIXA de 3 níveis (cost-center -> category -> subcategory).
+// `active` é o estado EFETIVO (nó ∧ ancestrais) — é o que a árvore do front mostra. A intenção
+// individual de cada nó fica na persistência; a borda não a expõe (ninguém pediu, e expor as duas
+// convidaria o front a recalcular a herança por conta).
 const subcategoryNodeSchema = z.object({
   id: z.uuid(),
   name: z.string(),
   launchType: launchTypeSchema,
+  active: z.boolean(),
 });
 
 const categoryNodeSchema = z.object({
   id: z.uuid(),
   name: z.string(),
+  active: z.boolean(),
   subcategories: z.array(subcategoryNodeSchema),
 });
 
@@ -263,6 +290,7 @@ const costCenterNodeSchema = z.object({
   id: z.uuid(),
   name: z.string(),
   direction: costDirectionSchema,
+  active: z.boolean(),
   categories: z.array(categoryNodeSchema),
 });
 

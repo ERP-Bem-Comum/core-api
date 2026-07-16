@@ -13,6 +13,7 @@
 
 import {
   bigint,
+  boolean,
   char,
   check,
   datetime,
@@ -145,6 +146,10 @@ export const costCenters = mysqlTable(
     budgetPlanId: varchar('budget_plan_id', { length: 36 }).notNull(),
     name: varchar('name', { length: 255 }).notNull(),
     direction: varchar('direction', { length: 16 }).notNull(),
+    // #454 gap 3 — intenção do PRÓPRIO nó (soft). O efetivo (nó ∧ ancestrais) é derivado na
+    // leitura: gravar o efetivo aqui apagaria quem foi desativado à mão. DEFAULT TRUE: nó
+    // existente nasce ativo. Molde: par_partners.active.
+    active: boolean('active').notNull().default(true),
   },
   (t) => [
     check('bgp_cost_centers_direction_chk', sql`${t.direction} IN ('A PAGAR','A RECEBER')`),
@@ -166,6 +171,8 @@ export const categories = mysqlTable(
     id: varchar('id', { length: 36 }).primaryKey().notNull(),
     costCenterId: varchar('cost_center_id', { length: 36 }).notNull(),
     name: varchar('name', { length: 255 }).notNull(),
+    // #454 gap 3 — intenção do próprio nó; o efetivo herda do centro na leitura.
+    active: boolean('active').notNull().default(true),
   },
   (t) => [
     // O índice implícito da FK já cobre a reconstrução (`WHERE cost_center_id IN (...)`) — sem índice redundante.
@@ -186,6 +193,9 @@ export const subcategories = mysqlTable(
     categoryId: varchar('category_id', { length: 36 }).notNull(),
     name: varchar('name', { length: 255 }).notNull(),
     launchType: varchar('launch_type', { length: 24 }).notNull(),
+    // #454 gap 3 — intenção do próprio nó; o efetivo herda de categoria e centro na leitura.
+    // Desativar NUNCA apaga: bgp_budget_results.subcategory_id aponta pra cá e não tem FK.
+    active: boolean('active').notNull().default(true),
   },
   (t) => [
     check(
