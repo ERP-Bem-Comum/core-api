@@ -9,9 +9,9 @@
 
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
-import * as Permission from '../../domain/authorization/permission.ts';
 import * as User from '../../domain/identity/user/user.ts';
-import { authorize } from '../../domain/authorization/authorize.ts';
+import { authorizeActor } from '../authorize-actor.ts';
+import type { RbacMode } from '../../domain/authorization/rbac-mode.ts';
 import type { UserId } from '../../domain/identity/user-id.ts';
 import type { RoleId } from '../../domain/authorization/role-id.ts';
 import type { ActiveUser } from '../../domain/identity/user/types.ts';
@@ -47,6 +47,7 @@ type Deps = Readonly<{
   userRepo: UserRepository;
   roleRepo: RoleRepository;
   clock: Clock;
+  rbacMode: RbacMode;
 }>;
 
 export const assignRole =
@@ -58,10 +59,10 @@ export const assignRole =
     const activeActor = User.parseActive(actor.value);
     if (!activeActor.ok) return err('forbidden');
 
-    const required = Permission.parse('user:assign-role');
-    if (!required.ok) return err('forbidden');
-    const authorized = authorize(activeActor.value, required.value);
-    if (!authorized.ok) return err('forbidden');
+    // ADR-0052 — em bypass, todo autenticado gere papéis (permite se auto-recuperar do #462).
+    if (!authorizeActor(deps.rbacMode, activeActor.value, 'user:assign-role').ok) {
+      return err('forbidden');
+    }
 
     const target = await deps.userReader.findById(cmd.targetUserId);
     if (!target.ok) return target;

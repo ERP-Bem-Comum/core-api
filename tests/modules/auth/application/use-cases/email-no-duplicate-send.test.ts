@@ -93,6 +93,7 @@ describe('CA5/CA7 — sem duplicacao de envio (corte do caminho antigo)', () => 
       resetTokenRepo: resetStore.repository,
       minter: minter(),
       clock: ClockFixed(AT),
+      rbacMode: 'enforced',
       unusablePasswordHash: unusableHash(),
       inviteTtlSeconds: 604_800,
       activationBaseUrl: 'https://app.local/activate',

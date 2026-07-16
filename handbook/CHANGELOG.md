@@ -4,6 +4,18 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-07-16 — 🔓 ADR-0052 (Accepted): modo `AUTH_RBAC_MODE=bypass` — desligar a autorização por permissão, mantendo a autenticação
+
+Decisão do dono do sistema: introduzir o modo `bypass`, em que **todo usuário autenticado é
+super-usuário** (a rota exige só *"está logado"*, não *"tem a permissão X"*). A autenticação
+(`requireAuth`) permanece. Bypass **total** — inclui a auto-gestão de RBAC (atribuir/revogar papéis),
+o que permite se auto-recuperar do #462. Guardas anti-silêncio (a condição da decisão): fail-secure
+(só `AUTH_RBAC_MODE=bypass` exato liga; qualquer typo → `enforced`), banner gritante no boot, e default
+`enforced`. **Ligável em produção**; o trade-off de escalação persistida (uma role admin concedida no
+bypass sobrevive ao desligar) está documentado e aceito. Ver ADR-0052.
+
+---
+
 ## 2026-07-15 — 🗂️ ADR-0051 (Accepted): owner da taxonomia — o Plano é dono do planejável, o Financeiro guarda o operacional
 
 Novo [ADR-0051](./architecture/adr/0051-taxonomy-owner-budget-plan-scoped.md) (**Accepted**), que resolve o follow-up prometido ao fechar o **#341** (_"unificação canônica segue como follow-up"_ — nota que não sobreviveu ao ticket) e aberto como [#448](https://github.com/ERP-Bem-Comum/core-api/issues/448). Fixa a hierarquia canônica em **4 níveis: Plano Orçamentário → Centro de Custo → Categoria → Subcategoria**, ratificando a premissa da P.O. (_"tudo se vincula ao PLANO"_, do legado).
