@@ -119,6 +119,8 @@ const WRITE_ERROR_STATUS: Readonly<Record<string, number>> = {
   'budget-plan-calibration-open': 409,
   'budget-plan-scenery-limit': 409,
   'scenario-name-required': 400,
+  // Exclusão do plano (#453): filhos saem antes do pai -> 409 (precondição de estado, não input).
+  'budget-plan-has-children': 409,
   // Consolidado + CSV (US5/#319). Export de plano não-aprovado -> 409 (precondição de estado).
   'plan-not-approved-for-consolidation': 409,
   // Insights com Realizado (#416): reader do financial indisponível -> 503 (fail-closed).
@@ -278,6 +280,24 @@ const budgetPlansRoutes =
         const result = await deps.getBudgetPlan(req.params.id);
         if (!result.ok) return sendWriteError(reply, result.error);
         return sendResult(reply, ok(budgetPlanDetailToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // DELETE /budget-plans/:id — exclui o plano INTEIRO (#453). 204.
+    // ≠ do DELETE /:id/budgets/:budgetId, que remove um orçamento de dentro do plano.
+    // 409 quando APROVADO (imutável) ou quando tem filhos (apagam-se de baixo pra cima).
+    scope.route({
+      method: 'DELETE',
+      url: '/budget-plans/:id',
+      preHandler: [hooks.requireAuth, hooks.authorize(BUDGET_PLAN_PERMISSION.write)],
+      schema: {
+        params: budgetPlanIdParamSchema,
+        // 204 sem body → sem response schema (convenção das rotas 204 deste projeto).
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.deleteBudgetPlan({ budgetPlanId: req.params.id });
+        if (!result.ok) return sendWriteError(reply, result.error);
+        return reply.code(204).send() as unknown as Promise<void>;
       },
     });
 

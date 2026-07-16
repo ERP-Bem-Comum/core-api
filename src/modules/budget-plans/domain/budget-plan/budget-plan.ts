@@ -99,6 +99,28 @@ const removeBudget = (
   });
 };
 
+// #453 — guarda de exclusão do plano INTEIRO (≠ removeBudget, que tira um orçamento de dentro).
+// Pura: só decide, não produz estado novo — quem apaga é o repositório.
+//
+// Duas regras, ambas decisão de produto (2026-07-15):
+//   • APROVADO não sai. O módulo trata aprovado como imutável (editar valor exige Calibração), o
+//     Consolidado ABC agrega aprovados (apagar reescreveria resultado já reportado) e
+//     `fin_documents.budget_plan_ref` aponta para planos SEM FK — orfanaria despesa real em silêncio.
+//   • Plano com filho não sai. Apaga-se de baixo pra cima; nada some por estar aninhado.
+//
+// Vale para os dois ramos da árvore: `startCalibration` gera filho de pai APROVADO e `createScenery`
+// gera filho de pai NÃO-aprovado — logo um RASCUNHO também pode ter filhos.
+//
+// Status decide antes da árvore: com os dois motivos juntos, o usuário lê `already-approved`.
+const remove = (
+  plan: BudgetPlanEntity,
+  children: readonly BudgetPlanEntity[],
+): Result<void, BudgetPlanError> => {
+  if (plan.status === 'APROVADO') return err('budget-plan-already-approved');
+  if (children.length > 0) return err('budget-plan-has-children');
+  return ok(undefined);
+};
+
 // Legado: no máx. 2 cenários por plano em calibração.
 const MAX_SCENERIES = 2;
 
@@ -185,6 +207,7 @@ export const BudgetPlan = {
   create,
   addBudget,
   removeBudget,
+  remove,
   startCalibration,
   createScenery,
   approve,

@@ -107,6 +107,23 @@ export const InMemoryBudgetPlanRepository = (
       }
       return ok(undefined);
     },
+
+    // #453 — apaga o plano e os results de cada orçamento dele. Os budgets vêm do store (como o
+    // adapter mysql os lê do banco), não de uma cópia recebida de fora: é o que mantém os dois
+    // adapters com o mesmo comportamento quando o agregado em mãos está velho.
+    remove: async (planId) => {
+      const plan = map.get(planId);
+      if (plan === undefined) return ok(undefined);
+      if (budgetResultRepo !== undefined) {
+        for (const budget of plan.budgets) {
+          const deleted = await budgetResultRepo.deleteByBudgetId(budget.id);
+          // Store in-memory nunca falha; mapeia p/ erro de infra do port por completude de tipos.
+          if (!deleted.ok) return err('budget-plan-repo-unavailable');
+        }
+      }
+      map.delete(planId);
+      return ok(undefined);
+    },
   };
 
   return {

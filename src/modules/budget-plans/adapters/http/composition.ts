@@ -58,6 +58,7 @@ import { addBudgetResult } from '../../application/use-cases/add-budget-result.t
 import { getBudgetResults } from '../../application/use-cases/get-budget-results.ts';
 import { addBudget } from '../../application/use-cases/add-budget.ts';
 import { deleteBudget } from '../../application/use-cases/delete-budget.ts';
+import { deleteBudgetPlan } from '../../application/use-cases/delete-budget-plan.ts';
 import { startCalibration } from '../../application/use-cases/start-calibration.ts';
 import { createScenery } from '../../application/use-cases/create-scenery.ts';
 import { approveBudgetPlan } from '../../application/use-cases/approve-budget-plan.ts';
@@ -148,6 +149,7 @@ export type BudgetPlansHttpDeps = Readonly<{
   getBudgetResults: ReturnType<typeof getBudgetResults>;
   addBudget: ReturnType<typeof addBudget>;
   deleteBudget: ReturnType<typeof deleteBudget>;
+  deleteBudgetPlan: ReturnType<typeof deleteBudgetPlan>;
   startCalibration: ReturnType<typeof startCalibration>;
   createScenery: ReturnType<typeof createScenery>;
   approveBudgetPlan: ReturnType<typeof approveBudgetPlan>;
@@ -278,6 +280,7 @@ const makeDeps = (pools: Pools): BudgetPlansHttpDeps => {
     getBudgetResults: getBudgetResults({ budgetResultRepo }),
     addBudget: addBudget({ planRepo, clock }),
     deleteBudget: deleteBudget({ planRepo, clock }),
+    deleteBudgetPlan: deleteBudgetPlan({ planRepo }),
     startCalibration: startCalibration({ planRepo, costStructureRepo, budgetResultRepo, clock }),
     createScenery: createScenery({ planRepo, costStructureRepo, budgetResultRepo, clock }),
     approveBudgetPlan: approveBudgetPlan({ planRepo, clock }),

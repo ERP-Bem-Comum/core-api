@@ -252,5 +252,36 @@ export const runBudgetPlanRepositoryContract = (
       assert.ok(isOk(all));
       assert.equal(all.value.items.filter((i) => String(i.id) === String(plan.id)).length, 1);
     });
+
+    // BGP-PLAN-DELETE (#453). Aqui só o contrato do port: o plano some das duas leituras. A
+    // atomicidade contra os dependentes SEM FK (bgp_budget_results) é do teste drizzle-mysql —
+    // o in-memory não tem transação para provar.
+    it('remove apaga o plano — findById devolve null e ele sai da listagem', async () => {
+      const { plan } = createPlan({ year: 2026 });
+      assert.ok(isOk(await repo.save(plan, [])));
+
+      assert.ok(isOk(await repo.remove(plan.id)));
+
+      const found = await repo.findById(plan.id);
+      assert.ok(isOk(found));
+      assert.equal(found.value, null);
+
+      const all = await repo.listPaged({ page: 1, limit: 50 });
+      assert.ok(isOk(all));
+      assert.equal(all.value.items.filter((i) => String(i.id) === String(plan.id)).length, 0);
+    });
+
+    it('remove é escopado: apagar um plano não derruba o outro', async () => {
+      const a = createPlan({ year: 2026 });
+      const b = createPlan({ year: 2027 });
+      assert.ok(isOk(await repo.save(a.plan, [])));
+      assert.ok(isOk(await repo.save(b.plan, [])));
+
+      assert.ok(isOk(await repo.remove(a.plan.id)));
+
+      const found = await repo.findById(b.plan.id);
+      assert.ok(isOk(found));
+      assert.ok(found.value !== null, 'o outro plano continua de pé');
+    });
   });
 };
