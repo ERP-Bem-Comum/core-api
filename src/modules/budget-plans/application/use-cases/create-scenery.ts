@@ -3,12 +3,12 @@ import type { Clock } from '../../../../shared/ports/clock.ts';
 import * as UserRef from '../../../../shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '../../domain/shared/budget-plan-id.ts';
 import { BudgetPlan } from '../../domain/budget-plan/budget-plan.ts';
-import type { BudgetPlan as BudgetPlanEntity } from '../../domain/budget-plan/types.ts';
 import type { BudgetPlanError } from '../../domain/budget-plan/errors.ts';
 import {
   clonePlanContent,
   type ClonePlanContentDeps,
   type ClonePlanContentError,
+  type ClonePlanContentOutcome,
 } from './clone-plan-content.ts';
 
 export type CreateSceneryCommand = Readonly<{
@@ -32,7 +32,7 @@ export const createScenery =
   (deps: CreateSceneryDeps) =>
   async (
     cmd: CreateSceneryCommand,
-  ): Promise<Result<Readonly<{ plan: BudgetPlanEntity }>, CreateSceneryError>> => {
+  ): Promise<Result<ClonePlanContentOutcome, CreateSceneryError>> => {
     const name = cmd.name.trim();
     if (name.length === 0) return err('scenario-name-required');
 

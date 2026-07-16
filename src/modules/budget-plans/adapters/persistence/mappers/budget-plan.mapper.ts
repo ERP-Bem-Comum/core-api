@@ -1,5 +1,4 @@
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
-import * as Money from '#src/shared/kernel/money.ts';
 import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '#src/modules/budget-plans/domain/shared/budget-plan-id.ts';
 import * as BudgetId from '#src/modules/budget-plans/domain/shared/budget-id.ts';
@@ -53,7 +52,6 @@ export const budgetToInsert = (
   budgetPlanId: budgetPlanId as unknown as string,
   partnerKind: budget.partner.kind,
   partnerRef: budget.partner.ref as unknown as string,
-  valueCents: budget.value.cents,
 });
 
 const parsePartner = (row: Readonly<BudgetRow>): Result<BudgetPartner, BudgetPlanMapperError> => {
@@ -77,10 +75,7 @@ const budgetFromRow = (row: Readonly<BudgetRow>): Result<Budget, BudgetPlanMappe
   const partner = parsePartner(row);
   if (!partner.ok) return partner;
 
-  const value = Money.fromCents(row.valueCents);
-  if (!value.ok) return err('budget-plan-mapper-invalid-money');
-
-  return ok({ id: id.value, partner: partner.value, value: value.value });
+  return ok({ id: id.value, partner: partner.value });
 };
 
 export const budgetPlanFromRow = (

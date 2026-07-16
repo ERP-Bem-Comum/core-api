@@ -1,4 +1,4 @@
-import { type Result, err } from '../../../../shared/primitives/result.ts';
+import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
 import * as UserRef from '../../../../shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '../../domain/shared/budget-plan-id.ts';
@@ -9,18 +9,27 @@ import type {
   BudgetPlanRepository,
   BudgetPlanRepositoryError,
 } from '../../domain/budget-plan/repository.ts';
+import type {
+  BudgetResultRepository,
+  BudgetResultRepositoryError,
+} from '../../domain/budget-result/repository.ts';
+import { planTotalCents } from '../read-models/plan-total.ts';
 
 export type ApproveBudgetPlanCommand = Readonly<{ planId: string; updatedByRef: string }>;
+
+export type ApproveBudgetPlanOutcome = Readonly<{ plan: BudgetPlanEntity; totalInCents: number }>;
 
 export type ApproveBudgetPlanError =
   | BudgetPlanId.BudgetPlanIdError
   | 'budget-plan-not-found'
   | BudgetPlanError
   | BudgetPlanRepositoryError
+  | BudgetResultRepositoryError
   | UserRef.UserRefError;
 
 export type ApproveBudgetPlanDeps = Readonly<{
   planRepo: BudgetPlanRepository;
+  budgetResultRepo: BudgetResultRepository;
   clock: Clock;
 }>;
 
@@ -32,7 +41,7 @@ export const approveBudgetPlan =
   (deps: ApproveBudgetPlanDeps) =>
   async (
     cmd: ApproveBudgetPlanCommand,
-  ): Promise<Result<Readonly<{ plan: BudgetPlanEntity }>, ApproveBudgetPlanError>> => {
+  ): Promise<Result<ApproveBudgetPlanOutcome, ApproveBudgetPlanError>> => {
     const planId = BudgetPlanId.rehydrate(cmd.planId);
     if (!planId.ok) return planId;
 
@@ -49,5 +58,14 @@ export const approveBudgetPlan =
     const saved = await deps.planRepo.save(approved.value.plan, []);
     if (!saved.ok) return saved;
 
-    return approved;
+    // #458 — o plano aprovado preserva os orçamentos; o total da response é a soma dos lançamentos.
+    const sums = await deps.budgetResultRepo.sumByBudgetIds(
+      approved.value.plan.budgets.map((b) => b.id),
+    );
+    if (!sums.ok) return sums;
+
+    return ok({
+      plan: approved.value.plan,
+      totalInCents: planTotalCents(approved.value.plan, sums.value),
+    });
   };

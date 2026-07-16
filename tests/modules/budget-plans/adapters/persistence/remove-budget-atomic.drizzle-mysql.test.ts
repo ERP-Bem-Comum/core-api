@@ -109,7 +109,7 @@ if (integrationEnabled()) {
     const budgetId = BudgetId.generate();
     const withBudget = BudgetPlan.addBudget(
       created.value.plan,
-      { id: budgetId, partner: { kind: 'state', ref: stateRef.value }, value: money.value },
+      { id: budgetId, partner: { kind: 'state', ref: stateRef.value } },
       NOW,
       ACTOR,
     );

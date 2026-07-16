@@ -8,6 +8,7 @@ import * as BudgetResultId from '../../domain/budget-result/budget-result-id.ts'
 import { BudgetPlan } from '../../domain/budget-plan/budget-plan.ts';
 import type { BudgetPlan as BudgetPlanEntity } from '../../domain/budget-plan/types.ts';
 import type { BudgetPlanError } from '../../domain/budget-plan/errors.ts';
+import { planTotalCents } from '../read-models/plan-total.ts';
 import type {
   BudgetPlanRepository,
   BudgetPlanRepositoryError,
@@ -29,6 +30,10 @@ export type ClonePlanContentError =
   | BudgetResultRepositoryError
   | BudgetPlanRepositoryError;
 
+// #458 — o filho clonado tem total (os lançamentos vieram junto). Devolvido para a response 201 de
+// calibração/cenário não mentir (bug do ticket). Compartilhado com startCalibration/createScenery.
+export type ClonePlanContentOutcome = Readonly<{ plan: BudgetPlanEntity; totalInCents: number }>;
+
 export type ClonePlanContentDeps = Readonly<{
   planRepo: BudgetPlanRepository;
   costStructureRepo: CostStructureRepository;
@@ -47,7 +52,7 @@ export const clonePlanContent =
     childHeader: BudgetPlanEntity,
     now: Date,
     actor: UserRef,
-  ): Promise<Result<Readonly<{ plan: BudgetPlanEntity }>, ClonePlanContentError>> => {
+  ): Promise<Result<ClonePlanContentOutcome, ClonePlanContentError>> => {
     // budgets (novos ids) → budgetIdMap
     const budgetIdMap = new Map<string, BudgetId.BudgetId>();
     let child = childHeader;
@@ -56,7 +61,7 @@ export const clonePlanContent =
       budgetIdMap.set(String(budget.id), newBudgetId);
       const added = BudgetPlan.addBudget(
         child,
-        { id: newBudgetId, partner: budget.partner, value: budget.value },
+        { id: newBudgetId, partner: budget.partner },
         now,
         actor,
       );
@@ -97,5 +102,11 @@ export const clonePlanContent =
       }
     }
 
-    return ok({ plan: child });
+    // #458 — o filho volta POPULADO (budgets + lançamentos clonados acima). O total da response é a
+    // soma derivada desses lançamentos — NÃO 0. Fixar 0 aqui reintroduziria o bug do ticket na
+    // resposta 201 (lista/detalhe mostrariam números diferentes do que o create devolveu).
+    const sums = await deps.budgetResultRepo.sumByBudgetIds(child.budgets.map((b) => b.id));
+    if (!sums.ok) return sums;
+
+    return ok({ plan: child, totalInCents: planTotalCents(child, sums.value) });
   };

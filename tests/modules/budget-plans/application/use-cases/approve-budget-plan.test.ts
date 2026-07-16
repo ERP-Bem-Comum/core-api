@@ -9,6 +9,7 @@ import * as BudgetPlanId from '#src/modules/budget-plans/domain/shared/budget-pl
 import { ProgramRef } from '#src/modules/budget-plans/domain/shared/refs.ts';
 import { BudgetPlan } from '#src/modules/budget-plans/domain/budget-plan/budget-plan.ts';
 import { InMemoryBudgetPlanRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-plan-repository.in-memory.ts';
+import { InMemoryBudgetResultRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-result-repository.in-memory.ts';
 import { approveBudgetPlan } from '#src/modules/budget-plans/application/use-cases/approve-budget-plan.ts';
 
 const NOW = new Date('2026-07-09T12:00:00.000Z');
@@ -50,7 +51,11 @@ describe('approveBudgetPlan (use case) — US4/CA2', () => {
   it('RASCUNHO → APROVADO', async () => {
     const planStore = InMemoryBudgetPlanRepository();
     const planId = await seedPlan(planStore, false);
-    const r = await approveBudgetPlan({ planRepo: planStore.repo, clock: ClockFixed(NOW) })({
+    const r = await approveBudgetPlan({
+      planRepo: planStore.repo,
+      budgetResultRepo: InMemoryBudgetResultRepository().repo,
+      clock: ClockFixed(NOW),
+    })({
       planId: String(planId),
       updatedByRef: ACTOR_REF,
     });
@@ -65,7 +70,11 @@ describe('approveBudgetPlan (use case) — US4/CA2', () => {
   it('já APROVADO → budget-plan-already-approved', async () => {
     const planStore = InMemoryBudgetPlanRepository();
     const planId = await seedPlan(planStore, true);
-    const r = await approveBudgetPlan({ planRepo: planStore.repo, clock: ClockFixed(NOW) })({
+    const r = await approveBudgetPlan({
+      planRepo: planStore.repo,
+      budgetResultRepo: InMemoryBudgetResultRepository().repo,
+      clock: ClockFixed(NOW),
+    })({
       planId: String(planId),
       updatedByRef: ACTOR_REF,
     });
@@ -75,7 +84,11 @@ describe('approveBudgetPlan (use case) — US4/CA2', () => {
 
   it('plano inexistente → budget-plan-not-found', async () => {
     const planStore = InMemoryBudgetPlanRepository();
-    const r = await approveBudgetPlan({ planRepo: planStore.repo, clock: ClockFixed(NOW) })({
+    const r = await approveBudgetPlan({
+      planRepo: planStore.repo,
+      budgetResultRepo: InMemoryBudgetResultRepository().repo,
+      clock: ClockFixed(NOW),
+    })({
       planId: '00000000-0000-4000-8000-000000000000',
       updatedByRef: ACTOR_REF,
     });

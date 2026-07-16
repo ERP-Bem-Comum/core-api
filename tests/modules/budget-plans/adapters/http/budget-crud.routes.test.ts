@@ -116,20 +116,22 @@ describe('POST /budget-plans/:id/budgets', () => {
     await teardown();
   });
 
-  it('parte 1: adiciona orçamento por Rede -> 201 + valueInCents', async () => {
+  it('parte 1: adiciona orçamento por Rede -> 201 (criar = plano + Rede)', async () => {
     const { app, teardown } = await makeApp();
     const token = await login(app, WRITER_EMAIL);
     const planId = await createPlan(app, token);
+    // #458 — o body não carrega mais valueInCents; um valor extra é ignorado (strip do Zod).
     const res = await app.inject({
       method: 'POST',
       url: `/api/v2/budget-plans/${planId}/budgets`,
       headers: { authorization: `Bearer ${token}` },
-      payload: { partnerKind: 'state', partnerRef: STATE_REF, valueInCents: 500000 },
+      payload: { partnerKind: 'state', partnerRef: STATE_REF },
     });
     assert.equal(res.statusCode, 201, res.body);
     const body = res.json() as { partner: { kind: string }; valueInCents: number };
     assert.equal(body.partner.kind, 'state');
-    assert.equal(body.valueInCents, 500000);
+    // #458 — valueInCents é DERIVADO dos lançamentos; orçamento recém-criado não tem nenhum → 0.
+    assert.equal(body.valueInCents, 0);
     await teardown();
   });
 

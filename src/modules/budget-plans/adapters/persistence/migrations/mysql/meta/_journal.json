@@ -57,6 +57,13 @@
       "when": 1784174618049,
       "tag": "0007_dashing_pepper_potts",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "5",
+      "when": 1784217843736,
+      "tag": "0008_tan_hobgoblin",
+      "breakpoints": true
     }
   ]
 }

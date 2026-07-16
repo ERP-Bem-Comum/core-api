@@ -9,7 +9,6 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { isOk, isErr } from '#src/shared/index.ts';
-import * as Money from '#src/shared/kernel/money.ts';
 import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import * as BudgetId from '#src/modules/budget-plans/domain/shared/budget-id.ts';
 import {
@@ -36,12 +35,6 @@ const ACTOR = (() => {
   return r.value;
 })();
 
-const cents = (raw: number) => {
-  const r = Money.fromCents(raw);
-  assert.ok(isOk(r));
-  return r.value;
-};
-
 describe('getBudgetPlan', () => {
   it('CA4: cabeçalho + budgets por Rede + totalInCents = soma', async () => {
     const deps = makeDeps();
@@ -57,7 +50,6 @@ describe('getBudgetPlan', () => {
       {
         id: BudgetId.generate(),
         partner: { kind: 'state', ref: stateRef.value },
-        value: cents(50_000),
       },
       NOW,
       ACTOR,
@@ -68,7 +60,6 @@ describe('getBudgetPlan', () => {
       {
         id: BudgetId.generate(),
         partner: { kind: 'municipality', ref: munRef.value },
-        value: cents(30_000),
       },
       NOW,
       ACTOR,
@@ -84,7 +75,9 @@ describe('getBudgetPlan', () => {
     assert.equal(r.value.version, '1.0');
     assert.equal(r.value.programName, 'Ensino em Tempo Integral');
     assert.equal(r.value.budgets.length, 2);
-    assert.equal(r.value.totalInCents, 80_000);
+    // #458: total agora derivado dos lançamentos (bgp_budget_results); sem results semeados → 0.
+    // Coberto em plan-total.test.ts e budget-total-derived.routes.test.ts.
+    assert.equal(r.value.totalInCents, 0);
 
     const kinds = r.value.budgets.map((b) => b.partner.kind).sort();
     assert.deepEqual(kinds, ['municipality', 'state']);

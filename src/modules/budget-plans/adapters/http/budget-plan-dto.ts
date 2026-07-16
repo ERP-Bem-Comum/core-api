@@ -3,7 +3,6 @@
  * serializa branded types (`BudgetPlanId`, `ProgramRef`) como string e datas como ISO-8601.
  */
 
-import { BudgetPlan } from '#src/modules/budget-plans/domain/budget-plan/budget-plan.ts';
 import * as PlanVersion from '#src/modules/budget-plans/domain/budget-plan/version.ts';
 import type { BudgetPlan as BudgetPlanEntity } from '#src/modules/budget-plans/domain/budget-plan/types.ts';
 import type { CreateBudgetPlanOutcome } from '#src/modules/budget-plans/application/use-cases/create-budget-plan.ts';
@@ -16,8 +15,15 @@ import type {
   LifecyclePlanResponseDto,
 } from './schemas.ts';
 
-/** Resposta das transições de ciclo de vida (US4): plano resultante + total. */
-export const lifecyclePlanToDto = (plan: BudgetPlanEntity): LifecyclePlanResponseDto => ({
+/**
+ * Resposta das transições de ciclo de vida (US4): plano resultante + total.
+ * #458 — `totalInCents` é DERIVADO dos lançamentos e vem computado do use case (calibração/cenário
+ * nascem vazios → 0; aprovar preserva os orçamentos → a soma real). O DTO não recalcula.
+ */
+export const lifecyclePlanToDto = (
+  plan: BudgetPlanEntity,
+  totalInCents: number,
+): LifecyclePlanResponseDto => ({
   id: String(plan.id),
   year: plan.year,
   programRef: String(plan.programRef),
@@ -25,10 +31,10 @@ export const lifecyclePlanToDto = (plan: BudgetPlanEntity): LifecyclePlanRespons
   version: PlanVersion.format(plan.version),
   scenarioName: plan.scenarioName,
   parentId: plan.parentId === null ? null : String(plan.parentId),
-  totalInCents: BudgetPlan.total(plan).cents,
+  totalInCents,
 });
 
-/** Resposta do POST /budget-plans (cabeçalho recém-criado, sem budgets — nasce vazio). */
+/** Resposta do POST /budget-plans (cabeçalho recém-criado, sem budgets — nasce vazio → total 0). */
 export const createBudgetPlanToDto = (
   outcome: CreateBudgetPlanOutcome,
 ): CreateBudgetPlanResponseDto => ({
@@ -37,7 +43,7 @@ export const createBudgetPlanToDto = (
   programRef: String(outcome.plan.programRef),
   status: outcome.plan.status,
   version: PlanVersion.format(outcome.plan.version),
-  totalInCents: BudgetPlan.total(outcome.plan).cents,
+  totalInCents: 0,
 });
 
 /** Item enxuto da listagem (GET /budget-plans). */

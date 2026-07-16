@@ -1,5 +1,4 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
-import * as Money from '../../../../shared/kernel/money.ts';
 import type { Clock } from '../../../../shared/ports/clock.ts';
 import * as UserRef from '../../../../shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '../../domain/shared/budget-plan-id.ts';
@@ -17,14 +16,12 @@ export type AddBudgetCommand = Readonly<{
   budgetPlanId: string;
   partnerKind: 'state' | 'municipality';
   partnerRef: string;
-  valueInCents: number;
   updatedByRef: string;
 }>;
 
 export type AddBudgetError =
   | BudgetPlanId.BudgetPlanIdError
   | 'budget-plan-ref-invalid'
-  | 'budget-plan-invalid-money'
   | 'budget-plan-not-found'
   | BudgetPlanError
   | BudgetPlanRepositoryError
@@ -56,9 +53,6 @@ export const addBudget =
     const planId = BudgetPlanId.rehydrate(cmd.budgetPlanId);
     if (!planId.ok) return planId;
 
-    const value = Money.fromCents(cmd.valueInCents);
-    if (!value.ok) return err('budget-plan-invalid-money');
-
     const partner = resolvePartner(cmd.partnerKind, cmd.partnerRef);
     if (!partner.ok) return partner;
 
@@ -72,7 +66,7 @@ export const addBudget =
     const budgetId = BudgetId.generate();
     const added = BudgetPlan.addBudget(
       found.value,
-      { id: budgetId, partner: partner.value, value: value.value },
+      { id: budgetId, partner: partner.value },
       deps.clock.now(),
       actor.value,
     );
@@ -81,5 +75,5 @@ export const addBudget =
     const saved = await deps.planRepo.save(added.value.plan, []);
     if (!saved.ok) return saved;
 
-    return ok({ id: budgetId, partner: partner.value, value: value.value });
+    return ok({ id: budgetId, partner: partner.value });
   };

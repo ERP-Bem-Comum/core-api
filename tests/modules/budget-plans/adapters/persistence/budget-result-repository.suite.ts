@@ -265,5 +265,49 @@ export const runBudgetResultRepositoryContract = (
       assert.ok(isOk(list));
       assert.equal(list.value.length, 2, 'subcategorias diferentes -> linhas diferentes');
     });
+
+    // BGP-BUDGET-TOTAL-DERIVED (#458). `sumByBudgetIds` é o que evita o N+1 da lista: uma agregação
+    // (SUM ... GROUP BY budget_id) para a página inteira, em vez de um listByBudgetId por plano/rede.
+    describe('sumByBudgetIds (#458)', () => {
+      it('soma value_cents por orçamento, de vários meses', async () => {
+        const b1 = BudgetIdMod.generate();
+        assert.ok(isOk(await repo.save(makeResult(b1, 'IPCA', IPCA_INPUT, 1)))); // 104500
+        assert.ok(isOk(await repo.save(makeResult(b1, 'IPCA', IPCA_INPUT, 2)))); // 104500
+
+        const sums = await repo.sumByBudgetIds([b1]);
+        assert.ok(isOk(sums));
+        assert.equal(sums.value.get(String(b1)), 209000);
+      });
+
+      it('agrupa por orçamento e não vaza entre eles', async () => {
+        const b1 = BudgetIdMod.generate();
+        const b2 = BudgetIdMod.generate();
+        assert.ok(isOk(await repo.save(makeResult(b1, 'IPCA', IPCA_INPUT, 1)))); // 104500
+        assert.ok(isOk(await repo.save(makeResult(b2, 'IPCA', IPCA_INPUT, 1)))); // 104500
+        assert.ok(isOk(await repo.save(makeResult(b2, 'IPCA', IPCA_INPUT, 2)))); // 104500
+
+        const sums = await repo.sumByBudgetIds([b1, b2]);
+        assert.ok(isOk(sums));
+        assert.equal(sums.value.get(String(b1)), 104500);
+        assert.equal(sums.value.get(String(b2)), 209000);
+      });
+
+      it('orçamento sem lançamento não aparece no mapa (o caller trata como 0)', async () => {
+        const b1 = BudgetIdMod.generate();
+        const semLancamento = BudgetIdMod.generate();
+        assert.ok(isOk(await repo.save(makeResult(b1, 'IPCA', IPCA_INPUT, 1))));
+
+        const sums = await repo.sumByBudgetIds([b1, semLancamento]);
+        assert.ok(isOk(sums));
+        assert.equal(sums.value.get(String(b1)), 104500);
+        assert.equal(sums.value.has(String(semLancamento)), false);
+      });
+
+      it('lista de ids vazia → mapa vazio (sem query degenerada)', async () => {
+        const sums = await repo.sumByBudgetIds([]);
+        assert.ok(isOk(sums));
+        assert.equal(sums.value.size, 0);
+      });
+    });
   });
 };

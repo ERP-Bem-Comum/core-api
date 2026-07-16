@@ -89,7 +89,9 @@ export const budgets = mysqlTable(
     budgetPlanId: varchar('budget_plan_id', { length: 36 }).notNull(),
     partnerKind: varchar('partner_kind', { length: 16 }).notNull(),
     partnerRef: varchar('partner_ref', { length: 36 }).notNull(),
-    valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
+    // #458 — `value_cents` REMOVIDO: o total por Rede é derivado dos bgp_budget_results. A coluna
+    // era o `valueInCents` informado, uma segunda fonte de verdade que a P.O. decidiu não existir
+    // (o legado nunca a escrevia). Orçamento = plano + Rede.
   },
   (t) => [
     check('bgp_budgets_partner_kind_chk', sql`${t.partnerKind} IN ('state','municipality')`),

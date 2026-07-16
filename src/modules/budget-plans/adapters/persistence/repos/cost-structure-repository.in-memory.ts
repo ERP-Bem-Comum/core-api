@@ -14,6 +14,10 @@ export type ReadPlanStatus = (id: BudgetPlanId) => Promise<BudgetPlanStatus | nu
 
 export type InMemoryCostStructureRepositoryHandle = Readonly<{
   repo: CostStructureRepository;
+  // #458 — o launchType de uma subcategoria criada na árvore. No drizzle o
+  // SubcategoryLaunchTypeReader lê `bgp_subcategories`; no in-memory precisa da MESMA fonte (as
+  // árvores deste store), senão lançar numa subcategoria criada via HTTP dá subcategory-not-found.
+  launchTypeOf: (subcategoryId: string) => string | null;
   clear: () => void;
 }>;
 
@@ -50,6 +54,17 @@ export const InMemoryCostStructureRepository = (
 
   return {
     repo,
+    launchTypeOf: (subcategoryId) => {
+      for (const structure of map.values()) {
+        for (const cc of structure.costCenters) {
+          for (const cat of cc.categories) {
+            const sub = cat.subcategories.find((s) => String(s.id) === subcategoryId);
+            if (sub !== undefined) return sub.launchType;
+          }
+        }
+      }
+      return null;
+    },
     clear: () => {
       map.clear();
     },

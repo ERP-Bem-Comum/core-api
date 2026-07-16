@@ -3,12 +3,12 @@ import type { Clock } from '../../../../shared/ports/clock.ts';
 import * as UserRef from '../../../../shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '../../domain/shared/budget-plan-id.ts';
 import { BudgetPlan } from '../../domain/budget-plan/budget-plan.ts';
-import type { BudgetPlan as BudgetPlanEntity } from '../../domain/budget-plan/types.ts';
 import type { BudgetPlanError } from '../../domain/budget-plan/errors.ts';
 import {
   clonePlanContent,
   type ClonePlanContentDeps,
   type ClonePlanContentError,
+  type ClonePlanContentOutcome,
 } from './clone-plan-content.ts';
 
 export type StartCalibrationCommand = Readonly<{
@@ -30,7 +30,7 @@ export const startCalibration =
   (deps: StartCalibrationDeps) =>
   async (
     cmd: StartCalibrationCommand,
-  ): Promise<Result<Readonly<{ plan: BudgetPlanEntity }>, StartCalibrationError>> => {
+  ): Promise<Result<ClonePlanContentOutcome, StartCalibrationError>> => {
     const parentId = BudgetPlanId.rehydrate(cmd.parentPlanId);
     if (!parentId.ok) return parentId;
 

@@ -70,7 +70,7 @@ const seedApprovedPlan = async (deps: ReturnType<typeof buildDeps>) => {
   let plan = created.value.plan;
   const withBudget = BudgetPlan.addBudget(
     plan,
-    { id: budgetId, partner: { kind: 'state', ref: stateRef.value }, value: money.value },
+    { id: budgetId, partner: { kind: 'state', ref: stateRef.value } },
     NOW,
     ACTOR,
   );

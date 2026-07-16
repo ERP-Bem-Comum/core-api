@@ -158,11 +158,13 @@ describe('GET /budget-plans/consolidated-result (CA1)', () => {
         plans: { programAbbreviation: string; version: number; totalCents: number }[];
       };
       assert.equal(body.year, 2026);
-      assert.equal(body.totalCents, 100_000);
+      // #458 — total derivado dos lançamentos; este seed não semeia budget_results → 0. A agregação
+      // com valores reais está coberta em budget-total-derived.routes.test.ts (CA4).
+      assert.equal(body.totalCents, 0);
       assert.equal(body.plans.length, 1);
       assert.equal(body.plans[0]?.programAbbreviation, 'ETI');
       assert.equal(body.plans[0]?.version, 1);
-      assert.equal(body.plans[0]?.totalCents, 100_000);
+      assert.equal(body.plans[0]?.totalCents, 0);
     } finally {
       await teardown();
     }

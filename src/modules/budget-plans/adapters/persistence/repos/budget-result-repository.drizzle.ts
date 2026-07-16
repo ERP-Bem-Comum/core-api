@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray, sql } from 'drizzle-orm';
 import process from 'node:process';
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type { BudgetId } from '#src/modules/budget-plans/domain/shared/budget-id.ts';
@@ -104,5 +104,35 @@ export const createDrizzleBudgetResultRepository = (
           .delete(schema.budgetResults)
           .where(eq(schema.budgetResults.budgetId, budgetId as unknown as string));
       }),
+
+    // #458 — SUM(value_cents) GROUP BY budget_id, para a página inteira numa query (evita N+1).
+    // Lista vazia → mapa vazio SEM tocar o banco: `inArray(col, [])` viraria `WHERE false` e ainda
+    // custaria um round-trip; pior, alguns dialetos tratam `IN ()` como erro de sintaxe.
+    sumByBudgetIds: async (budgetIds: readonly BudgetId[]) => {
+      if (budgetIds.length === 0) return ok(new Map<string, number>());
+      return safe('sumByBudgetIds', async () => {
+        const rows = await db
+          .select({
+            budgetId: schema.budgetResults.budgetId,
+            // `sql<string>`: mysql2 devolve SUM (agregado sobre BIGINT) como string — a anotação é
+            // honesta com o runtime, e o Number() abaixo reconstrói o cents sem cast redundante.
+            sumCents: sql<string>`sum(${schema.budgetResults.valueCents})`,
+          })
+          .from(schema.budgetResults)
+          .where(
+            inArray(
+              schema.budgetResults.budgetId,
+              budgetIds.map((id) => id as unknown as string),
+            ),
+          )
+          .groupBy(schema.budgetResults.budgetId);
+
+        const sums = new Map<string, number>();
+        for (const row of rows) {
+          sums.set(row.budgetId, Number(row.sumCents));
+        }
+        return sums;
+      });
+    },
   };
 };

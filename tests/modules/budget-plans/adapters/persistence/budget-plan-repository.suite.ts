@@ -77,7 +77,6 @@ export const runBudgetPlanRepositoryContract = (
         {
           id: BudgetId.generate(),
           partner: { kind: 'state', ref: stateRef.value },
-          value: moneyR.value,
         },
         NOW,
         ACTOR,
@@ -94,7 +93,8 @@ export const runBudgetPlanRepositoryContract = (
       assert.equal(found.value.version.major, 1);
       assert.equal(found.value.version.minor, 0);
       assert.equal(found.value.budgets.length, 1);
-      assert.equal(found.value.budgets[0]?.value.cents, 150_000);
+      // #458: Budget não guarda mais value; total derivado dos lançamentos (coberto em plan-total.test.ts
+      // e budget-total-derived.routes.test.ts).
       assert.equal(found.value.budgets[0]?.partner.kind, 'state');
       assert.equal(String(found.value.budgets[0]?.partner.ref), String(stateRef.value));
     });
@@ -234,7 +234,6 @@ export const runBudgetPlanRepositoryContract = (
         {
           id: BudgetId.generate(),
           partner: { kind: 'municipality', ref: municipalityRef.value },
-          value: moneyR.value,
         },
         NOW,
         ACTOR,

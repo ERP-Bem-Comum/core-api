@@ -1,5 +1,4 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
-import * as Money from '../../../../shared/kernel/money.ts';
 import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
 import type { BudgetPlanId } from '../shared/budget-plan-id.ts';
 import type { BudgetId } from '../shared/budget-id.ts';
@@ -24,7 +23,6 @@ export type CreateBudgetPlanInput = Readonly<{
 export type AddBudgetInput = Readonly<{
   id: BudgetId;
   partner: BudgetPartner;
-  value: Money.Money;
 }>;
 
 const samePartner = (a: BudgetPartner, b: BudgetPartner): boolean =>
@@ -73,7 +71,7 @@ const addBudget = (
   if (plan.budgets.some((b) => samePartner(b.partner, input.partner))) {
     return err('budget-plan-duplicate-partner');
   }
-  const budget: Budget = { id: input.id, partner: input.partner, value: input.value };
+  const budget: Budget = { id: input.id, partner: input.partner };
   return ok({
     plan: { ...plan, budgets: [...plan.budgets, budget], updatedAt: now, updatedByRef: actor },
   });
@@ -200,9 +198,9 @@ const approve = (
   return ok({ plan: { ...plan, status: 'APROVADO', updatedAt: now, updatedByRef: actor } });
 };
 
-const total = (plan: BudgetPlanEntity): Money.Money =>
-  plan.budgets.reduce((acc, b) => Money.add(acc, b.value), Money.ZERO);
-
+// #458 — `total` saiu do agregado: era `Σ budgets[].value` (o informado, que a P.O. decidiu não
+// existir). O total agora é a soma dos lançamentos (bgp_budget_results), que vivem em outro
+// repositório — logo é composição do application (`read-models/plan-total.ts`), não do agregado.
 export const BudgetPlan = {
   create,
   addBudget,
@@ -211,5 +209,4 @@ export const BudgetPlan = {
   startCalibration,
   createScenery,
   approve,
-  total,
 } as const;

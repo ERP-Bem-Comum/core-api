@@ -147,12 +147,14 @@ describe('GET /budget-plans/:id/insights — Realizado + networksCount (#416)', 
       assert.equal(res.statusCode, 200, res.body);
       const body = res.json() as InsightsBody;
 
-      // networksCount = nº de Redes do plano (2 orçamentos state).
+      // networksCount = nº de Redes do plano (2 orçamentos state) — independe do valor.
       assert.equal(body.networksCount, 2);
 
-      // current: Planejado intacto (CA4) + Realizado presente (0 sem lastro de conciliação).
+      // current: Realizado 0 (sem lastro de conciliação no memory).
       assert.equal(body.current.year, 2026);
-      assert.equal(body.current.totalInCents, 1_000_000, 'Planejado (2×500000) inalterado');
+      // #458 — Planejado derivado dos lançamentos; este teste não semeia budget_results → 0.
+      // O Planejado com valores está coberto em budget-total-derived.routes.test.ts (CA7).
+      assert.equal(body.current.totalInCents, 0, 'Planejado derivado, sem lançamentos = 0');
       assert.equal(body.current.realizedInCents, 0);
     } finally {
       await teardown();

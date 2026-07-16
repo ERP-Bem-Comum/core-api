@@ -1,4 +1,3 @@
-import type { Money } from '../../../../shared/kernel/money.ts';
 import type { UserRef } from '../../../../shared/kernel/user-ref.ts';
 import type { BudgetPlanId } from '../shared/budget-plan-id.ts';
 import type { BudgetId } from '../shared/budget-id.ts';
@@ -12,10 +11,12 @@ export type BudgetPartner = Readonly<
   { kind: 'state'; ref: PartnerStateRef } | { kind: 'municipality'; ref: PartnerMunicipalityRef }
 >;
 
+// #458 — Orçamento = plano + Rede, e nada mais. O `value` informado saiu: o total por Rede é a soma
+// dos lançamentos (bgp_budget_results), derivada na leitura. É o modelo do legado (o CreateBudgetDto
+// não tem valor; a coluna era cache que ninguém escrevia).
 export type Budget = Readonly<{
   id: BudgetId;
   partner: BudgetPartner;
-  value: Money;
 }>;
 
 export type BudgetPlan = Readonly<{

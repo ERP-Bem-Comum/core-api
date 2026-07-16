@@ -38,6 +38,19 @@ export const InMemoryBudgetResultRepository = (): InMemoryBudgetResultRepository
     listByBudgetId: async (budgetId: BudgetId) =>
       ok(store.filter((r) => String(r.budgetId) === String(budgetId))),
 
+    // #458 — soma por orçamento (paridade do GROUP BY do drizzle). Só entra no mapa quem tem
+    // lançamento; ids sem resultado ficam ausentes (o caller trata como 0). Lista vazia → mapa vazio.
+    sumByBudgetIds: async (budgetIds: readonly BudgetId[]) => {
+      const wanted = new Set(budgetIds.map((id) => String(id)));
+      const sums = new Map<string, number>();
+      for (const r of store) {
+        const key = String(r.budgetId);
+        if (!wanted.has(key)) continue;
+        sums.set(key, (sums.get(key) ?? 0) + r.value.cents);
+      }
+      return ok(sums);
+    },
+
     deleteByBudgetId: async (budgetId: BudgetId) => {
       store = store.filter((r) => String(r.budgetId) !== String(budgetId));
       return ok(undefined);
