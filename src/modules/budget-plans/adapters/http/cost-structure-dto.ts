@@ -5,22 +5,32 @@
  */
 
 import type { CostStructure } from '#src/modules/budget-plans/domain/cost-structure/types.ts';
+import { withInheritedActive } from '#src/modules/budget-plans/domain/cost-structure/cost-structure.ts';
 import type { CostStructureTreeDto } from './schemas.ts';
 
-export const costStructureToDto = (structure: CostStructure): CostStructureTreeDto => ({
-  budgetPlanId: String(structure.budgetPlanId),
-  costCenters: structure.costCenters.map((cc) => ({
-    id: String(cc.id),
-    name: cc.name,
-    direction: cc.direction,
-    categories: cc.categories.map((cat) => ({
-      id: String(cat.id),
-      name: cat.name,
-      subcategories: cat.subcategories.map((sub) => ({
-        id: String(sub.id),
-        name: sub.name,
-        launchType: sub.launchType,
+// O `active` que sai daqui é o EFETIVO (#454 gap 3): a herança é resolvida no domínio, não no front.
+// Sem isto, uma subcategoria ativa pendurada num centro desativado voltaria como `active: true` e a
+// tela mostraria um nó que o backend considera fora de circulação.
+export const costStructureToDto = (structure: CostStructure): CostStructureTreeDto => {
+  const view = withInheritedActive(structure);
+  return {
+    budgetPlanId: String(view.budgetPlanId),
+    costCenters: view.costCenters.map((cc) => ({
+      id: String(cc.id),
+      name: cc.name,
+      direction: cc.direction,
+      active: cc.active,
+      categories: cc.categories.map((cat) => ({
+        id: String(cat.id),
+        name: cat.name,
+        active: cat.active,
+        subcategories: cat.subcategories.map((sub) => ({
+          id: String(sub.id),
+          name: sub.name,
+          launchType: sub.launchType,
+          active: sub.active,
+        })),
       })),
     })),
-  })),
-});
+  };
+};

@@ -12,6 +12,8 @@ import {
   addCostCenter,
   addCategory,
   addSubcategory,
+  setCostCenterActive,
+  setSubcategoryActive,
 } from '#src/modules/budget-plans/domain/cost-structure/cost-structure.ts';
 import type {
   CostStructure,
@@ -261,6 +263,40 @@ export const runCostStructureRepositoryContract = (
       );
       assert.ok(isErr(r));
       assert.equal(r.error, 'budget-plan-not-found');
+    });
+
+    // BGP-COST-STRUCTURE-EDIT (#454 gap 3). O `active` é a INTENÇÃO de cada nó — o que a linha
+    // guarda. A herança é resolvida na leitura (`withInheritedActive`), não aqui: se o repositório
+    // gravasse o efetivo, reativar o pai não teria como distinguir quem foi desativado à mão.
+    it('active faz round-trip por nó — a persistência guarda a intenção, não o efetivo', async () => {
+      const tree = buildTree(budgetPlanId);
+      const ccId = tree.costCenters[0]!.id;
+      const subId = tree.costCenters[0]!.categories[0]!.subcategories[0]!.id;
+
+      const off1 = setCostCenterActive(tree, ccId, false, 'RASCUNHO');
+      assert.ok(isOk(off1));
+      const off2 = setSubcategoryActive(off1.value, subId, false, 'RASCUNHO');
+      assert.ok(isOk(off2));
+      assert.ok(isOk(await repo.save(off2.value)));
+
+      const found = await repo.findByBudgetPlanId(budgetPlanId);
+      assert.ok(isOk(found));
+      const cc = found.value.costCenters[0]!;
+      assert.equal(cc.active, false, 'centro desativado sobrevive ao round-trip');
+      assert.equal(cc.categories[0]!.active, true, 'a categoria guarda a PRÓPRIA intenção (true)');
+      assert.equal(cc.categories[0]!.subcategories[0]!.active, false);
+    });
+
+    it('nó salvo sem mexer no active volta ativo (default do schema não inverte)', async () => {
+      const tree = buildTree(budgetPlanId);
+      assert.ok(isOk(await repo.save(tree)));
+
+      const found = await repo.findByBudgetPlanId(budgetPlanId);
+      assert.ok(isOk(found));
+      const cc = found.value.costCenters[0]!;
+      assert.equal(cc.active, true);
+      assert.equal(cc.categories[0]!.active, true);
+      assert.equal(cc.categories[0]!.subcategories[0]!.active, true);
     });
   });
 };

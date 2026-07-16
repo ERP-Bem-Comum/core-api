@@ -54,6 +54,7 @@ import { getCostStructure } from '../../application/use-cases/get-cost-structure
 import { addCostCenter } from '../../application/use-cases/add-cost-center.ts';
 import { addCategory } from '../../application/use-cases/add-category.ts';
 import { addSubcategory } from '../../application/use-cases/add-subcategory.ts';
+import { patchCostNode } from '../../application/use-cases/patch-cost-node.ts';
 import { addBudgetResult } from '../../application/use-cases/add-budget-result.ts';
 import { getBudgetResults } from '../../application/use-cases/get-budget-results.ts';
 import { addBudget } from '../../application/use-cases/add-budget.ts';
@@ -145,6 +146,7 @@ export type BudgetPlansHttpDeps = Readonly<{
   addCostCenter: ReturnType<typeof addCostCenter>;
   addCategory: ReturnType<typeof addCategory>;
   addSubcategory: ReturnType<typeof addSubcategory>;
+  patchCostNode: ReturnType<typeof patchCostNode>;
   addBudgetResult: ReturnType<typeof addBudgetResult>;
   getBudgetResults: ReturnType<typeof getBudgetResults>;
   addBudget: ReturnType<typeof addBudget>;
@@ -276,6 +278,7 @@ const makeDeps = (pools: Pools): BudgetPlansHttpDeps => {
     addCostCenter: addCostCenter({ costStructureRepo }),
     addCategory: addCategory({ costStructureRepo }),
     addSubcategory: addSubcategory({ costStructureRepo }),
+    patchCostNode: patchCostNode({ costStructureRepo }),
     addBudgetResult: addBudgetResult({ budgetResultRepo, subcategoryReader, budgetReader }),
     getBudgetResults: getBudgetResults({ budgetResultRepo }),
     addBudget: addBudget({ planRepo, clock }),

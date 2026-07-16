@@ -120,13 +120,15 @@ const seedPlanWithTree = async (
         id: CostCenterId.generate(),
         name: 'Operacional',
         direction: 'A PAGAR',
+        active: true,
         categories: [
           {
             id: CategoryId.generate(),
             name: 'Pessoal',
+            active: true,
             subcategories: [
-              { id: sub1, name: 'Salários', launchType: 'DESPESAS_PESSOAIS' },
-              { id: sub2, name: 'Frete', launchType: 'DESPESAS_LOGISTICAS' },
+              { id: sub1, name: 'Salários', launchType: 'DESPESAS_PESSOAIS', active: true },
+              { id: sub2, name: 'Frete', launchType: 'DESPESAS_LOGISTICAS', active: true },
             ],
           },
         ],
