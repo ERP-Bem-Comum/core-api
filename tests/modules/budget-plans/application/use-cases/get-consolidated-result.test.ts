@@ -49,7 +49,6 @@ const seedApprovedRoot = async (
     {
       id: BudgetId.generate(),
       partner: { kind: 'state', ref: stateRef.value },
-      value: money.value,
     },
     NOW,
     ACTOR,
@@ -79,12 +78,14 @@ describe('getConsolidatedResult — agrega raízes aprovadas por Ano × Programa
     const r = await getConsolidatedResult(deps)({ year: 2026 });
     assert.ok(isOk(r));
     assert.equal(r.value.year, 2026);
-    assert.equal(r.value.totalCents, 350_000);
+    // #458: totalCents agora derivado dos lançamentos (bgp_budget_results); sem results semeados → 0.
+    // Coberto em plan-total.test.ts e budget-total-derived.routes.test.ts.
+    assert.equal(r.value.totalCents, 0);
     assert.equal(r.value.plans.length, 2);
     const eti = r.value.plans.find((p) => p.programAbbreviation === 'ETI');
     assert.ok(eti !== undefined);
     assert.equal(eti.programName, 'Ensino em Tempo Integral');
-    assert.equal(eti.totalCents, 100_000);
+    assert.equal(eti.totalCents, 0);
     assert.equal(eti.version, 1);
   });
 
@@ -103,7 +104,9 @@ describe('getConsolidatedResult — agrega raízes aprovadas por Ano × Programa
 
     const r = await getConsolidatedResult(deps)({ year: 2026 });
     assert.ok(isOk(r));
-    assert.equal(r.value.totalCents, 100_000);
+    // #458: total derivado dos lançamentos; sem results semeados → 0. O que este caso trava é o
+    // recorte por ano (só o plano de 2026 entra), não o valor monetário.
+    assert.equal(r.value.totalCents, 0);
     assert.equal(r.value.plans.length, 1);
   });
 
@@ -135,25 +138,25 @@ describe('getConsolidatedResult — agrega raízes aprovadas por Ano × Programa
       valueCents: 100_000,
     });
     // Filho aprovado da mesma família (calibração promovida, US4). Ambos ficam APROVADO; o vigente é
-    // o de MAIOR versão (v2.0) — o consolidado mostra o filho (150k), NÃO a raiz histórica (100k).
-    const money = Money.fromCents(150_000);
-    assert.ok(isOk(money));
+    // o de MAIOR versão (v2.0) — o consolidado mostra o filho, NÃO a raiz histórica.
     const child: BudgetPlanEntity = {
       ...root,
       id: BudgetPlanId.generate(),
       parentId: root.id,
       version: { major: 2, minor: 0 },
       status: 'APROVADO',
-      budgets: root.budgets.map((b) => ({ ...b, value: money.value })),
+      budgets: root.budgets,
     };
     await deps.planRepo.save(child, []);
 
     const r = await getConsolidatedResult(deps)({ year: 2026 });
     assert.ok(isOk(r));
-    assert.equal(r.value.totalCents, 150_000);
+    // #458: total derivado dos lançamentos; sem results semeados → 0. O discriminador deste caso é a
+    // seleção do filho vigente (version 2, id do filho), não o valor.
+    assert.equal(r.value.totalCents, 0);
     assert.equal(r.value.plans.length, 1);
     assert.equal(r.value.plans[0]?.version, 2);
-    assert.equal(r.value.plans[0]?.totalCents, 150_000);
+    assert.equal(r.value.plans[0]?.totalCents, 0);
     assert.equal(r.value.plans[0]?.id, String(child.id));
   });
 
@@ -172,7 +175,9 @@ describe('getConsolidatedResult — agrega raízes aprovadas por Ano × Programa
 
     const r = await getConsolidatedResult(deps)({ year: 2026, programRef: PROGRAM_ETI_REF });
     assert.ok(isOk(r));
-    assert.equal(r.value.totalCents, 100_000);
+    // #458: total derivado dos lançamentos; sem results semeados → 0. Este caso trava o filtro por
+    // programa (só ETI entra), não o valor monetário.
+    assert.equal(r.value.totalCents, 0);
     assert.equal(r.value.plans.length, 1);
     assert.equal(r.value.plans[0]?.programAbbreviation, 'ETI');
   });

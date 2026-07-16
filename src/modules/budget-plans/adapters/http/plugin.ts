@@ -596,11 +596,11 @@ const budgetPlansRoutes =
           budgetPlanId: req.params.id,
           partnerKind: req.body.partnerKind,
           partnerRef: req.body.partnerRef,
-          valueInCents: req.body.valueInCents,
           updatedByRef: req.userId,
         });
         if (!result.ok) return sendWriteError(reply, result.error);
-        return sendResult(reply, ok(budgetToDto(result.value)), { ok: 201 });
+        // Orçamento recém-criado ainda não tem lançamento → total 0 (#458).
+        return sendResult(reply, ok(budgetToDto(result.value, 0)), { ok: 201 });
       },
     });
 
@@ -639,7 +639,12 @@ const budgetPlansRoutes =
           updatedByRef: req.userId,
         });
         if (!result.ok) return sendWriteError(reply, result.error);
-        return sendResult(reply, ok(lifecyclePlanToDto(result.value.plan)), { ok: 201 });
+        // #458 — a calibração volta com os lançamentos clonados do pai; o total é derivado deles.
+        return sendResult(
+          reply,
+          ok(lifecyclePlanToDto(result.value.plan, result.value.totalInCents)),
+          { ok: 201 },
+        );
       },
     });
 
@@ -660,7 +665,12 @@ const budgetPlansRoutes =
           updatedByRef: req.userId,
         });
         if (!result.ok) return sendWriteError(reply, result.error);
-        return sendResult(reply, ok(lifecyclePlanToDto(result.value.plan)), { ok: 201 });
+        // #458 — o cenário volta com os lançamentos clonados do pai; o total é derivado deles.
+        return sendResult(
+          reply,
+          ok(lifecyclePlanToDto(result.value.plan, result.value.totalInCents)),
+          { ok: 201 },
+        );
       },
     });
 
@@ -679,7 +689,11 @@ const budgetPlansRoutes =
           updatedByRef: req.userId,
         });
         if (!result.ok) return sendWriteError(reply, result.error);
-        return sendResult(reply, ok(lifecyclePlanToDto(result.value.plan)), { ok: 200 });
+        return sendResult(
+          reply,
+          ok(lifecyclePlanToDto(result.value.plan, result.value.totalInCents)),
+          { ok: 200 },
+        );
       },
     });
 

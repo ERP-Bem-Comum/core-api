@@ -73,7 +73,7 @@ const build = () => {
   const budgetId = BudgetId.generate();
   const withBudget = BudgetPlan.addBudget(
     created.value.plan,
-    { id: budgetId, partner: { kind: 'state', ref: stateRef.value }, value: money.value },
+    { id: budgetId, partner: { kind: 'state', ref: stateRef.value } },
     NOW,
     ACTOR,
   );
@@ -204,7 +204,6 @@ describe('deleteBudget (use case) — BGP-DELETE-BUDGET-ATOMIC #377', () => {
       {
         id: BudgetId.generate(),
         partner: { kind: 'state', ref: municipality.value },
-        value: money.value,
       },
       NOW,
       ACTOR,

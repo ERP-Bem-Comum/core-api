@@ -1,0 +1,1 @@
+ALTER TABLE `bgp_budgets` DROP COLUMN `value_cents`;

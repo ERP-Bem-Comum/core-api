@@ -24,6 +24,10 @@ const matchesQuery = (p: BudgetPlan, query: ListBudgetPlansQuery): boolean => {
 
 export type InMemoryBudgetPlanRepositoryHandle = Readonly<{
   repo: BudgetPlanRepository;
+  // #458 — um orçamento "existe" se algum plano do store o contém. No drizzle o BudgetExistsReader
+  // lê `bgp_budgets`; no in-memory precisa da MESMA fonte (o store dos planos), senão o reader e o
+  // planRepo divergem — um budget criado via POST não seria reconhecido para lançar.
+  hasBudget: (budgetId: string) => boolean;
   clear: () => void;
 }>;
 
@@ -128,6 +132,8 @@ export const InMemoryBudgetPlanRepository = (
 
   return {
     repo,
+    hasBudget: (budgetId: string) =>
+      [...map.values()].some((plan) => plan.budgets.some((b) => String(b.id) === budgetId)),
     clear: () => {
       map.clear();
     },

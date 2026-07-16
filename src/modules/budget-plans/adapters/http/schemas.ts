@@ -435,21 +435,20 @@ const partnerKindSchema = z
   .enum(['state', 'municipality'])
   .meta({ description: 'Rede: estado (state) XOR município (municipality)' });
 
-// Teto do TOTAL alocado a uma Rede inteira — grandeza distinta do valor unitário de linha
-// (`centsField`); não é multiplicado por outros fatores (vai direto a Money.fromCents).
-const BUDGET_TOTAL_MAX_CENTS = 1_000_000_000_000; // R$ 10 bi
-const budgetTotalCentsField = z.number().int().min(0).max(BUDGET_TOTAL_MAX_CENTS);
-
-/** POST /budget-plans/:id/budgets — adiciona um orçamento por Rede ao plano. */
+/**
+ * POST /budget-plans/:id/budgets — adiciona um orçamento por Rede ao plano.
+ * #458 — criar orçamento é plano + Rede, NADA MAIS: o `valueInCents` informado saiu (era uma segunda
+ * fonte de verdade que a P.O. decidiu não existir — o legado nunca o teve). O total por Rede é
+ * derivado dos lançamentos.
+ */
 export const addBudgetBodySchema = z.object({
   partnerKind: partnerKindSchema,
   partnerRef: networkRefSchema.meta({
     description: 'Ref da rede: UF (estado, 2 letras) ou código IBGE (município, 7 dígitos)',
   }),
-  valueInCents: budgetTotalCentsField,
 });
 
-/** Response 201 do POST budget — mesma forma aninhada de `budgetDetailItemSchema` (partner:{kind,ref}). */
+/** Response 201 do POST budget. `valueInCents` = soma dos lançamentos da Rede (0 no nascimento). */
 export const budgetResponseSchema = z.object({
   id: z.uuid(),
   partner: z.object({ kind: partnerKindSchema, ref: networkRefSchema }),

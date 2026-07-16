@@ -17,7 +17,6 @@ import { strict as assert } from 'node:assert';
 
 import { ok, err } from '#src/shared/primitives/result.ts';
 import { isOk } from '#src/shared/index.ts';
-import * as Money from '#src/shared/kernel/money.ts';
 import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import * as BudgetId from '#src/modules/budget-plans/domain/shared/budget-id.ts';
 import {
@@ -42,12 +41,6 @@ const ACTOR = (() => {
   return r.value;
 })();
 
-const cents = (raw: number) => {
-  const r = Money.fromCents(raw);
-  assert.ok(isOk(r));
-  return r.value;
-};
-
 // Fake do RealizedByPlanReader (port/ACL): devolve o realizado por ref a partir de um mapa fixo.
 // Refs ausentes do mapa não entram → o use case deve tratá-los como 0.
 const fakeRealizedReader = (byRef: Readonly<Record<string, number>>) => ({
@@ -70,7 +63,6 @@ describe('getBudgetPlanInsights — Realizado + networksCount (#416)', () => {
       {
         id: BudgetId.generate(),
         partner: { kind: 'state', ref: stateRef.value },
-        value: cents(50_000),
       },
       NOW,
       ACTOR,
@@ -81,7 +73,6 @@ describe('getBudgetPlanInsights — Realizado + networksCount (#416)', () => {
       {
         id: BudgetId.generate(),
         partner: { kind: 'municipality', ref: munRef.value },
-        value: cents(30_000),
       },
       NOW,
       ACTOR,
@@ -99,17 +90,21 @@ describe('getBudgetPlanInsights — Realizado + networksCount (#416)', () => {
       // prev2024 ausente → 0
     });
 
-    const r = await getBudgetPlanInsights({ planRepo: deps.planRepo, realizedReader })(
-      String(current.id),
-    );
+    const r = await getBudgetPlanInsights({
+      planRepo: deps.planRepo,
+      budgetResultRepo: deps.budgetResultRepo,
+      realizedReader,
+    })(String(current.id));
     assert.ok(isOk(r), JSON.stringify(r));
 
     // networksCount = número de Redes do plano atual.
     assert.equal(r.value.networksCount, 2);
 
-    // current: Planejado inalterado + Realizado projetado.
+    // current: Realizado projetado. Planejado agora é derivado dos lançamentos (#458): sem results
+    // semeados → 0. O comportamento do total derivado é coberto em plan-total.test.ts e
+    // budget-total-derived.routes.test.ts.
     assert.equal(r.value.current.year, 2026);
-    assert.equal(r.value.current.totalInCents, 80_000, 'Planejado inalterado (aditivo)');
+    assert.equal(r.value.current.totalInCents, 0);
     assert.equal(r.value.current.realizedInCents, 60_000);
 
     // previousYears: mais recente primeiro; Realizado por ref, 0 quando ausente.
@@ -128,9 +123,11 @@ describe('getBudgetPlanInsights — Realizado + networksCount (#416)', () => {
 
     const realizedReader = fakeRealizedReader({}); // nada conciliado
 
-    const r = await getBudgetPlanInsights({ planRepo: deps.planRepo, realizedReader })(
-      String(plan.id),
-    );
+    const r = await getBudgetPlanInsights({
+      planRepo: deps.planRepo,
+      budgetResultRepo: deps.budgetResultRepo,
+      realizedReader,
+    })(String(plan.id));
     assert.ok(isOk(r), JSON.stringify(r));
     assert.equal(r.value.networksCount, 0, 'plano sem Redes → 0');
     assert.equal(r.value.current.realizedInCents, 0);
@@ -147,9 +144,11 @@ describe('getBudgetPlanInsights — Realizado + networksCount (#416)', () => {
         Promise.resolve(err('realized-by-plan-read-unavailable' as const)),
     };
 
-    const r = await getBudgetPlanInsights({ planRepo: deps.planRepo, realizedReader })(
-      String(plan.id),
-    );
+    const r = await getBudgetPlanInsights({
+      planRepo: deps.planRepo,
+      budgetResultRepo: deps.budgetResultRepo,
+      realizedReader,
+    })(String(plan.id));
     assert.equal(isOk(r), false, 'não pode devolver ok com Realizado zerado');
     if (isOk(r)) return;
     assert.equal(r.error, 'realized-by-plan-read-unavailable');

@@ -95,7 +95,6 @@ if (integrationEnabled()) {
       {
         id: BudgetId.generate(),
         partner: { kind: 'state', ref: stateRef.value },
-        value: money.value,
       },
       NOW,
       ACTOR,
@@ -171,8 +170,8 @@ if (integrationEnabled()) {
     const eti = current.find((p) => String(p.programRef) === PROGRAM_ETI);
     assert.equal(eti?.version.major, 2); // vigente = filho v2.0, não a raiz v1.0
     assert.equal(String(eti?.id), String(etiChild.id));
-    const totalCents = current.reduce((acc, p) => acc + BudgetPlan.total(p).cents, 0);
-    assert.equal(totalCents, 150_000 + 250_000); // 150k (ETI vigente) + 250k (PARC)
+    // #458: total agora derivado dos lançamentos (BudgetPlan.total removido) — coberto em
+    // plan-total.test.ts e budget-total-derived.routes.test.ts. Aqui trava-se a seleção da família vigente.
   });
 
   it('filtro por programa estreita a 1 família', async () => {

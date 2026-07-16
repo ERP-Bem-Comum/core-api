@@ -178,22 +178,26 @@ const buildMemoryPools = async (seed: BudgetPlansSeed | undefined): Promise<Pool
   // Store de results compartilhado com o planRepo: o removeBudget atômico apaga os results daquele
   // budget no MESMO store que o budgetResultRepo lê/escreve (espelha a tx única do adapter mysql).
   const budgetResultRepo = InMemoryBudgetResultRepository().repo;
-  const { repo: planRepo } = InMemoryBudgetPlanRepository(undefined, budgetResultRepo);
+  const { repo: planRepo, hasBudget } = InMemoryBudgetPlanRepository(undefined, budgetResultRepo);
   await seedPlans(planRepo, seed?.plans ?? []);
 
   // O writer atômico da árvore lê o status por FORA da árvore — aqui derivado do planRepo
   // (espelha o `SELECT status FOR UPDATE` do adapter drizzle). Plano ausente -> null.
-  const costStructureRepo = InMemoryCostStructureRepository(async (id) => {
+  const costStructureHandle = InMemoryCostStructureRepository(async (id) => {
     const found = await planRepo.findById(id);
     return found.ok && found.value !== null ? found.value.status : null;
-  }).repo;
+  });
+  const costStructureRepo = costStructureHandle.repo;
 
   return {
     planRepo,
     costStructureRepo,
     budgetResultRepo,
-    subcategoryReader: InMemorySubcategoryLaunchTypeReader(seed?.subcategoryLaunchTypes ?? {}),
-    budgetReader: InMemoryBudgetExistsReader(seed?.budgetsExisting ?? []),
+    subcategoryReader: InMemorySubcategoryLaunchTypeReader(
+      seed?.subcategoryLaunchTypes ?? {},
+      costStructureHandle.launchTypeOf,
+    ),
+    budgetReader: InMemoryBudgetExistsReader(seed?.budgetsExisting ?? [], hasBudget),
     programCatalog: InMemoryProgramCatalog(seed?.programs ?? []),
     partnerNetwork: InMemoryPartnerNetwork({
       states: seed?.partnerStates ?? [],
@@ -270,9 +274,9 @@ const makeDeps = (pools: Pools): BudgetPlansHttpDeps => {
   const { programCatalog, partnerNetwork, realizedReader } = pools;
   return {
     createBudgetPlan: createBudgetPlan({ planRepo, programCatalog, clock }),
-    listBudgetPlans: listBudgetPlans({ planRepo, programCatalog }),
-    getBudgetPlan: getBudgetPlan({ planRepo, programCatalog }),
-    listScenarioChildren: listScenarioChildren({ planRepo }),
+    listBudgetPlans: listBudgetPlans({ planRepo, budgetResultRepo, programCatalog }),
+    getBudgetPlan: getBudgetPlan({ planRepo, budgetResultRepo, programCatalog }),
+    listScenarioChildren: listScenarioChildren({ planRepo, budgetResultRepo }),
     getBudgetPlanOptions: getBudgetPlanOptions({ planRepo, programCatalog, partnerNetwork, clock }),
     getCostStructure: getCostStructure({ costStructureRepo, planRepo }),
     addCostCenter: addCostCenter({ costStructureRepo }),
@@ -286,9 +290,9 @@ const makeDeps = (pools: Pools): BudgetPlansHttpDeps => {
     deleteBudgetPlan: deleteBudgetPlan({ planRepo }),
     startCalibration: startCalibration({ planRepo, costStructureRepo, budgetResultRepo, clock }),
     createScenery: createScenery({ planRepo, costStructureRepo, budgetResultRepo, clock }),
-    approveBudgetPlan: approveBudgetPlan({ planRepo, clock }),
-    getBudgetPlanInsights: getBudgetPlanInsights({ planRepo, realizedReader }),
-    getConsolidatedResult: getConsolidatedResult({ planRepo, programCatalog }),
+    approveBudgetPlan: approveBudgetPlan({ planRepo, budgetResultRepo, clock }),
+    getBudgetPlanInsights: getBudgetPlanInsights({ planRepo, budgetResultRepo, realizedReader }),
+    getConsolidatedResult: getConsolidatedResult({ planRepo, budgetResultRepo, programCatalog }),
     getPlanExport: getPlanExport({
       planRepo,
       costStructureRepo,

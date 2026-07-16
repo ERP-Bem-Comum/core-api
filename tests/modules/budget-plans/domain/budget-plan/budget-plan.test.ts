@@ -9,7 +9,6 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { isOk, isErr } from '#src/shared/index.ts';
-import * as Money from '#src/shared/kernel/money.ts';
 import * as UserRef from '#src/shared/kernel/user-ref.ts';
 import * as BudgetPlanId from '#src/modules/budget-plans/domain/shared/budget-plan-id.ts';
 import * as BudgetId from '#src/modules/budget-plans/domain/shared/budget-id.ts';
@@ -54,12 +53,6 @@ const municipalityPartner = (): BudgetPartner => {
   return { kind: 'municipality', ref: r.value };
 };
 
-const cents = (raw: number) => {
-  const r = Money.fromCents(raw);
-  assert.ok(isOk(r));
-  return r.value;
-};
-
 const validInput = (over: Partial<CreateBudgetPlanInput> = {}): CreateBudgetPlanInput => ({
   id: BudgetPlanId.generate(),
   year: 2026,
@@ -93,7 +86,7 @@ describe('BudgetPlan.create', () => {
     assert.equal(PlanVersion.format(r.value.plan.version), '1.0');
     assert.equal(r.value.plan.year, 2026);
     assert.equal(r.value.plan.budgets.length, 0);
-    assert.equal(BudgetPlan.total(r.value.plan).cents, 0);
+    // #458: total agora derivado dos lançamentos — coberto em plan-total.test.ts e budget-total-derived.routes.test.ts
     assert.equal(r.value.plan.createdAt.getTime(), NOW.getTime());
     assert.equal(r.value.event.type, 'BudgetPlanCreated');
   });
@@ -116,34 +109,34 @@ describe('BudgetPlan.addBudget', () => {
     const p0 = makePlan();
     const r1 = BudgetPlan.addBudget(
       p0,
-      { id: BudgetId.generate(), partner: statePartner(), value: cents(50_000) },
+      { id: BudgetId.generate(), partner: statePartner() },
       NOW,
       ACTOR,
     );
     assert.ok(isOk(r1));
     const r2 = BudgetPlan.addBudget(
       r1.value.plan,
-      { id: BudgetId.generate(), partner: municipalityPartner(), value: cents(30_000) },
+      { id: BudgetId.generate(), partner: municipalityPartner() },
       NOW,
       ACTOR,
     );
     assert.ok(isOk(r2));
     assert.equal(r2.value.plan.budgets.length, 2);
-    assert.equal(BudgetPlan.total(r2.value.plan).cents, 80_000);
+    // #458: total agora derivado dos lançamentos — coberto em plan-total.test.ts e budget-total-derived.routes.test.ts
   });
 
   it('invariante: no máx. 1 orçamento por estado parceiro -> budget-plan-duplicate-partner', () => {
     const p0 = makePlan();
     const r1 = BudgetPlan.addBudget(
       p0,
-      { id: BudgetId.generate(), partner: statePartner(), value: cents(50_000) },
+      { id: BudgetId.generate(), partner: statePartner() },
       NOW,
       ACTOR,
     );
     assert.ok(isOk(r1));
     const dup = BudgetPlan.addBudget(
       r1.value.plan,
-      { id: BudgetId.generate(), partner: statePartner(), value: cents(10_000) },
+      { id: BudgetId.generate(), partner: statePartner() },
       NOW,
       ACTOR,
     );
@@ -155,14 +148,14 @@ describe('BudgetPlan.addBudget', () => {
     const p0 = makePlan();
     const r1 = BudgetPlan.addBudget(
       p0,
-      { id: BudgetId.generate(), partner: municipalityPartner(), value: cents(20_000) },
+      { id: BudgetId.generate(), partner: municipalityPartner() },
       NOW,
       ACTOR,
     );
     assert.ok(isOk(r1));
     const dup = BudgetPlan.addBudget(
       r1.value.plan,
-      { id: BudgetId.generate(), partner: municipalityPartner(), value: cents(5_000) },
+      { id: BudgetId.generate(), partner: municipalityPartner() },
       NOW,
       ACTOR,
     );

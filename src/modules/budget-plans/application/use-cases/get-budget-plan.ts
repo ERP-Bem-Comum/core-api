@@ -1,6 +1,5 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import * as BudgetPlanId from '../../domain/shared/budget-plan-id.ts';
-import { BudgetPlan } from '../../domain/budget-plan/budget-plan.ts';
 import type { BudgetPlan as BudgetPlanEntity, Budget } from '../../domain/budget-plan/types.ts';
 import type { BudgetPlanStatus } from '../../domain/budget-plan/status.ts';
 import * as PlanVersion from '../../domain/budget-plan/version.ts';
@@ -8,7 +7,12 @@ import type {
   BudgetPlanRepository,
   BudgetPlanRepositoryError,
 } from '../../domain/budget-plan/repository.ts';
+import type {
+  BudgetResultRepository,
+  BudgetResultRepositoryError,
+} from '../../domain/budget-result/repository.ts';
 import type { ProgramCatalogPort, ProgramCatalogError } from '../ports/program-catalog.ts';
+import { planTotalCents } from '../read-models/plan-total.ts';
 
 export type BudgetDetailItem = Readonly<{
   id: string;
@@ -34,28 +38,35 @@ export type GetBudgetPlanError =
   | BudgetPlanId.BudgetPlanIdError
   | 'budget-plan-not-found'
   | ProgramCatalogError
-  | BudgetPlanRepositoryError;
+  | BudgetPlanRepositoryError
+  | BudgetResultRepositoryError;
 
 export type GetBudgetPlanDeps = Readonly<{
   planRepo: BudgetPlanRepository;
+  budgetResultRepo: BudgetResultRepository;
   programCatalog: ProgramCatalogPort;
 }>;
 
-const toBudgetItem = (budget: Budget): BudgetDetailItem => ({
+// #458 — o valueInCents por Rede vem da soma dos lançamentos daquele orçamento (0 se não houver).
+const toBudgetItem = (budget: Budget, sums: ReadonlyMap<string, number>): BudgetDetailItem => ({
   id: String(budget.id),
   partner: { kind: budget.partner.kind, ref: String(budget.partner.ref) },
-  valueInCents: budget.value.cents,
+  valueInCents: sums.get(String(budget.id)) ?? 0,
 });
 
-const toDetail = (plan: BudgetPlanEntity, programName: string): BudgetPlanDetail => ({
+const toDetail = (
+  plan: BudgetPlanEntity,
+  programName: string,
+  sums: ReadonlyMap<string, number>,
+): BudgetPlanDetail => ({
   id: String(plan.id),
   year: plan.year,
   status: plan.status,
   version: PlanVersion.format(plan.version),
   programRef: String(plan.programRef),
   programName,
-  budgets: plan.budgets.map(toBudgetItem),
-  totalInCents: BudgetPlan.total(plan).cents,
+  budgets: plan.budgets.map((b) => toBudgetItem(b, sums)),
+  totalInCents: planTotalCents(plan, sums),
   createdAt: plan.createdAt,
   updatedAt: plan.updatedAt,
   updatedByRef: plan.updatedByRef === null ? null : String(plan.updatedByRef),
@@ -74,5 +85,8 @@ export const getBudgetPlan =
     const program = await deps.programCatalog.getByRef(found.value.programRef);
     if (!program.ok) return program;
 
-    return ok(toDetail(found.value, program.value?.name ?? ''));
+    const sums = await deps.budgetResultRepo.sumByBudgetIds(found.value.budgets.map((b) => b.id));
+    if (!sums.ok) return sums;
+
+    return ok(toDetail(found.value, program.value?.name ?? '', sums.value));
   };

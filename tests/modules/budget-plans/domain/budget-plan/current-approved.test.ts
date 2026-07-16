@@ -36,7 +36,6 @@ const plan = (
       {
         id: BudgetId.generate(),
         partner: { kind: 'state', ref: stateRef.value },
-        value: money.value,
       },
     ],
     parentId: null,

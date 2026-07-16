@@ -1,6 +1,5 @@
 import { type Result, ok } from '../../../../shared/primitives/result.ts';
 import { ProgramRef, type BudgetPlanRefError } from '../../domain/shared/refs.ts';
-import { BudgetPlan } from '../../domain/budget-plan/budget-plan.ts';
 import type { BudgetPlan as BudgetPlanEntity, Budget } from '../../domain/budget-plan/types.ts';
 import type { BudgetPlanStatus } from '../../domain/budget-plan/status.ts';
 import * as PlanVersion from '../../domain/budget-plan/version.ts';
@@ -9,7 +8,12 @@ import type {
   BudgetPlanRepositoryError,
   ListBudgetPlansQuery,
 } from '../../domain/budget-plan/repository.ts';
+import type {
+  BudgetResultRepository,
+  BudgetResultRepositoryError,
+} from '../../domain/budget-result/repository.ts';
 import type { ProgramCatalogPort, ProgramCatalogError } from '../ports/program-catalog.ts';
+import { planTotalCents, budgetIdsOf } from '../read-models/plan-total.ts';
 
 export type ListBudgetPlansInput = Readonly<{
   page: number;
@@ -39,10 +43,12 @@ export type BudgetPlanListItem = Readonly<{
 export type ListBudgetPlansError =
   | BudgetPlanRefError
   | ProgramCatalogError
-  | BudgetPlanRepositoryError;
+  | BudgetPlanRepositoryError
+  | BudgetResultRepositoryError;
 
 export type ListBudgetPlansDeps = Readonly<{
   planRepo: BudgetPlanRepository;
+  budgetResultRepo: BudgetResultRepository;
   programCatalog: ProgramCatalogPort;
 }>;
 
@@ -65,14 +71,18 @@ const deriveNetworkKind = (
   return [...kinds][0] ?? null;
 };
 
-const toItem = (plan: BudgetPlanEntity, programName: string): BudgetPlanListItem => ({
+const toItem = (
+  plan: BudgetPlanEntity,
+  programName: string,
+  sums: ReadonlyMap<string, number>,
+): BudgetPlanListItem => ({
   id: String(plan.id),
   year: plan.year,
   status: plan.status,
   version: PlanVersion.format(plan.version),
   programRef: String(plan.programRef),
   programName,
-  totalInCents: BudgetPlan.total(plan).cents,
+  totalInCents: planTotalCents(plan, sums),
   updatedAt: plan.updatedAt,
   updatedByRef: plan.updatedByRef === null ? null : String(plan.updatedByRef),
   partnersCount: plan.budgets.length,
@@ -105,6 +115,10 @@ export const listBudgetPlans =
     const page = await deps.planRepo.listPaged(query);
     if (!page.ok) return page;
 
+    // #458 — UMA agregação de somas para a página inteira (evita N+1: sem sumByBudgetIds por plano).
+    const sums = await deps.budgetResultRepo.sumByBudgetIds(budgetIdsOf(page.value.items));
+    if (!sums.ok) return sums;
+
     // Hidrata o nome do programa uma vez por ref distinta (projeção mínima do catálogo).
     const names = new Map<string, string>();
     const items: BudgetPlanListItem[] = [];
@@ -117,7 +131,7 @@ export const listBudgetPlans =
         name = program.value?.name ?? '';
         names.set(key, name);
       }
-      items.push(toItem(plan, name));
+      items.push(toItem(plan, name, sums.value));
     }
 
     return ok({ items, total: page.value.total });

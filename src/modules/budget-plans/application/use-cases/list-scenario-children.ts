@@ -6,7 +6,6 @@
 
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import * as BudgetPlanId from '../../domain/shared/budget-plan-id.ts';
-import { BudgetPlan } from '../../domain/budget-plan/budget-plan.ts';
 import type { BudgetPlan as BudgetPlanEntity } from '../../domain/budget-plan/types.ts';
 import type { BudgetPlanStatus } from '../../domain/budget-plan/status.ts';
 import * as PlanVersion from '../../domain/budget-plan/version.ts';
@@ -14,6 +13,11 @@ import type {
   BudgetPlanRepository,
   BudgetPlanRepositoryError,
 } from '../../domain/budget-plan/repository.ts';
+import type {
+  BudgetResultRepository,
+  BudgetResultRepositoryError,
+} from '../../domain/budget-result/repository.ts';
+import { planTotalCents, budgetIdsOf } from '../read-models/plan-total.ts';
 
 export type BudgetPlanChildView = Readonly<{
   id: string;
@@ -31,18 +35,23 @@ export type ListScenarioChildrenResult = Readonly<{
 export type ListScenarioChildrenError =
   | BudgetPlanId.BudgetPlanIdError
   | 'budget-plan-not-found'
-  | BudgetPlanRepositoryError;
+  | BudgetPlanRepositoryError
+  | BudgetResultRepositoryError;
 
 export type ListScenarioChildrenDeps = Readonly<{
   planRepo: BudgetPlanRepository;
+  budgetResultRepo: BudgetResultRepository;
 }>;
 
-const toChildView = (plan: BudgetPlanEntity): BudgetPlanChildView => ({
+const toChildView = (
+  plan: BudgetPlanEntity,
+  sums: ReadonlyMap<string, number>,
+): BudgetPlanChildView => ({
   id: String(plan.id),
   version: PlanVersion.format(plan.version),
   scenarioName: plan.scenarioName,
   status: plan.status,
-  totalInCents: BudgetPlan.total(plan).cents,
+  totalInCents: planTotalCents(plan, sums),
   updatedByRef: plan.updatedByRef === null ? null : String(plan.updatedByRef),
 });
 
@@ -66,5 +75,10 @@ export const listScenarioChildren =
     const children = await deps.planRepo.listChildren(id.value);
     if (!children.ok) return children;
 
-    return ok({ items: [...children.value].sort(byVersionAscending).map(toChildView) });
+    const sums = await deps.budgetResultRepo.sumByBudgetIds(budgetIdsOf(children.value));
+    if (!sums.ok) return sums;
+
+    return ok({
+      items: [...children.value].sort(byVersionAscending).map((c) => toChildView(c, sums.value)),
+    });
   };

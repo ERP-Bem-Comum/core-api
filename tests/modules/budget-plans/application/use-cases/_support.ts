@@ -3,9 +3,11 @@ import type { Clock } from '#src/shared/ports/clock.ts';
 import * as PlainDate from '#src/shared/kernel/plain-date.ts';
 import { isOk } from '#src/shared/index.ts';
 import { InMemoryBudgetPlanRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-plan-repository.in-memory.ts';
+import { InMemoryBudgetResultRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-result-repository.in-memory.ts';
 import { InMemoryProgramCatalog } from '#src/modules/budget-plans/adapters/catalog/program-catalog.in-memory.ts';
 import { InMemoryPartnerNetwork } from '#src/modules/budget-plans/adapters/network/partner-network.in-memory.ts';
 import type { BudgetPlanRepository } from '#src/modules/budget-plans/domain/budget-plan/repository.ts';
+import type { BudgetResultRepository } from '#src/modules/budget-plans/domain/budget-result/repository.ts';
 import type { ProgramCatalogPort } from '#src/modules/budget-plans/application/ports/program-catalog.ts';
 import type { PartnerNetworkPort } from '#src/modules/budget-plans/application/ports/partner-network.ts';
 import { createBudgetPlan } from '#src/modules/budget-plans/application/use-cases/create-budget-plan.ts';
@@ -37,6 +39,8 @@ export const seedMunicipalities = [
 
 export type Deps = Readonly<{
   planRepo: BudgetPlanRepository;
+  // #458 — total do plano derivado dos lançamentos; os use cases de leitura recebem o repo de results.
+  budgetResultRepo: BudgetResultRepository;
   programCatalog: ProgramCatalogPort;
   partnerNetwork: PartnerNetworkPort;
   clock: Clock;
@@ -44,6 +48,7 @@ export type Deps = Readonly<{
 
 export const makeDeps = (): Deps => ({
   planRepo: InMemoryBudgetPlanRepository().repo,
+  budgetResultRepo: InMemoryBudgetResultRepository().repo,
   programCatalog: InMemoryProgramCatalog(seedPrograms),
   partnerNetwork: InMemoryPartnerNetwork({
     states: seedStates,
