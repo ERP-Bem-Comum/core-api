@@ -157,6 +157,9 @@ const SUITES: Readonly<Record<string, Suite>> = {
   'etl:orchestrate': mysqlSuite(ETL_DB_ENV, ['tests/etl/orchestrate.integration.test.ts']),
   'etl:contracts': mysqlSuite(ETL_DB_ENV, ['tests/etl/contracts/writer.integration.test.ts']),
   'etl:financial': mysqlSuite(ETL_DB_ENV, ['tests/etl/financial/writer.integration.test.ts']),
+  // BGP-ETL-READER-MAPPER (fatia 3/3) — full-cycle legado -> bgp_* contra o banco de referencia:
+  // CA1 (contagens 5/5/4679/36/38/390) + CA2 (isBalanced) + CA3 (idempotencia) + CA4 (model derivado).
+  'etl:budget-plans': mysqlSuite(ETL_DB_ENV, ['tests/etl/budget-plans/writer.integration.test.ts']),
   storage: {
     services: ['minio'],
     secrets: false,
