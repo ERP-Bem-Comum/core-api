@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "BGP-ETL-PRESERVE-DATES",
+  "size": "S",
+  "createdAt": "2026-07-17T22:00:49.913Z",
+  "closedAt": "2026-07-17T22:12:19.310Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-17T22:12:16.805Z",
+      "finishedAt": "2026-07-17T22:12:17.118Z",
+      "rounds": 1,
+      "reportPath": "000-request.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "ts-domain-modeler",
+      "startedAt": "2026-07-17T22:12:17.420Z",
+      "finishedAt": "2026-07-17T22:12:17.717Z",
+      "rounds": 1,
+      "reportPath": "000-request.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-17T22:12:18.009Z",
+      "finishedAt": "2026-07-17T22:12:18.303Z",
+      "rounds": 1,
+      "reportPath": "000-request.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-17T22:12:18.727Z",
+      "finishedAt": "2026-07-17T22:12:19.026Z",
+      "rounds": 1,
+      "reportPath": "000-request.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

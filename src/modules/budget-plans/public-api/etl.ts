@@ -11,7 +11,6 @@
  */
 
 import { type Result, ok, err } from '../../../shared/primitives/result.ts';
-import { ClockReal } from '../../../shared/adapters/clock-real.ts';
 import {
   openBudgetPlansMysql,
   type BudgetPlansMysqlDriverError,
@@ -66,7 +65,7 @@ export const buildBudgetPlansEtlPort = async (
   if (!handleR.ok) return err(handleR.error);
   const handle = handleR.value;
 
-  const stores = createDrizzleBudgetPlansEtlStores(handle, ClockReal());
+  const stores = createDrizzleBudgetPlansEtlStores(handle);
 
   return ok({
     ...stores,

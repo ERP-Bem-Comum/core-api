@@ -100,6 +100,8 @@ export type MappedBudgetPlan = Readonly<{
     status: string;
     scenarioName: string | null;
     updatedBy: string | null;
+    createdAt: Date;
+    updatedAt: Date;
   }>;
 }>;
 
@@ -186,6 +188,8 @@ export const mapBudgetPlanRow = (
       status: row.status,
       scenarioName: row.scenarioName,
       updatedBy,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt,
     },
   });
 };
