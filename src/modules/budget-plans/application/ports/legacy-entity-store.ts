@@ -41,6 +41,10 @@ export type BudgetPlanEtlInput = Readonly<{
   status: string;
   parentId: string | null;
   scenarioName: string | null;
+  // Autor da ultima escrita no legado (BGP-UPDATED-BY-AUDIT/#373 fase B; decisao P.O. Opcao A,
+  // precedente Gabriel D11: migra o autor, nao deixa null). UUID do usuario (auth), resolvido pela
+  // ETL via auth.legacy_id. Nullable: nem todo plano legado tem autor rastreavel (miss -> null).
+  updatedBy: string | null;
 }>;
 
 export type CostCenterEtlInput = Readonly<{

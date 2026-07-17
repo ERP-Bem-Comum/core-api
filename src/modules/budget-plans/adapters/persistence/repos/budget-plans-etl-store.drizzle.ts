@@ -176,6 +176,9 @@ export const createDrizzleBudgetPlansEtlStores = (
             status: input.status,
             parentId: input.parentId,
             scenarioName: input.scenarioName,
+            // Autoria migrada do legado (decisao P.O. Opcao A). Nullable: miss -> null (coluna
+            // bgp_budget_plans.updated_by ja existe no schema, mysql.ts:53; sem migration nova).
+            updatedBy: input.updatedBy,
             createdAt: now,
             updatedAt: now,
             legacyId,

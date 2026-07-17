@@ -15,6 +15,13 @@ export type QuarantineReason =
   | Readonly<{ tag: 'RequiredFieldMissing'; field: string }>
   | Readonly<{ tag: 'Overflow'; field: string; attempted: string; maxLength: number }>
   | Readonly<{ tag: 'DateInvalid'; field: string; attempted: string }>
+  // Valor com precisao que o alvo nao representa (aditivo — BGP-ETL-READER-MAPPER). Ex.: `version`
+  // float com >1 casa decimal (o float nao distingue 1.10 de 1.1) — nao arredonda, quarentena.
+  // `attempted` e' um numero, nunca PII.
+  | Readonly<{ tag: 'PrecisionUnsupported'; field: string; attempted: string }>
+  // Dois campos que deveriam concordar divergem (aditivo — BGP-ETL-READER-MAPPER). Ex.: UF do
+  // municipio != abbreviation do estado no mesmo orcamento. `attempted` = 'SP!=CE', nunca PII.
+  | Readonly<{ tag: 'CrossFieldMismatch'; field: string; attempted: string }>
   // Falha de um port (persistencia/auth/rehydrate na borda do orquestrador). `portError`
   // carrega o codigo kebab-case EN do erro REAL do port (ex.: 'partners-etl-store-unavailable').
   // Codigo EN, nunca dado de linha — PII-free, seguro no resumo versionavel.
@@ -49,6 +56,10 @@ export const describeReason = (reason: QuarantineReason): string => {
       return `Valor excede ${reason.maxLength} caracteres no campo ${reason.field}`;
     case 'DateInvalid':
       return `Data inválida no campo ${reason.field}`;
+    case 'PrecisionUnsupported':
+      return `Precisão não suportada no campo ${reason.field}`;
+    case 'CrossFieldMismatch':
+      return `Divergência entre campos que deveriam concordar: ${reason.field}`;
     case 'PortError':
       return `Falha de port na etapa ${reason.field}: ${reason.portError}`;
     case 'ExcludedByDecision':

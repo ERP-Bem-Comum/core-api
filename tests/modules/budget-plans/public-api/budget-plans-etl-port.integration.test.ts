@@ -50,6 +50,9 @@ const aPlan = () =>
     status: 'RASCUNHO',
     parentId: null,
     scenarioName: null,
+    // BGP-ETL-READER-MAPPER estendeu o input com a autoria migrada (decisao P.O. Opcao A);
+    // nullable, entao null basta para os casos desta suite (nao exercitam a autoria).
+    updatedBy: null,
   }) as const;
 
 const aCostCenter = (budgetPlanId: string) =>
