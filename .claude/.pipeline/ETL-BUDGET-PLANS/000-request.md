@@ -216,3 +216,19 @@ vazia (ou justificada linha a linha).
 1. **`BGP-ETL-LEGACY-ID`** (S) — migration `legacy_id` + UNIQUE nas 6. Isolado, sem lógica.
 2. **`BGP-ETL-WRITE-PORT`** (M) — `budget-plans/public-api/etl.ts`.
 3. **`BGP-ETL-READER-MAPPER`** (M) — reader + mapper + main + reconcile.
+
+---
+
+## STATUS: MAPA CONCLUÍDO — fatiado e entregue (2026-07-17)
+
+Este é o ticket-**mapa** (guarda-chuva, size L). Não tem waves próprias — foi executado pelas 3 fatias,
+todas `closed-green`:
+
+- **BGP-ETL-LEGACY-ID** (S) — migration `legacy_id` + UNIQUE nas 6 tabelas.
+- **BGP-ETL-WRITE-PORT** (M) — `buildBudgetPlansEtlPort` (public-api) + store idempotente.
+- **BGP-ETL-READER-MAPPER** (M) — reader + mapper (17 regras) + main + runbook de infra.
+
+Runbook de execução: `handbook/infrastructure/12-etl-budget-plans-runbook.md`.
+Follow-ups abertos: issues #486 (auth read-resolver), #487 (parentId nulo silencioso).
+Permanece `open` no dashboard por não ter waves (o `close` exige 4 waves done) — é histórico do
+planejamento, não trabalho pendente.
