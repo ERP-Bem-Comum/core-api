@@ -113,6 +113,9 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // BGP-ETL-LEGACY-ID (fatia 1/3 ETL) — legacy_id INT NULL + UNIQUE nas 6 tabelas bgp_*:
     // CA1 (information_schema) + CA2 (multiplos NULL) + CA3 (dup -> ER_DUP_ENTRY) + CA4 (regressao).
     'tests/modules/budget-plans/adapters/persistence/legacy-id.drizzle-mysql.test.ts',
+    // BGP-ETL-WRITE-PORT (fatia 2/3 ETL) — buildBudgetPlansEtlPort: pool boot-scoped (CA1),
+    // grava legacy_id (CA2), idempotencia por legacy_id (CA3), erro de conexao -> Result (CA5).
+    'tests/modules/budget-plans/public-api/budget-plans-etl-port.integration.test.ts',
   ]),
   financial: mysqlSuite({ MYSQL_INTEGRATION: '1' }, [
     'tests/modules/financial/adapters/persistence/document-repository.drizzle-mysql.test.ts',
