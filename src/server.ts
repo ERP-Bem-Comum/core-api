@@ -18,6 +18,8 @@ import {
   authHttpPlugin,
   buildAuthHttpDeps,
   makeRequireAuth,
+  resolveRbacMode,
+  rbacBypassBanner,
   parseE2eAuthSeed,
   usersHttpPlugin,
   approversHttpPlugin,
@@ -126,8 +128,15 @@ const main = async (): Promise<void> => {
     process.exit(78);
   }
   const { resetBaseUrl, activationBaseUrl, selfRegistrationBaseUrl } = emailLinkUrls.value;
+  // ADR-0052 — modo do RBAC. `bypass` desliga a autorização por permissão (todo autenticado é
+  // super-usuário). NÃO pode ser silencioso: um banner gritante no boot torna o estado inconfundível.
+  const rbacMode = resolveRbacMode(process.env);
+  if (rbacMode === 'bypass') {
+    process.stderr.write(rbacBypassBanner(process.env['NODE_ENV'] ?? 'undefined'));
+  }
   const authDeps = await buildAuthHttpDeps({
     driver: authDriver,
+    rbacMode,
     ...(authConnString !== undefined ? { connectionString: authConnString } : {}),
     ...(authSeed !== undefined ? { seed: authSeed } : {}),
     ...(sensitiveRateLimit !== undefined ? { sensitiveRateLimit } : {}),

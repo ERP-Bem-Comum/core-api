@@ -89,6 +89,7 @@ import * as Permission from '../../domain/authorization/permission.ts';
 import * as Role from '../../domain/authorization/role.ts';
 import * as User from '../../domain/identity/user/user.ts';
 import { makeAuthorize, makeHasPermission } from './auth-hook.ts';
+import type { RbacMode } from './rbac-mode.ts';
 
 export type AuthDriver = 'memory' | 'mysql';
 
@@ -126,6 +127,11 @@ export type AuthCompositionConfig = Readonly<{
   activationBaseUrl?: string;
   /** TTL do token de ativação em segundos (spec 005 US3). Default: 604800 (7 dias). */
   inviteTtlSeconds?: number;
+  /**
+   * Modo do RBAC (ADR-0052). Default `enforced`. Em `bypass`, `authorize` vira no-op e
+   * `hasPermission` sempre `true` — todo autenticado é super-usuário. `requireAuth` NÃO é afetado.
+   */
+  rbacMode?: RbacMode;
 }>;
 
 export type AuthHttpDeps = Readonly<{
@@ -396,6 +402,7 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
   const issuer = config.issuer ?? DEFAULT_ISSUER;
   const accessTtlSeconds = config.accessTtlSeconds ?? DEFAULT_ACCESS_TTL;
   const refreshTtlSeconds = config.refreshTtlSeconds ?? DEFAULT_REFRESH_TTL;
+  const rbacMode: RbacMode = config.rbacMode ?? 'enforced'; // ADR-0052 — default seguro.
 
   const stores = await buildStores(config);
   const keys = await loadOrGenerateKeys(process.env);
@@ -482,12 +489,14 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
       userRepo: stores.userRepo,
       roleRepo: stores.roleRepo,
       clock,
+      rbacMode,
     }),
     revokeRole: revokeRole({
       userReader: stores.userReader,
       userRepo: stores.userRepo,
       roleRepo: stores.roleRepo,
       clock,
+      rbacMode,
     }),
     changePassword: changePassword({
       userReader: stores.userReader,
@@ -530,12 +539,14 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
       unusablePasswordHash: dummyPasswordHash,
       inviteTtlSeconds,
       activationBaseUrl,
+      rbacMode,
     }),
     updateUserProfile: updateUserProfile({
       userReader: stores.userReader,
       userRepo: stores.userRepo,
       roleRepo: stores.roleRepo,
       clock,
+      rbacMode,
     }),
     activateUser: activateUser({
       userReader: stores.userReader,
@@ -565,14 +576,22 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
     }),
     verifyAccessToken: tokenIssuer.verifyAccessToken,
     sensitiveRateLimit: config.sensitiveRateLimit ?? DEFAULT_SENSITIVE_RATE_LIMIT,
+    // ADR-0052 — ponto ÚNICO do bypass: todos os módulos herdam `authorize`/`hasPermission` daqui.
+    // Em `bypass`, a autorização por permissão é neutralizada; a autenticação (`requireAuth`, injetado
+    // à parte) permanece. A validação do nome da permissão continua no wiring mesmo no bypass — um
+    // nome inválido é bug de código, não de runtime, e deve estourar no boot em qualquer modo.
     authorize: (permissionName: string): preHandlerAsyncHookHandler => {
       const parsed = Permission.parse(permissionName);
       if (!parsed.ok) {
         throw new Error(`auth-composition: permission invalida no wiring (${permissionName})`);
       }
+      if (rbacMode === 'bypass') return async () => undefined;
       return makeAuthorize(stores.userReader)(parsed.value);
     },
-    hasPermission: makeHasPermission(stores.userReader),
+    hasPermission:
+      rbacMode === 'bypass'
+        ? async (): Promise<boolean> => true
+        : makeHasPermission(stores.userReader),
     // ADR-0047 (fatia 02): o composition nao monta mais os mailers (envio e do worker
     // `email-dispatch`); nao ha pool de outbox de e-mail para fechar aqui.
     shutdown: async () => {

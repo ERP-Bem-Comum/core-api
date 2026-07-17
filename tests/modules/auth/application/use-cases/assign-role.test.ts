@@ -39,7 +39,7 @@ const makeRole = (name: string, permissions: readonly string[]): RoleType => {
   return r.value;
 };
 
-const makeCtx = () => {
+const makeCtx = (rbacMode: 'enforced' | 'bypass' = 'enforced') => {
   const userStore = makeInMemoryUserStore();
   const roleStore = makeInMemoryRoleStore();
   const passwordHasher = makeFakePasswordHasher();
@@ -54,6 +54,7 @@ const makeCtx = () => {
     userRepo: userStore.repository,
     roleRepo: roleStore.repository,
     clock: ClockFixed(AT),
+    rbacMode,
   });
   return { userStore, roleStore, register, assign };
 };
@@ -118,6 +119,21 @@ describe('assignRole (A9)', () => {
     assert.equal(r.ok, false);
     if (!r.ok) assert.equal(r.error, 'forbidden');
     assert.equal((await targetRolesOf(ctx, targetId)).length, 0);
+  });
+
+  // ADR-0052 (W2 M1) — em bypass, a auto-gestão de RBAC também abre: o mesmo ator SEM
+  // 'user:assign-role' atribui a role. É o que permite se auto-recuperar do #462 (dar a si mesmo as
+  // permissões e depois religar o enforced). Sem esta correção, o bypass deixava a gestão travada.
+  it('bypass: ator SEM permissao atribui a role mesmo assim (auto-gestão liberada)', async () => {
+    const ctx = makeCtx('bypass');
+    const actorId = (await registerActive(ctx, ADMIN_EMAIL)).id;
+    const targetId = (await registerActive(ctx, TARGET_EMAIL)).id;
+    const editor = makeRole('editor', []);
+    await saveRole(ctx, editor);
+
+    const r = await ctx.assign({ actorId, targetUserId: targetId, roleId: editor.id });
+    assert.equal(r.ok, true, 'bypass deveria liberar a atribuição');
+    assert.equal((await targetRolesOf(ctx, targetId)).length, 1, 'a role foi atribuída');
   });
 
   it('CA3: ator inexistente -> forbidden', async () => {

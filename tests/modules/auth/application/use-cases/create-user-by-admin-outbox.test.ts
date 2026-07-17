@@ -57,6 +57,7 @@ const makeCtx = (over?: {
     resetTokenRepo: resetStore.repository,
     minter,
     clock: ClockFixed(AT),
+    rbacMode: 'enforced',
     unusablePasswordHash: unusableHash(),
     inviteTtlSeconds: TTL,
     activationBaseUrl: BASE_URL,

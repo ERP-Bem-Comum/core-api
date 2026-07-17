@@ -74,7 +74,10 @@ const makeDeps = (users: readonly User[]) => {
   };
   // roleRepo nunca tocado nestes casos (flag ausente); fornecido so para satisfazer a dep.
   const roleRepo = makeInMemoryRoleStore().repository;
-  return { deps: { userReader, userRepo, roleRepo, clock: ClockFixed(AT) }, captured };
+  return {
+    deps: { userReader, userRepo, roleRepo, clock: ClockFixed(AT), rbacMode: 'enforced' as const },
+    captured,
+  };
 };
 
 describe('updateUserProfile', () => {
@@ -230,6 +233,7 @@ describe('updateUserProfile - massApprovalPermission (AUTH-MASS-APPROVE-SETTABLE
       userRepo: userStore.repository,
       roleRepo: roleStore.repository,
       clock: ClockFixed(AT),
+      rbacMode: 'enforced',
     });
     return { userStore, roleStore, update };
   };

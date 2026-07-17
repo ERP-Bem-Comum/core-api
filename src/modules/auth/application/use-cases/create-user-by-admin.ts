@@ -27,8 +27,8 @@ import * as UserId from '../../domain/identity/user-id.ts';
 import * as ResetToken from '../../domain/session/password-reset-token.ts';
 import * as ResetTokenId from '../../domain/session/password-reset-token-id.ts';
 import * as User from '../../domain/identity/user/user.ts';
-import * as Permission from '../../domain/authorization/permission.ts';
-import { authorize } from '../../domain/authorization/authorize.ts';
+import { authorizeActor } from '../authorize-actor.ts';
+import type { RbacMode } from '../../domain/authorization/rbac-mode.ts';
 import type { ActiveUser } from '../../domain/identity/user/types.ts';
 import type { UserCreated } from '../../domain/identity/user/events.ts';
 import type { UserId as UserIdType } from '../../domain/identity/user-id.ts';
@@ -94,21 +94,23 @@ type Deps = Readonly<{
   inviteTtlSeconds: number;
   /** Origem confiavel do link (config). NUNCA header Host (anti Host-Header-Injection). */
   activationBaseUrl: string;
+  /** ADR-0052 — em bypass, conceder a alçada de aprovação não exige `user:assign-role`. */
+  rbacMode: RbacMode;
 }>;
 
 // AUTH-MASS-APPROVE-SETTABLE: fail-closed. Carrega o ator, exige active + `user:assign-role`
-// (mesma permission do motor assignRole/revokeRole). Qualquer falha -> 'forbidden'.
+// (mesma permission do motor assignRole/revokeRole). Em bypass (ADR-0052), a permissão é dispensada.
 const authorizeMassApproval = async (
-  deps: Pick<Deps, 'userReader'>,
+  deps: Pick<Deps, 'userReader' | 'rbacMode'>,
   actorId: UserIdType,
 ): Promise<Result<true, 'forbidden'>> => {
   const actor = await deps.userReader.findById(actorId);
   if (!actor.ok || actor.value === null) return err('forbidden');
   const activeActor = User.parseActive(actor.value);
   if (!activeActor.ok) return err('forbidden');
-  const required = Permission.parse('user:assign-role');
-  if (!required.ok) return err('forbidden');
-  if (!authorize(activeActor.value, required.value).ok) return err('forbidden');
+  if (!authorizeActor(deps.rbacMode, activeActor.value, 'user:assign-role').ok) {
+    return err('forbidden');
+  }
   return ok(true);
 };
 

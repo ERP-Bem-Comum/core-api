@@ -64,6 +64,7 @@ const makeCtx = () => {
     userRepo: repository,
     roleRepo: roleStore.repository,
     clock: ClockFixed(AT),
+    rbacMode: 'enforced',
   });
   return { userStore, roleStore, register, revoke, saves: () => saveCount };
 };

@@ -14,6 +14,8 @@ import type { Clock } from '../../../../shared/ports/clock.ts';
 import * as Permission from '../../domain/authorization/permission.ts';
 import * as User from '../../domain/identity/user/user.ts';
 import { authorize } from '../../domain/authorization/authorize.ts';
+import { authorizeActor } from '../authorize-actor.ts';
+import type { RbacMode } from '../../domain/authorization/rbac-mode.ts';
 import type { UserId } from '../../domain/identity/user-id.ts';
 import type { RoleId } from '../../domain/authorization/role-id.ts';
 import type { ActiveUser } from '../../domain/identity/user/types.ts';
@@ -49,6 +51,7 @@ type Deps = Readonly<{
   userRepo: UserRepository;
   roleRepo: RoleRepository;
   clock: Clock;
+  rbacMode: RbacMode;
 }>;
 
 export const revokeRole =
@@ -60,10 +63,10 @@ export const revokeRole =
     const activeActor = User.parseActive(actor.value);
     if (!activeActor.ok) return err('forbidden');
 
-    const required = Permission.parse('user:assign-role');
-    if (!required.ok) return err('forbidden');
-    const authorized = authorize(activeActor.value, required.value);
-    if (!authorized.ok) return err('forbidden');
+    // ADR-0052 — em bypass, todo autenticado gere papéis.
+    if (!authorizeActor(deps.rbacMode, activeActor.value, 'user:assign-role').ok) {
+      return err('forbidden');
+    }
 
     const target = await deps.userReader.findById(cmd.targetUserId);
     if (!target.ok) return target;
@@ -71,9 +74,12 @@ export const revokeRole =
     const activeTarget = User.parseActive(target.value);
     if (!activeTarget.ok) return err('user-disabled');
 
-    // Protecao FR-010: o ator nao pode revogar de SI a propria capacidade de gestao de acessos.
-    // Computa o estado pos-revoke e barra se o ator perde 'user:assign-role'. Antes de qualquer save.
+    // Proteção FR-010: o ator não pode revogar de SI a própria capacidade de gestão de acessos.
+    // É proteção de INTEGRIDADE do estado (não deixar o sistema sem gestor quando o enforced voltar),
+    // não de autorização — por isso sobrevive ao bypass (o `authorize` real, não o bypassado).
     if (cmd.actorId === cmd.targetUserId) {
+      const required = Permission.parse('user:assign-role');
+      if (!required.ok) return err('forbidden');
       const { user: afterRevoke } = User.revokeRole(
         activeTarget.value,
         cmd.roleId,
