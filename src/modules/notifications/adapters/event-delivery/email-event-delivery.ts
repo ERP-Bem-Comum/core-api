@@ -32,8 +32,16 @@ import type { EmailSender } from '../../application/ports/email-sender.ts';
 
 const CONSUMER_ID = 'notifications-email-dispatch';
 
+// Escapa para texto E para atributo: o retorno alimenta `href="..."`/conteudo de tag, entao a aspa
+// tambem precisa virar entidade — sem ela um valor com `"` fecha o atributo e injeta o proximo.
+// So o htmlBody usa isto; o textBody e montado a parte (entidade nao vaza no texto puro).
 const escapeHtml = (raw: string): string =>
-  raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  raw
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 
 // ─── templates de e-mail transacional (layout de marca compartilhado, definido abaixo) ──────────
 
@@ -144,11 +152,11 @@ const inviteTemplate = (
     bodyHtml:
       bodyP(
         `Seja bem-vindo ao ERP ${hl('Bem Comum')}! Agora falta pouco para voc&ecirc; ` +
-        'ter acesso &agrave; plataforma.',
+          'ter acesso &agrave; plataforma.',
       ) +
       bodyP(
         'Basta clicar no bot&atilde;o abaixo e criar uma senha para o seu primeiro acesso ' +
-        '(v&aacute;lido por tempo limitado):',
+          '(v&aacute;lido por tempo limitado):',
         true,
       ),
     ctaLabel: 'Criar senha',
@@ -176,7 +184,7 @@ const collaboratorInviteTemplate = (
     bodyHtml:
       bodyP(
         `Voc&ecirc; foi convidado a completar seu cadastro de ${hl('Colaborador')} ` +
-        'no sistema Bem Comum.',
+          'no sistema Bem Comum.',
       ) +
       bodyP(
         'Para preencher seus dados, clique no bot&atilde;o abaixo (v&aacute;lido por tempo limitado):',
@@ -206,9 +214,7 @@ const resetTemplate = (
     logoUrl: emailLogoUrl(event.resetUrl),
     greetingHtml: 'Ol&aacute;,',
     bodyHtml:
-      bodyP(
-        `Recebemos um pedido para redefinir a sua senha de acesso ao ERP ${hl('Bem Comum')}.`,
-      ) +
+      bodyP(`Recebemos um pedido para redefinir a sua senha de acesso ao ERP ${hl('Bem Comum')}.`) +
       bodyP(
         'Para criar uma nova senha, clique no bot&atilde;o abaixo (v&aacute;lido por tempo limitado):',
         true,

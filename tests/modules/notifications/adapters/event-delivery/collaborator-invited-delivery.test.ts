@@ -113,6 +113,26 @@ describe('createEmailEventDelivery multi-fonte (CA4/CA7)', () => {
     assert.equal(html.includes('Bem Comum'), true); // fallback textual
   });
 
+  it('nome com aspas nao escapa do atributo HTML (anti-XSS em contexto de atributo)', async () => {
+    const sender = createInMemoryEmailSender();
+    const delivery = createEmailEventDelivery({ emailSender: sender, from: from() });
+    const r = await delivery.deliver(
+      collaboratorInvitedRow({
+        payload: JSON.stringify({
+          email: 'colaborador@example.com',
+          autocadastroUrl: 'https://app.local/autocadastro?token=abc',
+          recipientName: 'Fulano" onmouseover="alert(1)',
+          occurredAt: AT.toISOString(),
+        }),
+      }),
+    );
+    assert.equal(r.ok, true);
+    const html = sender.getSent()[0]?.htmlBody ?? '';
+    // a aspa do nome tem de virar entidade — senao fecha o atributo do elemento que a envolve
+    assert.equal(html.includes('Fulano&quot;'), true);
+    assert.equal(html.includes('Fulano" onmouseover'), false);
+  });
+
   it('CA7 — a MESMA delivery continua entregando PasswordResetRequested (auth_outbox)', async () => {
     const sender = createInMemoryEmailSender();
     const delivery = createEmailEventDelivery({ emailSender: sender, from: from() });
