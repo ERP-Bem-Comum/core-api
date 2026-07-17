@@ -92,6 +92,16 @@ describe('notifications EmailEventDelivery (CA3/CA4/CA6/CA8)', () => {
     assert.equal(sent.length, 1);
     assert.equal(String(sent[0]?.to[0]), 'user@example.com');
     assert.ok(sent[0]?.textBody.includes('https://app.local/reset?token=abc'));
+    // agora tambem HTML de marca (mesmo layout dos convites), sem nome + nota "nao solicitou"
+    assert.equal(sent[0]?.subject, 'Bem Comum - Recuperar Senha');
+    const html = sent[0]?.htmlBody ?? '';
+    assert.ok(html.includes('<table'));
+    assert.ok(html.includes('#33609C'));
+    assert.ok(html.includes('https://app.local/images/logo-bem-comum-email.png'));
+    assert.ok(html.includes('Redefinir senha')); // CTA
+    assert.ok(html.includes('Ol&aacute;,')); // saudacao sem nome
+    assert.ok(html.includes('n&atilde;o solicitou')); // nota especifica do reset
+    assert.ok(html.includes('href="https://app.local/reset?token=abc"'));
   });
 
   it('CA4 — UserInvited -> envia e-mail de convite com link + nome', async () => {
@@ -106,6 +116,17 @@ describe('notifications EmailEventDelivery (CA3/CA4/CA6/CA8)', () => {
     assert.equal(sent.length, 1);
     assert.equal(String(sent[0]?.to[0]), 'joana@example.com');
     assert.ok(sent[0]?.textBody.includes('https://app.local/activate?token=xyz'));
+    // assunto (copy do modelo antigo, novo layout)
+    assert.equal(sent[0]?.subject, 'Bem Comum - Seja Bem-vindo ao ERP!');
+    const html = sent[0]?.htmlBody ?? '';
+    // layout de marca RESTRITO (tabelas + inline) — mesmo do Cadastro de Colaborador
+    assert.ok(html.includes('<table'));
+    assert.ok(html.includes('#33609C')); // azul da marca
+    assert.ok(html.includes('https://app.local/images/logo-bem-comum-email.png')); // logo derivado
+    assert.ok(html.includes('Criar senha')); // CTA
+    assert.ok(html.includes('Ol&aacute;')); // acento como entidade
+    assert.ok(html.includes('Seja bem-vindo ao ERP')); // copy do modelo antigo
+    assert.ok(html.includes('href="https://app.local/activate?token=xyz"')); // botao -> ativacao
   });
 
   it('CA8 — convite: nome escapado no HTML (anti-XSS) e link presente', async () => {
