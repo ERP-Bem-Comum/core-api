@@ -182,9 +182,9 @@ if (integrationEnabled()) {
 
       // Prova de que o pool e' boot-scoped e unico: apos close(), o pool esta morto e a operacao
       // devolve Result err (nunca abre um pool novo por operacao — causa do Incident-0001).
-      const after = await port.plans.provision(aPlan(), 1002);
-      assert.equal(after.ok, false, 'apos close() a operacao deve falhar (pool encerrado)');
-      if (!after.ok) assert.match(after.error, /^budget-plans-[a-z-]+$/);
+      const afterClose = await port.plans.provision(aPlan(), 1002);
+      assert.equal(afterClose.ok, false, 'apos close() a operacao deve falhar (pool encerrado)');
+      if (!afterClose.ok) assert.match(afterClose.error, /^budget-plans-[a-z-]+$/);
     });
   });
 
