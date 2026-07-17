@@ -51,12 +51,16 @@ export const budgetPlans = mysqlTable(
     // sem `references()` (ADR-0014) — molde `financial.approvedBy`. Mapper que preenche
     // é fase B do ticket.
     updatedBy: varchar('updated_by', { length: 36 }),
+    // Idempotencia da ETL: id da linha no legado (nullable — linha nativa criada na tela nao tem).
+    legacyId: int('legacy_id'),
   },
   (t) => [
     check(
       'bgp_budget_plans_status_chk',
       sql`${t.status} IN ('RASCUNHO','EM_CALIBRACAO','APROVADO')`,
     ),
+    // Idempotencia da ETL: UNIQUE em legacy_id (multiplos NULL permitidos no InnoDB).
+    uniqueIndex('bgp_budget_plans_legacy_id_uq').on(t.legacyId),
     // Unicidade por VERSÃO (US4): pai e filhos compartilham (year, programRef); a versão distingue.
     uniqueIndex('bgp_budget_plans_year_program_ref_version_uq').on(
       t.year,
@@ -92,9 +96,13 @@ export const budgets = mysqlTable(
     // #458 — `value_cents` REMOVIDO: o total por Rede é derivado dos bgp_budget_results. A coluna
     // era o `valueInCents` informado, uma segunda fonte de verdade que a P.O. decidiu não existir
     // (o legado nunca a escrevia). Orçamento = plano + Rede.
+    // Idempotencia da ETL: id da linha no legado (nullable — linha nativa criada na tela nao tem).
+    legacyId: int('legacy_id'),
   },
   (t) => [
     check('bgp_budgets_partner_kind_chk', sql`${t.partnerKind} IN ('state','municipality')`),
+    // Idempotencia da ETL: UNIQUE em legacy_id (multiplos NULL permitidos no InnoDB).
+    uniqueIndex('bgp_budgets_legacy_id_uq').on(t.legacyId),
     // Invariante do domínio (BudgetPlan.addBudget): no máx. 1 orçamento por parceiro
     // dentro do plano. Leftmost prefix (budget_plan_id) também cobre a FK abaixo —
     // sem índice single-column redundante.
@@ -152,9 +160,13 @@ export const costCenters = mysqlTable(
     // leitura: gravar o efetivo aqui apagaria quem foi desativado à mão. DEFAULT TRUE: nó
     // existente nasce ativo. Molde: par_partners.active.
     active: boolean('active').notNull().default(true),
+    // Idempotencia da ETL: id da linha no legado (nullable — linha nativa criada na tela nao tem).
+    legacyId: int('legacy_id'),
   },
   (t) => [
     check('bgp_cost_centers_direction_chk', sql`${t.direction} IN ('A PAGAR','A RECEBER')`),
+    // Idempotencia da ETL: UNIQUE em legacy_id (multiplos NULL permitidos no InnoDB).
+    uniqueIndex('bgp_cost_centers_legacy_id_uq').on(t.legacyId),
     // FK intra-módulo → agregado raiz (ON DELETE CASCADE — apaga a árvore quando o plano cai).
     // O índice implícito da FK já cobre `findByBudgetPlanId` (WHERE budget_plan_id) — sem índice redundante.
     foreignKey({
@@ -175,8 +187,12 @@ export const categories = mysqlTable(
     name: varchar('name', { length: 255 }).notNull(),
     // #454 gap 3 — intenção do próprio nó; o efetivo herda do centro na leitura.
     active: boolean('active').notNull().default(true),
+    // Idempotencia da ETL: id da linha no legado (nullable — linha nativa criada na tela nao tem).
+    legacyId: int('legacy_id'),
   },
   (t) => [
+    // Idempotencia da ETL: UNIQUE em legacy_id (multiplos NULL permitidos no InnoDB).
+    uniqueIndex('bgp_categories_legacy_id_uq').on(t.legacyId),
     // O índice implícito da FK já cobre a reconstrução (`WHERE cost_center_id IN (...)`) — sem índice redundante.
     foreignKey({
       name: 'bgp_categories_cost_center_id_fk',
@@ -198,8 +214,12 @@ export const subcategories = mysqlTable(
     // #454 gap 3 — intenção do próprio nó; o efetivo herda de categoria e centro na leitura.
     // Desativar NUNCA apaga: bgp_budget_results.subcategory_id aponta pra cá e não tem FK.
     active: boolean('active').notNull().default(true),
+    // Idempotencia da ETL: id da linha no legado (nullable — linha nativa criada na tela nao tem).
+    legacyId: int('legacy_id'),
   },
   (t) => [
+    // Idempotencia da ETL: UNIQUE em legacy_id (multiplos NULL permitidos no InnoDB).
+    uniqueIndex('bgp_subcategories_legacy_id_uq').on(t.legacyId),
     check(
       'bgp_subcategories_launch_type_chk',
       sql`${t.launchType} IN ('IPCA','CAED','DESPESAS_PESSOAIS','DESPESAS_LOGISTICAS')`,
@@ -234,8 +254,12 @@ export const budgetResults = mysqlTable(
     month: tinyint('month').notNull(),
     model: varchar('model', { length: 24 }).notNull(),
     valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
+    // Idempotencia da ETL: id da linha no legado (nullable — linha nativa criada na tela nao tem).
+    legacyId: int('legacy_id'),
   },
   (t) => [
+    // Idempotencia da ETL: UNIQUE em legacy_id (multiplos NULL permitidos no InnoDB).
+    uniqueIndex('bgp_budget_results_legacy_id_uq').on(t.legacyId),
     check(
       'bgp_budget_results_model_chk',
       sql`${t.model} IN ('IPCA','CAED','DESPESAS_PESSOAIS','DESPESAS_LOGISTICAS')`,

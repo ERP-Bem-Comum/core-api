@@ -5,10 +5,10 @@
 | Wave | Status | Skill | REPORT | Última atualização |
 | :--- | :--- | :--- | :--- | :--- |
 | W0 | done (RED) | tdd-strategist | 002-tests/REPORT.md | 2026-07-17T15:46:08.503Z |
-| W1 | pending | — | — | — |
+| W1 | done (GREEN) | drizzle-schema-author | 003-impl/REPORT.md | 2026-07-17T16:05:47.136Z |
 | W2 | pending | — | — | — |
 | W3 | pending | — | — | — |
 
 ## Último evento
 
-W0 finished (RED)
+W1 finished (GREEN)
