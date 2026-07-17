@@ -110,6 +110,12 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // #377 BGP-DELETE-BUDGET-ATOMIC — removeBudget atômico: upsert do plano + delete dos
     // bgp_budget_results na MESMA tx; caminho feliz + rollback (evento malformado reverte tudo).
     'tests/modules/budget-plans/adapters/persistence/remove-budget-atomic.drizzle-mysql.test.ts',
+    // BGP-ETL-LEGACY-ID (fatia 1/3 ETL) — legacy_id INT NULL + UNIQUE nas 6 tabelas bgp_*:
+    // CA1 (information_schema) + CA2 (multiplos NULL) + CA3 (dup -> ER_DUP_ENTRY) + CA4 (regressao).
+    'tests/modules/budget-plans/adapters/persistence/legacy-id.drizzle-mysql.test.ts',
+    // BGP-ETL-WRITE-PORT (fatia 2/3 ETL) — buildBudgetPlansEtlPort: pool boot-scoped (CA1),
+    // grava legacy_id (CA2), idempotencia por legacy_id (CA3), erro de conexao -> Result (CA5).
+    'tests/modules/budget-plans/public-api/budget-plans-etl-port.integration.test.ts',
   ]),
   financial: mysqlSuite({ MYSQL_INTEGRATION: '1' }, [
     'tests/modules/financial/adapters/persistence/document-repository.drizzle-mysql.test.ts',
@@ -151,6 +157,9 @@ const SUITES: Readonly<Record<string, Suite>> = {
   'etl:orchestrate': mysqlSuite(ETL_DB_ENV, ['tests/etl/orchestrate.integration.test.ts']),
   'etl:contracts': mysqlSuite(ETL_DB_ENV, ['tests/etl/contracts/writer.integration.test.ts']),
   'etl:financial': mysqlSuite(ETL_DB_ENV, ['tests/etl/financial/writer.integration.test.ts']),
+  // BGP-ETL-READER-MAPPER (fatia 3/3) — full-cycle legado -> bgp_* contra o banco de referencia:
+  // CA1 (contagens 5/5/4679/36/38/390) + CA2 (isBalanced) + CA3 (idempotencia) + CA4 (model derivado).
+  'etl:budget-plans': mysqlSuite(ETL_DB_ENV, ['tests/etl/budget-plans/writer.integration.test.ts']),
   storage: {
     services: ['minio'],
     secrets: false,
