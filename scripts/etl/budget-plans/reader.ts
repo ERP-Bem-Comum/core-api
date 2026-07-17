@@ -7,7 +7,7 @@
  *   - budget_plans.programId          -> programs.abbreviation        (programSigla)
  *   - budgets.partnerStateId          -> partner_states.abbreviation  (stateAbbreviation)
  *   - budgets.partnerMunicipalityId   -> partner_municipalities.cod   (municipalityCod)
- *                                     + estado do municipio.abbreviation (municipalityUf)
+ *                                     + partner_municipalities.uf     (municipalityUf, coluna direta)
  * Os `Legacy*Row` sao donas do mapper (`./mapper.ts`) — o reader so os popula. ASCII puro.
  *
  * ⚠️ Nomes de coluna/JOIN das tabelas legadas seguem o mapa `ETL-BUDGET-PLANS/000-request.md`
@@ -69,12 +69,11 @@ const SQL = {
            b.budgetPlanId          AS budgetPlanId,
            s.abbreviation          AS stateAbbreviation,
            pm.cod                  AS municipalityCod,
-           ms.abbreviation         AS municipalityUf,
+           pm.uf                   AS municipalityUf,
            b.valueInCents          AS valueInCents
     FROM budgets b
     LEFT JOIN partner_states s          ON s.id = b.partnerStateId
-    LEFT JOIN partner_municipalities pm ON pm.id = b.partnerMunicipalityId
-    LEFT JOIN partner_states ms         ON ms.id = pm.partnerStateId`,
+    LEFT JOIN partner_municipalities pm ON pm.id = b.partnerMunicipalityId`,
   costCenters: `
     SELECT id, budgetPlanId, name, type, active
     FROM cost_centers`,
