@@ -3,9 +3,9 @@
   "ticket": "BGP-ETL-WRITE-PORT",
   "size": "M",
   "createdAt": "2026-07-17T14:48:17.816Z",
-  "closedAt": null,
-  "currentWave": "W3",
-  "status": "in-progress",
+  "closedAt": "2026-07-17T17:27:22.700Z",
+  "currentWave": null,
+  "status": "closed-green",
   "waves": [
     {
       "id": "W0",
@@ -39,15 +39,15 @@
     },
     {
       "id": "W3",
-      "status": "pending",
-      "agent": null,
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-17T17:22:04.517Z",
+      "finishedAt": "2026-07-17T17:27:22.398Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
     }
   ],
   "blockers": [],
-  "lastEvent": "W2 finished (APPROVED)"
+  "lastEvent": "closed-green"
 }
