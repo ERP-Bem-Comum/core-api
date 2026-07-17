@@ -16,6 +16,7 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { access, readFile, readdir } from 'node:fs/promises';
+import type { Dirent } from 'node:fs';
 
 const rootUrl = new URL('../../../../', import.meta.url);
 
@@ -32,7 +33,7 @@ const exists = async (rel: string): Promise<boolean> => {
 const listTsFiles = async (relDir: string): Promise<readonly string[]> => {
   const out: string[] = [];
   const walk = async (rel: string): Promise<void> => {
-    let entries: Awaited<ReturnType<typeof readdir>>;
+    let entries: Dirent[];
     try {
       entries = await readdir(new URL(rel, rootUrl), { withFileTypes: true });
     } catch {
