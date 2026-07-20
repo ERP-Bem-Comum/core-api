@@ -5,10 +5,10 @@
 | Wave | Status | Skill | REPORT | Última atualização |
 | :--- | :--- | :--- | :--- | :--- |
 | W0 | done (RED) | tdd-strategist | 002-tests/REPORT.md | 2026-07-20T17:05:25.292Z |
-| W1 | pending | — | — | — |
+| W1 | done (GREEN) | ports-and-adapters | 003-impl/REPORT.md | 2026-07-20T18:24:33.488Z |
 | W2 | pending | — | — | — |
 | W3 | pending | — | — | — |
 
 ## Último evento
 
-W0 finished (RED)
+W1 finished (GREEN)

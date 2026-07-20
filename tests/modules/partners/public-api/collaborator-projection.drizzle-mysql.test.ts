@@ -74,7 +74,8 @@ if (process.env['MYSQL_INTEGRATION'] !== '1') {
       assert.equal((await repo.save(reg.value.collaborator)).ok, true);
 
       // Reader boot-scoped: abre pool uma vez, reusa, fecha no fim (não por operação).
-      const readerR = await openCollaboratorProjectionReader({ connectionString: CONN });
+      // `clock` injetado (REPORTS-TEAM-DEMOGRAPHIC-COLUMNS): a idade sai de `clock.today()`.
+      const readerR = await openCollaboratorProjectionReader({ connectionString: CONN, clock });
       assert.equal(readerR.ok, true, JSON.stringify(readerR));
       if (!readerR.ok) return;
       const reader = readerR.value;

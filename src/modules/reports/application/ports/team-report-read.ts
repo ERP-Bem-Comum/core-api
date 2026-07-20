@@ -18,6 +18,12 @@ export type TeamMember = Readonly<{
   active: boolean;
   education: string | null;
   experienceInPublicSector: boolean | null;
+  // REPORTS-TEAM-DEMOGRAPHIC-COLUMNS: as 3 colunas que a tabela exibe. Código do enum
+  // ('PARDO', 'MULHER_CIS') — o rótulo PT-BR é do front. `age` é derivada no `partners`
+  // (anos completos na data de referência); `dateOfBirth` não atravessa.
+  genderIdentity: string | null;
+  race: string | null;
+  age: number | null;
 }>;
 
 export type TeamReportReadError = 'team-report-read-unavailable';

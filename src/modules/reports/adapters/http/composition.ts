@@ -107,8 +107,10 @@ export const buildReportsHttpDeps = async (
   const financialUrl = config.financialUrl;
   const contractsUrl = config.contractsUrl;
 
+  // `today` da idade sai do ClockReal, injetado aqui — nunca de `new Date()` dentro do mapper.
   const teamReaderR = await openCollaboratorProjectionReader({
     connectionString: config.partnersUrl,
+    clock: ClockReal(),
   });
   if (!teamReaderR.ok) {
     throw new Error(`reports-composition: falha ao abrir reader do partners: ${teamReaderR.error}`);
