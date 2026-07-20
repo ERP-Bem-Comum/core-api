@@ -1,7 +1,9 @@
 /**
  * TEAM-REPORT-READ — Port de LEITURA (read-only) da projeção "Equipe ABC" (REP-1 · #238).
  *
- * 9 colunas LGPD-safe (ver ADR/handbook de coleta LGPD — REPORTS-TEAM-ABC 000-request.md).
+ * 13 colunas. As 10 do REPORTS-TEAM-ABC (#238) + genderIdentity/race/age, acrescentadas pelo
+ * REPORTS-TEAM-DEMOGRAPHIC-COLUMNS (decisao da P.O. 2026-07-20: replicar o legado, que exibia esses
+ * campos por pessoa nesta tela). `dateOfBirth` segue barrado — so a idade derivada atravessa.
  * `program` não existe no core-api (agregado `Collaborator` do partners não modela programa
  * de atuação) — sempre `null`. Consumido pela borda HTTP (`GET /reports/team`).
  */
