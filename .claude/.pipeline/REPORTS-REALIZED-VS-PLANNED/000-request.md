@@ -82,16 +82,16 @@ cross-módulo**. O `reports` não consegue ler o orçado sem violar o ADR-0006.
 ## Fora de escopo
 CSV/PDF server-side (o front monta do JSON) · Contas a Receber · Dashboard · demais fatias do #114.
 
-## Decisão pendente — o que fazer com o realizado SEM contraparte no plano
+## Decisão (P.O., 2026-07-20): realizado SEM contraparte no plano APARECE — opção (a)
 
-Existe lançamento realizado que não tem linha orçada (ADR-0051: estorno, ajuste — "ninguém planeja um
+Existe lançamento realizado sem linha orçada (ADR-0051: estorno, ajuste — "ninguém planeja um
 estorno"), e lançamento planejável cujo nó não está no plano filtrado.
 
-- **(a)** Linha **"Sem orçamento previsto"** no relatório — o gestor vê que gastou fora do plano.
-- **(b)** Omitir — compara só o planejável.
+**Decidido: linha "Sem orçamento previsto"** no relatório, com `expected = 0` e o realizado/
+provisionado que houver. O gestor vê que gastou fora do plano.
 
-**Recomendação: (a).** Um Realizado × Planejado que esconde o gasto não-planejado engana. Mesmo
-princípio do "nada some em silêncio" aplicado nos gráficos demográficos. **Confirmar com a P.O.**
+Descartado omitir: um Realizado × Planejado que esconde o gasto não-planejado engana. Mesmo princípio
+do "nada some em silêncio" aplicado nos gráficos demográficos (o `OUTROS`) e no ETL (a quarentena).
 
 ## Critérios de aceite
 
@@ -105,6 +105,8 @@ princípio do "nada some em silêncio" aplicado nos gráficos demográficos. **C
   total geral. **Nas 3 medidas.**
 - **CA6** Filtros (programa, plano, estado, município, ano) aplicam-se às 3 medidas coerentemente.
 - **CA7** Nó sem movimento aparece com **zero**, não some (a árvore vem do plano, não do realizado).
+- **CA7b** Realizado/provisionado **sem contraparte no plano** aparece em linha **"Sem orçamento
+  previsto"** (`expected = 0`), nunca descartado (decisão (a) da P.O.). Entra nos totais gerais.
 - **CA8** O realizado cobre **só contas a pagar** enquanto Contas a Receber não existir — documentado
   no contrato/resposta, não silencioso.
 - **CA9** ADR-0006: o `reports` lê `budget-plans` e `financial` **só** pelas public-api.
