@@ -3,9 +3,9 @@
   "ticket": "REPORTS-TEAM-DEMOGRAPHICS",
   "size": "M",
   "createdAt": "2026-07-17T02:44:11.146Z",
-  "closedAt": null,
-  "currentWave": "W2",
-  "status": "in-progress",
+  "closedAt": "2026-07-20T16:57:43.803Z",
+  "currentWave": null,
+  "status": "closed-green",
   "waves": [
     {
       "id": "W0",
@@ -29,25 +29,25 @@
     },
     {
       "id": "W2",
-      "status": "pending",
-      "agent": null,
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-20T16:46:11.292Z",
+      "finishedAt": "2026-07-20T16:53:51.484Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
     },
     {
       "id": "W3",
-      "status": "pending",
-      "agent": null,
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-20T16:53:51.781Z",
+      "finishedAt": "2026-07-20T16:57:42.700Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
     }
   ],
   "blockers": [],
-  "lastEvent": "W1 finished (GREEN)"
+  "lastEvent": "closed-green"
 }
