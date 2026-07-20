@@ -14,7 +14,8 @@ Os 3 gráficos **já existem no front** (replicam o legado) e estão órfãos: o
 ([`mysql.ts:180`](../../../src/modules/partners/adapters/persistence/schemas/mysql.ts)).
 
 Raça e identidade de gênero são **dado sensível na acepção do Art. 5º II da LGPD** (categoria
-especial). A liberação é sob permissão dedicada — ver §Bloqueio.
+especial). A liberação é sob permissão dedicada (`collaborator:read-sensitive`, CA7) — ver
+§Decisão sobre o bypass.
 
 ## Decisão de desenho: **o backend agrega** (Opção A — P.O., 2026-07-16)
 
@@ -96,30 +97,34 @@ volta, e com ela o bug de drift do item 2 acima. Alinhar com o front antes do W1
 - **CA6** k=5: bucket com `0 < count < 5` vira `Outros`; total preservado.
 - **CA7** RBAC: sem `collaborator:read-sensitive` → 403; com → 200. `collaborator:read` sozinho **não**
   abre.
-- **CA8** ⚠️ **Depende do ADR-0053:** com `AUTH_RBAC_MODE=bypass`, a rota **continua** exigindo a
-  permissão (carve-out de confidencialidade).
+- **CA8** ~~carve-out no bypass~~ — **REMOVIDO** (ver §Decisão sobre o bypass).
 - **CA9** Regressão zero: `GET /reports/team` (#238) inalterado.
 
-## Bloqueio
+## Decisão sobre o bypass — CA8 removido (P.O., 2026-07-20)
 
-⚠️ **O CA8 bloqueia o W1** e depende do **ADR-0053** (rascunho em
-`handbook/architecture/adr/0053-*.md`, status `Proposed`) — decisão do **Gabriel**, dono do sistema.
-O [ADR-0052](../../../handbook/architecture/adr/0052-rbac-bypass-flag.md) diz que o bypass é **total**;
-sem o carve-out, a permissão nova é desligada por env var e o CA7 vira decorativo. P.O. e eng.
-concordam com o carve-out; **não é alçada de nenhum dos dois** — ADR aceito só cai com ADR novo.
+O **ADR-0053 foi REJEITADO** (mergeado como `Rejected`). Não haverá carve-out: durante a aceitação do
+sistema recém-entregue, `AUTH_RBAC_MODE=bypass` libera **tudo**, inclusive estes gráficos. Razões
+registradas no ADR: paridade com o legado (que já era aberto), necessidade de o cliente testar todos
+os módulos, o RBAC será refeito por inteiro com critérios de LGPD + regras do cliente, e o cliente
+está ciente.
 
-Os demais CAs **não** dependem do ADR-0053: o W0 pode escrever tudo menos o CA8.
+**Consequência para este ticket:**
+- O **CA7 continua valendo** — a rota exige `collaborator:read-sensitive` no modo `enforced`. É o que
+  o redesenho do RBAC vai usar quando o bypass for desligado.
+- Em `bypass` a permissão não barra (como toda permissão hoje). Isso é **esperado**, não defeito —
+  não escrever teste exigindo o contrário.
+- **Nada mais bloqueia o W1.**
 
 ## Pipeline
 
 | Wave | Skill/agente | Atividade |
 | :-- | :-- | :-- |
-| W0 | `tdd-strategist` | RED — agregação + k=5 + N/A vs PREFIRO_NAO_RESPONDER + RBAC (CA8 após ADR-0053) |
+| W0 | `tdd-strategist` | RED — agregação + k=5 + N/A vs PREFIRO_NAO_RESPONDER + RBAC (CA7) |
 | W1 | `ports-and-adapters` + `fastify-server-expert` (par `zod-expert`) | reader agregado + rota + permissão + wiring |
 | W2 | `code-reviewer` + `security-backend-expert` (LGPD) | audit read-only |
 | W3 | `ts-quality-checker` | gate + integração MySQL (OrbStack) |
 
 ## DoD
 
-Gate W3 verde + ADR-0053 aceito + rota no `/api/v2` com a permissão dedicada + os 3 gráficos com dado
-real, `INDIGENA` incluso e soma batendo com o total de ativos.
+Gate W3 verde + rota no `/api/v2` com a permissão dedicada + os 3 gráficos com dado real,
+`INDIGENA` incluso e soma batendo com o total de ativos. (O ADR-0053 foi rejeitado — não é DoD.)
