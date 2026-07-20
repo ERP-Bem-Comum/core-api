@@ -13,7 +13,10 @@
  */
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import type { Result } from '#src/shared/primitives/result.ts';
-import { openCollaboratorProjectionReader } from '#src/modules/partners/public-api/index.ts';
+import {
+  openCollaboratorProjectionReader,
+  openCollaboratorDemographicsReader,
+} from '#src/modules/partners/public-api/index.ts';
 import {
   openSuppliersWithoutContractReader,
   openPaymentPositionReader,
@@ -22,6 +25,8 @@ import {
 import { buildContractsActiveContractorReadPort } from '#src/modules/contracts/public-api/index.ts';
 import { TeamReportReadFromPartners } from '../persistence/team-report-read.partners.ts';
 import { InMemoryTeamReportRead } from '../persistence/team-report-read.in-memory.ts';
+import { TeamDemographicsReadFromPartners } from '../persistence/team-demographics-read.partners.ts';
+import { InMemoryTeamDemographicsRead } from '../persistence/team-demographics-read.in-memory.ts';
 import { SuppliersWithoutContractReadFromFinancial } from '../persistence/suppliers-without-contract-read.financial.ts';
 import { InMemorySuppliersWithoutContractRead } from '../persistence/suppliers-without-contract-read.in-memory.ts';
 import { ActiveContractorReadFromContracts } from '../persistence/active-contractor-read.contracts.ts';
@@ -35,6 +40,7 @@ import {
 import { AnalysisReadFromFinancial } from '../persistence/analysis-read.financial.ts';
 import { InMemoryAnalysisRead } from '../persistence/analysis-read.in-memory.ts';
 import type { TeamReportReadPort } from '../../application/ports/team-report-read.ts';
+import type { TeamDemographicsReadPort } from '../../application/ports/team-demographics-read.ts';
 import type {
   SupplierWithoutContract,
   SuppliersWithoutContractReadPort,
@@ -57,6 +63,8 @@ export type ReportsCompositionConfig = Readonly<{
 
 export type ReportsHttpDeps = Readonly<{
   listTeam: TeamReportReadPort['list'];
+  /** REP-1 demográficos: contagem agregada (nunca linha por pessoa) — gate LGPD dedicado. */
+  listTeamDemographics: TeamDemographicsReadPort['list'];
   listSuppliersWithoutContract: () => Promise<
     Result<readonly SupplierWithoutContract[], ListSuppliersWithoutActiveContractError>
   >;
@@ -70,12 +78,14 @@ export const buildReportsHttpDeps = async (
 ): Promise<ReportsHttpDeps> => {
   if (config.driver === 'memory') {
     const team: TeamReportReadPort = InMemoryTeamReportRead();
+    const demographics: TeamDemographicsReadPort = InMemoryTeamDemographicsRead();
     const suppliers: SuppliersWithoutContractReadPort = InMemorySuppliersWithoutContractRead();
     const activeContractors: ActiveContractorReadPort = InMemoryActiveContractorRead();
     const position: PaymentPositionReadPort = InMemoryPaymentPositionRead();
     const analysis: AnalysisReadPort = InMemoryAnalysisRead();
     return {
       listTeam: team.list,
+      listTeamDemographics: demographics.list,
       listSuppliersWithoutContract: listSuppliersWithoutActiveContract({
         suppliersRead: suppliers,
         activeContractorsRead: activeContractors,
@@ -105,11 +115,26 @@ export const buildReportsHttpDeps = async (
   }
   const teamReader = teamReaderR.value;
 
+  // Pool próprio do reader demográfico, também aberto UMA vez no boot (incidente RDS 0001).
+  // `referenceDate` da faixa etária sai do ClockReal, injetado aqui — nunca de `new Date()` lá.
+  const demographicsReaderR = await openCollaboratorDemographicsReader({
+    connectionString: config.partnersUrl,
+    clock: ClockReal(),
+  });
+  if (!demographicsReaderR.ok) {
+    await teamReader.close();
+    throw new Error(
+      `reports-composition: falha ao abrir reader (demographics) do partners: ${demographicsReaderR.error}`,
+    );
+  }
+  const demographicsReader = demographicsReaderR.value;
+
   const suppliersReaderR = await openSuppliersWithoutContractReader({
     connectionString: financialUrl,
   });
   if (!suppliersReaderR.ok) {
     await teamReader.close();
+    await demographicsReader.close();
     throw new Error(
       `reports-composition: falha ao abrir reader (suppliers) do financial: ${suppliersReaderR.error}`,
     );
@@ -122,6 +147,7 @@ export const buildReportsHttpDeps = async (
   });
   if (!positionReaderR.ok) {
     await teamReader.close();
+    await demographicsReader.close();
     await suppliersReader.close();
     throw new Error(
       `reports-composition: falha ao abrir reader (payment-position) do financial: ${positionReaderR.error}`,
@@ -134,6 +160,7 @@ export const buildReportsHttpDeps = async (
   });
   if (!contractorsReaderR.ok) {
     await teamReader.close();
+    await demographicsReader.close();
     await suppliersReader.close();
     await positionReader.close();
     throw new Error(
@@ -145,6 +172,7 @@ export const buildReportsHttpDeps = async (
   const analysisReaderR = await openPayablesAnalysisReader({ connectionString: financialUrl });
   if (!analysisReaderR.ok) {
     await teamReader.close();
+    await demographicsReader.close();
     await suppliersReader.close();
     await positionReader.close();
     await contractorsReader.close();
@@ -155,6 +183,7 @@ export const buildReportsHttpDeps = async (
   const analysisReader = analysisReaderR.value;
 
   const teamPort = TeamReportReadFromPartners(teamReader.list);
+  const demographicsPort = TeamDemographicsReadFromPartners(demographicsReader.list);
   const suppliersPort = SuppliersWithoutContractReadFromFinancial(suppliersReader.list);
   const contractorsPort = ActiveContractorReadFromContracts(
     contractorsReader.listContractorsWithActiveContract,
@@ -164,6 +193,7 @@ export const buildReportsHttpDeps = async (
 
   return {
     listTeam: teamPort.list,
+    listTeamDemographics: demographicsPort.list,
     listSuppliersWithoutContract: listSuppliersWithoutActiveContract({
       suppliersRead: suppliersPort,
       activeContractorsRead: contractorsPort,
@@ -172,6 +202,7 @@ export const buildReportsHttpDeps = async (
     listAnalysis: analysisPort.list,
     shutdown: async () => {
       await teamReader.close();
+      await demographicsReader.close();
       await suppliersReader.close();
       await positionReader.close();
       await contractorsReader.close();

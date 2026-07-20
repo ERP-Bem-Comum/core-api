@@ -1,9 +1,11 @@
 /** Mapeadores application -> DTO HTTP. */
 import type { TeamMember } from '../../application/ports/team-report-read.ts';
+import type { TeamDemographics } from '../../application/ports/team-demographics-read.ts';
 import type { SupplierWithoutContract } from '../../application/ports/suppliers-without-contract-read.ts';
 import type { PaymentPositionRow } from '../../application/ports/payment-position-read.ts';
 import type { AnalysisRow } from '../../application/ports/analysis-read.ts';
 import type {
+  TeamDemographicsResponseDto,
   TeamReportResponseDto,
   SuppliersWithoutContractResponseDto,
   PaymentPositionResponseDto,
@@ -13,6 +15,16 @@ import type {
 
 export const teamToDto = (members: readonly TeamMember[]): TeamReportResponseDto => ({
   team: members.map((m) => ({ ...m })),
+});
+
+// REP-1 demográficos: cópia rasa dos 3 vetores de contagem. Nenhum campo por pessoa entra aqui.
+export const teamDemographicsToDto = (
+  demographics: TeamDemographics,
+): TeamDemographicsResponseDto => ({
+  totalActive: demographics.totalActive,
+  gender: demographics.gender.map((bucket) => ({ ...bucket })),
+  ageRange: demographics.ageRange.map((bucket) => ({ ...bucket })),
+  race: demographics.race.map((bucket) => ({ ...bucket })),
 });
 
 export const suppliersWithoutContractToDto = (

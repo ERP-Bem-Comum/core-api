@@ -4,6 +4,7 @@
  *
  * Rotas:
  *  - GET /reports/team — projeção "Equipe ABC" (9 colunas LGPD-safe, REP-1 · #238).
+ *  - GET /reports/team/demographics — 3 distribuições demográficas agregadas (REP-1 · sensível).
  *  - GET /reports/suppliers-without-contract — agregação de payables sem contrato (REP-2 · #240).
  *  - GET /reports/payment-position — posição de pagamentos por fornecedor×CC×categoria (REP-4 · #243).
  *  - GET /reports/analysis/payables + /reports/analysis/chart — análise de planejamento (REP-3 · #114).
@@ -25,6 +26,7 @@ import type { AnalysisFilter } from '../../application/ports/analysis-read.ts';
 import type { ReportsHttpDeps } from './composition.ts';
 import {
   teamToDto,
+  teamDemographicsToDto,
   suppliersWithoutContractToDto,
   paymentPositionToDto,
   analysisToReport,
@@ -32,6 +34,7 @@ import {
 } from './dto.ts';
 import {
   teamReportResponseSchema,
+  teamDemographicsResponseSchema,
   suppliersWithoutContractResponseSchema,
   paymentPositionResponseSchema,
   analysisQuerySchema,
@@ -68,6 +71,26 @@ const reportsRoutes =
           return sendResult(reply, result, { errors: { 'team-report-read-unavailable': 503 } });
         }
         return sendResult(reply, ok(teamToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /reports/team/demographics — gênero × faixa etária × raça/cor, só CONTAGEM (CA1/CA2).
+    // Gate dedicado: dado sensível LGPD (Art. 5º II) — `collaborator:read` sozinho não abre (CA7).
+    scope.route({
+      method: 'GET',
+      url: '/reports/team/demographics',
+      preHandler: [hooks.requireAuth, hooks.authorize(COLLABORATOR_PERMISSION.readSensitive)],
+      schema: {
+        response: { 200: teamDemographicsResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) => {
+        const result = await deps.listTeamDemographics();
+        if (!result.ok) {
+          return sendResult(reply, result, {
+            errors: { 'team-demographics-read-unavailable': 503 },
+          });
+        }
+        return sendResult(reply, ok(teamDemographicsToDto(result.value)), { ok: 200 });
       },
     });
 

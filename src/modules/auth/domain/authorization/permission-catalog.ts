@@ -29,6 +29,8 @@ const CATALOG_RAW = [
   'budget-plan:write',
   // collaborator:* (modulo partners - colaboradores)
   'collaborator:read',
+  // Gate do relatorio demografico (REPORTS-TEAM-DEMOGRAPHICS): dado sensivel LGPD agregado.
+  'collaborator:read-sensitive',
   'collaborator:write',
   // contract:* (modulo contracts)
   'contract:delete',
