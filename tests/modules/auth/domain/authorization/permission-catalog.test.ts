@@ -129,6 +129,9 @@ describe('PermissionCatalog.all', () => {
       'budget-plan:read',
       'budget-plan:write',
       'collaborator:read',
+      // collaborator:read-sensitive — gate do relatorio demografico (REPORTS-TEAM-DEMOGRAPHICS):
+      // raca/identidade de genero/faixa etaria agregadas (dado sensivel LGPD, Art. 5o II).
+      'collaborator:read-sensitive',
       'collaborator:write',
       'contract:delete',
       'contract:mass-approve',

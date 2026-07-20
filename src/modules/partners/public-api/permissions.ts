@@ -9,6 +9,9 @@
 
 export const COLLABORATOR_PERMISSION = {
   read: 'collaborator:read',
+  // Dado sensivel na acepcao do Art. 5o II da LGPD (raca, identidade de genero, faixa etaria).
+  // Gate dedicado do relatorio demografico - `collaborator:read` sozinho NAO abre (CA7).
+  readSensitive: 'collaborator:read-sensitive',
   write: 'collaborator:write',
 } as const;
 

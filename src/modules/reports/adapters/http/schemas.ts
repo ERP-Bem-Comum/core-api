@@ -26,6 +26,29 @@ export const teamReportResponseSchema = z.object({
 
 export type TeamReportResponseDto = z.infer<typeof teamReportResponseSchema>;
 
+// REP-1 (REPORTS-TEAM-DEMOGRAPHICS) — 3 distribuições demográficas como CONTAGEM agregada.
+// `.strict()`: fail-loud se o mapper vazar campo por pessoa (CA2 — nada de race/dateOfBirth).
+export const categoryCountSchema = z
+  .object({
+    id: z.string(),
+    label: z.string(),
+    count: z.number(),
+  })
+  .strict();
+
+export type CategoryCountDto = z.infer<typeof categoryCountSchema>;
+
+export const teamDemographicsResponseSchema = z
+  .object({
+    totalActive: z.number(),
+    gender: z.array(categoryCountSchema),
+    ageRange: z.array(categoryCountSchema),
+    race: z.array(categoryCountSchema),
+  })
+  .strict();
+
+export type TeamDemographicsResponseDto = z.infer<typeof teamDemographicsResponseSchema>;
+
 // REP-2 (#240) — "Fornecedores sem Contrato": agregação por fornecedor.
 // `.strict()` — fail-loud se o mapper de DTO vazar campo extra (alinha ao padrão do `financial`).
 export const supplierWithoutContractSchema = z

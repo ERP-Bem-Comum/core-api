@@ -1,0 +1,237 @@
+/**
+ * W0 RED - REPORTS-TEAM-DEMOGRAPHICS (REP-1 . Equipe ABC . graficos demograficos).
+ *
+ * Borda GET /api/v2/reports/team/demographics - as 3 distribuicoes (genero, faixa etaria,
+ * raca/cor) como CONTAGEM agregada. RED por inexistencia do port/rota/permissao.
+ *
+ * CA1 200 com as 3 distribuicoes em `CategoryCount[]`.
+ * CA2 nenhum campo por pessoa no payload.
+ * CA7 RBAC: sem `collaborator:read-sensitive` -> 403; com -> 200. `collaborator:read` sozinho
+ *     NAO abre. (Modo `bypass` libera tudo por decisao da P.O. - ADR-0053 rejeitado, sem carve-out.)
+ * CA9 regressao zero: GET /api/v2/reports/team (#238) inalterado.
+ */
+
+import { describe, it, before, after } from 'node:test';
+import { strict as assert } from 'node:assert';
+import type { preHandlerAsyncHookHandler, LightMyRequestResponse } from 'fastify';
+
+import { ok } from '#src/shared/primitives/result.ts';
+import { buildApp } from '#src/shared/http/app.ts';
+import { readHttpConfig } from '#src/shared/http/config.ts';
+import { buildReportsHttpDeps, reportsHttpPlugin } from '#src/modules/reports/public-api/http.ts';
+import type { TeamMember } from '#src/modules/reports/application/ports/team-report-read.ts';
+import type {
+  CategoryCount,
+  TeamDemographics,
+} from '#src/modules/reports/application/ports/team-demographics-read.ts';
+import { COLLABORATOR_PERMISSION } from '#src/modules/partners/public-api/permissions.ts';
+import * as PermissionCatalog from '#src/modules/auth/domain/authorization/permission-catalog.ts';
+
+const SENSITIVE = 'collaborator:read-sensitive';
+const READER = 'collaborator:read';
+const NO_PERM = 'reconciliation:read';
+const TEST_USER_ID = '99999999-9999-4999-8999-999999999999';
+
+const requireAuth: preHandlerAsyncHookHandler = async (req, reply) => {
+  const auth = req.headers.authorization;
+  if (typeof auth !== 'string' || !auth.startsWith('Bearer ')) {
+    return reply.code(401).send({ error: { code: 'unauthorized', message: 'sem token' } });
+  }
+  (req as unknown as { userId: string }).userId = TEST_USER_ID;
+  return undefined;
+};
+const authorize =
+  (permission: string): preHandlerAsyncHookHandler =>
+  async (req, reply) => {
+    const perms = (req.headers.authorization ?? '').replace('Bearer ', '').split(',');
+    if (!perms.includes(permission)) {
+      return reply.code(403).send({ error: { code: 'forbidden', message: 'sem permissão' } });
+    }
+    return undefined;
+  };
+
+const bucket = (id: string, label: string, count: number): CategoryCount => ({ id, label, count });
+
+// Fixture do read port: ja agregada (o backend agrega - Opcao A). 21 ativos nas 3 dimensoes.
+const DEMOGRAPHICS: TeamDemographics = {
+  totalActive: 21,
+  gender: [
+    bucket('PREFIRO_NAO_RESPONDER', 'Prefiro não responder', 0),
+    bucket('HOMEM_CIS', 'Homem cis', 5),
+    bucket('HOMEM_TRANS', 'Homem trans', 0),
+    bucket('MULHER_CIS', 'Mulher cis', 6),
+    bucket('MULHER_TRANS', 'Mulher trans', 0),
+    bucket('TRAVESTI', 'Travesti', 0),
+    bucket('NAO_BINARIO', 'Não binário', 5),
+    bucket('OUTRO', 'Outro', 0),
+    bucket('NA', 'N/A', 5),
+  ],
+  ageRange: [
+    bucket('ATE_29', 'Até 29', 6),
+    bucket('DE_30_A_39', '30 a 39', 5),
+    bucket('DE_40_A_49', '40 a 49', 0),
+    bucket('DE_50_A_59', '50 a 59', 0),
+    bucket('MAIS_60', '60+', 5),
+    bucket('NA', 'N/A', 5),
+  ],
+  race: [
+    bucket('AMARELO', 'Amarelo', 0),
+    bucket('BRANCO', 'Branco', 6),
+    bucket('PARDO', 'Pardo', 5),
+    bucket('INDIGENA', 'Indígena', 0),
+    bucket('PRETO', 'Preto', 5),
+    bucket('PREFIRO_NAO_RESPONDER', 'Prefiro não responder', 0),
+    bucket('NA', 'N/A', 5),
+  ],
+};
+
+const member = (over: Partial<TeamMember> = {}): TeamMember => ({
+  id: '11111111-1111-4111-8111-111111111111',
+  name: 'Maria Silva',
+  program: null,
+  role: 'Coordenadora',
+  employmentRelationship: 'CLT',
+  startOfContract: '2025-01-15',
+  registrationStatus: 'Complete',
+  active: true,
+  education: 'Superior completo',
+  experienceInPublicSector: true,
+  ...over,
+});
+
+interface AppHandle {
+  app: Awaited<ReturnType<typeof buildApp>>;
+  teardown: () => Promise<void>;
+}
+let handle: AppHandle;
+
+before(async () => {
+  const base = await buildReportsHttpDeps({ driver: 'memory' });
+  const deps = {
+    ...base,
+    listTeam: () => Promise.resolve(ok([member()])),
+    listTeamDemographics: () => Promise.resolve(ok(DEMOGRAPHICS)),
+  };
+  const config = readHttpConfig({ RATE_LIMIT_MAX: '10000' });
+  const app = await buildApp({
+    config,
+    routes: [reportsHttpPlugin(deps, { requireAuth, authorize })],
+  });
+  handle = { app, teardown: () => app.close() };
+});
+
+after(async () => {
+  await handle.teardown();
+});
+
+const get = (url: string, perms: string): Promise<LightMyRequestResponse> =>
+  handle.app.inject({ method: 'GET', url, headers: { authorization: `Bearer ${perms}` } });
+
+const getDemographics = (perms: string): Promise<LightMyRequestResponse> =>
+  get('/api/v2/reports/team/demographics', perms);
+
+describe('reports/http - GET /reports/team/demographics (REP-1 . demograficos)', () => {
+  it('CA1: 200 com as 3 distribuicoes como CategoryCount[]', async () => {
+    const res = await getDemographics(SENSITIVE);
+    assert.equal(res.statusCode, 200, res.body);
+
+    const body = res.json() as TeamDemographics;
+    assert.equal(body.totalActive, 21);
+    assert.equal(body.gender.length, 9, '8 categorias de genero + N/A');
+    assert.equal(body.race.length, 7, '6 categorias de raca + N/A');
+    assert.equal(body.ageRange.length, 6, '6 faixas etarias (N/A inclusa)');
+
+    for (const dimension of [body.gender, body.race, body.ageRange]) {
+      for (const item of dimension) {
+        assert.equal(typeof item.id, 'string');
+        assert.ok(item.label.length > 0, `bucket sem label: ${item.id}`);
+        assert.equal(Number.isInteger(item.count), true);
+      }
+    }
+  });
+
+  it('CA1/CA4: INDIGENA atravessa a fronteira e a soma bate com o total de ativos', async () => {
+    const res = await getDemographics(SENSITIVE);
+    const body = res.json() as TeamDemographics;
+
+    assert.ok(
+      body.race.some((b) => b.id === 'INDIGENA'),
+      'INDIGENA nao pode sumir (defeito do front que o backend passa a impedir)',
+    );
+    const sum = (d: readonly CategoryCount[]): number => d.reduce((a, b) => a + b.count, 0);
+    assert.equal(sum(body.gender), body.totalActive);
+    assert.equal(sum(body.race), body.totalActive);
+    assert.equal(sum(body.ageRange), body.totalActive);
+  });
+
+  it('CA2: nenhum campo por pessoa no payload', async () => {
+    const res = await getDemographics(SENSITIVE);
+    const body = res.json() as Record<string, unknown>;
+
+    assert.deepEqual(Object.keys(body).sort(), ['ageRange', 'gender', 'race', 'totalActive']);
+    for (const key of ['team', 'members', 'collaborators', 'rows']) {
+      assert.equal(key in body, false, `payload nao pode trazer linha por pessoa: ${key}`);
+    }
+    for (const dimension of [body['gender'], body['race'], body['ageRange']] as CategoryCount[][]) {
+      for (const item of dimension) {
+        assert.deepEqual(Object.keys(item).sort(), ['count', 'id', 'label']);
+      }
+    }
+
+    const raw = res.body;
+    for (const leak of ['dateOfBirth', 'birth', 'genderIdentity', 'idade', 'cpf', 'nome']) {
+      assert.equal(raw.includes(leak), false, `vazou dado sensivel por pessoa: ${leak}`);
+    }
+    assert.equal(/\d{4}-\d{2}-\d{2}/.test(raw), false, 'nenhuma data pode atravessar a fronteira');
+  });
+
+  it('CA7: sem permissao nenhuma -> 403', async () => {
+    const res = await getDemographics(NO_PERM);
+    assert.equal(res.statusCode, 403, res.body);
+  });
+
+  it('CA7: collaborator:read sozinho NAO abre o relatorio demografico -> 403', async () => {
+    const res = await getDemographics(READER);
+    assert.equal(res.statusCode, 403, res.body);
+  });
+
+  it('CA7: com collaborator:read-sensitive -> 200', async () => {
+    const res = await getDemographics(SENSITIVE);
+    assert.equal(res.statusCode, 200, res.body);
+  });
+
+  it('CA7: a permissao existe no catalogo do partners e no catalogo RBAC do auth', () => {
+    assert.equal(COLLABORATOR_PERMISSION.readSensitive, SENSITIVE);
+    assert.ok(
+      PermissionCatalog.all.some((p) => String(p) === SENSITIVE),
+      'collaborator:read-sensitive precisa estar no catalogo deploy-time do auth',
+    );
+  });
+});
+
+describe('reports/http - CA9 regressao zero em GET /reports/team (#238)', () => {
+  it('CA9: a projecao das 9 colunas segue inalterada sob collaborator:read', async () => {
+    const res = await get('/api/v2/reports/team', READER);
+    assert.equal(res.statusCode, 200, res.body);
+
+    const body = res.json() as { team: TeamMember[] };
+    assert.equal(body.team.length, 1);
+    assert.deepEqual(Object.keys(body.team[0]!).sort(), [
+      'active',
+      'education',
+      'employmentRelationship',
+      'experienceInPublicSector',
+      'id',
+      'name',
+      'program',
+      'registrationStatus',
+      'role',
+      'startOfContract',
+    ]);
+  });
+
+  it('CA9: /reports/team NAO passa a exigir a permissao nova', async () => {
+    const res = await get('/api/v2/reports/team', READER);
+    assert.equal(res.statusCode, 200, res.body);
+  });
+});
