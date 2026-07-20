@@ -157,6 +157,14 @@ describe('mapBudgetPlanRow — version float, sigla de programa, updatedBy', () 
     assert.equal(epv.value.input.programRef, PROGRAM_EPV_UUID);
   });
 
+  it('propaga createdAt/updatedAt do legado (nunca a data da migracao) [BGP-ETL-PRESERVE-DATES CA1]', () => {
+    const r = mapBudgetPlanRow(planRow(), planRefs());
+    assert.ok(r.ok);
+    // A "Ultima Alteracao" da tela le updatedAt; tem de ser a data do legado, nao clock.now() da ETL.
+    assert.equal(r.value.input.createdAt.getTime(), CREATED.getTime());
+    assert.equal(r.value.input.updatedAt.getTime(), UPDATED.getTime());
+  });
+
   it('sigla de programa que NAO resolve -> QUARENTENA (nunca inventa programa) [CA7]', () => {
     const r = mapBudgetPlanRow(planRow({ programSigla: 'XYZ' }), planRefs());
     assert.ok(!r.ok);

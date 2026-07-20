@@ -45,6 +45,10 @@ export type BudgetPlanEtlInput = Readonly<{
   // precedente Gabriel D11: migra o autor, nao deixa null). UUID do usuario (auth), resolvido pela
   // ETL via auth.legacy_id. Nullable: nem todo plano legado tem autor rastreavel (miss -> null).
   updatedBy: string | null;
+  // Datas do legado (BGP-ETL-PRESERVE-DATES): a ETL migra createdAt/updatedAt do plano legado, NAO o
+  // horario da migracao. A "Ultima Alteracao" da tela le updatedAt — tem de refletir a data real.
+  createdAt: Date;
+  updatedAt: Date;
 }>;
 
 export type CostCenterEtlInput = Readonly<{

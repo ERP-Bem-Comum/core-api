@@ -15,7 +15,6 @@ import { eq } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
-import type { Clock } from '../../../../../shared/ports/clock.ts';
 import type {
   LegacyEntityStore,
   BudgetPlansEtlStoreError,
@@ -133,7 +132,6 @@ const runProvision = async (
 
 export const createDrizzleBudgetPlansEtlStores = (
   handle: BudgetPlansMysqlHandle, // eslint-disable-line @typescript-eslint/prefer-readonly-parameter-types
-  clock: Clock,
 ): Readonly<{
   plans: LegacyEntityStore<BudgetPlanEtlInput, string>;
   costCenters: LegacyEntityStore<CostCenterEtlInput, string>;
@@ -166,7 +164,6 @@ export const createDrizzleBudgetPlansEtlStores = (
             outcome = 'already-exists';
             return;
           }
-          const now = clock.now();
           await tx.insert(schema.budgetPlans).values({
             id: input.id,
             year: input.year,
@@ -179,8 +176,10 @@ export const createDrizzleBudgetPlansEtlStores = (
             // Autoria migrada do legado (decisao P.O. Opcao A). Nullable: miss -> null (coluna
             // bgp_budget_plans.updated_by ja existe no schema, mysql.ts:53; sem migration nova).
             updatedBy: input.updatedBy,
-            createdAt: now,
-            updatedAt: now,
+            // Datas do legado (BGP-ETL-PRESERVE-DATES): NAO o horario da migracao — a "Ultima
+            // Alteracao" da tela le updatedAt e tem de refletir a data real do plano legado.
+            createdAt: input.createdAt,
+            updatedAt: input.updatedAt,
             legacyId,
           });
         });

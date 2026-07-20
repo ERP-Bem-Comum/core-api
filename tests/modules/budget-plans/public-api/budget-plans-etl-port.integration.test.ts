@@ -53,6 +53,9 @@ const aPlan = () =>
     // BGP-ETL-READER-MAPPER estendeu o input com a autoria migrada (decisao P.O. Opcao A);
     // nullable, entao null basta para os casos desta suite (nao exercitam a autoria).
     updatedBy: null,
+    // BGP-ETL-PRESERVE-DATES: datas do legado (nao a data da migracao).
+    createdAt: new Date('2025-01-10T12:00:00.000Z'),
+    updatedAt: new Date('2025-02-01T09:00:00.000Z'),
   }) as const;
 
 const aCostCenter = (budgetPlanId: string) =>
