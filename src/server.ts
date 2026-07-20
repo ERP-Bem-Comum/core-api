@@ -241,8 +241,19 @@ const main = async (): Promise<void> => {
   // BUDGET_PLANS_SEED_JSON). Malformado sob a flag → boot falha (o throw propaga p/ main().catch).
   // Só o ramo memory consome; o mysql lê prg_*/par_* real.
   const budgetPlansSeed = parseE2eBudgetPlansSeed(process.env);
+  const budgetPlansUsesMysql =
+    process.env['BUDGET_PLANS_DRIVER'] === 'mysql' && budgetPlansWriterUrl !== undefined;
+  // Sinal NAO-silencioso: em producao, cair em memory significa servir um store VAZIO — a tela fica
+  // vazia mesmo com o dado migrado no banco (incidente pos-ETL de Orcamento, 2026-07-17). Avisa alto
+  // em vez de degradar calado. Em dev/E2E o memory e' intencional (seed), entao nao alarma.
+  if (!budgetPlansUsesMysql && process.env['NODE_ENV'] === 'production') {
+    process.stderr.write(
+      'server: budget-plans em MEMORY (degradado) — a API NAO le o MySQL. ' +
+        'Defina BUDGET_PLANS_DRIVER=mysql + BUDGET_PLANS_DATABASE_URL para servir o dado persistido.\n',
+    );
+  }
   const budgetPlansDeps = await buildBudgetPlansHttpDeps(
-    process.env['BUDGET_PLANS_DRIVER'] === 'mysql' && budgetPlansWriterUrl !== undefined
+    budgetPlansUsesMysql
       ? { driver: 'mysql', connectionString: budgetPlansWriterUrl }
       : { driver: 'memory', ...(budgetPlansSeed !== undefined ? { seed: budgetPlansSeed } : {}) },
   );

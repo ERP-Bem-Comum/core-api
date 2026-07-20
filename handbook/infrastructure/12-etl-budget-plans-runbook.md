@@ -47,6 +47,9 @@ Este ETL **não é isolado**: ele resolve referências que precisam já existir 
 
 > **Programas e usuários já foram migrados** (confirmado pela P.O., 2026-07-17). Ainda assim, **execute
 > o pré-check do §4** antes de rodar — não assuma; verifique.
+>
+> ⚠️ **A escrita é metade do trabalho.** Depois de migrar, a **API precisa estar configurada para ler
+> o banco** — senão a tela fica vazia com o dado presente. Ver **§10** (passo obrigatório).
 
 ---
 
@@ -193,17 +196,108 @@ Confronte com o banco de referência (`SELECT COUNT(*) FROM budget_results;` etc
 
 ---
 
-## 10. Reversão
+## 10. ⚠️ Pós-migração: a API precisa LER o banco (senão a tela fica vazia)
 
-O ETL é aditivo e idempotente. Para desfazer uma migração de teste, `TRUNCATE` as `bgp_*` na ordem
-inversa das FKs (results → subcategories → categories → cost_centers → budgets → budget_plans) ou
-restaure o snapshot pré-migração. Sem migration a reverter (a coluna `legacy_id` é permanente e
-inócua). Ao terminar o ambiente de referência: `docker compose -f compose.etl.yaml down -v` (apaga o
-dump da RAM).
+**Escrever o dado não basta — a API que serve a tela precisa estar apontada para o mesmo banco.** Se
+não estiver, o resultado é: dado no MySQL (§9 confere), **tela vazia** — e o ETL parece ter falhado
+quando não falhou. Foi o que aconteceu no primeiro APPLY (2026-07-17): migração perfeita
+(5/5/4679, quarentena 0), tela vazia, porque o processo da **API** subiu o módulo `budget-plans` em
+modo `memory` (store vazio), ignorando o MySQL.
+
+O `budget-plans` só lê o MySQL quando **ambas** as env estão setadas **no ambiente da API** (não no do
+ETL):
+
+```bash
+BUDGET_PLANS_DRIVER=mysql
+BUDGET_PLANS_DATABASE_URL=<mesma connection string `core` que o ETL usou em ETL_CORE_CONNECTION_STRING>
+```
+
+Faltando qualquer uma → o módulo cai em **`memory` (degradado)**: serve um store vazio. Desde
+2026-07-17 o boot **avisa em stderr** quando isso ocorre em produção (`server: budget-plans em MEMORY
+(degradado) — a API NAO le o MySQL...`). **Confira o log de boot da API** e as env:
+
+```bash
+echo "$BUDGET_PLANS_DRIVER"          # tem de ser exatamente: mysql
+echo "$BUDGET_PLANS_DATABASE_URL"    # tem de apontar o mesmo `core` do ETL
+# no log de boot da API, NAO pode haver a linha "budget-plans em MEMORY (degradado)"
+```
+
+**Checklist de aceite da tela:**
+- [ ] `§9` confere as contagens no banco (dado escrito).
+- [ ] `BUDGET_PLANS_DRIVER=mysql` e `BUDGET_PLANS_DATABASE_URL` setadas no ambiente da API.
+- [ ] Boot da API **sem** a linha "budget-plans em MEMORY (degradado)".
+- [ ] API reiniciada após setar as env.
+- [ ] `GET /api/v2/budget-plans` (ou a tela) retorna os planos migrados.
+
+> Mesma disciplina dos outros módulos: `FINANCIAL_DRIVER=mysql`+`FINANCIAL_DATABASE_URL`,
+> `CONTRACTS_DATABASE_URL`, etc. O `budget-plans` é módulo recente — conferir que não ficou de fora da
+> config do deploy.
 
 ---
 
-## 11. Validação automatizada (CI / dev)
+## 11. Reversão e limpeza — `legacy_id` separa o migrado do criado na tela
+
+**O discriminador é a coluna `legacy_id`** (criada na fatia 1 exatamente para isto):
+
+| Origem da linha | `legacy_id` |
+| :-- | :-- |
+| **Migrada do legado** pelo ETL | **preenchido** (o id da linha legada) |
+| **Criada na tela** (uso normal / testes manuais) | **`NULL`** |
+
+### ⚠️ `TRUNCATE` apaga os dois — raramente é o que se quer
+
+Depois que o sistema entra em uso, as `bgp_*` têm **dado migrado + dado criado na tela**. Um
+`TRUNCATE` remove **ambos**. Use-o só num ambiente descartável, antes de qualquer uso real.
+
+### Limpar SÓ o que foi criado na tela (preservando o legado)
+
+Ordem inversa das FKs; o filtro `legacy_id IS NULL` protege o dado migrado:
+
+```sql
+-- CONFIRA ANTES (quantas linhas cada DELETE vai afetar):
+SELECT 'plans' t, COUNT(*) FROM bgp_budget_plans WHERE legacy_id IS NULL
+UNION ALL SELECT 'results', COUNT(*) FROM bgp_budget_results WHERE legacy_id IS NULL
+UNION ALL SELECT 'subcategories', COUNT(*) FROM bgp_subcategories WHERE legacy_id IS NULL
+UNION ALL SELECT 'categories', COUNT(*) FROM bgp_categories WHERE legacy_id IS NULL
+UNION ALL SELECT 'cost_centers', COUNT(*) FROM bgp_cost_centers WHERE legacy_id IS NULL
+UNION ALL SELECT 'budgets', COUNT(*) FROM bgp_budgets WHERE legacy_id IS NULL;
+
+-- Só então (filhos antes dos pais):
+DELETE FROM bgp_budget_results WHERE legacy_id IS NULL;
+DELETE FROM bgp_subcategories  WHERE legacy_id IS NULL;
+DELETE FROM bgp_categories     WHERE legacy_id IS NULL;
+DELETE FROM bgp_cost_centers   WHERE legacy_id IS NULL;
+DELETE FROM bgp_budgets        WHERE legacy_id IS NULL;
+DELETE FROM bgp_budget_plans   WHERE legacy_id IS NULL;
+```
+
+> ⚠️ Um plano **criado na tela como cenário/versão filho de um plano migrado** também tem
+> `legacy_id IS NULL` — o DELETE acima o remove. Confira a listagem antes; se algum desses filhos for
+> para manter, exclua-o do filtro por `id`.
+
+### Limpar SÓ o migrado (para re-rodar a carga do zero)
+
+Mesmo bloco, trocando o filtro por **`legacy_id IS NOT NULL`**. Depois re-rode o ETL (§7): ele
+reinsere o legado sem tocar no que foi criado na tela.
+
+### Re-rodar o ETL é seguro em qualquer caso
+
+É **skip-by-legacy_id**: não duplica o legado, **não sobrescreve** linhas já migradas, e **não encosta**
+no que foi criado na tela (`legacy_id NULL`). Corolário importante: por não sobrescrever, **re-rodar
+não corrige** dado já migrado com valor errado — para isso, ou `UPDATE` pontual, ou o
+`DELETE legacy_id IS NOT NULL` acima + re-run.
+
+### Outros módulos não são afetados
+
+O ETL de Orçamento só escreve em `bgp_*` (só **lê** `auth_user` e `prg_programs`). **Colaboradores
+(`par_*`), contratos, financeiro — nada disso é tocado**, em nenhum cenário de limpeza acima.
+
+Sem migration a reverter (a coluna `legacy_id` é permanente e inócua). Ao terminar o ambiente de
+referência: `docker compose -f compose.etl.yaml down -v` (apaga o dump da RAM).
+
+---
+
+## 12. Validação automatizada (CI / dev)
 
 - **Gate estático** (`typecheck`/`format`/`lint`/`test`): roda no CI a cada push. O mapper puro (17
   regras + 4 quarentenas) é coberto por unit tests sem DB.
