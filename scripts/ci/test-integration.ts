@@ -116,6 +116,10 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // BGP-ETL-WRITE-PORT (fatia 2/3 ETL) — buildBudgetPlansEtlPort: pool boot-scoped (CA1),
     // grava legacy_id (CA2), idempotencia por legacy_id (CA3), erro de conexao -> Result (CA5).
     'tests/modules/budget-plans/public-api/budget-plans-etl-port.integration.test.ts',
+    // BGP-READ-PORT (fatia 1/3 REPORTS-REALIZED-VS-PLANNED) — buildBudgetPlansReadPort:
+    // pool boot-scoped (CA1), 3 niveis da arvore (CA2), grade de 12 meses com zerados (CA3),
+    // filtros combinaveis programa/plano/ano/Rede (CA4), plain rows (CA6).
+    'tests/modules/budget-plans/public-api/budget-plans-read-port.integration.test.ts',
   ]),
   financial: mysqlSuite({ MYSQL_INTEGRATION: '1' }, [
     'tests/modules/financial/adapters/persistence/document-repository.drizzle-mysql.test.ts',
