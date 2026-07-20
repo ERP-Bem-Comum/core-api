@@ -228,8 +228,11 @@ if (integrationEnabled()) {
 
   const openPort = async (): Promise<BudgetPlansReadPort> => {
     const built = await buildBudgetPlansReadPort({ connectionString: VALID_CONN });
-    assert.equal(built.ok, true, 'buildBudgetPlansReadPort deve suceder com conn valida');
+    // O guard vem ANTES do assert: `assert.equal` (strict) e' assertion signature
+    // (`asserts actual is T`), entao apos ele o ramo `!built.ok` seria `never` e `built.error`
+    // nao compilaria. Mesma intencao, mesma falha em runtime.
     if (!built.ok) throw new Error(`fixture: build falhou — ${built.error}`);
+    assert.equal(built.ok, true, 'buildBudgetPlansReadPort deve suceder com conn valida');
     return built.value;
   };
 
@@ -238,8 +241,9 @@ if (integrationEnabled()) {
     filter: Parameters<BudgetPlansReadPort['listPlannedAmounts']>[0],
   ): Promise<readonly PlannedAmountRow[]> => {
     const r = await port.listPlannedAmounts(filter);
-    assert.equal(r.ok, true, 'listPlannedAmounts deve suceder');
+    // Mesma razao do guard-antes-do-assert em openPort().
     if (!r.ok) throw new Error(`listPlannedAmounts falhou — ${r.error}`);
+    assert.equal(r.ok, true, 'listPlannedAmounts deve suceder');
     return r.value;
   };
 
