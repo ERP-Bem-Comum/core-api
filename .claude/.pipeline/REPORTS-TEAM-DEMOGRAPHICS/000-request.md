@@ -56,10 +56,21 @@ não ausência. Fundir os dois falsifica a coleta.
 [FR-012](../../../src/modules/partners/adapters/http/schemas.ts) ("idade é derivável de birthDate no
 client") **apenas neste relatório**; o FR-012 segue válido onde está.
 
-**k-anonimato: k=5.** Bucket com `0 < count < 5` agrupa em `Outros` (não some — o total continua
-batendo). Motivo: a tela **já tem filtro** por programa/função (catálogo i18n
-`reports.equipe.filters.*`), então a fatia pequena não é hipotética (`TRAVESTI: 1` num programa de 4
-identifica a pessoa).
+**k-anonimato: REMOVIDO (P.O., 2026-07-20).** O gráfico mostra a distribuição **real** —
+`Indígena: 2` aparece como `Indígena: 2`.
+
+Histórico: o k=5 foi **sugestão da engenharia**, não do legado nem da P.O., sob a premissa de que
+"nada por pessoa sai do backend". A premissa é **falsa** e a régua do projeto é outra:
+
+1. **O legado não suprimia nada** — e a régua desta migração é **replicar o legado**.
+2. **A premissa caiu:** `GET /api/v1/collaborators/export` já entrega `race`/`genderIdentity` **por
+   pessoa** (26 colunas), sob `collaborator:read`. O CSV do legado fazia o mesmo (e ainda mandava
+   `remuneracao`, que o nosso não manda). Suprimir no gráfico o que o botão ao lado baixa em CSV é
+   **perda de informação sem ganho de proteção**.
+
+Segregação de acesso a dado sensível é assunto do **redesenho do RBAC** (com LGPD + regras do
+cliente), não de supressão estatística nesta tela — coerente com o ADR-0053 (rejeitado: durante a
+aceitação o acesso é liberado, com o cliente ciente).
 
 ## Contrato — ponto aberto para W1
 
@@ -71,7 +82,7 @@ volta, e com ela o bug de drift do item 2 acima. Alinhar com o front antes do W1
 
 1. **`partners/public-api`:** novo reader agregado (molde: `openCollaboratorProjectionReader`,
    boot-scoped — pool aberto uma vez, ver incidente RDS 0001). Agrega **dentro** do `partners` e
-   expõe só `CategoryCount[]` por dimensão. Filtra `active`. Aplica faixa etária e k=5.
+   expõe só `CategoryCount[]` por dimensão. Filtra `active`. Aplica a faixa etária.
    `CollaboratorTeamProjection` **não muda**.
 2. **`reports`:** port + rota `GET /api/v2/reports/team/demographics`, gate na permissão nova, Zod
    response, adapter ponte + wiring no `server.ts`.
@@ -94,7 +105,7 @@ volta, e com ela o bug de drift do item 2 acima. Alinhar com o front antes do W1
   próprio, distinto de `PREFIRO_NAO_RESPONDER`; **soma das fatias = total de ativos** (as 3 dimensões).
 - **CA5** Valor fora da lista canônica **não é descartado em silêncio** — cai em `Outros` e continua
   somando ao total.
-- **CA6** k=5: bucket com `0 < count < 5` vira `Outros`; total preservado.
+- **CA6** ~~k=5~~ — **REMOVIDO** (ver §Parâmetros). O gráfico mostra a contagem real de cada bucket.
 - **CA7** RBAC: sem `collaborator:read-sensitive` → 403; com → 200. `collaborator:read` sozinho **não**
   abre.
 - **CA8** ~~carve-out no bypass~~ — **REMOVIDO** (ver §Decisão sobre o bypass).
@@ -119,7 +130,7 @@ está ciente.
 
 | Wave | Skill/agente | Atividade |
 | :-- | :-- | :-- |
-| W0 | `tdd-strategist` | RED — agregação + k=5 + N/A vs PREFIRO_NAO_RESPONDER + RBAC (CA7) |
+| W0 | `tdd-strategist` | RED — agregação + N/A vs PREFIRO_NAO_RESPONDER + `Outros` + RBAC (CA7) |
 | W1 | `ports-and-adapters` + `fastify-server-expert` (par `zod-expert`) | reader agregado + rota + permissão + wiring |
 | W2 | `code-reviewer` + `security-backend-expert` (LGPD) | audit read-only |
 | W3 | `ts-quality-checker` | gate + integração MySQL (OrbStack) |

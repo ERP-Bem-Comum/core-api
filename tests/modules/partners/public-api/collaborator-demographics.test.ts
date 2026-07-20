@@ -13,7 +13,7 @@
  * CA4 8 generos + N/A, 6 racas (incl. INDIGENA) + N/A, 6 faixas etarias; N/A != PREFIRO_NAO_RESPONDER;
  *     soma das fatias = total de ativos nas 3 dimensoes.
  * CA5 valor fora da lista canonica -> `Outros` (nunca descarte silencioso).
- * CA6 k-anonimato k=5: bucket com 0 < count < 5 vira `Outros`; total preservado.
+ * CA6 REMOVIDO (P.O. 2026-07-20): sem k-anonimato — o grafico mostra a contagem real.
  */
 
 import { describe, it } from 'node:test';
@@ -24,7 +24,6 @@ import {
   GENDER_CATEGORIES,
   RACE_CATEGORIES,
   AGE_RANGE_CATEGORIES,
-  K_ANONYMITY_MIN,
   OTHERS_ID,
   NOT_AVAILABLE_ID,
   type CategoryCount,
@@ -111,10 +110,6 @@ describe('partners/demographics - listas canonicas (CA4)', () => {
     }
     assert.equal(RACE_CATEGORIES.find((c) => c.id === 'INDIGENA')?.label, 'Indígena');
     assert.equal(RACE_CATEGORIES.find((c) => c.id === NOT_AVAILABLE_ID)?.label, 'N/A');
-  });
-
-  it('k-anonimato do ticket e k=5', () => {
-    assert.equal(K_ANONYMITY_MIN, 5);
   });
 });
 
@@ -241,57 +236,6 @@ describe('partners/demographics - valor desconhecido vai para Outros (CA5)', () 
   it('CA5: Outros e o ultimo bucket da lista', () => {
     const out = aggregate([...many(6, { race: 'BRANCO' }), ...many(5, { race: 'XPTO' })]);
     assert.equal(idsOf(out.race).at(-1), OTHERS_ID);
-  });
-});
-
-describe('partners/demographics - k-anonimato k=5 (CA6)', () => {
-  it('CA6: bucket com 0 < count < 5 vira Outros e o total continua batendo', () => {
-    const out = aggregate([
-      ...many(6, { race: 'BRANCO' }),
-      ...many(3, { race: 'PRETO' }),
-      ...many(1, { race: null }),
-    ]);
-
-    assert.equal(out.totalActive, 10);
-    assert.equal(countOf(out.race, 'BRANCO'), 6, 'acima de k continua visivel');
-    assert.equal(countOf(out.race, 'PRETO'), 0, 'abaixo de k e suprimido do proprio bucket');
-    assert.equal(countOf(out.race, NOT_AVAILABLE_ID), 0, 'N/A tambem obedece ao k');
-    assert.equal(countOf(out.race, OTHERS_ID), 4, 'os suprimidos se somam em Outros');
-    assert.equal(sumOf(out.race), 10, 'k=5 suprime bucket, nunca pessoa');
-  });
-
-  it('CA6: exatamente k=5 NAO e suprimido (limite inferior inclusivo)', () => {
-    const out = aggregate([...many(5, { race: 'PARDO' }), ...many(6, { race: 'BRANCO' })]);
-
-    assert.equal(countOf(out.race, 'PARDO'), 5);
-    assert.equal(idsOf(out.race).includes(OTHERS_ID), false);
-    assert.equal(sumOf(out.race), 11);
-  });
-
-  it('CA6: Outros e o balde residual - nao e re-suprimido mesmo abaixo de k', () => {
-    const out = aggregate([
-      ...many(9, { genderIdentity: 'MULHER_CIS' }),
-      ...many(2, { genderIdentity: 'TRAVESTI' }),
-    ]);
-
-    assert.equal(countOf(out.gender, 'TRAVESTI'), 0);
-    assert.equal(
-      countOf(out.gender, OTHERS_ID),
-      2,
-      'residual < k permanece; suprimir perderia gente',
-    );
-    assert.equal(sumOf(out.gender), 11);
-  });
-
-  it('CA6: desconhecido (CA5) e suprimido (CA6) caem no MESMO bucket Outros', () => {
-    const out = aggregate([
-      ...many(8, { race: 'BRANCO' }),
-      ...many(2, { race: 'PRETO' }),
-      ...many(3, { race: 'XPTO' }),
-    ]);
-
-    assert.equal(countOf(out.race, OTHERS_ID), 5);
-    assert.equal(sumOf(out.race), 13);
   });
 });
 
