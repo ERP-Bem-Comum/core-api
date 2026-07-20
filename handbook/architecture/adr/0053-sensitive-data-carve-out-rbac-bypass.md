@@ -1,8 +1,8 @@
 # ADR-0053: Carve-out de confidencialidade ao `AUTH_RBAC_MODE=bypass` — dado sensível (LGPD Art. 5º II) continua exigindo permissão
 
-- **Status:** Proposed
+- **Status:** **Rejected** (2026-07-20 — decisão da P.O.; ver §Desfecho)
 - **Date:** 2026-07-16
-- **Deciders:** Tech Lead (Gabriel — dono do sistema; decisor registrado do ADR-0052) · P.O. (Alessandra — demanda de produto)
+- **Deciders:** P.O. (Alessandra — decisão de 2026-07-20) · Tech Lead (Gabriel — dono do ADR-0052)
 - **Complementa:** [ADR-0052](./0052-rbac-bypass-flag.md) — **não** o substitui. Mantém a flag, o default e o banner; recorta uma classe de permissão do alcance do `bypass`.
 - **Relates:** `REPORTS-TEAM-DEMOGRAPHICS` (gráficos demográficos do relatório Equipe ABC) · `REPORTS-TEAM-ABC`/#238 (projeção 9 colunas LGPD-safe)
 
@@ -97,3 +97,53 @@ exceção quando o dano escapa da janela do modo — aqui o dano escapa pela mes
 ## Reversão
 
 Remover a permissão da lista de sensíveis → ela volta a obedecer o `bypass`. Sem migração, sem dado.
+
+---
+
+## Desfecho — REJEITADO (P.O., 2026-07-20)
+
+O carve-out **não será implementado**. Registro da decisão e do seu contexto, para que a exposição
+de dado sensível no período seja rastreável como **escolha informada**, não como descuido.
+
+### Decisão
+
+Durante a fase de **aceitação do sistema recém-entregue**, o acesso fica **liberado para todos os
+usuários autenticados** (`AUTH_RBAC_MODE=bypass`, sem exceções). Inclui os gráficos demográficos
+(gênero, idade, raça/cor) e o restante do dado de colaborador.
+
+### Justificativa (P.O.)
+
+1. **Paridade com o legado.** O sistema legado já funcionava assim — sem segregação de acesso. A
+   migração não introduz exposição nova; mantém o statu quo enquanto o RBAC é desenhado.
+2. **Necessidade da aceitação.** O sistema acabou de ser entregue. Para o cliente **testar todos os
+   módulos**, todos precisam estar visíveis. Um RBAC parcial durante os testes produziria falsos
+   negativos ("não aparece" confundido com "não funciona") — exatamente o incidente
+   `AUTH-BYPASS-ME-PERMISSIONS` (módulo financeiro oculto de 17/07 a 20/07).
+3. **O RBAC será refeito por inteiro**, com critérios de LGPD + regras internas do cliente. Um
+   carve-out agora seria remendo numa regra que será substituída — e poderia enviesar o desenho novo.
+4. **O cliente está ciente** da liberação total no período e do plano de configurar o RBAC em seguida.
+
+### Consequências aceitas
+
+- Enquanto durar o `bypass`, **qualquer usuário autenticado** vê os módulos e o dado sensível
+  (raça, identidade de gênero, CPF, salário, dados de saúde) — via telas e via
+  `GET /api/v1/collaborators` (ver issue #482).
+- É janela **temporária**, atrelada à aceitação. Não é o estado-alvo.
+
+### O que substitui este ADR
+
+O **redesenho completo do RBAC** (a fazer), que deve tratar dado sensível com base legal e finalidade
+explícitas por papel. Insumos já levantados:
+- Catálogo real: **44 permissões**; papéis são **dado no banco** (configuráveis sem deploy).
+- Issue **#482** — `GET /api/v1/collaborators` serve CPF/RG/raça/alergias sob a permissão genérica
+  `collaborator:read`, e permite contagem por categoria sensível via filtro. Deve ser endereçada no
+  redesenho.
+- Questionário de elicitação (pessoas → tarefas → matriz ver/editar/aprovar; bloco separado de dado
+  sensível com finalidade declarada).
+
+### Quando re-avaliar
+
+- **Ao desligar o `bypass`** (fim da aceitação) — o redesenho do RBAC assume.
+- **Se a janela se estender** além do previsto, ou se o cliente admitir usuários externos ao time
+  atual: reabrir a discussão, porque a premissa (1) (paridade com o legado, público conhecido)
+  deixa de valer.
