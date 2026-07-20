@@ -79,7 +79,13 @@ const reportsRoutes =
     scope.route({
       method: 'GET',
       url: '/reports/team/demographics',
-      preHandler: [hooks.requireAuth, hooks.authorize(COLLABORATOR_PERMISSION.readSensitive)],
+      // Mesmo gate da tabela (`collaborator:read`), NAO o `readSensitive`
+      // (REPORTS-DEMOGRAPHICS-GATE-ALIGN, P.O. 2026-07-20): `GET /reports/team` expoe raca/genero
+      // POR PESSOA, com nome, sob `read`. Trancar o agregado — que nao identifica ninguem — atras de
+      // uma permissao MAIS restritiva nao protegia nada e deixava os 3 graficos vazios em todo
+      // ambiente. O `readSensitive` segue no catalogo: a segregacao volta no redesenho do RBAC,
+      // aplicada aos DOIS endpoints juntos (issue #497).
+      preHandler: [hooks.requireAuth, hooks.authorize(COLLABORATOR_PERMISSION.read)],
       schema: {
         response: { 200: teamDemographicsResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
