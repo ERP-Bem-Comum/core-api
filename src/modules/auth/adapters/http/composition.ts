@@ -477,7 +477,12 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
       refreshTokenRepo: stores.refreshTokenRepo,
       clock,
     }),
-    listUserPermissions: listUserPermissions({ userReader: stores.userReader }),
+    // rbacMode: em bypass o /me anuncia o catalogo inteiro (ADR-0052 — todo autenticado e
+    // super-usuario), senao o front esconde modulos que o backend liberaria.
+    listUserPermissions: listUserPermissions({ userReader: stores.userReader, rbacMode }),
+    // getUserPermissions NAO recebe rbacMode de proposito: e consulta ADMINISTRATIVA das permissoes
+    // ATRIBUIDAS a um usuario (spec 006 US1). Em bypass tem de seguir mostrando a verdade dos
+    // papeis — senao a tela de gestao de acessos mente.
     getUserPermissions: getUserPermissions({ userReader: stores.userReader }),
     listPermissionCatalog: listPermissionCatalog(),
     listRoles: listRoles({ roleRepository: stores.roleRepo }),

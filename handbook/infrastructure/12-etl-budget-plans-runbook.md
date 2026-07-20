@@ -194,6 +194,23 @@ SELECT budget_id, SUM(value_cents) FROM bgp_budget_results GROUP BY budget_id;
 
 Confronte com o banco de referência (`SELECT COUNT(*) FROM budget_results;` etc.).
 
+**Confira também a coluna "Última Alteração" na tela** (é `bgp_budget_plans.updated_at`): tem de mostrar
+a data real do legado, **nunca** o horário da migração. Se mostrar o horário em que o ETL rodou, a
+carga usou código anterior ao fix do PR #489 — ver §9.1.
+
+### 9.1. Backfill das datas (só se a carga rodou com código pré-#489)
+
+O ETL é **skip-by-legacy_id**: re-rodar **não** corrige linhas já migradas. Para consertar sem
+re-migrar, use [`12a-etl-budget-plans-date-backfill.sql`](./12a-etl-budget-plans-date-backfill.sql) —
+`UPDATE` das 5 linhas filtrado por `legacy_id` (não toca o que foi criado na tela), em transação, com
+`SELECT` de conferência antes/depois e `COMMIT` comentado.
+
+> Os valores do script vieram do **dump `Cloud_SQL_Export_2026-04-30`** — o mesmo que gerou os dados
+> de produção —, e **não** de uma réplica do legado. Uma réplica pode ter sido editada depois do dump
+> (foi o caso: o plano `legacy_id=19` aparecia lá com 17/07/2026, divergente do dump). Tirar a data de
+> uma fonte e o valor de outra deixa o registro inconsistente. **Se a carga usar outro dump, regere o
+> script a partir dele** (`SELECT id, createdAt, updatedAt FROM budget_plans`).
+
 ---
 
 ## 10. ⚠️ Pós-migração: a API precisa LER o banco (senão a tela fica vazia)
