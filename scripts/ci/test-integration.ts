@@ -119,6 +119,10 @@ const SUITES: Readonly<Record<string, Suite>> = {
   ]),
   financial: mysqlSuite({ MYSQL_INTEGRATION: '1' }, [
     'tests/modules/financial/adapters/persistence/document-repository.drizzle-mysql.test.ts',
+    // FIN-DOC-SUBCATEGORY-STAMP (#502 · S1) — coluna subcategory_ref em fin_documents +
+    // fin_payable_view (CA1 information_schema) + regressão dos refs irmãos (CA8). Não executado
+    // nesta janela (#500); registrado para o ritual manual / quando o runner de integração fechar.
+    'tests/modules/financial/adapters/persistence/subcategory-ref-stamp.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/supplier-view-store.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/document-supplier-view-join.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/cedente-account-store.drizzle-mysql.test.ts',

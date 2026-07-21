@@ -105,6 +105,8 @@ export const createDocumentBodySchema = z.object({
   contractRef: z.uuid().optional(),
   budgetPlanRef: z.uuid().optional(),
   categoryRef: z.uuid().optional(),
+  // #502: folha da árvore do plano (carimbo da subcategoria). Opcional; ref opaco por formato.
+  subcategoryRef: z.uuid().optional(),
   costCenterRef: z.uuid().optional(),
   programRef: z.uuid().optional(),
   paymentMethod: paymentMethodSchema,
@@ -270,6 +272,7 @@ export const documentResponseSchema = z
     contractRef: z.string().nullable(),
     budgetPlanRef: z.string().nullable(),
     categoryRef: z.string().nullable(),
+    subcategoryRef: z.string().nullable(), // #502: folha da árvore do plano (carimbo da subcategoria)
     costCenterRef: z.string().nullable(),
     programRef: z.string().nullable(),
     paymentMethod: z.string().nullable(),

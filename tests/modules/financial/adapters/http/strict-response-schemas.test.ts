@@ -96,6 +96,7 @@ describe('documentResponseSchema — .strict() (#384)', () => {
     contractRef: null,
     budgetPlanRef: null,
     categoryRef: null,
+    subcategoryRef: null,
     costCenterRef: null,
     programRef: null,
     paymentMethod: 'PIX',

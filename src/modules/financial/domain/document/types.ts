@@ -7,6 +7,7 @@ import type {
   ContractRef,
   BudgetPlanRef,
   CategoryRef,
+  SubcategoryRef,
   CostCenterRef,
   ProgramRef,
 } from '../shared/refs.ts';
@@ -60,6 +61,7 @@ export type DocumentCore = Readonly<{
   contractRef: ContractRef | null;
   budgetPlanRef: BudgetPlanRef | null;
   categoryRef: CategoryRef | null;
+  subcategoryRef: SubcategoryRef | null; // #502: folha da árvore do plano (carimbo da subcategoria)
   costCenterRef: CostCenterRef | null;
   programRef: ProgramRef | null;
   paymentMethod: PaymentMethod;
@@ -103,6 +105,7 @@ export type DraftDocument = Readonly<{
   contractRef: ContractRef | null;
   budgetPlanRef: BudgetPlanRef | null;
   categoryRef: CategoryRef | null;
+  subcategoryRef: SubcategoryRef | null; // #502: folha da árvore do plano (opcional no rascunho)
   costCenterRef: CostCenterRef | null;
   programRef: ProgramRef | null;
   paymentMethod: PaymentMethod | null;
