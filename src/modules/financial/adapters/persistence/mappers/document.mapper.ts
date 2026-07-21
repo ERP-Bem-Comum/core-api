@@ -27,11 +27,13 @@ import {
   ContractRef,
   BudgetPlanRef,
   CategoryRef,
+  SubcategoryRef,
   CostCenterRef,
   ProgramRef,
   type ContractRef as ContractRefType,
   type BudgetPlanRef as BudgetPlanRefType,
   type CategoryRef as CategoryRefType,
+  type SubcategoryRef as SubcategoryRefType,
   type CostCenterRef as CostCenterRefType,
   type ProgramRef as ProgramRefType,
 } from '../../../domain/shared/refs.ts';
@@ -76,6 +78,7 @@ export type DocumentMapperError =
   | 'mapper-invalid-contract-ref'
   | 'mapper-invalid-budget-plan-ref'
   | 'mapper-invalid-category-ref'
+  | 'mapper-invalid-subcategory-ref'
   | 'mapper-invalid-cost-center-ref'
   | 'mapper-invalid-program-ref'
   | 'mapper-invalid-approver-ref'
@@ -312,6 +315,13 @@ export const mapRowToDocument = (
       categoryRef = r.value;
     }
 
+    let subcategoryRef: SubcategoryRefType | null = null;
+    if (row.subcategoryRef !== null) {
+      const r = SubcategoryRef.rehydrate(row.subcategoryRef);
+      if (!r.ok) return err('mapper-invalid-subcategory-ref');
+      subcategoryRef = r.value;
+    }
+
     let costCenterRef: CostCenterRefType | null = null;
     if (row.costCenterRef !== null) {
       const r = CostCenterRef.rehydrate(row.costCenterRef);
@@ -374,6 +384,7 @@ export const mapRowToDocument = (
       contractRef,
       budgetPlanRef,
       categoryRef,
+      subcategoryRef,
       costCenterRef,
       programRef,
       paymentMethod,
@@ -465,6 +476,13 @@ export const mapRowToDocument = (
     categoryRef = r.value;
   }
 
+  let subcategoryRef: SubcategoryRefType | null = null;
+  if (row.subcategoryRef !== null) {
+    const r = SubcategoryRef.rehydrate(row.subcategoryRef);
+    if (!r.ok) return err('mapper-invalid-subcategory-ref');
+    subcategoryRef = r.value;
+  }
+
   let costCenterRef: CostCenterRefType | null = null;
   if (row.costCenterRef !== null) {
     const r = CostCenterRef.rehydrate(row.costCenterRef);
@@ -500,6 +518,7 @@ export const mapRowToDocument = (
     contractRef,
     budgetPlanRef,
     categoryRef,
+    subcategoryRef,
     costCenterRef,
     programRef,
     paymentMethod: row.paymentMethod,
@@ -644,6 +663,8 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
         document.budgetPlanRef !== null ? (document.budgetPlanRef as unknown as string) : null,
       categoryRef:
         document.categoryRef !== null ? (document.categoryRef as unknown as string) : null,
+      subcategoryRef:
+        document.subcategoryRef !== null ? (document.subcategoryRef as unknown as string) : null,
       costCenterRef:
         document.costCenterRef !== null ? (document.costCenterRef as unknown as string) : null,
       programRef: document.programRef !== null ? (document.programRef as unknown as string) : null,
@@ -688,6 +709,8 @@ export const mapDocumentToRow = (document: Document, version: number): NewDocume
     contractRef: core.contractRef !== null ? (core.contractRef as unknown as string) : null,
     budgetPlanRef: core.budgetPlanRef !== null ? (core.budgetPlanRef as unknown as string) : null,
     categoryRef: core.categoryRef !== null ? (core.categoryRef as unknown as string) : null,
+    subcategoryRef:
+      core.subcategoryRef !== null ? (core.subcategoryRef as unknown as string) : null,
     costCenterRef: core.costCenterRef !== null ? (core.costCenterRef as unknown as string) : null,
     programRef: core.programRef !== null ? (core.programRef as unknown as string) : null,
     paymentMethod: core.paymentMethod,

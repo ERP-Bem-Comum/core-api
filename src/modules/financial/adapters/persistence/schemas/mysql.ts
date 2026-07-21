@@ -87,6 +87,8 @@ export const finDocuments = mysqlTable(
     contractRef: varchar('contract_ref', { length: 36 }),
     budgetPlanRef: varchar('budget_plan_ref', { length: 36 }),
     categoryRef: varchar('category_ref', { length: 36 }),
+    // Subcategoria = folha da árvore do plano (#502). Soft ref (sem FK — ADR-0014); aditiva/nullable.
+    subcategoryRef: varchar('subcategory_ref', { length: 36 }),
     costCenterRef: varchar('cost_center_ref', { length: 36 }),
     programRef: varchar('program_ref', { length: 36 }),
 
@@ -558,6 +560,8 @@ export const finPayableView = mysqlTable(
     supplierRef: varchar('supplier_ref', { length: 36 }),
     contractRef: varchar('contract_ref', { length: 36 }),
     categoryRef: varchar('category_ref', { length: 36 }),
+    // Subcategoria = folha da árvore do plano (#502). Projeção espelha a ref do documento (S5).
+    subcategoryRef: varchar('subcategory_ref', { length: 36 }),
     costCenterRef: varchar('cost_center_ref', { length: 36 }),
     programRef: varchar('program_ref', { length: 36 }),
     valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
@@ -572,6 +576,7 @@ export const finPayableView = mysqlTable(
     index('fin_payable_view_status_idx').on(t.status),
     index('fin_payable_view_cost_center_ref_idx').on(t.costCenterRef),
     index('fin_payable_view_category_ref_idx').on(t.categoryRef),
+    index('fin_payable_view_subcategory_ref_idx').on(t.subcategoryRef),
     index('fin_payable_view_program_ref_idx').on(t.programRef),
     index('fin_payable_view_supplier_ref_idx').on(t.supplierRef),
     index('fin_payable_view_due_date_idx').on(t.dueDate),

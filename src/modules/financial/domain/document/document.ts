@@ -10,6 +10,7 @@ import type {
   ContractRef,
   BudgetPlanRef,
   CategoryRef,
+  SubcategoryRef,
   CostCenterRef,
   ProgramRef,
 } from '../shared/refs.ts';
@@ -43,6 +44,7 @@ export type CreateDocumentInput = Readonly<{
   contractRef?: ContractRef | null;
   budgetPlanRef?: BudgetPlanRef | null;
   categoryRef?: CategoryRef | null;
+  subcategoryRef?: SubcategoryRef | null; // #502: folha da árvore do plano
   costCenterRef?: CostCenterRef | null;
   programRef?: ProgramRef | null;
   paymentMethod: PaymentMethod;
@@ -193,6 +195,7 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     contractRef: input.contractRef ?? null,
     budgetPlanRef: input.budgetPlanRef ?? null,
     categoryRef: input.categoryRef ?? null,
+    subcategoryRef: input.subcategoryRef ?? null,
     costCenterRef: input.costCenterRef ?? null,
     programRef: input.programRef ?? null,
     paymentMethod: input.paymentMethod,
@@ -521,6 +524,7 @@ export const undoApproval = (
     contractRef: d.contractRef,
     budgetPlanRef: d.budgetPlanRef,
     categoryRef: d.categoryRef,
+    subcategoryRef: d.subcategoryRef,
     costCenterRef: d.costCenterRef,
     programRef: d.programRef,
     paymentMethod: d.paymentMethod,
@@ -593,6 +597,7 @@ export type SaveDraftInput = Readonly<{
   contractRef?: ContractRef | null;
   budgetPlanRef?: BudgetPlanRef | null;
   categoryRef?: CategoryRef | null;
+  subcategoryRef?: SubcategoryRef | null; // #502: folha da árvore do plano (opcional no rascunho)
   costCenterRef?: CostCenterRef | null;
   programRef?: ProgramRef | null;
   paymentMethod?: PaymentMethod | null;
@@ -632,6 +637,7 @@ export const saveDraft = (input: SaveDraftInput): Result<SaveDraftOutput, Docume
     contractRef: input.contractRef ?? null,
     budgetPlanRef: input.budgetPlanRef ?? null,
     categoryRef: input.categoryRef ?? null,
+    subcategoryRef: input.subcategoryRef ?? null,
     costCenterRef: input.costCenterRef ?? null,
     programRef: input.programRef ?? null,
     paymentMethod: input.paymentMethod ?? null,
@@ -684,6 +690,7 @@ export const submit = (
     contractRef: draft.contractRef,
     budgetPlanRef: draft.budgetPlanRef,
     categoryRef: draft.categoryRef,
+    subcategoryRef: draft.subcategoryRef,
     costCenterRef: draft.costCenterRef,
     programRef: draft.programRef,
     paymentMethod,
