@@ -35,7 +35,10 @@ import { and, eq, notExists, sql } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
-import { openMysqlFinancial } from '../adapters/persistence/drivers/mysql-driver.ts';
+import {
+  openMysqlFinancial,
+  type FinancialMysqlDriverError,
+} from '../adapters/persistence/drivers/mysql-driver.ts';
 import {
   finDocuments,
   finPayables,
@@ -51,10 +54,13 @@ export type RealizedProvisionedRow = Readonly<{
   provisionedCents: number;
 }>;
 
+// Union nomeada (não `string` cru): o consumidor cross-módulo faz switch exaustivo sobre o erro.
+export type RealizedProvisionedReadError = 'realized-provisioned-read-failure';
+
 export type RealizedProvisionedReader = Readonly<{
   list: (
     filter: Readonly<{ budgetPlanRef?: string; year?: number }>,
-  ) => Promise<Result<readonly RealizedProvisionedRow[], string>>;
+  ) => Promise<Result<readonly RealizedProvisionedRow[], RealizedProvisionedReadError>>;
   close: () => Promise<void>;
 }>;
 
@@ -95,7 +101,7 @@ const bucketFor = (
 
 export const openRealizedProvisionedReader = async (
   opts: Readonly<{ connectionString: string }>,
-): Promise<Result<RealizedProvisionedReader, string>> => {
+): Promise<Result<RealizedProvisionedReader, FinancialMysqlDriverError>> => {
   const handleR = await openMysqlFinancial({
     connectionString: opts.connectionString,
     applyMigrations: false,
