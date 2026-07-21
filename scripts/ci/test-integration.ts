@@ -116,6 +116,10 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // BGP-ETL-WRITE-PORT (fatia 2/3 ETL) — buildBudgetPlansEtlPort: pool boot-scoped (CA1),
     // grava legacy_id (CA2), idempotencia por legacy_id (CA3), erro de conexao -> Result (CA5).
     'tests/modules/budget-plans/public-api/budget-plans-etl-port.integration.test.ts',
+    // BGP-READ-PORT (fatia 1/3 REPORTS-REALIZED-VS-PLANNED) — buildBudgetPlansReadPort:
+    // pool boot-scoped (CA1), 3 niveis da arvore (CA2), grade de 12 meses com zerados (CA3),
+    // filtros combinaveis programa/plano/ano/Rede (CA4), plain rows (CA6).
+    'tests/modules/budget-plans/public-api/budget-plans-read-port.integration.test.ts',
   ]),
   financial: mysqlSuite({ MYSQL_INTEGRATION: '1' }, [
     'tests/modules/financial/adapters/persistence/document-repository.drizzle-mysql.test.ts',
@@ -156,6 +160,10 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // #416 BGP-INSIGHTS-REALIZED: "realizado por plano" (Σ reconciled_value_cents Active, JOIN 3-hop
     // fin_reconciliation_items → fin_reconciliations → fin_payables → fin_documents.budget_plan_ref)
     'tests/modules/financial/public-api/realized-by-plan.drizzle-mysql.test.ts',
+    // FIN-REALIZED-PROVISIONED-READ (fatia 2/3 REPORTS-REALIZED-VS-PLANNED): realizado + provisionado
+    // por (budget_plan_ref, category_ref, mês). Realizado=Σ reconciled_value_cents Active (mês=reconciled_at);
+    // provisionado=fin_payables Approved sem item Active (mês=due_date). Mesmo JOIN 3-hop do #416.
+    'tests/modules/financial/public-api/realized-provisioned.drizzle-mysql.test.ts',
     'tests/workers/supplier-view-projection/projection.integration.test.ts',
   ]),
   'etl:orchestrate': mysqlSuite(ETL_DB_ENV, ['tests/etl/orchestrate.integration.test.ts']),
