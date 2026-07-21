@@ -47,6 +47,9 @@ const buildDifferenceManualEntry = (difference: Difference): ManualEntry | null 
     type: 'FeePenaltyInterest',
     valueCents: difference.valueCents,
     supplierRef: null,
+    // #502/S2: a diferença classificada não carrega taxonomia planejável (plano/subcategoria) — null.
+    budgetPlanRef: null,
+    subcategoryRef: null,
     categoryRef: difference.categoryRef ?? null,
     costCenterRef: difference.costCenterRef ?? null,
     programRef: null,

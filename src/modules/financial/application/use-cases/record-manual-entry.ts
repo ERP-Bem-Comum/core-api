@@ -9,6 +9,7 @@ import {
   type ManualEntryError,
 } from '../../domain/reconciliation/manual-entry.ts';
 import type { ManualEntryType } from '../../domain/reconciliation/types.ts';
+import { BudgetPlanRef, SubcategoryRef, type FinancialRefError } from '../../domain/shared/refs.ts';
 import * as CedenteAccountId from '../../domain/cedente/cedente-account-id.ts';
 import { isClosed } from '../../domain/cedente/cedente-account.ts';
 import type {
@@ -49,6 +50,9 @@ export type RecordManualEntryInput = Readonly<{
   transactionId: string;
   type: ManualEntryType;
   supplierRef?: string;
+  // #502/S2: plano orçamentário + subcategoria (folha) no título manual — rehidratados via VO na borda.
+  budgetPlanRef?: string;
+  subcategoryRef?: string;
   categoryRef?: string;
   costCenterRef?: string;
   programRef?: string;
@@ -65,6 +69,7 @@ export type RecordManualEntryOutput = Readonly<{
 
 export type RecordManualEntryError =
   | ManualEntryError
+  | FinancialRefError
   | 'statement-transaction-not-found'
   | 'transaction-already-reconciled'
   | 'cedente-account-not-found'
@@ -117,12 +122,25 @@ export const recordManualEntry =
       destinationAccountId = destId.value;
     }
 
+    // #502/S2: rehidrata os refs de taxonomia (formato UUID v4) — defense-in-depth além do Zod da
+    // borda. Refs opacos (ADR-0014): valida só o formato, sem chamar budget-plans. Domínio guarda a string.
+    if (input.budgetPlanRef !== undefined) {
+      const r = BudgetPlanRef.rehydrate(input.budgetPlanRef);
+      if (!r.ok) return err(r.error);
+    }
+    if (input.subcategoryRef !== undefined) {
+      const r = SubcategoryRef.rehydrate(input.subcategoryRef);
+      if (!r.ok) return err(r.error);
+    }
+
     const confirmed = confirmManualEntry({
       reconciliationId: ReconciliationId.generate(),
       transactionId: transaction.id,
       type: input.type,
       valueCents: transaction.valueCents,
       ...(input.supplierRef !== undefined ? { supplierRef: input.supplierRef } : {}),
+      ...(input.budgetPlanRef !== undefined ? { budgetPlanRef: input.budgetPlanRef } : {}),
+      ...(input.subcategoryRef !== undefined ? { subcategoryRef: input.subcategoryRef } : {}),
       ...(input.categoryRef !== undefined ? { categoryRef: input.categoryRef } : {}),
       ...(input.costCenterRef !== undefined ? { costCenterRef: input.costCenterRef } : {}),
       ...(input.programRef !== undefined ? { programRef: input.programRef } : {}),

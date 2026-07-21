@@ -133,6 +133,10 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/financial/adapters/persistence/match-suggestion.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/payable-list-view.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/manual-entry.drizzle-mysql.test.ts',
+    // FIN-MANUAL-ENTRY-TAXONOMY (#502 · S2) — colunas budget_plan_ref + subcategory_ref em
+    // fin_manual_entries (CA1 information_schema) + regressão dos refs irmãos (CA8). Não executado
+    // nesta janela (#500); registrado para o ritual manual / quando o runner de integração fechar.
+    'tests/modules/financial/adapters/persistence/manual-entry-taxonomy.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/manual-payment.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/reconciliation-period.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/category-read.drizzle-mysql.test.ts',

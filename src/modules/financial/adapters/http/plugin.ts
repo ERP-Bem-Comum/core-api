@@ -1098,6 +1098,8 @@ const financialRoutes =
           transactionId: req.params.id,
           type: body.type,
           ...(body.supplierRef !== undefined ? { supplierRef: body.supplierRef } : {}),
+          ...(body.budgetPlanRef !== undefined ? { budgetPlanRef: body.budgetPlanRef } : {}),
+          ...(body.subcategoryRef !== undefined ? { subcategoryRef: body.subcategoryRef } : {}),
           ...(body.categoryRef !== undefined ? { categoryRef: body.categoryRef } : {}),
           ...(body.costCenterRef !== undefined ? { costCenterRef: body.costCenterRef } : {}),
           ...(body.programRef !== undefined ? { programRef: body.programRef } : {}),
@@ -1115,6 +1117,9 @@ const financialRoutes =
             reconciliationId: String(result.value.reconciliationId),
             type: 'ManualEntry' as const,
             manualEntryId: String(result.value.manualEntryId),
+            // #502/S2: ecoa o carimbo de taxonomia recebido (opaco; null quando ausente — back-compat).
+            budgetPlanRef: body.budgetPlanRef ?? null,
+            subcategoryRef: body.subcategoryRef ?? null,
           }),
           { ok: 201 },
         );
