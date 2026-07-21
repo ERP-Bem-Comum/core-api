@@ -152,6 +152,10 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // #416 BGP-INSIGHTS-REALIZED: "realizado por plano" (Σ reconciled_value_cents Active, JOIN 3-hop
     // fin_reconciliation_items → fin_reconciliations → fin_payables → fin_documents.budget_plan_ref)
     'tests/modules/financial/public-api/realized-by-plan.drizzle-mysql.test.ts',
+    // FIN-REALIZED-PROVISIONED-READ (fatia 2/3 REPORTS-REALIZED-VS-PLANNED): realizado + provisionado
+    // por (budget_plan_ref, category_ref, mês). Realizado=Σ reconciled_value_cents Active (mês=reconciled_at);
+    // provisionado=fin_payables Approved sem item Active (mês=due_date). Mesmo JOIN 3-hop do #416.
+    'tests/modules/financial/public-api/realized-provisioned.drizzle-mysql.test.ts',
     'tests/workers/supplier-view-projection/projection.integration.test.ts',
   ]),
   'etl:orchestrate': mysqlSuite(ETL_DB_ENV, ['tests/etl/orchestrate.integration.test.ts']),

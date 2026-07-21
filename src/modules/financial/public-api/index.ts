@@ -63,3 +63,11 @@ export type {
 // `budget-plans` (insights) via ACL.
 export { openRealizedByPlanReader } from './realized-by-plan-projection.ts';
 export type { RealizedByPlanReader } from './realized-by-plan-projection.ts';
+
+// FIN-REALIZED-PROVISIONED-READ (#416, fatia 2/3): realizado vs provisionado por
+// (budgetPlanRef, categoryRef, mês), cada medida no seu eixo de data. Refs opacos (ADR-0014).
+export { openRealizedProvisionedReader } from './realized-provisioned-projection.ts';
+export type {
+  RealizedProvisionedReader,
+  RealizedProvisionedRow,
+} from './realized-provisioned-projection.ts';
