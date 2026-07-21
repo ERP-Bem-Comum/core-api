@@ -800,6 +800,10 @@ export const finManualEntries = mysqlTable(
     type: varchar('type', { length: 24 }).notNull(),
     valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
     supplierRef: varchar('supplier_ref', { length: 36 }),
+    // #502/S2: taxonomia planejável no título manual — plano orçamentário + subcategoria (folha da
+    // árvore do plano). Refs opacos por identidade (varchar(36), sem FK — ADR-0014), como os irmãos.
+    budgetPlanRef: varchar('budget_plan_ref', { length: 36 }),
+    subcategoryRef: varchar('subcategory_ref', { length: 36 }),
     categoryRef: varchar('category_ref', { length: 36 }),
     costCenterRef: varchar('cost_center_ref', { length: 36 }),
     programRef: varchar('program_ref', { length: 36 }),

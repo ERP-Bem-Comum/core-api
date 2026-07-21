@@ -26,6 +26,9 @@ export type ConfirmManualEntryInput = Readonly<{
   type: ManualEntryType;
   valueCents: number;
   supplierRef?: string;
+  // #502/S2: plano orçamentário + subcategoria (folha) no título manual.
+  budgetPlanRef?: string;
+  subcategoryRef?: string;
   categoryRef?: string;
   costCenterRef?: string;
   programRef?: string;
@@ -66,6 +69,8 @@ export const confirmManualEntry = (
     type: input.type,
     valueCents: input.valueCents,
     supplierRef: input.supplierRef ?? null,
+    budgetPlanRef: input.budgetPlanRef ?? null,
+    subcategoryRef: input.subcategoryRef ?? null,
     categoryRef: input.categoryRef ?? null,
     costCenterRef: input.costCenterRef ?? null,
     programRef: input.programRef ?? null,

@@ -267,6 +267,13 @@
       "when": 1784665030537,
       "tag": "0037_natural_hedge_knight",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "5",
+      "when": 1784672123205,
+      "tag": "0038_huge_clint_barton",
+      "breakpoints": true
     }
   ]
 }

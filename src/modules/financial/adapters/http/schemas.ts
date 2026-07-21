@@ -652,6 +652,9 @@ const manualEntryTypeSchema = z.enum([
 export const manualEntryBodySchema = z.object({
   type: manualEntryTypeSchema,
   supplierRef: z.uuid().optional(),
+  // #502/S2: taxonomia planejável no título manual — plano + subcategoria (folha). UUID v4 → 400 na borda.
+  budgetPlanRef: z.uuid().optional(),
+  subcategoryRef: z.uuid().optional(),
   categoryRef: z.uuid().optional(),
   costCenterRef: z.uuid().optional(),
   programRef: z.uuid().optional(),
@@ -667,6 +670,9 @@ export const manualEntryResponseSchema = z.object({
   reconciliationId: z.uuid(),
   type: z.literal('ManualEntry'),
   manualEntryId: z.uuid(),
+  // #502/S2: a resposta ecoa o carimbo de taxonomia (plano + subcategoria) do título manual.
+  budgetPlanRef: z.string().nullable(),
+  subcategoryRef: z.string().nullable(),
 });
 
 export const batchBodySchema = z.object({

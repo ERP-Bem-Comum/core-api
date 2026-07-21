@@ -78,6 +78,8 @@ export const manualEntryToRow = (
   type: manualEntry.type,
   valueCents: manualEntry.valueCents,
   supplierRef: manualEntry.supplierRef,
+  budgetPlanRef: manualEntry.budgetPlanRef,
+  subcategoryRef: manualEntry.subcategoryRef,
   categoryRef: manualEntry.categoryRef,
   costCenterRef: manualEntry.costCenterRef,
   programRef: manualEntry.programRef,
