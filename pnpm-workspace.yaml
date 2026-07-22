@@ -15,8 +15,17 @@ allowBuilds:
 # Resolve: forçar esbuild >=0.25.0 <0.27.3 || >=0.28.1 em todas as cadeias transitivas.
 # Seguro: drizzle-kit@0.31.10 depende de esbuild@0.25.12 diretamente (compatível).
 # Referência: handbook/reference/pnpm/settings.md:29-98 (section overrides).
+#
+# - GHSA-4c8g-83qw-93j6: fast-uri <3.1.3 — host confusion via IDN malformado
+# - GHSA-v2hh-gcrm-f6hx: fast-uri <=3.1.3 — host confusion via '\' como delimitador de authority
+#   Transitiva de runtime por 23 caminhos, todos sob fastify (ajv-compiler) e @fastify/swagger
+#   (json-schema-resolver). Nenhum dep direto declara fast-uri: só override resolve.
+# - GHSA-3jxr-9vmj-r5cp: brace-expansion <5.0.7 — DoS por expansão exponencial
+#   Transitiva de runtime via @fastify/swagger-ui → @fastify/static → glob → minimatch.
 overrides:
   esbuild: '>=0.25.0 <0.27.3 || >=0.28.1'
+  fast-uri: '>=3.1.4 <4'
+  brace-expansion: '>=5.0.7 <6'
 
 # Supply-chain hardening explícito (ADR-0011 / ADR-0029). Mantemos os valores
 # explícitos mesmo quando coincidem com o default do pnpm 11 — explícito é auditável.
