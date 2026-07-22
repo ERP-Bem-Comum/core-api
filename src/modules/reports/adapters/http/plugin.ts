@@ -21,7 +21,9 @@ import { ok } from '#src/shared/primitives/result.ts';
 import { sendResult } from '#src/shared/http/reply.ts';
 import { COLLABORATOR_PERMISSION } from '#src/modules/partners/public-api/permissions.ts';
 import { FINANCIAL_PERMISSION } from '#src/modules/financial/public-api/permissions.ts';
+import { BUDGET_PLAN_PERMISSION } from '#src/modules/budget-plans/public-api/permissions.ts';
 import type { AnalysisFilter } from '../../application/ports/analysis-read.ts';
+import type { RealizedFilter } from '../../application/ports/realized-read.ts';
 
 import type { ReportsHttpDeps } from './composition.ts';
 import {
@@ -31,6 +33,7 @@ import {
   paymentPositionToDto,
   analysisToReport,
   analysisToChart,
+  realizedToDto,
 } from './dto.ts';
 import {
   teamReportResponseSchema,
@@ -40,13 +43,27 @@ import {
   analysisQuerySchema,
   analysisReportResponseSchema,
   analysisChartResponseSchema,
+  realizedQuerySchema,
+  realizedReportResponseSchema,
   type AnalysisQueryDto,
+  type RealizedQueryDto,
 } from './schemas.ts';
 
 const toAnalysisFilter = (q: AnalysisQueryDto): AnalysisFilter => ({
   dueStart: q.dueStart,
   dueEnd: q.dueEnd,
   ...(q.status !== undefined ? { status: q.status } : {}),
+});
+
+// Query (ids da borda) -> RealizedFilter (refs de árvore). `year` obrigatório já veio validado.
+const toRealizedFilter = (q: RealizedQueryDto): RealizedFilter => ({
+  year: q.year,
+  ...(q.programId !== undefined ? { programRef: q.programId } : {}),
+  ...(q.budgetPlanId !== undefined ? { budgetPlanId: q.budgetPlanId } : {}),
+  ...(q.partnerStateId !== undefined ? { partnerStateRef: q.partnerStateId } : {}),
+  ...(q.partnerMunicipalityId !== undefined
+    ? { partnerMunicipalityRef: q.partnerMunicipalityId }
+    : {}),
 });
 
 export type ReportsHttpHooks = Readonly<{
@@ -170,6 +187,30 @@ const reportsRoutes =
           return sendResult(reply, result, { errors: { 'analysis-read-unavailable': 503 } });
         }
         return sendResult(reply, ok(analysisToChart(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /reports/realized — Realizado × Planejado (S6 · #502). Árvore de 3 níveis, `year`
+    // obrigatório (Zod strict). Gate CA11: DUAS permissões (AND) — o relatório expõe orçado E
+    // realizado; ver só um lado não faz sentido. Dois `authorize` encadeados = conjunção.
+    scope.route({
+      method: 'GET',
+      url: '/reports/realized',
+      preHandler: [
+        hooks.requireAuth,
+        hooks.authorize(BUDGET_PLAN_PERMISSION.read),
+        hooks.authorize(FINANCIAL_PERMISSION.read),
+      ],
+      schema: {
+        querystring: realizedQuerySchema,
+        response: { 200: realizedReportResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.listRealized(toRealizedFilter(req.query));
+        if (!result.ok) {
+          return sendResult(reply, result, { errors: { 'realized-read-unavailable': 503 } });
+        }
+        return sendResult(reply, ok(realizedToDto(result.value)), { ok: 200 });
       },
     });
   };

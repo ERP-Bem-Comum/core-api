@@ -267,6 +267,10 @@ const main = async (): Promise<void> => {
   const reportsPartnersUrl = process.env['REPORTS_DATABASE_URL'] ?? partnersWriterUrl;
   const reportsFinancialUrl = process.env['REPORTS_FINANCIAL_DATABASE_URL'] ?? financialWriterUrl;
   const reportsContractsUrl = process.env['REPORTS_CONTRACTS_DATABASE_URL'] ?? contractsWriterUrl;
+  // S6 (#502): fonte do orçado no Realizado × Planejado. Cai no BUDGET_PLANS_DATABASE_URL quando o
+  // override específico falta (mesmo database `core`, prefixos isolados — ADR-0014).
+  const reportsBudgetPlansUrl =
+    process.env['REPORTS_BUDGET_PLANS_DATABASE_URL'] ?? budgetPlansWriterUrl;
   const reportsDeps = await buildReportsHttpDeps(
     process.env['REPORTS_DRIVER'] === 'mysql'
       ? {
@@ -274,6 +278,7 @@ const main = async (): Promise<void> => {
           ...(reportsPartnersUrl !== undefined ? { partnersUrl: reportsPartnersUrl } : {}),
           ...(reportsFinancialUrl !== undefined ? { financialUrl: reportsFinancialUrl } : {}),
           ...(reportsContractsUrl !== undefined ? { contractsUrl: reportsContractsUrl } : {}),
+          ...(reportsBudgetPlansUrl !== undefined ? { budgetPlansUrl: reportsBudgetPlansUrl } : {}),
         }
       : { driver: 'memory' },
   );

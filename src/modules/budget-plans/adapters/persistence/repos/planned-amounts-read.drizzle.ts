@@ -23,7 +23,7 @@
 // `bgp_budget_results` não tem FK para `bgp_budgets`/`bgp_subcategories` (D1 do #317): o join é por
 // identidade, exatamente como o resto do módulo faz.
 
-import { and, asc, eq, sql, type SQL } from 'drizzle-orm';
+import { and, asc, eq, or, sql, type SQL } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
@@ -69,21 +69,31 @@ export const createDrizzlePlannedAmountsReader = (
     }
 
     // Filtros da REDE — restringem quais orçamentos entram na SOMA, nunca quais nós aparecem.
-    // Por isso ficam no ON do LEFT JOIN (ver cabeçalho). Conjunção literal: pedir estado E
-    // município ao mesmo tempo não casa nenhuma linha de `bgp_budgets` (uma Rede é estadual XOR
-    // municipal) e o resultado sai zerado — leitura estritamente AND, nunca OR.
-    const budgetJoinConditions: SQL[] = [eq(schema.budgets.budgetPlanId, schema.budgetPlans.id)];
+    // Por isso ficam no ON do LEFT JOIN (ver cabeçalho), NUNCA no WHERE.
+    //
+    // Decisão da P.O. (S6 · #502, Frente A): estado E município juntos = OR (soma as DUAS Redes) —
+    // uma Rede é estadual XOR municipal, então AND não casaria linha nenhuma e zeraria. Um filtro só
+    // = a própria condição (o `or` de um único termo é o termo). Zero filtros = só o join base.
+    const networkConditions: SQL[] = [];
     if (filter.partnerStateRef !== undefined) {
-      budgetJoinConditions.push(
+      const stateCondition = and(
         eq(schema.budgets.partnerKind, 'state'),
         eq(schema.budgets.partnerRef, filter.partnerStateRef),
       );
+      if (stateCondition !== undefined) networkConditions.push(stateCondition);
     }
     if (filter.partnerMunicipalityRef !== undefined) {
-      budgetJoinConditions.push(
+      const municipalityCondition = and(
         eq(schema.budgets.partnerKind, 'municipality'),
         eq(schema.budgets.partnerRef, filter.partnerMunicipalityRef),
       );
+      if (municipalityCondition !== undefined) networkConditions.push(municipalityCondition);
+    }
+
+    const budgetJoinConditions: SQL[] = [eq(schema.budgets.budgetPlanId, schema.budgetPlans.id)];
+    if (networkConditions.length > 0) {
+      const networkOr = or(...networkConditions);
+      if (networkOr !== undefined) budgetJoinConditions.push(networkOr);
     }
 
     try {
