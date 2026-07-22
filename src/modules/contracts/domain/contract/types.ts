@@ -37,6 +37,13 @@ type ContractRegistration = Readonly<{
   budgetPlanId: string | null;
   categorizacao: string | null;
   centroDeCusto: string | null;
+  // CTR-TAXONOMY-REFS: Centro de Custo / Categoria / Subcategoria como refs da árvore do plano
+  // (bgp_*). Refs leves (UUID) validadas só na borda — string simples, NÃO VO branded (padrão de
+  // `programId`/`budgetPlanId`). Convivem com `categorizacao`/`centroDeCusto` (texto livre). `null`
+  // quando ausentes.
+  costCenterRef: string | null;
+  categoryRef: string | null;
+  subcategoryRef: string | null;
   // Metadados de cadastro editáveis via PATCH (FR-007/009) — `null` quando ausentes.
   observations: string | null;
   email: string | null;
@@ -211,6 +218,11 @@ export type ContractRegistrationMetaInput = Readonly<{
   budgetPlanId?: string | null;
   categorizacao?: string | null;
   centroDeCusto?: string | null;
+  // CTR-TAXONOMY-REFS: refs da árvore do plano (Centro → Categoria → Subcategoria). Opcionais →
+  // `null` no `resolveMeta`. String simples (padrão de `programId`/`budgetPlanId`).
+  costCenterRef?: string | null;
+  categoryRef?: string | null;
+  subcategoryRef?: string | null;
 }>;
 
 export type CreateContractInput = Readonly<{
