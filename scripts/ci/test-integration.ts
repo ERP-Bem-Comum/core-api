@@ -53,6 +53,10 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/contracts/adapters/persistence/mysql-driver.test.ts',
     'tests/modules/contracts/adapters/persistence/drizzle-mysql.test.ts',
     'tests/modules/contracts/adapters/persistence/contract-contractor-schema.mysql.test.ts',
+    // CTR-TAXONOMY-REFS (#502 · S3 = #343) — 3 colunas cost_center_ref/category_ref/
+    // subcategory_ref em ctr_contracts (CA1 estrutural + round-trip CA2/CA8). NÃO executado nesta
+    // janela (#500); registrado para o ritual manual / quando o runner de integração fechar.
+    'tests/modules/contracts/adapters/persistence/contract-taxonomy-refs.drizzle-mysql.test.ts',
     'tests/modules/contracts/adapters/persistence/contract-repository-paged.integration.test.ts',
     'tests/modules/contracts/adapters/persistence/outbox-schema.test.ts',
     'tests/modules/contracts/adapters/persistence/repos/outbox-repository.drizzle.test.ts',
