@@ -168,6 +168,12 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // por (budget_plan_ref, category_ref, mês). Realizado=Σ reconciled_value_cents Active (mês=reconciled_at);
     // provisionado=fin_payables Approved sem item Active (mês=due_date). Mesmo JOIN 3-hop do #416.
     'tests/modules/financial/public-api/realized-provisioned.drizzle-mysql.test.ts',
+    // FIN-REALIZED-SUBCATEGORY-GRAIN (#502 · S5): grão desce a subcategoria (RealizedProvisionedRow
+    // ganha subcategoryRef; realizado+provisionado agrupam por (plano, categoria, subcategoria, mês))
+    // + inclui o realizado dos TÍTULOS MANUAIS (fin_manual_entries → fin_reconciliations Active,
+    // regra: budget_plan_ref IS NOT NULL E type NOT IN Transfer/Investment/Redemption). Não executado
+    // nesta janela (#500); registrado para o ritual manual / quando o runner de integração fechar.
+    'tests/modules/financial/public-api/realized-provisioned-subcategory.drizzle-mysql.test.ts',
     'tests/workers/supplier-view-projection/projection.integration.test.ts',
   ]),
   'etl:orchestrate': mysqlSuite(ETL_DB_ENV, ['tests/etl/orchestrate.integration.test.ts']),
