@@ -8,11 +8,15 @@
  * Rotas (todas sob /financial/documents):
  *   POST   /financial/documents                      fiscal-document:write  → saveDocument | saveDraft
  *   PATCH  /financial/documents/:id                  fiscal-document:write  → adjustDocument
+ *   PATCH  /financial/documents/:id/payables/:pid    fiscal-document:write  → updatePayableDueDate (#270)
  *   POST   /financial/documents/:id/approve          payable:approve        → approveDocument
  *   POST   /financial/documents/:id/undo-approval    payable:approve        → undoApproval
  *   DELETE /financial/documents/:id                  fiscal-document:cancel → cancelDocument (204)
  *   GET    /financial/documents                      fiscal-document:read   → listDocuments
  *   GET    /financial/documents/:id                  fiscal-document:read   → findDocumentById
+ *   GET    /financial/dashboard/recent-payments      reference:read         → listRecentPaid (#239)
+ *   POST   /financial/payables:batch                 fiscal-document:read   → getPayablesSummaryByIds (#357)
+ *   POST   /financial/documents:batch                fiscal-document:read   → getDocumentsSummaryByIds (#358)
  *
  * Mapa erro→HTTP (financial-http.md §Status codes):
  *   400 schema/ref inválida         Zod + financial-ref-invalid + document-id-invalid
@@ -38,6 +42,7 @@ import { writeErrorStatus, toPublicCode, toPublicMessage } from './error-mapping
 import * as DocumentId from '../../domain/shared/document-id.ts';
 import * as CedenteAccountId from '../../domain/cedente/cedente-account-id.ts';
 import type { CedenteAccount } from '../../domain/cedente/types.ts';
+import { allMetadata } from '../../domain/document/document-type-metadata.ts';
 import type { RetentionInput } from '../../domain/shared/retention.ts';
 import type { RegisteredTaxInput } from '../../domain/shared/registered-tax.ts';
 import { FINANCIAL_PERMISSION } from '../../public-api/permissions.ts';
@@ -48,6 +53,7 @@ import {
   statementTransactionsToDto,
   paidPayablesToDto,
   suggestionsToDto,
+  counterpartSuggestionsToDto,
   accountStatementToDto,
   transactionReconciliationToDto,
   reconciliationPeriodsToDto,
@@ -55,6 +61,10 @@ import {
   categoriesToDto,
   costCentersToDto,
   programsToDto,
+  documentTypeMetadataToDto,
+  recentPaymentsToDto,
+  payableBatchItemToDto,
+  documentBatchItemToDto,
 } from './dto.ts';
 import type { DocumentListFilter } from '../../domain/document/query.ts';
 import type { PayableListFilter, PayableListItem } from '../../domain/payable/query.ts';
@@ -62,17 +72,24 @@ import type { FinancialHttpDeps } from './composition.ts';
 import {
   createDocumentBodySchema,
   adjustDocumentBodySchema,
+  bulkUpdateDueDateBodySchema,
+  bulkUpdateDueDateResponseSchema,
   approveBodySchema,
   cancelDocumentBodySchema,
   documentIdParamSchema,
   documentPayableParamsSchema,
   manualPaymentBodySchema,
+  updatePayableDueDateBodySchema,
   listDocumentsQuerySchema,
   documentResponseSchema,
   documentListResponseSchema,
   listPayablesQuerySchema,
   payableListResponseSchema,
   type PayableSummaryDto,
+  payablesBatchBodySchema,
+  payablesBatchResponseSchema,
+  documentsBatchBodySchema,
+  documentsBatchResponseSchema,
   documentTimelineResponseSchema,
   importBankStatementBodySchema,
   importBankStatementResponseSchema,
@@ -87,6 +104,9 @@ import {
   paidPayablesResponseSchema,
   statementTransactionIdParamSchema,
   suggestionsResponseSchema,
+  counterpartSuggestionsResponseSchema,
+  confirmCounterpartBodySchema,
+  confirmCounterpartResponseSchema,
   rejectSuggestionBodySchema,
   rejectSuggestionResponseSchema,
   manualEntryBodySchema,
@@ -103,9 +123,12 @@ import {
   cedenteAccountIdParamSchema,
   cedenteAccountResponseSchema,
   cedenteAccountListResponseSchema,
+  cedenteAccountListQuerySchema,
   categoryListResponseSchema,
   costCenterListResponseSchema,
   programListResponseSchema,
+  documentTypeMetadataListResponseSchema,
+  recentPaymentsResponseSchema,
   type CedenteAccountResponseDto,
   accountStatementQuerySchema,
   accountStatementResponseSchema,
@@ -113,6 +136,9 @@ import {
   reconciliationPeriodsQuerySchema,
   reconciliationPeriodsResponseSchema,
   statementSuggestionsResponseSchema,
+  ingestDocumentQuerySchema,
+  octetStreamIngestBody,
+  ingestDocumentResponseSchema,
 } from './schemas.ts';
 
 export type FinancialHttpHooks = Readonly<{
@@ -254,11 +280,83 @@ const cedenteAccountToDto = (a: CedenteAccount): CedenteAccountResponseDto => ({
   openingBalanceDate: a.openingBalanceDate ?? null,
 });
 
+// #62: upload seguro da ingestão (portado de contracts/http/plugin.ts:125-167). bodyLimit por rota
+// (não vaza o global de 1 MiB); magic-bytes contra mimeType mentido; sanitização anti header-injection.
+const MAX_INGEST_BYTES = 20 * 1024 * 1024; // 20 MiB
+const PDF_MAGIC = Buffer.from('%PDF');
+const XML_MIMES: ReadonlySet<string> = new Set(['text/xml', 'application/xml']);
+// Sniff de conteúdo vs mimeType declarado (M2, CWE-434): PDF começa com `%PDF`; XML, com `<` (após
+// BOM/whitespace). Bloqueia upload de blob arbitrário com Content-Type mentido.
+const magicBytesMatch = (mimeType: string, bytes: Buffer): boolean => {
+  if (mimeType === 'application/pdf') return bytes.subarray(0, 4).equals(PDF_MAGIC);
+  if (XML_MIMES.has(mimeType)) {
+    let i = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? 3 : 0; // pula BOM UTF-8
+    while (i < bytes.length) {
+      const b = bytes[i];
+      if (b !== 0x20 && b !== 0x09 && b !== 0x0a && b !== 0x0d) break; // pula whitespace
+      i += 1;
+    }
+    return bytes[i] === 0x3c; // '<'
+  }
+  return true;
+};
+// eslint-disable-next-line no-control-regex
+const FILENAME_UNSAFE = /["\\\r\n\x00-\x1F\x7F]/g;
+const sanitizeFilename = (name: string): string => {
+  const cleaned = name.replace(FILENAME_UNSAFE, '_').trim();
+  return cleaned.length > 0 ? cleaned : 'document';
+};
+
 // ─── Rotas ───────────────────────────────────────────────────────────────────
 
 const financialRoutes =
   (deps: FinancialHttpDeps, hooks: FinancialHttpHooks): FastifyPluginAsyncZodOpenApi =>
   async (scope) => {
+    // #62 (M1): parser + rota de ingest ISOLADOS num sub-scope — o parser octet-stream (bodyLimit
+    // 20 MiB) fica encapsulado aqui e NÃO vaza para as demais rotas de /financial. Sem isolamento, o
+    // Parsing (que ocorre ANTES do preHandler no lifecycle do Fastify) alocaria 20 MiB pré-auth em
+    // qualquer POST /financial/* com Content-Type: application/octet-stream.
+    await scope.register(async (ingestScope: typeof scope) => {
+      ingestScope.addContentTypeParser(
+        'application/octet-stream',
+        { parseAs: 'buffer', bodyLimit: MAX_INGEST_BYTES },
+        (_req, body, done) => {
+          done(null, body);
+        },
+      );
+
+      // #62: POST /financial/documents/ingest — lê o PDF/XML, guarda o comprovante-fonte, cria
+      // rascunho pré-preenchido (humano confere/submete). Upload seguro: magic-bytes + mime allowlist + auth.
+      ingestScope.route({
+        method: 'POST',
+        url: '/financial/documents/ingest',
+        preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.write)],
+        schema: {
+          querystring: ingestDocumentQuerySchema,
+          body: octetStreamIngestBody(),
+          response: { 201: ingestDocumentResponseSchema },
+        } satisfies FastifyZodOpenApiSchema,
+        handler: async (req, reply) => {
+          const bytes = req.body as unknown as Buffer;
+          const q = req.query;
+          if (!magicBytesMatch(q.mimeType, bytes)) {
+            return sendDomainError(reply, 'document-magic-bytes-mismatch');
+          }
+          const result = await deps.ingestDocument({
+            bytes, // Buffer é Uint8Array — sem cópia extra (m2)
+            fileName: sanitizeFilename(q.fileName),
+            mimeType: q.mimeType,
+            uploadedBy: req.userId,
+          });
+          if (!result.ok) return sendDomainError(reply, result.error);
+          return reply.code(201).send({
+            documentId: String(result.value.documentId),
+            resolvedVia: result.value.resolvedVia,
+          }) as unknown as Promise<void>;
+        },
+      });
+    });
+
     // POST /financial/documents — cria documento (Open ou Draft).
     scope.route({
       method: 'POST',
@@ -283,6 +381,7 @@ const financialRoutes =
             contractRef: body.contractRef ?? null,
             budgetPlanRef: body.budgetPlanRef ?? null,
             categoryRef: body.categoryRef ?? null,
+            subcategoryRef: body.subcategoryRef ?? null,
             costCenterRef: body.costCenterRef ?? null,
             programRef: body.programRef ?? null,
             paymentMethod: body.paymentMethod,
@@ -322,6 +421,7 @@ const financialRoutes =
           contractRef: body.contractRef ?? null,
           budgetPlanRef: body.budgetPlanRef ?? null,
           categoryRef: body.categoryRef ?? null,
+          subcategoryRef: body.subcategoryRef ?? null,
           costCenterRef: body.costCenterRef ?? null,
           programRef: body.programRef ?? null,
           paymentMethod: body.paymentMethod,
@@ -345,6 +445,28 @@ const financialRoutes =
         reply.header('location', `/api/v2/financial/documents/${idStr}`);
         reply.code(201);
         return loadAndSerialize(deps, reply, idStr);
+      },
+    });
+
+    // PATCH /financial/documents/due-date — alteração de vencimento em LOTE (#162).
+    // Rota ESTÁTICA: no find-my-way precede `/:id` (não é sombreada pelo parametrico).
+    // Falha PARCIAL por item — sempre 200 com o mapa de resultados; 400 só p/ payload inválido.
+    scope.route({
+      method: 'PATCH',
+      url: '/financial/documents/due-date',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.write)],
+      schema: {
+        body: bulkUpdateDueDateBodySchema,
+        response: { 200: bulkUpdateDueDateResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const body = req.body;
+        const result = await deps.bulkUpdateDueDate({
+          items: body.items.map((i) => ({ documentId: i.id, expectedVersion: i.version })),
+          dueDate: new Date(body.dueDate),
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok({ results: result.value }), { ok: 200 });
       },
     });
 
@@ -382,6 +504,8 @@ const financialRoutes =
             : {}),
           ...(body.dueDate !== undefined ? { dueDate: new Date(body.dueDate) } : {}),
           ...(body.description !== undefined ? { description: body.description } : {}),
+          // #273 US2: null apaga; undefined preserva (exactOptionalPropertyTypes).
+          ...(body.paymentDetail !== undefined ? { paymentDetail: body.paymentDetail } : {}),
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         return loadAndSerialize(deps, reply, req.params.id);
@@ -431,6 +555,30 @@ const financialRoutes =
           // #232: data de pagamento informada pelo operador (ancora o match da conciliação).
           ...(req.body.paidAt !== undefined ? { paidAt: req.body.paidAt } : {}),
           ...(req.body.reason !== undefined ? { reason: req.body.reason } : {}),
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return loadAndSerialize(deps, reply, req.params.id);
+      },
+    });
+
+    // PATCH /financial/documents/:id/payables/:payableId — vencimento de UM título isolado (#270).
+    // Não propaga ao documento-pai nem aos irmãos (contrasta com PATCH /documents/:id → editMetadata).
+    scope.route({
+      method: 'PATCH',
+      url: '/financial/documents/:id/payables/:payableId',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.write)],
+      schema: {
+        params: documentPayableParamsSchema,
+        body: updatePayableDueDateBodySchema,
+        response: { 200: documentResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.updatePayableDueDate({
+          documentId: req.params.id,
+          payableId: req.params.payableId,
+          // Optimistic lock (FR-009): propaga `body.version` → `cmd.expectedVersion`.
+          expectedVersion: req.body.version,
+          dueDate: new Date(req.body.dueDate),
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         return loadAndSerialize(deps, reply, req.params.id);
@@ -506,14 +654,32 @@ const financialRoutes =
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
         const q = req.query;
+        // #164: type/supplierRef aceitam single (retrocompat) ou lista → normaliza para o campo certo.
+        const supplierFilter = Array.isArray(q.supplierRef)
+          ? { supplierRefs: q.supplierRef }
+          : q.supplierRef !== undefined
+            ? { supplierRef: q.supplierRef }
+            : {};
+        const typeFilter = Array.isArray(q.type)
+          ? { types: q.type }
+          : q.type !== undefined
+            ? { type: q.type }
+            : {};
         const filter: DocumentListFilter = {
           ...(q.status !== undefined ? { status: q.status } : {}),
-          ...(q.supplierRef !== undefined ? { supplierRef: q.supplierRef } : {}),
-          ...(q.type !== undefined ? { type: q.type } : {}),
+          ...supplierFilter,
+          ...typeFilter,
           ...(q.dueFrom !== undefined ? { dueFrom: new Date(q.dueFrom) } : {}),
           ...(q.dueTo !== undefined ? { dueTo: new Date(q.dueTo) } : {}),
           ...(q.issuedFrom !== undefined ? { issuedFrom: new Date(q.issuedFrom) } : {}),
           ...(q.issuedTo !== undefined ? { issuedTo: new Date(q.issuedTo) } : {}),
+          ...(q.q !== undefined ? { q: q.q } : {}), // #167: busca textual (já trimada pelo schema)
+          ...(q.contractRef !== undefined ? { contractRef: q.contractRef } : {}),
+          ...(q.programRef !== undefined ? { programRef: q.programRef } : {}),
+          ...(q.valorMin !== undefined ? { valorMin: q.valorMin } : {}),
+          ...(q.valorMax !== undefined ? { valorMax: q.valorMax } : {}),
+          ...(q.sort !== undefined ? { sort: q.sort } : {}),
+          ...(q.order !== undefined ? { order: q.order } : {}),
         };
         const result = await deps.listDocuments(filter, q.page, q.pageSize);
         if (!result.ok) return sendDomainError(reply, result.error);
@@ -561,6 +727,56 @@ const financialRoutes =
           }),
           { ok: 200 },
         );
+      },
+    });
+
+    // POST /financial/payables:batch — resolve payableId[] em lote (#357, ADR-0049). Custom method
+    // AIP-136: find-my-way trata ':' como início de parâmetro, então `/payables:batch` cru capturaria
+    // qualquer `/payables*` (ex.: POST /payablesXYZ → 200). A regex `^:batch$` fixa o literal e devolve
+    // 404 p/ paths irmãos fora do custom method (ver 000-request.md §Decisão de roteamento). Declarada
+    // como rota estática, antes de eventuais `/:id` irmãs.
+    scope.route({
+      method: 'POST',
+      url: '/financial/payables:action(^:batch$)',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        body: payablesBatchBodySchema,
+        response: { 200: payablesBatchResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const { refs } = req.body;
+        const result = await deps.getPayablesSummaryByIds(refs);
+        if (!result.ok) return sendDomainError(reply, result.error);
+        const rows = result.value;
+        const found = new Set(rows.map((r) => r.payableId));
+        const missing = refs.filter((ref) => !found.has(ref));
+        return sendResult(reply, ok({ items: rows.map(payableBatchItemToDto), missing }), {
+          ok: 200,
+        });
+      },
+    });
+
+    // POST /financial/documents:batch — resolve documentId[] em lote (#358, ADR-0049). Custom method
+    // AIP-136: mesma técnica do payables:batch — a regex `^:batch$` fixa o literal e devolve 404 p/
+    // paths irmãos (ex.: POST /documentsXYZ). Declarada como rota estática, antes da `/:id` irmã.
+    scope.route({
+      method: 'POST',
+      url: '/financial/documents:action(^:batch$)',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        body: documentsBatchBodySchema,
+        response: { 200: documentsBatchResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const { refs } = req.body;
+        const result = await deps.getDocumentsSummaryByIds(refs);
+        if (!result.ok) return sendDomainError(reply, result.error);
+        const rows = result.value;
+        const found = new Set(rows.map((r) => r.documentId));
+        const missing = refs.filter((ref) => !found.has(ref));
+        return sendResult(reply, ok({ items: rows.map(documentBatchItemToDto), missing }), {
+          ok: 200,
+        });
       },
     });
 
@@ -777,6 +993,51 @@ const financialRoutes =
       },
     });
 
+    // GET /financial/statement-transactions/:id/counterpart-suggestions — casa a transação real de B
+    // com a contrapartida esperada da transferência (#269/US2, read; R1).
+    scope.route({
+      method: 'GET',
+      url: '/financial/statement-transactions/:id/counterpart-suggestions',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationRead)],
+      schema: {
+        params: statementTransactionIdParamSchema,
+        response: { 200: counterpartSuggestionsResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.suggestCounterpartMatches(req.params.id);
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(counterpartSuggestionsToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // POST /financial/reconciliations/counterpart — confirma o casamento transação×contrapartida:
+    // concilia a perna de B (ManualEntry Transfer) e consome a contrapartida (#269/US2).
+    scope.route({
+      method: 'POST',
+      url: '/financial/reconciliations/counterpart',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationWrite)],
+      schema: {
+        body: confirmCounterpartBodySchema,
+        response: { 201: confirmCounterpartResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.confirmCounterpartMatch({
+          transactionId: req.body.transactionId,
+          counterpartId: req.body.counterpartId,
+          reconciledBy: req.userId,
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(
+          reply,
+          ok({
+            reconciliationId: String(result.value.reconciliationId),
+            counterpartId: result.value.counterpartId,
+          }),
+          { ok: 201 },
+        );
+      },
+    });
+
     // GET /financial/statement-transactions/:id/reconciliation — conciliação ativa da transação (#175).
     // Destrava o "Desfazer" pós-reload (id p/ POST /reconciliations/:id/undo) + modal de detalhes.
     scope.route({
@@ -837,6 +1098,8 @@ const financialRoutes =
           transactionId: req.params.id,
           type: body.type,
           ...(body.supplierRef !== undefined ? { supplierRef: body.supplierRef } : {}),
+          ...(body.budgetPlanRef !== undefined ? { budgetPlanRef: body.budgetPlanRef } : {}),
+          ...(body.subcategoryRef !== undefined ? { subcategoryRef: body.subcategoryRef } : {}),
           ...(body.categoryRef !== undefined ? { categoryRef: body.categoryRef } : {}),
           ...(body.costCenterRef !== undefined ? { costCenterRef: body.costCenterRef } : {}),
           ...(body.programRef !== undefined ? { programRef: body.programRef } : {}),
@@ -854,6 +1117,9 @@ const financialRoutes =
             reconciliationId: String(result.value.reconciliationId),
             type: 'ManualEntry' as const,
             manualEntryId: String(result.value.manualEntryId),
+            // #502/S2: ecoa o carimbo de taxonomia recebido (opaco; null quando ausente — back-compat).
+            budgetPlanRef: body.budgetPlanRef ?? null,
+            subcategoryRef: body.subcategoryRef ?? null,
           }),
           { ok: 201 },
         );
@@ -1098,17 +1364,52 @@ const financialRoutes =
       },
     });
 
+    // GET /financial/document-types/metadata — catálogo estático por tipo de documento (#292,
+    // reference:read). Domínio PURO (sem I/O): não usa `deps`/port, só `allMetadata()`.
+    scope.route({
+      method: 'GET',
+      url: '/financial/document-types/metadata',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.referenceRead)],
+      schema: {
+        response: { 200: documentTypeMetadataListResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) => {
+        return sendResult(reply, ok(documentTypeMetadataToDto(allMetadata())), { ok: 200 });
+      },
+    });
+
+    // GET /financial/dashboard/recent-payments — widget "Últimos pagamentos" (#239, reference:read).
+    // Top-5 títulos Pagos, ordenados por data de pagamento (paidAt) desc. Read-model `fin_payable_view`
+    // (#235/ADR-0022) alimentado assincronamente pelo worker payable-view-projection.
+    scope.route({
+      method: 'GET',
+      url: '/financial/dashboard/recent-payments',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.referenceRead)],
+      schema: {
+        response: { 200: recentPaymentsResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) => {
+        const result = await deps.listRecentPaid(5);
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(recentPaymentsToDto(result.value)), { ok: 200 });
+      },
+    });
+
     // GET /financial/cedente-accounts — lista (bank-account:read).
     scope.route({
       method: 'GET',
       url: '/financial/cedente-accounts',
       preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.bankAccountRead)],
       schema: {
+        querystring: cedenteAccountListQuerySchema,
         response: { 200: cedenteAccountListResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
-      handler: async (_req, reply) => {
+      handler: async (req, reply) => {
         // #89c F1: saldo atual (abertura + Σ extratos) por conta junto da listagem.
-        const result = await deps.listCedenteAccountsWithBalance();
+        // #293: `?status=active` filtra contas encerradas para o seletor "Pagar da Conta".
+        const result = await deps.listCedenteAccountsWithBalance({
+          onlyActive: req.query.status === 'active',
+        });
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(
           reply,

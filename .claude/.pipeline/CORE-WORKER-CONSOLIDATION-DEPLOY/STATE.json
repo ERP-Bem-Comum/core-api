@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "CORE-WORKER-CONSOLIDATION-DEPLOY",
+  "size": "M",
+  "createdAt": "2026-07-12T00:44:20.309Z",
+  "closedAt": "2026-07-12T01:02:24.255Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-12T00:45:28.061Z",
+      "finishedAt": "2026-07-12T00:47:49.664Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "docker-compose-expert",
+      "startedAt": "2026-07-12T00:47:49.996Z",
+      "finishedAt": "2026-07-12T00:55:10.897Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-12T00:55:11.210Z",
+      "finishedAt": "2026-07-12T00:58:05.029Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-12T00:58:05.348Z",
+      "finishedAt": "2026-07-12T01:02:23.931Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

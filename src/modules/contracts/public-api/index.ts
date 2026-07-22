@@ -118,3 +118,26 @@ export type {
   ContractCategorizationReadError,
   ContractCategorizationView,
 } from './read.ts';
+
+// #110 — PAR-CONTRACT-COUNT-BACKFILL: public-api de leitura da contagem de contratos vivos por
+// contraparte (consumida pelo job de backfill do partners, ADR-0006).
+export { buildContractsContractCountReadPort, makeInMemoryContractCountRead } from './read.ts';
+export type {
+  ContractsContractCountReadPort,
+  BuildContractsContractCountReadPortOptions,
+  BuildContractsContractCountReadPortError,
+  ContractCountReadPort,
+  ContractCountReadError,
+  ContractCountByContractor,
+} from './read.ts';
+
+// #437 — REPORTS-SUPPLIERS-NO-ACTIVE-CONTRACT: public-api de leitura dos contratantes com contrato
+// Active (consumida pelo relatório "Fornecedores sem Contrato" do reports, ADR-0006).
+export { buildContractsActiveContractorReadPort } from './read.ts';
+export type {
+  ContractsActiveContractorReadPort,
+  BuildContractsActiveContractorReadPortOptions,
+  BuildContractsActiveContractorReadPortError,
+  ActiveContractorReadPort,
+  ActiveContractorReadError,
+} from './read.ts';

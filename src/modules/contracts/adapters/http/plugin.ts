@@ -156,16 +156,6 @@ const sendDomainError = (
 const contractsRoutes =
   (deps: ContractsHttpDeps, hooks: ContractsHttpHooks): FastifyPluginAsyncZodOpenApi =>
   async (scope) => {
-    // Parser binário das rotas de upload (C3 D1): corpo opaco → `Buffer`. `bodyLimit` por
-    // parser preserva o global de 1 MiB nas demais rotas (CA8). Só `application/octet-stream`.
-    scope.addContentTypeParser(
-      'application/octet-stream',
-      { parseAs: 'buffer', bodyLimit: MAX_UPLOAD_BYTES },
-      (_req, body, done) => {
-        done(null, body);
-      },
-    );
-
     // CTR-NUMBER-PROGRAM: list-item com o bloco `program` composto na borda (single). Usado
     // pelas respostas de escrita (POST/activate/end/homologate/cancel) — a listagem usa o batch.
     const listItemWithProgram = async (
@@ -399,6 +389,10 @@ const contractsRoutes =
             budgetPlanId: body.budgetPlanId ?? null,
             categorizacao: body.categorizacao ?? null,
             centroDeCusto: body.centroDeCusto ?? null,
+            // CTR-TAXONOMY-REFS: refs da árvore do plano repassados (nuláveis).
+            costCenterRef: body.costCenterRef ?? null,
+            categoryRef: body.categoryRef ?? null,
+            subcategoryRef: body.subcategoryRef ?? null,
           });
           if (!result.ok) return sendDomainError(reply, result.error);
           // Location no 201 (RFC 7231 §6.3.2): aponta para o recurso recém-criado. O body
@@ -426,6 +420,10 @@ const contractsRoutes =
           budgetPlanId: body.budgetPlanId ?? null,
           categorizacao: body.categorizacao ?? null,
           centroDeCusto: body.centroDeCusto ?? null,
+          // CTR-TAXONOMY-REFS: refs da árvore do plano repassados (nuláveis).
+          costCenterRef: body.costCenterRef ?? null,
+          categoryRef: body.categoryRef ?? null,
+          subcategoryRef: body.subcategoryRef ?? null,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         // Location no 201 (RFC 7231 §6.3.2): aponta para o recurso recém-criado. O body
@@ -531,126 +529,145 @@ const contractsRoutes =
     });
 
     // ─── Documents (C3) ──────────────────────────────────────────────────────
-    // E1: upload de documento do contrato (raw octet-stream; metadados na query).
-    scope.route({
-      method: 'POST',
-      url: '/contracts/:id/documents',
-      preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
-      schema: {
-        params: contractIdParamSchema,
-        querystring: uploadDocumentQuerySchema,
-        body: octetStreamUploadBody(),
-        response: { 201: documentSchema },
-      } satisfies FastifyZodOpenApiSchema,
-      handler: async (req, reply) => {
-        // O schema OpenAPI declara o corpo como `string/binary` (doc), mas o
-        // `addContentTypeParser('application/octet-stream', { parseAs:'buffer' })` entrega
-        // um `Buffer` em runtime — daí o cast via `unknown` (corpo opaco, D1 do C3).
-        const bytes = req.body as unknown as Buffer;
-        const q = req.query;
-        if (!magicBytesMatch(q.mimeType, bytes)) {
-          return sendDomainError(reply, 'document-magic-bytes-mismatch');
-        }
-        const result = await deps.uploadDocument({
-          parentType: 'Contract',
-          parentId: req.params.id,
-          categoria: q.categoria,
-          fileName: q.fileName,
-          mimeType: q.mimeType,
-          bytes: new Uint8Array(bytes),
-          signedElectronically: q.signedElectronically,
-          uploadedBy: req.userId,
-          retentionUntil: null,
-          bucket: deps.documentBucket,
-          storageKeyPrefix: deps.documentKeyPrefix,
-        });
-        if (!result.ok) return sendDomainError(reply, result.error);
-        return sendResult(reply, ok(documentToDto(result.value.document)), { ok: 201 });
-      },
-    });
+    // CTR-HTTP-UPLOAD-SCOPE (CWE-770): o parser octet-stream (bodyLimit 20 MiB) + as 3 rotas
+    // de upload (E1/E2/E3) vivem num SUB-SCOPE isolado. `addContentTypeParser` é acionado por
+    // Content-Type (não por rota) e o Parsing ocorre ANTES do preHandler (auth) no Fastify
+    // Lifecycle — se registrado no `scope` pai, QUALQUER rota de `/contracts` com `Content-Type:
+    // application/octet-stream` seria bufferizada até 20 MiB pré-autenticação. Isolado aqui, as
+    // demais rotas de `/contracts` (reads/writes/E4/E5) não têm esse parser e continuam só com
+    // o `bodyLimit` global de 1 MiB (`buildApp`). Espelha o fix do financial (M1,
+    // `src/modules/financial/adapters/http/plugin.ts`). O type-provider Zod NÃO propaga
+    // através de `register` — anota-se `uploadScope: typeof scope` explicitamente.
+    await scope.register(async (uploadScope: typeof scope) => {
+      uploadScope.addContentTypeParser(
+        'application/octet-stream',
+        { parseAs: 'buffer', bodyLimit: MAX_UPLOAD_BYTES },
+        (_req, body, done) => {
+          done(null, body);
+        },
+      );
 
-    // E2: upload + attach atômico do documento ao aditivo (destrava homologate, C2).
-    scope.route({
-      method: 'POST',
-      url: '/contracts/:id/amendments/:amendmentId/documents',
-      preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
-      schema: {
-        params: amendmentParamSchema,
-        querystring: amendmentDocumentUploadQuerySchema,
-        body: octetStreamUploadBody(),
-        response: { 201: documentSchema },
-      } satisfies FastifyZodOpenApiSchema,
-      handler: async (req, reply) => {
-        const bytes = req.body as unknown as Buffer; // ver E1: corpo opaco octet-stream → Buffer
-        const q = req.query;
-        if (!magicBytesMatch(q.mimeType, bytes)) {
-          return sendDomainError(reply, 'document-magic-bytes-mismatch');
-        }
-        // Ownership/IDOR: o aditivo deve pertencer ao contrato do path (BOLA).
-        const amendment = await deps.getAmendment(req.params.amendmentId);
-        if (!amendment.ok) return sendDomainError(reply, amendment.error);
-        if (amendment.value === null) return sendDomainError(reply, 'amendment-not-found');
-        if (String(amendment.value.contractId) !== req.params.id) {
-          return sendDomainError(reply, 'amendment-contract-mismatch');
-        }
-        const uploaded = await deps.uploadDocument({
-          parentType: 'Amendment',
-          parentId: req.params.amendmentId,
-          categoria: q.categoria,
-          fileName: q.fileName,
-          mimeType: q.mimeType,
-          bytes: new Uint8Array(bytes),
-          signedElectronically: q.signedElectronically,
-          uploadedBy: req.userId,
-          retentionUntil: null,
-          bucket: deps.documentBucket,
-          storageKeyPrefix: deps.documentKeyPrefix,
-        });
-        if (!uploaded.ok) return sendDomainError(reply, uploaded.error);
-        const attached = await deps.attachSignedDocument({
-          amendmentId: req.params.amendmentId,
-          signedDocumentRef: uploaded.value.document.id,
-          signedAt: q.signedAt,
-        });
-        if (!attached.ok) return sendDomainError(reply, attached.error);
-        return sendResult(reply, ok(documentToDto(uploaded.value.document)), { ok: 201 });
-      },
-    });
+      // E1: upload de documento do contrato (raw octet-stream; metadados na query).
+      uploadScope.route({
+        method: 'POST',
+        url: '/contracts/:id/documents',
+        preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
+        schema: {
+          params: contractIdParamSchema,
+          querystring: uploadDocumentQuerySchema,
+          body: octetStreamUploadBody(),
+          response: { 201: documentSchema },
+        } satisfies FastifyZodOpenApiSchema,
+        handler: async (req, reply) => {
+          // O schema OpenAPI declara o corpo como `string/binary` (doc), mas o
+          // `addContentTypeParser('application/octet-stream', { parseAs:'buffer' })` entrega
+          // um `Buffer` em runtime — daí o cast via `unknown` (corpo opaco, D1 do C3).
+          const bytes = req.body as unknown as Buffer;
+          const q = req.query;
+          if (!magicBytesMatch(q.mimeType, bytes)) {
+            return sendDomainError(reply, 'document-magic-bytes-mismatch');
+          }
+          const result = await deps.uploadDocument({
+            parentType: 'Contract',
+            parentId: req.params.id,
+            categoria: q.categoria,
+            fileName: q.fileName,
+            mimeType: q.mimeType,
+            bytes: new Uint8Array(bytes),
+            signedElectronically: q.signedElectronically,
+            uploadedBy: req.userId,
+            retentionUntil: null,
+            bucket: deps.documentBucket,
+            storageKeyPrefix: deps.documentKeyPrefix,
+          });
+          if (!result.ok) return sendDomainError(reply, result.error);
+          return sendResult(reply, ok(documentToDto(result.value.document)), { ok: 201 });
+        },
+      });
 
-    // E3: supersede de documento Active por uma nova versão.
-    scope.route({
-      method: 'POST',
-      url: '/contracts/:id/documents/:documentId/supersede',
-      preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
-      schema: {
-        params: documentParamSchema,
-        body: supersedeDocumentBodySchema,
-        response: { 200: documentSchema },
-      } satisfies FastifyZodOpenApiSchema,
-      handler: async (req, reply) => {
-        // Ownership: o documento do path deve pertencer ao contrato `:id` — diretamente
-        // (parentType Contract) ou via aditivo daquele contrato (parentType Amendment).
-        const doc = await deps.getDocument(req.params.documentId);
-        if (!doc.ok) return sendDomainError(reply, doc.error);
-        if (doc.value === null) return sendDomainError(reply, 'document-not-found');
-        if (doc.value.parentType === 'Amendment') {
-          const amendment = await deps.getAmendment(String(doc.value.parentId));
+      // E2: upload + attach atômico do documento ao aditivo (destrava homologate, C2).
+      uploadScope.route({
+        method: 'POST',
+        url: '/contracts/:id/amendments/:amendmentId/documents',
+        preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
+        schema: {
+          params: amendmentParamSchema,
+          querystring: amendmentDocumentUploadQuerySchema,
+          body: octetStreamUploadBody(),
+          response: { 201: documentSchema },
+        } satisfies FastifyZodOpenApiSchema,
+        handler: async (req, reply) => {
+          const bytes = req.body as unknown as Buffer; // ver E1: corpo opaco octet-stream → Buffer
+          const q = req.query;
+          if (!magicBytesMatch(q.mimeType, bytes)) {
+            return sendDomainError(reply, 'document-magic-bytes-mismatch');
+          }
+          // Ownership/IDOR: o aditivo deve pertencer ao contrato do path (BOLA).
+          const amendment = await deps.getAmendment(req.params.amendmentId);
           if (!amendment.ok) return sendDomainError(reply, amendment.error);
           if (amendment.value === null) return sendDomainError(reply, 'amendment-not-found');
           if (String(amendment.value.contractId) !== req.params.id) {
+            return sendDomainError(reply, 'amendment-contract-mismatch');
+          }
+          const uploaded = await deps.uploadDocument({
+            parentType: 'Amendment',
+            parentId: req.params.amendmentId,
+            categoria: q.categoria,
+            fileName: q.fileName,
+            mimeType: q.mimeType,
+            bytes: new Uint8Array(bytes),
+            signedElectronically: q.signedElectronically,
+            uploadedBy: req.userId,
+            retentionUntil: null,
+            bucket: deps.documentBucket,
+            storageKeyPrefix: deps.documentKeyPrefix,
+          });
+          if (!uploaded.ok) return sendDomainError(reply, uploaded.error);
+          const attached = await deps.attachSignedDocument({
+            amendmentId: req.params.amendmentId,
+            signedDocumentRef: uploaded.value.document.id,
+            signedAt: q.signedAt,
+          });
+          if (!attached.ok) return sendDomainError(reply, attached.error);
+          return sendResult(reply, ok(documentToDto(uploaded.value.document)), { ok: 201 });
+        },
+      });
+
+      // E3: supersede de documento Active por uma nova versão.
+      uploadScope.route({
+        method: 'POST',
+        url: '/contracts/:id/documents/:documentId/supersede',
+        preHandler: [hooks.requireAuth, hooks.authorize(CONTRACT_PERMISSION.write)],
+        schema: {
+          params: documentParamSchema,
+          body: supersedeDocumentBodySchema,
+          response: { 200: documentSchema },
+        } satisfies FastifyZodOpenApiSchema,
+        handler: async (req, reply) => {
+          // Ownership: o documento do path deve pertencer ao contrato `:id` — diretamente
+          // (parentType Contract) ou via aditivo daquele contrato (parentType Amendment).
+          const doc = await deps.getDocument(req.params.documentId);
+          if (!doc.ok) return sendDomainError(reply, doc.error);
+          if (doc.value === null) return sendDomainError(reply, 'document-not-found');
+          if (doc.value.parentType === 'Amendment') {
+            const amendment = await deps.getAmendment(String(doc.value.parentId));
+            if (!amendment.ok) return sendDomainError(reply, amendment.error);
+            if (amendment.value === null) return sendDomainError(reply, 'amendment-not-found');
+            if (String(amendment.value.contractId) !== req.params.id) {
+              return sendDomainError(reply, 'document-contract-mismatch');
+            }
+          } else if (String(doc.value.parentId) !== req.params.id) {
             return sendDomainError(reply, 'document-contract-mismatch');
           }
-        } else if (String(doc.value.parentId) !== req.params.id) {
-          return sendDomainError(reply, 'document-contract-mismatch');
-        }
-        const result = await deps.supersedeDocument({
-          documentId: req.params.documentId,
-          supersededByDocumentId: req.body.supersededByDocumentId,
-          supersededBy: req.userId,
-        });
-        if (!result.ok) return sendDomainError(reply, result.error);
-        return sendResult(reply, ok(documentToDto(result.value.document)), { ok: 200 });
-      },
+          const result = await deps.supersedeDocument({
+            documentId: req.params.documentId,
+            supersededByDocumentId: req.body.supersededByDocumentId,
+            supersededBy: req.userId,
+          });
+          if (!result.ok) return sendDomainError(reply, result.error);
+          return sendResult(reply, ok(documentToDto(result.value.document)), { ok: 200 });
+        },
+      });
     });
 
     // E4: exclusão LÓGICA do documento (RN-11, princípio #14 — nunca apaga fisicamente).

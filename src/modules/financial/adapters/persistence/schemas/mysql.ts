@@ -87,6 +87,8 @@ export const finDocuments = mysqlTable(
     contractRef: varchar('contract_ref', { length: 36 }),
     budgetPlanRef: varchar('budget_plan_ref', { length: 36 }),
     categoryRef: varchar('category_ref', { length: 36 }),
+    // Subcategoria = folha da árvore do plano (#502). Soft ref (sem FK — ADR-0014); aditiva/nullable.
+    subcategoryRef: varchar('subcategory_ref', { length: 36 }),
     costCenterRef: varchar('cost_center_ref', { length: 36 }),
     programRef: varchar('program_ref', { length: 36 }),
 
@@ -128,6 +130,13 @@ export const finDocuments = mysqlTable(
     // #197: competência contábil (mês de referência) 'YYYY-MM'; conta-débito reusa debit_account_ref.
     competencia: varchar('competencia', { length: 7 }),
 
+    // #62: comprovante-fonte (PDF/XML lido) guardado no storage — todas nullable (opcional + back-compat).
+    sourceFileBucket: varchar('source_file_bucket', { length: 63 }),
+    sourceFileKey: varchar('source_file_key', { length: 1024 }),
+    sourceFileHashSha256: varchar('source_file_hash_sha256', { length: 64 }),
+    sourceFileSizeBytes: bigint('source_file_size_bytes', { mode: 'number' }),
+    sourceFileMime: varchar('source_file_mime', { length: 127 }),
+
     // Metadados de origem OCR (R-OCR).
     readByOcr: boolean('read_by_ocr').notNull().default(false),
     ocrOriginalValue: bigint('ocr_original_value', { mode: 'number' }),
@@ -151,6 +160,12 @@ export const finDocuments = mysqlTable(
     // id de cartão corporativo, referência de câmbio). Nullable + sem CHECK (string livre).
     // ADR-0018 §"Texto livre curto" → varchar(255). Migration 0026 (ALTER ADD COLUMN, INSTANT).
     paymentDetail: varchar('payment_detail', { length: 255 }),
+
+    // Correlação ETL (ETL-FINANCIAL-WRITER, padrão par_*/auth_user): id do payable no
+    // legado. NULL = documento nativo do core-api; não-NULL = migrado. UNIQUE garante
+    // idempotência da carga (identifierCode legado NÃO é único: 37 distintos em 52 —
+    // por isso a correlação é por legacy_id, nunca por document_number).
+    legacyId: int('legacy_id'),
   },
   (t) => [
     // CHECKs de domínio (defesa em profundidade — ADR-0018 §"Features proibidas"):
@@ -180,6 +195,17 @@ export const finDocuments = mysqlTable(
     // Optimistic lock: versão nunca negativa.
     check('fin_documents_version_chk', sql`${t.version} >= 0`),
 
+    // #62: comprovante-fonte é all-or-nothing (defesa em profundidade — o mapper já reidrata via VO).
+    check(
+      'fin_documents_source_file_all_or_none_chk',
+      sql`(${t.sourceFileBucket} IS NULL AND ${t.sourceFileKey} IS NULL AND ${t.sourceFileHashSha256} IS NULL AND ${t.sourceFileSizeBytes} IS NULL AND ${t.sourceFileMime} IS NULL) OR (${t.sourceFileBucket} IS NOT NULL AND ${t.sourceFileKey} IS NOT NULL AND ${t.sourceFileHashSha256} IS NOT NULL AND ${t.sourceFileSizeBytes} IS NOT NULL AND ${t.sourceFileMime} IS NOT NULL)`,
+    ),
+    // #62: tamanho do comprovante nunca não-positivo (paridade com as bigint irmãs).
+    check(
+      'fin_documents_source_file_size_bytes_chk',
+      sql`${t.sourceFileSizeBytes} IS NULL OR ${t.sourceFileSizeBytes} > 0`,
+    ),
+
     // Índices (data-model.md §"Índices"):
     // supplier_ref: query "documentos por fornecedor" (relatório de contas a pagar).
     index('fin_documents_supplier_ref_idx').on(t.supplierRef),
@@ -191,6 +217,8 @@ export const finDocuments = mysqlTable(
     index('fin_documents_issue_date_idx').on(t.issueDate),
     // document_number: busca por nota fiscal / nº do documento.
     index('fin_documents_doc_number_idx').on(t.documentNumber),
+    // Idempotência da ETL (múltiplos NULL convivem no InnoDB — precedente par_*).
+    uniqueIndex('fin_documents_legacy_id_uq').on(t.legacyId),
   ],
 );
 
@@ -255,6 +283,10 @@ export const finPayables = mysqlTable(
       'fin_payables_child_retention_chk',
       sql`(${t.kind} = 'Child') = (${t.retentionType} IS NOT NULL)`,
     ),
+    // #383: consistência status/paid_at — todo título 'Paid' tem data de pagamento. O invariante já
+    // vale no domínio (payPayableManually seta status+paidAt na mesma cópia); reafirmado no banco
+    // como defesa em profundidade contra linha inconsistente vinda de ETL/UPDATE manual.
+    check('fin_payables_paid_at_chk', sql`${t.status} <> 'Paid' OR ${t.paidAt} IS NOT NULL`),
 
     // FK intra-módulo (ON DELETE CASCADE — boundary do agregado).
     foreignKey({
@@ -512,6 +544,60 @@ export const finSupplierView = mysqlTable('fin_supplier_view', {
   updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
 });
 
+// ─── fin_payable_view ─────────────────────────────────────────────────────────
+//
+// #235 (FND-RM-a) — read-model de payables do Dashboard/Reports (Camada 0). Projeção
+// evento-carregada (ADR-0022) alimentada pelo consumer `payable-view-projection` a partir dos
+// eventos enriquecidos do `financial` (DocumentSaved + transições). PK = payableId (UUID v4).
+// Sem FK cross-aggregate (refs por identidade). `kind`/`status` = varchar (ENUM proibido, ADR-0020).
+export const finPayableView = mysqlTable(
+  'fin_payable_view',
+  {
+    payableId: varchar('payable_id', { length: 36 }).primaryKey().notNull(),
+    documentId: varchar('document_id', { length: 36 }).notNull(),
+    kind: varchar('kind', { length: 10 }).notNull(), // Parent | Child
+    retentionType: varchar('retention_type', { length: 10 }),
+    supplierRef: varchar('supplier_ref', { length: 36 }),
+    contractRef: varchar('contract_ref', { length: 36 }),
+    categoryRef: varchar('category_ref', { length: 36 }),
+    // Subcategoria = folha da árvore do plano (#502). Projeção espelha a ref do documento (S5).
+    subcategoryRef: varchar('subcategory_ref', { length: 36 }),
+    costCenterRef: varchar('cost_center_ref', { length: 36 }),
+    programRef: varchar('program_ref', { length: 36 }),
+    valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
+    dueDate: date('due_date', { mode: 'string' }).notNull(),
+    status: varchar('status', { length: 12 }).notNull(), // Open|Approved|Paid|Cancelled
+    // #239: conta-débito (de qual conta cedente saiu) + data do pagamento (só quando Paid).
+    debitAccountRef: varchar('debit_account_ref', { length: 36 }),
+    paidAt: date('paid_at', { mode: 'string' }),
+    updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
+  },
+  (t) => [
+    index('fin_payable_view_status_idx').on(t.status),
+    index('fin_payable_view_cost_center_ref_idx').on(t.costCenterRef),
+    index('fin_payable_view_category_ref_idx').on(t.categoryRef),
+    index('fin_payable_view_subcategory_ref_idx').on(t.subcategoryRef),
+    index('fin_payable_view_program_ref_idx').on(t.programRef),
+    index('fin_payable_view_supplier_ref_idx').on(t.supplierRef),
+    index('fin_payable_view_due_date_idx').on(t.dueDate),
+    // #239: widget "Últimos pagamentos" ordena por paid_at desc.
+    index('fin_payable_view_paid_at_idx').on(t.paidAt),
+    // Enums de domínio → varchar + CHECK (ADR-0020; mysqlEnum proibido). Espelha fin_payables_*_chk.
+    check('fin_payable_view_kind_chk', sql`${t.kind} IN ('Parent','Child')`),
+    check(
+      'fin_payable_view_status_chk',
+      sql`${t.status} IN ('Open','Approved','Paid','Cancelled')`,
+    ),
+    check(
+      'fin_payable_view_retention_type_chk',
+      sql`${t.retentionType} IS NULL OR ${t.retentionType} IN ('ISS','IRRF','INSS','CSRF')`,
+    ),
+  ],
+);
+
+export type PayableViewRow = typeof finPayableView.$inferSelect;
+export type NewPayableViewRow = typeof finPayableView.$inferInsert;
+
 // ─── fin_cedente_accounts ─────────────────────────────────────────────────────
 //
 // Conta-cedente: conta-débito Bradesco da organização (D-CEDENTE), seedável via config. Liga
@@ -714,6 +800,10 @@ export const finManualEntries = mysqlTable(
     type: varchar('type', { length: 24 }).notNull(),
     valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
     supplierRef: varchar('supplier_ref', { length: 36 }),
+    // #502/S2: taxonomia planejável no título manual — plano orçamentário + subcategoria (folha da
+    // árvore do plano). Refs opacos por identidade (varchar(36), sem FK — ADR-0014), como os irmãos.
+    budgetPlanRef: varchar('budget_plan_ref', { length: 36 }),
+    subcategoryRef: varchar('subcategory_ref', { length: 36 }),
     categoryRef: varchar('category_ref', { length: 36 }),
     costCenterRef: varchar('cost_center_ref', { length: 36 }),
     programRef: varchar('program_ref', { length: 36 }),
@@ -760,6 +850,50 @@ export const finReconciliationPeriods = mysqlTable(
       t.periodStart,
       t.periodEnd,
     ),
+  ],
+);
+
+// ─── fin_expected_counterpart ──────────────────────────────────────────────────
+//
+// Contrapartida esperada de uma transferência A→B (#269). A perna esperada na conta de DESTINO —
+// agregado próprio (não uma StatementTransaction marcada; Vernon IDDD p.450). `destination/origin_account_ref`,
+// `origin_reconciliation_ref` e `origin_transaction_ref` referenciam outros agregados POR IDENTIDADE
+// (sem FK cross-aggregate — D-AGGREGATES/Evans). `type`/`movement`/`status` enum varchar+CHECK (ADR-0020);
+// cents = bigint; `expected_date` date-only. Índices: `(destination_account_ref, status)` = fila/seletor
+// de B; `(origin_reconciliation_ref)` = tratamento no undo da origem (US3).
+// ⚠️ CHARSET/COLLATE manual na migration: id/*_ref em utf8mb4_bin.
+export const finExpectedCounterpart = mysqlTable(
+  'fin_expected_counterpart',
+  {
+    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    destinationAccountRef: varchar('destination_account_ref', { length: 36 }).notNull(),
+    originAccountRef: varchar('origin_account_ref', { length: 36 }).notNull(),
+    originReconciliationRef: varchar('origin_reconciliation_ref', { length: 36 }).notNull(),
+    originTransactionRef: varchar('origin_transaction_ref', { length: 36 }).notNull(),
+    type: varchar('type', { length: 20 }).notNull(),
+    // #428: produto da operação (Investment/Redemption); NULL para Transfer. Espelhado na perna B.
+    productLabel: varchar('product_label', { length: 120 }),
+    movement: varchar('movement', { length: 8 }).notNull(),
+    valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
+    expectedDate: date('expected_date', { mode: 'date' }).notNull(),
+    status: varchar('status', { length: 12 }).notNull(),
+    matchedTransactionRef: varchar('matched_transaction_ref', { length: 36 }),
+    createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
+    updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
+  },
+  (t) => [
+    check(
+      'fin_expected_counterpart_type_chk',
+      sql`${t.type} IN ('Transfer','Investment','Redemption')`,
+    ),
+    check('fin_expected_counterpart_movement_chk', sql`${t.movement} IN ('Debit','Credit')`),
+    check(
+      'fin_expected_counterpart_status_chk',
+      sql`${t.status} IN ('Pending','Matched','Discarded')`,
+    ),
+    check('fin_expected_counterpart_value_chk', sql`${t.valueCents} > 0`),
+    index('fin_expected_counterpart_destination_status_idx').on(t.destinationAccountRef, t.status),
+    index('fin_expected_counterpart_origin_reconciliation_idx').on(t.originReconciliationRef),
   ],
 );
 
@@ -815,6 +949,9 @@ export type NewManualEntryRow = typeof finManualEntries.$inferInsert;
 export type ReconciliationPeriodRow = typeof finReconciliationPeriods.$inferSelect;
 export type NewReconciliationPeriodRow = typeof finReconciliationPeriods.$inferInsert;
 
+export type ExpectedCounterpartRow = typeof finExpectedCounterpart.$inferSelect;
+export type NewExpectedCounterpartRow = typeof finExpectedCounterpart.$inferInsert;
+
 // ─── fin_categories ───────────────────────────────────────────────────────────
 //
 // Dado de referência LOCAL do financeiro (020 · Decisão A — research.md D1): categorias de
@@ -833,12 +970,17 @@ export const finCategories = mysqlTable(
     // Hierarquia auto-referente (#147 F3): pai da categoria (subcategoria). Nullable = top-level.
     // Sem FK física (mesma tabela; validação de existência é do seed) — ADR-0014.
     parentId: varchar('parent_id', { length: 36 }),
+    // #341: nível Centro de Custo → Categoria. Soft ref a fin_cost_centers (sem FK — ADR-0014, igual
+    // ao parent_id). Nullable = categoria sem centro (back-compat pré-#341). Cascata no front:
+    // costCenterId (top-level) + parentId (subcategoria).
+    costCenterId: varchar('cost_center_id', { length: 36 }),
   },
   (t) => [
     check('fin_categories_group_chk', sql`${t.group} IN ('despesa','receita','ajuste')`),
     index('fin_categories_group_name_idx').on(t.group, t.name),
     index('fin_categories_active_idx').on(t.active),
     index('fin_categories_parent_id_idx').on(t.parentId),
+    index('fin_categories_cost_center_id_idx').on(t.costCenterId),
   ],
 );
 
@@ -878,9 +1020,9 @@ export const finOutbox = mysqlTable(
   {
     // UUID v4 do evento — gerado pelo domínio antes do INSERT (idempotência via PK).
     eventId: varchar('event_id', { length: 36 }).primaryKey().notNull(),
-    // id do agregado dono (documento / conciliação / extrato / período).
+    // id do agregado dono (documento / conciliação / extrato / período / contrapartida).
     aggregateId: varchar('aggregate_id', { length: 36 }).notNull(),
-    // 'Document' | 'Reconciliation' | 'Statement' | 'ReconciliationPeriod' — CHECK abaixo.
+    // 'Document' | 'Reconciliation' | 'Statement' | 'ReconciliationPeriod' | 'ExpectedCounterpart' — CHECK abaixo.
     aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
     // PascalCase EN: DocumentSaved, PayableReconciled, …
     eventType: varchar('event_type', { length: 64 }).notNull(),
@@ -902,7 +1044,7 @@ export const finOutbox = mysqlTable(
     check('fin_outbox_event_type_nonempty_chk', sql`CHAR_LENGTH(${t.eventType}) > 0`),
     check(
       'fin_outbox_aggregate_type_chk',
-      sql`${t.aggregateType} IN ('Document', 'Reconciliation', 'Statement', 'ReconciliationPeriod')`,
+      sql`${t.aggregateType} IN ('Document', 'Reconciliation', 'Statement', 'ReconciliationPeriod', 'ExpectedCounterpart')`,
     ),
     // Índice do worker (ADR-0015): processed_at PRIMEIRO → NULLs agrupados → range scan eficiente.
     index('fin_outbox_processed_at_occurred_at_idx').on(t.processedAt, t.occurredAt),
@@ -912,3 +1054,38 @@ export const finOutbox = mysqlTable(
 
 export type FinOutboxRow = typeof finOutbox.$inferSelect;
 export type NewFinOutboxRow = typeof finOutbox.$inferInsert;
+
+// ─── fin_outbox_dead_letter ───────────────────────────────────────────────────
+//
+// #307: DLQ do `fin_outbox` (o financial nunca teve consumidor; esta é a 1ª). Mirror de
+// `ctr_outbox_dead_letter`. O worker move a row pra cá após `maxAttempts` (ou payload corrupto);
+// `failed_at` + `last_error` guardam o contexto da falha. Sem `processed_at` (é terminal).
+export const finOutboxDeadLetter = mysqlTable(
+  'fin_outbox_dead_letter',
+  {
+    eventId: varchar('event_id', { length: 36 }).primaryKey().notNull(),
+    aggregateId: varchar('aggregate_id', { length: 36 }).notNull(),
+    aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
+    eventType: varchar('event_type', { length: 64 }).notNull(),
+    schemaVersion: int('schema_version').notNull(),
+    occurredAt: datetime('occurred_at', { mode: 'date', fsp: 3 }).notNull(),
+    enqueuedAt: datetime('enqueued_at', { mode: 'date', fsp: 3 }).notNull(),
+    failedAt: datetime('failed_at', { mode: 'date', fsp: 3 }).notNull(),
+    attempts: int('attempts').notNull(),
+    lastError: varchar('last_error', { length: 2048 }).notNull(),
+    payload: varchar('payload', { length: 8192 }).notNull(),
+  },
+  (t) => [
+    check('fin_outbox_dl_attempts_nonneg_chk', sql`${t.attempts} >= 0`),
+    // Paridade com `ctr_outbox_dead_letter` + defesa em profundidade contra writers diretos futuros
+    // (ex.: borda admin de DLQ). Espelha o CHECK da tabela-fonte `fin_outbox`.
+    check(
+      'fin_outbox_dl_aggregate_type_chk',
+      sql`${t.aggregateType} IN ('Document', 'Reconciliation', 'Statement', 'ReconciliationPeriod')`,
+    ),
+    index('fin_outbox_dl_failed_at_idx').on(t.failedAt),
+  ],
+);
+
+export type FinOutboxDeadLetterRow = typeof finOutboxDeadLetter.$inferSelect;
+export type NewFinOutboxDeadLetterRow = typeof finOutboxDeadLetter.$inferInsert;

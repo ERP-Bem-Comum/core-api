@@ -28,6 +28,7 @@ export type UpdateRoleCommand = Readonly<{
   id: string;
   name?: string;
   permissions?: readonly string[];
+  approvalLimitCents?: number | null;
 }>;
 
 export type UpdateRoleError =
@@ -36,6 +37,7 @@ export type UpdateRoleError =
   | 'role-name-invalid'
   | 'role-permission-not-in-catalog'
   | 'role-name-duplicate'
+  | 'role-approval-limit-invalid'
   | 'role-repo-unavailable';
 
 type Deps = Readonly<{ roleRepository: RoleRepository }>;
@@ -83,6 +85,13 @@ export const updateRole =
       const updated = Role.setPermissions(next, permissions);
       if (!updated.ok) return err('role-permission-not-in-catalog');
       next = updated.value;
+    }
+
+    // (e2) Alcada de aprovacao (opcional). Presente (incl. null) define/zera; Money valida >= 0.
+    if (cmd.approvalLimitCents !== undefined) {
+      const limited = Role.setApprovalLimit(next, cmd.approvalLimitCents);
+      if (!limited.ok) return err('role-approval-limit-invalid');
+      next = limited.value;
     }
 
     // (f) Persiste o agregado editado.

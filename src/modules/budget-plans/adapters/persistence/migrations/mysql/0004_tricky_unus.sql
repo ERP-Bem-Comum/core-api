@@ -1,0 +1,1 @@
+ALTER TABLE `bgp_budget_plans` ADD CONSTRAINT `bgp_budget_plans_parent_id_fk` FOREIGN KEY (`parent_id`) REFERENCES `bgp_budget_plans`(`id`) ON DELETE restrict ON UPDATE no action;

@@ -43,7 +43,11 @@ if (!process.env['MYSQL_INTEGRATION']) {
       await handle?.close();
     });
 
-    const seedPaidPayable = async (): Promise<{ payableId: string; documentNumber: string }> => {
+    const seedPaidPayable = async (): Promise<{
+      payableId: string;
+      documentNumber: string;
+      paidAt: Date;
+    }> => {
       const documentNumber = `NF-${newUuid().slice(0, 8)}`;
       const save = saveDocument({
         repo: createDrizzleDocumentRepository(handle),
@@ -64,11 +68,12 @@ if (!process.env['MYSQL_INTEGRATION']) {
       });
       if (!created.ok) throw new Error(`setup: saveDocument ${created.error}`);
       const payableId = String(created.value.payableIds[0]);
+      const paidAt = new Date('2026-06-15T00:00:00.000Z');
       await handle.db
         .update(finPayables)
-        .set({ status: 'Paid' })
+        .set({ status: 'Paid', paidAt })
         .where(eq(finPayables.id, payableId));
-      return { payableId, documentNumber };
+      return { payableId, documentNumber, paidAt };
     };
 
     it('SuggestionView.listCandidates traz o título Paid com nº do documento (JOIN)', async () => {
@@ -81,6 +86,8 @@ if (!process.env['MYSQL_INTEGRATION']) {
       assert.ok(found, 'candidato Paid deve aparecer');
       assert.equal(found?.valueCents, 1000);
       assert.equal(found?.documentNumber, documentNumber);
+      // #272 ponto 2 — o adapter projeta finPayables.paid_at (antes vinha undefined).
+      assert.ok(found?.paidAt instanceof Date, 'paidAt deve ser projetado da coluna paid_at');
       assert.equal(found?.supplierName, null); // fin_supplier_view vazio (sem worker nesta suíte)
     });
 

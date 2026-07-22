@@ -19,9 +19,15 @@ import type { Reconciliation } from '../../domain/reconciliation/types.ts';
 import type { ReconciliationPeriod } from '../../domain/reconciliation/period.ts';
 import type { Category } from '../../domain/category/category.ts';
 import type { CostCenter } from '../../domain/cost-center/cost-center.ts';
+import type { DocumentTypeMetadata } from '../../domain/document/document-type-metadata.ts';
+import type { PayableView } from '../../domain/payable-view/types.ts';
 import type { ProgramView } from '../../application/ports/program-read.ts';
 import type { PaidPayableView } from '../../application/ports/payable-reconciliation-view.ts';
+// #357: resumo de título em lote (POST /financial/payables:batch — ADR-0049).
+import type { PayableSummaryRow } from '../../application/ports/payable-summary-by-ids-view.ts';
+import type { DocumentSummaryRow } from '../../application/ports/document-summary-by-ids-view.ts';
 import type { MatchSuggestion } from '../../application/use-cases/suggest-matches.ts';
+import type { CounterpartSuggestion } from '../../application/use-cases/suggest-counterpart-matches.ts';
 import type { GetStatementSuggestionsOutput } from '../../application/use-cases/get-statement-suggestions.ts';
 import type {
   AccountStatementResponseDto,
@@ -34,9 +40,14 @@ import type {
   PaidPayablesResponseDto,
   StatementTransactionsResponseDto,
   SuggestionsResponseDto,
+  CounterpartSuggestionsResponseDto,
   CategoryResponseDto,
   CostCenterResponseDto,
   ProgramResponseDto,
+  DocumentTypeMetadataResponseDto,
+  RecentPaymentDto,
+  PayableBatchItemDto,
+  DocumentBatchItemDto,
 } from './schemas.ts';
 import type { PayeeBankBlock } from './payee-bank-composition.ts';
 
@@ -51,6 +62,8 @@ export const categoriesToDto = (categories: readonly Category[]): CategoryRespon
     group: c.group,
     // Hierarquia (#147 F3): parentId branded é string em runtime — atribuição direta.
     parentId: c.parentId,
+    // #341: centro de custo da categoria (Centro→Categoria). Branded string em runtime.
+    costCenterId: c.costCenterId,
   }));
 
 /** Centros de custo de referência (020 · US2) → DTO lean `{ id, code, name }`. */
@@ -60,6 +73,64 @@ export const costCentersToDto = (costCenters: readonly CostCenter[]): CostCenter
 /** Programas (020 · US3) → DTO lean `{ id, name }` (passthrough da fonte canônica). */
 export const programsToDto = (programs: readonly ProgramView[]): ProgramResponseDto[] =>
   programs.map((p) => ({ id: p.id, name: p.name }));
+
+/**
+ * Catálogo de metadados por tipo de documento (#292) → DTO. Identidade tipada: os campos do
+ * domínio puro (`DocumentTypeMetadata`) já são serializáveis (strings/boolean/array/null).
+ */
+export const documentTypeMetadataToDto = (
+  list: readonly DocumentTypeMetadata[],
+): DocumentTypeMetadataResponseDto[] =>
+  list.map((m) => ({
+    type: m.type,
+    allowedRetentions: [...m.allowedRetentions],
+    accessKeyRequired: m.accessKeyRequired,
+    suggestedPaymentMethod: m.suggestedPaymentMethod,
+  }));
+
+/** Widget "Últimos pagamentos" (#239) → DTO lean Top-N pagos `{payableId, documentId, supplierRef,
+ * debitAccountRef, valueCents, paidAt}`. Nunca expõe o resto da linha do read-model (kind, status,
+ * category/costCenter/programRef, dueDate — não pedidos pelo widget). */
+export const recentPaymentsToDto = (views: readonly PayableView[]): RecentPaymentDto[] =>
+  views.map((v) => ({
+    payableId: v.payableId,
+    documentId: v.documentId,
+    supplierRef: v.supplierRef,
+    debitAccountRef: v.debitAccountRef,
+    valueCents: moneyToCentsString(v.valueCents),
+    paidAt: v.paidAt,
+  }));
+
+/** #357: item de POST /financial/payables:batch — resumo de título p/ o match card da Conciliação
+ * (#172), sem N+1. `ref` = payableId (o BFF casa a resposta por `ref`, não por posição no array). */
+export const payableBatchItemToDto = (row: PayableSummaryRow): PayableBatchItemDto => ({
+  ref: row.payableId,
+  documentId: row.documentId,
+  documentNumber: row.documentNumber,
+  documentType: row.documentType,
+  valueCents: moneyToCentsString(row.valueCents),
+  dueDate: row.dueDate.toISOString().slice(0, 10),
+  status: row.status,
+  paymentMethod: row.paymentMethod,
+  supplierRef: row.supplierRef,
+  supplierName: row.supplierName,
+  supplierDocument: row.supplierDocument,
+});
+
+/** #358: item de POST /financial/documents:batch — resumo do documento p/ refs auxiliares do drawer
+ * de Detalhe (#95), sem N+1. `ref` = documentId (o BFF casa por `ref`, não por posição). netValueCents
+ * e dueDate nullable (Draft). */
+export const documentBatchItemToDto = (row: DocumentSummaryRow): DocumentBatchItemDto => ({
+  ref: row.documentId,
+  documentNumber: row.documentNumber,
+  type: row.type,
+  status: row.status,
+  supplierRef: row.supplierRef,
+  supplierName: row.supplierName,
+  supplierDocument: row.supplierDocument,
+  netValueCents: row.netValueCents !== null ? moneyToCentsString(row.netValueCents) : null,
+  dueDate: row.dueDate !== null ? row.dueDate.toISOString().slice(0, 10) : null,
+});
 
 /**
  * Mapeia um StoredDocument (Document + Payables | null) para o DTO de resposta completo.
@@ -98,6 +169,7 @@ export const documentToDto = (
       contractRef: document.contractRef,
       budgetPlanRef: document.budgetPlanRef,
       categoryRef: document.categoryRef,
+      subcategoryRef: document.subcategoryRef,
       costCenterRef: document.costCenterRef,
       programRef: document.programRef,
       paymentMethod: document.paymentMethod,
@@ -132,6 +204,7 @@ export const documentToDto = (
     contractRef: document.contractRef,
     budgetPlanRef: document.budgetPlanRef,
     categoryRef: document.categoryRef,
+    subcategoryRef: document.subcategoryRef,
     costCenterRef: document.costCenterRef,
     programRef: document.programRef,
     paymentMethod: document.paymentMethod,
@@ -250,6 +323,19 @@ export const suggestionsToDto = (
       result: c.result,
       detail: c.detail,
     })),
+  })),
+});
+
+/** Serializa as sugestões de contrapartida (US2 · #269). Money em string; data em ISO (convenção). */
+export const counterpartSuggestionsToDto = (
+  suggestions: readonly CounterpartSuggestion[],
+): CounterpartSuggestionsResponseDto => ({
+  suggestions: suggestions.map((s) => ({
+    counterpartId: s.counterpartId,
+    originAccountRef: s.originAccountRef,
+    valueCents: String(s.valueCents),
+    expectedDate: s.expectedDate.toISOString(),
+    score: s.score,
   })),
 });
 

@@ -89,6 +89,13 @@ export const contracts = mysqlTable(
     budgetPlanId: varchar('budget_plan_id', { length: 36 }),
     categorizacao: varchar('categorizacao', { length: 255 }),
     centroDeCusto: varchar('centro_de_custo', { length: 255 }),
+    // CTR-TAXONOMY-REFS (S3 do épico #502): Centro de Custo / Categoria / Subcategoria como refs
+    // reais da árvore do plano (bgp_*). Refs leves (UUID) — sem FK física (ADR-0014), opacos. `null`
+    // quando ausentes. Convivem com `categorizacao`/`centro_de_custo` (texto livre, back-compat).
+    // COLLATE utf8mb4_bin na migration (UUID — header §CHARSET/COLLATE).
+    costCenterRef: varchar('cost_center_ref', { length: 36 }),
+    categoryRef: varchar('category_ref', { length: 36 }),
+    subcategoryRef: varchar('subcategory_ref', { length: 36 }),
     // Metadados de cadastro editáveis (FR-009) — nullable.
     observations: varchar('observations', { length: 1000 }),
     email: varchar('email', { length: 255 }),

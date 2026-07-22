@@ -42,6 +42,8 @@ import {
 import { createDrizzleActReader } from '../persistence/repos/act-reader.drizzle.ts';
 import { makeInMemoryContractCountStore } from '../persistence/repos/contract-count-store.in-memory.ts';
 import { createDrizzleContractCountStore } from '../persistence/repos/contract-count-store.drizzle.ts';
+import { makeInMemorySuppliersBatchReader } from '../persistence/repos/suppliers-batch-reader.in-memory.ts';
+import { createDrizzleSuppliersBatchReader } from '../persistence/repos/suppliers-batch-reader.drizzle.ts';
 import {
   openPartnersMysql,
   type PartnersMysqlHandle,
@@ -113,6 +115,11 @@ import type {
   ContractCountStore,
   ContractCountStoreError,
 } from '../../application/ports/contract-count-store.ts';
+import type {
+  SuppliersBatchReadPort,
+  SupplierBatchResult,
+  SuppliersBatchReadError,
+} from '../../application/ports/suppliers-batch-read.ts';
 
 export type PartnersDriver = 'memory' | 'mysql';
 
@@ -182,6 +189,11 @@ export type PartnersHttpDeps = Readonly<{
   /** Fornecedores — leitura (reader pool, S1). */
   getSupplierById: (id: string) => Promise<Result<SupplierReadRecord | null, SupplierReaderError>>;
   listSupplierRecords: () => Promise<Result<readonly SupplierReadRecord[], SupplierReaderError>>;
+  /** Fornecedores — resolução em lote por ref (BFF batch-by-id, ADR-0049/#350, #356).
+   * Identidade mínima (nome/CNPJ/categoria) — NUNCA dado bancário. */
+  getSuppliersView: (
+    refs: readonly string[],
+  ) => Promise<Result<SupplierBatchResult, SuppliersBatchReadError>>;
   /** Fornecedores — escrita (writer pool, S2/S3). */
   registerSupplier: ReturnType<typeof registerSupplier>;
   deactivateSupplier: ReturnType<typeof deactivateSupplier>;
@@ -230,6 +242,8 @@ type Pools = Readonly<{
   getSentInvites?: () => readonly SentInviteCapture[];
   supplierReader: SupplierReader;
   supplierWriterRepo: SupplierRepository;
+  /** Resolução em lote por ref (#356) — 1 query (mysql) / filtro em memória. */
+  suppliersBatchReader: SuppliersBatchReadPort;
   financierReader: FinancierReader;
   financierWriterRepo: FinancierRepository;
   geographyRepo: PartnerGeographyRepository;
@@ -274,6 +288,8 @@ const buildMemoryPools = (config: PartnersCompositionConfig): Pools => {
     getSentInvites,
     supplierReader: makeInMemorySupplierReader(config.seed?.suppliers ?? []),
     supplierWriterRepo: makeInMemorySupplierStore().repository,
+    // #356 — resolução em lote (memory driver, testes/dev): filtra o mesmo seed de suppliers.
+    suppliersBatchReader: makeInMemorySuppliersBatchReader(config.seed?.suppliers ?? []),
     financierReader: makeInMemoryFinancierReader(config.seed?.financiers ?? []),
     financierWriterRepo: makeInMemoryFinancierStore().repository,
     geographyRepo: makeInMemoryPartnerGeographyStore().repository,
@@ -320,6 +336,8 @@ const buildMysqlPools = async (config: PartnersCompositionConfig): Promise<Pools
     inviteRepo: createDrizzleCollaboratorInviteTokenStore(writerHandle).repository,
     supplierReader: createDrizzleSupplierReader(readerHandle),
     supplierWriterRepo: createDrizzleSupplierStore(writerHandle, clock),
+    // #356 — resolução em lote (reader pool, 1 query anti-N+1) — port dedicado.
+    suppliersBatchReader: createDrizzleSuppliersBatchReader(readerHandle),
     financierReader: createDrizzleFinancierReader(readerHandle),
     financierWriterRepo: createDrizzleFinancierStore(writerHandle, clock),
     // Geography usa writer para writes; reads são leves (catálogo estático + par_states/par_municipalities).
@@ -402,6 +420,7 @@ const makeDeps = (pools: Pools, config: PartnersCompositionConfig): PartnersHttp
       return pools.supplierReader.getById(idR.value);
     },
     listSupplierRecords: pools.supplierReader.list,
+    getSuppliersView: pools.suppliersBatchReader.getSuppliersView,
     registerSupplier: registerSupplier({ supplierRepo: pools.supplierWriterRepo, clock }),
     deactivateSupplier: deactivateSupplier({ supplierRepo: pools.supplierWriterRepo, clock }),
     reactivateSupplier: reactivateSupplier({ supplierRepo: pools.supplierWriterRepo, clock }),

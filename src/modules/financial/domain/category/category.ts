@@ -21,6 +21,7 @@ export const create = (input: CreateInput): Result<Category, CategoryError> => {
       group: groupR.value,
       active: input.active ?? true,
       parentId: input.parentId ?? null,
+      costCenterId: input.costCenterId ?? null,
     }),
   );
 };

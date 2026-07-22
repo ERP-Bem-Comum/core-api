@@ -9,6 +9,7 @@ export type SuggestionCandidate = Readonly<{
   payableId: string;
   valueCents: number;
   dueDate: Date;
+  paidAt: Date | null;
   supplierRef: string | null;
   supplierName: string | null;
   documentNumber: string | null;

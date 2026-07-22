@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "REPORTS-TEAM-DEMOGRAPHICS",
+  "size": "M",
+  "createdAt": "2026-07-17T02:44:11.146Z",
+  "closedAt": "2026-07-20T16:57:43.803Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-20T15:09:03.469Z",
+      "finishedAt": "2026-07-20T15:40:00.165Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "ports-and-adapters",
+      "startedAt": "2026-07-20T16:17:03.482Z",
+      "finishedAt": "2026-07-20T16:45:46.177Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-20T16:46:11.292Z",
+      "finishedAt": "2026-07-20T16:53:51.484Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-20T16:53:51.781Z",
+      "finishedAt": "2026-07-20T16:57:42.700Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

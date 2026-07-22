@@ -1,0 +1,16 @@
+meta {
+  name: BGP detalhe sem auth
+  type: http
+  seq: 11
+}
+
+get {
+  url: {{baseUrl}}/api/v2/budget-plans/00000000-0000-4000-8000-000000000000
+  auth: none
+}
+
+tests {
+  test("BGP — GET /budget-plans/:id sem token retorna 401", function () {
+    expect(res.getStatus()).to.equal(401);
+  });
+}

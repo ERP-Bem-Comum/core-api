@@ -1,11 +1,23 @@
 # ─────────────────────────────────────────────────────────────────────────────
-# MySQL 8.4 EFÊMERO para o ETL (PARTNERS-ETL-READER). Restaura o dump legado em
-# RAM (`tmpfs`), é lido via `mysql2` e é 100% descartável (`down -v` + tmpfs).
+# MySQL 8.4 EFÊMERO — banco de REFERÊNCIA do legado. Restaura um dump em RAM
+# (`tmpfs`), é lido via `mysql2` e é 100% descartável (`down -v` + tmpfs).
 #
-# Uso (via scripts/etl/legacy/restore.ts ou pnpm run test:integration:etl):
+# Historia: este arquivo existiu para o PARTNERS-ETL-READER e foi apagado pelo
+# ETL-LEGACY-DIRECT-CONNECTION (o ETL deixou de subir Docker sozinho e passou a ler
+# a `ETL_LEGACY_CONNECTION_STRING`). Volta com papel DIFERENTE e menor: só levanta o
+# banco de referência para inspeção e conferência do ETL — o ETL NÃO o invoca. O
+# proprio ticket previu este uso: "a URL aponta para o legado vivo, uma réplica, ou um
+# dump que a infra restaurou por fora — é decisão operacional".
+#
+# Uso (manual — `restore.ts` não existe mais, e não deve voltar):
 #   docker compose -f compose.etl.yaml up -d --wait
-#   ...restore + read...
-#   docker compose -f compose.etl.yaml down -v
+#   docker exec -i -e MYSQL_PWD=etl-ephemeral-local-only etl-legacy-mysql \
+#     mysql -uroot < "<caminho-do-dump>.sql"
+#   docker compose -f compose.etl.yaml down -v      # apaga tudo (RAM)
+#
+# O dump traz o próprio `CREATE DATABASE`/`USE`, então restaura no banco de origem —
+# o `legacy` criado abaixo fica vazio. É de propósito: dump de referência não se
+# transforma, senão deixa de ser referência.
 #
 # Segurança: porta exposta SÓ em 127.0.0.1 (localhost) numa porta ALTERNATIVA
 # (3309 por default) — não conflita com a 3306 do stack de dev e não escuta na

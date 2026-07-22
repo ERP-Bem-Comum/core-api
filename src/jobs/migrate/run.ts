@@ -19,6 +19,7 @@ import process from 'node:process';
 import { readMigrateConfig } from './config.ts';
 import { runMigrations, type ModuleMigrator } from './migrate.ts';
 import { applyMigrations as authApply } from '#src/modules/auth/public-api/migrate.ts';
+import { applyMigrations as budgetPlansApply } from '#src/modules/budget-plans/public-api/migrate.ts';
 import { applyMigrations as contractsApply } from '#src/modules/contracts/public-api/migrate.ts';
 import { applyMigrations as financialApply } from '#src/modules/financial/public-api/migrate.ts';
 import { applyMigrations as notificationsApply } from '#src/modules/notifications/public-api/migrate.ts';
@@ -32,6 +33,7 @@ const EX_CONFIG = 78; // sysexits.h — configuração inválida.
 // fixá-la só torna o log e os testes reproduzíveis.
 const MIGRATORS: readonly ModuleMigrator[] = [
   { module: 'auth', apply: authApply },
+  { module: 'budget-plans', apply: budgetPlansApply },
   { module: 'contracts', apply: contractsApply },
   { module: 'financial', apply: financialApply },
   { module: 'notifications', apply: notificationsApply },

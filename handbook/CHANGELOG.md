@@ -4,6 +4,44 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-07-16 — 🔓 ADR-0052 (Accepted): modo `AUTH_RBAC_MODE=bypass` — desligar a autorização por permissão, mantendo a autenticação
+
+Decisão do dono do sistema: introduzir o modo `bypass`, em que **todo usuário autenticado é
+super-usuário** (a rota exige só *"está logado"*, não *"tem a permissão X"*). A autenticação
+(`requireAuth`) permanece. Bypass **total** — inclui a auto-gestão de RBAC (atribuir/revogar papéis),
+o que permite se auto-recuperar do #462. Guardas anti-silêncio (a condição da decisão): fail-secure
+(só `AUTH_RBAC_MODE=bypass` exato liga; qualquer typo → `enforced`), banner gritante no boot, e default
+`enforced`. **Ligável em produção**; o trade-off de escalação persistida (uma role admin concedida no
+bypass sobrevive ao desligar) está documentado e aceito. Ver ADR-0052.
+
+---
+
+## 2026-07-15 — 🗂️ ADR-0051 (Accepted): owner da taxonomia — o Plano é dono do planejável, o Financeiro guarda o operacional
+
+Novo [ADR-0051](./architecture/adr/0051-taxonomy-owner-budget-plan-scoped.md) (**Accepted**), que resolve o follow-up prometido ao fechar o **#341** (_"unificação canônica segue como follow-up"_ — nota que não sobreviveu ao ticket) e aberto como [#448](https://github.com/ERP-Bem-Comum/core-api/issues/448). Fixa a hierarquia canônica em **4 níveis: Plano Orçamentário → Centro de Custo → Categoria → Subcategoria**, ratificando a premissa da P.O. (_"tudo se vincula ao PLANO"_, do legado).
+
+**Decisão:** o `budget-plans` é o **owner** da árvore do que é **planejável** (escopada por plano — `bgp_cost_centers.budget_plan_id` NOT NULL); o `financial` **lê a árvore do plano do documento** via `budget-plans/public-api` ([ADR-0006](./architecture/adr/0006-modular-monolith-core-api.md)) — Open Host Service no owner + ACL no consumidor (Vernon, _IDDD_, p. 142) — **sem espelhar nem copiar**. `fin_categories`/`fin_cost_centers` **não são fonte, nem projeção, nem deprecadas**: retêm o que **não é planejável** (classificação **operacional**). O fato decisivo, medido em QA: as categorias `ajuste` são **`Estorno`** e **`Ajuste de conciliação`** — que **nunca existirão num plano** (ninguém planeja um estorno), então uma projeção pura não teria onde colocá-las. Grounding: Evans, _DDD_, p. 199 — _"we need to make careful choices about which parts of the system will be allowed to diverge (…) **Total unification of the domain model for a large system will not be feasible or cost-effective**"_.
+
+Encerra a _"divergência aceita por ora"_ que o [`07-categorization-taxonomy.md`](./domain_questions/financeiro/07-categorization-taxonomy.md) registrava: a divergência passa a ser **deliberada e delimitada** (planejável × operacional). Rejeitadas: (A) pura — `fin_categories` como projeção (não responde onde vive `Estorno`; e 0/91 documentos têm plano hoje, nada seria classificável); (B) — taxonomia global (contraria a premissa; `direction`/`launch_type` ficariam sem dono); e `program_ref` na referência global (é a (B) disfarçada — o legado copia a árvore **por plano**, e `plano ⊂ programa`).
+
+**Define a regra do ETL do legado antes da migração** (era o risco urgente): as 34 categorias + **158 subcategorias** do legado (100% despesa, por programa, uma cópia por plano/ano) migram como **estrutura de planos** (`bgp_*`), **não** como seed de `fin_categories`. Destrava [#443](https://github.com/ERP-Bem-Comum/core-api/issues/443) (que **muda de natureza**), [#343](https://github.com/ERP-Bem-Comum/core-api/issues/343) e [#446](https://github.com/ERP-Bem-Comum/core-api/issues/446).
+
+---
+
+## 2026-07-08 — 🔀 ADR-0050 (Accepted): leitura de documento fiscal em cascata (nativo-first) — supersedes ADR-0034
+
+Novo [ADR-0050](./architecture/adr/0050-document-reader-cascade-supersedes-0034.md) (**Accepted**), que **supersede** o [ADR-0034](./architecture/adr/0034-ocr-port-adapter.md) (OCR como Port/Adapter). Reorienta a leitura de documento fiscal de "OCR-engine-first" para uma **cascata nativo-first**: `XML estruturado → parser de texto nativo (in-house, node:zlib) → OCR self-hosted (microserviço externo, escaneado, adiado) → exceção manual`. Fundamentado em benchmark real do dono (parser nativo: **12/12 campos, ~10 ms CPU, 0 alucinação**; amostra 100% PDF nativo), varredura byte-level empírica (docs fiscais BR = xref clássico + FlateDecode, sem `/Encrypt`/`/ObjStm`) e pesquisa multi-fonte (LGPD bloqueia cloud OCR; `fast-xml-parser` já no lockfile; `mupdf` AGPL descartado). Muda o port de `OcrPort.extract(pdfUrl)` para **`DocumentReaderPort.read(bytes)`** — recebe bytes (anti-SSRF), nunca URL de input. Grounding DDD: ACL (Evans p.224) + Ports & Adapters (Vernon p.182). Pesquisa consolidada em `specs/034-fin-documento-reader/research.md`. Issues: [#62](https://github.com/ERP-Bem-Comum/core-api/issues/62), [#145](https://github.com/ERP-Bem-Comum/core-api/issues/145), [#290](https://github.com/ERP-Bem-Comum/core-api/issues/290).
+
+---
+
+## 2026-07-07 — 🔀 ADR-0049 (Proposed): fronteira de responsabilidade core-api ↔ BFF (Domain API + Experience API)
+
+Novo [ADR-0049](./architecture/adr/0049-core-api-bff-boundary.md) (**Proposed**), **estado-alvo** do [ADR-0032](./architecture/adr/0032-transient-http-composition-read-until-bff.md) (composição transitória — a "rota gorda" é removida quando esta fronteira entra). Formaliza a inversão de responsabilidade decidida no refinement de 2026-07-07: **core-api = Domain API** (expõe dado cru já autorizado; dono de invariante, integração externa, agregação no banco e authz/multi-tenant) e **BFF = Experience API** (server-side TanStack Start, um por front) que compõe view-models por tela.
+
+Régua normativa: *"o banco agrega → core-api; monta/formata o que já veio → BFF"*. Define o **contrato core↔BFF** (recursos por agregado em unidades canônicas + read-models [ADR-0022](./architecture/adr/0022-read-models-via-projection-over-event-stream.md) + endpoints **batch-by-id** contra N+1; contract-first Zod/OpenAPI [ADR-0027](./architecture/adr/0027-zod-openapi-contract-first-http-edge.md)), a **fronteira de authz/PII** (minimização e multi-tenant ficam no core por escopo, nunca delegados ao BFF — #53/#238), invariantes MUST/MUST NOT, e um **Apêndice A** que fundamenta *por que a agregação fica no banco* por citação literal do MySQL 8.4 Reference Manual (`10-optimization.part01.md` L697/L1089/L2154/L2164/L3537/L3560). Rollout faseado (só cards novos + apresentação pura); topologia híbrida (core sai da borda pública após o go-live). Rastreado em [#348](https://github.com/ERP-Bem-Comum/core-api/issues/348); fundação em [#349](https://github.com/ERP-Bem-Comum/core-api/issues/349) (camada BFF) e [#350](https://github.com/ERP-Bem-Comum/core-api/issues/350) (batch-by-id).
+
+---
+
 ## 2026-06-23 — 🧭 ADR-0048 (Proposed): Anticorruption Layer legado↔core — gate das Camadas 0–2 (Dashboard/Reports/Budget Plans)
 
 Novo [ADR-0048](./architecture/adr/0048-legacy-categorization-installments-mapping.md) (**Proposed**, aguardando ratificação do tech lead),

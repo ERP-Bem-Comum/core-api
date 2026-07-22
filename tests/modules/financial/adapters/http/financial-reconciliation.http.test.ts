@@ -32,6 +32,7 @@ import {
   type PayableStore,
 } from '#src/modules/financial/adapters/persistence/repos/payable-reconciliation-view.in-memory.ts';
 import { createInMemoryReconciliationRepository } from '#src/modules/financial/adapters/persistence/repos/reconciliation-repository.in-memory.ts';
+import { createInMemoryExpectedCounterpartStore } from '#src/modules/financial/adapters/persistence/repos/expected-counterpart-store.in-memory.ts';
 import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
 import { createInMemoryReconciliationPeriodStore } from '#src/modules/financial/adapters/persistence/repos/reconciliation-period-store.in-memory.ts';
 import { confirmReconciliation } from '#src/modules/financial/application/use-cases/confirm-reconciliation.ts';
@@ -176,6 +177,7 @@ before(async () => {
       statements: statementRepo,
       periods,
       clock,
+      expectedCounterpartStore: createInMemoryExpectedCounterpartStore(),
     }),
     searchPaidPayables: searchPaidPayables({ payables: payableView }),
   };

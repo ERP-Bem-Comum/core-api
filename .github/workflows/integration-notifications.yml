@@ -1,0 +1,41 @@
+# Integração de e-mail (notifications) com SMTP efêmero (Mailpit) — CI-NOTIFICATIONS-MAILPIT / #135 US4.
+#
+# Roda `pnpm run test:integration:notifications`, que sobe o serviço `mailpit` do compose (profile
+# `mail`, nomeado explicitamente no `up`) via `docker compose up --wait` e executa a suíte
+# `tests/modules/notifications/**` com NOTIFICATIONS_INTEGRATION=1 + envs SMTP apontando pro Mailpit.
+# O `ci.yml` segue deliberadamente offline (só unit); esta é a validação real do adapter SMTP.
+# Dispara só em PRs que tocam o e-mail (path filter) + manualmente (workflow_dispatch).
+# Actions pinadas por SHA (ADR-0011 §"Pin de versões").
+
+name: integration-notifications
+
+on:
+  pull_request:
+    paths:
+      - 'src/modules/notifications/**'
+      - 'src/workers/email-dispatch/**'
+      - 'tests/modules/notifications/**'
+      - 'scripts/ci/test-integration.ts'
+      - '.github/workflows/integration-notifications.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  notifications-integration:
+    name: integração e-mail (Mailpit efêmero)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Node 24 (runtime do --experimental-strip-types)
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '24'
+      - name: Habilita pnpm (corepack lê a versão do packageManager)
+        run: corepack enable
+      - name: Install (frozen-lockfile)
+        run: pnpm install --frozen-lockfile
+      - name: Integração notifications (sobe Mailpit + roda a suíte)
+        run: pnpm run test:integration:notifications

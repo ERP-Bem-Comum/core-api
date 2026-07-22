@@ -46,6 +46,11 @@ const registrationShape = {
   budgetPlanId: z.string().nullable(),
   categorizacao: z.string().nullable(),
   centroDeCusto: z.string().nullable(),
+  // CTR-TAXONOMY-REFS: refs da árvore do plano (Centro → Categoria → Subcategoria). Refs opacos
+  // (UUID cru) — o DTO os ecoa sem resolver nome. `null` quando ausentes.
+  costCenterRef: z.string().nullable(),
+  categoryRef: z.string().nullable(),
+  subcategoryRef: z.string().nullable(),
   program: programBlockSchema,
   // #116: ref do contratante no list-item (filtrar/exibir por fornecedor sem N+1).
   contractorId: z.string(),
@@ -187,6 +192,11 @@ const contractWriteShape = {
   budgetPlanId: z.uuid().nullable().optional(),
   categorizacao: z.string().min(1).max(255).nullable().optional(),
   centroDeCusto: z.string().min(1).max(255).nullable().optional(),
+  // CTR-TAXONOMY-REFS: refs da árvore do plano (Centro → Categoria → Subcategoria). Opcionais;
+  // formato UUID validado na borda (malformado → 400). Refs OPACOS: sem resolver contra o plano.
+  costCenterRef: z.uuid().nullable().optional(),
+  categoryRef: z.uuid().nullable().optional(),
+  subcategoryRef: z.uuid().nullable().optional(),
 };
 
 /** Body `POST /contracts` — discrimina cadastro (`Pending`) vs cadastro+assinatura (`Active`). */
@@ -207,6 +217,12 @@ export const patchContractMetadataBodySchema = z
     observations: z.string().max(1000).nullable().optional(),
     email: z.email().nullable().optional(),
     telephone: z.string().max(32).nullable().optional(),
+    // CTR-TAXONOMY-REFS: os 3 refs da árvore do plano também são editáveis via PATCH (a tela
+    // Incluir/Editar Contrato reenvia a cascata Centro → Categoria → Subcategoria). Refs opacos
+    // (UUID cru validado na borda); `null` limpa o campo.
+    costCenterRef: z.uuid().nullable().optional(),
+    categoryRef: z.uuid().nullable().optional(),
+    subcategoryRef: z.uuid().nullable().optional(),
   })
   .strict()
   .refine((b) => Object.keys(b).length > 0, {

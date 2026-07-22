@@ -19,8 +19,8 @@ import * as Cpf from '#src/modules/auth/domain/identity/cpf.ts';
 import * as Telephone from '#src/modules/auth/domain/identity/telephone.ts';
 import * as UserId from '#src/modules/auth/domain/identity/user-id.ts';
 import * as User from '#src/modules/auth/domain/identity/user/user.ts';
-import * as Permission from '#src/modules/auth/domain/authorization/permission.ts';
-import { authorize } from '#src/modules/auth/domain/authorization/authorize.ts';
+import { authorizeActor } from '#src/modules/auth/application/authorize-actor.ts';
+import type { RbacMode } from '#src/modules/auth/domain/authorization/rbac-mode.ts';
 import type { UpdateProfileInput } from '#src/modules/auth/domain/identity/user/user.ts';
 import type { User as UserType, ActiveUser } from '#src/modules/auth/domain/identity/user/types.ts';
 import type { UserId as UserIdType } from '#src/modules/auth/domain/identity/user-id.ts';
@@ -80,11 +80,14 @@ type Deps = Readonly<{
   userRepo: UserRepository;
   roleRepo: RoleRepository;
   clock: Clock;
+  /** ADR-0052 — em bypass, conceder a alçada de aprovação não exige `user:assign-role`. */
+  rbacMode: RbacMode;
 }>;
 
 // AUTH-MASS-APPROVE-SETTABLE: fail-closed. Carrega o ator, exige active + `user:assign-role`.
+// Em bypass (ADR-0052), a permissão é dispensada.
 const authorizeMassApproval = async (
-  deps: Pick<Deps, 'userReader'>,
+  deps: Pick<Deps, 'userReader' | 'rbacMode'>,
   actorId: UserIdType | undefined,
 ): Promise<Result<true, 'forbidden'>> => {
   if (actorId === undefined) return err('forbidden');
@@ -92,9 +95,9 @@ const authorizeMassApproval = async (
   if (!actor.ok || actor.value === null) return err('forbidden');
   const activeActor = User.parseActive(actor.value);
   if (!activeActor.ok) return err('forbidden');
-  const required = Permission.parse('user:assign-role');
-  if (!required.ok) return err('forbidden');
-  if (!authorize(activeActor.value, required.value).ok) return err('forbidden');
+  if (!authorizeActor(deps.rbacMode, activeActor.value, 'user:assign-role').ok) {
+    return err('forbidden');
+  }
   return ok(true);
 };
 

@@ -18,13 +18,33 @@ import {
   createInMemoryDocumentRepository,
   type DocumentStore,
 } from '../persistence/repos/document-repository.in-memory.ts';
-import { createInMemoryPayableListView } from '../persistence/repos/payable-list-view.in-memory.ts';
+import {
+  createInMemoryPayableListView,
+  derivePayableListItems,
+} from '../persistence/repos/payable-list-view.in-memory.ts';
 import { createDrizzlePayableListView } from '../persistence/repos/payable-list-view.drizzle.ts';
 import type { PayableListView } from '../../application/ports/payable-list-view.ts';
 import { createInMemorySupplierViewStore } from '../persistence/repos/supplier-view-store.in-memory.ts';
 import { createDrizzleSupplierViewStore } from '../persistence/repos/supplier-view-store.drizzle.ts';
+// #239: read-model de payables (Top-5 "Últimos pagamentos") — molde de supplier-view-store acima.
+import { createInMemoryPayableViewStore } from '../persistence/repos/payable-view-store.in-memory.ts';
+import { createDrizzlePayableViewStore } from '../persistence/repos/payable-view-store.drizzle.ts';
 import { createInMemoryPayableDocumentView } from '../persistence/repos/payable-document-view.in-memory.ts';
 import { createDrizzlePayableDocumentView } from '../persistence/repos/payable-document-view.drizzle.ts';
+// #357: resumo de título em lote — POST /financial/payables:batch (ADR-0049).
+import {
+  createInMemoryPayableSummaryByIdsView,
+  payableListItemToSummaryRow,
+} from '../persistence/repos/payable-summary-by-ids-view.in-memory.ts';
+import { createDrizzlePayableSummaryByIdsView } from '../persistence/repos/payable-summary-by-ids-view.drizzle.ts';
+import type { PayableSummaryByIdsView } from '../../application/ports/payable-summary-by-ids-view.ts';
+// #358: resumo de documento em lote — POST /financial/documents:batch (ADR-0049).
+import {
+  createInMemoryDocumentSummaryByIdsView,
+  loadedDocumentToSummaryRow,
+} from '../persistence/repos/document-summary-by-ids-view.in-memory.ts';
+import { createDrizzleDocumentSummaryByIdsView } from '../persistence/repos/document-summary-by-ids-view.drizzle.ts';
+import type { DocumentSummaryByIdsView } from '../../application/ports/document-summary-by-ids-view.ts';
 import {
   createInMemoryTimelineRepository,
   type TimelineStore,
@@ -38,6 +58,7 @@ import {
   type PayableStore,
 } from '../persistence/repos/payable-reconciliation-view.in-memory.ts';
 import { createInMemoryReconciliationRepository } from '../persistence/repos/reconciliation-repository.in-memory.ts';
+import { createInMemoryExpectedCounterpartStore } from '../persistence/repos/expected-counterpart-store.in-memory.ts';
 import { createInMemoryCedenteAccountStore } from '../persistence/repos/cedente-account-store.in-memory.ts';
 import { createInMemorySuggestionView } from '../persistence/repos/suggestion-view.in-memory.ts';
 import { createInMemoryRejectedSuggestionRepository } from '../persistence/repos/rejected-suggestion-repository.in-memory.ts';
@@ -53,9 +74,15 @@ import {
   type ContractorReadPort,
 } from '#src/modules/partners/public-api/index.ts';
 // #207: read-port cross-módulo do NOME de usuário (ADR-0006 — só via public-api; ADR-0032 — borda).
-import { buildAuthUserReadPort, type AuthUserReadPort } from '#src/modules/auth/public-api/read.ts';
+import {
+  buildAuthUserReadPort,
+  type AuthUserReadPort,
+  type ApproverAuthorityReadPort,
+} from '#src/modules/auth/public-api/read.ts';
 import { composePayeeBank, type PayeeBankBlock } from './payee-bank-composition.ts';
 import { resolveUserName } from './user-name-composition.ts';
+// #289: adapta o ApproverAuthorityReadPort do auth (ACL) → ApproverAuthorityReader do financial.
+import { createAuthApproverAuthorityReader } from '../read/approver-authority-reader.auth.ts';
 import { createInMemoryCategoryReadStore } from '../persistence/repos/category-read.in-memory.ts';
 import { createDrizzleCategoryReadStore } from '../persistence/repos/category-read.drizzle.ts';
 import { REFERENCE_CATEGORY_SEED } from '../persistence/seed/reference-categories.ts';
@@ -78,6 +105,7 @@ import { createDrizzleTimelineRepository } from '../persistence/repos/timeline-r
 import { createDrizzleBankStatementRepository } from '../persistence/repos/bank-statement-repository.drizzle.ts';
 import { createDrizzlePayableReconciliationView } from '../persistence/repos/payable-reconciliation-view.drizzle.ts';
 import { createDrizzleReconciliationRepository } from '../persistence/repos/reconciliation-repository.drizzle.ts';
+import { createDrizzleExpectedCounterpartStore } from '../persistence/repos/expected-counterpart-store.drizzle.ts';
 import { createDrizzleCedenteAccountStore } from '../persistence/repos/cedente-account-store.drizzle.ts';
 import { createDrizzleSuggestionView } from '../persistence/repos/suggestion-view.drizzle.ts';
 import { createDrizzleRejectedSuggestionRepository } from '../persistence/repos/rejected-suggestion-repository.drizzle.ts';
@@ -91,9 +119,18 @@ import {
 
 import { saveDocument } from '../../application/use-cases/save-document.ts';
 import { saveDraft } from '../../application/use-cases/save-draft.ts';
+import { ingestDocument } from '../../application/use-cases/ingest-document.ts';
+import type { SourceFileStoragePort } from '../../application/ports/source-file-storage.ts';
+import { createInMemorySourceFileStorage } from '../storage/source-file-storage.in-memory.ts';
+import { createS3SourceFileStorage } from '../storage/source-file-storage.s3.ts';
+import { createDocumentReader } from '../document-reader/create-document-reader.ts';
+import * as DocumentIdVo from '../../domain/shared/document-id.ts';
+import { parseAwsS3Env } from '#src/modules/contracts/public-api/index.ts';
 import { adjustDocument } from '../../application/use-cases/adjust-document.ts';
+import { bulkUpdateDueDate } from '../../application/use-cases/bulk-update-due-date.ts';
 import { approveDocument } from '../../application/use-cases/approve-document.ts';
 import { registerManualPayment } from '../../application/use-cases/register-manual-payment.ts';
+import { updatePayableDueDate } from '../../application/use-cases/update-payable-due-date.ts';
 import { undoApproval } from '../../application/use-cases/undo-approval.ts';
 import { cancelDocument } from '../../application/use-cases/cancel-document.ts';
 import { submitDraft } from '../../application/use-cases/submit-draft.ts';
@@ -103,6 +140,8 @@ import { confirmReconciliation } from '../../application/use-cases/confirm-recon
 import { undoReconciliation } from '../../application/use-cases/undo-reconciliation.ts';
 import { searchPaidPayables } from '../../application/use-cases/search-paid-payables.ts';
 import { suggestMatches } from '../../application/use-cases/suggest-matches.ts';
+import { suggestCounterpartMatches } from '../../application/use-cases/suggest-counterpart-matches.ts';
+import { confirmCounterpartMatch } from '../../application/use-cases/confirm-counterpart-match.ts';
 import { rejectSuggestion } from '../../application/use-cases/reject-suggestion.ts';
 import { recordManualEntry } from '../../application/use-cases/record-manual-entry.ts';
 import { confirmBatch } from '../../application/use-cases/confirm-batch.ts';
@@ -121,7 +160,7 @@ import { getTransactionReconciliation } from '../../application/use-cases/get-tr
 import { listReconciliationPeriods } from '../../application/use-cases/list-reconciliation-periods.ts';
 import { getStatementSuggestions } from '../../application/use-cases/get-statement-suggestions.ts';
 import { createStatementBackedAccountHistory } from '../persistence/repos/cedente-account-history.from-statements.ts';
-import type { DocumentRepository } from '../../domain/document/repository.ts';
+import type { DocumentRepository, LoadedDocument } from '../../domain/document/repository.ts';
 import type { PayeeKind } from '../../domain/document/types.ts';
 import type { FinancialTimelineRepository } from '../../domain/timeline/repository.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
@@ -129,11 +168,15 @@ import type { BankStatementRepository } from '../../application/ports/bank-state
 import type { PayableReconciliationView } from '../../application/ports/payable-reconciliation-view.ts';
 import type { ReconciliationRepository } from '../../application/ports/reconciliation-repository.ts';
 import type { CedenteAccountStore } from '../../application/ports/cedente-account-store.ts';
+import type { ExpectedCounterpartStore } from '../../application/ports/expected-counterpart-store.ts';
+import type { ExpectedCounterpart } from '../../domain/expected-counterpart/types.ts';
 import type { SuggestionView } from '../../application/ports/suggestion-view.ts';
 import type { RejectedSuggestionRepository } from '../../application/ports/rejected-suggestion-repository.ts';
 import type { ReconciliationPeriodStore } from '../../application/ports/reconciliation-period-store.ts';
 import type { SupplierViewStore } from '../../application/ports/supplier-view-store.ts';
 import type { PayableDocumentView } from '../../application/ports/payable-document-view.ts';
+// #239: read-model de payables — GET /financial/dashboard/recent-payments (Top-5 pagos).
+import type { PayableViewStore } from '../../application/ports/payable-view-store.ts';
 
 export type FinancialDriver = 'memory' | 'mysql';
 
@@ -144,18 +187,27 @@ export type FinancialCompositionConfig = Readonly<{
   /** Port de leitura de parceiros (ADR-0032 — composição síncrona do bancário do favorecido).
    *  Injetado em testes; driver mysql constrói automaticamente se ausente. */
   contractorReadPort?: ContractorReadPort;
-  /** Port de leitura do NOME de usuário (#207 — ADR-0032; nome do executor/closer da conciliação).
+  /** Port de leitura do NOME de usuário + alçada do aprovador (#207/#289 — ADR-0032).
    *  Injetado em testes; driver mysql constrói automaticamente se ausente. */
-  authUserReadPort?: AuthUserReadPort;
+  authUserReadPort?: AuthUserReadPort & ApproverAuthorityReadPort;
+  /** Read-model de payables (#239 — widget "Últimos pagamentos"). Em produção é alimentado de forma
+   *  ASSÍNCRONA pelo worker `payable-view-projection` (ADR-0022) — não pelas rotas de escrita deste
+   *  composition root. Injetado em testes HTTP para semear dados determinísticos via `applyPayableEvent`;
+   *  ambos os drivers constroem uma store vazia automaticamente se ausente. */
+  payableViewStore?: PayableViewStore;
 }>;
 
 export type FinancialHttpDeps = Readonly<{
   saveDocument: ReturnType<typeof saveDocument>;
   saveDraft: ReturnType<typeof saveDraft>;
+  ingestDocument: ReturnType<typeof ingestDocument>; // #62: ingestão (leitura + storage + rascunho)
   adjustDocument: ReturnType<typeof adjustDocument>;
+  bulkUpdateDueDate: ReturnType<typeof bulkUpdateDueDate>; // #162: vencimento em lote
   approveDocument: ReturnType<typeof approveDocument>;
   /** Baixa manual de título (#219/#224) — POST /documents/:id/payables/:payableId/manual-payment. */
   registerManualPayment: ReturnType<typeof registerManualPayment>;
+  /** Vencimento de título isolado (#270) — PATCH /documents/:id/payables/:payableId. */
+  updatePayableDueDate: ReturnType<typeof updatePayableDueDate>;
   undoApproval: ReturnType<typeof undoApproval>;
   cancelDocument: ReturnType<typeof cancelDocument>;
   submitDraft: ReturnType<typeof submitDraft>;
@@ -179,6 +231,10 @@ export type FinancialHttpDeps = Readonly<{
   searchPaidPayables: ReturnType<typeof searchPaidPayables>;
   /** Sugestões de match (US2, read-model) — GET /statement-transactions/:id/suggestions. */
   suggestMatches: ReturnType<typeof suggestMatches>;
+  /** Sugestões de contrapartida (#269/US2) — GET /statement-transactions/:id/counterpart-suggestions. */
+  suggestCounterpartMatches: ReturnType<typeof suggestCounterpartMatches>;
+  /** Confirma casamento de contrapartida (#269/US2) — POST /reconciliations/counterpart. */
+  confirmCounterpartMatch: ReturnType<typeof confirmCounterpartMatch>;
   /** Rejeita uma sugestão (US2) — POST /statement-transactions/:id/reject-suggestion. */
   rejectSuggestion: ReturnType<typeof rejectSuggestion>;
   /** Lançamento manual (US5) — POST /statement-transactions/:id/manual-entry. */
@@ -219,6 +275,12 @@ export type FinancialHttpDeps = Readonly<{
   listCostCenters: CostCenterReadPort['list'];
   /** Programas (020 · US3) — GET /financial/programs (passthrough cross-módulo). */
   listPrograms: ProgramReadPort['list'];
+  /** #239 · Últimos pagamentos — GET /financial/dashboard/recent-payments. */
+  listRecentPaid: PayableViewStore['listRecentPaid'];
+  /** #357 · Resolução em lote de payableId[] — POST /financial/payables:batch (ADR-0049). */
+  getPayablesSummaryByIds: PayableSummaryByIdsView['getPayablesSummaryByIds'];
+  /** #358 · Resolução em lote de documentId[] — POST /financial/documents:batch (ADR-0049). */
+  getDocumentsSummaryByIds: DocumentSummaryByIdsView['getDocumentsSummaryByIds'];
   /** Composição síncrona do bancário do favorecido (#255 — ADR-0032). */
   resolvePayeeBank: (ref: {
     kind: PayeeKind | null;
@@ -234,6 +296,7 @@ type Pools = Readonly<{
   // mysql: read-port de contracts na MESMA conexão (ctr_* no mesmo DB do monólito).
   contractCategorizationReader: ContractCategorizationReadPort;
   repo: DocumentRepository;
+  documentStorage: SourceFileStoragePort; // #62: storage do comprovante-fonte
   payableListView: PayableListView;
   // Repo de LEITURA da trilha. Na escrita, o `save` do DocumentRepository grava a trilha
   // na mesma transação (memory: store compartilhado; mysql: dentro da tx do save).
@@ -242,6 +305,8 @@ type Pools = Readonly<{
   payableView: PayableReconciliationView;
   reconciliationRepo: ReconciliationRepository;
   cedenteStore: CedenteAccountStore;
+  // #269: contrapartida esperada de transferência A→B (Pending → Matched | Discarded).
+  expectedCounterpartStore: ExpectedCounterpartStore;
   suggestionView: SuggestionView;
   rejectedSuggestionRepo: RejectedSuggestionRepository;
   periodStore: ReconciliationPeriodStore;
@@ -253,10 +318,18 @@ type Pools = Readonly<{
   supplierViewStore: SupplierViewStore;
   // #146: JOIN fin_payables × fin_documents para o export CSV-Nibo.
   payableDocView: PayableDocumentView;
+  // #357: JOIN fin_payables × fin_documents × fin_supplier_view p/ POST /financial/payables:batch.
+  payableSummaryByIdsView: PayableSummaryByIdsView;
+  // #358: SELECT fin_documents ⟕ recon ⟕ fin_supplier_view p/ POST /financial/documents:batch.
+  documentSummaryByIdsView: DocumentSummaryByIdsView;
+  // #239: read-model de payables (Top-5 "Últimos pagamentos"). memory: vazio no boot (sem worker de
+  // projeção síncrono — injetável em testes via config.payableViewStore); mysql: drizzle.
+  payableViewStore: PayableViewStore;
   // #255: port de leitura do contratado (ADR-0032). memory: injetado ou null; mysql: construído.
   contractorReadPort: ContractorReadPort | null;
-  // #207: port de leitura do nome de usuário (ADR-0032). memory: injetado ou null; mysql: construído.
-  authUserReadPort: AuthUserReadPort | null;
+  // #207/#289: port de leitura do nome de usuário + alçada do aprovador (ADR-0032). memory:
+  // injetado ou null; mysql: construído.
+  authUserReadPort: (AuthUserReadPort & ApproverAuthorityReadPort) | null;
   shutdown: () => Promise<void>;
 }>;
 
@@ -273,7 +346,20 @@ const seededCategories = (): readonly Category.Category[] =>
       if (!pR.ok) return [];
       parentId = pR.value;
     }
-    const r = Category.create({ id: idR.value, name: s.name, group: s.group, parentId });
+    // #341: costCenterId opcional no seed (nível Centro→Categoria). Centro inválido → descarta (defensivo).
+    let costCenterId: CostCenterId.CostCenterId | null = null;
+    if (s.costCenterId !== undefined) {
+      const ccR = CostCenterId.rehydrate(s.costCenterId);
+      if (!ccR.ok) return [];
+      costCenterId = ccR.value;
+    }
+    const r = Category.create({
+      id: idR.value,
+      name: s.name,
+      group: s.group,
+      parentId,
+      costCenterId,
+    });
     return r.ok ? [r.value] : [];
   });
 
@@ -295,7 +381,10 @@ const seededProgramsStub = (): readonly ProgramView[] => [
 
 const buildMemoryPools = (
   contractorReadPort: ContractorReadPort | null,
-  authUserReadPort: AuthUserReadPort | null,
+  authUserReadPort: (AuthUserReadPort & ApproverAuthorityReadPort) | null,
+  // #239: injetável em testes (semear via applyPayableEvent); vazio por padrão — em produção quem
+  // popula é o worker payable-view-projection (async), não este composition root (ADR-0022).
+  payableViewStore: PayableViewStore = createInMemoryPayableViewStore(),
 ): Pools => {
   // Store compartilhado entre o document-repo (escreve trilha no save) e o timeline-repo
   // (lê). Garante atomicidade em memória sem tx (timeline-repository.in-memory.ts §store).
@@ -318,11 +407,17 @@ const buildMemoryPools = (
   const payableStore: PayableStore = new Map();
   const statementRepo = createInMemoryBankStatementRepository(statementStore);
   const payableView = createInMemoryPayableReconciliationView(payableStore);
+  // #269: Map de contrapartidas COMPARTILHADO entre o reconRepo e o store — o `confirmCounterpartMatch`
+  // muta a contrapartida (→Matched) na mesma unit-of-work da perna de B (paridade da tx atômica do Drizzle).
+  const expectedCounterpartMap = new Map<string, ExpectedCounterpart>();
   const reconciliationRepo = createInMemoryReconciliationRepository({
     payables: payableStore,
     statements: statementStore,
+    expectedCounterparts: expectedCounterpartMap,
   });
   const cedenteStore = createInMemoryCedenteAccountStore();
+  // #269: contrapartida esperada (vazia no boot; nasce ao conciliar uma transferência A→B).
+  const expectedCounterpartStore = createInMemoryExpectedCounterpartStore(expectedCounterpartMap);
   // Match/sugestão (US2): stores dedicados (vazios no boot; testes semeiam). mysql faz JOIN real.
   const suggestionView = createInMemorySuggestionView();
   const rejectedSuggestionRepo = createInMemoryRejectedSuggestionRepository();
@@ -330,20 +425,24 @@ const buildMemoryPools = (
   const categoryReader = createInMemoryCategoryReadStore(seededCategories());
   const costCenterReader = createInMemoryCostCenterReadStore(seededCostCenters());
   const programReader = createInMemoryProgramReadStore(seededProgramsStub());
+  // Fonte compartilhada `documentStore → LoadedDocument[]` (payableListView e payableSummaryByIdsView
+  // derivam da MESMA leitura — evita duplicar a montagem entre os dois pools, #357 W2 refactor).
+  const documentSource = (): readonly LoadedDocument[] =>
+    [...documentStore.values()].map((e) => ({ ...e.aggregate, version: e.version }));
   return {
     contractCategorizationReader: createInMemoryContractCategorizationReadStore(),
+    documentStorage: createInMemorySourceFileStorage(),
     categoryReader,
     costCenterReader,
     programReader,
     repo,
-    payableListView: createInMemoryPayableListView(() =>
-      [...documentStore.values()].map((e) => ({ ...e.aggregate, version: e.version })),
-    ),
+    payableListView: createInMemoryPayableListView(documentSource),
     timelineRepo,
     statementRepo,
     payableView,
     reconciliationRepo,
     cedenteStore,
+    expectedCounterpartStore,
     // Read-model de fornecedor: in-memory vazio no boot (sem worker de projeção no driver memory).
     // Exposto para que o use-case Nibo (#146) possa invocar `supplierViewStore.get()`.
     supplierViewStore,
@@ -371,13 +470,37 @@ const buildMemoryPools = (
       }
       return rows;
     }),
+    // #357: derivação lazy do JOIN fin_payables × fin_documents × fin_supplier_view via documentStore
+    // (payableStore é da conciliação — não veria o payable recém-criado no create; documentStore é
+    // onde saveDocument grava). Reusa `derivePayableListItems` (mesmo loop de payableListView acima)
+    // + `payableListItemToSummaryRow` — PayableSummaryRow é subset de PayableListItem;
+    // supplierName/supplierDocument = null no driver memory (read-model de fornecedor vazio sem
+    // worker — mesma nota de payable-list-view.in-memory §toItem).
+    payableSummaryByIdsView: createInMemoryPayableSummaryByIdsView(() =>
+      derivePayableListItems(documentSource()).map(payableListItemToSummaryRow),
+    ),
+    // #358: derivação lazy do resumo de documento via documentSource (mesma fonte do payableListView).
+    // status cru + supplier null no driver memory (paridade com o grid in-memory `toListItem`).
+    documentSummaryByIdsView: createInMemoryDocumentSummaryByIdsView(() =>
+      documentSource().map(loadedDocumentToSummaryRow),
+    ),
     suggestionView,
     rejectedSuggestionRepo,
     periodStore,
+    payableViewStore,
     contractorReadPort,
     authUserReadPort,
     shutdown: () => Promise.resolve(),
   };
+};
+
+// #62: storage do comprovante no driver mysql — S3 se o env estiver configurado, senão in-memory
+// (boot não quebra sem S3; o deploy real provê as credenciais via env/IAM Role).
+const buildDocumentStorage = (): SourceFileStoragePort => {
+  const s3 = parseAwsS3Env(process.env);
+  return s3.ok
+    ? createS3SourceFileStorage({ s3: s3.value, keyPrefix: 'financial-documents' })
+    : createInMemorySourceFileStorage();
 };
 
 const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pools> => {
@@ -426,9 +549,11 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     contractorReadPort = portR.value;
     closeContractorPort = portR.value.close;
   }
-  // #207: port de leitura do nome de usuário (ADR-0032). Injetado tem precedência (testes); o
-  // construído abre pool próprio (auth_* no mesmo DB do monólito) e é fechado no shutdown.
-  let authUserReadPort: AuthUserReadPort | null = config.authUserReadPort ?? null;
+  // #207/#289: port de leitura do nome de usuário + alçada do aprovador (ADR-0032). Injetado tem
+  // precedência (testes); o construído abre pool próprio (auth_* no mesmo DB do monólito) e é
+  // fechado no shutdown.
+  let authUserReadPort: (AuthUserReadPort & ApproverAuthorityReadPort) | null =
+    config.authUserReadPort ?? null;
   let closeAuthUserPort: () => Promise<void> = () => Promise.resolve();
   if (authUserReadPort === null) {
     const authPortR = await buildAuthUserReadPort({ connectionString: writerUrl });
@@ -447,6 +572,7 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
   return {
     contractCategorizationReader: contractsReadPort,
     repo: createDrizzleDocumentRepository(handle),
+    documentStorage: buildDocumentStorage(),
     payableListView: createDrizzlePayableListView(handle),
     // Leitura da trilha via pool (a escrita é feita dentro da tx do document-repo.save).
     timelineRepo: createDrizzleTimelineRepository(handle),
@@ -454,6 +580,7 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     payableView: createDrizzlePayableReconciliationView(handle),
     reconciliationRepo: createDrizzleReconciliationRepository(handle),
     cedenteStore: createDrizzleCedenteAccountStore(handle),
+    expectedCounterpartStore: createDrizzleExpectedCounterpartStore(handle),
     categoryReader: createDrizzleCategoryReadStore(handle),
     costCenterReader: createDrizzleCostCenterReadStore(handle),
     programReader: createProgramsApiReadStore(programsReadPort),
@@ -462,6 +589,11 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     supplierViewStore: createDrizzleSupplierViewStore(handle, ClockReal()),
     // #146: JOIN fin_payables × fin_documents via Drizzle (inArray — suggestion-view.drizzle.ts precedente).
     payableDocView: createDrizzlePayableDocumentView(handle),
+    // #357: JOIN fin_payables × fin_documents × fin_supplier_view via Drizzle.
+    payableSummaryByIdsView: createDrizzlePayableSummaryByIdsView(handle),
+    documentSummaryByIdsView: createDrizzleDocumentSummaryByIdsView(handle),
+    // #239: injetado tem precedência (testes); mysql constrói o adapter Drizzle por padrão.
+    payableViewStore: config.payableViewStore ?? createDrizzlePayableViewStore(handle, ClockReal()),
     suggestionView: createDrizzleSuggestionView(handle),
     rejectedSuggestionRepo: createDrizzleRejectedSuggestionRepository(handle),
     periodStore: createDrizzleReconciliationPeriodStore(handle),
@@ -483,6 +615,12 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
   // (`save`/`delete`/`confirm`/`confirmManualEntry`/`undo`/`close`). No driver memory cada repo usa
   // um outbox interno (descartável); no mysql → tabela `fin_outbox`. Sem dual-write.
   const clock = ClockReal();
+  // #289: leitura cross-módulo da alçada do aprovador (auth/public-api). Opt-in — construído só
+  // quando o port existe (memory sem injeção: gate de alçada não roda nos use-cases).
+  const approverAuthorityReader =
+    pools.authUserReadPort !== null
+      ? createAuthApproverAuthorityReader(pools.authUserReadPort)
+      : undefined;
   // Deps base (repo + clock); os 6 use cases mutantes recebem `clock` para
   // carimbar `occurredAt` das entries da trilha (timeline-recording.ts).
   const deps = {
@@ -490,6 +628,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     repo: pools.repo,
     clock,
     contractCategorizationReader: pools.contractCategorizationReader,
+    ...(approverAuthorityReader !== undefined ? { approverAuthorityReader } : {}),
   };
   // Lançamento manual (US5): reaproveitado pelo confirmBatch (1 template × N transações).
   const record = recordManualEntry({
@@ -498,6 +637,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     cedenteStore: pools.cedenteStore,
     periods: pools.periodStore,
     clock,
+    expectedCounterpartStore: pools.expectedCounterpartStore,
   });
   // Sugestões: instância reusada pela rota por-transação (#121) e pelo lote (#174).
   const suggest = suggestMatches({
@@ -505,12 +645,21 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     suggestions: pools.suggestionView,
     rejected: pools.rejectedSuggestionRepo,
   });
+  const saveDraftUseCase = saveDraft(deps);
   return {
     saveDocument: saveDocument(deps),
-    saveDraft: saveDraft(deps),
+    saveDraft: saveDraftUseCase,
+    ingestDocument: ingestDocument({
+      reader: createDocumentReader(),
+      storage: pools.documentStorage,
+      saveDraft: saveDraftUseCase,
+      idGen: DocumentIdVo.generate,
+    }),
     adjustDocument: adjustDocument(deps),
+    bulkUpdateDueDate: bulkUpdateDueDate(deps), // #162: mesmas deps (repo + clock) do adjust
     approveDocument: approveDocument(deps),
     registerManualPayment: registerManualPayment(deps),
+    updatePayableDueDate: updatePayableDueDate(deps), // #270: mesmas deps (repo + clock)
     undoApproval: undoApproval(deps),
     cancelDocument: cancelDocument({ repo: pools.repo }),
     submitDraft: submitDraft(deps),
@@ -539,9 +688,22 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       statements: pools.statementRepo,
       periods: pools.periodStore,
       clock,
+      expectedCounterpartStore: pools.expectedCounterpartStore,
     }),
     searchPaidPayables: searchPaidPayables({ payables: pools.payableView }),
     suggestMatches: suggest,
+    suggestCounterpartMatches: suggestCounterpartMatches({
+      statements: pools.statementRepo,
+      expectedCounterpartStore: pools.expectedCounterpartStore,
+    }),
+    confirmCounterpartMatch: confirmCounterpartMatch({
+      statements: pools.statementRepo,
+      cedenteStore: pools.cedenteStore,
+      periods: pools.periodStore,
+      expectedCounterpartStore: pools.expectedCounterpartStore,
+      reconciliationRepo: pools.reconciliationRepo,
+      clock,
+    }),
     getStatementSuggestions: getStatementSuggestions({
       listStatementTransactions: pools.statementRepo.listTransactions,
       suggestMatches: suggest,
@@ -598,6 +760,9 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     listCategories: pools.categoryReader.list,
     listCostCenters: pools.costCenterReader.list,
     listPrograms: pools.programReader.list,
+    listRecentPaid: pools.payableViewStore.listRecentPaid,
+    getPayablesSummaryByIds: pools.payableSummaryByIdsView.getPayablesSummaryByIds,
+    getDocumentsSummaryByIds: pools.documentSummaryByIdsView.getDocumentsSummaryByIds,
     resolvePayeeBank: (ref) => composePayeeBank(pools.contractorReadPort, ref),
     resolveUserName: (id) => resolveUserName(pools.authUserReadPort, id),
     shutdown: pools.shutdown,
@@ -609,7 +774,11 @@ export const buildFinancialHttpDeps = async (
 ): Promise<FinancialHttpDeps> => {
   if (config.driver === 'memory') {
     return makeDeps(
-      buildMemoryPools(config.contractorReadPort ?? null, config.authUserReadPort ?? null),
+      buildMemoryPools(
+        config.contractorReadPort ?? null,
+        config.authUserReadPort ?? null,
+        config.payableViewStore,
+      ),
     );
   }
 

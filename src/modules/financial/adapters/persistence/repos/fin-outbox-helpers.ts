@@ -21,6 +21,7 @@ const extractAggregateInfo = (e: FinancialAppendableEvent): { id: string; type: 
   if ('documentId' in e) return { id: String(e.documentId), type: 'Document' };
   if ('reconciliationId' in e) return { id: String(e.reconciliationId), type: 'Reconciliation' };
   if ('statementId' in e) return { id: String(e.statementId), type: 'Statement' };
+  if ('counterpartId' in e) return { id: String(e.counterpartId), type: 'ExpectedCounterpart' };
   return { id: String(e.periodId), type: 'ReconciliationPeriod' };
 };
 

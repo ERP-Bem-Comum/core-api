@@ -9,6 +9,7 @@ import {
   type ManualEntryError,
 } from '../../domain/reconciliation/manual-entry.ts';
 import type { ManualEntryType } from '../../domain/reconciliation/types.ts';
+import { BudgetPlanRef, SubcategoryRef, type FinancialRefError } from '../../domain/shared/refs.ts';
 import * as CedenteAccountId from '../../domain/cedente/cedente-account-id.ts';
 import { isClosed } from '../../domain/cedente/cedente-account.ts';
 import type {
@@ -27,6 +28,13 @@ import type {
   ReconciliationPeriodStore,
   ReconciliationPeriodStoreError,
 } from '../ports/reconciliation-period-store.ts';
+import * as ExpectedCounterpartId from '../../domain/expected-counterpart/expected-counterpart-id.ts';
+import * as ExpectedCounterpart from '../../domain/expected-counterpart/expected-counterpart.ts';
+import type { ExpectedCounterpartError } from '../../domain/expected-counterpart/types.ts';
+import type {
+  ExpectedCounterpartStore,
+  ExpectedCounterpartStoreError,
+} from '../ports/expected-counterpart-store.ts';
 
 export type RecordManualEntryDeps = Readonly<{
   reconciliationRepo: Pick<ReconciliationRepository, 'confirmManualEntry'>;
@@ -34,12 +42,17 @@ export type RecordManualEntryDeps = Readonly<{
   cedenteStore: Pick<CedenteAccountStore, 'findById'>;
   periods: Pick<ReconciliationPeriodStore, 'isClosed'>;
   clock: Pick<Clock, 'now'>;
+  // #269/US1: cria a contrapartida esperada no destino quando `type='Transfer'` + `destinationAccountRef`.
+  expectedCounterpartStore: Pick<ExpectedCounterpartStore, 'save'>;
 }>;
 
 export type RecordManualEntryInput = Readonly<{
   transactionId: string;
   type: ManualEntryType;
   supplierRef?: string;
+  // #502/S2: plano orçamentário + subcategoria (folha) no título manual — rehidratados via VO na borda.
+  budgetPlanRef?: string;
+  subcategoryRef?: string;
   categoryRef?: string;
   costCenterRef?: string;
   programRef?: string;
@@ -56,6 +69,7 @@ export type RecordManualEntryOutput = Readonly<{
 
 export type RecordManualEntryError =
   | ManualEntryError
+  | FinancialRefError
   | 'statement-transaction-not-found'
   | 'transaction-already-reconciled'
   | 'cedente-account-not-found'
@@ -66,7 +80,9 @@ export type RecordManualEntryError =
   | ReconciliationRepositoryError
   | BankStatementRepositoryError
   | CedenteAccountStoreError
-  | ReconciliationPeriodStoreError;
+  | ReconciliationPeriodStoreError
+  | ExpectedCounterpartError
+  | ExpectedCounterpartStoreError;
 
 // Lança um ManualEntry para uma transação `Pending` sem título (ex.: tarifa). Guard FR-015 (conta não
 // `Closed`) → domínio confirmManualEntry (valor = valor da transação) → unit-of-work → outbox. R1.
@@ -95,6 +111,7 @@ export const recordManualEntry =
     if (periodClosedR.value) return err('period-closed');
 
     // #143: conta de destino da realocação (Transfer) — existe + ≠ origem.
+    let destinationAccountId: CedenteAccountId.CedenteAccountId | null = null;
     if (input.destinationAccountRef !== undefined) {
       if (input.destinationAccountRef === debitAccountRef) return err('destination-same-as-source');
       const destId = CedenteAccountId.rehydrate(input.destinationAccountRef);
@@ -102,6 +119,18 @@ export const recordManualEntry =
       const destR = await deps.cedenteStore.findById(destId.value);
       if (!destR.ok) return err(destR.error);
       if (destR.value === null) return err('destination-account-not-found');
+      destinationAccountId = destId.value;
+    }
+
+    // #502/S2: rehidrata os refs de taxonomia (formato UUID v4) — defense-in-depth além do Zod da
+    // borda. Refs opacos (ADR-0014): valida só o formato, sem chamar budget-plans. Domínio guarda a string.
+    if (input.budgetPlanRef !== undefined) {
+      const r = BudgetPlanRef.rehydrate(input.budgetPlanRef);
+      if (!r.ok) return err(r.error);
+    }
+    if (input.subcategoryRef !== undefined) {
+      const r = SubcategoryRef.rehydrate(input.subcategoryRef);
+      if (!r.ok) return err(r.error);
     }
 
     const confirmed = confirmManualEntry({
@@ -110,6 +139,8 @@ export const recordManualEntry =
       type: input.type,
       valueCents: transaction.valueCents,
       ...(input.supplierRef !== undefined ? { supplierRef: input.supplierRef } : {}),
+      ...(input.budgetPlanRef !== undefined ? { budgetPlanRef: input.budgetPlanRef } : {}),
+      ...(input.subcategoryRef !== undefined ? { subcategoryRef: input.subcategoryRef } : {}),
       ...(input.categoryRef !== undefined ? { categoryRef: input.categoryRef } : {}),
       ...(input.costCenterRef !== undefined ? { costCenterRef: input.costCenterRef } : {}),
       ...(input.programRef !== undefined ? { programRef: input.programRef } : {}),
@@ -129,6 +160,33 @@ export const recordManualEntry =
       confirmed.value.events,
     );
     if (!saved.ok) return err(saved.error);
+
+    // #269/US1 + #428: transferência/aplicação/resgate A→B com destino → nasce a contrapartida esperada
+    // (Pending, sinal oposto, valor da transação) na conta de destino, vinculada à perna de origem, com o
+    // tipo e o produto do lançamento. Fora dos 3 tipos ou sem destino: nada criado (guard de não-regressão).
+    if (
+      (input.type === 'Transfer' || input.type === 'Investment' || input.type === 'Redemption') &&
+      destinationAccountId !== null
+    ) {
+      const counterpart = ExpectedCounterpart.create({
+        id: ExpectedCounterpartId.generate(),
+        destinationAccountRef: destinationAccountId,
+        originAccountRef: accId.value,
+        originReconciliationRef: confirmed.value.reconciliation.id,
+        originTransactionRef: String(transaction.id),
+        type: input.type,
+        ...(input.productLabel !== undefined ? { productLabel: input.productLabel } : {}),
+        originMovement: transaction.movement,
+        valueCents: BigInt(transaction.valueCents),
+        expectedDate: transaction.date,
+      });
+      if (!counterpart.ok) return err(counterpart.error);
+      const savedCounterpart = await deps.expectedCounterpartStore.save(
+        counterpart.value.counterpart,
+        counterpart.value.events,
+      );
+      if (!savedCounterpart.ok) return err(savedCounterpart.error);
+    }
 
     return ok({
       reconciliationId: confirmed.value.reconciliation.id,

@@ -24,8 +24,13 @@ const CATALOG_RAW = [
   // bank-account:* (modulo financial - conta-cedente, #138)
   'bank-account:read',
   'bank-account:write',
+  // budget-plan:* (modulo budget-plans - plano orcamentario, #315)
+  'budget-plan:read',
+  'budget-plan:write',
   // collaborator:* (modulo partners - colaboradores)
   'collaborator:read',
+  // Gate do relatorio demografico (REPORTS-TEAM-DEMOGRAPHICS): dado sensivel LGPD agregado.
+  'collaborator:read-sensitive',
   'collaborator:write',
   // contract:* (modulo contracts)
   'contract:delete',

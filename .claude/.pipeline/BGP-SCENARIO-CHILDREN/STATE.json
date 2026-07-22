@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "BGP-SCENARIO-CHILDREN",
+  "size": "S",
+  "createdAt": "2026-07-10T17:43:19.122Z",
+  "closedAt": "2026-07-12T02:23:54.398Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-12T01:59:22.830Z",
+      "finishedAt": "2026-07-12T02:05:56.089Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "fastify-server-expert",
+      "startedAt": "2026-07-12T02:05:56.425Z",
+      "finishedAt": "2026-07-12T02:15:34.940Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "zod-expert",
+      "startedAt": "2026-07-12T02:15:35.287Z",
+      "finishedAt": "2026-07-12T02:19:04.099Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-12T02:19:04.424Z",
+      "finishedAt": "2026-07-12T02:23:54.074Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

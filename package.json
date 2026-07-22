@@ -15,7 +15,7 @@
       "onFail": "download"
     }
   },
-  "packageManager": "pnpm@11.7.0",
+  "packageManager": "pnpm@11.15.1+sha512.81350b07e53c9538a02f1f2303b4290fa2d7be04e56e2a970c4cc4b417dc761de196edabd49d55c7dc9580db81007c44143e4e3d7e462b3000d23c255122d065",
   "imports": {
     "#src/*": "./src/*",
     "#scripts/*": "./scripts/*"
@@ -34,11 +34,15 @@
     "worker:outbox": "node --experimental-strip-types --enable-source-maps --no-warnings src/modules/contracts/worker/run.ts",
     "worker:outbox:partners": "node --experimental-strip-types --enable-source-maps --no-warnings src/modules/partners/worker/run.ts",
     "worker:supplier-projection": "node --experimental-strip-types --enable-source-maps --no-warnings src/workers/supplier-view-projection/run.ts",
+    "worker:payable-projection": "node --experimental-strip-types --enable-source-maps --no-warnings src/workers/payable-view-projection/run.ts",
     "worker:contract-count-projection": "node --experimental-strip-types --enable-source-maps --no-warnings src/workers/contract-count-projection/run.ts",
     "worker:email-dispatch": "node --experimental-strip-types --enable-source-maps --no-warnings src/workers/email-dispatch/run.ts",
     "job:contracts:sweep": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/contracts/sweeper/run.ts",
     "job:financial:supplier-view-backfill": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/financial/supplier-view-backfill/run.ts",
+    "job:financial:payable-view-backfill": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/financial/payable-view-backfill/run.ts",
+    "job:partners:contract-count-backfill": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/partners/contract-count-backfill/run.ts",
     "job:migrate": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/migrate/run.ts",
+    "job:auth:sync-permissions": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/auth/sync-permissions/run.ts",
     "secrets:setup": "node --experimental-strip-types --enable-source-maps --no-warnings ./scripts/setup/secrets.ts",
     "pipeline:state": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/pipeline/state-cli.ts",
     "pipeline:status": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/pipeline/dashboard-cli.ts",
@@ -49,9 +53,12 @@
     "test:integration:auth": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts auth",
     "test:integration:partners": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts partners",
     "test:integration:programs": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts programs",
+    "test:integration:budget-plans": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts budget-plans",
     "test:integration:financial": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts financial",
     "test:integration:etl": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts etl",
     "test:integration:etl:orchestrate": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts etl:orchestrate",
+    "test:integration:etl:contracts": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts etl:contracts",
+    "test:integration:etl:financial": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts etl:financial",
     "etl:check-duplicates": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/etl/diagnostics/check-duplicates.ts",
     "serve": "node --experimental-strip-types --enable-source-maps --no-warnings src/server.ts",
     "dev": "overmind start",
@@ -67,6 +74,7 @@
     "db:generate:programs": "drizzle-kit generate --config db/drizzle/programs.ts",
     "db:generate:financial": "drizzle-kit generate --config db/drizzle/financial.ts",
     "db:generate:notifications": "drizzle-kit generate --config db/drizzle/notifications.ts",
+    "db:generate:budget-plans": "drizzle-kit generate --config db/drizzle/budget-plans.ts",
     "db:seed:partners": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/seed/partners.ts",
     "seed:admin": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/seed/admin-user.ts"
   },
@@ -92,6 +100,7 @@
     "@fastify/swagger": "9.7.0",
     "@fastify/swagger-ui": "5.2.6",
     "drizzle-orm": "0.45.2",
+    "fast-xml-parser": "5.7.3",
     "fastify": "5.8.5",
     "fastify-zod-openapi": "5.6.1",
     "hash-wasm": "^4.12.0",
@@ -99,6 +108,7 @@
     "mysql2": "^3.22.3",
     "nodemailer": "^9.0.1",
     "resend": "^6.12.4",
+    "unpdf": "1.6.2",
     "zod": "4.4.3",
     "zod-openapi": "5.4.6"
   }

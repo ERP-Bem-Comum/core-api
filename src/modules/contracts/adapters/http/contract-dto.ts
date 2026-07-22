@@ -50,6 +50,10 @@ export const contractToListItem = (
     budgetPlanId: c.budgetPlanId,
     categorizacao: c.categorizacao,
     centroDeCusto: c.centroDeCusto,
+    // CTR-TAXONOMY-REFS: refs da árvore do plano ecoados crus (sem resolver nome — refs opacos).
+    costCenterRef: c.costCenterRef,
+    categoryRef: c.categoryRef,
+    subcategoryRef: c.subcategoryRef,
     program,
     // #116: ref do contratante (local, sem composição cross-módulo) — habilita filtrar/exibir
     // os contratos de um fornecedor no list sem N+1. `contractorId` = supplierId quando type='supplier'.

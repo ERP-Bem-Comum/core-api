@@ -7,11 +7,13 @@ import type {
   ContractRef,
   BudgetPlanRef,
   CategoryRef,
+  SubcategoryRef,
   CostCenterRef,
   ProgramRef,
 } from '../shared/refs.ts';
 import type { Retention } from '../shared/retention.ts';
 import type { RegisteredTax } from '../shared/registered-tax.ts';
+import type { SourceFileRef } from './source-file-ref.ts';
 
 export type DocumentType = 'NFS-e' | 'DANFE' | 'RPA' | 'Fatura' | 'Boleto' | 'Recibo' | 'Imposto';
 
@@ -59,6 +61,7 @@ export type DocumentCore = Readonly<{
   contractRef: ContractRef | null;
   budgetPlanRef: BudgetPlanRef | null;
   categoryRef: CategoryRef | null;
+  subcategoryRef: SubcategoryRef | null; // #502: folha da árvore do plano (carimbo da subcategoria)
   costCenterRef: CostCenterRef | null;
   programRef: ProgramRef | null;
   paymentMethod: PaymentMethod;
@@ -82,6 +85,7 @@ export type DocumentCore = Readonly<{
   competencia: Competencia | null; // #197: mês contábil de referência
   debitAccountRef: string | null; // #197: conta-débito (ref → fin_cedente_accounts)
   paymentDetail: string | null; // #273: complemento da forma de pagamento (linha digitável, referência de câmbio etc.)
+  sourceFileRef: SourceFileRef | null; // #62: comprovante-fonte (PDF/XML lido) guardado no storage
 }>;
 
 export type OpenDocument = DocumentCore & Readonly<{ status: 'Open' }>;
@@ -101,6 +105,7 @@ export type DraftDocument = Readonly<{
   contractRef: ContractRef | null;
   budgetPlanRef: BudgetPlanRef | null;
   categoryRef: CategoryRef | null;
+  subcategoryRef: SubcategoryRef | null; // #502: folha da árvore do plano (opcional no rascunho)
   costCenterRef: CostCenterRef | null;
   programRef: ProgramRef | null;
   paymentMethod: PaymentMethod | null;
@@ -119,6 +124,7 @@ export type DraftDocument = Readonly<{
   competencia: Competencia | null; // #197 (opcional no rascunho)
   debitAccountRef: string | null; // #197 (opcional no rascunho)
   paymentDetail: string | null; // #273 (opcional no rascunho)
+  sourceFileRef: SourceFileRef | null; // #62: comprovante-fonte (opcional no rascunho)
 }>;
 
 export type Document = DraftDocument | OpenDocument | ApprovedDocument;

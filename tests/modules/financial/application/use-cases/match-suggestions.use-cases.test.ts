@@ -50,6 +50,7 @@ const candidate = (
 ): SuggestionCandidate => ({
   valueCents: 1000,
   dueDate: D,
+  paidAt: null,
   supplierRef: null,
   supplierName: null,
   documentNumber: null,
@@ -132,6 +133,37 @@ describe('financial/application/use-cases/suggest-matches', () => {
       assert.equal(r.value.length, 1);
       assert.equal(r.value[0]?.payableId, B);
     }
+  });
+
+  it('CA3 (#272 ponto 2): valor exato + data casando por paidAt sobe de baixa (filtrada) para media', async () => {
+    // Só o valor bate (40). Vencimento MUITO longe (não corrobora), mas a baixa (paidAt) casa (+20) → media.
+    // Antes do fix: 40 → baixa → filtrado → nenhuma sugestão.
+    const P = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
+    const store: SuggestionCandidateStore = new Map([
+      [
+        P,
+        candidate({
+          payableId: P,
+          valueCents: 1000,
+          dueDate: new Date('2020-01-01T00:00:00.000Z'),
+          paidAt: new Date('2024-05-19T00:00:00.000Z'),
+          supplierName: null,
+          documentNumber: null,
+          supplierRef: null,
+        }),
+      ],
+    ]);
+    const r = await suggestMatches({
+      statements: fakeStatements(),
+      suggestions: createInMemorySuggestionView(store),
+      rejected: createInMemoryRejectedSuggestionRepository(),
+    })(TX_ID);
+    assert.equal(r.ok, true);
+    if (!r.ok) return;
+    assert.equal(r.value.length, 1);
+    assert.equal(r.value[0]?.payableId, P);
+    assert.equal(r.value[0]?.band, 'media');
+    assert.equal(r.value[0]?.score, 60);
   });
 
   it('CA4: transação inexistente → statement-transaction-not-found', async () => {

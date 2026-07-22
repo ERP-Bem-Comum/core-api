@@ -190,6 +190,90 @@
       "when": 1782748910003,
       "tag": "0026_concerned_bromley",
       "breakpoints": true
+    },
+    {
+      "idx": 27,
+      "version": "5",
+      "when": 1782873785583,
+      "tag": "0027_classy_wild_child",
+      "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "5",
+      "when": 1782876445198,
+      "tag": "0028_useful_giant_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "5",
+      "when": 1782879803751,
+      "tag": "0029_complete_risque",
+      "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "5",
+      "when": 1783005154499,
+      "tag": "0030_adorable_zaladane",
+      "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "5",
+      "when": 1783604121439,
+      "tag": "0031_fat_beast",
+      "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "5",
+      "when": 1783604979208,
+      "tag": "0032_many_supernaut",
+      "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "5",
+      "when": 1783633256565,
+      "tag": "0033_ambiguous_xavin",
+      "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "5",
+      "when": 1783985183996,
+      "tag": "0034_heavy_frank_castle",
+      "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "5",
+      "when": 1783996669571,
+      "tag": "0035_wet_puff_adder",
+      "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "5",
+      "when": 1784091254173,
+      "tag": "0036_powerful_marrow",
+      "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "5",
+      "when": 1784665030537,
+      "tag": "0037_natural_hedge_knight",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "5",
+      "when": 1784672123205,
+      "tag": "0038_huge_clint_barton",
+      "breakpoints": true
     }
   ]
 }

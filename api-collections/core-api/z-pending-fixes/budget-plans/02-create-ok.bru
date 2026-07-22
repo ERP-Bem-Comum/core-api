@@ -1,0 +1,40 @@
+meta {
+  name: BGP-PEND-2 create com Program real deveria retornar 201
+  type: http
+  seq: 3
+  docs: EXPECTED-FAIL — contrato documentado (schemas.ts createBudgetPlanResponseSchema + CA1 da issue #315, coberto GREEN em tests/modules/budget-plans/adapters/http/budget-plans.routes.test.ts via fastify.inject com seed explicito). Em memory mode via HTTP real (src/server.ts) retorna 404 program-not-found porque o programRef nunca e' encontrado no catalogo (ver folder.bru).
+}
+
+post {
+  url: {{baseUrl}}/api/v2/budget-plans
+  body: json
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{budgetPlansOperatorToken}}
+}
+
+body:json {
+  {
+    "year": 2031,
+    "programRef": "{{budgetPlansProgramRef}}"
+  }
+}
+
+script:post-response {
+  if (res.getStatus() === 201) {
+    bru.setVar("budgetPlansPlanId", res.getBody().id);
+  }
+}
+
+tests {
+  test("BGP-PEND-2 — POST /budget-plans com Program ATIVO real retorna 201", function () {
+    expect(res.getStatus()).to.equal(201);
+  });
+  test("BGP-PEND-2 — corpo tem status RASCUNHO e version 1.0", function () {
+    const body = res.getBody();
+    expect(body.status).to.equal("RASCUNHO");
+    expect(body.version).to.equal("1.0");
+  });
+}

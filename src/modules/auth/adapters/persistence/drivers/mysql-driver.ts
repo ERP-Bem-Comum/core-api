@@ -17,6 +17,10 @@ import { fileURLToPath } from 'node:url';
 import process from 'node:process';
 
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
+import {
+  buildPoolOptions as buildSharedPoolOptions,
+  type PoolConfigError,
+} from '../../../../../shared/persistence/mysql-pool-config.ts';
 import * as schema from '../schemas/mysql.ts';
 
 export type AuthMysqlConnectOptions = Readonly<{
@@ -24,8 +28,10 @@ export type AuthMysqlConnectOptions = Readonly<{
   // prod-safe default. Omitido = false (NAO aplica). Dev/CI passam true.
   applyMigrations?: boolean;
   poolLimit?: number;
-  // Override do idleTimeout (ms). Default = DEFAULT_IDLE_TIMEOUT_MS.
+  // Override do idleTimeout (ms). Default no builder compartilhado.
   idleTimeoutMs?: number;
+  // Override do teto de conexões ociosas mantidas. Default derivado (< connectionLimit).
+  maxIdle?: number;
 }>;
 
 export type AuthMysqlHandle = Readonly<{
@@ -37,30 +43,25 @@ export type AuthMysqlHandle = Readonly<{
 export type AuthMysqlDriverError =
   | 'auth-mysql-driver-connection-string-invalid'
   | 'auth-mysql-driver-connect-failed'
-  | 'auth-mysql-driver-migrate-failed';
+  | 'auth-mysql-driver-migrate-failed'
+  | 'auth-mysql-driver-pool-config-invalid';
 
 const CONNECTION_STRING_RE = /^mysql:\/\/[^/@\s]+(?::[^/@\s]*)?@[^/\s]+\/[^/?\s]+/;
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const MIGRATIONS_FOLDER = resolve(HERE, '..', 'migrations', 'mysql');
 
-const DEFAULT_POOL_LIMIT = 10;
-// H3 — idleTimeout alinhado com wait_timeout MySQL (best-practice 03).
-// (wait_timeout=300s - 30s) * 90% ≈ 243s → arredondado para 270_000 ms.
-const DEFAULT_IDLE_TIMEOUT_MS = 270_000;
-
-export const buildAuthPoolOptions = (opts: AuthMysqlConnectOptions): PoolOptions => ({
-  uri: opts.connectionString,
-  connectionLimit: opts.poolLimit ?? DEFAULT_POOL_LIMIT,
-  waitForConnections: true,
-  queueLimit: 0,
-  enableKeepAlive: true,
-  keepAliveInitialDelay: 10_000,
-  // H3 — fechar conexao ociosa ANTES do servidor matar.
-  idleTimeout: opts.idleTimeoutMs ?? DEFAULT_IDLE_TIMEOUT_MS,
-  // M2 — UTC fixo no round-trip Date<->DATETIME(3).
-  timezone: 'Z',
-});
+// Delega ao builder compartilhado (src/shared/persistence/mysql-pool-config.ts), que garante
+// `maxIdle < connectionLimit` por construção — sem isso o `idleTimeout` é inerte (Incident-0001).
+export const buildAuthPoolOptions = (
+  opts: AuthMysqlConnectOptions,
+): Result<PoolOptions, PoolConfigError> =>
+  buildSharedPoolOptions({
+    connectionString: opts.connectionString,
+    ...(opts.poolLimit !== undefined ? { connectionLimit: opts.poolLimit } : {}),
+    ...(opts.idleTimeoutMs !== undefined ? { idleTimeoutMs: opts.idleTimeoutMs } : {}),
+    ...(opts.maxIdle !== undefined ? { maxIdle: opts.maxIdle } : {}),
+  });
 
 const validateConnectionString = (s: string): Result<true, AuthMysqlDriverError> => {
   if (!CONNECTION_STRING_RE.test(s)) return err('auth-mysql-driver-connection-string-invalid');
@@ -96,13 +97,30 @@ const applyMigrationsTo = async (
 };
 
 const createPoolSafe = (opts: AuthMysqlConnectOptions): Result<Pool, AuthMysqlDriverError> => {
+  const cfg = buildAuthPoolOptions(opts);
+  if (!cfg.ok) {
+    process.stderr.write(`[auth-mysql-driver:pool-config] ${cfg.error}\n`);
+    return err('auth-mysql-driver-pool-config-invalid');
+  }
   try {
-    return ok(createPool(buildAuthPoolOptions(opts)));
+    return ok(createPool(cfg.value));
   } catch (cause) {
     process.stderr.write(`[auth-mysql-driver:createPool] ${String(cause)}\n`);
     return err('auth-mysql-driver-connect-failed');
   }
 };
+
+// Handle sobre um pool EXTERNO (PoolRegistry) — NÃO é dono do pool: `close` é no-op (o registry
+// faz o `end`). Usado pelo worker-runner p/ compartilhar 1 pool entre workers do mesmo RDS (#407).
+export const openAuthMysqlOnPool = (
+  // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+  pool: Pool,
+): AuthMysqlHandle => ({
+  db: drizzle(pool, { schema, mode: 'default' }),
+  schema,
+  // eslint-disable-next-line @typescript-eslint/promise-function-async
+  close: () => Promise.resolve(),
+});
 
 export const openAuthMysql = async (
   opts: AuthMysqlConnectOptions,

@@ -15,10 +15,21 @@ export type QuarantineReason =
   | Readonly<{ tag: 'RequiredFieldMissing'; field: string }>
   | Readonly<{ tag: 'Overflow'; field: string; attempted: string; maxLength: number }>
   | Readonly<{ tag: 'DateInvalid'; field: string; attempted: string }>
+  // Valor com precisao que o alvo nao representa (aditivo — BGP-ETL-READER-MAPPER). Ex.: `version`
+  // float com >1 casa decimal (o float nao distingue 1.10 de 1.1) — nao arredonda, quarentena.
+  // `attempted` e' um numero, nunca PII.
+  | Readonly<{ tag: 'PrecisionUnsupported'; field: string; attempted: string }>
+  // Dois campos que deveriam concordar divergem (aditivo — BGP-ETL-READER-MAPPER). Ex.: UF do
+  // municipio != abbreviation do estado no mesmo orcamento. `attempted` = 'SP!=CE', nunca PII.
+  | Readonly<{ tag: 'CrossFieldMismatch'; field: string; attempted: string }>
   // Falha de um port (persistencia/auth/rehydrate na borda do orquestrador). `portError`
   // carrega o codigo kebab-case EN do erro REAL do port (ex.: 'partners-etl-store-unavailable').
   // Codigo EN, nunca dado de linha — PII-free, seguro no resumo versionavel.
-  | Readonly<{ tag: 'PortError'; field: string; portError: string }>;
+  | Readonly<{ tag: 'PortError'; field: string; portError: string }>
+  // Exclusao DELIBERADA por decisao registrada (allowlist explicita por legacy_id —
+  // decisao (c) 2026-07-02). `decisionRef` aponta o documento/issue da decisao; e
+  // PII-free por construcao (referencia, nunca dado de linha).
+  | Readonly<{ tag: 'ExcludedByDecision'; field: string; decisionRef: string }>;
 
 export type QuarantineSummary = Readonly<{ tag: QuarantineReason['tag']; field: string }>;
 
@@ -45,8 +56,14 @@ export const describeReason = (reason: QuarantineReason): string => {
       return `Valor excede ${reason.maxLength} caracteres no campo ${reason.field}`;
     case 'DateInvalid':
       return `Data inválida no campo ${reason.field}`;
+    case 'PrecisionUnsupported':
+      return `Precisão não suportada no campo ${reason.field}`;
+    case 'CrossFieldMismatch':
+      return `Divergência entre campos que deveriam concordar: ${reason.field}`;
     case 'PortError':
       return `Falha de port na etapa ${reason.field}: ${reason.portError}`;
+    case 'ExcludedByDecision':
+      return `Excluído por decisão registrada (${reason.decisionRef})`;
     default: {
       const _exhaustive: never = reason;
       return _exhaustive;

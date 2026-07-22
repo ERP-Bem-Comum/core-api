@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "BGP-ETL-READER-MAPPER",
+  "size": "M",
+  "createdAt": "2026-07-17T14:48:18.070Z",
+  "closedAt": "2026-07-17T18:38:34.046Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-17T17:32:27.054Z",
+      "finishedAt": "2026-07-17T17:47:30.135Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "nodejs-fs-scripter",
+      "startedAt": "2026-07-17T17:47:42.415Z",
+      "finishedAt": "2026-07-17T18:11:26.187Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-17T18:11:39.688Z",
+      "finishedAt": "2026-07-17T18:22:49.064Z",
+      "rounds": 2,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-17T18:23:15.905Z",
+      "finishedAt": "2026-07-17T18:38:33.778Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

@@ -9,6 +9,7 @@ import process from 'node:process';
 
 import { buildApp } from '#src/shared/http/app.ts';
 import { readHttpConfig } from '#src/shared/http/config.ts';
+import { readEmailLinkBaseUrls } from '#src/shared/http/email-link-base-urls.ts';
 import {
   installLastResortHandlers,
   processLastResortDeps,
@@ -17,6 +18,8 @@ import {
   authHttpPlugin,
   buildAuthHttpDeps,
   makeRequireAuth,
+  resolveRbacMode,
+  rbacBypassBanner,
   parseE2eAuthSeed,
   usersHttpPlugin,
   approversHttpPlugin,
@@ -30,6 +33,7 @@ import {
 import {
   collaboratorsHttpPlugin,
   suppliersHttpPlugin,
+  suppliersBatchHttpPlugin,
   financiersHttpPlugin,
   partnerGeographyHttpPlugin,
   actHttpPlugin,
@@ -50,6 +54,12 @@ import {
   financialHttpPlugin,
   buildFinancialHttpDeps,
 } from '#src/modules/financial/public-api/http.ts';
+import {
+  budgetPlansHttpPlugin,
+  buildBudgetPlansHttpDeps,
+  parseE2eBudgetPlansSeed,
+} from '#src/modules/budget-plans/public-api/http.ts';
+import { reportsHttpPlugin, buildReportsHttpDeps } from '#src/modules/reports/public-api/http.ts';
 
 // Config S3/MinIO do logo de programa (ADR-0019 / issue #244 IAM Role).
 // Retorna config quando endpoint + bucket presentes (minimo para S3); credentials opcionais:
@@ -110,14 +120,28 @@ const main = async (): Promise<void> => {
           timeWindow: process.env['AUTH_LOGIN_RATE_LIMIT_WINDOW'] ?? '1 minute',
         }
       : undefined;
-  // BE-REC-003: origem confiável do link de reset (nunca header Host). Ausente → default (dev).
-  const resetBaseUrl = process.env['AUTH_RESET_BASE_URL'];
+  // BE-REC-003 + #331/#332: origem confiável dos links de e-mail (nunca header Host).
+  // Inválida, ou ausente em produção → boot falha (EX_CONFIG), nunca link localhost/relativo.
+  const emailLinkUrls = readEmailLinkBaseUrls(process.env);
+  if (!emailLinkUrls.ok) {
+    for (const message of emailLinkUrls.error) process.stderr.write(`server: ${message}\n`);
+    process.exit(78);
+  }
+  const { resetBaseUrl, activationBaseUrl, selfRegistrationBaseUrl } = emailLinkUrls.value;
+  // ADR-0052 — modo do RBAC. `bypass` desliga a autorização por permissão (todo autenticado é
+  // super-usuário). NÃO pode ser silencioso: um banner gritante no boot torna o estado inconfundível.
+  const rbacMode = resolveRbacMode(process.env);
+  if (rbacMode === 'bypass') {
+    process.stderr.write(rbacBypassBanner(process.env['NODE_ENV'] ?? 'undefined'));
+  }
   const authDeps = await buildAuthHttpDeps({
     driver: authDriver,
+    rbacMode,
     ...(authConnString !== undefined ? { connectionString: authConnString } : {}),
     ...(authSeed !== undefined ? { seed: authSeed } : {}),
     ...(sensitiveRateLimit !== undefined ? { sensitiveRateLimit } : {}),
-    ...(resetBaseUrl !== undefined && resetBaseUrl.length > 0 ? { resetBaseUrl } : {}),
+    ...(resetBaseUrl !== undefined ? { resetBaseUrl } : {}),
+    ...(activationBaseUrl !== undefined ? { activationBaseUrl } : {}),
   });
 
   // CTR-NUMBER-PROGRAM: read port de programs (ADR-0006/0014) p/ contracts compor o bloco
@@ -166,8 +190,18 @@ const main = async (): Promise<void> => {
           driver: 'mysql',
           ...(partnersWriterUrl !== undefined ? { writerUrl: partnersWriterUrl } : {}),
           ...(partnersReaderUrl !== undefined ? { readerUrl: partnersReaderUrl } : {}),
+          // campo legado PT do partners — rename rastreado na issue #333
+          ...(selfRegistrationBaseUrl !== undefined
+            ? { autocadastroBaseUrl: selfRegistrationBaseUrl }
+            : {}),
         }
-      : { driver: 'memory' },
+      : {
+          driver: 'memory',
+          // campo legado PT do partners — rename rastreado na issue #333
+          ...(selfRegistrationBaseUrl !== undefined
+            ? { autocadastroBaseUrl: selfRegistrationBaseUrl }
+            : {}),
+        },
   );
 
   // Módulo programs (spec 008, ADR-0033) → /api/v1/programs. Logo storage S3/MinIO (ADR-0019)
@@ -199,6 +233,56 @@ const main = async (): Promise<void> => {
       : { driver: 'memory' },
   );
 
+  // Módulo budget-plans (BGP-PLAN-CRUD, issue #315) → /api/v2/budget-plans. Greenfield V2
+  // (plugin direto). Driver mysql só com BUDGET_PLANS_DRIVER=mysql + BUDGET_PLANS_DATABASE_URL
+  // (uma connection string: bgp_* + read ports prg_*/par_* — ADR-0014); senão in-memory (degradado).
+  const budgetPlansWriterUrl = process.env['BUDGET_PLANS_DATABASE_URL'];
+  // Seed de catálogo via env — inerte fora de E2E/dev (guarda dupla CORE_API_E2E +
+  // BUDGET_PLANS_SEED_JSON). Malformado sob a flag → boot falha (o throw propaga p/ main().catch).
+  // Só o ramo memory consome; o mysql lê prg_*/par_* real.
+  const budgetPlansSeed = parseE2eBudgetPlansSeed(process.env);
+  const budgetPlansUsesMysql =
+    process.env['BUDGET_PLANS_DRIVER'] === 'mysql' && budgetPlansWriterUrl !== undefined;
+  // Sinal NAO-silencioso: em producao, cair em memory significa servir um store VAZIO — a tela fica
+  // vazia mesmo com o dado migrado no banco (incidente pos-ETL de Orcamento, 2026-07-17). Avisa alto
+  // em vez de degradar calado. Em dev/E2E o memory e' intencional (seed), entao nao alarma.
+  if (!budgetPlansUsesMysql && process.env['NODE_ENV'] === 'production') {
+    process.stderr.write(
+      'server: budget-plans em MEMORY (degradado) — a API NAO le o MySQL. ' +
+        'Defina BUDGET_PLANS_DRIVER=mysql + BUDGET_PLANS_DATABASE_URL para servir o dado persistido.\n',
+    );
+  }
+  const budgetPlansDeps = await buildBudgetPlansHttpDeps(
+    budgetPlansUsesMysql
+      ? { driver: 'mysql', connectionString: budgetPlansWriterUrl }
+      : { driver: 'memory', ...(budgetPlansSeed !== undefined ? { seed: budgetPlansSeed } : {}) },
+  );
+
+  // Módulo reports (épico Relatórios #114) → /api/v2/reports. Greenfield V2 (plugin direto).
+  // Read-only, sem writer próprio — lê projeções via public-api (ADR-0006/0014): REP-1 (#238) do
+  // `partners` (par_*), REP-2 (#240) do `financial` (fin_*) e, desde #437, o conjunto de
+  // contratantes com contrato Active do `contracts` (ctr_*) para o anti-join do REP-2. Cada URL cai
+  // no *_DATABASE_URL do módulo-fonte (mesmo database `core`, prefixos isolados) quando o override
+  // específico falta.
+  const reportsPartnersUrl = process.env['REPORTS_DATABASE_URL'] ?? partnersWriterUrl;
+  const reportsFinancialUrl = process.env['REPORTS_FINANCIAL_DATABASE_URL'] ?? financialWriterUrl;
+  const reportsContractsUrl = process.env['REPORTS_CONTRACTS_DATABASE_URL'] ?? contractsWriterUrl;
+  // S6 (#502): fonte do orçado no Realizado × Planejado. Cai no BUDGET_PLANS_DATABASE_URL quando o
+  // override específico falta (mesmo database `core`, prefixos isolados — ADR-0014).
+  const reportsBudgetPlansUrl =
+    process.env['REPORTS_BUDGET_PLANS_DATABASE_URL'] ?? budgetPlansWriterUrl;
+  const reportsDeps = await buildReportsHttpDeps(
+    process.env['REPORTS_DRIVER'] === 'mysql'
+      ? {
+          driver: 'mysql',
+          ...(reportsPartnersUrl !== undefined ? { partnersUrl: reportsPartnersUrl } : {}),
+          ...(reportsFinancialUrl !== undefined ? { financialUrl: reportsFinancialUrl } : {}),
+          ...(reportsContractsUrl !== undefined ? { contractsUrl: reportsContractsUrl } : {}),
+          ...(reportsBudgetPlansUrl !== undefined ? { budgetPlansUrl: reportsBudgetPlansUrl } : {}),
+        }
+      : { driver: 'memory' },
+  );
+
   // requireAuth do auth (cross-módulo via public-api, ADR-0006/0024) protege as rotas de contracts.
   const requireAuth = makeRequireAuth(authDeps.verifyAccessToken);
 
@@ -208,6 +292,14 @@ const main = async (): Promise<void> => {
       authHttpPlugin(authDeps),
       contractsHttpPlugin(contractsDeps, { requireAuth, authorize: authDeps.authorize }),
       financialHttpPlugin(financialDeps, { requireAuth, authorize: authDeps.authorize }),
+      // Resolução em lote de fornecedores (#356; ADR-0049 §3) → /api/v2/partners/suppliers:batch.
+      suppliersBatchHttpPlugin(partnersDeps, {
+        requireAuth,
+        authorize: authDeps.authorize,
+      }),
+      budgetPlansHttpPlugin(budgetPlansDeps, { requireAuth, authorize: authDeps.authorize }),
+      // Relatórios (REPORTS-TEAM-ABC #238) → /api/v2/reports/team. Greenfield V2 (plugin direto).
+      reportsHttpPlugin(reportsDeps, { requireAuth, authorize: authDeps.authorize }),
       // Espelho do legado (ADR-0033) → /api/v1.
       {
         plugin: collaboratorsHttpPlugin(partnersDeps, {
@@ -334,6 +426,8 @@ const main = async (): Promise<void> => {
     await partnersDeps.shutdown();
     await programsDeps.shutdown();
     await financialDeps.shutdown();
+    await budgetPlansDeps.shutdown();
+    await reportsDeps.shutdown();
     // CTR-NUMBER-PROGRAM: fecha o pool do read port de programs injetado em contracts.
     if (programsReadPort !== undefined) await programsReadPort.close();
     app.log.info('Servidor encerrado.');

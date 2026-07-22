@@ -11,6 +11,8 @@
 //
 // ADR-0006 (Result na borda), ADR-0010 (Email Port/Adapter), ADR-0047 (consumidor do evento).
 
+import process from 'node:process';
+
 import { ok, err } from '#src/shared/primitives/result.ts';
 import type { Result } from '#src/shared/primitives/result.ts';
 import type { EventDelivery, DeliveryError, OutboxRow } from '#src/shared/outbox/index.ts';
@@ -30,70 +32,201 @@ import type { EmailSender } from '../../application/ports/email-sender.ts';
 
 const CONSUMER_ID = 'notifications-email-dispatch';
 
+// Escapa para texto E para atributo: o retorno alimenta `href="..."`/conteudo de tag, entao a aspa
+// tambem precisa virar entidade — sem ela um valor com `"` fecha o atributo e injeta o proximo.
+// So o htmlBody usa isto; o textBody e montado a parte (entidade nao vaza no texto puro).
 const escapeHtml = (raw: string): string =>
-  raw.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  raw
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 
-// ─── templates (migrados dos mailers atuais — CA8) ──────────────────────────────
+// ─── templates de e-mail transacional (layout de marca compartilhado, definido abaixo) ──────────
 
-// PasswordResetRequested — espelha password-reset-mailer.email.ts.
-const resetTemplate = (
-  event: Readonly<{ resetUrl: string }>,
-): Readonly<{ subject: string; textBody: string }> => ({
-  subject: 'Recuperacao de senha',
-  textBody:
-    'Recebemos um pedido de redefinicao de senha. Acesse o link para continuar ' +
-    `(expira em breve):\n\n${event.resetUrl}\n\nSe voce nao solicitou, ignore este e-mail.`,
-});
+// ─── layout de marca compartilhado (HTML RESTRITO: tabelas + CSS inline — diretriz do tech lead) ──
 
-// UserInvited — espelha invite-mailer.email.ts (texto + HTML com escapeHtml no nome).
+// Logo hospedado no web-app (mesma origem do link do e-mail). E-mail nao embute imagem (base64 e
+// bloqueado no Gmail) -> URL publica derivada do proprio link (zero config); URL malformada -> null
+// (fallback textual). Asset: web-app public/images/logo-bem-comum-email.png.
+const EMAIL_LOGO_PATH = '/images/logo-bem-comum-email.png';
+const emailLogoUrl = (linkUrl: string): string | null => {
+  try {
+    return new URL(linkUrl).origin + EMAIL_LOGO_PATH;
+  } catch {
+    return null;
+  }
+};
+
+const BRAND_BLUE = '#33609C';
+const FONT_STACK = "'Nunito','Helvetica Neue',Helvetica,Arial,sans-serif";
+
+// Paragrafo do corpo (estilo unico; o ultimo antes do botao ganha folga maior).
+const bodyP = (innerHtml: string, last = false): string =>
+  `<p style="margin:0 0 ${last ? '26' : '16'}px 0;font-size:15px;line-height:1.65;` +
+  `color:#4B5563;">${innerHtml}</p>`;
+
+// Realce de termo-chave no azul da marca (dentro do corpo).
+const hl = (text: string): string => `<strong style="color:${BRAND_BLUE};">${text}</strong>`;
+
+// Saudacao "Ola, <nome>!" (nome ja escapado). Nota de rodape dos CONVITES (colaborador/usuario).
+const greetName = (safeName: string): string => `Ol&aacute;, ${safeName}!`;
+const INVITE_FOOTNOTE =
+  'Se voc&ecirc; n&atilde;o esperava este convite, pode ignorar este e-mail com seguran&ccedil;a.';
+
+// Layout de marca compartilhado por todos os e-mails transacionais: faixa + logo, saudacao, corpo,
+// botao CTA table-based (Outlook-safe), nota + rodape. `safeName`/`ctaUrl` ja escapados pelo chamador
+// (anti-XSS); `bodyHtml` e conteudo CONFIAVEL (montado pelo template, acentos como entidades).
+const brandedEmailHtml = (
+  parts: Readonly<{
+    logoUrl: string | null;
+    greetingHtml: string;
+    bodyHtml: string;
+    ctaLabel: string;
+    ctaUrl: string;
+    footnoteHtml: string;
+  }>,
+): string => {
+  const logoBlock =
+    parts.logoUrl === null
+      ? `<div style="font-family:${FONT_STACK};font-size:22px;font-weight:800;` +
+        `color:${BRAND_BLUE};">Bem Comum</div>`
+      : `<img src="${parts.logoUrl}" width="180" alt="Bem Comum" ` +
+        'style="display:block;width:180px;max-width:180px;height:auto;border:0;" />';
+
+  return (
+    '<table role="presentation" width="100%" cellpadding="0" cellspacing="0" ' +
+    'style="margin:0;padding:0;background-color:#E8EEF0;"><tr>' +
+    '<td align="center" style="padding:32px 16px;">' +
+    '<table role="presentation" width="600" cellpadding="0" cellspacing="0" ' +
+    'style="width:600px;max-width:600px;background-color:#FFFFFF;border:1px solid #E3E9EE;' +
+    'border-radius:14px;overflow:hidden;">' +
+    `<tr><td style="height:5px;line-height:5px;font-size:0;background-color:${BRAND_BLUE};">` +
+    '&nbsp;</td></tr>' +
+    `<tr><td align="center" style="padding:34px 40px 22px 40px;">${logoBlock}</td></tr>` +
+    '<tr><td style="padding:0 40px;"><div style="height:1px;line-height:1px;font-size:0;' +
+    'background-color:#EDF1F4;">&nbsp;</div></td></tr>' +
+    `<tr><td style="padding:30px 40px 8px 40px;font-family:${FONT_STACK};">` +
+    '<p style="margin:0 0 18px 0;font-size:19px;line-height:1.4;font-weight:700;' +
+    `color:#1E2A3A;">${parts.greetingHtml}</p>` +
+    parts.bodyHtml +
+    '</td></tr>' +
+    '<tr><td align="center" style="padding:0 40px 30px 40px;">' +
+    '<table role="presentation" cellpadding="0" cellspacing="0"><tr>' +
+    `<td align="center" style="border-radius:8px;background-color:${BRAND_BLUE};">` +
+    `<a href="${parts.ctaUrl}" target="_blank" style="display:inline-block;padding:14px 30px;` +
+    `font-family:${FONT_STACK};font-size:15px;font-weight:700;color:#FFFFFF;` +
+    `text-decoration:none;border-radius:8px;">${parts.ctaLabel}</a>` +
+    '</td></tr></table></td></tr>' +
+    `<tr><td style="padding:0 40px 28px 40px;font-family:${FONT_STACK};">` +
+    '<div style="height:1px;line-height:1px;font-size:0;background-color:#EDF1F4;' +
+    'margin-bottom:18px;">&nbsp;</div>' +
+    '<p style="margin:0;font-size:13px;line-height:1.6;color:#9AA4B0;">' +
+    `${parts.footnoteHtml}</p></td></tr></table>` +
+    '<table role="presentation" width="600" cellpadding="0" cellspacing="0" ' +
+    'style="width:600px;max-width:600px;"><tr>' +
+    `<td align="center" style="padding:18px 40px 6px 40px;font-family:${FONT_STACK};">` +
+    '<p style="margin:0;font-size:12px;line-height:1.5;color:#A7B0BC;">' +
+    'Bem Comum &middot; este &eacute; um e-mail autom&aacute;tico, n&atilde;o responda.' +
+    '</p></td></tr></table></td></tr></table>'
+  );
+};
+
+// UserInvited — conta criada; define a senha do 1o acesso. Novo layout de marca + copy do modelo
+// antigo ("Bem-vindo ao ERP! ... criar uma senha para o primeiro acesso").
 const inviteTemplate = (
   event: Readonly<{ activationUrl: string; recipientName: string }>,
 ): Readonly<{ subject: string; textBody: string; htmlBody: string }> => {
   const textBody =
     `Ola, ${event.recipientName}!\n\n` +
-    'Uma conta foi criada para voce no sistema Bem Comum.\n\n' +
-    'Para definir sua senha e ativar o acesso, clique no link abaixo ' +
+    'Seja bem-vindo ao ERP Bem Comum! Agora falta pouco para voce ter acesso a plataforma.\n\n' +
+    'Basta clicar no link abaixo e criar uma senha para o seu primeiro acesso ' +
     '(valido por tempo limitado):\n\n' +
     `${event.activationUrl}\n\n` +
-    'Se voce nao esperava este convite, ignore este e-mail. ' +
-    'Nenhuma acao e necessaria - a conta permanecera inativa.';
+    'Se voce nao esperava este convite, ignore este e-mail.';
 
-  const safeName = escapeHtml(event.recipientName);
-  const htmlBody =
-    `<p>Ola, ${safeName}!</p>` +
-    '<p>Uma conta foi criada para voce no sistema <strong>Bem Comum</strong>.</p>' +
-    '<p>Para definir sua senha e ativar o acesso, clique no link abaixo ' +
-    '(valido por tempo limitado):</p>' +
-    `<p><a href="${event.activationUrl}">Ativar minha conta</a></p>` +
-    '<p>Se voce nao esperava este convite, ignore este e-mail.</p>';
+  const htmlBody = brandedEmailHtml({
+    logoUrl: emailLogoUrl(event.activationUrl),
+    greetingHtml: greetName(escapeHtml(event.recipientName)),
+    bodyHtml:
+      bodyP(
+        `Seja bem-vindo ao ERP ${hl('Bem Comum')}! Agora falta pouco para voc&ecirc; ` +
+          'ter acesso &agrave; plataforma.',
+      ) +
+      bodyP(
+        'Basta clicar no bot&atilde;o abaixo e criar uma senha para o seu primeiro acesso ' +
+          '(v&aacute;lido por tempo limitado):',
+        true,
+      ),
+    ctaLabel: 'Criar senha',
+    ctaUrl: escapeHtml(event.activationUrl),
+    footnoteHtml: INVITE_FOOTNOTE,
+  });
 
-  return { subject: 'Bem-vindo ao Bem Comum - ative seu acesso', textBody, htmlBody };
+  return { subject: 'Bem Comum - Seja Bem-vindo ao ERP!', textBody, htmlBody };
 };
 
-// CollaboratorInvited (partners) — convite de autocadastro de colaborador (texto + HTML com
-// escapeHtml no nome). Espelha o invite-mailer do partners (collaborator-invite-mailer.email.ts).
+// CollaboratorInvited (partners) — convite de autocadastro de colaborador (mesmo layout de marca).
 const collaboratorInviteTemplate = (
   event: Readonly<{ autocadastroUrl: string; recipientName: string }>,
 ): Readonly<{ subject: string; textBody: string; htmlBody: string }> => {
   const textBody =
     `Ola, ${event.recipientName}!\n\n` +
-    'Voce foi convidado a completar seu cadastro de colaborador no sistema Bem Comum.\n\n' +
-    'Para preencher seus dados e ativar o acesso, clique no link abaixo ' +
-    '(valido por tempo limitado):\n\n' +
+    'Voce foi convidado a completar seu cadastro de Colaborador no sistema Bem Comum.\n\n' +
+    'Para preencher seus dados, clique no link abaixo (valido por tempo limitado):\n\n' +
     `${event.autocadastroUrl}\n\n` +
     'Se voce nao esperava este convite, ignore este e-mail.';
 
-  const safeName = escapeHtml(event.recipientName);
-  const htmlBody =
-    `<p>Ola, ${safeName}!</p>` +
-    '<p>Voce foi convidado a completar seu cadastro de colaborador no sistema ' +
-    '<strong>Bem Comum</strong>.</p>' +
-    '<p>Para preencher seus dados e ativar o acesso, clique no link abaixo ' +
-    '(valido por tempo limitado):</p>' +
-    `<p><a href="${event.autocadastroUrl}">Completar meu cadastro</a></p>` +
-    '<p>Se voce nao esperava este convite, ignore este e-mail.</p>';
+  const htmlBody = brandedEmailHtml({
+    logoUrl: emailLogoUrl(event.autocadastroUrl),
+    greetingHtml: greetName(escapeHtml(event.recipientName)),
+    bodyHtml:
+      bodyP(
+        `Voc&ecirc; foi convidado a completar seu cadastro de ${hl('Colaborador')} ` +
+          'no sistema Bem Comum.',
+      ) +
+      bodyP(
+        'Para preencher seus dados, clique no bot&atilde;o abaixo (v&aacute;lido por tempo limitado):',
+        true,
+      ),
+    ctaLabel: 'Completar meu cadastro',
+    ctaUrl: escapeHtml(event.autocadastroUrl),
+    footnoteHtml: INVITE_FOOTNOTE,
+  });
 
-  return { subject: 'Bem Comum - complete seu cadastro de colaborador', textBody, htmlBody };
+  return { subject: 'Bem Comum - Complete seu Cadastro de Colaborador', textBody, htmlBody };
+};
+
+// PasswordResetRequested — pedido de recuperacao de senha (mesmo layout de marca). O evento NAO carrega
+// nome -> saudacao sem nome; a nota e "nao solicitou" (nao "nao esperava convite").
+const resetTemplate = (
+  event: Readonly<{ resetUrl: string }>,
+): Readonly<{ subject: string; textBody: string; htmlBody: string }> => {
+  const textBody =
+    'Ola,\n\n' +
+    'Recebemos um pedido para redefinir a sua senha de acesso ao ERP Bem Comum.\n\n' +
+    'Para criar uma nova senha, clique no link abaixo (valido por tempo limitado):\n\n' +
+    `${event.resetUrl}\n\n` +
+    'Se voce nao solicitou esta redefinicao, ignore este e-mail - sua senha atual continua valida.';
+
+  const htmlBody = brandedEmailHtml({
+    logoUrl: emailLogoUrl(event.resetUrl),
+    greetingHtml: 'Ol&aacute;,',
+    bodyHtml:
+      bodyP(`Recebemos um pedido para redefinir a sua senha de acesso ao ERP ${hl('Bem Comum')}.`) +
+      bodyP(
+        'Para criar uma nova senha, clique no bot&atilde;o abaixo (v&aacute;lido por tempo limitado):',
+        true,
+      ),
+    ctaLabel: 'Redefinir senha',
+    ctaUrl: escapeHtml(event.resetUrl),
+    footnoteHtml:
+      'Se voc&ecirc; n&atilde;o solicitou esta redefini&ccedil;&atilde;o, pode ignorar este e-mail ' +
+      '&mdash; sua senha atual continua v&aacute;lida.',
+  });
+
+  return { subject: 'Bem Comum - Recuperar Senha', textBody, htmlBody };
 };
 
 // ─── union multi-fonte (auth + partners) ──────────────────────────────────────
@@ -124,7 +257,13 @@ const buildMessage = (
       if (!subject.ok) {
         return err(deliveryUnavailable(`invalid-subject:${subject.error}`));
       }
-      return ok({ from, to: [to.value], subject: subject.value, textBody: tpl.textBody });
+      return ok({
+        from,
+        to: [to.value],
+        subject: subject.value,
+        textBody: tpl.textBody,
+        htmlBody: tpl.htmlBody,
+      });
     }
     case 'UserInvited': {
       const tpl = inviteTemplate(event);
@@ -201,6 +340,15 @@ export const createEmailEventDelivery = (
 
     const sent = await deps.emailSender.send(message.value);
     if (sent.ok) return ok(undefined);
+    // rate-limited (#133): descarte anti-flood — a row e PROCESSADA (nao retry, nao DLQ). O e-mail
+    // excedente e intencionalmente suprimido; nao ha o que reentregar (a janela precisa passar).
+    // M4: sinal observavel do descarte (sem endereco — anti-vazamento), distinto do "delivered" do worker.
+    if (sent.error.tag === 'rate-limited') {
+      process.stderr.write(
+        `[email-event-delivery] rate-limited: e-mail suprimido eventId=${row.eventId} type=${row.eventType}\n`,
+      );
+      return ok(undefined);
+    }
     return err(deliveryUnavailable(`email-send-failed:${sent.error.tag}:${sent.error.reason}`));
   },
 });

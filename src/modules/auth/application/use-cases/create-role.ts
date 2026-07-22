@@ -24,12 +24,14 @@ import type { RoleRepository } from '../../domain/authorization/role-repository.
 export type CreateRoleCommand = Readonly<{
   name: string;
   permissions: readonly string[];
+  approvalLimitCents?: number | null;
 }>;
 
 export type CreateRoleError =
   | 'role-name-invalid'
   | 'role-permission-not-in-catalog'
   | 'role-name-duplicate'
+  | 'role-approval-limit-invalid'
   | 'role-repo-unavailable';
 
 export type CreateRoleOutput = Readonly<{ id: string }>;
@@ -48,11 +50,20 @@ export const createRole =
       permissions.push(parsed.value);
     }
 
-    // (b)(c) Cria o agregado: valida o nome (RoleName) e deduplica. NAO valida o catalogo aqui.
-    const created = Role.create({ id: RoleId.generate(), name: cmd.name, permissions });
+    // (b)(c) Cria o agregado: valida o nome (RoleName), a alcada (Money >= 0) e deduplica. NAO
+    // valida o catalogo aqui. Propaga role-name-invalid OU role-approval-limit-invalid.
+    const created = Role.create({
+      id: RoleId.generate(),
+      name: cmd.name,
+      permissions,
+      ...(cmd.approvalLimitCents !== undefined
+        ? { approvalLimitCents: cmd.approvalLimitCents }
+        : {}),
+    });
     if (!created.ok) {
-      // Role.create so devolve 'role-name-invalid' nesta fase (catalogo validado em (d)).
-      return err('role-name-invalid');
+      return err(
+        created.error === 'role-approval-limit-invalid' ? created.error : 'role-name-invalid',
+      );
     }
 
     // (d) Valida cada permission ⊆ catalogo (Role.setPermissions). Fora do catalogo -> 422.

@@ -29,6 +29,7 @@ export type AdjustDocumentCommand = Readonly<{
   retentions?: readonly Retention.RetentionInput[];
   dueDate?: Date;
   description?: string | null;
+  paymentDetail?: string | null;
 }>;
 
 export type AdjustDocumentError =
@@ -84,6 +85,7 @@ const buildChanges = (
     ...(retentions.value !== undefined ? { retentions: retentions.value } : {}),
     ...(cmd.dueDate !== undefined ? { dueDate: cmd.dueDate } : {}),
     ...(cmd.description !== undefined ? { description: cmd.description } : {}),
+    ...(cmd.paymentDetail !== undefined ? { paymentDetail: cmd.paymentDetail } : {}),
   });
 };
 
@@ -119,6 +121,7 @@ export const adjustDocument =
         payables: found.value.payables,
         ...(cmd.dueDate !== undefined ? { dueDate: cmd.dueDate } : {}),
         ...(cmd.description !== undefined ? { description: cmd.description } : {}),
+        ...(cmd.paymentDetail !== undefined ? { paymentDetail: cmd.paymentDetail } : {}),
       });
       if (!edited.ok) return err(edited.error);
 

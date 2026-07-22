@@ -86,9 +86,10 @@ if (!process.env['MYSQL_INTEGRATION']) {
       });
       if (!created.ok) throw new Error(`setup: saveDocument ${created.error}`);
       const payableId = String(created.value.payableIds[0]);
+      // paid_at obrigatório junto de status='Paid' (CHECK fin_payables_paid_at_chk, #383).
       await handle.db
         .update(finPayables)
-        .set({ status: 'Paid' })
+        .set({ status: 'Paid', paidAt: new Date('2026-07-01T00:00:00.000Z') })
         .where(eq(finPayables.id, payableId));
       return payableId;
     };

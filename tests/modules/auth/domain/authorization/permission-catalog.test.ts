@@ -125,7 +125,13 @@ describe('PermissionCatalog.all', () => {
       'act:write',
       'bank-account:read',
       'bank-account:write',
+      // budget-plan:* — modulo budget-plans (#315, US1 CRUD de Plano Orcamentario)
+      'budget-plan:read',
+      'budget-plan:write',
       'collaborator:read',
+      // collaborator:read-sensitive — gate do relatorio demografico (REPORTS-TEAM-DEMOGRAPHICS):
+      // raca/identidade de genero/faixa etaria agregadas (dado sensivel LGPD, Art. 5o II).
+      'collaborator:read-sensitive',
       'collaborator:write',
       'contract:delete',
       'contract:mass-approve',

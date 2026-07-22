@@ -25,6 +25,9 @@ export type ManualEntry = Readonly<{
   type: ManualEntryType;
   valueCents: number;
   supplierRef: string | null;
+  // #502/S2: taxonomia planejável no título manual (plano + subcategoria), ao lado dos irmãos.
+  budgetPlanRef: string | null;
+  subcategoryRef: string | null;
   categoryRef: string | null;
   costCenterRef: string | null;
   programRef: string | null;

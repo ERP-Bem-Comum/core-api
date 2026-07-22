@@ -13,6 +13,7 @@
 export { authHttpPlugin } from '../adapters/http/plugin.ts';
 export { buildAuthHttpDeps } from '../adapters/http/composition.ts';
 export { makeRequireAuth, makeAuthorize, makeHasPermission } from '../adapters/http/auth-hook.ts';
+export { resolveRbacMode, rbacBypassBanner, type RbacMode } from '../adapters/http/rbac-mode.ts';
 export { parseE2eAuthSeed } from '../adapters/http/e2e-seed.ts';
 export { usersHttpPlugin } from '../adapters/http/users-plugin.ts';
 export type { UsersHttpDeps, UsersHttpHooks } from '../adapters/http/users-plugin.ts';

@@ -10,6 +10,9 @@ import type { Brand } from '../../../../shared/primitives/brand.ts';
 export type ContractRef = Brand<string, 'ContractRef'>;
 export type BudgetPlanRef = Brand<string, 'BudgetPlanRef'>;
 export type CategoryRef = Brand<string, 'CategoryRef'>;
+// Subcategoria = folha da árvore do plano (#502). Ref opaco por formato (UUID v4), sem acoplamento
+// ao módulo dono (budget-plans) — o pertencimento ao plano é resolvido na leitura (S5), não aqui.
+export type SubcategoryRef = Brand<string, 'SubcategoryRef'>;
 export type CostCenterRef = Brand<string, 'CostCenterRef'>;
 export type ProgramRef = Brand<string, 'ProgramRef'>;
 export type FinancialRefError = 'financial-ref-invalid';
@@ -28,6 +31,11 @@ export const BudgetPlanRef = {
 
 export const CategoryRef = {
   rehydrate: (raw: string): Result<CategoryRef, FinancialRefError> => rehydrateAs<CategoryRef>(raw),
+} as const;
+
+export const SubcategoryRef = {
+  rehydrate: (raw: string): Result<SubcategoryRef, FinancialRefError> =>
+    rehydrateAs<SubcategoryRef>(raw),
 } as const;
 
 export const CostCenterRef = {

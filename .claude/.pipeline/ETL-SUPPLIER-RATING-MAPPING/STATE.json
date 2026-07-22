@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "ETL-SUPPLIER-RATING-MAPPING",
+  "size": "S",
+  "createdAt": "2026-07-02T13:35:40.534Z",
+  "closedAt": "2026-07-02T13:53:07.796Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-02T13:36:12.011Z",
+      "finishedAt": "2026-07-02T13:37:35.904Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "mysql-database-expert",
+      "startedAt": "2026-07-02T13:37:36.284Z",
+      "finishedAt": "2026-07-02T13:41:05.519Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-02T13:41:05.922Z",
+      "finishedAt": "2026-07-02T13:49:36.581Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-02T13:53:07.041Z",
+      "finishedAt": "2026-07-02T13:53:07.418Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

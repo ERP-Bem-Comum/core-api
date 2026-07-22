@@ -7,6 +7,7 @@ import {
   ContractRef,
   BudgetPlanRef,
   CategoryRef,
+  SubcategoryRef,
   CostCenterRef,
   ProgramRef,
   type FinancialRefError,
@@ -16,9 +17,16 @@ import * as Retention from '../../domain/shared/retention.ts';
 import * as RegisteredTax from '../../domain/shared/registered-tax.ts';
 import * as Document from '../../domain/document/document.ts';
 import * as Competencia from '../../domain/document/competencia.ts';
+import {
+  checkApprover,
+  escalate,
+  type ApprovalError,
+} from '../../domain/document/approval-policy.ts';
 import * as CedenteAccountId from '../../domain/cedente/cedente-account-id.ts';
+import { isActive } from '../../domain/cedente/cedente-account.ts';
 import type { DocumentType, PaymentMethod, PayeeKind } from '../../domain/document/types.ts';
 import type { PayableId } from '../../domain/shared/payable-id.ts';
+import type { DocumentEvent } from '../../domain/document/events.ts';
 import type { DocumentError } from '../../domain/document/errors.ts';
 import type {
   DocumentRepository,
@@ -32,6 +40,10 @@ import type {
   CedenteAccountStore,
   CedenteAccountStoreError,
 } from '../ports/cedente-account-store.ts';
+import type {
+  ApproverAuthorityReader,
+  ApproverAuthorityReadError,
+} from '../ports/approver-authority-reader.ts';
 import { buildTimelineEntries } from '../timeline-recording.ts';
 
 export type SaveDocumentDeps = Readonly<{
@@ -41,6 +53,9 @@ export type SaveDocumentDeps = Readonly<{
   contractCategorizationReader: ContractCategorizationReadPort;
   // #197 (R-1b): valida existência da conta-débito (by-identity em fin_cedente_accounts).
   cedenteAccountStore: CedenteAccountStore;
+  // #289: leitura cross-módulo da alçada do aprovador (auth/public-api). Opt-in — a composição
+  // HTTP sempre injeta; ausente ⇒ gate de alçada não roda (testes de persistência sem aprovador).
+  approverAuthorityReader?: ApproverAuthorityReader;
 }>;
 
 export type SaveDocumentCommand = Readonly<{
@@ -52,6 +67,7 @@ export type SaveDocumentCommand = Readonly<{
   contractRef?: string | null;
   budgetPlanRef?: string | null;
   categoryRef?: string | null;
+  subcategoryRef?: string | null; // #502: folha da árvore do plano (carimbo da subcategoria)
   costCenterRef?: string | null;
   programRef?: string | null;
   paymentMethod: PaymentMethod;
@@ -88,7 +104,10 @@ export type SaveDocumentError =
   | RegisteredTax.RegisteredTaxError
   | UserRef.UserRefError
   | CedenteAccountStoreError
-  | 'cedente-account-not-found';
+  | 'cedente-account-not-found'
+  | 'cedente-account-closed'
+  | ApprovalError
+  | ApproverAuthorityReadError;
 
 // Imperative Shell: traduz primitivos → VOs (smart constructors), chama o domínio, persiste e publica.
 // Sequência canônica (.claude/rules/application.md): validar → domain → persist → publish.
@@ -105,6 +124,10 @@ export const saveDocument =
     if (budgetPlanRef !== null && !budgetPlanRef.ok) return err(budgetPlanRef.error);
     const categoryRef = cmd.categoryRef == null ? null : CategoryRef.rehydrate(cmd.categoryRef);
     if (categoryRef !== null && !categoryRef.ok) return err(categoryRef.error);
+    // #502: ref opaco por formato (UUID v4) — o pertencimento ao plano é resolvido na leitura (S5).
+    const subcategoryRef =
+      cmd.subcategoryRef == null ? null : SubcategoryRef.rehydrate(cmd.subcategoryRef);
+    if (subcategoryRef !== null && !subcategoryRef.ok) return err(subcategoryRef.error);
     const costCenterRef =
       cmd.costCenterRef == null ? null : CostCenterRef.rehydrate(cmd.costCenterRef);
     if (costCenterRef !== null && !costCenterRef.ok) return err(costCenterRef.error);
@@ -126,6 +149,7 @@ export const saveDocument =
       const found = await deps.cedenteAccountStore.findById(accId.value);
       if (!found.ok) return err(found.error);
       if (found.value === null) return err('cedente-account-not-found');
+      if (!isActive(found.value)) return err('cedente-account-closed');
     }
 
     // #48: herda programRef/budgetPlanRef do contrato vinculado quando não informados pelo front
@@ -177,7 +201,9 @@ export const saveDocument =
       registeredTaxes.push(built.value);
     }
 
-    const created = Document.create({
+    // Input do agregado montado uma vez; a cascata (US3) reusa via spread trocando só o aprovador
+    // efetivo — evita duplicar os ~25 campos (drift entre os dois `Document.create`).
+    const createInput = {
       id: DocumentId.generate(),
       documentNumber: cmd.documentNumber,
       series: cmd.series ?? null,
@@ -187,6 +213,7 @@ export const saveDocument =
       contractRef: contractRef?.value ?? null,
       budgetPlanRef: resolvedBudgetPlanRef,
       categoryRef: categoryRef?.value ?? null,
+      subcategoryRef: subcategoryRef?.value ?? null,
       costCenterRef: costCenterRef?.value ?? null,
       programRef: resolvedProgramRef,
       paymentMethod: cmd.paymentMethod,
@@ -205,39 +232,78 @@ export const saveDocument =
       competencia,
       debitAccountRef: cmd.contaDebitoRef ?? null,
       paymentDetail: cmd.paymentDetail ?? null,
-    });
+    } satisfies Parameters<typeof Document.create>[0];
+
+    const created = Document.create(createInput);
     if (!created.ok) return err(created.error);
+
+    // US1+US3 (#289): valida a alçada do aprovador indicado contra o líquido, antes de persistir.
+    // Gate opt-in: só roda com aprovador informado e reader injetado (composição HTTP sempre injeta).
+    // `outcome`/`cascadeEvents` só mudam quando a cascata (US3) reencaminha o documento.
+    let outcome = created.value;
+    const cascadeEvents: DocumentEvent[] = [];
+
+    if (approverRef !== null && deps.approverAuthorityReader !== undefined) {
+      const authority = await deps.approverAuthorityReader.get(String(approverRef.value));
+      if (!authority.ok) return err(authority.error);
+      const check = checkApprover(outcome.document.netValue, authority.value);
+      if (!check.ok) {
+        // Só `approver-limit-exceeded` aciona a cascata; demais erros (not-found/missing-permission)
+        // propagam direto — não fazem sentido escalar para outro aprovador.
+        if (check.error !== 'approver-limit-exceeded') return err(check.error);
+
+        const candidates = await deps.approverAuthorityReader.list();
+        if (!candidates.ok) return err(candidates.error);
+        const escalated = escalate(outcome.document.netValue, candidates.value);
+        if (!escalated.ok) return err(escalated.error);
+
+        const effectiveApproverRef = UserRef.rehydrate(escalated.value.userId);
+        if (!effectiveApproverRef.ok) return err(effectiveApproverRef.error);
+
+        // Recria com o mesmo id (createInput reusado), só o aprovador efetivo difere.
+        const reCreated = Document.create({
+          ...createInput,
+          approverRef: effectiveApproverRef.value,
+        });
+        if (!reCreated.ok) return err(reCreated.error);
+        outcome = reCreated.value;
+
+        cascadeEvents.push({
+          type: 'ApproverEscalated',
+          documentId: String(outcome.document.id),
+          indicatedApproverRef: approverRef.value,
+          effectiveApproverRef: effectiveApproverRef.value,
+        });
+      }
+    }
 
     // Trilha (Time Travel): marco de criação. before/payablesBefore=null (documento novo);
     // actor=null (criação não carrega autoria nesta fatia). events[0] sempre presente — o
     // domínio emite ≥1 evento em create; guard mantém Result-clean sob noUncheckedIndexedAccess.
-    const event = created.value.events[0];
+    const event = outcome.events[0];
     if (event === undefined) return err('document-repository-failure');
     const entries = buildTimelineEntries(deps.clock, {
       event,
       before: null,
-      after: created.value.document,
+      after: outcome.document,
       payablesBefore: null,
-      payablesAfter: created.value.payables,
+      payablesAfter: outcome.payables,
       actor: null,
     });
 
     const saved = await deps.repo.save(
       {
-        document: created.value.document,
-        payables: created.value.payables,
+        document: outcome.document,
+        payables: outcome.payables,
       },
       entries,
       undefined,
-      created.value.events,
+      [...outcome.events, ...cascadeEvents],
     );
     if (!saved.ok) return err(saved.error);
 
     return ok({
-      documentId: created.value.document.id,
-      payableIds: [
-        created.value.payables.parent.id,
-        ...created.value.payables.children.map((c) => c.id),
-      ],
+      documentId: outcome.document.id,
+      payableIds: [outcome.payables.parent.id, ...outcome.payables.children.map((c) => c.id)],
     });
   };

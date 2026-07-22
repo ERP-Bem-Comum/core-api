@@ -10,19 +10,28 @@ import {
 } from '../adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleProgramReadStore } from '../adapters/persistence/repos/program-read.drizzle.ts';
 import { createDrizzleProgramListReader } from '../adapters/persistence/repos/program-list-read.drizzle.ts';
+import { createDrizzleProgramCatalogReader } from '../adapters/persistence/repos/program-catalog-read.drizzle.ts';
 import type {
   ProgramReadPort,
   ProgramView,
   ProgramReadError,
 } from '../application/ports/program-read.ts';
+import type { ProgramCatalogReadPort } from '../application/ports/program-catalog-read.ts';
 
 export type {
   ProgramReadPort,
   ProgramReadError,
   ProgramView,
 } from '../application/ports/program-read.ts';
+export type {
+  ProgramCatalogReadPort,
+  ProgramCatalogView,
+  ProgramCatalogReadError,
+} from '../application/ports/program-catalog-read.ts';
 
 export type ProgramsReadPort = ProgramReadPort &
+  // Catálogo com status (port segregado — ISP): consumo cross-módulo (budget-plans #315).
+  ProgramCatalogReadPort &
   Readonly<{
     // Listagem de todos os programas (projeção ProgramView) — consumo cross-módulo (financeiro 020 · US3).
     listAll: () => Promise<Result<readonly ProgramView[], ProgramReadError>>;
@@ -46,10 +55,12 @@ export const buildProgramsReadPort = async (
 
   const store = createDrizzleProgramReadStore(handle);
   const listReader = createDrizzleProgramListReader(handle);
+  const catalogReader = createDrizzleProgramCatalogReader(handle);
 
   return ok({
     ...store,
     listAll: listReader.listAll,
+    listCatalog: catalogReader.listCatalog,
     close: async () => handle.close(),
   });
 };

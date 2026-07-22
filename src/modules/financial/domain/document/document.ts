@@ -10,11 +10,13 @@ import type {
   ContractRef,
   BudgetPlanRef,
   CategoryRef,
+  SubcategoryRef,
   CostCenterRef,
   ProgramRef,
 } from '../shared/refs.ts';
-import type { Retention, RetentionType } from '../shared/retention.ts';
+import type { Retention } from '../shared/retention.ts';
 import type { RegisteredTax } from '../shared/registered-tax.ts';
+import type { SourceFileRef } from './source-file-ref.ts';
 import type {
   DocumentType,
   PaymentMethod,
@@ -25,9 +27,10 @@ import type {
   Document,
 } from './types.ts';
 import type { Payable, Payables } from '../payable/types.ts';
-import type { DocumentEvent } from './events.ts';
+import type { DocumentEvent, PayableSnapshot } from './events.ts';
 import type { DocumentError } from './errors.ts';
 import { computeNetValue } from './financial-data.ts';
+import { allowedRetentionsFor } from './document-type-metadata.ts';
 
 // Padrão D (module-as-namespace): consumir com `import * as Document from './document.ts'`.
 
@@ -41,6 +44,7 @@ export type CreateDocumentInput = Readonly<{
   contractRef?: ContractRef | null;
   budgetPlanRef?: BudgetPlanRef | null;
   categoryRef?: CategoryRef | null;
+  subcategoryRef?: SubcategoryRef | null; // #502: folha da árvore do plano
   costCenterRef?: CostCenterRef | null;
   programRef?: ProgramRef | null;
   paymentMethod: PaymentMethod;
@@ -59,6 +63,7 @@ export type CreateDocumentInput = Readonly<{
   competencia?: Competencia | null; // #197: mês contábil (VO já validado)
   debitAccountRef?: string | null; // #197: conta-débito (validada by-identity no use-case)
   paymentDetail?: string | null; // #273: complemento da forma de pagamento
+  sourceFileRef?: SourceFileRef | null; // #62: comprovante-fonte guardado no storage
 }>;
 
 export type CreateDocumentOutput = Readonly<{
@@ -67,16 +72,10 @@ export type CreateDocumentOutput = Readonly<{
   events: readonly DocumentEvent[];
 }>;
 
-// Retenções permitidas por tipo de documento (R8): só NFS-e e RPA geram filhos.
-const EMPTY_RETENTIONS: ReadonlySet<RetentionType> = new Set();
-const ALLOWED_RETENTIONS: Readonly<Partial<Record<DocumentType, ReadonlySet<RetentionType>>>> = {
-  'NFS-e': new Set<RetentionType>(['ISS', 'IRRF', 'INSS', 'CSRF']),
-  RPA: new Set<RetentionType>(['ISS', 'IRRF', 'INSS', 'CSRF']),
-};
-
+// Retenções permitidas por tipo (R8): fonte única em document-type-metadata.ts (#292).
 const retentionsAllowed = (type: DocumentType, retentions: readonly Retention[]): boolean => {
-  const allowed = ALLOWED_RETENTIONS[type] ?? EMPTY_RETENTIONS;
-  return retentions.every((r) => allowed.has(r.type));
+  const allowed = allowedRetentionsFor(type);
+  return retentions.every((r) => allowed.includes(r.type));
 };
 
 // Gera os títulos em `Open`: 1 pai (valor líquido) + 1 filho por retenção. Usado por create e adjust
@@ -115,16 +114,46 @@ const buildOpenPayables = (params: {
   return immutable<Payables>({ parent, children });
 };
 
+// #235: refs necessárias ao snapshot de projeção — subset estrutural de Open/ApprovedDocument.
+type DocumentRefsSource = Readonly<{
+  id: DocumentId;
+  supplier: SupplierRef;
+  contractRef: ContractRef | null;
+  categoryRef: CategoryRef | null;
+  costCenterRef: CostCenterRef | null;
+  programRef: ProgramRef | null;
+  debitAccountRef: string | null;
+}>;
+
+const payableSnapshot = (p: Payable): PayableSnapshot => ({
+  payableId: p.id,
+  kind: p.kind,
+  retentionType: p.retentionType,
+  valueCents: String(p.value.cents),
+  dueDate: p.dueDate.toISOString().slice(0, 10),
+  status: p.status,
+});
+
 const documentSavedEvents = (
-  documentId: DocumentId,
+  document: DocumentRefsSource,
   payables: Payables,
-): readonly DocumentEvent[] => [
-  {
-    type: 'DocumentSaved',
-    documentId,
-    payableIds: [payables.parent.id, ...payables.children.map((c) => c.id)],
-  },
-];
+): readonly DocumentEvent[] => {
+  const all = [payables.parent, ...payables.children];
+  return [
+    {
+      type: 'DocumentSaved',
+      documentId: document.id,
+      payableIds: all.map((p) => p.id),
+      supplierRef: document.supplier,
+      contractRef: document.contractRef,
+      categoryRef: document.categoryRef,
+      costCenterRef: document.costCenterRef,
+      programRef: document.programRef,
+      debitAccountRef: document.debitAccountRef,
+      payables: all.map(payableSnapshot),
+    },
+  ];
+};
 
 // Salva o documento (Fato Gerador) e gera os títulos em `Open`: 1 pai (líquido) + 1 filho por retenção
 // (apenas NFS-e/RPA — R8). Retenção em tipo não permitido é rejeitada.
@@ -166,6 +195,7 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     contractRef: input.contractRef ?? null,
     budgetPlanRef: input.budgetPlanRef ?? null,
     categoryRef: input.categoryRef ?? null,
+    subcategoryRef: input.subcategoryRef ?? null,
     costCenterRef: input.costCenterRef ?? null,
     programRef: input.programRef ?? null,
     paymentMethod: input.paymentMethod,
@@ -185,6 +215,7 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     competencia: input.competencia ?? null,
     debitAccountRef: input.debitAccountRef ?? null,
     paymentDetail: input.paymentDetail ?? null,
+    sourceFileRef: input.sourceFileRef ?? null,
     status: 'Open',
   });
 
@@ -192,7 +223,7 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     immutable<CreateDocumentOutput>({
       document,
       payables,
-      events: documentSavedEvents(input.id, payables),
+      events: documentSavedEvents(document, payables),
     }),
   );
 };
@@ -295,6 +326,47 @@ export const payPayableManually = (
   );
 };
 
+export type UpdatePayableDueDateInput = Readonly<{
+  document: OpenDocument | ApprovedDocument;
+  payables: Payables;
+  payableId: PayableId.PayableId;
+  dueDate: Date;
+}>;
+
+export type UpdatePayableDueDateOutput = Readonly<{
+  document: OpenDocument | ApprovedDocument;
+  payables: Payables;
+  events: readonly DocumentEvent[];
+}>;
+
+// #270: altera o vencimento de UM título isolado — sem propagar ao documento-pai nem aos irmãos
+// (contrasta com `editMetadata`, que leva o dueDate a TODOS os payables). O documento permanece
+// intacto; só o título alvo recebe o novo `dueDate`. Reemite `DocumentSaved` (reprojeta o read-model
+// com o snapshot atualizado), como `editMetadata`/`adjust` — sem evento novo nem migration.
+export const updatePayableDueDate = (
+  input: UpdatePayableDueDateInput,
+): Result<UpdatePayableDueDateOutput, DocumentError> => {
+  const all = [input.payables.parent, ...input.payables.children];
+  const target = all.find((p) => p.id === input.payableId);
+  if (target === undefined) return err('payable-not-found');
+
+  const retime = (p: Payable): Payable =>
+    p.id === input.payableId ? immutable<Payable>({ ...p, dueDate: input.dueDate }) : p;
+
+  const payables = immutable<Payables>({
+    parent: retime(input.payables.parent),
+    children: input.payables.children.map(retime),
+  });
+
+  return ok(
+    immutable<UpdatePayableDueDateOutput>({
+      document: input.document,
+      payables,
+      events: documentSavedEvents(input.document, payables),
+    }),
+  );
+};
+
 export type AdjustDocumentChanges = Readonly<{
   grossValue?: Money;
   sourceDiscounts?: Money;
@@ -304,6 +376,7 @@ export type AdjustDocumentChanges = Readonly<{
   retentions?: readonly Retention[];
   dueDate?: Date;
   description?: string | null;
+  paymentDetail?: string | null;
 }>;
 
 export type AdjustDocumentInput = Readonly<{
@@ -361,6 +434,8 @@ export const adjust = (input: AdjustDocumentInput): Result<AdjustDocumentOutput,
     netValue: net.value,
     dueDate,
     description: c.description ?? d.description,
+    // null apaga (undefined preserva): semântica correta p/ CA6.2 mesmo no caminho completo.
+    paymentDetail: c.paymentDetail !== undefined ? c.paymentDetail : d.paymentDetail,
     status: 'Open',
   });
 
@@ -368,7 +443,7 @@ export const adjust = (input: AdjustDocumentInput): Result<AdjustDocumentOutput,
     immutable<AdjustDocumentOutput>({
       document,
       payables,
-      events: documentSavedEvents(d.id, payables),
+      events: documentSavedEvents(document, payables),
     }),
   );
 };
@@ -378,6 +453,7 @@ export type EditMetadataInput = Readonly<{
   payables: Payables;
   dueDate?: Date;
   description?: string | null;
+  paymentDetail?: string | null;
 }>;
 
 export type EditMetadataOutput = Readonly<{
@@ -395,6 +471,8 @@ export const editMetadata = (
   const d = input.document;
   const dueDate = input.dueDate ?? d.dueDate;
   const description = input.description !== undefined ? input.description : d.description;
+  // null apaga (undefined preserva) — mesma semântica que description neste caminho.
+  const paymentDetail = input.paymentDetail !== undefined ? input.paymentDetail : d.paymentDetail;
 
   const propagate = (p: Payable): Payable => immutable<Payable>({ ...p, dueDate });
   const payables = immutable<Payables>({
@@ -402,11 +480,13 @@ export const editMetadata = (
     children: input.payables.children.map(propagate),
   });
 
-  const document = immutable<OpenDocument | ApprovedDocument>({ ...d, dueDate, description });
-  const payableIds = [payables.parent.id, ...payables.children.map((c) => c.id)];
-  const events: readonly DocumentEvent[] = [
-    { type: 'DocumentSaved', documentId: d.id, payableIds },
-  ];
+  const document = immutable<OpenDocument | ApprovedDocument>({
+    ...d,
+    dueDate,
+    description,
+    paymentDetail,
+  });
+  const events = documentSavedEvents(document, payables);
 
   return ok(immutable<EditMetadataOutput>({ document, payables, events }));
 };
@@ -444,6 +524,7 @@ export const undoApproval = (
     contractRef: d.contractRef,
     budgetPlanRef: d.budgetPlanRef,
     categoryRef: d.categoryRef,
+    subcategoryRef: d.subcategoryRef,
     costCenterRef: d.costCenterRef,
     programRef: d.programRef,
     paymentMethod: d.paymentMethod,
@@ -463,10 +544,17 @@ export const undoApproval = (
     competencia: d.competencia,
     debitAccountRef: d.debitAccountRef,
     paymentDetail: d.paymentDetail,
+    sourceFileRef: d.sourceFileRef,
     status: 'Open',
   });
 
-  const events: readonly DocumentEvent[] = [{ type: 'ApprovalUndone', documentId: d.id }];
+  const events: readonly DocumentEvent[] = [
+    {
+      type: 'ApprovalUndone',
+      documentId: d.id,
+      payableIds: [payables.parent.id, ...payables.children.map((c) => c.id)],
+    },
+  ];
 
   return ok(immutable<UndoApprovalOutput>({ document, payables, events }));
 };
@@ -509,6 +597,7 @@ export type SaveDraftInput = Readonly<{
   contractRef?: ContractRef | null;
   budgetPlanRef?: BudgetPlanRef | null;
   categoryRef?: CategoryRef | null;
+  subcategoryRef?: SubcategoryRef | null; // #502: folha da árvore do plano (opcional no rascunho)
   costCenterRef?: CostCenterRef | null;
   programRef?: ProgramRef | null;
   paymentMethod?: PaymentMethod | null;
@@ -527,6 +616,7 @@ export type SaveDraftInput = Readonly<{
   competencia?: Competencia | null; // #197
   debitAccountRef?: string | null; // #197
   paymentDetail?: string | null; // #273
+  sourceFileRef?: SourceFileRef | null; // #62
 }>;
 
 export type SaveDraftOutput = Readonly<{
@@ -547,6 +637,7 @@ export const saveDraft = (input: SaveDraftInput): Result<SaveDraftOutput, Docume
     contractRef: input.contractRef ?? null,
     budgetPlanRef: input.budgetPlanRef ?? null,
     categoryRef: input.categoryRef ?? null,
+    subcategoryRef: input.subcategoryRef ?? null,
     costCenterRef: input.costCenterRef ?? null,
     programRef: input.programRef ?? null,
     paymentMethod: input.paymentMethod ?? null,
@@ -565,13 +656,19 @@ export const saveDraft = (input: SaveDraftInput): Result<SaveDraftOutput, Docume
     competencia: input.competencia ?? null,
     debitAccountRef: input.debitAccountRef ?? null,
     paymentDetail: input.paymentDetail ?? null,
+    sourceFileRef: input.sourceFileRef ?? null,
   });
   const events: readonly DocumentEvent[] = [{ type: 'DocumentDraftSaved', documentId: input.id }];
   return ok(immutable<SaveDraftOutput>({ document, events }));
 };
 
 // Submissão (US7): Draft → Open. Exige os campos obrigatórios preenchidos; delega a geração de títulos a `create`.
-export const submit = (draft: DraftDocument): Result<CreateDocumentOutput, DocumentError> => {
+// `approverRefOverride` (#297): quando presente, substitui o aprovador do rascunho — usado pela
+// cascata de alçada no submit para reencaminhar ao próximo aprovador apto (paridade com o create).
+export const submit = (
+  draft: DraftDocument,
+  approverRefOverride?: UserRef,
+): Result<CreateDocumentOutput, DocumentError> => {
   const { documentNumber, type, supplier, paymentMethod, grossValue, dueDate } = draft;
   if (
     documentNumber === null ||
@@ -593,6 +690,7 @@ export const submit = (draft: DraftDocument): Result<CreateDocumentOutput, Docum
     contractRef: draft.contractRef,
     budgetPlanRef: draft.budgetPlanRef,
     categoryRef: draft.categoryRef,
+    subcategoryRef: draft.subcategoryRef,
     costCenterRef: draft.costCenterRef,
     programRef: draft.programRef,
     paymentMethod,
@@ -605,8 +703,9 @@ export const submit = (draft: DraftDocument): Result<CreateDocumentOutput, Docum
     registeredTaxes: draft.registeredTaxes,
     dueDate,
     description: draft.description,
-    approverRef: draft.approverRef,
+    approverRef: approverRefOverride ?? draft.approverRef,
     paymentDetail: draft.paymentDetail,
+    sourceFileRef: draft.sourceFileRef, // #62: o documento submetido mantém o comprovante-fonte
   });
 };
 

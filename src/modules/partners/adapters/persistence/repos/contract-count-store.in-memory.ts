@@ -22,6 +22,10 @@ export const makeInMemoryContractCountStore = (
       return ok(undefined);
     },
     getCount: async (contractorRef) => ok(counts.get(contractorRef) ?? 0),
+    setCount: async ({ contractorRef, activeCount }) => {
+      counts.set(contractorRef, activeCount); // absoluto: sobrescreve (idempotente, reconcilia drift)
+      return ok(undefined);
+    },
     getCounts: async (contractorRefs) => {
       const out = new Map<string, number>();
       for (const ref of contractorRefs) {

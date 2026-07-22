@@ -105,6 +105,8 @@ export const createDocumentBodySchema = z.object({
   contractRef: z.uuid().optional(),
   budgetPlanRef: z.uuid().optional(),
   categoryRef: z.uuid().optional(),
+  // #502: folha da árvore do plano (carimbo da subcategoria). Opcional; ref opaco por formato.
+  subcategoryRef: z.uuid().optional(),
   costCenterRef: z.uuid().optional(),
   programRef: z.uuid().optional(),
   paymentMethod: paymentMethodSchema,
@@ -151,6 +153,8 @@ export const adjustDocumentBodySchema = z
     retentions: z.array(retentionItemSchema).optional(),
     dueDate: z.iso.date().optional(),
     description: z.string().max(500).nullable().optional(),
+    // #273 US2: complemento da forma de pagamento — null apaga; ausente não altera (CA6).
+    paymentDetail: paymentDetailInput.nullable().optional(),
   })
   .refine((b) => Object.keys(b).filter((k) => k !== 'version').length > 0, {
     message: 'pelo menos um campo além de version deve ser informado',
@@ -185,111 +189,163 @@ export const documentIdParamSchema = z.object({
 export const listDocumentsQuerySchema = z.object({
   // #204: Paid/Reconciled habilitam a fila de conciliação no grid (Reconciled é derivado em leitura).
   status: z.enum(['Draft', 'Open', 'Approved', 'Paid', 'Reconciled']).optional(),
-  supplierRef: z.uuid().optional(),
-  type: documentTypeSchema.optional(),
+  // #164: aceitam valor único (retrocompat) OU lista (?type=a&type=b) — Fastify entrega array em repetição.
+  // .max(50) espelha o teto dos demais arrays de input do arquivo (anti-amplificação de IN — CWE-770).
+  supplierRef: z.union([z.uuid(), z.array(z.uuid()).max(50)]).optional(),
+  type: z.union([documentTypeSchema, z.array(documentTypeSchema).max(50)]).optional(),
   dueFrom: z.iso.date().optional(),
   dueTo: z.iso.date().optional(),
   issuedFrom: z.iso.date().optional(), // #163: filtro por emissão (janela inclusiva)
   issuedTo: z.iso.date().optional(),
+  // #167: busca textual (fornecedor / nº documento / CNPJ) — trimada, 1..100 chars.
+  // .regex bloqueia caracteres de controle (mesmo guard de `paymentDetailInput`, OWASP Input Validation).
+  q: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    // eslint-disable-next-line no-control-regex -- rejeição de control chars é o objetivo (defesa em profundidade)
+    .regex(/^[^\x00-\x1F\x7F]*$/, 'caracteres de controle não são permitidos')
+    .optional(),
+  // #164: filtros adicionais + ordenação.
+  contractRef: z.uuid().optional(),
+  programRef: z.uuid().optional(),
+  valorMin: z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  valorMax: z.coerce.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+  sort: z.enum(['dueDate', 'netValue', 'supplierName']).optional(),
+  order: z.enum(['asc', 'desc']).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });
 
 export type ListDocumentsQuery = z.infer<typeof listDocumentsQuerySchema>;
 
+// ─── PATCH /documents/due-date (alteração de vencimento em lote — #162) ─────────
+
+export const bulkUpdateDueDateBodySchema = z.object({
+  items: z
+    .array(
+      z.object({ id: z.uuid(), version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER) }),
+    )
+    .min(1)
+    .max(100),
+  dueDate: z.iso.date(),
+});
+
+export type BulkUpdateDueDateBody = z.infer<typeof bulkUpdateDueDateBodySchema>;
+
+export const bulkUpdateDueDateResponseSchema = z.object({
+  results: z.array(
+    z.object({
+      documentId: z.uuid(),
+      outcome: z.enum(['ok', 'not-found', 'version-conflict', 'invalid-state', 'error']),
+    }),
+  ),
+});
+
 // ─── Responses ───────────────────────────────────────────────────────────────
 
-const payableResponseSchema = z.object({
-  id: z.uuid(),
-  kind: z.enum(['Parent', 'Child']),
-  retentionType: retentionTypeSchema.nullable(),
-  valueCents: centsStringSchema,
-  status: z.string(),
-});
+const payableResponseSchema = z
+  .object({
+    id: z.uuid(),
+    kind: z.enum(['Parent', 'Child']),
+    retentionType: retentionTypeSchema.nullable(),
+    valueCents: centsStringSchema,
+    status: z.string(),
+  })
+  .strict();
 
 /** Resposta de criação/escrita (POST/PATCH/approve/undo-approval) — documento + títulos. */
-export const documentResponseSchema = z.object({
-  id: z.uuid(),
-  status: z.string(),
-  documentNumber: z.string().nullable(),
-  series: z.string().nullable(), // #95: série (drawer de Detalhe / edição)
-  type: z.string().nullable(),
-  supplierRef: z.string().nullable(),
-  // Tipo do favorecido (#90) — round-trip p/ o front exibir o kind correto.
-  payeeKind: z.string().nullable(),
-  // Aprovador pretendido definido na inclusão (#148).
-  approverRef: z.string().nullable(),
-  // Refs de categorização editável (#147) — round-trip p/ o drawer refletir a categorização salva.
-  contractRef: z.string().nullable(),
-  budgetPlanRef: z.string().nullable(),
-  categoryRef: z.string().nullable(),
-  costCenterRef: z.string().nullable(),
-  programRef: z.string().nullable(),
-  paymentMethod: z.string().nullable(),
-  grossValueCents: centsStringSchema.nullable(),
-  netValueCents: centsStringSchema.nullable(),
-  dueDate: z.string().nullable(),
-  issueDate: z.string().nullable(), // #163: data de emissão
-  description: z.string().nullable(),
-  accessKey: z.string().nullable(), // #115: chave de acesso (DANFE)
-  competencia: z.string().nullable(), // #197: competência YYYY-MM
-  contaDebitoRef: z.string().nullable(), // #197: conta-débito
-  paymentDetail: z.string().nullable(), // #273: complemento da forma de pagamento
-  payables: z.array(payableResponseSchema),
-  version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).meta({
-    description:
-      'Versão atual do documento (optimistic lock) — reenvie no próximo PATCH/approve/undo-approval',
-  }),
-  // #255: bloco bancário do favorecido (composição síncrona ADR-0032). null = não resolvível
-  // (não-supplier, not-found, port ausente, IO ou timeout — degradação graciosa).
-  payeeBank: z
-    .object({
-      bankAccount: z
-        .object({
-          bank: z.string().max(80),
-          agency: z.string().max(10),
-          accountNumber: z.string().max(20),
-          checkDigit: z.string().max(2),
-        })
-        .nullable(),
-      pixKey: z
-        .object({
-          keyType: z.enum(['cpf', 'cnpj', 'email', 'phone', 'random-key']),
-          key: z.string().max(80),
-        })
-        .nullable(),
-    })
-    .nullable(),
-});
+export const documentResponseSchema = z
+  .object({
+    id: z.uuid(),
+    status: z.string(),
+    documentNumber: z.string().nullable(),
+    series: z.string().nullable(), // #95: série (drawer de Detalhe / edição)
+    type: z.string().nullable(),
+    supplierRef: z.string().nullable(),
+    // Tipo do favorecido (#90) — round-trip p/ o front exibir o kind correto.
+    payeeKind: z.string().nullable(),
+    // Aprovador pretendido definido na inclusão (#148).
+    approverRef: z.string().nullable(),
+    // Refs de categorização editável (#147) — round-trip p/ o drawer refletir a categorização salva.
+    contractRef: z.string().nullable(),
+    budgetPlanRef: z.string().nullable(),
+    categoryRef: z.string().nullable(),
+    subcategoryRef: z.string().nullable(), // #502: folha da árvore do plano (carimbo da subcategoria)
+    costCenterRef: z.string().nullable(),
+    programRef: z.string().nullable(),
+    paymentMethod: z.string().nullable(),
+    grossValueCents: centsStringSchema.nullable(),
+    netValueCents: centsStringSchema.nullable(),
+    dueDate: z.string().nullable(),
+    issueDate: z.string().nullable(), // #163: data de emissão
+    description: z.string().nullable(),
+    accessKey: z.string().nullable(), // #115: chave de acesso (DANFE)
+    competencia: z.string().nullable(), // #197: competência YYYY-MM
+    contaDebitoRef: z.string().nullable(), // #197: conta-débito
+    paymentDetail: z.string().nullable(), // #273: complemento da forma de pagamento
+    payables: z.array(payableResponseSchema),
+    version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).meta({
+      description:
+        'Versão atual do documento (optimistic lock) — reenvie no próximo PATCH/approve/undo-approval',
+    }),
+    // #255: bloco bancário do favorecido (composição síncrona ADR-0032). null = não resolvível
+    // (não-supplier, not-found, port ausente, IO ou timeout — degradação graciosa).
+    payeeBank: z
+      .object({
+        bankAccount: z
+          .object({
+            bank: z.string().max(80),
+            agency: z.string().max(10),
+            accountNumber: z.string().max(20),
+            checkDigit: z.string().max(2),
+          })
+          .strict()
+          .nullable(),
+        pixKey: z
+          .object({
+            keyType: z.enum(['cpf', 'cnpj', 'email', 'phone', 'random-key']),
+            key: z.string().max(80),
+          })
+          .strict()
+          .nullable(),
+      })
+      .strict()
+      .nullable(),
+  })
+  .strict();
 
 export type DocumentResponseDto = z.infer<typeof documentResponseSchema>;
 
 /** Item resumido na listagem. */
-export const documentSummarySchema = z.object({
-  id: z.uuid(),
-  status: z.string(),
-  documentNumber: z.string().nullable(),
-  type: z.string().nullable(),
-  supplierRef: z.string().nullable(),
-  // Campos locais do documento no grid de Contas a Pagar (#47/US1).
-  series: z.string().max(20).nullable(),
-  grossValueCents: centsStringSchema.nullable(),
-  paymentMethod: paymentMethodSchema.nullable(),
-  contractRef: z.string().max(36).nullable(),
-  netValueCents: centsStringSchema.nullable(),
-  dueDate: z.string().nullable(),
-  issueDate: z.string().nullable(), // #163: data de emissão
-  version: z
-    .number()
-    .int()
-    .min(0)
-    .max(Number.MAX_SAFE_INTEGER)
-    .meta({ description: 'Versão atual (optimistic lock) para ações inline' }),
-  // Fornecedor resolvido pelo read-model local `fin_supplier_view` (#47/US2).
-  // null quando supplierRef é nulo ou ainda não processado (consistência eventual).
-  supplierName: z.string().nullable(),
-  supplierDocument: z.string().nullable(),
-});
+export const documentSummarySchema = z
+  .object({
+    id: z.uuid(),
+    status: z.string(),
+    documentNumber: z.string().nullable(),
+    type: z.string().nullable(),
+    supplierRef: z.string().nullable(),
+    // Campos locais do documento no grid de Contas a Pagar (#47/US1).
+    series: z.string().max(20).nullable(),
+    grossValueCents: centsStringSchema.nullable(),
+    paymentMethod: paymentMethodSchema.nullable(),
+    contractRef: z.string().max(36).nullable(),
+    netValueCents: centsStringSchema.nullable(),
+    dueDate: z.string().nullable(),
+    issueDate: z.string().nullable(), // #163: data de emissão
+    version: z
+      .number()
+      .int()
+      .min(0)
+      .max(Number.MAX_SAFE_INTEGER)
+      .meta({ description: 'Versão atual (optimistic lock) para ações inline' }),
+    // Fornecedor resolvido pelo read-model local `fin_supplier_view` (#47/US2).
+    // null quando supplierRef é nulo ou ainda não processado (consistência eventual).
+    supplierName: z.string().nullable(),
+    supplierDocument: z.string().nullable(),
+  })
+  .strict();
 
 export type DocumentSummaryDto = z.infer<typeof documentSummarySchema>;
 
@@ -311,48 +367,56 @@ export type DocumentListResponseDto = z.infer<typeof documentListResponseSchema>
 // response de GET /timeline).
 
 /** Uma entrada da trilha por-campo (Time Travel). */
-export const timelineEntrySchema = z.object({
-  eventType: z.enum(TIMELINE_EVENT_TYPES).meta({
-    description: 'Tipo do evento de domínio que originou esta entrada na trilha',
-  }),
-  target: z.object({
-    kind: z.enum(['Document', 'Payable']).meta({
-      description: 'Entidade afetada pelo evento — documento principal ou título filho',
+export const timelineEntrySchema = z
+  .object({
+    eventType: z.enum(TIMELINE_EVENT_TYPES).meta({
+      description: 'Tipo do evento de domínio que originou esta entrada na trilha',
     }),
-    id: z.uuid().meta({
-      description: 'UUID da entidade afetada (Document.id ou Payable.id)',
+    target: z
+      .object({
+        kind: z.enum(['Document', 'Payable']).meta({
+          description: 'Entidade afetada pelo evento — documento principal ou título filho',
+        }),
+        id: z.uuid().meta({
+          description: 'UUID da entidade afetada (Document.id ou Payable.id)',
+        }),
+      })
+      .strict(),
+    occurredAt: z.iso.datetime().meta({
+      description: 'Instante UTC em que o evento ocorreu (ISO-8601 com offset)',
     }),
-  }),
-  occurredAt: z.iso.datetime().meta({
-    description: 'Instante UTC em que o evento ocorreu (ISO-8601 com offset)',
-  }),
-  actor: z.uuid().nullable().meta({
-    description: 'UUID do usuário responsável pela ação; nulo em ações automáticas do sistema',
-  }),
-  changes: z
-    .array(
-      z.object({
-        field: z.string().max(60).meta({
-          description: 'Nome do campo de domínio alterado (espelha varchar(60) no storage)',
-        }),
-        before: z.string().max(65535).nullable().meta({
-          description: 'Valor anterior serializado; null se o campo não existia (limite TEXT)',
-        }),
-        after: z.string().max(65535).nullable().meta({
-          description: 'Valor novo serializado; null se o campo foi removido (limite TEXT)',
-        }),
+    actor: z.uuid().nullable().meta({
+      description: 'UUID do usuário responsável pela ação; nulo em ações automáticas do sistema',
+    }),
+    changes: z
+      .array(
+        z
+          .object({
+            field: z.string().max(60).meta({
+              description: 'Nome do campo de domínio alterado (espelha varchar(60) no storage)',
+            }),
+            before: z.string().max(65535).nullable().meta({
+              description: 'Valor anterior serializado; null se o campo não existia (limite TEXT)',
+            }),
+            after: z.string().max(65535).nullable().meta({
+              description: 'Valor novo serializado; null se o campo foi removido (limite TEXT)',
+            }),
+          })
+          .strict(),
+      )
+      .meta({
+        description:
+          'Lista de campos alterados com o valor anterior e o novo valor serializados como string',
       }),
-    )
-    .meta({
-      description:
-        'Lista de campos alterados com o valor anterior e o novo valor serializados como string',
-    }),
-});
+  })
+  .strict();
 
 /** Response do GET /documents/:id/timeline. */
-export const documentTimelineResponseSchema = z.object({
-  entries: z.array(timelineEntrySchema),
-});
+export const documentTimelineResponseSchema = z
+  .object({
+    entries: z.array(timelineEntrySchema),
+  })
+  .strict();
 
 export type DocumentTimelineResponseDto = z.infer<typeof documentTimelineResponseSchema>;
 
@@ -392,22 +456,26 @@ export type ImportBankStatementResponseDto = z.infer<typeof importBankStatementR
 
 // valueCents/balanceAfterCents trafegam como string (cents). Não usam o regex não-negativo de
 // `centsStringSchema`: saldo pode ser negativo (cheque especial); é serialização nossa (confiável).
-const statementTransactionSchema = z.object({
-  id: z.uuid(),
-  fitid: z.string(),
-  date: z.iso.datetime(),
-  movement: z.enum(['Debit', 'Credit']),
-  entryType: z.string(),
-  payeeName: z.string(),
-  memo: z.string(),
-  valueCents: z.string(),
-  balanceAfterCents: z.string(),
-  reconciliationStatus: z.enum(['Pending', 'Reconciled', 'ManualEntry']),
-});
+const statementTransactionSchema = z
+  .object({
+    id: z.uuid(),
+    fitid: z.string(),
+    date: z.iso.datetime(),
+    movement: z.enum(['Debit', 'Credit']),
+    entryType: z.string(),
+    payeeName: z.string(),
+    memo: z.string(),
+    valueCents: z.string(),
+    balanceAfterCents: z.string(),
+    reconciliationStatus: z.enum(['Pending', 'Reconciled', 'ManualEntry']),
+  })
+  .strict();
 
-export const statementTransactionsResponseSchema = z.object({
-  items: z.array(statementTransactionSchema),
-});
+export const statementTransactionsResponseSchema = z
+  .object({
+    items: z.array(statementTransactionSchema),
+  })
+  .strict();
 
 export type StatementTransactionsResponseDto = z.infer<typeof statementTransactionsResponseSchema>;
 
@@ -472,17 +540,21 @@ export const paidPayablesQuerySchema = z.object({
   status: z.literal('Paid'),
 });
 
-const paidPayableSchema = z.object({
-  id: z.uuid(),
-  documentId: z.uuid(),
-  valueCents: z.string(),
-  dueDate: z.string(),
-  paymentMethod: z.string(),
-});
+const paidPayableSchema = z
+  .object({
+    id: z.uuid(),
+    documentId: z.uuid(),
+    valueCents: z.string(),
+    dueDate: z.string(),
+    paymentMethod: z.string(),
+  })
+  .strict();
 
-export const paidPayablesResponseSchema = z.object({
-  items: z.array(paidPayableSchema),
-});
+export const paidPayablesResponseSchema = z
+  .object({
+    items: z.array(paidPayableSchema),
+  })
+  .strict();
 
 export type PaidPayablesResponseDto = z.infer<typeof paidPayablesResponseSchema>;
 
@@ -521,6 +593,37 @@ export const suggestionsResponseSchema = z.object({
 
 export type SuggestionsResponseDto = z.infer<typeof suggestionsResponseSchema>;
 
+// ─── Contrapartida de transferência (US2 · #269) ─────────────────────────────
+// GET /statement-transactions/:id/counterpart-suggestions + POST /reconciliations/counterpart.
+
+const counterpartSuggestionSchema = z.object({
+  counterpartId: z.uuid(),
+  originAccountRef: z.uuid(),
+  valueCents: centsStringSchema,
+  expectedDate: z.string(),
+  score: z.number().int().min(0).max(100),
+});
+
+export const counterpartSuggestionsResponseSchema = z.object({
+  suggestions: z.array(counterpartSuggestionSchema),
+});
+
+export type CounterpartSuggestionsResponseDto = z.infer<
+  typeof counterpartSuggestionsResponseSchema
+>;
+
+export const confirmCounterpartBodySchema = z.object({
+  transactionId: z.uuid(),
+  counterpartId: z.uuid(),
+});
+
+export type ConfirmCounterpartBody = z.infer<typeof confirmCounterpartBodySchema>;
+
+export const confirmCounterpartResponseSchema = z.object({
+  reconciliationId: z.uuid(),
+  counterpartId: z.uuid(),
+});
+
 // ─── POST /statement-transactions/:id/reject-suggestion (rejectSuggestion, US2) ──
 
 export const rejectSuggestionBodySchema = z.object({
@@ -549,6 +652,9 @@ const manualEntryTypeSchema = z.enum([
 export const manualEntryBodySchema = z.object({
   type: manualEntryTypeSchema,
   supplierRef: z.uuid().optional(),
+  // #502/S2: taxonomia planejável no título manual — plano + subcategoria (folha). UUID v4 → 400 na borda.
+  budgetPlanRef: z.uuid().optional(),
+  subcategoryRef: z.uuid().optional(),
   categoryRef: z.uuid().optional(),
   costCenterRef: z.uuid().optional(),
   programRef: z.uuid().optional(),
@@ -564,6 +670,9 @@ export const manualEntryResponseSchema = z.object({
   reconciliationId: z.uuid(),
   type: z.literal('ManualEntry'),
   manualEntryId: z.uuid(),
+  // #502/S2: a resposta ecoa o carimbo de taxonomia (plano + subcategoria) do título manual.
+  budgetPlanRef: z.string().nullable(),
+  subcategoryRef: z.string().nullable(),
 });
 
 export const batchBodySchema = z.object({
@@ -649,22 +758,24 @@ export const cedenteAccountIdParamSchema = z.object({
   id: z.uuid().meta({ description: 'UUID da conta-cedente' }),
 });
 
-export const cedenteAccountResponseSchema = z.object({
-  id: z.uuid(),
-  bankCode: z.string(),
-  bankName: z.string().nullable(),
-  type: z.string().nullable(),
-  typeLabel: z.string().nullable(),
-  agency: z.string(),
-  accountNumber: z.string(),
-  accountDigit: z.string(),
-  convenio: z.string(),
-  document: z.string(),
-  status: z.string(),
-  nickname: z.string().nullable(),
-  openingBalanceCents: z.string().nullable(),
-  openingBalanceDate: z.string().nullable(),
-});
+export const cedenteAccountResponseSchema = z
+  .object({
+    id: z.uuid(),
+    bankCode: z.string(),
+    bankName: z.string().nullable(),
+    type: z.string().nullable(),
+    typeLabel: z.string().nullable(),
+    agency: z.string(),
+    accountNumber: z.string(),
+    accountDigit: z.string(),
+    convenio: z.string(),
+    document: z.string(),
+    status: z.string(),
+    nickname: z.string().nullable(),
+    openingBalanceCents: z.string().nullable(),
+    openingBalanceDate: z.string().nullable(),
+  })
+  .strict();
 
 // Item da listagem (#89c F1): inclui o saldo ATUAL (abertura + Σ extratos importados). Money em
 // string de centavos (convenção). Distinto de openingBalanceCents (saldo de abertura).
@@ -673,6 +784,12 @@ export const cedenteAccountListItemSchema = cedenteAccountResponseSchema.extend(
 });
 
 export const cedenteAccountListResponseSchema = z.array(cedenteAccountListItemSchema);
+
+// #293 — `status=active` filtra contas encerradas (seletor "Pagar da Conta"); ausente/`all` mantém
+// a listagem geral (gestão precisa enxergar `Closed`).
+export const cedenteAccountListQuerySchema = z.object({
+  status: z.enum(['active', 'all']).optional(),
+});
 
 export type CedenteAccountResponseDto = z.infer<typeof cedenteAccountResponseSchema>;
 export type CedenteAccountListItemDto = z.infer<typeof cedenteAccountListItemSchema>;
@@ -684,6 +801,8 @@ export const categoryResponseSchema = z.object({
   group: z.enum(['despesa', 'receita', 'ajuste']),
   // Hierarquia auto-referente (#147 F3): pai (subcategoria). null = top-level. UUID v4 (espelha id).
   parentId: z.uuid().nullable(),
+  // #341: nível Centro de Custo → Categoria. null = sem centro. Front cascateia com costCenterId + parentId.
+  costCenterId: z.uuid().nullable(),
 });
 
 export const categoryListResponseSchema = z.array(categoryResponseSchema);
@@ -711,6 +830,45 @@ export const programListResponseSchema = z.array(programResponseSchema);
 
 export type ProgramResponseDto = z.infer<typeof programResponseSchema>;
 
+// Catálogo estático de metadados por tipo de documento (#292) — GET /financial/document-types/metadata.
+// Domínio puro (document-type-metadata.ts), sem persistência; fonte única das retenções permitidas.
+export const documentTypeMetadataResponseSchema = z.object({
+  type: documentTypeSchema.meta({ description: 'Tipo do documento fiscal' }),
+  allowedRetentions: z
+    .array(retentionTypeSchema)
+    .meta({ description: 'Retenções permitidas para este tipo (vazio = nenhuma)' }),
+  accessKeyRequired: z
+    .boolean()
+    .meta({ description: 'Se a chave de acesso (44 dígitos) é exigida para este tipo' }),
+  suggestedPaymentMethod: paymentMethodSchema
+    .nullable()
+    .meta({ description: 'Forma de pagamento sugerida; null = sem sugestão fixa' }),
+});
+
+export const documentTypeMetadataListResponseSchema = z.array(documentTypeMetadataResponseSchema);
+
+export type DocumentTypeMetadataResponseDto = z.infer<typeof documentTypeMetadataResponseSchema>;
+
+// Widget "Últimos pagamentos" (#239, reference:read) — GET /financial/dashboard/recent-payments.
+// Top-5 títulos Pagos por data de pagamento desc. `valueCents` como string de centavos (convenção de
+// Money do módulo — bigint não é JSON-safe; espelha `paidPayablesToDto`). Refs estrangeiras
+// (supplier/debit) como `z.string()`: o read-model NÃO revalida UUID na leitura (evita 500 na
+// serialização de resposta se o payload do evento sofrer drift). IDs próprios seguem `z.uuid()`.
+export const recentPaymentSchema = z
+  .object({
+    payableId: z.uuid(),
+    documentId: z.uuid(),
+    supplierRef: z.string().nullable(),
+    debitAccountRef: z.string().nullable(),
+    valueCents: centsStringSchema,
+    paidAt: z.iso.date().nullable(),
+  })
+  .strict();
+
+export const recentPaymentsResponseSchema = z.array(recentPaymentSchema);
+
+export type RecentPaymentDto = z.infer<typeof recentPaymentSchema>;
+
 // ─── Read-model do extrato por conta + período (#139) ──────────────────────────
 
 export const accountStatementQuerySchema = z.object({
@@ -719,55 +877,63 @@ export const accountStatementQuerySchema = z.object({
   filter: z.enum(['all', 'in', 'out', 'reconciled', 'pending']).optional(),
 });
 
-const statementViewLineSchema = z.object({
-  id: z.string(),
-  date: z.iso.datetime(),
-  movement: z.enum(['Debit', 'Credit']),
-  entryType: z.string(),
-  payeeName: z.string(),
-  memo: z.string(),
-  valueCents: z.string(),
-  runningBalanceCents: z.string(),
-  reconciliationStatus: z.enum(['Pending', 'Reconciled', 'ManualEntry']),
-});
+const statementViewLineSchema = z
+  .object({
+    id: z.string(),
+    date: z.iso.datetime(),
+    movement: z.enum(['Debit', 'Credit']),
+    entryType: z.string(),
+    payeeName: z.string(),
+    memo: z.string(),
+    valueCents: z.string(),
+    runningBalanceCents: z.string(),
+    reconciliationStatus: z.enum(['Pending', 'Reconciled', 'ManualEntry']),
+  })
+  .strict();
 
-const statementViewDaySchema = z.object({
-  date: z.string(),
-  lines: z.array(statementViewLineSchema),
-  inCents: z.string(),
-  outCents: z.string(),
-  dayBalanceCents: z.string(),
-});
+const statementViewDaySchema = z
+  .object({
+    date: z.string(),
+    lines: z.array(statementViewLineSchema),
+    inCents: z.string(),
+    outCents: z.string(),
+    dayBalanceCents: z.string(),
+  })
+  .strict();
 
-export const accountStatementResponseSchema = z.object({
-  openingBalanceCents: z.string(),
-  closingBalanceCents: z.string(),
-  counters: z.object({
-    all: z.number().int().min(0),
-    in: z.number().int().min(0),
-    out: z.number().int().min(0),
-    reconciled: z.number().int().min(0),
-    pending: z.number().int().min(0),
-  }),
-  days: z.array(statementViewDaySchema),
-});
+export const accountStatementResponseSchema = z
+  .object({
+    openingBalanceCents: z.string(),
+    closingBalanceCents: z.string(),
+    counters: z.object({
+      all: z.number().int().min(0),
+      in: z.number().int().min(0),
+      out: z.number().int().min(0),
+      reconciled: z.number().int().min(0),
+      pending: z.number().int().min(0),
+    }),
+    days: z.array(statementViewDaySchema),
+  })
+  .strict();
 
 export type AccountStatementResponseDto = z.infer<typeof accountStatementResponseSchema>;
 
 // ─── Lookup da conciliação ativa por transação (#175) ──────────────────────────
 
-export const transactionReconciliationResponseSchema = z.object({
-  id: z.uuid(),
-  transactionId: z.uuid(),
-  type: z.enum(['Individual', 'Multiple', 'Partial', 'ManualEntry']),
-  status: z.enum(['Active', 'Undone']),
-  reconciledBy: z.string(),
-  // #207: nome de quem executou, resolvido server-side (ADR-0032). null = não-resolvido.
-  reconciledByName: z.string().nullable(),
-  reconciledAt: z.iso.datetime(),
-  differenceCents: z.string().nullable(),
-  items: z.array(z.object({ payableId: z.uuid(), reconciledValueCents: z.string() })),
-});
+export const transactionReconciliationResponseSchema = z
+  .object({
+    id: z.uuid(),
+    transactionId: z.uuid(),
+    type: z.enum(['Individual', 'Multiple', 'Partial', 'ManualEntry']),
+    status: z.enum(['Active', 'Undone']),
+    reconciledBy: z.string(),
+    // #207: nome de quem executou, resolvido server-side (ADR-0032). null = não-resolvido.
+    reconciledByName: z.string().nullable(),
+    reconciledAt: z.iso.datetime(),
+    differenceCents: z.string().nullable(),
+    items: z.array(z.object({ payableId: z.uuid(), reconciledValueCents: z.string() }).strict()),
+  })
+  .strict();
 
 export type TransactionReconciliationResponseDto = z.infer<
   typeof transactionReconciliationResponseSchema
@@ -779,17 +945,19 @@ export const reconciliationPeriodsQuerySchema = z.object({
   debitAccountRef: z.uuid(),
 });
 
-const reconciliationPeriodItemSchema = z.object({
-  id: z.uuid(),
-  debitAccountRef: z.string(),
-  periodStart: z.iso.date(),
-  periodEnd: z.iso.date(),
-  status: z.enum(['Open', 'Closed']),
-  closedAt: z.iso.datetime().nullable(),
-  closedBy: z.string().nullable(),
-  // #207: nome de quem fechou o período, resolvido server-side (ADR-0032). null = sem closer/não-resolvido.
-  closedByName: z.string().nullable(),
-});
+const reconciliationPeriodItemSchema = z
+  .object({
+    id: z.uuid(),
+    debitAccountRef: z.string(),
+    periodStart: z.iso.date(),
+    periodEnd: z.iso.date(),
+    status: z.enum(['Open', 'Closed']),
+    closedAt: z.iso.datetime().nullable(),
+    closedBy: z.string().nullable(),
+    // #207: nome de quem fechou o período, resolvido server-side (ADR-0032). null = sem closer/não-resolvido.
+    closedByName: z.string().nullable(),
+  })
+  .strict();
 
 export const reconciliationPeriodsResponseSchema = z.array(reconciliationPeriodItemSchema);
 
@@ -826,37 +994,109 @@ export const listPayablesQuerySchema = z.object({
 
 export type ListPayablesQuery = z.infer<typeof listPayablesQuerySchema>;
 
-export const payableSummarySchema = z.object({
-  payableId: z.uuid(),
-  documentId: z.uuid(),
-  documentNumber: z.string().nullable(),
-  series: z.string().nullable(),
-  documentType: z.string().nullable(),
-  kind: z.string(), // Parent (líquido) | Child (retenção)
-  retentionType: z.string().nullable(),
-  valueCents: centsStringSchema,
-  dueDate: z.string(),
-  status: z.string(),
-  supplierRef: z.string().nullable(),
-  contractRef: z.string().nullable(),
-  // #229: paridade com o grid por documento (derivados do documento pai).
-  issueDate: z.string().nullable(),
-  paymentMethod: z.string().nullable(),
-  version: z.number().int(),
-  grossValueCents: z.string().nullable(),
-  netValueCents: z.string().nullable(),
-  // #231: data de pagamento do título (ancora o match da conciliação); null enquanto não pago.
-  paidAt: z.string().nullable(),
-});
+export const payableSummarySchema = z
+  .object({
+    payableId: z.uuid(),
+    documentId: z.uuid(),
+    documentNumber: z.string().nullable(),
+    series: z.string().nullable(),
+    documentType: z.string().nullable(),
+    kind: z.string(), // Parent (líquido) | Child (retenção)
+    retentionType: z.string().nullable(),
+    valueCents: centsStringSchema,
+    dueDate: z.string(),
+    status: z.string(),
+    supplierRef: z.string().nullable(),
+    contractRef: z.string().nullable(),
+    // #229: paridade com o grid por documento (derivados do documento pai).
+    issueDate: z.string().nullable(),
+    paymentMethod: z.string().nullable(),
+    version: z.number().int(),
+    grossValueCents: z.string().nullable(),
+    netValueCents: z.string().nullable(),
+    // #231: data de pagamento do título (ancora o match da conciliação); null enquanto não pago.
+    paidAt: z.string().nullable(),
+  })
+  .strict();
 
 export type PayableSummaryDto = z.infer<typeof payableSummarySchema>;
 
-export const payableListResponseSchema = z.object({
-  items: z.array(payableSummarySchema),
-  page: z.number().int(),
-  pageSize: z.number().int(),
-  total: z.number().int(),
+export const payableListResponseSchema = z
+  .object({
+    items: z.array(payableSummarySchema),
+    page: z.number().int(),
+    pageSize: z.number().int(),
+    total: z.number().int(),
+  })
+  .strict();
+
+// ─── Resolução em lote (#357, ADR-0049) — POST /financial/payables:batch ──────
+// Destrava o match card da Conciliação (#172) em 1 hop: payableId[] → resumo do título,
+// já com supplierName/supplierDocument (fin_supplier_view). Subset de payableSummarySchema
+// (sem `series`/`kind`/`retentionType`/`issueDate`/`version`/`grossValueCents`/`netValueCents`/`paidAt`
+// — o batch é focado no que o match card consome) + os 2 campos de fornecedor.
+export const payablesBatchBodySchema = z.object({
+  refs: z.array(z.uuid()).min(1).max(200),
 });
+
+export const payableBatchItemSchema = z
+  .object({
+    ref: z.uuid(),
+    documentId: z.uuid(),
+    documentNumber: z.string().nullable(),
+    documentType: z.string().nullable(),
+    valueCents: centsStringSchema,
+    dueDate: z.string(),
+    status: z.string(),
+    paymentMethod: z.string().nullable(),
+    supplierRef: z.string().nullable(),
+    supplierName: z.string().nullable(),
+    supplierDocument: z.string().nullable(),
+  })
+  .strict();
+
+export type PayableBatchItemDto = z.infer<typeof payableBatchItemSchema>;
+
+export const payablesBatchResponseSchema = z
+  .object({
+    items: z.array(payableBatchItemSchema),
+    // UUIDs válidos sem registro correspondente — o lote não aborta por isso (degradação graciosa).
+    missing: z.array(z.uuid()),
+  })
+  .strict();
+
+// ─── Resolução em lote (#358, ADR-0049) — POST /financial/documents:batch ─────
+// Destrava o drawer de Detalhe (#95): documentId[] → resumo do documento (refs auxiliares em 1 hop),
+// já com supplierName/supplierDocument (fin_supplier_view). Subset de documentSummarySchema (linha 270)
+// — sem series/grossValueCents/paymentMethod/contractRef/issueDate/version (fora do que o drawer resolve
+// via batch). `ref` = documentId. Espelha o slice de payables (#357) trocando payable→documento.
+export const documentsBatchBodySchema = z.object({
+  refs: z.array(z.uuid()).min(1).max(200),
+});
+
+export const documentBatchItemSchema = z
+  .object({
+    ref: z.uuid(),
+    documentNumber: z.string().nullable(),
+    type: z.string().nullable(),
+    status: z.string(),
+    supplierRef: z.string().nullable(),
+    supplierName: z.string().nullable(),
+    supplierDocument: z.string().nullable(),
+    netValueCents: centsStringSchema.nullable(),
+    dueDate: z.string().nullable(),
+  })
+  .strict();
+
+export type DocumentBatchItemDto = z.infer<typeof documentBatchItemSchema>;
+
+export const documentsBatchResponseSchema = z
+  .object({
+    items: z.array(documentBatchItemSchema),
+    // UUIDs válidos sem registro correspondente — o lote não aborta por isso (degradação graciosa).
+    missing: z.array(z.uuid()),
+  })
+  .strict();
 
 // ─── Baixa manual de título (#219/#224) — POST /documents/:id/payables/:payableId/manual-payment ──
 export const documentPayableParamsSchema = z.object({
@@ -870,4 +1110,47 @@ export const manualPaymentBodySchema = z.object({
   paidAt: z.iso.date().optional(),
   // #223: motivo opcional (a trilha já captura quem+quando).
   reason: z.string().min(1).max(500).optional(),
+});
+
+// ─── Vencimento de título isolado (#270) — PATCH /documents/:id/payables/:payableId ──────────────
+export const updatePayableDueDateBodySchema = z.object({
+  version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
+  // Novo vencimento do título alvo (date-only `YYYY-MM-DD`). Não propaga ao documento-pai nem aos irmãos.
+  dueDate: z.iso.date(),
+});
+
+// ─── #62 Ingestão de documento (POST /documents/ingest) ──────────────────────
+
+/** Allowlist de mimeType do ingest — PDF (parser nativo) + XML (NFS-e/NF-e). */
+export const INGEST_MIME_ALLOWLIST = ['application/pdf', 'text/xml', 'application/xml'] as const;
+
+/** Query de `POST /documents/ingest` — metadados do upload (o corpo é o binário). */
+export const ingestDocumentQuerySchema = z.object({
+  fileName: z
+    .string()
+    .min(1)
+    .max(255)
+    .regex(/^[^/\\:*?"<>|]+$/, 'fileName contém caractere inválido')
+    // m1: veta os segmentos de traversal `.`/`..` na borda (400 limpo, não 503 do adapter).
+    .refine((f) => f !== '.' && f !== '..', 'fileName inválido'),
+  mimeType: z.enum(INGEST_MIME_ALLOWLIST),
+});
+
+/** Corpo binário (Buffer em runtime via addContentTypeParser); documentado como binário no OpenAPI. */
+export const octetStreamIngestBody = (): { content: Record<string, { schema: z.ZodType }> } => ({
+  content: {
+    'application/octet-stream': {
+      schema: z.instanceof(Buffer).meta({
+        type: 'string',
+        format: 'binary',
+        description: 'Bytes do documento fiscal (PDF/XML)',
+      }),
+    },
+  },
+});
+
+/** Resposta 201 do ingest. */
+export const ingestDocumentResponseSchema = z.object({
+  documentId: z.string(),
+  resolvedVia: z.enum(['xml', 'native-text', 'unpdf']).nullable(),
 });

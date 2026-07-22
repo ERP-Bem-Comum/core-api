@@ -32,6 +32,25 @@ export type {
 export { listSuppliersForProjection } from './supplier-projection.ts';
 export type { SupplierProjectionRecord } from './supplier-projection.ts';
 
+// Reader boot-scoped de collaborators para projeção cross-módulo (REPORTS-TEAM-ABC #238 —
+// read-only). Pool aberto uma vez (não por requisição) — ver incidente RDS 0001.
+export { openCollaboratorProjectionReader } from './collaborator-projection.ts';
+export type {
+  CollaboratorTeamProjection,
+  CollaboratorProjectionReader,
+} from './collaborator-projection.ts';
+
+// Reader boot-scoped da agregacao demografica da equipe (REPORTS-TEAM-DEMOGRAPHICS - read-only).
+// So contagem por categoria atravessa a fronteira; nunca linha por pessoa.
+export { openCollaboratorDemographicsReader } from './collaborator-demographics-reader.ts';
+export type { CollaboratorDemographicsReader } from './collaborator-demographics-reader.ts';
+export { aggregateTeamDemographics } from './collaborator-demographics.ts';
+export type {
+  CategoryCount,
+  CollaboratorDemographicsRecord,
+  TeamDemographicsSummary,
+} from './collaborator-demographics.ts';
+
 // US6b: projeção da contagem de contratos por contraparte (consome ctr_outbox via contracts/public-api).
 export { applyContractCountEvent } from '../application/use-cases/apply-contract-count-event.ts';
 export type {

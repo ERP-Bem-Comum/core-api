@@ -1,0 +1,27 @@
+meta {
+  name: BGP-PEND-4 lista deveria conter o plano criado
+  type: http
+  seq: 5
+  docs: EXPECTED-FAIL — depende de 02-create-ok ter criado o plano. CA3 da issue #315.
+}
+
+get {
+  url: {{baseUrl}}/api/v2/budget-plans?programRef={{budgetPlansProgramRef}}
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{budgetPlansOperatorToken}}
+}
+
+tests {
+  test("BGP-PEND-4 — GET /budget-plans?programRef= retorna 200", function () {
+    expect(res.getStatus()).to.equal(200);
+  });
+  test("BGP-PEND-4 — lista contem o plano criado com programName populado", function () {
+    const items = res.getBody().items;
+    const found = items.find(function (i) { return i.id === bru.getVar("budgetPlansPlanId"); });
+    expect(found).to.exist;
+    expect(found.programName).to.be.a("string").and.not.equal("");
+  });
+}

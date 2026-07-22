@@ -1,0 +1,22 @@
+meta {
+  name: BGP-PEND-1 options deveria listar o Program criado
+  type: http
+  seq: 2
+  docs: EXPECTED-FAIL — o programCatalog do budget-plans em modo memory nao enxerga /api/v1/programs (ver folder.bru). `programs` volta vazio mesmo apos o setup criar um Program ATIVO.
+}
+
+get {
+  url: {{baseUrl}}/api/v2/budget-plans/options
+  auth: bearer
+}
+
+auth:bearer {
+  token: {{budgetPlansOperatorToken}}
+}
+
+tests {
+  test("BGP-PEND-1 — options.programs contem o Program recem-criado", function () {
+    const refs = res.getBody().programs.map(function (p) { return p.ref; });
+    expect(refs).to.include(bru.getVar("budgetPlansProgramRef"));
+  });
+}

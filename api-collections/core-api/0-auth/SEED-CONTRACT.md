@@ -9,14 +9,15 @@
 
 ## Usuários e permissões requeridos
 
-| email                       | var do token             | permissões                                                                                                                                                                      | módulo(s)          |
-| --------------------------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
-| `admin.e2e@bemcomum.dev`    | `adminToken`             | `user:read`, `user:create`, `user:update`, `user:deactivate`, `role:read`, `user:assign-role`, `role:create`, `role:update`                                                     | auth               |
-| `bare.e2e@bemcomum.dev`     | `bareToken`              | nenhuma                                                                                                                                                                         | auth               |
-| `e2e-reader@example.com`    | `readerToken`            | `contract:read`                                                                                                                                                                 | contracts          |
-| `e2e-contracts@example.com` | `contractsOperatorToken` | `contract:read`, `contract:write`                                                                                                                                               | contracts          |
-| `e2e-partners@example.com`  | `partnersOperatorToken`  | `supplier:read`, `supplier:write`, `financier:read`, `financier:write`, `collaborator:read`, `collaborator:write`, `act:read`, `act:write`, `geography:read`, `geography:write` | partners           |
-| `e2e-bare@example.com`      | `bareUserToken`          | nenhuma (criado via `POST /api/v2/auth/register` no request `01-register-bare-user.bru`)                                                                                        | contracts/partners |
+| email                         | var do token               | permissões                                                                                                                                                                      | módulo(s)          |
+| ----------------------------- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------ |
+| `admin.e2e@bemcomum.dev`      | `adminToken`               | `user:read`, `user:create`, `user:update`, `user:deactivate`, `role:read`, `user:assign-role`, `role:create`, `role:update`                                                     | auth               |
+| `bare.e2e@bemcomum.dev`       | `bareToken`                | nenhuma                                                                                                                                                                         | auth               |
+| `e2e-reader@example.com`      | `readerToken`              | `contract:read`                                                                                                                                                                 | contracts          |
+| `e2e-contracts@example.com`   | `contractsOperatorToken`   | `contract:read`, `contract:write`                                                                                                                                               | contracts          |
+| `e2e-partners@example.com`    | `partnersOperatorToken`    | `supplier:read`, `supplier:write`, `financier:read`, `financier:write`, `collaborator:read`, `collaborator:write`, `act:read`, `act:write`, `geography:read`, `geography:write` | partners           |
+| `e2e-bare@example.com`        | `bareUserToken`            | nenhuma (criado via `POST /api/v2/auth/register` no request `01-register-bare-user.bru`)                                                                                        | contracts/partners |
+| `e2e-budgetplans@example.com` | `budgetPlansOperatorToken` | `budget-plan:read`, `budget-plan:write`                                                                                                                                         | budget-plans       |
 
 > **Nota sobre `bareUserEmail` (`e2e-bare@example.com`):** este usuário é registrado
 > pelo próprio request `01-register-bare-user.bru` via `POST /api/v2/auth/register`.

@@ -1,0 +1,5 @@
+meta {
+  name: budget-plans
+  type: folder
+  docs: Smoke da fatia US1 do módulo budget-plans (issue #315, BGP-PLAN-CRUD). Cobre RBAC (401/403), validação de body/query (400/422), e os cenários que independem de um Program real e ativo estar visível ao módulo em modo memory. O fluxo feliz completo (POST cria plano 201 → GET options com o programa criado → duplicado 409 → lista/detalhe contendo o plano) fica isolado em `z-pending-fixes/budget-plans/` — ver `meta.docs` de cada request lá para o porquê (gap de composição cross-módulo em `src/server.ts` no driver memory, achado desta sessão).
+}

@@ -95,7 +95,8 @@ mysql://<user>:<password>@<host>:3306/<database>?ssl=true
 
 Provider, remetente e sandbox são escolhidos **só por env**, validados no boot por
 `buildEmailSender(env)` (ticket `NOTIF-EMAIL-DEPLOY-CONFIG`; [ADR-0010](../architecture/adr/0010-email-port-adapter-pattern.md)).
-Config inválida (provider desconhecido, provider sem suas envs, `EMAIL_FROM` malformado) = **boot falha**.
+Config inválida (provider desconhecido, provider sem suas envs, `EMAIL_FROM` malformado, remetente
+com domínio fora de `EMAIL_FROM_ALLOWED_DOMAINS`) = **boot falha**.
 
 | Variável | Tipo | Obrigatória quando | Descrição |
 | :--- | :--- | :--- | :--- |
@@ -103,10 +104,21 @@ Config inválida (provider desconhecido, provider sem suas envs, `EMAIL_FROM` ma
 | `SMTP_HOST` / `SMTP_PORT` / `SMTP_SECURE` / `SMTP_USER` | config | `provider=smtp` | Servidor SMTP. Umbler: `smtp.umbler.com:587` (STARTTLS, `SMTP_SECURE=false`) ou `:465` (`true`). |
 | `SMTP_PASS` | **secret** | `provider=smtp` | Senha SMTP. Rotação: conforme provedor. |
 | `SMTP_POOL` / `SMTP_MAX_CONNS` | config | opcional | Pool (default `true` / `5`). |
+| `SMTP_REQUIRE_TLS` | config | opcional | STARTTLS obrigatório. Default fail-secure `true` quando `SMTP_SECURE=false`; só a string `false` desativa (dev/Mailpit sem TLS). |
 | `RESEND_API_KEY` | **secret** | `provider=resend` | API key Resend. Rotação: conforme provedor. |
 | `EMAIL_FROM` | config | `provider≠memory` | Remetente global, ex.: `"Bem Comum <no-reply@dominio>"`. |
 | `EMAIL_FROM_RESET` / `EMAIL_FROM_INVITE` / `EMAIL_FROM_NOTIFICATION` | config | opcional | Remetente por fluxo (fallback → `EMAIL_FROM`). |
 | `EMAIL_SANDBOX_TO` | config | **só não-prod** | Redireciona TODO e-mail (to/cc/bcc) para esta caixa. Nunca setar em prod. |
+| `EMAIL_FROM_ALLOWED_DOMAINS` | config | **recomendada em prod** | Allowlist (CSV) de domínios do remetente (guarda-corpo, issue #331). Presente → todo remetente resolvível (`EMAIL_FROM*` + aliases legados quando usados) deve ter domínio na lista (após o `@`, case-insensitive), senão **boot falha**. Ausente → sem verificação (dev/Mailpit). Ex.: `abemcomum.org, mail.abemcomum.org`. |
+| `AUTH_RESET_BASE_URL` | config | **prod** | Base do link de reset no e-mail (URL absoluta http(s) do FRONT, ex.: `https://<front>/reset-password`). |
+| `AUTH_ACTIVATION_BASE_URL` | config | **prod** | Base do link de ativação do convite de usuário (issue #331). |
+| `PARTNERS_SELF_REGISTRATION_BASE_URL` | config | **prod** | Base do link de autocadastro do colaborador (issue #331). |
+
+> **Base URLs de link (ticket `AUTH-EMAIL-LINK-BASE-URLS`, issues #331/#332):** validadas no boot do
+> `server.ts` por `readEmailLinkBaseUrls` — URL absoluta `http(s)` obrigatória; em `NODE_ENV=production`
+> as três são obrigatórias (ausente/inválida → boot falha, exit 78). Fora de prod, ausente → default
+> `localhost` de dev. Motivo: Q.A. 2026-07-02 flagrou convite com `http://localhost:3000/activate` e
+> reset com base sem protocolo em produção.
 
 > **Aliases legados (deprecados):** `AUTH_RESET_FROM`, `AUTH_INVITE_FROM`, `PARTNERS_INVITE_FROM` —
 > ainda lidos quando os `EMAIL_FROM*` correspondentes não estão setados. Secrets reais nesta seção:

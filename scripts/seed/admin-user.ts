@@ -35,7 +35,10 @@ import { eq } from 'drizzle-orm';
 import { openAuthMysql } from '#src/modules/auth/adapters/persistence/drivers/mysql-driver.ts';
 import { makeArgon2PasswordHasher } from '#src/modules/auth/adapters/crypto/password-hasher.argon2.ts';
 import * as PasswordPolicy from '#src/modules/auth/domain/credential/password-policy.ts';
-import * as PermissionCatalog from '#src/modules/auth/domain/authorization/permission-catalog.ts';
+import {
+  syncPermissionCatalog,
+  ADMIN_ROLE_NAME,
+} from '#src/modules/auth/public-api/sync-permissions.ts';
 import * as schema from '#src/modules/auth/adapters/persistence/schemas/mysql.ts';
 import * as Email from '#src/modules/auth/domain/identity/email.ts';
 import * as Cpf from '#src/modules/auth/domain/identity/cpf.ts';
@@ -157,34 +160,10 @@ export const validateAdminProfile = (
   };
 };
 
-// ─── ER_DUP_ENTRY detection (espelha role-repository.drizzle.ts) ───────────────
-
-const getDupEntryInfo = (e: unknown): { errno: number; sqlMessage: string } | null => {
-  const candidates: unknown[] = [e];
-  if (e instanceof Error && e.cause !== undefined) candidates.push(e.cause);
-  for (const c of candidates) {
-    if (typeof c === 'object' && c !== null) {
-      const obj = c as Record<string, unknown>;
-      if (typeof obj['errno'] === 'number' && obj['errno'] === 1062) {
-        return {
-          errno: 1062,
-          sqlMessage: typeof obj['sqlMessage'] === 'string' ? obj['sqlMessage'] : '',
-        };
-      }
-    }
-  }
-  return null;
-};
-
-const isPermissionNameDupEntry = (e: unknown): boolean => {
-  const info = getDupEntryInfo(e);
-  if (info === null) return false;
-  return info.sqlMessage.includes('auth_permission_name_idx');
-};
-
 // ─── Logica de seed ───────────────────────────────────────────────────────────
-
-const ADMIN_ROLE_NAME = 'admin-sistema';
+//
+// A detecção de ER_DUP_ENTRY (auth_permission_name_idx) saiu daqui junto com o passo 4: quem
+// resolve corrida no upsert de permissão é o RoleRepository, atrás de syncPermissionCatalog.
 
 const main = async (): Promise<void> => {
   // 1. Validar env obrigatorias — antes de qualquer escrita
@@ -252,94 +231,22 @@ const main = async (): Promise<void> => {
     // O VO nao expoe um getter — o valor e a propria string PHC (fromString preserva byte-a-byte).
     const passwordHash = hashR.value as unknown as string;
 
-    // 4. Role 'admin-sistema': reusar se existir; criar senao.
-    //    Garantir que tem TODAS as PermissionCatalog.all (upsert idempotente).
-    process.stdout.write(`[admin-seed] verificando role '${ADMIN_ROLE_NAME}'...\n`);
-
-    const roleId = await db.transaction(async (tx) => {
-      // Busca role por nome (auth_role_name_idx UNIQUE)
-      const existingRoles = await tx
-        .select({ id: schema.authRole.id })
-        .from(schema.authRole)
-        .where(eq(schema.authRole.name, ADMIN_ROLE_NAME))
-        .limit(1);
-
-      const existingRoleRow = existingRoles[0];
-      const id: string =
-        existingRoleRow !== undefined
-          ? existingRoleRow.id
-          : await (async () => {
-              const newId = randomUUID();
-              await tx.insert(schema.authRole).values({
-                id: newId,
-                name: ADMIN_ROLE_NAME,
-                description: 'Administrador do sistema — acesso total a todas as permissoes.',
-                status: 'active',
-                createdAt: now,
-                updatedAt: now,
-              });
-              process.stdout.write(`[admin-seed] role criada: ${newId}\n`);
-              return newId;
-            })();
-      if (existingRoleRow !== undefined) {
-        process.stdout.write(`[admin-seed] role existente reutilizada: ${id}\n`);
-      }
-
-      // Upsert auth_permission por name (espelha role-repository.drizzle.ts:resolvePermissionId).
-      // Loop serial (nao Promise.all — evita deadlock no name_idx).
-      const permissionIds: string[] = [];
-      for (const perm of PermissionCatalog.all) {
-        const permName = perm as unknown as string;
-
-        const existingPerm = await tx
-          .select({ id: schema.authPermission.id })
-          .from(schema.authPermission)
-          .where(eq(schema.authPermission.name, permName))
-          .limit(1);
-
-        const existingPermRow = existingPerm[0];
-        // Resolve permissionId: SELECT existente ou INSERT (ignore-then-reselect em corrida).
-        const permId: string =
-          existingPermRow !== undefined
-            ? existingPermRow.id
-            : await (async () => {
-                const newPermId = randomUUID();
-                try {
-                  await tx.insert(schema.authPermission).values({
-                    id: newPermId,
-                    name: permName,
-                    createdAt: now,
-                  });
-                  return newPermId;
-                } catch (insertErr) {
-                  if (isPermissionNameDupEntry(insertErr)) {
-                    // Corrida: re-SELECT (ignore-then-reselect; permission e imutavel)
-                    const raced = await tx
-                      .select({ id: schema.authPermission.id })
-                      .from(schema.authPermission)
-                      .where(eq(schema.authPermission.name, permName))
-                      .limit(1);
-                    const racedRow = raced[0];
-                    if (racedRow !== undefined) return racedRow.id;
-                  }
-                  throw insertErr;
-                }
-              })();
-        permissionIds.push(permId);
-      }
-
-      // Upsert auth_role_permission: DELETE existentes + INSERT batch.
-      // Idempotente: re-rodar e seguro (nao duplica).
-      await tx.delete(schema.authRolePermission).where(eq(schema.authRolePermission.roleId, id));
-
-      if (permissionIds.length > 0) {
-        await tx
-          .insert(schema.authRolePermission)
-          .values(permissionIds.map((permissionId) => ({ roleId: id, permissionId })));
-      }
-
-      return id;
-    });
+    // 4. Catálogo de permissões + role 'admin-sistema' — delegado à public-api do auth (#462).
+    //    Mesma regra que o job `auth:sync-permissions` roda no deploy: uma implementação, dois
+    //    entrypoints. Antes este bloco reimplementava o upsert à mão, contornando o agregado —
+    //    duas cópias da regra é como o ambiente passou a divergir do catálogo.
+    process.stdout.write(`[admin-seed] sincronizando catálogo em '${ADMIN_ROLE_NAME}'...\n`);
+    const syncR = await syncPermissionCatalog(config.databaseUrl);
+    if (!syncR.ok) {
+      process.stderr.write(`[admin-seed] falha ao sincronizar permissões: ${syncR.error}\n`);
+      process.exitCode = 1;
+      return;
+    }
+    const { roleId, permissionsTotal, roleCreated } = syncR.value;
+    process.stdout.write(
+      `[admin-seed] role ${roleCreated ? 'criada' : 'reutilizada'}: ${roleId} ` +
+        `(${permissionsTotal} permissões)\n`,
+    );
 
     // 5. Usuario: se ADMIN_EMAIL ja existe -> encerra com aviso (idempotente, exitCode 0).
     process.stdout.write(`[admin-seed] verificando usuario '${profile.email}'...\n`);

@@ -23,3 +23,51 @@ export type {
   SupplierViewStore,
   SupplierViewStoreError,
 } from '../application/ports/supplier-view-store.ts';
+
+// Read-model de payables (Camada 0 do Dashboard/Reports, #235): consumido pelo worker de projeção
+// `payable-view-projection` (composition root), que aplica os eventos do `fin_outbox` no read-model.
+export { applyPayableEvent } from '../application/use-cases/apply-payable-event.ts';
+export type {
+  ApplyPayableEventInput,
+  ApplyPayableEventError,
+} from '../application/use-cases/apply-payable-event.ts';
+export type {
+  PayableViewStore,
+  PayableViewStoreError,
+} from '../application/ports/payable-view-store.ts';
+
+// Reader boot-scoped da agregação "Fornecedores sem Contrato" (#240 REP-2 — read-only). Pool
+// aberto uma vez (não por requisição). Consumido pelo módulo `reports` via ACL.
+export { openSuppliersWithoutContractReader } from './suppliers-without-contract-projection.ts';
+export type {
+  SupplierWithoutContractRow,
+  SuppliersWithoutContractReader,
+} from './suppliers-without-contract-projection.ts';
+
+// Reader boot-scoped da "Posição de Pagamentos" (#243 REP-4 — read-only). Agrega fin_payable_view
+// por Fornecedor×CentroCusto×Categoria em 3 baldes. Consumido pelo `reports` via ACL.
+export { openPaymentPositionReader } from './payment-position-projection.ts';
+export type { PaymentPositionRow, PaymentPositionReader } from './payment-position-projection.ts';
+
+// Reader boot-scoped da "Análise de Planejamento" (#114 REP-3 — read-only). Agrega fin_payable_view
+// por categoria×CC×mês num período. Consumido pelo `reports` via ACL.
+export { openPayablesAnalysisReader } from './payables-analysis-projection.ts';
+export type {
+  PayablesAnalysisRow,
+  PayablesAnalysisFilter,
+  PayablesAnalysisReader,
+} from './payables-analysis-projection.ts';
+
+// Reader boot-scoped do "Realizado por Plano" (#416 — read-only). Soma reconciled_value_cents das
+// reconciliações Active por budget_plan_ref (JOIN 3-hop intra-financial). Consumido pelo
+// `budget-plans` (insights) via ACL.
+export { openRealizedByPlanReader } from './realized-by-plan-projection.ts';
+export type { RealizedByPlanReader } from './realized-by-plan-projection.ts';
+
+// FIN-REALIZED-PROVISIONED-READ (#416, fatia 2/3): realizado vs provisionado por
+// (budgetPlanRef, categoryRef, mês), cada medida no seu eixo de data. Refs opacos (ADR-0014).
+export { openRealizedProvisionedReader } from './realized-provisioned-projection.ts';
+export type {
+  RealizedProvisionedReader,
+  RealizedProvisionedRow,
+} from './realized-provisioned-projection.ts';

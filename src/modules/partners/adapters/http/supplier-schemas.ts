@@ -143,3 +143,35 @@ export type CreateSupplierBody = z.infer<typeof createSupplierBodySchema>;
 export const updateSupplierBodySchema = createSupplierBodySchema;
 
 export type UpdateSupplierBody = z.infer<typeof updateSupplierBodySchema>;
+
+// ─── #356 — resolução em lote (BFF batch-by-id, ADR-0049 §3 / #350) ───────────
+
+/**
+ * Body do POST /partners/suppliers:batch. Teto 200 refs/chamada (< 500 do batch de
+ * escrita — deliberado, anti-DoS). Fundamento: OWASP AI Exchange, l.3735.
+ */
+export const suppliersBatchBodySchema = z.object({
+  refs: z.array(z.uuid()).min(1).max(200),
+});
+
+export type SuppliersBatchBody = z.infer<typeof suppliersBatchBodySchema>;
+
+/**
+ * Item da resposta do batch — identidade MÍNIMA (nome/CNPJ/categoria). NUNCA inclui
+ * `bankAccount`/`pixKey` (minimização, CA5 do #356) — o schema de resposta é a
+ * segunda linha de defesa: o serializer Zod descarta qualquer campo fora daqui.
+ */
+const supplierBatchItemSchema = z.object({
+  ref: z.uuid(),
+  name: z.string(),
+  taxId: z.string(),
+  serviceCategory: z.string(),
+});
+
+/** Resposta do POST /partners/suppliers:batch — `items` sem ordem garantida + `missing` (refs sem registro). */
+export const suppliersBatchResponseSchema = z.object({
+  items: z.array(supplierBatchItemSchema),
+  missing: z.array(z.uuid()),
+});
+
+export type SuppliersBatchResponseDto = z.infer<typeof suppliersBatchResponseSchema>;

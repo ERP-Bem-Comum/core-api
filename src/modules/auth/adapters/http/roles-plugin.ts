@@ -139,6 +139,7 @@ const rolesRoutes =
                 name: String(role.name),
                 active: role.status === 'active',
                 permissions: role.permissions.map(String),
+                approvalLimitCents: role.approvalLimit === null ? null : role.approvalLimit.cents,
               })),
             })
           : result;
@@ -162,7 +163,14 @@ const rolesRoutes =
         response: { 201: createRoleResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
-        const result = await deps.createRole(req.body);
+        // exactOptionalPropertyTypes: inclui approvalLimitCents só quando presente no body.
+        const result = await deps.createRole({
+          name: req.body.name,
+          permissions: req.body.permissions,
+          ...(req.body.approvalLimitCents !== undefined
+            ? { approvalLimitCents: req.body.approvalLimitCents }
+            : {}),
+        });
         // Location no 201 (RFC 7231 6.3.2): aponta para o recurso recem-criado. O body
         // { id } e preservado para compat com o front atual.
         if (result.ok) reply.header('location', `/api/v1/roles/${result.value.id}`);
@@ -172,6 +180,7 @@ const rolesRoutes =
             'role-name-duplicate': 409,
             'role-name-invalid': 422,
             'role-permission-not-in-catalog': 422,
+            'role-approval-limit-invalid': 422,
             'role-repo-unavailable': 503,
           },
         });
@@ -199,6 +208,9 @@ const rolesRoutes =
           id: req.params.id,
           ...(req.body.name !== undefined ? { name: req.body.name } : {}),
           ...(req.body.permissions !== undefined ? { permissions: req.body.permissions } : {}),
+          ...(req.body.approvalLimitCents !== undefined
+            ? { approvalLimitCents: req.body.approvalLimitCents }
+            : {}),
         });
         const shaped = result.ok
           ? ok({
@@ -206,6 +218,8 @@ const rolesRoutes =
               name: String(result.value.name),
               active: result.value.status === 'active',
               permissions: result.value.permissions.map(String),
+              approvalLimitCents:
+                result.value.approvalLimit === null ? null : result.value.approvalLimit.cents,
             })
           : result;
         return sendResult(reply, shaped, {
@@ -216,6 +230,7 @@ const rolesRoutes =
             'role-name-duplicate': 409,
             'role-name-invalid': 422,
             'role-permission-not-in-catalog': 422,
+            'role-approval-limit-invalid': 422,
             'role-repo-unavailable': 503,
           },
         });
@@ -244,6 +259,8 @@ const rolesRoutes =
               name: String(result.value.name),
               active: result.value.status === 'active',
               permissions: result.value.permissions.map(String),
+              approvalLimitCents:
+                result.value.approvalLimit === null ? null : result.value.approvalLimit.cents,
             })
           : result;
         return sendResult(reply, shaped, {

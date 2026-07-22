@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "FIN-DOCREPO-TEST-PAIDAT-CHECK",
+  "size": "S",
+  "createdAt": "2026-07-13T17:00:06.526Z",
+  "closedAt": "2026-07-13T17:05:24.558Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-13T17:00:40.172Z",
+      "finishedAt": "2026-07-13T17:01:15.926Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-13T17:01:53.657Z",
+      "finishedAt": "2026-07-13T17:03:02.229Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-13T17:03:19.251Z",
+      "finishedAt": "2026-07-13T17:03:45.594Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-13T17:04:08.583Z",
+      "finishedAt": "2026-07-13T17:05:24.235Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

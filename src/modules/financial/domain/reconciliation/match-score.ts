@@ -25,6 +25,7 @@ export type MatchInput = Readonly<{
   payableValueCents: number;
   transactionDate: Date;
   payableDueDate: Date;
+  paidAt: Date | null;
   memo: string;
   documentNumber: string | null;
   supplierOpenCount: number;
@@ -102,11 +103,6 @@ export const criteriaBreakdown = (criteria: MatchCriteria): readonly CriterionRe
   },
 ];
 
-const normalizeName = (value: string): string => value.trim().toUpperCase().replace(/\s+/g, ' ');
-
-const sameDayUtc = (a: Date, b: Date): boolean =>
-  a.toISOString().slice(0, 10) === b.toISOString().slice(0, 10);
-
 const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 // Referência do memo casa por FRONTEIRA de palavra (\b) — evita falso-positivo de nº curto
@@ -114,15 +110,55 @@ const escapeRegex = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]
 const memoMentions = (memo: string, ref: string): boolean =>
   ref.length > 0 && new RegExp(`\\b${escapeRegex(ref)}\\b`).test(memo.toUpperCase());
 
+// Sufixos societários (só ruído p/ o match). Os de 2 chars (ME/SA/EI) já caem pelo filtro de tamanho.
+const NAME_STOPWORDS: ReadonlySet<string> = new Set(['LTDA', 'EIRELI', 'EPP', 'MEI', 'CIA']);
+
+// Tokens significativos de um nome: sem acento, caixa alta, só alfanumérico, ≥3 chars, sem sufixo societário.
+const nameTokens = (value: string): readonly string[] =>
+  value
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]+/g, ' ')
+    .trim()
+    .split(' ')
+    .filter((t) => t.length >= 3 && !NAME_STOPWORDS.has(t));
+
+// payeeMatch TOLERANTE (multi-banco): ≥60% dos tokens do fornecedor presentes no payee do extrato.
+// Ex.: "TED 33994 FULANO LTDA" (extrato) casa com "Fulano Ltda" (cadastro). Anti-ruído: exige a MAIORIA
+// dos tokens do fornecedor (não um só genérico) → não casa por um sobrenome comum isolado.
+const PAYEE_MATCH_MIN_RATIO = 0.6;
+const payeeMatches = (payeeName: string, supplierName: string): boolean => {
+  const supplier = nameTokens(supplierName);
+  if (supplier.length === 0) return false;
+  const payee = new Set(nameTokens(payeeName));
+  const hits = supplier.filter((t) => payee.has(t)).length;
+  return hits / supplier.length >= PAYEE_MATCH_MIN_RATIO;
+};
+
+// Data TOLERANTE: o débito bancário casa com a BAIXA do título, não com o vencimento — aceita ±N dias
+// em torno da data-âncora (paidAt quando existe; ver evaluateCriteria). Comparação por número do dia em
+// UTC (imune a fuso). Mantém o sinal como corroboração (não é o âncora do match).
+const DATE_TOLERANCE_DAYS = 5;
+const MS_PER_DAY = 86_400_000;
+const utcDayNumber = (d: Date): number =>
+  Math.floor(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()) / MS_PER_DAY);
+// Exportada para reuso no casamento de contrapartida (#269/US2): mesma janela ±5d, evita duplicar a constante.
+export const dateWithinTolerance = (a: Date, b: Date): boolean =>
+  Math.abs(utcDayNumber(a) - utcDayNumber(b)) <= DATE_TOLERANCE_DAYS;
+
 // Avalia os critérios a partir dos dados crus (transação × título candidato). Pura.
+// `payeeMatch` e `dateD0` são TOLERANTES (extrato real de bancos diferentes: descrição livre + data ≠ D0);
+// a precisão vem da CORROBORAÇÃO — `exactValue` (40) sozinho segue < 50 (banda baixa, filtrado); só ativa
+// com um 2º sinal (payee/data/memo). Ver #272.
+// `dateD0` ancora na DATA DE PAGAMENTO (`paidAt`) quando registrada — o débito do extrato casa com a baixa,
+// não com o vencimento; sem baixa, cai no `payableDueDate` como rede (mesma tolerância ±5d). Ver #272 ponto 2.
 export const evaluateCriteria = (input: MatchInput): MatchCriteria => {
-  const payee = normalizeName(input.payeeName);
-  const supplier = input.supplierName === null ? '' : normalizeName(input.supplierName);
   const doc = input.documentNumber === null ? '' : input.documentNumber.trim().toUpperCase();
   return {
-    payeeMatch: payee.length > 0 && payee === supplier,
+    payeeMatch: input.supplierName !== null && payeeMatches(input.payeeName, input.supplierName),
     exactValue: input.transactionValueCents === input.payableValueCents,
-    dateD0: sameDayUtc(input.transactionDate, input.payableDueDate),
+    dateD0: dateWithinTolerance(input.transactionDate, input.paidAt ?? input.payableDueDate),
     memoRef: memoMentions(input.memo, doc),
     supplierOpenCount: input.supplierOpenCount,
   };

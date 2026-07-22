@@ -21,6 +21,8 @@ const documentSnapshot = (d: Document): Readonly<Record<string, string | null>> 
   netValue: d.status === 'Draft' ? null : fromMoney(d.netValue),
   dueDate: fromDate(d.dueDate),
   description: d.description ?? null,
+  // #273: complemento da forma de pagamento — auditado before/after no timeline (CA6.5).
+  paymentDetail: d.paymentDetail ?? null,
 });
 
 const payableSnapshot = (p: Payable): Readonly<Record<string, string | null>> => ({
@@ -62,9 +64,11 @@ export type ProjectEntryInput = Readonly<{
 // Gera as entradas do marco: 1 para o Documento + 1 por título alterado/criado.
 export const projectEntry = (input: ProjectEntryInput): readonly FinancialTimelineEntry[] => {
   // Cancelar faz hard-delete + cascade — não há marco de trilha para `DocumentCancelled`.
-  // O guard também narrowa `eventType` para o subconjunto `TimelineEventType` (sem o cancelamento).
+  // `ApproverEscalated` (#289/CASCADE) também não é marco de estado do Document — vai só pro
+  // outbox (ver `TimelineEventType` em events.ts). O guard narrowa `eventType` para o
+  // subconjunto `TimelineEventType` (sem cancelamento nem escalonamento).
   const eventType = input.event.type;
-  if (eventType === 'DocumentCancelled') return [];
+  if (eventType === 'DocumentCancelled' || eventType === 'ApproverEscalated') return [];
 
   const documentId = input.after.id;
   const entries: FinancialTimelineEntry[] = [

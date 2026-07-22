@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "NOTIF-EMAIL-FROM-DOMAIN-ALLOWLIST",
+  "size": "S",
+  "createdAt": "2026-07-02T15:16:25.491Z",
+  "closedAt": "2026-07-02T16:40:31.073Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-02T15:16:25.811Z",
+      "finishedAt": "2026-07-02T15:23:56.855Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "nodemailer-email-expert",
+      "startedAt": "2026-07-02T15:23:57.182Z",
+      "finishedAt": "2026-07-02T15:34:29.770Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-02T15:34:30.078Z",
+      "finishedAt": "2026-07-02T15:39:33.604Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-02T15:39:33.908Z",
+      "finishedAt": "2026-07-02T16:40:30.769Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

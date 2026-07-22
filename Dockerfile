@@ -44,7 +44,7 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 
 # Corepack habilita pnpm sem npm install global. Versão pinada (ADR-0029).
-ENV PNPM_VERSION=11.7.0
+ENV PNPM_VERSION=11.15.1
 RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate
 
 WORKDIR /app
@@ -99,7 +99,12 @@ ENV NODE_ENV=production \
 
 # Copia node_modules do estágio deps.
 COPY --from=deps /app/node_modules ./node_modules
-COPY package.json pnpm-lock.yaml ./
+# pnpm-workspace.yaml também no runtime: `pnpm <script>` (ex.: `pnpm job:auth:sync-permissions`
+# no deploy) roda o deps-status-check do pnpm 11, que revalida `overrides` (esbuild) contra o lock.
+# Sem o workspace aqui, `overrides` fica vazio vs. lock → ERR_PNPM_LOCKFILE_CONFIG_MISMATCH.
+# (O exemplo era `pnpm seed:admin` — comando que não existe na imagem, já que `scripts/` não é
+# copiado. Era o sintoma do #462: a intenção estava documentada e quebrada.)
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 
 # Código de produção. `tsconfig.json` fica pra suportar tooling; os configs do
 # drizzle-kit (dev-only, devDependency) vivem em db/drizzle/ e não vão pro runtime.

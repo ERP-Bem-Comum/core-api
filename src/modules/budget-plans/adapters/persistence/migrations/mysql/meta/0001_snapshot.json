@@ -1,0 +1,448 @@
+{
+  "version": "5",
+  "dialect": "mysql",
+  "id": "29793c20-add8-4cd8-8a6f-b22b703dd39c",
+  "prevId": "6df29f62-515d-4667-8019-117730411e3a",
+  "tables": {
+    "bgp_outbox": {
+      "name": "bgp_outbox",
+      "columns": {
+        "event_id": {
+          "name": "event_id",
+          "type": "char(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "aggregate_id": {
+          "name": "aggregate_id",
+          "type": "char(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "aggregate_type": {
+          "name": "aggregate_type",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "event_type": {
+          "name": "event_type",
+          "type": "varchar(64)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "schema_version": {
+          "name": "schema_version",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "occurred_at": {
+          "name": "occurred_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "enqueued_at": {
+          "name": "enqueued_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "processed_at": {
+          "name": "processed_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "attempts": {
+          "name": "attempts",
+          "type": "smallint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false,
+          "default": 0
+        },
+        "payload": {
+          "name": "payload",
+          "type": "varchar(8192)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "bgp_outbox_processed_at_occurred_at_idx": {
+          "name": "bgp_outbox_processed_at_occurred_at_idx",
+          "columns": ["processed_at", "occurred_at"],
+          "isUnique": false
+        },
+        "bgp_outbox_aggregate_id_idx": {
+          "name": "bgp_outbox_aggregate_id_idx",
+          "columns": ["aggregate_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "bgp_outbox_event_id": {
+          "name": "bgp_outbox_event_id",
+          "columns": ["event_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {
+        "bgp_outbox_attempts_nonneg_chk": {
+          "name": "bgp_outbox_attempts_nonneg_chk",
+          "value": "`bgp_outbox`.`attempts` >= 0"
+        },
+        "bgp_outbox_event_type_nonempty_chk": {
+          "name": "bgp_outbox_event_type_nonempty_chk",
+          "value": "CHAR_LENGTH(`bgp_outbox`.`event_type`) > 0"
+        },
+        "bgp_outbox_aggregate_type_chk": {
+          "name": "bgp_outbox_aggregate_type_chk",
+          "value": "`bgp_outbox`.`aggregate_type` IN ('BudgetPlan')"
+        }
+      }
+    },
+    "bgp_budget_plans": {
+      "name": "bgp_budget_plans",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "year": {
+          "name": "year",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "program_ref": {
+          "name": "program_ref",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version_major": {
+          "name": "version_major",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "version_minor": {
+          "name": "version_minor",
+          "type": "int",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "status": {
+          "name": "status",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "bgp_budget_plans_year_program_ref_uq": {
+          "name": "bgp_budget_plans_year_program_ref_uq",
+          "columns": ["year", "program_ref"],
+          "isUnique": true
+        },
+        "bgp_budget_plans_status_idx": {
+          "name": "bgp_budget_plans_status_idx",
+          "columns": ["status"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "bgp_budget_plans_id": {
+          "name": "bgp_budget_plans_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {
+        "bgp_budget_plans_status_chk": {
+          "name": "bgp_budget_plans_status_chk",
+          "value": "`bgp_budget_plans`.`status` IN ('RASCUNHO','EM_CALIBRACAO','APROVADO')"
+        }
+      }
+    },
+    "bgp_budgets": {
+      "name": "bgp_budgets",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "budget_plan_id": {
+          "name": "budget_plan_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "partner_kind": {
+          "name": "partner_kind",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "partner_ref": {
+          "name": "partner_ref",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "value_cents": {
+          "name": "value_cents",
+          "type": "bigint",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "bgp_budgets_budget_plan_id_partner_kind_partner_ref_uq": {
+          "name": "bgp_budgets_budget_plan_id_partner_kind_partner_ref_uq",
+          "columns": ["budget_plan_id", "partner_kind", "partner_ref"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {
+        "bgp_budgets_budget_plan_id_fk": {
+          "name": "bgp_budgets_budget_plan_id_fk",
+          "tableFrom": "bgp_budgets",
+          "tableTo": "bgp_budget_plans",
+          "columnsFrom": ["budget_plan_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "bgp_budgets_id": {
+          "name": "bgp_budgets_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {
+        "bgp_budgets_partner_kind_chk": {
+          "name": "bgp_budgets_partner_kind_chk",
+          "value": "`bgp_budgets`.`partner_kind` IN ('state','municipality')"
+        }
+      }
+    },
+    "bgp_categories": {
+      "name": "bgp_categories",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "cost_center_id": {
+          "name": "cost_center_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "bgp_categories_cost_center_id_fk": {
+          "name": "bgp_categories_cost_center_id_fk",
+          "tableFrom": "bgp_categories",
+          "tableTo": "bgp_cost_centers",
+          "columnsFrom": ["cost_center_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "bgp_categories_id": {
+          "name": "bgp_categories_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
+    "bgp_cost_centers": {
+      "name": "bgp_cost_centers",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "budget_plan_id": {
+          "name": "budget_plan_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "direction": {
+          "name": "direction",
+          "type": "varchar(16)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "bgp_cost_centers_budget_plan_id_fk": {
+          "name": "bgp_cost_centers_budget_plan_id_fk",
+          "tableFrom": "bgp_cost_centers",
+          "tableTo": "bgp_budget_plans",
+          "columnsFrom": ["budget_plan_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "bgp_cost_centers_id": {
+          "name": "bgp_cost_centers_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {
+        "bgp_cost_centers_direction_chk": {
+          "name": "bgp_cost_centers_direction_chk",
+          "value": "`bgp_cost_centers`.`direction` IN ('A PAGAR','A RECEBER')"
+        }
+      }
+    },
+    "bgp_subcategories": {
+      "name": "bgp_subcategories",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "category_id": {
+          "name": "category_id",
+          "type": "varchar(36)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "name": {
+          "name": "name",
+          "type": "varchar(255)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "launch_type": {
+          "name": "launch_type",
+          "type": "varchar(24)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {},
+      "foreignKeys": {
+        "bgp_subcategories_category_id_fk": {
+          "name": "bgp_subcategories_category_id_fk",
+          "tableFrom": "bgp_subcategories",
+          "tableTo": "bgp_categories",
+          "columnsFrom": ["category_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {
+        "bgp_subcategories_id": {
+          "name": "bgp_subcategories_id",
+          "columns": ["id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {
+        "bgp_subcategories_launch_type_chk": {
+          "name": "bgp_subcategories_launch_type_chk",
+          "value": "`bgp_subcategories`.`launch_type` IN ('IPCA','CAED','DESPESAS_PESSOAIS','DESPESAS_LOGISTICAS')"
+        }
+      }
+    }
+  },
+  "views": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  },
+  "internal": {
+    "tables": {},
+    "indexes": {}
+  }
+}

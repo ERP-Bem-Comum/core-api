@@ -50,6 +50,7 @@ export const createNodemailerEmailSender = (config: SmtpConfig): EmailSender => 
     host: config.host,
     port: config.port,
     secure: config.secure,
+    requireTLS: config.requireTLS,
     auth: { user: config.user, pass: config.pass },
   };
   const transporter = config.pool

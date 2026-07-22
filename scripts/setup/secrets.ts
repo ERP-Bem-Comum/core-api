@@ -57,6 +57,9 @@ const SECRETS_TO_GENERATE: readonly SecretSpec[] = [
   // consistência com os outros secrets facilita auditoria de permissões.
   { name: 'minio_root_user', label: 'MinIO root user (access key)' },
   { name: 'minio_root_password', label: 'MinIO root password (secret key)' },
+  // SMTP do worker `email-dispatch`. Em dev é placeholder (mailpit ignora auth); em
+  // produção o ERP-INFRA injeta a credencial SMTP do Amazon SES via Secrets Manager.
+  { name: 'smtp_pass', label: 'SMTP password (SES em prod; placeholder em dev/mailpit)' },
 ];
 
 // Connection-string secrets — um por módulo com persistência MySQL. Todos apontam
@@ -72,6 +75,10 @@ const DATABASE_URL_SECRETS: readonly string[] = [
   'programs_database_url',
   'partners_database_url',
   'financial_database_url',
+  // #374 — o `http` monta este secret e exporta BUDGET_PLANS_DATABASE_URL. Sem ele o módulo
+  // budget-plans degrada para in-memory EM SILÊNCIO e o dado some no restart. `reports` não
+  // aparece aqui de propósito: é read-only e reusa as URLs dos módulos-fonte (server.ts:247-249).
+  'budget_plans_database_url',
   // Consumido pelo job one-shot `migrate` (compose profile `jobs`) — aplica as
   // migrations dos 6 módulos antes de http/workers. Mesma URL (DB único `core`).
   'migrate_database_url',

@@ -25,4 +25,7 @@ export type EmailReceipt = Readonly<{
 export type EmailError =
   | Readonly<{ tag: 'invalid-recipient'; reason: string }>
   | Readonly<{ tag: 'smtp-rejected'; reason: string }>
-  | Readonly<{ tag: 'transport-failed'; reason: string }>;
+  | Readonly<{ tag: 'transport-failed'; reason: string }>
+  // rate-limited: excedeu o teto por destinatario (anti-flood, #133). O consumidor de e-mail
+  // (email-event-delivery) trata como DESCARTE processado — nao e retry nem DLQ.
+  | Readonly<{ tag: 'rate-limited'; reason: string }>;

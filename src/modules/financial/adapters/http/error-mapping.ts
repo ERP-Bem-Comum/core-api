@@ -28,6 +28,8 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'period-closed',
   // Reabertura (#203): reabrir período não-fechado é conflito de estado.
   'period-not-closed',
+  // Contrapartida de transferência (#269/US2): casar uma contrapartida não-pendente é conflito de estado.
+  'counterpart-not-pending',
   // Conta-cedente (019): conflitos de estado/unicidade.
   'cedente-account-already-closed',
   'cedente-account-duplicate',
@@ -51,10 +53,21 @@ const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
   'unsupported-export-format',
   // Conta-cedente (019): id malformado.
   'cedente-account-id-invalid',
+  // #62 ingestão: magic-bytes mentido / entrada vazia.
+  'document-magic-bytes-mismatch',
+  'empty-input',
+]);
+
+// #62 ingestão: entrada grande demais / bomba de descompressão → 413 Payload Too Large.
+const PAYLOAD_TOO_LARGE_CODES: ReadonlySet<string> = new Set([
+  'source-too-large',
+  'decompression-limit-exceeded',
 ]);
 
 const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   'document-repository-failure',
+  // #62 ingestão: falha ao gravar o comprovante no storage.
+  'source-file-upload-failed',
   'timeline-repository-failure',
   'outbox-append-failed',
   'bank-statement-repository-failure',
@@ -66,6 +79,8 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   // Match/sugestão (US2).
   'suggestion-view-failure',
   'rejected-suggestion-repository-failure',
+  // Contrapartida de transferência (#269/US2): store indisponível.
+  'expected-counterpart-store-unavailable',
   // Período (US6).
   'reconciliation-period-store-failure',
   // Dados de referência (020): reader indisponível → 503 (contracts/categorization-read.md).
@@ -75,6 +90,10 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   // Export Nibo (#146): falhas de read-model/view necessários ao enriquecimento.
   'payable-document-view-failure',
   'supplier-view-store-unavailable',
+  // Alçada do aprovador (#289 — CA9): leitura do `auth` indisponível.
+  'approver-authority-unavailable',
+  // Resolução em lote (#357): falha ao ler o JOIN fin_payables × fin_documents × fin_supplier_view.
+  'payable-summary-by-ids-view-failure',
 ]);
 
 // NOTA (019): `cedente-account-not-found` NÃO está em NOT_FOUND_CODES de propósito → default 422.
@@ -87,6 +106,7 @@ export const writeErrorStatus = (code: string): number => {
   if (NOT_FOUND_CODES.has(code)) return 404;
   if (CONFLICT_CODES.has(code)) return 409;
   if (BAD_REQUEST_CODES.has(code)) return 400;
+  if (PAYLOAD_TOO_LARGE_CODES.has(code)) return 413;
   if (UNAVAILABLE_CODES.has(code)) return 503;
   return 422;
 };
@@ -103,7 +123,7 @@ export const toPublicCode = (code: string): PublicErrorCode => {
   if (UNAVAILABLE_CODES.has(code)) return 'internal';
   if (NOT_FOUND_CODES.has(code)) return 'not-found';
   if (CONFLICT_CODES.has(code)) return 'conflict';
-  if (BAD_REQUEST_CODES.has(code)) return 'bad-request';
+  if (BAD_REQUEST_CODES.has(code) || PAYLOAD_TOO_LARGE_CODES.has(code)) return 'bad-request';
   return 'unprocessable';
 };
 
@@ -149,6 +169,8 @@ const SLUG_MESSAGES: Record<string, string> = {
   'statement-transaction-not-found': 'Transação de extrato não encontrada.',
   'reconciliation-not-found': 'Conciliação não encontrada.',
   'cedente-account-not-found': 'Conta-cedente não encontrada.',
+  // #293: não se lança pagamento contra conta encerrada.
+  'cedente-account-closed': 'A conta-cedente está encerrada e não pode ser usada para pagamento.',
   // Conta-cedente (019 — CRUD).
   'cedente-account-duplicate':
     'Já existe uma conta-cedente com esta chave bancária (banco/agência/conta/dígito).',
@@ -174,6 +196,14 @@ const SLUG_MESSAGES: Record<string, string> = {
     'O sinal da diferença é incoerente com o tratamento: desconto/parcial devem ser negativos; juros/multa/tarifa, positivos.',
   'empty-reconciliation': 'Informe ao menos um título para conciliar.',
   'reconciliation-id-invalid': 'Identificador de conciliação inválido.',
+  // Contrapartida de transferência (#269/US2).
+  'counterpart-not-found': 'A contrapartida esperada informada não foi encontrada.',
+  'counterpart-not-pending': 'A contrapartida esperada já foi casada ou descartada.',
+  'counterpart-account-mismatch':
+    'A transação não pertence à conta de destino da contrapartida esperada.',
+  'counterpart-value-mismatch': 'O valor da transação não confere com o da contrapartida esperada.',
+  'counterpart-value-invalid': 'O valor da contrapartida esperada deve ser positivo.',
+  'counterpart-same-account': 'A conta de destino não pode ser igual à de origem.',
   // Lançamento manual / lote (US5).
   'manual-entry-value-not-positive': 'O valor do lançamento manual deve ser positivo.',
   'empty-batch': 'Informe ao menos uma transação para o lote.',
@@ -189,6 +219,18 @@ const SLUG_MESSAGES: Record<string, string> = {
   // Export Nibo (#146): falhas de infraestrutura ocultadas pelo caller como 'internal' (5xx).
   'payable-document-view-failure': 'Erro ao consultar documentos dos títulos.',
   'supplier-view-store-unavailable': 'Erro ao consultar read-model de fornecedores.',
+  // Alçada do aprovador (#289): create + submit (CA6/CA7). Os 3 primeiros são regra de negócio
+  // (default 422); o 4º é falha de leitura do `auth` (UNAVAILABLE_CODES → 503).
+  'approver-not-found': 'O aprovador informado não foi encontrado.',
+  'approver-missing-permission': 'O aprovador informado não tem permissão de aprovação.',
+  'approver-limit-exceeded': 'O aprovador não possui alçada suficiente para este valor.',
+  'approver-authority-unavailable':
+    'Não foi possível consultar a alçada do aprovador. Tente novamente.',
+  // Cascata de alçada (#289 — CASCADE/US3, CA7): regra de negócio (default 422), não vaza o slug.
+  'no-approver-with-sufficient-limit': 'Nenhum aprovador com alçada suficiente para este valor.',
+  // Resolução em lote (#357): infraestrutura oculta pelo caller como 'internal' (5xx) — nunca chega
+  // a este texto na prática (branch >=500 do sendDomainError), mantido por consistência de padrão.
+  'payable-summary-by-ids-view-failure': 'Erro ao consultar resumo de títulos em lote.',
 };
 
 /** Mensagem PT-BR ao humano para um slug; fallback por `code` público. Nunca retorna o slug. */

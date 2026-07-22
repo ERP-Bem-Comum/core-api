@@ -36,7 +36,7 @@
 // Boundary: todo try/catch converte para Result. Nenhum Error cruza a borda
 //   (.claude/rules/adapters.md §"converter para Result na borda").
 
-import { and, asc, count, eq, gte, lte, sql } from 'drizzle-orm';
+import { and, asc, count, desc, eq, gte, inArray, like, lte, or, sql } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
@@ -415,6 +415,10 @@ export const createDrizzleDocumentRepository = (
   // leve. netValue NULL → null; netValue número → Money.fromCents(). Falha no
   // fromCents = corrupção de row → err('document-repository-failure').
   // status/type são cast seguros: CHECK de banco garante o conjunto válido.
+  // #167: termo de busca → padrão LIKE contains, com `%`/`_`/`\` escapados (viram literais).
+  // MySQL usa `\` como escape default no LIKE; sem cláusula ESCAPE explícita.
+  const likeContains = (term: string): string => `%${term.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
+
   const findPaged = async (
     filter: DocumentListFilter,
     page: number,
@@ -456,16 +460,40 @@ export const createDrizzleDocumentRepository = (
       // correto para listagem sem filtro. (operators.mdx §"and")
       const conditions = [
         statusCondition,
-        filter.supplierRef !== undefined
-          ? eq(finDocuments.supplierRef, filter.supplierRef)
+        // #164: multi-valor tem precedência sobre o single (retrocompat) quando presente.
+        filter.supplierRefs !== undefined
+          ? inArray(finDocuments.supplierRef, filter.supplierRefs)
+          : filter.supplierRef !== undefined
+            ? eq(finDocuments.supplierRef, filter.supplierRef)
+            : undefined,
+        filter.types !== undefined
+          ? inArray(finDocuments.type, filter.types)
+          : filter.type !== undefined
+            ? eq(finDocuments.type, filter.type)
+            : undefined,
+        filter.contractRef !== undefined
+          ? eq(finDocuments.contractRef, filter.contractRef)
           : undefined,
-        filter.type !== undefined ? eq(finDocuments.type, filter.type) : undefined,
+        filter.programRef !== undefined
+          ? eq(finDocuments.programRef, filter.programRef)
+          : undefined,
+        filter.valorMin !== undefined ? gte(finDocuments.netValue, filter.valorMin) : undefined,
+        filter.valorMax !== undefined ? lte(finDocuments.netValue, filter.valorMax) : undefined,
         filter.dueFrom !== undefined ? gte(finDocuments.dueDate, filter.dueFrom) : undefined,
         filter.dueTo !== undefined ? lte(finDocuments.dueDate, filter.dueTo) : undefined,
         filter.issuedFrom !== undefined
           ? gte(finDocuments.issueDate, filter.issuedFrom)
           : undefined,
         filter.issuedTo !== undefined ? lte(finDocuments.issueDate, filter.issuedTo) : undefined,
+        // #167: busca textual (OR entre nº documento + nome/CNPJ do fornecedor). Requer o LEFT JOIN
+        // fin_supplier_view também na query de COUNT (adicionado abaixo).
+        filter.q !== undefined
+          ? or(
+              like(finDocuments.documentNumber, likeContains(filter.q)),
+              like(finSupplierView.name, likeContains(filter.q)),
+              like(finSupplierView.document, likeContains(filter.q)),
+            )
+          : undefined,
       ].filter((c): c is NonNullable<typeof c> => c !== undefined);
 
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
@@ -475,6 +503,9 @@ export const createDrizzleDocumentRepository = (
         .select({ value: count() })
         .from(finDocuments)
         .leftJoin(recon, eq(recon.documentId, finDocuments.id))
+        // #167: mesmo LEFT JOIN das rows — o WHERE pode referenciar fin_supplier_view (busca por q).
+        // 1:0..1 (supplierRef→PK), não multiplica o COUNT.
+        .leftJoin(finSupplierView, eq(finDocuments.supplierRef, finSupplierView.supplierRef))
         .where(whereClause);
 
       const total = countRows[0]?.value ?? 0;
@@ -512,7 +543,17 @@ export const createDrizzleDocumentRepository = (
         .leftJoin(recon, eq(recon.documentId, finDocuments.id))
         .leftJoin(finSupplierView, eq(finDocuments.supplierRef, finSupplierView.supplierRef))
         .where(whereClause)
-        .orderBy(asc(finDocuments.dueDate), asc(finDocuments.id))
+        // #164: ordenação configurável (default dueDate asc); desempate estável por id asc.
+        .orderBy(
+          (filter.order === 'desc' ? desc : asc)(
+            filter.sort === 'netValue'
+              ? finDocuments.netValue
+              : filter.sort === 'supplierName'
+                ? finSupplierView.name
+                : finDocuments.dueDate,
+          ),
+          asc(finDocuments.id),
+        )
         .limit(pageSize)
         .offset((page - 1) * pageSize);
 
