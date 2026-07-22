@@ -54,3 +54,40 @@ O QA roda com um compose **não-versionado, editado à mão no host** (drift con
 | QA (VPS, compose à mão) | **Desconhecido** | Depende do `NODE_ENV` efetivo | **Conferir antes do merge** |
 | Dev local | Não (e tudo bem) | Não — ramo permissivo + avisos | Nenhum |
 | `pnpm test` | Não (e tudo bem) | Não — ramo permissivo | Nenhum (caso 7 do W0 cobre) |
+
+---
+
+# VERIFICADO — 2026-07-22 (fecha o Blocker B1 e o S7)
+
+A conferência que faltava foi executada nos dois ambientes. **Resultado: a guarda não derruba nenhum dos dois, e protege os dois.**
+
+## PRODUÇÃO — taskdef ECS (`ERP-INFRA/platform/aws-ecs-prod/taskdefs/api.taskdef.json`)
+
+| Item | Valor efetivo |
+| --- | --- |
+| `NODE_ENV` | **`production`** ✅ |
+| 7 drivers (`AUTH`, `PROGRAMS`, `CONTRACTS`, `PARTNERS`, `FINANCIAL`, `BUDGET_PLANS`, `REPORTS`) | todos `mysql` ✅ |
+| Connection strings | 6 declaradas via `secrets` (auth, programs, contracts, partners, financial, budget-plans) ✅ |
+| `reports` | sem URL própria — resolve por **cascata** a partir das 6 acima ✅ |
+
+## QA — env efetivo do PID 1 do container `core-api`
+
+Lido com `tr '\0' '\n' < /proc/1/environ` (o `docker exec env` não mostra as `*_DATABASE_URL`, injetadas em runtime).
+
+| Item | Valor efetivo |
+| --- | --- |
+| `NODE_ENV` | **`production`** ✅ |
+| 7 drivers | todos `mysql` ✅ |
+| Connection strings | as mesmas 6, presentes ✅ |
+| `*_READER_URL` | nenhuma — correto e esperado (opcional por ADR-0026) ✅ |
+
+## Conclusões
+
+1. **Blocker B1 resolvido.** A hipótese de que a guarda subiria inerte era infundada: o `NODE_ENV: development` do `compose.yaml` é do ambiente local, como o cabeçalho do arquivo declara. PROD e QA rodam com `production`.
+2. **Risco R3 zerado.** Nenhum ambiente depende hoje do fallback silencioso — os dois já declaram tudo. O deploy da guarda é não-disruptivo.
+3. **A guarda protege o QA também**, e não só produção. Isso é melhor do que o previsto na análise inicial, que supunha o QA fora do alcance por rodar em modo não-produtivo.
+4. **Confirma o drift do QA**, mas em direção segura: o compose do host difere do `compose.yaml` versionado justamente no `NODE_ENV` (`production` lá, `development` aqui).
+
+## Ressalva de método
+
+O taskdef lido é o versionado no ERP-INFRA. Ele **bate** com o `compose.yaml` do core-api nos 7 drivers, o que é a evidência cruzada esperada; ainda assim, o que roda em produção é o taskdef **registrado no ECS**, não este arquivo. Divergência entre os dois seria um problema de processo (fora do escopo deste ticket) — e a leitura do QA, essa sim feita no processo vivo, confirma o padrão.
