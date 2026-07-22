@@ -21,7 +21,9 @@ import {
   openSuppliersWithoutContractReader,
   openPaymentPositionReader,
   openPayablesAnalysisReader,
+  openRealizedProvisionedReader,
 } from '#src/modules/financial/public-api/index.ts';
+import { buildBudgetPlansReadPort } from '#src/modules/budget-plans/public-api/read.ts';
 import { buildContractsActiveContractorReadPort } from '#src/modules/contracts/public-api/index.ts';
 import { TeamReportReadFromPartners } from '../persistence/team-report-read.partners.ts';
 import { InMemoryTeamReportRead } from '../persistence/team-report-read.in-memory.ts';
@@ -39,6 +41,8 @@ import {
 } from '../../application/use-cases/list-suppliers-without-active-contract.ts';
 import { AnalysisReadFromFinancial } from '../persistence/analysis-read.financial.ts';
 import { InMemoryAnalysisRead } from '../persistence/analysis-read.in-memory.ts';
+import { RealizedReadFromSources } from '../persistence/realized-read.from-sources.ts';
+import { InMemoryRealizedRead } from '../persistence/realized-read.in-memory.ts';
 import type { TeamReportReadPort } from '../../application/ports/team-report-read.ts';
 import type { TeamDemographicsReadPort } from '../../application/ports/team-demographics-read.ts';
 import type {
@@ -48,6 +52,7 @@ import type {
 import type { ActiveContractorReadPort } from '../../application/ports/active-contractor-read.ts';
 import type { PaymentPositionReadPort } from '../../application/ports/payment-position-read.ts';
 import type { AnalysisReadPort } from '../../application/ports/analysis-read.ts';
+import type { RealizedReadPort } from '../../application/ports/realized-read.ts';
 
 export type ReportsDriver = 'memory' | 'mysql';
 
@@ -55,10 +60,12 @@ export type ReportsCompositionConfig = Readonly<{
   driver: ReportsDriver;
   /** Connection string do `partners` — fonte do REP-1 (ADR-0014). */
   partnersUrl?: string;
-  /** Connection string do `financial` — fonte do REP-2/REP-4 (ADR-0014). */
+  /** Connection string do `financial` — fonte do REP-2/REP-4 e do realizado (S6, ADR-0014). */
   financialUrl?: string;
   /** Connection string do `contracts` — subtraendo do anti-join do REP-2 (#437, ADR-0014). */
   contractsUrl?: string;
+  /** Connection string do `budget-plans` — fonte do orçado no Realizado × Planejado (S6, ADR-0014). */
+  budgetPlansUrl?: string;
 }>;
 
 export type ReportsHttpDeps = Readonly<{
@@ -70,6 +77,8 @@ export type ReportsHttpDeps = Readonly<{
   >;
   listPaymentPosition: PaymentPositionReadPort['list'];
   listAnalysis: AnalysisReadPort['list'];
+  /** S6 (#502): Realizado × Planejado — árvore de 3 níveis costurada de budget-plans × financial. */
+  listRealized: RealizedReadPort['list'];
   shutdown: () => Promise<void>;
 }>;
 
@@ -83,6 +92,7 @@ export const buildReportsHttpDeps = async (
     const activeContractors: ActiveContractorReadPort = InMemoryActiveContractorRead();
     const position: PaymentPositionReadPort = InMemoryPaymentPositionRead();
     const analysis: AnalysisReadPort = InMemoryAnalysisRead();
+    const realized: RealizedReadPort = InMemoryRealizedRead();
     return {
       listTeam: team.list,
       listTeamDemographics: demographics.list,
@@ -92,6 +102,7 @@ export const buildReportsHttpDeps = async (
       }),
       listPaymentPosition: position.list,
       listAnalysis: analysis.list,
+      listRealized: realized.list,
       shutdown: () => Promise.resolve(),
     };
   }
@@ -104,8 +115,12 @@ export const buildReportsHttpDeps = async (
   if (config.contractsUrl === undefined || config.contractsUrl.length === 0) {
     throw new Error('reports-composition: driver mysql exige contractsUrl');
   }
+  if (config.budgetPlansUrl === undefined || config.budgetPlansUrl.length === 0) {
+    throw new Error('reports-composition: driver mysql exige budgetPlansUrl');
+  }
   const financialUrl = config.financialUrl;
   const contractsUrl = config.contractsUrl;
+  const budgetPlansUrl = config.budgetPlansUrl;
 
   const teamReaderR = await openCollaboratorProjectionReader({
     connectionString: config.partnersUrl,
@@ -182,6 +197,37 @@ export const buildReportsHttpDeps = async (
   }
   const analysisReader = analysisReaderR.value;
 
+  // S6 (#502): duas fontes do Realizado × Planejado — orçado (budget-plans) + realizado/provisionado
+  // (financial). Pools próprios abertos UMA vez no boot (incidente RDS 0001), fechados no shutdown.
+  const budgetPlansReadR = await buildBudgetPlansReadPort({ connectionString: budgetPlansUrl });
+  if (!budgetPlansReadR.ok) {
+    await teamReader.close();
+    await demographicsReader.close();
+    await suppliersReader.close();
+    await positionReader.close();
+    await contractorsReader.close();
+    await analysisReader.close();
+    throw new Error(
+      `reports-composition: falha ao abrir read port (planned-amounts) do budget-plans: ${budgetPlansReadR.error}`,
+    );
+  }
+  const budgetPlansRead = budgetPlansReadR.value;
+
+  const realizedReaderR = await openRealizedProvisionedReader({ connectionString: financialUrl });
+  if (!realizedReaderR.ok) {
+    await teamReader.close();
+    await demographicsReader.close();
+    await suppliersReader.close();
+    await positionReader.close();
+    await contractorsReader.close();
+    await analysisReader.close();
+    await budgetPlansRead.close();
+    throw new Error(
+      `reports-composition: falha ao abrir reader (realized-provisioned) do financial: ${realizedReaderR.error}`,
+    );
+  }
+  const realizedReader = realizedReaderR.value;
+
   const teamPort = TeamReportReadFromPartners(teamReader.list);
   const demographicsPort = TeamDemographicsReadFromPartners(demographicsReader.list);
   const suppliersPort = SuppliersWithoutContractReadFromFinancial(suppliersReader.list);
@@ -190,6 +236,10 @@ export const buildReportsHttpDeps = async (
   );
   const positionPort = PaymentPositionReadFromFinancial(positionReader.list);
   const analysisPort = AnalysisReadFromFinancial(analysisReader.list);
+  const realizedPort = RealizedReadFromSources(
+    budgetPlansRead.listPlannedAmounts,
+    realizedReader.list,
+  );
 
   return {
     listTeam: teamPort.list,
@@ -200,6 +250,7 @@ export const buildReportsHttpDeps = async (
     }),
     listPaymentPosition: positionPort.list,
     listAnalysis: analysisPort.list,
+    listRealized: realizedPort.list,
     shutdown: async () => {
       await teamReader.close();
       await demographicsReader.close();
@@ -207,6 +258,8 @@ export const buildReportsHttpDeps = async (
       await positionReader.close();
       await contractorsReader.close();
       await analysisReader.close();
+      await budgetPlansRead.close();
+      await realizedReader.close();
     },
   };
 };
