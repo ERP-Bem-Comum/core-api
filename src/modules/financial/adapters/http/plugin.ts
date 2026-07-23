@@ -85,6 +85,8 @@ import {
   documentListResponseSchema,
   listPayablesQuerySchema,
   payableListResponseSchema,
+  payableCountsQuerySchema,
+  payableCountsResponseSchema,
   type PayableSummaryDto,
   payablesBatchBodySchema,
   payablesBatchResponseSchema,
@@ -372,10 +374,10 @@ const financialRoutes =
         if (body.asDraft) {
           // Rascunho — campos opcionais. `undefined` → `null` (exactOptionalPropertyTypes).
           const result = await deps.saveDraft({
-            documentNumber: body.documentNumber,
+            documentNumber: body.documentNumber ?? null,
             series: body.series ?? null,
-            type: body.type,
-            supplierRef: body.supplierRef,
+            type: body.type ?? null,
+            supplierRef: body.supplierRef ?? null,
             ...(body.payeeKind !== undefined ? { payeeKind: body.payeeKind } : {}),
             approverRef: body.approverRef ?? null,
             contractRef: body.contractRef ?? null,
@@ -384,8 +386,9 @@ const financialRoutes =
             subcategoryRef: body.subcategoryRef ?? null,
             costCenterRef: body.costCenterRef ?? null,
             programRef: body.programRef ?? null,
-            paymentMethod: body.paymentMethod,
-            grossValueCents: Number(body.grossValueCents),
+            paymentMethod: body.paymentMethod ?? null,
+            grossValueCents:
+              body.grossValueCents !== undefined ? Number(body.grossValueCents) : null,
             sourceDiscountsCents: Number(body.sourceDiscountsCents),
             discountsCents: Number(body.discountsCents),
             penaltyCents: Number(body.penaltyCents),
@@ -407,8 +410,16 @@ const financialRoutes =
           return loadAndSerialize(deps, reply, idStr);
         }
 
-        // Open — dueDate obrigatória.
-        if (body.dueDate === undefined) {
+        // Open — dueDate + os 5 campos do #534 obrigatórios (o superRefine já garante o 400; este
+        // guard estreita os opcionais do tipo para o saveDocument sem non-null assertion).
+        if (
+          body.dueDate === undefined ||
+          body.type === undefined ||
+          body.documentNumber === undefined ||
+          body.supplierRef === undefined ||
+          body.paymentMethod === undefined ||
+          body.grossValueCents === undefined
+        ) {
           return sendDomainError(reply, 'document-incomplete');
         }
         const result = await deps.saveDocument({
@@ -690,6 +701,52 @@ const financialRoutes =
             page: result.value.page,
             pageSize: result.value.pageSize,
             total: result.value.total,
+          }),
+          { ok: 200 },
+        );
+      },
+    });
+
+    // GET /financial/payable-titles/counts — contagem agregada por status (#536). 1 request no lugar
+    // de ~6 (chips do grid). Rota estática — precede a lista `/payable-titles` (sem conflito no find-my-way).
+    scope.route({
+      method: 'GET',
+      url: '/financial/payable-titles/counts',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        querystring: payableCountsQuerySchema,
+        response: { 200: payableCountsResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const q = req.query;
+        // Filtro dos TÍTULOS (sem `status` — queremos o breakdown completo).
+        const payableFilter: PayableListFilter = {
+          ...(q.documentType !== undefined ? { documentType: q.documentType } : {}),
+          ...(q.supplierRef !== undefined ? { supplierRef: q.supplierRef } : {}),
+          ...(q.dueFrom !== undefined ? { dueFrom: new Date(q.dueFrom) } : {}),
+          ...(q.dueTo !== undefined ? { dueTo: new Date(q.dueTo) } : {}),
+        };
+        const counts = await deps.countPayableTitles(payableFilter);
+        if (!counts.ok) return sendDomainError(reply, counts.error);
+
+        // Rascunho (Draft) vive na tabela de documentos (sem título) — reusa a listagem com pageSize 1
+        // só para o `total`, aplicando os mesmos filtros da lista.
+        const draftFilter: DocumentListFilter = {
+          status: 'Draft',
+          ...(q.supplierRef !== undefined ? { supplierRef: q.supplierRef } : {}),
+          ...(q.documentType !== undefined ? { type: q.documentType } : {}),
+          ...(q.dueFrom !== undefined ? { dueFrom: new Date(q.dueFrom) } : {}),
+          ...(q.dueTo !== undefined ? { dueTo: new Date(q.dueTo) } : {}),
+        };
+        const drafts = await deps.listDocuments(draftFilter, 1, 1);
+        if (!drafts.ok) return sendDomainError(reply, drafts.error);
+
+        return sendResult(
+          reply,
+          ok({
+            total: counts.value.total,
+            draft: drafts.value.total,
+            byStatus: counts.value.byStatus,
           }),
           { ok: 200 },
         );

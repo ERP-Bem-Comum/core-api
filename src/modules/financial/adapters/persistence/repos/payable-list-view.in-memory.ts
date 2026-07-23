@@ -10,7 +10,9 @@ import type {
 import type {
   PayableListView,
   PayableListViewError,
+  PayableStatusCounts,
 } from '#src/modules/financial/application/ports/payable-list-view.ts';
+import type { DocumentStatus } from '#src/modules/financial/domain/document/types.ts';
 
 // Adapter in-memory do PayableListView (#221): deriva os itens (pai + filhos como linhas) dos
 // `StoredDocument` da fonte injetada — espelha o JOIN do Drizzle sobre o agregado em memória.
@@ -70,20 +72,34 @@ export const createInMemoryPayableListView = (
     page: number,
     pageSize: number,
   ): Promise<Result<Page<PayableListItem>, PayableListViewError>> => {
-    const items = derivePayableListItems(source());
-    const filtered = items.filter((it) => matchesFilter(it, filter));
-    // dueDate ASC, desempate por payableId ASC — mesma semântica do Drizzle.
-    const sorted = [...filtered].sort((a, b) => {
-      const d = a.dueDate.getTime() - b.dueDate.getTime();
-      if (d !== 0) return d;
-      return a.payableId < b.payableId ? -1 : a.payableId > b.payableId ? 1 : 0;
-    });
+    // #263: mais recente (último inserido) primeiro — proxy fiel do `createdAt desc` do Drizzle
+    // (o modelo in-memory não guarda createdAt). Pai antes dos filhos dentro do mesmo documento.
+    const ordered: PayableListItem[] = [];
+    for (const stored of [...source()].reverse()) {
+      if (stored.payables === null) continue;
+      for (const p of [stored.payables.parent, ...stored.payables.children]) {
+        ordered.push(toItem(stored.document, p, stored.version));
+      }
+    }
+    const filtered = ordered.filter((it) => matchesFilter(it, filter));
     const start = (page - 1) * pageSize;
     return ok({
-      items: sorted.slice(start, start + pageSize),
+      items: filtered.slice(start, start + pageSize),
       page,
       pageSize,
       total: filtered.length,
     });
+  },
+
+  countByStatus: async (
+    filter: PayableListFilter,
+  ): Promise<Result<PayableStatusCounts, PayableListViewError>> => {
+    const items = derivePayableListItems(source());
+    const filtered = items.filter((it) => matchesFilter(it, filter));
+    const byStatus: Partial<Record<DocumentStatus, number>> = {};
+    for (const it of filtered) {
+      byStatus[it.status] = (byStatus[it.status] ?? 0) + 1;
+    }
+    return ok({ total: filtered.length, byStatus });
   },
 });

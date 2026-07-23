@@ -2,7 +2,7 @@
 // INNER JOIN fin_documents` (cada título é uma linha; filhos de retenção viram linhas próprias).
 // Boundary: try/catch → Result (.claude/rules/adapters.md).
 
-import { and, asc, between, eq, sql, type SQL } from 'drizzle-orm';
+import { and, between, desc, eq, sql, type SQL } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
@@ -14,7 +14,9 @@ import type {
 import type {
   PayableListView,
   PayableListViewError,
+  PayableStatusCounts,
 } from '#src/modules/financial/application/ports/payable-list-view.ts';
+import type { DocumentStatus } from '#src/modules/financial/domain/document/types.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { finDocuments, finPayables } from '../schemas/mysql.ts';
 import { rowToPayableListItem } from '../mappers/payable-list.mapper.ts';
@@ -80,7 +82,8 @@ export const createDrizzlePayableListView = (
           .from(finPayables)
           .innerJoin(finDocuments, eq(finPayables.documentId, finDocuments.id))
           .where(where)
-          .orderBy(asc(finPayables.dueDate), asc(finPayables.id))
+          // #263: lançamento mais recente no topo (default). Desempate por id desc (estável).
+          .orderBy(desc(finPayables.createdAt), desc(finPayables.id))
           .limit(pageSize)
           .offset((page - 1) * pageSize);
 
@@ -96,6 +99,31 @@ export const createDrizzlePayableListView = (
         return ok({ items, page, pageSize, total });
       } catch (cause) {
         logStore('findPaged', cause);
+        return err('payable-list-view-failure');
+      }
+    },
+
+    countByStatus: async (
+      filter: PayableListFilter,
+    ): Promise<Result<PayableStatusCounts, PayableListViewError>> => {
+      try {
+        const where = wheres(filter);
+        const rows = await db
+          .select({ status: finPayables.status, n: sql<number>`count(*)` })
+          .from(finPayables)
+          .innerJoin(finDocuments, eq(finPayables.documentId, finDocuments.id))
+          .where(where)
+          .groupBy(finPayables.status);
+
+        const byStatus: Partial<Record<DocumentStatus, number>> = {};
+        let total = 0;
+        for (const row of rows) {
+          byStatus[row.status as DocumentStatus] = row.n;
+          total += row.n;
+        }
+        return ok({ total, byStatus });
+      } catch (cause) {
+        logStore('countByStatus', cause);
         return err('payable-list-view-failure');
       }
     },

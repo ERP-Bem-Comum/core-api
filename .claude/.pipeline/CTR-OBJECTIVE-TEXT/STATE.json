@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "CTR-OBJECTIVE-TEXT",
+  "size": "S",
+  "createdAt": "2026-07-23T17:06:06.792Z",
+  "closedAt": "2026-07-23T17:11:45.574Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-23T17:07:36.837Z",
+      "finishedAt": "2026-07-23T17:07:37.100Z",
+      "rounds": 1,
+      "reportPath": "002-tests/objective-text.test.ts",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "drizzle-schema-author",
+      "startedAt": "2026-07-23T17:11:43.897Z",
+      "finishedAt": "2026-07-23T17:11:44.183Z",
+      "rounds": 1,
+      "reportPath": "003-impl/0018_bent_masque.sql",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-23T17:11:44.457Z",
+      "finishedAt": "2026-07-23T17:11:44.743Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-23T17:11:45.006Z",
+      "finishedAt": "2026-07-23T17:11:45.266Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

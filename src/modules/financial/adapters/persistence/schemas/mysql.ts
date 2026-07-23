@@ -113,7 +113,7 @@ export const finDocuments = mysqlTable(
 
     // Status (7 valores — ADR-0005; só Draft/Open/Approved têm transição nesta fatia).
     // varchar + CHECK (mysqlEnum proibido — ADR-0018/0020).
-    status: varchar('status', { length: 16 }).notNull(),
+    status: varchar('status', { length: 24 }).notNull(),
 
     // Descrição editável (opcional).
     description: varchar('description', { length: 500 }),
@@ -246,7 +246,7 @@ export const finPayables = mysqlTable(
     retentionType: varchar('retention_type', { length: 8 }),
 
     // Status espelha o documento nesta fatia (7 valores — domain/document/types.ts §DocumentStatus).
-    status: varchar('status', { length: 16 }).notNull(),
+    status: varchar('status', { length: 24 }).notNull(),
 
     // Valor em centavos (Money — ADR-0018 §"Money cents").
     value: bigint('value', { mode: 'number' }).notNull(),

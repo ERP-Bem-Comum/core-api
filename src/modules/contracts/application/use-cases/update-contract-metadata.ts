@@ -19,6 +19,11 @@ export type ContractMetadataPatch = Readonly<{
   observations?: string | null;
   email?: string | null;
   telephone?: string | null;
+  // CTR-TAXONOMY-REFS: os 3 refs da árvore do plano são editáveis via PATCH. String simples
+  // (padrão de `programId`/`budgetPlanId`); `updateContract` os propaga intra-variante. `null` limpa.
+  costCenterRef?: string | null;
+  categoryRef?: string | null;
+  subcategoryRef?: string | null;
 }>;
 
 export type UpdateContractMetadataCommand = Readonly<{

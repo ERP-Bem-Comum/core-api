@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "FIN-DRAFT-PARTIAL-SCHEMA",
+  "size": "S",
+  "createdAt": "2026-07-23T19:44:48.301Z",
+  "closedAt": "2026-07-23T19:52:21.408Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-23T19:46:06.189Z",
+      "finishedAt": "2026-07-23T19:47:23.421Z",
+      "rounds": 1,
+      "reportPath": "002-tests/draft-partial-body.http.test.ts",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "fastify-server-expert",
+      "startedAt": "2026-07-23T19:52:19.855Z",
+      "finishedAt": "2026-07-23T19:52:20.114Z",
+      "rounds": 1,
+      "reportPath": "003-impl/schemas.ts",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-23T19:52:20.368Z",
+      "finishedAt": "2026-07-23T19:52:20.625Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-23T19:52:20.887Z",
+      "finishedAt": "2026-07-23T19:52:21.146Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}
