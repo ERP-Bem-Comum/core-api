@@ -3,9 +3,11 @@
 //   - listStates/listMunicipalities: SELECT `par_states`/`par_municipalities` WHERE
 //     active = true, hidrata `name` do catálogo estático IBGE (sem persistência —
 //     `domain/geography/{state,municipality}.ts`).
-//   - Linha órfã (uf/ibgeCode fora do catálogo estático — não deveria ocorrer, o
-//     catálogo é a fonte de validação na escrita) → tratada como infra corrompida,
-//     loga e devolve err (não interrompe silenciosamente, não expõe row cru).
+//   - Linha órfã (uf/ibgeCode fora do catálogo estático — drift de catálogo, não deveria
+//     ocorrer) → DEGRADA POR LINHA, nunca aborta a lista (uma órfã não pode zerar o
+//     dropdown inteiro): estado cai no fallback de sigla (name = uf, paridade com o
+//     legado); município é omitido (não há nome para exibir). Sempre logado.
+//   - `err('partner-geography-read-unavailable')` fica reservado à FALHA REAL de query (catch).
 //
 // ADR-0014: só lê `par_*`. ADR-0020: SELECT. Zero escrita. Zero throw cruzando a borda.
 
@@ -28,26 +30,44 @@ const logRead = (scope: string, cause: unknown): void => {
   process.stderr.write(`[partners-geography-read:${scope}] ${String(cause)}\n`);
 };
 
-const stateToView = (
-  row: Readonly<StateRow>,
-): Result<PartnerStateView, PartnerGeographyReadError> => {
+// Estado órfão (uf fora do catálogo) → fallback de sigla (name = uf), paridade com o legado.
+// Nunca aborta: uma linha inconsistente não pode zerar a lista.
+const stateToView = (row: Readonly<StateRow>): PartnerStateView => {
   const found = State.findStateByAbbreviation(row.uf);
   if (!found.ok) {
-    logRead('stateToView', `uf fora do catálogo estático: ${row.uf}`);
-    return err('partner-geography-read-unavailable');
+    logRead('stateToView', `uf fora do catálogo estático (fallback de sigla): ${row.uf}`);
+    return { ref: row.uf, name: row.uf, uf: row.uf };
   }
-  return ok({ ref: row.uf, name: found.value.name, uf: row.uf });
+  return { ref: row.uf, name: found.value.name, uf: row.uf };
 };
 
-const municipalityToView = (
-  row: Readonly<MunicipalityRow>,
-): Result<PartnerMunicipalityView, PartnerGeographyReadError> => {
+// Município órfão (ibgeCode fora do catálogo) → omitido (não há nome para exibir; `par_municipalities`
+// não guarda nome). `null` sinaliza omissão ao mapeador de lista. Nunca aborta.
+const municipalityToView = (row: Readonly<MunicipalityRow>): PartnerMunicipalityView | null => {
   const found = Municipality.findMunicipalityByCod(row.ibgeCode);
   if (!found.ok) {
-    logRead('municipalityToView', `ibgeCode fora do catálogo estático: ${row.ibgeCode}`);
-    return err('partner-geography-read-unavailable');
+    logRead(
+      'municipalityToView',
+      `ibgeCode fora do catálogo estático (linha omitida): ${row.ibgeCode}`,
+    );
+    return null;
   }
-  return ok({ ref: row.ibgeCode, name: found.value.name, uf: row.uf });
+  return { ref: row.ibgeCode, name: found.value.name, uf: row.uf };
+};
+
+// Mappers de lista puros (testáveis sem banco): degradam por linha, nunca abortam.
+export const mapStateRows = (rows: readonly Readonly<StateRow>[]): PartnerStateView[] =>
+  rows.map(stateToView);
+
+export const mapMunicipalityRows = (
+  rows: readonly Readonly<MunicipalityRow>[],
+): PartnerMunicipalityView[] => {
+  const out: PartnerMunicipalityView[] = [];
+  for (const row of rows) {
+    const view = municipalityToView(row);
+    if (view !== null) out.push(view);
+  }
+  return out;
 };
 
 export const createDrizzleGeographyReadStore = (
@@ -63,13 +83,7 @@ export const createDrizzleGeographyReadStore = (
         .select()
         .from(schema.parStates)
         .where(eq(schema.parStates.active, true));
-      const out: PartnerStateView[] = [];
-      for (const row of rows) {
-        const mapped = stateToView(row);
-        if (!mapped.ok) return mapped;
-        out.push(mapped.value);
-      }
-      return ok(out);
+      return ok(mapStateRows(rows));
     } catch (cause) {
       logRead('listStates', cause);
       return err('partner-geography-read-unavailable');
@@ -84,13 +98,7 @@ export const createDrizzleGeographyReadStore = (
         .select()
         .from(schema.parMunicipalities)
         .where(eq(schema.parMunicipalities.active, true));
-      const out: PartnerMunicipalityView[] = [];
-      for (const row of rows) {
-        const mapped = municipalityToView(row);
-        if (!mapped.ok) return mapped;
-        out.push(mapped.value);
-      }
-      return ok(out);
+      return ok(mapMunicipalityRows(rows));
     } catch (cause) {
       logRead('listMunicipalities', cause);
       return err('partner-geography-read-unavailable');
