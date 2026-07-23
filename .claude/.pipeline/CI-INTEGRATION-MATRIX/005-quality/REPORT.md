@@ -21,9 +21,19 @@ Regressão zero: `fail 0`. O arquivo do W0 (`integration-matrix-workflow.test.ts
 
 O lint pegou 2 erros no teste do W0 (`no-confusing-void-expression` em `:52`, `no-empty-function` em `:175`) — o subagente do W0 não passa pelo hook de lint (lição registrada). Corrigidos **sem tocar as asserções**: `present()` ganhou chaves; o corpo do `it` skipado ganhou comentário. Lint, format e o teste seguem verdes depois.
 
-## CA4 — matriz esperada (a conferir no 1º run real)
+## Correção pós-abertura do PR — o CA4 rodou pré-merge e pegou um bug de setup
 
-Quando o workflow rodar de verdade (1º PR para `dev` após o merge, ou o nightly cron 05:00 UTC), o resultado esperado é:
+Premissa minha derrubada: eu afirmara que um workflow novo não roda no PR que o introduz. **Rodou.** O 1º run (PR #537, run 30035790868) deu **13/13 vermelho em ~10s** — rápido demais para ser a suíte real; falhava no **setup**, antes de qualquer teste:
+
+```
+##[error]Unable to locate executable file: pnpm
+```
+
+Causa: o step `setup-node` estava com `cache: pnpm`, opção que roda `pnpm store path` **dentro** do setup-node — antes do `corepack enable` — quando o pnpm ainda não existe no PATH. Era o `cache: pnpm` que eu sugeri no design; o `ci.yml` não usa cache pelo mesmo motivo. **Removido** (segue o padrão provado do `ci.yml`). O gate local não pega isso — só o run real do Actions, que é exatamente o valor do CA4.
+
+## CA4 — matriz esperada (a conferir no run real, agora pré-merge)
+
+Com o setup corrigido, o resultado esperado é:
 
 | Suíte | Esperado | Motivo |
 | --- | --- | --- |
