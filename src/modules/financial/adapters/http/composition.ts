@@ -217,6 +217,7 @@ export type FinancialHttpDeps = Readonly<{
   listDocuments: DocumentRepository['findPaged'];
   /** Listagem payable-centric (#201/#222) — GET /financial/payable-titles (pai+filhos como linhas). */
   listPayables: PayableListView['findPaged'];
+  countPayableTitles: PayableListView['countByStatus'];
   /** Trilha por-campo (Time Travel) de um documento — consumido pelo GET /documents/:id/timeline. */
   getDocumentTimeline: ReturnType<typeof getDocumentTimeline>;
   /** Importação de extrato bancário (US1 conciliação) — POST /bank-statements. */
@@ -666,6 +667,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     findDocumentById: pools.repo.findById,
     listDocuments: pools.repo.findPaged,
     listPayables: pools.payableListView.findPaged,
+    countPayableTitles: pools.payableListView.countByStatus,
     getDocumentTimeline: getDocumentTimeline({ timelineRepo: pools.timelineRepo }),
     importBankStatement: importBankStatement({
       parser: bankStatementParser,

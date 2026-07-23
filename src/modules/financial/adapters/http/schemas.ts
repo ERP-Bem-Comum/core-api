@@ -1055,6 +1055,27 @@ export const payableListResponseSchema = z
   })
   .strict();
 
+// ─── GET /payable-titles/counts (#536) — contagem agregada por status ─────────
+// Mesmos filtros da lista, sem `status` (queremos o breakdown) nem paginação.
+export const payableCountsQuerySchema = z.object({
+  documentType: documentTypeSchema.optional(),
+  supplierRef: z.uuid().optional(),
+  dueFrom: z.iso.date().optional(),
+  dueTo: z.iso.date().optional(),
+});
+
+export type PayableCountsQuery = z.infer<typeof payableCountsQuerySchema>;
+
+// `total` = títulos (qualquer status); `draft` = documentos Draft (rascunho, sem título);
+// `byStatus` = contagem por status de título presente (chave ausente = 0 no front).
+export const payableCountsResponseSchema = z
+  .object({
+    total: z.number().int().nonnegative(),
+    draft: z.number().int().nonnegative(),
+    byStatus: z.record(z.string(), z.number().int().nonnegative()),
+  })
+  .strict();
+
 // ─── Resolução em lote (#357, ADR-0049) — POST /financial/payables:batch ──────
 // Destrava o match card da Conciliação (#172) em 1 hop: payableId[] → resumo do título,
 // já com supplierName/supplierDocument (fin_supplier_view). Subset de payableSummarySchema

@@ -85,6 +85,8 @@ import {
   documentListResponseSchema,
   listPayablesQuerySchema,
   payableListResponseSchema,
+  payableCountsQuerySchema,
+  payableCountsResponseSchema,
   type PayableSummaryDto,
   payablesBatchBodySchema,
   payablesBatchResponseSchema,
@@ -699,6 +701,52 @@ const financialRoutes =
             page: result.value.page,
             pageSize: result.value.pageSize,
             total: result.value.total,
+          }),
+          { ok: 200 },
+        );
+      },
+    });
+
+    // GET /financial/payable-titles/counts — contagem agregada por status (#536). 1 request no lugar
+    // de ~6 (chips do grid). Rota estática — precede a lista `/payable-titles` (sem conflito no find-my-way).
+    scope.route({
+      method: 'GET',
+      url: '/financial/payable-titles/counts',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        querystring: payableCountsQuerySchema,
+        response: { 200: payableCountsResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const q = req.query;
+        // Filtro dos TÍTULOS (sem `status` — queremos o breakdown completo).
+        const payableFilter: PayableListFilter = {
+          ...(q.documentType !== undefined ? { documentType: q.documentType } : {}),
+          ...(q.supplierRef !== undefined ? { supplierRef: q.supplierRef } : {}),
+          ...(q.dueFrom !== undefined ? { dueFrom: new Date(q.dueFrom) } : {}),
+          ...(q.dueTo !== undefined ? { dueTo: new Date(q.dueTo) } : {}),
+        };
+        const counts = await deps.countPayableTitles(payableFilter);
+        if (!counts.ok) return sendDomainError(reply, counts.error);
+
+        // Rascunho (Draft) vive na tabela de documentos (sem título) — reusa a listagem com pageSize 1
+        // só para o `total`, aplicando os mesmos filtros da lista.
+        const draftFilter: DocumentListFilter = {
+          status: 'Draft',
+          ...(q.supplierRef !== undefined ? { supplierRef: q.supplierRef } : {}),
+          ...(q.documentType !== undefined ? { type: q.documentType } : {}),
+          ...(q.dueFrom !== undefined ? { dueFrom: new Date(q.dueFrom) } : {}),
+          ...(q.dueTo !== undefined ? { dueTo: new Date(q.dueTo) } : {}),
+        };
+        const drafts = await deps.listDocuments(draftFilter, 1, 1);
+        if (!drafts.ok) return sendDomainError(reply, drafts.error);
+
+        return sendResult(
+          reply,
+          ok({
+            total: counts.value.total,
+            draft: drafts.value.total,
+            byStatus: counts.value.byStatus,
           }),
           { ok: 200 },
         );
