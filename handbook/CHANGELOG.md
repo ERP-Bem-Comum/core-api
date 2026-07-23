@@ -4,6 +4,16 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-07-23 — 🤖 ADR-0054 (Accepted): política de contribuição assistida por IA — trailer `Assisted-by`, DCO humano, dono humano de cada linha
+
+Novo [ADR-0054](./architecture/adr/0054-ai-assisted-contribution-policy.md) (**Accepted**), que adota — no precedente do Linux kernel ([`coding-assistants.rst`](https://docs.kernel.org/process/coding-assistants.html), 2025-12-23) — a política de contribuição assistida por IA para este repo, que é desenvolvido com uso intensivo de agentes.
+
+**Decisão:** (1) todo commit gerado/materialmente modificado por IA carrega o trailer **`Assisted-by: AGENT_NAME:MODEL_VERSION [ferramenta]`** (utilitários triviais omitidos); (2) **a IA nunca adiciona `Signed-off-by`** — só um humano certifica o DCO; (3) **o humano é o dono de cada linha** — revisa o código-IA, garante licença e assume responsabilidade integral por bugs/falhas; (4) **mesmo processo, sem trilha paralela** — código-IA passa pela mesma Pipeline W0→W3 e pelos mesmos gates required (`integração (gate)` + `typecheck + format + lint + test`) tornados obrigatórios na Fase 2 do #523. Registrado em `AGENTS.md` (§"Contribuição assistida por IA" + linha de commit da tabela Idioma).
+
+Não impõe (guardas, follow-ups additive): **DCO obrigatório** (`git commit -s` + check de CI) e **verificação mecânica do `Assisted-by`** ficam como decisões de enforcement separadas — a adoção aqui é de convenção, aplicada por review (W2).
+
+---
+
 ## 2026-07-16 — 🔓 ADR-0052 (Accepted): modo `AUTH_RBAC_MODE=bypass` — desligar a autorização por permissão, mantendo a autenticação
 
 Decisão do dono do sistema: introduzir o modo `bypass`, em que **todo usuário autenticado é
