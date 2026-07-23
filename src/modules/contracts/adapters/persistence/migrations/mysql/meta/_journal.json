@@ -127,6 +127,13 @@
       "when": 1784687108605,
       "tag": "0017_chilly_human_torch",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1784826480502,
+      "tag": "0018_bent_masque",
+      "breakpoints": true
     }
   ]
 }
