@@ -95,11 +95,13 @@ const paymentDetailInput = z
  * Body de criação de documento fiscal. `asDraft: false` (default) → Open com títulos;
  * `asDraft: true` → Draft (campos opcionais, sem geração de títulos).
  */
-export const createDocumentBodySchema = z.object({
-  type: documentTypeSchema,
-  documentNumber: z.string().min(1).max(60),
+const createDocumentBodyBaseSchema = z.object({
+  // #534: os 5 campos abaixo são opcionais no schema — o domínio `saveDraft` aceita rascunho parcial.
+  // O `superRefine` os reexige quando `asDraft:false` (Open com títulos), preservando o 400 do fluxo.
+  type: documentTypeSchema.optional(),
+  documentNumber: z.string().min(1).max(60).optional(),
   series: z.string().max(20).optional(),
-  supplierRef: z.uuid(),
+  supplierRef: z.uuid().optional(),
   payeeKind: z.enum(['supplier', 'financier', 'act', 'collaborator']).optional(),
   approverRef: z.uuid().optional(),
   contractRef: z.uuid().optional(),
@@ -109,8 +111,8 @@ export const createDocumentBodySchema = z.object({
   subcategoryRef: z.uuid().optional(),
   costCenterRef: z.uuid().optional(),
   programRef: z.uuid().optional(),
-  paymentMethod: paymentMethodSchema,
-  grossValueCents: centsStringSchema,
+  paymentMethod: paymentMethodSchema.optional(),
+  grossValueCents: centsStringSchema.optional(),
   sourceDiscountsCents: centsStringSchema.default('0'),
   discountsCents: centsStringSchema.default('0'),
   penaltyCents: centsStringSchema.default('0'),
@@ -131,6 +133,29 @@ export const createDocumentBodySchema = z.object({
   // #273: complemento da forma de pagamento (linha digitável, referência de câmbio etc.). Opcional na criação.
   paymentDetail: paymentDetailInput.optional(),
   asDraft: z.boolean().default(false),
+});
+
+// #534: fora do rascunho (`asDraft:false` → Open com títulos), os 5 campos voltam a ser obrigatórios.
+// Rejeita cedo (400) com o `path` do campo faltante, preservando o contrato do fluxo Open.
+const OPEN_REQUIRED_FIELDS = [
+  'type',
+  'documentNumber',
+  'supplierRef',
+  'paymentMethod',
+  'grossValueCents',
+] as const;
+
+export const createDocumentBodySchema = createDocumentBodyBaseSchema.superRefine((val, ctx) => {
+  if (val.asDraft) return;
+  for (const field of OPEN_REQUIRED_FIELDS) {
+    if (val[field] === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [field],
+        message: 'obrigatório quando asDraft:false',
+      });
+    }
+  }
 });
 
 export type CreateDocumentBody = z.infer<typeof createDocumentBodySchema>;

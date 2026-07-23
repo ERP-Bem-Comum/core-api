@@ -372,10 +372,10 @@ const financialRoutes =
         if (body.asDraft) {
           // Rascunho — campos opcionais. `undefined` → `null` (exactOptionalPropertyTypes).
           const result = await deps.saveDraft({
-            documentNumber: body.documentNumber,
+            documentNumber: body.documentNumber ?? null,
             series: body.series ?? null,
-            type: body.type,
-            supplierRef: body.supplierRef,
+            type: body.type ?? null,
+            supplierRef: body.supplierRef ?? null,
             ...(body.payeeKind !== undefined ? { payeeKind: body.payeeKind } : {}),
             approverRef: body.approverRef ?? null,
             contractRef: body.contractRef ?? null,
@@ -384,8 +384,9 @@ const financialRoutes =
             subcategoryRef: body.subcategoryRef ?? null,
             costCenterRef: body.costCenterRef ?? null,
             programRef: body.programRef ?? null,
-            paymentMethod: body.paymentMethod,
-            grossValueCents: Number(body.grossValueCents),
+            paymentMethod: body.paymentMethod ?? null,
+            grossValueCents:
+              body.grossValueCents !== undefined ? Number(body.grossValueCents) : null,
             sourceDiscountsCents: Number(body.sourceDiscountsCents),
             discountsCents: Number(body.discountsCents),
             penaltyCents: Number(body.penaltyCents),
@@ -407,8 +408,16 @@ const financialRoutes =
           return loadAndSerialize(deps, reply, idStr);
         }
 
-        // Open — dueDate obrigatória.
-        if (body.dueDate === undefined) {
+        // Open — dueDate + os 5 campos do #534 obrigatórios (o superRefine já garante o 400; este
+        // guard estreita os opcionais do tipo para o saveDocument sem non-null assertion).
+        if (
+          body.dueDate === undefined ||
+          body.type === undefined ||
+          body.documentNumber === undefined ||
+          body.supplierRef === undefined ||
+          body.paymentMethod === undefined ||
+          body.grossValueCents === undefined
+        ) {
           return sendDomainError(reply, 'document-incomplete');
         }
         const result = await deps.saveDocument({
