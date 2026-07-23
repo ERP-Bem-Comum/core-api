@@ -1165,6 +1165,12 @@ const financialRoutes =
             ? { destinationAccountRef: body.destinationAccountRef }
             : {}),
           ...(body.productLabel !== undefined ? { productLabel: body.productLabel } : {}),
+          ...(body.documentNumber !== undefined ? { documentNumber: body.documentNumber } : {}),
+          ...(body.documentType !== undefined ? { documentType: body.documentType } : {}),
+          ...(body.issueDate !== undefined ? { issueDate: new Date(body.issueDate) } : {}),
+          ...(body.documentValueCents !== undefined
+            ? { documentValueCents: Number(body.documentValueCents) }
+            : {}),
           reconciledBy: req.userId,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
@@ -1177,6 +1183,14 @@ const financialRoutes =
             // #502/S2: ecoa o carimbo de taxonomia recebido (opaco; null quando ausente — back-compat).
             budgetPlanRef: body.budgetPlanRef ?? null,
             subcategoryRef: body.subcategoryRef ?? null,
+            // #370: eco dos campos de documento (documentValueCents já com o default do domínio aplicado).
+            documentNumber: result.value.documentNumber,
+            documentType: result.value.documentType,
+            issueDate:
+              result.value.issueDate === null
+                ? null
+                : result.value.issueDate.toISOString().slice(0, 10),
+            documentValueCents: String(result.value.documentValueCents),
           }),
           { ok: 201 },
         );

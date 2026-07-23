@@ -687,6 +687,12 @@ export const manualEntryBodySchema = z.object({
   // #143: realocação patrimonial — conta de destino (Transfer) e produto livre (Investment/Redemption).
   destinationAccountRef: z.uuid().optional(),
   productLabel: z.string().min(1).max(120).optional(),
+  // #370: campos de documento (opcionais; aplicabilidade por tipo é do front). `documentValueCents`
+  // omitido → default = valor da transação conciliada (no domínio).
+  documentNumber: z.string().min(1).max(60).optional(),
+  documentType: documentTypeSchema.optional(),
+  issueDate: z.iso.date().optional(),
+  documentValueCents: centsStringSchema.optional(),
 });
 
 export type ManualEntryBody = z.infer<typeof manualEntryBodySchema>;
@@ -698,6 +704,12 @@ export const manualEntryResponseSchema = z.object({
   // #502/S2: a resposta ecoa o carimbo de taxonomia (plano + subcategoria) do título manual.
   budgetPlanRef: z.string().nullable(),
   subcategoryRef: z.string().nullable(),
+  // #370: eco dos campos de documento. `documentValueCents` já vem com o default aplicado (nunca null
+  // na criação); `issueDate` em YYYY-MM-DD.
+  documentNumber: z.string().nullable(),
+  documentType: z.string().nullable(),
+  issueDate: z.string().nullable(),
+  documentValueCents: z.string(),
 });
 
 export const batchBodySchema = z.object({

@@ -811,6 +811,12 @@ export const finManualEntries = mysqlTable(
     // #143: realocação patrimonial — conta de destino (Transfer) e produto livre (Investment/Redemption).
     destinationAccountRef: varchar('destination_account_ref', { length: 36 }),
     productLabel: varchar('product_label', { length: 120 }),
+    // #370: campos de documento (rastreabilidade). `document_value_cents` default = valor da transação
+    // (aplicado no domínio); pode divergir. Nullable — lançamentos antigos não têm documento.
+    documentNumber: varchar('document_number', { length: 60 }),
+    documentType: varchar('document_type', { length: 16 }),
+    issueDate: date('issue_date', { mode: 'date' }),
+    documentValueCents: bigint('document_value_cents', { mode: 'number' }),
   },
   (t) => [
     foreignKey({
