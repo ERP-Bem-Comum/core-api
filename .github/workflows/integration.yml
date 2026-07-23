@@ -82,6 +82,18 @@ jobs:
         # resolver o secret (compose.yaml:112-117). Idempotente e barato; roda em todas.
         run: pnpm run secrets:setup
 
+      - name: Alinha credencial MinIO do teste com a do container
+        # Em CI (não-TTY) o `secrets:setup` gera MinIO root ALEATÓRIO; o container sobe com
+        # ele (MINIO_ROOT_USER_FILE, compose.yaml:112-113). Mas o teste lê
+        # `process.env['MINIO_ROOT_USER'] ?? 'dev-access-key'` (s3.integration.test.ts:50-51) —
+        # sem a env, cai no fallback e bate InvalidAccessKeyId. Exporta o valor do secret
+        # para a env, então teste e container usam a MESMA credencial. Inerte para suítes MySQL.
+        run: |
+          {
+            echo "MINIO_ROOT_USER=$(cat secrets/minio_root_user.txt)"
+            echo "MINIO_ROOT_PASSWORD=$(cat secrets/minio_root_password.txt)"
+          } >> "$GITHUB_ENV"
+
       - name: Integração (${{ matrix.suite }}) — sobe compose efêmero + roda a suíte
         # O runner: compose up --wait (config-parity: conf.d + initdb.d) → node --test
         # → finally: down -v. O `down -v` é INOFENSIVO aqui (VM efêmera), destrutivo
