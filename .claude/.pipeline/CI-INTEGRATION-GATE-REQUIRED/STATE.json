@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "CI-INTEGRATION-GATE-REQUIRED",
+  "size": "S",
+  "createdAt": "2026-07-23T21:16:53.529Z",
+  "closedAt": "2026-07-23T21:32:16.026Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-23T21:21:06.185Z",
+      "finishedAt": "2026-07-23T21:21:42.548Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "main",
+      "startedAt": "2026-07-23T21:21:42.870Z",
+      "finishedAt": "2026-07-23T21:23:32.320Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "security-backend-expert",
+      "startedAt": "2026-07-23T21:23:32.645Z",
+      "finishedAt": "2026-07-23T21:29:16.202Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-23T21:29:16.521Z",
+      "finishedAt": "2026-07-23T21:32:15.719Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

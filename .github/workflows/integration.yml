@@ -32,9 +32,10 @@ jobs:
   integration:
     name: integração (${{ matrix.suite }})
     runs-on: ubuntu-latest
-    # FASE 0 (rollout): report-only até #519/#520/#521/#522 fecharem. Remover na
-    # Fase 2 e tornar o job `gate` (abaixo) o required status check.
-    continue-on-error: true
+    # FASE 2 (#523): report-only encerrada — #519/#520/#521/#522 corrigidos/mergeados e a matriz 100% verde.
+    # Sem `continue-on-error`: um leg vermelho torna `needs.integration.result=failure` → o job
+    # `gate` (abaixo) falha de verdade. Marcar `integração (gate)` como required no branch protection
+    # de dev/main é a op de repo que completa o bloqueio (fora deste arquivo).
     strategy:
       fail-fast: false # uma suíte vermelha NÃO pode sumir as outras (#523).
       matrix:
@@ -109,10 +110,9 @@ jobs:
           docker compose ps -a
           docker compose logs --tail=100
 
-  # FASE 2 — agregador que vira o único required status check. Ativar (marcar como
-  # required no branch protection de dev/main) só quando a matrix estiver verde.
-  # Necessário porque nomes de job de matrix são dinâmicos e o branch protection
-  # não casa cada um; este `gate` colapsa o resultado num check estável.
+  # Agregador que colapsa a matrix num check estável (nomes de job de matrix são dinâmicos e o
+  # branch protection não casa cada um). Marcar `integração (gate)` como required no branch
+  # protection de dev/main é a op de repo que completa o bloqueio — fora deste arquivo.
   gate:
     name: integração (gate)
     if: always()
@@ -120,10 +120,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Falha se qualquer suíte falhou ou foi cancelada
-        # result ∈ success|failure|cancelled|skipped. Só `success` passa.
-        # Com `continue-on-error:true` na Fase 0, `needs.integration.result` é
-        # `success` mesmo com jobs vermelhos (o erro fica "engolido"); por isso o
-        # gate só é significativo na Fase 2, DEPOIS de remover o continue-on-error.
+        # result ∈ success|failure|cancelled|skipped. Só `success` passa. Sem `continue-on-error`
+        # no job da matrix (Fase 2), um leg vermelho torna needs.integration.result=failure → este
+        # gate falha de verdade. Confia-se SÓ no result agregado, nunca no sumário do node:test.
         run: |
           result="${{ needs.integration.result }}"
           echo "integration matrix result: $result"
