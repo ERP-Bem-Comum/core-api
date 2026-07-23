@@ -10,7 +10,9 @@ import type {
 import type {
   PayableListView,
   PayableListViewError,
+  PayableStatusCounts,
 } from '#src/modules/financial/application/ports/payable-list-view.ts';
+import type { DocumentStatus } from '#src/modules/financial/domain/document/types.ts';
 
 // Adapter in-memory do PayableListView (#221): deriva os itens (pai + filhos como linhas) dos
 // `StoredDocument` da fonte injetada — espelha o JOIN do Drizzle sobre o agregado em memória.
@@ -85,5 +87,17 @@ export const createInMemoryPayableListView = (
       pageSize,
       total: filtered.length,
     });
+  },
+
+  countByStatus: async (
+    filter: PayableListFilter,
+  ): Promise<Result<PayableStatusCounts, PayableListViewError>> => {
+    const items = derivePayableListItems(source());
+    const filtered = items.filter((it) => matchesFilter(it, filter));
+    const byStatus: Partial<Record<DocumentStatus, number>> = {};
+    for (const it of filtered) {
+      byStatus[it.status] = (byStatus[it.status] ?? 0) + 1;
+    }
+    return ok({ total: filtered.length, byStatus });
   },
 });
