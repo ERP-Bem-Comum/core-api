@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "FIN-OFX-COMMA-DECIMAL",
+  "size": "S",
+  "createdAt": "2026-07-23T17:16:27.672Z",
+  "closedAt": "2026-07-23T17:20:27.776Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-23T17:17:18.846Z",
+      "finishedAt": "2026-07-23T17:17:26.511Z",
+      "rounds": 1,
+      "reportPath": "002-tests/amount-comma-decimal.test.ts",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "main",
+      "startedAt": "2026-07-23T17:20:26.208Z",
+      "finishedAt": "2026-07-23T17:20:26.474Z",
+      "rounds": 1,
+      "reportPath": "003-impl/amount.ts",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-23T17:20:26.741Z",
+      "finishedAt": "2026-07-23T17:20:27.009Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-23T17:20:27.264Z",
+      "finishedAt": "2026-07-23T17:20:27.522Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

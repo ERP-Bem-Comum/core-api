@@ -1,7 +1,8 @@
-// Converte string monetária "(-)123.45" em centavos com sinal. Retorna null se não-numérica.
+// Converte string monetária "(-)123.45" ou "(-)123,45" em centavos com sinal. Retorna null se
+// não-numérica. Vírgula decimal (ex.: Bradesco no OFX/CSV) é normalizada para ponto antes do parse.
 // Sem float: parte inteira × 100 + 2 casas decimais (padding/truncamento determinístico).
 export const parseAmountCents = (raw: string): number | null => {
-  const s = raw.trim();
+  const s = raw.trim().replace(',', '.');
   if (!/^-?\d+(\.\d{1,2})?$/.test(s)) return null;
   const negative = s.startsWith('-');
   const [intPart = '0', fracPart = ''] = s.replace('-', '').split('.');
