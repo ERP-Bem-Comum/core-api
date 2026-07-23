@@ -17,15 +17,14 @@
  * o DRAFT da seção 8 de `.claude/.planning/ci-integration-gate-523/CI-INTEGRATION-DESIGN.md`.
  *
  * ─────────────────────────────────────────────────────────────────────────────────────────────
- * CA4 — MATRIZ DE RESULTADO ESPERADA (não asserível em unit; é comportamento de CI, verificável
- *        só no W3 com run real via `workflow_dispatch`). Documentada aqui e no REPORT:
+ * FASE 2 (atual) — a matriz é 100% verde: os 4 defeitos que a Fase 0 (report-only) expôs foram
+ *        corrigidos e mergeados na `dev` — #519 (bug de PROD, errno 1406, PR #541), #520 (#542),
+ *        #521 (#543), #522 (#544). O job da matrix não tem mais `continue-on-error`, então o `gate`
+ *        reflete o resultado real (verde só com TODOS os legs verdes). Marcar `integração (gate)`
+ *        como required no branch protection de dev/main é a op de repo que completa o bloqueio.
  *
- *   VERDES esperados : contracts, auth, programs, etl:contracts, etl:financial, storage, photo, logo
- *   VERMELHOS         : financial → #519 (bug de PROD, errno 1406) · budget-plans → #520
- *                       partners  → #521 · etl → #522 · etl:orchestrate → #522
- *
- *   O "verde" do W3 é ESTA matriz reproduzida (report-only, `continue-on-error:true`), NÃO
- *   "tudo verde": os 4 defeitos ainda estão abertos.
+ *   Histórico Fase 0 (report-only): os legs que nasciam vermelhos eram financial/#519,
+ *   budget-plans/#520, partners/#521, etl+etl:orchestrate/#522 — hoje todos verdes.
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  */
 
@@ -153,13 +152,15 @@ describe('integration.yml — CA2: invoca o runner, sem `services:` nativo', () 
   });
 });
 
-describe('integration.yml — CA3: report-only', () => {
-  it('o job da matrix entra com continue-on-error:true (fase report-only)', () => {
+describe('integration.yml — CA3: gate bloqueante (Fase 2)', () => {
+  it('o job da matrix NÃO tem continue-on-error (fase report-only encerrada — #519/#520/#521/#522 fechados)', () => {
     present();
-    assert.match(
+    assert.doesNotMatch(
       wf,
       /continue-on-error:\s*true/,
-      'Fase 0 é report-only — não pode bloquear merge enquanto #519/#520/#521/#522 estão abertos',
+      'Fase 2: com os 4 defeitos corrigidos, o gate passa a refletir o resultado real da matriz ' +
+        '(sem continue-on-error, um leg vermelho torna needs.integration.result=failure). ' +
+        'Marcar `integração (gate)` como required no branch protection é a op de repo pós-merge.',
     );
   });
 });
