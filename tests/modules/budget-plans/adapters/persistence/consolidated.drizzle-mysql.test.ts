@@ -18,8 +18,9 @@ import { openBudgetPlansMysql } from '#src/modules/budget-plans/adapters/persist
 import type { BudgetPlansMysqlHandle } from '#src/modules/budget-plans/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleBudgetPlanRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-plan-repository.drizzle.ts';
 import { isNotNull } from 'drizzle-orm';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = mysqlTestConnectionString();
 const NOW = new Date('2026-07-09T12:00:00.000Z');
 const PROGRAM_ETI = '11111111-1111-4111-8111-111111111111';
 const PROGRAM_PARC = '22222222-2222-4222-8222-222222222222';

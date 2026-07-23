@@ -17,6 +17,7 @@ import { closeReconciliationPeriod } from '#src/modules/financial/application/us
 import { reopenReconciliationPeriod } from '#src/modules/financial/application/use-cases/reopen-reconciliation-period.ts';
 import { exportReconciliation } from '#src/modules/financial/application/use-cases/export-reconciliation.ts';
 import { newUuid } from '#src/shared/utils/id.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 if (!process.env['MYSQL_INTEGRATION']) {
   process.stdout.write(
@@ -26,7 +27,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('ReconciliationPeriod — Drizzle + MySQL (integração)', () => {
     let handle: FinancialMysqlHandle;

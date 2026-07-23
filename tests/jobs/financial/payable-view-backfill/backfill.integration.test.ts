@@ -17,6 +17,7 @@ import { createDrizzleDocumentRepository } from '#src/modules/financial/adapters
 import { createDrizzlePayableViewStore } from '#src/modules/financial/adapters/persistence/repos/payable-view-store.drizzle.ts';
 import { readPayableBackfillRecords } from '#src/jobs/financial/payable-view-backfill/reader.ts';
 import { backfillPayableViews } from '#src/jobs/financial/payable-view-backfill/backfill.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 if (!process.env['MYSQL_INTEGRATION']) {
   process.stdout.write('[payable-view-backfill:e2e] MYSQL_INTEGRATION nao definido — pulando.\n');
@@ -24,7 +25,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('payable-view-backfill — e2e fin_payables → fin_payable_view', () => {
     let handle: FinancialMysqlHandle;

@@ -13,13 +13,12 @@ import { newUuid } from '#src/shared/utils/id.ts';
 import { openMysql } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
 import type { MysqlHandle } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
 import { claimJobRun } from '#src/modules/contracts/adapters/persistence/repos/job-run.drizzle.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 if (!process.env['MYSQL_INTEGRATION']) {
   process.stdout.write('[contracts:job-run] MYSQL_INTEGRATION não definido — pulando.\n');
 } else {
-  const connectionString =
-    process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+  const connectionString = process.env['CONTRACTS_DATABASE_URL'] ?? mysqlTestConnectionString();
 
   describe('claimJobRun — coordenação de jobs (integração)', () => {
     let handle: MysqlHandle;

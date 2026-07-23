@@ -29,6 +29,7 @@ import * as ReconciliationId from '#src/modules/financial/domain/reconciliation/
 import { confirmManualEntry } from '#src/modules/financial/domain/reconciliation/manual-entry.ts';
 import { undo } from '#src/modules/financial/domain/reconciliation/reconciliation.ts';
 import * as ExpectedCounterpartId from '#src/modules/financial/domain/expected-counterpart/expected-counterpart-id.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 import {
   create,
   match,
@@ -85,7 +86,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('ExpectedCounterpartStore — Drizzle + MySQL (integração · #269)', () => {
     let handle: FinancialMysqlHandle;

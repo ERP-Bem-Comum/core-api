@@ -31,15 +31,14 @@ import { inArray } from 'drizzle-orm';
 import { openMysql } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
 import type { MysqlHandle } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
 import { buildContractsActiveContractorReadPort } from '#src/modules/contracts/public-api/index.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 if (!process.env['MYSQL_INTEGRATION']) {
   process.stdout.write(
     '[contracts:active-contractor-read] MYSQL_INTEGRATION não definido — pulando integração.\n',
   );
 } else {
-  const connectionString =
-    process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+  const connectionString = process.env['CONTRACTS_DATABASE_URL'] ?? mysqlTestConnectionString();
 
   // Contratantes isolados por este teste. `listContractorsWithActiveContract()` é global (lê o DB
   // inteiro), então toda asserção é escopada a estes refs — coexiste com o resto da suíte.

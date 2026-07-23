@@ -12,6 +12,7 @@ import { spawnSync } from 'node:child_process';
 import process from 'node:process';
 import { composeUpArgs, composeDownArgs } from './compose-project.ts';
 import { backupAndWriteTestSecrets, restoreSecrets, type SecretBackup } from './secrets-vault.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 const EX_USAGE = 64; // sysexits.h — uso inválido.
 
@@ -45,11 +46,10 @@ const mysqlSuite = (env: Readonly<Record<string, string>>, paths: readonly strin
 // ETL sem Docker (ETL-LEGACY-DIRECT-CONNECTION): legado e core-api ficam em DBs distintos do
 // MESMO MySQL de teste (compose.yaml). A fixture SINTÉTICA é carregada via mysql2 no `before`
 // de cada suite (helper load-fixture) — sem `compose.etl.yaml`. root já tem DROP/CREATE DATABASE.
-const ETL_TEST_MYSQL_PORT = process.env['MYSQL_PORT'] ?? '3306';
 const ETL_DB_ENV: Readonly<Record<string, string>> = {
   PARTNERS_ETL_INTEGRATION: '1',
-  ETL_LEGACY_CONNECTION_STRING: `mysql://root:rootpw-migration-test-only@127.0.0.1:${ETL_TEST_MYSQL_PORT}/legacy`,
-  ETL_CORE_CONNECTION_STRING: `mysql://root:rootpw-migration-test-only@127.0.0.1:${ETL_TEST_MYSQL_PORT}/core`,
+  ETL_LEGACY_CONNECTION_STRING: mysqlTestConnectionString({ database: 'legacy' }),
+  ETL_CORE_CONNECTION_STRING: mysqlTestConnectionString({ database: 'core' }),
 };
 
 const SUITES: Readonly<Record<string, Suite>> = {
