@@ -2,7 +2,7 @@
 // INNER JOIN fin_documents` (cada título é uma linha; filhos de retenção viram linhas próprias).
 // Boundary: try/catch → Result (.claude/rules/adapters.md).
 
-import { and, asc, between, eq, sql, type SQL } from 'drizzle-orm';
+import { and, between, desc, eq, sql, type SQL } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
@@ -80,7 +80,8 @@ export const createDrizzlePayableListView = (
           .from(finPayables)
           .innerJoin(finDocuments, eq(finPayables.documentId, finDocuments.id))
           .where(where)
-          .orderBy(asc(finPayables.dueDate), asc(finPayables.id))
+          // #263: lançamento mais recente no topo (default). Desempate por id desc (estável).
+          .orderBy(desc(finPayables.createdAt), desc(finPayables.id))
           .limit(pageSize)
           .offset((page - 1) * pageSize);
 
