@@ -28,6 +28,7 @@ import type { AnyMySqlTable } from 'drizzle-orm/mysql-core';
 
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 import {
   finDocuments,
   finPayableView,
@@ -89,7 +90,7 @@ if (!integrationEnabled()) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('FIN-DOC-SUBCATEGORY-STAMP — subcategory_ref contra MySQL (integração)', () => {
     let handle: FinancialMysqlHandle;

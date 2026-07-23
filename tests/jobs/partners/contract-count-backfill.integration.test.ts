@@ -15,13 +15,12 @@ import { openPartnersMysql } from '#src/modules/partners/adapters/persistence/dr
 import type { PartnersMysqlHandle } from '#src/modules/partners/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleContractCountStore } from '#src/modules/partners/adapters/persistence/repos/contract-count-store.drizzle.ts';
 import { backfillContractCounts } from '#src/jobs/partners/contract-count-backfill/backfill.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 if (!process.env['MYSQL_INTEGRATION']) {
   process.stdout.write('[contract-count-backfill:e2e] MYSQL_INTEGRATION nao definido — pulando.\n');
 } else {
-  const connectionString =
-    process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+  const connectionString = process.env['CONTRACTS_DATABASE_URL'] ?? mysqlTestConnectionString();
 
   // Contrapartes isoladas por este teste (afere só os próprios refs — coexiste com outros dados).
   const X = 'a0000000-0000-4000-8000-000000000001'; // 1 Active + 1 Pending → conta 2

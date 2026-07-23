@@ -16,6 +16,7 @@ import { DocumentRepositoryDrizzle } from '#src/modules/contracts/adapters/persi
 import { ctrOutbox } from '#src/modules/contracts/adapters/persistence/schemas/mysql.ts';
 
 import { runDocumentRepositoryContract } from '../document-repository.suite.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 const integrationOn = process.env['MYSQL_INTEGRATION'] === '1';
 
@@ -30,7 +31,7 @@ if (!integrationOn) {
     make: async () => {
       const connStr =
         process.env['MYSQL_CONNECTION_STRING'] ??
-        'mysql://core_app:apppw-migration-test-only@127.0.0.1:3306/core';
+        mysqlTestConnectionString({ user: 'core_app', password: 'apppw-migration-test-only' });
       const driver = await openMysql({
         connectionString: connStr,
         applyMigrations: false,

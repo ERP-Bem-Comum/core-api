@@ -11,13 +11,12 @@ import { inArray } from 'drizzle-orm';
 import { openPartnersMysql } from '#src/modules/partners/adapters/persistence/drivers/mysql-driver.ts';
 import type { PartnersMysqlHandle } from '#src/modules/partners/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleSuppliersBatchReader } from '#src/modules/partners/adapters/persistence/repos/suppliers-batch-reader.drizzle.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 if (!process.env['MYSQL_INTEGRATION']) {
   process.stdout.write('[suppliers-batch-reader:e2e] MYSQL_INTEGRATION nao definido — pulando.\n');
 } else {
-  const connectionString =
-    process.env['PARTNERS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+  const connectionString = process.env['PARTNERS_DATABASE_URL'] ?? mysqlTestConnectionString();
 
   const A = 'aa000000-0000-4000-8000-0000000000a1';
   const B = 'bb000000-0000-4000-8000-0000000000b1';

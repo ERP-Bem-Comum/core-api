@@ -19,6 +19,7 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { spawnSync } from 'node:child_process';
 import { sql } from 'drizzle-orm';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 import {
   openMysql,
@@ -26,7 +27,7 @@ import {
 } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
 
 // Credenciais sincronizadas com `pnpm test:integration`.
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = mysqlTestConnectionString();
 const DUMMY_ROOT_PWD = 'rootpw-migration-test-only';
 const CONTAINER = 'core-api-mysql';
 

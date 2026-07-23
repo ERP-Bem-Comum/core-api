@@ -18,6 +18,7 @@ import { createDrizzleBankStatementRepository } from '#src/modules/financial/ada
 import { importStatement } from '#src/modules/financial/domain/statement/bank-statement.ts';
 import * as Fitid from '#src/modules/financial/domain/statement/fitid.ts';
 import type { ImportStatementInput } from '#src/modules/financial/domain/statement/types.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 const buildStatement = (account: string, fitidRaw: string) => {
   const f = Fitid.fromNative(fitidRaw);
@@ -58,7 +59,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('BankStatementRepository — Drizzle + MySQL (integração)', () => {
     let handle: FinancialMysqlHandle;

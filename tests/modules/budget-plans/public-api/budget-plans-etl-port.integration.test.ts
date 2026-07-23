@@ -21,6 +21,7 @@ import { strict as assert } from 'node:assert';
 import { randomUUID } from 'node:crypto';
 import process from 'node:process';
 import { eq, sql } from 'drizzle-orm';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 import {
   buildBudgetPlansEtlPort,
@@ -32,7 +33,7 @@ import {
 } from '#src/modules/budget-plans/adapters/persistence/drivers/mysql-driver.ts';
 
 // A request fixa esta connection-string literal (mesma da fatia 1 legacy-id.drizzle-mysql).
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = mysqlTestConnectionString();
 // String malformada: reprovada na validacao de formato do driver, SEM tocar o MySQL (CA5 sem DB).
 const MALFORMED_CONN = 'not-a-mysql-url';
 
