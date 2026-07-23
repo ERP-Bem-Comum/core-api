@@ -6,7 +6,6 @@
 import { describe, before, after, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
-import { inArray } from 'drizzle-orm';
 
 import { openPartnersMysql } from '#src/modules/partners/adapters/persistence/drivers/mysql-driver.ts';
 import type { PartnersMysqlHandle } from '#src/modules/partners/adapters/persistence/drivers/mysql-driver.ts';
@@ -32,7 +31,10 @@ if (!process.env['MYSQL_INTEGRATION']) {
       if (!r.ok) throw new Error(`[suppliers-batch-reader:e2e] partners: ${r.error}`);
       handle = r.value;
       const t = handle.schema.parSuppliers;
-      await handle.db.delete(t).where(inArray(t.id, [A, B, MISSING]));
+      // Limpa na ENTRADA por tabela, não por id: um irmão da suíte (supplier-repository, sem afterEach)
+      // deixa resíduo com o MESMO CNPJ e id distinto — delete por id não o pega e colide na UNIQUE
+      // par_suppliers_cnpj_idx (#521). Contrato de isolamento intra-suíte do #535.
+      await handle.db.delete(t);
       const row = (id: string, name: string, cnpj: string, cat: string) => ({
         id,
         name,
