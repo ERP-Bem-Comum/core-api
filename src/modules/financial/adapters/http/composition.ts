@@ -13,6 +13,7 @@
  */
 
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
+import { ok, err } from '#src/shared/primitives/result.ts';
 
 import {
   createInMemoryDocumentRepository,
@@ -653,6 +654,8 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     rejected: pools.rejectedSuggestionRepo,
   });
   const saveDraftUseCase = saveDraft(deps);
+  // const p/ narrow no closure do resolveSupplierByCnpj (método opcional no port).
+  const resolveSupplierId = pools.contractorReadPort?.findSupplierIdByCnpj;
   return {
     saveDocument: saveDocument(deps),
     saveDraft: saveDraftUseCase,
@@ -661,6 +664,16 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       storage: pools.documentStorage,
       saveDraft: saveDraftUseCase,
       idGen: DocumentIdVo.generate,
+      // #FIN-OCR-AUTOFILL-SUPPLIER: só quando o partners está disponível (driver mysql); memory → sem
+      // resolução (o rascunho fica sem supplierRef, seleção manual — comportamento atual).
+      ...(resolveSupplierId !== undefined
+        ? {
+            resolveSupplierByCnpj: async (taxId: string) => {
+              const r = await resolveSupplierId(taxId);
+              return r.ok ? ok(r.value) : err('supplier-resolve-unavailable');
+            },
+          }
+        : {}),
     }),
     adjustDocument: adjustDocument(deps),
     bulkUpdateDueDate: bulkUpdateDueDate(deps), // #162: mesmas deps (repo + clock) do adjust

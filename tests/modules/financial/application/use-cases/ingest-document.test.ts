@@ -195,3 +195,57 @@ describe('financial/application/use-cases/ingest-document', () => {
     assert.equal(storage.removeCalls.length, 1); // e removeu o órfão
   });
 });
+
+// #FIN-OCR-AUTOFILL-SUPPLIER — resolve o CNPJ do emitente (SupplierIdentity.taxId) para um fornecedor
+// cadastrado e pré-preenche o `supplierRef` no rascunho (hoje o humano seleciona manualmente).
+describe('financial/application/use-cases/ingest-document — auto-preenche fornecedor por CNPJ', () => {
+  it('CNPJ do emitente casa um fornecedor cadastrado → rascunho leva supplierRef', async () => {
+    const storage = storageSpy(ok(STORED));
+    const save = saveDraftSpy();
+    const SUP = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+    const resolvedTaxIds: string[] = [];
+    const ingest = ingestDocument({
+      reader: createMockDocumentReader({ result: SEED }), // supplier.taxId = 12345678000199
+      storage: storage.port,
+      saveDraft: save.fn,
+      idGen: DocumentId.generate,
+      resolveSupplierByCnpj: (taxId: string) => {
+        resolvedTaxIds.push(taxId);
+        return Promise.resolve(ok(taxId === '12345678000199' ? SUP : null));
+      },
+    });
+    const r = await ingest(INPUT);
+    assert.equal(r.ok, true);
+    assert.deepEqual(resolvedTaxIds, ['12345678000199']);
+    assert.equal(save.commands[0]?.supplierRef, SUP);
+  });
+
+  it('CNPJ do emitente NÃO casa → sem supplierRef (humano seleciona — back-compat)', async () => {
+    const storage = storageSpy(ok(STORED));
+    const save = saveDraftSpy();
+    const ingest = ingestDocument({
+      reader: createMockDocumentReader({ result: SEED }),
+      storage: storage.port,
+      saveDraft: save.fn,
+      idGen: DocumentId.generate,
+      resolveSupplierByCnpj: () => Promise.resolve(ok(null)),
+    });
+    const r = await ingest(INPUT);
+    assert.equal(r.ok, true);
+    assert.equal(save.commands[0]?.supplierRef, undefined);
+  });
+
+  it('sem o resolver (dep ausente) → sem supplierRef (comportamento atual intacto)', async () => {
+    const storage = storageSpy(ok(STORED));
+    const save = saveDraftSpy();
+    const ingest = ingestDocument({
+      reader: createMockDocumentReader({ result: SEED }),
+      storage: storage.port,
+      saveDraft: save.fn,
+      idGen: DocumentId.generate,
+    });
+    const r = await ingest(INPUT);
+    assert.equal(r.ok, true);
+    assert.equal(save.commands[0]?.supplierRef, undefined);
+  });
+});

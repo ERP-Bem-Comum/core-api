@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "FIN-OCR-AUTOFILL-SUPPLIER",
+  "size": "M",
+  "createdAt": "2026-07-24T03:44:26.887Z",
+  "closedAt": "2026-07-24T03:56:11.697Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-24T03:47:56.907Z",
+      "finishedAt": "2026-07-24T03:48:32.096Z",
+      "rounds": 1,
+      "reportPath": "002-tests/ingest-document.test.ts",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "ports-and-adapters",
+      "startedAt": "2026-07-24T03:56:10.012Z",
+      "finishedAt": "2026-07-24T03:56:10.284Z",
+      "rounds": 1,
+      "reportPath": "003-impl/ingest-document.ts",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-24T03:56:10.562Z",
+      "finishedAt": "2026-07-24T03:56:10.857Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-24T03:56:11.138Z",
+      "finishedAt": "2026-07-24T03:56:11.419Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}
