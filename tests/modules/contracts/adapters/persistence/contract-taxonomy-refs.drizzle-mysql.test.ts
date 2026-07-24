@@ -34,6 +34,7 @@ import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts
 import * as ContractorRef from '#src/modules/contracts/domain/shared/contractor.ts';
 import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
 import { updateContract } from '#src/modules/contracts/domain/contract/types.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 const integrationEnabled = (): boolean => process.env['MYSQL_INTEGRATION'] === '1';
 
@@ -73,7 +74,7 @@ describe('CTR-TAXONOMY-REFS — colunas de taxonomia no schema Drizzle de ctr_co
 //    janela (#500 destrói o dev). Registrado no grupo `contracts` do runner.
 // ─────────────────────────────────────────────────────────────────────────────
 if (integrationEnabled()) {
-  const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+  const VALID_CONN = mysqlTestConnectionString();
   let handle: MysqlHandle | null = null;
 
   before(async () => {

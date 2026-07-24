@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "MYSQL-TEST-PORT-HELPER",
+  "size": "M",
+  "createdAt": "2026-07-22T19:58:11.375Z",
+  "closedAt": "2026-07-23T15:03:34.064Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-22T20:00:56.915Z",
+      "finishedAt": "2026-07-22T21:58:19.251Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "nodejs-fs-scripter",
+      "startedAt": "2026-07-22T21:58:19.528Z",
+      "finishedAt": "2026-07-23T01:21:06.888Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-23T01:21:07.175Z",
+      "finishedAt": "2026-07-23T13:47:42.044Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-23T13:47:42.315Z",
+      "finishedAt": "2026-07-23T15:03:33.797Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

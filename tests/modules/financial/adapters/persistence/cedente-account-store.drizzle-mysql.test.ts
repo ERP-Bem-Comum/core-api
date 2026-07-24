@@ -14,6 +14,7 @@ import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persi
 import { createDrizzleCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.drizzle.ts';
 import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
 import { create, close } from '#src/modules/financial/domain/cedente/cedente-account.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 // W1 (FR-016): cada chamada gera uma CHAVE NATURAL distinta (accountNumber via contador) — o
 // UNIQUE INDEX da migration 0009 colidiria se dois testes reusassem 237/1234/567890/1.
@@ -41,7 +42,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('CedenteAccountStore — Drizzle + MySQL (integração)', () => {
     let handle: FinancialMysqlHandle;

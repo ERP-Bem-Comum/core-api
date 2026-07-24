@@ -20,8 +20,9 @@ import { buildPartnersPoolOptions } from '#src/modules/partners/adapters/persist
 import { buildProgramsPoolOptions } from '#src/modules/programs/adapters/persistence/drivers/mysql-driver.ts';
 import { buildBudgetPlansPoolOptions } from '#src/modules/budget-plans/adapters/persistence/drivers/mysql-driver.ts';
 import { buildNotificationsPoolOptions } from '#src/modules/notifications/adapters/persistence/drivers/mysql-driver.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
-const CONN = 'mysql://core:pw@127.0.0.1:3306/core';
+const CONN = mysqlTestConnectionString({ user: 'core', password: 'pw' });
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const DRIVERS: readonly (readonly [string, (o: any) => unknown])[] = [

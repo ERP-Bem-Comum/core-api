@@ -16,11 +16,12 @@ import { ClockFixed } from '#src/shared/adapters/clock-fixed.ts';
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { openPaymentPositionReader } from '#src/modules/financial/public-api/payment-position-projection.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 const connectionString =
   process.env['FINANCIAL_DATABASE_URL'] ??
   process.env['CONTRACTS_DATABASE_URL'] ??
-  'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+  mysqlTestConnectionString();
 
 const S1 = 'aa000000-0000-4000-8000-0000000000a1';
 const CC1 = 'cc000000-0000-4000-8000-0000000000c1';

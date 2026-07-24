@@ -26,6 +26,7 @@ import { getTableColumns } from 'drizzle-orm';
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { finManualEntries } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 const integrationEnabled = (): boolean => process.env['MYSQL_INTEGRATION'] === '1';
 
@@ -69,7 +70,7 @@ if (!integrationEnabled()) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('FIN-MANUAL-ENTRY-TAXONOMY — refs em fin_manual_entries contra MySQL (integração)', () => {
     let handle: FinancialMysqlHandle;

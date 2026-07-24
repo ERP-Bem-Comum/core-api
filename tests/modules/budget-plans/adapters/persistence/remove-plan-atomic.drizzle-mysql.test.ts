@@ -38,10 +38,9 @@ import { openBudgetPlansMysql } from '#src/modules/budget-plans/adapters/persist
 import type { BudgetPlansMysqlHandle } from '#src/modules/budget-plans/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleBudgetPlanRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-plan-repository.drizzle.ts';
 import { createDrizzleBudgetResultRepository } from '#src/modules/budget-plans/adapters/persistence/repos/budget-result-repository.drizzle.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
-const VALID_CONN =
-  process.env['BUDGET_PLANS_DATABASE_URL'] ??
-  'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = process.env['BUDGET_PLANS_DATABASE_URL'] ?? mysqlTestConnectionString();
 
 const integrationEnabled = (): boolean => process.env['MYSQL_INTEGRATION'] === '1';
 
