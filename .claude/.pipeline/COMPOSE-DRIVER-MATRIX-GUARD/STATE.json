@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "COMPOSE-DRIVER-MATRIX-GUARD",
+  "size": "S",
+  "createdAt": "2026-07-24T18:46:38.462Z",
+  "closedAt": "2026-07-24T18:51:45.574Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "docker-compose-expert",
+      "startedAt": "2026-07-24T18:51:43.058Z",
+      "finishedAt": "2026-07-24T18:51:43.371Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "self",
+      "startedAt": "2026-07-24T18:51:43.689Z",
+      "finishedAt": "2026-07-24T18:51:44.001Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-24T18:51:44.313Z",
+      "finishedAt": "2026-07-24T18:51:44.627Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-24T18:51:44.944Z",
+      "finishedAt": "2026-07-24T18:51:45.261Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}
