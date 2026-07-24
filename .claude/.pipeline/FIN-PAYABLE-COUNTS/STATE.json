@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "FIN-PAYABLE-COUNTS",
+  "size": "M",
+  "createdAt": "2026-07-23T20:03:24.593Z",
+  "closedAt": "2026-07-23T20:11:48.518Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-23T20:04:57.822Z",
+      "finishedAt": "2026-07-23T20:05:10.980Z",
+      "rounds": 1,
+      "reportPath": "002-tests/payable-counts.http.test.ts",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "fastify-server-expert",
+      "startedAt": "2026-07-23T20:11:46.901Z",
+      "finishedAt": "2026-07-23T20:11:47.192Z",
+      "rounds": 1,
+      "reportPath": "003-impl/payable-list-view.drizzle.ts",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-23T20:11:47.458Z",
+      "finishedAt": "2026-07-23T20:11:47.725Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-23T20:11:47.989Z",
+      "finishedAt": "2026-07-23T20:11:48.255Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

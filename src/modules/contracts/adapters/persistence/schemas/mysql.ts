@@ -52,6 +52,7 @@ import {
   mysqlTable,
   primaryKey,
   smallint,
+  text,
   varchar,
 } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
@@ -62,7 +63,7 @@ export const contracts = mysqlTable(
     id: varchar('id', { length: 36 }).primaryKey().notNull(),
     sequentialNumber: varchar('sequential_number', { length: 16 }).notNull().unique(),
     title: varchar('title', { length: 255 }).notNull(),
-    objective: varchar('objective', { length: 1000 }).notNull(),
+    objective: text('objective').notNull(),
     // ADR-0023: NULL em contrato `Pending` (sem assinatura).
     signedAt: datetime('signed_at', { mode: 'date', fsp: 3 }),
     originalValueCents: bigint('original_value_cents', { mode: 'number' }).notNull(),

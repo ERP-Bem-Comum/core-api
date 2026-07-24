@@ -141,6 +141,9 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/financial/adapters/persistence/cedente-account-store.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/bank-statement-repository.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/reconciliation-repository.drizzle-mysql.test.ts',
+    // FIN-STATUS-VARCHAR-WIDTH (#519) — largura de fin_payables.status / fin_documents.status comporta
+    // 'PartiallyReconciled' (19 chars). RED por errno 1406 (varchar(16) curta) até o widen p/ varchar(24).
+    'tests/modules/financial/adapters/persistence/payable-status-width.drizzle-mysql.test.ts',
     // #269 — ExpectedCounterpartStore (fin_expected_counterpart 0034 + outbox na tx)
     'tests/modules/financial/adapters/persistence/expected-counterpart-store.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/match-suggestion.drizzle-mysql.test.ts',

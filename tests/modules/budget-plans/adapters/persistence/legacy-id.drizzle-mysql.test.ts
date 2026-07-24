@@ -252,7 +252,13 @@ if (integrationEnabled()) {
         await insertRow(dbName, 1, 999);
         await assert.rejects(
           () => insertRow(dbName, 2, 999),
-          /duplicate/i,
+          (e: unknown) => {
+            // drizzle envolve o erro do mysql2 em DrizzleQueryError; o errno real fica em `cause`
+            // (não na message de topo, que é `Failed query: INSERT ...`).
+            const cause = (e as { cause?: { errno?: number } }).cause;
+            assert.equal(cause?.errno, 1062); // ER_DUP_ENTRY
+            return true;
+          },
           `${dbName}: legacy_id repetido deveria violar o UNIQUE`,
         );
       });

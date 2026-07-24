@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "FIN-PDF-STATEMENT-PARSER",
+  "size": "L",
+  "createdAt": "2026-07-24T02:23:02.206Z",
+  "closedAt": "2026-07-24T02:48:02.508Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-24T02:26:04.076Z",
+      "finishedAt": "2026-07-24T02:27:30.645Z",
+      "rounds": 1,
+      "reportPath": "002-tests/pdf-parser.test.ts",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "nodejs-runtime-expert",
+      "startedAt": "2026-07-24T02:48:00.888Z",
+      "finishedAt": "2026-07-24T02:48:01.171Z",
+      "rounds": 1,
+      "reportPath": "003-impl/pdf-parser.ts",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-24T02:48:01.442Z",
+      "finishedAt": "2026-07-24T02:48:01.716Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-24T02:48:01.984Z",
+      "finishedAt": "2026-07-24T02:48:02.245Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

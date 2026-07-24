@@ -29,5 +29,10 @@ export const createInMemorySourceFileStorage = (
       store.delete(ref.key);
       return ok(undefined);
     },
+    download: async (ref) => {
+      const bytes = store.get(ref.key);
+      if (bytes === undefined) return err('source-file-download-failed');
+      return ok({ bytes, mimeType: ref.mimeType });
+    },
   };
 };

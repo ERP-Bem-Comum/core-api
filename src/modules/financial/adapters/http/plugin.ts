@@ -85,6 +85,8 @@ import {
   documentListResponseSchema,
   listPayablesQuerySchema,
   payableListResponseSchema,
+  payableCountsQuerySchema,
+  payableCountsResponseSchema,
   type PayableSummaryDto,
   payablesBatchBodySchema,
   payablesBatchResponseSchema,
@@ -372,10 +374,10 @@ const financialRoutes =
         if (body.asDraft) {
           // Rascunho — campos opcionais. `undefined` → `null` (exactOptionalPropertyTypes).
           const result = await deps.saveDraft({
-            documentNumber: body.documentNumber,
+            documentNumber: body.documentNumber ?? null,
             series: body.series ?? null,
-            type: body.type,
-            supplierRef: body.supplierRef,
+            type: body.type ?? null,
+            supplierRef: body.supplierRef ?? null,
             ...(body.payeeKind !== undefined ? { payeeKind: body.payeeKind } : {}),
             approverRef: body.approverRef ?? null,
             contractRef: body.contractRef ?? null,
@@ -384,8 +386,9 @@ const financialRoutes =
             subcategoryRef: body.subcategoryRef ?? null,
             costCenterRef: body.costCenterRef ?? null,
             programRef: body.programRef ?? null,
-            paymentMethod: body.paymentMethod,
-            grossValueCents: Number(body.grossValueCents),
+            paymentMethod: body.paymentMethod ?? null,
+            grossValueCents:
+              body.grossValueCents !== undefined ? Number(body.grossValueCents) : null,
             sourceDiscountsCents: Number(body.sourceDiscountsCents),
             discountsCents: Number(body.discountsCents),
             penaltyCents: Number(body.penaltyCents),
@@ -407,8 +410,16 @@ const financialRoutes =
           return loadAndSerialize(deps, reply, idStr);
         }
 
-        // Open — dueDate obrigatória.
-        if (body.dueDate === undefined) {
+        // Open — dueDate + os 5 campos do #534 obrigatórios (o superRefine já garante o 400; este
+        // guard estreita os opcionais do tipo para o saveDocument sem non-null assertion).
+        if (
+          body.dueDate === undefined ||
+          body.type === undefined ||
+          body.documentNumber === undefined ||
+          body.supplierRef === undefined ||
+          body.paymentMethod === undefined ||
+          body.grossValueCents === undefined
+        ) {
           return sendDomainError(reply, 'document-incomplete');
         }
         const result = await deps.saveDocument({
@@ -696,6 +707,52 @@ const financialRoutes =
       },
     });
 
+    // GET /financial/payable-titles/counts — contagem agregada por status (#536). 1 request no lugar
+    // de ~6 (chips do grid). Rota estática — precede a lista `/payable-titles` (sem conflito no find-my-way).
+    scope.route({
+      method: 'GET',
+      url: '/financial/payable-titles/counts',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        querystring: payableCountsQuerySchema,
+        response: { 200: payableCountsResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const q = req.query;
+        // Filtro dos TÍTULOS (sem `status` — queremos o breakdown completo).
+        const payableFilter: PayableListFilter = {
+          ...(q.documentType !== undefined ? { documentType: q.documentType } : {}),
+          ...(q.supplierRef !== undefined ? { supplierRef: q.supplierRef } : {}),
+          ...(q.dueFrom !== undefined ? { dueFrom: new Date(q.dueFrom) } : {}),
+          ...(q.dueTo !== undefined ? { dueTo: new Date(q.dueTo) } : {}),
+        };
+        const counts = await deps.countPayableTitles(payableFilter);
+        if (!counts.ok) return sendDomainError(reply, counts.error);
+
+        // Rascunho (Draft) vive na tabela de documentos (sem título) — reusa a listagem com pageSize 1
+        // só para o `total`, aplicando os mesmos filtros da lista.
+        const draftFilter: DocumentListFilter = {
+          status: 'Draft',
+          ...(q.supplierRef !== undefined ? { supplierRef: q.supplierRef } : {}),
+          ...(q.documentType !== undefined ? { type: q.documentType } : {}),
+          ...(q.dueFrom !== undefined ? { dueFrom: new Date(q.dueFrom) } : {}),
+          ...(q.dueTo !== undefined ? { dueTo: new Date(q.dueTo) } : {}),
+        };
+        const drafts = await deps.listDocuments(draftFilter, 1, 1);
+        if (!drafts.ok) return sendDomainError(reply, drafts.error);
+
+        return sendResult(
+          reply,
+          ok({
+            total: counts.value.total,
+            draft: drafts.value.total,
+            byStatus: counts.value.byStatus,
+          }),
+          { ok: 200 },
+        );
+      },
+    });
+
     // GET /financial/payable-titles — listagem payable-centric (#201/#222): pai + filhos como linhas
     // pagáveis (status próprio por título). Distinta da busca de conciliação GET /payables?status=Paid.
     scope.route({
@@ -819,6 +876,37 @@ const financialRoutes =
       },
     });
 
+    // GET /financial/documents/:id/source-file — serve o comprovante-fonte INLINE (#62/Feature 2).
+    // Proxy: o backend lê os bytes do storage privado e os repassa (nunca URL/presigned — ADR-0050);
+    // a área de OCR da tela de edição renderiza o arquivo. 404 quando o documento não tem anexo.
+    scope.route({
+      method: 'GET',
+      url: '/financial/documents/:id/source-file',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        params: documentIdParamSchema,
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const idR = DocumentId.rehydrate(req.params.id);
+        if (!idR.ok) return sendDomainError(reply, 'document-id-invalid');
+
+        const found = await deps.findDocumentById(idR.value);
+        if (!found.ok) return sendDomainError(reply, found.error);
+
+        const ref = found.value.document.sourceFileRef;
+        if (ref === null) return sendDomainError(reply, 'source-file-not-found');
+
+        const dl = await deps.downloadSourceFile(ref);
+        if (!dl.ok) return sendDomainError(reply, 'source-file-not-found');
+
+        const rawName = ref.key.slice(ref.key.lastIndexOf('/') + 1);
+        const fileName = rawName.length > 0 ? rawName : 'document';
+        reply.header('content-type', dl.value.mimeType);
+        reply.header('content-disposition', `inline; filename="${sanitizeFilename(fileName)}"`);
+        return reply.send(Buffer.from(dl.value.bytes)) as unknown as Promise<void>;
+      },
+    });
+
     // POST /financial/bank-statements — importa extrato OFX/CSV (US1 conciliação).
     scope.route({
       method: 'POST',
@@ -867,6 +955,24 @@ const financialRoutes =
         if (!result.ok) return sendDomainError(reply, result.error);
         if (result.value === null) return sendDomainError(reply, 'bank-statement-not-found');
         return sendResult(reply, ok(statementTransactionsToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // DELETE /financial/bank-statements/:id — exclui o extrato importado (hard delete; transações somem
+    // por FK cascade). GUARDA (sem cascata): 409 se houver transação conciliada (desfaça antes) ou período
+    // fechado (reabra antes); 404 se inexistente. 204 sem corpo.
+    scope.route({
+      method: 'DELETE',
+      url: '/financial/bank-statements/:id',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationImport)],
+      schema: {
+        params: bankStatementIdParamSchema,
+        // 204 sem body → sem response schema (convenção das rotas 204 deste projeto).
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.deleteBankStatement({ statementId: req.params.id });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return reply.code(204).send() as unknown as Promise<void>;
       },
     });
 
@@ -1053,9 +1159,19 @@ const financialRoutes =
         if (!result.ok) return sendDomainError(reply, result.error);
         // #207: compõe o nome do executor server-side (ADR-0032). Graceful → null.
         const reconciledByName = await deps.resolveUserName(result.value.audit.reconciledBy);
+        // Categoria (ref → nome) — modal "Conciliação realizada". Lançamento manual tem precedência
+        // (fatia 1); senão, vem do documento do 1º título conciliado (fatia 2).
+        let categoryRef = result.value.manualEntry?.categoryRef ?? null;
+        if (categoryRef === null) {
+          const firstItem = result.value.items[0];
+          if (firstItem !== undefined) {
+            categoryRef = await deps.resolveTitleCategoryRef(String(firstItem.payableId));
+          }
+        }
+        const category = await deps.resolveCategoryName(categoryRef);
         return sendResult(
           reply,
-          ok(transactionReconciliationToDto(result.value, reconciledByName)),
+          ok(transactionReconciliationToDto(result.value, reconciledByName, category)),
           { ok: 200 },
         );
       },
@@ -1108,6 +1224,12 @@ const financialRoutes =
             ? { destinationAccountRef: body.destinationAccountRef }
             : {}),
           ...(body.productLabel !== undefined ? { productLabel: body.productLabel } : {}),
+          ...(body.documentNumber !== undefined ? { documentNumber: body.documentNumber } : {}),
+          ...(body.documentType !== undefined ? { documentType: body.documentType } : {}),
+          ...(body.issueDate !== undefined ? { issueDate: new Date(body.issueDate) } : {}),
+          ...(body.documentValueCents !== undefined
+            ? { documentValueCents: Number(body.documentValueCents) }
+            : {}),
           reconciledBy: req.userId,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
@@ -1120,6 +1242,14 @@ const financialRoutes =
             // #502/S2: ecoa o carimbo de taxonomia recebido (opaco; null quando ausente — back-compat).
             budgetPlanRef: body.budgetPlanRef ?? null,
             subcategoryRef: body.subcategoryRef ?? null,
+            // #370: eco dos campos de documento (documentValueCents já com o default do domínio aplicado).
+            documentNumber: result.value.documentNumber,
+            documentType: result.value.documentType,
+            issueDate:
+              result.value.issueDate === null
+                ? null
+                : result.value.issueDate.toISOString().slice(0, 10),
+            documentValueCents: String(result.value.documentValueCents),
           }),
           { ok: 201 },
         );

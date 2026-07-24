@@ -14,14 +14,14 @@ const CSV = `data;tipo;valor;nome;descricao;saldo
 
 // Critério CA5: dispatcher delega por formato; fora de {OFX,CSV} → unsupported-format.
 describe('financial/adapters/statement-parsers/bank-statement-parser (dispatcher)', () => {
-  it('CA5: delega OFX e CSV ao adapter correto', () => {
-    assert.equal(bankStatementParser.parse('OFX', OFX).ok, true);
-    assert.equal(bankStatementParser.parse('CSV', CSV).ok, true);
+  it('CA5: delega OFX e CSV ao adapter correto', async () => {
+    assert.equal((await bankStatementParser.parse('OFX', OFX)).ok, true);
+    assert.equal((await bankStatementParser.parse('CSV', CSV)).ok, true);
   });
 
-  it('CA5: formato fora de {OFX,CSV} → unsupported-format', () => {
+  it('CA5: formato fora de {OFX,CSV,PDF} → unsupported-format', async () => {
     // Força um formato inválido em runtime para exercitar o guard do dispatcher.
-    const r = bankStatementParser.parse('XLSX' as unknown as 'OFX', 'qualquer');
+    const r = await bankStatementParser.parse('XLSX' as unknown as 'OFX', 'qualquer');
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'unsupported-format');
   });

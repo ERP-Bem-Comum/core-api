@@ -12,11 +12,20 @@ import type { SaveDraftCommand, SaveDraftOutput, SaveDraftError } from './save-d
 
 // Ingestão de documento (#62, fatia 2): lê o PDF/XML, guarda o comprovante-fonte e cria um rascunho
 // pré-preenchido — o humano confere/submete (o motor nunca confirma sozinho, #62 CA4).
+// #FIN-OCR-AUTOFILL-SUPPLIER: resolve o CNPJ do emitente lido → id de um fornecedor CADASTRADO (partners
+// via public-api). Opcional e GRACIOSO: sem match ou falha de leitura → `null` → o humano seleciona
+// (comportamento atual). Nunca bloqueia a ingestão (o PDF+rascunho já foram salvos).
+export type ResolveSupplierByCnpjError = 'supplier-resolve-unavailable';
+export type ResolveSupplierByCnpj = (
+  taxId: string,
+) => Promise<Result<string | null, ResolveSupplierByCnpjError>>;
+
 export type IngestDocumentDeps = Readonly<{
   reader: DocumentReaderPort;
   storage: SourceFileStoragePort;
   saveDraft: (cmd: SaveDraftCommand) => Promise<Result<SaveDraftOutput, SaveDraftError>>;
   idGen: () => DocumentId;
+  resolveSupplierByCnpj?: ResolveSupplierByCnpj;
 }>;
 
 export type IngestDocumentCommand = Readonly<{
@@ -67,9 +76,19 @@ export const ingestDocument =
     if (!stored.ok) return err(stored.error);
 
     const draftFields = readResult !== null ? readerResultToDraft(readResult) : {};
+
+    // Resolve o CNPJ do emitente → fornecedor cadastrado (gracioso: sem match/erro → não seta supplierRef).
+    let supplierRef: string | undefined = undefined;
+    const taxId = readResult?.supplier?.taxId;
+    if (taxId !== undefined && deps.resolveSupplierByCnpj !== undefined) {
+      const resolved = await deps.resolveSupplierByCnpj(taxId);
+      if (resolved.ok && resolved.value !== null) supplierRef = resolved.value;
+    }
+
     const saved = await deps.saveDraft({
       id: documentId,
       ...draftFields,
+      ...(supplierRef !== undefined ? { supplierRef } : {}),
       sourceFile: {
         bucket: stored.value.bucket,
         key: stored.value.key,

@@ -223,6 +223,16 @@ const parseBrCents = (raw: string): number | undefined => {
 
 const group1 = (text: string, re: RegExp): string | undefined => re.exec(text)?.[1];
 
+// #566: normaliza o CNPJ/CPF lido para APENAS dígitos, no comprimento canônico (CNPJ 14, CPF 11).
+// Menos que 11 → inválido (undefined). Slice protege contra dígitos vizinhos capturados junto.
+const normalizeTaxId = (raw: string | undefined): string | undefined => {
+  if (raw === undefined) return undefined;
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length >= 14) return digits.slice(0, 14);
+  if (digits.length >= 11) return digits.slice(0, 11);
+  return undefined;
+};
+
 const detectType = (text: string): DocumentType | undefined => {
   if (/NFS-e|NOTA FISCAL DE SERVI/i.test(text)) return 'NFS-e';
   if (/RECIBO DE PAGAMENTO A AUT|\bRPA\b/i.test(text)) return 'RPA';
@@ -271,12 +281,31 @@ export const structureText = (
   if (type === undefined) return err('malformed-document');
 
   const documentNumber = group1(text, /N[uú]mero[^:\n]*:\s*(\S+)/i);
+  // Isola o bloco do EMITENTE (prestador) — do rótulo "EMITENTE ..." até "TOMADOR ..." — para NUNCA pegar
+  // o CNPJ/nome do TOMADOR (o DANFSe traz os dois). Sem os marcadores, cai no texto inteiro (layout genérico).
+  const emitStart = text.search(/EMITENTE\s+DA\s+NFS-?e|EMITENTE\s+DA\s+NOTA|EMITENTE\b/i);
+  const emitTail = emitStart === -1 ? text : text.slice(emitStart);
+  const tomadorAt = emitTail.search(/TOMADOR\s+D[OA]\s+SERVI[ÇC]O|TOMADOR\b/i);
+  const emitBlock = tomadorAt === -1 ? emitTail : emitTail.slice(0, tomadorAt);
+
   // #396 F2 (CWE-20): terminador `[^:\n]+` (não `.+`) — o unpdf colapsa `\n` em espaço, então `.+`
   // engoliria o documento inteiro após "Prestador:", contaminando o legalName e estourando `description`.
-  const legalName = group1(text, /Prestador:\s*([^:\n]+)/i)?.trim();
-  const taxId = group1(text, /CNPJ:\s*(\d+)/i) ?? group1(text, /CPF:\s*(\d+)/i);
+  const legalName =
+    group1(text, /Prestador:\s*([^:\n]+)/i)?.trim() ??
+    // DANFSe: "Nome / Nome Empresarial <IM numérico opcional> <nome> E-mail". Remove o IM à esquerda.
+    group1(emitBlock, /Nome\s*\/\s*Nome Empresarial\s+(.+?)\s+E-?mail/i)
+      ?.replace(/^[\d.\-/]+\s+/, '')
+      .trim();
+  // #566: só dígitos, COMPLETOS — CNPJ 14 / CPF 11. O `\s` no run tolera a quebra de linha da camada
+  // de texto do unpdf (o "-90" pode cair na linha seguinte); `normalizeTaxId` corta no comprimento
+  // canônico. Menos que CPF → undefined (não seta supplier — evita o CNPJ truncado silencioso, #566).
+  const taxId =
+    normalizeTaxId(group1(text, /CNPJ:\s*([\d.\-/\s]{11,25})/i)) ??
+    normalizeTaxId(group1(text, /CPF:\s*([\d.\-/\s]{11,20})/i)) ??
+    normalizeTaxId(group1(emitBlock, /CNPJ\s*\/\s*CPF\s*\/\s*NIF\s*(\d[\d.\-/\s]{9,24})/i));
+  // Basta o CNPJ para resolver o fornecedor (#FIN-OCR-AUTOFILL-SUPPLIER); legalName é auxiliar.
   const supplier: SupplierIdentity | undefined =
-    legalName !== undefined && taxId !== undefined ? { legalName, taxId } : undefined;
+    taxId !== undefined ? { legalName: legalName ?? '', taxId } : undefined;
   const competence = parseCompetence(text);
 
   const grossRaw =
@@ -297,12 +326,22 @@ export const structureText = (
 
   const retentions = grossCents !== undefined ? parseRetentions(text, grossCents) : [];
 
+  // #566: "Descrição do Serviço <texto> TRIBUTAÇÃO MUNICIPAL" (DANFSe) → campo `description` do
+  // rascunho. Colapsa espaços e limita a varchar(500). NÃO carrega o fornecedor (resolve em supplierRef).
+  const descRaw = group1(
+    text,
+    /Descri[çc][ãa]o\s+do\s+Servi[çc]o\s+(.+?)\s+TRIBUTA[ÇC][ÃA]O\s+MUNICIPAL/is,
+  );
+  const description =
+    descRaw !== undefined ? descRaw.replace(/\s+/g, ' ').trim().slice(0, 500) : undefined;
+
   return ok({
     resolvedVia,
     type,
     ...(documentNumber !== undefined ? { documentNumber } : {}),
     ...(competence !== undefined ? { competence } : {}),
     ...(supplier !== undefined ? { supplier } : {}),
+    ...(description !== undefined ? { description } : {}),
     ...(grossValue !== undefined ? { grossValue } : {}),
     ...(retentions.length > 0 ? { retentions } : {}),
   });

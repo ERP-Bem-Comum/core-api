@@ -113,7 +113,7 @@ export const finDocuments = mysqlTable(
 
     // Status (7 valores — ADR-0005; só Draft/Open/Approved têm transição nesta fatia).
     // varchar + CHECK (mysqlEnum proibido — ADR-0018/0020).
-    status: varchar('status', { length: 16 }).notNull(),
+    status: varchar('status', { length: 24 }).notNull(),
 
     // Descrição editável (opcional).
     description: varchar('description', { length: 500 }),
@@ -246,7 +246,7 @@ export const finPayables = mysqlTable(
     retentionType: varchar('retention_type', { length: 8 }),
 
     // Status espelha o documento nesta fatia (7 valores — domain/document/types.ts §DocumentStatus).
-    status: varchar('status', { length: 16 }).notNull(),
+    status: varchar('status', { length: 24 }).notNull(),
 
     // Valor em centavos (Money — ADR-0018 §"Money cents").
     value: bigint('value', { mode: 'number' }).notNull(),
@@ -666,7 +666,7 @@ export const finBankStatements = mysqlTable(
     closingBalanceCents: bigint('closing_balance_cents', { mode: 'number' }).notNull(),
   },
   (t) => [
-    check('fin_bank_statements_file_format_chk', sql`${t.fileFormat} IN ('OFX','CSV')`),
+    check('fin_bank_statements_file_format_chk', sql`${t.fileFormat} IN ('OFX','CSV','PDF')`),
     index('fin_bank_statements_debit_account_ref_idx').on(t.debitAccountRef),
   ],
 );
@@ -811,6 +811,12 @@ export const finManualEntries = mysqlTable(
     // #143: realocação patrimonial — conta de destino (Transfer) e produto livre (Investment/Redemption).
     destinationAccountRef: varchar('destination_account_ref', { length: 36 }),
     productLabel: varchar('product_label', { length: 120 }),
+    // #370: campos de documento (rastreabilidade). `document_value_cents` default = valor da transação
+    // (aplicado no domínio); pode divergir. Nullable — lançamentos antigos não têm documento.
+    documentNumber: varchar('document_number', { length: 60 }),
+    documentType: varchar('document_type', { length: 16 }),
+    issueDate: date('issue_date', { mode: 'date' }),
+    documentValueCents: bigint('document_value_cents', { mode: 'number' }),
   },
   (t) => [
     foreignKey({

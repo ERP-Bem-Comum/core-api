@@ -1,0 +1,129 @@
+name: integration
+
+# Suítes MySQL/MinIO de integração — fecha o buraco da #523. O ci.yml segue
+# offline (só unit); ESTE workflow sobe MySQL/MinIO efêmeros (via o runner
+# scripts/ci/test-integration.ts) e roda as suítes reais que pegam bugs de
+# schema/persistência — incluindo o #519 (bug de PRODUÇÃO: errno 1406).
+#
+# Uma job por suíte (matrix, fail-fast:false) — o runner já é per-suíte. Cada job
+# é uma VM isolada que sobe seu compose próprio (docker/mysql/conf.d + initdb.d
+# montados = paridade de config; é o que faz o #519/#522 reproduzirem — o
+# services nativo do Actions NÃO dá essa paridade porque sobe antes do checkout).
+#
+# Actions pinadas por SHA (ADR-0011). Repo público → Actions grátis.
+
+on:
+  pull_request:
+    branches: [dev, main]
+  schedule:
+    # Nightly 05:00 UTC (02:00 BRT) — pega drift de fixture/dep sem depender de PR
+    # (mesmo padrão do audit.yml). Ex.: o #522 foi drift de fixture desde 2026-07-02.
+    - cron: '0 5 * * *'
+  workflow_dispatch: {}
+
+concurrency:
+  group: integration-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  integration:
+    name: integração (${{ matrix.suite }})
+    runs-on: ubuntu-latest
+    # FASE 2 (#523): report-only encerrada — #519/#520/#521/#522 corrigidos/mergeados e a matriz 100% verde.
+    # Sem `continue-on-error`: um leg vermelho torna `needs.integration.result=failure` → o job
+    # `gate` (abaixo) falha de verdade. Marcar `integração (gate)` como required no branch protection
+    # de dev/main é a op de repo que completa o bloqueio (fora deste arquivo).
+    strategy:
+      fail-fast: false # uma suíte vermelha NÃO pode sumir as outras (#523).
+      matrix:
+        suite:
+          # MySQL (o runner cria os 3 secrets de MySQL sozinho):
+          - contracts
+          - auth
+          - partners # ⚠️ #521 (vermelho até fechar)
+          - programs
+          - budget-plans # ⚠️ #520
+          - financial # ⚠️ #519 (bug de prod) — a suíte mais pesada (~28 arquivos)
+          - etl # ⚠️ #522
+          - etl:orchestrate # ⚠️ #522
+          - etl:contracts
+          - etl:financial
+          # MinIO (precisam do secrets:setup — o runner NÃO cria os secrets do MinIO):
+          - storage
+          - photo
+          - logo
+          # etl:budget-plans FICA DE FORA: depende de dump legado ausente do repo (#522).
+          # notifications FICA DE FORA: já coberta por integration-notifications.yml.
+    steps:
+      - name: Checkout
+        # SHA já em uso em ci.yml:30 (v6.0.3). Pin por digest (ADR-0011).
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Node 24 (runtime do --experimental-strip-types)
+        # SHA já em uso em ci.yml:32 (v6.4.0). SEM `cache: pnpm`: essa opção roda
+        # `pnpm store path` DENTRO do setup-node, antes do `corepack enable` abaixo — e aí
+        # o pnpm ainda não existe no PATH ("Unable to locate executable file: pnpm"). O ci.yml
+        # não usa cache pelo mesmo motivo; seguimos o padrão provado do repo.
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '24'
+
+      - name: Habilita pnpm (corepack lê a versão do packageManager)
+        run: corepack enable
+
+      - name: Install (frozen-lockfile)
+        run: pnpm install --frozen-lockfile
+
+      - name: Gera secrets de teste (necessário p/ suítes MinIO; o runner sobrescreve os do MySQL)
+        # storage/photo/logo têm secrets:false no manifesto → o runner NÃO cria
+        # minio_root_user/password. Sem estes arquivos, `compose up minio` falha ao
+        # resolver o secret (compose.yaml:112-117). Idempotente e barato; roda em todas.
+        run: pnpm run secrets:setup
+
+      - name: Alinha credencial MinIO do teste com a do container
+        # Em CI (não-TTY) o `secrets:setup` gera MinIO root ALEATÓRIO; o container sobe com
+        # ele (MINIO_ROOT_USER_FILE, compose.yaml:112-113). Mas o teste lê
+        # `process.env['MINIO_ROOT_USER'] ?? 'dev-access-key'` (s3.integration.test.ts:50-51) —
+        # sem a env, cai no fallback e bate InvalidAccessKeyId. Exporta o valor do secret
+        # para a env, então teste e container usam a MESMA credencial. Inerte para suítes MySQL.
+        run: |
+          {
+            echo "MINIO_ROOT_USER=$(cat secrets/minio_root_user.txt)"
+            echo "MINIO_ROOT_PASSWORD=$(cat secrets/minio_root_password.txt)"
+          } >> "$GITHUB_ENV"
+
+      - name: Integração (${{ matrix.suite }}) — sobe compose efêmero + roda a suíte
+        # O runner: compose up --wait (config-parity: conf.d + initdb.d) → node --test
+        # → finally: down -v. O `down -v` é INOFENSIVO aqui (VM efêmera), destrutivo
+        # só em dev (#500). Exit code != 0 = vermelho, MESMO com "fail 0/cancelled 1"
+        # no sumário do node:test (o caso do #521). Confia-se SÓ no exit code.
+        run: node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts "${{ matrix.suite }}"
+
+      - name: Diagnóstico do compose em caso de falha
+        # Roda só se o step anterior falhou (`if: failure()`). Sem mascarar exit code:
+        # é inofensivo (o job já está vermelho) e nunca engole o `exit 1` do runner.
+        if: failure()
+        run: |
+          docker compose ps -a
+          docker compose logs --tail=100
+
+  # Agregador que colapsa a matrix num check estável (nomes de job de matrix são dinâmicos e o
+  # branch protection não casa cada um). Marcar `integração (gate)` como required no branch
+  # protection de dev/main é a op de repo que completa o bloqueio — fora deste arquivo.
+  gate:
+    name: integração (gate)
+    if: always()
+    needs: [integration]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Falha se qualquer suíte falhou ou foi cancelada
+        # result ∈ success|failure|cancelled|skipped. Só `success` passa. Sem `continue-on-error`
+        # no job da matrix (Fase 2), um leg vermelho torna needs.integration.result=failure → este
+        # gate falha de verdade. Confia-se SÓ no result agregado, nunca no sumário do node:test.
+        run: |
+          result="${{ needs.integration.result }}"
+          echo "integration matrix result: $result"
+          test "$result" = "success"
