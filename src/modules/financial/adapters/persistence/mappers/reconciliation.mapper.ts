@@ -4,18 +4,21 @@
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import { immutable } from '#src/shared/primitives/immutable.ts';
 import * as ReconciliationId from '#src/modules/financial/domain/reconciliation/reconciliation-id.ts';
+import * as ManualEntryId from '#src/modules/financial/domain/reconciliation/manual-entry-id.ts';
 import * as StatementTransactionId from '#src/modules/financial/domain/statement/statement-transaction-id.ts';
 import * as PayableId from '#src/modules/financial/domain/shared/payable-id.ts';
 import type {
   Difference,
   DifferenceTreatment,
   ManualEntry,
+  ManualEntryType,
   Reconciliation,
   ReconciliationItem,
   ReconciliationStatus,
   ReconciliationType,
 } from '#src/modules/financial/domain/reconciliation/types.ts';
 import type {
+  ManualEntryRow,
   NewManualEntryRow,
   NewReconciliationItemRow,
   NewReconciliationRow,
@@ -29,7 +32,45 @@ export type ReconciliationMapperError =
   | 'invalid-reconciliation-payable-id'
   | 'invalid-reconciliation-type'
   | 'invalid-reconciliation-status'
-  | 'invalid-reconciliation-difference';
+  | 'invalid-reconciliation-difference'
+  | 'invalid-manual-entry-id'
+  | 'invalid-manual-entry-type';
+
+const toManualEntryType = (raw: string): ManualEntryType | null =>
+  raw === 'Payment' ||
+  raw === 'Receipt' ||
+  raw === 'Transfer' ||
+  raw === 'FeePenaltyInterest' ||
+  raw === 'Investment' ||
+  raw === 'Redemption'
+    ? raw
+    : null;
+
+// Inverso de `manualEntryToRow`: reidrata o lançamento manual a partir da linha `fin_manual_entries`.
+export const manualEntryRowToDomain = (
+  row: Readonly<ManualEntryRow>,
+): Result<ManualEntry, ReconciliationMapperError> => {
+  const id = ManualEntryId.rehydrate(row.id);
+  if (!id.ok) return err('invalid-manual-entry-id');
+  const type = toManualEntryType(row.type);
+  if (type === null) return err('invalid-manual-entry-type');
+  return ok(
+    immutable<ManualEntry>({
+      id: id.value,
+      type,
+      valueCents: row.valueCents,
+      supplierRef: row.supplierRef,
+      budgetPlanRef: row.budgetPlanRef,
+      subcategoryRef: row.subcategoryRef,
+      categoryRef: row.categoryRef,
+      costCenterRef: row.costCenterRef,
+      programRef: row.programRef,
+      description: row.description,
+      destinationAccountRef: row.destinationAccountRef,
+      productLabel: row.productLabel,
+    }),
+  );
+};
 
 const toType = (raw: string): ReconciliationType | null =>
   raw === 'Individual' || raw === 'Multiple' || raw === 'Partial' || raw === 'ManualEntry'
@@ -91,6 +132,7 @@ export const manualEntryToRow = (
 export const toDomain = (
   row: Readonly<ReconciliationRow>,
   itemRows: readonly Readonly<ReconciliationItemRow>[],
+  manualEntryRow: Readonly<ManualEntryRow> | null = null,
 ): Result<Reconciliation, ReconciliationMapperError> => {
   const id = ReconciliationId.rehydrate(row.id);
   if (!id.ok) return err('invalid-reconciliation-id');
@@ -121,6 +163,15 @@ export const toDomain = (
     items.push({ payableId: payableId.value, reconciledValueCents: ir.reconciledValueCents });
   }
 
+  // Reidrata o lançamento manual quando a linha é fornecida (detalhe da conciliação — categoria etc.).
+  // Sem a linha, segue `null` (undo e demais caminhos não precisam do boundary pós-criação).
+  let manualEntry: ManualEntry | null = null;
+  if (manualEntryRow !== null) {
+    const me = manualEntryRowToDomain(manualEntryRow);
+    if (!me.ok) return err(me.error);
+    manualEntry = me.value;
+  }
+
   return ok(
     immutable<Reconciliation>({
       id: id.value,
@@ -129,9 +180,7 @@ export const toDomain = (
       status,
       items,
       difference,
-      // O lançamento manual (fin_manual_entries) não é recarregado aqui: o undo não o lê e nenhum
-      // use-case desta fatia precisa do boundary pós-criação (US5). Reidratar fica p/ ticket futuro se preciso.
-      manualEntry: null,
+      manualEntry,
       audit: {
         reconciledAt: row.reconciledAt,
         reconciledBy: row.reconciledBy,

@@ -376,6 +376,7 @@ export const accountStatementToDto = (view: StatementView): AccountStatementResp
 export const transactionReconciliationToDto = (
   r: Reconciliation,
   reconciledByName: string | null = null,
+  category: string | null = null,
 ): TransactionReconciliationResponseDto => ({
   id: String(r.id),
   transactionId: String(r.transactionId),
@@ -389,6 +390,7 @@ export const transactionReconciliationToDto = (
     payableId: String(i.payableId),
     reconciledValueCents: String(i.reconciledValueCents),
   })),
+  category,
 });
 
 /**

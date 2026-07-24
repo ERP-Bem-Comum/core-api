@@ -1110,9 +1110,14 @@ const financialRoutes =
         if (!result.ok) return sendDomainError(reply, result.error);
         // #207: compõe o nome do executor server-side (ADR-0032). Graceful → null.
         const reconciledByName = await deps.resolveUserName(result.value.audit.reconciledBy);
+        // Categoria do lançamento manual (ref → nome) — modal "Conciliação realizada". null se sem
+        // lançamento manual/categoria (título real = fatia 2).
+        const category = await deps.resolveCategoryName(
+          result.value.manualEntry?.categoryRef ?? null,
+        );
         return sendResult(
           reply,
-          ok(transactionReconciliationToDto(result.value, reconciledByName)),
+          ok(transactionReconciliationToDto(result.value, reconciledByName, category)),
           { ok: 200 },
         );
       },
