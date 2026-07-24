@@ -18,8 +18,13 @@ import { createDrizzleBankStatementRepository } from '#src/modules/financial/ada
 import { importStatement } from '#src/modules/financial/domain/statement/bank-statement.ts';
 import * as Fitid from '#src/modules/financial/domain/statement/fitid.ts';
 import type { ImportStatementInput } from '#src/modules/financial/domain/statement/types.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
-const buildStatement = (account: string, fitidRaw: string) => {
+const buildStatement = (
+  account: string,
+  fitidRaw: string,
+  format: 'OFX' | 'CSV' | 'PDF' = 'OFX',
+) => {
   const f = Fitid.fromNative(fitidRaw);
   if (!f.ok) throw new Error('test setup: fitid');
   const input: ImportStatementInput = {
@@ -28,7 +33,7 @@ const buildStatement = (account: string, fitidRaw: string) => {
       start: new Date('2024-05-01T00:00:00.000Z'),
       end: new Date('2024-05-31T00:00:00.000Z'),
     },
-    file: { name: 'extrato.ofx', format: 'OFX', hash: `hash-${fitidRaw}` },
+    file: { name: `extrato.${format.toLowerCase()}`, format, hash: `hash-${fitidRaw}` },
     openingBalanceCents: 0,
     closingBalanceCents: 1000,
     transactions: [
@@ -58,7 +63,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('BankStatementRepository — Drizzle + MySQL (integração)', () => {
     let handle: FinancialMysqlHandle;
@@ -142,6 +147,14 @@ if (!process.env['MYSQL_INTEGRATION']) {
           ),
         /entry_type|constraint|check/i,
       );
+    });
+
+    it('#559: CHECK aceita file_format PDF (import de extrato PDF persiste)', async () => {
+      const repo = createDrizzleBankStatementRepository(handle);
+      const account = '66666666-6666-4666-8666-666666666666';
+      const statement = buildStatement(account, 'fitid-pdf-1', 'PDF');
+      const saved = await repo.save(statement);
+      assert.equal(saved.ok, true, JSON.stringify(saved)); // antes do fix: CHECK barrava 'PDF' → 503
     });
   });
 }

@@ -15,8 +15,28 @@ allowBuilds:
 # Resolve: forçar esbuild >=0.25.0 <0.27.3 || >=0.28.1 em todas as cadeias transitivas.
 # Seguro: drizzle-kit@0.31.10 depende de esbuild@0.25.12 diretamente (compatível).
 # Referência: handbook/reference/pnpm/settings.md:29-98 (section overrides).
+#
+# - GHSA-4c8g-83qw-93j6: fast-uri <3.1.3 — host confusion via IDN malformado
+# - GHSA-v2hh-gcrm-f6hx: fast-uri <=3.1.3 — host confusion via '\' como delimitador de authority
+#   Transitiva de runtime por 23 caminhos, todos sob fastify (ajv-compiler) e @fastify/swagger
+#   (json-schema-resolver). Nenhum dep direto declara fast-uri: só override resolve.
+# - GHSA-3jxr-9vmj-r5cp: brace-expansion <5.0.7 — DoS por expansão exponencial
+#   Transitiva de runtime via @fastify/swagger-ui → @fastify/static → glob → minimatch.
+#
+# - GHSA-c96f-x56v-gq3h: find-my-way <=9.6.0 — DDoS via HTTP2. Transitiva de runtime via fastify
+#   (router). fastify@5.8.5 pede `^9.0.0`; não existe 9.6.1, o patch está em 9.7.0. Override seguro
+#   dentro do major 9.
+# - GHSA-83w8-p2f5-377r: @fastify/static <=10.1.0 — route guard bypass. Transitiva via
+#   @fastify/swagger-ui → @fastify/static (serve os assets do /docs). O patch é 10.1.1+, mas NENHUM
+#   @fastify/swagger-ui (nem o latest 6.1.0) declara `@fastify/static ^10` — todos pedem `^9.1.2`.
+#   Forçar o major 10 mesmo assim; a API de `register(root/prefix)` que o swagger-ui usa é estável
+#   entre 9 e 10, validado por boot + fastify.inject do /docs (ver ticket #573).
 overrides:
   esbuild: '>=0.25.0 <0.27.3 || >=0.28.1'
+  fast-uri: '>=3.1.4 <4'
+  brace-expansion: '>=5.0.7 <6'
+  find-my-way: '^9.7.0'
+  '@fastify/static': '^10.1.2'
 
 # Supply-chain hardening explícito (ADR-0011 / ADR-0029). Mantemos os valores
 # explícitos mesmo quando coincidem com o default do pnpm 11 — explícito é auditável.

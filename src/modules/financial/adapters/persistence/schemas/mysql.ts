@@ -87,6 +87,8 @@ export const finDocuments = mysqlTable(
     contractRef: varchar('contract_ref', { length: 36 }),
     budgetPlanRef: varchar('budget_plan_ref', { length: 36 }),
     categoryRef: varchar('category_ref', { length: 36 }),
+    // Subcategoria = folha da árvore do plano (#502). Soft ref (sem FK — ADR-0014); aditiva/nullable.
+    subcategoryRef: varchar('subcategory_ref', { length: 36 }),
     costCenterRef: varchar('cost_center_ref', { length: 36 }),
     programRef: varchar('program_ref', { length: 36 }),
 
@@ -111,7 +113,7 @@ export const finDocuments = mysqlTable(
 
     // Status (7 valores — ADR-0005; só Draft/Open/Approved têm transição nesta fatia).
     // varchar + CHECK (mysqlEnum proibido — ADR-0018/0020).
-    status: varchar('status', { length: 16 }).notNull(),
+    status: varchar('status', { length: 24 }).notNull(),
 
     // Descrição editável (opcional).
     description: varchar('description', { length: 500 }),
@@ -244,7 +246,7 @@ export const finPayables = mysqlTable(
     retentionType: varchar('retention_type', { length: 8 }),
 
     // Status espelha o documento nesta fatia (7 valores — domain/document/types.ts §DocumentStatus).
-    status: varchar('status', { length: 16 }).notNull(),
+    status: varchar('status', { length: 24 }).notNull(),
 
     // Valor em centavos (Money — ADR-0018 §"Money cents").
     value: bigint('value', { mode: 'number' }).notNull(),
@@ -558,6 +560,8 @@ export const finPayableView = mysqlTable(
     supplierRef: varchar('supplier_ref', { length: 36 }),
     contractRef: varchar('contract_ref', { length: 36 }),
     categoryRef: varchar('category_ref', { length: 36 }),
+    // Subcategoria = folha da árvore do plano (#502). Projeção espelha a ref do documento (S5).
+    subcategoryRef: varchar('subcategory_ref', { length: 36 }),
     costCenterRef: varchar('cost_center_ref', { length: 36 }),
     programRef: varchar('program_ref', { length: 36 }),
     valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
@@ -572,6 +576,7 @@ export const finPayableView = mysqlTable(
     index('fin_payable_view_status_idx').on(t.status),
     index('fin_payable_view_cost_center_ref_idx').on(t.costCenterRef),
     index('fin_payable_view_category_ref_idx').on(t.categoryRef),
+    index('fin_payable_view_subcategory_ref_idx').on(t.subcategoryRef),
     index('fin_payable_view_program_ref_idx').on(t.programRef),
     index('fin_payable_view_supplier_ref_idx').on(t.supplierRef),
     index('fin_payable_view_due_date_idx').on(t.dueDate),
@@ -661,7 +666,7 @@ export const finBankStatements = mysqlTable(
     closingBalanceCents: bigint('closing_balance_cents', { mode: 'number' }).notNull(),
   },
   (t) => [
-    check('fin_bank_statements_file_format_chk', sql`${t.fileFormat} IN ('OFX','CSV')`),
+    check('fin_bank_statements_file_format_chk', sql`${t.fileFormat} IN ('OFX','CSV','PDF')`),
     index('fin_bank_statements_debit_account_ref_idx').on(t.debitAccountRef),
   ],
 );
@@ -795,6 +800,10 @@ export const finManualEntries = mysqlTable(
     type: varchar('type', { length: 24 }).notNull(),
     valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
     supplierRef: varchar('supplier_ref', { length: 36 }),
+    // #502/S2: taxonomia planejável no título manual — plano orçamentário + subcategoria (folha da
+    // árvore do plano). Refs opacos por identidade (varchar(36), sem FK — ADR-0014), como os irmãos.
+    budgetPlanRef: varchar('budget_plan_ref', { length: 36 }),
+    subcategoryRef: varchar('subcategory_ref', { length: 36 }),
     categoryRef: varchar('category_ref', { length: 36 }),
     costCenterRef: varchar('cost_center_ref', { length: 36 }),
     programRef: varchar('program_ref', { length: 36 }),
@@ -802,6 +811,12 @@ export const finManualEntries = mysqlTable(
     // #143: realocação patrimonial — conta de destino (Transfer) e produto livre (Investment/Redemption).
     destinationAccountRef: varchar('destination_account_ref', { length: 36 }),
     productLabel: varchar('product_label', { length: 120 }),
+    // #370: campos de documento (rastreabilidade). `document_value_cents` default = valor da transação
+    // (aplicado no domínio); pode divergir. Nullable — lançamentos antigos não têm documento.
+    documentNumber: varchar('document_number', { length: 60 }),
+    documentType: varchar('document_type', { length: 16 }),
+    issueDate: date('issue_date', { mode: 'date' }),
+    documentValueCents: bigint('document_value_cents', { mode: 'number' }),
   },
   (t) => [
     foreignKey({

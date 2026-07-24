@@ -37,6 +37,7 @@ import {
 } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { saveDocument } from '#src/modules/financial/application/use-cases/save-document.ts';
 import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 const fitidOf = (raw: string) => {
   const f = Fitid.fromNative(raw);
@@ -52,7 +53,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('#127 Fatia B — atomicidade conciliacao+evento (Drizzle + MySQL)', () => {
     let handle: FinancialMysqlHandle;

@@ -28,11 +28,12 @@ import process from 'node:process';
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { openSuppliersWithoutContractReader } from '#src/modules/financial/public-api/suppliers-without-contract-projection.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 const connectionString =
   process.env['FINANCIAL_DATABASE_URL'] ??
   process.env['CONTRACTS_DATABASE_URL'] ??
-  'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+  mysqlTestConnectionString();
 
 const S1 = 'aa000000-0000-4000-8000-0000000000a1';
 const S2 = 'bb000000-0000-4000-8000-0000000000b2';

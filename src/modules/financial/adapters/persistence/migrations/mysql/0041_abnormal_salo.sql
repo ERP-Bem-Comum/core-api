@@ -1,0 +1,2 @@
+ALTER TABLE `fin_bank_statements` DROP CONSTRAINT `fin_bank_statements_file_format_chk`;--> statement-breakpoint
+ALTER TABLE `fin_bank_statements` ADD CONSTRAINT `fin_bank_statements_file_format_chk` CHECK (`fin_bank_statements`.`file_format` IN ('OFX','CSV','PDF'));

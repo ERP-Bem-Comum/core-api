@@ -21,8 +21,9 @@ import { buildContract, buildCancelledContract } from './fixtures.ts';
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
 import { runContractRepositoryContract } from './contract-repository.suite.ts';
 import { runAmendmentRepositoryContract } from './amendment-repository.suite.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = mysqlTestConnectionString();
 
 const integrationEnabled = (): boolean => process.env.MYSQL_INTEGRATION === '1';
 

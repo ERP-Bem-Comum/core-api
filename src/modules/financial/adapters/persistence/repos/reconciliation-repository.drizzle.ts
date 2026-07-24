@@ -268,7 +268,19 @@ export const createDrizzleReconciliationRepository = (
           .from(finReconciliationItems)
           .where(eq(finReconciliationItems.reconciliationId, row.id));
 
-        const mapped = toDomain(row, itemRows);
+        // Detalhe da conciliação: reidrata o lançamento manual (categoria etc.) quando houver.
+        const manualEntryRow =
+          row.type === 'ManualEntry'
+            ? ((
+                await db
+                  .select()
+                  .from(finManualEntries)
+                  .where(eq(finManualEntries.reconciliationId, row.id))
+                  .limit(1)
+              )[0] ?? null)
+            : null;
+
+        const mapped = toDomain(row, itemRows, manualEntryRow);
         if (!mapped.ok) {
           logStore('findActiveByTransaction:map', mapped.error);
           return err('reconciliation-repository-failure');

@@ -39,6 +39,10 @@ describe('contractToListItem — mapper agregado -> DTO', () => {
       budgetPlanId: null,
       categorizacao: null,
       centroDeCusto: null,
+      // CTR-TAXONOMY-REFS: refs da árvore do plano no snapshot exato do list-item (nascem null).
+      costCenterRef: null,
+      categoryRef: null,
+      subcategoryRef: null,
       program: null,
       // #116: ref do contratante exposta no list-item.
       contractorId: '55555555-5555-4555-8555-555555555555',

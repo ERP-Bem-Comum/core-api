@@ -16,6 +16,8 @@ const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
   'payable-not-found',
   // Período (US6).
   'reconciliation-period-not-found',
+  // #62/Feature 2: documento sem comprovante-fonte (ou bytes ausentes no storage).
+  'source-file-not-found',
 ]);
 
 const CONFLICT_CODES: ReadonlySet<string> = new Set([
@@ -26,6 +28,8 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'reconciliation-already-undone',
   'account-closed',
   'period-closed',
+  // Exclusão de extrato: guarda — extrato com transação conciliada não pode ser excluído (desfaça antes).
+  'statement-has-reconciled-transactions',
   // Reabertura (#203): reabrir período não-fechado é conflito de estado.
   'period-not-closed',
   // Contrapartida de transferência (#269/US2): casar uma contrapartida não-pendente é conflito de estado.
@@ -144,6 +148,7 @@ const SLUG_MESSAGES: Record<string, string> = {
   'financial-ref-invalid': 'Referência inválida: o valor informado não é um identificador válido.',
   'partner-ref-invalid': 'Referência de fornecedor inválida.',
   'document-id-invalid': 'Identificador de documento inválido.',
+  'source-file-not-found': 'Documento sem arquivo anexado.',
   'document-incomplete':
     'Dados insuficientes: a data de vencimento é obrigatória para documentos em aberto.',
   'net-value-not-positive': 'O valor líquido do documento deve ser positivo.',

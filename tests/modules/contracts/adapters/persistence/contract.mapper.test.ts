@@ -59,6 +59,10 @@ const BASE_ROW: Omit<ContractRow, 'status' | 'endedAt'> = {
   budgetPlanId: null,
   categorizacao: null,
   centroDeCusto: null,
+  // CTR-TAXONOMY-REFS: refs da árvore do plano no row exaustivo (Omit<ContractRow,...>) — null.
+  costCenterRef: null,
+  categoryRef: null,
+  subcategoryRef: null,
   observations: null,
   email: null,
   telephone: null,

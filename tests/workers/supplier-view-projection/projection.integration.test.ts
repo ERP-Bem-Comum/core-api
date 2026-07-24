@@ -17,6 +17,7 @@ import { createDrizzleOutboxRepository } from '#src/modules/partners/adapters/pe
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleSupplierViewStore } from '#src/modules/financial/adapters/persistence/repos/supplier-view-store.drizzle.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 import {
   createSupplierProjectionDelivery,
   rowToMessage,
@@ -28,7 +29,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('supplier-view-projection — e2e par_outbox → fin_supplier_view', () => {
     let partners: PartnersMysqlHandle;

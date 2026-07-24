@@ -24,8 +24,9 @@ import type { AnyMySqlTable } from 'drizzle-orm/mysql-core';
 import { openBudgetPlansMysql } from '#src/modules/budget-plans/adapters/persistence/drivers/mysql-driver.ts';
 import type { BudgetPlansMysqlHandle } from '#src/modules/budget-plans/adapters/persistence/drivers/mysql-driver.ts';
 import * as schema from '#src/modules/budget-plans/adapters/persistence/schemas/mysql.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = mysqlTestConnectionString();
 
 const integrationEnabled = (): boolean => process.env['MYSQL_INTEGRATION'] === '1';
 
@@ -252,7 +253,13 @@ if (integrationEnabled()) {
         await insertRow(dbName, 1, 999);
         await assert.rejects(
           () => insertRow(dbName, 2, 999),
-          /duplicate/i,
+          (e: unknown) => {
+            // drizzle envolve o erro do mysql2 em DrizzleQueryError; o errno real fica em `cause`
+            // (não na message de topo, que é `Failed query: INSERT ...`).
+            const cause = (e as { cause?: { errno?: number } }).cause;
+            assert.equal(cause?.errno, 1062); // ER_DUP_ENTRY
+            return true;
+          },
           `${dbName}: legacy_id repetido deveria violar o UNIQUE`,
         );
       });

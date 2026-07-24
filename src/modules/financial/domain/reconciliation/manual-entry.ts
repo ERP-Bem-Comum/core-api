@@ -26,12 +26,20 @@ export type ConfirmManualEntryInput = Readonly<{
   type: ManualEntryType;
   valueCents: number;
   supplierRef?: string;
+  // #502/S2: plano orçamentário + subcategoria (folha) no título manual.
+  budgetPlanRef?: string;
+  subcategoryRef?: string;
   categoryRef?: string;
   costCenterRef?: string;
   programRef?: string;
   description?: string;
   destinationAccountRef?: string;
   productLabel?: string;
+  // #370: campos de documento. `documentValueCents` omitido → default = `valueCents` (valor da transação).
+  documentNumber?: string;
+  documentType?: string;
+  issueDate?: Date;
+  documentValueCents?: number;
   reconciledBy: string;
   occurredAt: Date;
 }>;
@@ -66,12 +74,19 @@ export const confirmManualEntry = (
     type: input.type,
     valueCents: input.valueCents,
     supplierRef: input.supplierRef ?? null,
+    budgetPlanRef: input.budgetPlanRef ?? null,
+    subcategoryRef: input.subcategoryRef ?? null,
     categoryRef: input.categoryRef ?? null,
     costCenterRef: input.costCenterRef ?? null,
     programRef: input.programRef ?? null,
     description: input.description ?? null,
     destinationAccountRef: input.destinationAccountRef ?? null,
     productLabel: input.productLabel ?? null,
+    documentNumber: input.documentNumber ?? null,
+    documentType: input.documentType ?? null,
+    issueDate: input.issueDate ?? null,
+    // #370: default = valor da transação conciliada quando o front não envia (regra da P.O.).
+    documentValueCents: input.documentValueCents ?? input.valueCents,
   });
 
   const reconciliation: Reconciliation = immutable<Reconciliation>({

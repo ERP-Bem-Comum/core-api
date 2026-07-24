@@ -389,6 +389,10 @@ const contractsRoutes =
             budgetPlanId: body.budgetPlanId ?? null,
             categorizacao: body.categorizacao ?? null,
             centroDeCusto: body.centroDeCusto ?? null,
+            // CTR-TAXONOMY-REFS: refs da árvore do plano repassados (nuláveis).
+            costCenterRef: body.costCenterRef ?? null,
+            categoryRef: body.categoryRef ?? null,
+            subcategoryRef: body.subcategoryRef ?? null,
           });
           if (!result.ok) return sendDomainError(reply, result.error);
           // Location no 201 (RFC 7231 §6.3.2): aponta para o recurso recém-criado. O body
@@ -416,6 +420,10 @@ const contractsRoutes =
           budgetPlanId: body.budgetPlanId ?? null,
           categorizacao: body.categorizacao ?? null,
           centroDeCusto: body.centroDeCusto ?? null,
+          // CTR-TAXONOMY-REFS: refs da árvore do plano repassados (nuláveis).
+          costCenterRef: body.costCenterRef ?? null,
+          categoryRef: body.categoryRef ?? null,
+          subcategoryRef: body.subcategoryRef ?? null,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         // Location no 201 (RFC 7231 §6.3.2): aponta para o recurso recém-criado. O body

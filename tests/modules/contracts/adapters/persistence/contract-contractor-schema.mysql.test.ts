@@ -26,8 +26,9 @@ import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts
 import * as ContractorRef from '#src/modules/contracts/domain/shared/contractor.ts';
 import { Contract } from '#src/modules/contracts/domain/contract/contract.ts';
 import { updateContract } from '#src/modules/contracts/domain/contract/types.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = mysqlTestConnectionString();
 const integrationEnabled = (): boolean => process.env.MYSQL_INTEGRATION === '1';
 const FINANCIER_UUID = '7f3a1234-5678-4abc-9def-fedcba987654';
 

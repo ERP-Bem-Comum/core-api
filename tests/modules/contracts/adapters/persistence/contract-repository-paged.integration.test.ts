@@ -19,8 +19,9 @@ import type { MysqlHandle } from '#src/modules/contracts/adapters/persistence/dr
 import { createDrizzleContractRepository } from '#src/modules/contracts/adapters/persistence/repos/contract-repository.drizzle.ts';
 
 import { buildContract, buildExpiredContract } from './fixtures.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = mysqlTestConnectionString();
 const integrationEnabled = (): boolean => process.env.MYSQL_INTEGRATION === '1';
 
 let handle: MysqlHandle | null = null;

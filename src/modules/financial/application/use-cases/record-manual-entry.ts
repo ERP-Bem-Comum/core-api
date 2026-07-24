@@ -9,6 +9,7 @@ import {
   type ManualEntryError,
 } from '../../domain/reconciliation/manual-entry.ts';
 import type { ManualEntryType } from '../../domain/reconciliation/types.ts';
+import { BudgetPlanRef, SubcategoryRef, type FinancialRefError } from '../../domain/shared/refs.ts';
 import * as CedenteAccountId from '../../domain/cedente/cedente-account-id.ts';
 import { isClosed } from '../../domain/cedente/cedente-account.ts';
 import type {
@@ -49,22 +50,36 @@ export type RecordManualEntryInput = Readonly<{
   transactionId: string;
   type: ManualEntryType;
   supplierRef?: string;
+  // #502/S2: plano orçamentário + subcategoria (folha) no título manual — rehidratados via VO na borda.
+  budgetPlanRef?: string;
+  subcategoryRef?: string;
   categoryRef?: string;
   costCenterRef?: string;
   programRef?: string;
   description?: string;
   destinationAccountRef?: string;
   productLabel?: string;
+  // #370: campos de documento. `documentValueCents` omitido → default = valor da transação (domínio).
+  documentNumber?: string;
+  documentType?: string;
+  issueDate?: Date;
+  documentValueCents?: number;
   reconciledBy: string;
 }>;
 
 export type RecordManualEntryOutput = Readonly<{
   reconciliationId: ReconciliationIdT;
   manualEntryId: ManualEntryId;
+  // #370: ecoa os campos de documento como ficaram no domínio (documentValueCents já com o default aplicado).
+  documentNumber: string | null;
+  documentType: string | null;
+  issueDate: Date | null;
+  documentValueCents: number;
 }>;
 
 export type RecordManualEntryError =
   | ManualEntryError
+  | FinancialRefError
   | 'statement-transaction-not-found'
   | 'transaction-already-reconciled'
   | 'cedente-account-not-found'
@@ -117,12 +132,25 @@ export const recordManualEntry =
       destinationAccountId = destId.value;
     }
 
+    // #502/S2: rehidrata os refs de taxonomia (formato UUID v4) — defense-in-depth além do Zod da
+    // borda. Refs opacos (ADR-0014): valida só o formato, sem chamar budget-plans. Domínio guarda a string.
+    if (input.budgetPlanRef !== undefined) {
+      const r = BudgetPlanRef.rehydrate(input.budgetPlanRef);
+      if (!r.ok) return err(r.error);
+    }
+    if (input.subcategoryRef !== undefined) {
+      const r = SubcategoryRef.rehydrate(input.subcategoryRef);
+      if (!r.ok) return err(r.error);
+    }
+
     const confirmed = confirmManualEntry({
       reconciliationId: ReconciliationId.generate(),
       transactionId: transaction.id,
       type: input.type,
       valueCents: transaction.valueCents,
       ...(input.supplierRef !== undefined ? { supplierRef: input.supplierRef } : {}),
+      ...(input.budgetPlanRef !== undefined ? { budgetPlanRef: input.budgetPlanRef } : {}),
+      ...(input.subcategoryRef !== undefined ? { subcategoryRef: input.subcategoryRef } : {}),
       ...(input.categoryRef !== undefined ? { categoryRef: input.categoryRef } : {}),
       ...(input.costCenterRef !== undefined ? { costCenterRef: input.costCenterRef } : {}),
       ...(input.programRef !== undefined ? { programRef: input.programRef } : {}),
@@ -131,6 +159,12 @@ export const recordManualEntry =
         ? { destinationAccountRef: input.destinationAccountRef }
         : {}),
       ...(input.productLabel !== undefined ? { productLabel: input.productLabel } : {}),
+      ...(input.documentNumber !== undefined ? { documentNumber: input.documentNumber } : {}),
+      ...(input.documentType !== undefined ? { documentType: input.documentType } : {}),
+      ...(input.issueDate !== undefined ? { issueDate: input.issueDate } : {}),
+      ...(input.documentValueCents !== undefined
+        ? { documentValueCents: input.documentValueCents }
+        : {}),
       reconciledBy: input.reconciledBy,
       occurredAt: deps.clock.now(),
     });
@@ -170,8 +204,13 @@ export const recordManualEntry =
       if (!savedCounterpart.ok) return err(savedCounterpart.error);
     }
 
+    const entry = confirmed.value.manualEntry;
     return ok({
       reconciliationId: confirmed.value.reconciliation.id,
-      manualEntryId: confirmed.value.manualEntry.id,
+      manualEntryId: entry.id,
+      documentNumber: entry.documentNumber,
+      documentType: entry.documentType,
+      issueDate: entry.issueDate,
+      documentValueCents: entry.documentValueCents ?? transaction.valueCents,
     });
   };

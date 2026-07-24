@@ -23,6 +23,7 @@ import { create as createCedente } from '#src/modules/financial/domain/cedente/c
 import * as Fitid from '#src/modules/financial/domain/statement/fitid.ts';
 import { importStatement } from '#src/modules/financial/domain/statement/bank-statement.ts';
 import { newUuid } from '#src/shared/utils/id.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 const fitidOf = (raw: string) => {
   const f = Fitid.fromNative(raw);
@@ -38,7 +39,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('ManualEntry — Drizzle + MySQL (integração)', () => {
     let handle: FinancialMysqlHandle;

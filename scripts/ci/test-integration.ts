@@ -9,8 +9,10 @@
 // Sem dependências novas (ADR-0011): só node:child_process (spawnSync, shell:false) + node:fs.
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, rmSync, chmodSync } from 'node:fs';
 import process from 'node:process';
+import { composeUpArgs, composeDownArgs } from './compose-project.ts';
+import { backupAndWriteTestSecrets, restoreSecrets, type SecretBackup } from './secrets-vault.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 const EX_USAGE = 64; // sysexits.h — uso inválido.
 
@@ -22,11 +24,15 @@ type Suite = Readonly<{
   paths: readonly string[];
 }>;
 
+// Diretório dos secrets (o compose lê de `./secrets/*.txt`).
+const SECRETS_DIR = 'secrets';
+
 // Secrets de TESTE (valores fixos, não-prod) — espelham o que os scripts inline criavam.
+// Chave = nome do arquivo (sem o prefixo `secrets/`); o `secrets-vault` resolve contra o `SECRETS_DIR`.
 const TEST_SECRETS: Readonly<Record<string, string>> = {
-  'secrets/mysql_root_password.txt': 'rootpw-migration-test-only',
-  'secrets/mysql_app_password.txt': 'apppw-migration-test-only',
-  'secrets/mysql_readonly_password.txt': 'ropw-migration-test-only',
+  'mysql_root_password.txt': 'rootpw-migration-test-only',
+  'mysql_app_password.txt': 'apppw-migration-test-only',
+  'mysql_readonly_password.txt': 'ropw-migration-test-only',
 };
 
 const mysqlSuite = (env: Readonly<Record<string, string>>, paths: readonly string[]): Suite => ({
@@ -40,11 +46,10 @@ const mysqlSuite = (env: Readonly<Record<string, string>>, paths: readonly strin
 // ETL sem Docker (ETL-LEGACY-DIRECT-CONNECTION): legado e core-api ficam em DBs distintos do
 // MESMO MySQL de teste (compose.yaml). A fixture SINTÉTICA é carregada via mysql2 no `before`
 // de cada suite (helper load-fixture) — sem `compose.etl.yaml`. root já tem DROP/CREATE DATABASE.
-const ETL_TEST_MYSQL_PORT = process.env['MYSQL_PORT'] ?? '3306';
 const ETL_DB_ENV: Readonly<Record<string, string>> = {
   PARTNERS_ETL_INTEGRATION: '1',
-  ETL_LEGACY_CONNECTION_STRING: `mysql://root:rootpw-migration-test-only@127.0.0.1:${ETL_TEST_MYSQL_PORT}/legacy`,
-  ETL_CORE_CONNECTION_STRING: `mysql://root:rootpw-migration-test-only@127.0.0.1:${ETL_TEST_MYSQL_PORT}/core`,
+  ETL_LEGACY_CONNECTION_STRING: mysqlTestConnectionString({ database: 'legacy' }),
+  ETL_CORE_CONNECTION_STRING: mysqlTestConnectionString({ database: 'core' }),
 };
 
 const SUITES: Readonly<Record<string, Suite>> = {
@@ -53,6 +58,10 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/contracts/adapters/persistence/mysql-driver.test.ts',
     'tests/modules/contracts/adapters/persistence/drizzle-mysql.test.ts',
     'tests/modules/contracts/adapters/persistence/contract-contractor-schema.mysql.test.ts',
+    // CTR-TAXONOMY-REFS (#502 · S3 = #343) — 3 colunas cost_center_ref/category_ref/
+    // subcategory_ref em ctr_contracts (CA1 estrutural + round-trip CA2/CA8). NÃO executado nesta
+    // janela (#500); registrado para o ritual manual / quando o runner de integração fechar.
+    'tests/modules/contracts/adapters/persistence/contract-taxonomy-refs.drizzle-mysql.test.ts',
     'tests/modules/contracts/adapters/persistence/contract-repository-paged.integration.test.ts',
     'tests/modules/contracts/adapters/persistence/outbox-schema.test.ts',
     'tests/modules/contracts/adapters/persistence/repos/outbox-repository.drizzle.test.ts',
@@ -116,19 +125,34 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // BGP-ETL-WRITE-PORT (fatia 2/3 ETL) — buildBudgetPlansEtlPort: pool boot-scoped (CA1),
     // grava legacy_id (CA2), idempotencia por legacy_id (CA3), erro de conexao -> Result (CA5).
     'tests/modules/budget-plans/public-api/budget-plans-etl-port.integration.test.ts',
+    // BGP-READ-PORT (fatia 1/3 REPORTS-REALIZED-VS-PLANNED) — buildBudgetPlansReadPort:
+    // pool boot-scoped (CA1), 3 niveis da arvore (CA2), grade de 12 meses com zerados (CA3),
+    // filtros combinaveis programa/plano/ano/Rede (CA4), plain rows (CA6).
+    'tests/modules/budget-plans/public-api/budget-plans-read-port.integration.test.ts',
   ]),
   financial: mysqlSuite({ MYSQL_INTEGRATION: '1' }, [
     'tests/modules/financial/adapters/persistence/document-repository.drizzle-mysql.test.ts',
+    // FIN-DOC-SUBCATEGORY-STAMP (#502 · S1) — coluna subcategory_ref em fin_documents +
+    // fin_payable_view (CA1 information_schema) + regressão dos refs irmãos (CA8). Não executado
+    // nesta janela (#500); registrado para o ritual manual / quando o runner de integração fechar.
+    'tests/modules/financial/adapters/persistence/subcategory-ref-stamp.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/supplier-view-store.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/document-supplier-view-join.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/cedente-account-store.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/bank-statement-repository.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/reconciliation-repository.drizzle-mysql.test.ts',
+    // FIN-STATUS-VARCHAR-WIDTH (#519) — largura de fin_payables.status / fin_documents.status comporta
+    // 'PartiallyReconciled' (19 chars). RED por errno 1406 (varchar(16) curta) até o widen p/ varchar(24).
+    'tests/modules/financial/adapters/persistence/payable-status-width.drizzle-mysql.test.ts',
     // #269 — ExpectedCounterpartStore (fin_expected_counterpart 0034 + outbox na tx)
     'tests/modules/financial/adapters/persistence/expected-counterpart-store.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/match-suggestion.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/payable-list-view.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/manual-entry.drizzle-mysql.test.ts',
+    // FIN-MANUAL-ENTRY-TAXONOMY (#502 · S2) — colunas budget_plan_ref + subcategory_ref em
+    // fin_manual_entries (CA1 information_schema) + regressão dos refs irmãos (CA8). Não executado
+    // nesta janela (#500); registrado para o ritual manual / quando o runner de integração fechar.
+    'tests/modules/financial/adapters/persistence/manual-entry-taxonomy.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/manual-payment.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/reconciliation-period.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/category-read.drizzle-mysql.test.ts',
@@ -152,6 +176,16 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // #416 BGP-INSIGHTS-REALIZED: "realizado por plano" (Σ reconciled_value_cents Active, JOIN 3-hop
     // fin_reconciliation_items → fin_reconciliations → fin_payables → fin_documents.budget_plan_ref)
     'tests/modules/financial/public-api/realized-by-plan.drizzle-mysql.test.ts',
+    // FIN-REALIZED-PROVISIONED-READ (fatia 2/3 REPORTS-REALIZED-VS-PLANNED): realizado + provisionado
+    // por (budget_plan_ref, category_ref, mês). Realizado=Σ reconciled_value_cents Active (mês=reconciled_at);
+    // provisionado=fin_payables Approved sem item Active (mês=due_date). Mesmo JOIN 3-hop do #416.
+    'tests/modules/financial/public-api/realized-provisioned.drizzle-mysql.test.ts',
+    // FIN-REALIZED-SUBCATEGORY-GRAIN (#502 · S5): grão desce a subcategoria (RealizedProvisionedRow
+    // ganha subcategoryRef; realizado+provisionado agrupam por (plano, categoria, subcategoria, mês))
+    // + inclui o realizado dos TÍTULOS MANUAIS (fin_manual_entries → fin_reconciliations Active,
+    // regra: budget_plan_ref IS NOT NULL E type NOT IN Transfer/Investment/Redemption). Não executado
+    // nesta janela (#500); registrado para o ritual manual / quando o runner de integração fechar.
+    'tests/modules/financial/public-api/realized-provisioned-subcategory.drizzle-mysql.test.ts',
     'tests/workers/supplier-view-projection/projection.integration.test.ts',
   ]),
   'etl:orchestrate': mysqlSuite(ETL_DB_ENV, ['tests/etl/orchestrate.integration.test.ts']),
@@ -221,26 +255,11 @@ const SUITES: Readonly<Record<string, Suite>> = {
   },
 };
 
-const writeTestSecrets = (): void => {
-  mkdirSync('secrets', { recursive: true });
-  for (const [path, value] of Object.entries(TEST_SECRETS)) {
-    writeFileSync(path, value);
-    chmodSync(path, 0o644);
-  }
-};
-
-const removeTestSecrets = (): void => {
-  for (const path of Object.keys(TEST_SECRETS)) {
-    rmSync(path, { force: true });
-  }
-};
-
 const dockerUp = (services: readonly string[]): number =>
-  spawnSync('docker', ['compose', 'up', '-d', ...services, '--wait'], { stdio: 'inherit' })
-    .status ?? 1;
+  spawnSync('docker', composeUpArgs(services), { stdio: 'inherit' }).status ?? 1;
 
 const dockerDown = (): void => {
-  spawnSync('docker', ['compose', 'down', '-v'], { stdio: 'ignore' });
+  spawnSync('docker', composeDownArgs(), { stdio: 'ignore' });
 };
 
 const runNodeTest = (suite: Suite): number => {
@@ -269,7 +288,11 @@ const main = (): number => {
     return EX_USAGE;
   }
 
-  if (suite.secrets) writeTestSecrets();
+  // Backup dos secrets de dev preexistentes + escrita dos de teste (0o644). O restore roda no
+  // `finally` — mesmo que o `up` falhe ou o `node --test` saia com exit≠0 — devolvendo o dev intacto.
+  const backup: SecretBackup | undefined = suite.secrets
+    ? backupAndWriteTestSecrets(SECRETS_DIR, TEST_SECRETS)
+    : undefined;
   try {
     if (suite.services.length > 0) {
       const up = dockerUp(suite.services);
@@ -278,7 +301,7 @@ const main = (): number => {
     return runNodeTest(suite);
   } finally {
     if (suite.services.length > 0) dockerDown();
-    if (suite.secrets) removeTestSecrets();
+    if (backup !== undefined) restoreSecrets(backup);
   }
 };
 

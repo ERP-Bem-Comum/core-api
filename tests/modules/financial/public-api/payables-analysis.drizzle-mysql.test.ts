@@ -15,11 +15,12 @@ import { inArray } from 'drizzle-orm';
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { openPayablesAnalysisReader } from '#src/modules/financial/public-api/payables-analysis-projection.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 const connectionString =
   process.env['FINANCIAL_DATABASE_URL'] ??
   process.env['CONTRACTS_DATABASE_URL'] ??
-  'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+  mysqlTestConnectionString();
 
 const CAT_A = 'aa000000-0000-4000-8000-0000000000a1';
 const CAT_B = 'bb000000-0000-4000-8000-0000000000b1';

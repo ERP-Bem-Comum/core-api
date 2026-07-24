@@ -13,6 +13,7 @@
  */
 
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
+import { ok, err } from '#src/shared/primitives/result.ts';
 
 import {
   createInMemoryDocumentRepository,
@@ -136,6 +137,7 @@ import { cancelDocument } from '../../application/use-cases/cancel-document.ts';
 import { submitDraft } from '../../application/use-cases/submit-draft.ts';
 import { getDocumentTimeline } from '../../application/use-cases/get-document-timeline.ts';
 import { importBankStatement } from '../../application/use-cases/import-bank-statement.ts';
+import { deleteBankStatement } from '../../application/use-cases/delete-bank-statement.ts';
 import { confirmReconciliation } from '../../application/use-cases/confirm-reconciliation.ts';
 import { undoReconciliation } from '../../application/use-cases/undo-reconciliation.ts';
 import { searchPaidPayables } from '../../application/use-cases/search-paid-payables.ts';
@@ -213,14 +215,18 @@ export type FinancialHttpDeps = Readonly<{
   submitDraft: ReturnType<typeof submitDraft>;
   /** Leitura direta do repositório — usado pelo GET /documents/:id. */
   findDocumentById: DocumentRepository['findById'];
+  /** #62/Feature 2: serve os bytes do comprovante-fonte INLINE — GET /documents/:id/source-file. */
+  downloadSourceFile: SourceFileStoragePort['download'];
   /** Listagem paginada (US1 — read path no writer pool; split reader/writer diferido — ADR-0003). */
   listDocuments: DocumentRepository['findPaged'];
   /** Listagem payable-centric (#201/#222) — GET /financial/payable-titles (pai+filhos como linhas). */
   listPayables: PayableListView['findPaged'];
+  countPayableTitles: PayableListView['countByStatus'];
   /** Trilha por-campo (Time Travel) de um documento — consumido pelo GET /documents/:id/timeline. */
   getDocumentTimeline: ReturnType<typeof getDocumentTimeline>;
   /** Importação de extrato bancário (US1 conciliação) — POST /bank-statements. */
   importBankStatement: ReturnType<typeof importBankStatement>;
+  deleteBankStatement: ReturnType<typeof deleteBankStatement>;
   /** Leitura das transações de um extrato — GET /bank-statements/:id/transactions. */
   listStatementTransactions: BankStatementRepository['listTransactions'];
   /** Confirma a conciliação (US2/4) — POST /reconciliations. */
@@ -288,6 +294,10 @@ export type FinancialHttpDeps = Readonly<{
   }) => Promise<PayeeBankBlock | null>;
   /** Composição síncrona do NOME de usuário (#207 — ADR-0032). null = não-resolvido (graceful). */
   resolveUserName: (id: string | null) => Promise<string | null>;
+  /** Resolve categoryRef → nome (detalhe da conciliação). null = sem ref ou não-resolvido (graceful). */
+  resolveCategoryName: (ref: string | null) => Promise<string | null>;
+  /** Fatia 2: categoryRef do documento conciliado (payableId → doc). null = sem doc/categoria (graceful). */
+  resolveTitleCategoryRef: (payableId: string) => Promise<string | null>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -646,6 +656,8 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     rejected: pools.rejectedSuggestionRepo,
   });
   const saveDraftUseCase = saveDraft(deps);
+  // const p/ narrow no closure do resolveSupplierByCnpj (método opcional no port).
+  const resolveSupplierId = pools.contractorReadPort?.findSupplierIdByCnpj;
   return {
     saveDocument: saveDocument(deps),
     saveDraft: saveDraftUseCase,
@@ -654,6 +666,16 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       storage: pools.documentStorage,
       saveDraft: saveDraftUseCase,
       idGen: DocumentIdVo.generate,
+      // #FIN-OCR-AUTOFILL-SUPPLIER: só quando o partners está disponível (driver mysql); memory → sem
+      // resolução (o rascunho fica sem supplierRef, seleção manual — comportamento atual).
+      ...(resolveSupplierId !== undefined
+        ? {
+            resolveSupplierByCnpj: async (taxId: string) => {
+              const r = await resolveSupplierId(taxId);
+              return r.ok ? ok(r.value) : err('supplier-resolve-unavailable');
+            },
+          }
+        : {}),
     }),
     adjustDocument: adjustDocument(deps),
     bulkUpdateDueDate: bulkUpdateDueDate(deps), // #162: mesmas deps (repo + clock) do adjust
@@ -664,8 +686,10 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     cancelDocument: cancelDocument({ repo: pools.repo }),
     submitDraft: submitDraft(deps),
     findDocumentById: pools.repo.findById,
+    downloadSourceFile: pools.documentStorage.download,
     listDocuments: pools.repo.findPaged,
     listPayables: pools.payableListView.findPaged,
+    countPayableTitles: pools.payableListView.countByStatus,
     getDocumentTimeline: getDocumentTimeline({ timelineRepo: pools.timelineRepo }),
     importBankStatement: importBankStatement({
       parser: bankStatementParser,
@@ -673,6 +697,10 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       periods: pools.periodStore,
       cedenteStore: pools.cedenteStore,
       clock,
+    }),
+    deleteBankStatement: deleteBankStatement({
+      repo: pools.statementRepo,
+      periods: pools.periodStore,
     }),
     listStatementTransactions: pools.statementRepo.listTransactions,
     confirmReconciliation: confirmReconciliation({
@@ -765,6 +793,17 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     getDocumentsSummaryByIds: pools.documentSummaryByIdsView.getDocumentsSummaryByIds,
     resolvePayeeBank: (ref) => composePayeeBank(pools.contractorReadPort, ref),
     resolveUserName: (id) => resolveUserName(pools.authUserReadPort, id),
+    resolveCategoryName: async (ref) => {
+      if (ref === null) return null;
+      const r = await pools.categoryReader.list();
+      if (!r.ok) return null;
+      return r.value.find((c) => String(c.id) === ref)?.name ?? null;
+    },
+    resolveTitleCategoryRef: async (payableId) => {
+      const r = await pools.payableDocView.findByPayableIds([payableId]);
+      if (!r.ok) return null;
+      return r.value[0]?.categoryRef ?? null;
+    },
     shutdown: pools.shutdown,
   };
 };

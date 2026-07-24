@@ -13,8 +13,9 @@ import { openProgramsMysql } from '#src/modules/programs/adapters/persistence/dr
 import type { ProgramsMysqlHandle } from '#src/modules/programs/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleProgramRepository } from '#src/modules/programs/adapters/persistence/repos/program-repository.drizzle.ts';
 import { createDrizzleProgramListReader } from '#src/modules/programs/adapters/persistence/repos/program-list-read.drizzle.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = mysqlTestConnectionString();
 const NOW = new Date('2026-06-20T12:00:00.000Z');
 
 // Estrutural — sempre roda (mesmo sem DB).

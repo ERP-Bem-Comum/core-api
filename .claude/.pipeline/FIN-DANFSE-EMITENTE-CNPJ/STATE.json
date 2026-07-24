@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "FIN-DANFSE-EMITENTE-CNPJ",
+  "size": "M",
+  "createdAt": "2026-07-24T04:30:40.244Z",
+  "closedAt": "2026-07-24T04:38:30.823Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-24T04:32:45.224Z",
+      "finishedAt": "2026-07-24T04:33:40.640Z",
+      "rounds": 1,
+      "reportPath": "002-tests/danfse-emitente-cnpj.test.ts",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "nodejs-runtime-expert",
+      "startedAt": "2026-07-24T04:38:29.213Z",
+      "finishedAt": "2026-07-24T04:38:29.486Z",
+      "rounds": 1,
+      "reportPath": "003-impl/native-pdf.ts",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-24T04:38:29.744Z",
+      "finishedAt": "2026-07-24T04:38:29.997Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-24T04:38:30.249Z",
+      "finishedAt": "2026-07-24T04:38:30.513Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

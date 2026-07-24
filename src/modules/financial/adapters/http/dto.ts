@@ -155,6 +155,20 @@ export const documentToDto = (
           status: p.status,
         }));
 
+  // #62/Feature 2: expõe o anexo (fileName derivado do último segmento da key) — o front mostra o
+  // badge e a área de OCR busca os bytes via `url` (proxy inline). null quando não há comprovante.
+  const ref = document.sourceFileRef;
+  const rawFileName = ref === null ? '' : ref.key.slice(ref.key.lastIndexOf('/') + 1);
+  const attachment =
+    ref === null
+      ? null
+      : {
+          fileName: rawFileName.length > 0 ? rawFileName : 'document',
+          mimeType: ref.mimeType,
+          sizeBytes: ref.sizeBytes,
+          url: `/api/v2/financial/documents/${String(document.id)}/source-file`,
+        };
+
   if (document.status === 'Draft') {
     return {
       id: String(document.id),
@@ -169,6 +183,7 @@ export const documentToDto = (
       contractRef: document.contractRef,
       budgetPlanRef: document.budgetPlanRef,
       categoryRef: document.categoryRef,
+      subcategoryRef: document.subcategoryRef,
       costCenterRef: document.costCenterRef,
       programRef: document.programRef,
       paymentMethod: document.paymentMethod,
@@ -186,6 +201,7 @@ export const documentToDto = (
       payables: payableItems,
       version,
       payeeBank,
+      attachment,
     };
   }
 
@@ -203,6 +219,7 @@ export const documentToDto = (
     contractRef: document.contractRef,
     budgetPlanRef: document.budgetPlanRef,
     categoryRef: document.categoryRef,
+    subcategoryRef: document.subcategoryRef,
     costCenterRef: document.costCenterRef,
     programRef: document.programRef,
     paymentMethod: document.paymentMethod,
@@ -218,6 +235,7 @@ export const documentToDto = (
     payables: payableItems,
     version,
     payeeBank,
+    attachment,
   };
 };
 
@@ -374,6 +392,7 @@ export const accountStatementToDto = (view: StatementView): AccountStatementResp
 export const transactionReconciliationToDto = (
   r: Reconciliation,
   reconciledByName: string | null = null,
+  category: string | null = null,
 ): TransactionReconciliationResponseDto => ({
   id: String(r.id),
   transactionId: String(r.transactionId),
@@ -387,6 +406,7 @@ export const transactionReconciliationToDto = (
     payableId: String(i.payableId),
     reconciledValueCents: String(i.reconciledValueCents),
   })),
+  category,
 });
 
 /**

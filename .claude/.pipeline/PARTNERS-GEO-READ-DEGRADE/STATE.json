@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "PARTNERS-GEO-READ-DEGRADE",
+  "size": "S",
+  "createdAt": "2026-07-23T14:13:22.918Z",
+  "closedAt": "2026-07-23T14:21:03.731Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-23T14:15:01.883Z",
+      "finishedAt": "2026-07-23T14:15:02.197Z",
+      "rounds": 1,
+      "reportPath": "002-tests/geography-read-degrade.test.ts",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "main",
+      "startedAt": "2026-07-23T14:16:34.978Z",
+      "finishedAt": "2026-07-23T14:16:35.285Z",
+      "rounds": 1,
+      "reportPath": "003-impl/geography-read.drizzle.ts",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-23T14:21:02.458Z",
+      "finishedAt": "2026-07-23T14:21:02.778Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-23T14:21:03.094Z",
+      "finishedAt": "2026-07-23T14:21:03.415Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

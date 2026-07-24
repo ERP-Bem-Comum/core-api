@@ -36,6 +36,10 @@ export type CreatePendingContractCommand = Readonly<{
   budgetPlanId?: string | null;
   categorizacao?: string | null;
   centroDeCusto?: string | null;
+  // CTR-TAXONOMY-REFS: refs da árvore do plano (Centro → Categoria → Subcategoria) — opcionais.
+  costCenterRef?: string | null;
+  categoryRef?: string | null;
+  subcategoryRef?: string | null;
 }>;
 
 export type CreatePendingContractError =
@@ -100,6 +104,10 @@ export const createPendingContract =
       budgetPlanId: cmd.budgetPlanId ?? null,
       categorizacao: cmd.categorizacao ?? null,
       centroDeCusto: cmd.centroDeCusto ?? null,
+      // CTR-TAXONOMY-REFS: refs da árvore do plano repassados ao domínio (nuláveis).
+      costCenterRef: cmd.costCenterRef ?? null,
+      categoryRef: cmd.categoryRef ?? null,
+      subcategoryRef: cmd.subcategoryRef ?? null,
     });
     if (!created.ok) return created;
 

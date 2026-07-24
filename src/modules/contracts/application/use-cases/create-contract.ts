@@ -38,6 +38,10 @@ export type CreateContractCommand = Readonly<{
   budgetPlanId?: string | null;
   categorizacao?: string | null;
   centroDeCusto?: string | null;
+  // CTR-TAXONOMY-REFS: refs da árvore do plano (Centro → Categoria → Subcategoria) — opcionais.
+  costCenterRef?: string | null;
+  categoryRef?: string | null;
+  subcategoryRef?: string | null;
 }>;
 
 // Input do builder puro: o número sequencial JÁ resolvido (gerado ou preservado).
@@ -109,6 +113,10 @@ export const buildContract = (
     budgetPlanId: cmd.budgetPlanId ?? null,
     categorizacao: cmd.categorizacao ?? null,
     centroDeCusto: cmd.centroDeCusto ?? null,
+    // CTR-TAXONOMY-REFS: refs da árvore do plano repassados ao domínio (nuláveis).
+    costCenterRef: cmd.costCenterRef ?? null,
+    categoryRef: cmd.categoryRef ?? null,
+    subcategoryRef: cmd.subcategoryRef ?? null,
   });
   if (!created.ok) return created;
 
