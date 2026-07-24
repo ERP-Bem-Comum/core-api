@@ -223,6 +223,16 @@ const parseBrCents = (raw: string): number | undefined => {
 
 const group1 = (text: string, re: RegExp): string | undefined => re.exec(text)?.[1];
 
+// #566: normaliza o CNPJ/CPF lido para APENAS dígitos, no comprimento canônico (CNPJ 14, CPF 11).
+// Menos que 11 → inválido (undefined). Slice protege contra dígitos vizinhos capturados junto.
+const normalizeTaxId = (raw: string | undefined): string | undefined => {
+  if (raw === undefined) return undefined;
+  const digits = raw.replace(/\D/g, '');
+  if (digits.length >= 14) return digits.slice(0, 14);
+  if (digits.length >= 11) return digits.slice(0, 11);
+  return undefined;
+};
+
 const detectType = (text: string): DocumentType | undefined => {
   if (/NFS-e|NOTA FISCAL DE SERVI/i.test(text)) return 'NFS-e';
   if (/RECIBO DE PAGAMENTO A AUT|\bRPA\b/i.test(text)) return 'RPA';
@@ -286,12 +296,13 @@ export const structureText = (
     group1(emitBlock, /Nome\s*\/\s*Nome Empresarial\s+(.+?)\s+E-?mail/i)
       ?.replace(/^[\d.\-/]+\s+/, '')
       .trim();
+  // #566: só dígitos, COMPLETOS — CNPJ 14 / CPF 11. O `\s` no run tolera a quebra de linha da camada
+  // de texto do unpdf (o "-90" pode cair na linha seguinte); `normalizeTaxId` corta no comprimento
+  // canônico. Menos que CPF → undefined (não seta supplier — evita o CNPJ truncado silencioso, #566).
   const taxId =
-    group1(text, /CNPJ:\s*(\d+)/i) ??
-    group1(text, /CPF:\s*(\d+)/i) ??
-    // DANFSe: "CNPJ / CPF / NIF 64.894.238/0001-90" no bloco do EMITENTE. Máscara → só dígitos (o VO
-    // de resolução também normaliza; aqui já entregamos 14 dígitos, como o leitor XML).
-    group1(emitBlock, /CNPJ\s*\/\s*CPF\s*\/\s*NIF\s*([\d.\-/]{11,20})/i)?.replace(/\D/g, '');
+    normalizeTaxId(group1(text, /CNPJ:\s*([\d.\-/\s]{11,25})/i)) ??
+    normalizeTaxId(group1(text, /CPF:\s*([\d.\-/\s]{11,20})/i)) ??
+    normalizeTaxId(group1(emitBlock, /CNPJ\s*\/\s*CPF\s*\/\s*NIF\s*(\d[\d.\-/\s]{9,24})/i));
   // Basta o CNPJ para resolver o fornecedor (#FIN-OCR-AUTOFILL-SUPPLIER); legalName é auxiliar.
   const supplier: SupplierIdentity | undefined =
     taxId !== undefined ? { legalName: legalName ?? '', taxId } : undefined;
@@ -315,12 +326,22 @@ export const structureText = (
 
   const retentions = grossCents !== undefined ? parseRetentions(text, grossCents) : [];
 
+  // #566: "Descrição do Serviço <texto> TRIBUTAÇÃO MUNICIPAL" (DANFSe) → campo `description` do
+  // rascunho. Colapsa espaços e limita a varchar(500). NÃO carrega o fornecedor (resolve em supplierRef).
+  const descRaw = group1(
+    text,
+    /Descri[çc][ãa]o\s+do\s+Servi[çc]o\s+(.+?)\s+TRIBUTA[ÇC][ÃA]O\s+MUNICIPAL/is,
+  );
+  const description =
+    descRaw !== undefined ? descRaw.replace(/\s+/g, ' ').trim().slice(0, 500) : undefined;
+
   return ok({
     resolvedVia,
     type,
     ...(documentNumber !== undefined ? { documentNumber } : {}),
     ...(competence !== undefined ? { competence } : {}),
     ...(supplier !== undefined ? { supplier } : {}),
+    ...(description !== undefined ? { description } : {}),
     ...(grossValue !== undefined ? { grossValue } : {}),
     ...(retentions.length > 0 ? { retentions } : {}),
   });
