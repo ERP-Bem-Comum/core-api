@@ -87,8 +87,8 @@ const INPUT = {
 };
 
 describe('financial/application/document-reader-to-draft (mapper)', () => {
-  it('CA4: mapeia DocumentReaderResult → rascunho (Money→cents, Competencia→string, retenções, supplier→description)', () => {
-    const draft = readerResultToDraft(SEED);
+  it('CA4: mapeia DocumentReaderResult → rascunho (Money→cents, Competencia→string, retenções; #566)', () => {
+    const draft = readerResultToDraft({ ...SEED, description: 'Serviço de consultoria' });
     assert.equal(draft.type, 'NFS-e');
     assert.equal(draft.documentNumber, '2024-0537');
     assert.equal(draft.competencia, '2026-04');
@@ -96,9 +96,15 @@ describe('financial/application/document-reader-to-draft (mapper)', () => {
     assert.deepEqual(draft.retentions, [
       { type: 'ISS', baseCents: 100000, rateBps: 500, valueCents: 5000 },
     ]);
-    assert.match(String(draft.description), /RAZAO SOCIAL LTDA/);
-    assert.match(String(draft.description), /12345678000199/);
-    assert.equal('supplierRef' in draft, false); // humano seleciona
+    // #566: description reflete a descrição do serviço da nota — NÃO o fornecedor ("Fornecedor lido").
+    assert.equal(draft.description, 'Serviço de consultoria');
+    assert.doesNotMatch(draft.description ?? '', /Fornecedor lido|RAZAO SOCIAL/);
+    assert.equal('supplierRef' in draft, false); // resolvido no ingest via #560, não no mapper
+  });
+
+  it('CA4b: sem descrição no reader → não polui `description` (#566)', () => {
+    const draft = readerResultToDraft(SEED); // SEED tem supplier, mas nenhuma description
+    assert.equal('description' in draft, false);
   });
 });
 
