@@ -68,6 +68,11 @@ export const manualEntryRowToDomain = (
       description: row.description,
       destinationAccountRef: row.destinationAccountRef,
       productLabel: row.productLabel,
+      // #370: campos de documento (reidratação simétrica ao manualEntryToRow).
+      documentNumber: row.documentNumber,
+      documentType: row.documentType,
+      issueDate: row.issueDate,
+      documentValueCents: row.documentValueCents,
     }),
   );
 };
