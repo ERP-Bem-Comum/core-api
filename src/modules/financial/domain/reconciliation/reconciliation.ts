@@ -56,6 +56,11 @@ const buildDifferenceManualEntry = (difference: Difference): ManualEntry | null 
     description: difference.note ?? null,
     destinationAccountRef: null,
     productLabel: null,
+    // #370: a diferença classificada é gerada da conciliação, sem documento próprio.
+    documentNumber: null,
+    documentType: null,
+    issueDate: null,
+    documentValueCents: null,
   });
 };
 

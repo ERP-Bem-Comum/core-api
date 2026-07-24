@@ -68,6 +68,11 @@ export const manualEntryRowToDomain = (
       description: row.description,
       destinationAccountRef: row.destinationAccountRef,
       productLabel: row.productLabel,
+      // #370: campos de documento (reidratação simétrica ao manualEntryToRow).
+      documentNumber: row.documentNumber,
+      documentType: row.documentType,
+      issueDate: row.issueDate,
+      documentValueCents: row.documentValueCents,
     }),
   );
 };
@@ -127,6 +132,10 @@ export const manualEntryToRow = (
   description: manualEntry.description,
   destinationAccountRef: manualEntry.destinationAccountRef,
   productLabel: manualEntry.productLabel,
+  documentNumber: manualEntry.documentNumber,
+  documentType: manualEntry.documentType,
+  issueDate: manualEntry.issueDate,
+  documentValueCents: manualEntry.documentValueCents,
 });
 
 export const toDomain = (

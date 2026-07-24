@@ -59,12 +59,22 @@ export type RecordManualEntryInput = Readonly<{
   description?: string;
   destinationAccountRef?: string;
   productLabel?: string;
+  // #370: campos de documento. `documentValueCents` omitido → default = valor da transação (domínio).
+  documentNumber?: string;
+  documentType?: string;
+  issueDate?: Date;
+  documentValueCents?: number;
   reconciledBy: string;
 }>;
 
 export type RecordManualEntryOutput = Readonly<{
   reconciliationId: ReconciliationIdT;
   manualEntryId: ManualEntryId;
+  // #370: ecoa os campos de documento como ficaram no domínio (documentValueCents já com o default aplicado).
+  documentNumber: string | null;
+  documentType: string | null;
+  issueDate: Date | null;
+  documentValueCents: number;
 }>;
 
 export type RecordManualEntryError =
@@ -149,6 +159,12 @@ export const recordManualEntry =
         ? { destinationAccountRef: input.destinationAccountRef }
         : {}),
       ...(input.productLabel !== undefined ? { productLabel: input.productLabel } : {}),
+      ...(input.documentNumber !== undefined ? { documentNumber: input.documentNumber } : {}),
+      ...(input.documentType !== undefined ? { documentType: input.documentType } : {}),
+      ...(input.issueDate !== undefined ? { issueDate: input.issueDate } : {}),
+      ...(input.documentValueCents !== undefined
+        ? { documentValueCents: input.documentValueCents }
+        : {}),
       reconciledBy: input.reconciledBy,
       occurredAt: deps.clock.now(),
     });
@@ -188,8 +204,13 @@ export const recordManualEntry =
       if (!savedCounterpart.ok) return err(savedCounterpart.error);
     }
 
+    const entry = confirmed.value.manualEntry;
     return ok({
       reconciliationId: confirmed.value.reconciliation.id,
-      manualEntryId: confirmed.value.manualEntry.id,
+      manualEntryId: entry.id,
+      documentNumber: entry.documentNumber,
+      documentType: entry.documentType,
+      issueDate: entry.issueDate,
+      documentValueCents: entry.documentValueCents ?? transaction.valueCents,
     });
   };

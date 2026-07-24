@@ -1,0 +1,25 @@
+# Gate de enforcement dos invariantes de ADR/AGENTS.md (SEMGREP-ADR-ENFORCER, #548).
+#
+# MVP = 2 rules PRECISAS (AST TypeScript), ancoradas em ADR-0020. Verificado (grep) que nenhuma
+# bate em codigo existente. Sao a classe de drift que nem tsc, nem ESLint, nem os hooks pegam.
+# Fixtures anotadas em .semgrep/tests/ (validadas por `semgrep --test`).
+#
+# Diferidas com razao (ver 002-tests/REPORT.md do ticket): no-npm (falso-positiva no proprio
+# block-npm.sh; risco real ja coberto pelo hook + ADR-0012), nodenext-ts-extension (tsc barra,
+# TS2835), no-throw-exhaustive-default (impreciso em Semgrep).
+rules:
+  - id: mysql-enum-forbidden
+    message: >-
+      ADR-0020 proibe ENUM nativo do MySQL: ALTER TABLE para adicionar valor e caro em tabela
+      grande. Use varchar(N) + CHECK e um smart constructor / discriminated union no dominio.
+    severity: ERROR
+    languages: [typescript]
+    pattern: mysqlEnum(...)
+
+  - id: mysql-json-forbidden
+    message: >-
+      ADR-0020 proibe coluna JSON nativa: JSON arbitrario virtualiza tipos volateis, dificulta
+      query e esconde dependencias funcionais. Modele como tabelas relacionais ou colunas escalares.
+    severity: ERROR
+    languages: [typescript]
+    pattern: json(...)
