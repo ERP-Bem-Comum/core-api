@@ -291,6 +291,8 @@ export type FinancialHttpDeps = Readonly<{
   resolveUserName: (id: string | null) => Promise<string | null>;
   /** Resolve categoryRef → nome (detalhe da conciliação). null = sem ref ou não-resolvido (graceful). */
   resolveCategoryName: (ref: string | null) => Promise<string | null>;
+  /** Fatia 2: categoryRef do documento conciliado (payableId → doc). null = sem doc/categoria (graceful). */
+  resolveTitleCategoryRef: (payableId: string) => Promise<string | null>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -774,6 +776,11 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       const r = await pools.categoryReader.list();
       if (!r.ok) return null;
       return r.value.find((c) => String(c.id) === ref)?.name ?? null;
+    },
+    resolveTitleCategoryRef: async (payableId) => {
+      const r = await pools.payableDocView.findByPayableIds([payableId]);
+      if (!r.ok) return null;
+      return r.value[0]?.categoryRef ?? null;
     },
     shutdown: pools.shutdown,
   };
