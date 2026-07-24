@@ -9,8 +9,9 @@
 // Sem dependências novas (ADR-0011): só node:child_process (spawnSync, shell:false) + node:fs.
 
 import { spawnSync } from 'node:child_process';
-import { mkdirSync, writeFileSync, rmSync, chmodSync } from 'node:fs';
 import process from 'node:process';
+import { composeUpArgs, composeDownArgs } from './compose-project.ts';
+import { backupAndWriteTestSecrets, restoreSecrets, type SecretBackup } from './secrets-vault.ts';
 
 const EX_USAGE = 64; // sysexits.h — uso inválido.
 
@@ -22,11 +23,15 @@ type Suite = Readonly<{
   paths: readonly string[];
 }>;
 
+// Diretório dos secrets (o compose lê de `./secrets/*.txt`).
+const SECRETS_DIR = 'secrets';
+
 // Secrets de TESTE (valores fixos, não-prod) — espelham o que os scripts inline criavam.
+// Chave = nome do arquivo (sem o prefixo `secrets/`); o `secrets-vault` resolve contra o `SECRETS_DIR`.
 const TEST_SECRETS: Readonly<Record<string, string>> = {
-  'secrets/mysql_root_password.txt': 'rootpw-migration-test-only',
-  'secrets/mysql_app_password.txt': 'apppw-migration-test-only',
-  'secrets/mysql_readonly_password.txt': 'ropw-migration-test-only',
+  'mysql_root_password.txt': 'rootpw-migration-test-only',
+  'mysql_app_password.txt': 'apppw-migration-test-only',
+  'mysql_readonly_password.txt': 'ropw-migration-test-only',
 };
 
 const mysqlSuite = (env: Readonly<Record<string, string>>, paths: readonly string[]): Suite => ({
@@ -250,26 +255,11 @@ const SUITES: Readonly<Record<string, Suite>> = {
   },
 };
 
-const writeTestSecrets = (): void => {
-  mkdirSync('secrets', { recursive: true });
-  for (const [path, value] of Object.entries(TEST_SECRETS)) {
-    writeFileSync(path, value);
-    chmodSync(path, 0o644);
-  }
-};
-
-const removeTestSecrets = (): void => {
-  for (const path of Object.keys(TEST_SECRETS)) {
-    rmSync(path, { force: true });
-  }
-};
-
 const dockerUp = (services: readonly string[]): number =>
-  spawnSync('docker', ['compose', 'up', '-d', ...services, '--wait'], { stdio: 'inherit' })
-    .status ?? 1;
+  spawnSync('docker', composeUpArgs(services), { stdio: 'inherit' }).status ?? 1;
 
 const dockerDown = (): void => {
-  spawnSync('docker', ['compose', 'down', '-v'], { stdio: 'ignore' });
+  spawnSync('docker', composeDownArgs(), { stdio: 'ignore' });
 };
 
 const runNodeTest = (suite: Suite): number => {
@@ -298,7 +288,11 @@ const main = (): number => {
     return EX_USAGE;
   }
 
-  if (suite.secrets) writeTestSecrets();
+  // Backup dos secrets de dev preexistentes + escrita dos de teste (0o644). O restore roda no
+  // `finally` — mesmo que o `up` falhe ou o `node --test` saia com exit≠0 — devolvendo o dev intacto.
+  const backup: SecretBackup | undefined = suite.secrets
+    ? backupAndWriteTestSecrets(SECRETS_DIR, TEST_SECRETS)
+    : undefined;
   try {
     if (suite.services.length > 0) {
       const up = dockerUp(suite.services);
@@ -307,7 +301,7 @@ const main = (): number => {
     return runNodeTest(suite);
   } finally {
     if (suite.services.length > 0) dockerDown();
-    if (suite.secrets) removeTestSecrets();
+    if (backup !== undefined) restoreSecrets(backup);
   }
 };
 
