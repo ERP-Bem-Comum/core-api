@@ -64,6 +64,7 @@ const storageSpy = (behavior: Result<SourceFileRef.SourceFileRef, 'source-file-u
       removeCalls.push(ref);
       return Promise.resolve(ok(undefined));
     },
+    download: (ref) => Promise.resolve(ok({ bytes: new Uint8Array(), mimeType: ref.mimeType })),
   };
   return { calls, removeCalls, port };
 };

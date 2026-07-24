@@ -876,6 +876,37 @@ const financialRoutes =
       },
     });
 
+    // GET /financial/documents/:id/source-file — serve o comprovante-fonte INLINE (#62/Feature 2).
+    // Proxy: o backend lê os bytes do storage privado e os repassa (nunca URL/presigned — ADR-0050);
+    // a área de OCR da tela de edição renderiza o arquivo. 404 quando o documento não tem anexo.
+    scope.route({
+      method: 'GET',
+      url: '/financial/documents/:id/source-file',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        params: documentIdParamSchema,
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const idR = DocumentId.rehydrate(req.params.id);
+        if (!idR.ok) return sendDomainError(reply, 'document-id-invalid');
+
+        const found = await deps.findDocumentById(idR.value);
+        if (!found.ok) return sendDomainError(reply, found.error);
+
+        const ref = found.value.document.sourceFileRef;
+        if (ref === null) return sendDomainError(reply, 'source-file-not-found');
+
+        const dl = await deps.downloadSourceFile(ref);
+        if (!dl.ok) return sendDomainError(reply, 'source-file-not-found');
+
+        const rawName = ref.key.slice(ref.key.lastIndexOf('/') + 1);
+        const fileName = rawName.length > 0 ? rawName : 'document';
+        reply.header('content-type', dl.value.mimeType);
+        reply.header('content-disposition', `inline; filename="${sanitizeFilename(fileName)}"`);
+        return reply.send(Buffer.from(dl.value.bytes)) as unknown as Promise<void>;
+      },
+    });
+
     // POST /financial/bank-statements — importa extrato OFX/CSV (US1 conciliação).
     scope.route({
       method: 'POST',
