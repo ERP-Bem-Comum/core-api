@@ -289,6 +289,8 @@ export type FinancialHttpDeps = Readonly<{
   }) => Promise<PayeeBankBlock | null>;
   /** Composição síncrona do NOME de usuário (#207 — ADR-0032). null = não-resolvido (graceful). */
   resolveUserName: (id: string | null) => Promise<string | null>;
+  /** Resolve categoryRef → nome (detalhe da conciliação). null = sem ref ou não-resolvido (graceful). */
+  resolveCategoryName: (ref: string | null) => Promise<string | null>;
   shutdown: () => Promise<void>;
 }>;
 
@@ -767,6 +769,12 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     getDocumentsSummaryByIds: pools.documentSummaryByIdsView.getDocumentsSummaryByIds,
     resolvePayeeBank: (ref) => composePayeeBank(pools.contractorReadPort, ref),
     resolveUserName: (id) => resolveUserName(pools.authUserReadPort, id),
+    resolveCategoryName: async (ref) => {
+      if (ref === null) return null;
+      const r = await pools.categoryReader.list();
+      if (!r.ok) return null;
+      return r.value.find((c) => String(c.id) === ref)?.name ?? null;
+    },
     shutdown: pools.shutdown,
   };
 };

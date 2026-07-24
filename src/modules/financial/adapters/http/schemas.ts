@@ -969,6 +969,9 @@ export const transactionReconciliationResponseSchema = z
     reconciledAt: z.iso.datetime(),
     differenceCents: z.string().nullable(),
     items: z.array(z.object({ payableId: z.uuid(), reconciledValueCents: z.string() }).strict()),
+    // Categoria do lançamento manual, resolvida server-side (ref → nome). null = sem categoria ou
+    // conciliação sem lançamento manual (título real fica p/ fatia 2).
+    category: z.string().nullable(),
   })
   .strict();
 
