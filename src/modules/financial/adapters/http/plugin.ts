@@ -1110,11 +1110,16 @@ const financialRoutes =
         if (!result.ok) return sendDomainError(reply, result.error);
         // #207: compõe o nome do executor server-side (ADR-0032). Graceful → null.
         const reconciledByName = await deps.resolveUserName(result.value.audit.reconciledBy);
-        // Categoria do lançamento manual (ref → nome) — modal "Conciliação realizada". null se sem
-        // lançamento manual/categoria (título real = fatia 2).
-        const category = await deps.resolveCategoryName(
-          result.value.manualEntry?.categoryRef ?? null,
-        );
+        // Categoria (ref → nome) — modal "Conciliação realizada". Lançamento manual tem precedência
+        // (fatia 1); senão, vem do documento do 1º título conciliado (fatia 2).
+        let categoryRef = result.value.manualEntry?.categoryRef ?? null;
+        if (categoryRef === null) {
+          const firstItem = result.value.items[0];
+          if (firstItem !== undefined) {
+            categoryRef = await deps.resolveTitleCategoryRef(String(firstItem.payableId));
+          }
+        }
+        const category = await deps.resolveCategoryName(categoryRef);
         return sendResult(
           reply,
           ok(transactionReconciliationToDto(result.value, reconciledByName, category)),
