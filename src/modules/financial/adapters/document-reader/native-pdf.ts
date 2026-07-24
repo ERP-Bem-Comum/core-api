@@ -271,12 +271,30 @@ export const structureText = (
   if (type === undefined) return err('malformed-document');
 
   const documentNumber = group1(text, /N[uú]mero[^:\n]*:\s*(\S+)/i);
+  // Isola o bloco do EMITENTE (prestador) — do rótulo "EMITENTE ..." até "TOMADOR ..." — para NUNCA pegar
+  // o CNPJ/nome do TOMADOR (o DANFSe traz os dois). Sem os marcadores, cai no texto inteiro (layout genérico).
+  const emitStart = text.search(/EMITENTE\s+DA\s+NFS-?e|EMITENTE\s+DA\s+NOTA|EMITENTE\b/i);
+  const emitTail = emitStart === -1 ? text : text.slice(emitStart);
+  const tomadorAt = emitTail.search(/TOMADOR\s+D[OA]\s+SERVI[ÇC]O|TOMADOR\b/i);
+  const emitBlock = tomadorAt === -1 ? emitTail : emitTail.slice(0, tomadorAt);
+
   // #396 F2 (CWE-20): terminador `[^:\n]+` (não `.+`) — o unpdf colapsa `\n` em espaço, então `.+`
   // engoliria o documento inteiro após "Prestador:", contaminando o legalName e estourando `description`.
-  const legalName = group1(text, /Prestador:\s*([^:\n]+)/i)?.trim();
-  const taxId = group1(text, /CNPJ:\s*(\d+)/i) ?? group1(text, /CPF:\s*(\d+)/i);
+  const legalName =
+    group1(text, /Prestador:\s*([^:\n]+)/i)?.trim() ??
+    // DANFSe: "Nome / Nome Empresarial <IM numérico opcional> <nome> E-mail". Remove o IM à esquerda.
+    group1(emitBlock, /Nome\s*\/\s*Nome Empresarial\s+(.+?)\s+E-?mail/i)
+      ?.replace(/^[\d.\-/]+\s+/, '')
+      .trim();
+  const taxId =
+    group1(text, /CNPJ:\s*(\d+)/i) ??
+    group1(text, /CPF:\s*(\d+)/i) ??
+    // DANFSe: "CNPJ / CPF / NIF 64.894.238/0001-90" no bloco do EMITENTE. Máscara → só dígitos (o VO
+    // de resolução também normaliza; aqui já entregamos 14 dígitos, como o leitor XML).
+    group1(emitBlock, /CNPJ\s*\/\s*CPF\s*\/\s*NIF\s*([\d.\-/]{11,20})/i)?.replace(/\D/g, '');
+  // Basta o CNPJ para resolver o fornecedor (#FIN-OCR-AUTOFILL-SUPPLIER); legalName é auxiliar.
   const supplier: SupplierIdentity | undefined =
-    legalName !== undefined && taxId !== undefined ? { legalName, taxId } : undefined;
+    taxId !== undefined ? { legalName: legalName ?? '', taxId } : undefined;
   const competence = parseCompetence(text);
 
   const grossRaw =
