@@ -1,0 +1,35 @@
+name: semgrep
+
+# Gate de enforcement dos invariantes de ADR/AGENTS.md (SEMGREP-ADR-ENFORCER, #548).
+# Roda o Semgrep com as rules locais `.semgrep/rules.yml`; um finding falha o job — gate REAL,
+# sem `continue-on-error`/`|| true` (a licao de gate-integrity da Fase 2 do #523, CWE-703).
+# Free: repo publico, sem app/token pago (Semgrep OSS via pipx). Actions SHA-pinadas (ADR-0011).
+#
+# `--exclude .semgrep` tira as fixtures do scan (elas tem findings de proposito). `--error` faz o
+# exit != 0 no achado. `--metrics off` = zero telemetria.
+
+on:
+  pull_request:
+    branches: [dev, main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: semgrep-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  semgrep:
+    name: semgrep (ADR-enforcer)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: Instala o Semgrep (pin de versao — validada localmente com as rules)
+        run: pipx install semgrep==1.171.0
+
+      - name: Roda o Semgrep (rules locais; finding = falha)
+        run: semgrep scan --config .semgrep/rules.yml --error --metrics off --exclude .semgrep .
