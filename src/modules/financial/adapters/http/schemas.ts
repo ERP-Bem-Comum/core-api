@@ -453,7 +453,7 @@ export type DocumentTimelineResponseDto = z.infer<typeof documentTimelineRespons
  */
 export const importBankStatementBodySchema = z.object({
   debitAccountRef: z.uuid(),
-  format: z.enum(['OFX', 'CSV']),
+  format: z.enum(['OFX', 'CSV', 'PDF']),
   content: z.string().min(1).max(5_000_000),
   fileName: z.string().min(1).max(255).optional(),
 });
