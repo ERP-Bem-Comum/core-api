@@ -3,7 +3,8 @@
  * DIRETO pelo root sob `/api/v2` (greenfield). Espelha `programs/adapters/http/plugin.ts`.
  *
  * Rotas:
- *  - GET /reports/team — projeção "Equipe ABC" (9 colunas LGPD-safe, REP-1 · #238).
+ *  - GET /reports/team — projeção "Equipe ABC" (13 colunas: as 10 do REP-1 · #238 +
+ *    genderIdentity/race/age do REPORTS-TEAM-DEMOGRAPHIC-COLUMNS).
  *  - GET /reports/team/demographics — 3 distribuições demográficas agregadas (REP-1 · sensível).
  *  - GET /reports/suppliers-without-contract — agregação de payables sem contrato (REP-2 · #240).
  *  - GET /reports/payment-position — posição de pagamentos por fornecedor×CC×categoria (REP-4 · #243).

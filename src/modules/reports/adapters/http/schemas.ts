@@ -1,7 +1,7 @@
 /**
  * Schemas Zod da rota de relatórios (ADR-0027). Zod só na borda.
  *
- * `teamMemberSchema` espelha o subconjunto LGPD-safe de `TeamMember` (9 colunas).
+ * `teamMemberSchema` espelha `TeamMember` (13 colunas — 10 do #238 + as 3 demográficas).
  */
 import * as z from 'zod/v4';
 
@@ -16,6 +16,11 @@ export const teamMemberSchema = z.object({
   active: z.boolean(),
   education: z.string().nullable(),
   experienceInPublicSector: z.boolean().nullable(),
+  // REPORTS-TEAM-DEMOGRAPHIC-COLUMNS: sem declarar aqui, o serializer descarta os campos e o
+  // payload sai errado mesmo com o mapper certo.
+  genderIdentity: z.string().nullable(),
+  race: z.string().nullable(),
+  age: z.number().nullable(),
 });
 
 export type TeamMemberDto = z.infer<typeof teamMemberSchema>;

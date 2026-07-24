@@ -19,6 +19,9 @@
  * Invariante: a soma das fatias de cada dimensao == `totalActive`.
  */
 
+import * as PlainDate from '#src/shared/kernel/plain-date.ts';
+import { completedYears } from './completed-years.ts';
+
 export type CategoryCount = Readonly<{
   id: string;
   label: string;
@@ -87,19 +90,10 @@ export const AGE_RANGE_CATEGORIES: readonly CategoryCount[] = [
   notAvailable,
 ];
 
-/** Anos completos em `reference` (UTC) - aniversario nao feito no ano conta a idade menor. */
-const completedYears = (birth: Date, reference: Date): number => {
-  const difference = reference.getUTCFullYear() - birth.getUTCFullYear();
-  const hadBirthday =
-    reference.getUTCMonth() > birth.getUTCMonth() ||
-    (reference.getUTCMonth() === birth.getUTCMonth() &&
-      reference.getUTCDate() >= birth.getUTCDate());
-  return hadBirthday ? difference : difference - 1;
-};
-
 const ageRangeIdOf = (birth: Date | null, reference: Date): string => {
   if (birth === null) return NOT_AVAILABLE_ID;
-  const age = completedYears(birth, reference);
+  // Regra de idade compartilhada com `toTeamProjection` (uma unica fonte - ver completed-years.ts).
+  const age = completedYears(PlainDate.fromDate(birth), PlainDate.fromDate(reference));
   if (age <= 29) return 'ATE_29';
   if (age <= 39) return 'DE_30_A_39';
   if (age <= 49) return 'DE_40_A_49';

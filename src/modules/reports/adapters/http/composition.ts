@@ -128,8 +128,10 @@ export const buildReportsHttpDeps = async (
     throw new Error('reports-composition: driver mysql exige as 4 connection strings nao-vazias');
   }
 
+  // `today` da idade sai do ClockReal, injetado aqui — nunca de `new Date()` dentro do mapper.
   const teamReaderR = await openCollaboratorProjectionReader({
     connectionString: partnersUrl,
+    clock: ClockReal(),
   });
   if (!teamReaderR.ok) {
     throw new Error(`reports-composition: falha ao abrir reader do partners: ${teamReaderR.error}`);

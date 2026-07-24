@@ -50,6 +50,11 @@ const member = (over: Partial<TeamMember> = {}): TeamMember => ({
   active: true,
   education: 'Superior completo',
   experienceInPublicSector: true,
+  // 3 colunas demográficas (REPORTS-TEAM-DEMOGRAPHIC-COLUMNS) — passaram a fazer parte do
+  // contrato; a fixture as declara para seguir espelhando `TeamMember`.
+  genderIdentity: 'MULHER_CIS',
+  race: 'PARDO',
+  age: 41,
   ...over,
 });
 
