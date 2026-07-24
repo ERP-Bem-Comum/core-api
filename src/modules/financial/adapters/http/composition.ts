@@ -136,6 +136,7 @@ import { cancelDocument } from '../../application/use-cases/cancel-document.ts';
 import { submitDraft } from '../../application/use-cases/submit-draft.ts';
 import { getDocumentTimeline } from '../../application/use-cases/get-document-timeline.ts';
 import { importBankStatement } from '../../application/use-cases/import-bank-statement.ts';
+import { deleteBankStatement } from '../../application/use-cases/delete-bank-statement.ts';
 import { confirmReconciliation } from '../../application/use-cases/confirm-reconciliation.ts';
 import { undoReconciliation } from '../../application/use-cases/undo-reconciliation.ts';
 import { searchPaidPayables } from '../../application/use-cases/search-paid-payables.ts';
@@ -222,6 +223,7 @@ export type FinancialHttpDeps = Readonly<{
   getDocumentTimeline: ReturnType<typeof getDocumentTimeline>;
   /** Importação de extrato bancário (US1 conciliação) — POST /bank-statements. */
   importBankStatement: ReturnType<typeof importBankStatement>;
+  deleteBankStatement: ReturnType<typeof deleteBankStatement>;
   /** Leitura das transações de um extrato — GET /bank-statements/:id/transactions. */
   listStatementTransactions: BankStatementRepository['listTransactions'];
   /** Confirma a conciliação (US2/4) — POST /reconciliations. */
@@ -679,6 +681,10 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       periods: pools.periodStore,
       cedenteStore: pools.cedenteStore,
       clock,
+    }),
+    deleteBankStatement: deleteBankStatement({
+      repo: pools.statementRepo,
+      periods: pools.periodStore,
     }),
     listStatementTransactions: pools.statementRepo.listTransactions,
     confirmReconciliation: confirmReconciliation({

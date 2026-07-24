@@ -167,5 +167,18 @@ export const createDrizzleBankStatementRepository = (
         return err('bank-statement-repository-failure');
       }
     },
+
+    deleteById: async (
+      statementId: string,
+    ): Promise<Result<void, BankStatementRepositoryError>> => {
+      try {
+        // FK cascade (fin_statement_transactions → fin_bank_statements) apaga as transações.
+        await db.delete(finBankStatements).where(eq(finBankStatements.id, statementId));
+        return ok(undefined);
+      } catch (cause) {
+        logStore('deleteById', cause);
+        return err('bank-statement-repository-failure');
+      }
+    },
   };
 };

@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "FIN-DELETE-BANK-STATEMENT",
+  "size": "M",
+  "createdAt": "2026-07-24T03:03:17.303Z",
+  "closedAt": "2026-07-24T03:14:11.147Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-24T03:06:05.820Z",
+      "finishedAt": "2026-07-24T03:06:26.215Z",
+      "rounds": 1,
+      "reportPath": "002-tests/delete-bank-statement.test.ts",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "ports-and-adapters",
+      "startedAt": "2026-07-24T03:14:09.417Z",
+      "finishedAt": "2026-07-24T03:14:09.706Z",
+      "rounds": 1,
+      "reportPath": "003-impl/delete-bank-statement.ts",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-24T03:14:09.971Z",
+      "finishedAt": "2026-07-24T03:14:10.255Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-24T03:14:10.559Z",
+      "finishedAt": "2026-07-24T03:14:10.867Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

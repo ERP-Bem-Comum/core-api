@@ -26,6 +26,8 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'reconciliation-already-undone',
   'account-closed',
   'period-closed',
+  // Exclusão de extrato: guarda — extrato com transação conciliada não pode ser excluído (desfaça antes).
+  'statement-has-reconciled-transactions',
   // Reabertura (#203): reabrir período não-fechado é conflito de estado.
   'period-not-closed',
   // Contrapartida de transferência (#269/US2): casar uma contrapartida não-pendente é conflito de estado.

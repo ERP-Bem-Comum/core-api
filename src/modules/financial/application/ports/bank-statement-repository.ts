@@ -21,6 +21,8 @@ export type BankStatementRepository = Readonly<{
   listTransactions: (
     statementId: string,
   ) => Promise<Result<readonly StatementTransaction[] | null, BankStatementRepositoryError>>;
+  // Exclui o extrato (hard delete) — as transações somem por FK cascade. Idempotente: inexistente → ok.
+  deleteById: (statementId: string) => Promise<Result<void, BankStatementRepositoryError>>;
   // Localiza uma transação por id, com o `debit_account_ref` da raiz (desnormalizado) — base da
   // conciliação (#123): fornece valor + conta para o guard FR-015 e a checagem de status `Pending`.
   findTransaction: (

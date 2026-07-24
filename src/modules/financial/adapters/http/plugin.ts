@@ -927,6 +927,24 @@ const financialRoutes =
       },
     });
 
+    // DELETE /financial/bank-statements/:id — exclui o extrato importado (hard delete; transações somem
+    // por FK cascade). GUARDA (sem cascata): 409 se houver transação conciliada (desfaça antes) ou período
+    // fechado (reabra antes); 404 se inexistente. 204 sem corpo.
+    scope.route({
+      method: 'DELETE',
+      url: '/financial/bank-statements/:id',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationImport)],
+      schema: {
+        params: bankStatementIdParamSchema,
+        // 204 sem body → sem response schema (convenção das rotas 204 deste projeto).
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.deleteBankStatement({ statementId: req.params.id });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return reply.code(204).send() as unknown as Promise<void>;
+      },
+    });
+
     // GET /financial/bank-statements/:id/suggestions — palpite de topo por transação (#174, lote).
     scope.route({
       method: 'GET',
