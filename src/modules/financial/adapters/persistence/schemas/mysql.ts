@@ -666,7 +666,7 @@ export const finBankStatements = mysqlTable(
     closingBalanceCents: bigint('closing_balance_cents', { mode: 'number' }).notNull(),
   },
   (t) => [
-    check('fin_bank_statements_file_format_chk', sql`${t.fileFormat} IN ('OFX','CSV')`),
+    check('fin_bank_statements_file_format_chk', sql`${t.fileFormat} IN ('OFX','CSV','PDF')`),
     index('fin_bank_statements_debit_account_ref_idx').on(t.debitAccountRef),
   ],
 );

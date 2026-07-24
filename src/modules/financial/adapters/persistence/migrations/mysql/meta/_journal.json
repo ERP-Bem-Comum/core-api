@@ -288,6 +288,13 @@
       "when": 1784848909591,
       "tag": "0040_foamy_hydra",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "5",
+      "when": 1784865577308,
+      "tag": "0041_abnormal_salo",
+      "breakpoints": true
     }
   ]
 }
