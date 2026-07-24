@@ -338,6 +338,17 @@ export const documentResponseSchema = z
       })
       .strict()
       .nullable(),
+    // #62/Feature 2: comprovante-fonte guardado no storage. null = documento sem anexo. `url` é o
+    // endpoint proxy que serve os bytes INLINE (área de OCR da edição) — sem download, sem presigned.
+    attachment: z
+      .object({
+        fileName: z.string(),
+        mimeType: z.string(),
+        sizeBytes: z.number().int().min(0),
+        url: z.string(),
+      })
+      .strict()
+      .nullable(),
   })
   .strict();
 

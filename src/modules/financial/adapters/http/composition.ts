@@ -215,6 +215,8 @@ export type FinancialHttpDeps = Readonly<{
   submitDraft: ReturnType<typeof submitDraft>;
   /** Leitura direta do repositório — usado pelo GET /documents/:id. */
   findDocumentById: DocumentRepository['findById'];
+  /** #62/Feature 2: serve os bytes do comprovante-fonte INLINE — GET /documents/:id/source-file. */
+  downloadSourceFile: SourceFileStoragePort['download'];
   /** Listagem paginada (US1 — read path no writer pool; split reader/writer diferido — ADR-0003). */
   listDocuments: DocumentRepository['findPaged'];
   /** Listagem payable-centric (#201/#222) — GET /financial/payable-titles (pai+filhos como linhas). */
@@ -684,6 +686,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     cancelDocument: cancelDocument({ repo: pools.repo }),
     submitDraft: submitDraft(deps),
     findDocumentById: pools.repo.findById,
+    downloadSourceFile: pools.documentStorage.download,
     listDocuments: pools.repo.findPaged,
     listPayables: pools.payableListView.findPaged,
     countPayableTitles: pools.payableListView.countByStatus,

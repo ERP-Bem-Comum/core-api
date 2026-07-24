@@ -115,6 +115,7 @@ describe('documentResponseSchema — .strict() (#384)', () => {
       bankAccount: bankAccountFixture,
       pixKey: null,
     },
+    attachment: null,
   };
 
   it('fixture válido é aceito (regressão)', () => {

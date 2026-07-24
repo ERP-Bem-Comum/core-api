@@ -16,6 +16,8 @@ const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
   'payable-not-found',
   // Período (US6).
   'reconciliation-period-not-found',
+  // #62/Feature 2: documento sem comprovante-fonte (ou bytes ausentes no storage).
+  'source-file-not-found',
 ]);
 
 const CONFLICT_CODES: ReadonlySet<string> = new Set([
@@ -146,6 +148,7 @@ const SLUG_MESSAGES: Record<string, string> = {
   'financial-ref-invalid': 'Referência inválida: o valor informado não é um identificador válido.',
   'partner-ref-invalid': 'Referência de fornecedor inválida.',
   'document-id-invalid': 'Identificador de documento inválido.',
+  'source-file-not-found': 'Documento sem arquivo anexado.',
   'document-incomplete':
     'Dados insuficientes: a data de vencimento é obrigatória para documentos em aberto.',
   'net-value-not-positive': 'O valor líquido do documento deve ser positivo.',
