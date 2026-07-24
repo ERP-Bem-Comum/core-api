@@ -35,6 +35,7 @@ import {
   finPayables,
 } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { newUuid } from '#src/shared/utils/id.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 // Status derivado da conciliação PARCIAL (#141/#247) — 19 chars. É o valor que estoura varchar(16).
 const PARTIALLY_RECONCILED = 'PartiallyReconciled';
@@ -59,7 +60,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('Largura de status (#519) — Drizzle + MySQL (integração)', () => {
     let handle: FinancialMysqlHandle;
