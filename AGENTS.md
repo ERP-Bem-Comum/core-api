@@ -51,15 +51,26 @@ Nunca contradizer um ADR aceito — abrir novo ADR que `supersedes` o anterior, 
 
 ## Idioma (regra invariante)
 
-| Camada                                                           | Idioma                                                     |
-| ---------------------------------------------------------------- | ---------------------------------------------------------- |
-| Código (tipos, funções, variáveis, pastas, arquivos)             | **EN**                                                     |
-| Strings ao humano (mensagens da CLI, erros formatados)           | **PT** (via dicionário em `cli/formatters/`)               |
-| Documentação (`.claude/`, `.pipeline/`, READMEs, handbook, ADRs) | **PT**                                                     |
-| Erros internos (string literal union)                            | **EN kebab-case** — `'contract-not-active'`                |
-| Eventos de domínio                                               | **EN passado** — `ContractCreated`, `AmendmentHomologated` |
-| IDs de ticket                                                    | **EN** — `CTR-VO-MONEY`, `CTR-STORAGE-PORT`                |
-| Commit messages                                                  | **PT** — `feat(contracts): adiciona VO Money`              |
+| Camada                                                           | Idioma                                                                                                        |
+| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
+| Código (tipos, funções, variáveis, pastas, arquivos)             | **EN**                                                                                                        |
+| Strings ao humano (mensagens da CLI, erros formatados)           | **PT** (via dicionário em `cli/formatters/`)                                                                  |
+| Documentação (`.claude/`, `.pipeline/`, READMEs, handbook, ADRs) | **PT**                                                                                                        |
+| Erros internos (string literal union)                            | **EN kebab-case** — `'contract-not-active'`                                                                   |
+| Eventos de domínio                                               | **EN passado** — `ContractCreated`, `AmendmentHomologated`                                                    |
+| IDs de ticket                                                    | **EN** — `CTR-VO-MONEY`, `CTR-STORAGE-PORT`                                                                   |
+| Commit messages                                                  | **PT** — `feat(contracts): adiciona VO Money`; commit assistido por IA leva trailer `Assisted-by:` (ADR-0054) |
+
+---
+
+## Contribuição assistida por IA (regra invariante — ADR-0054)
+
+Este repo é desenvolvido com uso intensivo de IA. A política de contribuição segue o precedente do Linux kernel ([`coding-assistants.rst`](https://docs.kernel.org/process/coding-assistants.html)), adaptada ao nosso fluxo — normativa em [ADR-0054](./handbook/architecture/adr/0054-ai-assisted-contribution-policy.md):
+
+- **Trailer `Assisted-by:` obrigatório** em todo commit gerado/materialmente modificado por IA — `Assisted-by: AGENT_NAME:MODEL_VERSION [ferramenta]` (ex.: `Assisted-by: Claude-Code:claude-opus-4-8`). Utilitários triviais (git, pnpm, tsc, editor) são omitidos.
+- **A IA NUNCA adiciona `Signed-off-by`.** Só um humano certifica o [DCO](https://developercertificate.org/) — quando houver DCO, quem assina é a pessoa.
+- **O humano é o dono de cada linha.** Quem submete revisa todo o código-IA, garante licença e **assume responsabilidade integral** — todo bug/falha de segurança de código-IA recai sobre a pessoa, não sobre a ferramenta.
+- **Mesmo processo, sem trilha paralela.** Código-IA passa pela mesma Pipeline W0→W3 e pelos mesmos gates required (`integração (gate)` + `typecheck + format + lint + test`) que código humano.
 
 ---
 

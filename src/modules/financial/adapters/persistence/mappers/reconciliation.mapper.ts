@@ -127,6 +127,10 @@ export const manualEntryToRow = (
   description: manualEntry.description,
   destinationAccountRef: manualEntry.destinationAccountRef,
   productLabel: manualEntry.productLabel,
+  documentNumber: manualEntry.documentNumber,
+  documentType: manualEntry.documentType,
+  issueDate: manualEntry.issueDate,
+  documentValueCents: manualEntry.documentValueCents,
 });
 
 export const toDomain = (

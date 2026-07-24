@@ -33,6 +33,10 @@ export default tseslint.config(
       // outra branch. Sem esta exclusão o projectService ingere os .ts extras e
       // estoura o heap (OOM no lint), além de lintar código de outra branch.
       'epic/**',
+      // Fixtures do gate Semgrep (.semgrep/tests/**) — TS/SH com violações de ADR
+      // INTENCIONAIS (mysqlEnum, json column) para `semgrep --test`. Não entram em
+      // nenhum tsconfig; o projectService type-aware falharia neles.
+      '.semgrep/**',
     ],
   },
 
