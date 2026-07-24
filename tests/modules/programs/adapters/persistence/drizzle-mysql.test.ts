@@ -9,8 +9,9 @@ import { openProgramsMysql } from '#src/modules/programs/adapters/persistence/dr
 import type { ProgramsMysqlHandle } from '#src/modules/programs/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleProgramRepository } from '#src/modules/programs/adapters/persistence/repos/program-repository.drizzle.ts';
 import { runProgramRepositoryContract } from './program-repository.suite.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = mysqlTestConnectionString();
 
 const integrationEnabled = (): boolean => process.env.MYSQL_INTEGRATION === '1';
 

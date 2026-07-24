@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "FIN-RECON-DETAIL-MANUAL-CATEGORY",
+  "size": "M",
+  "createdAt": "2026-07-23T23:52:18.046Z",
+  "closedAt": "2026-07-24T00:13:18.589Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "tdd-strategist",
+      "startedAt": "2026-07-23T23:58:34.630Z",
+      "finishedAt": "2026-07-23T23:59:00.738Z",
+      "rounds": 1,
+      "reportPath": "002-tests/recon-detail-manual-category.http.test.ts",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "ts-domain-modeler",
+      "startedAt": "2026-07-24T00:13:16.998Z",
+      "finishedAt": "2026-07-24T00:13:17.267Z",
+      "rounds": 1,
+      "reportPath": "003-impl/reconciliation.mapper.ts",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-24T00:13:17.536Z",
+      "finishedAt": "2026-07-24T00:13:17.802Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-24T00:13:18.066Z",
+      "finishedAt": "2026-07-24T00:13:18.327Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

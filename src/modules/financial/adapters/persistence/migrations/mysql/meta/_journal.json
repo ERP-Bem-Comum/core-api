@@ -260,6 +260,41 @@
       "when": 1784091254173,
       "tag": "0036_powerful_marrow",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "5",
+      "when": 1784665030537,
+      "tag": "0037_natural_hedge_knight",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "5",
+      "when": 1784672123205,
+      "tag": "0038_huge_clint_barton",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "5",
+      "when": 1784835318324,
+      "tag": "0039_huge_firelord",
+      "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "5",
+      "when": 1784848909591,
+      "tag": "0040_foamy_hydra",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "5",
+      "when": 1784865577308,
+      "tag": "0041_abnormal_salo",
+      "breakpoints": true
     }
   ]
 }

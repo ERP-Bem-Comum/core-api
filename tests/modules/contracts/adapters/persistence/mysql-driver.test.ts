@@ -24,6 +24,7 @@ import type {
   MysqlHandle,
 } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
 import { openMysql } from '#src/modules/contracts/adapters/persistence/drivers/mysql-driver.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 // ─── Paths ────────────────────────────────────────────────────────────────
 const HERE = fileURLToPath(new URL('.', import.meta.url));
@@ -32,8 +33,12 @@ const PACKAGE_JSON = join(PROJECT_ROOT, 'package.json');
 
 // Credenciais sincronizadas com os secrets fixos do `pnpm test:integration`
 // (escritos pelo script no `package.json`). Não usar em produção.
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
-const BAD_AUTH_CONN = 'mysql://invalid:invalid@127.0.0.1:3306/inexistente';
+const VALID_CONN = mysqlTestConnectionString();
+const BAD_AUTH_CONN = mysqlTestConnectionString({
+  user: 'invalid',
+  password: 'invalid',
+  database: 'inexistente',
+});
 
 const integrationEnabled = (): boolean => process.env.MYSQL_INTEGRATION === '1';
 const skipReason = (): string =>

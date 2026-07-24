@@ -44,7 +44,9 @@ const parserWith = (fitids: readonly string[]): BankStatementParser => {
       balanceAfterCents: 50000,
     })),
   };
-  return { parse: (): Result<ParsedStatement, ParseError> => ok(statement) };
+  return {
+    parse: (): Promise<Result<ParsedStatement, ParseError>> => Promise.resolve(ok(statement)),
+  };
 };
 
 // Período sempre aberto (guard R18 do #125 é no-op no escopo do #120).
@@ -121,10 +123,8 @@ describe('financial/application/use-cases/import-bank-statement', () => {
   it('CA3: parser malformado → use-case repassa err', async () => {
     const captured: Captured = { events: [] };
     const failing: BankStatementParser = {
-      parse: (): Result<ParsedStatement, ParseError> => ({
-        ok: false,
-        error: 'malformed-statement',
-      }),
+      parse: (): Promise<Result<ParsedStatement, ParseError>> =>
+        Promise.resolve({ ok: false, error: 'malformed-statement' }),
     };
     const r = await importBankStatement(deps(failing, captured))(input);
     assert.equal(isErr(r), true);
@@ -135,8 +135,8 @@ describe('financial/application/use-cases/import-bank-statement', () => {
     const csvLike = parserWith(['x']);
     // sobrescreve para fitid null (simula CSV sem FITID nativo)
     const nullFitidParser: BankStatementParser = {
-      parse: () => {
-        const r = csvLike.parse('CSV', '');
+      parse: async () => {
+        const r = await csvLike.parse('CSV', '');
         if (!r.ok) return r;
         const tx0 = r.value.transactions[0];
         const txs = tx0 === undefined ? [] : [{ ...tx0, fitid: null }];

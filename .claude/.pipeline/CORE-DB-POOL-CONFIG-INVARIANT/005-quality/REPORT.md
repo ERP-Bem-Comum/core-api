@@ -12,7 +12,7 @@
 Delta: +20 testes (CA-1..CA-6 = 6, CA-7 = 14). CA-8 = skip (opt-in).
 
 ## CA-8 (efeito de reaping) — VALIDADO NO x99 ✅
-MySQL 8.4 efêmero (`docker run` no x99 `100.99.66.84` + túnel SSH `-L 3306`, método `mac-dev-x99-docker-runner-tunnel`). `MYSQL_INTEGRATION=1`:
+MySQL 8.4 efêmero (`docker run` no x99, alcançado pela tailnet + túnel SSH `-L 3306`, método `mac-dev-x99-docker-runner-tunnel`). `MYSQL_INTEGRATION=1`:
 ```
 ✔ CA-8: conexões ociosas acima de maxIdle fecham após idleTimeout (3658ms)
 tests 7 · pass 7 · fail 0 · skipped 0

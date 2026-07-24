@@ -7,6 +7,7 @@ import {
   ContractRef,
   BudgetPlanRef,
   CategoryRef,
+  SubcategoryRef,
   CostCenterRef,
   ProgramRef,
   type FinancialRefError,
@@ -42,6 +43,7 @@ export type SaveDraftCommand = Readonly<{
   contractRef?: string | null;
   budgetPlanRef?: string | null;
   categoryRef?: string | null;
+  subcategoryRef?: string | null; // #502: folha da árvore do plano (opcional no rascunho)
   costCenterRef?: string | null;
   programRef?: string | null;
   paymentMethod?: PaymentMethod | null;
@@ -99,6 +101,9 @@ export const saveDraft =
     if (!budgetPlanRef.ok) return err(budgetPlanRef.error);
     const categoryRef = cmd.categoryRef == null ? ok(null) : CategoryRef.rehydrate(cmd.categoryRef);
     if (!categoryRef.ok) return err(categoryRef.error);
+    const subcategoryRef =
+      cmd.subcategoryRef == null ? ok(null) : SubcategoryRef.rehydrate(cmd.subcategoryRef);
+    if (!subcategoryRef.ok) return err(subcategoryRef.error);
     const costCenterRef =
       cmd.costCenterRef == null ? ok(null) : CostCenterRef.rehydrate(cmd.costCenterRef);
     if (!costCenterRef.ok) return err(costCenterRef.error);
@@ -157,6 +162,7 @@ export const saveDraft =
       ...(contractRef.value !== null ? { contractRef: contractRef.value } : {}),
       ...(budgetPlanRef.value !== null ? { budgetPlanRef: budgetPlanRef.value } : {}),
       ...(categoryRef.value !== null ? { categoryRef: categoryRef.value } : {}),
+      ...(subcategoryRef.value !== null ? { subcategoryRef: subcategoryRef.value } : {}),
       ...(costCenterRef.value !== null ? { costCenterRef: costCenterRef.value } : {}),
       ...(programRef.value !== null ? { programRef: programRef.value } : {}),
       ...(cmd.paymentMethod !== undefined ? { paymentMethod: cmd.paymentMethod } : {}),

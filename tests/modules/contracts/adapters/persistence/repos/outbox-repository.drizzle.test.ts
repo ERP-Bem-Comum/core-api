@@ -37,10 +37,11 @@ import { runOutboxContract } from '../../../application/ports/outbox.contract.ts
 import * as ContractId from '#src/modules/contracts/domain/shared/contract-id.ts';
 import type { ContractsModuleEvent } from '#src/modules/contracts/application/ports/event-bus.ts';
 import { isOk } from '#src/shared/index.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 // ─── Configuração ─────────────────────────────────────────────────────────────
 
-const VALID_CONN = 'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+const VALID_CONN = mysqlTestConnectionString();
 
 const integrationEnabled = (): boolean => process.env.MYSQL_INTEGRATION === '1';
 

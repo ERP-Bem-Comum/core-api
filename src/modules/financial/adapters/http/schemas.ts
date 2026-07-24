@@ -95,20 +95,24 @@ const paymentDetailInput = z
  * Body de criação de documento fiscal. `asDraft: false` (default) → Open com títulos;
  * `asDraft: true` → Draft (campos opcionais, sem geração de títulos).
  */
-export const createDocumentBodySchema = z.object({
-  type: documentTypeSchema,
-  documentNumber: z.string().min(1).max(60),
+const createDocumentBodyBaseSchema = z.object({
+  // #534: os 5 campos abaixo são opcionais no schema — o domínio `saveDraft` aceita rascunho parcial.
+  // O `superRefine` os reexige quando `asDraft:false` (Open com títulos), preservando o 400 do fluxo.
+  type: documentTypeSchema.optional(),
+  documentNumber: z.string().min(1).max(60).optional(),
   series: z.string().max(20).optional(),
-  supplierRef: z.uuid(),
+  supplierRef: z.uuid().optional(),
   payeeKind: z.enum(['supplier', 'financier', 'act', 'collaborator']).optional(),
   approverRef: z.uuid().optional(),
   contractRef: z.uuid().optional(),
   budgetPlanRef: z.uuid().optional(),
   categoryRef: z.uuid().optional(),
+  // #502: folha da árvore do plano (carimbo da subcategoria). Opcional; ref opaco por formato.
+  subcategoryRef: z.uuid().optional(),
   costCenterRef: z.uuid().optional(),
   programRef: z.uuid().optional(),
-  paymentMethod: paymentMethodSchema,
-  grossValueCents: centsStringSchema,
+  paymentMethod: paymentMethodSchema.optional(),
+  grossValueCents: centsStringSchema.optional(),
   sourceDiscountsCents: centsStringSchema.default('0'),
   discountsCents: centsStringSchema.default('0'),
   penaltyCents: centsStringSchema.default('0'),
@@ -129,6 +133,29 @@ export const createDocumentBodySchema = z.object({
   // #273: complemento da forma de pagamento (linha digitável, referência de câmbio etc.). Opcional na criação.
   paymentDetail: paymentDetailInput.optional(),
   asDraft: z.boolean().default(false),
+});
+
+// #534: fora do rascunho (`asDraft:false` → Open com títulos), os 5 campos voltam a ser obrigatórios.
+// Rejeita cedo (400) com o `path` do campo faltante, preservando o contrato do fluxo Open.
+const OPEN_REQUIRED_FIELDS = [
+  'type',
+  'documentNumber',
+  'supplierRef',
+  'paymentMethod',
+  'grossValueCents',
+] as const;
+
+export const createDocumentBodySchema = createDocumentBodyBaseSchema.superRefine((val, ctx) => {
+  if (val.asDraft) return;
+  for (const field of OPEN_REQUIRED_FIELDS) {
+    if (val[field] === undefined) {
+      ctx.addIssue({
+        code: 'custom',
+        path: [field],
+        message: 'obrigatório quando asDraft:false',
+      });
+    }
+  }
 });
 
 export type CreateDocumentBody = z.infer<typeof createDocumentBodySchema>;
@@ -270,6 +297,7 @@ export const documentResponseSchema = z
     contractRef: z.string().nullable(),
     budgetPlanRef: z.string().nullable(),
     categoryRef: z.string().nullable(),
+    subcategoryRef: z.string().nullable(), // #502: folha da árvore do plano (carimbo da subcategoria)
     costCenterRef: z.string().nullable(),
     programRef: z.string().nullable(),
     paymentMethod: z.string().nullable(),
@@ -307,6 +335,17 @@ export const documentResponseSchema = z
           })
           .strict()
           .nullable(),
+      })
+      .strict()
+      .nullable(),
+    // #62/Feature 2: comprovante-fonte guardado no storage. null = documento sem anexo. `url` é o
+    // endpoint proxy que serve os bytes INLINE (área de OCR da edição) — sem download, sem presigned.
+    attachment: z
+      .object({
+        fileName: z.string(),
+        mimeType: z.string(),
+        sizeBytes: z.number().int().min(0),
+        url: z.string(),
       })
       .strict()
       .nullable(),
@@ -425,7 +464,7 @@ export type DocumentTimelineResponseDto = z.infer<typeof documentTimelineRespons
  */
 export const importBankStatementBodySchema = z.object({
   debitAccountRef: z.uuid(),
-  format: z.enum(['OFX', 'CSV']),
+  format: z.enum(['OFX', 'CSV', 'PDF']),
   content: z.string().min(1).max(5_000_000),
   fileName: z.string().min(1).max(255).optional(),
 });
@@ -649,6 +688,9 @@ const manualEntryTypeSchema = z.enum([
 export const manualEntryBodySchema = z.object({
   type: manualEntryTypeSchema,
   supplierRef: z.uuid().optional(),
+  // #502/S2: taxonomia planejável no título manual — plano + subcategoria (folha). UUID v4 → 400 na borda.
+  budgetPlanRef: z.uuid().optional(),
+  subcategoryRef: z.uuid().optional(),
   categoryRef: z.uuid().optional(),
   costCenterRef: z.uuid().optional(),
   programRef: z.uuid().optional(),
@@ -656,6 +698,12 @@ export const manualEntryBodySchema = z.object({
   // #143: realocação patrimonial — conta de destino (Transfer) e produto livre (Investment/Redemption).
   destinationAccountRef: z.uuid().optional(),
   productLabel: z.string().min(1).max(120).optional(),
+  // #370: campos de documento (opcionais; aplicabilidade por tipo é do front). `documentValueCents`
+  // omitido → default = valor da transação conciliada (no domínio).
+  documentNumber: z.string().min(1).max(60).optional(),
+  documentType: documentTypeSchema.optional(),
+  issueDate: z.iso.date().optional(),
+  documentValueCents: centsStringSchema.optional(),
 });
 
 export type ManualEntryBody = z.infer<typeof manualEntryBodySchema>;
@@ -664,6 +712,15 @@ export const manualEntryResponseSchema = z.object({
   reconciliationId: z.uuid(),
   type: z.literal('ManualEntry'),
   manualEntryId: z.uuid(),
+  // #502/S2: a resposta ecoa o carimbo de taxonomia (plano + subcategoria) do título manual.
+  budgetPlanRef: z.string().nullable(),
+  subcategoryRef: z.string().nullable(),
+  // #370: eco dos campos de documento. `documentValueCents` já vem com o default aplicado (nunca null
+  // na criação); `issueDate` em YYYY-MM-DD.
+  documentNumber: z.string().nullable(),
+  documentType: z.string().nullable(),
+  issueDate: z.string().nullable(),
+  documentValueCents: z.string(),
 });
 
 export const batchBodySchema = z.object({
@@ -923,6 +980,9 @@ export const transactionReconciliationResponseSchema = z
     reconciledAt: z.iso.datetime(),
     differenceCents: z.string().nullable(),
     items: z.array(z.object({ payableId: z.uuid(), reconciledValueCents: z.string() }).strict()),
+    // Categoria do lançamento manual, resolvida server-side (ref → nome). null = sem categoria ou
+    // conciliação sem lançamento manual (título real fica p/ fatia 2).
+    category: z.string().nullable(),
   })
   .strict();
 
@@ -1018,6 +1078,27 @@ export const payableListResponseSchema = z
     page: z.number().int(),
     pageSize: z.number().int(),
     total: z.number().int(),
+  })
+  .strict();
+
+// ─── GET /payable-titles/counts (#536) — contagem agregada por status ─────────
+// Mesmos filtros da lista, sem `status` (queremos o breakdown) nem paginação.
+export const payableCountsQuerySchema = z.object({
+  documentType: documentTypeSchema.optional(),
+  supplierRef: z.uuid().optional(),
+  dueFrom: z.iso.date().optional(),
+  dueTo: z.iso.date().optional(),
+});
+
+export type PayableCountsQuery = z.infer<typeof payableCountsQuerySchema>;
+
+// `total` = títulos (qualquer status); `draft` = documentos Draft (rascunho, sem título);
+// `byStatus` = contagem por status de título presente (chave ausente = 0 no front).
+export const payableCountsResponseSchema = z
+  .object({
+    total: z.number().int().nonnegative(),
+    draft: z.number().int().nonnegative(),
+    byStatus: z.record(z.string(), z.number().int().nonnegative()),
   })
   .strict();
 

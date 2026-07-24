@@ -1,7 +1,7 @@
 /**
  * Schemas Zod da rota de relatórios (ADR-0027). Zod só na borda.
  *
- * `teamMemberSchema` espelha o subconjunto LGPD-safe de `TeamMember` (9 colunas).
+ * `teamMemberSchema` espelha `TeamMember` (13 colunas — 10 do #238 + as 3 demográficas).
  */
 import * as z from 'zod/v4';
 
@@ -16,6 +16,11 @@ export const teamMemberSchema = z.object({
   active: z.boolean(),
   education: z.string().nullable(),
   experienceInPublicSector: z.boolean().nullable(),
+  // REPORTS-TEAM-DEMOGRAPHIC-COLUMNS: sem declarar aqui, o serializer descarta os campos e o
+  // payload sai errado mesmo com o mapper certo.
+  genderIdentity: z.string().nullable(),
+  race: z.string().nullable(),
+  age: z.number().nullable(),
 });
 
 export type TeamMemberDto = z.infer<typeof teamMemberSchema>;
@@ -140,3 +145,74 @@ export const analysisChartItemSchema = z
 export const analysisChartResponseSchema = z.array(analysisChartItemSchema);
 
 export type AnalysisChartResponseDto = z.infer<typeof analysisChartResponseSchema>;
+
+// REALIZED (S6 · #502) — "Realizado × Planejado". Query: `year` OBRIGATÓRIO (coerce de string→number),
+// refs opcionais. `.strict()` → parâmetro desconhecido vira 400 (CA8).
+export const realizedQuerySchema = z
+  .object({
+    year: z.coerce.number().int(),
+    programId: z.string().min(1).optional(),
+    budgetPlanId: z.string().min(1).optional(),
+    partnerStateId: z.string().min(1).optional(),
+    partnerMunicipalityId: z.string().min(1).optional(),
+  })
+  .strict();
+
+export type RealizedQueryDto = z.infer<typeof realizedQuerySchema>;
+
+// Árvore de resposta (centro → categoria → subcategoria). `months[12]` só em categoria e
+// subcategoria; 3 medidas por nó. `.strict()` fail-loud se o mapper vazar campo extra.
+const realizedMonthSchema = z
+  .object({
+    month: z.number(),
+    expected: z.number(),
+    realized: z.number(),
+    provisioned: z.number(),
+  })
+  .strict();
+
+const realizedSubCategorySchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    totalExpected: z.number(),
+    totalRealized: z.number(),
+    totalProvisioned: z.number(),
+    months: z.array(realizedMonthSchema),
+  })
+  .strict();
+
+const realizedCategorySchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    totalExpected: z.number(),
+    totalRealized: z.number(),
+    totalProvisioned: z.number(),
+    months: z.array(realizedMonthSchema),
+    subCategories: z.array(realizedSubCategorySchema),
+  })
+  .strict();
+
+const realizedCostCenterSchema = z
+  .object({
+    id: z.string(),
+    name: z.string(),
+    budgetPlanId: z.string(),
+    totalExpected: z.number(),
+    totalRealized: z.number(),
+    totalProvisioned: z.number(),
+    categories: z.array(realizedCategorySchema),
+  })
+  .strict();
+
+export const realizedReportResponseSchema = z
+  .object({
+    totalExpected: z.number(),
+    totalRealized: z.number(),
+    totalProvisioned: z.number(),
+    costCenters: z.array(realizedCostCenterSchema),
+  })
+  .strict();
+
+export type RealizedReportResponseDto = z.infer<typeof realizedReportResponseSchema>;

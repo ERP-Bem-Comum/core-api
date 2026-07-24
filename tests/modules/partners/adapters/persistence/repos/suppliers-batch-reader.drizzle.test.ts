@@ -6,18 +6,16 @@
 import { describe, before, after, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
-import { inArray } from 'drizzle-orm';
 
 import { openPartnersMysql } from '#src/modules/partners/adapters/persistence/drivers/mysql-driver.ts';
 import type { PartnersMysqlHandle } from '#src/modules/partners/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleSuppliersBatchReader } from '#src/modules/partners/adapters/persistence/repos/suppliers-batch-reader.drizzle.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 if (!process.env['MYSQL_INTEGRATION']) {
   process.stdout.write('[suppliers-batch-reader:e2e] MYSQL_INTEGRATION nao definido — pulando.\n');
 } else {
-  const connectionString =
-    process.env['PARTNERS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+  const connectionString = process.env['PARTNERS_DATABASE_URL'] ?? mysqlTestConnectionString();
 
   const A = 'aa000000-0000-4000-8000-0000000000a1';
   const B = 'bb000000-0000-4000-8000-0000000000b1';
@@ -32,7 +30,10 @@ if (!process.env['MYSQL_INTEGRATION']) {
       if (!r.ok) throw new Error(`[suppliers-batch-reader:e2e] partners: ${r.error}`);
       handle = r.value;
       const t = handle.schema.parSuppliers;
-      await handle.db.delete(t).where(inArray(t.id, [A, B, MISSING]));
+      // Limpa na ENTRADA por tabela, não por id: um irmão da suíte (supplier-repository, sem afterEach)
+      // deixa resíduo com o MESMO CNPJ e id distinto — delete por id não o pega e colide na UNIQUE
+      // par_suppliers_cnpj_idx (#521). Contrato de isolamento intra-suíte do #535.
+      await handle.db.delete(t);
       const row = (id: string, name: string, cnpj: string, cat: string) => ({
         id,
         name,

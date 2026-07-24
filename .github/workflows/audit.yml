@@ -42,9 +42,7 @@ jobs:
         # ADR-0011 §"Pin de versões" — pin por SHA.
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: Habilita pnpm (corepack — packageManager pinado em package.json)
-        run: |
-          corepack enable
-          corepack prepare pnpm@11.10.0 --activate
+        run: corepack enable
       - name: Audit (dependencies de runtime ≥ high)
         run: pnpm audit --prod --audit-level=high --ignore-registry-errors
 
@@ -55,9 +53,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: Habilita pnpm (corepack — packageManager pinado em package.json)
-        run: |
-          corepack enable
-          corepack prepare pnpm@11.10.0 --activate
+        run: corepack enable
       - name: Audit completo (visibilidade de devDependencies — não bloqueia)
         continue-on-error: true
         run: pnpm audit --audit-level=high --ignore-registry-errors

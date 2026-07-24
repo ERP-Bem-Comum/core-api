@@ -97,6 +97,11 @@ const member = (over: Partial<TeamMember> = {}): TeamMember => ({
   active: true,
   education: 'Superior completo',
   experienceInPublicSector: true,
+  // 3 colunas demográficas (REPORTS-TEAM-DEMOGRAPHIC-COLUMNS) — entraram no contrato de
+  // `TeamMember` depois deste ticket; a fixture as declara para seguir espelhando o port.
+  genderIdentity: 'MULHER_CIS',
+  race: 'PARDO',
+  age: 41,
   ...over,
 });
 
@@ -219,7 +224,11 @@ describe('reports/http - GET /reports/team/demographics (REP-1 . demograficos)',
 });
 
 describe('reports/http - CA9 regressao zero em GET /reports/team (#238)', () => {
-  it('CA9: a projecao das 9 colunas segue inalterada sob collaborator:read', async () => {
+  // O contrato desta rota passou de 10 para 13 campos no REPORTS-TEAM-DEMOGRAPHIC-COLUMNS
+  // (decisao da P.O. 2026-07-20: a tabela "Equipe ABC" exibe Idade/Identidade de genero/Raca-cor
+  // e mostrava "-" por falta de contrato). A lista abaixo acompanha essa mudanca; o que o CA9
+  // guarda segue sendo o mesmo: os 10 campos do #238 continuam la, sob a MESMA permissao.
+  it('CA9: a projecao do #238 segue inalterada sob collaborator:read (agora com as 3 colunas)', async () => {
     const res = await get('/api/v2/reports/team', READER);
     assert.equal(res.statusCode, 200, res.body);
 
@@ -227,12 +236,15 @@ describe('reports/http - CA9 regressao zero em GET /reports/team (#238)', () => 
     assert.equal(body.team.length, 1);
     assert.deepEqual(Object.keys(body.team[0]!).sort(), [
       'active',
+      'age',
       'education',
       'employmentRelationship',
       'experienceInPublicSector',
+      'genderIdentity',
       'id',
       'name',
       'program',
+      'race',
       'registrationStatus',
       'role',
       'startOfContract',

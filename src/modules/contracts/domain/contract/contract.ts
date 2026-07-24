@@ -72,6 +72,10 @@ type ResolvedMeta = Readonly<{
   budgetPlanId: string | null;
   categorizacao: string | null;
   centroDeCusto: string | null;
+  // CTR-TAXONOMY-REFS: refs da árvore do plano — `null` quando ausentes (padrão dos demais refs).
+  costCenterRef: string | null;
+  categoryRef: string | null;
+  subcategoryRef: string | null;
 }>;
 
 const CONTRACT_CLASSIFICATIONS: readonly ContractClassification[] = ['CT', 'OS'];
@@ -90,6 +94,10 @@ const resolveMeta = (
     budgetPlanId: input.budgetPlanId ?? null,
     categorizacao: input.categorizacao ?? null,
     centroDeCusto: input.centroDeCusto ?? null,
+    // CTR-TAXONOMY-REFS: refs da árvore do plano — ausentes nascem `null`.
+    costCenterRef: input.costCenterRef ?? null,
+    categoryRef: input.categoryRef ?? null,
+    subcategoryRef: input.subcategoryRef ?? null,
   });
 };
 

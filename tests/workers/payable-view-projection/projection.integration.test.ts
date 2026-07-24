@@ -22,6 +22,7 @@ import {
 } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { createDrizzleFinancialOutboxReader } from '#src/modules/financial/adapters/persistence/repos/fin-outbox-reader.drizzle.ts';
 import { createDrizzlePayableViewStore } from '#src/modules/financial/adapters/persistence/repos/payable-view-store.drizzle.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 import {
   createPayableProjectionDelivery,
   rowToMessage,
@@ -33,7 +34,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('payable-view-projection — e2e fin_outbox → fin_payable_view', () => {
     let financial: FinancialMysqlHandle;

@@ -22,27 +22,29 @@ import { fileURLToPath } from 'node:url';
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const PROJECT_ROOT = resolve(HERE, '..', '..');
 const PACKAGE_JSON = join(PROJECT_ROOT, 'package.json');
-const ORCHESTRATOR = join(PROJECT_ROOT, 'scripts', 'ci', 'test-integration.ts');
+// CI-RUNNER-NON-DESTRUCTIVE (Parte A da #500): a escrita dos secrets (com o `chmod 0o644`) migrou do
+// orquestrador para o cofre `secrets-vault.ts` (`backupAndWriteTestSecrets`). A invariante 0o644 vive lá.
+const SECRETS_VAULT = join(PROJECT_ROOT, 'scripts', 'ci', 'secrets-vault.ts');
 
 // `chmod 600`/`0600` (shell legado) ou `0o600` (orquestrador) mirando os secrets de MySQL.
 const CHMOD_600_SECRETS = /chmod\s+0?600\s+secrets\/mysql_/;
 
 describe('CTR-INFRA-INTEGRATION-SECRET-PERMS — orquestrador de integração', () => {
-  it('CA-1: o orquestrador NÃO grava os secrets MySQL com 0o600', () => {
-    const src = readFileSync(ORCHESTRATOR, 'utf-8');
+  it('CA-1: o cofre de secrets NÃO grava os secrets MySQL com 0o600', () => {
+    const src = readFileSync(SECRETS_VAULT, 'utf-8');
     assert.doesNotMatch(
       src,
       /0o600/,
-      'orquestrador usa 0o600 — o seed readonly_bi falha (uid mysql não lê 0600). Use 0o644.',
+      'secrets-vault usa 0o600 — o seed readonly_bi falha (uid mysql não lê 0600). Use 0o644.',
     );
   });
 
-  it('CA-1b: o orquestrador grava os secrets MySQL em 0o644', () => {
-    const src = readFileSync(ORCHESTRATOR, 'utf-8');
+  it('CA-1b: o cofre de secrets grava os secrets MySQL em 0o644', () => {
+    const src = readFileSync(SECRETS_VAULT, 'utf-8');
     assert.match(
       src,
       /chmodSync\([^)]*0o644\)/,
-      'orquestrador deveria gravar os secrets em 0o644 (alinhado a setup-secrets.ts e ao seed do MySQL).',
+      'secrets-vault deveria gravar os secrets em 0o644 (alinhado a setup-secrets.ts e ao seed do MySQL).',
     );
   });
 

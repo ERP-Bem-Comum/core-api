@@ -96,6 +96,7 @@ describe('documentResponseSchema — .strict() (#384)', () => {
     contractRef: null,
     budgetPlanRef: null,
     categoryRef: null,
+    subcategoryRef: null,
     costCenterRef: null,
     programRef: null,
     paymentMethod: 'PIX',
@@ -114,6 +115,7 @@ describe('documentResponseSchema — .strict() (#384)', () => {
       bankAccount: bankAccountFixture,
       pixKey: null,
     },
+    attachment: null,
   };
 
   it('fixture válido é aceito (regressão)', () => {
@@ -520,6 +522,7 @@ describe('transactionReconciliationResponseSchema — .strict() (#384)', () => {
     reconciledAt: '2026-07-01T12:00:00.000Z',
     differenceCents: null,
     items: [itemFixture],
+    category: null,
   };
 
   it('fixture válido é aceito (regressão)', () => {

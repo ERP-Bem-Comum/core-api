@@ -4,6 +4,7 @@ import type { TeamDemographics } from '../../application/ports/team-demographics
 import type { SupplierWithoutContract } from '../../application/ports/suppliers-without-contract-read.ts';
 import type { PaymentPositionRow } from '../../application/ports/payment-position-read.ts';
 import type { AnalysisRow } from '../../application/ports/analysis-read.ts';
+import type { RealizedReport } from '../../application/ports/realized-read.ts';
 import type {
   TeamDemographicsResponseDto,
   TeamReportResponseDto,
@@ -11,6 +12,7 @@ import type {
   PaymentPositionResponseDto,
   AnalysisReportResponseDto,
   AnalysisChartResponseDto,
+  RealizedReportResponseDto,
 } from './schemas.ts';
 
 export const teamToDto = (members: readonly TeamMember[]): TeamReportResponseDto => ({
@@ -81,6 +83,38 @@ export const analysisToReport = (rows: readonly AnalysisRow[]): AnalysisReportRe
 
   return { totalValueOfPeriod, data };
 };
+
+// REALIZED (S6 · #502): a árvore do port já tem exatamente o shape do DTO (só string/number). O
+// mapper reconstrói arrays MUTÁVEIS (o port é Readonly aninhado) sem alterar valor — cópia estrutural.
+export const realizedToDto = (report: RealizedReport): RealizedReportResponseDto => ({
+  totalExpected: report.totalExpected,
+  totalRealized: report.totalRealized,
+  totalProvisioned: report.totalProvisioned,
+  costCenters: report.costCenters.map((cc) => ({
+    id: cc.id,
+    name: cc.name,
+    budgetPlanId: cc.budgetPlanId,
+    totalExpected: cc.totalExpected,
+    totalRealized: cc.totalRealized,
+    totalProvisioned: cc.totalProvisioned,
+    categories: cc.categories.map((cat) => ({
+      id: cat.id,
+      name: cat.name,
+      totalExpected: cat.totalExpected,
+      totalRealized: cat.totalRealized,
+      totalProvisioned: cat.totalProvisioned,
+      months: cat.months.map((m) => ({ ...m })),
+      subCategories: cat.subCategories.map((sub) => ({
+        id: sub.id,
+        name: sub.name,
+        totalExpected: sub.totalExpected,
+        totalRealized: sub.totalRealized,
+        totalProvisioned: sub.totalProvisioned,
+        months: sub.months.map((m) => ({ ...m })),
+      })),
+    })),
+  })),
+});
 
 export const analysisToChart = (rows: readonly AnalysisRow[]): AnalysisChartResponseDto => {
   const byCategory = new Map<string | null, { name: string | null; total: number }>();

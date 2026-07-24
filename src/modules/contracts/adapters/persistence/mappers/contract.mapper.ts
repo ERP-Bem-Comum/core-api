@@ -216,6 +216,10 @@ export const contractToInsert = (
         budgetPlanId: c.budgetPlanId,
         categorizacao: c.categorizacao,
         centroDeCusto: c.centroDeCusto,
+        // CTR-TAXONOMY-REFS: refs da árvore do plano — string pura, copiada 1:1 (padrão program/budget).
+        costCenterRef: c.costCenterRef,
+        categoryRef: c.categoryRef,
+        subcategoryRef: c.subcategoryRef,
         observations: c.observations,
         email: c.email,
         telephone: c.telephone,
@@ -254,6 +258,10 @@ export const contractToInsert = (
       budgetPlanId: c.budgetPlanId,
       categorizacao: c.categorizacao,
       centroDeCusto: c.centroDeCusto,
+      // CTR-TAXONOMY-REFS: refs da árvore do plano — string pura, copiada 1:1 (padrão program/budget).
+      costCenterRef: c.costCenterRef,
+      categoryRef: c.categoryRef,
+      subcategoryRef: c.subcategoryRef,
       observations: c.observations,
       email: c.email,
       telephone: c.telephone,
@@ -309,6 +317,10 @@ export const contractFromRow = (
     budgetPlanId: row.budgetPlanId,
     categorizacao: row.categorizacao,
     centroDeCusto: row.centroDeCusto,
+    // CTR-TAXONOMY-REFS: refs da árvore do plano — string pura, sem rehydrate (padrão program/budget).
+    costCenterRef: row.costCenterRef,
+    categoryRef: row.categoryRef,
+    subcategoryRef: row.subcategoryRef,
     observations: row.observations,
     email: row.email,
     telephone: row.telephone,

@@ -25,6 +25,9 @@ export type ManualEntry = Readonly<{
   type: ManualEntryType;
   valueCents: number;
   supplierRef: string | null;
+  // #502/S2: taxonomia planejável no título manual (plano + subcategoria), ao lado dos irmãos.
+  budgetPlanRef: string | null;
+  subcategoryRef: string | null;
   categoryRef: string | null;
   costCenterRef: string | null;
   programRef: string | null;
@@ -33,6 +36,12 @@ export type ManualEntry = Readonly<{
   // `productLabel` = produto livre (Investment/Redemption). Null nos demais tipos.
   destinationAccountRef: string | null;
   productLabel: string | null;
+  // #370: campos de documento (rastreabilidade). `documentValueCents` default = valor da transação
+  // conciliada (`valueCents`); pode divergir (multa/juros/complemento). Metadado — não altera o realizado.
+  documentNumber: string | null;
+  documentType: string | null;
+  issueDate: Date | null;
+  documentValueCents: number | null;
 }>;
 
 // Foto do título no momento da conciliação (referência por identidade — D-AGGREGATES).

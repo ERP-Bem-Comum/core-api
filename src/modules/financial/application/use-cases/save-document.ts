@@ -7,6 +7,7 @@ import {
   ContractRef,
   BudgetPlanRef,
   CategoryRef,
+  SubcategoryRef,
   CostCenterRef,
   ProgramRef,
   type FinancialRefError,
@@ -66,6 +67,7 @@ export type SaveDocumentCommand = Readonly<{
   contractRef?: string | null;
   budgetPlanRef?: string | null;
   categoryRef?: string | null;
+  subcategoryRef?: string | null; // #502: folha da árvore do plano (carimbo da subcategoria)
   costCenterRef?: string | null;
   programRef?: string | null;
   paymentMethod: PaymentMethod;
@@ -122,6 +124,10 @@ export const saveDocument =
     if (budgetPlanRef !== null && !budgetPlanRef.ok) return err(budgetPlanRef.error);
     const categoryRef = cmd.categoryRef == null ? null : CategoryRef.rehydrate(cmd.categoryRef);
     if (categoryRef !== null && !categoryRef.ok) return err(categoryRef.error);
+    // #502: ref opaco por formato (UUID v4) — o pertencimento ao plano é resolvido na leitura (S5).
+    const subcategoryRef =
+      cmd.subcategoryRef == null ? null : SubcategoryRef.rehydrate(cmd.subcategoryRef);
+    if (subcategoryRef !== null && !subcategoryRef.ok) return err(subcategoryRef.error);
     const costCenterRef =
       cmd.costCenterRef == null ? null : CostCenterRef.rehydrate(cmd.costCenterRef);
     if (costCenterRef !== null && !costCenterRef.ok) return err(costCenterRef.error);
@@ -207,6 +213,7 @@ export const saveDocument =
       contractRef: contractRef?.value ?? null,
       budgetPlanRef: resolvedBudgetPlanRef,
       categoryRef: categoryRef?.value ?? null,
+      subcategoryRef: subcategoryRef?.value ?? null,
       costCenterRef: costCenterRef?.value ?? null,
       programRef: resolvedProgramRef,
       paymentMethod: cmd.paymentMethod,

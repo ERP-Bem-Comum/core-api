@@ -19,6 +19,7 @@ import { finPayables } from '#src/modules/financial/adapters/persistence/schemas
 import { saveDocument } from '#src/modules/financial/application/use-cases/save-document.ts';
 import { createInMemoryCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.in-memory.ts';
 import { newUuid } from '#src/shared/utils/id.ts';
+import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 if (!process.env['MYSQL_INTEGRATION']) {
   process.stdout.write(
@@ -28,7 +29,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
   const connectionString =
     process.env['FINANCIAL_DATABASE_URL'] ??
     process.env['CONTRACTS_DATABASE_URL'] ??
-    'mysql://root:rootpw-migration-test-only@127.0.0.1:3306/core';
+    mysqlTestConnectionString();
 
   describe('Match/Suggestion — Drizzle + MySQL (integração)', () => {
     let handle: FinancialMysqlHandle;

@@ -17,14 +17,19 @@ import { openCollaboratorProjectionReader } from '#src/modules/partners/public-a
 const CONN = `mysql://root:rootpw-migration-test-only@127.0.0.1:${process.env['MYSQL_PORT'] ?? '3306'}/core`;
 const clock = ClockFixed(new Date('2026-06-01T12:00:00.000Z'));
 
-const NINE_KEYS = [
+// REPORTS-TEAM-DEMOGRAPHIC-COLUMNS: 10 colunas do #238 + as 3 demográficas da tabela Equipe ABC.
+// `dateOfBirth` NÃO entra — só `age` (idade calculada com o Clock injetado).
+const PROJECTION_KEYS = [
   'active',
+  'age',
   'education',
   'employmentRelationship',
   'experienceInPublicSector',
+  'genderIdentity',
   'id',
   'name',
   'program',
+  'race',
   'registrationStatus',
   'role',
   'startOfContract',
@@ -69,7 +74,8 @@ if (process.env['MYSQL_INTEGRATION'] !== '1') {
       assert.equal((await repo.save(reg.value.collaborator)).ok, true);
 
       // Reader boot-scoped: abre pool uma vez, reusa, fecha no fim (não por operação).
-      const readerR = await openCollaboratorProjectionReader({ connectionString: CONN });
+      // `clock` injetado (REPORTS-TEAM-DEMOGRAPHIC-COLUMNS): a idade sai de `clock.today()`.
+      const readerR = await openCollaboratorProjectionReader({ connectionString: CONN, clock });
       assert.equal(readerR.ok, true, JSON.stringify(readerR));
       if (!readerR.ok) return;
       const reader = readerR.value;
@@ -87,8 +93,9 @@ if (process.env['MYSQL_INTEGRATION'] !== '1') {
       assert.equal(m.active, true);
       assert.equal(m.program, null, 'programa não existe no core-api → null');
 
-      // LGPD (CA3): o objeto projetado tem EXATAMENTE as 9 chaves — nada sensível vaza.
-      assert.deepEqual([...Object.keys(m)].sort(), [...NINE_KEYS].sort());
+      // CA3/CA6: o objeto projetado tem EXATAMENTE as 13 chaves do contrato — e `dateOfBirth`
+      // não é uma delas (só `age`).
+      assert.deepEqual([...Object.keys(m)].sort(), [...PROJECTION_KEYS].sort());
     });
   });
 }
