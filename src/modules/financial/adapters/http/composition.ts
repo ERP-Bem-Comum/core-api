@@ -121,6 +121,7 @@ import {
 import { saveDocument } from '../../application/use-cases/save-document.ts';
 import { saveDraft } from '../../application/use-cases/save-draft.ts';
 import { ingestDocument } from '../../application/use-cases/ingest-document.ts';
+import { parseDocument } from '../../application/use-cases/parse-document.ts';
 import type { SourceFileStoragePort } from '../../application/ports/source-file-storage.ts';
 import { createInMemorySourceFileStorage } from '../storage/source-file-storage.in-memory.ts';
 import { createS3SourceFileStorage } from '../storage/source-file-storage.s3.ts';
@@ -203,6 +204,7 @@ export type FinancialHttpDeps = Readonly<{
   saveDocument: ReturnType<typeof saveDocument>;
   saveDraft: ReturnType<typeof saveDraft>;
   ingestDocument: ReturnType<typeof ingestDocument>; // #62: ingestão (leitura + storage + rascunho)
+  parseDocument: ReturnType<typeof parseDocument>; // #580: leitura pura (parse-only, sem persistir)
   adjustDocument: ReturnType<typeof adjustDocument>;
   bulkUpdateDueDate: ReturnType<typeof bulkUpdateDueDate>; // #162: vencimento em lote
   approveDocument: ReturnType<typeof approveDocument>;
@@ -660,8 +662,17 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     rejected: pools.rejectedSuggestionRepo,
   });
   const saveDraftUseCase = saveDraft(deps);
-  // const p/ narrow no closure do resolveSupplierByCnpj (método opcional no port).
+  // const p/ narrow no closure do resolveSupplierByCnpj (método opcional no port). #FIN-OCR-AUTOFILL:
+  // só quando o partners está disponível (driver mysql); memory → sem resolução (seleção manual). Um
+  // closure compartilhado por ingest (#560) e parse (#580).
   const resolveSupplierId = pools.contractorReadPort?.findSupplierIdByCnpj;
+  const resolveSupplierByCnpj =
+    resolveSupplierId !== undefined
+      ? async (taxId: string) => {
+          const r = await resolveSupplierId(taxId);
+          return r.ok ? ok(r.value) : err('supplier-resolve-unavailable' as const);
+        }
+      : undefined;
   return {
     saveDocument: saveDocument(deps),
     saveDraft: saveDraftUseCase,
@@ -670,16 +681,11 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
       storage: pools.documentStorage,
       saveDraft: saveDraftUseCase,
       idGen: DocumentIdVo.generate,
-      // #FIN-OCR-AUTOFILL-SUPPLIER: só quando o partners está disponível (driver mysql); memory → sem
-      // resolução (o rascunho fica sem supplierRef, seleção manual — comportamento atual).
-      ...(resolveSupplierId !== undefined
-        ? {
-            resolveSupplierByCnpj: async (taxId: string) => {
-              const r = await resolveSupplierId(taxId);
-              return r.ok ? ok(r.value) : err('supplier-resolve-unavailable');
-            },
-          }
-        : {}),
+      ...(resolveSupplierByCnpj !== undefined ? { resolveSupplierByCnpj } : {}),
+    }),
+    parseDocument: parseDocument({
+      reader: createDocumentReader(),
+      ...(resolveSupplierByCnpj !== undefined ? { resolveSupplierByCnpj } : {}),
     }),
     adjustDocument: adjustDocument(deps),
     bulkUpdateDueDate: bulkUpdateDueDate(deps), // #162: mesmas deps (repo + clock) do adjust

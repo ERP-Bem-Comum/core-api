@@ -9,6 +9,8 @@
 
 import type { Document } from '../../domain/document/types.ts';
 import * as Competencia from '../../domain/document/competencia.ts';
+import type { ParseDocumentOutput } from '../../application/use-cases/parse-document.ts';
+import type { ParseDocumentResponseDto } from './schemas.ts';
 import type { DocumentListItem } from '../../domain/document/query.ts';
 import type { Payables } from '../../domain/payable/types.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
@@ -236,6 +238,30 @@ export const documentToDto = (
     version,
     payeeBank,
     attachment,
+  };
+};
+
+// #580: serializa a leitura pura (parse-only) → campos p/ o front auto-preencher (sem persistir).
+// Cents e datas viram string (mesma convenção do create); supplierRef = fornecedor CADASTRADO casado.
+export const parseResultToDto = (output: ParseDocumentOutput): ParseDocumentResponseDto => {
+  const r = output.result;
+  return {
+    resolvedVia: output.resolvedVia,
+    supplierRef: output.supplierRef,
+    supplierName: output.supplier?.legalName ?? null,
+    supplierTaxId: output.supplier?.taxId ?? null,
+    type: r?.type ?? null,
+    documentNumber: r?.documentNumber ?? null,
+    competencia: r?.competence != null ? Competencia.toString(r.competence) : null,
+    issueDate: r?.issueDate != null ? r.issueDate.toISOString().slice(0, 10) : null,
+    grossValueCents: r?.grossValue != null ? moneyToCentsString(r.grossValue.cents) : null,
+    description: r?.description ?? null,
+    retentions: (r?.retentions ?? []).map((x) => ({
+      type: x.type,
+      baseCents: moneyToCentsString(x.base.cents),
+      rateBps: x.rateBps,
+      valueCents: moneyToCentsString(x.value.cents),
+    })),
   };
 };
 

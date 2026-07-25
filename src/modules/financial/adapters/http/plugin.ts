@@ -49,6 +49,7 @@ import type { RegisteredTaxInput } from '../../domain/shared/registered-tax.ts';
 import { FINANCIAL_PERMISSION } from '../../public-api/permissions.ts';
 import {
   documentToDto,
+  parseResultToDto,
   listItemToSummaryDto,
   timelineToDto,
   statementTransactionsToDto,
@@ -142,6 +143,8 @@ import {
   ingestDocumentQuerySchema,
   octetStreamIngestBody,
   createDocumentWithSourceFileBodySchema,
+  parseDocumentQuerySchema,
+  parseDocumentResponseSchema,
   ingestDocumentResponseSchema,
 } from './schemas.ts';
 
@@ -361,6 +364,31 @@ const financialRoutes =
             documentId: String(result.value.documentId),
             resolvedVia: result.value.resolvedVia,
           }) as unknown as Promise<void>;
+        },
+      });
+
+      // #580: POST /financial/documents/parse — leitura PURA. Roda o mesmo leitor da ingestão e devolve
+      // os campos extraídos (incl. supplierRef casado por CNPJ) SEM criar rascunho nem persistir nada.
+      // Reusa o parser octet-stream + magic-bytes deste sub-scope. Restaura o auto-fill do fornecedor
+      // no upload (que caiu quando o upload deixou de criar rascunho) p/ todos os layouts do leitor.
+      ingestScope.route({
+        method: 'POST',
+        url: '/financial/documents/parse',
+        preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.write)],
+        schema: {
+          querystring: parseDocumentQuerySchema,
+          body: octetStreamIngestBody(),
+          response: { 200: parseDocumentResponseSchema },
+        } satisfies FastifyZodOpenApiSchema,
+        handler: async (req, reply) => {
+          const bytes = req.body as unknown as Buffer;
+          const q = req.query;
+          if (!magicBytesMatch(q.mimeType, bytes)) {
+            return sendDomainError(reply, 'document-magic-bytes-mismatch');
+          }
+          const result = await deps.parseDocument({ bytes, mimeType: q.mimeType });
+          if (!result.ok) return sendDomainError(reply, result.error);
+          return sendResult(reply, ok(parseResultToDto(result.value)), { ok: 200 });
         },
       });
     });
