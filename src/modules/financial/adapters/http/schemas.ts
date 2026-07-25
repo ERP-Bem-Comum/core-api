@@ -160,6 +160,15 @@ export const createDocumentBodySchema = createDocumentBodyBaseSchema.superRefine
 
 export type CreateDocumentBody = z.infer<typeof createDocumentBodySchema>;
 
+// #579: corpo OPCIONAL do submit (promover rascunho no lugar com os campos revisados). Mesmos campos
+// do create (defaults de cents/arrays preservados) + `version` opcional (optimistic lock). Sem corpo →
+// promove como está (comportamento atual, backward-compat). Validado por safeParse no handler.
+export const submitDraftBodySchema = createDocumentBodyBaseSchema.extend({
+  version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER).optional(),
+});
+
+export type SubmitDraftBody = z.infer<typeof submitDraftBodySchema>;
+
 // ─── PATCH /documents/:id (adjustDocument) ──────────────────────────────────
 
 /**

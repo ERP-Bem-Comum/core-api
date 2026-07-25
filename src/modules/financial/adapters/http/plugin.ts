@@ -45,6 +45,7 @@ import * as CedenteAccountId from '../../domain/cedente/cedente-account-id.ts';
 import type { CedenteAccount } from '../../domain/cedente/types.ts';
 import { allMetadata } from '../../domain/document/document-type-metadata.ts';
 import type { RetentionInput } from '../../domain/shared/retention.ts';
+import type { SaveDraftCommand } from '../../application/use-cases/save-draft.ts';
 import type { RegisteredTaxInput } from '../../domain/shared/registered-tax.ts';
 import { FINANCIAL_PERMISSION } from '../../public-api/permissions.ts';
 import {
@@ -142,6 +143,8 @@ import {
   ingestDocumentQuerySchema,
   octetStreamIngestBody,
   createDocumentWithSourceFileBodySchema,
+  submitDraftBodySchema,
+  type SubmitDraftBody,
   ingestDocumentResponseSchema,
 } from './schemas.ts';
 
@@ -177,6 +180,15 @@ const sendDomainError = (reply: FastifyReply, error: string): Promise<void> => {
       toErrorEnvelope(toPublicCode(error), toPublicMessage(error), requestId),
     ) as unknown as Promise<void>;
 };
+
+// #579: 400 de body inválido via FastifyReply plano (o type-provider da rota restringe `.code()` aos
+// status declarados no response schema; o helper recebe o reply widened, como o sendDomainError).
+const sendBadRequest = (reply: FastifyReply, message: string): Promise<void> =>
+  reply
+    .code(400)
+    .send(
+      toErrorEnvelope('validation', message, currentCorrelationId() ?? reply.request.id),
+    ) as unknown as Promise<void>;
 
 // ─── Helper: carrega stored document e serializa ──────────────────────────────
 
@@ -243,6 +255,40 @@ const toRegisteredTaxInputs = (
     rateBps: t.rateBps,
     valueCents: Number(t.valueCents),
   }));
+
+// #579: campos crus do body → comando do rascunho (sem id/sourceFile — o caller adiciona). Defaults de
+// cents/arrays garantidos pelo schema. Espelha o mapeamento do POST /documents asDraft.
+const buildSaveDraftCommand = (
+  body: SubmitDraftBody,
+): Omit<SaveDraftCommand, 'id' | 'sourceFile'> => ({
+  documentNumber: body.documentNumber ?? null,
+  series: body.series ?? null,
+  type: body.type ?? null,
+  supplierRef: body.supplierRef ?? null,
+  ...(body.payeeKind !== undefined ? { payeeKind: body.payeeKind } : {}),
+  approverRef: body.approverRef ?? null,
+  contractRef: body.contractRef ?? null,
+  budgetPlanRef: body.budgetPlanRef ?? null,
+  categoryRef: body.categoryRef ?? null,
+  subcategoryRef: body.subcategoryRef ?? null,
+  costCenterRef: body.costCenterRef ?? null,
+  programRef: body.programRef ?? null,
+  paymentMethod: body.paymentMethod ?? null,
+  grossValueCents: body.grossValueCents !== undefined ? Number(body.grossValueCents) : null,
+  sourceDiscountsCents: Number(body.sourceDiscountsCents),
+  discountsCents: Number(body.discountsCents),
+  penaltyCents: Number(body.penaltyCents),
+  interestCents: Number(body.interestCents),
+  retentions: toRetentionInputs(body.retentions),
+  registeredTaxes: toRegisteredTaxInputs(body.registeredTaxes),
+  dueDate: body.dueDate !== undefined ? new Date(body.dueDate) : null,
+  issueDate: body.issueDate !== undefined ? new Date(body.issueDate) : null,
+  description: body.description ?? null,
+  accessKey: body.accessKey ?? null,
+  competencia: body.competencia ?? null,
+  contaDebitoRef: body.contaDebitoRef ?? null,
+  paymentDetail: body.paymentDetail ?? null,
+});
 
 // Serializa a conta-cedente (019). Money em string (convenção); opcionais → null.
 // #222: item da listagem payable-centric → DTO (centavos em string; data ISO).
@@ -776,11 +822,47 @@ const financialRoutes =
       method: 'POST',
       url: '/financial/documents/:id/submit',
       preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.write)],
+      // #579: body OPCIONAL com os campos revisados (não declarado no schema p/ preservar o submit
+      // SEM corpo — backward-compat; validado por safeParse abaixo).
       schema: {
         params: documentIdParamSchema,
         response: { 200: documentResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
+        // #579: promover NO LUGAR com os campos revisados (sem duplicata). Se o corpo traz campos,
+        // atualiza o rascunho (upsert por id, preservando o comprovante) e então promove — numa chamada.
+        const raw = req.body;
+        const hasFields = raw != null && typeof raw === 'object' && Object.keys(raw).length > 0;
+        if (hasFields) {
+          const parsed = submitDraftBodySchema.safeParse(raw);
+          if (!parsed.success) {
+            return sendBadRequest(reply, 'Corpo inválido para finalizar o rascunho.');
+          }
+          const idR = DocumentId.rehydrate(req.params.id);
+          if (!idR.ok) return sendDomainError(reply, 'document-id-invalid');
+          const found = await deps.findDocumentById(idR.value);
+          if (!found.ok) return sendDomainError(reply, found.error);
+
+          // Preserva o comprovante-fonte já anexado ao rascunho (a remontagem zeraria a ref sem isto).
+          const ref = found.value.document.sourceFileRef;
+          const draftResult = await deps.saveDraft({
+            id: idR.value,
+            ...buildSaveDraftCommand(parsed.data),
+            ...(ref !== null
+              ? {
+                  sourceFile: {
+                    bucket: ref.bucket,
+                    key: ref.key,
+                    hashSha256: ref.hashSha256,
+                    sizeBytes: ref.sizeBytes,
+                    mimeType: ref.mimeType,
+                  },
+                }
+              : {}),
+          });
+          if (!draftResult.ok) return sendDomainError(reply, draftResult.error);
+        }
+
         const result = await deps.submitDraft({ documentId: req.params.id });
         if (!result.ok) return sendDomainError(reply, result.error);
         return loadAndSerialize(deps, reply, req.params.id);
