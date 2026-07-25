@@ -1265,3 +1265,36 @@ export const createDocumentWithSourceFileBodySchema = createDocumentBodyBaseSche
 export type CreateDocumentWithSourceFileBody = z.infer<
   typeof createDocumentWithSourceFileBodySchema
 >;
+
+// #580: leitura pura (parse-only). Query só com o mimeType (mesma allowlist do ingest); o corpo é
+// octet-stream (bytes crus). Não persiste nada — devolve os campos extraídos p/ o front auto-preencher.
+export const parseDocumentQuerySchema = z.object({
+  mimeType: z.enum(INGEST_MIME_ALLOWLIST),
+});
+
+export const parseDocumentResponseSchema = z
+  .object({
+    resolvedVia: z.enum(['xml', 'native-text', 'unpdf']).nullable(),
+    supplierRef: z.string().nullable(),
+    supplierName: z.string().nullable(),
+    supplierTaxId: z.string().nullable(),
+    type: z.string().nullable(),
+    documentNumber: z.string().nullable(),
+    competencia: z.string().nullable(),
+    issueDate: z.string().nullable(),
+    grossValueCents: z.string().nullable(),
+    description: z.string().nullable(),
+    retentions: z.array(
+      z
+        .object({
+          type: z.string(),
+          baseCents: z.string(),
+          rateBps: z.number().int().min(0),
+          valueCents: z.string(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
+export type ParseDocumentResponseDto = z.infer<typeof parseDocumentResponseSchema>;

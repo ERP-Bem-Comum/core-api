@@ -46,7 +46,7 @@ export type IngestDocumentError = DocumentReaderError | SourceFileStorageError |
 // Classificação EXAUSTIVA (F6): o compilador quebra se um novo `DocumentReaderError` não for
 // classificado aqui — evita fail-open (erro de recurso novo cair silenciosamente no "guarda mesmo
 // assim"). RECURSO = rejeita sem guardar; LEITURA = guarda o PDF + rascunho vazio (preenchimento manual).
-const READER_ERROR_CLASS: Record<DocumentReaderError, 'resource' | 'read'> = {
+export const READER_ERROR_CLASS: Record<DocumentReaderError, 'resource' | 'read'> = {
   'decompression-limit-exceeded': 'resource',
   'source-too-large': 'resource',
   'empty-input': 'resource',
