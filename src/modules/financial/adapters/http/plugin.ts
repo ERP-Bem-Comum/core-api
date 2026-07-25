@@ -40,6 +40,7 @@ import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
 import { writeErrorStatus, toPublicCode, toPublicMessage } from './error-mapping.ts';
 
 import * as DocumentId from '../../domain/shared/document-id.ts';
+import type { SourceFileRef, SourceFileRefInput } from '../../domain/document/source-file-ref.ts';
 import * as CedenteAccountId from '../../domain/cedente/cedente-account-id.ts';
 import type { CedenteAccount } from '../../domain/cedente/types.ts';
 import { allMetadata } from '../../domain/document/document-type-metadata.ts';
@@ -140,6 +141,7 @@ import {
   statementSuggestionsResponseSchema,
   ingestDocumentQuerySchema,
   octetStreamIngestBody,
+  createDocumentWithSourceFileBodySchema,
   ingestDocumentResponseSchema,
 } from './schemas.ts';
 
@@ -285,6 +287,10 @@ const cedenteAccountToDto = (a: CedenteAccount): CedenteAccountResponseDto => ({
 // #62: upload seguro da ingestão (portado de contracts/http/plugin.ts:125-167). bodyLimit por rota
 // (não vaza o global de 1 MiB); magic-bytes contra mimeType mentido; sanitização anti header-injection.
 const MAX_INGEST_BYTES = 20 * 1024 * 1024; // 20 MiB
+// #577: base64 infla ~33%; + envelope JSON. bodyLimit ISOLADO na rota /with-source-file (não vaza p/
+// as demais /financial — mesmo princípio do sub-scope octet-stream do ingest). ~28 MiB cobre 20 MiB
+// em base64 + os campos do create; acima disso o Fastify rejeita no parse (413).
+const MAX_CREATE_WITH_FILE_BYTES = Math.ceil(MAX_INGEST_BYTES * 1.4);
 const PDF_MAGIC = Buffer.from('%PDF');
 const XML_MIMES: ReadonlySet<string> = new Set(['text/xml', 'application/xml']);
 // Sniff de conteúdo vs mimeType declarado (M2, CWE-434): PDF começa com `%PDF`; XML, com `<` (após
@@ -355,6 +361,154 @@ const financialRoutes =
             documentId: String(result.value.documentId),
             resolvedVia: result.value.resolvedVia,
           }) as unknown as Promise<void>;
+        },
+      });
+    });
+
+    // #577: POST /financial/documents/with-source-file — cria o documento (Draft OU Open) JÁ COM o
+    // comprovante, em UMA chamada atômica (base64 no JSON). Rota ISOLADA num sub-scope com bodyLimit
+    // próprio (~28 MiB) — o base64 não vaza o limite p/ o create comum (parsing é pré-auth). Substitui
+    // o fluxo ingest→rascunho-fantasma: o arquivo nasce no MESMO doc que o usuário salva.
+    await scope.register(async (withFileScope: typeof scope) => {
+      withFileScope.route({
+        method: 'POST',
+        url: '/financial/documents/with-source-file',
+        bodyLimit: MAX_CREATE_WITH_FILE_BYTES,
+        preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.write)],
+        schema: {
+          body: createDocumentWithSourceFileBodySchema,
+          response: { 201: documentResponseSchema },
+        } satisfies FastifyZodOpenApiSchema,
+        handler: async (req, reply) => {
+          const body = req.body;
+
+          // 1. Anexo (opcional): decodifica + revalida magic-bytes/tamanho (a allowlist de mime já
+          //    é garantida pelo schema). Sem anexo → segue o fluxo normal, sem `sourceFile`.
+          let sourceFileInput: SourceFileRefInput | undefined = undefined;
+          let storedRef: SourceFileRef | undefined = undefined;
+          const documentId = DocumentId.generate();
+          if (body.sourceFile !== undefined) {
+            const bytes = Buffer.from(body.sourceFile.base64, 'base64');
+            if (bytes.length === 0 || !magicBytesMatch(body.sourceFile.mimeType, bytes)) {
+              return sendDomainError(reply, 'document-magic-bytes-mismatch');
+            }
+            if (bytes.length > MAX_INGEST_BYTES) return sendDomainError(reply, 'source-too-large');
+
+            const stored = await deps.uploadSourceFile({
+              documentId,
+              bytes,
+              mimeType: body.sourceFile.mimeType,
+              fileName: sanitizeFilename(body.sourceFile.fileName),
+            });
+            if (!stored.ok) return sendDomainError(reply, stored.error);
+            storedRef = stored.value;
+            sourceFileInput = {
+              bucket: stored.value.bucket,
+              key: stored.value.key,
+              hashSha256: stored.value.hashSha256,
+              sizeBytes: stored.value.sizeBytes,
+              mimeType: stored.value.mimeType,
+            };
+          }
+
+          // Compensação (F4): remove o comprovante órfão se o save falhar depois do upload.
+          const compensate = async (): Promise<void> => {
+            if (storedRef !== undefined) await deps.removeSourceFile(storedRef);
+          };
+
+          if (body.asDraft) {
+            const result = await deps.saveDraft({
+              id: documentId,
+              documentNumber: body.documentNumber ?? null,
+              series: body.series ?? null,
+              type: body.type ?? null,
+              supplierRef: body.supplierRef ?? null,
+              ...(body.payeeKind !== undefined ? { payeeKind: body.payeeKind } : {}),
+              approverRef: body.approverRef ?? null,
+              contractRef: body.contractRef ?? null,
+              budgetPlanRef: body.budgetPlanRef ?? null,
+              categoryRef: body.categoryRef ?? null,
+              subcategoryRef: body.subcategoryRef ?? null,
+              costCenterRef: body.costCenterRef ?? null,
+              programRef: body.programRef ?? null,
+              paymentMethod: body.paymentMethod ?? null,
+              grossValueCents:
+                body.grossValueCents !== undefined ? Number(body.grossValueCents) : null,
+              sourceDiscountsCents: Number(body.sourceDiscountsCents),
+              discountsCents: Number(body.discountsCents),
+              penaltyCents: Number(body.penaltyCents),
+              interestCents: Number(body.interestCents),
+              retentions: toRetentionInputs(body.retentions),
+              registeredTaxes: toRegisteredTaxInputs(body.registeredTaxes),
+              dueDate: body.dueDate !== undefined ? new Date(body.dueDate) : null,
+              issueDate: body.issueDate !== undefined ? new Date(body.issueDate) : null,
+              description: body.description ?? null,
+              accessKey: body.accessKey ?? null,
+              competencia: body.competencia ?? null,
+              contaDebitoRef: body.contaDebitoRef ?? null,
+              paymentDetail: body.paymentDetail ?? null,
+              ...(sourceFileInput !== undefined ? { sourceFile: sourceFileInput } : {}),
+            });
+            if (!result.ok) {
+              await compensate();
+              return sendDomainError(reply, result.error);
+            }
+            const idStr = String(result.value.documentId);
+            reply.header('location', `/api/v2/financial/documents/${idStr}`);
+            reply.code(201);
+            return loadAndSerialize(deps, reply, idStr);
+          }
+
+          if (
+            body.dueDate === undefined ||
+            body.type === undefined ||
+            body.documentNumber === undefined ||
+            body.supplierRef === undefined ||
+            body.paymentMethod === undefined ||
+            body.grossValueCents === undefined
+          ) {
+            await compensate();
+            return sendDomainError(reply, 'document-incomplete');
+          }
+          const result = await deps.saveDocument({
+            id: documentId,
+            documentNumber: body.documentNumber,
+            series: body.series ?? null,
+            type: body.type,
+            supplierRef: body.supplierRef,
+            ...(body.payeeKind !== undefined ? { payeeKind: body.payeeKind } : {}),
+            approverRef: body.approverRef ?? null,
+            contractRef: body.contractRef ?? null,
+            budgetPlanRef: body.budgetPlanRef ?? null,
+            categoryRef: body.categoryRef ?? null,
+            subcategoryRef: body.subcategoryRef ?? null,
+            costCenterRef: body.costCenterRef ?? null,
+            programRef: body.programRef ?? null,
+            paymentMethod: body.paymentMethod,
+            grossValueCents: Number(body.grossValueCents),
+            sourceDiscountsCents: Number(body.sourceDiscountsCents),
+            discountsCents: Number(body.discountsCents),
+            penaltyCents: Number(body.penaltyCents),
+            interestCents: Number(body.interestCents),
+            retentions: toRetentionInputs(body.retentions),
+            registeredTaxes: toRegisteredTaxInputs(body.registeredTaxes),
+            dueDate: new Date(body.dueDate),
+            issueDate: body.issueDate !== undefined ? new Date(body.issueDate) : null,
+            description: body.description ?? null,
+            accessKey: body.accessKey ?? null,
+            competencia: body.competencia ?? null,
+            contaDebitoRef: body.contaDebitoRef ?? null,
+            paymentDetail: body.paymentDetail ?? null,
+            ...(sourceFileInput !== undefined ? { sourceFile: sourceFileInput } : {}),
+          });
+          if (!result.ok) {
+            await compensate();
+            return sendDomainError(reply, result.error);
+          }
+          const idStr = String(result.value.documentId);
+          reply.header('location', `/api/v2/financial/documents/${idStr}`);
+          reply.code(201);
+          return loadAndSerialize(deps, reply, idStr);
         },
       });
     });
