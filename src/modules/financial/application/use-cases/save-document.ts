@@ -16,6 +16,7 @@ import * as DocumentId from '../../domain/shared/document-id.ts';
 import * as Retention from '../../domain/shared/retention.ts';
 import * as RegisteredTax from '../../domain/shared/registered-tax.ts';
 import * as Document from '../../domain/document/document.ts';
+import * as SourceFileRef from '../../domain/document/source-file-ref.ts';
 import * as Competencia from '../../domain/document/competencia.ts';
 import {
   checkApprover,
@@ -59,6 +60,10 @@ export type SaveDocumentDeps = Readonly<{
 }>;
 
 export type SaveDocumentCommand = Readonly<{
+  // #577: id opcional (para casar a chave do comprovante já enviado ao storage). Ausente → gerado.
+  id?: DocumentId.DocumentId;
+  // #577: comprovante-fonte (crus → VO aqui). O create do documento Open passa a carregar o anexo.
+  sourceFile?: SourceFileRef.SourceFileRefInput | null;
   documentNumber: string;
   series?: string | null;
   type: DocumentType;
@@ -107,7 +112,8 @@ export type SaveDocumentError =
   | 'cedente-account-not-found'
   | 'cedente-account-closed'
   | ApprovalError
-  | ApproverAuthorityReadError;
+  | ApproverAuthorityReadError
+  | SourceFileRef.SourceFileRefError;
 
 // Imperative Shell: traduz primitivos → VOs (smart constructors), chama o domínio, persiste e publica.
 // Sequência canônica (.claude/rules/application.md): validar → domain → persist → publish.
@@ -201,10 +207,20 @@ export const saveDocument =
       registeredTaxes.push(built.value);
     }
 
+    // #577: comprovante-fonte opcional — construído aqui (crus → VO). Bytes já validados na borda
+    // (magic/mime/tamanho) e a ref vem de um upload OK, então `create` normalmente sucede.
+    let sourceFileRef: SourceFileRef.SourceFileRef | null = null;
+    if (cmd.sourceFile != null) {
+      const sf = SourceFileRef.create(cmd.sourceFile);
+      if (!sf.ok) return err(sf.error);
+      sourceFileRef = sf.value;
+    }
+
     // Input do agregado montado uma vez; a cascata (US3) reusa via spread trocando só o aprovador
     // efetivo — evita duplicar os ~25 campos (drift entre os dois `Document.create`).
     const createInput = {
-      id: DocumentId.generate(),
+      id: cmd.id ?? DocumentId.generate(),
+      sourceFileRef,
       documentNumber: cmd.documentNumber,
       series: cmd.series ?? null,
       type: cmd.type,

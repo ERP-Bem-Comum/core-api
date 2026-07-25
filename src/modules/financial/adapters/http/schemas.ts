@@ -1226,3 +1226,33 @@ export const ingestDocumentResponseSchema = z.object({
   documentId: z.string(),
   resolvedVia: z.enum(['xml', 'native-text', 'unpdf']).nullable(),
 });
+
+// #577: comprovante-fonte embutido no create (base64 no JSON). Mesma allowlist de mime do ingest;
+// magic-bytes + tamanho (bytes decodificados) são revalidados no handler. Usado na rota dedicada
+// e sub-scopada POST /documents/with-source-file (bodyLimit isolado).
+export const sourceFileInputSchema = z
+  .object({
+    fileName: z.string().min(1).max(255),
+    mimeType: z.enum(INGEST_MIME_ALLOWLIST),
+    base64: z.string().min(1),
+  })
+  .strict();
+
+export const createDocumentWithSourceFileBodySchema = createDocumentBodyBaseSchema
+  .extend({ sourceFile: sourceFileInputSchema.optional() })
+  .superRefine((val, ctx) => {
+    if (val.asDraft) return;
+    for (const field of OPEN_REQUIRED_FIELDS) {
+      if (val[field] === undefined) {
+        ctx.addIssue({
+          code: 'custom',
+          path: [field],
+          message: 'obrigatório quando asDraft:false',
+        });
+      }
+    }
+  });
+
+export type CreateDocumentWithSourceFileBody = z.infer<
+  typeof createDocumentWithSourceFileBodySchema
+>;
