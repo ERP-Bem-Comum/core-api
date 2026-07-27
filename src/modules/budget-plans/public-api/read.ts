@@ -13,11 +13,18 @@
 
 import { type Result, ok, err } from '../../../shared/primitives/result.ts';
 import {
+  buildProgramsReadPort,
+  type BuildProgramsReadPortError,
+} from '../../programs/public-api/read.ts';
+import {
   openBudgetPlansMysql,
   type BudgetPlansMysqlDriverError,
 } from '../adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzlePlannedAmountsReader } from '../adapters/persistence/repos/planned-amounts-read.drizzle.ts';
+import { createDrizzlePlanLabelsReader } from '../adapters/persistence/repos/plan-labels-read.drizzle.ts';
+import { ProgramCatalogFromPrograms } from '../adapters/catalog/program-catalog.from-programs.ts';
 import type { PlannedAmountsReadPort } from '../application/ports/planned-amounts-read.ts';
+import type { PlanLabelsReadPort } from '../application/ports/plan-labels-read.ts';
 
 export type {
   PlannedAmountsReadPort,
@@ -25,15 +32,21 @@ export type {
   PlannedAmountRow,
   BudgetPlansReadError,
 } from '../application/ports/planned-amounts-read.ts';
+export type { PlanLabelsReadPort } from '../application/ports/plan-labels-read.ts';
 
 export type BudgetPlansReadPort = PlannedAmountsReadPort &
+  PlanLabelsReadPort &
   Readonly<{
     close: () => Promise<void>;
   }>;
 
 export type BuildBudgetPlansReadPortOptions = Readonly<{ connectionString: string }>;
 
-export type BuildBudgetPlansReadPortError = BudgetPlansMysqlDriverError;
+// O rótulo do plano (resolvePlanLabels) resolve o nome do programa via `programs/public-api` —
+// mesmo database (ADR-0014, prefixo). Por isso o boot pode falhar por qualquer um dos dois drivers.
+export type BuildBudgetPlansReadPortError =
+  | BudgetPlansMysqlDriverError
+  | BuildProgramsReadPortError;
 
 export const buildBudgetPlansReadPort = async (
   opts: BuildBudgetPlansReadPortOptions,
@@ -46,10 +59,25 @@ export const buildBudgetPlansReadPort = async (
   if (!handleR.ok) return err(handleR.error);
   const handle = handleR.value;
 
+  // Catálogo de programas (ACL) — pool boot-scoped próprio, para compor o rótulo do plano. Mesmo
+  // database (prg_* convive com bgp_*, ADR-0014). Fechado junto com o handle no `close()`.
+  const programsPortR = await buildProgramsReadPort({ connectionString: opts.connectionString });
+  if (!programsPortR.ok) {
+    await handle.close();
+    return err(programsPortR.error);
+  }
+  const programsPort = programsPortR.value;
+  const programCatalog = ProgramCatalogFromPrograms(programsPort);
+
   const reader = createDrizzlePlannedAmountsReader(handle);
+  const labelsReader = createDrizzlePlanLabelsReader(handle, programCatalog);
 
   return ok({
     ...reader,
-    close: async () => handle.close(),
+    ...labelsReader,
+    close: async () => {
+      await programsPort.close();
+      await handle.close();
+    },
   });
 };

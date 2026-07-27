@@ -23,7 +23,7 @@ import { sendResult } from '#src/shared/http/reply.ts';
 import { COLLABORATOR_PERMISSION } from '#src/modules/partners/public-api/permissions.ts';
 import { FINANCIAL_PERMISSION } from '#src/modules/financial/public-api/permissions.ts';
 import { BUDGET_PLAN_PERMISSION } from '#src/modules/budget-plans/public-api/permissions.ts';
-import type { AnalysisFilter } from '../../application/ports/analysis-read.ts';
+import type { AnalysisFilter, AnalysisRow } from '../../application/ports/analysis-read.ts';
 import type { RealizedFilter } from '../../application/ports/realized-read.ts';
 
 import type { ReportsHttpDeps } from './composition.ts';
@@ -55,6 +55,23 @@ const toAnalysisFilter = (q: AnalysisQueryDto): AnalysisFilter => ({
   dueEnd: q.dueEnd,
   ...(q.status !== undefined ? { status: q.status } : {}),
 });
+
+// REP-3 (#446 Slice C): costura o RÓTULO do Plano Orçamentário. Colhe os `budgetPlanRef` DISTINTOS
+// (não-nulos) das rows e delega ao `budget-plans/public-api` (`resolvePlanLabels`) — o rótulo é
+// composto DENTRO do budget-plans (autonomia — ADR-0006/0051). Gracioso: se o read falhar, devolve
+// um Map vazio (os nomes viram null) em vez de derrubar o relatório — os valores vêm do financial e
+// o rótulo é decorativo. Nunca há JOIN cross-módulo (ADR-0014): o stitch é na aplicação.
+const resolveLabels = async (
+  deps: ReportsHttpDeps,
+  rows: readonly AnalysisRow[],
+): Promise<ReadonlyMap<string, string>> => {
+  const ids = [
+    ...new Set(rows.map((r) => r.budgetPlanRef).filter((ref): ref is string => ref !== null)),
+  ];
+  if (ids.length === 0) return new Map();
+  const labelsR = await deps.resolvePlanLabels(ids);
+  return labelsR.ok ? labelsR.value : new Map();
+};
 
 // Query (ids da borda) -> RealizedFilter (refs de árvore). `year` obrigatório já veio validado.
 const toRealizedFilter = (q: RealizedQueryDto): RealizedFilter => ({
@@ -175,11 +192,12 @@ const reportsRoutes =
         if (!result.ok) {
           return sendResult(reply, result, { errors: { 'analysis-read-unavailable': 503 } });
         }
-        return sendResult(reply, ok(analysisToReport(result.value)), { ok: 200 });
+        const labels = await resolveLabels(deps, result.value);
+        return sendResult(reply, ok(analysisToReport(result.value, labels)), { ok: 200 });
       },
     });
 
-    // GET /reports/analysis/chart — resumo por categoria (mesmo filtro de período).
+    // GET /reports/analysis/chart — resumo por Plano Orçamentário (mesmo filtro de período).
     scope.route({
       method: 'GET',
       url: '/reports/analysis/chart',
@@ -193,7 +211,8 @@ const reportsRoutes =
         if (!result.ok) {
           return sendResult(reply, result, { errors: { 'analysis-read-unavailable': 503 } });
         }
-        return sendResult(reply, ok(analysisToChart(result.value)), { ok: 200 });
+        const labels = await resolveLabels(deps, result.value);
+        return sendResult(reply, ok(analysisToChart(result.value, labels)), { ok: 200 });
       },
     });
 

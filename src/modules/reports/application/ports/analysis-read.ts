@@ -1,9 +1,11 @@
 /**
- * ANALYSIS-READ — Port de LEITURA (read-only) da "Análise de Planejamento" (REP-3 · #114).
+ * ANALYSIS-READ — Port de LEITURA (read-only) da "Análise de Pagamentos" (REP-3 · #114/#446).
  *
- * Rows planas na grão Categoria × Centro de Custo × mês, lidas da agregação de `fin_payable_view`
- * do financial via ACL. A borda HTTP aninha em `AnalysisReport` (categoria → itens[] mensais +
- * costCenters[]) e deriva o chart. Filtro por período `[dueStart, dueEnd)` + status opcional.
+ * Rows planas na grão **Plano Orçamentário × Centro de Custo × mês**, lidas da agregação de
+ * `fin_payable_view` do financial via ACL. #446 Slice C: a raiz da árvore é o Plano Orçamentário
+ * (`budgetPlanRef`) — a categoria saiu do grão. A borda HTTP aninha em `AnalysisReport`
+ * (plano → itens[] mensais + costCenters[] folha) e deriva o chart; o RÓTULO do plano é costurado
+ * na borda via `budget-plans/public-api`. Filtro por período `[dueStart, dueEnd)` + status opcional.
  */
 import type { Result } from '#src/shared/primitives/result.ts';
 
@@ -14,8 +16,7 @@ export type AnalysisFilter = Readonly<{
 }>;
 
 export type AnalysisRow = Readonly<{
-  categoryRef: string | null;
-  categoryName: string | null;
+  budgetPlanRef: string | null;
   costCenterRef: string | null;
   costCenterName: string | null;
   monthYear: string; // 'YYYY-MM'

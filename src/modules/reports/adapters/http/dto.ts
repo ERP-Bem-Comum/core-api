@@ -41,37 +41,43 @@ export const paymentPositionToDto = (
   positions: rows.map((p) => ({ ...p })),
 });
 
-// REP-3: aninha as rows planas (categoria × cc × mês) em AnalysisReport
-// (categoria → itens[] mensais + costCenters[]). Agrupamento estável (ordem de 1ª ocorrência).
-export const analysisToReport = (rows: readonly AnalysisRow[]): AnalysisReportResponseDto => {
+// REP-3 (#446 Slice C): aninha as rows planas (PLANO × cc × mês) em AnalysisReport
+// (Plano Orçamentário → itens[] mensais + costCenters[] folha). Agrupamento estável (ordem de 1ª
+// ocorrência). O `name` da raiz é o RÓTULO do plano, costurado a partir de `labels` (id → rótulo)
+// resolvido no `budget-plans`; plano sem ref (budgetPlanRef null) ou id fora do map → `name: null`
+// (gracioso, como o grupo sem-CC na folha).
+export const analysisToReport = (
+  rows: readonly AnalysisRow[],
+  labels: ReadonlyMap<string, string>,
+): AnalysisReportResponseDto => {
   const totalValueOfPeriod = rows.reduce((sum, r) => sum + r.totalCents, 0);
 
-  const byCategory = new Map<string | null, AnalysisRow[]>();
+  const byPlan = new Map<string | null, AnalysisRow[]>();
   for (const r of rows) {
-    const bucket = byCategory.get(r.categoryRef);
-    if (bucket === undefined) byCategory.set(r.categoryRef, [r]);
+    const bucket = byPlan.get(r.budgetPlanRef);
+    if (bucket === undefined) byPlan.set(r.budgetPlanRef, [r]);
     else bucket.push(r);
   }
 
-  const data = [...byCategory.entries()].map(([categoryRef, catRows]) => {
-    const total = catRows.reduce((sum, r) => sum + r.totalCents, 0);
-    const name = catRows[0]?.categoryName ?? null;
+  const data = [...byPlan.entries()].map(([budgetPlanRef, planRows]) => {
+    const total = planRows.reduce((sum, r) => sum + r.totalCents, 0);
+    const name = budgetPlanRef !== null ? (labels.get(budgetPlanRef) ?? null) : null;
 
     const monthTotals = new Map<string, number>();
-    for (const r of catRows)
+    for (const r of planRows)
       monthTotals.set(r.monthYear, (monthTotals.get(r.monthYear) ?? 0) + r.totalCents);
     const itens = [...monthTotals.entries()].map(([monthYear, monthTotal]) => ({
       monthYear,
       total: monthTotal,
     }));
 
-    // #446 Gap 3: acumula a série mensal PRÓPRIA de cada Centro de Custo (folha da matriz), não só o
-    // total — a projeção já entrega o grão cc × mês; aqui ele deixa de ser achatado.
+    // #446 Gap 3 (Slice A, preservado): acumula a série mensal PRÓPRIA de cada Centro de Custo (folha
+    // da matriz), não só o total — a projeção já entrega o grão cc × mês; aqui ele não é achatado.
     const ccTotals = new Map<
       string | null,
       { name: string | null; total: number; months: Map<string, number> }
     >();
-    for (const r of catRows) {
+    for (const r of planRows) {
       let cur = ccTotals.get(r.costCenterRef);
       if (cur === undefined) {
         cur = { name: r.costCenterName, total: 0, months: new Map() };
@@ -90,7 +96,7 @@ export const analysisToReport = (rows: readonly AnalysisRow[]): AnalysisReportRe
       })),
     }));
 
-    return { id: categoryRef, name, total, itens, costCenters };
+    return { id: budgetPlanRef, name, total, itens, costCenters };
   });
 
   return { totalValueOfPeriod, data };
@@ -128,13 +134,18 @@ export const realizedToDto = (report: RealizedReport): RealizedReportResponseDto
   })),
 });
 
-export const analysisToChart = (rows: readonly AnalysisRow[]): AnalysisChartResponseDto => {
-  const byCategory = new Map<string | null, { name: string | null; total: number }>();
+// REP-3 (#446 Slice C): resumo por PLANO Orçamentário (raiz). `name` = rótulo costurado de `labels`.
+export const analysisToChart = (
+  rows: readonly AnalysisRow[],
+  labels: ReadonlyMap<string, string>,
+): AnalysisChartResponseDto => {
+  const byPlan = new Map<string | null, number>();
   for (const r of rows) {
-    const cur = byCategory.get(r.categoryRef);
-    if (cur === undefined)
-      byCategory.set(r.categoryRef, { name: r.categoryName, total: r.totalCents });
-    else cur.total += r.totalCents;
+    byPlan.set(r.budgetPlanRef, (byPlan.get(r.budgetPlanRef) ?? 0) + r.totalCents);
   }
-  return [...byCategory.entries()].map(([id, cat]) => ({ id, name: cat.name, total: cat.total }));
+  return [...byPlan.entries()].map(([id, total]) => ({
+    id,
+    name: id !== null ? (labels.get(id) ?? null) : null,
+    total,
+  }));
 };
