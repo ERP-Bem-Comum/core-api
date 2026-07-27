@@ -1,11 +1,9 @@
 /**
  * W0 — REP-3 Slice C (#446). Compositor puro do RÓTULO do Plano Orçamentário.
  *
- * Decisão da P.O.: um plano não tem "nome". O rótulo é:
- *   label = scenarioName ?? `Programa ${programName} ${year} v${versionMajor}.${versionMinor}`
- * Fallback gracioso quando o nome do programa não resolve: `Plano ${year} v${maj}.${min}`.
- *
- * RED por inexistência de `composePlanLabel`.
+ * Decisão da P.O.: um plano não tem "nome"; segue o PADRÃO do sistema (programa pela SIGLA):
+ *   label = scenarioName ?? `${programAbbreviation} — ${programName}`   (ex.: "PARC — Parceria pela Alfabetização")
+ * Fallbacks graciosos: só o nome quando falta a sigla; `Plano ${year} v${maj}.${min}` quando falta o programa.
  */
 
 import { describe, it } from 'node:test';
@@ -18,7 +16,8 @@ describe('composePlanLabel — rótulo do Plano Orçamentário (REP-3 · #446)',
     assert.equal(
       composePlanLabel({
         scenarioName: 'Cenário Otimista',
-        programName: 'Educação',
+        programAbbreviation: 'PARC',
+        programName: 'Parceria pela Alfabetização',
         year: 2026,
         versionMajor: 1,
         versionMinor: 2,
@@ -27,16 +26,31 @@ describe('composePlanLabel — rótulo do Plano Orçamentário (REP-3 · #446)',
     );
   });
 
-  it('sem cenário → `Programa {nome} {ano} v{maj}.{min}`', () => {
+  it('sem cenário → `{sigla} — {nome}` (padrão do sistema)', () => {
     assert.equal(
       composePlanLabel({
         scenarioName: null,
-        programName: 'Educação',
+        programAbbreviation: 'PARC',
+        programName: 'Parceria pela Alfabetização',
         year: 2026,
         versionMajor: 1,
         versionMinor: 0,
       }),
-      'Programa Educação 2026 v1.0',
+      'PARC — Parceria pela Alfabetização',
+    );
+  });
+
+  it('sem sigla mas com nome → só o nome (gracioso)', () => {
+    assert.equal(
+      composePlanLabel({
+        scenarioName: null,
+        programAbbreviation: null,
+        programName: 'Parceria pela Alfabetização',
+        year: 2026,
+        versionMajor: 1,
+        versionMinor: 0,
+      }),
+      'Parceria pela Alfabetização',
     );
   });
 
@@ -44,6 +58,7 @@ describe('composePlanLabel — rótulo do Plano Orçamentário (REP-3 · #446)',
     assert.equal(
       composePlanLabel({
         scenarioName: null,
+        programAbbreviation: null,
         programName: null,
         year: 2027,
         versionMajor: 2,
@@ -57,12 +72,13 @@ describe('composePlanLabel — rótulo do Plano Orçamentário (REP-3 · #446)',
     assert.equal(
       composePlanLabel({
         scenarioName: '',
+        programAbbreviation: 'SAUDE',
         programName: 'Saúde',
         year: 2026,
         versionMajor: 3,
         versionMinor: 1,
       }),
-      'Programa Saúde 2026 v3.1',
+      'SAUDE — Saúde',
     );
   });
 });

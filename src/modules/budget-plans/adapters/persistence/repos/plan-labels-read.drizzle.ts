@@ -30,21 +30,25 @@ export const createDrizzlePlanLabelsReader = (
 ): PlanLabelsReadPort => {
   const { db } = handle;
 
-  // Resolve o nome de cada `program_ref` distinto, gracioso: erro/null/ref-inválida → null.
-  const resolveProgramNames = async (
+  // Resolve sigla+nome de cada `program_ref` distinto, gracioso: erro/null/ref-inválida → null.
+  const resolveProgramInfo = async (
     refs: readonly string[],
-  ): Promise<ReadonlyMap<string, string | null>> => {
-    const names = new Map<string, string | null>();
+  ): Promise<ReadonlyMap<string, { abbreviation: string | null; name: string | null }>> => {
+    const info = new Map<string, { abbreviation: string | null; name: string | null }>();
     for (const raw of refs) {
       const refR = ProgramRef.rehydrate(raw);
       if (!refR.ok) {
-        names.set(raw, null);
+        info.set(raw, { abbreviation: null, name: null });
         continue;
       }
       const snapR = await programCatalog.getByRef(refR.value);
-      names.set(raw, snapR.ok && snapR.value !== null ? snapR.value.name : null);
+      const snap = snapR.ok ? snapR.value : null;
+      info.set(raw, {
+        abbreviation: snap?.abbreviation ?? null,
+        name: snap?.name ?? null,
+      });
     }
-    return names;
+    return info;
   };
 
   const resolvePlanLabels = async (
@@ -65,15 +69,17 @@ export const createDrizzlePlanLabelsReader = (
         .where(inArray(schema.budgetPlans.id, [...ids]));
 
       const distinctRefs = [...new Set(rows.map((r) => r.programRef))];
-      const programNames = await resolveProgramNames(distinctRefs);
+      const programInfo = await resolveProgramInfo(distinctRefs);
 
       const out = new Map<string, string>();
       for (const r of rows) {
+        const prog = programInfo.get(r.programRef);
         out.set(
           r.id,
           composePlanLabel({
             scenarioName: r.scenarioName,
-            programName: programNames.get(r.programRef) ?? null,
+            programAbbreviation: prog?.abbreviation ?? null,
+            programName: prog?.name ?? null,
             year: r.year,
             versionMajor: r.versionMajor,
             versionMinor: r.versionMinor,
