@@ -115,7 +115,14 @@ export type AnalysisQueryDto = z.infer<typeof analysisQuerySchema>;
 
 const analysisMonthItemSchema = z.object({ monthYear: z.string(), total: z.number() }).strict();
 const analysisCostCenterItemSchema = z
-  .object({ id: z.string().nullable(), name: z.string().nullable(), total: z.number() })
+  .object({
+    id: z.string().nullable(),
+    name: z.string().nullable(),
+    total: z.number(),
+    // #446 Gap 3: série mensal PRÓPRIA da folha (Centro de Custo) — sem isto a matriz folha × mês
+    // fica com meses zerados (a projeção já tem o grão cc × mês; o DTO parava de propagá-lo).
+    itens: z.array(analysisMonthItemSchema),
+  })
   .strict();
 
 const analysisGroupSchema = z

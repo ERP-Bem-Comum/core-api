@@ -106,7 +106,12 @@ interface AnalysisReport {
     name: string | null;
     total: number;
     itens: { monthYear: string; total: number }[];
-    costCenters: { id: string | null; name: string | null; total: number }[];
+    costCenters: {
+      id: string | null;
+      name: string | null;
+      total: number;
+      itens: { monthYear: string; total: number }[];
+    }[];
   }[];
 }
 
@@ -134,6 +139,14 @@ describe('reports/http — analysis (REP-3 · #114)', () => {
     assert.equal(a.costCenters.length, 1);
     assert.equal(a.costCenters[0]!.id, CC_1);
     assert.equal(a.costCenters[0]!.total, 150000);
+    // #446 Gap 3: a folha (Centro de Custo) carrega a série mensal PRÓPRIA (não achatada).
+    assert.deepEqual(
+      a.costCenters[0]!.itens.map((i) => [i.monthYear, i.total]).sort(byMonth),
+      [
+        ['2026-07', 100000],
+        ['2026-08', 50000],
+      ].sort(byMonth),
+    );
     // categoria B com CC nulo
     const b = body.data.find((d) => d.id === CAT_B)!;
     assert.equal(b.costCenters[0]!.id, null);

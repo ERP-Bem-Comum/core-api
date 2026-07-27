@@ -65,17 +65,29 @@ export const analysisToReport = (rows: readonly AnalysisRow[]): AnalysisReportRe
       total: monthTotal,
     }));
 
-    const ccTotals = new Map<string | null, { name: string | null; total: number }>();
+    // #446 Gap 3: acumula a série mensal PRÓPRIA de cada Centro de Custo (folha da matriz), não só o
+    // total — a projeção já entrega o grão cc × mês; aqui ele deixa de ser achatado.
+    const ccTotals = new Map<
+      string | null,
+      { name: string | null; total: number; months: Map<string, number> }
+    >();
     for (const r of catRows) {
-      const cur = ccTotals.get(r.costCenterRef);
-      if (cur === undefined)
-        ccTotals.set(r.costCenterRef, { name: r.costCenterName, total: r.totalCents });
-      else cur.total += r.totalCents;
+      let cur = ccTotals.get(r.costCenterRef);
+      if (cur === undefined) {
+        cur = { name: r.costCenterName, total: 0, months: new Map() };
+        ccTotals.set(r.costCenterRef, cur);
+      }
+      cur.total += r.totalCents;
+      cur.months.set(r.monthYear, (cur.months.get(r.monthYear) ?? 0) + r.totalCents);
     }
     const costCenters = [...ccTotals.entries()].map(([id, cc]) => ({
       id,
       name: cc.name,
       total: cc.total,
+      itens: [...cc.months.entries()].map(([monthYear, ccMonthTotal]) => ({
+        monthYear,
+        total: ccMonthTotal,
+      })),
     }));
 
     return { id: categoryRef, name, total, itens, costCenters };
