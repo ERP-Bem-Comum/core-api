@@ -48,6 +48,8 @@ export type PayableView = Readonly<{
   supplierRef: string | null;
   contractRef: string | null;
   categoryRef: string | null;
+  // #446 (REP-3 / Slice B): Plano Orçamentário — permite ao REP-3 agrupar por Plano Orçamentário.
+  budgetPlanRef: string | null;
   costCenterRef: string | null;
   programRef: string | null;
   valueCents: number; // centavos (convenção Money do codebase — bigint(mode:'number'))

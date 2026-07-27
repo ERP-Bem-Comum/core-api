@@ -78,6 +78,8 @@ const parseSnapshotRow = (
     supplierRef: asString(refs.supplierRef),
     contractRef: asString(refs.contractRef),
     categoryRef: asString(refs.categoryRef),
+    // #446 (REP-3 / Slice B): Plano Orçamentário (top-level ref do documento) projetado no read-model.
+    budgetPlanRef: asString(refs.budgetPlanRef),
     costCenterRef: asString(refs.costCenterRef),
     programRef: asString(refs.programRef),
     valueCents: Number(valueCentsStr),
