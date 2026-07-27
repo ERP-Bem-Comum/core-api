@@ -15,7 +15,7 @@
  *
  * ADR-0020 §"Features permitidas": GROUP BY/agregação, LEFT JOIN, CASE.
  */
-import { eq, ne, sql } from 'drizzle-orm';
+import { and, eq, gte, lt, ne, sql } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
@@ -27,7 +27,25 @@ import {
   finSupplierView,
   finCostCenters,
   finCategories,
+  finDocuments,
 } from '../adapters/persistence/schemas/mysql.ts';
+
+// #588: filtro OPCIONAL da Posição de Pagamentos — todos os campos opcionais, ausente = sem
+// restrição, combinação = AND. Aplicado no WHERE ANTES dos CASE WHEN (só restringe a população;
+// as 3 medidas seguem derivadas do status reduzido do payable-view). `status` (6 granulares) filtra
+// o status VIVO em `fin_documents` via LEFT JOIN (o payable-view reduz a 4 e não distingue
+// Transmitted/PartiallyReconciled/Reconciled). Validação dos 6 valores é feita na borda HTTP.
+export type PaymentPositionFilter = Readonly<{
+  budgetPlanRef?: string;
+  dueFrom?: string; // 'YYYY-MM-DD' inclusivo (half-open [dueFrom, dueTo))
+  dueTo?: string; // 'YYYY-MM-DD' exclusivo
+  cedenteAccountRef?: string; // → fin_payable_view.debit_account_ref
+  status?: string; // → fin_documents.status (status vivo, 8 valores)
+  costCenterRef?: string;
+  categoryRef?: string;
+  subcategoryRef?: string;
+  supplierRef?: string;
+}>;
 
 export type PaymentPositionRow = Readonly<{
   supplierRef: string | null;
@@ -42,7 +60,7 @@ export type PaymentPositionRow = Readonly<{
 }>;
 
 export type PaymentPositionReader = Readonly<{
-  list: () => Promise<Result<readonly PaymentPositionRow[], string>>;
+  list: (filter?: PaymentPositionFilter) => Promise<Result<readonly PaymentPositionRow[], string>>;
   close: () => Promise<void>;
 }>;
 
@@ -58,9 +76,10 @@ export const openPaymentPositionReader = async (
   const { db } = handle;
 
   return ok({
-    list: async () => {
+    list: async (filter) => {
       try {
         const today = plainDateToISO(opts.clock.today());
+        const f = filter ?? {};
         const rows = await db
           .select({
             supplierRef: finPayableView.supplierRef,
@@ -78,7 +97,37 @@ export const openPaymentPositionReader = async (
           .leftJoin(finSupplierView, eq(finPayableView.supplierRef, finSupplierView.supplierRef))
           .leftJoin(finCostCenters, eq(finPayableView.costCenterRef, finCostCenters.id))
           .leftJoin(finCategories, eq(finPayableView.categoryRef, finCategories.id))
-          .where(ne(finPayableView.status, 'Cancelled'))
+          // #588: JOIN 1:1 same-module (documentId NOT NULL → id PK) — não faz fan-out nem altera a
+          // agregação; só habilita o filtro por status VIVO. Sem filtro de status, é neutro.
+          .leftJoin(finDocuments, eq(finPayableView.documentId, finDocuments.id))
+          .where(
+            and(
+              // Mantém a exclusão padrão (Refused→Cancelled não é oferecido no filtro — #588).
+              ne(finPayableView.status, 'Cancelled'),
+              f.budgetPlanRef !== undefined
+                ? eq(finPayableView.budgetPlanRef, f.budgetPlanRef)
+                : undefined,
+              f.dueFrom !== undefined ? gte(finPayableView.dueDate, f.dueFrom) : undefined,
+              f.dueTo !== undefined ? lt(finPayableView.dueDate, f.dueTo) : undefined,
+              f.cedenteAccountRef !== undefined
+                ? eq(finPayableView.debitAccountRef, f.cedenteAccountRef)
+                : undefined,
+              f.costCenterRef !== undefined
+                ? eq(finPayableView.costCenterRef, f.costCenterRef)
+                : undefined,
+              f.categoryRef !== undefined
+                ? eq(finPayableView.categoryRef, f.categoryRef)
+                : undefined,
+              f.subcategoryRef !== undefined
+                ? eq(finPayableView.subcategoryRef, f.subcategoryRef)
+                : undefined,
+              f.supplierRef !== undefined
+                ? eq(finPayableView.supplierRef, f.supplierRef)
+                : undefined,
+              // 6 granulares → status vivo do documento (o payable-view não os distingue).
+              f.status !== undefined ? eq(finDocuments.status, f.status) : undefined,
+            ),
+          )
           .groupBy(
             finPayableView.supplierRef,
             finSupplierView.name,

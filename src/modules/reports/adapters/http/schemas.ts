@@ -102,6 +102,36 @@ export const paymentPositionResponseSchema = z
 
 export type PaymentPositionResponseDto = z.infer<typeof paymentPositionResponseSchema>;
 
+// REP-4 (#588) — filtros da "Posição de Pagamentos": todos OPCIONAIS, ausente = sem restrição,
+// combinação = AND. Refs aplicam direto em `fin_payable_view`; `status` (6 valores granulares)
+// filtra o status VIVO em `fin_documents` via LEFT JOIN — o status do payable-view é reduzido a
+// 4 (Open/Approved/Paid/Cancelled) e não distingue Transmitted/PartiallyReconciled/Reconciled.
+// Os 6 valores = `DocumentStatus` do domínio MENOS Draft e Refused (decisão da P.O.).
+export const paymentPositionStatusValues = [
+  'Open',
+  'Approved',
+  'Transmitted',
+  'Paid',
+  'PartiallyReconciled',
+  'Reconciled',
+] as const;
+
+// Objeto simples (sem `.strict()`, como `listDocumentsQuerySchema` do financial): parâmetro
+// desconhecido é ignorado, não vira 400. `dueFrom`/`dueTo` = janela half-open [dueFrom, dueTo).
+export const paymentPositionQuerySchema = z.object({
+  budgetPlanRef: z.uuid().optional(),
+  dueFrom: z.iso.date().optional(),
+  dueTo: z.iso.date().optional(),
+  cedenteAccountRef: z.uuid().optional(), // → fin_payable_view.debit_account_ref
+  status: z.enum(paymentPositionStatusValues).optional(), // via LEFT JOIN fin_documents.status
+  costCenterRef: z.uuid().optional(),
+  categoryRef: z.uuid().optional(),
+  subcategoryRef: z.uuid().optional(),
+  supplierRef: z.uuid().optional(),
+});
+
+export type PaymentPositionQueryDto = z.infer<typeof paymentPositionQuerySchema>;
+
 // REP-3 (#114) — "Análise de Planejamento". Query de filtro (período half-open + status opcional).
 export const analysisQuerySchema = z
   .object({

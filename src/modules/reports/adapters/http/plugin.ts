@@ -24,6 +24,7 @@ import { COLLABORATOR_PERMISSION } from '#src/modules/partners/public-api/permis
 import { FINANCIAL_PERMISSION } from '#src/modules/financial/public-api/permissions.ts';
 import { BUDGET_PLAN_PERMISSION } from '#src/modules/budget-plans/public-api/permissions.ts';
 import type { AnalysisFilter, AnalysisRow } from '../../application/ports/analysis-read.ts';
+import type { PaymentPositionFilter } from '../../application/ports/payment-position-read.ts';
 import type { RealizedFilter } from '../../application/ports/realized-read.ts';
 
 import type { ReportsHttpDeps } from './composition.ts';
@@ -41,12 +42,14 @@ import {
   teamDemographicsResponseSchema,
   suppliersWithoutContractResponseSchema,
   paymentPositionResponseSchema,
+  paymentPositionQuerySchema,
   analysisQuerySchema,
   analysisReportResponseSchema,
   analysisChartResponseSchema,
   realizedQuerySchema,
   realizedReportResponseSchema,
   type AnalysisQueryDto,
+  type PaymentPositionQueryDto,
   type RealizedQueryDto,
 } from './schemas.ts';
 
@@ -54,6 +57,20 @@ const toAnalysisFilter = (q: AnalysisQueryDto): AnalysisFilter => ({
   dueStart: q.dueStart,
   dueEnd: q.dueEnd,
   ...(q.status !== undefined ? { status: q.status } : {}),
+});
+
+// #588: query (borda, validada) -> PaymentPositionFilter. Só inclui a chave quando presente
+// (`exactOptionalPropertyTypes`: nunca gravar `undefined` explícito). Nomes 1:1 com a query.
+const toPaymentPositionFilter = (q: PaymentPositionQueryDto): PaymentPositionFilter => ({
+  ...(q.budgetPlanRef !== undefined ? { budgetPlanRef: q.budgetPlanRef } : {}),
+  ...(q.dueFrom !== undefined ? { dueFrom: q.dueFrom } : {}),
+  ...(q.dueTo !== undefined ? { dueTo: q.dueTo } : {}),
+  ...(q.cedenteAccountRef !== undefined ? { cedenteAccountRef: q.cedenteAccountRef } : {}),
+  ...(q.status !== undefined ? { status: q.status } : {}),
+  ...(q.costCenterRef !== undefined ? { costCenterRef: q.costCenterRef } : {}),
+  ...(q.categoryRef !== undefined ? { categoryRef: q.categoryRef } : {}),
+  ...(q.subcategoryRef !== undefined ? { subcategoryRef: q.subcategoryRef } : {}),
+  ...(q.supplierRef !== undefined ? { supplierRef: q.supplierRef } : {}),
 });
 
 // REP-3 (#446 Slice C): costura o RÓTULO do Plano Orçamentário. Colhe os `budgetPlanRef` DISTINTOS
@@ -165,10 +182,11 @@ const reportsRoutes =
       url: '/reports/payment-position',
       preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
       schema: {
+        querystring: paymentPositionQuerySchema,
         response: { 200: paymentPositionResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
-      handler: async (_req, reply) => {
-        const result = await deps.listPaymentPosition();
+      handler: async (req, reply) => {
+        const result = await deps.listPaymentPosition(toPaymentPositionFilter(req.query));
         if (!result.ok) {
           return sendResult(reply, result, {
             errors: { 'payment-position-read-unavailable': 503 },

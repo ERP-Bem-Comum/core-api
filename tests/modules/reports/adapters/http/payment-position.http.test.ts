@@ -16,7 +16,10 @@ import { ok } from '#src/shared/primitives/result.ts';
 import { buildApp } from '#src/shared/http/app.ts';
 import { readHttpConfig } from '#src/shared/http/config.ts';
 import { buildReportsHttpDeps, reportsHttpPlugin } from '#src/modules/reports/public-api/http.ts';
-import type { PaymentPositionRow } from '#src/modules/reports/application/ports/payment-position-read.ts';
+import type {
+  PaymentPositionFilter,
+  PaymentPositionRow,
+} from '#src/modules/reports/application/ports/payment-position-read.ts';
 
 const READER = 'fiscal-document:read';
 const NO_PERM = 'reconciliation:read';
@@ -58,13 +61,16 @@ interface AppHandle {
   teardown: () => Promise<void>;
 }
 let handle: AppHandle;
+// #588: captura o filtro que a borda repassa ao reader — prova o parse+map da querystring.
+let lastFilter: PaymentPositionFilter | undefined;
 
 before(async () => {
   const base = await buildReportsHttpDeps({ driver: 'memory' });
   const deps = {
     ...base,
-    listPaymentPosition: () =>
-      Promise.resolve(
+    listPaymentPosition: (filter?: PaymentPositionFilter) => {
+      lastFilter = filter;
+      return Promise.resolve(
         ok([
           row(),
           row({
@@ -79,7 +85,8 @@ before(async () => {
             overdueCents: 5000,
           }),
         ]),
-      ),
+      );
+    },
   };
   const config = readHttpConfig({ RATE_LIMIT_MAX: '10000' });
   const app = await buildApp({
@@ -93,12 +100,22 @@ after(async () => {
   await handle.teardown();
 });
 
-const get = (perm: string): Promise<LightMyRequestResponse> =>
+const get = (perm: string, query = ''): Promise<LightMyRequestResponse> =>
   handle.app.inject({
     method: 'GET',
-    url: '/api/v2/reports/payment-position',
+    url: `/api/v2/reports/payment-position${query}`,
     headers: { authorization: `Bearer ${perm}` },
   });
+
+// UUIDs válidos para os filtros de ref.
+const U = {
+  budgetPlan: 'b0000000-0000-4000-8000-00000000b001',
+  cedente: 'c0000000-0000-4000-8000-00000000c001',
+  costCenter: 'cc000000-0000-4000-8000-0000000cc001',
+  category: 'ca000000-0000-4000-8000-0000000ca001',
+  subcategory: '5b000000-0000-4000-8000-0000005b0001',
+  supplier: '5a000000-0000-4000-8000-0000005a0001',
+} as const;
 
 describe('reports/http — GET /reports/payment-position (REP-4 · #243)', () => {
   it('CA1: 200 com linhas por (fornecedor, CC, categoria) + 3 baldes', async () => {
@@ -139,5 +156,77 @@ describe('reports/http — GET /reports/payment-position (REP-4 · #243)', () =>
         'supplierRef',
       ].sort(),
     );
+  });
+
+  // #588 filtros
+  it('CA4: sem query → filtro vazio (nenhuma chave)', async () => {
+    lastFilter = undefined;
+    const res = await get(READER);
+    assert.equal(res.statusCode, 200, res.body);
+    assert.deepEqual(lastFilter, {});
+  });
+
+  it('CA5: os 8 filtros na querystring viram o PaymentPositionFilter (AND) repassado ao reader', async () => {
+    lastFilter = undefined;
+    const query =
+      `?budgetPlanRef=${U.budgetPlan}` +
+      `&dueFrom=2026-01-01&dueTo=2026-07-01` +
+      `&cedenteAccountRef=${U.cedente}` +
+      `&status=Reconciled` +
+      `&costCenterRef=${U.costCenter}` +
+      `&categoryRef=${U.category}` +
+      `&subcategoryRef=${U.subcategory}` +
+      `&supplierRef=${U.supplier}`;
+    const res = await get(READER, query);
+    assert.equal(res.statusCode, 200, res.body);
+    assert.deepEqual(lastFilter, {
+      budgetPlanRef: U.budgetPlan,
+      dueFrom: '2026-01-01',
+      dueTo: '2026-07-01',
+      cedenteAccountRef: U.cedente,
+      status: 'Reconciled',
+      costCenterRef: U.costCenter,
+      categoryRef: U.category,
+      subcategoryRef: U.subcategory,
+      supplierRef: U.supplier,
+    });
+  });
+
+  it('CA6: filtro parcial só inclui as chaves presentes (ausente = sem restrição)', async () => {
+    lastFilter = undefined;
+    const res = await get(READER, `?supplierRef=${U.supplier}&status=Paid`);
+    assert.equal(res.statusCode, 200, res.body);
+    assert.deepEqual(lastFilter, { supplierRef: U.supplier, status: 'Paid' });
+  });
+
+  it('CA7: os 6 valores de status são aceitos', async () => {
+    for (const status of [
+      'Open',
+      'Approved',
+      'Transmitted',
+      'Paid',
+      'PartiallyReconciled',
+      'Reconciled',
+    ]) {
+      const res = await get(READER, `?status=${status}`);
+      assert.equal(res.statusCode, 200, `${status}: ${res.body}`);
+    }
+  });
+
+  it('CA8: status fora dos 6 (Draft/Refused/lixo) → 400', async () => {
+    for (const status of ['Draft', 'Refused', 'Nope']) {
+      const res = await get(READER, `?status=${status}`);
+      assert.equal(res.statusCode, 400, `${status}: ${res.body}`);
+    }
+  });
+
+  it('CA9: ref malformada (uuid inválido) → 400', async () => {
+    const res = await get(READER, '?supplierRef=not-a-uuid');
+    assert.equal(res.statusCode, 400, res.body);
+  });
+
+  it('CA10: data malformada em dueFrom → 400', async () => {
+    const res = await get(READER, '?dueFrom=2026-13-99');
+    assert.equal(res.statusCode, 400, res.body);
   });
 });
