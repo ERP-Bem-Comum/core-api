@@ -12,7 +12,7 @@
  * fechados no `shutdown()`. Molde: `buildPartnersReadPort`.
  */
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
-import type { Result } from '#src/shared/primitives/result.ts';
+import { type Result, ok } from '#src/shared/primitives/result.ts';
 import {
   openCollaboratorProjectionReader,
   openCollaboratorDemographicsReader,
@@ -23,7 +23,10 @@ import {
   openPayablesAnalysisReader,
   openRealizedProvisionedReader,
 } from '#src/modules/financial/public-api/index.ts';
-import { buildBudgetPlansReadPort } from '#src/modules/budget-plans/public-api/read.ts';
+import {
+  buildBudgetPlansReadPort,
+  type PlanLabelsReadPort,
+} from '#src/modules/budget-plans/public-api/read.ts';
 import { buildContractsActiveContractorReadPort } from '#src/modules/contracts/public-api/index.ts';
 import { TeamReportReadFromPartners } from '../persistence/team-report-read.partners.ts';
 import { InMemoryTeamReportRead } from '../persistence/team-report-read.in-memory.ts';
@@ -86,6 +89,8 @@ export type ReportsHttpDeps = Readonly<{
   >;
   listPaymentPosition: PaymentPositionReadPort['list'];
   listAnalysis: AnalysisReadPort['list'];
+  /** REP-3 (#446 Slice C): id do Plano Orçamentário → rótulo, composto no budget-plans (ACL). */
+  resolvePlanLabels: PlanLabelsReadPort['resolvePlanLabels'];
   /** S6 (#502): Realizado × Planejado — árvore de 3 níveis costurada de budget-plans × financial. */
   listRealized: RealizedReadPort['list'];
   shutdown: () => Promise<void>;
@@ -111,6 +116,9 @@ export const buildReportsHttpDeps = async (
       }),
       listPaymentPosition: position.list,
       listAnalysis: analysis.list,
+      // Driver memory: sem budget-plans real → Map vazio (nomes viram null). Testes injetam o
+      // próprio `resolvePlanLabels` para exercitar o rótulo costurado (espelha `listAnalysis`).
+      resolvePlanLabels: () => Promise.resolve(ok(new Map())),
       listRealized: realized.list,
       shutdown: () => Promise.resolve(),
     };
@@ -258,6 +266,9 @@ export const buildReportsHttpDeps = async (
     }),
     listPaymentPosition: positionPort.list,
     listAnalysis: analysisPort.list,
+    // REP-3 (#446 Slice C): rótulo do plano costurado na borda — reaproveita o MESMO read port do
+    // budget-plans já aberto para o Realizado × Planejado (S6), sem novo pool (incidente RDS 0001).
+    resolvePlanLabels: budgetPlansRead.resolvePlanLabels,
     listRealized: realizedPort.list,
     shutdown: async () => {
       await teamReader.close();
