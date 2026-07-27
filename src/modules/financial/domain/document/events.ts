@@ -26,6 +26,8 @@ export type DocumentSaved = Readonly<{
   supplierRef: string;
   contractRef: string | null;
   categoryRef: string | null;
+  // #446 (REP-3 / Slice B): Plano Orçamentário carimbado no documento (#502) — flui até fin_payable_view.
+  budgetPlanRef: string | null;
   costCenterRef: string | null;
   programRef: string | null;
   // #239: conta-débito (de qual conta cedente o pagamento sai) — p/ o widget "Últimos pagamentos".

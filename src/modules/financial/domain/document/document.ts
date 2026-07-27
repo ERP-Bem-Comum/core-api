@@ -120,6 +120,7 @@ type DocumentRefsSource = Readonly<{
   supplier: SupplierRef;
   contractRef: ContractRef | null;
   categoryRef: CategoryRef | null;
+  budgetPlanRef: BudgetPlanRef | null;
   costCenterRef: CostCenterRef | null;
   programRef: ProgramRef | null;
   debitAccountRef: string | null;
@@ -147,6 +148,7 @@ const documentSavedEvents = (
       supplierRef: document.supplier,
       contractRef: document.contractRef,
       categoryRef: document.categoryRef,
+      budgetPlanRef: document.budgetPlanRef,
       costCenterRef: document.costCenterRef,
       programRef: document.programRef,
       debitAccountRef: document.debitAccountRef,
