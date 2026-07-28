@@ -39,8 +39,16 @@ export type CashflowRow = Readonly<{
   expectedCents: number;
 }>;
 
+// Slice B (#590): linha datada da SÉRIE TEMPORAL — o mesmo `CashflowRow` com uma dimensão de MÊS
+// (`installmentsDueDate` = 'YYYY-MM-01', primeiro dia do mês). Grão Categoria × Subcategoria × Mês.
+export type CashflowChartRow = CashflowRow & Readonly<{ installmentsDueDate: string }>;
+
 export type CashflowReadError = 'cashflow-read-unavailable';
 
 export type CashflowReadPort = Readonly<{
   list: (filter?: CashflowFilter) => Promise<Result<readonly CashflowRow[], CashflowReadError>>;
+  // Slice B (#590): série temporal — mesmas linhas do `list` com o eixo de mês.
+  listChart: (
+    filter?: CashflowFilter,
+  ) => Promise<Result<readonly CashflowChartRow[], CashflowReadError>>;
 }>;

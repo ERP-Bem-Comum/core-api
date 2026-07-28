@@ -11,11 +11,18 @@ import type { CashflowReadPort, CashflowReadError } from '../../application/port
 
 export const CashflowReadFromFinancial = (
   listAggregation: CashflowReader['list'],
+  listChartAggregation: CashflowReader['listChart'],
 ): CashflowReadPort => ({
   // Repassa o filtro (opcional) ao reader do financial. Estruturalmente idêntico ao `CashflowFilter`
   // do financial — passa direto, sem remapear.
   list: async (filter) => {
     const listed = await listAggregation(filter);
+    if (!listed.ok) return err<CashflowReadError>('cashflow-read-unavailable');
+    return ok(listed.value);
+  },
+  // Slice B (#590): série temporal — mesmo pass-through, agora com o eixo de mês.
+  listChart: async (filter) => {
+    const listed = await listChartAggregation(filter);
     if (!listed.ok) return err<CashflowReadError>('cashflow-read-unavailable');
     return ok(listed.value);
   },

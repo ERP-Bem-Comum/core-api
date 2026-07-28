@@ -39,6 +39,7 @@ import {
   suppliersWithoutContractToDto,
   paymentPositionToDto,
   cashflowToDto,
+  cashflowChartToDto,
   analysisToReport,
   analysisToChart,
   realizedToDto,
@@ -52,6 +53,7 @@ import {
   paymentPositionQuerySchema,
   cashflowQuerySchema,
   cashflowResponseSchema,
+  cashflowChartResponseSchema,
   analysisQuerySchema,
   analysisReportResponseSchema,
   analysisChartResponseSchema,
@@ -274,6 +276,29 @@ const reportsRoutes =
           });
         }
         return sendResult(reply, ok(cashflowToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /reports/cashflow/chart — REP (#590 Slice B): SÉRIE TEMPORAL do Fluxo de Caixa. As mesmas
+    // Saídas do `/cashflow`, agora com o eixo de MÊS (grão Categoria × Subcategoria × Mês). Resposta
+    // = ARRAY plano de linhas datadas `(CashflowRow legado & { Installments_dueDate })[]` — sem
+    // envelope (o front monta a linha do tempo). Mesmos 10 filtros (AND) e mesmo gate do Slice A.
+    scope.route({
+      method: 'GET',
+      url: '/reports/cashflow/chart',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        querystring: cashflowQuerySchema,
+        response: { 200: cashflowChartResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.listCashflowChart(toCashflowFilter(req.query));
+        if (!result.ok) {
+          return sendResult(reply, result, {
+            errors: { 'cashflow-read-unavailable': 503 },
+          });
+        }
+        return sendResult(reply, ok(cashflowChartToDto(result.value)), { ok: 200 });
       },
     });
 

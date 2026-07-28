@@ -102,6 +102,8 @@ export type ReportsHttpDeps = Readonly<{
   listPaymentPosition: PaymentPositionReadPort['list'];
   /** REP (#590 Slice A): Fluxo de Caixa — Payables por Categoria × Subcategoria (financial single-module). */
   listCashflow: CashflowReadPort['list'];
+  /** REP (#590 Slice B): Fluxo de Caixa /chart — série temporal por Categoria × Subcategoria × Mês. */
+  listCashflowChart: CashflowReadPort['listChart'];
   /** REP-6 (#442 Slice A): linhas planas paginadas de títulos a-pagar (financial single-module). */
   listGeneralReport: GeneralReportReadPort['list'];
   listAnalysis: AnalysisReadPort['list'];
@@ -134,6 +136,7 @@ export const buildReportsHttpDeps = async (
       }),
       listPaymentPosition: position.list,
       listCashflow: cashflow.list,
+      listCashflowChart: cashflow.listChart,
       listGeneralReport: general.list,
       listAnalysis: analysis.list,
       // Driver memory: sem budget-plans real → Map vazio (nomes viram null). Testes injetam o
@@ -368,7 +371,7 @@ export const buildReportsHttpDeps = async (
     },
     contractNumberReader.resolveContractNumbers,
   );
-  const cashflowPort = CashflowReadFromFinancial(cashflowReader.list);
+  const cashflowPort = CashflowReadFromFinancial(cashflowReader.list, cashflowReader.listChart);
   const analysisPort = AnalysisReadFromFinancial(analysisReader.list);
   const realizedPort = RealizedReadFromSources(
     budgetPlansRead.listPlannedAmounts,
@@ -384,6 +387,7 @@ export const buildReportsHttpDeps = async (
     }),
     listPaymentPosition: positionPort.list,
     listCashflow: cashflowPort.list,
+    listCashflowChart: cashflowPort.listChart,
     listGeneralReport: generalPort.list,
     listAnalysis: analysisPort.list,
     // REP-3 (#446 Slice C): rótulo do plano costurado na borda — reaproveita o MESMO read port do

@@ -182,6 +182,9 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // REP #590 (Slice A): "fluxo de caixa" — fin_payable_view agregado por Categoria × Subcategoria
     // em 2 baldes (EXPECTED=Σ Open+Approved; REALIZED=Σ Paid; Cancelled fora) + self-join subcategoria.
     'tests/modules/financial/public-api/cashflow.drizzle-mysql.test.ts',
+    // REP #590 (Slice B): "fluxo de caixa /chart" — série temporal. fin_payable_view agregado por
+    // Categoria × Subcategoria × MÊS (DATE_FORMAT due_date '%Y-%m-01'), 2 baldes, ordenado por mês ASC.
+    'tests/modules/financial/public-api/cashflow-chart.drizzle-mysql.test.ts',
     // #416 BGP-INSIGHTS-REALIZED: "realizado por plano" (Σ reconciled_value_cents Active, JOIN 3-hop
     // fin_reconciliation_items → fin_reconciliations → fin_payables → fin_documents.budget_plan_ref)
     'tests/modules/financial/public-api/realized-by-plan.drizzle-mysql.test.ts',

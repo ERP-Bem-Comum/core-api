@@ -316,6 +316,20 @@ export const cashflowResponseSchema = z
 
 export type CashflowResponseDto = z.infer<typeof cashflowResponseSchema>;
 
+// REP (#590 · Slice B) — "Fluxo de Caixa /chart": as mesmas linhas do Slice A com uma DIMENSÃO DE MÊS
+// (`Installments_dueDate`, o primeiro dia do mês 'YYYY-MM-01' como date legado). A resposta é um
+// ARRAY plano de linhas datadas (sem envelope Receivables/Payables — o front monta a série temporal).
+// `.strict()` fail-loud se o mapper vazar campo extra (7 chaves = as 6 do Slice A + o mês).
+export const cashflowChartRowSchema = cashflowRowSchema
+  .extend({ Installments_dueDate: z.iso.date() })
+  .strict();
+
+export type CashflowChartRowDto = z.infer<typeof cashflowChartRowSchema>;
+
+export const cashflowChartResponseSchema = z.array(cashflowChartRowSchema);
+
+export type CashflowChartResponseDto = z.infer<typeof cashflowChartResponseSchema>;
+
 // REP-3 (#114) — "Análise de Planejamento". Query de filtro (período half-open + status opcional).
 export const analysisQuerySchema = z
   .object({
