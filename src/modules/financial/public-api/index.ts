@@ -66,6 +66,11 @@ export type {
   GeneralReportReader,
 } from './general-report-projection.ts';
 
+// Reader boot-scoped do "Fluxo de Caixa" (#590 REP — Slice A, read-only). Agrega fin_payable_view
+// por Categoria × Subcategoria em 2 baldes (REALIZED/EXPECTED). Consumido pelo `reports` via ACL.
+export { openCashflowReader } from './cashflow-projection.ts';
+export type { CashflowRow, CashflowFilter, CashflowReader } from './cashflow-projection.ts';
+
 // Reader boot-scoped da "Análise de Planejamento" (#114 REP-3 — read-only). Agrega fin_payable_view
 // por categoria×CC×mês num período. Consumido pelo `reports` via ACL.
 export { openPayablesAnalysisReader } from './payables-analysis-projection.ts';

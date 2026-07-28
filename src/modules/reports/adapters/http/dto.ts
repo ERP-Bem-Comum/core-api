@@ -3,6 +3,7 @@ import type { TeamMember } from '../../application/ports/team-report-read.ts';
 import type { TeamDemographics } from '../../application/ports/team-demographics-read.ts';
 import type { SupplierWithoutContract } from '../../application/ports/suppliers-without-contract-read.ts';
 import type { PaymentPositionRow } from '../../application/ports/payment-position-read.ts';
+import type { CashflowRow } from '../../application/ports/cashflow-read.ts';
 import type { AnalysisRow } from '../../application/ports/analysis-read.ts';
 import type { RealizedReport } from '../../application/ports/realized-read.ts';
 import type { GeneralReportPage } from '../../application/ports/general-report-read.ts';
@@ -15,6 +16,7 @@ import type {
   AnalysisChartResponseDto,
   RealizedReportResponseDto,
   GeneralReportResponseDto,
+  CashflowResponseDto,
 } from './schemas.ts';
 
 export const teamToDto = (members: readonly TeamMember[]): TeamReportResponseDto => ({
@@ -41,6 +43,22 @@ export const paymentPositionToDto = (
   rows: readonly PaymentPositionRow[],
 ): PaymentPositionResponseDto => ({
   positions: rows.map((p) => ({ ...p })),
+});
+
+// REP (#590 · Slice A): traduz as linhas EN internas (`realizedCents`…) para o shape LEGADO
+// (`REALIZED`/`Category_id`…) e monta o envelope `{ Receivables, Payables }`. `Receivables` é SEMPRE
+// `[]` (financial é payables-centric — A-Receber não existe no modelo, #179). `Category_id`/
+// `SubCategory_id` recebem os refs (UUID string do nosso domínio; no legado eram integer).
+export const cashflowToDto = (rows: readonly CashflowRow[]): CashflowResponseDto => ({
+  Receivables: [],
+  Payables: rows.map((r) => ({
+    Category_id: r.categoryRef,
+    Category_name: r.categoryName,
+    SubCategory_id: r.subcategoryRef,
+    SubCategory_name: r.subcategoryName,
+    REALIZED: r.realizedCents,
+    EXPECTED: r.expectedCents,
+  })),
 });
 
 // REP-6 (#442 · Slice A/B/C): a página do port já tem exatamente o shape do DTO (string/number/null

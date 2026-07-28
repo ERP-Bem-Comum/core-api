@@ -259,6 +259,63 @@ export const generalReportResponseSchema = z
 
 export type GeneralReportResponseDto = z.infer<typeof generalReportResponseSchema>;
 
+// REP (#590 · Slice A) — "Fluxo de Caixa": Saídas (Payables) agregadas por Categoria × Subcategoria
+// em 2 baldes (REALIZED/EXPECTED). Os 6 valores de status = `DocumentStatus` MENOS Draft e Refused
+// (mesmo conjunto do #588/#442); filtram o status VIVO em `fin_documents` via LEFT JOIN.
+export const cashflowStatusValues = [
+  'Open',
+  'Approved',
+  'Transmitted',
+  'Paid',
+  'PartiallyReconciled',
+  'Reconciled',
+] as const;
+
+// Objeto simples (sem `.strict()`, como o REP-4/#588): parâmetro desconhecido é ignorado, não vira
+// 400. 10 filtros opcionais (AND). Nomes id-suffixed (padrão #442). `dueFrom`/`dueTo` = janela
+// half-open [dueFrom, dueTo). SEM paginação (é agregação — retorna todos os grupos).
+export const cashflowQuerySchema = z.object({
+  programId: z.uuid().optional(), // → program_ref
+  budgetPlanId: z.uuid().optional(), // → budget_plan_ref
+  dueFrom: z.iso.date().optional(),
+  dueTo: z.iso.date().optional(),
+  accountId: z.uuid().optional(), // → debit_account_ref
+  costCenterId: z.uuid().optional(), // → cost_center_ref (restringe a população; NÃO é eixo)
+  categoryId: z.uuid().optional(), // → category_ref
+  subCategoryId: z.uuid().optional(), // → subcategory_ref
+  entityId: z.uuid().optional(), // → supplier_ref
+  status: z.enum(cashflowStatusValues).optional(), // via LEFT JOIN fin_documents.status
+});
+
+export type CashflowQueryDto = z.infer<typeof cashflowQuerySchema>;
+
+// Linha no shape LEGADO (openapi.yaml `CashflowRow`, ~linha 3010). `Category_id`/`SubCategory_id`
+// recebem os refs do nosso modelo (UUID string — no legado eram integer). `REALIZED`/`EXPECTED` em
+// centavos inteiros. `.strict()` fail-loud se o mapper vazar campo extra.
+export const cashflowRowSchema = z
+  .object({
+    Category_id: z.string().nullable(),
+    Category_name: z.string().nullable(),
+    SubCategory_id: z.string().nullable(),
+    SubCategory_name: z.string().nullable(),
+    REALIZED: z.number(),
+    EXPECTED: z.number(),
+  })
+  .strict();
+
+export type CashflowRowDto = z.infer<typeof cashflowRowSchema>;
+
+// Envelope legado `{ Receivables, Payables }`. `Receivables` é SEMPRE `[]` no Slice A (financial é
+// payables-centric — A-Receber não existe no modelo, #179). `.strict()`.
+export const cashflowResponseSchema = z
+  .object({
+    Receivables: z.array(cashflowRowSchema),
+    Payables: z.array(cashflowRowSchema),
+  })
+  .strict();
+
+export type CashflowResponseDto = z.infer<typeof cashflowResponseSchema>;
+
 // REP-3 (#114) — "Análise de Planejamento". Query de filtro (período half-open + status opcional).
 export const analysisQuerySchema = z
   .object({

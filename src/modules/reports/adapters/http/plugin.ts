@@ -25,6 +25,7 @@ import { FINANCIAL_PERMISSION } from '#src/modules/financial/public-api/permissi
 import { BUDGET_PLAN_PERMISSION } from '#src/modules/budget-plans/public-api/permissions.ts';
 import type { AnalysisFilter, AnalysisRow } from '../../application/ports/analysis-read.ts';
 import type { PaymentPositionFilter } from '../../application/ports/payment-position-read.ts';
+import type { CashflowFilter } from '../../application/ports/cashflow-read.ts';
 import type { RealizedFilter } from '../../application/ports/realized-read.ts';
 import type {
   GeneralReportFilter,
@@ -37,6 +38,7 @@ import {
   teamDemographicsToDto,
   suppliersWithoutContractToDto,
   paymentPositionToDto,
+  cashflowToDto,
   analysisToReport,
   analysisToChart,
   realizedToDto,
@@ -48,6 +50,8 @@ import {
   suppliersWithoutContractResponseSchema,
   paymentPositionResponseSchema,
   paymentPositionQuerySchema,
+  cashflowQuerySchema,
+  cashflowResponseSchema,
   analysisQuerySchema,
   analysisReportResponseSchema,
   analysisChartResponseSchema,
@@ -57,6 +61,7 @@ import {
   generalReportResponseSchema,
   type AnalysisQueryDto,
   type PaymentPositionQueryDto,
+  type CashflowQueryDto,
   type RealizedQueryDto,
   type GeneralReportQueryDto,
 } from './schemas.ts';
@@ -105,6 +110,21 @@ const toPaymentPositionFilter = (q: PaymentPositionQueryDto): PaymentPositionFil
   ...(q.categoryRef !== undefined ? { categoryRef: q.categoryRef } : {}),
   ...(q.subcategoryRef !== undefined ? { subcategoryRef: q.subcategoryRef } : {}),
   ...(q.supplierRef !== undefined ? { supplierRef: q.supplierRef } : {}),
+});
+
+// REP (#590 · Slice A): query (borda, validada) → CashflowFilter (nomes id → ref). Só inclui a
+// chave quando presente (`exactOptionalPropertyTypes`: nunca gravar `undefined` explícito).
+const toCashflowFilter = (q: CashflowQueryDto): CashflowFilter => ({
+  ...(q.programId !== undefined ? { programRef: q.programId } : {}),
+  ...(q.budgetPlanId !== undefined ? { budgetPlanRef: q.budgetPlanId } : {}),
+  ...(q.dueFrom !== undefined ? { dueFrom: q.dueFrom } : {}),
+  ...(q.dueTo !== undefined ? { dueTo: q.dueTo } : {}),
+  ...(q.accountId !== undefined ? { debitAccountRef: q.accountId } : {}),
+  ...(q.costCenterId !== undefined ? { costCenterRef: q.costCenterId } : {}),
+  ...(q.categoryId !== undefined ? { categoryRef: q.categoryId } : {}),
+  ...(q.subCategoryId !== undefined ? { subcategoryRef: q.subCategoryId } : {}),
+  ...(q.entityId !== undefined ? { supplierRef: q.entityId } : {}),
+  ...(q.status !== undefined ? { status: q.status } : {}),
 });
 
 // REP-3 (#446 Slice C): costura o RÓTULO do Plano Orçamentário. Colhe os `budgetPlanRef` DISTINTOS
@@ -231,6 +251,29 @@ const reportsRoutes =
           });
         }
         return sendResult(reply, ok(paymentPositionToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /reports/cashflow — REP (#590 Slice A): Saídas (Payables) agregadas por Categoria ×
+    // Subcategoria em 2 baldes (REALIZED/EXPECTED). Resposta no envelope LEGADO
+    // `{ Receivables: [], Payables: CashflowRow[] }` — `Receivables` sempre `[]` (financial é
+    // payables-centric, #179). `/cashflow/chart` é o Slice B (não implementado aqui).
+    scope.route({
+      method: 'GET',
+      url: '/reports/cashflow',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        querystring: cashflowQuerySchema,
+        response: { 200: cashflowResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.listCashflow(toCashflowFilter(req.query));
+        if (!result.ok) {
+          return sendResult(reply, result, {
+            errors: { 'cashflow-read-unavailable': 503 },
+          });
+        }
+        return sendResult(reply, ok(cashflowToDto(result.value)), { ok: 200 });
       },
     });
 
