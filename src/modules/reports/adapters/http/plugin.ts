@@ -11,7 +11,7 @@
  *  - GET /reports/analysis/payables + /reports/analysis/chart — análise de planejamento (REP-3 · #114).
  */
 
-import type { FastifyPluginAsync, preHandlerAsyncHookHandler } from 'fastify';
+import type { FastifyPluginAsync, FastifyRequest, preHandlerAsyncHookHandler } from 'fastify';
 import type {
   FastifyPluginAsyncZodOpenApi,
   FastifyZodOpenApiSchema,
@@ -138,6 +138,10 @@ const toRealizedFilter = (q: RealizedQueryDto): RealizedFilter => ({
 export type ReportsHttpHooks = Readonly<{
   requireAuth: preHandlerAsyncHookHandler;
   authorize: (permissionName: string) => preHandlerAsyncHookHandler;
+  // REP-6 Slice C (#442): predicado de redação campo-a-campo (respeita o bypass ADR-0052, NÃO dá
+  // 403). OPCIONAL para não quebrar os testes de reports que montam só `{requireAuth, authorize}`;
+  // ausente ⇒ o Relatório Geral trata como sem `bank-account:read` (pix/banco redigidos).
+  hasPermission?: (req: FastifyRequest, permissionName: string) => Promise<boolean>;
 }>;
 
 const reportsRoutes =
@@ -230,7 +234,11 @@ const reportsRoutes =
       },
     });
 
-    // GET /reports/generalReport — REP-6 Slice A: linhas planas paginadas de títulos a-pagar.
+    // GET /reports/generalReport — REP-6: linhas planas paginadas de títulos a-pagar. O endpoint
+    // exige `fiscal-document:read` (preHandler). Slice C (#442): PIX/Bancários têm gate ADICIONAL de
+    // redação campo-a-campo — `bank-account:read` via `hasPermission` (predicado, NÃO 403). Sem a
+    // permissão (ou sem o hook), `includeBankData=false` e o adapter nem resolve o supplier; o
+    // relatório retorna 200 com pix/banco null em todas as linhas.
     scope.route({
       method: 'GET',
       url: '/reports/generalReport',
@@ -240,9 +248,14 @@ const reportsRoutes =
         response: { 200: generalReportResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
+        const includeBankData =
+          hooks.hasPermission !== undefined
+            ? await hooks.hasPermission(req, FINANCIAL_PERMISSION.bankAccountRead)
+            : false;
         const result = await deps.listGeneralReport(
           toGeneralReportFilter(req.query),
           toGeneralReportPagination(req.query),
+          { includeBankData },
         );
         if (!result.ok) {
           return sendResult(reply, result, {

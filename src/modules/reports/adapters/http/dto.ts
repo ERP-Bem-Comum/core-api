@@ -43,8 +43,9 @@ export const paymentPositionToDto = (
   positions: rows.map((p) => ({ ...p })),
 });
 
-// REP-6 (#442 · Slice A): a página do port já tem exatamente o shape do DTO (só string/number/null).
-// Cópia estrutural das linhas planas (o port é Readonly aninhado → arrays mutáveis no DTO).
+// REP-6 (#442 · Slice A/B/C): a página do port já tem exatamente o shape do DTO (string/number/null
+// + os objetos `pixKey`/`bankAccount` do Slice C). Cópia estrutural rasa das linhas planas (o port é
+// Readonly aninhado → arrays mutáveis no DTO; pix/banco copiados por referência, serializados iguais).
 export const generalReportToDto = (page: GeneralReportPage): GeneralReportResponseDto => ({
   items: page.items.map((r) => ({ ...r })),
   page: page.page,

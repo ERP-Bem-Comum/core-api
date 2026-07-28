@@ -200,8 +200,22 @@ export const generalReportQuerySchema = z.object({
 
 export type GeneralReportQueryDto = z.infer<typeof generalReportQuerySchema>;
 
-// Linha PLANA (Slice A + Slice B). `.strict()` fail-loud se o mapper vazar campo extra (ex.: uma
-// coluna de Slice C/D entrar sem passar por sua fatia).
+// Slice C (#442): PIX + Dados Bancários (espelham `PixKey`/`BankAccount` do partners public-api).
+// Os 5 tipos de chave PIX = `PixKeyType`; os 4 campos bancários são strings opacas.
+export const pixKeyDtoSchema = z.object({
+  keyType: z.enum(['cpf', 'cnpj', 'email', 'phone', 'random-key']),
+  key: z.string(),
+});
+
+export const bankAccountDtoSchema = z.object({
+  bank: z.string(),
+  agency: z.string(),
+  accountNumber: z.string(),
+  checkDigit: z.string(),
+});
+
+// Linha PLANA (Slice A + Slice B + Slice C). `.strict()` fail-loud se o mapper vazar campo extra
+// (ex.: uma coluna de Slice D entrar sem passar por sua fatia).
 export const generalReportRowSchema = z
   .object({
     payableId: z.string(),
@@ -223,6 +237,9 @@ export const generalReportRowSchema = z
     subcategoryName: z.string().nullable(),
     valueCents: z.number(),
     contractRef: z.string().nullable(),
+    // Slice C (#442): PIX + Dados Bancários (só supplier com `bank-account:read`; senão null).
+    pixKey: pixKeyDtoSchema.nullable(),
+    bankAccount: bankAccountDtoSchema.nullable(),
   })
   .strict();
 

@@ -298,10 +298,12 @@ export const buildReportsHttpDeps = async (
     contractorsReader.listContractorsWithActiveContract,
   );
   const positionPort = PaymentPositionReadFromFinancial(positionReader.list);
-  // Slice B: costura os nomes cross-módulo com só os dois getters do partners read port.
+  // Slice B/C: costura nomes (financier/collaborator) e PIX/banco (supplier) cross-módulo com os
+  // três getters do partners read port. `getSupplierView` só é chamado quando o gate concede.
   const generalPort = GeneralReportReadFromFinancial(generalReader.list, {
     getFinancierView: partnersRead.getFinancierView,
     getCollaboratorView: partnersRead.getCollaboratorView,
+    getSupplierView: partnersRead.getSupplierView,
   });
   const analysisPort = AnalysisReadFromFinancial(analysisReader.list);
   const realizedPort = RealizedReadFromSources(
