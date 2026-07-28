@@ -214,8 +214,7 @@ export const bankAccountDtoSchema = z.object({
   checkDigit: z.string(),
 });
 
-// Linha PLANA (Slice A + Slice B + Slice C). `.strict()` fail-loud se o mapper vazar campo extra
-// (ex.: uma coluna de Slice D entrar sem passar por sua fatia).
+// Linha PLANA completa (Slice A + B + C + D). `.strict()` fail-loud se o mapper vazar campo extra.
 export const generalReportRowSchema = z
   .object({
     payableId: z.string(),
@@ -240,6 +239,9 @@ export const generalReportRowSchema = z
     // Slice C (#442): PIX + Dados Bancários (só supplier com `bank-account:read`; senão null).
     pixKey: pixKeyDtoSchema.nullable(),
     bankAccount: bankAccountDtoSchema.nullable(),
+    // Slice D (#442): NÚMERO do contrato (`sequential_number`), costurado do `contractRef`; null se
+    // sem contrato ou ref não resolvível.
+    contractNumber: z.string().nullable(),
   })
   .strict();
 

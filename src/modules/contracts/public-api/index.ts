@@ -141,3 +141,14 @@ export type {
   ActiveContractorReadPort,
   ActiveContractorReadError,
 } from './read.ts';
+
+// REP-6 (#442 · Slice D) — public-api de leitura do NÚMERO do contrato (`sequential_number`) a partir
+// da ref/UUID, consumida pelo "Relatório Geral" do reports para costurar a coluna Número do Contrato.
+export { buildContractsContractNumberReadPort, makeInMemoryContractNumberRead } from './read.ts';
+export type {
+  ContractsContractNumberReadPort,
+  BuildContractsContractNumberReadPortOptions,
+  BuildContractsContractNumberReadPortError,
+  ContractNumberReadPort,
+  ContractNumberReadError,
+} from './read.ts';

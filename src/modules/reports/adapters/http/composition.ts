@@ -29,7 +29,10 @@ import {
   buildBudgetPlansReadPort,
   type PlanLabelsReadPort,
 } from '#src/modules/budget-plans/public-api/read.ts';
-import { buildContractsActiveContractorReadPort } from '#src/modules/contracts/public-api/index.ts';
+import {
+  buildContractsActiveContractorReadPort,
+  buildContractsContractNumberReadPort,
+} from '#src/modules/contracts/public-api/index.ts';
 import { TeamReportReadFromPartners } from '../persistence/team-report-read.partners.ts';
 import { InMemoryTeamReportRead } from '../persistence/team-report-read.in-memory.ts';
 import { TeamDemographicsReadFromPartners } from '../persistence/team-demographics-read.partners.ts';
@@ -291,6 +294,30 @@ export const buildReportsHttpDeps = async (
   }
   const generalReader = generalReaderR.value;
 
+  // REP-6 (#442 · Slice D): read port do `contracts` — resolve o NÚMERO do contrato
+  // (`sequential_number`) a partir do `contractRef` na costura do Relatório Geral. Pool próprio
+  // aberto UMA vez no boot (incidente RDS 0001), reaproveita a `contractsUrl` já em mãos. Aberto por
+  // último → só seu próprio caminho de erro fecha TODOS os anteriores. Fail-closed encadeado.
+  const contractNumberReaderR = await buildContractsContractNumberReadPort({
+    connectionString: contractsUrl,
+  });
+  if (!contractNumberReaderR.ok) {
+    await teamReader.close();
+    await demographicsReader.close();
+    await suppliersReader.close();
+    await positionReader.close();
+    await contractorsReader.close();
+    await analysisReader.close();
+    await budgetPlansRead.close();
+    await realizedReader.close();
+    await partnersRead.close();
+    await generalReader.close();
+    throw new Error(
+      `reports-composition: falha ao abrir read port (contract-number) do contracts: ${contractNumberReaderR.error}`,
+    );
+  }
+  const contractNumberReader = contractNumberReaderR.value;
+
   const teamPort = TeamReportReadFromPartners(teamReader.list);
   const demographicsPort = TeamDemographicsReadFromPartners(demographicsReader.list);
   const suppliersPort = SuppliersWithoutContractReadFromFinancial(suppliersReader.list);
@@ -300,11 +327,17 @@ export const buildReportsHttpDeps = async (
   const positionPort = PaymentPositionReadFromFinancial(positionReader.list);
   // Slice B/C: costura nomes (financier/collaborator) e PIX/banco (supplier) cross-módulo com os
   // três getters do partners read port. `getSupplierView` só é chamado quando o gate concede.
-  const generalPort = GeneralReportReadFromFinancial(generalReader.list, {
-    getFinancierView: partnersRead.getFinancierView,
-    getCollaboratorView: partnersRead.getCollaboratorView,
-    getSupplierView: partnersRead.getSupplierView,
-  });
+  // Slice D: 3º dep — o `resolveContractNumbers` do read port de contracts costura o NÚMERO do
+  // contrato por `contractRef`, em lote (1 chamada por página), com degradação graciosa.
+  const generalPort = GeneralReportReadFromFinancial(
+    generalReader.list,
+    {
+      getFinancierView: partnersRead.getFinancierView,
+      getCollaboratorView: partnersRead.getCollaboratorView,
+      getSupplierView: partnersRead.getSupplierView,
+    },
+    contractNumberReader.resolveContractNumbers,
+  );
   const analysisPort = AnalysisReadFromFinancial(analysisReader.list);
   const realizedPort = RealizedReadFromSources(
     budgetPlansRead.listPlannedAmounts,
@@ -336,6 +369,7 @@ export const buildReportsHttpDeps = async (
       await realizedReader.close();
       await generalReader.close();
       await partnersRead.close();
+      await contractNumberReader.close();
     },
   };
 };
