@@ -433,5 +433,70 @@ if (!process.env['MYSQL_INTEGRATION']) {
 
       await reader.close();
     });
+
+    it('CA6 (Slice B · #442): payee_kind projetado por COALESCE; supplierRef = ref do favorecido', async () => {
+      const DOC_FIN = 'd0000000-0000-4000-8000-00000000df01'; // payee_kind = 'financier'
+      const DOC_COL = 'd0000000-0000-4000-8000-00000000dc01'; // payee_kind = 'collaborator'
+      const DOC_LEG = 'd0000000-0000-4000-8000-00000000de01'; // payee_kind NULL → 'supplier'
+      const FIN_REF = 'e1000000-0000-4000-8000-0000000000e1';
+      const COL_REF = 'e2000000-0000-4000-8000-0000000000e2';
+      const SUP_REF = 'e3000000-0000-4000-8000-0000000000e3';
+
+      await handle.db.insert(handle.schema.finDocuments).values([
+        { id: DOC_FIN, payeeKind: 'financier', status: 'Open', createdAt: NOW },
+        { id: DOC_COL, payeeKind: 'collaborator', status: 'Open', createdAt: NOW },
+        // payee_kind NULL (pré-#90) → lido como 'supplier' pelo COALESCE.
+        { id: DOC_LEG, payeeKind: null, status: 'Open', createdAt: NOW },
+      ]);
+
+      await handle.db.insert(handle.schema.finPayableView).values([
+        payable({
+          payableId: 'f0000000-0000-4000-8000-0000000000f1',
+          documentId: DOC_FIN,
+          supplierRef: FIN_REF,
+          valueCents: 100,
+          status: 'Open',
+          dueDate: '2026-07-01',
+        }),
+        payable({
+          payableId: 'f0000000-0000-4000-8000-0000000000f2',
+          documentId: DOC_COL,
+          supplierRef: COL_REF,
+          valueCents: 200,
+          status: 'Open',
+          dueDate: '2026-07-02',
+        }),
+        payable({
+          payableId: 'f0000000-0000-4000-8000-0000000000f3',
+          documentId: DOC_LEG,
+          supplierRef: SUP_REF,
+          valueCents: 300,
+          status: 'Open',
+          dueDate: '2026-07-03',
+        }),
+      ]);
+
+      const readerR = await openGeneralReportReader({ connectionString });
+      if (!readerR.ok) return assert.fail(JSON.stringify(readerR));
+      const reader = readerR.value;
+      const r = await reader.list({ order: 'dueDate:asc' }, { page: 1, limit: 50 });
+      await reader.close();
+
+      assert.equal(r.ok, true, JSON.stringify(r));
+      if (!r.ok) return;
+      const byRef = new Map(r.value.items.map((line) => [line.supplierRef, line]));
+
+      const fin = byRef.get(FIN_REF)!;
+      assert.equal(fin.payeeKind, 'financier', 'payee_kind financier projetado');
+      assert.equal(fin.supplierRef, FIN_REF, 'supplierRef = ref do favorecido (financier)');
+
+      const col = byRef.get(COL_REF)!;
+      assert.equal(col.payeeKind, 'collaborator', 'payee_kind collaborator projetado');
+      assert.equal(col.supplierRef, COL_REF, 'supplierRef = ref do favorecido (collaborator)');
+
+      const leg = byRef.get(SUP_REF)!;
+      assert.equal(leg.payeeKind, 'supplier', 'payee_kind NULL → supplier (COALESCE)');
+      assert.equal(leg.supplierRef, SUP_REF);
+    });
   });
 }

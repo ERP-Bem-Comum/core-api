@@ -55,8 +55,11 @@ const row = (over: Partial<GeneralReportRow> = {}): GeneralReportRow => ({
   code: 'NFS 1234',
   tipo: 'a-pagar',
   dueDate: '2026-07-01',
+  payeeKind: 'supplier',
   supplierRef: '11111111-1111-4111-8111-111111111111',
   supplierName: 'Fornecedor Alpha',
+  financierName: null,
+  collaboratorName: null,
   costCenterRef: '33333333-3333-4333-8333-333333333333',
   costCenterName: 'Administrativo',
   categoryRef: '22222222-2222-4222-8222-222222222222',
@@ -165,19 +168,23 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice A)
     const first = body.items[0]!;
     assert.equal(first['tipo'], 'a-pagar');
     assert.equal(first['code'], 'NFS 1234');
-    // Contrato de saída fechado: exatamente as 15 colunas servíveis no Slice A (nenhuma cross-módulo).
+    // Contrato de saída: 15 colunas do Slice A + 3 do Slice B (payeeKind + financierName +
+    // collaboratorName) = 18 chaves. PIX/Bancários (Slice C) e Número do Contrato (Slice D) fora.
     assert.deepEqual(
       [...Object.keys(first)].sort(),
       [
         'categoryName',
         'categoryRef',
         'code',
+        'collaboratorName',
         'contractRef',
         'costCenterName',
         'costCenterRef',
         'documentId',
         'dueDate',
+        'financierName',
         'payableId',
+        'payeeKind',
         'subcategoryName',
         'subcategoryRef',
         'supplierName',
@@ -186,8 +193,8 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice A)
         'valueCents',
       ].sort(),
     );
-    // Nenhuma coluna cross-módulo (Slices B/C/D) vaza no shape.
-    for (const k of ['financier', 'collaborator', 'pix', 'bankInfo', 'contractNumber']) {
+    // Colunas de Slices C/D ainda não vazam no shape.
+    for (const k of ['pix', 'bankInfo', 'contractNumber']) {
       assert.equal(k in first, false, `coluna cross-módulo ${k} não deve estar presente`);
     }
     // Linha sem refs → nomes/refs null (degradação graciosa).
@@ -291,5 +298,94 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice A)
     assert.equal(okRes.statusCode, 200, okRes.body);
     const badRes = await get(READER, '?columns=code,unknownColumn');
     assert.equal(badRes.statusCode, 400, badRes.body);
+  });
+});
+
+// Slice B (#442): FINANCIADOR/COLABORADOR (nomes) preenchidos por kind. App próprio com um reader
+// semeando uma linha de cada kind — o nome cross-módulo já vem costurado na página do port.
+describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice B: Financiador/Colaborador)', () => {
+  let kindHandle: AppHandle;
+
+  before(async () => {
+    const base = await buildReportsHttpDeps({ driver: 'memory' });
+    const deps = {
+      ...base,
+      listGeneralReport: (_filter: GeneralReportFilter, pagination: GeneralReportPagination) =>
+        Promise.resolve(
+          ok({
+            items: [
+              row({
+                payableId: 'f1000000-0000-4000-8000-0000000000f1',
+                payeeKind: 'financier',
+                supplierRef: 'e1000000-0000-4000-8000-0000000000e1',
+                supplierName: null,
+                financierName: 'Financiador BNDES',
+                collaboratorName: null,
+              }),
+              row({
+                payableId: 'f2000000-0000-4000-8000-0000000000f2',
+                payeeKind: 'collaborator',
+                supplierRef: 'e2000000-0000-4000-8000-0000000000e2',
+                supplierName: null,
+                financierName: null,
+                collaboratorName: 'Colaborador João',
+              }),
+              row({
+                payableId: 'f3000000-0000-4000-8000-0000000000f3',
+                payeeKind: 'supplier',
+                supplierName: 'Fornecedor Alpha',
+                financierName: null,
+                collaboratorName: null,
+              }),
+            ],
+            page: pagination.page,
+            pageSize: pagination.limit,
+            total: 3,
+          }),
+        ),
+    };
+    const config = readHttpConfig({ RATE_LIMIT_MAX: '10000' });
+    const app = await buildApp({
+      config,
+      routes: [reportsHttpPlugin(deps, { requireAuth, authorize })],
+    });
+    kindHandle = { app, teardown: () => app.close() };
+  });
+
+  after(async () => {
+    await kindHandle.teardown();
+  });
+
+  it('shape de 18 chaves + preenchimento por kind (financier/collaborator/supplier)', async () => {
+    const res = await kindHandle.app.inject({
+      method: 'GET',
+      url: '/api/v2/reports/generalReport',
+      headers: { authorization: `Bearer ${READER}` },
+    });
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as { items: Record<string, unknown>[] };
+    assert.equal(body.items.length, 3);
+
+    // 18 chaves em toda linha.
+    for (const line of body.items) {
+      assert.equal(Object.keys(line).length, 18, JSON.stringify(line));
+    }
+
+    const [fin, col, sup] = body.items;
+    // Financier: financierName preenchido; collaboratorName e supplierName null.
+    assert.equal(fin!['payeeKind'], 'financier');
+    assert.equal(fin!['financierName'], 'Financiador BNDES');
+    assert.equal(fin!['collaboratorName'], null);
+    assert.equal(fin!['supplierName'], null);
+    // Collaborator: collaboratorName preenchido; financierName e supplierName null.
+    assert.equal(col!['payeeKind'], 'collaborator');
+    assert.equal(col!['collaboratorName'], 'Colaborador João');
+    assert.equal(col!['financierName'], null);
+    assert.equal(col!['supplierName'], null);
+    // Supplier: supplierName local; financier/collaborator null.
+    assert.equal(sup!['payeeKind'], 'supplier');
+    assert.equal(sup!['supplierName'], 'Fornecedor Alpha');
+    assert.equal(sup!['financierName'], null);
+    assert.equal(sup!['collaboratorName'], null);
   });
 });

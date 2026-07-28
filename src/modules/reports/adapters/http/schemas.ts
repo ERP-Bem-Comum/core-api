@@ -200,8 +200,8 @@ export const generalReportQuerySchema = z.object({
 
 export type GeneralReportQueryDto = z.infer<typeof generalReportQuerySchema>;
 
-// Linha PLANA (colunas servíveis no Slice A). `.strict()` fail-loud se o mapper vazar campo extra
-// (ex.: uma coluna cross-módulo entrar sem passar pelo Slice B/C/D).
+// Linha PLANA (Slice A + Slice B). `.strict()` fail-loud se o mapper vazar campo extra (ex.: uma
+// coluna de Slice C/D entrar sem passar por sua fatia).
 export const generalReportRowSchema = z
   .object({
     payableId: z.string(),
@@ -209,8 +209,12 @@ export const generalReportRowSchema = z
     code: z.string().nullable(),
     tipo: z.literal('a-pagar'),
     dueDate: z.string(),
+    // Slice B (#442): tipo do favorecido + nomes cross-módulo (Financiador/Colaborador).
+    payeeKind: z.enum(['supplier', 'financier', 'act', 'collaborator']),
     supplierRef: z.string().nullable(),
     supplierName: z.string().nullable(),
+    financierName: z.string().nullable(),
+    collaboratorName: z.string().nullable(),
     costCenterRef: z.string().nullable(),
     costCenterName: z.string().nullable(),
     categoryRef: z.string().nullable(),

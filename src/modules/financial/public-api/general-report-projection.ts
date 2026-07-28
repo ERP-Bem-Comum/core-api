@@ -64,14 +64,26 @@ export type GeneralReportPagination = Readonly<{ page: number; limit: number }>;
 
 // Linha PLANA do grid (colunas servíveis no Slice A). As cross-módulo (Financiador/Colaborador/PIX/
 // Bancários/Número do Contrato) NÃO entram — Slices B/C/D.
+// Tipo do favorecido (#90) — CHECK em fin_documents.payee_kind. `payeeKind` guia a costura
+// cross-módulo do nome (Financiador/Colaborador) na borda (Slice B); aqui só o classificador viaja.
+export type GeneralReportPayeeKind = 'supplier' | 'financier' | 'act' | 'collaborator';
+
+// COALESCE(payee_kind, 'supplier') no SQL cobre o NULL (pré-#90); esta guarda cobre o valor fora do
+// enum (não deve ocorrer — há CHECK) com fallback gracioso para 'supplier'.
+const toPayeeKind = (raw: string | null): GeneralReportPayeeKind =>
+  raw === 'financier' || raw === 'act' || raw === 'collaborator' ? raw : 'supplier';
+
 export type GeneralReportRow = Readonly<{
   payableId: string;
   documentId: string;
   code: string | null; // fin_documents.document_number
   tipo: 'a-pagar'; // constante (v1 só a-pagar)
   dueDate: string; // 'YYYY-MM-DD'
-  supplierRef: string | null;
-  supplierName: string | null;
+  // Slice B (#442): tipo do favorecido (COALESCE de fin_documents.payee_kind). O NOME de
+  // Financiador/Colaborador é cross-módulo (partners) e NÃO é resolvido aqui — Slice B costura na borda.
+  payeeKind: GeneralReportPayeeKind;
+  supplierRef: string | null; // ref do favorecido (genérica p/ todos os kinds, apesar do nome)
+  supplierName: string | null; // só ≠ null para supplier real (fin_supplier_view, same-module)
   costCenterRef: string | null;
   costCenterName: string | null;
   categoryRef: string | null;
@@ -162,6 +174,8 @@ export const openGeneralReportReader = async (
             documentId: finPayableView.documentId,
             code: finDocuments.documentNumber,
             dueDate: finPayableView.dueDate,
+            // Cru (nullable) — normalizado por `toPayeeKind` no map (NULL/valor fora do enum → 'supplier').
+            payeeKind: finDocuments.payeeKind,
             supplierRef: finPayableView.supplierRef,
             supplierName: finSupplierView.name,
             costCenterRef: finPayableView.costCenterRef,
@@ -190,6 +204,7 @@ export const openGeneralReportReader = async (
           code: row.code,
           tipo: 'a-pagar',
           dueDate: row.dueDate,
+          payeeKind: toPayeeKind(row.payeeKind),
           supplierRef: row.supplierRef,
           supplierName: row.supplierName,
           costCenterRef: row.costCenterRef,

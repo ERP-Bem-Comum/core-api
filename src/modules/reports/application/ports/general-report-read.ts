@@ -6,8 +6,9 @@
  * (payable sem fornecedor/CC/categoria/subcategoria; nome ainda não projetado — degradação graciosa).
  * Consumido pela borda HTTP (`GET /reports/generalReport`).
  *
- * Slice A é single-module (financial): as colunas cross-módulo (Financiador, Colaborador, PIX,
- * Bancários, Número do Contrato) são Slices B/C/D e NÃO fazem parte deste shape.
+ * Slice B (#442) soma FINANCIADOR e COLABORADOR (nomes) via stitch cross-módulo com `partners`
+ * (ADR-0006) — o financial entrega `payeeKind` + `supplierRef`; o nome é resolvido na borda. PIX,
+ * Bancários (Slice C) e Número do Contrato (Slice D) ainda NÃO fazem parte deste shape.
  *
  * O filtro (todos os campos opcionais, ausente = sem restrição, AND) e a paginação são repassados
  * ao reader do financial; aqui os valores são strings/números opacos (validados na borda).
@@ -39,8 +40,14 @@ export type GeneralReportRow = Readonly<{
   code: string | null;
   tipo: 'a-pagar';
   dueDate: string;
+  // Slice B (#442): tipo do favorecido (do financial) + NOMES cross-módulo costurados via partners.
+  // Por kind: supplier → só supplierName; financier → só financierName; collaborator → só
+  // collaboratorName; act → nenhum nome (todos null). Degradação graciosa: ref não resolvido → null.
+  payeeKind: 'supplier' | 'financier' | 'act' | 'collaborator';
   supplierRef: string | null;
   supplierName: string | null;
+  financierName: string | null;
+  collaboratorName: string | null;
   costCenterRef: string | null;
   costCenterName: string | null;
   categoryRef: string | null;

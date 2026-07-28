@@ -59,6 +59,7 @@ export type {
 export { openGeneralReportReader } from './general-report-projection.ts';
 export type {
   GeneralReportRow,
+  GeneralReportPayeeKind,
   GeneralReportFilter,
   GeneralReportPagination,
   GeneralReportOrder,
