@@ -179,6 +179,9 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // REP-6 #442 (Slice A): "relatório geral" — linhas planas paginadas de fin_payable_view com
     // LEFT JOINs same-module (documento/fornecedor/CC/categoria + self-join subcategoria) + filtros.
     'tests/modules/financial/public-api/general-report.drizzle-mysql.test.ts',
+    // REP #590 (Slice A): "fluxo de caixa" — fin_payable_view agregado por Categoria × Subcategoria
+    // em 2 baldes (EXPECTED=Σ Open+Approved; REALIZED=Σ Paid; Cancelled fora) + self-join subcategoria.
+    'tests/modules/financial/public-api/cashflow.drizzle-mysql.test.ts',
     // #416 BGP-INSIGHTS-REALIZED: "realizado por plano" (Σ reconciled_value_cents Active, JOIN 3-hop
     // fin_reconciliation_items → fin_reconciliations → fin_payables → fin_documents.budget_plan_ref)
     'tests/modules/financial/public-api/realized-by-plan.drizzle-mysql.test.ts',
