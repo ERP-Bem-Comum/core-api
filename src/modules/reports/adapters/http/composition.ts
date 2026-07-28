@@ -22,6 +22,7 @@ import {
   openPaymentPositionReader,
   openPayablesAnalysisReader,
   openRealizedProvisionedReader,
+  openGeneralReportReader,
 } from '#src/modules/financial/public-api/index.ts';
 import {
   buildBudgetPlansReadPort,
@@ -38,6 +39,8 @@ import { ActiveContractorReadFromContracts } from '../persistence/active-contrac
 import { InMemoryActiveContractorRead } from '../persistence/active-contractor-read.in-memory.ts';
 import { PaymentPositionReadFromFinancial } from '../persistence/payment-position-read.financial.ts';
 import { InMemoryPaymentPositionRead } from '../persistence/payment-position-read.in-memory.ts';
+import { GeneralReportReadFromFinancial } from '../persistence/general-report-read.financial.ts';
+import { InMemoryGeneralReportRead } from '../persistence/general-report-read.in-memory.ts';
 import {
   listSuppliersWithoutActiveContract,
   type ListSuppliersWithoutActiveContractError,
@@ -54,6 +57,7 @@ import type {
 } from '../../application/ports/suppliers-without-contract-read.ts';
 import type { ActiveContractorReadPort } from '../../application/ports/active-contractor-read.ts';
 import type { PaymentPositionReadPort } from '../../application/ports/payment-position-read.ts';
+import type { GeneralReportReadPort } from '../../application/ports/general-report-read.ts';
 import type { AnalysisReadPort } from '../../application/ports/analysis-read.ts';
 import type { RealizedReadPort } from '../../application/ports/realized-read.ts';
 
@@ -88,6 +92,8 @@ export type ReportsHttpDeps = Readonly<{
     Result<readonly SupplierWithoutContract[], ListSuppliersWithoutActiveContractError>
   >;
   listPaymentPosition: PaymentPositionReadPort['list'];
+  /** REP-6 (#442 Slice A): linhas planas paginadas de títulos a-pagar (financial single-module). */
+  listGeneralReport: GeneralReportReadPort['list'];
   listAnalysis: AnalysisReadPort['list'];
   /** REP-3 (#446 Slice C): id do Plano Orçamentário → rótulo, composto no budget-plans (ACL). */
   resolvePlanLabels: PlanLabelsReadPort['resolvePlanLabels'];
@@ -105,6 +111,7 @@ export const buildReportsHttpDeps = async (
     const suppliers: SuppliersWithoutContractReadPort = InMemorySuppliersWithoutContractRead();
     const activeContractors: ActiveContractorReadPort = InMemoryActiveContractorRead();
     const position: PaymentPositionReadPort = InMemoryPaymentPositionRead();
+    const general: GeneralReportReadPort = InMemoryGeneralReportRead();
     const analysis: AnalysisReadPort = InMemoryAnalysisRead();
     const realized: RealizedReadPort = InMemoryRealizedRead();
     return {
@@ -115,6 +122,7 @@ export const buildReportsHttpDeps = async (
         activeContractorsRead: activeContractors,
       }),
       listPaymentPosition: position.list,
+      listGeneralReport: general.list,
       listAnalysis: analysis.list,
       // Driver memory: sem budget-plans real → Map vazio (nomes viram null). Testes injetam o
       // próprio `resolvePlanLabels` para exercitar o rótulo costurado (espelha `listAnalysis`).
@@ -244,6 +252,24 @@ export const buildReportsHttpDeps = async (
   }
   const realizedReader = realizedReaderR.value;
 
+  // REP-6 (#442 Slice A): reader do Relatório Geral (financial). Pool próprio aberto UMA vez no boot
+  // (incidente RDS 0001). Aberto por último → só seu próprio caminho de erro fecha os anteriores.
+  const generalReaderR = await openGeneralReportReader({ connectionString: financialUrl });
+  if (!generalReaderR.ok) {
+    await teamReader.close();
+    await demographicsReader.close();
+    await suppliersReader.close();
+    await positionReader.close();
+    await contractorsReader.close();
+    await analysisReader.close();
+    await budgetPlansRead.close();
+    await realizedReader.close();
+    throw new Error(
+      `reports-composition: falha ao abrir reader (general-report) do financial: ${generalReaderR.error}`,
+    );
+  }
+  const generalReader = generalReaderR.value;
+
   const teamPort = TeamReportReadFromPartners(teamReader.list);
   const demographicsPort = TeamDemographicsReadFromPartners(demographicsReader.list);
   const suppliersPort = SuppliersWithoutContractReadFromFinancial(suppliersReader.list);
@@ -251,6 +277,7 @@ export const buildReportsHttpDeps = async (
     contractorsReader.listContractorsWithActiveContract,
   );
   const positionPort = PaymentPositionReadFromFinancial(positionReader.list);
+  const generalPort = GeneralReportReadFromFinancial(generalReader.list);
   const analysisPort = AnalysisReadFromFinancial(analysisReader.list);
   const realizedPort = RealizedReadFromSources(
     budgetPlansRead.listPlannedAmounts,
@@ -265,6 +292,7 @@ export const buildReportsHttpDeps = async (
       activeContractorsRead: contractorsPort,
     }),
     listPaymentPosition: positionPort.list,
+    listGeneralReport: generalPort.list,
     listAnalysis: analysisPort.list,
     // REP-3 (#446 Slice C): rótulo do plano costurado na borda — reaproveita o MESMO read port do
     // budget-plans já aberto para o Realizado × Planejado (S6), sem novo pool (incidente RDS 0001).
@@ -279,6 +307,7 @@ export const buildReportsHttpDeps = async (
       await analysisReader.close();
       await budgetPlansRead.close();
       await realizedReader.close();
+      await generalReader.close();
     },
   };
 };

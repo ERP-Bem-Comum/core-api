@@ -5,6 +5,7 @@ import type { SupplierWithoutContract } from '../../application/ports/suppliers-
 import type { PaymentPositionRow } from '../../application/ports/payment-position-read.ts';
 import type { AnalysisRow } from '../../application/ports/analysis-read.ts';
 import type { RealizedReport } from '../../application/ports/realized-read.ts';
+import type { GeneralReportPage } from '../../application/ports/general-report-read.ts';
 import type {
   TeamDemographicsResponseDto,
   TeamReportResponseDto,
@@ -13,6 +14,7 @@ import type {
   AnalysisReportResponseDto,
   AnalysisChartResponseDto,
   RealizedReportResponseDto,
+  GeneralReportResponseDto,
 } from './schemas.ts';
 
 export const teamToDto = (members: readonly TeamMember[]): TeamReportResponseDto => ({
@@ -39,6 +41,15 @@ export const paymentPositionToDto = (
   rows: readonly PaymentPositionRow[],
 ): PaymentPositionResponseDto => ({
   positions: rows.map((p) => ({ ...p })),
+});
+
+// REP-6 (#442 · Slice A): a página do port já tem exatamente o shape do DTO (só string/number/null).
+// Cópia estrutural das linhas planas (o port é Readonly aninhado → arrays mutáveis no DTO).
+export const generalReportToDto = (page: GeneralReportPage): GeneralReportResponseDto => ({
+  items: page.items.map((r) => ({ ...r })),
+  page: page.page,
+  pageSize: page.pageSize,
+  total: page.total,
 });
 
 // REP-3 (#446 Slice C): aninha as rows planas (PLANO × cc × mês) em AnalysisReport

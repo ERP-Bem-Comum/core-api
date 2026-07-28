@@ -53,6 +53,18 @@ export type {
   PaymentPositionFilter,
 } from './payment-position-projection.ts';
 
+// Reader boot-scoped do "Relatório Geral" (#442 REP-6 — Slice A, read-only). Linhas PLANAS
+// PAGINADAS de títulos a-pagar (fin_payable_view), colunas servíveis via LEFT JOIN same-module.
+// Consumido pelo `reports` via ACL.
+export { openGeneralReportReader } from './general-report-projection.ts';
+export type {
+  GeneralReportRow,
+  GeneralReportFilter,
+  GeneralReportPagination,
+  GeneralReportOrder,
+  GeneralReportReader,
+} from './general-report-projection.ts';
+
 // Reader boot-scoped da "Análise de Planejamento" (#114 REP-3 — read-only). Agrega fin_payable_view
 // por categoria×CC×mês num período. Consumido pelo `reports` via ACL.
 export { openPayablesAnalysisReader } from './payables-analysis-projection.ts';
