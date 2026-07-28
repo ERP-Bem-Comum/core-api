@@ -3,7 +3,7 @@ import type { TeamMember } from '../../application/ports/team-report-read.ts';
 import type { TeamDemographics } from '../../application/ports/team-demographics-read.ts';
 import type { SupplierWithoutContract } from '../../application/ports/suppliers-without-contract-read.ts';
 import type { PaymentPositionRow } from '../../application/ports/payment-position-read.ts';
-import type { CashflowRow } from '../../application/ports/cashflow-read.ts';
+import type { CashflowRow, CashflowChartRow } from '../../application/ports/cashflow-read.ts';
 import type { AnalysisRow } from '../../application/ports/analysis-read.ts';
 import type { RealizedReport } from '../../application/ports/realized-read.ts';
 import type { GeneralReportPage } from '../../application/ports/general-report-read.ts';
@@ -17,6 +17,7 @@ import type {
   RealizedReportResponseDto,
   GeneralReportResponseDto,
   CashflowResponseDto,
+  CashflowChartResponseDto,
 } from './schemas.ts';
 
 export const teamToDto = (members: readonly TeamMember[]): TeamReportResponseDto => ({
@@ -60,6 +61,20 @@ export const cashflowToDto = (rows: readonly CashflowRow[]): CashflowResponseDto
     EXPECTED: r.expectedCents,
   })),
 });
+
+// REP (#590 · Slice B): série temporal — traduz as linhas EN datadas para o shape LEGADO das 7
+// chaves (as 6 do Slice A + `Installments_dueDate`). Sem envelope: ARRAY plano de linhas datadas
+// (o front monta a linha do tempo). `Category_id`/`SubCategory_id` recebem os refs (UUID string).
+export const cashflowChartToDto = (rows: readonly CashflowChartRow[]): CashflowChartResponseDto =>
+  rows.map((r) => ({
+    Category_id: r.categoryRef,
+    Category_name: r.categoryName,
+    SubCategory_id: r.subcategoryRef,
+    SubCategory_name: r.subcategoryName,
+    REALIZED: r.realizedCents,
+    EXPECTED: r.expectedCents,
+    Installments_dueDate: r.installmentsDueDate,
+  }));
 
 // REP-6 (#442 · Slice A/B/C): a página do port já tem exatamente o shape do DTO (string/number/null
 // + os objetos `pixKey`/`bankAccount` do Slice C). Cópia estrutural rasa das linhas planas (o port é

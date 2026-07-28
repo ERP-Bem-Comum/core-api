@@ -26,6 +26,7 @@
  * ADR-0020 §"Features permitidas": GROUP BY/agregação, LEFT JOIN, CASE.
  */
 import { and, eq, gte, lt, ne, sql } from 'drizzle-orm';
+import type { SQL } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/mysql-core';
 import process from 'node:process';
 
@@ -63,8 +64,15 @@ export type CashflowRow = Readonly<{
   expectedCents: number;
 }>;
 
+// REP (#590 · Slice B) — linha datada da SÉRIE TEMPORAL: as mesmas medidas do `CashflowRow`, porém
+// com uma dimensão de MÊS (grão Categoria × Subcategoria × Mês). `installmentsDueDate` = o mês como
+// data 'YYYY-MM-01' (primeiro dia), derivado de `DATE_FORMAT(due_date, '%Y-%m-01')` — o front monta a
+// linha do tempo (Esperado/Realizado/Saldo por mês; o Saldo é derivado no front, não é campo daqui).
+export type CashflowChartRow = CashflowRow & Readonly<{ installmentsDueDate: string }>;
+
 export type CashflowReader = Readonly<{
   list: (filter?: CashflowFilter) => Promise<Result<readonly CashflowRow[], string>>;
+  listChart: (filter?: CashflowFilter) => Promise<Result<readonly CashflowChartRow[], string>>;
   close: () => Promise<void>;
 }>;
 
@@ -82,19 +90,43 @@ export const openCashflowReader = async (
   // Self-join da taxonomia (subcategoria = folha auto-referente por parent_id — #147 F3).
   const subcategory = alias(finCategories, 'fin_subcategories');
 
+  // mysql2 devolve SUM (DECIMAL) como string → Number() no mapper. Mesmos baldes para tabela e série.
+  const expectedCents = sql<string>`sum(case when ${finPayableView.status} in ('Open','Approved') then ${finPayableView.valueCents} else 0 end)`;
+  const realizedCents = sql<string>`sum(case when ${finPayableView.status} = 'Paid' then ${finPayableView.valueCents} else 0 end)`;
+
+  // Cláusula de filtro COMPARTILHADA entre `list` (tabela) e `listChart` (série temporal): os mesmos
+  // 10 filtros AND, ausente = sem restrição. `Cancelled` sempre fora (exclusão padrão dos REPs).
+  const whereClause = (f: CashflowFilter): SQL | undefined =>
+    and(
+      ne(finPayableView.status, 'Cancelled'),
+      f.programRef !== undefined ? eq(finPayableView.programRef, f.programRef) : undefined,
+      f.budgetPlanRef !== undefined ? eq(finPayableView.budgetPlanRef, f.budgetPlanRef) : undefined,
+      f.dueFrom !== undefined ? gte(finPayableView.dueDate, f.dueFrom) : undefined,
+      f.dueTo !== undefined ? lt(finPayableView.dueDate, f.dueTo) : undefined,
+      f.debitAccountRef !== undefined
+        ? eq(finPayableView.debitAccountRef, f.debitAccountRef)
+        : undefined,
+      f.costCenterRef !== undefined ? eq(finPayableView.costCenterRef, f.costCenterRef) : undefined,
+      f.categoryRef !== undefined ? eq(finPayableView.categoryRef, f.categoryRef) : undefined,
+      f.subcategoryRef !== undefined
+        ? eq(finPayableView.subcategoryRef, f.subcategoryRef)
+        : undefined,
+      f.supplierRef !== undefined ? eq(finPayableView.supplierRef, f.supplierRef) : undefined,
+      // 6 granulares → status vivo do documento (o payable-view não os distingue).
+      f.status !== undefined ? eq(finDocuments.status, f.status) : undefined,
+    );
+
   return ok({
     list: async (filter) => {
       try {
-        const f = filter ?? {};
         const rows = await db
           .select({
             categoryRef: finPayableView.categoryRef,
             categoryName: finCategories.name,
             subcategoryRef: finPayableView.subcategoryRef,
             subcategoryName: subcategory.name,
-            // mysql2 devolve SUM (DECIMAL) como string → Number() no mapper.
-            expectedCents: sql<string>`sum(case when ${finPayableView.status} in ('Open','Approved') then ${finPayableView.valueCents} else 0 end)`,
-            realizedCents: sql<string>`sum(case when ${finPayableView.status} = 'Paid' then ${finPayableView.valueCents} else 0 end)`,
+            expectedCents,
+            realizedCents,
           })
           .from(finPayableView)
           .leftJoin(finCategories, eq(finPayableView.categoryRef, finCategories.id))
@@ -102,35 +134,7 @@ export const openCashflowReader = async (
           // JOIN 1:1 same-module (documentId NOT NULL → id PK) — não faz fan-out nem altera a
           // agregação; só habilita o filtro por status VIVO. Sem filtro de status, é neutro.
           .leftJoin(finDocuments, eq(finPayableView.documentId, finDocuments.id))
-          .where(
-            and(
-              // Exclusão padrão dos REPs (Cancelled fora).
-              ne(finPayableView.status, 'Cancelled'),
-              f.programRef !== undefined ? eq(finPayableView.programRef, f.programRef) : undefined,
-              f.budgetPlanRef !== undefined
-                ? eq(finPayableView.budgetPlanRef, f.budgetPlanRef)
-                : undefined,
-              f.dueFrom !== undefined ? gte(finPayableView.dueDate, f.dueFrom) : undefined,
-              f.dueTo !== undefined ? lt(finPayableView.dueDate, f.dueTo) : undefined,
-              f.debitAccountRef !== undefined
-                ? eq(finPayableView.debitAccountRef, f.debitAccountRef)
-                : undefined,
-              f.costCenterRef !== undefined
-                ? eq(finPayableView.costCenterRef, f.costCenterRef)
-                : undefined,
-              f.categoryRef !== undefined
-                ? eq(finPayableView.categoryRef, f.categoryRef)
-                : undefined,
-              f.subcategoryRef !== undefined
-                ? eq(finPayableView.subcategoryRef, f.subcategoryRef)
-                : undefined,
-              f.supplierRef !== undefined
-                ? eq(finPayableView.supplierRef, f.supplierRef)
-                : undefined,
-              // 6 granulares → status vivo do documento (o payable-view não os distingue).
-              f.status !== undefined ? eq(finDocuments.status, f.status) : undefined,
-            ),
-          )
+          .where(whereClause(filter ?? {}))
           .groupBy(
             finPayableView.categoryRef,
             finCategories.name,
@@ -150,6 +154,53 @@ export const openCashflowReader = async (
         );
       } catch (cause) {
         process.stderr.write(`[fin-cashflow:list] ${String(cause)}\n`);
+        return err('cashflow-read-failure');
+      }
+    },
+    // REP (#590 · Slice B): série temporal — mesmas medidas/filtros do `list`, com o MÊS como eixo
+    // extra. O mês entra como 'YYYY-MM-01' (primeiro dia) via `DATE_FORMAT(due_date, '%Y-%m-01')`,
+    // no SELECT e no GROUP BY. Ordenação por mês ASC (crescente), desempate estável por categoria/
+    // subcategoria. ADR-0020 §"Features permitidas": DATE_FORMAT/GROUP BY/agregação/CASE.
+    listChart: async (filter) => {
+      try {
+        const installmentsDueDate = sql<string>`date_format(${finPayableView.dueDate}, '%Y-%m-01')`;
+        const rows = await db
+          .select({
+            categoryRef: finPayableView.categoryRef,
+            categoryName: finCategories.name,
+            subcategoryRef: finPayableView.subcategoryRef,
+            subcategoryName: subcategory.name,
+            installmentsDueDate,
+            expectedCents,
+            realizedCents,
+          })
+          .from(finPayableView)
+          .leftJoin(finCategories, eq(finPayableView.categoryRef, finCategories.id))
+          .leftJoin(subcategory, eq(finPayableView.subcategoryRef, subcategory.id))
+          .leftJoin(finDocuments, eq(finPayableView.documentId, finDocuments.id))
+          .where(whereClause(filter ?? {}))
+          .groupBy(
+            installmentsDueDate,
+            finPayableView.categoryRef,
+            finCategories.name,
+            finPayableView.subcategoryRef,
+            subcategory.name,
+          )
+          .orderBy(installmentsDueDate, finPayableView.categoryRef, finPayableView.subcategoryRef);
+
+        return ok(
+          rows.map((row) => ({
+            categoryRef: row.categoryRef,
+            categoryName: row.categoryName,
+            subcategoryRef: row.subcategoryRef,
+            subcategoryName: row.subcategoryName,
+            installmentsDueDate: row.installmentsDueDate,
+            realizedCents: Number(row.realizedCents),
+            expectedCents: Number(row.expectedCents),
+          })),
+        );
+      } catch (cause) {
+        process.stderr.write(`[fin-cashflow:listChart] ${String(cause)}\n`);
         return err('cashflow-read-failure');
       }
     },
