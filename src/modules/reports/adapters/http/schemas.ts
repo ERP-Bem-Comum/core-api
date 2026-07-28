@@ -132,6 +132,110 @@ export const paymentPositionQuerySchema = z.object({
 
 export type PaymentPositionQueryDto = z.infer<typeof paymentPositionQuerySchema>;
 
+// REP-6 (#442 · Slice A) — "Relatório Geral": linhas PLANAS PAGINADAS de títulos a-pagar.
+// Os 6 valores de status = `DocumentStatus` do domínio MENOS Draft e Refused (mesmo conjunto do
+// #588/REP-4); filtram o status VIVO em `fin_documents` via LEFT JOIN.
+export const generalReportStatusValues = [
+  'Open',
+  'Approved',
+  'Transmitted',
+  'Paid',
+  'PartiallyReconciled',
+  'Reconciled',
+] as const;
+
+// Ordenação servível no Slice A (só por vencimento). Default (aplicado na borda) = 'dueDate:desc'.
+export const generalReportOrderValues = ['dueDate:asc', 'dueDate:desc'] as const;
+
+// Catálogo de colunas do REP-6 (contrato de seleção `columns`, CSV). As 9 primeiras são servíveis
+// no Slice A; as 5 últimas são cross-módulo (Slices B/C/D) — ACEITAS na validação (não viram 400),
+// mas NÃO servidas ainda. No Slice A a seleção não altera o shape da linha (todas as colunas locais
+// sempre presentes); o parâmetro existe para o contrato forward-compat da grade.
+export const generalReportColumnValues = [
+  'code',
+  'tipo',
+  'dueDate',
+  'supplier',
+  'costCenter',
+  'category',
+  'subcategory',
+  'value',
+  'contract',
+  // Slices B/C/D (aceitos, ainda não servidos):
+  'financier',
+  'collaborator',
+  'pix',
+  'bankInfo',
+  'contractNumber',
+] as const;
+
+const isKnownColumn = (token: string): boolean =>
+  (generalReportColumnValues as readonly string[]).includes(token.trim());
+
+// Objeto simples (sem `.strict()`, como o REP-4): parâmetro desconhecido é ignorado, não vira 400.
+// 9 filtros opcionais + search/order/page/limit + columns. `dueFrom`/`dueTo` = janela half-open.
+export const generalReportQuerySchema = z.object({
+  programId: z.uuid().optional(), // → program_ref
+  budgetPlanId: z.uuid().optional(), // → budget_plan_ref
+  dueFrom: z.iso.date().optional(),
+  dueTo: z.iso.date().optional(),
+  accountId: z.uuid().optional(), // → debit_account_ref
+  costCenterId: z.uuid().optional(), // → cost_center_ref
+  categoryId: z.uuid().optional(), // → category_ref
+  subCategoryId: z.uuid().optional(), // → subcategory_ref
+  entityId: z.uuid().optional(), // → supplier_ref
+  status: z.enum(generalReportStatusValues).optional(), // via LEFT JOIN fin_documents.status
+  search: z.string().min(1).optional(), // LIKE contains em document_number + fornecedor
+  order: z.enum(generalReportOrderValues).optional(), // default dueDate:desc
+  page: z.coerce.number().int().min(1).optional(), // default 1
+  limit: z.coerce.number().int().min(1).max(200).optional(), // default 50, teto 200
+  // CSV do catálogo de colunas — cada token deve ∈ generalReportColumnValues (senão 400).
+  columns: z
+    .string()
+    .refine((s) => s.split(',').every((token) => isKnownColumn(token)), {
+      message: 'coluna desconhecida em `columns`',
+    })
+    .optional(),
+});
+
+export type GeneralReportQueryDto = z.infer<typeof generalReportQuerySchema>;
+
+// Linha PLANA (colunas servíveis no Slice A). `.strict()` fail-loud se o mapper vazar campo extra
+// (ex.: uma coluna cross-módulo entrar sem passar pelo Slice B/C/D).
+export const generalReportRowSchema = z
+  .object({
+    payableId: z.string(),
+    documentId: z.string(),
+    code: z.string().nullable(),
+    tipo: z.literal('a-pagar'),
+    dueDate: z.string(),
+    supplierRef: z.string().nullable(),
+    supplierName: z.string().nullable(),
+    costCenterRef: z.string().nullable(),
+    costCenterName: z.string().nullable(),
+    categoryRef: z.string().nullable(),
+    categoryName: z.string().nullable(),
+    subcategoryRef: z.string().nullable(),
+    subcategoryName: z.string().nullable(),
+    valueCents: z.number(),
+    contractRef: z.string().nullable(),
+  })
+  .strict();
+
+export type GeneralReportRowDto = z.infer<typeof generalReportRowSchema>;
+
+// Resposta paginada `Page<T>` (molde financial/domain/document/query.ts).
+export const generalReportResponseSchema = z
+  .object({
+    items: z.array(generalReportRowSchema),
+    page: z.number(),
+    pageSize: z.number(),
+    total: z.number(),
+  })
+  .strict();
+
+export type GeneralReportResponseDto = z.infer<typeof generalReportResponseSchema>;
+
 // REP-3 (#114) — "Análise de Planejamento". Query de filtro (período half-open + status opcional).
 export const analysisQuerySchema = z
   .object({

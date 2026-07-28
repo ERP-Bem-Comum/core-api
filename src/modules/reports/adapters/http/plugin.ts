@@ -26,6 +26,10 @@ import { BUDGET_PLAN_PERMISSION } from '#src/modules/budget-plans/public-api/per
 import type { AnalysisFilter, AnalysisRow } from '../../application/ports/analysis-read.ts';
 import type { PaymentPositionFilter } from '../../application/ports/payment-position-read.ts';
 import type { RealizedFilter } from '../../application/ports/realized-read.ts';
+import type {
+  GeneralReportFilter,
+  GeneralReportPagination,
+} from '../../application/ports/general-report-read.ts';
 
 import type { ReportsHttpDeps } from './composition.ts';
 import {
@@ -36,6 +40,7 @@ import {
   analysisToReport,
   analysisToChart,
   realizedToDto,
+  generalReportToDto,
 } from './dto.ts';
 import {
   teamReportResponseSchema,
@@ -48,10 +53,39 @@ import {
   analysisChartResponseSchema,
   realizedQuerySchema,
   realizedReportResponseSchema,
+  generalReportQuerySchema,
+  generalReportResponseSchema,
   type AnalysisQueryDto,
   type PaymentPositionQueryDto,
   type RealizedQueryDto,
+  type GeneralReportQueryDto,
 } from './schemas.ts';
+
+// Defaults de paginação do Relatório Geral (borda). Teto de `limit` (200) fica no Zod.
+const GENERAL_REPORT_DEFAULT_PAGE = 1;
+const GENERAL_REPORT_DEFAULT_LIMIT = 50;
+
+// #442 Slice A: query (borda, validada) → GeneralReportFilter (nomes id → ref). Só inclui a chave
+// quando presente (`exactOptionalPropertyTypes`: nunca gravar `undefined` explícito).
+const toGeneralReportFilter = (q: GeneralReportQueryDto): GeneralReportFilter => ({
+  ...(q.programId !== undefined ? { programRef: q.programId } : {}),
+  ...(q.budgetPlanId !== undefined ? { budgetPlanRef: q.budgetPlanId } : {}),
+  ...(q.dueFrom !== undefined ? { dueFrom: q.dueFrom } : {}),
+  ...(q.dueTo !== undefined ? { dueTo: q.dueTo } : {}),
+  ...(q.accountId !== undefined ? { debitAccountRef: q.accountId } : {}),
+  ...(q.costCenterId !== undefined ? { costCenterRef: q.costCenterId } : {}),
+  ...(q.categoryId !== undefined ? { categoryRef: q.categoryId } : {}),
+  ...(q.subCategoryId !== undefined ? { subcategoryRef: q.subCategoryId } : {}),
+  ...(q.entityId !== undefined ? { supplierRef: q.entityId } : {}),
+  ...(q.status !== undefined ? { status: q.status } : {}),
+  ...(q.search !== undefined ? { search: q.search } : {}),
+  ...(q.order !== undefined ? { order: q.order } : {}),
+});
+
+const toGeneralReportPagination = (q: GeneralReportQueryDto): GeneralReportPagination => ({
+  page: q.page ?? GENERAL_REPORT_DEFAULT_PAGE,
+  limit: q.limit ?? GENERAL_REPORT_DEFAULT_LIMIT,
+});
 
 const toAnalysisFilter = (q: AnalysisQueryDto): AnalysisFilter => ({
   dueStart: q.dueStart,
@@ -193,6 +227,29 @@ const reportsRoutes =
           });
         }
         return sendResult(reply, ok(paymentPositionToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /reports/generalReport — REP-6 Slice A: linhas planas paginadas de títulos a-pagar.
+    scope.route({
+      method: 'GET',
+      url: '/reports/generalReport',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        querystring: generalReportQuerySchema,
+        response: { 200: generalReportResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.listGeneralReport(
+          toGeneralReportFilter(req.query),
+          toGeneralReportPagination(req.query),
+        );
+        if (!result.ok) {
+          return sendResult(reply, result, {
+            errors: { 'general-report-read-unavailable': 503 },
+          });
+        }
+        return sendResult(reply, ok(generalReportToDto(result.value)), { ok: 200 });
       },
     });
 
