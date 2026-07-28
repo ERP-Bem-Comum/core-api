@@ -16,6 +16,7 @@ import { type Result, ok } from '#src/shared/primitives/result.ts';
 import {
   openCollaboratorProjectionReader,
   openCollaboratorDemographicsReader,
+  buildPartnersReadPort,
 } from '#src/modules/partners/public-api/index.ts';
 import {
   openSuppliersWithoutContractReader,
@@ -252,6 +253,25 @@ export const buildReportsHttpDeps = async (
   }
   const realizedReader = realizedReaderR.value;
 
+  // REP-6 (#442 Slice B): read port do `partners` — resolve os NOMES de Financiador/Colaborador na
+  // costura do Relatório Geral. Pool próprio aberto UMA vez no boot (incidente RDS 0001), reaproveita
+  // a `partnersUrl` já em mãos. Fail-closed encadeado: fecha os anteriores em erro.
+  const partnersReadR = await buildPartnersReadPort({ connectionString: partnersUrl });
+  if (!partnersReadR.ok) {
+    await teamReader.close();
+    await demographicsReader.close();
+    await suppliersReader.close();
+    await positionReader.close();
+    await contractorsReader.close();
+    await analysisReader.close();
+    await budgetPlansRead.close();
+    await realizedReader.close();
+    throw new Error(
+      `reports-composition: falha ao abrir read port (contractor-names) do partners: ${partnersReadR.error}`,
+    );
+  }
+  const partnersRead = partnersReadR.value;
+
   // REP-6 (#442 Slice A): reader do Relatório Geral (financial). Pool próprio aberto UMA vez no boot
   // (incidente RDS 0001). Aberto por último → só seu próprio caminho de erro fecha os anteriores.
   const generalReaderR = await openGeneralReportReader({ connectionString: financialUrl });
@@ -264,6 +284,7 @@ export const buildReportsHttpDeps = async (
     await analysisReader.close();
     await budgetPlansRead.close();
     await realizedReader.close();
+    await partnersRead.close();
     throw new Error(
       `reports-composition: falha ao abrir reader (general-report) do financial: ${generalReaderR.error}`,
     );
@@ -277,7 +298,11 @@ export const buildReportsHttpDeps = async (
     contractorsReader.listContractorsWithActiveContract,
   );
   const positionPort = PaymentPositionReadFromFinancial(positionReader.list);
-  const generalPort = GeneralReportReadFromFinancial(generalReader.list);
+  // Slice B: costura os nomes cross-módulo com só os dois getters do partners read port.
+  const generalPort = GeneralReportReadFromFinancial(generalReader.list, {
+    getFinancierView: partnersRead.getFinancierView,
+    getCollaboratorView: partnersRead.getCollaboratorView,
+  });
   const analysisPort = AnalysisReadFromFinancial(analysisReader.list);
   const realizedPort = RealizedReadFromSources(
     budgetPlansRead.listPlannedAmounts,
@@ -308,6 +333,7 @@ export const buildReportsHttpDeps = async (
       await budgetPlansRead.close();
       await realizedReader.close();
       await generalReader.close();
+      await partnersRead.close();
     },
   };
 };
