@@ -170,6 +170,9 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // #357 — PayableSummaryByIdsView (JOIN fin_payables × fin_documents × fin_supplier_view p/ payables:batch)
     'tests/modules/financial/adapters/persistence/payable-summary-by-ids-view.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/document-summary-by-ids-view.drizzle-mysql.test.ts',
+    // #323 — searchPaid reflete o status do DOCUMENTO (paridade com o grid Contas a Pagar): documento
+    // Pago traz líquido Paid + retenções Open/Approved; salvaguarda <> 'Reconciled'. Regressão fix.
+    'tests/modules/financial/adapters/persistence/payable-reconciliation-view.drizzle-mysql.test.ts',
     // #240 REP-2: agregação "fornecedores sem contrato" (fin_payable_view ⟕ fin_supplier_view)
     'tests/modules/financial/public-api/suppliers-without-contract.drizzle-mysql.test.ts',
     // #243 REP-4: "posição de pagamentos" (fin_payable_view × cost_center × categoria, 3 baldes)
