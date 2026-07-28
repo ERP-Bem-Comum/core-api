@@ -13,9 +13,11 @@ import { openMysql, type MysqlDriverError } from '../adapters/persistence/driver
 import { createDrizzleContractCategorizationReadStore } from '../adapters/persistence/repos/contract-categorization-read.drizzle.ts';
 import { createDrizzleContractCountReadStore } from '../adapters/persistence/repos/contract-count-read.drizzle.ts';
 import { createDrizzleActiveContractorReadStore } from '../adapters/persistence/repos/active-contractor-read.drizzle.ts';
+import { createDrizzleContractNumberReadStore } from '../adapters/persistence/repos/contract-number-read.drizzle.ts';
 import type { ContractCategorizationReadPort } from '../application/ports/contract-categorization-read.ts';
 import type { ContractCountReadPort } from '../application/ports/contract-count-read.ts';
 import type { ActiveContractorReadPort } from '../application/ports/active-contractor-read.ts';
+import type { ContractNumberReadPort } from '../application/ports/contract-number-read.ts';
 
 export type {
   ContractCategorizationReadPort,
@@ -37,6 +39,13 @@ export type {
   ActiveContractorReadPort,
   ActiveContractorReadError,
 } from '../application/ports/active-contractor-read.ts';
+
+export { makeInMemoryContractNumberRead } from '../adapters/persistence/repos/contract-number-read.in-memory.ts';
+
+export type {
+  ContractNumberReadPort,
+  ContractNumberReadError,
+} from '../application/ports/contract-number-read.ts';
 
 export type ContractsReadPort = ContractCategorizationReadPort &
   Readonly<{ close: () => Promise<void> }>;
@@ -117,6 +126,36 @@ export const buildContractsActiveContractorReadPort = async (
   const handle = handleR.value;
 
   const store = createDrizzleActiveContractorReadStore(handle);
+
+  return ok({
+    ...store,
+    close: async () => handle.close(),
+  });
+};
+
+// REP-6 (#442 · Slice D): resolução em LOTE do NÚMERO do contrato (`sequential_number`) a partir da
+// ref/UUID (`id`), consumida pelo `reports` para costurar a coluna "Número do Contrato" do Relatório
+// Geral. Espelha `buildContractsActiveContractorReadPort` — mesma forma, mesmo driver, sem
+// applyMigrations. Pool boot-scoped: aberto uma vez, fechado no `close()`.
+
+export type ContractsContractNumberReadPort = ContractNumberReadPort &
+  Readonly<{ close: () => Promise<void> }>;
+
+export type BuildContractsContractNumberReadPortOptions = Readonly<{ connectionString: string }>;
+export type BuildContractsContractNumberReadPortError = MysqlDriverError;
+
+export const buildContractsContractNumberReadPort = async (
+  opts: BuildContractsContractNumberReadPortOptions,
+): Promise<Result<ContractsContractNumberReadPort, BuildContractsContractNumberReadPortError>> => {
+  // Leitura: as ctr_* já existem (provisionadas pelas migrations do writer). Sem applyMigrations.
+  const handleR = await openMysql({
+    connectionString: opts.connectionString,
+    applyMigrations: false,
+  });
+  if (!handleR.ok) return err(handleR.error);
+  const handle = handleR.value;
+
+  const store = createDrizzleContractNumberReadStore(handle);
 
   return ok({
     ...store,

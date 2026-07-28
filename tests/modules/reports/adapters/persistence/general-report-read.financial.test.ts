@@ -35,6 +35,7 @@ import type {
   BankAccount,
   PixKey,
 } from '#src/modules/partners/public-api/index.ts';
+import type { ContractNumberReadPort } from '#src/modules/contracts/public-api/index.ts';
 
 const NOW = new Date('2026-07-14T12:00:00.000Z');
 
@@ -104,6 +105,33 @@ const supplierView = (
   pixKey: over.pixKey ?? PIX,
   updatedAt: NOW,
 });
+
+// Slice D (#442): fake do read port de NÚMERO do contrato (contracts public-api). Conta as chamadas
+// (para provar a costura em LOTE — 1 por página), filtra o seed pelos ids, e sabe degradar (`err`).
+const makeContractNumberRead = (
+  seed: Readonly<Record<string, string>> = {},
+  mode: 'ok' | 'err' = 'ok',
+): {
+  resolveContractNumbers: ContractNumberReadPort['resolveContractNumbers'];
+  calls: string[][];
+} => {
+  const calls: string[][] = [];
+  return {
+    calls,
+    resolveContractNumbers: (ids) => {
+      calls.push([...ids]);
+      if (mode === 'err') return Promise.resolve(err('contract-number-read-unavailable'));
+      const out = new Map<string, string>();
+      for (const id of ids) {
+        const num = seed[id];
+        if (num !== undefined) out.set(id, num);
+      }
+      return Promise.resolve(ok<ReadonlyMap<string, string>>(out));
+    },
+  };
+};
+// Resolver neutro (Map sempre vazio) para os testes de Slice B/C que não exercitam o número.
+const noNumbers = makeContractNumberRead().resolveContractNumbers;
 
 // Fake reader do financial (Slice A): devolve página fixa; conta as chamadas.
 const fakeListReport =
@@ -175,6 +203,7 @@ describe('GeneralReportReadFromFinancial — stitch de Financiador/Colaborador (
         finRow({ payableId: 'p-col', payeeKind: 'collaborator', supplierRef: COL }),
       ]),
       port,
+      noNumbers,
     );
 
     const r = await adapter.list({}, { page: 1, limit: 50 }, { includeBankData: false });
@@ -200,6 +229,7 @@ describe('GeneralReportReadFromFinancial — stitch de Financiador/Colaborador (
         finRow({ payableId: 'p3', payeeKind: 'financier', supplierRef: FIN }),
       ]),
       port,
+      noNumbers,
     );
 
     const r = await adapter.list({}, { page: 1, limit: 50 }, { includeBankData: false });
@@ -215,6 +245,7 @@ describe('GeneralReportReadFromFinancial — stitch de Financiador/Colaborador (
     const adapter = GeneralReportReadFromFinancial(
       fakeListReport([finRow({ payableId: 'p1', payeeKind: 'financier', supplierRef: FIN })]),
       port,
+      noNumbers,
     );
 
     const r = await adapter.list({}, { page: 1, limit: 50 }, { includeBankData: false });
@@ -229,6 +260,7 @@ describe('GeneralReportReadFromFinancial — stitch de Financiador/Colaborador (
     const adapter = GeneralReportReadFromFinancial(
       fakeListReport([finRow({ payableId: 'p1', payeeKind: 'collaborator', supplierRef: COL })]),
       port,
+      noNumbers,
     );
 
     const r = await adapter.list({}, { page: 1, limit: 50 }, { includeBankData: false });
@@ -254,6 +286,7 @@ describe('GeneralReportReadFromFinancial — stitch de Financiador/Colaborador (
         }),
       ]),
       port,
+      noNumbers,
     );
 
     const r = await adapter.list({}, { page: 1, limit: 50 }, { includeBankData: false });
@@ -274,6 +307,7 @@ describe('GeneralReportReadFromFinancial — stitch de Financiador/Colaborador (
     const adapter = GeneralReportReadFromFinancial(
       () => Promise.resolve(err('general-report-read-failure')),
       port,
+      noNumbers,
     );
 
     const r = await adapter.list({}, { page: 1, limit: 50 }, { includeBankData: false });
@@ -306,6 +340,7 @@ describe('GeneralReportReadFromFinancial — stitch de PIX/Bancários (REP-6 · 
         }),
       ]),
       port,
+      noNumbers,
     );
 
     const r = await adapter.list({}, { page: 1, limit: 50 }, { includeBankData: true });
@@ -336,6 +371,7 @@ describe('GeneralReportReadFromFinancial — stitch de PIX/Bancários (REP-6 · 
         finRow({ payableId: 'p3', payeeKind: 'supplier', supplierRef: SUP }),
       ]),
       port,
+      noNumbers,
     );
 
     const r = await adapter.list({}, { page: 1, limit: 50 }, { includeBankData: true });
@@ -361,6 +397,7 @@ describe('GeneralReportReadFromFinancial — stitch de PIX/Bancários (REP-6 · 
         finRow({ payableId: 'p2', payeeKind: 'supplier', supplierRef: OTHER }),
       ]),
       port,
+      noNumbers,
     );
 
     const r = await adapter.list({}, { page: 1, limit: 50 }, { includeBankData: true });
@@ -381,6 +418,7 @@ describe('GeneralReportReadFromFinancial — stitch de PIX/Bancários (REP-6 · 
     const adapter = GeneralReportReadFromFinancial(
       fakeListReport([finRow({ payableId: 'p1', payeeKind: 'supplier', supplierRef: SUP })]),
       port,
+      noNumbers,
     );
 
     const r = await adapter.list({}, { page: 1, limit: 50 }, { includeBankData: false });
@@ -389,5 +427,122 @@ describe('GeneralReportReadFromFinancial — stitch de PIX/Bancários (REP-6 · 
     assert.equal(supplierCalls.length, 0, 'redigido: nem busca o supplier no partners');
     assert.equal(r.value.items[0]!.pixKey, null);
     assert.equal(r.value.items[0]!.bankAccount, null);
+  });
+});
+
+// Slice D (#442): NÚMERO do contrato costurado de `resolveContractNumbers` (contracts public-api),
+// a partir do `contractRef` (UUID). Batch (1 chamada por página), dedupe, degradação graciosa e
+// `contractRef: null` → `contractNumber: null` sem custo.
+describe('GeneralReportReadFromFinancial — stitch do Número do Contrato (REP-6 · #442 · Slice D)', () => {
+  const SUP = '11111111-1111-4111-8111-111111111111';
+  const CTR_1 = 'c1000000-0000-4000-8000-0000000000c1';
+  const CTR_2 = 'c2000000-0000-4000-8000-0000000000c2';
+
+  const noContractors: Pick<
+    ContractorReadPort,
+    'getFinancierView' | 'getCollaboratorView' | 'getSupplierView'
+  > = makeContractorRead({}, {}).port;
+
+  it('costura o número por contractRef (map.get(ref))', async () => {
+    const { resolveContractNumbers } = makeContractNumberRead({
+      [CTR_1]: 'CT-2026-0001',
+      [CTR_2]: 'CT-2026-0002',
+    });
+    const adapter = GeneralReportReadFromFinancial(
+      fakeListReport([
+        finRow({ payableId: 'p1', payeeKind: 'supplier', supplierRef: SUP, contractRef: CTR_1 }),
+        finRow({ payableId: 'p2', payeeKind: 'supplier', supplierRef: SUP, contractRef: CTR_2 }),
+      ]),
+      noContractors,
+      resolveContractNumbers,
+    );
+
+    const r = await adapter.list({}, { page: 1, limit: 50 }, { includeBankData: false });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    if (!r.ok) return;
+    const [a, b] = r.value.items;
+    assert.equal(a!.contractNumber, 'CT-2026-0001');
+    assert.equal(b!.contractNumber, 'CT-2026-0002');
+  });
+
+  it('BATCH + DEDUPE: refs distintos → 1 chamada; ids repetidos não duplicam no IN', async () => {
+    const { resolveContractNumbers, calls } = makeContractNumberRead({
+      [CTR_1]: 'CT-2026-0001',
+      [CTR_2]: 'CT-2026-0002',
+    });
+    const adapter = GeneralReportReadFromFinancial(
+      fakeListReport([
+        finRow({ payableId: 'p1', payeeKind: 'supplier', supplierRef: SUP, contractRef: CTR_1 }),
+        finRow({ payableId: 'p2', payeeKind: 'supplier', supplierRef: SUP, contractRef: CTR_1 }),
+        finRow({ payableId: 'p3', payeeKind: 'supplier', supplierRef: SUP, contractRef: CTR_2 }),
+        finRow({ payableId: 'p4', payeeKind: 'supplier', supplierRef: SUP, contractRef: null }),
+      ]),
+      noContractors,
+      resolveContractNumbers,
+    );
+
+    const r = await adapter.list({}, { page: 1, limit: 50 }, { includeBankData: false });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    if (!r.ok) return;
+    assert.equal(calls.length, 1, 'uma única chamada por página (batch)');
+    // Refs distintos não-nulos, sem duplicata (p1 e p2 compartilham CTR_1; p4 é null → fora).
+    assert.deepEqual([...calls[0]!].sort(), [CTR_1, CTR_2].sort());
+    const [a, b, c, d] = r.value.items;
+    assert.equal(a!.contractNumber, 'CT-2026-0001');
+    assert.equal(b!.contractNumber, 'CT-2026-0001');
+    assert.equal(c!.contractNumber, 'CT-2026-0002');
+    assert.equal(d!.contractNumber, null);
+  });
+
+  it('DEGRADAÇÃO GRACIOSA: resolveContractNumbers → err ⇒ TODOS null, página ainda ok', async () => {
+    const { resolveContractNumbers } = makeContractNumberRead({ [CTR_1]: 'CT-2026-0001' }, 'err');
+    const adapter = GeneralReportReadFromFinancial(
+      fakeListReport([
+        finRow({ payableId: 'p1', payeeKind: 'supplier', supplierRef: SUP, contractRef: CTR_1 }),
+        finRow({ payableId: 'p2', payeeKind: 'supplier', supplierRef: SUP, contractRef: CTR_2 }),
+      ]),
+      noContractors,
+      resolveContractNumbers,
+    );
+
+    const r = await adapter.list({}, { page: 1, limit: 50 }, { includeBankData: false });
+    assert.equal(r.ok, true, 'err do contracts NÃO derruba o relatório');
+    if (!r.ok) return;
+    for (const line of r.value.items) assert.equal(line.contractNumber, null);
+  });
+
+  it('contractRef null → contractNumber null (e não entra no IN)', async () => {
+    const { resolveContractNumbers, calls } = makeContractNumberRead({});
+    const adapter = GeneralReportReadFromFinancial(
+      fakeListReport([
+        finRow({ payableId: 'p1', payeeKind: 'supplier', supplierRef: SUP, contractRef: null }),
+      ]),
+      noContractors,
+      resolveContractNumbers,
+    );
+
+    const r = await adapter.list({}, { page: 1, limit: 50 }, { includeBankData: false });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    if (!r.ok) return;
+    assert.equal(r.value.items[0]!.contractNumber, null);
+    assert.deepEqual(calls[0], [], 'nenhum ref não-nulo → IN vazio');
+  });
+
+  it('ref sem número no Map → contractNumber null (degradação por linha)', async () => {
+    const { resolveContractNumbers } = makeContractNumberRead({ [CTR_1]: 'CT-2026-0001' });
+    const adapter = GeneralReportReadFromFinancial(
+      fakeListReport([
+        finRow({ payableId: 'p1', payeeKind: 'supplier', supplierRef: SUP, contractRef: CTR_1 }),
+        finRow({ payableId: 'p2', payeeKind: 'supplier', supplierRef: SUP, contractRef: CTR_2 }),
+      ]),
+      noContractors,
+      resolveContractNumbers,
+    );
+
+    const r = await adapter.list({}, { page: 1, limit: 50 }, { includeBankData: false });
+    assert.equal(r.ok, true, JSON.stringify(r));
+    if (!r.ok) return;
+    assert.equal(r.value.items[0]!.contractNumber, 'CT-2026-0001');
+    assert.equal(r.value.items[1]!.contractNumber, null, 'ref ausente no Map → null');
   });
 });
