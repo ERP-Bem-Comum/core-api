@@ -65,23 +65,63 @@ Mesmos campos do ping **+**:
 ## 3. `audit.jsonl` — registro do Auditor (repo) + keep-alive
 
 ```jsonc
-{"v":1,"run_at":"2026-06-17T00:05:00.000Z","emitter":"sweeper-vps-qa","last_seen":"2026-06-16T04:05:00.000Z","age_h":20.0,"status":"alive","merged":1,"threshold_days":3}
-{"v":1,"run_at":"2026-06-20T00:05:00.000Z","emitter":"sweeper-vps-qa","last_seen":"2026-06-16T04:05:00.000Z","age_h":92.0,"status":"DEAD","merged":0,"threshold_days":3,"payload_fired":true}
+{"v":2,"run_at":"2026-06-17T00:05:00.000Z","emitter":"sweeper-vps-qa","last_seen":"2026-06-16T04:05:00.000Z","age_h":20,"status":"alive","merged":1,"threshold_days":2}
+{"v":2,"run_at":"2026-06-20T00:05:00.000Z","emitter":"sweeper-vps-qa","last_seen":"2026-06-16T04:05:00.000Z","age_h":92,"status":"dead","merged":0,"threshold_days":2,"payload_fired":true}
+{"v":2,"run_at":"2026-06-21T00:05:00.000Z","emitter":"sweeper-vps-qa","last_seen":null,"age_h":null,"status":"bootstrap","merged":0,"threshold_days":2}
 ```
 
 | Campo | Tipo | Regra |
 | --- | --- | --- |
+| `v` | int | versão do registro — **`2` desde #368** (ver §3.1) |
 | `run_at` | string | ISO-8601 UTC do run do Auditor |
-| `last_seen` | string | `max(ts)` entre `status.jsonl` (S3) e `history.jsonl` (repo) para o `emitter` |
-| `age_h` | number | `(run_at − last_seen)` em horas |
-| `status` | enum | `"alive"` \| `"DEAD"` |
+| `last_seen` | string \| null | `max(ts)` entre `status.jsonl` (S3) e `history.jsonl` (repo) para o `emitter`. **`null`** quando o emissor nunca sinalizou |
+| `age_h` | int \| null | `(run_at − last_seen)` em horas, truncado. **`null`** quando `last_seen` é `null` — nunca `0` |
+| `status` | enum | `"alive"` \| `"dead"` \| `"bootstrap"` |
 | `merged` | int | nº de linhas recuperadas do S3 para `history.jsonl` no self-heal |
-| `threshold_days` | number | limite vigente (SLO — ADR-0042 D3) |
-| `payload_fired` | bool? | presente e `true` apenas quando o payload de contingência foi disparado |
+| `threshold_days` | number | limite vigente do **emissor** (SLO — ADR-0042 D3), com `default_threshold_days` como fallback |
+| `payload_fired` | bool? | presente e `true` quando o **canal mínimo** (issue do GitHub) foi entregue — o Discord é best-effort e não participa do dedup (§3.2) |
+
+### 3.1 Versão `2` do registro (#368)
+
+O formato mudou junto com a correção do falso-positivo do Auditor ([#368](https://github.com/ERP-Bem-Comum/core-api/issues/368)). Diferenças em relação ao `v:1`:
+
+| | `v:1` | `v:2` |
+| --- | --- | --- |
+| `emitter` | gravado como `"*"` — não dizia **qual** emissor | id real do emissor, **uma linha por emissor** |
+| `status` | `"alive"` \| `"DEAD"` | `"alive"` \| `"dead"` \| `"bootstrap"` — minúsculas, e o estado de bootstrap passa a existir |
+| `last_seen` / `age_h` | `""` / `0` quando nunca houve ping | **`null`** nos dois — a ausência de sinal deixa de ser indistinguível de "0 hora de silêncio" |
+| `threshold_days` | sempre o `default_threshold_days` | o do emissor, com o default como fallback |
+
+**Bootstrap não é morte.** Sem `last_seen`, a condição de disparo do [ADR-0042](../architecture/adr/0042-deadman-switch-redundant.md) (*"se `now − last_seen > limite`"*) é **indefinida** — logo não é satisfeita, e o Auditor **não** dispara o payload. Era o `else status=DEAD` do workflow que produzia alertas `sem sinal há 0h (limite 3d)` a cada execução do cron.
+
+**Leitura de registros v1:** consumidores devem comparar `status` de forma **case-insensitive** (`"DEAD"` ≡ `"dead"`) e ignorar linhas com `emitter: "*"`, que não identificam emissor. É o que `scripts/ci/deadman-audit.ts` faz ao derivar o dedup por transição.
 
 **Toda execução do Auditor escreve uma linha** (mesmo `alive`, mesmo sem ping novo) e
 **commita** — esse commit é o **keep-alive** que evita a suspensão de 60 dias dos workflows
 agendados do GitHub.
+
+### 3.2 `payload_fired` e dedup por canal mínimo (#368, round 4)
+
+O payload de contingência tem dois canais (§6): a **issue do GitHub** (obrigatório — o
+workflow o chama de *"payload mínimo"*, `permissions:` do `deadman-audit.yml`) e o **webhook
+do Discord** (opcional, `DEADMAN_DISCORD_WEBHOOK`). `payload_fired` reflete **só o canal
+mínimo**: é `true` quando `gh issue create` teve sucesso para aquela transição, e é a partir
+dele — não da decisão de disparar — que a **próxima execução** deriva o dedup
+(`deriveAlreadyAlerted`, `status==="dead" && payload_fired===true`).
+
+O Discord é **best-effort e não participa do dedup.** Uma falha no `curl` do webhook fica
+visível no run do Actions (o step falha no fim, via `/tmp/payload-failures`), mas **não** força
+uma retentativa na próxima execução — é uma decisão **deliberada**, não uma omissão:
+`gh issue create` **não é idempotente** (cada chamada cria uma issue nova, sem chave de
+dedup). Se a falha do Discord também zerasse a marca de entrega, a próxima execução veria
+`payload_fired` ausente e retentaria os **dois** canais, recriando uma issue **duplicada** para
+a **mesma** morte — a classe exata do bug original deste ticket (#368: 14 issues idênticas
+para o mesmo evento). Entre "Discord fica em silêncio uma vez" e "issue duplicada", a escolha
+foi a primeira.
+
+Consequência aceita: uma falha transitória do Discord no exato momento de uma transição
+alive/bootstrap→dead **não tem retentativa automática** — só o sinal do run falhado no Actions.
+Ver `Ainda abertos` (§6) para uma evolução possível (estado de entrega por canal).
 
 ---
 
@@ -115,6 +155,25 @@ das duas fontes ter registrado o ping para o sistema ser considerado vivo. O 2º
 independente (ADR-0042 D2, em ERP-INFRA) roda o **mesmo** algoritmo sobre as **mesmas**
 fontes — removendo o SPOF do Actions na decisão.
 
+### 5.1 Tolerância de relógio (skew) e idade nunca-negativa (#368, round 3)
+
+Um `ts` no futuro (relógio do Emissor adiantado, ou dado corrompido/forjado) não pode produzir
+`age_h` negativo — um negativo nunca cruza `threshold_days`, e silenciaria o alerta para
+sempre. Duas defesas, aplicadas juntas em `scripts/ci/deadman-audit.ts`:
+
+- **Tolerância de skew (`CLOCK_SKEW_TOLERANCE_HOURS = 2`).** Um `ts` mais de 2h no futuro em
+  relação ao `now` do Auditor é tratado como corrompido/forjado e **descartado** — não participa
+  do `max(ts)` do emissor. 2h é folgado o bastante para skew de relógio real entre Emissor e
+  Auditor, e irrelevante frente a `threshold_days` (medido em **dias**). Um `ts` até 2h no
+  futuro é aceito (skew legítimo).
+- **Clamp em `0`.** Mesmo dentro da tolerância, `age_h = max(0, run_at − last_seen)` nunca é
+  negativo — um pequeno adiantamento de relógio vira "idade zero", nunca uma idade negativa que
+  mascararia o cálculo.
+
+Se **todo** ping já registrado de um emissor cair fora da tolerância (só possível se ele nunca
+teve um ping válido aceito), o emissor permanece em `bootstrap` — o mesmo estado e a mesma
+régua do ADR-0042 (bootstrap não é morte), não um caso novo.
+
 ---
 
 ## 6. SLO e payload (#72)
@@ -125,3 +184,6 @@ fontes — removendo o SPOF do Actions na decisão.
 ### Ainda abertos
 - Rotação da `key` do HMAC.
 - Retenção/compactação dos objetos `status/` (append infinito no S3 → política de roll/arquivamento).
+- Retry garantido do canal Discord (§3.2): hoje é best-effort, sem estado de entrega próprio —
+  uma falha vira log/step vermelho, não retentativa automática. Uma evolução possível é um
+  campo de entrega por canal (`issue_fired`/`discord_fired`) em vez de um único `payload_fired`.

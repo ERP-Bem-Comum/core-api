@@ -31,7 +31,14 @@ jobs:
   audit:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      # A decisão roda em Node (scripts/ci/deadman-audit.ts) — sem pinar a versão, o
+      # `--experimental-strip-types` fica à mercê do runtime da imagem `ubuntu-latest`, e uma quebra
+      # aqui mata o step ANTES do commit de keep-alive.
+      - uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: '24'
 
       - name: Baixar pings do S3 (status/)
         run: |
@@ -49,18 +56,9 @@ jobs:
           sed -i '/^[[:space:]]*$/d' /tmp/remote.jsonl || true
           echo "pings remotos: $(wc -l < /tmp/remote.jsonl)"
 
-      - name: Self-heal (S3 → history.jsonl) + decisão + keep-alive
+      - name: Self-heal (S3 → history.jsonl)
         run: |
           set -euo pipefail
-          # SLO (D3/#72): threshold do config versionado deadman/emitters.json (fallback no env).
-          THRESHOLD_DAYS=$(jq -r ".default_threshold_days // ${THRESHOLD_DAYS}" deadman/emitters.json)
-          last() { jq -s 'map(.ts // empty) | max // ""' -r "$1" 2>/dev/null || echo ""; }
-          remote_last=$(last /tmp/remote.jsonl)
-          local_last=$(last deadman/history.jsonl)
-          # ts é ISO-8601 UTC com Z → ordenação lexicográfica == cronológica.
-          last_seen=$remote_last
-          [ "$local_last" \> "$last_seen" ] && last_seen=$local_last
-
           # self-heal: pings remotos ausentes em history (por emitter+seq) → audit-merge.
           merged=0
           while IFS= read -r line; do
@@ -73,39 +71,102 @@ jobs:
               merged=$((merged+1))
             fi
           done < /tmp/remote.jsonl
+          echo "merged=$merged" >> "$GITHUB_ENV"
 
-          # idade desde o último sinal
+      # A DECISÃO vive em scripts/ci/deadman-audit.ts, não aqui (#368). Bootstrap (nenhum ping
+      # jamais visto) NÃO é morte: sem `last_seen`, a condição do ADR-0042 (`now − last_seen >
+      # limite`) é indefinida. O bash inline que decidia isso gerou 14 issues `sem sinal há 0h`.
+      - name: Decidir (script testado) + payload + keep-alive
+        run: |
+          set -euo pipefail
           run_at=$(date -u +%Y-%m-%dT%H:%M:%S.000Z)
-          status=alive; age_h=0; fired=false
-          if [ -n "$last_seen" ]; then
-            age_h=$(( ( $(date -u +%s) - $(date -u -d "$last_seen" +%s) ) / 3600 ))
-            if [ "$age_h" -gt $(( THRESHOLD_DAYS * 24 )) ]; then status=DEAD; fi
-          else
-            status=DEAD # nenhum sinal jamais visto
-          fi
 
-          # payload de contingência (#72): (1) issue p1 + (2) webhook Discord (se configurado).
-          if [ "$status" = "DEAD" ]; then
-            fired=true
-            gh issue create --title "🔴 DEAD-MAN FIRED — sem sinal há ${age_h}h (limite ${THRESHOLD_DAYS}d)" \
-              --body "Auditor: nenhum ping dentro da janela. last_seen=${last_seen:-nunca}. Ver deadman/audit.jsonl." \
-              --label "agent-found,priority:p1" || true
-            if [ -n "${DEADMAN_DISCORD_WEBHOOK:-}" ]; then
-              curl -fsS -X POST "$DEADMAN_DISCORD_WEBHOOK" -H 'Content-Type: application/json' \
-                -d "$(jq -nc --arg c "🔴 DEAD-MAN FIRED — sem sinal há ${age_h}h (limite ${THRESHOLD_DAYS}d). last_seen=${last_seen:-nunca}" '{content:$c}')" || true
+          # Um JSON com o veredito de CADA emissor. O script não tem efeito colateral — quem age é
+          # este step. `alreadyAlerted` é derivado do próprio audit.jsonl (dedup por transição).
+          node --experimental-strip-types --no-warnings scripts/ci/deadman-audit.ts \
+            deadman/emitters.json deadman/history.jsonl deadman/audit.jsonl "$run_at" > /tmp/verdicts.json
+
+          # O loop NÃO pode abortar o step: o commit lá embaixo é o keep-alive contra a suspensão
+          # de 60 dias, e perdê-lo por uma falha de alerta enfraquece o próprio dead-man. Falha de
+          # payload é registrada e re-erguida no FIM (sem `|| true`, que engoliria — ADR-0011).
+          : > /tmp/payload-failures
+          while IFS= read -r v; do
+            emitter=$(jq -r '.emitter'       <<<"$v")
+            st=$(jq      -r '.status'        <<<"$v")   # `status` é read-only em alguns shells
+            age=$(jq     -r '.ageHours'      <<<"$v")   # "null" quando nunca pingou
+            seen=$(jq    -r '.lastSeen'      <<<"$v")   # idem
+            th=$(jq      -r '.thresholdDays' <<<"$v")
+            fires=$(jq   -r '.firesPayload'  <<<"$v")
+
+            # `delivered` = o CANAL MÍNIMO (a issue do GitHub — `permissions:` acima já o chama de
+            # "payload mínimo") foi entregue. É esse valor, não a decisão `fires`, que vira
+            # `payload_fired` no `audit.jsonl` — e é dele que a PRÓXIMA execução deriva o dedup
+            # (`deriveAlreadyAlerted`): sem isso, uma falha transitória do `gh` suprimiria a
+            # retentativa e a morte se perderia em silêncio (F4, round 3).
+            #
+            # DECISÃO DELIBERADA (F4, round 4 — escalada e aprovada pelo dono do repo, "Opção A"):
+            # só a falha do `gh issue create` zera `delivered` (o `delivered=false` logo abaixo do
+            # `then`, mais adiante). A falha do Discord (bloco `curl` a seguir) NÃO zera `delivered`
+            # — é PROPOSITAL, não esquecimento. Motivo: `gh issue create` não é idempotente, cada
+            # chamada cria uma issue NOVA. Se a falha do Discord também zerasse `delivered`, a
+            # PRÓXIMA execução veria `payload_fired` ausente e retentaria os DOIS canais, recriando
+            # uma issue DUPLICADA para a MESMA morte — a classe exata do bug original deste ticket
+            # (#368: 14 issues idênticas). O Discord é BEST-EFFORT: uma falha dele já falha o step
+            # (`exit 1` no fim, via /tmp/payload-failures) e fica visível no run do Actions, mas não
+            # é retentada automaticamente. Semântica documentada em
+            # `handbook/infrastructure/07-deadman-switch-data-contracts.md` §3.2.
+            #
+            # NÃO "conserte" isto espelhando `delivered=false` para dentro do bloco do `curl` abaixo
+            # — essa opção foi considerada e rejeitada pelo motivo acima.
+            delivered=false
+            if [ "$fires" = "true" ]; then
+              delivered=true
+              if ! gh issue create \
+                --title "🔴 DEAD-MAN FIRED — ${emitter} sem sinal há ${age}h (limite ${th}d)" \
+                --body "Auditor: o emissor \`${emitter}\` ultrapassou a janela de ${th} dia(s) — último sinal em \`${seen}\` (há ${age}h). Ver \`deadman/audit.jsonl\`." \
+                --label "agent-found,priority:p1"
+              then
+                echo "issue:${emitter}" >> /tmp/payload-failures
+                delivered=false
+              fi
+              if [ -n "${DEADMAN_DISCORD_WEBHOOK:-}" ]; then
+                if ! curl -fsS -X POST "$DEADMAN_DISCORD_WEBHOOK" -H 'Content-Type: application/json' \
+                  -d "$(jq -nc --arg c "🔴 DEAD-MAN FIRED — ${emitter} sem sinal há ${age}h (limite ${th}d)" '{content:$c}')" \
+                  2>/tmp/curl-err
+                then
+                  # a mensagem nativa do curl pode conter o host do webhook — não ecoar.
+                  # Best-effort: falha aqui NÃO zera `delivered` (ver comentário acima do bloco,
+                  # decisão deliberada F4/round 4) — só registra em /tmp/payload-failures, que já
+                  # faz o step falhar no fim. Não é retentada na próxima execução.
+                  echo "discord:${emitter}" >> /tmp/payload-failures
+                fi
+              fi
             fi
-          fi
 
-          jq -nc --arg run "$run_at" --arg ls "${last_seen:-}" --argjson age "$age_h" \
-                 --arg st "$status" --argjson m "$merged" --argjson th "$THRESHOLD_DAYS" --argjson f "$fired" \
-            '{v:1, run_at:$run, emitter:"*", last_seen:$ls, age_h:$age, status:$st, merged:$m, threshold_days:$th} + (if $f then {payload_fired:true} else {} end)' \
-            >> deadman/audit.jsonl
+            # Uma linha POR EMISSOR (o `emitter:"*"` antigo não dizia QUAL emissor morreu), e é
+            # daqui que a próxima execução deriva o dedup. Shape = §3 do contrato de dados (v:2).
+            jq -nc --arg run "$run_at" --arg em "$emitter" --arg st "$st" \
+                   --argjson seen "$(jq -c '.lastSeen' <<<"$v")" \
+                   --argjson age "$age" --argjson th "$th" --argjson m "${merged:-0}" \
+                   --argjson f "$delivered" \
+              '{v:2, run_at:$run, emitter:$em, last_seen:$seen, age_h:$age, status:$st,
+                merged:$m, threshold_days:$th}
+               + (if $f then {payload_fired:true} else {} end)' >> deadman/audit.jsonl
+          done < <(jq -c '.verdicts[]' /tmp/verdicts.json)
 
+          # commit de auditoria = keep-alive contra a suspensão de 60 dias de workflows agendados.
+          # `--allow-empty` garante o keep-alive mesmo num run sem emissor configurado.
           git config user.name "deadman-bot"
           git config user.email "deadman-bot@users.noreply.github.com"
           git add deadman/
-          git commit -m "chore(deadman): audit ${status} (age=${age_h}h, merged=${merged})"
+          git commit --allow-empty -m "chore(deadman): audit run ${run_at} (merged=${merged:-0})"
           git push
+
+          # Só agora o step falha, com o keep-alive já garantido.
+          if [ -s /tmp/payload-failures ]; then
+            echo "::error::payload de contingência falhou: $(tr '\n' ' ' < /tmp/payload-failures)"
+            exit 1
+          fi
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           DEADMAN_DISCORD_WEBHOOK: ${{ secrets.DEADMAN_DISCORD_WEBHOOK }}
