@@ -66,6 +66,7 @@ import {
   programsToDto,
   documentTypeMetadataToDto,
   recentPaymentsToDto,
+  noContractSuppliersToDto,
   payableBatchItemToDto,
   documentBatchItemToDto,
 } from './dto.ts';
@@ -134,6 +135,7 @@ import {
   programListResponseSchema,
   documentTypeMetadataListResponseSchema,
   recentPaymentsResponseSchema,
+  noContractSuppliersResponseSchema,
   type CedenteAccountResponseDto,
   accountStatementQuerySchema,
   accountStatementResponseSchema,
@@ -1786,6 +1788,24 @@ const financialRoutes =
         const result = await deps.listRecentPaid(5);
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(reply, ok(recentPaymentsToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /financial/dashboard/no-contract-suppliers — widget "Fornecedores sem Contrato" (#242,
+    // reference:read). Top-5 fornecedores sem contrato por total desc (corte no SQL — reader.listTop;
+    // desempate estável por supplier_ref asc). Reusa o read path do REP-2/#240 (mesma agregação de
+    // fin_payable_view ⟕ fin_supplier_view). Molde: GET /financial/dashboard/recent-payments (#239).
+    scope.route({
+      method: 'GET',
+      url: '/financial/dashboard/no-contract-suppliers',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.referenceRead)],
+      schema: {
+        response: { 200: noContractSuppliersResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) => {
+        const result = await deps.listTopSuppliersWithoutContract(5);
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(noContractSuppliersToDto(result.value)), { ok: 200 });
       },
     });
 

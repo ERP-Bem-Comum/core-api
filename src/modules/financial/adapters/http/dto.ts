@@ -48,10 +48,12 @@ import type {
   ProgramResponseDto,
   DocumentTypeMetadataResponseDto,
   RecentPaymentDto,
+  NoContractSuppliersResponseDto,
   PayableBatchItemDto,
   DocumentBatchItemDto,
 } from './schemas.ts';
 import type { PayeeBankBlock } from './payee-bank-composition.ts';
+import type { SupplierWithoutContractRow } from '../../public-api/suppliers-without-contract-projection.ts';
 
 /** Serializa Money (branded { cents: number }) como string de centavos. */
 const moneyToCentsString = (cents: number): string => String(cents);
@@ -102,6 +104,19 @@ export const recentPaymentsToDto = (views: readonly PayableView[]): RecentPaymen
     valueCents: moneyToCentsString(v.valueCents),
     paidAt: v.paidAt,
   }));
+
+/** Widget "Fornecedores sem Contrato" (DASH-F5 · #242) → DTO envelope `{ suppliers: [...] }`. Top-5
+ * já ordenado/cortado no SQL (reader.listTop). DTO lean `{ supplierRef, name, totalCents }` — descarta
+ * `payableCount` da linha do REP-2 (não pedido pelo widget). `totalCents` em centavos (number). */
+export const noContractSuppliersToDto = (
+  rows: readonly SupplierWithoutContractRow[],
+): NoContractSuppliersResponseDto => ({
+  suppliers: rows.map((r) => ({
+    supplierRef: r.supplierRef,
+    name: r.name,
+    totalCents: r.totalCents,
+  })),
+});
 
 /** #357: item de POST /financial/payables:batch — resumo de título p/ o match card da Conciliação
  * (#172), sem N+1. `ref` = payableId (o BFF casa a resposta por `ref`, não por posição no array). */
