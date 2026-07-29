@@ -926,6 +926,28 @@ export const recentPaymentsResponseSchema = z.array(recentPaymentSchema);
 
 export type RecentPaymentDto = z.infer<typeof recentPaymentSchema>;
 
+// Widget "Fornecedores sem Contrato" (DASH-F5 · #242, reference:read) — GET
+// /financial/dashboard/no-contract-suppliers. Top-5 fornecedores sem contrato por total, decrescente.
+// Envelope `{ suppliers: [...] }` + `totalCents: z.number()`: paridade com o REP-2/#240 do `reports`
+// (mesma agregação já exposta assim), sem o `payableCount` (widget lean — não pedido pelo Dashboard).
+// `.strict()` — fail-loud se o mapper de DTO vazar campo extra (padrão do módulo financial).
+export const noContractSupplierSchema = z
+  .object({
+    supplierRef: z.string(),
+    name: z.string().nullable(),
+    totalCents: z.number(),
+  })
+  .strict();
+
+export const noContractSuppliersResponseSchema = z
+  .object({
+    suppliers: z.array(noContractSupplierSchema),
+  })
+  .strict();
+
+export type NoContractSupplierDto = z.infer<typeof noContractSupplierSchema>;
+export type NoContractSuppliersResponseDto = z.infer<typeof noContractSuppliersResponseSchema>;
+
 // ─── Read-model do extrato por conta + período (#139) ──────────────────────────
 
 export const accountStatementQuerySchema = z.object({

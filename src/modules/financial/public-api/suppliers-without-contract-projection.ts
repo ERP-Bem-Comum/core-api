@@ -18,7 +18,7 @@
  *
  * ADR-0020 §"Features permitidas": GROUP BY/agregação, LEFT JOIN, `is null`. ADR-0006/0014.
  */
-import { and, eq, isNull, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, isNull, isNotNull, sql } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
@@ -34,6 +34,13 @@ export type SupplierWithoutContractRow = Readonly<{
 
 export type SuppliersWithoutContractReader = Readonly<{
   list: () => Promise<Result<readonly SupplierWithoutContractRow[], string>>;
+  /**
+   * Top-N por total decrescente — widget "Fornecedores sem Contrato" do Dashboard (DASH-F5 · #242).
+   * Corte no SQL (`ORDER BY sum DESC, supplier_ref ASC LIMIT ?`), nunca em memória: `supplier_ref ASC`
+   * é o desempate ESTÁVEL (resultado determinístico sob empate de total). Reusa a MESMA agregação/
+   * WHERE/JOIN do `list()` (que segue intocado — contrato do `reports`/REP-2).
+   */
+  listTop: (limit: number) => Promise<Result<readonly SupplierWithoutContractRow[], string>>;
   close: () => Promise<void>;
 }>;
 
@@ -48,44 +55,76 @@ export const openSuppliersWithoutContractReader = async (
   const handle = handleR.value;
   const { db } = handle;
 
+  // Agregação CANÔNICA dos candidatos (SUM value_cents, COUNT por fornecedor): SELECT/WHERE/`sumExpr`
+  // são a única fonte de verdade reusada por `list()` e `listTop()` (não duplicar semântica). `sumExpr`
+  // é reusado idêntico no SELECT e no ORDER BY do Top-N (mesma expressão agregada → MySQL feliz). Cada
+  // método constrói o builder do zero (não reaproveitar a mesma instância de query entre execuções).
+  const sumExpr = sql<string>`sum(${finPayableView.valueCents})`;
+  const selectShape = {
+    supplierRef: finPayableView.supplierRef,
+    name: finSupplierView.name,
+    // mysql2 devolve SUM (DECIMAL) como string; COUNT(*) como number.
+    totalCents: sumExpr,
+    payableCount: sql<number>`count(*)`,
+  };
+  const whereClause = and(
+    isNull(finPayableView.contractRef),
+    isNotNull(finPayableView.supplierRef),
+    // Filhos de retenção (ISS/IRRF/INSS/CSRF) carregam o supplier_ref do fornecedor
+    // (`apply-payable-event.ts`), então inflariam soma e contagem. Só o pai representa o
+    // documento: 1 NFS-e = 1, e `totalCents` = líquido ao fornecedor.
+    eq(finPayableView.kind, 'Parent'),
+  );
+
+  type AggregationRow = Readonly<{
+    supplierRef: string | null;
+    name: string | null;
+    totalCents: string;
+    payableCount: number;
+  }>;
+  const toRows = (rows: readonly AggregationRow[]): SupplierWithoutContractRow[] => {
+    const items: SupplierWithoutContractRow[] = [];
+    for (const row of rows) {
+      if (row.supplierRef === null) continue; // defensivo (já filtrado no WHERE)
+      items.push({
+        supplierRef: row.supplierRef,
+        name: row.name,
+        totalCents: Number(row.totalCents),
+        payableCount: row.payableCount,
+      });
+    }
+    return items;
+  };
+
   return ok({
     list: async () => {
       try {
         const rows = await db
-          .select({
-            supplierRef: finPayableView.supplierRef,
-            name: finSupplierView.name,
-            // mysql2 devolve SUM (DECIMAL) como string; COUNT(*) como number.
-            totalCents: sql<string>`sum(${finPayableView.valueCents})`,
-            payableCount: sql<number>`count(*)`,
-          })
+          .select(selectShape)
           .from(finPayableView)
           .leftJoin(finSupplierView, eq(finPayableView.supplierRef, finSupplierView.supplierRef))
-          .where(
-            and(
-              isNull(finPayableView.contractRef),
-              isNotNull(finPayableView.supplierRef),
-              // Filhos de retenção (ISS/IRRF/INSS/CSRF) carregam o supplier_ref do fornecedor
-              // (`apply-payable-event.ts`), então inflariam soma e contagem. Só o pai representa o
-              // documento: 1 NFS-e = 1, e `totalCents` = líquido ao fornecedor.
-              eq(finPayableView.kind, 'Parent'),
-            ),
-          )
+          .where(whereClause)
           .groupBy(finPayableView.supplierRef, finSupplierView.name);
-
-        const items: SupplierWithoutContractRow[] = [];
-        for (const row of rows) {
-          if (row.supplierRef === null) continue; // defensivo (já filtrado no WHERE)
-          items.push({
-            supplierRef: row.supplierRef,
-            name: row.name,
-            totalCents: Number(row.totalCents),
-            payableCount: row.payableCount,
-          });
-        }
-        return ok(items);
+        return ok(toRows(rows));
       } catch (cause) {
         process.stderr.write(`[fin-suppliers-without-contract:list] ${String(cause)}\n`);
+        return err('suppliers-without-contract-read-failure');
+      }
+    },
+    listTop: async (limit: number) => {
+      try {
+        const rows = await db
+          .select(selectShape)
+          .from(finPayableView)
+          .leftJoin(finSupplierView, eq(finPayableView.supplierRef, finSupplierView.supplierRef))
+          .where(whereClause)
+          .groupBy(finPayableView.supplierRef, finSupplierView.name)
+          // Corte no SQL (nunca em memória): total desc + desempate estável supplier_ref asc.
+          .orderBy(desc(sumExpr), asc(finPayableView.supplierRef))
+          .limit(limit);
+        return ok(toRows(rows));
+      } catch (cause) {
+        process.stderr.write(`[fin-suppliers-without-contract:listTop] ${String(cause)}\n`);
         return err('suppliers-without-contract-read-failure');
       }
     },

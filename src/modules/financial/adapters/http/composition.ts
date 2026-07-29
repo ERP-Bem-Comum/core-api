@@ -30,6 +30,13 @@ import { createDrizzleSupplierViewStore } from '../persistence/repos/supplier-vi
 // #239: read-model de payables (Top-5 "Últimos pagamentos") — molde de supplier-view-store acima.
 import { createInMemoryPayableViewStore } from '../persistence/repos/payable-view-store.in-memory.ts';
 import { createDrizzlePayableViewStore } from '../persistence/repos/payable-view-store.drizzle.ts';
+// #242 DASH-F5: reader da agregação "Fornecedores sem Contrato" (REP-2/#240) reusado para o Top-5
+// do Dashboard. memory: fake in-memory (seedável em testes); mysql: reader Drizzle boot-scoped.
+import { createInMemorySuppliersWithoutContractReader } from '../persistence/repos/suppliers-without-contract-reader.in-memory.ts';
+import {
+  openSuppliersWithoutContractReader,
+  type SuppliersWithoutContractReader,
+} from '../../public-api/suppliers-without-contract-projection.ts';
 import { createInMemoryPayableDocumentView } from '../persistence/repos/payable-document-view.in-memory.ts';
 import { createDrizzlePayableDocumentView } from '../persistence/repos/payable-document-view.drizzle.ts';
 // #357: resumo de título em lote — POST /financial/payables:batch (ADR-0049).
@@ -198,6 +205,10 @@ export type FinancialCompositionConfig = Readonly<{
    *  composition root. Injetado em testes HTTP para semear dados determinísticos via `applyPayableEvent`;
    *  ambos os drivers constroem uma store vazia automaticamente se ausente. */
   payableViewStore?: PayableViewStore;
+  /** #242 · DASH-F5 — reader da agregação "Fornecedores sem Contrato" (REP-2/#240), reusado para o
+   *  Top-5 do Dashboard. Injetado em testes HTTP (memory) com dados determinísticos; ambos os drivers
+   *  constroem um reader por padrão se ausente (memory: fake vazio; mysql: reader Drizzle boot-scoped). */
+  suppliersWithoutContractReader?: SuppliersWithoutContractReader;
 }>;
 
 export type FinancialHttpDeps = Readonly<{
@@ -289,6 +300,8 @@ export type FinancialHttpDeps = Readonly<{
   listPrograms: ProgramReadPort['list'];
   /** #239 · Últimos pagamentos — GET /financial/dashboard/recent-payments. */
   listRecentPaid: PayableViewStore['listRecentPaid'];
+  /** #242 · Fornecedores sem contrato (Top-5) — GET /financial/dashboard/no-contract-suppliers. */
+  listTopSuppliersWithoutContract: SuppliersWithoutContractReader['listTop'];
   /** #357 · Resolução em lote de payableId[] — POST /financial/payables:batch (ADR-0049). */
   getPayablesSummaryByIds: PayableSummaryByIdsView['getPayablesSummaryByIds'];
   /** #358 · Resolução em lote de documentId[] — POST /financial/documents:batch (ADR-0049). */
@@ -341,6 +354,9 @@ type Pools = Readonly<{
   // #239: read-model de payables (Top-5 "Últimos pagamentos"). memory: vazio no boot (sem worker de
   // projeção síncrono — injetável em testes via config.payableViewStore); mysql: drizzle.
   payableViewStore: PayableViewStore;
+  // #242: reader da agregação "Fornecedores sem Contrato" (REP-2) reusado para o Top-5 do Dashboard.
+  // memory: fake in-memory (injetável em testes); mysql: reader Drizzle boot-scoped (pool próprio).
+  suppliersWithoutContractReader: SuppliersWithoutContractReader;
   // #255: port de leitura do contratado (ADR-0032). memory: injetado ou null; mysql: construído.
   contractorReadPort: ContractorReadPort | null;
   // #207/#289: port de leitura do nome de usuário + alçada do aprovador (ADR-0032). memory:
@@ -401,6 +417,8 @@ const buildMemoryPools = (
   // #239: injetável em testes (semear via applyPayableEvent); vazio por padrão — em produção quem
   // popula é o worker payable-view-projection (async), não este composition root (ADR-0022).
   payableViewStore: PayableViewStore = createInMemoryPayableViewStore(),
+  // #242: fake vazio por padrão; testes HTTP injetam um reader semeado (Top-5 determinístico).
+  suppliersWithoutContractReader: SuppliersWithoutContractReader = createInMemorySuppliersWithoutContractReader(),
 ): Pools => {
   // Store compartilhado entre o document-repo (escreve trilha no save) e o timeline-repo
   // (lê). Garante atomicidade em memória sem tx (timeline-repository.in-memory.ts §store).
@@ -504,6 +522,7 @@ const buildMemoryPools = (
     rejectedSuggestionRepo,
     periodStore,
     payableViewStore,
+    suppliersWithoutContractReader,
     contractorReadPort,
     authUserReadPort,
     shutdown: () => Promise.resolve(),
@@ -585,6 +604,26 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     authUserReadPort = authPortR.value;
     closeAuthUserPort = authPortR.value.close;
   }
+  // #242 DASH-F5: reader boot-scoped (pool próprio — molde dos outros readers do Dashboard), aberto
+  // por ÚLTIMO → só seu próprio caminho de erro fecha os anteriores. Injetado tem precedência (testes).
+  let suppliersWithoutContractReader: SuppliersWithoutContractReader | null =
+    config.suppliersWithoutContractReader ?? null;
+  let closeSuppliersReader: () => Promise<void> = () => Promise.resolve();
+  if (suppliersWithoutContractReader === null) {
+    const readerR = await openSuppliersWithoutContractReader({ connectionString: writerUrl });
+    if (!readerR.ok) {
+      await closeAuthUserPort();
+      await closeContractorPort();
+      await programsReadPort.close();
+      await contractsReadPort.close();
+      await handle.close();
+      throw new Error(
+        `financial-composition: falha ao abrir suppliers-without-contract reader (${readerR.error})`,
+      );
+    }
+    suppliersWithoutContractReader = readerR.value;
+    closeSuppliersReader = readerR.value.close;
+  }
   return {
     contractCategorizationReader: contractsReadPort,
     repo: createDrizzleDocumentRepository(handle),
@@ -610,12 +649,15 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     documentSummaryByIdsView: createDrizzleDocumentSummaryByIdsView(handle),
     // #239: injetado tem precedência (testes); mysql constrói o adapter Drizzle por padrão.
     payableViewStore: config.payableViewStore ?? createDrizzlePayableViewStore(handle, ClockReal()),
+    // #242: reader da agregação REP-2 reusado para o Top-5 do Dashboard (aberto acima, boot-scoped).
+    suppliersWithoutContractReader,
     suggestionView: createDrizzleSuggestionView(handle),
     rejectedSuggestionRepo: createDrizzleRejectedSuggestionRepository(handle),
     periodStore: createDrizzleReconciliationPeriodStore(handle),
     contractorReadPort,
     authUserReadPort,
     shutdown: async () => {
+      await closeSuppliersReader();
       await closeAuthUserPort();
       await closeContractorPort();
       await programsReadPort.close();
@@ -801,6 +843,7 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     listCostCenters: pools.costCenterReader.list,
     listPrograms: pools.programReader.list,
     listRecentPaid: pools.payableViewStore.listRecentPaid,
+    listTopSuppliersWithoutContract: pools.suppliersWithoutContractReader.listTop,
     getPayablesSummaryByIds: pools.payableSummaryByIdsView.getPayablesSummaryByIds,
     getDocumentsSummaryByIds: pools.documentSummaryByIdsView.getDocumentsSummaryByIds,
     resolvePayeeBank: (ref) => composePayeeBank(pools.contractorReadPort, ref),
@@ -829,6 +872,7 @@ export const buildFinancialHttpDeps = async (
         config.contractorReadPort ?? null,
         config.authUserReadPort ?? null,
         config.payableViewStore,
+        config.suppliersWithoutContractReader,
       ),
     );
   }
