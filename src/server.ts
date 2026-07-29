@@ -20,6 +20,7 @@ import {
   buildAuthHttpDeps,
   makeRequireAuth,
   resolveRbacMode,
+  readAuthJwtKeys,
   rbacBypassBanner,
   parseE2eAuthSeed,
   usersHttpPlugin,
@@ -151,6 +152,18 @@ const main = async (): Promise<void> => {
     return;
   }
   const { resetBaseUrl, activationBaseUrl, selfRegistrationBaseUrl } = emailLinkUrls.value;
+  // #515: chave de assinatura do access token. Ausente em produção → boot falha (EX_CONFIG) em vez
+  // de gerar um par efêmero em silêncio, que fazia toda sessão morrer no restart e o BFF rejeitar
+  // todo token novo, sem nenhuma pista aqui. Fora de produção segue efêmero, com aviso.
+  // Precisa rodar ANTES de `buildAuthHttpDeps` (abaixo), que é o primeiro ponto do boot a abrir
+  // handle — depois dele `exitCode` + `return` deixaria de ser seguro (ver comentário dos drivers).
+  const jwtKeys = await readAuthJwtKeys(process.env);
+  if (!jwtKeys.ok) {
+    for (const message of jwtKeys.error) process.stderr.write(`server: ${message}\n`);
+    process.exitCode = 78;
+    return;
+  }
+  for (const warning of jwtKeys.value.warnings) process.stderr.write(`server: ${warning}\n`);
   // ADR-0052 — modo do RBAC. `bypass` desliga a autorização por permissão (todo autenticado é
   // super-usuário). NÃO pode ser silencioso: um banner gritante no boot torna o estado inconfundível.
   const rbacMode = resolveRbacMode(process.env);
@@ -165,6 +178,7 @@ const main = async (): Promise<void> => {
     ...(sensitiveRateLimit !== undefined ? { sensitiveRateLimit } : {}),
     ...(resetBaseUrl !== undefined ? { resetBaseUrl } : {}),
     ...(activationBaseUrl !== undefined ? { activationBaseUrl } : {}),
+    ...(jwtKeys.value.keys !== undefined ? { jwtKeys: jwtKeys.value.keys } : {}),
   });
 
   // CTR-NUMBER-PROGRAM: read port de programs (ADR-0006/0014) p/ contracts compor o bloco
