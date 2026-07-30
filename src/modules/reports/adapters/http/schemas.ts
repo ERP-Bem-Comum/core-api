@@ -451,3 +451,36 @@ export const realizedReportResponseSchema = z
   .strict();
 
 export type RealizedReportResponseDto = z.infer<typeof realizedReportResponseSchema>;
+
+// DASH-F4 (#112) — widget "Realizado x Previsto mensal" do Dashboard. Query: `budgetPlanId` (uuid) +
+// `year` (int), AMBOS obrigatórios (o BFF/front passa o plano ativo e o ano). `.strict()` → parâmetro
+// desconhecido vira 400.
+export const dashboardRealizedQuerySchema = z
+  .object({
+    budgetPlanId: z.uuid(),
+    year: z.coerce.number().int(),
+  })
+  .strict();
+
+export type DashboardRealizedQueryDto = z.infer<typeof dashboardRealizedQuerySchema>;
+
+// Um ponto da série mensal (mês 1..12 + as duas medidas em cents). `.strict()` fail-loud se o mapper
+// vazar campo extra (ex.: o `provisioned`, que NÃO faz parte deste widget).
+const dashboardRealizedPointSchema = z
+  .object({
+    month: z.number(),
+    expectedCents: z.number(),
+    realizedCents: z.number(),
+  })
+  .strict();
+
+// Resposta: `chart` com EXATAMENTE 12 pontos (`.length(12)` = contrato fail-loud da grade mensal).
+export const dashboardRealizedResponseSchema = z
+  .object({
+    budgetPlanId: z.string(),
+    year: z.number(),
+    chart: z.array(dashboardRealizedPointSchema).length(12),
+  })
+  .strict();
+
+export type DashboardRealizedResponseDto = z.infer<typeof dashboardRealizedResponseSchema>;
