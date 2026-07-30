@@ -13,6 +13,7 @@
  */
 
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
+import type { Clock } from '#src/shared/ports/clock.ts';
 import { ok, err } from '#src/shared/primitives/result.ts';
 
 import {
@@ -37,6 +38,15 @@ import {
   openSuppliersWithoutContractReader,
   type SuppliersWithoutContractReader,
 } from '../../public-api/suppliers-without-contract-projection.ts';
+// #241 DASH-F1: reader do KPI "Despesas por Centro de Custo". memory: fake in-memory (seedável em
+// testes); mysql: reader Drizzle boot-scoped. As janelas M-1/M-2 são computadas na borda (clock).
+import { createInMemoryDashboardCostCentersReader } from '../persistence/repos/dashboard-cost-centers-reader.in-memory.ts';
+import {
+  openDashboardCostCentersReader,
+  type DashboardCostCentersReader,
+} from '../../public-api/dashboard-cost-centers-projection.ts';
+// #237: motor de variação PURO (M-1 vs M-2). A referência é o `clock.now()` da composição (borda).
+import { comparisonWindows } from '../../domain/dashboard/variation.ts';
 import { createInMemoryPayableDocumentView } from '../persistence/repos/payable-document-view.in-memory.ts';
 import { createDrizzlePayableDocumentView } from '../persistence/repos/payable-document-view.drizzle.ts';
 // #357: resumo de título em lote — POST /financial/payables:batch (ADR-0049).
@@ -209,6 +219,13 @@ export type FinancialCompositionConfig = Readonly<{
    *  Top-5 do Dashboard. Injetado em testes HTTP (memory) com dados determinísticos; ambos os drivers
    *  constroem um reader por padrão se ausente (memory: fake vazio; mysql: reader Drizzle boot-scoped). */
   suppliersWithoutContractReader?: SuppliersWithoutContractReader;
+  /** #241 · DASH-F1 — reader do KPI "Despesas por Centro de Custo". Injetado em testes HTTP (memory)
+   *  com dados determinísticos; ambos os drivers constroem um reader por padrão se ausente
+   *  (memory: fake vazio; mysql: reader Drizzle boot-scoped). */
+  dashboardCostCentersReader?: DashboardCostCentersReader;
+  /** #241 · DASH-F1 — fonte da referência de "agora" (M-1/M-2). Injetável em testes (ClockFixed) para
+   *  asserir as janelas de forma determinística; default `ClockReal()`. */
+  clock?: Clock;
 }>;
 
 export type FinancialHttpDeps = Readonly<{
@@ -302,6 +319,10 @@ export type FinancialHttpDeps = Readonly<{
   listRecentPaid: PayableViewStore['listRecentPaid'];
   /** #242 · Fornecedores sem contrato (Top-5) — GET /financial/dashboard/no-contract-suppliers. */
   listTopSuppliersWithoutContract: SuppliersWithoutContractReader['listTop'];
+  /** #241 · KPI Despesas por Centro de Custo — GET /financial/dashboard/cost-centers. Zero-arg: a
+   *  borda computa as janelas M-1/M-2 de `clock.now()` (motor #237) e chama o reader. Devolve o
+   *  agregado bruto por CC (o assembler puro monta total/top/distribuição). */
+  listDashboardCostCenters: () => ReturnType<DashboardCostCentersReader['list']>;
   /** #357 · Resolução em lote de payableId[] — POST /financial/payables:batch (ADR-0049). */
   getPayablesSummaryByIds: PayableSummaryByIdsView['getPayablesSummaryByIds'];
   /** #358 · Resolução em lote de documentId[] — POST /financial/documents:batch (ADR-0049). */
@@ -357,6 +378,9 @@ type Pools = Readonly<{
   // #242: reader da agregação "Fornecedores sem Contrato" (REP-2) reusado para o Top-5 do Dashboard.
   // memory: fake in-memory (injetável em testes); mysql: reader Drizzle boot-scoped (pool próprio).
   suppliersWithoutContractReader: SuppliersWithoutContractReader;
+  // #241: reader do KPI "Despesas por Centro de Custo". memory: fake in-memory (injetável em testes);
+  // mysql: reader Drizzle boot-scoped (pool próprio).
+  dashboardCostCentersReader: DashboardCostCentersReader;
   // #255: port de leitura do contratado (ADR-0032). memory: injetado ou null; mysql: construído.
   contractorReadPort: ContractorReadPort | null;
   // #207/#289: port de leitura do nome de usuário + alçada do aprovador (ADR-0032). memory:
@@ -411,15 +435,28 @@ const seededProgramsStub = (): readonly ProgramView[] => [
   { id: '7b000000-0000-4000-8000-000000000003', name: 'Captação de recursos' },
 ];
 
+// Seams injetáveis do driver memory (todos read-models do Dashboard/Reports). Injetados em testes HTTP
+// com dados determinísticos; default = fake vazio. Agrupados num objeto para não estourar max-params.
+type MemoryPoolSeams = Readonly<{
+  // #239: injetável em testes (semear via applyPayableEvent); vazio por padrão — em produção quem
+  // popula é o worker payable-view-projection (async), não este composition root (ADR-0022).
+  payableViewStore?: PayableViewStore;
+  // #242: fake vazio por padrão; testes HTTP injetam um reader semeado (Top-5 determinístico).
+  suppliersWithoutContractReader?: SuppliersWithoutContractReader;
+  // #241: fake vazio por padrão; testes HTTP injetam um reader semeado/capturador (janelas M-1/M-2).
+  dashboardCostCentersReader?: DashboardCostCentersReader;
+}>;
+
 const buildMemoryPools = (
   contractorReadPort: ContractorReadPort | null,
   authUserReadPort: (AuthUserReadPort & ApproverAuthorityReadPort) | null,
-  // #239: injetável em testes (semear via applyPayableEvent); vazio por padrão — em produção quem
-  // popula é o worker payable-view-projection (async), não este composition root (ADR-0022).
-  payableViewStore: PayableViewStore = createInMemoryPayableViewStore(),
-  // #242: fake vazio por padrão; testes HTTP injetam um reader semeado (Top-5 determinístico).
-  suppliersWithoutContractReader: SuppliersWithoutContractReader = createInMemorySuppliersWithoutContractReader(),
+  seams: MemoryPoolSeams = {},
 ): Pools => {
+  const payableViewStore = seams.payableViewStore ?? createInMemoryPayableViewStore();
+  const suppliersWithoutContractReader =
+    seams.suppliersWithoutContractReader ?? createInMemorySuppliersWithoutContractReader();
+  const dashboardCostCentersReader =
+    seams.dashboardCostCentersReader ?? createInMemoryDashboardCostCentersReader();
   // Store compartilhado entre o document-repo (escreve trilha no save) e o timeline-repo
   // (lê). Garante atomicidade em memória sem tx (timeline-repository.in-memory.ts §store).
   const timelineStore: TimelineStore = new Map<string, FinancialTimelineEntry[]>();
@@ -523,6 +560,7 @@ const buildMemoryPools = (
     periodStore,
     payableViewStore,
     suppliersWithoutContractReader,
+    dashboardCostCentersReader,
     contractorReadPort,
     authUserReadPort,
     shutdown: () => Promise.resolve(),
@@ -624,6 +662,27 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     suppliersWithoutContractReader = readerR.value;
     closeSuppliersReader = readerR.value.close;
   }
+  // #241 DASH-F1: reader boot-scoped (pool próprio — molde dos outros readers do Dashboard), aberto
+  // por ÚLTIMO → só seu próprio caminho de erro fecha os anteriores. Injetado tem precedência (testes).
+  let dashboardCostCentersReader: DashboardCostCentersReader | null =
+    config.dashboardCostCentersReader ?? null;
+  let closeDashboardCostCentersReader: () => Promise<void> = () => Promise.resolve();
+  if (dashboardCostCentersReader === null) {
+    const readerR = await openDashboardCostCentersReader({ connectionString: writerUrl });
+    if (!readerR.ok) {
+      await closeSuppliersReader();
+      await closeAuthUserPort();
+      await closeContractorPort();
+      await programsReadPort.close();
+      await contractsReadPort.close();
+      await handle.close();
+      throw new Error(
+        `financial-composition: falha ao abrir dashboard-cost-centers reader (${readerR.error})`,
+      );
+    }
+    dashboardCostCentersReader = readerR.value;
+    closeDashboardCostCentersReader = readerR.value.close;
+  }
   return {
     contractCategorizationReader: contractsReadPort,
     repo: createDrizzleDocumentRepository(handle),
@@ -651,12 +710,15 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     payableViewStore: config.payableViewStore ?? createDrizzlePayableViewStore(handle, ClockReal()),
     // #242: reader da agregação REP-2 reusado para o Top-5 do Dashboard (aberto acima, boot-scoped).
     suppliersWithoutContractReader,
+    // #241: reader do KPI "Despesas por Centro de Custo" (aberto acima, boot-scoped).
+    dashboardCostCentersReader,
     suggestionView: createDrizzleSuggestionView(handle),
     rejectedSuggestionRepo: createDrizzleRejectedSuggestionRepository(handle),
     periodStore: createDrizzleReconciliationPeriodStore(handle),
     contractorReadPort,
     authUserReadPort,
     shutdown: async () => {
+      await closeDashboardCostCentersReader();
       await closeSuppliersReader();
       await closeAuthUserPort();
       await closeContractorPort();
@@ -667,12 +729,13 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
   };
 };
 
-const makeDeps = (pools: Pools): FinancialHttpDeps => {
+const makeDeps = (pools: Pools, clock: Clock = ClockReal()): FinancialHttpDeps => {
   // #127: NENHUM use-case recebe mais `outbox` — todo evento de domínio do financial é gravado no
   // `fin_outbox` na MESMA tx do agregado/unit-of-work (atomicidade — ADR-0015), via os repos
   // (`save`/`delete`/`confirm`/`confirmManualEntry`/`undo`/`close`). No driver memory cada repo usa
   // um outbox interno (descartável); no mysql → tabela `fin_outbox`. Sem dual-write.
-  const clock = ClockReal();
+  // #241: o clock (default ClockReal; ClockFixed em testes) é a fonte da referência M-1/M-2 do KPI
+  // de Centro de Custo — mantém o domínio `variation.ts` PURO (a referência é INPUT, não o relógio).
   // #289: leitura cross-módulo da alçada do aprovador (auth/public-api). Opt-in — construído só
   // quando o port existe (memory sem injeção: gate de alçada não roda nos use-cases).
   const approverAuthorityReader =
@@ -844,6 +907,16 @@ const makeDeps = (pools: Pools): FinancialHttpDeps => {
     listPrograms: pools.programReader.list,
     listRecentPaid: pools.payableViewStore.listRecentPaid,
     listTopSuppliersWithoutContract: pools.suppliersWithoutContractReader.listTop,
+    // #241: computa as janelas M-1/M-2 do `clock.now()` (motor #237) e chama o reader por-request.
+    listDashboardCostCenters: () => {
+      const { m1, m2 } = comparisonWindows(clock.now());
+      return pools.dashboardCostCentersReader.list({
+        m1Start: m1.start,
+        m1End: m1.end,
+        m2Start: m2.start,
+        m2End: m2.end,
+      });
+    },
     getPayablesSummaryByIds: pools.payableSummaryByIdsView.getPayablesSummaryByIds,
     getDocumentsSummaryByIds: pools.documentSummaryByIdsView.getDocumentsSummaryByIds,
     resolvePayeeBank: (ref) => composePayeeBank(pools.contractorReadPort, ref),
@@ -868,17 +941,23 @@ export const buildFinancialHttpDeps = async (
 ): Promise<FinancialHttpDeps> => {
   if (config.driver === 'memory') {
     return makeDeps(
-      buildMemoryPools(
-        config.contractorReadPort ?? null,
-        config.authUserReadPort ?? null,
-        config.payableViewStore,
-        config.suppliersWithoutContractReader,
-      ),
+      buildMemoryPools(config.contractorReadPort ?? null, config.authUserReadPort ?? null, {
+        ...(config.payableViewStore !== undefined
+          ? { payableViewStore: config.payableViewStore }
+          : {}),
+        ...(config.suppliersWithoutContractReader !== undefined
+          ? { suppliersWithoutContractReader: config.suppliersWithoutContractReader }
+          : {}),
+        ...(config.dashboardCostCentersReader !== undefined
+          ? { dashboardCostCentersReader: config.dashboardCostCentersReader }
+          : {}),
+      }),
+      config.clock,
     );
   }
 
   if (config.writerUrl === undefined || config.writerUrl.length === 0) {
     throw new Error('financial-composition: driver mysql exige writerUrl');
   }
-  return makeDeps(await buildMysqlPools(config));
+  return makeDeps(await buildMysqlPools(config), config.clock);
 };

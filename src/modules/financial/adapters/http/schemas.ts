@@ -948,6 +948,53 @@ export const noContractSuppliersResponseSchema = z
 export type NoContractSupplierDto = z.infer<typeof noContractSupplierSchema>;
 export type NoContractSuppliersResponseDto = z.infer<typeof noContractSuppliersResponseSchema>;
 
+// KPI "Despesas por Centro de Custo" (DASH-F1 · #241, reference:read) — GET
+// /financial/dashboard/cost-centers. Base = títulos Pagos no mês de referência (M-1); variação M-1 vs
+// M-2 via o motor #237. O core devolve os NÚMEROS prontos (centavos); a formatação humana ("12,5%")
+// é do BFF (#352). `percentage` da variação é a UNIÃO DISCRIMINADA do domínio (variation.ts),
+// serializada COMO ESTÁ — a borda não formata. `ref`/`name` nullable (CC nulo = título sem centro).
+const variationPercentageSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('value'), percent: z.number() }).strict(),
+  z.object({ kind: z.literal('no-change') }).strict(),
+  z.object({ kind: z.literal('new') }).strict(),
+]);
+
+export const dashboardCostCentersResponseSchema = z
+  .object({
+    // Σ dos totais M-1 de todos os CCs (centavos).
+    totalExpenses: z.number(),
+    variation: z
+      .object({
+        absoluteCents: z.number(),
+        percentage: variationPercentageSchema,
+      })
+      .strict(),
+    // CC com maior total M-1; null quando não houve despesa paga em M-1.
+    topCostCenter: z
+      .object({
+        ref: z.string().nullable(),
+        name: z.string().nullable(),
+        totalCents: z.number(),
+      })
+      .strict()
+      .nullable(),
+    // Por CC (só total M-1 > 0), ordenado por totalCents desc. `percentage` = totalCents*100/totalExpenses
+    // (0 quando totalExpenses=0 — guarda divisão por zero).
+    distribution: z.array(
+      z
+        .object({
+          ref: z.string().nullable(),
+          name: z.string().nullable(),
+          totalCents: z.number(),
+          percentage: z.number(),
+        })
+        .strict(),
+    ),
+  })
+  .strict();
+
+export type DashboardCostCentersResponseDto = z.infer<typeof dashboardCostCentersResponseSchema>;
+
 // ─── Read-model do extrato por conta + período (#139) ──────────────────────────
 
 export const accountStatementQuerySchema = z.object({
