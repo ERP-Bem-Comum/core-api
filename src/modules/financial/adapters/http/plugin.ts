@@ -15,6 +15,7 @@
  *   GET    /financial/documents                      fiscal-document:read   → listDocuments
  *   GET    /financial/documents/:id                  fiscal-document:read   → findDocumentById
  *   GET    /financial/dashboard/recent-payments      reference:read         → listRecentPaid (#239)
+ *   GET    /financial/dashboard/cost-centers         reference:read         → listDashboardCostCenters (#241)
  *   POST   /financial/payables:batch                 fiscal-document:read   → getPayablesSummaryByIds (#357)
  *   POST   /financial/documents:batch                fiscal-document:read   → getDocumentsSummaryByIds (#358)
  *
@@ -67,6 +68,7 @@ import {
   documentTypeMetadataToDto,
   recentPaymentsToDto,
   noContractSuppliersToDto,
+  dashboardCostCentersToDto,
   payableBatchItemToDto,
   documentBatchItemToDto,
 } from './dto.ts';
@@ -136,6 +138,7 @@ import {
   documentTypeMetadataListResponseSchema,
   recentPaymentsResponseSchema,
   noContractSuppliersResponseSchema,
+  dashboardCostCentersResponseSchema,
   type CedenteAccountResponseDto,
   accountStatementQuerySchema,
   accountStatementResponseSchema,
@@ -1806,6 +1809,24 @@ const financialRoutes =
         const result = await deps.listTopSuppliersWithoutContract(5);
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(reply, ok(noContractSuppliersToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /financial/dashboard/cost-centers — KPI "Despesas por Centro de Custo" (#241, reference:read).
+    // Base = títulos Pagos no mês de referência (M-1, paid_at); variação M-1 vs M-2 (motor #237). O
+    // reader agrega fin_payable_view por CC em 2 baldes de mês (as janelas vêm do clock da composição);
+    // o assembler puro monta totalExpenses/variation/topCostCenter/distribution. Molde: no-contract-suppliers.
+    scope.route({
+      method: 'GET',
+      url: '/financial/dashboard/cost-centers',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.referenceRead)],
+      schema: {
+        response: { 200: dashboardCostCentersResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (_req, reply) => {
+        const result = await deps.listDashboardCostCenters();
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(dashboardCostCentersToDto(result.value)), { ok: 200 });
       },
     });
 

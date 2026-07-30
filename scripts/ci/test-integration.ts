@@ -178,6 +178,9 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // #242 DASH-F5: Top-5 "fornecedores sem contrato" do Dashboard (listTop — ORDER BY sum DESC,
     // supplier_ref ASC LIMIT 5; corte e desempate no SQL). Reusa a agregação do REP-2.
     'tests/modules/financial/public-api/suppliers-without-contract-top.drizzle-mysql.test.ts',
+    // #241 DASH-F1: KPI "Despesas por Centro de Custo" — dois CASE-SUM sobre paid_at (M-1/M-2) por CC,
+    // WHERE status='Paid', GROUP BY cost_center_ref + LEFT JOIN fin_cost_centers (nome).
+    'tests/modules/financial/public-api/dashboard-cost-centers.drizzle-mysql.test.ts',
     // #243 REP-4: "posição de pagamentos" (fin_payable_view × cost_center × categoria, 3 baldes)
     'tests/modules/financial/public-api/payment-position.drizzle-mysql.test.ts',
     // REP-3 #114: "análise de planejamento" (fin_payable_view por categoria×CC×mês, DATE_FORMAT)
