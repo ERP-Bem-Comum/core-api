@@ -36,6 +36,35 @@ describe('checkCommitTrailers — presença (label-gated)', () => {
   });
 });
 
+describe('checkCommitTrailers — merge commit não é autoria (ADR-0054 §1)', () => {
+  // O ADR-0054 §1 exige o trailer em "todo commit cujo CONTEÚDO foi gerado ou materialmente
+  // modificado por um assistente de IA". Um merge commit não gera nem modifica conteúdo — integra
+  // duas linhas de história. Exigir trailer dele é o gate ser mais restritivo que a norma, e quebra
+  // qualquer PR atualizado pelo botão "Update branch" do GitHub (que gera o merge sem trailer).
+  it('CA7: merge commit sem Assisted-by → sem violação, mesmo com label ai-assisted', () => {
+    const v = checkCommitTrailers([{ sha: 'merge01', assistedBy: [], parentCount: 2 }], {
+      aiAssisted: true,
+    });
+    assert.deepEqual(v, []);
+  });
+
+  it('CA8: commit normal sem Assisted-by continua violando (a isenção é só do merge)', () => {
+    const v = checkCommitTrailers([{ sha: 'plain01', assistedBy: [], parentCount: 1 }], {
+      aiAssisted: true,
+    });
+    assert.equal(v.length, 1);
+    assert.equal(v[0]?.kind, 'missing-assisted-by');
+  });
+
+  it('CA9: merge commit COM trailer malformado ainda viola formato', () => {
+    const v = checkCommitTrailers([{ sha: 'merge02', assistedBy: ['Foo'], parentCount: 2 }], {
+      aiAssisted: true,
+    });
+    assert.equal(v.length, 1);
+    assert.equal(v[0]?.kind, 'malformed-assisted-by');
+  });
+});
+
 describe('checkCommitTrailers — formato (sempre, independe da label)', () => {
   it('CA3: Assisted-by malformado (sem :MODEL) → violação malformed, mesmo sem label', () => {
     const v = checkCommitTrailers([{ sha: 'abc', assistedBy: ['Foo'] }], { aiAssisted: false });
