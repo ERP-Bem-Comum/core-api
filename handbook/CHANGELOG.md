@@ -4,6 +4,20 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-07-29 — 🔐 ADR-0055 (Accepted): Amazon Cognito como autoridade de autenticação — supersede parcial do ADR-0024 (authN); autorização permanece no `core-api`
+
+Novo [ADR-0055](./architecture/adr/0055-cognito-external-idp-supersedes-0024-authn.md) (**Accepted**), registrando a **decisão de diretoria** de adotar o Amazon Cognito como autoridade única de autenticação (identidade nativa, MFA/TOTP obrigatório, Threat Protection). Supersede **parcialmente** o [ADR-0024](./architecture/adr/0024-identity-and-rbac-auth-module.md): caem a "fonte de identidade", a emissão de token e o refresh opaco server-side; **permanecem vigentes e inalterados** o RBAC, o catálogo de permissões, a autorização pura e o schema de papéis. O próprio 0024 previa este gatilho (`:117`) e já deixara `password_hash` nullable para isso (`:68`).
+
+**Decisão:** (1) **nenhuma claim de autorização no token** — `cognito:groups` não é fonte de authZ, toda permissão segue resolvida contra o banco a cada request; (2) vínculo por coluna **neutra ao fornecedor** `external_subject` (não `cognito_sub`), com find-or-link JIT que resolve primeiro por subject, só então por e-mail, nunca sobrescreve e **nunca cria usuário**; (3) transição com **dois verificadores completamente isolados** (ES256 legado × RS256 Cognito), roteados por `iss` decodificado, com allowlist de algoritmo por verificador e flags fail-secure no molde do `rbac-mode.ts`; (4) o desligamento do legado cobre **três superfícies** (login, renovação, verificação) com revogação em massa no mesmo passo; (5) estado do PKCE (`state`/`code_verifier`/`nonce`) em **cookie selado `SameSite=Lax`**, não em store — resolvendo multi-instância por construção, sem infraestrutura nova.
+
+**Registrado como negativo honesto:** recuperação de dispositivo TOTP perdido deixa de ser nossa (não existe API para remover o segredo; sem 2º método de MFA a saída é excluir e recriar a conta — limitação que o sistema atual **não** tem); revogação deixa de ser imediata do lado do IdP, mitigada pelo padrão BFF com tokens server-side; e o login passa a depender de serviço externo no caminho crítico.
+
+**Dependências bloqueantes:** issue #515 (inicialização silenciosa com chave efêmera) trava a fase de corte; criação de contas restrita a administradores trava a fase 1; segundo método de MFA trava a fase 2. Briefing de implementação em #603. A análise prévia (`inquiries/0024-cognito-vs-identidade-propria-seguranca.md`) recomendava o contrário e permanece no handbook como registro de due diligence — sem reabrir a decisão.
+
+Correção de índice no mesmo commit: o **ADR-0054** não constava da tabela de `architecture/adr/README.md`.
+
+---
+
 ## 2026-07-23 — 🤖 ADR-0054 (Accepted): política de contribuição assistida por IA — trailer `Assisted-by`, DCO humano, dono humano de cada linha
 
 Novo [ADR-0054](./architecture/adr/0054-ai-assisted-contribution-policy.md) (**Accepted**), que adota — no precedente do Linux kernel ([`coding-assistants.rst`](https://docs.kernel.org/process/coding-assistants.html), 2025-12-23) — a política de contribuição assistida por IA para este repo, que é desenvolvido com uso intensivo de agentes.
