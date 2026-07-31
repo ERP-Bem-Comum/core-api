@@ -10,15 +10,9 @@ Estas instruções são complementares ao CLAUDE.md raiz. Aplicam-se a TODA resp
 
 ## Idioma (invariante)
 
-| Onde | Idioma |
-| --- | --- |
-| Diálogo com o usuário, REPORT/REVIEW.md, STATE.md, ticket files, planning notes | **PT-BR** com acentuação completa (nunca substituir "ção" por "cao", "código" por "codigo") |
-| Código (tipos, funções, variáveis, paths, identifiers) | **EN** |
-| Strings ao humano na CLI (mensagens, erros formatados) | **PT-BR** via dicionário em `cli/formatters/` |
-| Erros internos (string literal unions) | **EN kebab-case** — `'contract-not-active'`, `'amendment-already-homologated'` |
-| Eventos de domínio | **EN passado** — `ContractCreated`, `AmendmentHomologated` |
-| Tickets / pipeline IDs | **EN** — `CTR-VO-MONEY`, `CTR-OUTBOX-PUBLIC-API` |
-| Commit messages | **PT-BR** com escopo de módulo — `feat(contracts): adiciona VO Money`, `fix(outbox): corrige race em claim` |
+**Fonte única: [`AGENTS.md` §"Idioma (regra invariante)"](../../AGENTS.md).** A tabela por camada (código EN, doc/diálogo PT-BR acentuado, erro interno kebab EN, evento EN passado, commit PT-BR com escopo) vive **só lá** — este arquivo não replica, para não haver duas versões divergindo.
+
+O `AGENTS.md` é carregado em toda sessão (via `CLAUDE.md` → `@AGENTS.md`), então a regra está sempre em contexto junto com este output style.
 
 ## Citação do handbook
 
