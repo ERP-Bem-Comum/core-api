@@ -64,10 +64,24 @@ mysql://<user>:<password>@<host>:3306/<database>?ssl=true
 
 | Secret | Consumidor | Rotação |
 | :--- | :--- | :--- |
+| **`AUTH_JWT_PRIVATE_KEY`** | **`core-api`** | **Trimestral** |
+| **`AUTH_JWT_PUBLIC_KEY`** | **`core-api`** | **Trimestral (junto com a privada)** |
 | `JWT_SIGNING_KEY` | `bff-gateway` | Mensal |
 | `SESSION_SECRET` | `bff-gateway`, `legacy-api` | Mensal |
 | `OIDC_CLIENT_ID` | `bff-gateway` | Não rotaciona (configuração) |
 | `OIDC_CLIENT_SECRET` | `bff-gateway` | Conforme provedor |
+
+> ⚠️ **Chave de assinatura do access token (ticket `AUTH-JWT-KEY-BOOT-GUARD`, issue #515):** o par
+> ES256 (`AUTH_JWT_PRIVATE_KEY` em PEM PKCS#8, `AUTH_JWT_PUBLIC_KEY` em PEM SPKI) é validado no boot
+> do `server.ts` por `readAuthJwtKeys`. Em **`NODE_ENV=production` as duas são obrigatórias** —
+> ausente, par incompleto ou PEM inválido derruba o boot com **exit 78 (EX_CONFIG)**, antes de a porta
+> abrir. Fora de produção, ausência degrada para um par efêmero gerado no boot, **com aviso** no
+> stderr. Valor presente porém inválido falha em **qualquer** ambiente.
+>
+> Motivo: até a #515 a ausência gerava par efêmero **em silêncio, inclusive em produção** — toda
+> sessão morria no restart e o BFF passava a rejeitar todo token novo, sem nenhuma pista no
+> `core-api`. As duas chaves **precisam existir no Secrets Manager antes** de subir uma versão que
+> contenha esse guard, ou o serviço não inicia.
 
 ---
 
