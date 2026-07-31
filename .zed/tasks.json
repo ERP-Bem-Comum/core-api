@@ -55,12 +55,6 @@
     "use_new_terminal": true
   },
   {
-    "label": "core-api: pipeline status",
-    "command": "pnpm",
-    "args": ["pipeline:status"],
-    "cwd": "$ZED_WORKTREE_ROOT"
-  },
-  {
     "label": "core-api: test arquivo atual (node:test)",
     "command": "node",
     "args": ["--experimental-strip-types", "--test", "$ZED_FILE"],
