@@ -13,25 +13,42 @@ Aplicáveis ao módulo `src/modules/contracts/`.
 ```
 src/modules/contracts/
 ├── domain/                    # PURO. Sem infra. Result<T,E>, branded, Readonly.
-│   ├── shared/                # VOs: Money, Period, ContractId, AmendmentId, DocumentId, UserRef, BucketName, StorageKey, StorageRef
-│   ├── contract/              # Agregado Contract: types, events, errors, contract.ts (operações)
-│   └── amendment/             # Agregado Amendment: types, events, errors, amendment.ts
+│   ├── shared/                # IDs do módulo: ContractId, AmendmentId, DocumentId, Contractor
+│   ├── contract/              # Agregado Contract: types, events, errors, repository, sequential-number, contract.ts (operações)
+│   ├── amendment/             # Agregado Amendment: types, events, errors, repository, amendment-number, amendment.ts
+│   ├── document/              # Agregado Document: types, events, errors, repository, document.ts
+│   └── timeline/              # Projeção de linha do tempo: types, repository, projection.ts
 ├── application/
-│   ├── ports/                 # type contracts: ContractRepository, AmendmentRepository, EventBus, DocumentStorage
-│   └── use-cases/             # createContract, createAmendment, attachSignedDocument, homologateAmendment, getContract, listContracts
+│   ├── ports/                 # type contracts: EventBus, Outbox, EventDelivery, DocumentStorage, *-read
+│   └── use-cases/             # createContract, createAmendment, attachSignedDocument, homologateAmendment, uploadDocument, getContractTimeline, importContracts, listContracts…
 ├── adapters/                  # Implementações concretas
-│   ├── *.in-memory.ts         # Para testes
-│   └── persistence/           # Drizzle/mysql2 (schema mysql, mappers, repos, driver, migrations)
-├── cli/                       # CLI para P.O.
-│   ├── main.ts, registry.ts, parse-flags.ts, parse-driver-flags.ts
-│   ├── context.ts, state.ts   # Estado/persistência da CLI
-│   ├── drivers/{memory,mysql}.ts
-│   ├── commands/              # Um arquivo por subcomando
-│   └── formatters/            # PT-BR para humanos
+│   ├── http/                  # Borda Fastify: plugin, schemas (Zod), DTOs, composition
+│   ├── persistence/           # Drizzle/mysql2: schemas, mappers, repos (`*.drizzle.ts` + `*.in-memory.ts`), drivers, migrations
+│   ├── storage/               # DocumentStorage: S3/Magalu (`*.s3.ts`) + `*.in-memory.ts`
+│   ├── outbox/                # Outbox in-memory (o drizzle vive em persistence/repos)
+│   └── event-delivery/        # Entrega de eventos: logger, in-memory, timeline-projection
+├── worker/                    # Worker do outbox: config, outbox-worker, run
 └── public-api/                # Contrato público para outros módulos (ADR-0006)
     ├── events.ts              # ContractsModuleEvent + decoder versionado v1 + isContractsModuleEvent
+    ├── http.ts, migrate.ts, permissions.ts, read.ts
     └── index.ts               # Barrel — único ponto de import externo ao módulo
 ```
+
+> VOs transversais (`Money`, `NonZeroMoney`, `Period`, `PlainDate`, `UserRef`, `Cpf`, `Cnpj`) vivem em [`src/shared/kernel/`](../../src/shared/kernel/), não em `domain/shared/`. A CLI embutida foi retirada (ADR-0037) — a UX primária é a borda HTTP em `adapters/http/`.
+
+## Máquina de estado do `Contract` — 5 estados ([ADR-0023](../../handbook/architecture/adr/0023-contract-lifecycle-pending-state.md) + [ADR-0039](../../handbook/architecture/adr/0039-contract-cancelled-state.md))
+
+| `status` (código EN) | Termo de negócio (PT, borda) | Transições de saída          |
+| -------------------- | ---------------------------- | ---------------------------- |
+| `Pending`            | Pendente                     | → `Active` · → `Cancelled`   |
+| `Active`             | Em Andamento                 | → `Active` (aditivo homologado) · → `Expired` · → `Terminated` |
+| `Expired`            | Finalizado                   | terminal                     |
+| `Terminated`         | Distrato                     | terminal                     |
+| `Cancelled`          | Cancelado                    | terminal                     |
+
+- Contrato nasce `Pending` (sem documento assinado) ou já `Active` (com documento assinado + data).
+- **`Cancelled` só é alcançável a partir de `Pending`** — é o descarte de rascunho. Contrato que já vigorou termina em `Expired` ou `Terminated`, nunca em `Cancelled`.
+- Identificador em **EN** no código; termo PT só na borda. A P.O. é a autoridade dos termos de UI.
 
 ## Regras de negócio invariantes
 
