@@ -19,18 +19,6 @@
     ]
   },
   "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/inject-ticket-context.sh",
-            "timeout": 10,
-            "statusMessage": "Detectando ticket ativo da pipeline..."
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -72,19 +60,6 @@
             "timeout": 90,
             "statusMessage": "Rodando typecheck em background...",
             "async": true
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "matcher": "contratos-orchestrator",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/subagent-stop-validate.sh",
-            "timeout": 15,
-            "statusMessage": "Validando fechamento da wave pelo sub-agent..."
           }
         ]
       }

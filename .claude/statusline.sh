@@ -21,11 +21,10 @@ DIR=$(get '.workspace.current_dir')
 SESSION_ID=$(get '.session_id')
 SESSION_NAME=$(get '.session_name')
 
-# --- ticket ativo + git (cacheado 5s por session) ---
+# --- git (cacheado 5s por session) ---
 # Formato do cache (uma linha por campo, sufixo `-` indica vazio para evitar
 # colapso de tabs adjacentes no `read`):
 #   BRANCH=<valor ou ->
-#   TICKET=<valor ou ->
 #   STAGED=<n>
 #   MODIFIED=<n>
 CACHE_FILE="/tmp/erp-statusline-${SESSION_ID:-unknown}"
@@ -41,7 +40,6 @@ cache_is_stale() {
 
 if cache_is_stale; then
   BRANCH=""
-  TICKET=""
   STAGED=0
   MODIFIED=0
   if git -C "$DIR" rev-parse --git-dir >/dev/null 2>&1; then
@@ -49,21 +47,8 @@ if cache_is_stale; then
     STAGED=$(git -C "$DIR" diff --cached --numstat 2>/dev/null | wc -l | tr -d ' ')
     MODIFIED=$(git -C "$DIR" diff --numstat 2>/dev/null | wc -l | tr -d ' ')
   fi
-  # Ticket ativo: primeiro STATE.md em .claude/.pipeline/ cuja primeira ocorrência
-  # de "OPEN" (no resumo do topo) vem antes de "CLOSED".
-  PIPELINE_DIR="$DIR/.claude/.pipeline"
-  if [ -d "$PIPELINE_DIR" ]; then
-    for state in $(ls -t "$PIPELINE_DIR"/*/STATE.md 2>/dev/null | head -8); do
-      header=$(head -10 "$state" 2>/dev/null || true)
-      if echo "$header" | grep -qE '\bOPEN\b' && ! echo "$header" | grep -qE '\bCLOSED\b'; then
-        TICKET=$(basename "$(dirname "$state")")
-        break
-      fi
-    done
-  fi
   {
     printf 'BRANCH=%s\n' "${BRANCH:--}"
-    printf 'TICKET=%s\n' "${TICKET:--}"
     printf 'STAGED=%s\n' "${STAGED:-0}"
     printf 'MODIFIED=%s\n' "${MODIFIED:-0}"
   } > "$CACHE_FILE"
@@ -72,7 +57,6 @@ fi
 # shellcheck disable=SC1090
 . "$CACHE_FILE"
 [ "$BRANCH" = "-" ] && BRANCH=""
-[ "$TICKET" = "-" ] && TICKET=""
 STAGED=${STAGED:-0}
 MODIFIED=${MODIFIED:-0}
 
@@ -160,9 +144,6 @@ if [ -n "$BRANCH" ]; then
   [ "${STAGED:-0}" -gt 0 ] && GIT_BIT="$GIT_BIT ${GREEN}+${STAGED}${RESET}"
   [ "${MODIFIED:-0}" -gt 0 ] && GIT_BIT="$GIT_BIT ${YELLOW}~${MODIFIED}${RESET}"
   L1="$L1 │ $GIT_BIT"
-fi
-if [ -n "$TICKET" ]; then
-  L1="$L1 │ ${MAGENTA}🎫 $TICKET${RESET}"
 fi
 if [ -n "$SESSION_NAME" ]; then
   L1="$L1 │ ${BLUE}📛 $SESSION_NAME${RESET}"

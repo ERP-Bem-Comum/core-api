@@ -146,7 +146,7 @@ describe('renderStateMd — override com quebra de linha não forja linhas', () 
       'nenhuma linha de wave pode ser forjada pelo texto do motivo',
     );
     assert.equal(
-      lines.filter((l) => /^> \*\*Size:\*\*/.test(l)).length,
+      lines.filter((l) => l.startsWith('> **Size:**')).length,
       1,
       'nenhum header de status pode ser forjado pelo texto do motivo',
     );
