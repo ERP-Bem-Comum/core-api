@@ -43,6 +43,7 @@ import {
   analysisToReport,
   analysisToChart,
   realizedToDto,
+  dashboardRealizedToDto,
   generalReportToDto,
 } from './dto.ts';
 import {
@@ -59,6 +60,8 @@ import {
   analysisChartResponseSchema,
   realizedQuerySchema,
   realizedReportResponseSchema,
+  dashboardRealizedQuerySchema,
+  dashboardRealizedResponseSchema,
   generalReportQuerySchema,
   generalReportResponseSchema,
   type AnalysisQueryDto,
@@ -393,6 +396,31 @@ const reportsRoutes =
           return sendResult(reply, result, { errors: { 'realized-read-unavailable': 503 } });
         }
         return sendResult(reply, ok(realizedToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /reports/dashboard/realized — DASH-F4 (#112): widget "Realizado x Previsto mensal". Serie
+    // de 12 meses de UM plano (`budgetPlanId` + `year` obrigatorios, Zod strict). Gate `reference:read`
+    // (mesmo dos widgets `/financial/dashboard/*`, por coerencia do dashboard). Fail-closed -> 503.
+    scope.route({
+      method: 'GET',
+      url: '/reports/dashboard/realized',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.referenceRead)],
+      schema: {
+        querystring: dashboardRealizedQuerySchema,
+        response: { 200: dashboardRealizedResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.listDashboardRealized({
+          budgetPlanId: req.query.budgetPlanId,
+          year: req.query.year,
+        });
+        if (!result.ok) {
+          return sendResult(reply, result, {
+            errors: { 'dashboard-realized-read-unavailable': 503 },
+          });
+        }
+        return sendResult(reply, ok(dashboardRealizedToDto(result.value)), { ok: 200 });
       },
     });
   };
