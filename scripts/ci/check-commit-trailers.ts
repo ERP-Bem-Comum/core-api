@@ -10,6 +10,8 @@ import { fileURLToPath } from 'node:url';
 export interface CommitTrailers {
   readonly sha: string;
   readonly assistedBy: readonly string[];
+  /** Nº de pais. >1 é merge commit. Ausente = commit comum (1). */
+  readonly parentCount?: number;
 }
 
 export interface TrailerViolation {
@@ -28,7 +30,12 @@ export function checkCommitTrailers(
 ): TrailerViolation[] {
   const violations: TrailerViolation[] = [];
   for (const commit of commits) {
-    if (opts.aiAssisted && commit.assistedBy.length === 0) {
+    // ADR-0054 §1 exige o trailer no commit cujo CONTEÚDO foi gerado ou materialmente modificado
+    // por IA. Merge commit integra história, não produz conteúdo — a exigência de presença não se
+    // aplica. Sem esta isenção, o botão "Update branch" do GitHub quebra o próprio PR: o merge que
+    // ele gera nunca carrega trailer. O FORMATO segue validado quando o trailer existe.
+    const isMerge = (commit.parentCount ?? 1) > 1;
+    if (opts.aiAssisted && !isMerge && commit.assistedBy.length === 0) {
       violations.push({
         sha: commit.sha,
         kind: 'missing-assisted-by',
@@ -49,18 +56,20 @@ const UNIT_SEP = String.fromCharCode(0x1f);
 const REC_SEP = String.fromCharCode(0x1e);
 
 function readCommits(range: string): CommitTrailers[] {
+  // %P = pais separados por espaço; 2+ ⇒ merge commit (isento da exigência de presença).
   const out = execFileSync(
     'git',
-    ['log', '--format=%H%x1f%(trailers:key=Assisted-by,valueonly,separator=%x1e)', range],
+    ['log', '--format=%H%x1f%P%x1f%(trailers:key=Assisted-by,valueonly,separator=%x1e)', range],
     { encoding: 'utf8' },
   );
   const commits: CommitTrailers[] = [];
   for (const line of out.split('\n')) {
     if (line.trim() === '') continue;
-    const [sha = '', assistedRaw = ''] = line.split(UNIT_SEP);
+    const [sha = '', parentsRaw = '', assistedRaw = ''] = line.split(UNIT_SEP);
     const assistedBy =
       assistedRaw === '' ? [] : assistedRaw.split(REC_SEP).filter((s) => s.trim() !== '');
-    commits.push({ sha, assistedBy });
+    const parentCount = parentsRaw.trim() === '' ? 0 : parentsRaw.trim().split(/\s+/).length;
+    commits.push({ sha, assistedBy, parentCount });
   }
   return commits;
 }
