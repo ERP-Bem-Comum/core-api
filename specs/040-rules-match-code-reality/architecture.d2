@@ -1,0 +1,70 @@
+# Arquitetura real do core-api - extraida de src/ em 2026-07-31
+# Gerado por extract-arch.mjs (zero dependencias). NAO editar a mao.
+
+direction: right
+classes: {
+  mod: { style: { fill: "#eef2ff"; stroke: "#4338ca"; border-radius: 8 } }
+  infra: { style: { fill: "#f0fdf4"; stroke: "#15803d"; border-radius: 8 } }
+  root: { style: { fill: "#fef3c7"; stroke: "#b45309"; border-radius: 8; bold: true } }
+}
+
+"auth": { class: mod }
+"budget-plans": { class: mod }
+"contracts": { class: mod }
+"financial": { class: mod }
+"jobs": { class: infra }
+"notifications": { class: mod }
+"partners": { class: mod }
+"programs": { class: mod }
+"reports": { class: mod }
+"server.ts": { class: root }
+"shared": { class: infra }
+"workers": { class: infra }
+
+"partners" -> "shared": 323
+"financial" -> "shared": 295
+"contracts" -> "shared": 183
+"auth" -> "shared": 149
+"budget-plans" -> "shared": 119
+"programs" -> "shared": 42
+"reports" -> "shared": 29
+"workers" -> "shared": 25
+"notifications" -> "shared": 24
+"jobs" -> "shared": 16
+"workers" -> "partners": 15
+"workers" -> "financial": 13
+"jobs" -> "financial": 11
+"reports" -> "financial": 9
+"jobs" -> "contracts": 7
+"financial" -> "partners": 7
+"workers" -> "contracts": 7
+"jobs" -> "partners": 5
+"reports" -> "partners": 5
+"reports" -> "budget-plans": 5
+"server.ts" -> "shared": 5
+"financial" -> "contracts": 4
+"workers" -> "notifications": 4
+"workers" -> "auth": 4
+"budget-plans" -> "programs": 3
+"financial" -> "auth": 3
+"server.ts" -> "programs": 3
+"jobs" -> "auth": 2
+"budget-plans" -> "partners": 2
+"budget-plans" -> "financial": 2
+"contracts" -> "partners": 2
+"contracts" -> "programs": 2
+"financial" -> "programs": 2
+"reports" -> "contracts": 2
+"jobs" -> "budget-plans": 1
+"jobs" -> "notifications": 1
+"jobs" -> "programs": 1
+"auth" -> "contracts": 1
+"notifications" -> "auth": 1
+"notifications" -> "partners": 1
+"partners" -> "contracts": 1
+"server.ts" -> "auth": 1
+"server.ts" -> "contracts": 1
+"server.ts" -> "partners": 1
+"server.ts" -> "financial": 1
+"server.ts" -> "budget-plans": 1
+"server.ts" -> "reports": 1

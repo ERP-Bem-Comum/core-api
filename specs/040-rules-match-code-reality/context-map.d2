@@ -1,0 +1,71 @@
+# Context Map do core-api — estado REAL extraido de src/ em 2026-07-31
+# Nomenclatura: Evans (Domain-Driven Design, cap. 14) e Vernon (IDDD, p. 142)
+# Fatos extraidos por analise de imports; NAO desenhado a mao.
+
+direction: right
+
+classes: {
+  bc:        { style: { fill: "#eef2ff"; stroke: "#4338ca"; border-radius: 8 } }
+  bc-up:     { style: { fill: "#ecfdf5"; stroke: "#047857"; border-radius: 8; bold: true } }
+  bc-down:   { style: { fill: "#fef2f2"; stroke: "#b91c1c"; border-radius: 8 } }
+  kernel:    { style: { fill: "#fef3c7"; stroke: "#b45309"; border-radius: 8; bold: true } }
+  root:      { style: { fill: "#f5f3ff"; stroke: "#6d28d9"; border-radius: 8 } }
+  async:     { style: { stroke: "#0891b2"; stroke-dash: 4 } }
+}
+
+title: |md
+  # Context Map — core-api
+  Estado real em 2026-07-31 · 8 Bounded Contexts · 905 arquivos
+| { near: top-center }
+
+kernel: "SHARED KERNEL\nsrc/shared/kernel/\nMoney · Period · Cpf · Cnpj\nPlainDate · UserRef" { class: kernel }
+
+auth:          "auth\n(U) upstream puro" { class: bc-up }
+programs:      "programs\n(U) upstream puro" { class: bc-up }
+partners:      "partners" { class: bc }
+contracts:     "contracts" { class: bc }
+financial:     "financial" { class: bc }
+"budget-plans": "budget-plans" { class: bc }
+notifications: "notifications" { class: bc }
+reports:       "reports\n(D) downstream puro" { class: bc-down }
+
+server: "server.ts\ncomposition root" { class: root }
+
+# ── Shared Kernel (Evans, cap.14) — modelo compartilhado, fronteira explicita
+partners     -> kernel: "46" { style.stroke: "#b45309" }
+contracts    -> kernel: "29" { style.stroke: "#b45309" }
+financial    -> kernel: "26" { style.stroke: "#b45309" }
+"budget-plans" -> kernel: "14" { style.stroke: "#b45309" }
+auth         -> kernel: "2"  { style.stroke: "#b45309" }
+
+# ── Sincrono: Customer/Supplier via OPEN HOST SERVICE (public-api/)
+reports        -> financial:      "8 · OHS"
+reports        -> partners:       "5 · OHS"
+reports        -> "budget-plans": "4 · OHS"
+reports        -> contracts:      "2 · OHS"
+financial      -> partners:       "7 · OHS+ACL"
+financial      -> contracts:      "4 · OHS"
+financial      -> auth:           "3 · OHS"
+financial      -> programs:       "2 · OHS"
+"budget-plans" -> financial:      "2 · OHS"
+"budget-plans" -> programs:       "1 · OHS"
+"budget-plans" -> partners:       "1 · OHS"
+contracts      -> programs:       "2 · OHS"
+contracts      -> partners:       "2 · OHS"
+notifications  -> partners:       "1 · OHS"
+notifications  -> auth:           "1 · OHS"
+partners       -> contracts:      "1 · OHS"
+
+# ── Assincrono: PUBLISHED LANGUAGE via outbox + worker de projecao
+contracts -> partners:      "evento: ContractCreated/Ended/Cancelled\n(ADR-0046)" { class: async }
+partners  -> financial:     "evento: SupplierRegistered/Edited\n(ADR-0043 → ADR-0045)" { class: async }
+auth      -> notifications: "evento: PasswordResetRequested\n(ADR-0047)" { class: async }
+partners  -> notifications: "evento: CollaboratorInvited\n(ADR-0047)" { class: async }
+
+server -> auth
+server -> contracts
+server -> partners
+server -> financial
+server -> "budget-plans"
+server -> programs
+server -> reports

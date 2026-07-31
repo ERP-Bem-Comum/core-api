@@ -14,6 +14,7 @@
 | [`infrastructure/`](./infrastructure/README.md) | Especificação de infraestrutura | Provisionar / operar ambientes |
 | [`operations/`](./operations/README.md) | Runbooks, post-mortems, playbooks | Quando algo dá errado em produção |
 | [`inquiries/`](./inquiries/README.md) | Log de chamadas, dúvidas e decisões | Auditar **como** chegamos a cada decisão |
+| [`process/`](./process/00-fluxo-pipeline-sdd-agentes.md) | Fluxo de engenharia: pipeline W0→W3, SDD, templates, agentes/skills | Entender **como se trabalha** neste repo (onboarding de agente ou pessoa) |
 | [`domain_questions/`](./domain_questions/) | Histórico de descoberta de domínio | Contexto histórico de decisões de negócio |
 | [`guidelines/`](./guidelines/) | Documentação externa (Bradesco, etc.) | Referência de integrações com terceiros |
 
