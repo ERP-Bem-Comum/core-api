@@ -44,6 +44,16 @@ export type {
   SuppliersWithoutContractReader,
 } from './suppliers-without-contract-projection.ts';
 
+// Reader boot-scoped do KPI "Despesas por Centro de Custo" do Dashboard (DASH-F1 · #241 — read-only).
+// Agrega fin_payable_view (WHERE status='Paid') por Centro de Custo em 2 baldes de mês (M-1/M-2 via
+// dois CASE-SUM sobre paid_at); as janelas são INPUT do `list`. Pool aberto uma vez (não por requisição).
+export { openDashboardCostCentersReader } from './dashboard-cost-centers-projection.ts';
+export type {
+  DashboardCostCenterRow,
+  DashboardCostCentersWindows,
+  DashboardCostCentersReader,
+} from './dashboard-cost-centers-projection.ts';
+
 // Reader boot-scoped da "Posição de Pagamentos" (#243 REP-4 — read-only). Agrega fin_payable_view
 // por Fornecedor×CentroCusto×Categoria em 3 baldes. Consumido pelo `reports` via ACL.
 export { openPaymentPositionReader } from './payment-position-projection.ts';

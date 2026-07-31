@@ -6,6 +6,7 @@ import type { PaymentPositionRow } from '../../application/ports/payment-positio
 import type { CashflowRow, CashflowChartRow } from '../../application/ports/cashflow-read.ts';
 import type { AnalysisRow } from '../../application/ports/analysis-read.ts';
 import type { RealizedReport } from '../../application/ports/realized-read.ts';
+import type { DashboardRealizedChart } from '../../application/ports/dashboard-realized-read.ts';
 import type { GeneralReportPage } from '../../application/ports/general-report-read.ts';
 import type {
   TeamDemographicsResponseDto,
@@ -15,6 +16,7 @@ import type {
   AnalysisReportResponseDto,
   AnalysisChartResponseDto,
   RealizedReportResponseDto,
+  DashboardRealizedResponseDto,
   GeneralReportResponseDto,
   CashflowResponseDto,
   CashflowChartResponseDto,
@@ -177,6 +179,16 @@ export const realizedToDto = (report: RealizedReport): RealizedReportResponseDto
       })),
     })),
   })),
+});
+
+// DASH-F4 (#112): a série do port já tem exatamente o shape do DTO (só string/number). Cópia
+// estrutural rasa dos 12 pontos (o port é Readonly aninhado → array mutável no DTO, sem alterar valor).
+export const dashboardRealizedToDto = (
+  chart: DashboardRealizedChart,
+): DashboardRealizedResponseDto => ({
+  budgetPlanId: chart.budgetPlanId,
+  year: chart.year,
+  chart: chart.chart.map((p) => ({ ...p })),
 });
 
 // REP-3 (#446 Slice C): resumo por PLANO Orçamentário (raiz). `name` = rótulo costurado de `labels`.

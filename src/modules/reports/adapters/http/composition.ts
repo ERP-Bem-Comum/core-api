@@ -56,6 +56,8 @@ import { AnalysisReadFromFinancial } from '../persistence/analysis-read.financia
 import { InMemoryAnalysisRead } from '../persistence/analysis-read.in-memory.ts';
 import { RealizedReadFromSources } from '../persistence/realized-read.from-sources.ts';
 import { InMemoryRealizedRead } from '../persistence/realized-read.in-memory.ts';
+import { DashboardRealizedReadFromSources } from '../persistence/dashboard-realized-read.from-sources.ts';
+import { InMemoryDashboardRealizedRead } from '../persistence/dashboard-realized-read.in-memory.ts';
 import type { TeamReportReadPort } from '../../application/ports/team-report-read.ts';
 import type { TeamDemographicsReadPort } from '../../application/ports/team-demographics-read.ts';
 import type {
@@ -68,6 +70,7 @@ import type { CashflowReadPort } from '../../application/ports/cashflow-read.ts'
 import type { GeneralReportReadPort } from '../../application/ports/general-report-read.ts';
 import type { AnalysisReadPort } from '../../application/ports/analysis-read.ts';
 import type { RealizedReadPort } from '../../application/ports/realized-read.ts';
+import type { DashboardRealizedReadPort } from '../../application/ports/dashboard-realized-read.ts';
 
 export type ReportsDriver = 'memory' | 'mysql';
 
@@ -111,6 +114,8 @@ export type ReportsHttpDeps = Readonly<{
   resolvePlanLabels: PlanLabelsReadPort['resolvePlanLabels'];
   /** S6 (#502): Realizado × Planejado — árvore de 3 níveis costurada de budget-plans × financial. */
   listRealized: RealizedReadPort['list'];
+  /** DASH-F4 (#112): widget "Realizado × Previsto mensal" — série de 12 meses de UM plano. */
+  listDashboardRealized: DashboardRealizedReadPort['list'];
   shutdown: () => Promise<void>;
 }>;
 
@@ -127,6 +132,7 @@ export const buildReportsHttpDeps = async (
     const general: GeneralReportReadPort = InMemoryGeneralReportRead();
     const analysis: AnalysisReadPort = InMemoryAnalysisRead();
     const realized: RealizedReadPort = InMemoryRealizedRead();
+    const dashboardRealized: DashboardRealizedReadPort = InMemoryDashboardRealizedRead();
     return {
       listTeam: team.list,
       listTeamDemographics: demographics.list,
@@ -143,6 +149,7 @@ export const buildReportsHttpDeps = async (
       // próprio `resolvePlanLabels` para exercitar o rótulo costurado (espelha `listAnalysis`).
       resolvePlanLabels: () => Promise.resolve(ok(new Map())),
       listRealized: realized.list,
+      listDashboardRealized: dashboardRealized.list,
       shutdown: () => Promise.resolve(),
     };
   }
@@ -377,6 +384,12 @@ export const buildReportsHttpDeps = async (
     budgetPlansRead.listPlannedAmounts,
     realizedReader.list,
   );
+  // DASH-F4 (#112): rollup mensal do mesmo par de fontes. REUSA os readers JÁ ABERTOS (budget-plans +
+  // financial) — nenhum pool novo, nenhum close extra (incidente RDS 0001).
+  const dashboardRealizedPort = DashboardRealizedReadFromSources(
+    budgetPlansRead.listPlannedAmounts,
+    realizedReader.list,
+  );
 
   return {
     listTeam: teamPort.list,
@@ -394,6 +407,7 @@ export const buildReportsHttpDeps = async (
     // budget-plans já aberto para o Realizado × Planejado (S6), sem novo pool (incidente RDS 0001).
     resolvePlanLabels: budgetPlansRead.resolvePlanLabels,
     listRealized: realizedPort.list,
+    listDashboardRealized: dashboardRealizedPort.list,
     shutdown: async () => {
       await teamReader.close();
       await demographicsReader.close();
