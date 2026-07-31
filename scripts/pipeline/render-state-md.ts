@@ -8,7 +8,7 @@
  * `| W0 ... | W1 ... | W2 ... | W3 ...`.
  */
 
-import type { PipelineState, WaveEntry } from './state-schema.ts';
+import type { PipelineState, WaveEntry, WaveOverride } from './state-schema.ts';
 
 const statusLabel = (status: WaveEntry['status']): string => {
   switch (status) {
@@ -32,7 +32,21 @@ const renderWaveRow = (w: WaveEntry): string => {
   return `| ${w.id} | ${statusLabel(w.status)}${outcome}${rounds} | ${agent} | ${report} | ${updated} |`;
 };
 
+// Autorizações de override (PIPELINE-STATE-WAVE-OVERRIDE). Renderizadas em lista
+// própria, fora da tabela de waves: o `reason` é texto livre do humano e pode
+// conter `|`, que quebraria a tabela lida pelo `inject-ticket-context.sh`.
+type OverriddenWave = Readonly<{ id: WaveEntry['id']; override: WaveOverride }>;
+
+const overriddenWaves = (waves: readonly WaveEntry[]): readonly OverriddenWave[] =>
+  waves.flatMap((w) =>
+    w.override === undefined || w.override === null ? [] : [{ id: w.id, override: w.override }],
+  );
+
+const renderOverrideItem = ({ id, override }: OverriddenWave): string =>
+  `- **${id}** · autorizado em ${override.authorizedAt} · rounds no override: ${override.roundsAtOverride} · motivo: ${override.reason}`;
+
 export const renderStateMd = (state: PipelineState): string => {
+  const overrides = overriddenWaves(state.waves);
   const lines: readonly string[] = [
     `# Estado do Ticket ${state.ticket}`,
     '',
@@ -48,6 +62,9 @@ export const renderStateMd = (state: PipelineState): string => {
     '',
     state.lastEvent,
     '',
+    ...(overrides.length === 0
+      ? []
+      : ['## Overrides autorizados', '', ...overrides.map(renderOverrideItem), '']),
     ...(state.blockers.length === 0
       ? []
       : ['## Blockers', '', ...state.blockers.map((b) => `- ${b}`), '']),

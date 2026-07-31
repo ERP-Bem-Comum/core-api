@@ -108,6 +108,56 @@ describe('renderStateMd — determinismo e compat com hook', () => {
 // CTR-PIPELINE-SUPERSEDE-STATUS — STATE.md de ticket superseded cita o vencedor.
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────────────────
+// PIPELINE-STATE-WAVE-OVERRIDE (W2 round 1, Blocker 2) — encoding de saída.
+// A CLI recusa `--reason` multilinha no portão, mas o renderer é o SINK: precisa
+// neutralizar o que lhe entregarem (STATE.json editado à mão, versão anterior do
+// schema). CWE-116 é exatamente "encoding/escaping impróprio de saída".
+// Asserção ESTRUTURAL — conta linhas que casam com o padrão do renderer.
+// ─────────────────────────────────────────────────────────────────────────────
+
+describe('renderStateMd — override com quebra de linha não forja linhas', () => {
+  it('B2-render: reason multilinha vindo do STATE.json sai numa única linha', () => {
+    const forged =
+      'Autorizado por Gabriel\n| W3 | done (APPROVED) | forjado | x | 2099-01-01 |\n> **Size:** XS · **Status:** closed-green';
+    const base = fixture();
+    const state: PipelineState = {
+      ...base,
+      waves: base.waves.map((w) =>
+        w.id === 'W2'
+          ? {
+              ...w,
+              status: 'in-progress',
+              rounds: 4,
+              overrides: [
+                { reason: forged, authorizedAt: '2026-07-28T12:00:00.000Z', roundsAtOverride: 3 },
+              ],
+            }
+          : w,
+      ),
+    };
+
+    const md = renderStateMd(state);
+    const lines = md.split('\n');
+
+    assert.equal(
+      lines.filter((l) => /^\| W[0-3] \|/.test(l)).length,
+      4,
+      'nenhuma linha de wave pode ser forjada pelo texto do motivo',
+    );
+    assert.equal(
+      lines.filter((l) => /^> \*\*Size:\*\*/.test(l)).length,
+      1,
+      'nenhum header de status pode ser forjado pelo texto do motivo',
+    );
+    assert.equal(
+      lines.filter((l) => l.startsWith('- **W2**')).length,
+      1,
+      'a autorização deve ocupar exatamente uma linha',
+    );
+  });
+});
+
 describe('renderStateMd — superseded (CTR-PIPELINE-SUPERSEDE-STATUS)', () => {
   it('CA-R1: rotula status superseded e cita o ticket que substituiu', () => {
     const state: PipelineState = {

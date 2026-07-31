@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "PIPELINE-STATE-WAVE-OVERRIDE",
+  "size": "S",
+  "createdAt": "2026-07-28T14:09:20.005Z",
+  "closedAt": null,
+  "currentWave": "W2",
+  "status": "in-progress",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "nodejs-runtime-expert",
+      "startedAt": "2026-07-28T14:10:30.415Z",
+      "finishedAt": "2026-07-28T14:24:48.385Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "typescript-language-expert",
+      "startedAt": "2026-07-28T14:24:48.709Z",
+      "finishedAt": "2026-07-28T14:40:20.563Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "in-progress",
+      "agent": "security-backend-expert",
+      "startedAt": "2026-07-28T14:50:54.423Z",
+      "finishedAt": null,
+      "rounds": 2,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": null
+    },
+    {
+      "id": "W3",
+      "status": "pending",
+      "agent": null,
+      "startedAt": null,
+      "finishedAt": null,
+      "rounds": 1,
+      "reportPath": null,
+      "outcome": null
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "W2 reopened (round 2)"
+}

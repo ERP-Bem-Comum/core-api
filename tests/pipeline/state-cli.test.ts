@@ -519,3 +519,392 @@ describe('state-cli — supersede recusa auto-referência (CTR-PIPELINE-SUPERSED
     assert.equal(content.status, 'open', 'auto-referência não deve mudar o status');
   });
 });
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PIPELINE-STATE-WAVE-OVERRIDE — subcomando `wave-override <ticket> <Wn> --reason "<motivo>"`.
+//
+// Autoriza uma wave `done`+`REJECTED` que já esgotou `MAX_ROUNDS` (3) a receber um
+// round extra, registrando quem autorizou e por quê no próprio STATE.json/STATE.md —
+// sem editar o canônico à mão. É o irmão de `wave-reopen` (que cobre `rounds < MAX`):
+// `wave-reopen` continua exatamente como está (CA4 é controle de regressão, não API
+// nova); `wave-override` é subcomando NOVO e SEPARADO para a exceção acima do teto.
+//
+// Ver `.claude/.pipeline/PIPELINE-STATE-WAVE-OVERRIDE/000-request.md`.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Leva W2 a done+REJECTED já no teto de rounds (3) — replica o cenário real
+// (DEADMAN-AUDIT-FALSE-FIRED) que originou este ticket: W2 rejeitado 3x seguidas.
+const driveW2ToMaxRoundsRejected = async (root: string, ticket: string): Promise<void> => {
+  await runCli(root, ['init', ticket, '--size', 'S']);
+  await runCli(root, ['wave-start', ticket, 'W0', '--agent', 'tdd-strategist']);
+  await runCli(root, [
+    'wave-finish',
+    ticket,
+    'W0',
+    '--outcome',
+    'RED',
+    '--report',
+    '002-tests/REPORT.md',
+  ]);
+  await runCli(root, ['wave-start', ticket, 'W1', '--agent', 'ts-domain-modeler']);
+  await runCli(root, [
+    'wave-finish',
+    ticket,
+    'W1',
+    '--outcome',
+    'GREEN',
+    '--report',
+    '003-impl/REPORT.md',
+  ]);
+  await runCli(root, ['wave-start', ticket, 'W2', '--agent', 'code-reviewer']);
+  await runCli(root, ['wave-round', ticket, 'W2']); // 1→2
+  await runCli(root, ['wave-round', ticket, 'W2']); // 2→3
+  await runCli(root, [
+    'wave-finish',
+    ticket,
+    'W2',
+    '--outcome',
+    'REJECTED',
+    '--report',
+    '004-code-review/REVIEW.md',
+  ]);
+};
+
+// Projeção de leitura para asserções sobre o campo `override` (opcional — só
+// presente quando a wave foi destravada via `wave-override`). Tipo local de
+// teste, não o schema de produção: o W1 decide o shape exato em state-schema.ts.
+type WaveOverrideSnapshot = WaveSnapshot & {
+  override?: Readonly<{ reason: string; authorizedAt: string; roundsAtOverride: number }> | null;
+};
+
+type StateSnapshotWithOverride = Readonly<
+  Omit<StateSnapshot, 'waves'> & { waves: readonly WaveOverrideSnapshot[] }
+>;
+
+describe('state-cli — wave-override (PIPELINE-STATE-WAVE-OVERRIDE)', () => {
+  it('CA1: sem --reason, wave-override falha (exit 2) e STATE.json não é alterado', async () => {
+    // Arrange
+    const ticket = 'CTR-OVERRIDE-1';
+    const root = await makeTicketDir(ticket);
+    await driveW2ToMaxRoundsRejected(root, ticket);
+
+    // Act — sem --reason
+    const r = await runCli(root, ['wave-override', ticket, 'W2']);
+
+    // Assert
+    assert.equal(r.code, 2, `esperado exit 2; obtido ${r.code}; stderr: ${r.stderr}`);
+    assert.match(r.stderr, /--reason/, 'stderr deve citar a flag --reason ausente');
+    const content = await readJson<StateSnapshot>(stateJsonPath(root, ticket));
+    const w2 = content.waves.find((w) => w.id === 'W2');
+    assert.equal(w2?.status, 'done', 'W2 não deve mudar sem --reason');
+    assert.equal(w2?.outcome, 'REJECTED', 'outcome não deve mudar sem --reason');
+    assert.equal(w2?.rounds, 3, 'rounds não deve incrementar sem --reason');
+  });
+
+  it('CA1b: --reason só com espaços conta como ausente (exit 2, STATE.json intacto)', async () => {
+    // Arrange
+    const ticket = 'CTR-OVERRIDE-1B';
+    const root = await makeTicketDir(ticket);
+    await driveW2ToMaxRoundsRejected(root, ticket);
+
+    // Act — --reason presente mas em branco
+    const r = await runCli(root, ['wave-override', ticket, 'W2', '--reason', '   ']);
+
+    // Assert
+    assert.equal(r.code, 2, `esperado exit 2; obtido ${r.code}; stderr: ${r.stderr}`);
+    const content = await readJson<StateSnapshot>(stateJsonPath(root, ticket));
+    const w2 = content.waves.find((w) => w.id === 'W2');
+    assert.equal(w2?.rounds, 3, 'reason em branco não pode contar como motivo válido');
+    assert.equal(w2?.status, 'done', 'W2 não deve mudar com reason em branco');
+  });
+
+  it('CA2: com --reason válido, o override destrava (in-progress, rounds=4, outcome limpo) e wave-finish volta a funcionar', async () => {
+    // Arrange
+    const ticket = 'CTR-OVERRIDE-2';
+    const root = await makeTicketDir(ticket);
+    await driveW2ToMaxRoundsRejected(root, ticket);
+
+    // Act
+    const r = await runCli(root, [
+      'wave-override',
+      ticket,
+      'W2',
+      '--reason',
+      'Autorizado por Gabriel via issue #368 — 3 correções verificadas',
+    ]);
+
+    // Assert — destrava além do MAX_ROUNDS normal (3→4)
+    assert.equal(r.code, 0, `esperado exit 0; stderr: ${r.stderr}`);
+    const content = await readJson<StateSnapshot>(stateJsonPath(root, ticket));
+    const w2 = content.waves.find((w) => w.id === 'W2');
+    assert.equal(w2?.status, 'in-progress', 'W2 deve voltar a in-progress');
+    assert.equal(w2?.outcome, null, 'outcome deve ser limpo');
+    assert.equal(w2?.rounds, 4, 'rounds deve incrementar de 3 para 4 — além do MAX_ROUNDS normal');
+    assert.equal(content.currentWave, 'W2', 'currentWave deve voltar para W2');
+
+    // Assert — o fluxo normal wave-finish volta a funcionar depois do override
+    const finish = await runCli(root, [
+      'wave-finish',
+      ticket,
+      'W2',
+      '--outcome',
+      'APPROVED',
+      '--report',
+      '004-code-review/REVIEW-round4.md',
+    ]);
+    assert.equal(
+      finish.code,
+      0,
+      `wave-finish pós-override deve funcionar; stderr: ${finish.stderr}`,
+    );
+    const after = await readJson<StateSnapshot>(stateJsonPath(root, ticket));
+    const w2After = after.waves.find((w) => w.id === 'W2');
+    assert.equal(w2After?.status, 'done');
+    assert.equal(w2After?.outcome, 'APPROVED');
+    assert.equal(
+      after.currentWave,
+      'W3',
+      'currentWave deve avançar para W3 após o fechamento pós-override',
+    );
+  });
+
+  it('CA3: a autorização fica registrada no STATE.json e no STATE.md (motivo + instante)', async () => {
+    // Arrange
+    const ticket = 'CTR-OVERRIDE-3';
+    const root = await makeTicketDir(ticket);
+    await driveW2ToMaxRoundsRejected(root, ticket);
+    const reason = 'Aprovado por Gabriel — 3 correções verificadas (round 4)';
+
+    // Act
+    const r = await runCli(root, ['wave-override', ticket, 'W2', '--reason', reason]);
+    assert.equal(r.code, 0, `stderr: ${r.stderr}`);
+
+    // Assert — STATE.json carrega o registro
+    const content = await readJson<StateSnapshotWithOverride>(stateJsonPath(root, ticket));
+    const w2 = content.waves.find((w) => w.id === 'W2');
+    assert.ok(w2?.override != null, 'W2 deve carregar um registro de override');
+    assert.equal(w2.override?.reason, reason, 'reason deve ser persistido literalmente');
+    assert.ok(
+      typeof w2.override?.authorizedAt === 'string' && w2.override.authorizedAt.length > 0,
+      'authorizedAt deve ser um timestamp ISO não vazio',
+    );
+
+    // Assert — STATE.md (gerado) reflete a mesma autorização, sem precisar de git history
+    const md = await readFile(join(root, '.claude', '.pipeline', ticket, 'STATE.md'), 'utf8');
+    assert.ok(md.includes(reason), 'STATE.md deve exibir o motivo da autorização');
+    assert.ok(
+      w2.override !== null && w2.override !== undefined && md.includes(w2.override.authorizedAt),
+      'STATE.md deve exibir o instante da autorização',
+    );
+  });
+
+  it('CA4 (controle positivo — regressão): wave-reopen continua recusando rounds>=3 byte a byte, sem wave-override', async () => {
+    // Arrange — mesmo cenário que travaria uma wave-override; wave-reopen NÃO muda.
+    const ticket = 'CTR-OVERRIDE-4-REOPEN-UNCHANGED';
+    const root = await makeTicketDir(ticket);
+    await driveW2ToMaxRoundsRejected(root, ticket);
+
+    // Act — o caminho normal, não o novo subcomando
+    const r = await runCli(root, ['wave-reopen', ticket, 'W2']);
+
+    // Assert — mensagem IDÊNTICA à de hoje (state-cli.ts:262-263). Este teste
+    // deve passar VERDE já no W0: é regressão do comportamento atual, não API nova.
+    assert.equal(r.code, 2, `esperado exit 2; obtido ${r.code}; stderr: ${r.stderr}`);
+    assert.equal(
+      r.stderr,
+      'wave W2 atingiu max rounds (3); escalar ao humano\n',
+      'mensagem de wave-reopen deve permanecer byte a byte igual à atual',
+    );
+    const content = await readJson<StateSnapshot>(stateJsonPath(root, ticket));
+    const w2 = content.waves.find((w) => w.id === 'W2');
+    assert.equal(w2?.status, 'done', 'wave-reopen não deve ter efeito nenhum');
+    assert.equal(w2?.rounds, 3, 'rounds deve permanecer travado em 3 via wave-reopen');
+  });
+
+  it('CA5: override não é atalho — rounds < MAX_ROUNDS orienta a usar wave-reopen (exit ≠ 0)', async () => {
+    // Arrange — W2 done+REJECTED no round normal (1), sem esgotar o teto. Este é
+    // exatamente o caso de uso legítimo de `wave-reopen`, não de `wave-override`.
+    const ticket = 'CTR-OVERRIDE-5';
+    const root = await makeTicketDir(ticket);
+    await driveToWaveDone(root, ticket, 'W2', 'REJECTED');
+
+    // Act
+    const r = await runCli(root, [
+      'wave-override',
+      ticket,
+      'W2',
+      '--reason',
+      'Tentativa de pular a disciplina normal',
+    ]);
+
+    // Assert
+    assert.equal(r.code, 2, `esperado exit 2; obtido ${r.code}; stderr: ${r.stderr}`);
+    assert.match(
+      r.stderr,
+      /wave-reopen/,
+      'stderr deve orientar a usar wave-reopen no caminho normal (abaixo do teto)',
+    );
+    const content = await readJson<StateSnapshot>(stateJsonPath(root, ticket));
+    const w2 = content.waves.find((w) => w.id === 'W2');
+    assert.equal(w2?.status, 'done', 'W2 não deve mudar');
+    assert.equal(w2?.rounds, 1, 'rounds não deve incrementar');
+  });
+
+  it('CA6: recusa override se alguma wave posterior já não está pending (exit ≠ 0)', async () => {
+    // Arrange — W2 done+REJECTED no teto, mas W3 já foi iniciada.
+    const ticket = 'CTR-OVERRIDE-6';
+    const root = await makeTicketDir(ticket);
+    await driveW2ToMaxRoundsRejected(root, ticket);
+    // wave-start só exige que a anterior (W2) esteja `done` — outcome não importa.
+    await runCli(root, ['wave-start', ticket, 'W3', '--agent', 'ts-quality-checker']);
+
+    // Act
+    const r = await runCli(root, ['wave-override', ticket, 'W2', '--reason', 'motivo válido']);
+
+    // Assert
+    assert.equal(r.code, 2, `esperado exit 2; obtido ${r.code}; stderr: ${r.stderr}`);
+    assert.match(r.stderr, /posterior|W3/i, 'stderr deve mencionar a wave posterior que bloqueia');
+    const content = await readJson<StateSnapshot>(stateJsonPath(root, ticket));
+    const w2 = content.waves.find((w) => w.id === 'W2');
+    assert.equal(w2?.status, 'done', 'W2 deve permanecer done');
+    assert.equal(w2?.rounds, 3, 'rounds não deve mudar');
+  });
+});
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PIPELINE-STATE-WAVE-OVERRIDE — W2 round 1 REJECTED. Dois Blockers achados pelo
+// `security-backend-expert` e reproduzidos na sessão principal; ver
+// `.claude/.pipeline/PIPELINE-STATE-WAVE-OVERRIDE/004-code-review/REVIEW.md`.
+//
+// B1: `override` é valor único — o 2º override sobrescreve o 1º e a primeira
+//     autorização some do canônico (não recuperável por git log: STATE.json é
+//     commitado ~1× por PR, não a cada transição).
+// B2: `--reason` interpolado cru no STATE.md forja linhas de tabela/header
+//     indistinguíveis das reais (CWE-93 injeção de nova linha / CWE-116 encoding
+//     impróprio de saída).
+//
+// As asserções aqui são ESTRUTURAIS (contagem de linhas que casam com o padrão
+// do renderer), nunca `includes()` de substring: o Minor 2 da review registra
+// que o CA3 passa por substring e passaria **mesmo com a injeção presente**.
+// ─────────────────────────────────────────────────────────────────────────────
+
+type WaveLedgerSnapshot = WaveSnapshot & {
+  override?: Readonly<{ reason: string; authorizedAt: string; roundsAtOverride: number }> | null;
+  overrides?: readonly Readonly<{
+    reason: string;
+    authorizedAt: string;
+    roundsAtOverride: number;
+  }>[];
+};
+
+type StateSnapshotWithLedger = Readonly<
+  Omit<StateSnapshot, 'waves'> & { waves: readonly WaveLedgerSnapshot[] }
+>;
+
+// Conta linhas que casam com um padrão de linha do renderer. Serve para detectar
+// linha FORJADA: o STATE.md de um ticket saudável tem exatamente 4 linhas de wave
+// e exatamente 1 linha de header `> **Size:**`.
+const countLines = (md: string, re: RegExp): number =>
+  md.split('\n').filter((line) => re.test(line)).length;
+
+const WAVE_ROW_RE = /^\| W[0-3] \|/;
+const HEADER_RE = /^> \*\*Size:\*\*/;
+
+describe('state-cli — wave-override round 2 (Blockers do W2 round 1)', () => {
+  it('B1: segundo wave-override na mesma wave PRESERVA o registro do primeiro (ledger append-only)', async () => {
+    // Arrange — reprodução literal do REVIEW §Blocker 1: o round 4 autorizado
+    // também é REJECTED, e o humano autoriza um round 5.
+    const ticket = 'CTR-OVERRIDE-B1';
+    const root = await makeTicketDir(ticket);
+    await driveW2ToMaxRoundsRejected(root, ticket);
+    const reason1 = 'Autorizado por Gabriel via issue #368 — 3 correcoes verificadas';
+    const reason2 = 'x';
+
+    // Act — override #1 → round 4 REJECTED → override #2
+    const first = await runCli(root, ['wave-override', ticket, 'W2', '--reason', reason1]);
+    assert.equal(first.code, 0, `1º override deve passar; stderr: ${first.stderr}`);
+    await runCli(root, [
+      'wave-finish',
+      ticket,
+      'W2',
+      '--outcome',
+      'REJECTED',
+      '--report',
+      '004-code-review/REVIEW-round4.md',
+    ]);
+    const second = await runCli(root, ['wave-override', ticket, 'W2', '--reason', reason2]);
+
+    // Assert — o ledger tem AS DUAS autorizações, na ordem em que foram dadas
+    assert.equal(second.code, 0, `2º override deve passar; stderr: ${second.stderr}`);
+    const content = await readJson<StateSnapshotWithLedger>(stateJsonPath(root, ticket));
+    const w2 = content.waves.find((w) => w.id === 'W2');
+    assert.equal(w2?.rounds, 5, 'rounds deve ir de 4 para 5 no segundo override');
+    assert.equal(w2?.overrides?.length, 2, 'as DUAS autorizações devem estar no canônico');
+    assert.equal(
+      w2?.overrides?.[0]?.reason,
+      reason1,
+      'a PRIMEIRA autorização não pode ser sobrescrita pela segunda',
+    );
+    assert.equal(w2?.overrides?.[1]?.reason, reason2, 'a segunda autorização deve estar no fim');
+    assert.equal(
+      w2?.overrides?.[0]?.roundsAtOverride,
+      3,
+      'a 1ª autorização registra o teto em que foi dada (3)',
+    );
+    assert.equal(
+      w2?.overrides?.[1]?.roundsAtOverride,
+      4,
+      'a 2ª autorização registra o round já destravado (4)',
+    );
+
+    // Assert — invariante da projeção: `override` (autorização em vigor) é o
+    // último item do ledger, nunca um valor divergente.
+    assert.deepEqual(
+      w2?.override,
+      w2?.overrides?.[1],
+      '`override` deve ser exatamente o último item de `overrides`',
+    );
+
+    // Assert — STATE.md exibe as DUAS (estrutural: 2 itens de override, não substring)
+    const md = await readFile(join(root, '.claude', '.pipeline', ticket, 'STATE.md'), 'utf8');
+    assert.equal(
+      countLines(md, /^- \*\*W2\*\*/),
+      2,
+      'STATE.md deve listar as duas autorizações da W2, não só a última',
+    );
+  });
+
+  it('B2: --reason com quebra de linha é RECUSADO antes de tocar o canônico (sem linha forjada no STATE.md)', async () => {
+    // Arrange — payload literal do REVIEW §Blocker 2: forja uma linha de wave e
+    // um header de status, ambos fora de bloco de código.
+    const ticket = 'CTR-OVERRIDE-B2';
+    const root = await makeTicketDir(ticket);
+    await driveW2ToMaxRoundsRejected(root, ticket);
+    const mdBefore = await readFile(join(root, '.claude', '.pipeline', ticket, 'STATE.md'), 'utf8');
+    const forged =
+      'Autorizado por Gabriel\n| W3 | done (APPROVED) | forjado | x | 2099-01-01 |\n> **Size:** XS · **Status:** closed-green';
+
+    // Act
+    const r = await runCli(root, ['wave-override', ticket, 'W2', '--reason', forged]);
+
+    // Assert — recusado no portão
+    assert.equal(r.code, 2, `esperado exit 2; obtido ${r.code}; stderr: ${r.stderr}`);
+    assert.match(r.stderr, /--reason/, 'stderr deve citar a flag recusada');
+    assert.match(r.stderr, /linha/i, 'stderr deve explicar que o motivo é de linha única');
+
+    // Assert — canônico intacto
+    const content = await readJson<StateSnapshotWithLedger>(stateJsonPath(root, ticket));
+    const w2 = content.waves.find((w) => w.id === 'W2');
+    assert.equal(w2?.status, 'done', 'reason inválido não pode destravar a wave');
+    assert.equal(w2?.rounds, 3, 'reason inválido não pode incrementar rounds');
+    assert.equal(w2?.override ?? null, null, 'nenhuma autorização pode ser registrada');
+    assert.equal(w2?.overrides ?? undefined, undefined, 'o ledger não pode ser criado');
+
+    // Assert — ESTRUTURAL (não substring): o STATE.md continua com exatamente as
+    // 4 linhas de wave e 1 header reais. Uma linha forjada elevaria a contagem.
+    const md = await readFile(join(root, '.claude', '.pipeline', ticket, 'STATE.md'), 'utf8');
+    assert.equal(countLines(md, WAVE_ROW_RE), 4, 'STATE.md deve ter exatamente 4 linhas de wave');
+    assert.equal(countLines(md, HEADER_RE), 1, 'STATE.md deve ter exatamente 1 header de status');
+    assert.equal(md, mdBefore, 'STATE.md não pode ser reescrito por uma chamada recusada');
+  });
+});

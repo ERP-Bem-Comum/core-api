@@ -448,3 +448,56 @@ describe('metrics - superseded (CTR-PIPELINE-SUPERSEDE-STATUS)', () => {
     assert.match(md, /\| superseded \| 1 \|/, 'tabela Status deve ter linha superseded');
   });
 });
+
+// ----------------------------------------------------------------------------
+// PIPELINE-STATE-WAVE-OVERRIDE - forward-compat: o campo extra `override` que o
+// `wave-override` grava numa WaveEntry NAO pode quebrar computeMetrics/
+// renderMetricsMd/renderMetricsJson. Controle positivo - metrics.ts nao
+// referencia o campo novo, entao isto ja deve passar VERDE no W0 (trava a
+// exigencia do DoD: "pipeline:metrics continua funcionando com o STATE.json novo").
+// ----------------------------------------------------------------------------
+
+describe('computeMetrics - forward-compat com WaveEntry.override (PIPELINE-STATE-WAVE-OVERRIDE)', () => {
+  it('CA-DoD-metrics: snapshot com wave.override extra nao derruba computeMetrics/renderMetricsMd/renderMetricsJson', () => {
+    // Arrange - simula o STATE.json que o wave-override vai produzir (W2 em
+    // rounds=4, in-progress, com o registro de autorizacao), sem depender da
+    // implementacao real do subcomando ainda existir.
+    const state = makeState({
+      ticket: 'CTR-OVERRIDE-METRICS',
+      status: 'in-progress',
+      waves: [{ id: 'W2', status: 'in-progress', rounds: 4 }],
+    });
+    const stateWithOverride = {
+      ...state,
+      waves: state.waves.map((w) =>
+        w.id === 'W2'
+          ? {
+              ...w,
+              override: {
+                reason: 'Autorizado por Gabriel - round extra',
+                authorizedAt: '2026-07-28T15:00:00.000Z',
+                roundsAtOverride: 3,
+              },
+            }
+          : w,
+      ),
+    };
+    const snapshot = makeSnapshot(stateWithOverride);
+
+    // Act
+    const m = computeMetrics([snapshot]);
+
+    // Assert
+    assert.equal(m.total, 1, 'campo extra override nao pode afetar a contagem total');
+    assert.equal(m.byStatus.inProgress, 1);
+
+    const md = renderMetricsMd(m);
+    assert.ok(md.length > 0, 'renderMetricsMd nao deve lancar nem produzir markdown vazio');
+
+    const jsonOut = renderMetricsJson(m);
+    assert.doesNotThrow(
+      () => JSON.parse(jsonOut),
+      'renderMetricsJson deve produzir JSON parseavel',
+    );
+  });
+});

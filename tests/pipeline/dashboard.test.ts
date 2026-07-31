@@ -433,3 +433,59 @@ describe('dashboard — summarize exaustivo (CTR-PIPELINE-SUMMARIZE-EXHAUSTIVE)'
     );
   });
 });
+
+// ──────────────────────────────────────────────────────────────────────────────
+// PIPELINE-STATE-WAVE-OVERRIDE — forward-compat: o campo extra `override` que o
+// `wave-override` grava numa WaveEntry NÃO pode quebrar `loadAllStates`/
+// `renderDashboardTable`/`renderDashboardJson`. Controle positivo — dashboard.ts
+// não referencia o campo novo, então isto já deve passar VERDE no W0 (trava a
+// exigência do DoD: "pipeline:status continua funcionando com o STATE.json novo").
+// ──────────────────────────────────────────────────────────────────────────────
+
+describe('dashboard — forward-compat com WaveEntry.override (PIPELINE-STATE-WAVE-OVERRIDE)', () => {
+  it('CA-DoD-dashboard: STATE.json com wave.override extra não quebra loadAllStates/renderDashboardTable/renderDashboardJson', async () => {
+    // Arrange — grava um STATE.json "do futuro" (como o wave-override vai produzir),
+    // sem depender da implementação real do subcomando ainda existir.
+    const root = await makePipelineRoot();
+    const state = makeState({
+      ticket: 'CTR-OVERRIDE-FWD',
+      status: 'in-progress',
+      currentWave: 'W2',
+    });
+    const stateWithOverride = {
+      ...state,
+      waves: state.waves.map((w) =>
+        w.id === 'W2'
+          ? {
+              ...w,
+              status: 'in-progress',
+              rounds: 4,
+              override: {
+                reason: 'Aprovado por Gabriel — round extra autorizado',
+                authorizedAt: '2026-07-28T12:00:00.000Z',
+                roundsAtOverride: 3,
+              },
+            }
+          : w,
+      ),
+    };
+    const dir = join(root, 'CTR-OVERRIDE-FWD');
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'STATE.json'), JSON.stringify(stateWithOverride, null, 2), 'utf8');
+
+    // Act
+    const result = await loadAllStates(root);
+
+    // Assert — carrega sem erro; o parser só valida presença de campos top-level.
+    assert.equal(result.errors.length, 0, 'campo extra override não pode gerar erro de parse');
+    assert.equal(result.snapshots.length, 1);
+
+    const now = new Date('2026-07-28T12:00:00.000Z');
+    const md = renderDashboardTable(result.snapshots, { filter: 'all', now });
+    assert.ok(md.includes('CTR-OVERRIDE-FWD'), 'markdown deve renderizar o ticket normalmente');
+
+    const jsonOut = renderDashboardJson(result.snapshots, { filter: 'all', now });
+    const parsed = JSON.parse(jsonOut) as { tickets: readonly { ticket: string }[] };
+    assert.equal(parsed.tickets[0]?.ticket, 'CTR-OVERRIDE-FWD');
+  });
+});
