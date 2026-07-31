@@ -1,0 +1,8 @@
+{
+  "enabledMcpjsonServers": [
+    "acdg-skills",
+    "docker-docs",
+    "reverse-proxy",
+    "security"
+  ]
+}

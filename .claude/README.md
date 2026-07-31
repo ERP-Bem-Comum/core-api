@@ -35,7 +35,6 @@ Adaptação do estilo `/Users/gabriel_aderaldo/Desktop/Projetos/dev/envolve/acdg
 | Modelar agregado/VO/evento de domínio em TS | [`ts-domain-modeler`](./skills/ts-domain-modeler/SKILL.md) | [`modular-monolith`](./skills/modular-monolith/SKILL.md), [`ports-and-adapters`](./skills/ports-and-adapters/SKILL.md) |
 | Definir contratos entre módulos (`fin_*` ↔ `ctr_*` via outbox) | [`modular-monolith`](./skills/modular-monolith/SKILL.md) | — |
 | Definir ports (Repository, EventBus, Clock) | [`ports-and-adapters`](./skills/ports-and-adapters/SKILL.md) | [`ts-domain-modeler`](./skills/ts-domain-modeler/SKILL.md) |
-| Construir CLI para P.O. validar regras de negócio | [`application-cli-builder`](./skills/application-cli-builder/SKILL.md) | [`ts-domain-modeler`](./skills/ts-domain-modeler/SKILL.md) |
 | Executar pipeline W0→W3 de um ticket | [`pipeline-maestro`](./skills/pipeline-maestro/SKILL.md) | [`code-reviewer`](./skills/code-reviewer/SKILL.md), [`ts-quality-checker`](./skills/ts-quality-checker/SKILL.md) |
 | Revisão read-only de implementação (W2) | [`code-reviewer`](./skills/code-reviewer/SKILL.md) | — |
 | Gate de qualidade final (W3) — `tsc`, format, test | [`ts-quality-checker`](./skills/ts-quality-checker/SKILL.md) | — |
@@ -88,17 +87,7 @@ Aplicáveis em **todo** código do `core-api`:
 
 ### 🌐 Regra invariante de idioma
 
-| Camada | Idioma | Exemplo |
-| :--- | :--- | :--- |
-| Código (`src/`, `tests/`): tipos, funções, variáveis, pastas, arquivos | **EN (Clean Code)** | `type Contract`, `Money.fromCents`, `terminate(contract)`, `src/modules/contracts/` |
-| Strings literais ao humano (mensagens da CLI, erros formatados) | **PT** | "Contrato encerrado", "Aditivo sem documento" (via dicionário) |
-| Documentação (`.claude/`, `.pipeline/`, READMEs, handbook, ADRs, inquiries) | **PT** | Este arquivo. Identificadores de código sempre entre backticks. |
-| Erros internos (string literal union em código) | **EN kebab-case** | `'contract-terminated'`, `'amendment-without-signature'` |
-| Eventos de domínio | **EN passado** | `ContractCreated`, `AmendmentHomologated` |
-| IDs de ticket (`.pipeline/`) | **EN** | `CTR-VO-MONEY`, `CTR-AGG-CONTRACT` |
-| Commit messages | **PT** | `feat(contracts): adiciona VO Money com smart constructor` |
-
-> ⚠️ **Invariante. Não negociar.** Material legado (handbook) que ainda usa identificadores em PT será migrado conforme cada agregado for codado.
+**Fonte única: [`AGENTS.md` §"Idioma (regra invariante)"](../AGENTS.md).** A tabela por camada (com exemplos) e o enforcement mecânico de casing vivem lá — este README não replica.
 
 ### Regras de modelagem (TS funcional puro)
 

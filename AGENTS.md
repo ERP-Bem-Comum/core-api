@@ -51,15 +51,22 @@ Nunca contradizer um ADR aceito — abrir novo ADR que `supersedes` o anterior, 
 
 ## Idioma (regra invariante)
 
-| Camada                                                           | Idioma                                                                                                        |
-| ---------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| Código (tipos, funções, variáveis, pastas, arquivos)             | **EN**                                                                                                        |
-| Strings ao humano (mensagens da CLI, erros formatados)           | **PT** (via dicionário em `cli/formatters/`)                                                                  |
-| Documentação (`.claude/`, `.pipeline/`, READMEs, handbook, ADRs) | **PT**                                                                                                        |
-| Erros internos (string literal union)                            | **EN kebab-case** — `'contract-not-active'`                                                                   |
-| Eventos de domínio                                               | **EN passado** — `ContractCreated`, `AmendmentHomologated`                                                    |
-| IDs de ticket                                                    | **EN** — `CTR-VO-MONEY`, `CTR-STORAGE-PORT`                                                                   |
-| Commit messages                                                  | **PT** — `feat(contracts): adiciona VO Money`; commit assistido por IA leva trailer `Assisted-by:` (ADR-0054) |
+**Fonte única.** Esta tabela é a única definição de idioma/nomenclatura por camada no repo. `.claude/output-styles/erp-contracts.md` e `.claude/README.md` apontam para cá — não replicar a tabela em outro arquivo.
+
+| Camada                                                                      | Idioma                            | Exemplo                                                                                                                            |
+| --------------------------------------------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| Código (`src/`, `tests/`): tipos, funções, variáveis, pastas, arquivos      | **EN**                            | `type Contract`, `Money.fromCents`, `terminate(contract)`, `src/modules/contracts/`                                                |
+| Strings ao humano (mensagens da borda HTTP, erros formatados, logs)         | **PT-BR**                         | "Contrato encerrado", "Aditivo sem documento"                                                                                      |
+| Documentação (`.claude/`, `.pipeline/`, READMEs, handbook, ADRs, inquiries) | **PT-BR**                         | identificadores de código sempre entre backticks                                                                                   |
+| Diálogo com o usuário, REPORT/REVIEW.md, STATE.md, planning notes           | **PT-BR com acentuação completa** | "código", nunca "codigo"; "ção", nunca "cao"                                                                                       |
+| Erros internos (string literal union)                                       | **EN kebab-case**                 | `'contract-not-active'`, `'amendment-already-homologated'`                                                                         |
+| Eventos de domínio                                                          | **EN passado**                    | `ContractCreated`, `AmendmentHomologated`                                                                                          |
+| IDs de ticket / pipeline                                                    | **EN**                            | `CTR-VO-MONEY`, `CTR-OUTBOX-PUBLIC-API`, `CTR-STORAGE-PORT`                                                                        |
+| Commit messages                                                             | **PT-BR** com escopo de módulo    | `feat(contracts): adiciona VO Money`, `fix(outbox): corrige race em claim`; commit assistido por IA leva `Assisted-by:` (ADR-0054) |
+
+> ⚠️ **Invariante. Não negociar.** Material legado (handbook) que ainda usa identificadores em PT será migrado conforme cada agregado for codado.
+
+**Casing dentro do código** é enforced mecanicamente por `@typescript-eslint/naming-convention` em [`eslint.config.js`](./eslint.config.js) (default `camelCase`; variável aceita `camelCase | UPPER_CASE | PascalCase`) — desligado em `tests/**` (ver [`.claude/rules/testing.md`](./.claude/rules/testing.md)).
 
 ---
 
@@ -194,6 +201,7 @@ pnpm run pipeline:state wave-start <ticket> W0 --agent tdd-strategist
 pnpm run pipeline:state wave-finish <ticket> W0 --outcome RED --report 002-tests/REPORT.md
 pnpm run pipeline:state wave-round <ticket> W2     # incrementa round (max 3)
 pnpm run pipeline:state wave-reopen <ticket> W2    # reabre wave done+REJECTED → in-progress (round++, max 3)
+pnpm run pipeline:state wave-override <ticket> W2 --reason "<motivo>"  # autorização humana: destrava wave done+REJECTED já no teto (rounds>=3); grava motivo+instante no STATE
 pnpm run pipeline:state close <ticket>             # exige todas as 4 waves done
 pnpm run pipeline:state render <ticket>            # regenera STATE.md de STATE.json
 
@@ -215,14 +223,13 @@ Pre-commit hook: `.claude/hooks/pre-commit-typecheck.sh` (ativar via `git config
 
 ## Hooks ativos em `.claude/settings.json`
 
-| Evento                                 | Script                      | Função                                                        |
-| -------------------------------------- | --------------------------- | ------------------------------------------------------------- |
-| `SessionStart`                         | `session-start-context.sh`  | Resumo do estado do projeto no boot.                          |
-| `UserPromptSubmit`                     | `inject-ticket-context.sh`  | Injeta STATE.md do ticket ativo.                              |
-| `PreToolUse(Bash)` if `Bash(npm *)`    | `block-npm.sh`              | Bloqueia `npm` (ADR-0012).                                    |
-| `PostToolUse(Edit\|Write)`             | `prettier-write.sh`         | Formata o arquivo tocado.                                     |
-| `Stop` (async)                         | `stop-typecheck.sh`         | Typecheck em background no fim.                               |
-| `SubagentStop(contratos-orchestrator)` | `subagent-stop-validate.sh` | Detecta Bug #47936; log em `.claude/.last-subagent-stop.log`. |
+| Evento                              | Script                          | Função                                      |
+| ----------------------------------- | ------------------------------- | ------------------------------------------- |
+| `SessionStart`                      | `session-start-context.sh`      | Resumo do estado do projeto no boot.        |
+| `PreToolUse(Bash)` if `Bash(npm *)` | `block-npm.sh`                  | Bloqueia `npm` (ADR-0012).                  |
+| `PreToolUse(Bash)`                  | `block-cross-project-docker.sh` | Bloqueia Docker cruzando core-api ↔ legacy. |
+| `PostToolUse(Edit\|Write)`          | `prettier-write.sh`             | Formata o arquivo tocado.                   |
+| `Stop` (async)                      | `stop-typecheck.sh`             | Typecheck em background no fim.             |
 
 ---
 

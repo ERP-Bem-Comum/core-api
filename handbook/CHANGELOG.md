@@ -4,6 +4,23 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-07-26 — 🏭 Nova seção `process/`: o fluxo de engenharia documentado ponta a ponta
+
+Novo [`process/00-fluxo-pipeline-sdd-agentes.md`](./process/00-fluxo-pipeline-sdd-agentes.md) — doc de
+onboarding que descreve, num único lugar, **como se trabalha neste repositório**: os dois motores de
+processo e como se encaixam (o **SDD `core-api-sdd`** na escala de feature; a **pipeline fail-first
+W0→W3** na escala de ticket), o `STATE.json` como fonte canônica e as invariantes que o
+`state-cli.ts` impõe mecanicamente (exit 2), os **18 steps** do workflow SDD com os 6 pontos de
+citação obrigatória do princípio IX, o **modelo de orquestração in-session** (por que `specify
+workflow run` não é o executor — gate TTY-only e `claude -p` headless sem MCP) e o **protocolo de
+gate em texto puro**, os 13 templates de fase, e a anatomia de **como agentes e skills foram
+construídos** (14 agentes ancorados em `reference/<tech>/`, 42 skills com fronteira declarada).
+Documentação **descritiva e derivada** — não legisla; a hierarquia de fontes segue sendo ADR →
+handbook → `AGENTS.md`/`.claude/rules/`. Inclui apêndice de **drifts conhecidos** (registry em 2.0.0
+vs yml em 2.1.0; `_METRICS.md` defasado; contagens antigas no `.claude/README.md`).
+
+---
+
 ## 2026-07-23 — 🤖 ADR-0054 (Accepted): política de contribuição assistida por IA — trailer `Assisted-by`, DCO humano, dono humano de cada linha
 
 Novo [ADR-0054](./architecture/adr/0054-ai-assisted-contribution-policy.md) (**Accepted**), que adota — no precedente do Linux kernel ([`coding-assistants.rst`](https://docs.kernel.org/process/coding-assistants.html), 2025-12-23) — a política de contribuição assistida por IA para este repo, que é desenvolvido com uso intensivo de agentes.
