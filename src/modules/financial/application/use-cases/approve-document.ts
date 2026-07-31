@@ -9,10 +9,27 @@ import type {
   DocumentRepositoryError,
 } from '../../domain/document/repository.ts';
 import { buildTimelineEntries } from '../timeline-recording.ts';
+import { checkApprover, type ApprovalError } from '../../domain/document/approval-policy.ts';
+import type {
+  ApproverAuthorityReader,
+  ApproverAuthorityReadError,
+} from '../ports/approver-authority-reader.ts';
 
 export type ApproveDocumentDeps = Readonly<{
   repo: DocumentRepository;
   clock: Clock;
+  /**
+   * #609: alçada enforçada no ATO de aprovar, contra o USUÁRIO AUTENTICADO que chama — não contra o
+   * `approverRef` indicado no documento (essa é a diferença em relação ao `submitDraft`).
+   *
+   * Antes, `checkApprover` rodava só na indicação/escalação (`submit-draft.ts`, `save-document.ts`):
+   * a alçada era roteamento, não controle de acesso, e qualquer um com `payable:approve` aprovava
+   * qualquer valor.
+   *
+   * Opcional pelo mesmo gate opt-in do `submitDraft`: sem reader injetado, o comportamento anterior
+   * é preservado (a composição HTTP injeta).
+   */
+  approverAuthorityReader?: ApproverAuthorityReader;
 }>;
 
 export type ApproveDocumentCommand = Readonly<{
@@ -27,7 +44,10 @@ export type ApproveDocumentError =
   | DocumentError
   | DocumentRepositoryError
   | DocumentId.DocumentIdError
-  | UserRef.UserRefError;
+  | UserRef.UserRefError
+  // #609: alçada/permissão do chamador + indisponibilidade da leitura cross-módulo.
+  | ApprovalError
+  | ApproverAuthorityReadError;
 
 export const approveDocument =
   (deps: ApproveDocumentDeps) =>
@@ -43,6 +63,15 @@ export const approveDocument =
     const open = Document.parseOpen(found.value.document);
     if (!open.ok) return err(open.error);
     if (found.value.payables === null) return err('document-repository-failure');
+
+    // #609: alçada do CHAMADOR, antes de qualquer escrita. Gate opt-in (mesmo do `submitDraft`):
+    // sem reader injetado, preserva o comportamento anterior.
+    if (deps.approverAuthorityReader !== undefined) {
+      const authority = await deps.approverAuthorityReader.get(cmd.approvedBy);
+      if (!authority.ok) return err(authority.error);
+      const check = checkApprover(open.value.netValue, authority.value);
+      if (!check.ok) return err(check.error);
+    }
 
     const approved = Document.approve({
       document: open.value,
