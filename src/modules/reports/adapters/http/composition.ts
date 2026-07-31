@@ -21,6 +21,7 @@ import {
 import {
   openSuppliersWithoutContractReader,
   openPaymentPositionReader,
+  openCashflowReader,
   openPayablesAnalysisReader,
   openRealizedProvisionedReader,
   openGeneralReportReader,
@@ -29,7 +30,10 @@ import {
   buildBudgetPlansReadPort,
   type PlanLabelsReadPort,
 } from '#src/modules/budget-plans/public-api/read.ts';
-import { buildContractsActiveContractorReadPort } from '#src/modules/contracts/public-api/index.ts';
+import {
+  buildContractsActiveContractorReadPort,
+  buildContractsContractNumberReadPort,
+} from '#src/modules/contracts/public-api/index.ts';
 import { TeamReportReadFromPartners } from '../persistence/team-report-read.partners.ts';
 import { InMemoryTeamReportRead } from '../persistence/team-report-read.in-memory.ts';
 import { TeamDemographicsReadFromPartners } from '../persistence/team-demographics-read.partners.ts';
@@ -40,6 +44,8 @@ import { ActiveContractorReadFromContracts } from '../persistence/active-contrac
 import { InMemoryActiveContractorRead } from '../persistence/active-contractor-read.in-memory.ts';
 import { PaymentPositionReadFromFinancial } from '../persistence/payment-position-read.financial.ts';
 import { InMemoryPaymentPositionRead } from '../persistence/payment-position-read.in-memory.ts';
+import { CashflowReadFromFinancial } from '../persistence/cashflow-read.financial.ts';
+import { InMemoryCashflowRead } from '../persistence/cashflow-read.in-memory.ts';
 import { GeneralReportReadFromFinancial } from '../persistence/general-report-read.financial.ts';
 import { InMemoryGeneralReportRead } from '../persistence/general-report-read.in-memory.ts';
 import {
@@ -50,6 +56,8 @@ import { AnalysisReadFromFinancial } from '../persistence/analysis-read.financia
 import { InMemoryAnalysisRead } from '../persistence/analysis-read.in-memory.ts';
 import { RealizedReadFromSources } from '../persistence/realized-read.from-sources.ts';
 import { InMemoryRealizedRead } from '../persistence/realized-read.in-memory.ts';
+import { DashboardRealizedReadFromSources } from '../persistence/dashboard-realized-read.from-sources.ts';
+import { InMemoryDashboardRealizedRead } from '../persistence/dashboard-realized-read.in-memory.ts';
 import type { TeamReportReadPort } from '../../application/ports/team-report-read.ts';
 import type { TeamDemographicsReadPort } from '../../application/ports/team-demographics-read.ts';
 import type {
@@ -58,9 +66,11 @@ import type {
 } from '../../application/ports/suppliers-without-contract-read.ts';
 import type { ActiveContractorReadPort } from '../../application/ports/active-contractor-read.ts';
 import type { PaymentPositionReadPort } from '../../application/ports/payment-position-read.ts';
+import type { CashflowReadPort } from '../../application/ports/cashflow-read.ts';
 import type { GeneralReportReadPort } from '../../application/ports/general-report-read.ts';
 import type { AnalysisReadPort } from '../../application/ports/analysis-read.ts';
 import type { RealizedReadPort } from '../../application/ports/realized-read.ts';
+import type { DashboardRealizedReadPort } from '../../application/ports/dashboard-realized-read.ts';
 
 export type ReportsDriver = 'memory' | 'mysql';
 
@@ -93,6 +103,10 @@ export type ReportsHttpDeps = Readonly<{
     Result<readonly SupplierWithoutContract[], ListSuppliersWithoutActiveContractError>
   >;
   listPaymentPosition: PaymentPositionReadPort['list'];
+  /** REP (#590 Slice A): Fluxo de Caixa — Payables por Categoria × Subcategoria (financial single-module). */
+  listCashflow: CashflowReadPort['list'];
+  /** REP (#590 Slice B): Fluxo de Caixa /chart — série temporal por Categoria × Subcategoria × Mês. */
+  listCashflowChart: CashflowReadPort['listChart'];
   /** REP-6 (#442 Slice A): linhas planas paginadas de títulos a-pagar (financial single-module). */
   listGeneralReport: GeneralReportReadPort['list'];
   listAnalysis: AnalysisReadPort['list'];
@@ -100,6 +114,8 @@ export type ReportsHttpDeps = Readonly<{
   resolvePlanLabels: PlanLabelsReadPort['resolvePlanLabels'];
   /** S6 (#502): Realizado × Planejado — árvore de 3 níveis costurada de budget-plans × financial. */
   listRealized: RealizedReadPort['list'];
+  /** DASH-F4 (#112): widget "Realizado × Previsto mensal" — série de 12 meses de UM plano. */
+  listDashboardRealized: DashboardRealizedReadPort['list'];
   shutdown: () => Promise<void>;
 }>;
 
@@ -112,9 +128,11 @@ export const buildReportsHttpDeps = async (
     const suppliers: SuppliersWithoutContractReadPort = InMemorySuppliersWithoutContractRead();
     const activeContractors: ActiveContractorReadPort = InMemoryActiveContractorRead();
     const position: PaymentPositionReadPort = InMemoryPaymentPositionRead();
+    const cashflow: CashflowReadPort = InMemoryCashflowRead();
     const general: GeneralReportReadPort = InMemoryGeneralReportRead();
     const analysis: AnalysisReadPort = InMemoryAnalysisRead();
     const realized: RealizedReadPort = InMemoryRealizedRead();
+    const dashboardRealized: DashboardRealizedReadPort = InMemoryDashboardRealizedRead();
     return {
       listTeam: team.list,
       listTeamDemographics: demographics.list,
@@ -123,12 +141,15 @@ export const buildReportsHttpDeps = async (
         activeContractorsRead: activeContractors,
       }),
       listPaymentPosition: position.list,
+      listCashflow: cashflow.list,
+      listCashflowChart: cashflow.listChart,
       listGeneralReport: general.list,
       listAnalysis: analysis.list,
       // Driver memory: sem budget-plans real → Map vazio (nomes viram null). Testes injetam o
       // próprio `resolvePlanLabels` para exercitar o rótulo costurado (espelha `listAnalysis`).
       resolvePlanLabels: () => Promise.resolve(ok(new Map())),
       listRealized: realized.list,
+      listDashboardRealized: dashboardRealized.list,
       shutdown: () => Promise.resolve(),
     };
   }
@@ -291,6 +312,52 @@ export const buildReportsHttpDeps = async (
   }
   const generalReader = generalReaderR.value;
 
+  // REP-6 (#442 · Slice D): read port do `contracts` — resolve o NÚMERO do contrato
+  // (`sequential_number`) a partir do `contractRef` na costura do Relatório Geral. Pool próprio
+  // aberto UMA vez no boot (incidente RDS 0001), reaproveita a `contractsUrl` já em mãos. Aberto por
+  // último → só seu próprio caminho de erro fecha TODOS os anteriores. Fail-closed encadeado.
+  const contractNumberReaderR = await buildContractsContractNumberReadPort({
+    connectionString: contractsUrl,
+  });
+  if (!contractNumberReaderR.ok) {
+    await teamReader.close();
+    await demographicsReader.close();
+    await suppliersReader.close();
+    await positionReader.close();
+    await contractorsReader.close();
+    await analysisReader.close();
+    await budgetPlansRead.close();
+    await realizedReader.close();
+    await partnersRead.close();
+    await generalReader.close();
+    throw new Error(
+      `reports-composition: falha ao abrir read port (contract-number) do contracts: ${contractNumberReaderR.error}`,
+    );
+  }
+  const contractNumberReader = contractNumberReaderR.value;
+
+  // REP (#590 · Slice A): reader do Fluxo de Caixa (financial). Pool próprio aberto UMA vez no boot
+  // (incidente RDS 0001), reaproveita a `financialUrl` já em mãos. Aberto por ÚLTIMO → só seu próprio
+  // caminho de erro fecha TODOS os anteriores. Fail-closed encadeado.
+  const cashflowReaderR = await openCashflowReader({ connectionString: financialUrl });
+  if (!cashflowReaderR.ok) {
+    await teamReader.close();
+    await demographicsReader.close();
+    await suppliersReader.close();
+    await positionReader.close();
+    await contractorsReader.close();
+    await analysisReader.close();
+    await budgetPlansRead.close();
+    await realizedReader.close();
+    await partnersRead.close();
+    await generalReader.close();
+    await contractNumberReader.close();
+    throw new Error(
+      `reports-composition: falha ao abrir reader (cashflow) do financial: ${cashflowReaderR.error}`,
+    );
+  }
+  const cashflowReader = cashflowReaderR.value;
+
   const teamPort = TeamReportReadFromPartners(teamReader.list);
   const demographicsPort = TeamDemographicsReadFromPartners(demographicsReader.list);
   const suppliersPort = SuppliersWithoutContractReadFromFinancial(suppliersReader.list);
@@ -298,13 +365,28 @@ export const buildReportsHttpDeps = async (
     contractorsReader.listContractorsWithActiveContract,
   );
   const positionPort = PaymentPositionReadFromFinancial(positionReader.list);
-  // Slice B: costura os nomes cross-módulo com só os dois getters do partners read port.
-  const generalPort = GeneralReportReadFromFinancial(generalReader.list, {
-    getFinancierView: partnersRead.getFinancierView,
-    getCollaboratorView: partnersRead.getCollaboratorView,
-  });
+  // Slice B/C: costura nomes (financier/collaborator) e PIX/banco (supplier) cross-módulo com os
+  // três getters do partners read port. `getSupplierView` só é chamado quando o gate concede.
+  // Slice D: 3º dep — o `resolveContractNumbers` do read port de contracts costura o NÚMERO do
+  // contrato por `contractRef`, em lote (1 chamada por página), com degradação graciosa.
+  const generalPort = GeneralReportReadFromFinancial(
+    generalReader.list,
+    {
+      getFinancierView: partnersRead.getFinancierView,
+      getCollaboratorView: partnersRead.getCollaboratorView,
+      getSupplierView: partnersRead.getSupplierView,
+    },
+    contractNumberReader.resolveContractNumbers,
+  );
+  const cashflowPort = CashflowReadFromFinancial(cashflowReader.list, cashflowReader.listChart);
   const analysisPort = AnalysisReadFromFinancial(analysisReader.list);
   const realizedPort = RealizedReadFromSources(
+    budgetPlansRead.listPlannedAmounts,
+    realizedReader.list,
+  );
+  // DASH-F4 (#112): rollup mensal do mesmo par de fontes. REUSA os readers JÁ ABERTOS (budget-plans +
+  // financial) — nenhum pool novo, nenhum close extra (incidente RDS 0001).
+  const dashboardRealizedPort = DashboardRealizedReadFromSources(
     budgetPlansRead.listPlannedAmounts,
     realizedReader.list,
   );
@@ -317,12 +399,15 @@ export const buildReportsHttpDeps = async (
       activeContractorsRead: contractorsPort,
     }),
     listPaymentPosition: positionPort.list,
+    listCashflow: cashflowPort.list,
+    listCashflowChart: cashflowPort.listChart,
     listGeneralReport: generalPort.list,
     listAnalysis: analysisPort.list,
     // REP-3 (#446 Slice C): rótulo do plano costurado na borda — reaproveita o MESMO read port do
     // budget-plans já aberto para o Realizado × Planejado (S6), sem novo pool (incidente RDS 0001).
     resolvePlanLabels: budgetPlansRead.resolvePlanLabels,
     listRealized: realizedPort.list,
+    listDashboardRealized: dashboardRealizedPort.list,
     shutdown: async () => {
       await teamReader.close();
       await demographicsReader.close();
@@ -334,6 +419,8 @@ export const buildReportsHttpDeps = async (
       await realizedReader.close();
       await generalReader.close();
       await partnersRead.close();
+      await contractNumberReader.close();
+      await cashflowReader.close();
     },
   };
 };

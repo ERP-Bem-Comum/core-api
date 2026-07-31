@@ -200,8 +200,21 @@ export const generalReportQuerySchema = z.object({
 
 export type GeneralReportQueryDto = z.infer<typeof generalReportQuerySchema>;
 
-// Linha PLANA (Slice A + Slice B). `.strict()` fail-loud se o mapper vazar campo extra (ex.: uma
-// coluna de Slice C/D entrar sem passar por sua fatia).
+// Slice C (#442): PIX + Dados Bancários (espelham `PixKey`/`BankAccount` do partners public-api).
+// Os 5 tipos de chave PIX = `PixKeyType`; os 4 campos bancários são strings opacas.
+export const pixKeyDtoSchema = z.object({
+  keyType: z.enum(['cpf', 'cnpj', 'email', 'phone', 'random-key']),
+  key: z.string(),
+});
+
+export const bankAccountDtoSchema = z.object({
+  bank: z.string(),
+  agency: z.string(),
+  accountNumber: z.string(),
+  checkDigit: z.string(),
+});
+
+// Linha PLANA completa (Slice A + B + C + D). `.strict()` fail-loud se o mapper vazar campo extra.
 export const generalReportRowSchema = z
   .object({
     payableId: z.string(),
@@ -223,6 +236,12 @@ export const generalReportRowSchema = z
     subcategoryName: z.string().nullable(),
     valueCents: z.number(),
     contractRef: z.string().nullable(),
+    // Slice C (#442): PIX + Dados Bancários (só supplier com `bank-account:read`; senão null).
+    pixKey: pixKeyDtoSchema.nullable(),
+    bankAccount: bankAccountDtoSchema.nullable(),
+    // Slice D (#442): NÚMERO do contrato (`sequential_number`), costurado do `contractRef`; null se
+    // sem contrato ou ref não resolvível.
+    contractNumber: z.string().nullable(),
   })
   .strict();
 
@@ -239,6 +258,77 @@ export const generalReportResponseSchema = z
   .strict();
 
 export type GeneralReportResponseDto = z.infer<typeof generalReportResponseSchema>;
+
+// REP (#590 · Slice A) — "Fluxo de Caixa": Saídas (Payables) agregadas por Categoria × Subcategoria
+// em 2 baldes (REALIZED/EXPECTED). Os 6 valores de status = `DocumentStatus` MENOS Draft e Refused
+// (mesmo conjunto do #588/#442); filtram o status VIVO em `fin_documents` via LEFT JOIN.
+export const cashflowStatusValues = [
+  'Open',
+  'Approved',
+  'Transmitted',
+  'Paid',
+  'PartiallyReconciled',
+  'Reconciled',
+] as const;
+
+// Objeto simples (sem `.strict()`, como o REP-4/#588): parâmetro desconhecido é ignorado, não vira
+// 400. 10 filtros opcionais (AND). Nomes id-suffixed (padrão #442). `dueFrom`/`dueTo` = janela
+// half-open [dueFrom, dueTo). SEM paginação (é agregação — retorna todos os grupos).
+export const cashflowQuerySchema = z.object({
+  programId: z.uuid().optional(), // → program_ref
+  budgetPlanId: z.uuid().optional(), // → budget_plan_ref
+  dueFrom: z.iso.date().optional(),
+  dueTo: z.iso.date().optional(),
+  accountId: z.uuid().optional(), // → debit_account_ref
+  costCenterId: z.uuid().optional(), // → cost_center_ref (restringe a população; NÃO é eixo)
+  categoryId: z.uuid().optional(), // → category_ref
+  subCategoryId: z.uuid().optional(), // → subcategory_ref
+  entityId: z.uuid().optional(), // → supplier_ref
+  status: z.enum(cashflowStatusValues).optional(), // via LEFT JOIN fin_documents.status
+});
+
+export type CashflowQueryDto = z.infer<typeof cashflowQuerySchema>;
+
+// Linha no shape LEGADO (openapi.yaml `CashflowRow`, ~linha 3010). `Category_id`/`SubCategory_id`
+// recebem os refs do nosso modelo (UUID string — no legado eram integer). `REALIZED`/`EXPECTED` em
+// centavos inteiros. `.strict()` fail-loud se o mapper vazar campo extra.
+export const cashflowRowSchema = z
+  .object({
+    Category_id: z.string().nullable(),
+    Category_name: z.string().nullable(),
+    SubCategory_id: z.string().nullable(),
+    SubCategory_name: z.string().nullable(),
+    REALIZED: z.number(),
+    EXPECTED: z.number(),
+  })
+  .strict();
+
+export type CashflowRowDto = z.infer<typeof cashflowRowSchema>;
+
+// Envelope legado `{ Receivables, Payables }`. `Receivables` é SEMPRE `[]` no Slice A (financial é
+// payables-centric — A-Receber não existe no modelo, #179). `.strict()`.
+export const cashflowResponseSchema = z
+  .object({
+    Receivables: z.array(cashflowRowSchema),
+    Payables: z.array(cashflowRowSchema),
+  })
+  .strict();
+
+export type CashflowResponseDto = z.infer<typeof cashflowResponseSchema>;
+
+// REP (#590 · Slice B) — "Fluxo de Caixa /chart": as mesmas linhas do Slice A com uma DIMENSÃO DE MÊS
+// (`Installments_dueDate`, o primeiro dia do mês 'YYYY-MM-01' como date legado). A resposta é um
+// ARRAY plano de linhas datadas (sem envelope Receivables/Payables — o front monta a série temporal).
+// `.strict()` fail-loud se o mapper vazar campo extra (7 chaves = as 6 do Slice A + o mês).
+export const cashflowChartRowSchema = cashflowRowSchema
+  .extend({ Installments_dueDate: z.iso.date() })
+  .strict();
+
+export type CashflowChartRowDto = z.infer<typeof cashflowChartRowSchema>;
+
+export const cashflowChartResponseSchema = z.array(cashflowChartRowSchema);
+
+export type CashflowChartResponseDto = z.infer<typeof cashflowChartResponseSchema>;
 
 // REP-3 (#114) — "Análise de Planejamento". Query de filtro (período half-open + status opcional).
 export const analysisQuerySchema = z
@@ -361,3 +451,36 @@ export const realizedReportResponseSchema = z
   .strict();
 
 export type RealizedReportResponseDto = z.infer<typeof realizedReportResponseSchema>;
+
+// DASH-F4 (#112) — widget "Realizado x Previsto mensal" do Dashboard. Query: `budgetPlanId` (uuid) +
+// `year` (int), AMBOS obrigatórios (o BFF/front passa o plano ativo e o ano). `.strict()` → parâmetro
+// desconhecido vira 400.
+export const dashboardRealizedQuerySchema = z
+  .object({
+    budgetPlanId: z.uuid(),
+    year: z.coerce.number().int(),
+  })
+  .strict();
+
+export type DashboardRealizedQueryDto = z.infer<typeof dashboardRealizedQuerySchema>;
+
+// Um ponto da série mensal (mês 1..12 + as duas medidas em cents). `.strict()` fail-loud se o mapper
+// vazar campo extra (ex.: o `provisioned`, que NÃO faz parte deste widget).
+const dashboardRealizedPointSchema = z
+  .object({
+    month: z.number(),
+    expectedCents: z.number(),
+    realizedCents: z.number(),
+  })
+  .strict();
+
+// Resposta: `chart` com EXATAMENTE 12 pontos (`.length(12)` = contrato fail-loud da grade mensal).
+export const dashboardRealizedResponseSchema = z
+  .object({
+    budgetPlanId: z.string(),
+    year: z.number(),
+    chart: z.array(dashboardRealizedPointSchema).length(12),
+  })
+  .strict();
+
+export type DashboardRealizedResponseDto = z.infer<typeof dashboardRealizedResponseSchema>;

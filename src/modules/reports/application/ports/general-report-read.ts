@@ -7,13 +7,26 @@
  * Consumido pela borda HTTP (`GET /reports/generalReport`).
  *
  * Slice B (#442) soma FINANCIADOR e COLABORADOR (nomes) via stitch cross-módulo com `partners`
- * (ADR-0006) — o financial entrega `payeeKind` + `supplierRef`; o nome é resolvido na borda. PIX,
- * Bancários (Slice C) e Número do Contrato (Slice D) ainda NÃO fazem parte deste shape.
+ * (ADR-0006) — o financial entrega `payeeKind` + `supplierRef`; o nome é resolvido na borda.
+ *
+ * Slice C (#442) soma PIX e Bancários (`pixKey`/`bankAccount`), também via stitch com `partners`
+ * (`getSupplierView`) — existem SÓ em `Supplier`, logo só se preenchem para linhas `supplier`
+ * (financier/collaborator/act → null). Redação campo-a-campo por RBAC: a resolução só acontece
+ * quando o caller tem `bank-account:read` (opções `{ includeBankData }`); sem a permissão, ambos
+ * saem `null` e o relatório retorna 200 normal.
+ *
+ * Slice D (#442) soma o NÚMERO do Contrato (`contractNumber`), costurado cross-módulo a partir do
+ * `contractRef` (UUID) via a public-api de contracts (`resolveContractNumbers`, ADR-0006) — em LOTE
+ * (1 query por página), com degradação graciosa (ref não resolvível → null). Última fatia: com ela
+ * o shape fica completo (14 colunas do legado).
  *
  * O filtro (todos os campos opcionais, ausente = sem restrição, AND) e a paginação são repassados
  * ao reader do financial; aqui os valores são strings/números opacos (validados na borda).
  */
 import type { Result } from '#src/shared/primitives/result.ts';
+// Slice C (#442): PIX/Bancário são shapes cross-módulo do `partners` (existem só em `Supplier`).
+// Import via public-api é permitido (ADR-0006) — o payee-bank-composition do financial já faz isso.
+import type { BankAccount, PixKey } from '#src/modules/partners/public-api/index.ts';
 
 export type GeneralReportOrder = 'dueDate:asc' | 'dueDate:desc';
 
@@ -56,6 +69,14 @@ export type GeneralReportRow = Readonly<{
   subcategoryName: string | null;
   valueCents: number;
   contractRef: string | null;
+  // Slice C (#442): PIX + Dados Bancários do favorecido. Só preenchidos para `payeeKind === 'supplier'`
+  // com `supplierRef` resolvível E quando o caller tem `bank-account:read`; caso contrário, ambos null.
+  pixKey: PixKey | null;
+  bankAccount: BankAccount | null;
+  // Slice D (#442): NÚMERO do contrato (`ctr_contracts.sequential_number`), costurado cross-módulo a
+  // partir do `contractRef` via a public-api de contracts (ADR-0006). `contractRef` null ou ref não
+  // resolvível → null (degradação graciosa). Completa as 14 colunas do legado.
+  contractNumber: string | null;
 }>;
 
 // Página read-model (molde `Page<T>` de financial/domain/document/query.ts — replicado aqui para
@@ -69,9 +90,14 @@ export type GeneralReportPage = Readonly<{
 
 export type GeneralReportReadError = 'general-report-read-unavailable';
 
+// Slice C (#442): gate de redação campo-a-campo. `includeBankData: false` ⇒ o adapter NEM resolve
+// PIX/banco (não chama `getSupplierView`), deixando `pixKey`/`bankAccount` null em todas as linhas.
+export type GeneralReportReadOptions = Readonly<{ includeBankData: boolean }>;
+
 export type GeneralReportReadPort = Readonly<{
   list: (
     filter: GeneralReportFilter,
     pagination: GeneralReportPagination,
+    options: GeneralReportReadOptions,
   ) => Promise<Result<GeneralReportPage, GeneralReportReadError>>;
 }>;

@@ -70,6 +70,9 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // #437: contratantes com contrato Active (public-api) — fonte do anti-join do relatório
     // "Fornecedores sem Contrato" no módulo reports.
     'tests/modules/contracts/public-api/active-contractor-read.drizzle-mysql.test.ts',
+    // REP-6 (#442 · Slice D): número do contrato (public-api) — fonte do NÚMERO costurado no
+    // Relatório Geral (reports) a partir do contractRef.
+    'tests/modules/contracts/public-api/contract-number-read.drizzle-mysql.test.ts',
     'tests/modules/contracts/worker/outbox-worker.integration.test.ts',
   ]),
   auth: mysqlSuite({ MYSQL_INTEGRATION: '1' }, [
@@ -167,8 +170,17 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // #357 — PayableSummaryByIdsView (JOIN fin_payables × fin_documents × fin_supplier_view p/ payables:batch)
     'tests/modules/financial/adapters/persistence/payable-summary-by-ids-view.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/document-summary-by-ids-view.drizzle-mysql.test.ts',
+    // #323 — searchPaid reflete o status do DOCUMENTO (paridade com o grid Contas a Pagar): documento
+    // Pago traz líquido Paid + retenções Open/Approved; salvaguarda <> 'Reconciled'. Regressão fix.
+    'tests/modules/financial/adapters/persistence/payable-reconciliation-view.drizzle-mysql.test.ts',
     // #240 REP-2: agregação "fornecedores sem contrato" (fin_payable_view ⟕ fin_supplier_view)
     'tests/modules/financial/public-api/suppliers-without-contract.drizzle-mysql.test.ts',
+    // #242 DASH-F5: Top-5 "fornecedores sem contrato" do Dashboard (listTop — ORDER BY sum DESC,
+    // supplier_ref ASC LIMIT 5; corte e desempate no SQL). Reusa a agregação do REP-2.
+    'tests/modules/financial/public-api/suppliers-without-contract-top.drizzle-mysql.test.ts',
+    // #241 DASH-F1: KPI "Despesas por Centro de Custo" — dois CASE-SUM sobre paid_at (M-1/M-2) por CC,
+    // WHERE status='Paid', GROUP BY cost_center_ref + LEFT JOIN fin_cost_centers (nome).
+    'tests/modules/financial/public-api/dashboard-cost-centers.drizzle-mysql.test.ts',
     // #243 REP-4: "posição de pagamentos" (fin_payable_view × cost_center × categoria, 3 baldes)
     'tests/modules/financial/public-api/payment-position.drizzle-mysql.test.ts',
     // REP-3 #114: "análise de planejamento" (fin_payable_view por categoria×CC×mês, DATE_FORMAT)
@@ -176,6 +188,12 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // REP-6 #442 (Slice A): "relatório geral" — linhas planas paginadas de fin_payable_view com
     // LEFT JOINs same-module (documento/fornecedor/CC/categoria + self-join subcategoria) + filtros.
     'tests/modules/financial/public-api/general-report.drizzle-mysql.test.ts',
+    // REP #590 (Slice A): "fluxo de caixa" — fin_payable_view agregado por Categoria × Subcategoria
+    // em 2 baldes (EXPECTED=Σ Open+Approved; REALIZED=Σ Paid; Cancelled fora) + self-join subcategoria.
+    'tests/modules/financial/public-api/cashflow.drizzle-mysql.test.ts',
+    // REP #590 (Slice B): "fluxo de caixa /chart" — série temporal. fin_payable_view agregado por
+    // Categoria × Subcategoria × MÊS (DATE_FORMAT due_date '%Y-%m-01'), 2 baldes, ordenado por mês ASC.
+    'tests/modules/financial/public-api/cashflow-chart.drizzle-mysql.test.ts',
     // #416 BGP-INSIGHTS-REALIZED: "realizado por plano" (Σ reconciled_value_cents Active, JOIN 3-hop
     // fin_reconciliation_items → fin_reconciliations → fin_payables → fin_documents.budget_plan_ref)
     'tests/modules/financial/public-api/realized-by-plan.drizzle-mysql.test.ts',

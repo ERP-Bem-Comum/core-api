@@ -285,7 +285,13 @@ const main = async (): Promise<void> => {
       }),
       budgetPlansHttpPlugin(budgetPlansDeps, { requireAuth, authorize: authDeps.authorize }),
       // Relatórios (REPORTS-TEAM-ABC #238) → /api/v2/reports/team. Greenfield V2 (plugin direto).
-      reportsHttpPlugin(reportsDeps, { requireAuth, authorize: authDeps.authorize }),
+      reportsHttpPlugin(reportsDeps, {
+        requireAuth,
+        authorize: authDeps.authorize,
+        // REP-6 Slice C (#442): gate de redação de PIX/Bancários (`bank-account:read`) no Relatório
+        // Geral — predicado, respeita o bypass ADR-0052 (NÃO 403).
+        hasPermission: authDeps.hasPermission,
+      }),
       // Espelho do legado (ADR-0033) → /api/v1.
       {
         plugin: collaboratorsHttpPlugin(partnersDeps, {

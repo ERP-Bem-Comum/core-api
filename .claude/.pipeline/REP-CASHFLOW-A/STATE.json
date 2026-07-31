@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "ticket": "REP-CASHFLOW-A",
+  "size": "M",
+  "createdAt": "2026-07-28T14:54:20.733Z",
+  "closedAt": "2026-07-28T15:23:41.961Z",
+  "currentWave": null,
+  "status": "closed-green",
+  "waves": [
+    {
+      "id": "W0",
+      "status": "done",
+      "agent": "general-purpose",
+      "startedAt": "2026-07-28T15:23:39.768Z",
+      "finishedAt": "2026-07-28T15:23:40.055Z",
+      "rounds": 1,
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
+    },
+    {
+      "id": "W1",
+      "status": "done",
+      "agent": "general-purpose",
+      "startedAt": "2026-07-28T15:23:40.337Z",
+      "finishedAt": "2026-07-28T15:23:40.627Z",
+      "rounds": 1,
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
+    },
+    {
+      "id": "W2",
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-07-28T15:23:40.902Z",
+      "finishedAt": "2026-07-28T15:23:41.167Z",
+      "rounds": 1,
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
+    },
+    {
+      "id": "W3",
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-07-28T15:23:41.430Z",
+      "finishedAt": "2026-07-28T15:23:41.691Z",
+      "rounds": 1,
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
+    }
+  ],
+  "blockers": [],
+  "lastEvent": "closed-green"
+}

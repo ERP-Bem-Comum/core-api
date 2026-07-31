@@ -11,7 +11,7 @@
  *  - GET /reports/analysis/payables + /reports/analysis/chart — análise de planejamento (REP-3 · #114).
  */
 
-import type { FastifyPluginAsync, preHandlerAsyncHookHandler } from 'fastify';
+import type { FastifyPluginAsync, FastifyRequest, preHandlerAsyncHookHandler } from 'fastify';
 import type {
   FastifyPluginAsyncZodOpenApi,
   FastifyZodOpenApiSchema,
@@ -25,6 +25,7 @@ import { FINANCIAL_PERMISSION } from '#src/modules/financial/public-api/permissi
 import { BUDGET_PLAN_PERMISSION } from '#src/modules/budget-plans/public-api/permissions.ts';
 import type { AnalysisFilter, AnalysisRow } from '../../application/ports/analysis-read.ts';
 import type { PaymentPositionFilter } from '../../application/ports/payment-position-read.ts';
+import type { CashflowFilter } from '../../application/ports/cashflow-read.ts';
 import type { RealizedFilter } from '../../application/ports/realized-read.ts';
 import type {
   GeneralReportFilter,
@@ -37,9 +38,12 @@ import {
   teamDemographicsToDto,
   suppliersWithoutContractToDto,
   paymentPositionToDto,
+  cashflowToDto,
+  cashflowChartToDto,
   analysisToReport,
   analysisToChart,
   realizedToDto,
+  dashboardRealizedToDto,
   generalReportToDto,
 } from './dto.ts';
 import {
@@ -48,15 +52,21 @@ import {
   suppliersWithoutContractResponseSchema,
   paymentPositionResponseSchema,
   paymentPositionQuerySchema,
+  cashflowQuerySchema,
+  cashflowResponseSchema,
+  cashflowChartResponseSchema,
   analysisQuerySchema,
   analysisReportResponseSchema,
   analysisChartResponseSchema,
   realizedQuerySchema,
   realizedReportResponseSchema,
+  dashboardRealizedQuerySchema,
+  dashboardRealizedResponseSchema,
   generalReportQuerySchema,
   generalReportResponseSchema,
   type AnalysisQueryDto,
   type PaymentPositionQueryDto,
+  type CashflowQueryDto,
   type RealizedQueryDto,
   type GeneralReportQueryDto,
 } from './schemas.ts';
@@ -107,6 +117,21 @@ const toPaymentPositionFilter = (q: PaymentPositionQueryDto): PaymentPositionFil
   ...(q.supplierRef !== undefined ? { supplierRef: q.supplierRef } : {}),
 });
 
+// REP (#590 · Slice A): query (borda, validada) → CashflowFilter (nomes id → ref). Só inclui a
+// chave quando presente (`exactOptionalPropertyTypes`: nunca gravar `undefined` explícito).
+const toCashflowFilter = (q: CashflowQueryDto): CashflowFilter => ({
+  ...(q.programId !== undefined ? { programRef: q.programId } : {}),
+  ...(q.budgetPlanId !== undefined ? { budgetPlanRef: q.budgetPlanId } : {}),
+  ...(q.dueFrom !== undefined ? { dueFrom: q.dueFrom } : {}),
+  ...(q.dueTo !== undefined ? { dueTo: q.dueTo } : {}),
+  ...(q.accountId !== undefined ? { debitAccountRef: q.accountId } : {}),
+  ...(q.costCenterId !== undefined ? { costCenterRef: q.costCenterId } : {}),
+  ...(q.categoryId !== undefined ? { categoryRef: q.categoryId } : {}),
+  ...(q.subCategoryId !== undefined ? { subcategoryRef: q.subCategoryId } : {}),
+  ...(q.entityId !== undefined ? { supplierRef: q.entityId } : {}),
+  ...(q.status !== undefined ? { status: q.status } : {}),
+});
+
 // REP-3 (#446 Slice C): costura o RÓTULO do Plano Orçamentário. Colhe os `budgetPlanRef` DISTINTOS
 // (não-nulos) das rows e delega ao `budget-plans/public-api` (`resolvePlanLabels`) — o rótulo é
 // composto DENTRO do budget-plans (autonomia — ADR-0006/0051). Gracioso: se o read falhar, devolve
@@ -138,6 +163,10 @@ const toRealizedFilter = (q: RealizedQueryDto): RealizedFilter => ({
 export type ReportsHttpHooks = Readonly<{
   requireAuth: preHandlerAsyncHookHandler;
   authorize: (permissionName: string) => preHandlerAsyncHookHandler;
+  // REP-6 Slice C (#442): predicado de redação campo-a-campo (respeita o bypass ADR-0052, NÃO dá
+  // 403). OPCIONAL para não quebrar os testes de reports que montam só `{requireAuth, authorize}`;
+  // ausente ⇒ o Relatório Geral trata como sem `bank-account:read` (pix/banco redigidos).
+  hasPermission?: (req: FastifyRequest, permissionName: string) => Promise<boolean>;
 }>;
 
 const reportsRoutes =
@@ -230,7 +259,57 @@ const reportsRoutes =
       },
     });
 
-    // GET /reports/generalReport — REP-6 Slice A: linhas planas paginadas de títulos a-pagar.
+    // GET /reports/cashflow — REP (#590 Slice A): Saídas (Payables) agregadas por Categoria ×
+    // Subcategoria em 2 baldes (REALIZED/EXPECTED). Resposta no envelope LEGADO
+    // `{ Receivables: [], Payables: CashflowRow[] }` — `Receivables` sempre `[]` (financial é
+    // payables-centric, #179). `/cashflow/chart` é o Slice B (não implementado aqui).
+    scope.route({
+      method: 'GET',
+      url: '/reports/cashflow',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        querystring: cashflowQuerySchema,
+        response: { 200: cashflowResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.listCashflow(toCashflowFilter(req.query));
+        if (!result.ok) {
+          return sendResult(reply, result, {
+            errors: { 'cashflow-read-unavailable': 503 },
+          });
+        }
+        return sendResult(reply, ok(cashflowToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /reports/cashflow/chart — REP (#590 Slice B): SÉRIE TEMPORAL do Fluxo de Caixa. As mesmas
+    // Saídas do `/cashflow`, agora com o eixo de MÊS (grão Categoria × Subcategoria × Mês). Resposta
+    // = ARRAY plano de linhas datadas `(CashflowRow legado & { Installments_dueDate })[]` — sem
+    // envelope (o front monta a linha do tempo). Mesmos 10 filtros (AND) e mesmo gate do Slice A.
+    scope.route({
+      method: 'GET',
+      url: '/reports/cashflow/chart',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
+      schema: {
+        querystring: cashflowQuerySchema,
+        response: { 200: cashflowChartResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.listCashflowChart(toCashflowFilter(req.query));
+        if (!result.ok) {
+          return sendResult(reply, result, {
+            errors: { 'cashflow-read-unavailable': 503 },
+          });
+        }
+        return sendResult(reply, ok(cashflowChartToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /reports/generalReport — REP-6: linhas planas paginadas de títulos a-pagar. O endpoint
+    // exige `fiscal-document:read` (preHandler). Slice C (#442): PIX/Bancários têm gate ADICIONAL de
+    // redação campo-a-campo — `bank-account:read` via `hasPermission` (predicado, NÃO 403). Sem a
+    // permissão (ou sem o hook), `includeBankData=false` e o adapter nem resolve o supplier; o
+    // relatório retorna 200 com pix/banco null em todas as linhas.
     scope.route({
       method: 'GET',
       url: '/reports/generalReport',
@@ -240,9 +319,14 @@ const reportsRoutes =
         response: { 200: generalReportResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
+        const includeBankData =
+          hooks.hasPermission !== undefined
+            ? await hooks.hasPermission(req, FINANCIAL_PERMISSION.bankAccountRead)
+            : false;
         const result = await deps.listGeneralReport(
           toGeneralReportFilter(req.query),
           toGeneralReportPagination(req.query),
+          { includeBankData },
         );
         if (!result.ok) {
           return sendResult(reply, result, {
@@ -312,6 +396,31 @@ const reportsRoutes =
           return sendResult(reply, result, { errors: { 'realized-read-unavailable': 503 } });
         }
         return sendResult(reply, ok(realizedToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /reports/dashboard/realized — DASH-F4 (#112): widget "Realizado x Previsto mensal". Serie
+    // de 12 meses de UM plano (`budgetPlanId` + `year` obrigatorios, Zod strict). Gate `reference:read`
+    // (mesmo dos widgets `/financial/dashboard/*`, por coerencia do dashboard). Fail-closed -> 503.
+    scope.route({
+      method: 'GET',
+      url: '/reports/dashboard/realized',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.referenceRead)],
+      schema: {
+        querystring: dashboardRealizedQuerySchema,
+        response: { 200: dashboardRealizedResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.listDashboardRealized({
+          budgetPlanId: req.query.budgetPlanId,
+          year: req.query.year,
+        });
+        if (!result.ok) {
+          return sendResult(reply, result, {
+            errors: { 'dashboard-realized-read-unavailable': 503 },
+          });
+        }
+        return sendResult(reply, ok(dashboardRealizedToDto(result.value)), { ok: 200 });
       },
     });
   };

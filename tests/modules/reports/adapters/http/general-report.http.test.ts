@@ -15,12 +15,14 @@
 
 import { describe, it, before, after } from 'node:test';
 import { strict as assert } from 'node:assert';
-import type { preHandlerAsyncHookHandler, LightMyRequestResponse } from 'fastify';
+import type { preHandlerAsyncHookHandler, LightMyRequestResponse, FastifyRequest } from 'fastify';
 
 import { ok } from '#src/shared/primitives/result.ts';
 import { buildApp } from '#src/shared/http/app.ts';
 import { readHttpConfig } from '#src/shared/http/config.ts';
 import { buildReportsHttpDeps, reportsHttpPlugin } from '#src/modules/reports/public-api/http.ts';
+import { InMemoryGeneralReportRead } from '#src/modules/reports/adapters/persistence/general-report-read.in-memory.ts';
+import { FINANCIAL_PERMISSION } from '#src/modules/financial/public-api/permissions.ts';
 import type {
   GeneralReportFilter,
   GeneralReportPagination,
@@ -68,6 +70,9 @@ const row = (over: Partial<GeneralReportRow> = {}): GeneralReportRow => ({
   subcategoryName: 'Aluguel Sede',
   valueCents: 300000,
   contractRef: '55555555-5555-4555-8555-555555555555',
+  pixKey: null,
+  bankAccount: null,
+  contractNumber: null,
   ...over,
 });
 
@@ -162,21 +167,24 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice A)
     assert.equal(res.statusCode, 403, res.body);
   });
 
-  it('CA3: tipo sempre a-pagar; code = document_number; sem colunas cross-módulo (B/C/D)', async () => {
+  it('CA3: tipo sempre a-pagar; code = document_number; shape completo A+B+C+D (21 chaves)', async () => {
     const res = await get(READER);
     const body = res.json() as { items: Record<string, unknown>[] };
     const first = body.items[0]!;
     assert.equal(first['tipo'], 'a-pagar');
     assert.equal(first['code'], 'NFS 1234');
-    // Contrato de saída: 15 colunas do Slice A + 3 do Slice B (payeeKind + financierName +
-    // collaboratorName) = 18 chaves. PIX/Bancários (Slice C) e Número do Contrato (Slice D) fora.
+    // Contrato de saída completo (última fatia): 15 colunas do Slice A + 3 do Slice B (payeeKind +
+    // financierName + collaboratorName) + 2 do Slice C (pixKey + bankAccount) + 1 do Slice D
+    // (contractNumber) = 21 chaves. As 14 colunas do legado ficam completas.
     assert.deepEqual(
       [...Object.keys(first)].sort(),
       [
+        'bankAccount',
         'categoryName',
         'categoryRef',
         'code',
         'collaboratorName',
+        'contractNumber',
         'contractRef',
         'costCenterName',
         'costCenterRef',
@@ -185,6 +193,7 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice A)
         'financierName',
         'payableId',
         'payeeKind',
+        'pixKey',
         'subcategoryName',
         'subcategoryRef',
         'supplierName',
@@ -193,13 +202,10 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice A)
         'valueCents',
       ].sort(),
     );
-    // Colunas de Slices C/D ainda não vazam no shape.
-    for (const k of ['pix', 'bankInfo', 'contractNumber']) {
-      assert.equal(k in first, false, `coluna cross-módulo ${k} não deve estar presente`);
-    }
     // Linha sem refs → nomes/refs null (degradação graciosa).
     assert.equal(body.items[1]!['code'], null);
     assert.equal(body.items[1]!['subcategoryName'], null);
+    assert.equal(body.items[1]!['contractNumber'], null);
   });
 
   it('CA4: page/limit da querystring viram a paginação repassada ao reader', async () => {
@@ -356,7 +362,7 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice B:
     await kindHandle.teardown();
   });
 
-  it('shape de 18 chaves + preenchimento por kind (financier/collaborator/supplier)', async () => {
+  it('shape de 20 chaves + preenchimento por kind (financier/collaborator/supplier)', async () => {
     const res = await kindHandle.app.inject({
       method: 'GET',
       url: '/api/v2/reports/generalReport',
@@ -366,9 +372,9 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice B:
     const body = res.json() as { items: Record<string, unknown>[] };
     assert.equal(body.items.length, 3);
 
-    // 18 chaves em toda linha.
+    // 21 chaves em toda linha (A+B+C+D).
     for (const line of body.items) {
-      assert.equal(Object.keys(line).length, 18, JSON.stringify(line));
+      assert.equal(Object.keys(line).length, 21, JSON.stringify(line));
     }
 
     const [fin, col, sup] = body.items;
@@ -387,5 +393,153 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice B:
     assert.equal(sup!['supplierName'], 'Fornecedor Alpha');
     assert.equal(sup!['financierName'], null);
     assert.equal(sup!['collaboratorName'], null);
+  });
+});
+
+// Slice C (#442): PIX + Dados Bancários com gate RBAC de redação campo-a-campo. App real com o
+// InMemoryGeneralReportRead semeado (exercita o gate `includeBankData` do próprio in-memory) e um
+// `hasPermission` fake controlável por flag. Sem `bank-account:read` → pix/bank null em 200.
+const PIX_KEY = { keyType: 'cnpj' as const, key: '11222333000181' };
+const BANK_ACCOUNT = { bank: '237', agency: '1234', accountNumber: '567890', checkDigit: '1' };
+
+describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice C: PIX/Bancários + RBAC)', () => {
+  let cHandle: AppHandle;
+  // Flag mutável: alterna a concessão de `bank-account:read` entre casos.
+  let grantBank = true;
+
+  before(async () => {
+    const base = await buildReportsHttpDeps({ driver: 'memory' });
+    // Seed: supplier COM pix/banco + financier com pix/banco null (não-supplier nunca tem).
+    const seed: GeneralReportRow[] = [
+      row({
+        payableId: 'f1000000-0000-4000-8000-0000000000f1',
+        payeeKind: 'supplier',
+        supplierRef: '11111111-1111-4111-8111-111111111111',
+        supplierName: 'Fornecedor Alpha',
+        pixKey: PIX_KEY,
+        bankAccount: BANK_ACCOUNT,
+      }),
+      row({
+        payableId: 'f2000000-0000-4000-8000-0000000000f2',
+        payeeKind: 'financier',
+        supplierRef: 'e1000000-0000-4000-8000-0000000000e1',
+        supplierName: null,
+        financierName: 'Financiador BNDES',
+        pixKey: null,
+        bankAccount: null,
+      }),
+    ];
+    const deps = { ...base, listGeneralReport: InMemoryGeneralReportRead(seed).list };
+    const hasPermission = (_req: FastifyRequest, permissionName: string): Promise<boolean> =>
+      Promise.resolve(grantBank && permissionName === FINANCIAL_PERMISSION.bankAccountRead);
+    const config = readHttpConfig({ RATE_LIMIT_MAX: '10000' });
+    const app = await buildApp({
+      config,
+      routes: [reportsHttpPlugin(deps, { requireAuth, authorize, hasPermission })],
+    });
+    cHandle = { app, teardown: () => app.close() };
+  });
+
+  after(async () => {
+    await cHandle.teardown();
+  });
+
+  const getC = (perm: string): Promise<LightMyRequestResponse> =>
+    cHandle.app.inject({
+      method: 'GET',
+      url: '/api/v2/reports/generalReport',
+      headers: { authorization: `Bearer ${perm}` },
+    });
+
+  it('(a) COM bank-account:read → linha supplier traz pixKey/bankAccount', async () => {
+    grantBank = true;
+    const res = await getC(READER);
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as { items: Record<string, unknown>[] };
+    const [sup, fin] = body.items;
+    assert.deepEqual(sup!['pixKey'], PIX_KEY);
+    assert.deepEqual(sup!['bankAccount'], BANK_ACCOUNT);
+    // (c) financier: pix/bank sempre null mesmo com permissão.
+    assert.equal(fin!['payeeKind'], 'financier');
+    assert.equal(fin!['pixKey'], null);
+    assert.equal(fin!['bankAccount'], null);
+  });
+
+  it('(b) SEM bank-account:read → pixKey/bankAccount null em todas as linhas, 200', async () => {
+    grantBank = false;
+    const res = await getC(READER);
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as { items: Record<string, unknown>[] };
+    for (const line of body.items) {
+      assert.equal(line['pixKey'], null);
+      assert.equal(line['bankAccount'], null);
+    }
+  });
+
+  it('(d) shape de 21 chaves (pixKey/bankAccount/contractNumber incluídos)', async () => {
+    grantBank = true;
+    const res = await getC(READER);
+    const body = res.json() as { items: Record<string, unknown>[] };
+    for (const line of body.items) {
+      assert.equal(Object.keys(line).length, 21, JSON.stringify(line));
+      assert.equal('pixKey' in line, true);
+      assert.equal('bankAccount' in line, true);
+      assert.equal('contractNumber' in line, true);
+    }
+  });
+
+  it('(e) endpoint ainda exige fiscal-document:read (403 sem ele)', async () => {
+    const res = await getC(NO_PERM);
+    assert.equal(res.statusCode, 403, res.body);
+  });
+});
+
+// Slice D (#442): NÚMERO do Contrato. App real com o InMemoryGeneralReportRead semeado — o número já
+// vem no shape da linha do port (costurado no driver mysql; no memory, entregue direto pelo seed).
+describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice D: Número do Contrato)', () => {
+  let dHandle: AppHandle;
+
+  before(async () => {
+    const base = await buildReportsHttpDeps({ driver: 'memory' });
+    const seed: GeneralReportRow[] = [
+      row({
+        payableId: 'f1000000-0000-4000-8000-0000000000f1',
+        contractRef: '55555555-5555-4555-8555-555555555555',
+        contractNumber: 'CT-2026-0001',
+      }),
+      row({
+        payableId: 'f2000000-0000-4000-8000-0000000000f2',
+        contractRef: null,
+        contractNumber: null,
+      }),
+    ];
+    const deps = { ...base, listGeneralReport: InMemoryGeneralReportRead(seed).list };
+    const config = readHttpConfig({ RATE_LIMIT_MAX: '10000' });
+    const app = await buildApp({
+      config,
+      routes: [reportsHttpPlugin(deps, { requireAuth, authorize })],
+    });
+    dHandle = { app, teardown: () => app.close() };
+  });
+
+  after(async () => {
+    await dHandle.teardown();
+  });
+
+  it('linha com contrato → contractNumber; linha sem contractRef → null (21 chaves)', async () => {
+    const res = await dHandle.app.inject({
+      method: 'GET',
+      url: '/api/v2/reports/generalReport',
+      headers: { authorization: `Bearer ${READER}` },
+    });
+    assert.equal(res.statusCode, 200, res.body);
+    const body = res.json() as { items: Record<string, unknown>[] };
+    assert.equal(body.items.length, 2);
+    for (const line of body.items) {
+      assert.equal(Object.keys(line).length, 21, JSON.stringify(line));
+      assert.equal('contractNumber' in line, true);
+    }
+    assert.equal(body.items[0]!['contractNumber'], 'CT-2026-0001');
+    assert.equal(body.items[1]!['contractNumber'], null);
   });
 });
