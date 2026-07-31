@@ -124,7 +124,7 @@ package.json                     # linhas 48-50
 README.md · docs/04-dev-guide.md · .claude/README.md · handbook/CHANGELOG.md
 
 # CRIADO
-handbook/architecture/adr/0055-retire-w0-w3-pipeline.md
+handbook/architecture/adr/0056-retire-w0-w3-pipeline.md
 
 # INTOCADO — invariante da feature
 src/**                           # 0 arquivos alterados

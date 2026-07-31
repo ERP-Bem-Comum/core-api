@@ -207,7 +207,7 @@ referenciais:
 | `0054`                         | "código-IA passa pela **mesma** Pipeline W0→W3"         | referencia processo extinto |
 | `0022`, `0023`, `0042`, `0050` | citam tickets W0→W3 como rastreabilidade histórica      | apenas histórico            |
 
-**Decisão**: **não editar nenhum ADR**. Criar ADR novo — `0055-retire-w0-w3-pipeline.md` — que
+**Decisão**: **não editar nenhum ADR**. Criar ADR novo — `0056-retire-w0-w3-pipeline.md` — que
 registra a aposentadoria e declara explicitamente como ler os anteriores após ela. Registrar em
 `handbook/CHANGELOG.md`.
 
@@ -277,7 +277,25 @@ Começar por ela adiaria o alívio real. A divergência foi apresentada e a prio
 | ------------------------------------------------------- | ------------------------- | ------------------------------------------------------------------------------------ |
 | Perda de trabalho não commitado                         | **alta** se R3 for pulado | R3 é pré-condição bloqueante da US3                                                  |
 | `git config core.bare false` afetar os 11 worktrees     | baixa                     | Worktrees operam com repo não-bare normalmente; validar com `git worktree list` após |
-| Links quebrados em ADRs imutáveis                       | **certa**                 | Custo aceito e documentado no ADR-0055 (R6)                                          |
+| Links quebrados em ADRs imutáveis                       | **certa**                 | Custo aceito e documentado no ADR-0056 (R6)                                          |
 | Assistente continuar propondo waves por memória externa | média                     | Memória `always-full-w0-w3-pipeline` já corrigida em 2026-07-30                      |
 | Acervo perdido na movimentação                          | baixa                     | Cópia → verificação por contagem → remoção; nunca `mv` cego (R1)                     |
 | Reintrodução acidental de `.claude/.pipeline/`          | média                     | Entrada em `.gitignore` (FR-020)                                                     |
+
+---
+
+## R11 — Numeração do ADR: 0055 → 0056 _(corrigido em 2026-07-31)_
+
+O plano original reservava `ADR-0055` para a aposentadoria da pipeline. **O número foi ocupado**: o
+PR #605 mergeou `0055-cognito-external-idp-supersedes-0024-authn.md` em 2026-07-31, registrando a
+decisão de diretoria sobre o Amazon Cognito.
+
+O ADR desta spec passa a ser **`0056-retire-w0-w3-pipeline.md`**. Todas as 14 referências nos
+artefatos foram atualizadas.
+
+**Armadilha evitada:** o critério `C5.1` verificava `test -f handbook/architecture/adr/0055-*.md`.
+Com o ADR do Cognito no disco, esse teste passaria **sem que o ADR da pipeline existisse** — um
+falso positivo silencioso. O glob agora aponta para `0056-*`.
+
+Precedente relevante: o repo já tem dois ADRs com o número `0034` (`adopt-bruno-api-client-cli` e
+`ocr-port-adapter`), registrado no Apêndice C do doc de processo. Esta correção evita o terceiro caso.

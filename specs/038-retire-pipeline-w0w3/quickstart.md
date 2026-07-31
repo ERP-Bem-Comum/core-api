@@ -84,7 +84,7 @@ git commit -m "chore(claude): remove hooks que injetam estado de ticket no conte
 
 Ordem imposta pela Governance da constituição: **ADR primeiro**, emenda depois.
 
-**3a. ADR novo** — `handbook/architecture/adr/0055-retire-w0-w3-pipeline.md`. Registra a
+**3a. ADR novo** — `handbook/architecture/adr/0056-retire-w0-w3-pipeline.md`. Registra a
 aposentadoria e declara como ler os ADRs que citam a pipeline (`0018`, `0034`, `0054`). **Não é
 `supersedes`** — nenhum ADR instituía a pipeline. Registrar em `handbook/CHANGELOG.md`.
 
@@ -156,7 +156,7 @@ rm -rf .claude/.pipeline
 Adicionar ao `.gitignore`:
 
 ```gitignore
-# Acervo da pipeline W0→W3 (aposentada — ADR-0055); arquivado fora do repo
+# Acervo da pipeline W0→W3 (aposentada — ADR-0056); arquivado fora do repo
 .claude/.pipeline/
 ```
 

@@ -95,9 +95,9 @@ Projeto único, raiz em `core-api/`. **Nenhuma task toca `src/`** — invariante
 
 > A seção Governance determina que _"alterações de stack ou de princípio exigem ADR novo (com `supersedes`), não edição aqui"_. **O ADR vem antes da emenda — nunca o contrário.**
 
-- [ ] T017 [US2] Criar `handbook/architecture/adr/0055-retire-w0-w3-pipeline.md` registrando a aposentadoria, **sem `supersedes`** (nenhum ADR instituía a pipeline), e declarando como ler `0018`, `0034` e `0054` após a remoção (FR-022, C5.1)
-- [ ] T018 [US2] Incluir no ADR-0055 as 3 citações literais já extraídas com grounding verificado em `research.md` §R0 — Valente (espaço mental), Uncle Bob (código morto), Beck (o que TDD de fato é) — exigência do Princípio IX
-- [ ] T019 [US2] Registrar o ADR-0055 em `handbook/CHANGELOG.md` (FR-022, C5.2)
+- [ ] T017 [US2] Criar `handbook/architecture/adr/0056-retire-w0-w3-pipeline.md` registrando a aposentadoria, **sem `supersedes`** (nenhum ADR instituía a pipeline), e declarando como ler `0018`, `0034` e `0054` após a remoção (FR-022, C5.1)
+- [ ] T018 [US2] Incluir no ADR-0056 as 3 citações literais já extraídas com grounding verificado em `research.md` §R0 — Valente (espaço mental), Uncle Bob (código morto), Beck (o que TDD de fato é) — exigência do Princípio IX
+- [ ] T019 [US2] Registrar o ADR-0056 em `handbook/CHANGELOG.md` (FR-022, C5.2)
 - [ ] T020 [US2] Confirmar que **nenhum** ADR de `0001` a `0054` foi editado (C5.4) — são imutáveis por hierarquia de regras
 
 ### Constituição
@@ -183,7 +183,7 @@ Projeto único, raiz em `core-api/`. **Nenhuma task toca `src/`** — invariante
 - [ ] T054 [US4] **GATE BLOQUEANTE**: conferir que `find ../core-api-pipeline-archive -type f | wc -l` é idêntico ao baseline de T004 (3.436). Divergência de **um único arquivo aborta a etapa** (FR-018, C4.1)
 - [ ] T055 [US4] Remover do índice: `git rm -r --cached .claude/.pipeline` (FR-019, C4.3)
 - [ ] T056 [US4] Remover da árvore de trabalho: `rm -rf .claude/.pipeline` (FR-019, C4.2)
-- [ ] T057 [US4] Adicionar `.claude/.pipeline/` ao `.gitignore` com comentário apontando o ADR-0055 (FR-020, C4.4)
+- [ ] T057 [US4] Adicionar `.claude/.pipeline/` ao `.gitignore` com comentário apontando o ADR-0056 (FR-020, C4.4)
 - [ ] T058 [US4] Verificar recuperabilidade: `git show <SHA-T006>:.claude/.pipeline/<ticket>/STATE.json` retorna conteúdo (FR-021, C4.5)
 - [ ] T059 [US4] Rodar as asserções C4.1–C4.5
 - [ ] T060 [US4] Commit atômico: `chore(pipeline): evacua o acervo de 544 tickets para fora do repo (#038)`

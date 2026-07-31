@@ -107,8 +107,8 @@ remover. Nunca `mv` cego.
 
 | Artefato                                            | Destino  | Detalhe                                                                 |
 | --------------------------------------------------- | -------- | ----------------------------------------------------------------------- |
-| `handbook/architecture/adr/0055-…`                  | ➕ criar | **ADR novo** registrando a aposentadoria (R6). Exigido pela Governance. |
-| `handbook/CHANGELOG.md`                             | ✂️       | Registrar o ADR-0055.                                                   |
+| `handbook/architecture/adr/0056-…`                  | ➕ criar | **ADR novo** registrando a aposentadoria (R6). Exigido pela Governance. |
+| `handbook/CHANGELOG.md`                             | ✂️       | Registrar o ADR-0056.                                                   |
 | `.specify/memory/constitution.md` Princípio I       | ✂️       | Emendar (R4). Versão 1.2.0 → **2.0.0**.                                 |
 | `.specify/memory/constitution.md` §RED→YELLOW→GREEN | ✂️       | Linhas 75-81 — mapeamento nas waves.                                    |
 | `.specify/memory/constitution.md` §Workflow         | ✂️       | Linha 95 — "Pipeline state". **Manter** o gate de qualidade.            |
@@ -134,7 +134,7 @@ remover. Nunca `mv` cego.
 
 | Artefato                                             | Motivo                                                               |
 | ---------------------------------------------------- | -------------------------------------------------------------------- |
-| `handbook/architecture/adr/*` (7 que citam pipeline) | **Imutáveis** por hierarquia de regras. ADR-0055 reconcilia (R6).    |
+| `handbook/architecture/adr/*` (7 que citam pipeline) | **Imutáveis** por hierarquia de regras. ADR-0056 reconcilia (R6).    |
 | `specs/*/tasks.md` e `specs/*/plan.md` (~40)         | Registro do que foi feito à época. Reescrever falsificaria (FR-024). |
 | `.claude/worktrees/` (11 worktrees)                  | Trabalho em curso; tratados na integração de cada branch (R5).       |
 | `src/**`                                             | **Invariante da feature** — zero mudanças (FR-017, SC-007).          |

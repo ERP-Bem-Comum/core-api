@@ -105,8 +105,8 @@ não a justificar.
 
 | ID   | Asserção                                                                     | PASS                        | Cobre  |
 | ---- | ---------------------------------------------------------------------------- | --------------------------- | ------ |
-| C5.1 | `test -f handbook/architecture/adr/0055-*.md`                                | presente                    | FR-022 |
-| C5.2 | `grep -c "0055" handbook/CHANGELOG.md`                                       | **> 0**                     | FR-022 |
+| C5.1 | `test -f handbook/architecture/adr/0056-*.md`                                | presente                    | FR-022 |
+| C5.2 | `grep -c "0056" handbook/CHANGELOG.md`                                       | **> 0**                     | FR-022 |
 | C5.3 | `git log --oneline <base>..HEAD \| wc -l`                                    | **≥ 6** — um por camada     | FR-023 |
 | C5.4 | `git diff --stat <base>..HEAD -- handbook/architecture/adr/0001-*.md … 0054` | vazio — ADRs intactos       | FR-022 |
 | C5.5 | `git diff --name-only <base>..HEAD -- specs/ \| grep -v 038-`                | vazio — histórico congelado | FR-024 |
