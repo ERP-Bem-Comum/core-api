@@ -48,10 +48,16 @@ import type {
   ProgramResponseDto,
   DocumentTypeMetadataResponseDto,
   RecentPaymentDto,
+  NoContractSuppliersResponseDto,
   PayableBatchItemDto,
   DocumentBatchItemDto,
 } from './schemas.ts';
 import type { PayeeBankBlock } from './payee-bank-composition.ts';
+import type { SupplierWithoutContractRow } from '../../public-api/suppliers-without-contract-projection.ts';
+import type { DashboardCostCenterRow } from '../../public-api/dashboard-cost-centers-projection.ts';
+import type { DashboardCostCentersResponseDto } from './schemas.ts';
+// #237: motor de variação PURO (M-1 vs M-2). Reusado aqui na borda — a referência é INPUT.
+import { calculateVariation, calculatePercentage } from '../../domain/dashboard/variation.ts';
 
 /** Serializa Money (branded { cents: number }) como string de centavos. */
 const moneyToCentsString = (cents: number): string => String(cents);
@@ -102,6 +108,71 @@ export const recentPaymentsToDto = (views: readonly PayableView[]): RecentPaymen
     valueCents: moneyToCentsString(v.valueCents),
     paidAt: v.paidAt,
   }));
+
+/** Widget "Fornecedores sem Contrato" (DASH-F5 · #242) → DTO envelope `{ suppliers: [...] }`. Top-5
+ * já ordenado/cortado no SQL (reader.listTop). DTO lean `{ supplierRef, name, totalCents }` — descarta
+ * `payableCount` da linha do REP-2 (não pedido pelo widget). `totalCents` em centavos (number). */
+export const noContractSuppliersToDto = (
+  rows: readonly SupplierWithoutContractRow[],
+): NoContractSuppliersResponseDto => ({
+  suppliers: rows.map((r) => ({
+    supplierRef: r.supplierRef,
+    name: r.name,
+    totalCents: r.totalCents,
+  })),
+});
+
+/**
+ * KPI "Despesas por Centro de Custo" (DASH-F1 · #241) — assembler PURO agregado→DTO. Recebe o agregado
+ * bruto por CC (m1/m2 por Centro de Custo) e monta os 4 blocos:
+ *  - totalExpenses = Σ m1 de todos os CCs (base "Despesas Pagas no período" = M-1);
+ *  - variation = calculateVariation(totalM1, totalM2) + calculatePercentage(totalM1, totalM2) (#237);
+ *  - topCostCenter = o CC com maior m1 (null se não houver despesa em M-1);
+ *  - distribution = por CC com m1 > 0, ordenado por totalCents desc (desempate estável por ref), com
+ *    percentage = totalCents*100/totalExpenses (0 quando totalExpenses=0 — guarda divisão por zero).
+ * A união `Percentage` é serializada COMO ESTÁ (a borda não formata "12,5%" — isso é do BFF #352).
+ */
+export const dashboardCostCentersToDto = (
+  rows: readonly DashboardCostCenterRow[],
+): DashboardCostCentersResponseDto => {
+  const totalM1 = rows.reduce((acc, r) => acc + r.m1Cents, 0);
+  const totalM2 = rows.reduce((acc, r) => acc + r.m2Cents, 0);
+  const totalExpenses = totalM1;
+
+  // Só CCs com despesa paga no mês corrente (M-1); a distribuição é de M-1. Ordena por total desc,
+  // desempate estável por ref (null por último) — resultado determinístico sob empate.
+  const withM1 = rows.filter((r) => r.m1Cents > 0);
+  const sorted = [...withM1].sort((a, b) => {
+    if (b.m1Cents !== a.m1Cents) return b.m1Cents - a.m1Cents;
+    if (a.ref === b.ref) return 0;
+    if (a.ref === null) return 1;
+    if (b.ref === null) return -1;
+    return a.ref.localeCompare(b.ref);
+  });
+
+  const distribution = sorted.map((r) => ({
+    ref: r.ref,
+    name: r.name,
+    totalCents: r.m1Cents,
+    // Guarda divisão por zero: totalExpenses=0 nunca ocorre aqui (m1>0 ⇒ totalExpenses>0), mas o 0
+    // explícito documenta o contrato.
+    percentage: totalExpenses === 0 ? 0 : (r.m1Cents * 100) / totalExpenses,
+  }));
+
+  const top = sorted[0];
+  const topCostCenter =
+    top === undefined ? null : { ref: top.ref, name: top.name, totalCents: top.m1Cents };
+
+  return {
+    totalExpenses,
+    variation: {
+      absoluteCents: calculateVariation(totalM1, totalM2).absoluteCents,
+      percentage: calculatePercentage(totalM1, totalM2),
+    },
+    topCostCenter,
+    distribution,
+  };
+};
 
 /** #357: item de POST /financial/payables:batch — resumo de título p/ o match card da Conciliação
  * (#172), sem N+1. `ref` = payableId (o BFF casa a resposta por `ref`, não por posição no array). */
