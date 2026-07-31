@@ -130,16 +130,24 @@ describe('importContracts — H3 linha inválida isolada', () => {
 });
 
 // ============================================================================
-// H4 — duplicidade intra-arquivo e vs repositório
+// H4 — dedup pelo número DERIVADO: colisão REJEITA (não reatribui) — issue #425
 // ============================================================================
+// O número gravado é derivado (seq legado + ano de vigência). A dedup passa a ser pelo número
+// DERIVADO — intra-arquivo (`seen`) e vs repositório (`findBySequentialNumber`) — e a colisão
+// vira `contract-sequential-number-duplicated`, como o import sempre fez. NUNCA reatribui: sem
+// `legacy_id`, o `sequential_number` é a única chave de dedup, então reatribuir duplicaria.
 
-describe('importContracts — H4 duplicidade', () => {
-  it('duplicata intra-arquivo: 1ª cria, 2ª falha como duplicada', async () => {
+describe('importContracts — H4 dedup pelo número derivado (issue #425)', () => {
+  it('duplicata intra-arquivo (mesmo ano+seq derivado): 1ª cria, 2ª falha como duplicada', async () => {
     const w = setup();
     const useCase = importContracts(w.deps);
 
+    // Ambas derivam para 0030/2024 (inicio 2024, seq 30) → a 2ª colide e é rejeitada.
     const r = await useCase({
-      rows: [baseRow({ numero: '030/2026' }), baseRow({ numero: '030/2026' })],
+      rows: [
+        baseRow({ numero: '030/2026', inicio: '2024-03-01', fim: '2024-12-31' }),
+        baseRow({ numero: '030/2026', inicio: '2024-06-01', fim: '2024-12-31' }),
+      ],
       dryRun: false,
     });
 
@@ -148,20 +156,122 @@ describe('importContracts — H4 duplicidade', () => {
     assert.equal(r.value.succeeded, 1);
     assert.equal(r.value.failed, 1);
     assert.equal(r.value.failures[0]?.error, 'contract-sequential-number-duplicated');
+
+    const list = await w.contractRepo.repo.list();
+    if (!list.ok) return;
+    assert.equal(list.value.length, 1);
+    assert.equal(list.value[0]?.sequentialNumber, '0030/2024');
   });
 
-  it('duplicata vs repositório: número já existente falha', async () => {
+  it('duplicata vs repositório: número derivado já existente falha', async () => {
     const w = setup();
     const useCase = importContracts(w.deps);
 
-    await useCase({ rows: [baseRow({ numero: '031/2026' })], dryRun: false });
-    const r = await useCase({ rows: [baseRow({ numero: '031/2026' })], dryRun: false });
+    await useCase({
+      rows: [baseRow({ numero: '031/2026', inicio: '2024-01-10', fim: '2024-12-31' })],
+      dryRun: false,
+    });
+    // Linha distinta que deriva ao MESMO 0031/2024 → colide com o repo → rejeitada.
+    const r = await useCase({
+      rows: [baseRow({ numero: '031/2020', inicio: '2024-02-10', fim: '2024-12-31' })],
+      dryRun: false,
+    });
 
     assert.equal(isOk(r), true);
     if (!r.ok) return;
     assert.equal(r.value.succeeded, 0);
     assert.equal(r.value.failed, 1);
     assert.equal(r.value.failures[0]?.error, 'contract-sequential-number-duplicated');
+  });
+
+  it('idempotência: re-importar o mesmo arquivo → 2ª rodada rejeita, 0 novos contratos', async () => {
+    const w = setup();
+    const useCase = importContracts(w.deps);
+
+    const rows = [
+      baseRow({ numero: '040/2026', inicio: '2023-01-10', fim: '2023-12-31' }),
+      baseRow({ numero: '041/2026', inicio: '2022-05-01', fim: '2022-12-31' }),
+    ];
+
+    const first = await useCase({ rows, dryRun: false });
+    assert.equal(isOk(first), true);
+    if (!first.ok) return;
+    assert.equal(first.value.succeeded, 2);
+
+    const second = await useCase({ rows, dryRun: false });
+    assert.equal(isOk(second), true);
+    if (!second.ok) return;
+    // O número derivado é determinístico → re-importar acha no repo → rejeita. Idempotente.
+    assert.equal(second.value.succeeded, 0);
+    assert.equal(second.value.failed, 2);
+    assert.equal(second.value.failures[0]?.error, 'contract-sequential-number-duplicated');
+
+    const list = await w.contractRepo.repo.list();
+    if (list.ok) assert.equal(list.value.length, 2, 'nenhum contrato duplicado');
+  });
+
+  it('colisão entre contratos DISTINTOS que derivam ao mesmo número → failure reportado', async () => {
+    const w = setup();
+    const useCase = importContracts(w.deps);
+
+    // 0005/2026 (inicio 2024) e 0005/2027 (inicio 2024) → ambos derivam 0005/2024.
+    const r = await useCase({
+      rows: [
+        baseRow({ numero: '005/2026', inicio: '2024-01-10', fim: '2024-12-31' }),
+        baseRow({ numero: '005/2027', inicio: '2024-08-10', fim: '2024-12-31' }),
+      ],
+      dryRun: false,
+    });
+
+    assert.equal(isOk(r), true);
+    if (!r.ok) return;
+    assert.equal(r.value.succeeded, 1);
+    assert.equal(r.value.failed, 1, 'o 2º distinto que colide é reportado, não duplicado');
+    assert.equal(r.value.failures[0]?.error, 'contract-sequential-number-duplicated');
+
+    const list = await w.contractRepo.repo.list();
+    if (list.ok) assert.equal(list.value.length, 1);
+  });
+});
+
+// ============================================================================
+// #425 — deriva o ano de original_period_start (não verbatim)
+// ============================================================================
+
+describe('importContracts — #425 número derivado do ano de vigência inicial', () => {
+  it('grava NNNN/ano-de-inicio, não o /YYYY verbatim do legado', async () => {
+    const w = setup();
+    const useCase = importContracts(w.deps);
+
+    // numero legado diz /2026, mas a vigência inicia em 2023 → número gravado deve ser 0015/2023.
+    const r = await useCase({
+      rows: [baseRow({ numero: '015/2026', inicio: '2023-05-10', fim: '2023-12-31' })],
+      dryRun: false,
+    });
+
+    assert.equal(isOk(r), true);
+    if (!r.ok) return;
+    assert.equal(r.value.succeeded, 1);
+
+    const list = await w.contractRepo.repo.list();
+    if (!list.ok) return;
+    assert.equal(list.value[0]?.sequentialNumber, '0015/2023');
+  });
+
+  it('preserva a sequência trocando só o ano (0015/2026 → 0015/2023)', async () => {
+    const w = setup();
+    const useCase = importContracts(w.deps);
+
+    const r = await useCase({
+      rows: [baseRow({ numero: '0015/2026', inicio: '2023-05-10', fim: '2023-12-31' })],
+      dryRun: false,
+    });
+
+    assert.equal(isOk(r), true);
+    if (!r.ok) return;
+    const list = await w.contractRepo.repo.list();
+    if (!list.ok) return;
+    assert.equal(list.value[0]?.sequentialNumber, '0015/2023');
   });
 });
 

@@ -62,6 +62,9 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // subcategory_ref em ctr_contracts (CA1 estrutural + round-trip CA2/CA8). NÃO executado nesta
     // janela (#500); registrado para o ritual manual / quando o runner de integração fechar.
     'tests/modules/contracts/adapters/persistence/contract-taxonomy-refs.drizzle-mysql.test.ts',
+    // #425 — backfill de renumeração pelo ano de vigência inicial: renumera afetados, resolve
+    // colisão sem duplicar, reconcilia ctr_contract_seq e idempotência (2ª execução = 0 afetados).
+    'tests/modules/contracts/adapters/persistence/renumber-by-vigencia.drizzle-mysql.test.ts',
     'tests/modules/contracts/adapters/persistence/contract-repository-paged.integration.test.ts',
     'tests/modules/contracts/adapters/persistence/outbox-schema.test.ts',
     'tests/modules/contracts/adapters/persistence/repos/outbox-repository.drizzle.test.ts',
