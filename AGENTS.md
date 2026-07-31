@@ -141,10 +141,10 @@ Carrega **um único** agente por turno.
 
 ### Skills (técnicas/disciplinas aplicadas)
 
-> **Discovery de skills (Kimi Code):** as skills vivem em `.claude/skills/`; o Kimi (Node) as descobre
-> via o **symlink versionado `.agents/skills → ../.claude/skills`** (não auto-descobre `.claude/skills/`
-> direto). Se as skills `/skill:*` não aparecerem, confira o symlink `.agents/skills` ou adicione
-> `extra_skill_dirs = [".claude/skills"]` no seu `~/.kimi-code/config.toml`. No Claude Code, são nativas.
+> **Claude Code é o único agente suportado neste repositório** (decisão do dono, 2026-07-31). As
+> skills vivem em `.claude/skills/` e são descobertas nativamente. Não há symlink `.agents/` nem
+> configuração para outros agentes — quem quiser usar outra ferramenta é responsável pela própria
+> descoberta, sem suporte do repo.
 
 | Atividade                                                            | Skill                                                                                                                                                                                                                          |
 | -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

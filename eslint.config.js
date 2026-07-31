@@ -27,7 +27,6 @@ export default tseslint.config(
       // config do ESLint NÃO lê .gitignore — sem isto o projectService type-aware
       // ingere ~1748 .ts extras e estoura o heap do V8 (OOM no `pnpm run lint`).
       '.claude/**',
-      '.agents/**',
       // Worktrees de épico criados na raiz (`epic/<branch>`, convenção do dev):
       // mesmo caso dos worktrees do Claude — cópia completa de src/ e tests/ de
       // outra branch. Sem esta exclusão o projectService ingere os .ts extras e

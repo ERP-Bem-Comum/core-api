@@ -233,8 +233,8 @@ já coberto).
 - **FR-022**: Aprendizado que **já é** enforced mecanicamente MUST NOT virar rule; MUST ser registrado como coberto, indicando o mecanismo que o garante.
 - **FR-023**: Aprendizado acionável que **não** é enforced e **poderia** ser MUST ser registrado como candidato a enforcement mecânico, em vez de virar só texto.
 - **FR-024**: O conjunto final de rules MUST permanecer proporcional ao seu custo de contexto: rules carregam ao tocar o path, então crescimento MUST ser justificado item a item, não por completude.
-- **FR-025**: O symlink versionado `.agents/skills → ../.claude/skills` MUST ser preservado e MUST continuar resolvendo ao fim da entrega — é o mecanismo de descoberta de skills do Kimi Code (ADR-0054).
-- **FR-026**: A entrega MUST NOT reduzir a portabilidade efetiva entre agentes. Capacidade hoje visível a um segundo agente MUST permanecer visível depois.
+- ~~**FR-025**: O symlink `.agents/skills` MUST ser preservado.~~ **REVOGADO em 2026-07-31** — o dono decidiu que **Claude Code é o único agente suportado**. O symlink foi removido; não há mais mecanismo de descoberta para outros agentes.
+- ~~**FR-026**: A entrega MUST NOT reduzir a portabilidade efetiva entre agentes.~~ **REVOGADO em 2026-07-31** — portabilidade multi-agente deixou de ser objetivo. O repo passa a otimizar para um consumidor só.
 
 ### Key Entities
 
@@ -277,7 +277,10 @@ já coberto).
 - ~~O Claude Code é o único consumidor de agente deste repositório.~~ **CORRIGIDO em 2026-07-30 — a premissa era falsa.** O [ADR-0054](../../handbook/architecture/adr/0054-ai-assisted-contribution-policy.md) (aceito) declara que o projeto é desenvolvido com "Claude Code, **Kimi Code** e outros agentes que consomem o `AGENTS.md`", e o repo versiona `.agents/skills → ../.claude/skills`, symlink que existe porque o Kimi não auto-descobre `.claude/skills/`. Um ADR aceito vence a suposição.
 - **A premissa correta:** o repo **é** multi-agente, e a portabilidade real **nunca veio do spec-kit** — vem do `AGENTS.md` (padrão aberto, com `CLAUDE.md` como stub) e do symlink `.agents/skills`. O spec-kit está com `"integration": "claude"`, uma única integração, e não gera nada para os demais agentes. **A decisão de remover se mantém, e por um motivo mais forte:** o produto que vende portabilidade não é o que a entrega aqui.
 - **Consequência para FR-017:** migrar o fluxo de `.specify/` para `.claude/skills/` o coloca **atrás do symlink `.agents/`**, tornando-o visível ao Kimi — o que hoje não ocorre. A consolidação **aumenta** a portabilidade efetiva em vez de reduzi-la.
-- **`.agents/` MUST ser preservado** por esta feature. Custo de manter: 17 bytes. Custo de remover por engano: o Kimi perde a descoberta das 42 skills, em silêncio.
+- ~~**`.agents/` MUST ser preservado.**~~ **A premissa voltou a mudar em 2026-07-31**, agora por decisão explícita: o dono determinou que **só o Claude Code será usado** neste projeto — nada de Kimi, Copilot ou outros. O symlink `.agents/skills` e o `.zed/` foram removidos.
+
+  Vale registrar o percurso, porque ele é instrutivo: a spec nasceu assumindo "só Claude Code", eu **corrigi** a premissa ao descobrir o symlink e o ADR-0054 (que cita Kimi Code), e agora ela volta a valer — não por eu ter acertado antes, mas porque o dono **decidiu** que assim seja. A diferença entre suposição e decisão é exatamente essa: a primeira se verifica contra o repo, a segunda se declara e o repo se ajusta.
+
 - `specs/` (os artefatos de feature já produzidos) é histórico de projeto e **sobrevive** a qualquer decisão sobre `.specify/` — o formato Markdown das specs não depende da ferramenta que as gerou.
 - TDD como disciplina e a Política de Regressão Zero sobrevivem intactos, como na spec 038.
 - A spec 038 fecha antes desta começar a executar; esta spec assume o estado **pós-038**.
