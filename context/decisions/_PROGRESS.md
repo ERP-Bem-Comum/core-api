@@ -87,7 +87,13 @@ enquanto ninguém repetir o padrão.
 **Candidato a gate:** teste que falhe se dois arquivos de `handbook/architecture/adr/`
 compartilharem prefixo numérico. Quatro reincidências é padrão, não acidente — e é barato de barrar.
 
-**Atualização (lote 5): a doença não é só dos ADRs.** `handbook/inquiries/0011` está **duplicado** —
+**Atualização (2026-08-03): RESOLVIDO.** A colisão de `inquiries/0011` foi desfeita renumerando a
+watchlist para [`0025`](../../handbook/inquiries/0025-typedarrays-immutability-tc39-watchlist.md) —
+quem estava no índice manteve o número, mesmo critério do `ADR-0034`. O gate proposto abaixo existe:
+`tests/cleanup/handbook-numbering.test.ts` barra colisão de prefixo em `adr/` e `inquiries/` e compara
+disco × índice dos ADRs. Registro original do achado, preservado:
+
+**Atualização (lote 5): a doença não é só dos ADRs.** `handbook/inquiries/0011` estava **duplicado** —
 `0011-auditoria-fiscal-cross-periodo.md` (no índice) e `0011-typedarrays-immutability-tc39-watchlist.md`
 (fora dele). Mesma mecânica do `ADR-0034`: arquivo posterior pegou número ocupado e nunca entrou no
 índice. São agora **duas colisões confirmadas no handbook** mais uma em branch (`ADR-0047`). O gate

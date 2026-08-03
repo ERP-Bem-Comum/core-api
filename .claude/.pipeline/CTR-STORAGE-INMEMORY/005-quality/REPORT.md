@@ -133,7 +133,7 @@ Decisao: `.slice()` e mais idiomatico que `Uint8Array.from(src)` para clonar Typ
 
 REVIEW W2 §S2 chancelou a decisao de `eslint-disable` em `sha256hex` ja auditada por dois mecanismos:
 - Audit pelo agente `nodejs-runtime-expert` durante W1
-- Inquiry-0011 (`handbook/inquiries/0011-typedarrays-immutability-tc39-watchlist.md`)
+- Inquiry-0025 (`handbook/inquiries/0025-typedarrays-immutability-tc39-watchlist.md`)
 
 Sem mudanca de codigo necessaria.
 
@@ -177,7 +177,7 @@ Sem mudanca adicional necessaria. `pnpm test` do modulo notifications continua 1
 | W3 | `nodejs-runtime-expert` | Forma idiomatica de clonar TypedArray em Node 24 | APPROVED `src.slice()` |
 | W3 | `nodemailer-email-expert` | Fix colateral em `nodemailer.ts` (W1) | APPROVED |
 
-Cross-link adicional: `handbook/inquiries/0011-typedarrays-immutability-tc39-watchlist.md` documenta criterio de revisita (Immutable ArrayBuffer Stage 3 + V8 ship).
+Cross-link adicional: `handbook/inquiries/0025-typedarrays-immutability-tc39-watchlist.md` documenta criterio de revisita (Immutable ArrayBuffer Stage 3 + V8 ship).
 
 ---
 

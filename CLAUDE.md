@@ -87,6 +87,14 @@ pnpm run secrets:setup        # gera ./secrets/*.txt para o compose
 
 Gate de qualidade: `typecheck` + `format:check` + `lint` + `test`. Os demais scripts estão no `package.json`.
 
+**Hook de pre-commit — instalação manual, uma vez por clone:**
+
+```bash
+git config core.hooksPath .githooks
+```
+
+`core.hooksPath` é estado local (`.git/config`), não conteúdo versionado: um clone novo não o traz. Sem esse comando **não há hook de commit instalado**. O `.githooks/pre-commit` delega a `.claude/hooks/pre-commit-typecheck.sh`, que roda os 4 gates sobre `.ts` staged e recusa o commit se algum ficar vermelho. Escape de emergência: `git commit --no-verify`.
+
 ## Onde procurar
 
 - **Regras por camada:** [`.claude/rules/`](./.claude/rules/) — carregam por `paths:`.

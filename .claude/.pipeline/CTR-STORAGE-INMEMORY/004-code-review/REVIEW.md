@@ -8,7 +8,7 @@
 
 - `src/modules/contracts/adapters/storage/in-memory.ts` (criado em W1)
 - `src/modules/notifications/adapters/email/nodemailer.ts` (fix colateral de formatacao em W1)
-- `handbook/inquiries/0011-typedarrays-immutability-tc39-watchlist.md` (registro complementar - decisao de manter `eslint-disable`)
+- `handbook/inquiries/0025-typedarrays-immutability-tc39-watchlist.md` (registro complementar - decisao de manter `eslint-disable`)
 - Referencias para contexto (nao modificadas em W1):
   - `src/modules/contracts/application/ports/document-storage.ts` (port)
   - `src/modules/contracts/application/ports/document-storage.types.ts` (BucketName/StorageKey/StorageRef + smart constructors)
@@ -59,7 +59,7 @@ Custo: O(n_blobs * size) por chamada. Aceitavel pois `getAllBlobs` so e chamado 
 Nao e issue — registro positivo. A decisao foi auditada por **dois** mecanismos independentes durante o W1:
 
 1. **Audit pelo agente `nodejs-runtime-expert`** (registrado em [REPORT W1 §Fix colateral] e cross-link em inquiry 0011). Veredito: APPROVED. Citacao literal de `handbook/reference/nodejs/Crypto.md` linha 2050.
-2. **Inquiry-0011** ([handbook/inquiries/0011-typedarrays-immutability-tc39-watchlist.md](../../../../handbook/inquiries/0011-typedarrays-immutability-tc39-watchlist.md)) — documenta 4 alternativas exploradas (branded, wrapper objeto, omit-readonly mapping, Proxy) e por que cada uma falha. Critério de revisita registrado (Immutable ArrayBuffer Stage 3 + V8 ship).
+2. **Inquiry-0025** ([handbook/inquiries/0025-typedarrays-immutability-tc39-watchlist.md](../../../../handbook/inquiries/0025-typedarrays-immutability-tc39-watchlist.md)) — documenta 4 alternativas exploradas (branded, wrapper objeto, omit-readonly mapping, Proxy) e por que cada uma falha. Critério de revisita registrado (Immutable ArrayBuffer Stage 3 + V8 ship).
 
 O reviewer chancela a decisao.
 
@@ -136,7 +136,7 @@ Aceitavel como fix colateral neste ticket - alternativa seria abrir micro-ticket
 
 - [REPORT W1](../003-impl/REPORT.md) §"Fix colateral" — detalhe das 3 mudancas em `nodemailer.ts`
 - [REPORT W0](../002-tests/REPORT.md) §"Intencao de cada teste" — mapa CA-T1..CA-T13
-- [Inquiry-0011](../../../../handbook/inquiries/0011-typedarrays-immutability-tc39-watchlist.md) — decisao registrada sobre `eslint-disable` em `Uint8Array`, com criterio de revisita
+- [Inquiry-0025](../../../../handbook/inquiries/0025-typedarrays-immutability-tc39-watchlist.md) — decisao registrada sobre `eslint-disable` em `Uint8Array`, com criterio de revisita
 - [ADR-0019](../../../../handbook/architecture/adr/0019-document-storage-s3-with-minio-dev.md) — habilita esta serie de tickets
 
 ---

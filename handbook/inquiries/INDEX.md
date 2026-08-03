@@ -62,6 +62,17 @@ _Nenhuma._
 | # | Título | Quando reabrir | Bloqueio |
 | :--- | :--- | :--- | :--- |
 | [0016](./0016-nodejs-native-eventbus-pubsub-observer.md) | Soluções nativas Node.js para EventBus / Pub-Sub / Observer | Quando surgir o primeiro caso real de evento intra-módulo (provavelmente `ContractCreated` → adapter outbox) | Nenhum — estudo arquivado como watchlist; regra provisória definida na seção 5 |
+| [0025](./0025-typedarrays-immutability-tc39-watchlist.md) | Imutabilidade real de `Uint8Array` em TS 6 — TC39 watchlist | Quando `Immutable ArrayBuffer` chegar a Stage 3 **e** a V8 embarcar | Nenhum — decisão provisória é `eslint-disable` + defensive copy nos adapters. **Criada como `0011` e renumerada em 2026-08-03** (ver Notas de numeração) |
+
+### Notas de numeração
+
+- **`0011` esteve duplicado** entre 2026-05-22 e 2026-08-03: a auditoria fiscal cross-período
+  (2026-05-19, no índice) e a watchlist de imutabilidade de `Uint8Array` (2026-05-25, fora dele)
+  reivindicavam o mesmo número. Resolvido renumerando a watchlist para `0025`, pelo mesmo critério
+  do `ADR-0034`: quem está no índice mantém o número. O `0011` agora significa, sem ambiguidade, a
+  auditoria fiscal.
+- Colisão de prefixo e divergência entre disco e índice passaram a ser barradas por
+  `tests/cleanup/handbook-numbering.test.ts`.
 
 ---
 

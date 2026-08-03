@@ -33,10 +33,8 @@ const INQUIRIES_DIR = join(PROJECT_ROOT, 'handbook/inquiries');
  * e o pin por deepEqual impede que a lista cresça em silêncio.
  */
 const KNOWN_COLLISIONS: readonly string[] = [
-  // `0011-auditoria-fiscal-cross-periodo.md` (no índice) × `0011-typedarrays-immutability-tc39-watchlist.md`
-  // (fora dele). Mesma mecânica do ADR-0034; registrada em context/decisions/_PROGRESS.md.
-  // Resolver exige renumerar uma inquiry — decisão do dono do repo, não deste gate.
-  'inquiries:0011',
+  // Vazia. A colisão `inquiries:0011` foi resolvida em 2026-08-03 renumerando a watchlist de
+  // `Uint8Array` para `0025` — quem estava no índice manteve o número, mesmo critério do ADR-0034.
 ];
 
 const numericPrefixes = (dir: string): readonly string[] =>
@@ -75,7 +73,7 @@ describe('HANDBOOK-NUMBERING — prefixo numérico é único', () => {
   });
 
   it('a allowlist de colisões está pinada (não cresce em silêncio)', () => {
-    assert.deepEqual([...KNOWN_COLLISIONS].sort(), ['inquiries:0011']);
+    assert.deepEqual([...KNOWN_COLLISIONS].sort(), []);
   });
 });
 
