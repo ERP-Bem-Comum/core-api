@@ -1,6 +1,6 @@
 name: ci
 
-# Gate de qualidade automatizado em PR — espelha o W3 local (AGENTS.md §"Pipeline
+# Gate de qualidade automatizado em PR — espelha o gate local (CLAUDE.md §"Política de regressão zero
 # fail-first"): typecheck + format:check + lint + test (unit). Hoje o W3 só roda na
 # máquina do dev; este workflow torna o gate obrigatório e auditável em todo PR.
 #

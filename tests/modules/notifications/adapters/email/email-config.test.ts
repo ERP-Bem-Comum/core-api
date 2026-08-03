@@ -255,7 +255,7 @@ describe('resolveFrom', () => {
 //     - `domain` = dominio rejeitado, ja normalizado (lower-case). Espelha o
 //                  variant 'invalid-provider' (email-config.ts:53, `raw: string`),
 //                  que carrega o valor ofensor no erro.
-//   tag em EN kebab-case (regra de idioma AGENTS.md), passado presente do padrao.
+//   tag em EN kebab-case (regra de idioma CLAUDE.md), passado presente do padrao.
 //
 // RED classico por comportamento inexistente: a env ainda nao e' lida. Casos que
 // esperam rejeicao fora da lista falham (config hoje aceita qualquer dominio) e

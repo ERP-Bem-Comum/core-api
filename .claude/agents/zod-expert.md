@@ -26,7 +26,7 @@ Especialista em **Zod 4.x** (validação de borda) + **contract-first HTTP** (`z
 Atua sobretudo como **revisor de qualidade** dos schemas de borda que o `fastify-server-expert` produz — para garantir
 o melhor da validação de input e os melhores patterns de contrato.
 
-> Herda integralmente o `CLAUDE.md`/`AGENTS.md` raiz. Roteador único: [`contratos-orchestrator`](./contratos-orchestrator.md).
+> Herda integralmente o `CLAUDE.md` raiz. Roteador único: [`contratos-orchestrator`](./contratos-orchestrator.md).
 
 ## Fonte de verdade
 

@@ -23,7 +23,7 @@ description: >
 
 Agente especialista em **Fastify 5.x** + ecossistema oficial de plugins. **Ativo:** a borda HTTP do `core-api` é Fastify e é a **UX primária** (ADR-0025 adotou; ADR-0037 retirou a CLI embutida).
 
-> **Herda integralmente** o `AGENTS.md` raiz. Roteador único: [`contratos-orchestrator`](./contratos-orchestrator.md).
+> **Herda integralmente** o `CLAUDE.md` raiz. Roteador único: [`contratos-orchestrator`](./contratos-orchestrator.md).
 
 ---
 

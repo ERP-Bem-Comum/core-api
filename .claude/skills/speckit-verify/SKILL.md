@@ -18,7 +18,7 @@ etapa executável, invocável manualmente (`/speckit-verify`) ou automaticamente
 `after_implement` em `.specify/extensions.yml`.
 
 > Esta skill é **custom** e não está no manifesto do spec-kit — updates do CLI **não** a
-> sobrescrevem. As regras canônicas vivem em `AGENTS.md` e `handbook/`; aqui só as aplicamos.
+> sobrescrevem. As regras canônicas vivem em `CLAUDE.md` e `handbook/`; aqui só as aplicamos.
 
 ## Execução
 
@@ -57,7 +57,7 @@ falha, exatamente uma destas saídas é aceitável:
    escopo, e sempre explícito.
 
 Fechar o gate com vermelho não-endereçado é o anti-padrão #14. Veja
-`AGENTS.md` §"Política de regressão zero".
+`CLAUDE.md` §"Política de regressão zero".
 
 ## Saída
 

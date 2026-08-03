@@ -3,8 +3,8 @@
 > **Fonte de verdade:** esta constituição **resume** os princípios para guiar o
 > fluxo do spec-kit (plan/tasks/implement). Ela **não substitui** o cânone — quando
 > houver divergência, vencem, nesta ordem: `handbook/architecture/adr/` (ADRs aceitos,
-> imutáveis) → `handbook/` → `AGENTS.md` + `.claude/rules/`. Veja a "Hierarquia de
-> regras" no `AGENTS.md`. Não duplique regras aqui; referencie.
+> imutáveis) → `handbook/` → `CLAUDE.md` + `.claude/rules/`. Veja a "Hierarquia de
+> regras" no `CLAUDE.md`. Não duplique regras aqui; referencie.
 
 ## Core Principles
 
@@ -14,19 +14,19 @@ Toda mudança em código de produção abre ticket em `.claude/.pipeline/<TICKET
 **W0** testes RED antes de tocar `src/`; **W1** implementação mínima até GREEN;
 **W2** code review read-only (máx. 3 rounds); **W3** quality gate verde
 (`typecheck` + `format:check` + `lint` + `test`). Pular wave quebra o fail-first.
-Bug trivial (1-3 linhas) ou config pode ir direto. *(AGENTS.md §"Pipeline fail-first")*
+Bug trivial (1-3 linhas) ou config pode ir direto. *(CLAUDE.md §"Pipeline fail-first")*
 
 ### II. Política de regressão zero (NÃO-NEGOCIÁVEL)
 Qualquer vermelho — teste, `lint`, `typecheck`, hook, build, gate W3 — é regressão a
 corrigir AGORA, tenha ou não sido causado pelo diff atual. "Não é meu erro" / "já estava
 quebrado" não fecham wave. Saídas aceitas: consertar a causa; corrigir o gate mal-gateado
 **provando** o verde no caminho certo; ou escalar ao humano com causa-raiz. É o anti-padrão
-mais grave (#14). *(AGENTS.md §"Política de regressão zero")*
+mais grave (#14). *(CLAUDE.md §"Política de regressão zero")*
 
 ### III. pnpm é o único package manager
 Nunca `npm` (ADR-0012; hook `block-npm.sh` bloqueia). Qualquer doc/PR/script com `npm`
 deve ser convertido. Supply-chain endurecido: corepack, `only-allow=pnpm`,
-`approve-builds` (ADR-0011). *(AGENTS.md §"IMPORTANTE")*
+`approve-builds` (ADR-0011). *(CLAUDE.md §"IMPORTANTE")*
 
 ### IV. Modular Monolith com isolamento estrito por Bounded Context
 Único processo deployável; módulos isolados por pasta (`src/modules/<bc>/`), tabelas
@@ -61,7 +61,7 @@ ADR-0006). *(supersede o "CLI-first" original; ver ADR-0037)*
 `import type` para tipos, extensões `.ts` nos imports relativos (NodeNext), subpath
 `#src/*`. Proibidos: `any`, classes no domínio, `axios`/`moment`/`lodash`. Idioma:
 código em **EN**, strings ao humano e docs/commits em **PT** (commit `feat(contracts): …`).
-*(AGENTS.md §"Idioma" e §"Sintaxe TS")*
+*(CLAUDE.md §"Idioma" e §"Sintaxe TS")*
 
 ### IX. Decisões ancoradas no cânone (consultoria ACDG + citação obrigatória)
 A pipeline `core-api-sdd` opera em **máximo rigor**: cada fase consulta a persona-consultora
@@ -85,7 +85,7 @@ OWASP…). Sem citação, a decisão não avança o gate. *(MCP `acdg-skills`; v
 Stack fixa: Node.js 24 LTS · TypeScript 6 (roadmap TS 7) · ESM · pnpm · Drizzle + `mysql2`
 (MySQL 8) · `node:test` (sem Jest) · ESLint flat config + Prettier · CLI (Fastify reservado).
 Mudar qualquer item exige ADR novo que `supersedes` o anterior, registrado em
-`handbook/CHANGELOG.md`. Nunca contradizer um ADR aceito. *(AGENTS.md §"ADRs críticos")*
+`handbook/CHANGELOG.md`. Nunca contradizer um ADR aceito. *(CLAUDE.md §"ADRs críticos")*
 
 ## Development Workflow & Quality Gates
 
@@ -100,7 +100,7 @@ Mudar qualquer item exige ADR novo que `supersedes` o anterior, registrado em
 ## Governance
 
 Esta constituição serve ao fluxo spec-kit e está **subordinada** ao cânone do repositório
-(`AGENTS.md`, `handbook/`, ADRs). Em conflito, o cânone vence. Toda feature planejada via
+(`CLAUDE.md`, `handbook/`, ADRs). Em conflito, o cânone vence. Toda feature planejada via
 `/speckit-plan` deve passar pelo "Constitution Check" verificando os princípios I–VIII; uma
 violação só é aceitável com justificativa explícita na seção "Complexity Tracking" do plano.
 O "Constitution Check" do `/speckit-plan` verifica os princípios I–IX.

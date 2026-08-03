@@ -31,7 +31,7 @@ escopo, double e gate próprios neste projeto.
 - **Double:** nenhum na fronteira testada; o ponto é exercitar serialização/IO de verdade.
 - **Gate:** opt-in `*_INTEGRATION=1` / `pnpm test:integration` (sobe MySQL via Docker `--wait`).
   **Nunca** roda em `pnpm test` puro — se rodar, é gate mal-classificado (corrigir, ver
-  política de regressão zero no AGENTS.md).
+  política de regressão zero no CLAUDE.md).
 
 ## Contract
 

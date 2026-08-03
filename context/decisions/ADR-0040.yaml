@@ -43,7 +43,7 @@ extraction:
 prior_art:
   - source: specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: GERA REGRA
-    applied_to: ['AGENTS.md']
+    applied_to: ['CLAUDE.md']
     gap: |
       A regra aterrissou no `AGENTS.md` como anti-padrão #15, e é o lugar certo — vale para todo turno, não
       para um diretório.
@@ -128,7 +128,7 @@ claims:
         `testable-with-work`; o template mitiga na origem, mas não impede edição posterior.
       expected_error: null
       blocker: 'Verificar corpo de issue exige chamada à API, não é grep no repo.'
-      enforced_by: ['.github/ISSUE_TEMPLATE/agent-finding.md', 'AGENTS.md']
+      enforced_by: ['.github/ISSUE_TEMPLATE/agent-finding.md', 'CLAUDE.md']
     rule:
       status: proposed
       disposition: narrow

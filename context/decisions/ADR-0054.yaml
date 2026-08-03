@@ -42,7 +42,7 @@ extraction:
 prior_art:
   - source: specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: GERA REGRA
-    applied_to: ['AGENTS.md']
+    applied_to: ['CLAUDE.md']
     gap: |
       A regra aterrissou no `AGENTS.md` como seção própria e é o lugar certo — política de commit vale para
       todo turno.
@@ -84,7 +84,7 @@ claims:
         PR.
       expected_error: null
       blocker: null
-      enforced_by: ['.github/workflows/commit-policy.yml', 'AGENTS.md']
+      enforced_by: ['.github/workflows/commit-policy.yml', 'CLAUDE.md']
     rule:
       status: proposed
       disposition: narrow
