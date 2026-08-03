@@ -1,8 +1,20 @@
-# ADR-0034: OCR como Port/Adapter Pattern
+# ADR-0056: OCR como Port/Adapter Pattern
 
-- **Status:** Accepted
+- **Status:** Superseded by ADR-0050
 - **Date:** 2026-06-06
 - **Deciders:** Tech Lead + Especialista de Domínio
+- **Superseded by:** [ADR-0050](./0050-document-reader-cascade-supersedes-0034.md) (leitura de documento em cascata, nativo-first)
+
+> ⚠️ **Renumerado em 2026-07-31.** Este ADR foi criado como `ADR-0034` — número já ocupado por
+> [ADR-0034 — adoção do Bruno](./0034-adopt-bruno-api-client-cli.md), que **permanece vigente**. A
+> colisão nasceu da importação do baseline `FIN-DOCUMENTO-INGESTAO` (commit `0b88bade`, 2026-06-08),
+> que trouxe este arquivo de uma árvore de docs com numeração independente. Renumerado para `0056`
+> para que a chave `ADR-NNNN` volte a ser única.
+>
+> O `Status` também foi corrigido na mesma ocasião: o `ADR-0050` supersede este desde 2026-07-08 e o
+> campo seguia dizendo `Accepted`. Uma triagem por status — como a que abriu a
+> [destilação da spec 039](../../../specs/039-claude-native-harness/adr-rules-distillation.md) — o
+> classificaria como vigente e destilaria norma morta.
 
 ## Contexto
 

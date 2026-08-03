@@ -4,6 +4,18 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-07-31 — 🔢 Colisão do `ADR-0034` resolvida: o ADR de OCR renumerado para `0056`, com `Status` corrigido
+
+Dois arquivos reivindicavam o número `0034` desde 2026-06-08: [`0034-adopt-bruno-api-client-cli.md`](./architecture/adr/0034-adopt-bruno-api-client-cli.md) (adoção do Bruno, no índice) e o de OCR Port/Adapter (fora do índice). A colisão entrou pela importação do baseline `FIN-DOCUMENTO-INGESTAO` (commit `0b88bade`), que trouxe o arquivo de uma árvore de docs com numeração independente.
+
+**Por que não era cosmético:** o [ADR-0050](./architecture/adr/0050-document-reader-cascade-supersedes-0034.md) declara *"Supersedes ADR-0034"* e supersede o de **OCR**. Como o índice registrava apenas o do **Bruno** sob esse número, resolver a referência pela via natural concluía que **o Bruno havia sido superseded** — falso: o [ADR-0038](./architecture/adr/0038-bruno-cli-mandatory-and-bru-authoring.md) tornou o Bruno CLI obrigatório e existe agente dedicado a ele.
+
+**Correções:** (1) o ADR de OCR passa a ser [ADR-0056](./architecture/adr/0056-ocr-port-adapter.md), com nota de renumeração explicando a origem; (2) seu `Status` sai de `Accepted` para **`Superseded by ADR-0050`** — o campo nunca havia sido atualizado, e uma triagem por status o classificaria como vigente e destilaria norma morta (mesma classe do `ADR-0012`, registrada na spec 039); (3) o `ADR-0050` cita `ADR-0056` no corpo, com nota de que o **nome do arquivo** (`…-supersedes-0034.md`) foi preservado de propósito, para não quebrar as referências do CHANGELOG e da spec 039 — vale o conteúdo, não o nome; (4) o índice de ADRs ganhou seção **"Notas de numeração"**.
+
+**Registrado no mesmo passo:** o **`ADR-0016` não existe e é reservado de propósito** para a estratégia de implementação dos módulos (prefixos `ctr_*`/`fin_*`, outbox in-process), conforme reserva de 2026-04-28. A consequência prática ficou explícita no índice: enquanto não for escrito, **não existe lista canônica de prefixo de tabela por módulo** — `auth`, `partners`, `programs`, `budget-plans` e `notifications` operam por convenção tácita.
+
+Achados originados do inventário de decisões em `context/decisions/`, que verifica cada alegação de ADR contra `src/`.
+
 ## 2026-07-29 — 🔐 ADR-0055 (Accepted): Amazon Cognito como autoridade de autenticação — supersede parcial do ADR-0024 (authN); autorização permanece no `core-api`
 
 Novo [ADR-0055](./architecture/adr/0055-cognito-external-idp-supersedes-0024-authn.md) (**Accepted**), registrando a **decisão de diretoria** de adotar o Amazon Cognito como autoridade única de autenticação (identidade nativa, MFA/TOTP obrigatório, Threat Protection). Supersede **parcialmente** o [ADR-0024](./architecture/adr/0024-identity-and-rbac-auth-module.md): caem a "fonte de identidade", a emissão de token e o refresh opaco server-side; **permanecem vigentes e inalterados** o RBAC, o catálogo de permissões, a autorização pura e o schema de papéis. O próprio 0024 previa este gatilho (`:117`) e já deixara `password_hash` nullable para isso (`:68`).
@@ -69,7 +81,7 @@ Encerra a _"divergência aceita por ora"_ que o [`07-categorization-taxonomy.md`
 
 ## 2026-07-08 — 🔀 ADR-0050 (Accepted): leitura de documento fiscal em cascata (nativo-first) — supersedes ADR-0034
 
-Novo [ADR-0050](./architecture/adr/0050-document-reader-cascade-supersedes-0034.md) (**Accepted**), que **supersede** o [ADR-0034](./architecture/adr/0034-ocr-port-adapter.md) (OCR como Port/Adapter). Reorienta a leitura de documento fiscal de "OCR-engine-first" para uma **cascata nativo-first**: `XML estruturado → parser de texto nativo (in-house, node:zlib) → OCR self-hosted (microserviço externo, escaneado, adiado) → exceção manual`. Fundamentado em benchmark real do dono (parser nativo: **12/12 campos, ~10 ms CPU, 0 alucinação**; amostra 100% PDF nativo), varredura byte-level empírica (docs fiscais BR = xref clássico + FlateDecode, sem `/Encrypt`/`/ObjStm`) e pesquisa multi-fonte (LGPD bloqueia cloud OCR; `fast-xml-parser` já no lockfile; `mupdf` AGPL descartado). Muda o port de `OcrPort.extract(pdfUrl)` para **`DocumentReaderPort.read(bytes)`** — recebe bytes (anti-SSRF), nunca URL de input. Grounding DDD: ACL (Evans p.224) + Ports & Adapters (Vernon p.182). Pesquisa consolidada em `specs/034-fin-documento-reader/research.md`. Issues: [#62](https://github.com/ERP-Bem-Comum/core-api/issues/62), [#145](https://github.com/ERP-Bem-Comum/core-api/issues/145), [#290](https://github.com/ERP-Bem-Comum/core-api/issues/290).
+Novo [ADR-0050](./architecture/adr/0050-document-reader-cascade-supersedes-0034.md) (**Accepted**), que **supersede** o [ADR-0034](./architecture/adr/0056-ocr-port-adapter.md) (OCR como Port/Adapter — renumerado para `ADR-0056` em 2026-07-31; o link aponta para o destino atual). Reorienta a leitura de documento fiscal de "OCR-engine-first" para uma **cascata nativo-first**: `XML estruturado → parser de texto nativo (in-house, node:zlib) → OCR self-hosted (microserviço externo, escaneado, adiado) → exceção manual`. Fundamentado em benchmark real do dono (parser nativo: **12/12 campos, ~10 ms CPU, 0 alucinação**; amostra 100% PDF nativo), varredura byte-level empírica (docs fiscais BR = xref clássico + FlateDecode, sem `/Encrypt`/`/ObjStm`) e pesquisa multi-fonte (LGPD bloqueia cloud OCR; `fast-xml-parser` já no lockfile; `mupdf` AGPL descartado). Muda o port de `OcrPort.extract(pdfUrl)` para **`DocumentReaderPort.read(bytes)`** — recebe bytes (anti-SSRF), nunca URL de input. Grounding DDD: ACL (Evans p.224) + Ports & Adapters (Vernon p.182). Pesquisa consolidada em `specs/034-fin-documento-reader/research.md`. Issues: [#62](https://github.com/ERP-Bem-Comum/core-api/issues/62), [#145](https://github.com/ERP-Bem-Comum/core-api/issues/145), [#290](https://github.com/ERP-Bem-Comum/core-api/issues/290).
 
 ---
 
@@ -91,7 +103,7 @@ Três decisões, todas via **Anticorruption Layer** (Evans cap.14 — translatio
 **(D1)** reusar a **020**, não portar a hierarquia legada `CostCenter→Category→SubCategory`+`releaseType` (achatar 3 níveis → 2 dimensões + hierarquia opcional de `Category`);
 **(D2)** mapear `installments→payables` — `Payable`(legado)→`Document`, `Installment`→`Payable`, e a fórmula-chave `SUM(Installment.value WHERE 'PAGO')` → `SUM(Payable.value WHERE 'Paid')`; **sem parcelamento temporal no core** (lacuna R-1 para migração de histórico);
 **(D3)** dashboard **fatiado** (1 endpoint por widget). RBAC de Dashboard/Reports = **só autenticação** (ratificado pela P.O. em #233).
-Destrava `DASH-F1`, `DASH-F5`, `REP-3`, `REP-4`. Relatório de pesquisa completo em [`.claude/.planning/SPIKE-233-CATEGORIZACAO-INSTALLMENTS.md`](../.claude/.planning/SPIKE-233-CATEGORIZACAO-INSTALLMENTS.md).
+Destrava `DASH-F1`, `DASH-F5`, `REP-3`, `REP-4`. Relatório de pesquisa completo em [`context/planning/SPIKE-233-CATEGORIZACAO-INSTALLMENTS.md`](../context/planning/SPIKE-233-CATEGORIZACAO-INSTALLMENTS.md).
 
 ---
 
@@ -136,7 +148,7 @@ Feature [`014-financial-supplier-readmodel`](../specs/014-financial-supplier-rea
 - **Consumer** em worker dedicado (composition root `src/workers/supplier-view-projection/`) sobre o worker
   de outbox genérico (`src/shared/outbox`); nenhum módulo importa o outro. Upsert idempotente com guard de
   `occurred_at` (at-least-once + fora de ordem). **Backfill** one-shot dos fornecedores legados.
-- Decisão de manter outbox-MySQL (sem broker/Go) registrada em `.claude/.planning/ASYNC-MESSAGING-STRATEGY.md`.
+- Decisão de manter outbox-MySQL (sem broker/Go) registrada em `context/planning/ASYNC-MESSAGING-STRATEGY.md`.
 
 ## 2026-06-16 — 🔤 ADR-0044: CNPJ alfanumérico (Serpro/Receita 2026) no VO `Cnpj` do kernel
 
@@ -359,12 +371,12 @@ Borda HTTP de Fornecedores sob `/api/v1/suppliers` (módulo `partners`), espelha
 (`SupplierReader`, `GET /suppliers` paginado + filtros search/active/categories, `GET /:id`); **S2**
 cadastro (`POST` 201+Location, invariante de payment target → 422); **S3** lifecycle (`POST`
 deactivate/reactivate, sem `disableBy`). Permissões `supplier:read`/`supplier:write`. Design em
-`.claude/.planning/EPIC-SUPPLIERS-HTTP-V1.md`. Pendentes: S-EDIT (`PUT` — exige `Supplier.edit`, gap de
+`context/planning/EPIC-SUPPLIERS-HTTP-V1.md`. Pendentes: S-EDIT (`PUT` — exige `Supplier.edit`, gap de
 domínio) e extras (`/options`,`/csv`,`/nameOrCNPJ`). Suite: 2048 testes verdes.
 
 ## 2026-06-03 — 🔢 ADR-0033 (versionamento de API: `/api/v1` espelha o legado) + EPIC-COLLABORATORS-HTTP-V1
 
-> Borda HTTP de Colaboradores. Design do épico em `.claude/.planning/EPIC-COLLABORATORS-HTTP-V1.md`.
+> Borda HTTP de Colaboradores. Design do épico em `context/planning/EPIC-COLLABORATORS-HTTP-V1.md`.
 
 ### EPIC-COLLABORATORS-HTTP-V1 — CRUD de Colaboradores no `/api/v1` (6 fatias closed-green)
 
@@ -440,7 +452,7 @@ ETL fatiado em 5 slices, cada um W0→W3. Pré-requisitos P2 (`legacy_id`) + P3 
 
 ### Planejamento
 
-- **Design consolidado** em `.claude/.planning/EPIC-PARTNERS-CADASTROS.md` — convergências, 9 decisões (4 fechadas pela banca, 5 P.O./ETL pendentes) e fatiamento em ~13 tickets W0→W3.
+- **Design consolidado** em `context/planning/EPIC-PARTNERS-CADASTROS.md` — convergências, 9 decisões (4 fechadas pela banca, 5 P.O./ETL pendentes) e fatiamento em ~13 tickets W0→W3.
 
 ### Manutenção
 
@@ -450,7 +462,7 @@ ETL fatiado em 5 slices, cada um W0→W3. Pré-requisitos P2 (`legacy_id`) + P3 
 
 ### Decisões (ADR)
 
-- **ADR-0030 proposto** — store compartilhado (**Valkey** via `ioredis`) para rate-limit/cache **adiado** enquanto o core-api for single-instance (YAGNI); direção fixada para quando escalar horizontalmente. Discussão em `.claude/.planning/REDIS-RATE-LIMIT-STORE.md`.
+- **ADR-0030 proposto** — store compartilhado (**Valkey** via `ioredis`) para rate-limit/cache **adiado** enquanto o core-api for single-instance (YAGNI); direção fixada para quando escalar horizontalmente. Discussão em `context/planning/REDIS-RATE-LIMIT-STORE.md`.
 
 ### Segurança (módulo auth — spec 003)
 
@@ -503,8 +515,8 @@ ETL fatiado em 5 slices, cada um W0→W3. Pré-requisitos P2 (`legacy_id`) + P3 
 
 ### Planejamento (sem código de produção)
 
-- **Método spec-driven nativo** adotado — **sem** instalar o spec-kit oficial (conflito com ADR-0011 supply-chain + ADR-0012 Node/pnpm puro; exigiria Python/uv e duplicaria o W0→W3). Template `.claude/templates/spec.md` + runbook `.claude/runbooks/spec-driven-pipeline.md`; artefato `001-spec/SPEC.md` como gate pré-W0.
-- **Épico `EPIC-HTTP-CORE-API`** especificado (`.claude/.planning/EPIC-HTTP-CORE-API.md`): borda HTTP de auth (primeiro) + contracts; TLS termina no BFF (ADR-0005); fatiado em H0 (bootstrap Fastify) → H1/H2 (rotas+authz auth) → I1 (RW split, ADR-0026), contracts em spec-filha. Recursos (agente·skill·docs) mapeados por etapa. Aguarda aprovação para abrir o H0.
+- **Método spec-driven nativo** adotado — **sem** instalar o spec-kit oficial (conflito com ADR-0011 supply-chain + ADR-0012 Node/pnpm puro; exigiria Python/uv e duplicaria o W0→W3). Template `context/templates/spec.md` + runbook `context/runbooks/spec-driven-pipeline.md`; artefato `001-spec/SPEC.md` como gate pré-W0.
+- **Épico `EPIC-HTTP-CORE-API`** especificado (`context/planning/EPIC-HTTP-CORE-API.md`): borda HTTP de auth (primeiro) + contracts; TLS termina no BFF (ADR-0005); fatiado em H0 (bootstrap Fastify) → H1/H2 (rotas+authz auth) → I1 (RW split, ADR-0026), contracts em spec-filha. Recursos (agente·skill·docs) mapeados por etapa. Aguarda aprovação para abrir o H0.
 - **Tickets fechados** `closed-green`: `AUTH-DB-REPO-SESSION` (W2/W3 reconciliados) e `AUTH-TEST-INTEGRATION-SCRIPT` (runner `pnpm run test:integration:auth` — fecha o gap de integração auth fora do gate padrão).
 
 ---
