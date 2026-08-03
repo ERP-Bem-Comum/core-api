@@ -39,12 +39,17 @@ const HERE = fileURLToPath(new URL('.', import.meta.url));
 const PROJECT_ROOT = resolve(HERE, '..', '..');
 const RULES_DIR = join(PROJECT_ROOT, '.claude', 'rules');
 
-type VerifyEntry = Readonly<{
-  claim: string;
-  root: string;
-  pattern: string;
-  expect: readonly string[];
-}>;
+/**
+ * Dois modos de descrever um conjunto de arquivos, ambos declarativos:
+ *   - `contains` — arquivos sob `root` cujo conteúdo inclui `pattern`
+ *   - `glob`     — arquivos que casam `glob` (expressa AUSÊNCIA: `expect: []` num diretório
+ *                  que não deve existir, como um mirror de teste ainda não criado)
+ */
+type VerifyEntry = Readonly<{ claim: string; expect: readonly string[] }> &
+  (
+    | Readonly<{ mode: 'contains'; root: string; pattern: string }>
+    | Readonly<{ mode: 'glob'; glob: string }>
+  );
 
 type RuleDoc = Readonly<{
   file: string;
@@ -63,11 +68,14 @@ const asVerifyEntries = (v: unknown): readonly VerifyEntry[] => {
   const out: VerifyEntry[] = [];
   for (const raw of v) {
     if (!isRecord(raw)) continue;
-    const { claim, root, pattern } = raw;
-    if (typeof claim !== 'string' || typeof root !== 'string' || typeof pattern !== 'string') {
-      continue;
+    const { claim, root, pattern, glob } = raw;
+    if (typeof claim !== 'string') continue;
+    const expect = asStringArray(raw['expect']);
+    if (typeof glob === 'string') {
+      out.push({ claim, expect, mode: 'glob', glob });
+    } else if (typeof root === 'string' && typeof pattern === 'string') {
+      out.push({ claim, expect, mode: 'contains', root, pattern });
     }
-    out.push({ claim, root, pattern, expect: asStringArray(raw['expect']) });
   }
   return out;
 };
@@ -114,6 +122,13 @@ const filesContaining = (root: string, pattern: string): readonly string[] =>
     .filter((rel) => readFileSync(join(PROJECT_ROOT, rel), 'utf-8').includes(pattern))
     .sort();
 
+const resolveEntry = (entry: VerifyEntry): readonly string[] =>
+  entry.mode === 'glob'
+    ? globSync(entry.glob, { cwd: PROJECT_ROOT })
+        .map((p) => p.split(sep).join('/'))
+        .sort()
+    : filesContaining(entry.root, entry.pattern);
+
 const RULES = readRules();
 
 describe('RULES-SELF-VERIFY — rules reconstruídas se sustentam contra o código', () => {
@@ -136,7 +151,7 @@ describe('RULES-SELF-VERIFY — rules reconstruídas se sustentam contra o códi
 
       for (const entry of rule.verify) {
         it(`afirmação ainda vale: ${entry.claim}`, () => {
-          const found = filesContaining(entry.root, entry.pattern);
+          const found = resolveEntry(entry);
           assert.deepEqual(
             found,
             [...entry.expect].sort(),
