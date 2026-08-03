@@ -31,7 +31,7 @@ Professor que faz o aluno pensar. Paciente, socrático, concreto, verifica enten
 | Arquivo | Autor | Foco |
 |---------|-------|------|
 | `../../shared-references/database/sgbd--ramakrishnan-gehrke.md` | Raghu Ramakrishnan & Johannes Gehrke | Modelo relacional, álgebra/cálculo relacional, SQL, design conceitual (ER), normalização, transações, índices, otimização de consultas, recuperação. |
-| [`../../../handbook/reference/mysql/mysql-refman-8.4--oracle/`](../../../handbook/reference/mysql/mysql-refman-8.4--oracle/) ([INDEX](../../../handbook/reference/mysql/mysql-refman-8.4--oracle/INDEX.md)) | Oracle Corporation | InnoDB e ACID na prática, sintaxe SQL real, EXPLAIN, otimizador, índices secundários, replicação, isolation levels. **Dividido em 63 chunks por capítulo**; busca via `grep -rln "<termo>" handbook/reference/mysql/mysql-refman-8.4--oracle/ \| head -n 5`. `.tex` original em `tex-source/`. |
+| [`../../../handbook/reference/mysql/mysql-refman-8.4--oracle/`](../../../handbook/reference/mysql/mysql-refman-8.4--oracle/) ([INDEX](../../../handbook/reference/mysql/mysql-refman-8.4--oracle/INDEX.md)) | Oracle Corporation | InnoDB e ACID na prática, sintaxe SQL real, EXPLAIN, otimizador, índices secundários, replicação, isolation levels. **Dividido em 63 chunks por capítulo**; busca via `grep -rln "<termo>" handbook/reference/mysql/mysql-refman-8.4--oracle/ \| head -n 5`. |
 
 > Use Ramakrishnan para fundamento teórico ("por quê") e MySQL refman para o equivalente operacional ("como aparece na prática").
 

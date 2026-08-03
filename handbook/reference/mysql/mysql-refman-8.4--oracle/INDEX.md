@@ -1,6 +1,6 @@
 # MySQL 8.4 Reference Manual — Split Index
 
-Arquivo fonte: `../tex-source/mysql-refman-8.4--oracle.tex` (13MB, 221.231 linhas — LaTeX exportado pela Oracle).
+Gerado do LaTeX oficial da Oracle (MySQL 8.4 Reference Manual). O fonte `.tex` foi removido do repo — estes 63 chunks são a referência.
 Dividido por capítulo. Capítulos com mais de 8.000 linhas foram subdivididos em partes de ~5.000 linhas, cortando no `\section*{...}` mais próximo do alvo.
 
 Para ler um capítulo específico: `Read` o arquivo correspondente abaixo (faixa de linhas é do arquivo original, para referência cruzada).
