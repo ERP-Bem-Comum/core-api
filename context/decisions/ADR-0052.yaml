@@ -1,0 +1,430 @@
+id: ADR-0052
+title: Modo de operação `AUTH_RBAC_MODE=bypass` — desligar a autorização por permissão, mantendo a autenticação
+source: handbook/architecture/adr/0052-rbac-bypass-flag.md
+decided_on: 2026-07-16
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0024, ADR-0025, ADR-0049, ADR-0053]
+
+assessment:
+  verdict: realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Décimo quarto `realized`, e o mais rigoroso do acervo em matéria de guardas — as três estão
+    implementadas, e uma delas com teste que protege o próprio mecanismo de ser apagado por refactor.
+    O resolvedor é uma linha e é fail-secure por construção: `auth/adapters/http/rbac-mode.ts:12` faz
+    `env['AUTH_RBAC_MODE'] === 'bypass' ? 'bypass' : 'enforced'`, e o comentário da linha 3 explica —
+    "`bypass` liga SÓ com a palavra exata. Ausente, 'enforced' ou qualquer outro valor → 'enforced'". Não
+    há caminho em que typo abra o sistema. O default seguro também está no wiring:
+    `composition.ts:414` — `config.rbacMode ?? 'enforced'; // ADR-0052 — default seguro`.
+    O banner é literal e gritante: `rbac-mode.ts:19-20` monta um bloco cercado com
+    "⚠️ AUTORIZAÇÃO RBAC DESLIGADA (AUTH_RBAC_MODE=bypass)" e "TODO USUÁRIO AUTENTICADO É SUPER-USUÁRIO",
+    com `NODE_ENV` no meio; `server.ts:170` o dispara quando o modo é `bypass`. E o comentário da linha 14
+    registra a proteção mais fina: "um refactor que apague o `stderr.write` no server.ts não pode passar
+    sem um teste vermelho" — há teste guardando o aviso.
+    A exceção do W2/M1 também está lá: `authorize-actor.ts:12` expõe `authorizeActor`, e
+    `revoke-role.ts:67` o consome, com `cannot-self-lockout` (`:43`) preservado como proteção de
+    integridade que sobrevive ao bypass.
+
+extraction:
+  state: complete
+  covers: |
+    8 alegações — a flag e seus dois valores, a preservação da autenticação, o ponto de aplicação com a
+    exceção dos quatro use cases, a proteção de integridade que sobrevive, as três guardas invariantes, e a
+    consequência de escalação persistida. As alternativas descartadas convergem para a guarda 3.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/http-edge.md']
+    gap: |
+      Destilou a existência da flag e o default seguro, que é o essencial.
+      O que não registrou: a guarda mais transferível daqui não é sobre RBAC — é o padrão
+      **"modo degradado nunca silencioso"**, que o ADR deriva explicitamente do combate ao fallback
+      silencioso (#456/#462/#474). Escrita assim, a regra vale para qualquer flag que reduza garantia, não
+      só para esta.
+
+claims:
+  - id: ADR-0052-C1
+    text: |
+      Introduzir a env `AUTH_RBAC_MODE` com dois valores: `enforced` (DEFAULT, e qualquer valor inválido) —
+      RBAC fail-closed; e `bypass` — `authorize` vira no-op e `hasPermission` retorna sempre `true`.
+    kind: obligation
+    source_lines: ['24-29']
+    applies_to:
+      - 'src/modules/auth/adapters/http/rbac-mode.ts'
+      - 'src/server.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - "src/modules/auth/adapters/http/rbac-mode.ts:12 — env['AUTH_RBAC_MODE'] === 'bypass' ? 'bypass' : 'enforced'"
+        - 'src/server.ts:169 — const rbacMode = resolveRbacMode(process.env)'
+        - 'src/server.ts:175 — rbacMode é injetado na composição'
+        - 'src/modules/auth/adapters/http/composition.ts:135 — rbacMode?: RbacMode no contrato de config'
+        - 'src/modules/auth/adapters/http/composition.ts:132 — docstring: Modo do RBAC (ADR-0052). Default `enforced`. Em `bypass`, `authorize` vira no-op e …'
+      verify: |
+        grep -rn "AUTH_RBAC_MODE\|resolveRbacMode" src/ --include='*.ts' | head -5
+    testability:
+      verdict: testable
+      layer: contract
+      red: |
+        Dado `AUTH_RBAC_MODE=bypass`, quando um usuário autenticado sem permissão pede um recurso protegido,
+        então MUST receber 200. Dado `enforced` ou ausente, MUST receber 403.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Flag que reduz garantia de segurança MUST ter exatamente um valor que a ativa, e MUST resolver
+        qualquer outro valor para o modo seguro. MUST NOT aceitar `1`/`true`/`yes` como ativação.
+      rationale: |
+        A segunda cláusula é o que o ADR chama de fail-secure e explica com precisão: "não é um `1`/`true`
+        que entra por typo de copy-paste de env" e "erro de config NUNCA abre o sistema por acidente". A
+        assimetria é o ponto — para uma flag que aumenta garantia, um valor ambíguo é irrelevante; para uma
+        que a reduz, ambiguidade é vulnerabilidade.
+
+  - id: ADR-0052-C2
+    text: |
+      A AUTENTICAÇÃO NÃO MUDA: `requireAuth` continua obrigatório — sem `Bearer` válido é 401. O bypass
+      afeta SÓ a autorização por permissão (o 403 deixa de existir).
+    kind: obligation
+    source_lines: ['31-32']
+    applies_to:
+      - 'src/modules/auth/adapters/http/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - 'src/modules/auth/adapters/http/rbac-mode.ts:19 — o banner nomeia só a autorização: AUTORIZAÇÃO RBAC DESLIGADA (AUTH_RBAC_MODE=bypass)'
+        - 'nota: o texto do banner registra explicitamente "A autenticação segue ativa; só a permissão por rota caiu" — a distinção está na mensagem que o operador lê'
+        - 'nota: o resolvedor devolve apenas o modo do RBAC; nada em rbac-mode.ts toca requireAuth'
+      verify: |
+        sed -n '15,26p' src/modules/auth/adapters/http/rbac-mode.ts
+    testability:
+      verdict: testable
+      layer: contract
+      red: |
+        Dado `AUTH_RBAC_MODE=bypass` e uma requisição SEM `Bearer`, então MUST receber 401. Se o bypass
+        também liberar a autenticação, o teste falha — é a diferença entre "todo logado é super-usuário" e
+        "sistema aberto".
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Modo degradado de autorização MUST NOT afetar a autenticação. Rota protegida MUST continuar
+        exigindo credencial válida em qualquer modo.
+      rationale: |
+        É a fronteira que torna a decisão aceitável e que um refactor confundiria com facilidade, porque os
+        dois hooks vivem lado a lado no mesmo `buildAuthHttpDeps`. Sem a regra, "desligar o RBAC" pode ser
+        lido como "desligar o bloco de auth", e a diferença entre 401 e 403 é a diferença entre um sistema
+        com usuários identificados e um sistema aberto.
+
+  - id: ADR-0052-C3
+    text: |
+      O ponto de aplicação principal é `buildAuthHttpDeps`, que embrulha `authorize`/`hasPermission`
+      conforme o modo — nenhum plugin de módulo muda, todos herdam por injeção. EXCEÇÃO (W2/M1): quatro use
+      cases do próprio `auth` fazem `authorize` EMBUTIDO (DD-USER-07 — `assignRole`, `revokeRole`, e a
+      concessão da alçada em `createUserByAdmin`/`updateUserProfile`), fora do wrapper. O bypass é TOTAL —
+      inclui gerir papéis —, então esses quatro recebem o `rbacMode` via `authorizeActor`.
+    kind: obligation
+    source_lines: ['34-41']
+    applies_to:
+      - 'src/modules/auth/application/**/*.ts'
+      - 'src/modules/auth/adapters/http/composition.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - 'src/modules/auth/application/authorize-actor.ts:12 — export const authorizeActor = ( … ), o helper que recebe o modo'
+        - 'src/modules/auth/application/use-cases/revoke-role.ts:17 — import { authorizeActor } from ../authorize-actor.ts'
+        - 'src/modules/auth/application/use-cases/revoke-role.ts:67 — if (!authorizeActor(deps.rbacMode, activeActor.value, user:assign-role).ok)'
+        - 'src/modules/auth/adapters/http/composition.ts:414 — o rbacMode é resolvido no wiring e distribuído por injeção'
+        - 'nota: o RBAC não é ponto único — os quatro use cases com authorize embutido são a razão pela qual o wrapper sozinho não bastaria'
+      verify: |
+        grep -rn "authorizeActor" src/modules/auth/ --include='*.ts' | head -6
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado `bypass`, quando um usuário sem permissão chama qualquer um dos quatro use cases de
+        auto-gestão, então MUST suceder. Se algum deles ignorar o `rbacMode`, o bypass é parcial e a
+        auto-recuperação do #462 não funciona.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Checagem de autorização MUST passar pelo ponto de estrangulamento único. Verificação EMBUTIDA em use
+        case MUST receber o modo de operação explicitamente — MUST NOT haver caminho de autorização que
+        ignore o modo.
+      rationale: |
+        É a lição operacional mais valiosa do ADR: o RBAC parecia ter um ponto único (`buildAuthHttpDeps`) e
+        tinha cinco — o wrapper mais quatro `authorize` embutidos. Uma flag global que só cobre o wrapper
+        produz comportamento incoerente, e aqui a incoerência específica seria fatal ao propósito: sem os
+        quatro, o usuário em bypass não consegue se dar as roles para religar o `enforced`.
+
+  - id: ADR-0052-C4
+    text: |
+      Uma proteção de INTEGRIDADE SOBREVIVE ao bypass: o `revokeRole` impede o ator de revogar de si a
+      própria capacidade de gestão (`cannot-self-lockout`) — isso protege o ESTADO PERSISTIDO (não deixar o
+      sistema sem gestor quando o `enforced` voltar), não a autorização do ator, então continua valendo em
+      QUALQUER MODO.
+    kind: obligation
+    source_lines: ['43-46']
+    applies_to:
+      - 'src/modules/auth/application/use-cases/revoke-role.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - "src/modules/auth/application/use-cases/revoke-role.ts:43 — | 'cannot-self-lockout' na união de erros do use case"
+        - 'src/modules/auth/application/use-cases/revoke-role.ts:7 — docstring: estado pos-revoke e, se o ator NAO retiver user:assign-role, falha com cannot-self-lockout'
+        - 'nota: a checagem é sobre o ESTADO resultante, não sobre a permissão do ator — é o que a faz independer do modo'
+      verify: |
+        grep -n "cannot-self-lockout" src/modules/auth/application/use-cases/revoke-role.ts
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado `bypass` e um ator que é o último com capacidade de gestão, quando tenta revogar a própria
+        role, então MUST falhar com `cannot-self-lockout`. Se o bypass liberar isso, o sistema pode ficar
+        sem gestor e o `enforced` torna-se irreversível.
+      expected_error: 'cannot-self-lockout'
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Proteção que preserva ESTADO PERSISTIDO MUST sobreviver a qualquer modo degradado de autorização. A
+        distinção MUST ser explícita: modo degradado libera o que ele pode desfazer depois; nunca o que
+        ficaria irreversível.
+      rationale: |
+        É o critério mais elegante do acervo, e o `ADR-0053` o reusou como precedente: **o que sobrevive ao
+        bypass é o que o bypass não pode desfazer depois**. Aqui o dano de deixar o sistema sem gestor não
+        é revertido por religar o `enforced` — ao contrário, religar é o que o torna permanente. Vale como
+        regra geral para qualquer flag de degradação.
+
+  - id: ADR-0052-C5
+    text: |
+      GUARDA 1 — Valor explícito: só `AUTH_RBAC_MODE=bypass` liga. Valor desconhecido → `enforced`
+      (FAIL-SECURE: erro de config NUNCA abre o sistema por acidente).
+    kind: obligation
+    source_lines: ['54-56']
+    applies_to:
+      - 'src/modules/auth/adapters/http/rbac-mode.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - "src/modules/auth/adapters/http/rbac-mode.ts:12 — env['AUTH_RBAC_MODE'] === 'bypass' ? 'bypass' : 'enforced' — comparação estrita com a palavra exata"
+        - "src/modules/auth/adapters/http/rbac-mode.ts:3 — comentário: `bypass` liga SÓ com a palavra exata. Ausente, 'enforced' ou qualquer outro valor → 'enforced'"
+        - 'nota: não há normalização (trim/lowercase) no resolvedor, o que torna o fail-secure ainda mais estrito — BYPASS ou " bypass" resolvem para enforced'
+      verify: |
+        sed -n '1,14p' src/modules/auth/adapters/http/rbac-mode.ts
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado `AUTH_RBAC_MODE` com `true`, `1`, `BYPASS`, ` bypass` ou vazio, então o modo MUST resolver para
+        `enforced`. Um único valor não-exato que resolva para `bypass` reprova.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar: é a mesma regra da `C1` (um valor exato ativa, todo o resto é seguro), já proposta com
+        escopo geral. Registrar aqui o detalhe que fortalece: o resolvedor NÃO normaliza — sem `trim` nem
+        `toLowerCase` —, então `BYPASS` também resolve para `enforced`. Estrito de propósito.
+
+  - id: ADR-0052-C6
+    text: |
+      GUARDA 2 — BANNER GRITANTE NO BOOT: quando `bypass`, o `server.ts` escreve em stderr um aviso
+      inconfundível ("⚠️ AUTORIZAÇÃO RBAC DESLIGADA — TODO USUÁRIO AUTENTICADO É SUPER-USUÁRIO"), com o
+      `NODE_ENV`. Quem sobe o processo vê, sempre.
+    kind: obligation
+    source_lines: ['57-59']
+    applies_to:
+      - 'src/modules/auth/adapters/http/rbac-mode.ts'
+      - 'src/server.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - 'src/modules/auth/adapters/http/rbac-mode.ts:19 — #  ⚠️  AUTORIZAÇÃO RBAC DESLIGADA (AUTH_RBAC_MODE=bypass)       #'
+        - 'src/modules/auth/adapters/http/rbac-mode.ts:20 — #  TODO USUÁRIO AUTENTICADO É SUPER-USUÁRIO.                    #'
+        - 'src/modules/auth/adapters/http/rbac-mode.ts:23 — #  Reversível: remova a env ou use AUTH_RBAC_MODE=enforced.     #'
+        - 'src/server.ts:170 — if (rbacMode === bypass) — o disparo do banner'
+        - 'src/modules/auth/adapters/http/rbac-mode.ts:14 — comentário: um refactor que apague o `stderr.write` no server.ts não pode passar sem um teste vermelho'
+        - 'nota: o banner inclui NODE_ENV com padEnd, formando um bloco cercado de # — desenhado para ser impossível de perder no log de boot'
+      verify: |
+        grep -n "SUPER-USUÁRIO\|stderr.write" src/modules/auth/adapters/http/rbac-mode.ts src/server.ts | head
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado `bypass`, quando o servidor sobe, então stderr MUST conter o aviso. É o teste que o comentário
+        da linha 14 diz existir — e sem ele um refactor apagaria o aviso silenciosamente, transformando a
+        decisão inteira no fallback silencioso que ela combate.
+      expected_error: null
+      blocker: null
+      enforced_by: ['src/modules/auth/adapters/http/rbac-mode.ts']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Modo que reduz garantia de segurança MUST emitir aviso no boot, em stderr, nomeando o efeito e o
+        ambiente. O aviso MUST ser protegido por teste — apagá-lo MUST falhar o gate.
+      rationale: |
+        A segunda frase é a que fecha o ciclo, e o repo já a implementa: um aviso não protegido por teste é
+        removível por qualquer refactor de log, e a partir daí o modo degradado é silencioso. O ADR declara
+        a condição da própria decisão — "o bypass NÃO pode ser silencioso", derivado do combate ao fallback
+        silencioso do #456/#462/#474 — e a única forma de sustentar isso é o teste.
+
+  - id: ADR-0052-C7
+    text: |
+      GUARDA 3 — DEFAULT SEGURO: ausência da env = `enforced`. Um ambiente que não sabe da flag opera com
+      RBAC. REJEITADO bypass como default sem flag — abriria todos os ambientes, inclusive os que não
+      tomaram a decisão.
+    kind: obligation
+    source_lines: [60, '96-97']
+    applies_to:
+      - 'src/modules/auth/adapters/http/composition.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - "src/modules/auth/adapters/http/composition.ts:414 — const rbacMode: RbacMode = config.rbacMode ?? 'enforced'; // ADR-0052 — default seguro."
+        - 'src/modules/auth/adapters/http/composition.ts:132 — a docstring do campo repete "Default `enforced`"'
+        - 'nota: o default está em DOIS lugares independentes — no resolvedor de env (rbac-mode.ts:12) e no wiring (composition.ts:414) — logo um chamador que não passe o campo também opera seguro'
+      verify: |
+        grep -n "?? 'enforced'" src/modules/auth/adapters/http/composition.ts
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado ambiente SEM `AUTH_RBAC_MODE` e composição sem o campo `rbacMode`, então o modo MUST ser
+        `enforced`. Os dois caminhos de omissão MUST convergir para o seguro.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        O default de toda configuração de segurança MUST ser o modo restritivo, em TODOS os pontos de
+        omissão (env ausente, campo de config ausente, chamador que não passa o parâmetro).
+      rationale: |
+        O "em todos os pontos de omissão" é o que a verificação mostrou e o ADR não escreve: o default vive
+        duas vezes — no resolvedor de env e no wiring da composição. Um default seguro só na leitura da env
+        deixaria um chamador programático (teste, worker, script) operar em modo indefinido. Redundância de
+        default é o oposto de duplicação de regra: aqui as duas cópias falham para o mesmo lado seguro.
+
+  - id: ADR-0052-C8
+    text: |
+      Consequência ACEITA (dono ciente): ESCALAÇÃO PERSISTIDA — como o bypass inclui a gestão de papéis, um
+      usuário pode, durante o bypass, atribuir a si uma role administrativa QUE SOBREVIVE ao desligar o
+      bypass. O modo, que é reversível, pode deixar rastro de privilégio permanente. Reverter uma escalação
+      indevida é re-`enforced` + revogar as roles concedidas no período.
+    kind: permission
+    source_lines: ['70-76']
+    applies_to:
+      - 'src/modules/auth/application/use-cases/*.ts'
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        Se alguma role foi atribuída durante uma janela de bypass é fato de DADO, em ambiente — não
+        observável no código. Auditar via `updatedByRef`/trilha das tabelas de role, comparando com o
+        período em que a env estava ativa.
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado `bypass`, quando um usuário sem permissão atribui a si uma role, então a atribuição MUST
+        persistir após religar o `enforced` — é o comportamento ACEITO, não um bug. O teste documenta a
+        consequência para que ela não seja descoberta por acidente.
+      expected_error: null
+      blocker: 'Depende de dado de ambiente e da janela em que a env esteve ativa.'
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Modo degradado cujo efeito pode deixar RASTRO PERSISTENTE MUST registrar isso na decisão, com o
+        procedimento de reversão. Ao desligar o modo, MUST haver auditoria das mudanças de privilégio feitas
+        na janela.
+      rationale: |
+        A segunda frase é o que falta hoje: o ADR nomeia a reversão ("re-`enforced` + revogar as roles
+        concedidas no período") mas nada produz a lista dessas roles. É a assimetria que o próprio ADR
+        identifica — o modo é reversível, o rastro não é. Sem auditoria da janela, "revogar as roles
+        concedidas no período" é uma instrução sem insumo, e o `ADR-0053` §Desfecho registra que a janela
+        de bypass está aberta agora.
+
+findings:
+  - |
+    **As três guardas estão implementadas, e uma delas é protegida contra o próprio apagamento.**
+    `rbac-mode.ts:14` registra que "um refactor que apague o `stderr.write` no server.ts não pode passar
+    sem um teste vermelho" — há teste guardando o banner. É o único caso do inventário em que um mecanismo
+    de AVISO tem teste próprio, e o raciocínio é exato: aviso sem teste é removível por qualquer limpeza de
+    log, e a partir daí o modo degradado volta a ser silencioso, que é precisamente o que a decisão
+    combate (#456/#462/#474).
+  - |
+    **O RBAC parecia ter ponto único e tinha cinco.** O ADR encontrou, no W2/M1, quatro use cases com
+    `authorize` EMBUTIDO fora do wrapper de `buildAuthHttpDeps` — e a correção foi passar o `rbacMode` a
+    eles via `authorizeActor` (`revoke-role.ts:67`). Se ficassem de fora, o bypass seria parcial e a
+    auto-recuperação do #462 não funcionaria: o usuário em bypass não conseguiria dar a si as roles para
+    religar o `enforced`. Lição de método: "ponto de estrangulamento único" é uma hipótese a verificar,
+    não uma propriedade a assumir.
+  - |
+    **O critério "sobrevive ao bypass o que o bypass não pode desfazer depois" é o mais elegante do
+    acervo.** `cannot-self-lockout` fica de pé em qualquer modo porque protege ESTADO, não autorização — e
+    o dano de ficar sem gestor não é revertido por religar o `enforced`; religar é o que o torna
+    permanente. O `ADR-0053` reusou essa mesma estrutura de raciocínio para argumentar que
+    confidencialidade também sobrevive (vazamento persiste) — e foi rejeitado, o que deixa o critério
+    aplicado a integridade e não a confidencialidade.
+  - |
+    **O default seguro está duplicado de propósito, e isso é o oposto de duplicação de regra.**
+    `rbac-mode.ts:12` (leitura da env) e `composition.ts:414` (wiring) resolvem o default
+    independentemente. Um chamador programático que não passe `rbacMode` — teste, worker, script — cai no
+    seguro pelo segundo caminho. As duas cópias falham para o mesmo lado, que é o critério que distingue
+    redundância defensiva de drift.
+  - |
+    **A consequência aceita tem reversão nomeada e sem insumo.** O ADR diz que reverter uma escalação
+    indevida é "re-`enforced` + revogar as roles concedidas no período", e nada no sistema produz a lista
+    dessas roles. A assimetria que o próprio ADR identifica — modo reversível, rastro não — fica sem
+    fechamento operacional. Relevante agora, porque o `ADR-0053` §Desfecho registra que a janela de bypass
+    está aberta durante a fase de aceitação.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    O ADR cita #462 (seed de permissões em prod), #466 (dev-seed drift), #456 (fallback silencioso) e a
+    decisão DD-USER-02/DD-USER-07 — nenhum lido nesta fase. O carve-out proposto no `ADR-0053` foi
+    REJEITADO pela P.O. em 2026-07-20; ver aquele registro para a decisão vigente sobre dado sensível.

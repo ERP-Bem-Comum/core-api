@@ -1,0 +1,498 @@
+id: ADR-0049
+title: Fronteira de responsabilidade core-api ↔ BFF (Domain API + Experience API)
+source: handbook/architecture/adr/0049-core-api-bff-boundary.md
+decided_on: 2026-07-07
+
+declared:
+  status: Proposed
+  status_normalized: proposed
+  supersedes: []
+  superseded_by: []
+  related:
+    [
+      ADR-0006,
+      ADR-0014,
+      ADR-0018,
+      ADR-0020,
+      ADR-0022,
+      ADR-0025,
+      ADR-0027,
+      ADR-0028,
+      ADR-0032,
+      ADR-0037,
+      ADR-0045,
+    ]
+  note_on_relation: |
+    Declara-se o ESTADO-ALVO do `ADR-0032` — "quando esta fronteira entra, a rota gorda transitória do
+    0032 é removida". Único caso do inventário em que um ADR é o fim-de-vida planejado de outro sem
+    supersedê-lo: os dois são vigentes ao mesmo tempo, um transitório e um alvo.
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Um `Proposed` cuja parte de CONTRATO já foi construída e cujo invariante mais explícito está violado
+    justamente no módulo onde ele mandava aplicar a régua "rigorosamente".
+    O que existe: os endpoints batch-by-id do §Contrato, com o ADR citado no ponto —
+    `financial/adapters/http/schemas.ts:1183` abre a seção "Resolução em lote (#357, ADR-0049) — POST
+    /financial/payables:batch", e há também `documents:batch` (#358) e `partners/suppliers:batch`. O teto
+    de 200 refs/chamada é enforçado por Zod em três lugares (`refs: z.array(z.uuid()).min(1).max(200)`),
+    não por convenção. `supplier-schemas.ts:150` documenta o teto e o compara com outro batch do sistema.
+    O que não existe: o BFF. A composição transitória do `ADR-0032` segue viva e anotada como tal
+    (`contracts/adapters/http/composition.ts:141` — "Composição transitória do contratado na borda
+    (ADR-0032). Degrada p/ snapshot null"), o que é o estado correto enquanto esta fronteira não entrar.
+    E o invariante 2 ("MUST NOT — o core retornar DTO de tela, formatação PT, `R$`") está CONTRADITADO:
+    `budget-plans/adapters/http/budget-plan-csv.ts:39` faz
+    `toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })`, produzindo `R$ 1.234,56`, e
+    `plugin.ts:149` serve isso como `text/csv`. O §Rollout dizia "aplicar a régua rigorosamente a
+    budget-plans (#315-320)".
+
+extraction:
+  state: complete
+  covers: |
+    9 alegações — a régua divisória, os três itens do contrato do core, as duas correções de rota
+    (authz/PII), os sete invariantes normativos agrupados por assunto, e as duas decisões de topologia e
+    rollout. O Apêndice A é fundamentação medida; os exemplos de view-model são ilustração.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: INELEGÍVEL (status Proposed)
+    applied_to: []
+    gap: |
+      Descartado pelo status — e é o descarte mais caro dos dez, porque este ADR tem uma seção
+      explicitamente intitulada "Invariantes (normativo)" com sete cláusulas em MUST/MUST NOT. É material
+      de rule pronto, escrito no formato de rule.
+      Pior: um dos sete está violado no código, e a violação está no módulo que o §Rollout nomeia como
+      alvo rigoroso da régua. Filtrar por status deixou passar exatamente o caso que o confronto com `src/`
+      pegaria.
+
+claims:
+  - id: ADR-0049-C1
+    text: |
+      A linha divisória é uma pergunta única: "O banco precisa fazer isso? → core-api. É montar/formatar o
+      que já veio? → BFF." O core-api expõe DADOS DE DOMÍNIO CRUS E JÁ AUTORIZADOS; o BFF compõe e formata
+      view-models por tela.
+    kind: obligation
+    source_lines: [23, 25]
+    applies_to:
+      - 'src/modules/*/adapters/http/**/*.ts'
+    reality:
+      verdict: partial
+      holds_in: [contracts, financial, partners]
+      absent_in: [budget-plans]
+      evidence:
+        - 'src/modules/financial/adapters/http/schemas.ts:1183 — a seção de resolução em lote cita ADR-0049 no ponto de aplicação'
+        - 'src/modules/budget-plans/adapters/http/budget-plan-csv.ts:39 — (cents / 100).toLocaleString(pt-BR, { style: currency, currency: BRL }) — formatação de apresentação dentro do core'
+        - 'src/modules/budget-plans/adapters/http/plugin.ts:149 — .header(content-type, text/csv; charset=utf-8) e .send(csv) — o artefato formatado é servido pela borda do core'
+        - 'nota: o BFF não existe neste repositório; a régua só é verificável do lado do core'
+      verify: |
+        grep -rn "toLocaleString" src/modules/*/adapters/http/*.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/modules/*/adapters/http/`, quando aparecer formatação de apresentação
+        (`toLocaleString`, símbolo de moeda, label PT em campo de dado), então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        A borda HTTP do core MUST NOT formatar valor para apresentação. Dinheiro sai em `bigint` cents,
+        data em ISO-8601, enum como união EN. `toLocaleString` e símbolo de moeda MUST NOT aparecer em
+        `src/`.
+      rationale: |
+        É a única alegação deste ADR já violada, e a violação é detectável por um grep de uma linha. O
+        custo de deixar passar é o que o ADR nomeia na alternativa (A): "todo redesign de UI vira mudança
+        no core". O caso do CSV é instrutivo porque a justificativa local é boa — "paridade com o legado
+        (mesmo `toLocaleString`)" — e ainda assim coloca decisão de apresentação no system-of-record.
+
+  - id: ADR-0049-C2
+    text: |
+      O core expõe RECURSOS POR AGREGADO (`/api/v2/<módulo>/<recurso>`) — campos do próprio agregado em
+      UNIDADES CANÔNICAS: dinheiro em `bigint` cents, IDs em `varchar(36)`, datas em ISO-8601, enums como
+      união EN. SEM formatação de apresentação (nada de `R$ 1.234,56`, label PT, ou `%` calculado para o
+      widget).
+    kind: prohibition
+    source_lines: [43, 99]
+    applies_to:
+      - 'src/modules/*/adapters/http/**/*.ts'
+    reality:
+      verdict: contradicted
+      holds_in: [contracts, financial, partners]
+      absent_in: [budget-plans]
+      evidence:
+        - 'src/modules/budget-plans/adapters/http/budget-plan-csv.ts:37 — comentário: pt-BR currency — paridade com o legado (mesmo toLocaleString): `R$ 1.234,56` (espaço U+00A0)'
+        - 'src/modules/budget-plans/adapters/http/budget-plan-csv.ts:39 — a formatação em si'
+        - 'src/modules/budget-plans/adapters/http/budget-plan-csv.ts:11 — o valor vai em JAN, `R$ 0,00` em FEV..DEZ — string formatada como conteúdo de célula'
+        - 'src/modules/budget-plans/adapters/http/plugin.ts:70 — import { sectionsToCsv } from ./budget-plan-csv.ts, dentro do plugin HTTP'
+        - 'nota: o ADR classifica "Renderizar artefato (PDF/CSV) a partir de números já calculados" como trabalho do BFF, e a seção Neutras diz que a decisão da P.O. de "CSV server-side" (#319) "é satisfeita gerando no BFF"'
+        - 'nota: o §Rollout manda "aplicar a régua rigorosamente a budget-plans (#315-320)" — é exatamente o módulo onde está a violação'
+        - 'ausência: nenhuma outra formatação de moeda em src/modules/*/adapters/http/ — a violação é localizada, não sistêmica'
+      verify: |
+        grep -rn "toLocaleString\|R\\\$" src/modules/*/adapters/http/*.ts | head
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o CSV servido pela borda do core, quando uma célula de valor vier formatada (`R$`, separador
+        pt-BR), então o teste falha — o artefato MUST sair com números canônicos, ou ser gerado fora do
+        core.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Resposta da borda do core MUST usar unidades canônicas (cents em `bigint`, ISO-8601, união EN).
+        Geração de artefato para consumo humano (CSV, PDF) MUST NOT formatar valores — se a paridade com o
+        legado exigir formatação, ela MUST ser decidida por escrito e registrada no ponto do código.
+      rationale: |
+        Estreitado com a saída que o caso real exige. Proibir formatação em bloco reprovaria um CSV que a
+        P.O. pediu com paridade explícita ao legado, e regra que reprova entrega acordada é desligada. A
+        cláusula útil é a terceira: se houver exceção, ela tem de ser decisão registrada — hoje o
+        comentário de `budget-plan-csv.ts:37` explica a paridade, mas nada liga isso a uma decisão que
+        autorize desviar do invariante 2.
+
+  - id: ADR-0049-C3
+    text: |
+      ENDPOINTS DE RESOLUÇÃO EM LOTE (batch-by-id) para o BFF resolver refs sem N+1. Forma canônica:
+      `POST /api/v2/<módulo>/<recurso>:batch` com `{ "refs": [...] }`, TETO de 200 refs/chamada, resposta
+      `{ "items": [...], "missing": [...] }`.
+    kind: obligation
+    source_lines: ['45-54']
+    applies_to:
+      - 'src/modules/*/adapters/http/*schemas*.ts'
+    reality:
+      verdict: holds
+      holds_in: [financial, partners]
+      absent_in: []
+      evidence:
+        - 'src/modules/financial/adapters/http/schemas.ts:1183 — seção: Resolução em lote (#357, ADR-0049) — POST /financial/payables:batch'
+        - 'src/modules/financial/adapters/http/schemas.ts:1189 — refs: z.array(z.uuid()).min(1).max(200) — o teto é enforçado por schema, não por convenção'
+        - 'src/modules/financial/adapters/http/schemas.ts:1224 — o mesmo teto no segundo batch'
+        - 'src/modules/partners/adapters/http/supplier-schemas.ts:154 — refs: z.array(z.uuid()).min(1).max(200) em suppliers:batch'
+        - 'src/modules/partners/adapters/http/supplier-schemas.ts:150 — comentário: Body do POST /partners/suppliers:batch. Teto 200 refs/chamada'
+        - 'src/modules/financial/adapters/http/dto.ts:177 — item de POST /financial/payables:batch — resumo de título p/ o match card da Conciliação, o exemplo #172 do ADR'
+        - 'src/modules/financial/adapters/http/dto.ts:193 — #358: item de POST /financial/documents:batch — resumo do documento p/ refs auxiliares do drawer, o exemplo #95'
+      verify: |
+        grep -rn "max(200)" src/modules/*/adapters/http/*schemas*.ts; grep -rn ":batch" src/modules/financial/adapters/http/dto.ts | head -3
+    testability:
+      verdict: testable
+      layer: contract
+      red: |
+        Dado um `POST …:batch` com 201 refs, então MUST responder 400. Dado um ref inexistente, ele MUST
+        aparecer em `missing` e a requisição MUST responder 200 — não 404.
+      expected_error: null
+      blocker: null
+      enforced_by:
+        [
+          'src/modules/partners/adapters/http/supplier-schemas.ts',
+          'src/modules/financial/adapters/http/schemas.ts',
+        ]
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Endpoint de resolução em lote MUST declarar teto de refs no schema e MUST devolver
+        `{ items, missing }` — ref sem registro vai em `missing`, nunca produz erro da requisição inteira.
+      rationale: |
+        As duas cláusulas são o que faz o batch cumprir o propósito. O teto no SCHEMA (e não no handler)
+        transforma "não abuse" em 400 automático e documentado no OpenAPI. E o `missing` separado é o que
+        evita o pior modo de falha: um ref órfão derrubando a resolução de outros 199 — que no drawer ou
+        no match card apareceria como tela vazia.
+
+  - id: ADR-0049-C4
+    text: |
+      Contract-first: TODO endpoint core↔BFF é definido por schema Zod → OpenAPI; o BFF gera cliente
+      tipado a partir do OpenAPI. O contrato é a FONTE DE VERDADE da fronteira — não há acoplamento a
+      implementação.
+    kind: obligation
+    source_lines: [58, 104]
+    applies_to:
+      - 'src/modules/*/adapters/http/*schemas*.ts'
+    reality:
+      verdict: holds
+      holds_in: [financial, partners]
+      absent_in: []
+      evidence:
+        - 'src/modules/financial/adapters/http/schemas.ts:1189 — o body do batch é schema Zod, logo entra no OpenAPI pela via do ADR-0027'
+        - 'src/modules/partners/adapters/http/supplier-schemas.ts:154 — idem para suppliers:batch'
+        - 'nota: a geração de cliente tipado a partir do OpenAPI acontece no BFF, fora deste repositório'
+      verify: |
+        grep -rn "z.array(z.uuid())" src/modules/*/adapters/http/*schemas*.ts | head
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um endpoint da fronteira, quando não tiver schema Zod registrado, então ele não aparece no
+        OpenAPI e o teste falha. É a mesma invariante do `ADR-0027`, aplicada à fronteira core↔BFF.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como duplicata: é o `ADR-0027` (contract-first Zod→OpenAPI), já `realized` e proposto
+        com escopo geral. O que este ADR acrescenta é apenas o ALCANCE — o OpenAPI passa a ser contrato de
+        serviço interno, não só doc pública —, e isso está na seção Neutras, sem exigir invariante nova.
+
+  - id: ADR-0049-C5
+    text: |
+      AUTHZ de recurso, MULTI-TENANT e MINIMIZAÇÃO de dado sensível ficam NO CORE, aplicadas por escopo do
+      token. O BFF NÃO é a barreira de PII — é a última projeção de conveniência, não a única. Se o core
+      entregasse tudo e "confiasse" no BFF, um bug no BFF vazaria a base inteira.
+    kind: obligation
+    source_lines: [66, 69, 100]
+    applies_to:
+      - 'src/modules/*/adapters/http/**/*.ts'
+      - 'src/modules/auth/**/*.ts'
+    reality:
+      verdict: partial
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - 'nota: o RBAC do core é fail-closed por desenho (ADR-0052-C1), o que satisfaz "authz no core" no modo enforced'
+        - 'nota: sob AUTH_RBAC_MODE=bypass a authz por permissão deixa de existir (ADR-0052), e a decisão da P.O. registrada no ADR-0053 §Desfecho é operar em bypass durante a aceitação'
+        - 'nota: as duas provas vivas que o ADR cita (#53 multi-tenant em fin_documents, #238 CPF/RG/salário sob collaborator:read) não foram verificadas nesta fase'
+        - 'nota: o ADR-0053 §Desfecho registra que GET /api/v1/collaborators serve dado sensível sob permissão genérica (issue #482), o que é a contraparte desta alegação e segue aberto'
+      verify: |
+        grep -rn "authorize(\|hasPermission" src/modules/*/adapters/http/*.ts | wc -l
+    testability:
+      verdict: testable
+      layer: contract
+      red: |
+        Dado um principal sem escopo para o recurso, quando pedir dado, então MUST receber 403 (ou projeção
+        minimizada) — no CORE, sem depender de nenhuma camada acima. Se a resposta trouxer o dado completo
+        confiando no consumidor, o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Minimização de dado sensível e isolamento multi-tenant MUST ser aplicados no core, por escopo do
+        principal. MUST NOT ser delegados a camada acima (BFF, gateway, front) — nem parcialmente.
+      rationale: |
+        O ADR dá a razão em uma frase que vale mais que qualquer reformulação: "um bug no BFF vazaria a
+        base inteira". A regra é o oposto do que a inversão de responsabilidade sugere na leitura
+        ingênua ("core cru, BFF protege"), e é por isso que precisa estar escrita — a arquitetura nova
+        cria a tentação. Vale registrar que o estado atual tem tensão real com ela: o `ADR-0052` permite
+        desligar a authz por permissão via env, e a P.O. decidiu operar assim durante a aceitação
+        (`ADR-0053` §Desfecho).
+
+  - id: ADR-0049-C6
+    text: |
+      MUST NOT — o BFF reimplementar invariante de domínio ou validação de escrita. Regra de negócio é do
+      core, SEMPRE. MUST NOT — componente client falar direto com o core: todo dado do front passa pelo
+      BFF.
+    kind: prohibition
+    source_lines: [98, 101]
+    applies_to: []
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        Não verificável a partir deste repositório: as duas cláusulas normatizam o BFF e o front, que
+        vivem em outros pacotes. Conferir no repo do web-app se há validação de escrita duplicada e se
+        algum componente client chama o core diretamente.
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o código do BFF, quando ele contiver validação de regra de negócio (não de forma de input),
+        então o teste falha. Dado o código client, quando houver chamada ao core sem passar pelo BFF, falha.
+      expected_error: null
+      blocker: 'As duas cláusulas normatizam artefatos fora deste repositório.'
+      enforced_by: []
+    rule:
+      status: pending
+      disposition: null
+      text: null
+      rationale: |
+        Fica `pending`: são as duas únicas cláusulas do ADR cujo sujeito é outro repositório. Uma rule de
+        `.claude/rules/` do core-api não tem como cobrá-las, e propô-las aqui criaria norma sem alcance.
+        Pertencem ao harness do web-app/BFF — vale registrar a dependência, não legislar de fora.
+
+  - id: ADR-0049-C7
+    text: |
+      MUST — agregação (`SUM`/`GROUP-BY`/`TOP-N`) e filtro/sort/paginação/full-text no CORE (banco).
+      MUST NOT — puxar linhas cruas para agregar em TS. Um `GROUP BY` indexado lê ~1 chave por GRUPO (K),
+      não por linha (N) — Loose Index Scan. TS/BFF só agrega quando o volume é bounded por
+      `LIMIT`/paginação ou por invariante de negócio.
+    kind: obligation
+    source_lines: [102, '192-202']
+    applies_to:
+      - 'src/modules/*/adapters/persistence/repos/*.ts'
+      - 'src/modules/*/public-api/*.ts'
+    reality:
+      verdict: partial
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'src/modules/financial/public-api/payment-position-projection.ts:94 — sum(case when …) em SQL, não em TS — agregação no banco'
+        - 'src/modules/financial/adapters/persistence/repos/document-repository.drizzle.ts:444 — a derivação de conciliado é feita em SQL, com contagem'
+        - 'nota: o ADR-0037-C1 (reports) registra que o anti-join de fornecedores sem contrato é feito EM MEMÓRIA (achado do ADR-0045/reports), o que é o caso-limite desta regra'
+        - 'nota: uma varredura completa de agregações em TS não foi feita nesta fase'
+      verify: |
+        grep -rn "\.reduce(\|Array.from" src/modules/*/public-api/*.ts | head
+    testability:
+      verdict: testable-with-work
+      layer: integration
+      red: |
+        Dada uma agregação, quando ela for computada em TS sobre resultado não-bounded (sem `LIMIT` nem
+        invariante que limite a cardinalidade), então o teste falha. Distinguir bounded de não-bounded
+        exige julgamento por caso — daí o `testable-with-work`.
+      expected_error: null
+      blocker: 'Provar que um conjunto é não-bounded exige analisar a query, não só o código TS.'
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Agregação (`SUM`/`GROUP BY`/`TOP-N`) e filtro/sort/paginação MUST ser executados no banco.
+        Agregação em TS é permitida SOMENTE sobre conjunto bounded por `LIMIT`/paginação ou por invariante
+        de negócio declarada.
+      rationale: |
+        É a alegação com a melhor fundamentação medida do acervo inteiro. O Apêndice A testou a objeção
+        ("JOIN não é caro?") por grep literal contra o MySQL 8.4 Reference Manual, com cinco citações e
+        linha verificável, e chegou ao argumento central: Loose Index Scan lê ~1 chave por GRUPO, "which
+        may be a much smaller number than that of all keys" (L2164). Logo agregar no banco escala com o
+        resultado, não com a entrada. A permissão condicional para TS é o que evita a regra ser absoluta e
+        irreal.
+
+  - id: ADR-0049-C8
+    text: |
+      TOPOLOGIA (híbrido/faseado): o core-api permanece PÚBLICO por ora; migra para trás do BFF (rede
+      privada / service-auth) após o go-live. ENQUANTO PÚBLICO, os guardrails no core NÃO RELAXAM. Regra de
+      ouro: nenhum front novo fala direto com o core.
+    kind: obligation
+    source_lines: [67, 110]
+    applies_to: []
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        Topologia de rede não é verificável a partir do código-fonte. Conferir na infraestrutura se o core
+        está exposto publicamente e se existe caminho de rede direto do front até ele.
+    testability:
+      verdict: testable-with-work
+      layer: e2e
+      red: |
+        Dado o ambiente, quando o core responder a requisição originada fora da rede do BFF, então ele está
+        público — e os guardrails de authz/multi-tenant MUST estar todos ativos. O teste é de
+        infraestrutura, não de código.
+      expected_error: null
+      blocker: 'Depende de configuração de rede, fora deste repositório.'
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Enquanto o core estiver acessível fora da rede privada, os guardrails de authz e isolamento
+        multi-tenant MUST estar ativos. Relaxá-los MUST exigir prova de que a borda pública foi fechada.
+      rationale: |
+        Estreitado para a única parte com consequência de segurança e que sobrevive à mudança de
+        topologia. É a inversão condicional que importa: o ganho de PII da arquitetura nova depende de o
+        core sair da internet, e o risco é alguém antecipar o relaxamento contando com um fechamento de
+        rede que ainda não aconteceu. Tem tensão direta com o `ADR-0052`/`ADR-0053`, cuja decisão vigente
+        é operar em `bypass` durante a aceitação.
+
+  - id: ADR-0049-C9
+    text: |
+      ROLLOUT: aplicar a régua RIGOROSAMENTE a budget-plans (#315-320) e aos que migram limpo
+      (#172/#144/#319/#95). NÃO re-desenhar o que está perto do go-live (#112/#114/#240-243 congelados com
+      débito). Dívida retroativa nos ~111 cards "Done" — mapear e migrar oportunisticamente, não agora.
+    kind: permission
+    source_lines: [114, 136]
+    applies_to:
+      - 'src/modules/budget-plans/**/*.ts'
+    reality:
+      verdict: contradicted
+      holds_in: []
+      absent_in: [budget-plans]
+      evidence:
+        - 'src/modules/budget-plans/adapters/http/budget-plan-csv.ts:39 — a formatação pt-BR de moeda está exatamente no módulo que o rollout nomeia como alvo rigoroso'
+        - 'src/modules/budget-plans/adapters/http/plugin.ts:70 — o CSV formatado é montado dentro do plugin HTTP do módulo'
+        - 'nota: o ADR classifica "Renderizar artefato (PDF/CSV)" como trabalho do BFF e diz na seção Neutras que a decisão da P.O. de CSV server-side (#319) "é satisfeita gerando no BFF" — o #319 está na lista dos que "migram limpo"'
+        - 'nota: o financial e o partners, que NÃO estavam na lista de rollout rigoroso, são justamente os que construíram os endpoints batch do §Contrato'
+      verify: |
+        grep -rn "toLocaleString" src/modules/budget-plans/adapters/http/*.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/modules/budget-plans/adapters/http/`, quando houver formatação de apresentação, então o
+        teste falha — é o módulo designado como conformidade rigorosa.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: replace
+      text: |
+        Módulo designado como conformidade rigorosa a uma régua nova MUST ter a régua verificada por teste
+        antes de o próximo módulo entrar. MUST NOT haver módulo "alvo rigoroso" sem gate que o prove.
+      rationale: |
+        SUBSTITUÍDO: a lista de cards é organização de trabalho e envelhece; o que sobrevive é a lição.
+        Designar um módulo como piloto rigoroso de uma régua e não instrumentar a verificação produziu
+        exatamente o inverso do planejado — `budget-plans`, o alvo rigoroso, é o único que viola o
+        invariante 2, enquanto `financial` e `partners`, fora da lista, construíram a parte de contrato.
+        Régua sem gate não distingue piloto de resto.
+
+findings:
+  - |
+    **O invariante mais explícito do ADR está violado no módulo que ele designou como conformidade
+    rigorosa.** O invariante 2 diz "MUST NOT — o core retornar DTO de tela (formatação PT, `R$`, `%` de
+    layout)"; `budget-plans/adapters/http/budget-plan-csv.ts:39` faz
+    `toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })` e `plugin.ts:149` serve o resultado
+    como `text/csv`. O §Rollout diz "aplicar a régua rigorosamente a budget-plans (#315-320)". E a seção
+    Neutras diz que a decisão da P.O. de "CSV server-side" (#319) "é satisfeita gerando **no BFF**" — o BFF
+    que não existe. Três partes do mesmo ADR apontando para o que não aconteceu.
+  - |
+    **Inversão instrutiva: os módulos FORA da lista de rollout rigoroso são os que implementaram o
+    contrato.** `financial` e `partners` construíram os três endpoints batch-by-id com o teto de 200 refs
+    enforçado por Zod e o ADR citado no ponto (`schemas.ts:1183`, `supplier-schemas.ts:150`).
+    `budget-plans`, o alvo rigoroso, é onde está a violação. A diferença aparente: os batch nasceram de
+    cards próprios (#357, #358, #350) e a conformidade do `budget-plans` dependia de disciplina. Quarta
+    confirmação do padrão do inventário — **o que tem ticket acontece**.
+  - |
+    **O descarte por status custou caro aqui.** A spec 039 filtrou este ADR por ser `Proposed`, e ele tem
+    uma seção literalmente intitulada "Invariantes (normativo)" com sete cláusulas em MUST/MUST NOT — é
+    material de rule pronto, no formato de rule. Uma delas está violada, e a violação é um grep de uma
+    linha. É o argumento mais concreto do inventário para a tese da spec 040: filtro por status não
+    substitui confronto com `src/`.
+  - |
+    **A melhor fundamentação medida do acervo inteiro.** O Apêndice A pega a objeção natural à régua
+    ("JOIN no MySQL não é caro?") e a testa por grep literal contra o MySQL 8.4 Reference Manual, com cinco
+    citações e número de linha, chegando ao argumento central: Loose Index Scan lê ~1 chave por GRUPO,
+    "which may be a much smaller number than that of all keys" (L2164). E declara duas ressalvas de
+    honestidade — a versão exata do hash join não aparece literal no manual, e o custo do lado Node não é
+    território do Refman. Método reprodutível, com o que não foi provado dito em voz alta.
+  - |
+    **Único ADR do inventário que é o fim-de-vida planejado de outro sem supersedê-lo.** Ele se declara "o
+    estado-alvo do `ADR-0032`", e os dois são vigentes ao mesmo tempo — um transitório, um alvo. Funciona
+    porque o `ADR-0032` já se declarava provisório e o código anota isso no ponto
+    (`composition.ts:141` — "Composição transitória do contratado na borda (ADR-0032)"). É o desenho certo
+    para dívida planejada: o transitório sabe que é transitório, o alvo diz quando ele sai, e o código
+    aponta para os dois.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    O ADR cita ~20 issues (#349 camada BFF, #350 batch-by-id, #53/#238 guardrails, #95/#172/#144/#319 que
+    migram, #351-353 frontes, #112/#114/#240-243 congelados) — nenhuma lida nesta fase, mas #357 e #358
+    aparecem citadas no código dos batch verificados. O BFF, o web-app e a topologia de rede vivem fora
+    deste repositório.

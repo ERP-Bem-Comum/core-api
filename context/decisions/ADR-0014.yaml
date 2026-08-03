@@ -1,0 +1,393 @@
+id: ADR-0014
+title: Isolamento por Database em MySQL
+source: handbook/architecture/adr/0014-mysql-database-isolation.md
+decided_on: 2026-04-28
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: [ADR-0003]
+  superseded_by: []
+  related: [ADR-0013, ADR-0015]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    A regra de ouro se sustenta no que este repositório controla: o `core-api` escreve apenas em
+    `core`, via `core_app`. O charset `utf8mb4` está nas migrations. Migração por serviço com
+    `drizzle-kit` confere.
+    Duas alegações não se sustentam como escritas. A primeira é "outbox é o ÚNICO canal de
+    comunicação cross-database": o ETL conecta direto no `legacy` como `etl_ro` com GRANT SELECT, por
+    decisão explícita do ticket ETL-LEGACY-DIRECT-CONNECTION. É leitura sem mutação — cabe no padrão
+    permitido do próprio ADR (`readonly_bi`) — mas contradiz a palavra "único".
+    A segunda é "outbox local em CADA DATABASE (`legacy.outbox`, `core.outbox`)": o código tem SETE
+    outboxes, um por MÓDULO, dentro do database `core`. A granularidade ficou mais fina que o ADR
+    previa, o que reforça o espírito (cada dono tem o seu) e falsifica a letra.
+
+extraction:
+  state: complete
+  covers: |
+    7 alegações — regra de ouro, estrutura de databases e usuários, charset, canal cross-database,
+    anti-padrões, migração por serviço, granularidade do outbox. Backup/PITR e retenção de audit log
+    (linhas 113-121) ficaram fora: são requisitos de infra provisionada, sem path neste repositório.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/adapters.md']
+    gap: |
+      A 039 destilou como "Regra de ouro: um único escritor por database. `core.*` só o core-api
+      escreve. Eventos via outbox são o único canal cross-database". Repetiu a palavra "único" sem
+      confrontar o ETL, que lê `legacy` direto desde o ticket ETL-LEGACY-DIRECT-CONNECTION. Também
+      não registrou que a topologia de outbox evoluiu de um-por-database para um-por-módulo.
+
+claims:
+  - id: ADR-0014-C1
+    text: |
+      Cada database tem UM único escritor, sem exceção. `legacy.*` só o legacy-api escreve;
+      `core.*` só o core-api escreve.
+    kind: obligation
+    source_lines: ['60-66']
+    applies_to:
+      - 'src/modules/*/adapters/persistence/**/*.ts'
+      - 'compose.yaml'
+    reality:
+      verdict: partial
+      holds_in: [core]
+      absent_in: []
+      evidence:
+        - 'compose.yaml:184 — MYSQL_USER default core_app, o escritor único de core'
+        - 'scripts/etl/legacy/reader.ts:4 — acesso a legacy é etl_ro com GRANT SELECT, sem mutação'
+        - 'nota: o escritor de legacy.* é o legacy-api, fora deste repositório — não verificável aqui'
+      verify: |
+        grep -rn "core_app\|legacy_app\|etl_ro" compose.yaml scripts/ | grep -v node_modules
+    testability:
+      verdict: testable-with-work
+      layer: integration
+      red: |
+        Dado um pool conectado com `etl_ro` ou `readonly_bi`, quando qualquer caminho emite
+        INSERT/UPDATE/DELETE, então o MySQL recusa por falta de GRANT e o teste falha. A guarda é do
+        banco, não da aplicação.
+      expected_error: null
+      blocker: |
+        Exige MySQL real com os GRANTs provisionados. Os `scripts/e2e/*.sh` já montam esse cenário
+        para o pool reader, mas não há teste que exercite a negativa de escrita deliberadamente.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Cada database MUST ter um único escritor. Um serviço MUST NOT emitir INSERT, UPDATE ou
+        DELETE no database de outro. O isolamento MUST ser garantido por GRANT, não por disciplina.
+      rationale: |
+        O próprio ADR diz que o GRANT "é a única coisa que impede um dev distraído de violar a regra
+        de ouro" (linha 56). Adotar como está; a parte de `legacy` fica fora do alcance deste repo.
+
+  - id: ADR-0014-C2
+    text: |
+      Uma instância MySQL com dois databases isolados (`legacy`, `core`) e três usuários com GRANT
+      estrito: `legacy_app` só em legacy, `core_app` só em core, `readonly_bi` com SELECT em ambos.
+    kind: obligation
+    source_lines: ['24-54']
+    applies_to:
+      - 'compose.yaml'
+      - 'scripts/'
+    reality:
+      verdict: partial
+      holds_in: [core]
+      absent_in: []
+      evidence:
+        - 'compose.yaml:184 — core_app provisionado como usuário default'
+        - 'scripts/e2e/contracts.sh:50 — readonly_bi usado como pool reader, SELECT-only'
+        - 'scripts/ci/secrets-vault.ts:10 — seed de readonly_bi documentado'
+        - 'nota: legacy_app não aparece neste repositório; o legacy roda fora dele'
+      verify: |
+        grep -rn "core_app\|readonly_bi\|legacy_app" compose.yaml scripts/ci/ scripts/e2e/
+    testability:
+      verdict: testable-with-work
+      layer: integration
+      red: |
+        Dado o compose de dev subido, quando `core_app` tenta SELECT em `legacy.*` ou `readonly_bi`
+        tenta INSERT em `core.*`, então o MySQL recusa; se permitir, o teste falha.
+      expected_error: null
+      blocker: |
+        O compose de dev provisiona apenas o database `core`. O `legacy` só existe efêmero no
+        `compose.etl.yaml`, então o par completo de GRANTs não é exercitável num teste só.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        O database `core` MUST ser acessado para escrita exclusivamente por `core_app`. Acesso de
+        leitura para BI e para pool reader MUST usar usuário SELECT-only (`readonly_bi`).
+      rationale: |
+        Estreitado para o que este repositório controla. A metade `legacy_app` é responsabilidade do
+        legacy-api e não tem path aqui — manter a exigência completa criaria regra inverificável.
+
+  - id: ADR-0014-C3
+    text: |
+      Databases e tabelas MUST usar CHARACTER SET utf8mb4. O default histórico (latin1, ou utf8 que é
+      alias de utf8mb3) quebra emojis e alguns caracteres.
+    kind: obligation
+    source_lines: ['36-37', '79-83']
+    applies_to:
+      - 'src/modules/*/adapters/persistence/migrations/**'
+      - 'compose.yaml'
+    reality:
+      verdict: holds
+      holds_in: [auth, contracts, financial, partners, programs, budget-plans, notifications]
+      absent_in: []
+      evidence:
+        - 'src/modules/auth/adapters/persistence/migrations/mysql/0000_charming_mastermind.sql:2 — coluna com COLLATE utf8mb4_bin, logo charset utf8mb4'
+        - 'nota: 225 declarações utf8mb4_* nas migrations dos 7 módulos, e nenhuma latin1 ou utf8mb3'
+      verify: |
+        grep -rhoE "utf8mb4_[a-z0-9_]+" src/modules/*/adapters/persistence/migrations/ | sort -u
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o conjunto de migrations, quando um CREATE TABLE ou CREATE DATABASE não declarar
+        `utf8mb4`, então o teste falha nomeando o arquivo.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Todo database e toda tabela MUST declarar `CHARACTER SET utf8mb4` explicitamente.
+        MUST NOT depender do charset default do servidor.
+      rationale: |
+        Verificável por varredura de texto nas migrations, e o ADR classifica o esquecimento como
+        "fonte clássica de bugs em sistemas brasileiros". Barato de barrar.
+
+  - id: ADR-0014-C4
+    text: |
+      Eventos, via Outbox Pattern, são o ÚNICO canal de comunicação cross-database.
+    kind: obligation
+    source_lines: [66]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/**/*.ts'
+      - 'scripts/etl/**'
+    reality:
+      verdict: partial
+      holds_in: []
+      absent_in: [etl]
+      evidence:
+        - 'scripts/etl/legacy/reader.ts:4 — o ETL conecta direto no legacy como etl_ro e faz SELECT por entidade'
+        - 'nota: é leitura sem mutação, o que o próprio ADR permite no padrão readonly_bi (linha 141) — mas contradiz a palavra "único canal de comunicação"'
+        - 'nota: decisão explícita do ticket ETL-LEGACY-DIRECT-CONNECTION, que remove a dependência de Docker do ETL e conecta no legado real'
+      verify: |
+        grep -rn "etl_ro\|legacy" scripts/etl/legacy/reader.ts scripts/etl/legacy/connect.ts
+    testability:
+      verdict: testable-with-work
+      layer: static
+      red: |
+        Dado `src/`, quando qualquer módulo abrir conexão para um database que não seja o próprio,
+        então o teste falha. O ETL, fora de `src/`, entra como exceção declarada.
+      expected_error: null
+      blocker: |
+        Exige uma lista canônica de "qual database cada componente pode abrir", que não existe. Sem
+        ela, o teste não distingue o ETL legítimo de um acesso indevido.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        MUTAÇÃO cross-database MUST passar exclusivamente pelo outbox. LEITURA direta do `legacy` é
+        permitida apenas a componente com GRANT SELECT dedicado (`etl_ro`), fora de `src/modules/`.
+      rationale: |
+        A palavra "único" do ADR já é falsa na prática, e a prática é defensável: leitura read-only
+        com usuário próprio é o padrão que o ADR permite duas linhas depois. Estreitar para "mutação"
+        torna a regra verdadeira e testável, em vez de mantê-la absoluta e violada.
+
+  - id: ADR-0014-C5
+    text: |
+      Proibidos: tabela compartilhada entre serviços, JOIN cross-database em query de aplicação,
+      um serviço escrevendo no database do outro, foreign key cross-database entre tabelas de
+      domínio, e trigger que escreve no database vizinho.
+    kind: prohibition
+    source_lines: ['125-134']
+    applies_to:
+      - 'src/modules/*/adapters/persistence/**/*.ts'
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        grep -rniE "legacy\.[a-z_]+|JOIN\s+legacy|references\(\(\) =>" src/modules/*/adapters/persistence/schemas/mysql.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um schema ou repo, quando aparecer nome qualificado de outro database (`legacy.x`), FK
+        apontando para tabela de outro database, ou CREATE TRIGGER, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        MUST NOT existir tabela compartilhada entre serviços, JOIN cross-database em query de
+        aplicação, FK cross-database entre tabelas de domínio, nem trigger que escreva em database
+        vizinho.
+      rationale: |
+        Cinco proibições estruturais, todas detectáveis por varredura de texto no schema. Mesma
+        natureza das proibições do ADR-0020 que já viraram rule semgrep.
+
+  - id: ADR-0014-C6
+    text: |
+      Cada serviço gerencia as migrações do próprio database. O core-api migra `core.*` com
+      drizzle-kit; não há requisito de uniformizar ferramentas.
+    kind: obligation
+    source_lines: ['89-92']
+    applies_to:
+      - 'db/drizzle/*.ts'
+      - 'src/modules/*/adapters/persistence/migrations/**'
+    reality:
+      verdict: holds
+      holds_in: [auth, contracts, financial, partners, programs, budget-plans, notifications]
+      absent_in: []
+      evidence:
+        - 'nota: 7 configs drizzle-kit em db/drizzle/ (contracts, auth, partners, programs, financial, notifications, budget-plans), uma por módulo'
+        - 'package.json:72 — db:generate aponta para db/drizzle/contracts.ts; há um db:generate:<módulo> por módulo'
+      verify: |
+        ls db/drizzle/; node -e "const p=require('./package.json'); console.log(Object.keys(p.scripts).filter(s=>s.startsWith('db:generate')))"
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado cada módulo com schema Drizzle, quando faltar config em `db/drizzle/` ou script
+        `db:generate:<módulo>`, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Cada módulo com persistência MUST ter config `drizzle-kit` própria em `db/drizzle/` e script
+        `db:generate:<módulo>`. Migration MUST ser gerada, nunca escrita à mão.
+      rationale: |
+        Já é o padrão de fato nos 7 módulos. Adotar transforma convenção em invariante e pega o
+        módulo novo que nasce sem config.
+
+  - id: ADR-0014-C7
+    text: |
+      Outbox local em cada database (`legacy.outbox`, `core.outbox`) — cada serviço é dono do
+      próprio outbox.
+    kind: permission
+    source_lines: [143]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: contradicted
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'nota: não existe uma tabela core.outbox; existem SETE outboxes por módulo dentro do database core'
+        - 'src/modules/contracts/adapters/persistence/schemas/mysql.ts:345 — ctr_outbox'
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:1050 — fin_outbox'
+        - 'nota: os outros cinco são auth_outbox, bgp_outbox, par_outbox, par_email_outbox e prg_outbox'
+      verify: |
+        grep -rhoE "'[a-z_]+_outbox'" src/modules/*/adapters/persistence/schemas/mysql.ts | sort -u
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um módulo que publique evento, quando ele não tiver outbox própria com o prefixo do
+        módulo, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: replace
+      text: |
+        Cada MÓDULO que publica evento MUST ter outbox própria, prefixada com o prefixo do módulo
+        (`ctr_outbox`, `fin_outbox`, …). MUST NOT existir outbox compartilhada entre módulos.
+      rationale: |
+        A granularidade real é por módulo, não por database — evolução puxada pelo isolamento por
+        prefixo deste mesmo ADR e pelo ADR-0043 (`par_outbox`). O espírito ("cada dono tem o seu")
+        ficou mais forte; a letra ("um por database") ficou falsa. Substituir, não adotar.
+
+  - id: ADR-0014-C8
+    text: |
+      A collation MUST ser utf8mb4_unicode_ci (ou utf8mb4_0900_ai_ci em MySQL 8).
+    kind: obligation
+    source_lines: ['36-37', '79-83']
+    applies_to:
+      - 'src/modules/*/adapters/persistence/schemas/mysql.ts'
+      - 'src/modules/*/adapters/persistence/migrations/**'
+    reality:
+      verdict: contradicted
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'nota: nas migrations, utf8mb4_bin aparece 160 vezes contra 65 de utf8mb4_unicode_ci — a collation dominante não é nenhuma das duas que o ADR permite'
+        - 'nota: nos schemas Drizzle, 51 utf8mb4_bin contra 17 utf8mb4_unicode_ci'
+        - 'src/modules/auth/adapters/persistence/migrations/mysql/0000_charming_mastermind.sql:2 — id varchar(36) COLLATE utf8mb4_bin'
+        - 'compose.yaml:7 — o comentário do compose repete o ADR ("charset utf8mb4_unicode_ci") enquanto os schemas usam majoritariamente _bin'
+      verify: |
+        grep -rhoE "utf8mb4_[a-z0-9_]+" src/modules/*/adapters/persistence/migrations/ src/modules/*/adapters/persistence/schemas/*.ts | sort | uniq -c | sort -rn
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o conjunto de schemas e migrations, quando uma coluna declarar collation fora da lista
+        permitida, então o teste falha. Contra a lista do ADR, o RED seria de 211 declarações — tamanho
+        que indica norma a redecidir, não código a corrigir em massa.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: replace
+      text: |
+        A collation MUST ser declarada explicitamente por coluna, escolhida entre duas: `utf8mb4_bin`
+        para identificador e chave natural (comparação determinística, case-sensitive) e
+        `utf8mb4_unicode_ci` para texto de leitura humana. MUST NOT existir JOIN entre colunas de
+        collations diferentes.
+      rationale: |
+        O ADR permite só a `_ci` e o código usa majoritariamente `_bin` — quase certamente de
+        propósito, porque ID brandado e chave natural precisam de comparação exata. Mas ninguém
+        escreveu o critério, então as duas coexistem sem regra. Propor o critério em vez do
+        alinhamento cego: forçar tudo para `_ci` mudaria a semântica de comparação em 160 pontos, e
+        misturar collations num JOIN é erro de runtime no MySQL, não detalhe estético.
+
+findings:
+  - |
+    Charset e collation divergiram. O charset `utf8mb4` é universal, mas a collation dominante é
+    `utf8mb4_bin` — 160 declarações nas migrations contra 65 de `utf8mb4_unicode_ci`, e o ADR permite
+    apenas a segunda. As duas coexistem sem critério escrito em lugar algum. No MySQL, JOIN entre
+    colunas de collations diferentes é erro de runtime ("illegal mix of collations"), não detalhe
+    estético. Agrava: o comentário do `compose.yaml:7` cita este ADR e reforça a versão que o código
+    majoritariamente não segue.
+  - |
+    A alegação "outbox é o único canal cross-database" é a mais citada deste ADR e a que não se
+    sustenta como escrita. O ETL lê `legacy` direto, por decisão registrada em ticket. A destilação
+    da spec 039 repetiu a palavra "único" para `.claude/rules/adapters.md` sem confrontar isso.
+  - |
+    Este ADR não tem seção "Quando Re-avaliar", enquanto o `ADR-0003` que ele supersede tinha três
+    gatilhos explícitos (escalar `core` independente do `legacy`, manutenção compartilhada virar
+    gargalo, volume ultrapassar uma instância). A supersessão perdeu os gatilhos de revisão.
+  - |
+    Os outboxes reais têm hardening que o ADR não pediu: CHECK de `aggregate_type`, de
+    `event_type` não-vazio e de `attempts` não-negativo em todos os sete. Norma implementada
+    ACIMA do ADR — o inverso do caso comum, e vale registrar para ninguém "simplificar" depois.
+
+provenance:
+  tickets:
+    - CTR-OUTBOX-SCHEMA
+    - ETL-LEGACY-DIRECT-CONNECTION
+    - FIN-OUTBOX-ATOMIC
+    - PAR-OUTBOX-INFRA
+  issues: []
+  note: |
+    ETL-LEGACY-DIRECT-CONNECTION foi lido parcialmente (seção "Problema" do `000-request.md`) e
+    confirma a conexão direta ao legado como decisão deliberada. Os demais tickets de outbox
+    (CTR-OUTBOX-SCHEMA, PAR-OUTBOX-INFRA, FIN-OUTBOX-ATOMIC) não foram lidos — preencher na Fase 3.

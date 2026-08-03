@@ -1,0 +1,186 @@
+id: ADR-0017
+title: Chaves de correlação cross-período entre legacy e core (auditoria fiscal sob Strangler Fig)
+source: handbook/architecture/adr/0017-correlation-keys-cross-period-audit.md
+decided_on: 2026-05-07
+
+declared:
+  status: Proposed
+  status_normalized: proposed
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0001, ADR-0014, ADR-0021]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Achado central: **este ADR nunca saiu de `Proposed`, e o assunto dele foi decidido no CÓDIGO.**
+    Ele exige três chaves de correlação nascendo com o schema de `core.fin_*`, e declara que a janela
+    de oportunidade "se fecha quando o desenho do schema de `core.fin_documentos` começar". O schema
+    existe. A janela fechou com UMA das três chaves.
+    Presente: `legacyId: int('legacy_id')` com `uniqueIndex('fin_documents_legacy_id_uq')` — mas como
+    `int`, não como o `id_legado VARCHAR(64)` que o ADR pede.
+    Ausentes: `numero_documento_original_legado` e `cnpj_emitente`, além do índice composto
+    `idx_correlacao_legado`.
+    E não foi esquecimento: o comentário em `financial/schemas/mysql.ts:167` diz literalmente "por isso
+    a correlação é por `legacy_id`, nunca por `document_number`". Alguém decidiu o contrário do ADR, com
+    razão escrita, no schema. O ADR nunca foi promovido nem rejeitado.
+
+extraction:
+  state: complete
+  covers: |
+    3 alegações — as chaves de correlação, o índice composto e o adiamento do reporting cross-período.
+    O Componente 2 (gatilhos de adiamento) está extraído junto com a terceira.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: Inelegível na triagem por status (Proposed) — não gera ainda, reavaliar se aceito
+    applied_to: []
+    gap: |
+      A triagem por status é correta como filtro para gerar rule, mas aqui ela esconde o essencial: o
+      ADR tem PRAZO embutido ("a janela se fecha quando o schema começar") e o prazo venceu. Um ADR
+      `Proposed` com condição de expiração não é o mesmo que um `Proposed` em aberto — e a 039 tratou os
+      quatro `Proposed` do acervo com o mesmo veredito genérico.
+
+claims:
+  - id: ADR-0017-C1
+    text: |
+      Toda tabela de `core.fin_documentos` e correlatas deve NASCER contendo três colunas:
+      `numero_documento_original_legado VARCHAR(255) NULL`, `id_legado VARCHAR(64) NULL` e
+      `cnpj_emitente VARCHAR(14) NOT NULL`.
+    kind: obligation
+    source_lines: ['26-35']
+    applies_to:
+      - 'src/modules/financial/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: partial
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:168 — legacyId: int(legacy_id) existe, mas como int, não VARCHAR(64)'
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:221 — uniqueIndex fin_documents_legacy_id_uq'
+        - 'ausência: não existe coluna numero_documento_original_legado nem equivalente'
+        - 'ausência: não existe coluna cnpj_emitente em fin_documents'
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:167 — comentário decide o contrário: "por isso a correlação é por legacy_id, nunca por document_number"'
+      verify: |
+        grep -n "legacy_id\|cnpj_emitente\|numero_documento_original" src/modules/financial/adapters/persistence/schemas/mysql.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o schema de `fin_documents`, quando faltar chave de correlação com o legado, então o teste
+        falha. Contra a lista do ADR, falharia em duas colunas — mas a lista está em disputa com a
+        decisão registrada no schema.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: pending
+      disposition: null
+      text: null
+      rationale: null
+
+  - id: ADR-0017-C2
+    text: |
+      Índice composto para reconciliação futura: `INDEX idx_correlacao_legado (cnpj_emitente,
+      numero_documento_original_legado)`.
+    kind: obligation
+    source_lines: ['36-40']
+    applies_to:
+      - 'src/modules/financial/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in: [financial]
+      evidence:
+        - 'ausência: não existe índice de correlação legado no schema financeiro; as ocorrências de "correlation" em src/ são de correlation-id de observabilidade, sem relação'
+        - 'nota: o índice que existe é fin_documents_legacy_id_uq, UNIQUE sobre legacy_id — decisão diferente e mais forte no que cobre, mas não permite reconciliar por CNPJ + número'
+      verify: |
+        grep -rn "correlacao\|idx_correlacao" src/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o schema de `fin_documents`, quando não existir índice que suporte reconciliação por
+        emitente e número original, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: pending
+      disposition: null
+      text: null
+      rationale: null
+
+  - id: ADR-0017-C3
+    text: |
+      Adiar a construção de infraestrutura de reporting cross-período (Reporting Database ou Read Model
+      CQRS) até que um gatilho objetivo dispare, preservando hoje apenas as chaves de correlação.
+    kind: obligation
+    source_lines: [24, '44-45']
+    applies_to: []
+    reality:
+      verdict: holds
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'ausência: não existe reporting database nem read-model cross-período legado↔core em src/'
+        - 'nota: o módulo reports existe, mas projeta sobre dados do core — não atravessa a fronteira temporal com o legado'
+      verify: |
+        ls src/modules/reports/; grep -rln "legacy" src/modules/reports/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/`, quando existir leitura que junte dados de `legacy` e `core` na mesma consulta,
+        então o teste falha enquanto o gatilho não disparar.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        MUST NOT construir infraestrutura de reporting cross-período antes de gatilho objetivo
+        registrado. Consulta que atravesse a fronteira `legacy`↔`core` MUST NOT existir em `src/`.
+      rationale: |
+        É a única das três alegações cumprida, e vale como regra por si: converge com a `ADR-0014-C4`
+        (mutação cross-database só por outbox) e com a `ADR-0001-C1` (não escrever no legado). Adotar o
+        adiamento é mais fácil de sustentar que adotar as chaves, que estão em disputa.
+
+findings:
+  - |
+    O achado que dá nome a este registro: **o assunto de um ADR `Proposed` foi decidido no código, e o
+    ADR nunca foi promovido nem rejeitado.** Ele pede três chaves de correlação; o schema tem uma
+    (`legacy_id`, e como `int`, não `varchar(64)`); e o comentário em `mysql.ts:167` registra a decisão
+    contrária com razão explícita — "a correlação é por `legacy_id`, nunca por `document_number`".
+    A decisão existe, está fundamentada, e vive num comentário de schema. O ADR segue `Proposed` desde
+    2026-05-07.
+  - |
+    Este ADR tem PRAZO, e o prazo venceu. Ele declara que "a janela de oportunidade se fecha quando o
+    desenho do schema de `core.fin_documentos` começar (entrada de M3)". O schema está construído e em
+    produção. Diferente dos outros três `Proposed` do acervo (`0030`, `0048`, `0049`), este não podia
+    esperar — e esperou.
+  - |
+    A ausência de `cnpj_emitente` em `fin_documents` merece verificação própria na Fase 3: o ADR o
+    chama de "sempre obrigatório por ser pivô de qualquer reconciliação fiscal", e o acervo tem o ticket
+    FIN-DANFSE-EMITENTE-CNPJ, não lido. Pode existir sob outro nome ou em outra tabela; não afirmo que
+    o dado não existe, apenas que a coluna nomeada pelo ADR não está lá.
+  - |
+    Padrão que se fecha com o `ADR-0007`: dos quatro ADRs `Proposed` do acervo, o `0007` tinha checklist
+    explícita de promoção e funcionou (virou `0021`); este não tem critério de promoção, tem prazo, e o
+    prazo passou em silêncio. `Proposed` sem critério de promoção vira limbo — e quando há prazo, vira
+    perda.
+
+provenance:
+  tickets:
+    - BGP-ETL-LEGACY-ID
+    - FIN-DANFSE-EMITENTE-CNPJ
+    - PARTNERS-LEGACY-ID-COLUMNS
+  issues: []
+  note: |
+    Origem declarada: Inquiry-0011 (auditoria fiscal cross-período), Hipótese D — não lida, e é uma das
+    duas inquiries que disputam o número 0011 (ver `_PROGRESS.md`, notas de numeração). O acervo tem
+    FIN-DANFSE-EMITENTE-CNPJ, PARTNERS-LEGACY-ID-COLUMNS e BGP-ETL-LEGACY-ID, todos relevantes para as
+    chaves de correlação — nenhum lido.

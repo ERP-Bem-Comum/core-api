@@ -1,0 +1,395 @@
+id: ADR-0041
+title: Workers especializados por entrypoint + jobs one-shot via cron externo (sem job queue até multi-instância)
+source: handbook/architecture/adr/0041-specialized-workers-and-oneshot-jobs.md
+decided_on: 2026-06-16
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0002, ADR-0006, ADR-0009, ADR-0015, ADR-0030, ADR-0042, ADR-0045]
+  note_on_status: |
+    Header `Accepted`, seção intitulada "## Decisão (proposta)" — mesma discrepância interna do `ADR-0040`,
+    também de 2026-06-15/16. Dois ADRs da mesma semana com o mesmo descuido de molde.
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    O padrão canônico de job foi seguido à letra e a coordenação adiada foi documentada onde importa —
+    mas a TOPOLOGIA de workers, que é a decisão nº 1, foi deliberadamente revertida depois, por uma razão
+    de produção que o ADR não previu.
+    O que confere: `src/jobs/contracts/sweeper/` tem `run.ts`, `config.ts` e `sweeper.ts` exatamente como o
+    §"Padrão canônico" prescreve — mais um `clock-sao-paulo.ts`, que é o risco de fuso listado no ADR
+    resolvido como arquivo próprio ("o cutoff D+1 é calculado no job em `America/Sao_Paulo`"). Nenhum
+    `setInterval` em `src/jobs/` ou `src/workers/`. Nenhum `worker_threads`/`cluster` em uso — a única
+    menção é um comentário em `unpdf-reader.ts:27` sobre hang de CPU, que é precisamente o caso em que o
+    ADR admite a primitiva.
+    A coordenação multi-instância do §Decisão (4), que o ADR declara "documentado, não implementado", **foi
+    implementada no dia seguinte** — `CTR-SWEEPER-JOB-LOCK` (closed-green, 2026-06-17) criou `ctr_job_runs`
+    e `claimJobRun` com `INSERT IGNORE`, a opção B, sem Redis. Três comentários do código
+    (`contract-repository.drizzle.ts:344`, `.in-memory.ts:99`, `domain/contract/repository.ts:71`) seguem
+    dizendo "fica para F-Plus" e estão **stale desde então** — foram eles que me levaram a registrar
+    ausência na primeira passagem (ver `findings`).
+    O que divergiu: a decisão nº 1 pede "um entrypoint por responsabilidade". `src/workers/runner/run.ts:3`
+    registra o oposto — "standalone por 3 (`WORKER_GROUP=outbox|projections|email`), cortando tasks Fargate
+    e pools contra o RDS". Os quatro workers especializados continuam existindo como especificações; o que
+    mudou é que passaram a ser AGRUPADOS em três processos.
+
+extraction:
+  state: complete
+  covers: |
+    6 alegações — as cinco decisões numeradas mais o padrão canônico de job (que é normativo, com
+    estrutura de arquivos e as três regras de sinais/erro). A fundamentação em Parnas/Newman e a tabela de
+    alternativas são justificação.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/adapters.md']
+    gap: |
+      Destilou o padrão de job one-shot, correto e útil — é a parte que um agente reproduz ao criar job novo.
+      O que não registrou: a topologia de "um entrypoint por responsabilidade" **não é mais o estado do
+      repo**. Uma rule que a repita manda o agente criar processo novo por worker, quando o repo
+      deliberadamente agrupa em três por causa de limite de conexões do RDS. É o caso mais claro do lote em
+      que destilar sem confrontar `src/` produziria regra que contradiz a operação.
+
+claims:
+  - id: ADR-0041-C1
+    text: |
+      Workers ESPECIALIZADOS = um entrypoint por responsabilidade, no mesmo monorepo (compartilham
+      `domain`/`application`; NÃO são microsserviços — ADR-0006 fala de deployável, não de processo).
+      Topologia: `core-api` (HTTP) · `outbox-worker` (loop contínuo) · `contracts-sweeper` (job agendado).
+    kind: obligation
+    source_lines: ['28-30']
+    applies_to:
+      - 'src/workers/**'
+      - 'src/jobs/**'
+    reality:
+      verdict: contradicted
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'src/workers/runner/run.ts:3 — comentário: standalone por 3 (WORKER_GROUP=outbox|projections|email), cortando tasks Fargate e pools contra o RDS'
+        - "src/workers/runner/run.ts:22 — const group = process.env['WORKER_GROUP'] — o processo escolhe o GRUPO, não a responsabilidade"
+        - 'src/workers/runner/run.ts:25 — mensagem de erro: WORKER_GROUP inválido — use outbox|projections|email'
+        - 'src/workers/runner/run.ts:35 — for (const build of GROUPS[group]) — um processo executa N specs de worker'
+        - 'nota: os quatro workers especializados seguem existindo como diretórios (contract-count-projection, email-dispatch, payable-view-projection, supplier-view-projection) — o que mudou é que viraram SPECS agrupadas, não processos'
+        - 'nota: a razão declarada no código é operacional — cortar tasks Fargate e pools contra o RDS; o ADR não considerou limite de conexões na topologia'
+        - 'handbook/incidents/0001-prod-rds-connection-exhaustion-2026-07-10.md:3 — Severidade Alta (proximidade de indisponibilidade total — 56/60 conexões; mitigado manualmente antes de derrubar)'
+        - 'handbook/incidents/0001-prod-rds-connection-exhaustion-2026-07-10.md:5 — Detecção: DBA via SHOW FULL PROCESSLIST; salto de 14→52 conexões'
+        - '.claude/.pipeline/CORE-WORKER-CONSOLIDATION-DEPLOY/000-request.md:3 — o ticket cita o incidente como origem, "causa #2: proliferação de pools", com Fatia 2 = compose 6→3 + taskdefs Fargate 6→3'
+      verify: |
+        ls src/workers/; grep -n "WORKER_GROUP\|GROUPS\[" src/workers/runner/run.ts | head -5
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/workers/`, quando um worker novo não estiver registrado em nenhum `WORKER_GROUP`, então
+        ele nunca roda em produção e o teste falha. A invariante virou "toda spec pertence a um grupo", não
+        "todo worker tem processo".
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: replace
+      text: |
+        Worker MUST ser escrito como SPEC isolada por responsabilidade (domínio próprio, sem acoplar
+        cadência) e MUST ser atribuído a um grupo de execução declarado. O número de PROCESSOS MUST ser
+        decidido por restrição operacional (pools de banco, tasks de container), não por contagem de
+        responsabilidades.
+      rationale: |
+        SUBSTITUÍDO pelo que o repo realmente faz, e a razão é forte: manter "um processo por
+        responsabilidade" custou exaustão de pool contra o RDS, e `runner/run.ts:3` nomeia a economia
+        ("cortando tasks Fargate e pools"). A parte do ADR que sobrevive intacta é o ISOLAMENTO LÓGICO de
+        Parnas — cada worker segue uma responsabilidade separada, testável e rastreável. O que não
+        sobrevive é a inferência de que isolamento lógico exige processo próprio. Separar as duas coisas é
+        a lição.
+
+  - id: ADR-0041-C2
+    text: |
+      Jobs periódicos = processos ONE-SHOT disparados por CRON EXTERNO (systemd timer / `ofelia`) — NÃO
+      `setInterval` long-running, NÃO acoplados ao loop do outbox. O job: conecta → `UPDATE` em lote +
+      `INSERT` outbox (1 TRANSAÇÃO) → fecha o pool → `exit 0`.
+    kind: obligation
+    source_lines: ['31-33']
+    applies_to:
+      - 'src/jobs/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts, financial]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhum setInterval em src/jobs/ nem src/workers/ — a proibição se sustenta em todos'
+        - 'nota: src/jobs/ tem cinco jobs one-shot — auth/sync-permissions, contracts/sweeper, financial/payable-view-backfill, financial/supplier-view-backfill e migrate'
+        - 'nota: o sweeper tem run.ts (entrypoint), config.ts e sweeper.ts (lógica), a separação que o padrão canônico exige'
+        - 'nota: o disparo por cron externo vive no ERP-INFRA e não é verificável a partir deste repositório'
+      verify: |
+        grep -rn "setInterval" src/jobs/ src/workers/ --include='*.ts'; ls src/jobs/*/
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/jobs/`, quando aparecer `setInterval` ou `setTimeout` recorrente, então o teste falha —
+        job é one-shot por definição, e agendamento é externo.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Job agendado MUST ser processo one-shot com agendamento EXTERNO ao runtime. MUST NOT usar
+        `setInterval` nem ser acoplado ao loop de outro worker.
+      rationale: |
+        O ADR dá dois custos concretos, e os dois valem a regra. Acoplar ao outbox junta cadências
+        incompatíveis (~ms contra 24h) e mata o isolamento de falha; e um processo dedicado com
+        `setInterval` "fica acordado 23h59 à toa" e deixa de ser observável por exit code. A alternativa
+        one-shot torna o sucesso/falha do job um número que o cron já sabe ler.
+
+  - id: ADR-0041-C3
+    text: |
+      `worker_threads`/`cluster` NÃO se aplicam a jobs I/O-bound — `worker_threads` é para CPU-bound;
+      `cluster` é escala de HTTP (porta TCP). A primitiva certa é `async/await` sobre o pool `mysql2` mais
+      sinais de processo.
+    kind: prohibition
+    source_lines: ['34-35']
+    applies_to:
+      - 'src/jobs/**/*.ts'
+      - 'src/workers/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhum uso de worker_threads ou node:cluster em src/'
+        - 'src/modules/financial/adapters/document-reader/unpdf-reader.ts:27 — a única menção é um comentário sobre hang SÍNCRONO de CPU exigir worker_threads.terminate() (risco residual → follow-up)'
+        - 'nota: essa menção CONFIRMA a regra em vez de violá-la — parsing de PDF é CPU-bound, exatamente o caso em que o ADR admite a primitiva'
+      verify: |
+        grep -rn "worker_threads\|node:cluster" src/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/jobs/` ou `src/workers/`, quando importar `worker_threads` ou `node:cluster`, então o
+        teste falha. Uso legítimo em código CPU-bound (parsing) fica fora do escopo da proibição.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Job ou worker I/O-bound MUST NOT usar `worker_threads` nem `node:cluster`. `worker_threads` é
+        permitido apenas para trabalho CPU-bound (parsing, cripto síncrona); `node:cluster`, apenas para
+        escala de porta HTTP.
+      rationale: |
+        Estreitado para carregar a exceção legítima, sem a qual a regra reprovaria o caso certo: o
+        comentário de `unpdf-reader.ts:27` aponta que um hang de CPU no parser exigiria
+        `worker_threads.terminate()`. Regra que proíbe em bloco viraria obstáculo justamente onde a
+        primitiva é a resposta — e regra que atrapalha o uso correto é regra que se desliga.
+
+  - id: ADR-0041-C4
+    text: |
+      Coordenação multi-instância (quando chegar): `GET_LOCK('<job>:<data>', 0)` do MySQL OU tabela
+      `ctr_job_executions(job_name, run_date)` com `UNIQUE` + `INSERT IGNORE` (idempotência). SEM REDIS.
+      Hoje (single-instance) o cron já garante 1×/dia — documentado, NÃO implementado.
+    kind: permission
+    source_lines: ['36-38', 123]
+    applies_to:
+      - 'src/modules/contracts/**/*.ts'
+    reality:
+      verdict: exercised
+      holds_in: [contracts]
+      absent_in: []
+      evidence:
+        - "src/modules/contracts/adapters/persistence/schemas/mysql.ts:504 — export const ctrJobRuns = mysqlTable('ctr_job_runs', …) — a OPÇÃO B do ADR, com nome ctr_job_runs (não ctr_job_executions)"
+        - 'src/modules/contracts/adapters/persistence/repos/job-run.drizzle.ts:3 — claimJobRun faz INSERT IGNORE em ctr_job_runs (PK job_name+run_key): a 1ª instância insere'
+        - 'src/modules/contracts/adapters/persistence/repos/job-run.drizzle.ts:36 — INSERT IGNORE: affectedRows=1 se inseriu (adquiriu); 0 se a PK já existia'
+        - 'src/jobs/contracts/sweeper/run.ts:59 — const claim = await claimJobRun(handle, contracts-sweeper, runKey, clock.now()) — antes do sweep'
+        - 'src/jobs/contracts/sweeper/run.ts:68 — execução de ${runKey} já reivindicada por outra instância — skip'
+        - 'nota: a migration src/modules/contracts/adapters/persistence/migrations/mysql/0015_absent_paper_doll.sql existe — cria a tabela'
+        - '.claude/.pipeline/CTR-SWEEPER-JOB-LOCK/STATE.md:3 — closed-green, criado e fechado em 2026-06-17, UM DIA depois do ADR (2026-06-16)'
+        - 'nota: sem Redis, como o ADR exige — o mecanismo é UNIQUE/PK + INSERT IGNORE, a opção B'
+        - 'nota: os comentários de contract-repository.drizzle.ts:344, .in-memory.ts:99 e domain/contract/repository.ts:71 seguem dizendo "fica para F-Plus" — estão STALE desde 2026-06-17'
+      verify: |
+        grep -rn "ctrJobRuns\|claimJobRun" src/ --include='*.ts' | head; grep -rn "F-Plus" src/modules/contracts/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dadas duas instâncias do sweeper no mesmo dia, quando ambas tentam reivindicar, então exatamente
+        UMA MUST adquirir e a outra MUST sair com exit 0 (skip). O W1 do ticket registra 88/88 no
+        `test:integration` de contracts, "inclui claimJobRun (adquire/não-adquire contra MySQL real)".
+      expected_error: null
+      blocker: null
+      enforced_by: ['src/modules/contracts/adapters/persistence/repos/job-run.drizzle.ts']
+    rule:
+      status: proposed
+      disposition: replace
+      text: |
+        Anotação de adiamento MUST ser removida quando o adiamento terminar. Comentário que declara um
+        mecanismo inexistente, existindo o mecanismo, MUST ser tratado como defeito — não como
+        documentação desatualizada inofensiva.
+      rationale: |
+        SUBSTITUÍDO, e a razão é um erro que este inventário cometeu. Eu li os três comentários que dizem
+        "fica para F-Plus via `GET_LOCK` ou `UNIQUE(job_name, run_date)`", grifei-os como "o adiamento
+        melhor executado do inventário", e confirmei a ausência com `grep GET_LOCK|job_executions` — o
+        vocabulário do próprio ADR. O mecanismo existe desde 2026-06-17, pela opção B, com a tabela
+        chamada `ctr_job_runs` e a função `claimJobRun`. **A anotação obsoleta produziu um veredito
+        errado**, e no sentido mais perigoso: afirmou ausência onde há implementação. É a única classe de
+        comentário desatualizado que engana ativamente uma auditoria.
+
+  - id: ADR-0041-C5
+    text: |
+      Job queue (BullMQ/Valkey) fica DEFERIDA até (a) o ADR-0030 ser promovido a Accepted OU (b) 3+ jobs
+      com dependência/fanout entre si. Até lá, cron + one-shot é YAGNI.
+    kind: prohibition
+    source_lines: ['39-40']
+    applies_to:
+      - 'package.json'
+      - 'src/jobs/**'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhum BullMQ, bull, ou cliente Valkey/Redis em package.json'
+        - 'nota: existem cinco jobs one-shot e nenhum tem dependência declarada de outro — a condição (b) não foi atingida'
+        - 'nota: o ADR-0030 segue Proposed, então a condição (a) também não foi atingida'
+      verify: |
+        grep -n "bullmq\|bull\|redis\|valkey\|iovalkey" package.json
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `package.json`, quando aparecer job queue (BullMQ) sem que o `ADR-0030` esteja Accepted, então
+        o teste falha — a condição de ativação é explícita e verificável.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar: é o mesmo adiamento do `ADR-0030-C1` (sem store compartilhado até multi-instância), já
+        proposto com escopo geral, e a condição (a) é literalmente "o `ADR-0030` ser promovido". Registrar
+        aqui só como evidência de que o adiamento tem DUAS condições de saída independentes — status do
+        outro ADR e contagem de jobs interdependentes —, o que é mais rigoroso que a maioria dos
+        adiamentos do acervo.
+
+  - id: ADR-0041-C6
+    text: |
+      PADRÃO CANÔNICO de job novo: `src/jobs/<módulo>/<job>/` com `run.ts` (entrypoint one-shot),
+      `config.ts` (`readJobConfig(env): Result<JobConfig, JobConfigError>`), `<job>.ts` (lógica PURA,
+      recebe Clock port, testável sem DB) e teste com repositório in-memory. SEM
+      `AbortController`/`SIGTERM` listener (o job é one-shot; `SIGTERM` mata → rollback → próximo disparo
+      refaz). `AsyncLocalStorage` (`withNewCorrelation`) envolve a execução.
+      `uncaughtException`/rejeição não-tratada: logar stack, fechar pool, sair com código ≠ 0 — nunca
+      "resumir".
+    kind: obligation
+    source_lines: ['44-55']
+    applies_to:
+      - 'src/jobs/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth, contracts, financial]
+      absent_in: []
+      evidence:
+        - 'nota: src/jobs/contracts/sweeper/ tem run.ts, config.ts e sweeper.ts — a tríade exata do padrão'
+        - 'nota: o mesmo diretório tem clock-sao-paulo.ts, que materializa o §Riscos ("o cutoff D+1 é calculado no job em America/Sao_Paulo") como arquivo próprio'
+        - 'nota: src/jobs/financial/supplier-view-backfill/ segue a mesma forma (backfill.ts + run.ts), verificado no ADR-0045-C4'
+        - 'nota: o teste vive em tests/jobs/, fora do diretório do job — divergência de localização em relação ao padrão, coerente com a convenção geral do repo (tests/ espelhando src/)'
+        - 'ausência: nenhum AbortController em src/jobs/ — o job não escuta sinal, como o padrão prescreve'
+      verify: |
+        ls src/jobs/contracts/sweeper/ src/jobs/financial/supplier-view-backfill/; grep -rn "AbortController" src/jobs/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um diretório em `src/jobs/`, quando faltar `run.ts` ou `config.ts`, ou quando a lógica não for
+        separada em arquivo próprio testável sem DB, então o teste falha. E job MUST NÃO registrar
+        `AbortController`/listener de `SIGTERM`.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Job MUST separar entrypoint (`run.ts`), configuração validada (`config.ts` devolvendo `Result`) e
+        lógica pura (recebe `Clock`, testável sem DB). Job MUST NOT registrar listener de `SIGTERM` —
+        confia no rollback da transação. Erro não-tratado MUST fechar o pool e sair com código ≠ 0.
+      rationale: |
+        Estreitado para as três partes que mudam o comportamento, deixando de fora a localização do teste —
+        que o repo faz diferente (em `tests/`) por convenção geral e não vale conflitar. O ponto não óbvio
+        e mais valioso é o `SIGTERM`: o instinto é adicionar shutdown gracioso a todo processo, e aqui
+        isso é ERRADO — o job depende do rollback para ser idempotente, e um handler que tenta "terminar
+        direitinho" pode commitar trabalho parcial.
+
+findings:
+  - |
+    **A topologia da decisão nº 1 foi revertida por um INCIDENTE DE PRODUÇÃO documentado.** O ADR pede "um
+    entrypoint por responsabilidade" com fundamentação em Parnas; hoje `src/workers/runner/run.ts:3` agrupa
+    os workers em três processos por `WORKER_GROUP` (`outbox|projections|email`), "cortando tasks Fargate e
+    pools contra o RDS". Na primeira passagem eu inferi a razão do comentário; o cruzamento com a
+    `.pipeline/` deu a origem exata:
+    `handbook/incidents/0001-prod-rds-connection-exhaustion-2026-07-10.md` — **56 de 60 conexões**,
+    severidade Alta, "proximidade de indisponibilidade total", detectado por DBA via
+    `SHOW FULL PROCESSLIST` com salto de 14→52 conexões, mitigado à mão. O ticket
+    `CORE-WORKER-CONSOLIDATION-DEPLOY` cita o incidente como origem ("causa #2: proliferação de pools").
+    O isolamento LÓGICO de Parnas continua — cada worker é uma spec separada e testável. O que caiu foi a
+    inferência de que isolamento lógico exige processo próprio: a decisão estava **certa na razão e errada
+    na unidade**, e o custo de descobrir isso foi um quase-outage em produção.
+  - |
+    **Existe um quarto plano de evidência que este inventário nunca abriu: `handbook/incidents/`.** Descoberto
+    pela referência do `CORE-WORKER-CONSOLIDATION-DEPLOY`. O post-mortem 0001 traz data, severidade,
+    detecção, mitigação, causa-raiz e o ticket de correção — material que nenhum ADR carrega e que aqui
+    explicava uma reversão de decisão arquitetural. Um inventário de decisões que confronta ADR × código ×
+    ticket ainda perde o plano onde as decisões são **corrigidas pela realidade operacional**.
+  - |
+    **CORREÇÃO (cruzamento com a `.pipeline/`): o adiamento da `C4` não é adiamento — foi implementado no
+    dia seguinte, e a anotação obsoleta me fez registrar o contrário.** `CTR-SWEEPER-JOB-LOCK`
+    (closed-green, 2026-06-17, um dia após o ADR) criou `ctr_job_runs`, `claimJobRun` com `INSERT IGNORE`,
+    a migration `0015` e o wiring em `sweeper/run.ts:59` — a **opção B** do §Decisão (4), sem Redis, com
+    teste de integração contra MySQL real.
+    Meu `grep GET_LOCK|job_executions` usou o vocabulário do ADR e a implementação usou o outro nome
+    (`ctr_job_runs`, não `ctr_job_executions`). **Sexta armadilha de grep ingênuo do inventário, e a
+    primeira que inverteu um veredito.**
+    O agravante é o que eu havia elogiado: os três comentários em `contract-repository.drizzle.ts:344`,
+    `.in-memory.ts:99` e `domain/contract/repository.ts:71` seguem dizendo "fica para F-Plus". Eles estão
+    **stale desde 2026-06-17** e foram a evidência que me convenceu. Anotação de adiamento que sobrevive ao
+    fim do adiamento não é documentação velha inofensiva — é a única classe de comentário que **engana
+    ativamente uma auditoria**, porque afirma ausência onde há implementação.
+  - |
+    **A única menção a `worker_threads` no repo confirma a regra em vez de violá-la.**
+    `unpdf-reader.ts:27` comenta que um hang SÍNCRONO de CPU exigiria `worker_threads.terminate()` — e
+    parsing de PDF é CPU-bound, o caso em que o ADR explicitamente admite a primitiva. Foi o que motivou a
+    `C3` a ser proposta como `narrow` com a exceção escrita: uma proibição em bloco reprovaria o uso
+    correto e seria desligada na primeira vez que fizesse falta.
+  - |
+    **`clock-sao-paulo.ts` é um risco do ADR virado arquivo.** A seção §Riscos alerta que "cron disparar em
+    fuso errado" se mitiga porque "o cutoff D+1 é calculado no job em `America/Sao_Paulo` (não confiar só
+    no horário do cron)". O job tem um arquivo dedicado a isso. É o padrão que diferencia risco mitigado de
+    risco anotado: virou código com nome próprio, não comentário.
+  - |
+    Segundo ADR do lote com header `Accepted` e seção "## Decisão (proposta)" — o outro é o `ADR-0040`, do
+    dia anterior. Dois documentos da mesma semana com o mesmo descuido de molde sugerem que o template foi
+    copiado de um para o outro. Reforça o gate já proposto de conferir o corpo do ADR contra o próprio
+    header.
+
+provenance:
+  tickets:
+    - CTR-AUTO-EXPIRE
+    - CTR-SWEEPER-JOB-LOCK
+  issues: []
+  note: |
+    O ADR cita as issues #39 (auto-expire, job piloto) e o ticket `CTR-AUTO-EXPIRE`, além de
+    `handbook/infrastructure/06-contracts-sweeper-job.md` — nenhum lido nesta fase. O disparo por cron
+    externo (systemd timer / `ofelia`) vive no ERP-INFRA e está fora do alcance desta verificação. A
+    consolidação em três grupos veio de um ticket posterior que este inventário não leu; o que se verifica
+    é o estado do código.

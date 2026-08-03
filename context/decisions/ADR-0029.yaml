@@ -1,0 +1,236 @@
+id: ADR-0029
+title: pnpm 11.x com defaults de supply-chain (supersedes ADR-0012)
+source: handbook/architecture/adr/0029-pnpm-11-supply-chain-defaults.md
+decided_on: 2026-05-30
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: [ADR-0012]
+  superseded_by: []
+  related: [ADR-0011, ADR-0012, ADR-0034]
+
+assessment:
+  verdict: realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Quinto `realized` do inventário, e o mais completo em conformidade: as quatro decisões conferem
+    inteiras, incluindo a consistência entre manifesto e imagem — `package.json:18` fixa
+    `pnpm@11.15.1+sha512...` e o `Dockerfile:47` declara `ENV PNPM_VERSION=11.15.1`, o mesmo número, com
+    `corepack prepare pnpm@${PNPM_VERSION} --activate` na linha seguinte.
+    As quatro settings de supply-chain estão explícitas no `pnpm-workspace.yaml`, nas linhas 46, 49, 52 e
+    68 — e há um `trustPolicyExclude` (linha 54) para as exceções cirúrgicas por versão que o
+    `ADR-0034` (Bruno) previu.
+    A versão que o ADR nomeia é `11.5.0` e a real é `11.15.1`. Não é divergência: é o pin funcionando —
+    mesma major, dentro do `engines: >=11.0.0 <12`, consistente nos dois lugares. O exemplo do ADR
+    envelheceu; a norma não.
+    Este é o ADR que ~18 arquivos de doutrina viva DEVERIAM citar e não citam — ver `ADR-0012`.
+
+extraction:
+  state: complete
+  covers: |
+    4 alegações — as quatro decisões numeradas. A justificativa de por que a major 11 (defaults de
+    supply-chain) é fundamentação.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA + RULE NOVA — originou a .claude/rules/supply-chain.md
+    applied_to: ['.claude/rules/supply-chain.md']
+    gap: |
+      Trabalho exemplar: a 039 VERIFICOU as sete exigências deste ADR uma por uma, com `path:linha`, e
+      concluiu corretamente que "o repo não viola o ADR-0029; o problema é referência obsoleta em massa".
+      Criou a `supply-chain.md` com `paths` cobrindo `package.json`, `pnpm-workspace.yaml`, `Dockerfile*`
+      e `.npmrc` — a primeira lacuna de cobertura de path que ela identificou — e incluiu aviso explícito
+      para citar este ADR, não o `0012`.
+      É o único caso do acervo em que a 039 fez o que este inventário faz: confrontar o ADR com o código.
+      Nada a acrescentar além de confirmar que segue verdade dois meses depois.
+
+claims:
+  - id: ADR-0029-C1
+    text: |
+      `pnpm 11.x` é o package manager único, com versão PINADA em `packageManager` e
+      `engines: { node: ">=24.0.0", pnpm: ">=11.0.0 <12" }`.
+    kind: obligation
+    source_lines: ['32-40']
+    applies_to:
+      - 'package.json'
+    reality:
+      verdict: holds
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'package.json:18 — packageManager: pnpm@11.15.1 com hash de integridade sha512'
+        - 'package.json:9 — engines.pnpm: ">=11.0.0 <12", exatamente a faixa do ADR'
+        - 'nota: o ADR nomeia 11.5.0 e a real é 11.15.1 — mesma major, dentro da faixa; é o pin sendo avançado, não violado'
+      verify: |
+        node -e "const p=require('./package.json');console.log(p.packageManager,'|',JSON.stringify(p.engines))"
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `package.json`, quando `packageManager` não tiver versão exata com hash de integridade, ou
+        quando a major sair da faixa de `engines`, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: ['scripts/ci/only-allow-pnpm.ts']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        `packageManager` MUST declarar versão exata com hash de integridade. `engines.pnpm` MUST fixar a
+        faixa da major vigente. MUST NOT usar range aberto no `packageManager`.
+      rationale: |
+        O hash de integridade é a parte que o `ADR-0012` não tinha e esta versão trouxe: sem ele, o
+        corepack aceita qualquer artefato que se chame `pnpm@11.15.1`. É a diferença entre pinar versão e
+        pinar artefato — e é exatamente o vetor do incidente que originou o `ADR-0011`.
+
+  - id: ADR-0029-C2
+    text: |
+      Corepack ativa a versão pinada (`corepack enable && corepack prepare pnpm@<versão> --activate`), e
+      o `Dockerfile` usa `ENV PNPM_VERSION` com a mesma versão.
+    kind: obligation
+    source_lines: [41]
+    applies_to:
+      - 'Dockerfile*'
+      - 'package.json'
+    reality:
+      verdict: holds
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'Dockerfile:47 — ENV PNPM_VERSION=11.15.1'
+        - 'Dockerfile:48 — RUN corepack enable && corepack prepare pnpm@${PNPM_VERSION} --activate'
+        - 'nota: a versão do Dockerfile é IDÊNTICA à do packageManager em package.json:18 — as duas fontes não divergiram'
+      verify: |
+        grep -n "PNPM_VERSION\|corepack" Dockerfile; node -e "console.log(require('./package.json').packageManager)"
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `Dockerfile` e `package.json`, quando a versão do pnpm divergir entre os dois, então o teste
+        falha — a imagem instalaria um pnpm diferente do declarado no manifesto.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        A versão do pnpm no `Dockerfile` MUST ser idêntica à de `packageManager`. A ativação MUST ser via
+        `corepack prepare ... --activate`, nunca instalação global solta.
+      rationale: |
+        Divergência entre manifesto e imagem é a classe de bug que só aparece em produção — build passa,
+        resolução difere. Hoje as duas coincidem, então o RED passa e a regra protege o futuro. É
+        verificável com um `grep` e uma leitura de JSON.
+
+  - id: ADR-0029-C3
+    text: |
+      As settings de supply-chain são EXPLÍCITAS em `pnpm-workspace.yaml`, mesmo quando coincidem com o
+      default da v11 — explícito é auditável: `minimumReleaseAge: 1440`,
+      `minimumReleaseAgeStrict: true`, `trustPolicy: no-downgrade`, `blockExoticSubdeps: true`.
+    kind: obligation
+    source_lines: ['42-48']
+    applies_to:
+      - 'pnpm-workspace.yaml'
+    reality:
+      verdict: holds
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'pnpm-workspace.yaml:46 — minimumReleaseAge: 1440'
+        - 'pnpm-workspace.yaml:49 — minimumReleaseAgeStrict: true'
+        - 'pnpm-workspace.yaml:52 — trustPolicy: no-downgrade'
+        - 'pnpm-workspace.yaml:68 — blockExoticSubdeps: true'
+        - 'pnpm-workspace.yaml:54 — trustPolicyExclude, para as exceções cirúrgicas por versão previstas pelo ADR-0034 (Bruno como devDependency)'
+      verify: |
+        grep -n "minimumReleaseAge\|minimumReleaseAgeStrict\|trustPolicy\|blockExoticSubdeps" pnpm-workspace.yaml
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `pnpm-workspace.yaml`, quando qualquer uma das quatro settings estiver ausente ou com valor
+        diferente do registrado, então o teste falha. Foi exatamente este o enforcement candidato #2 da
+        spec 039.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        As quatro settings de supply-chain MUST estar declaradas explicitamente em `pnpm-workspace.yaml`,
+        mesmo quando coincidem com o default da major. Exceção MUST ser por versão, via
+        `trustPolicyExclude`, nunca desligando a política.
+      rationale: |
+        A razão do ADR é a certa e vale citar: explícito é AUDITÁVEL. Default silencioso muda com a major
+        e ninguém percebe; setting escrita aparece no diff do PR. É o enforcement candidato #2 da 039 —
+        um teste que lê o YAML e falha se faltar uma — e é barato.
+
+  - id: ADR-0029-C4
+    text: |
+      Tudo o que o ADR-0012 decidiu e continua valendo: pnpm como PM único em legado e novo; lockfile
+      `pnpm-lock.yaml` committed; `--frozen-lockfile` em CI; `only-allow=pnpm`;
+      `approve-builds`/`allowBuilds` para postinstall.
+    kind: obligation
+    source_lines: [49]
+    applies_to:
+      - 'package.json'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/**'
+    reality:
+      verdict: holds
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'package.json:30 — preinstall roda scripts/ci/only-allow-pnpm.ts (ver ADR-0012-C1)'
+        - '.github/workflows/integration.yml:78 — pnpm install --frozen-lockfile (ver ADR-0011-C1)'
+        - 'nota: pnpm-lock.yaml versionado e nenhum lockfile de outro gerenciador'
+      verify: |
+        ls pnpm-lock.yaml scripts/ci/only-allow-pnpm.ts; grep -rn "frozen-lockfile" .github/workflows/
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Idêntico ao da `ADR-0011-C1` e da `ADR-0012-C1` — mesma varredura.
+      expected_error: null
+      blocker: null
+      enforced_by: ['scripts/ci/only-allow-pnpm.ts']
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como texto: é reafirmação do que já está normatizado na `ADR-0011-C1` (lockfile e
+        frozen) e na `ADR-0012-C1` (pnpm único com bloqueio mecânico). A reafirmação tem valor DENTRO do
+        ADR — deixa claro que superseder a major não revoga o resto — mas duplicá-la aqui criaria terceira
+        fonte.
+
+findings:
+  - |
+    Único caso do acervo em que a spec 039 fez o que este inventário faz: ela VERIFICOU as sete
+    exigências deste ADR uma por uma, com `path:linha`, e separou corretamente "o repo viola a norma" de
+    "a doutrina aponta para o documento errado". Concluiu que era o segundo. Dois meses depois, segue
+    verdade — as quatro settings, o pin e o Dockerfile conferem.
+  - |
+    A consistência entre `package.json:18` e `Dockerfile:47` é o detalhe mais valioso e o menos óbvio: as
+    duas fontes declaram `11.15.1`. Divergência aí é bug que só aparece em produção, porque o build passa
+    e a resolução de dependência difere. Hoje coincidem, então a regra protege sem exigir conserto.
+  - |
+    O hash de integridade no `packageManager` é o que este ADR trouxe e o `ADR-0012` não tinha. Sem ele,
+    o corepack aceita qualquer artefato com o nome certo — que é o vetor do incidente `axios` que originou
+    o `ADR-0011`. Pinar VERSÃO e pinar ARTEFATO são coisas diferentes, e só a segunda protege.
+  - |
+    Contraste com o `ADR-0011-C3`: as settings que ESTE ADR mandou declarar explicitamente estão todas
+    declaradas; as "deps críticas" que o `ADR-0011` mandou pinar sem definir o critério não estão. A
+    diferença é a mesma do `ADR-0027`: quando a exigência é NOMINAL e verificável, é cumprida.
+
+provenance:
+  tickets:
+    - CTR-PNPM-11-MIGRATION
+    - CTR-PNPM-ONLY-ALLOW
+  issues: []
+  note: |
+    O acervo tem CTR-PNPM-11-MIGRATION (a execução deste ADR) e CTR-PNPM-ONLY-ALLOW — nenhum lido. O
+    `trustPolicyExclude` da linha 54 existe por causa do `ADR-0034` (Bruno como devDependency com exceção
+    cirúrgica por versão), que está no lote 8c.

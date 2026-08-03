@@ -1,0 +1,294 @@
+id: ADR-0010
+title: Email — Port & Adapter Pattern com Nodemailer inicial
+source: handbook/architecture/adr/0010-email-port-adapter-pattern.md
+decided_on: 2026-04-28
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0006, ADR-0019, ADR-0047]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    O PADRÃO se realizou melhor do que o ADR previu; a DESCRIÇÃO envelheceu como de costume. O port
+    `EmailSender` existe, é exportado pela `public-api` do módulo `notifications`, e tem três
+    implementações reais — Nodemailer, in-memory para teste, e Resend. O ADR previa o Resend como
+    "stub pronto para migração futura"; ele está implementado, com config própria.
+    Duas divergências, ambas para melhor: os decorators previstos (`withRetry`, `withLogging`) NÃO
+    existem, e no lugar deles há `rate-limit` e `sandbox-redirect` — a composição foi usada, com
+    decorators que o ADR não imaginou e que respondem a necessidade real. E a estrutura de pastas
+    (`packages/shared-kernel/`, `apps/core-api/`) é a projeção inicial de monorepo, que nunca existiu.
+    Não há adapter de SES, e isso é coerente: o SES fala SMTP, então o adapter Nodemailer o atende sem
+    código novo.
+
+extraction:
+  state: complete
+  covers: |
+    6 alegações — o port, os três adapters previstos, os decorators, os stubs futuros e a estrutura de
+    pastas. As restrições de contexto (custo zero, deliverability, LGPD) são fundamentação.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: COBERTO — port & adapter já em application.md/adapters.md; paths do ADR são da projeção inicial
+    applied_to: ['.claude/rules/application.md', '.claude/rules/adapters.md']
+    gap: |
+      Correto nos dois pontos, e ela já identificou que os paths são projeção. O que não registrou: o
+      ADR previu dois decorators específicos que não existem, e o repo construiu outros dois que
+      resolvem problema real (rate limit e redirecionamento em sandbox). É informação útil — mostra que
+      o PADRÃO de composição pegou, e que a lista de decorators de um ADR de abril não deve ser lida
+      como catálogo fechado.
+
+claims:
+  - id: ADR-0010-C1
+    text: |
+      Port `EmailSender` com `send: (message: EmailMessage) => Promise<Result<EmailReceipt, EmailError>>`
+      — o domínio nunca conhece o provedor.
+    kind: obligation
+    source_lines: ['29-33', '56-60']
+    applies_to:
+      - 'src/modules/notifications/application/ports/*.ts'
+      - 'src/modules/notifications/public-api/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [notifications]
+      absent_in: []
+      evidence:
+        - 'src/modules/notifications/public-api/index.ts:26 — exporta o type EmailSender de application/ports/email-sender.ts'
+        - 'src/modules/notifications/adapters/email/nodemailer.ts:48 — createNodemailerEmailSender retorna EmailSender'
+        - 'nota: o port vive na camada application do módulo, e o consumo cross-módulo passa pela public-api — conforme ADR-0006-C4'
+      verify: |
+        grep -rn "EmailSender" src/modules/notifications/public-api/index.ts src/modules/notifications/application/ports/
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um módulo que envie e-mail, quando ele importar adapter concreto (Nodemailer, Resend) em
+        vez do port, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Envio de e-mail MUST passar pelo port `EmailSender`. Módulo consumidor MUST NOT importar
+        adapter concreto de provedor.
+      rationale: |
+        Cumprida, e é a alegação que sustenta as outras cinco — sem o port, trocar de provedor mexe no
+        domínio. Verificável por import, no mesmo padrão do `ADR-0006-C4`.
+
+  - id: ADR-0010-C2
+    text: |
+      Adapter inicial: Nodemailer.
+    kind: obligation
+    source_lines: [30]
+    applies_to:
+      - 'src/modules/notifications/adapters/email/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [notifications]
+      absent_in: []
+      evidence:
+        - 'src/modules/notifications/adapters/email/nodemailer.ts:48 — createNodemailerEmailSender(config: SmtpConfig)'
+        - 'nota: há nodemailer-config.ts separado do adapter, isolando a leitura de configuração'
+      verify: |
+        ls src/modules/notifications/adapters/email/
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o módulo notifications, quando não existir adapter concreto implementando o port, então o
+        teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Escolha de provedor inicial não é regra de edição — é fato histórico. O que vale como regra é a
+        `C1` (falar pelo port). Descartar para não fixar Nodemailer como obrigação, que é justamente o
+        que o padrão port/adapter existe para evitar.
+
+  - id: ADR-0010-C3
+    text: |
+      Adapter in-memory para testes.
+    kind: obligation
+    source_lines: [31]
+    applies_to:
+      - 'src/modules/notifications/adapters/email/in-memory.ts'
+    reality:
+      verdict: holds
+      holds_in: [notifications]
+      absent_in: []
+      evidence:
+        - 'src/modules/notifications/adapters/email/in-memory.ts:23 — createInMemoryEmailSender'
+        - 'src/modules/notifications/adapters/email/in-memory.ts:17 — InMemoryEmailSender estende EmailSender com superfície de inspeção para teste'
+      verify: |
+        grep -n "export" src/modules/notifications/adapters/email/in-memory.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um port de integração externa, quando não existir implementação in-memory, então o teste
+        falha — sem ela, testar o caso de uso exige rede.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Todo port de integração externa MUST ter implementação in-memory para teste. MUST NOT exigir
+        rede para testar caso de uso.
+      rationale: |
+        Generalizado de e-mail para qualquer port externo — é o padrão que o repo já segue em storage
+        (`CTR-STORAGE-INMEMORY`) e persistência (adapter `memory`). Fixar como regra geral vale mais
+        que repetir por port.
+
+  - id: ADR-0010-C4
+    text: |
+      Decorators opcionais por composição: `withRetry`, `withLogging`.
+    kind: permission
+    source_lines: [32]
+    applies_to:
+      - 'src/modules/notifications/adapters/email/*.ts'
+    reality:
+      verdict: contradicted
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'ausência: withRetry e withLogging não existem em src/'
+        - 'src/modules/notifications/adapters/email/rate-limit.ts:39 — withRateLimit, decorator não previsto pelo ADR mas na MESMA convenção with* que ele propôs'
+        - 'src/modules/notifications/adapters/email/sandbox-redirect.ts:14 — withSandboxRedirect, decorator não previsto'
+        - 'src/modules/notifications/adapters/email/build-email-sender.ts:38 — buildEmailSender, o ponto único de composição dos decorators'
+      verify: |
+        grep -rn "withRetry\|withLogging" src/ --include='*.ts'; ls src/modules/notifications/adapters/email/
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o construtor do sender, quando um decorator alterar a assinatura do port em vez de
+        preservá-la, então o teste falha — decorator que muda contrato não é decorator.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: replace
+      text: |
+        Comportamento transversal de envio (rate limit, redirecionamento de sandbox, retry) MUST ser
+        aplicado por decorator que preserve a assinatura do port, composto num único ponto.
+        MUST NOT ser embutido no adapter de provedor.
+      rationale: |
+        Os dois decorators do ADR não existem e os dois que existem são melhores — respondem a
+        necessidade real (limitar taxa, não vazar e-mail para destinatário real em sandbox). Substituir
+        a lista fechada pela PROPRIEDADE que importa: preservar a assinatura e compor num lugar só,
+        que é o que `build-email-sender.ts` faz.
+
+  - id: ADR-0010-C5
+    text: |
+      Stubs para Resend e SES prontos para migração futura, sem alterar o domínio.
+    kind: permission
+    source_lines: [33, '46-51']
+    applies_to:
+      - 'src/modules/notifications/adapters/email/*.ts'
+    reality:
+      verdict: partial
+      holds_in: [notifications]
+      absent_in: []
+      evidence:
+        - 'src/modules/notifications/adapters/email/resend.ts:55 — createResendEmailSender: adapter IMPLEMENTADO, não stub, com resend-config.ts próprio'
+        - 'ausência: não existe adapter de SES'
+        - 'nota: a ausência do SES é coerente — o SES fala SMTP, então o adapter Nodemailer o atende por configuração, sem código novo'
+      verify: |
+        ls src/modules/notifications/adapters/email/ | grep -iE "resend|ses"
+    testability:
+      verdict: not-applicable
+      layer: null
+      red: |
+        Não há obrigação a falsificar: o ADR prevê stubs como conveniência futura, e a existência ou
+        não de um adapter específico é decisão de produto.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar: catálogo de provedores não é regra de edição. A propriedade que importa — trocar de
+        provedor sem tocar o domínio — está garantida pela `C1`, e o Resend implementado é a prova de
+        que funciona.
+
+  - id: ADR-0010-C6
+    text: |
+      Estrutura: o port vive em `packages/shared-kernel/src/email/`; os adapters em
+      `apps/core-api/src/adapters/email/`.
+    kind: obligation
+    source_lines: ['37-52']
+    applies_to:
+      - 'src/**'
+    reality:
+      verdict: contradicted
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'ausência: não existem packages/ nem apps/ — a raiz é src/{jobs,modules,shared,workers}'
+        - 'nota: port e adapters vivem juntos no módulo notifications, em application/ports/ e adapters/email/'
+      verify: |
+        ls src/; ls src/modules/notifications/
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/`, quando a estrutura divergir da declarada no registro vigente, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Terceira ocorrência da mesma projeção de monorepo (`packages/`, `apps/`) que o `ADR-0006-C2` e
+        o `ADR-0056` também trazem. Descartar daqui: a estrutura vigente já é normatizada pelo
+        `ADR-0006-C2`, e repetir criaria quarta fonte para a mesma regra.
+
+findings:
+  - |
+    Caso raro no inventário: a divergência é para MELHOR. O ADR previu `withRetry` e `withLogging`;
+    o repo construiu `rate-limit` e `sandbox-redirect`, que respondem a necessidade real — limitar taxa
+    de envio e não vazar e-mail para destinatário verdadeiro em ambiente de teste. O PADRÃO (composição
+    por decorator preservando a assinatura, num ponto único) pegou; a lista de abril não era catálogo.
+  - |
+    O Resend estava previsto como "stub pronto para migração futura" e está IMPLEMENTADO, com config
+    própria. Ausência de adapter de SES não é lacuna: o SES fala SMTP, então o Nodemailer o atende por
+    configuração — que é exatamente a propriedade que o port/adapter deveria entregar.
+  - |
+    Terceira aparição da projeção de monorepo (`packages/shared-kernel/`, `apps/core-api/`) num ADR de
+    abril, junto com o `ADR-0006` e o `ADR-0056`. Três ADRs descrevendo uma estrutura que nunca
+    existiu, e nenhum deles com aviso. É a forma mais comum de drift do acervo: não regra violada, e sim
+    descrição que nunca foi verdade.
+
+provenance:
+  tickets:
+    - CTR-EMAIL-ADAPTER-NODEMAILER
+    - CTR-EMAIL-ADAPTER-RESEND
+    - CTR-EMAIL-PORT
+    - CTR-STORAGE-INMEMORY
+    - NOTIF-EMAIL-RATE-LIMIT
+    - NOTIF-SMTP-REQUIRETLS
+  issues: []
+  note: |
+    Inquiry-0009 (estratégia de e-mail — Nodemailer com Service Adapter) embasou este ADR — não lida.
+    O acervo tem CTR-EMAIL-PORT, CTR-EMAIL-ADAPTER-NODEMAILER, CTR-EMAIL-ADAPTER-RESEND,
+    NOTIF-EMAIL-RATE-LIMIT e NOTIF-SMTP-REQUIRETLS — os adapters e decorators reais saíram deles.
+    Nenhum lido. O ADR-0047 (e-mail como evento de domínio no outbox do produtor) reorienta o DISPARO
+    e entra no lote 8.

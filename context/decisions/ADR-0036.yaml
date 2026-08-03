@@ -1,0 +1,275 @@
+id: ADR-0036
+title: Act — novo tipo de parceiro PLACEHOLDER (clone enxuto do núcleo do Collaborator)
+source: handbook/architecture/adr/0036-act-partner-placeholder.md
+decided_on: 2026-06-06
+
+declared:
+  status: Accepted (provisório)
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0014, ADR-0020, ADR-0031, ADR-0033, ADR-0035]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    O núcleo se realizou: o agregado `Act` existe em `partners/domain/act/`, a tabela `par_acts` tem o
+    soft-delete padrão com CHECK (`par_acts_active_consistency_chk`), e o plugin HTTP está registrado sob
+    `/api/v1` (`server.ts:346`).
+    Mas o ESCOPO cresceu além do que o ADR delimitou, e cresceu justamente no item que ele excluiu
+    nominalmente. O ADR lista "eventos de domínio" entre o que fica **fora do escopo até as regras
+    reais**, e `domain/act/events.ts` existe com `ActRegistered`, `ActEdited`, `ActDeactivated` e
+    `ActReactivated`. Há também `act-number.ts`, que não está entre os 7 campos de pré-cadastro que o ADR
+    enumera.
+    É o inverso do padrão comum deste inventário: em vez de algo dentro do escopo não sair, algo
+    explicitamente fora do escopo foi construído. E o ADR se declara PROVISÓRIO, com as regras de negócio
+    pendentes — o que torna o crescimento mais delicado, não menos: cada campo e evento acrescentado
+    antes das regras é uma decisão tomada sem elas.
+
+extraction:
+  state: complete
+  covers: |
+    5 alegações — as duas decisões numeradas (com o item 1 decomposto em núcleo, status duplo e borda) e
+    a natureza provisória.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/partners-module.md']
+    gap: |
+      Destilou como "`Act` reusa o soft-delete padrão `par_*` + **status duplo** (`registrationStatus` ×
+      `status`). Reforça `0035`" — correto e econômico, e o "reforça" é a leitura certa: o valor deste ADR
+      para uma rule é confirmar que o padrão do módulo se aplica a agregado novo.
+      O que não registrou: os eventos de domínio, que o ADR exclui do escopo, existem. É informação que
+      importa porque o ADR é provisório — saber o que já foi construído define o que a próxima decisão
+      herda.
+
+claims:
+  - id: ADR-0036-C1
+    text: |
+      `Act` é um clone ENXUTO do núcleo do Collaborator (não o Collaborator completo): PF com identidade
+      `Cpf` reusando o VO do kernel, mais os 7 campos de pré-cadastro — `name`, `email`, `cpf`,
+      `occupationArea`, `role`, `startOfContract`, `employmentRelationship`.
+    kind: obligation
+    source_lines: ['24-27']
+    applies_to:
+      - 'src/modules/partners/domain/act/**'
+    reality:
+      verdict: partial
+      holds_in: [partners]
+      absent_in: []
+      evidence:
+        - 'nota: src/modules/partners/domain/act/ tem act.ts, act-id.ts, act-number.ts, errors.ts, events.ts, repository.ts e types.ts'
+        - 'nota: act-number.ts introduz um ActNumber que NÃO está entre os 7 campos de pré-cadastro enumerados pelo ADR'
+        - 'nota: o VO Cpf vem do kernel (src/shared/kernel/cpf.ts), conforme o ADR e a ADR-0031-C4'
+      verify: |
+        ls src/modules/partners/domain/act/; grep -rn "occupationArea\|employmentRelationship" src/modules/partners/domain/act/types.ts | head -3
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o agregado `Act`, quando ele ganhar campo fora da lista registrada, então o teste falha —
+        enquanto o ADR for provisório, crescer é decisão, não implementação.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Enquanto um agregado for declarado PROVISÓRIO, seu conjunto de campos MUST corresponder ao
+        registrado. Campo novo MUST atualizar o registro de decisão antes de entrar.
+      rationale: |
+        Estreitado para a condição que importa: não é que `ActNumber` seja errado — é que o ADR se
+        declara placeholder "até as regras reais" e cada campo adicionado antes delas é uma regra
+        decidida por omissão. A regra não proíbe crescer; exige registrar.
+
+  - id: ADR-0036-C2
+    text: |
+      Status DUPLO: `registrationStatus` (`PreRegistration` → `Complete`) mais `status`
+      (`Active`/`Inactive`), este com o soft-delete padrão `par_*` (`active` + `deactivated_at` + CHECK).
+    kind: obligation
+    source_lines: ['28-29']
+    applies_to:
+      - 'src/modules/partners/domain/act/types.ts'
+      - 'src/modules/partners/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: holds
+      holds_in: [partners]
+      absent_in: []
+      evidence:
+        - 'nota: par_acts_active_consistency_chk existe, aplicando o CHECK de coerência do ADR-0035 ao agregado novo'
+        - 'src/modules/partners/adapters/persistence/schemas/mysql.ts:467 — active boolean NOT NULL DEFAULT true em par_acts'
+        - 'nota: os dois eixos de status são distintos por desenho — registrationStatus é completude de cadastro, status é ciclo de vida'
+      verify: |
+        grep -rhoE "'par_acts[a-z_]*'" src/modules/partners/adapters/persistence/schemas/mysql.ts | sort -u; grep -rn "registrationStatus" src/modules/partners/domain/act/types.ts | head -2
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `par_acts`, quando faltar o CHECK de coerência do soft-delete, ou quando os dois eixos de
+        status forem colapsados num só, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Completude de cadastro e ciclo de vida MUST ser eixos de status SEPARADOS. MUST NOT colapsar
+        `registrationStatus` e `status` num único campo.
+      rationale: |
+        É a única regra genuinamente nova deste ADR — o soft-delete já vem do `ADR-0035`. Separar
+        "cadastro incompleto" de "inativo" evita a confusão clássica em que um pré-cadastro aparece como
+        desativado, ou um desativado volta a parecer pendente. Vale para qualquer agregado com entrada
+        em duas etapas.
+
+  - id: ADR-0036-C3
+    text: |
+      CRUD e lista sob `/api/v1/acts` (`POST`/`GET`/`PUT`, `GET /acts/:id`,
+      `POST /acts/:id/{deactivate,reactivate}`), RBAC `act:read`/`act:write`, tabela `par_acts` com
+      migration gerada.
+    kind: obligation
+    source_lines: ['30-31']
+    applies_to:
+      - 'src/modules/partners/adapters/http/**/*.ts'
+      - 'src/server.ts'
+    reality:
+      verdict: partial
+      holds_in: [partners]
+      absent_in: []
+      evidence:
+        - 'src/server.ts:346 — actHttpPlugin registrado sob prefix /api/v1, conforme o ADR'
+        - 'nota: a tabela par_acts existe com o prefixo do módulo'
+        - 'nota: o RBAC act:read/act:write não foi verificado nesta fase'
+      verify: |
+        grep -n "actHttpPlugin" -A 5 src/server.ts | head; grep -rn "act:read\|act:write" src/ --include='*.ts' | head -3
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dada a rota de `acts`, quando responder sem exigir a permissão registrada, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar daqui: prefixo é regido pela `ADR-0033-C1` e permissão granular pela `ADR-0024-C5`.
+        Registrar rota e permissão por ADR de agregado multiplicaria fontes — a informação pertence à
+        lista canônica de recurso→prefixo e ao catálogo de permissões.
+
+  - id: ADR-0036-C4
+    text: |
+      FORA do escopo até as regras reais, deliberadamente: import em lote, complete-registration de ~27
+      campos, filtros avançados, e EVENTOS DE DOMÍNIO. Quando as regras do ACT forem definidas, evoluem
+      por épico próprio.
+    kind: prohibition
+    source_lines: ['32-34']
+    applies_to:
+      - 'src/modules/partners/domain/act/**'
+    reality:
+      verdict: contradicted
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'nota: src/modules/partners/domain/act/events.ts existe — eventos de domínio foram construídos apesar de o ADR os excluir do escopo'
+        - 'nota: os eventos ActRegistered, ActEdited, ActDeactivated e ActReactivated existem no módulo, apesar de o ADR excluir eventos de domínio do escopo'
+        - 'nota: não foi verificado se esses eventos atravessam a fronteira de integração; o filtro tipado do supplier (PublishableEventType) é o precedente de como isso seria contido'
+      verify: |
+        ls src/modules/partners/domain/act/; grep -rhoE "'Act(Registered|Edited|Deactivated|Reactivated)'" src/modules/partners/ --include='*.ts' | sort -u
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um agregado cujo registro de decisão exclui eventos de domínio, quando existir `events.ts`
+        nele, então o teste falha. Hoje falha no `Act`.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: replace
+      text: |
+        Escopo excluído por registro de decisão MUST permanecer excluído até o registro ser atualizado.
+        Construir item explicitamente fora de escopo MUST atualizar a decisão no mesmo passo.
+      rationale: |
+        Substituir a lista específica pela regra que ela exemplifica. O `Act` ganhou eventos de domínio
+        que o ADR excluiu, e isso não é bug — pode ter sido necessidade real. O defeito é o registro não
+        ter acompanhado: hoje o ADR diz que não há eventos e há quatro. É o inverso do padrão comum do
+        inventário, onde o que está no escopo não sai; aqui saiu o que não estava.
+
+  - id: ADR-0036-C5
+    text: |
+      Natureza PROVISÓRIA — não tratar como definitivo. As regras de negócio do ACT estão pendentes.
+    kind: aspiration
+    source_lines: [36, 5]
+    applies_to: []
+    reality:
+      verdict: holds
+      holds_in: [partners]
+      absent_in: []
+      evidence:
+        - 'nota: o próprio status declarado é "Accepted (provisório)", único do acervo com essa qualificação'
+        - 'nota: o agregado cresceu além do escopo declarado (ver C1 e C4), o que confirma que a provisoriedade é real e ativa'
+      verify: |
+        grep -n "Status:" handbook/architecture/adr/0036-act-partner-placeholder.md
+    testability:
+      verdict: not-applicable
+      layer: null
+      red: |
+        Declaração de provisoriedade não é regra de edição — não há teste. Registrada porque é o único
+        `Accepted (provisório)` do acervo e porque muda como as outras alegações deste ADR devem ser
+        lidas: como estado transitório, não como norma estável.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Agregado PLACEHOLDER MUST declarar a provisoriedade no registro de decisão e a condição de
+        promoção. Enquanto provisório, MUST NOT ser tomado como precedente de modelagem para outros
+        agregados.
+      rationale: |
+        A cláusula final é a que protege: um placeholder copiado como referência propaga decisões que
+        ninguém tomou. E vale a lição dos quatro `Proposed` do lote 7b — provisoriedade sem condição de
+        promoção declarada vira permanente por decurso. Aqui a condição existe ("quando as regras do ACT
+        forem definidas") mas não tem dono nem gatilho verificável.
+
+findings:
+  - |
+    Inverso do padrão comum do inventário: em vez de item dentro do escopo que não saiu, um item
+    explicitamente FORA do escopo foi construído. O ADR lista "eventos de domínio" entre o que fica de
+    fora "até as regras reais", e `domain/act/events.ts` existe com `ActRegistered`, `ActEdited`,
+    `ActDeactivated` e `ActReactivated`. Há também `act-number.ts`, fora dos 7 campos enumerados.
+  - |
+    O agravante é a provisoriedade. Este é o único ADR do acervo com status `Accepted (provisório)`, e o
+    ADR diz que as regras de negócio estão pendentes. Cada campo e evento acrescentado ANTES das regras é
+    uma regra decidida por omissão — e o registro não acompanhou, então hoje o ADR descreve um agregado
+    menor do que o que existe.
+  - |
+    A provisoriedade não tem gatilho verificável: "quando as regras do ACT forem definidas" não nomeia
+    dono nem condição observável. É o mesmo defeito dos `Proposed` sem critério de promoção que o lote 7b
+    mapeou — com a diferença de que este está `Accepted`, então nem aparece como pendência numa triagem
+    por status.
+  - |
+    A única regra genuinamente nova deste ADR é o status duplo (`registrationStatus` × `status`) — o
+    soft-delete vem do `ADR-0035` e o prefixo do `ADR-0014`. Separar completude de cadastro de ciclo de
+    vida é padrão reusável para qualquer agregado com entrada em duas etapas, e vale mais que o resto do
+    documento.
+
+provenance:
+  tickets:
+    - CON-ACT-CONTRACTOR-RAZAO-SOCIAL
+    - PAR-ACT-ACORDO
+    - PARTNERS-ACT-PLACEHOLDER
+  issues: []
+  note: |
+    O acervo tem PARTNERS-ACT-PLACEHOLDER, PAR-ACT-ACORDO e CON-ACT-CONTRACTOR-RAZAO-SOCIAL — nenhum
+    lido. O segundo sugere que o ACT ganhou semântica de "acordo" depois deste ADR, o que reforçaria o
+    achado de crescimento fora do escopo; verificar na Fase 3.

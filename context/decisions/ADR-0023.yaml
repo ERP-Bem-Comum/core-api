@@ -1,0 +1,286 @@
+id: ADR-0023
+title: Ciclo de vida do Contrato — estado Pendente (4 estados)
+source: handbook/architecture/adr/0023-contract-lifecycle-pending-state.md
+decided_on: 2026-05-27
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0027, ADR-0039]
+
+assessment:
+  verdict: realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Quarto `realized` do inventário, e o mais completo em termos de modelagem: a máquina de estados
+    está no código exatamente como desenhada, com o refinamento de tipo que o ADR prescreveu.
+    `PendingContract` existe como tipo refinado (`types.ts:77`), a transição `activate` existe
+    (`contract.ts:154`), o evento `ContractActivated` existe e é consumido pelo projetor de timeline
+    (`timeline-projection.delivery.ts:24`), e o guard `parseActive` (`contract.ts:233-238`) rejeita
+    qualquer status não-`Active` com erro tipado — é ele que implementa a RN-CV-01.
+    Uma nuance que o ADR antecipa e o código confirma: a RN-CV-02 é dividida. O agregado valida o
+    `signedAt`; a exigência de documento assinado é validada no use case. O comentário em
+    `contract.ts:152` diz isso explicitamente — "validada pelo use case (application), não pelo
+    agregado".
+    Os 4 estados deste ADR viraram 5 com o `ADR-0039` (`Cancelled`), e o código tem os cinco.
+
+extraction:
+  state: complete
+  covers: |
+    5 alegações — a máquina de estados, a nomenclatura EN/PT, o tipo refinado com `create` dual, e as
+    duas invariantes novas (RN-CV-01, RN-CV-02). A resposta da P.O. (linhas 22-30) é fundamentação da
+    decisão, não alegação própria.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA (agrupado com o ADR-0039)
+    applied_to: ['.claude/rules/contracts-module.md']
+    gap: |
+      Destilou junto com o `ADR-0039` e acertou o essencial: "Máquina de estado do `Contract` tem 5
+      estados: `Pending`, `Active`, `Expired`, `Terminated`, `Cancelled`. `Cancelled` só é alcançável a
+      partir de `Pending`. `contracts-module.md` descreve o agregado mas **não lista a máquina**" — e a
+      observação sobre a lacuna da rule é precisa.
+      O que não registrou: a divisão da RN-CV-02 entre agregado e use case, que é a informação que
+      impede alguém de "consertar" o agregado adicionando a validação de documento nele.
+
+claims:
+  - id: ADR-0023-C1
+    text: |
+      O ciclo de vida do `Contract` tem 4 estados, nascendo `Pendente`:
+      `Pendente → Em Andamento → Finalizado / Distrato`. `Pendente` não tem efetividade — não inicia
+      vigência, não aceita aditivos, sem vínculo financeiro.
+    kind: obligation
+    source_lines: [37, '41-51', '25-29']
+    applies_to:
+      - 'src/modules/contracts/domain/contract/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts]
+      absent_in: []
+      evidence:
+        - 'src/modules/contracts/domain/contract/types.ts:132 — a union Contract inclui PendingContract'
+        - 'src/modules/contracts/domain/contract/types.ts:161 — ContractStatus é derivado de Contract[status], não uma lista paralela'
+        - 'nota: os cinco literais de status existem no domínio — Pending, Active, Expired, Terminated e Cancelled (este último do ADR-0039)'
+      verify: |
+        grep -rhoE "'(Pending|Active|Expired|Terminated|Cancelled)'" src/modules/contracts/domain/ --include='*.ts' | sort -u
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dada a union `Contract`, quando faltar um dos estados registrados, ou quando existir transição
+        fora do diagrama (ex.: `Expired → Active`), então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        A máquina de estados do `Contract` MUST ter cinco estados — `Pending`, `Active`, `Expired`,
+        `Terminated`, `Cancelled` — e `ContractStatus` MUST ser derivado da union do agregado, nunca
+        declarado como lista paralela. Transição fora do diagrama registrado MUST NOT existir.
+      rationale: |
+        Estreitado em dois pontos: são cinco estados (o `ADR-0039` acrescentou `Cancelled`), e o detalhe
+        de desenho que vale preservar é `ContractStatus = Contract['status']` — status derivado da union
+        não pode divergir dela. A 039 já registrou que a `contracts-module.md` descreve o agregado sem
+        listar a máquina; esta é a regra que fecha isso.
+
+  - id: ADR-0023-C2
+    text: |
+      Nomenclatura canônica: identificadores em EN no código (`Pending`, `Active`, `Expired`,
+      `Terminated`); termos de negócio em PT na borda (`Pendente`, `Em Andamento`, `Finalizado`,
+      `Distrato`). Os termos da P.O. prevalecem sobre os sinônimos antigos do handbook.
+    kind: obligation
+    source_lines: ['53-64']
+    applies_to:
+      - 'src/modules/contracts/domain/**/*.ts'
+      - 'src/modules/contracts/adapters/http/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts]
+      absent_in: []
+      evidence:
+        - 'nota: os cinco status no domínio estão em EN PascalCase, conforme a tabela do ADR'
+        - 'ausência: nenhum literal de status em PT no domínio de contracts'
+      verify: |
+        grep -rhoE "'(Pendente|EmAndamento|Finalizado|Distrato)'" src/modules/contracts/domain/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o domínio de contracts, quando um literal de status estiver em PT, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como texto: a tabela de idioma do `AGENTS.md` é a fonte única declarada (EN no código,
+        PT ao humano), e o próprio `AGENTS.md` diz "não replicar a tabela em outro arquivo". Mesmo
+        tratamento dado à `ADR-0015-C8` e à `ADR-0024-C10`. O que este ADR acrescenta e vale guardar é
+        a autoridade: a P.O. é quem decide os termos de UI.
+
+  - id: ADR-0023-C3
+    text: |
+      Novo tipo refinado `PendingContract` (`status: 'Pending'`) sem `signedAt`, sem vigência efetiva e
+      sem aditivos homologados. `Contract.create` passa a ser DUAL: nasce `Pending` (sem documento) ou
+      `Active` (com documento assinado + `signedAt`). Nova transição `Contract.activate`.
+    kind: obligation
+    source_lines: ['66-73']
+    applies_to:
+      - 'src/modules/contracts/domain/contract/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts]
+      absent_in: []
+      evidence:
+        - 'src/modules/contracts/domain/contract/types.ts:77 — PendingContract = ContractRegistration & Readonly<{ status: Pending }>'
+        - 'src/modules/contracts/domain/contract/contract.ts:154 — activate(contract: PendingContract, signedAt: Date) retorna Result<{ contract: ActiveContract; event }>'
+        - 'src/modules/contracts/domain/contract/contract.ts:162 — a ativação inicia a vigência: currentValue e currentPeriod recebem os originais, homologatedAmendmentIds nasce vazio'
+        - 'src/modules/contracts/domain/contract/types.ts:115 — comentário registra que o estado Cancelled nasce de um PendingContract (rascunho descartado antes de vigorar), coerente com o ADR-0039'
+      verify: |
+        grep -n "PendingContract" src/modules/contracts/domain/contract/types.ts | head; sed -n '154,166p' src/modules/contracts/domain/contract/contract.ts
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado um `PendingContract`, quando ativado com `signedAt` válido, então MUST virar `ActiveContract`
+        com `current = original`. Se a vigência não iniciar, ou se o tipo permitir `signedAt` em
+        `Pending`, o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Estado que não tem efetividade MUST ser tipo refinado próprio, sem os campos que só existem no
+        estado efetivo. A transição MUST receber o tipo refinado de origem e devolver o de destino.
+      rationale: |
+        Generalizado de `PendingContract` para o padrão, porque é o que faz a máquina de estados ser
+        verificada pelo compilador em vez de por `if`. O `Amendment` já usava o mesmo padrão
+        (`PendingWithoutDocument → PendingWithDocument → Homologated`), e o ADR o cita como precedente —
+        é regra de modelagem consolidada no repo, não invenção deste ADR.
+
+  - id: ADR-0023-C4
+    text: |
+      RN-CV-01: `PendingContract` REJEITA aditivos (criar, anexar, homologar) — só `Active` aceita.
+      Estende a R3 do handbook, que hoje só cobre os estados terminais.
+    kind: prohibition
+    source_lines: [77]
+    applies_to:
+      - 'src/modules/contracts/domain/contract/*.ts'
+      - 'src/modules/contracts/application/use-cases/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts]
+      absent_in: []
+      evidence:
+        - 'src/modules/contracts/domain/contract/contract.ts:233 — parseActive(contract) devolve ActiveContract ou err(contractNotActive(status))'
+        - 'src/modules/contracts/domain/contract/contract.ts:238 — o guard rejeita QUALQUER status diferente de Active, o que inclui Pending'
+        - 'src/modules/contracts/domain/contract/errors.ts:169 — contractNotActive carrega o currentStatus, então o erro diz qual estado bloqueou'
+        - 'nota: o guard usa narrowing de tipo, não checagem solta — o compilador garante que o caminho de aditivo só vê ActiveContract'
+      verify: |
+        sed -n '232,240p' src/modules/contracts/domain/contract/contract.ts
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado um contrato `Pending`, quando qualquer operação de aditivo é tentada, então MUST retornar
+        `contract-not-active` com o status atual. Se aceitar, o teste falha.
+      expected_error: 'contract-not-active'
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Operação que exige contrato vigente MUST passar por guard que devolva o tipo refinado `Active` ou
+        erro tipado com o status bloqueante. MUST NOT checar status por comparação solta no use case.
+      rationale: |
+        A forma importa mais que a regra: `parseActive` faz narrowing, então o caminho de aditivo NÃO
+        COMPILA se receber um contrato de outro estado. É a diferença entre invariante garantida pelo
+        tipo e invariante lembrada pelo dev — e é o padrão que o `AGENTS.md` chama de smart constructor
+        aplicado a estado.
+
+  - id: ADR-0023-C5
+    text: |
+      RN-CV-02: a ativação EXIGE referência de documento assinado MAIS `signedAt` — espelha a RN-12 do
+      `Amendment`. Sem documento, permanece `Pending`.
+    kind: obligation
+    source_lines: [78]
+    applies_to:
+      - 'src/modules/contracts/domain/contract/contract.ts'
+      - 'src/modules/contracts/application/use-cases/*.ts'
+    reality:
+      verdict: partial
+      holds_in: [contracts]
+      absent_in: []
+      evidence:
+        - 'src/modules/contracts/domain/contract/contract.ts:159 — o agregado valida o signedAt: if (!isValidDate(signedAt)) return err(contractInvalidSignedAt())'
+        - 'src/modules/contracts/domain/contract/contract.ts:152 — comentário: "A exigência de documento assinado (RN-CV-02) é validada pelo use case (application), não pelo agregado"'
+        - 'nota: a invariante é DIVIDIDA por desenho — data no agregado, documento no use case; a metade do use case não foi verificada nesta fase'
+      verify: |
+        sed -n '148,160p' src/modules/contracts/domain/contract/contract.ts; ls src/modules/contracts/application/use-cases/ | grep -i activate
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado um contrato `Pending` sem referência de documento assinado, quando a ativação é tentada,
+        então MUST falhar. Dado `signedAt` inválido, MUST falhar no agregado. Os dois casos precisam de
+        teste porque as duas metades vivem em camadas diferentes.
+      expected_error: 'contract-invalid-signed-at'
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        A ativação MUST exigir `signedAt` válido (verificado no agregado) E referência de documento
+        assinado (verificada no use case). Invariante dividida entre camadas MUST estar documentada no
+        ponto de cada metade.
+      rationale: |
+        O código já documenta a divisão no lugar certo (`contract.ts:152`), e essa nota é o que impede
+        duas refatorações erradas: mover a checagem de documento para o agregado (que passaria a
+        conhecer storage) ou removê-la achando que o agregado já cobre. Exigir a documentação da divisão
+        é o que torna a invariante auditável.
+
+findings:
+  - |
+    Melhor exemplo de modelagem do inventário: a máquina de estados é garantida pelo TIPO, não por
+    checagem. `parseActive` (`contract.ts:233`) faz narrowing e devolve `ActiveContract` ou erro tipado,
+    então o caminho de aditivo não compila se receber contrato em outro estado. É a diferença entre
+    invariante que o compilador cobra e invariante que o dev lembra.
+  - |
+    Invariante DIVIDIDA entre camadas, e documentada onde é dividida: a RN-CV-02 tem a validação de data
+    no agregado e a de documento no use case, com o comentário em `contract.ts:152` explicando por quê.
+    É a primeira vez no inventário que encontro uma invariante deliberadamente partida — e a nota é o que
+    impede as duas refatorações erradas (mover a checagem de documento para o agregado, ou removê-la).
+  - |
+    `ContractStatus = Contract['status']` (`types.ts:161`) é detalhe de desenho que vale como regra: o
+    status é DERIVADO da union do agregado, não declarado em paralelo. Impede a classe de bug em que a
+    lista de status e a união de tipos divergem.
+  - |
+    Os 4 estados deste ADR viraram 5 com o `ADR-0039` (`Cancelled`), e o comentário em `types.ts:115`
+    registra a regra de alcançabilidade ("nasce de um `PendingContract` — rascunho descartado antes de
+    vigorar") no próprio tipo. A 039 já havia notado que a `contracts-module.md` descreve o agregado sem
+    listar a máquina; a máquina está no código, com a razão anotada.
+
+provenance:
+  tickets:
+    - CTR-AUTO-EXPIRE
+    - CTR-DOMAIN-CONTRACT-ACTIVATE
+    - CTR-DOMAIN-CONTRACT-PENDING-STATE
+    - CTR-DOMAIN-STATE-MACHINE-CONTRACT
+    - CTR-USECASE-ACTIVATE-CONTRACT
+  issues: []
+  note: |
+    Inquiry-0021 (ciclo de vida do Contrato, 3 vs 5 estados) é a origem e traz a resposta da P.O. — não
+    lida. O acervo tem CTR-DOMAIN-CONTRACT-PENDING-STATE, CTR-DOMAIN-CONTRACT-ACTIVATE,
+    CTR-USECASE-ACTIVATE-CONTRACT, CTR-DOMAIN-STATE-MACHINE-CONTRACT e CTR-AUTO-EXPIRE — nenhum lido.
+    O ADR-0039 (`Cancelled`) está no lote 8c.

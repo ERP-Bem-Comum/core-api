@@ -1,0 +1,352 @@
+id: ADR-0011
+title: Supply Chain Hardening — Política de Dependências
+source: handbook/architecture/adr/0011-supply-chain-hardening.md
+decided_on: 2026-04-28
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0012, ADR-0029, ADR-0050]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Quatro dos seis pilares se sustentam, e um deles é o melhor exemplo de enforcement do repositório:
+    a lista de libs proibidas está no `no-restricted-imports` com a MENSAGEM DO ADR dentro do erro do
+    lint — o dev lê a razão no ponto do erro, não no ponto da leitura.
+    O pilar que falha é o 3, e falha em pontos que importam: o ADR manda pinar deps críticas sem
+    `^`/`~`, e `fastify@5.8.5` e `drizzle-orm@0.45.2` estão pinadas, mas `mysql2@^3.22.3`,
+    `@aws-sdk/client-s3@^3.1052.0` e `nodemailer@^9.0.1` NÃO estão — sendo, respectivamente, o driver
+    de banco, o cliente único de storage (ADR-0019) e o adapter de e-mail (ADR-0010). Sete das 19 deps
+    de produção carregam range.
+    O pilar 6 (`--permission` do Node) nunca foi adotado, mas o ADR pede "avaliar", não "adotar" —
+    não é violação.
+
+extraction:
+  state: complete
+  covers: |
+    7 alegações — os 6 pilares mais o princípio de substituição nativa. A "Aplicação ao legado"
+    (linhas 135-145) não gera alegação: trata do `legacy_project`, fora deste repositório.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA PARCIAL — o único veredito misto da 039, quebrado pilar por pilar
+    applied_to: ['.claude/rules/supply-chain.md']
+    gap: |
+      É o melhor trabalho da 039. Ela quebrou o ADR em 6 pilares e deu veredito diferente a cada um:
+      §4 não vira rule porque já é enforced (citando `eslint.config.js:77`); §3, §5 e §1 vão para
+      `supply-chain.md`; §2 e §6 ficam no ADR por não serem acionáveis ao editar path. E registrou o
+      raciocínio: "sem o teste B, a §4 teria virado uma tabela de 5 libs duplicando o que o ESLint já
+      reporta com mensagem melhor".
+      O que ela não fez: verificar se o §3 é CUMPRIDO. Ela o classificou como "sem enforcement" e o
+      mandou para a rule — correto — mas não mediu que três deps críticas estão sem pin.
+
+claims:
+  - id: ADR-0011-C1
+    text: |
+      Lockfile estrito e auditável: `pnpm-lock.yaml` committed e versionado,
+      `pnpm install --frozen-lockfile` em CI sempre, lockfile binário (`bun.lockb`) PROIBIDO.
+    kind: obligation
+    source_lines: ['27-31']
+    applies_to:
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/**'
+    reality:
+      verdict: holds
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'nota: pnpm-lock.yaml existe e está versionado; não existe bun.lockb'
+        - '.github/workflows/integration.yml:78 — pnpm install --frozen-lockfile'
+      verify: |
+        ls pnpm-lock.yaml bun.lockb 2>/dev/null; grep -rn "frozen-lockfile" .github/workflows/
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado os workflows, quando algum instalar dependências sem `--frozen-lockfile`, ou quando
+        existir lockfile binário no repo, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        CI MUST instalar com `--frozen-lockfile`. O lockfile MUST ser versionado em formato textual.
+        MUST NOT existir lockfile binário no repositório.
+      rationale: |
+        Verificável por varredura de workflow e por listagem de arquivo. Barato, e é a base de toda a
+        política: sem lockfile confiável, os outros cinco pilares não têm o que auditar.
+
+  - id: ADR-0011-C2
+    text: |
+      Audit em CI BLOQUEANTE: `pnpm audit --audit-level=high` falha o build em High ou Critical.
+    kind: obligation
+    source_lines: ['33-38']
+    applies_to:
+      - '.github/workflows/**'
+      - 'package.json'
+    reality:
+      verdict: holds
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'package.json:31 — script audit: pnpm audit --prod --audit-level=high'
+        - 'package.json:32 — script audit:all sem --prod, cobrindo dev também'
+        - 'nota: existe workflow dedicado .github/workflows/audit.yml'
+      verify: |
+        grep -n '"audit"' package.json; ls .github/workflows/audit.yml
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o workflow de audit, quando ele tiver `continue-on-error: true` ou `|| true`, então o
+        teste falha — audit não-bloqueante é audit decorativo.
+      expected_error: null
+      blocker: null
+      enforced_by: ['.github/workflows/audit.yml']
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        O audit MUST rodar em CI de forma bloqueante, com nível mínimo `high`. MUST NOT ter escape
+        (`|| true`, `continue-on-error`). O escopo `--prod` MUST ser o gate; o audit de dev MAY ser
+        informativo.
+      rationale: |
+        Estreitado para separar `--prod` de dev, porque a distinção é onde o gate machuca na prática:
+        advisory transitiva em dependência de desenvolvimento reprova PR que não tem relação com ela.
+        O repo já tem os dois scripts separados — a regra apenas fixa qual é o gate.
+
+  - id: ADR-0011-C3
+    text: |
+      Pin de versões em deps críticas — sem `^` nem `~`. O ADR exemplifica com fastify, driver de
+      banco, drizzle-orm e ssh2 (crítica para a VAN).
+    kind: obligation
+    source_lines: ['44-56', 78]
+    applies_to:
+      - 'package.json'
+    reality:
+      verdict: partial
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'package.json:106 — fastify em 5.8.5, pinada; :104 — drizzle-orm em 0.45.2, pinada'
+        - 'package.json:110 — mysql2 em ^3.22.3, NÃO pinada, sendo o driver de banco'
+        - 'package.json:97 — @aws-sdk/client-s3 em ^3.1052.0, NÃO pinada, sendo o cliente único de storage do ADR-0019'
+        - 'package.json:111 — nodemailer em ^9.0.1, NÃO pinada, sendo o adapter de e-mail do ADR-0010'
+        - 'nota: 7 das 19 dependências de produção carregam range ^ ou ~'
+      verify: |
+        node -e "const d=require('./package.json').dependencies;for(const [k,v] of Object.entries(d))if(/^[\^~]/.test(v))console.log(k,v)"
+    testability:
+      verdict: testable-with-work
+      layer: static
+      red: |
+        Dado `package.json`, quando uma dependência da lista de CRÍTICAS carregar `^` ou `~`, então o
+        teste falha.
+      expected_error: null
+      blocker: |
+        Não existe lista canônica de "dependência crítica". O ADR dá exemplos (incluindo `pg`, que é
+        driver Postgres e não se aplica desde o ADR-0013) mas não define o critério. Sem a lista, o
+        teste não distingue crítica de acessória.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Dependência de produção que seja driver de banco, cliente de storage, adapter de integração
+        externa ou framework de borda MUST ser pinada sem `^`/`~`. A lista MUST ser explícita no
+        registro de decisão.
+      rationale: |
+        Estreitado para dar o critério que o ADR não deu — "crítica" sem definição não é testável, e é
+        por isso que três deps críticas passaram sem pin. Definir por FUNÇÃO (driver, cliente, adapter,
+        framework) em vez de por nome evita que a lista envelheça a cada dependência nova. Vale notar
+        que o exemplo do ADR cita `pg`, obsoleto desde o ADR-0013.
+
+  - id: ADR-0011-C4
+    text: |
+      Lista de libs PROIBIDAS, enforced via ESLint `no-restricted-imports`: `axios` (supply chain
+      compromise), `request` (deprecated), `moment`, `crypto-js`, `lodash` completo.
+    kind: prohibition
+    source_lines: ['58-68']
+    applies_to:
+      - 'eslint.config.js'
+      - 'src/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'eslint.config.js:76 — @typescript-eslint/no-restricted-imports com severidade error'
+        - 'eslint.config.js:82 — entrada de axios com a MENSAGEM DO ADR no erro: "Proibida (ADR-0011 §4): supply chain compromise em mar/2026. Use fetch global."'
+        - 'eslint.config.js:87 — entrada de request, citando o ADR §4'
+        - 'ausência: axios e node-fetch não estão em package.json'
+      verify: |
+        sed -n '75,95p' eslint.config.js
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Já enforçado: importar `axios` falha o lint com a razão do ADR na mensagem. O RED existe e
+        roda no gate.
+      expected_error: null
+      blocker: null
+      enforced_by: ['eslint.config.js']
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como TEXTO, mantendo o mecanismo — é o caso exemplar da regra 1 do
+        `context/INDEX.md`. Reescrever a tabela de 5 libs numa rule duplicaria o que o ESLint já
+        reporta com mensagem melhor: no ponto do erro, não no ponto da leitura. Modelo a copiar em
+        toda proibição de import.
+
+  - id: ADR-0011-C5
+    text: |
+      Política de adoção de nova dependência: todo PR que adicione dep exige justificativa,
+      alternativas avaliadas (incluindo implementar interno), verificação de mantenedor (2FA,
+      atividade, bus factor), última publicação em até 6 meses, e versão pinada.
+    kind: obligation
+    source_lines: ['70-78']
+    applies_to: []
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        echo 'Checklist de PR. Verificável no histórico de pull requests, não no código. Requer varredura via gh.'
+    testability:
+      verdict: testable-with-work
+      layer: static
+      red: |
+        Dado um PR que altere `package.json` adicionando dependência, quando o corpo não trouxer o
+        checklist preenchido, então o gate falha.
+      expected_error: null
+      blocker: |
+        Exige gate de PR (template obrigatório ou action que leia o corpo), que não existe. O repo tem
+        `commit-policy.yml`, precedente direto de gate sobre metadado de contribuição.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        PR que adicione dependência de produção MUST trazer justificativa, alternativas avaliadas,
+        verificação de mantenedor e versão pinada.
+      rationale: |
+        Adotar com o caminho mecânico anotado: já existe `commit-policy.yml` gateando metadado de
+        commit, então gatear corpo de PR é o mesmo padrão. Enquanto for só texto, é o pilar mais fácil
+        de esquecer — e a `C3` mostra o resultado, com três deps críticas entrando sem pin.
+
+  - id: ADR-0011-C6
+    text: |
+      Avaliar habilitar o permission model do Node (`--permission`, `--allow-fs-read`,
+      `--allow-net`) em produção, para limitar o que dependência maliciosa pode fazer mesmo se
+      carregada. Experimental no Node 24 — avaliar maturidade antes de prod crítica.
+    kind: aspiration
+    source_lines: ['80-92']
+    applies_to:
+      - 'Dockerfile*'
+      - 'package.json'
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in: [core-api]
+      evidence:
+        - 'ausência: nenhuma flag --permission, --allow-fs-read ou --allow-net em package.json, Dockerfile ou compose.yaml'
+      verify: |
+        grep -rn "\-\-permission\|allow-fs-read\|allow-net" package.json Dockerfile compose.yaml
+    testability:
+      verdict: not-applicable
+      layer: null
+      red: |
+        O ADR pede "avaliar", não "adotar" — não há obrigação a falsificar. A ausência é conformidade,
+        não violação.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        "Avaliar" não vira regra. Descartar e registrar como pergunta aberta: o Node 24 estabilizou
+        parte do permission model, então a avaliação que o ADR pediu tem hoje base melhor do que em
+        abril. Vale uma issue, não uma rule.
+
+  - id: ADR-0011-C7
+    text: |
+      Princípio: se o Node 24 oferece nativamente, adotar. Substituições listadas — `fetch` no lugar
+      de axios/node-fetch, `crypto.randomUUID()` no lugar de uuid, Web Crypto no lugar de crypto-js,
+      `--env-file` no lugar de dotenv, `structuredClone` no lugar de lodash.clonedeep, `node --watch`
+      no lugar de nodemon, `node:test` no lugar de jest.
+    kind: obligation
+    source_lines: ['96-108']
+    applies_to:
+      - 'package.json'
+    reality:
+      verdict: partial
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'ausência: axios e node-fetch não estão em package.json'
+        - 'package.json:31 — a suíte roda em node:test (script test com node --test), sem jest'
+        - 'nota: as substituições de uuid, crypto-js, dotenv e nodemon não foram verificadas nesta fase'
+      verify: |
+        node -e "const p=require('./package.json'),d={...p.dependencies,...p.devDependencies};for(const k of ['axios','node-fetch','uuid','crypto-js','dotenv','nodemon','moment','lodash','jest'])if(d[k])console.log('presente:',k,d[k])"
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `package.json`, quando aparecer dependência da tabela de substituições cujo nativo o Node
+        24 já oferece, então o teste falha nomeando o substituto.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Dependência cuja função o Node 24 oferece nativamente MUST NOT ser adicionada. A tabela de
+        equivalências MUST ser mantida no registro de decisão.
+      rationale: |
+        A metade proibitiva mais crítica já é enforçada pela `C4` (axios). A regra generaliza o
+        princípio para o que ainda não está no `no-restricted-imports`, e é a mesma lista — logo,
+        candidata a virar entradas novas no ESLint em vez de texto.
+
+findings:
+  - |
+    Três dependências críticas entraram sem pin: `mysql2` (driver de banco), `@aws-sdk/client-s3`
+    (cliente único de storage por ADR-0019) e `nodemailer` (adapter de e-mail por ADR-0010). O ADR
+    manda pinar "deps críticas" e nunca definiu o critério — é a lacuna que permitiu as três passarem.
+    Sete das 19 deps de produção carregam range.
+  - |
+    O pilar 4 é o melhor enforcement do repositório e vale como modelo: a proibição vive no
+    `no-restricted-imports` com a MENSAGEM DO ADR dentro do erro do lint. O dev que tentar importar
+    `axios` lê "Proibida (ADR-0011 §4): supply chain compromise em mar/2026. Use fetch global." no
+    ponto do erro. É o oposto de doutrina que se lê antes e se esquece depois.
+  - |
+    O exemplo de pin do ADR cita `pg` (driver Postgres), obsoleto desde o ADR-0013 (MySQL como engine
+    único). Detalhe pequeno, mas é o tipo de resíduo que faz um agente inferir que Postgres está em
+    jogo — mesma mecânica que produziu o port por URL do ADR-0056.
+  - |
+    O pilar 6 (`--permission`) pede "avaliar" e nunca foi avaliado. Não é violação, mas o Node 24
+    estabilizou parte do permission model desde abril, então a avaliação tem base melhor hoje. Fica
+    como pergunta aberta, não como regra.
+
+provenance:
+  tickets:
+    - AUDIT-FASTIFY-ADVISORIES
+    - CTR-PNPM-11-MIGRATION
+    - CTR-PNPM-ONLY-ALLOW
+    - SEMGREP-ADR-ENFORCER
+  issues: []
+  note: |
+    Inquiry-0005 (incidente Axios e hardening) embasou este ADR; Inquiry-0006 (pnpm vs Bun) é o suporte
+    do pilar 1. Nenhuma lida. O acervo tem CTR-PNPM-ONLY-ALLOW, CTR-PNPM-11-MIGRATION,
+    AUDIT-FASTIFY-ADVISORIES e SEMGREP-ADR-ENFORCER, todos diretamente ligados — nenhum lido.

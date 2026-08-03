@@ -1,0 +1,181 @@
+id: ADR-0001
+title: Estratégia Strangler Fig sobre Big Bang Rewrite ou Refactor In-Place
+source: handbook/architecture/adr/0001-strangler-fig-over-rewrite.md
+decided_on: 2026-04-27
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0005, ADR-0006, ADR-0021]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    A estratégia se sustenta — legado roda intocado (o único acesso a ele é leitura via `etl_ro`), o
+    novo cresceu ao lado, e a migração é incremental. Mas a ORDEM prescrita foi completamente
+    invertida, e isso não é detalhe.
+    O ADR manda migrar "Bradesco → OCR → Documentos → Títulos". Nenhum desses quatro existe como
+    módulo. Os oito módulos reais são `auth`, `budget-plans`, `contracts`, `financial`,
+    `notifications`, `partners`, `programs` e `reports`. Bradesco segue sem implementação (ADR-0008,
+    VAN pendente) e OCR está adiado (issue #62). Os dois BCs que o ADR punha PRIMEIRO, por serem
+    "menos críticos" e servirem para validar a stack, são justamente os dois que nunca começaram.
+    A validação de stack aconteceu em `contracts` e `financial` — os BCs que o ADR chamava de mais
+    críticos e deixava para o fim.
+
+extraction:
+  state: complete
+  covers: |
+    3 alegações — o mecanismo do strangler fig, a ordem de migração e a premissa de governança do
+    handbook. As consequências (custo duplicado, dualidade de UI, 12-24 meses) são projeções de
+    contexto, não regra de edição.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: NÃO GERA — estratégia macro de migração, não é acionável ao editar arquivo algum
+    applied_to: []
+    gap: |
+      Correto quanto a não gerar rule. Mas ao classificar como "não acionável" a 039 não confrontou a
+      ORDEM de migração com `src/modules/`, e a inversão é fato verificável em um `ls`: os dois BCs
+      que o ADR punha primeiro não existem, e os que ele deixava para o fim são os que estão prontos.
+
+claims:
+  - id: ADR-0001-C1
+    text: |
+      Legado roda intocado; o novo é construído ao lado, em serviços separados; a funcionalidade migra
+      incrementalmente, BC por BC; o legado é desligado quando o último BC é absorvido.
+    kind: obligation
+    source_lines: ['28-33']
+    applies_to: []
+    reality:
+      verdict: partial
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'scripts/etl/legacy/reader.ts:4 — o único acesso ao legado é leitura como etl_ro com GRANT SELECT; nada escreve nele'
+        - 'nota: oito módulos foram construídos ao lado em src/modules/, sem tocar o legado — o mecanismo do strangler fig se sustenta'
+        - 'nota: o desligamento do legado não começou e não é verificável a partir deste repositório'
+      verify: |
+        ls src/modules/; grep -n "etl_ro" scripts/etl/legacy/reader.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/` e os scripts, quando existir qualquer caminho de ESCRITA no database `legacy`,
+        então o teste falha. Leitura por usuário SELECT-only dedicado é permitida.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Nenhum código deste repositório MUST escrever no database `legacy`. Leitura MUST usar usuário
+        com GRANT SELECT dedicado, fora de `src/modules/`.
+      rationale: |
+        Estreitado para a metade verificável e acionável: "legado intocado" vira "não escreve no
+        legado", que é grep. O resto (desligamento, migração incremental) é estratégia sem path.
+        Converge com a `ADR-0014-C4`, que chegou ao mesmo texto por outro caminho — sinal de que a
+        regra é a certa.
+
+  - id: ADR-0001-C2
+    text: |
+      Ordem de migração: Bradesco → OCR → Documentos → Títulos. Os primeiros BCs, menos críticos,
+      validam a stack para os críticos.
+    kind: obligation
+    source_lines: [35, 46]
+    applies_to: []
+    reality:
+      verdict: contradicted
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'nota: os oito módulos reais são auth, budget-plans, contracts, financial, notifications, partners, programs, reports — nenhum dos quatro BCs nomeados pelo ADR'
+        - 'ausência: não existe módulo banco nem ocr em src/modules/'
+        - 'nota: o ADR-0008 (Bradesco) segue Accepted e sem implementação — a VAN é pendência aberta, não módulo'
+        - 'nota: OCR está adiado pela issue #62, conforme ADR-0050; o degrau de OCR do cascade não existe'
+      verify: |
+        ls src/modules/
+    testability:
+      verdict: unfalsifiable
+      layer: null
+      red: |
+        Nenhum. Ordem de execução de projeto não é estado do sistema — não há teste que a falsifique
+        depois do fato. A divergência é observável, mas não é violação de invariante.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        A ordem não se cumpriu e não faz sentido reinstituí-la: os dois BCs do início nunca
+        começaram, e a validação de stack aconteceu nos que estavam no fim. Descartar como regra e
+        preservar como registro — a divergência é informação útil sobre como o projeto de fato
+        priorizou, e contradiz a premissa de "validar com os menos críticos primeiro".
+
+  - id: ADR-0001-C3
+    text: |
+      O handbook é fonte da verdade e não será alterado — premissa estabelecida pela P.O.
+    kind: obligation
+    source_lines: [22, 28]
+    applies_to:
+      - 'handbook/**'
+    reality:
+      verdict: holds
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'nota: o AGENTS.md declara "Source of truth da arquitetura: handbook/. Quando código e handbook discordam, o handbook vence"'
+        - 'nota: a hierarquia de fontes do AGENTS.md põe os ADRs aceitos no topo, acima do próprio AGENTS.md'
+      verify: |
+        grep -n "handbook vence\|Hierarquia de regras" AGENTS.md
+    testability:
+      verdict: not-applicable
+      layer: null
+      red: |
+        Não é regra de edição de código — é premissa de governança sobre quem decide. Sem teste.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: replace
+      text: |
+        O handbook permanece a fonte narrativa e de domínio. Para decisão de ARQUITETURA, a norma
+        vigente é a que `context/decisions/*.yaml` fixar com `rule.status: accepted`, verificada
+        contra `src/`. Divergência entre ADR e código MUST ser registrada, nunca resolvida por
+        precedência automática.
+      rationale: |
+        Esta premissa está em revisão por decisão do dono do repo (2026-07-31): o ADR passa a ser
+        evidência de intenção, não lei, e a regra vigente é a promovida neste inventário. Registrar a
+        substituição aqui em vez de deixar duas governanças concorrendo em silêncio — é a mesma
+        pendência anotada em `SCHEMA.md` §14 sobre o `context/INDEX.md`.
+
+findings:
+  - |
+    A ordem de migração do ADR foi invertida por completo, e o efeito é o oposto do pretendido: os
+    dois BCs que ele punha primeiro **por serem menos críticos e servirem para validar a stack**
+    (Bradesco, OCR) são exatamente os dois que nunca começaram, e a validação aconteceu em
+    `contracts` e `financial` — os que ele classificava como mais críticos.
+  - |
+    Nenhum dos quatro BCs nomeados pelo ADR-0001 e pelo ADR-0006 (Documentos, Títulos, Bradesco, OCR)
+    existe como módulo. O vocabulário do domínio mudou de PT para EN e a decomposição mudou de 4 BCs
+    para 8 módulos. Os dois ADRs fundacionais descrevem um sistema com nomes que não existem — o que
+    torna a leitura deles um exercício de tradução para quem chega.
+  - |
+    A premissa "handbook é fonte da verdade e não será alterado" foi estabelecida pela P.O. em
+    2026-04-27 e está em revisão pelo dono do repo desde 2026-07-31. As duas governanças coexistem
+    hoje: o `AGENTS.md` declara que o handbook vence, e este inventário assume que o código é o
+    árbitro do que existe. Precisa de decisão explícita, não de precedência tácita.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    ADR fundacional, anterior ao código. Sem ticket associado. A ordem de migração real está
+    reconstruível pelo acervo de `.claude/.pipeline/` (549 tickets) — não lido nesta fase.

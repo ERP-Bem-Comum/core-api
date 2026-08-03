@@ -1,0 +1,434 @@
+id: ADR-0020
+title: MySQL como Único Dialeto de Persistência
+source: handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md
+decided_on: 2026-05-15
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: [ADR-0018]
+  superseded_by: []
+  related: [ADR-0013, ADR-0014, ADR-0015, ADR-0011, ADR-0019]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Este é o ADR mais bem executado do lote inspecionado, e o único com enforcement mecânico já
+    existente. A alegação central (SQLite fora) tem suíte dedicada de 18 critérios que passa
+    (`tests/cleanup/sqlite-removal.test.ts`), e duas das proibições de schema são cobradas por AST em
+    `.semgrep/rules.yml` com gate em CI.
+    As três proibições verificadas por varredura são respeitadas: coluna JSON nativa, `mysqlEnum` e
+    `AUTO_INCREMENT` em PK não aparecem em `src/`. A liberação de `ON DUPLICATE KEY UPDATE` é
+    exercida de fato — 9 usos via builder do Drizzle, nenhum em SQL bruto.
+    O veredito é `partially-realized` e não `realized` porque 5 das ~20 alegações seguem
+    `unverified`, não porque haja violação conhecida. Nenhuma contradição encontrada.
+
+extraction:
+  state: sample
+  covers: |
+    9 de ~20 alegações. Faltam: os mapeamentos canônicos de tipo (linhas 65-72 — Money para BIGINT,
+    Date para DATETIME(3), Period decomposto em 3 colunas, IDs em VARCHAR(36)), window functions e
+    CTE recursiva liberadas (95-96), tipos espaciais proibidos (105), isolation level explícito
+    proibido (107), e a tabela de conformidade e auditoria (209-216).
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: PARCIAL
+    applied_to: ['.claude/rules/adapters.md']
+    gap: |
+      A 039 registrou que a lista de features SQL permitidas/proibidas já estava em `adapters.md` e
+      que os mapeamentos canônicos de tipo não estavam. Duas lacunas:
+      (1) não verificou nenhuma das proibições contra `src/` — o veredito saiu da leitura do ADR e da
+      rule, não do código;
+      (2) o Teste B dela ("não é já garantido por eslint/tsc/hook/CI?") não olhou `.semgrep/`. As
+      rules `mysql-enum-forbidden` e `mysql-json-forbidden` entraram em 2026-07-23 (#548), OITO DIAS
+      antes da destilação, e a 039 não menciona semgrep em nenhum ponto. Resultado: `adapters.md:27`
+      reescreve como texto duas proibições que já eram barradas por AST com gate em CI.
+
+claims:
+  - id: ADR-0020-C1
+    text: |
+      MySQL 8.4 é o único dialeto de persistência relacional em todo o ciclo de vida (dev local, CI,
+      staging, prod). SQLite é removido em todas as formas: schemas, drivers, migrations,
+      dependências, testes.
+    kind: obligation
+    source_lines: [46]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/**/*.ts'
+      - 'package.json'
+    reality:
+      verdict: holds
+      holds_in: [contracts, financial, auth, partners, programs, budget-plans, notifications]
+      absent_in: []
+      evidence:
+        - 'tests/cleanup/sqlite-removal.test.ts:179 — CA-15 assere package.json sem better-sqlite3 nem @types'
+        - 'tests/cleanup/sqlite-removal.test.ts:231 — CA-18 varre src/ inteiro por referência a SQLite'
+        - 'nota: suíte passa 18/18 em 2026-07-31 — é a alegação melhor provada de todo o lote'
+      verify: |
+        node --test --experimental-strip-types --no-warnings tests/cleanup/sqlite-removal.test.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `package.json` e a árvore `src/`, quando aparecer dependência, import ou identificador
+        SQLite, então o teste falha apontando o arquivo.
+      expected_error: null
+      blocker: null
+      enforced_by: ['tests/cleanup/sqlite-removal.test.ts']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        MySQL 8.4 MUST ser o único dialeto relacional. MUST NOT existir dependência, schema, driver
+        ou migration SQLite no repositório.
+      rationale: |
+        Já cobrado mecanicamente pela suíte de cleanup — não precisa de linha nova em
+        `.claude/rules/`, só referência ao teste. Adotar formaliza que a limpeza pontual do ticket
+        CTR-CLEANUP-SQLITE virou invariante permanente contra reintrodução.
+
+  - id: ADR-0020-C2
+    text: |
+      Um único conjunto por módulo: 1 port, 1 adapter Drizzle, 1 schema, 1 conjunto de mappers,
+      1 dialeto SQL. Sem schemas espelhados por dialeto nem mappers com ramo condicional.
+    kind: obligation
+    source_lines: [50, '52-59']
+    applies_to:
+      - 'src/modules/*/adapters/persistence/schemas/*.ts'
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        find src/modules -path '*persistence/schemas/*' -name '*.ts' | sort
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/modules/*/adapters/persistence/schemas/`, quando um módulo tiver mais de um
+        arquivo de schema, ou um mapper contiver ramo condicional por dialeto, então falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Cada módulo MUST ter exatamente um arquivo de schema (`schemas/mysql.ts`). Mapper
+        MUST NOT ramificar por dialeto.
+      rationale: |
+        É a consequência estrutural de C1. Sem ela, C1 pode ser respeitada na dependência e violada
+        no formato (schema espelhado "por precaução").
+
+  - id: ADR-0020-C3
+    text: |
+      Proibido usar coluna JSON nativa e as funções JSON_EXTRACT / JSON_OBJECT / JSON_ARRAY. Modelar
+      como tabela relacional ou coluna escalar — schema é tipo.
+    kind: prohibition
+    source_lines: [102]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/schemas/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts, financial, auth, partners, programs, budget-plans, notifications]
+      absent_in: []
+      evidence:
+        - "ausência: nenhuma ocorrência de mode: 'json' nem .json( em definição de tabela em src/"
+        - '.semgrep/rules.yml:19 — rule mysql-json-forbidden barra o padrão por AST, com gate em CI'
+      verify: |
+        grep -rn "mode: 'json'" src/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um schema Drizzle, quando declarar coluna com `mode: 'json'` ou a query usar
+        JSON_EXTRACT/JSON_OBJECT/JSON_ARRAY, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: ['.semgrep/rules.yml']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        MUST NOT declarar coluna JSON nativa nem usar JSON_EXTRACT, JSON_OBJECT ou JSON_ARRAY.
+        Estrutura variável MUST ser modelada como tabela relacional ou coluna escalar.
+      rationale: |
+        Proibição com razão própria (não paridade), respeitada por todos os módulos e já cobrada por
+        AST. Referenciar a rule semgrep em vez de repetir o texto.
+
+  - id: ADR-0020-C4
+    text: |
+      Proibido stored procedure, trigger e evento agendado. Lógica de negócio vive no código
+      TypeScript, não no SGBD.
+    kind: prohibition
+    source_lines: [103]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/migrations/**'
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        grep -rniE "CREATE (PROCEDURE|TRIGGER|EVENT)" src/ --include='*.sql' --include='*.ts'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o conjunto de migrations SQL, quando qualquer arquivo contiver CREATE PROCEDURE,
+        CREATE TRIGGER ou CREATE EVENT, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Migration MUST NOT criar stored procedure, trigger ou evento agendado. Regra de negócio
+        MUST viver em TypeScript.
+      rationale: |
+        Verificável por varredura de texto sobre as migrations — o tipo de guarda que impede a
+        lógica de vazar para onde nenhum teste da suíte alcança.
+
+  - id: ADR-0020-C5
+    text: |
+      Proibido ENUM nativo do MySQL. Usar VARCHAR(N) com CHECK constraint — smart constructor e
+      discriminated union no domínio dão type safety melhor.
+    kind: prohibition
+    source_lines: [104]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/schemas/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts, financial, auth, partners, programs, budget-plans, notifications]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhuma chamada mysqlEnum( em src/; as 3 ocorrências do termo são comentários'
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:115 — comentário: varchar + CHECK, mysqlEnum proibido'
+        - '.semgrep/rules.yml:11 — rule mysql-enum-forbidden barra o padrão por AST, com gate em CI'
+      verify: |
+        grep -rn "mysqlEnum(" src/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um schema Drizzle, quando declarar coluna via `mysqlEnum(...)`, então o teste falha
+        indicando o VARCHAR + CHECK equivalente.
+      expected_error: null
+      blocker: null
+      enforced_by: ['.semgrep/rules.yml']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        MUST NOT usar `mysqlEnum`. Conjunto fechado de valores MUST ser `varchar(N)` com CHECK
+        constraint, espelhando a discriminated union do domínio.
+      rationale: |
+        Já cobrada por AST. Vale notar que o código também documenta a proibição em 3 comentários —
+        redundância que pode sair, já que a rule semgrep é a fonte executável.
+
+  - id: ADR-0020-C6
+    text: |
+      Proibido AUTO_INCREMENT em PK de tabela de domínio. IDs são UUID v4 gerados no domínio via
+      branded type. Permanece aceitável em coluna operacional não-domínio.
+    kind: prohibition
+    source_lines: [106]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/schemas/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts, financial, auth, partners, programs, budget-plans, notifications]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhuma ocorrência de autoincrement em src/ — nem nas tabelas operacionais, que o ADR permitiria'
+      verify: |
+        grep -rn "autoincrement" src/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um schema Drizzle, quando uma PK de tabela de domínio usar `.autoincrement()`, então o
+        teste falha. A exceção operacional exige lista explícita de tabelas isentas.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        PK de tabela de domínio MUST ser UUID v4 gerado no domínio via branded type e
+        MUST NOT usar AUTO_INCREMENT. Coluna operacional não-domínio (log, outbox interno) pode usá-lo.
+      rationale: |
+        Mesma natureza das duas proibições já cobertas por semgrep — estática, precisa, zero
+        falso-positivo no código atual — e é a única das três sem rule. Candidata mais barata à
+        terceira rule do `.semgrep/rules.yml`. O código hoje é MAIS estrito que a regra; endurecer
+        para proibição total é decisão disponível, mas é decisão sua, não consequência da leitura.
+
+  - id: ADR-0020-C7
+    text: |
+      ON DUPLICATE KEY UPDATE é permitido (era proibido por paridade no ADR-0018). Preferir a
+      tradução portável do Drizzle, mas SQL bruto não é bloqueio.
+    kind: permission
+    source_lines: [93]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/repos/*.ts'
+    reality:
+      verdict: exercised
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'nota: 9 usos de onDuplicateKeyUpdate em src/ e nenhum de SQL bruto — as ocorrências do termo cru são comentários'
+        - 'src/modules/financial/adapters/persistence/repos/cedente-account-store.drizzle.ts:1 — upsert por PK, cita este ADR'
+        - 'src/modules/financial/adapters/persistence/repos/supplier-view-store.drizzle.ts:3 — upsert com guard de recência por occurred_at'
+      verify: |
+        grep -rn "onDuplicateKeyUpdate" src/ --include='*.ts' | wc -l
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um repo Drizzle, quando o upsert for escrito como SQL bruto com ON DUPLICATE KEY UPDATE
+        em vez de `onDuplicateKeyUpdate`, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Upsert MUST usar `onDuplicateKeyUpdate` do Drizzle. SQL bruto com ON DUPLICATE KEY UPDATE
+        MUST NOT ser introduzido em repo novo.
+      rationale: |
+        O ADR permite as duas formas e apenas "prefere" o builder. Preferência não dá teste; a forma
+        MUST dá. O estreitamento é grátis: o código já está 100% no builder, com 9 usos e zero SQL
+        bruto — a regra endurece sem exigir refactor.
+
+  - id: ADR-0020-C8
+    text: |
+      FULLTEXT INDEX e MATCH ... AGAINST ficam liberados, mas introduzir busca textual exige abrir
+      ADR específico.
+    kind: permission
+    source_lines: [94]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/schemas/*.ts'
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        grep -rniE "fulltext|match .* against" src/ --include='*.ts'
+    testability:
+      verdict: testable-with-work
+      layer: static
+      red: |
+        Dado um schema que declare FULLTEXT, quando não existir registro de decisão autorizando
+        busca textual, então o teste falha.
+      expected_error: null
+      blocker: |
+        Falta a convenção de como um schema referencia o registro que o autoriza. Sem isso, a
+        cláusula "exige abrir ADR" não é mecanizável — só auditável por humano em review.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        FULLTEXT INDEX e MATCH ... AGAINST são permitidos. Introduzir busca textual MUST vir
+        acompanhado de registro de decisão próprio.
+      rationale: |
+        Mantido como está, mas registrado como o exemplo do limite deste formato: obrigação
+        processual ("abra um ADR") só vira teste se existir a convenção de vínculo schema→decisão.
+
+  - id: ADR-0020-C9
+    text: |
+      Tabelas do módulo contracts usam prefixo ctr_ dentro do database core. A convenção se estende
+      aos módulos futuros (fin_ para financial).
+    kind: obligation
+    source_lines: ['124-130']
+    applies_to:
+      - 'src/modules/*/adapters/persistence/schemas/*.ts'
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        grep -rhoE "mysqlTable\('[a-z_]+'" src/modules/*/adapters/persistence/schemas/mysql.ts | sort -u
+    testability:
+      verdict: testable-with-work
+      layer: static
+      red: |
+        Dado `schemas/mysql.ts` de um módulo, quando um `mysqlTable` não começar com o prefixo
+        registrado daquele módulo, então o teste falha.
+      expected_error: null
+      blocker: |
+        Não existe lista canônica de prefixo por módulo. O ADR nomeia `ctr_` e antecipa `fin_`;
+        auth, partners, programs, budget-plans e notifications não têm prefixo declarado em lugar
+        algum. Sem a lista, o teste não pode ser escrito.
+        A lista tem dono previsto: o `ADR-0016` foi RESERVADO em 2026-04-28 exatamente para
+        "estratégia de implementação dos 2 módulos — prefixos `ctr_*`/`fin_*` e outbox in-process"
+        (`handbook/CHANGELOG.md:1013`) e nunca foi escrito. O número segue vago de propósito.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Toda tabela MUST ser prefixada com o prefixo registrado do módulo dono (`ctr_` para
+        contracts, `fin_` para financial). O prefixo MUST constar de lista canônica única.
+      rationale: |
+        A convenção existe e é seguida na prática, mas depende de uma lista que nunca foi escrita.
+        Adotar a regra obriga a produzir a lista — que é pré-requisito do teste.
+
+findings:
+  - |
+    Duas proibições deste ADR já são enforçadas por AST em `.semgrep/rules.yml`
+    (`mysql-enum-forbidden`, `mysql-json-forbidden`, ticket SEMGREP-ADR-ENFORCER), com gate em CI e
+    teste guardando o próprio workflow (`tests/scripts/semgrep-workflow.test.ts`). O mecanismo que
+    este inventário precisa já existe — está 2 regras fundo.
+  - |
+    C6 (AUTO_INCREMENT) é da mesma natureza das duas já cobertas — estática, precisa, sem
+    falso-positivo no código atual — e não tem rule semgrep. É a terceira rule mais barata do repo.
+  - |
+    O ADR lista 9 arquivos de `.claude/skills/` que precisariam de touch-up e nomeia o ticket
+    CTR-DOCS-UPDATE-FOR-ADR-0020 (linhas 232-246). Um deles,
+    `.claude/skills/application-cli-builder/SKILL.md`, não existe mais — a CLI embutida foi
+    aposentada pelo ADR-0037. A lista de pendências do ADR envelheceu junto com o repo.
+  - |
+    Não existe lista canônica de prefixo de tabela por módulo. O ADR-0020 nomeia `ctr_` e antecipa
+    `fin_`; auth, partners, programs, budget-plans e notifications operam por convenção tácita.
+    O registro que resolveria isso já tem número reservado: o `ADR-0016` foi deliberadamente pulado
+    em 2026-04-28 para "prefixos `ctr_*`/`fin_*` e outbox in-process" e nunca foi escrito. Decisão de
+    2026-07-31: mantê-lo reservado e apenas registrar o vínculo — a alegação C9 fica
+    `testable-with-work` até ele existir.
+  - |
+    A destilação da spec 039 não menciona `semgrep` em nenhum ponto, apesar de o gate
+    `.semgrep/rules.yml` existir desde 2026-07-23 (#548) e cobrir duas proibições DESTE ADR. O Teste
+    B dela enumerava "eslint/tsc/hook/CI" e o mecanismo real ficou fora da lista. É o argumento
+    concreto para `enforced_by` ser campo verificado pelo gate, e não julgamento de memória.
+  - |
+    A proibição de `mysqlEnum` aparece como comentário em 3 pontos dos schemas
+    (`financial/schemas/mysql.ts:14,115,589`) **além** da rule semgrep. Com o enforcement por AST no
+    lugar, o comentário é redundância que pode sair.
+
+provenance:
+  tickets:
+    - COMPOSE-DRIVER-MATRIX-GUARD
+    - CTR-CLEANUP-SQLITE
+    - CTR-CLI-MYSQL-SMOKE
+    - CTR-DB-COMPOSE-MYSQL
+    - CTR-DB-DRIVER-MYSQL
+    - CTR-DB-MIGRATION-MYSQL
+    - CTR-DB-SCHEMA-MYSQL-CTR-PREFIX
+    - CTR-DOCS-UPDATE-FOR-ADR-0020
+    - SEMGREP-ADR-ENFORCER
+  issues: []
+  note: |
+    O ADR nomeia 7 tickets que ele mesmo gerou (linhas 224-231) e 6 existem no acervo:
+    CTR-DB-COMPOSE-MYSQL, CTR-DB-SCHEMA-MYSQL-CTR-PREFIX, CTR-DB-MIGRATION-MYSQL,
+    CTR-DB-DRIVER-MYSQL, CTR-CLEANUP-SQLITE, CTR-CLI-MYSQL-SMOKE. O sétimo,
+    CTR-DOCKERFILE-MYSQL, **CONFIRMADO INEXISTENTE** na varredura de 2026-07-31 — não há ticket com
+    `DOCKER` nem `COMPOSE` no nome além de `COMPOSE-DRIVER-MATRIX-GUARD` (outro assunto). Foi renomeado,
+    absorvido por outro ticket ou nunca executado; o ADR o nomeia como se tivesse sido gerado.
+    SEMGREP-ADR-ENFORCER também consta do acervo e é diretamente relevante. Vínculo confirmado por nome
+    apenas; conteúdo não lido.

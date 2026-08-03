@@ -1,0 +1,284 @@
+id: ADR-0019
+title: Document Storage — AWS S3 (produção) com MinIO via Docker (dev/homologação)
+source: handbook/architecture/adr/0019-document-storage-s3-with-minio-dev.md
+decided_on: 2026-05-15
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0006, ADR-0010, ADR-0018, ADR-0021, ADR-0050]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    O princípio condutor é "1 port, 1 adapter, 1 SDK, 2 endpoints, 0 emulação custom". Três dos cinco
+    números se sustentam integralmente: 1 SDK (`@aws-sdk/client-s3`), 2 endpoints (por configuração,
+    com `forcePathStyle`), 0 emulação custom (MinIO oficial, referenciado e ainda por DIGEST — mais
+    estrito que o exemplo do próprio ADR, que usava `:latest`).
+    O que divergiu é a contagem de adapters: existem QUATRO, um por módulo (contracts, financial, auth,
+    programs), somando 465 linhas, e NÃO existe helper compartilhado de S3 em `src/shared/`. A
+    assimetria é o achado — o MySQL tem `src/shared/persistence/mysql-pool-config.ts` centralizando a
+    construção do pool, e o S3 não tem equivalente. A "reinvenção" que o ADR queria evitar não veio
+    como wrapper caseiro; veio como replicação.
+
+extraction:
+  state: complete
+  covers: |
+    5 alegações — a escolha de storage, o princípio dos cinco números, a troca por endpoint, o cliente
+    único e a análise de licenciamento AGPL. As 7 alternativas rejeitadas (FlatDoc, s3rver, LocalStack,
+    Garage/SeaweedFS/Ceph, MinIO embutido) e as seções de conformidade são fundamentação.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/adapters.md']
+    gap: |
+      Destilou bem o princípio: "1 port, 1 adapter, 1 SDK, 2 endpoints, 0 emulação custom.
+      `@aws-sdk/client-s3` é o único cliente — sem wrapper caseiro. MinIO↔S3 troca por endpoint;
+      `forcePathStyle: true` só para MinIO". Todas as cinco partes estão certas como leitura do ADR.
+      O que faltou é contar os adapters: são quatro, sem abstração compartilhada. A rule diz "1
+      adapter" e o repo tem quatro — o que não é violação da INTENÇÃO (um adapter por port) mas
+      contradiz a letra e esconde a duplicação de wiring.
+
+claims:
+  - id: ADR-0019-C1
+    text: |
+      AWS S3 é o storage de documentos em produção; MinIO via Docker Compose é a implementação local
+      equivalente para dev, homologação e CI.
+    kind: obligation
+    source_lines: [49, '77-87']
+    applies_to:
+      - 'compose.yaml'
+      - 'src/modules/*/adapters/storage/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'compose.yaml:95 — serviço minio declarado'
+        - 'compose.yaml:98 — imagem minio/minio pinada por DIGEST (sha256), mais estrito que o exemplo do ADR, que usava :latest'
+        - 'compose.yaml:15 — comentário de uso: docker compose up -d sobe minio + mysql'
+      verify: |
+        grep -n "minio" compose.yaml | head -5
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o `compose.yaml`, quando o serviço de storage local estiver ausente ou a imagem não
+        estiver pinada por digest, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        O storage local MUST ser servidor S3-compatível declarado no `compose.yaml`, com imagem pinada
+        por digest. MUST NOT ser emulação escrita em casa.
+      rationale: |
+        Estreitado para exigir o pin por digest, que o código já faz e o ADR não pediu — imagem
+        `:latest` é mutável e quebra a reprodutibilidade que o pilar 1 do ADR-0011 persegue.
+
+  - id: ADR-0019-C2
+    text: |
+      Princípio condutor: 1 port, 1 adapter, 1 SDK, 2 endpoints, 0 emulação custom. Um único adapter
+      S3-compatível serve MinIO e AWS S3, com paridade garantida pelo SDK oficial.
+    kind: obligation
+    source_lines: [53, '55-61']
+    applies_to:
+      - 'src/modules/*/adapters/storage/*.s3.ts'
+      - 'src/shared/**'
+    reality:
+      verdict: partial
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'nota: 1 SDK confere — os quatro adapters usam @aws-sdk/client-s3, sem wrapper de terceiros'
+        - 'nota: 0 emulação custom confere — nenhum servidor S3 caseiro'
+        - 'src/modules/contracts/adapters/storage/document-storage.s3.ts:51 — createS3DocumentStorage'
+        - 'src/modules/auth/adapters/storage/profile-photo-storage.s3.ts:36 — createS3ProfilePhotoStorage'
+        - 'src/modules/financial/adapters/storage/source-file-storage.s3.ts:22 — createS3SourceFileStorage'
+        - 'src/modules/programs/adapters/storage/logo-storage.s3.ts:32 — createS3LogoStorage'
+        - 'ausência: nenhum helper compartilhado de S3 em src/shared/, ao contrário do MySQL, que tem src/shared/persistence/mysql-pool-config.ts'
+      verify: |
+        wc -l src/modules/*/adapters/storage/*.s3.ts; find src/shared -iname "*s3*"
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado os adapters de storage, quando a construção do `S3Client` (endpoint, região, credenciais,
+        `forcePathStyle`) estiver repetida em mais de um lugar sem helper compartilhado, então o teste
+        falha. Hoje falha em quatro.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: replace
+      text: |
+        MUST haver um único SDK de storage (`@aws-sdk/client-s3`) e um adapter POR PORT. A construção
+        do cliente S3 MUST vir de helper compartilhado em `src/shared/`, no mesmo padrão de
+        `mysql-pool-config.ts`. MUST NOT existir emulação de S3 escrita em casa.
+      rationale: |
+        "1 adapter" é literalmente falso e não deveria ser verdade: quatro módulos com quatro ports
+        distintos (documento, foto de perfil, arquivo-fonte, logo) precisam de quatro adapters — é o
+        modular monolith funcionando. O que o ADR queria evitar era reinvenção, e ela existe na forma
+        de wiring replicado quatro vezes. Substituir "1 adapter" por "1 adapter por port + helper
+        compartilhado" preserva a intenção e aponta o conserto.
+
+  - id: ADR-0019-C3
+    text: |
+      A troca entre MinIO e AWS S3 é feita por CONFIGURAÇÃO de endpoint, sem mudança de código.
+      `forcePathStyle: true` para MinIO; `false` para AWS S3 (virtual-hosted-style).
+    kind: obligation
+    source_lines: [49, '65-75']
+    applies_to:
+      - 'src/modules/*/adapters/storage/*.s3.ts'
+      - 'src/server.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts, financial, auth, programs]
+      absent_in: []
+      evidence:
+        - 'src/modules/financial/adapters/storage/source-file-storage.s3.ts:27 — endpoint vem de config'
+        - 'src/modules/financial/adapters/storage/source-file-storage.s3.ts:38 — forcePathStyle vem de config'
+        - 'src/modules/auth/adapters/storage/profile-photo-storage.s3.ts:26 — endpoint no tipo de config'
+        - 'src/server.ts:105 — forcePathStyle do logo lido de env, com default seguro'
+        - 'nota: a mesma alegação foi verificada pelo lado do ADR-0021 (ADR-0021-C3), que exige o endpoint da MGC — o mecanismo é o mesmo'
+      verify: |
+        grep -rn "endpoint\|forcePathStyle" src/modules/*/adapters/storage/*.s3.ts src/server.ts | head
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um adapter de storage, quando endpoint ou `forcePathStyle` estiver hardcoded, então o
+        teste falha — trocar de provedor exigiria editar código.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Adapter de object-storage MUST receber `endpoint` e `forcePathStyle` por configuração.
+        MUST NOT fixar endpoint de provedor no código.
+      rationale: |
+        Mesmo texto proposto na `ADR-0021-C3`, alcançado por dois ADRs independentes — quarto par de
+        regras convergentes do inventário. É a propriedade que faz dev com MinIO, PBE na MGC e produção
+        na AWS rodarem o mesmo código.
+
+  - id: ADR-0019-C4
+    text: |
+      `@aws-sdk/client-s3` é o cliente único. Sem wrappers caseiros, sem reinvenção.
+    kind: prohibition
+    source_lines: [59, 118]
+    applies_to:
+      - 'package.json'
+      - 'src/modules/*/adapters/storage/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts, financial, auth, programs]
+      absent_in: []
+      evidence:
+        - 'nota: os quatro adapters importam @aws-sdk/client-s3; nenhum cliente S3 alternativo em package.json'
+        - 'package.json:97 — @aws-sdk/client-s3 em ^3.1052.0, sem pin, contra o ADR-0011-C3'
+      verify: |
+        grep -rln "@aws-sdk/client-s3" src/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `package.json` e `src/`, quando aparecer cliente S3 alternativo (`minio`, `aws-sdk` v2,
+        wrapper de terceiros), então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        `@aws-sdk/client-s3` MUST ser o único cliente de object-storage. MUST NOT adicionar SDK
+        alternativo nem wrapper de terceiros.
+      rationale: |
+        Cumprida, e é o que garante a paridade MinIO↔S3 sem teste duplicado. Candidata a
+        `no-restricted-imports`, no mesmo padrão do `ADR-0011-C4`. Nota de dívida cruzada: sendo o
+        cliente ÚNICO, deveria estar pinada pelo `ADR-0011-C3` e não está.
+
+  - id: ADR-0019-C5
+    text: |
+      O compose REFERENCIA a imagem oficial `minio/minio`. Não copiamos o binário, não modificamos o
+      código-fonte, não redistribuímos o software como parte do produto — o `core-api` distribuído
+      NÃO inclui o MinIO. É uso interno, sem obrigação copyleft da AGPLv3.
+    kind: prohibition
+    source_lines: [111, 42, '236-253']
+    applies_to:
+      - 'compose.yaml'
+      - 'Dockerfile*'
+    reality:
+      verdict: holds
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'compose.yaml:98 — image minio/minio:latest@sha256:14cea49... referenciada do registry, não copiada'
+        - 'ausência: nenhum binário nem código-fonte de MinIO no repositório'
+        - 'nota: o Dockerfile do app não inclui MinIO — o serviço vive só no compose de dev'
+      verify: |
+        grep -n "minio" compose.yaml Dockerfile 2>/dev/null
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o `Dockerfile` da aplicação, quando ele copiar ou instalar MinIO, então o teste falha —
+        seria distribuição de AGPL dentro do produto.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Software AGPL MAY ser usado como ferramenta local, referenciado por imagem de registry.
+        MUST NOT ser copiado, modificado ou incluído no artefato distribuído do produto.
+      rationale: |
+        A distinção entre USAR e DISTRIBUIR AGPL é o que separa uso interno legítimo de obrigação
+        copyleft, e é a mesma régua que o `ADR-0050` aplicou para rejeitar `mupdf.js`. Vale como regra
+        geral de licença, não só para o MinIO — é o tipo de erro que só aparece em auditoria.
+
+findings:
+  - |
+    Quatro adapters S3 (465 linhas) e nenhum helper compartilhado em `src/shared/`, enquanto o MySQL
+    tem `src/shared/persistence/mysql-pool-config.ts` centralizando a construção do pool. A assimetria
+    é o achado: o mesmo repositório resolveu o problema de um jeito para banco e de outro para storage.
+    A reinvenção que o ADR queria evitar chegou como replicação de wiring, não como wrapper caseiro.
+  - |
+    O compose pina a imagem do MinIO por DIGEST (`@sha256:14cea49...`), enquanto o exemplo do ADR usa
+    `minio/minio:latest`. Segundo caso do inventário de hardening ACIMA do ADR, junto com os CHECKs dos
+    outbox (`ADR-0014#findings`). Registrar antes que alguém "simplifique" para `:latest`.
+  - |
+    O cliente único deste ADR (`@aws-sdk/client-s3`) está em `^3.1052.0`, sem pin — violando o pilar 3
+    do `ADR-0011`, que manda pinar dep crítica. Ser "o cliente único" de um subsistema é a definição
+    de crítica, e ninguém fez a conexão entre os dois ADRs.
+  - |
+    Quarto par de regras convergentes: a `C3` chegou ao mesmo texto da `ADR-0021-C3` por caminho
+    independente (endpoint e `forcePathStyle` por configuração). Quando dois ADRs escritos em datas
+    diferentes convergem na mesma diretiva, é forte indício de que a regra é a certa.
+
+provenance:
+  tickets:
+    - CTR-STORAGE-INMEMORY
+    - CTR-STORAGE-MAGALU-CONFIG
+    - CTR-STORAGE-PORT
+    - CTR-STORAGE-S3-ADAPTER
+    - FIN-DOC-SOURCEFILE-CREATE
+    - PRG-LOGO-CONTENT
+    - USR-ME-PHOTO
+  issues: []
+  note: |
+    O ADR lista tickets gerados (seção linhas 281-296) que não foram lidos. O acervo tem
+    CTR-STORAGE-PORT, CTR-STORAGE-S3-ADAPTER, CTR-STORAGE-INMEMORY, CTR-STORAGE-MAGALU-CONFIG,
+    USR-ME-PHOTO, PRG-LOGO-CONTENT e FIN-DOC-SOURCEFILE-CREATE — os quatro adapters saíram deles.
+    Nenhum lido.

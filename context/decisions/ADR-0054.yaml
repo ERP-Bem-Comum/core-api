@@ -1,0 +1,310 @@
+id: ADR-0054
+title: Política de contribuição assistida por IA — trailer `Assisted-by`, DCO humano e responsabilidade da pessoa
+source: handbook/architecture/adr/0054-ai-assisted-contribution-policy.md
+decided_on: 2026-07-23
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0011]
+
+assessment:
+  verdict: realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Décimo quinto e último `realized` — e o SEGUNDO ADR do lote que fechou algo que ele próprio declarava
+    como follow-up não ativado.
+    A política está no `AGENTS.md` em dois lugares: `:65` na tabela de idioma ("commit assistido por IA leva
+    `Assisted-by:` (ADR-0054)") e `:77` na seção própria, com o formato completo e a nota de que utilitários
+    triviais são omitidos. `git log --grep 'Assisted-by'` devolve **45 commits** de 1162.
+    A proibição do §2 é cumprida de forma absoluta: **zero** trailers `Signed-off-by`. A única
+    correspondência do grep é o commit `00f6dcf2` — o próprio commit que adotou o ADR, cujo CORPO descreve
+    "a IA nunca adiciona Signed-off-by". E esse mesmo commit carrega
+    `Assisted-by: Claude-Code:claude-opus-4-8`, ou seja aplica a política a si mesmo.
+    A guarda que o ADR deixou aberta virou mecanismo: ele diz que "verificação mecânica do `Assisted-by`
+    (…) também é follow-up opcional — a adoção aqui é de convenção, aplicada por disciplina e review (W2)".
+    Hoje existe `.github/workflows/commit-policy.yml`, cujo cabeçalho (`:3`) declara
+    "Enforcement da ADR-0054 §1 (formato do trailer Assisted-by), LABEL-GATED (#549)". O desenho é honesto
+    sobre o que dá para cobrar: com label `ai-assisted` → todo commit do range precisa do trailer
+    bem-formado; sem label → valida só o FORMATO quando presente.
+    Segue não ativado, como declarado, apenas o DCO obrigatório.
+
+extraction:
+  state: complete
+  covers: |
+    5 alegações — as três decisões numeradas e as duas guardas explícitas do §"o que a política NÃO impõe".
+    As três alternativas descartadas convergem para a C2 (a semântica de `Assisted-by` contra
+    `Co-authored-by`).
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['AGENTS.md']
+    gap: |
+      A regra aterrissou no `AGENTS.md` como seção própria e é o lugar certo — política de commit vale para
+      todo turno.
+      O que não registrou: o check mecânico já existe (`commit-policy.yml`, #549), o que muda a natureza da
+      norma de convenção para gate. E não registrou a limitação do gate — ele é label-gated, logo a
+      completude do trailer é auto-declarada; só o FORMATO é cobrado sempre.
+
+claims:
+  - id: ADR-0054-C1
+    text: |
+      TRAILER `Assisted-by:` OBRIGATÓRIO em todo commit cujo conteúdo foi gerado ou materialmente modificado
+      por assistente de IA, no formato `Assisted-by: AGENT_NAME:MODEL_VERSION [ferramenta-de-análise]`.
+      UTILITÁRIOS TRIVIAIS SÃO OMITIDOS — `git`, `pnpm`, `tsc`, `node`, editor, formatadores.
+    kind: obligation
+    source_lines: ['31-45']
+    applies_to:
+      - 'AGENTS.md'
+      - '.github/workflows/commit-policy.yml'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'AGENTS.md:77 — Trailer `Assisted-by:` obrigatório em todo commit gerado/materialmente modificado por IA — `Assisted-by: AGENT_NAME:MODEL_VERSION [ferramenta]`. Utilitários triviais (git, pnpm, tsc, editor) são omitidos.'
+        - 'AGENTS.md:65 — a tabela de idioma repete a exigência na linha de commit messages, citando ADR-0054'
+        - '.github/workflows/commit-policy.yml:3 — Enforcement da ADR-0054 §1 (formato do trailer Assisted-by), LABEL-GATED (#549)'
+        - '.github/workflows/commit-policy.yml:24 — o job se chama commit-policy (Assisted-by)'
+        - '.github/workflows/commit-policy.yml:37 — passo: Verifica trailers Assisted-by dos commits do PR'
+        - 'nota: git log --grep Assisted-by devolve 45 commits de 1162 no histórico'
+        - 'nota: o commit 00f6dcf2, que adotou este ADR, carrega Assisted-by: Claude-Code:claude-opus-4-8 — a política se aplica a si mesma'
+      verify: |
+        grep -n "Assisted-by" AGENTS.md .github/workflows/commit-policy.yml | head; git log --grep 'Assisted-by' --oneline | wc -l
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um PR com label `ai-assisted`, quando um commit do range não tiver `Assisted-by` bem-formado,
+        então o check falha. Dado um commit com trailer malformado (sem `:MODEL_VERSION`), falha em qualquer
+        PR.
+      expected_error: null
+      blocker: null
+      enforced_by: ['.github/workflows/commit-policy.yml', 'AGENTS.md']
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Commit gerado ou materialmente modificado por IA MUST carregar
+        `Assisted-by: AGENT_NAME:MODEL_VERSION`. Utilitário trivial (git, pnpm, tsc, editor, formatador)
+        MUST NOT ser declarado. O check MUST validar o FORMATO em todo PR; a COMPLETUDE (todo commit do
+        range) MUST ser cobrada quando o PR se declarar assistido.
+      rationale: |
+        Estreitado para incorporar o que o mecanismo real consegue provar, que é o desenho honesto do
+        `commit-policy.yml`: "todo commit assistido tem o trailer" é indecidível mecanicamente — nada no
+        repositório distingue código gerado de código escrito. O que se cobra sempre é o formato; a
+        completude é auto-declarada pela label. Escrever a regra assim evita prometer enforcement que não
+        existe.
+
+  - id: ADR-0054-C2
+    text: |
+      `Signed-off-by:` é EXCLUSIVAMENTE HUMANO — a IA NUNCA assina. Quando um commit carrega DCO, o
+      `Signed-off-by` é de uma PESSOA, que certifica o Developer Certificate of Origin, revisa todo o código
+      gerado, garante a licença e ASSUME RESPONSABILIDADE INTEGRAL: todo bug ou falha de segurança de
+      código-IA recai sobre o humano que submeteu, não sobre a ferramenta. REJEITADO `Co-authored-by:
+      <agente>` — trata a IA como co-autora, o que é juridicamente impreciso.
+    kind: prohibition
+    source_lines: ['47-56', '97-99']
+    applies_to:
+      - 'AGENTS.md'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'AGENTS.md:78 — a seção registra que a IA NUNCA adiciona Signed-off-by; só um humano certifica o DCO'
+        - 'ausência: nenhum trailer Signed-off-by no histórico — a única correspondência de git log --grep é o commit 00f6dcf2, cujo CORPO descreve a proibição ("a IA nunca adiciona Signed-off-by — só humano")'
+        - 'ausência: nenhum Co-authored-by de agente no histórico — a alternativa descartada não foi usada'
+      verify: |
+        git log --grep 'Signed-off-by' --format='%h %s' | head -3; git log --grep 'Co-authored-by' --oneline | head -3
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o histórico, quando um `Signed-off-by` ou `Co-authored-by` nomear um agente de IA, então o check
+        falha. Distinguir agente de pessoa exige lista de nomes de agentes — barata, porque são poucos.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Agente de IA MUST NOT adicionar `Signed-off-by` nem `Co-authored-by`. Atribuição de autoria e
+        certificação de origem MUST nomear uma pessoa.
+      rationale: |
+        A razão que o ADR dá é jurídica e não estética: a IA "não é uma pessoa jurídica e não pode certificar
+        a origem" — logo `Co-authored-by` é impreciso e `Signed-off-by` é inválido. A proibição de
+        `Co-authored-by` importa especialmente porque é o padrão que várias ferramentas emitem por DEFAULT;
+        sem a regra explícita, entra sozinho no commit e cria atribuição de autoria a quem não pode ser
+        autor.
+
+  - id: ADR-0054-C3
+    text: |
+      MESMO PROCESSO, sem trilha paralela: código assistido por IA passa pelos MESMOS gates required
+      (`integração (gate)` + `typecheck + format + lint + test`) que código escrito à mão. NÃO há revisão mais
+      frouxa nem mais rígida por origem — a origem se declara (trailer), a responsabilidade é humana, e a
+      barra de qualidade é uma só.
+    kind: obligation
+    source_lines: ['58-64']
+    applies_to:
+      - '.github/workflows/*.yml'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'AGENTS.md:79 — Mesmo processo, sem trilha paralela. Código-IA passa pelos mesmos gates required que código humano'
+        - 'ausência: nenhum workflow condicional por origem — o commit-policy.yml é o único gate que olha a label ai-assisted, e ele checa o TRAILER, não relaxa nem endurece a qualidade'
+        - 'nota: o ADR amarra a política à Pipeline W0→W3, que está em aposentadoria pela spec 038 — o gate mecânico (typecheck/format/lint/test) sobrevive à mudança de processo, a nomenclatura de wave não'
+      verify: |
+        ls .github/workflows/; grep -rn "ai-assisted" .github/workflows/*.yml | head -3
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado os workflows, quando algum gate de qualidade for condicionado à origem do código (label,
+        autor, trailer), então o teste falha — a barra MUST ser uma só.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Gate de qualidade MUST NOT ser condicionado à origem do código. A label de origem MUST governar
+        apenas a checagem de PROCEDÊNCIA (trailer), nunca o rigor da verificação técnica.
+      rationale: |
+        A distinção é fina e o repo a respeita: a label `ai-assisted` existe e governa **só** o
+        `commit-policy`; nenhum gate técnico a consulta. Sem a regra, o caminho tentador é o oposto em
+        qualquer direção — relaxar ("é só refactor de IA") ou endurecer ("código de IA precisa de review
+        extra") —, e os dois substituem julgamento técnico por proveniência.
+
+  - id: ADR-0054-C4
+    text: |
+      GUARDA — DCO obrigatório em todo commit (`git commit -s` + check de CI que rejeita commit sem
+      `Signed-off-by`) é DECISÃO DE ENFORCEMENT SEPARADA, NÃO ativada por este ADR. Hoje o repo NÃO exige
+      `Signed-off-by`; o §2 fixa a regra de QUEM assina para quando/se o DCO for tornado obrigatório.
+    kind: permission
+    source_lines: ['68-71', '100-102']
+    applies_to:
+      - '.github/workflows/*.yml'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhum check de DCO nos workflows — o commit-policy.yml valida Assisted-by, não Signed-off-by'
+        - 'ausência: nenhum trailer Signed-off-by no histórico, coerente com "hoje o repo não exige"'
+        - 'nota: o adiamento é declarado additive ("um workflow + um check required, a abrir como ticket próprio") e segue não ativado'
+      verify: |
+        grep -rn "Signed-off-by\|dco" .github/workflows/*.yml | head
+    testability:
+      verdict: not-applicable
+      layer: null
+      red: |
+        Adiamento declarado; não há violação a testar. Ativar o DCO seria a evolução prevista, não erro.
+      expected_error: null
+      blocker: 'Decisão de enforcement separada, deliberadamente não ativada.'
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar: é adiamento com escopo declarado e caminho de ativação nomeado. O que vale como regra é
+        a `C2` (quem pode assinar), que já está proposta e é justamente o que este adiamento preserva para
+        o dia em que o DCO entrar. Registrar que o fatiamento foi deliberado — o ADR rejeitou "DCO
+        obrigatório já neste ADR" para "não acoplar a adoção da convenção à imposição do gate".
+
+  - id: ADR-0054-C5
+    text: |
+      GUARDA — VERIFICAÇÃO MECÂNICA do `Assisted-by` (um check que exige o trailer em PRs de sessão de IA)
+      é FOLLOW-UP OPCIONAL — a adoção aqui é de CONVENÇÃO, aplicada por disciplina e review (W2). A convenção
+      depende de review humano enquanto não houver o check mecânico.
+    kind: permission
+    source_lines: ['72-73', 86]
+    applies_to:
+      - '.github/workflows/commit-policy.yml'
+    reality:
+      verdict: contradicted
+      holds_in: []
+      absent_in: []
+      evidence:
+        - '.github/workflows/commit-policy.yml:1 — name: commit-policy'
+        - '.github/workflows/commit-policy.yml:3 — Enforcement da ADR-0054 §1 (formato do trailer Assisted-by), LABEL-GATED (#549)'
+        - '.github/workflows/commit-policy.yml:4 — PR com label `ai-assisted` → todo commit do range precisa de Assisted-by bem-formado'
+        - '.github/workflows/commit-policy.yml:5 — PR sem a label → só valida o FORMATO quando presente'
+        - '.github/workflows/commit-policy.yml:12 — types: [opened, synchronize, reopened, labeled, unlabeled] — reavalia quando a label muda'
+        - '.github/workflows/commit-policy.yml:6 — Actions SHA-pinadas (ADR-0011), aplicando a política de supply-chain ao próprio gate'
+        - 'nota: contraditado no bom sentido — o follow-up declarado opcional FOI implementado depois (#549); a convenção deixou de depender só de disciplina'
+      verify: |
+        grep -n "ADR-0054\|ai-assisted\|LABEL-GATED" .github/workflows/commit-policy.yml | head
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um PR sem a label e um commit com `Assisted-by` malformado, então o check MUST falhar (formato
+        sempre). Dado um PR COM a label e um commit sem trailer, MUST falhar (completude sob declaração).
+      expected_error: null
+      blocker: null
+      enforced_by: ['.github/workflows/commit-policy.yml']
+    rule:
+      status: proposed
+      disposition: replace
+      text: |
+        Convenção de commit cuja violação é detectável MUST ter check mecânico. Quando a checagem completa
+        for indecidível, o gate MUST cobrar a parte decidível (formato) sempre e a parte indecidível
+        (completude) sob declaração explícita.
+      rationale: |
+        SUBSTITUÍDO porque a alegação envelheceu para melhor: o follow-up "opcional" foi implementado (#549) e
+        a convenção deixou de depender de disciplina. A regra generaliza o desenho, que é a parte
+        transferível — separar o que dá para provar do que precisa ser declarado. É o mesmo problema da
+        `ADR-0038-C2` ("`.bru` executado antes do commit"), que não teve essa saída e ficou
+        `unfalsifiable`.
+
+findings:
+  - |
+    **Segundo ADR do lote a fechar um follow-up que ele mesmo declarou opcional.** O §Guardas diz que a
+    verificação mecânica do `Assisted-by` "também é follow-up opcional — a adoção aqui é de convenção,
+    aplicada por disciplina e review (W2)". Hoje `.github/workflows/commit-policy.yml:3` declara
+    "Enforcement da ADR-0054 §1", via #549. Junto com o HMAC do `ADR-0042`, são os dois casos do inventário
+    em que um item declarado aberto foi fechado — e ambos por ticket posterior, não por lembrança.
+  - |
+    **O gate é honesto sobre o que é indecidível, e isso é o achado transferível.** "Todo commit assistido
+    por IA tem o trailer" não é verificável — nada no repositório distingue código gerado de código escrito.
+    O desenho separa as duas metades: FORMATO é cobrado em todo PR (`:5` — "sem a label → só valida o
+    formato quando presente") e COMPLETUDE é cobrada quando o PR se declara assistido (`:4`). E reavalia em
+    `labeled`/`unlabeled` (`:12`), para a label não ser aplicada depois do check. Compare com a
+    `ADR-0038-C2`, que tem o mesmo problema ("`.bru` executado antes do commit") e nenhuma saída — ficou
+    `unfalsifiable`.
+  - |
+    **A política se aplica a si mesma.** O commit `00f6dcf2`, que adotou este ADR, carrega
+    `Assisted-by: Claude-Code:claude-opus-4-8` — e é também a única correspondência de
+    `git log --grep 'Signed-off-by'`, porque o CORPO dele descreve a proibição. Zero trailers
+    `Signed-off-by` de fato, zero `Co-authored-by` de agente. Aderência total nas duas proibições do §2.
+  - |
+    **45 commits de 1162 carregam o trailer.** O número é interessante menos como cobertura e mais como
+    limite: a política vale desde 2026-07-23 (oito dias antes desta verificação), então o histórico anterior
+    não é retroativo por desenho — o ADR não pede reescrita. E a auditabilidade que ele promete
+    (`git log --grep 'Assisted-by'` recupera contribuição por agente/modelo) funciona só para a janela em que
+    a política vigeu, o que é a expectativa correta e não está escrita.
+  - |
+    **A política se ancora na Pipeline W0→W3, que está sendo aposentada.** O §3 diz que código-IA "passa pela
+    mesma Pipeline W0→W3" e o §Guardas menciona "review (W2)". A spec 038 retira o pipeline. O que sobrevive
+    é o gate mecânico nomeado no mesmo parágrafo — `typecheck + format + lint + test` mais o gate de
+    integração —, que é o que importa. Terceiro acoplamento documental à nomenclatura de waves encontrado no
+    lote (com `ADR-0040` DoD e este), todos inofensivos hoje e todos apontando para um processo em saída.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    O ADR cita o precedente do Linux kernel (`Documentation/process/coding-assistants.rst`, commitado em
+    2025-12-23) com duas citações literais, e a Fase 2 do #523 (gate de CI tornado required) como braço
+    mecânico da política. A issue #549, que implementou o check do `Assisted-by`, aparece no cabeçalho do
+    workflow e é posterior ao ADR. Nenhuma issue lida nesta fase.

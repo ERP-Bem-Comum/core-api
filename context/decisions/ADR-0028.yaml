@@ -1,0 +1,238 @@
+id: ADR-0028
+title: Localização do shell HTTP de borda e do composition root (verticalidade por feature)
+source: handbook/architecture/adr/0028-http-edge-shell-location.md
+decided_on: 2026-05-28
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0006, ADR-0025, ADR-0027, ADR-0033]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Os três lugares existem e as responsabilidades estão separadas: o shell transversal em
+    `src/shared/http/` (5 arquivos, todos agnósticos de domínio), o composition root em
+    `src/server.ts`, e o HTTP de feature em `src/modules/*/adapters/http/`.
+    A invariante que falha é a segunda, e falha por UM import: dos 9 imports de módulo em
+    `src/server.ts`, oito passam por `public-api` e um vem de
+    `#src/modules/programs/adapters/storage/logo-storage.s3.ts`. É `import type`, logo sem dependência
+    de runtime — mas atravessa a fronteira que este ADR fixa.
+    Precisão importante: isso NÃO contradiz o `ADR-0006-C4`, que proíbe import de `domain/` ou
+    `application/` de outro módulo. Este é de `adapters/storage/`, que aquela proibição não nomeia. São
+    duas fronteiras diferentes, e a deste ADR é a mais estrita das duas.
+
+extraction:
+  state: complete
+  covers: |
+    4 alegações — os três lugares e as três invariantes (a terceira, sobre Zod, é o escopo estendido
+    que a `ADR-0027-C1` já carrega, e é referenciada em vez de duplicada).
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/http-edge.md']
+    gap: |
+      Destilou como "Três locais (shell / composition root / HTTP de feature); `server.ts` só importa
+      via `public-api/http.ts`", e a `http-edge.md:13` abre com a seção "Onde cada coisa mora". Correto.
+      Foi também a 039 que registrou o refinamento entre o `0027` e o `0028` sobre a home do Zod, e
+      adotou o escopo do mais recente — bom julgamento.
+      O que não fez: conferir os imports do `server.ts`. São 9, e um deles fura a fronteira. A 039
+      listou "server.ts importando domain/ ou application/ de módulo" como enforcement candidato #4 e
+      não mediu se havia violação — havia, num caminho que o candidato #4 como formulado não pegaria.
+
+claims:
+  - id: ADR-0028-C1
+    text: |
+      A borda distribui-se em TRÊS lugares: shell transversal em `src/shared/http/` (`buildApp`, error
+      handler, `sendResult`, config), composition root em `src/server.ts`, e HTTP de feature em
+      `src/modules/<m>/adapters/http/`.
+    kind: obligation
+    source_lines: ['42-48']
+    applies_to:
+      - 'src/shared/http/**'
+      - 'src/server.ts'
+      - 'src/modules/*/adapters/http/**'
+    reality:
+      verdict: holds
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'nota: src/shared/http/ tem 5 arquivos — app.ts, config.ts, errors.ts, reply.ts, email-link-base-urls.ts'
+        - 'src/shared/http/app.ts:2 — buildApp descrito como factory com hardening, Zod compilers e OpenAPI'
+        - 'src/server.ts:289 — o composition root chama buildApp com as rotas'
+        - 'ausência: não existe src/http/ no topo da árvore — o refactor do CORE-HTTP-SHELL-RELOCATE foi aplicado'
+      verify: |
+        ls src/shared/http/ src/; ls src/modules/contracts/adapters/http/ | head -3
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/`, quando existir `src/http/` no topo, ou quando o shell transversal contiver arquivo
+        de feature, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        O shell de borda MUST viver em `src/shared/http/`; o composition root em `src/server.ts`; o HTTP
+        de cada módulo em `src/modules/<m>/adapters/http/`. MUST NOT existir camada HTTP horizontal no
+        topo da árvore.
+      rationale: |
+        Cumprida, incluindo o refactor que a motivou (`src/http/` não existe mais). É a regra que
+        mantém a verticalidade por feature legível na árvore — e o `ADR-0006-C2` depende dela para que
+        "módulo é fatia completa" seja verdade.
+
+  - id: ADR-0028-C2
+    text: |
+      Nenhuma rota, handler ou schema de feature vive no shell transversal. O shell é AGNÓSTICO de
+      domínio: só sabe subir o servidor, aplicar hardening, traduzir `Result` e gerar OpenAPI.
+    kind: prohibition
+    source_lines: ['52-53']
+    applies_to:
+      - 'src/shared/http/**/*.ts'
+    reality:
+      verdict: partial
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'nota: dos 5 arquivos do shell, quatro são inequivocamente agnósticos — app.ts, config.ts, errors.ts, reply.ts'
+        - 'src/shared/http/email-link-base-urls.ts:32 — readEmailLinkBaseUrls: é config, não rota nem schema, logo não viola a letra; mas conhece o conceito de link de e-mail, que é de feature'
+        - 'ausência: nenhuma rota, handler ou schema Zod de feature em src/shared/http/'
+      verify: |
+        ls src/shared/http/; grep -rln "route\|handler" src/shared/http/
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/shared/http/`, quando um arquivo declarar rota, handler ou schema de feature, então o
+        teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        `src/shared/http/` MUST conter apenas infraestrutura de borda agnóstica de domínio.
+        MUST NOT conter rota, handler ou schema de feature.
+      rationale: |
+        Cumprida na letra. O `email-link-base-urls.ts` é o caso-limite que vale monitorar: é config e
+        passa, mas é o tipo de arquivo por onde o shell começa a saber de feature. Registrar como
+        observação, não como violação.
+
+  - id: ADR-0028-C3
+    text: |
+      O composition root (`src/server.ts`) SÓ importa plugins de módulo via `<m>/public-api/http.ts` —
+      nunca de `<m>/domain/` ou `<m>/application/`.
+    kind: prohibition
+    source_lines: ['54-55']
+    applies_to:
+      - 'src/server.ts'
+    reality:
+      verdict: partial
+      holds_in: [auth, budget-plans, contracts, financial, notifications, partners]
+      absent_in: [programs]
+      evidence:
+        - 'nota: dos 9 imports de #src/modules/ em src/server.ts, OITO passam por public-api'
+        - 'src/server.ts:54 — import type { LogoS3Config } from #src/modules/programs/adapters/storage/logo-storage.s3.ts — não passa pela public-api'
+        - 'ausência: nenhum import de domain/ ou application/ de módulo em src/server.ts — a proibição literal do ADR está respeitada'
+        - 'nota: o import violador é `import type`, logo sem dependência de runtime; atravessa a fronteira de organização, não a de acoplamento executável'
+      verify: |
+        grep -n "from '#src/modules/" src/server.ts | grep -v "public-api"
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/server.ts`, quando importar de módulo por caminho que não seja `public-api/`, então o
+        teste falha. Hoje falha em um import.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        `src/server.ts` MUST importar de módulo exclusivamente por `<m>/public-api/`. Tipo de
+        configuração de adapter que o root precisa injetar MUST ser reexportado pela `public-api` do
+        módulo.
+      rationale: |
+        Estreitado para dizer o CONSERTO, não só a proibição: o caso real é um `import type` de config
+        de storage que o root precisa para injetar dependência. A saída não é remover o import — é a
+        `public-api` do `programs` reexportar `LogoS3Config`. Sem isso, a regra vira bloqueio sem
+        caminho, e é assim que regra boa é ignorada.
+        Nota de escopo: esta fronteira é MAIS ESTRITA que a do `ADR-0006-C4`, que proíbe apenas
+        `domain/` e `application/`. As duas coexistem e não se contradizem.
+
+  - id: ADR-0028-C4
+    text: |
+      Zod permanece exclusivo de `src/modules/<m>/adapters/http/` e `src/shared/http/`. Domínio e
+      application seguem sem framework.
+    kind: prohibition
+    source_lines: ['56-57']
+    applies_to:
+      - 'src/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in:
+        [auth, budget-plans, contracts, financial, notifications, partners, programs, reports]
+      absent_in: []
+      evidence:
+        - 'nota: 16 arquivos importam zod/v4, todos nas duas camadas permitidas — verificado em ADR-0027-C1'
+        - 'nota: é ESTE ADR que estende a home do Zod para incluir src/shared/http/, escopo que o texto do ADR-0027 não tem'
+      verify: |
+        grep -rlE "from 'zod(/v4)?'" src/ --include='*.ts' | grep -vE "adapters/http/|shared/http/"
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Idêntico ao da `ADR-0027-C1` — mesma varredura, mesmo escopo.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como texto e manter a referência: a regra vigente é a `ADR-0027-C1`, já estreitada
+        para incluir `src/shared/http/` — que é a extensão que ESTE ADR criou. Duas fontes para a mesma
+        fronteira é o que o formato evita; a contribuição deste ADR está incorporada lá.
+
+findings:
+  - |
+    Uma violação real, num `import type`: `src/server.ts:54` importa `LogoS3Config` de
+    `#src/modules/programs/adapters/storage/logo-storage.s3.ts`, fora da `public-api`. Oito dos nove
+    imports de módulo estão corretos. É `import type`, então não cria dependência de runtime — mas
+    atravessa a fronteira que este ADR fixa, e o conserto é trivial: reexportar o tipo pela
+    `public-api` do `programs`.
+  - |
+    Precisão que evita um falso positivo: isto NÃO contradiz o achado da `ADR-0006-C4` ("zero violações
+    de fronteira"). Aquela alegação proíbe import de `domain/` ou `application/` de outro módulo, e
+    essa proibição está respeitada. Esta proíbe QUALQUER import fora de `public-api/` no composition
+    root — é mais estrita. Duas fronteiras diferentes, e a minha varredura do lote 5 media a primeira.
+  - |
+    O enforcement candidato #4 da spec 039 ("`server.ts` importando `domain/` ou `application/` de
+    módulo") não pegaria este caso, porque o import é de `adapters/storage/`. O candidato precisa ser
+    formulado como "qualquer caminho que não seja `public-api/`", não como lista de camadas proibidas.
+  - |
+    `src/shared/http/email-link-base-urls.ts` é o caso-limite do shell agnóstico: é config e não viola a
+    letra (não é rota, handler nem schema), mas conhece o conceito "link de e-mail", que pertence a
+    feature. Não é violação — é o arquivo por onde o shell começaria a saber de domínio, e vale
+    monitorar.
+
+provenance:
+  tickets:
+    - CORE-HTTP-FASTIFY-BOOTSTRAP
+    - CORE-HTTP-SHELL-RELOCATE
+  issues: []
+  note: |
+    O ADR nomeia o ticket CORE-HTTP-SHELL-RELOCATE como o refactor que o executa, e o ticket
+    CORE-HTTP-FASTIFY-BOOTSTRAP como o H0 que entregou o shell no lugar errado (`src/http/`). Ambos
+    estão no acervo e nenhum foi lido. O refactor foi aplicado — `src/http/` não existe.

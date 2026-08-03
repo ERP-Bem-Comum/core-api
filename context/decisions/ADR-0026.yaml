@@ -1,0 +1,293 @@
+id: ADR-0026
+title: Read/Write Split de Conexão MySQL (writer/reader pools)
+source: handbook/architecture/adr/0026-mysql-read-write-split-connection.md
+decided_on: 2026-05-27
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0014, ADR-0022, ADR-0013, ADR-0006]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    A costura de wiring existe, opt-in, em 2 módulos: contracts e partners aceitam um `readerUrl`
+    opcional no composition root, ligado por `CONTRACTS_READER_URL` / `PARTNERS_READER_URL`. Com a
+    env ausente, o reader reusa o writer — comportamento single-node, como o ADR previu, e essa
+    opcionalidade é o único aspecto com teste (`module-driver-config.test.ts`).
+    Onde o ADR NÃO se realizou é justamente onde ele próprio disse que o ganho apareceria: financial
+    e programs recebem apenas `writerUrl`, e financial roteia TODAS as leituras pelo writer
+    (`composition.ts:592-671`), sem parâmetro de reader no tipo de config. Ligar réplica ali exige
+    mudança de código, não configuração.
+    Duas afirmações opostas sobre este ADR circulam no repo e AMBAS são falsas: a de que o código
+    "nunca implementou" o split (falsa para contracts/partners) e a do próprio ADR, de que habilitar
+    a réplica é "zero mudança de código" (falsa para financial/programs).
+
+extraction:
+  state: sample
+  covers: |
+    5 alegações normativas extraídas (as 4 da §"Invariantes normativas" + o mecanismo de 2 pools).
+    C4 e C5 seguem `unverified` no plano da realidade — exigem rastrear o uso efetivo da 2ª conexão
+    e as decisões de roteamento nos use cases, trabalho de Fase 2. A testabilidade de todas as 5 já
+    está avaliada.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/adapters.md', '.claude/rules/application.md']
+    gap: |
+      A 039 destilou este ADR em duas rules. O `adapters.md:44` chegou MAIS PERTO do certo que o
+      próprio ADR: declara o split "norma decidida e ainda não implementada" e manda não escrever
+      código assumindo os dois pools. Mas a evidência que ele apresenta é
+      `grep -rn "createPool" src/`, que hoje devolve 7+ ocorrências (pool-registry + 6 drivers de
+      módulo) — o que falta é um pool CHAMADO reader, não pool. E o aviso é largo demais: vale para
+      financial e programs, não para contracts e partners.
+      O `application.md:17` afirma o read-after-write como norma sem sinalizar que não há teste —
+      C4 segue `unverified` aqui.
+      O que a 039 não fez, e este registro acrescenta: confrontar cada alegação com `src/` e
+      perguntar qual teste falha se ela for violada.
+
+claims:
+  - id: ADR-0026-C1
+    text: |
+      Dois pools de conexão mysql2, um por endpoint: writer (primário) e reader (réplica).
+    kind: obligation
+    source_lines: [33, 28]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/drivers/*.ts'
+      - 'src/modules/*/adapters/http/composition.ts'
+      - 'src/server.ts'
+    reality:
+      verdict: partial
+      holds_in: [contracts, partners]
+      absent_in: [financial, programs]
+      evidence:
+        - 'src/modules/contracts/adapters/http/composition.ts:103 — readerUrl opcional no tipo de config'
+        - 'src/modules/contracts/adapters/http/composition.ts:235 — 2º pool só quando readerUrl difere do writerUrl'
+        - 'src/modules/contracts/adapters/http/composition.ts:238 — abre a 2ª conexão com applyMigrations false'
+        - 'src/server.ts:201 — env CONTRACTS_READER_URL'
+        - 'src/server.ts:219 — env PARTNERS_READER_URL'
+        - 'src/server.ts:248 — programs recebe apenas writerUrl'
+        - 'src/server.ts:261 — financial recebe apenas writerUrl'
+        - 'src/modules/financial/adapters/http/composition.ts:206 — o tipo de config só tem writerUrl'
+        - 'tests/shared/persistence/module-driver-config.test.ts:298 — assere que a ausência das envs de reader não é erro'
+      verify: |
+        grep -rn "readerUrl\|READER_URL" src/server.ts src/modules/*/adapters/http/composition.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o tipo de config do composition root de cada módulo que abre pool MySQL para leitura,
+        quando algum deles não aceitar `readerUrl`, então o teste falha nomeando o módulo.
+        Hoje falha em financial e programs — é o RED legítimo desta regra.
+      expected_error: null
+      blocker: null
+      enforced_by: ['tests/shared/persistence/module-driver-config.test.ts']
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Todo módulo que abre pool MySQL para leitura MUST aceitar `readerUrl` opcional no
+        composition root; ausente, MUST reusar o writer. MUST NOT existir módulo onde habilitar a
+        réplica exija editar tipo ou wiring.
+      rationale: |
+        O enforçável é a costura, não a existência física de dois pools — o próprio ADR admite
+        ambos apontando ao mesmo host em single-node (linha 40). Estreitar para a costura dá teste
+        estático e preserva a intenção. Atenção ao `enforced_by`: o teste existente cobre só a
+        METADE "reader é opcional"; a metade "todo módulo aceita readerUrl" não tem teste, e é
+        exatamente onde financial e programs violam.
+
+  - id: ADR-0026-C2
+    text: |
+      Ports de persistência separados por intenção: mutação (save, insert, update) usa o pool
+      writer; query (findById, list, projeções) usa o pool reader.
+    kind: obligation
+    source_lines: ['34-36', 101]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/repos/*.ts'
+      - 'src/modules/*/adapters/http/composition.ts'
+    reality:
+      verdict: partial
+      holds_in: []
+      absent_in: [financial]
+      evidence:
+        - 'src/modules/financial/adapters/http/composition.ts:592 — buildContractsReadPort recebe writerUrl'
+        - 'src/modules/financial/adapters/http/composition.ts:601 — buildProgramsReadPort recebe writerUrl'
+        - 'src/modules/financial/adapters/http/composition.ts:615 — buildPartnersReadPort recebe writerUrl'
+        - 'src/modules/financial/adapters/http/composition.ts:632 — buildAuthUserReadPort recebe writerUrl'
+        - 'src/modules/financial/adapters/http/composition.ts:651 — openSuppliersWithoutContractReader recebe writerUrl'
+        - 'src/modules/financial/adapters/http/composition.ts:671 — openDashboardCostCentersReader recebe writerUrl'
+        - 'src/modules/financial/adapters/http/composition.ts:959 — driver mysql exige writerUrl, sem menção a reader'
+        - 'nota: contracts e partners não foram verificados na Fase 0 quanto ao roteamento efetivo de cada leitura — daí holds_in vazio'
+      verify: |
+        grep -rn "connectionString: writerUrl" src/modules/financial/adapters/http/composition.ts
+    testability:
+      verdict: testable-with-work
+      layer: integration
+      red: |
+        Dados dois pools distintos injetados num módulo, quando um port de leitura executa
+        `findById`/`list`, então a query MUST ter chegado ao pool reader; se chegar ao writer, falha.
+        Simétrico: mutação que chegue ao reader também falha.
+      expected_error: null
+      blocker: |
+        Falta um double de pool que registre qual conexão recebeu cada query. Não existe na suíte —
+        os testes de integração hoje usam MySQL real com um pool só.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Port de leitura MUST usar o pool reader quando `readerUrl` for distinto do writer. Port de
+        mutação MUST usar o pool writer, sempre.
+      rationale: |
+        É a alegação central do ADR e a única que dá efeito ao split. Sem ela, `readerUrl` é
+        parâmetro decorativo — que é exatamente o estado de financial, violando em 6 pontos.
+
+  - id: ADR-0026-C3
+    text: |
+      Introduzir a réplica é mudança de configuração, não de código: apenas a connection string
+      injetada no composition root muda.
+    kind: aspiration
+    source_lines: [40]
+    applies_to: []
+    reality:
+      verdict: partial
+      holds_in: [contracts, partners]
+      absent_in: [financial, programs]
+      evidence:
+        - 'src/server.ts:207 — contracts: readerUrl entra por env, sem tocar código'
+        - 'src/server.ts:225 — partners: idem'
+        - 'src/modules/financial/adapters/http/composition.ts:206 — sem readerUrl no tipo: habilitar réplica exige editar o tipo, o composition e o wiring'
+        - 'tests/shared/persistence/module-driver-config.test.ts:45 — documenta a opcionalidade citando ADR-0026, caso 13'
+      verify: |
+        grep -rhoE "[A-Z0-9_]*READER_URL" src/ --include='*.ts' | sort -u
+    testability:
+      verdict: unfalsifiable
+      layer: null
+      red: |
+        Nenhum. A alegação é sobre o esforço de uma mudança futura — não há estado do sistema que
+        a falsifique. "Seria só configuração" não é observável.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Afirmação sobre esforço futuro, não falsificável. O conteúdo verificável dela já vive em C1
+        na forma estreitada ("todo módulo aceita readerUrl"). Manter as duas colocaria uma regra
+        intestável ao lado da regra que a substitui.
+
+  - id: ADR-0026-C4
+    text: |
+      Fluxo read-after-write crítico lê do primário, nunca da réplica. O roteamento é explícito no
+      use case, não mágica de runtime.
+    kind: obligation
+    source_lines: [44, 99, 101]
+    applies_to:
+      - 'src/modules/*/application/**/*.ts'
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        grep -rniE "read-after-write|readAfterWrite|stale.?read" src/ --include='*.ts'
+    testability:
+      verdict: testable-with-work
+      layer: integration
+      red: |
+        Dado um pool reader que não reflete a última escrita (lag simulado), quando um fluxo
+        classificado como read-after-write crítico lê imediatamente após escrever, então MUST ler do
+        writer; ler do reader devolve dado velho e falha.
+      expected_error: null
+      blocker: |
+        Duas coisas faltam: um fake de réplica com lag, e a lista de quais fluxos são
+        "read-after-write crítico" — o ADR exige a disciplina mas nunca enumerou os fluxos.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Fluxo que lê logo após escrever dentro do mesmo caso de uso MUST ler do pool writer. A
+        escolha MUST ser explícita no use case, nunca inferida em runtime.
+      rationale: |
+        Sem isto o split troca escala por stale read silencioso. O ADR já exige explicitude (linha
+        101); o que falta é a enumeração dos fluxos, que é trabalho de Fase 2.
+
+  - id: ADR-0026-C5
+    text: |
+      O pool reader nunca emite DML de mutação (INSERT/UPDATE/DELETE). Um único escritor por
+      database, preservando a regra de ouro do ADR-0014.
+    kind: prohibition
+    source_lines: [48, 98, 100]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/repos/*.ts'
+    reality:
+      verdict: partial
+      holds_in: [contracts, partners]
+      absent_in: []
+      evidence:
+        - 'scripts/e2e/contracts.sh:50 — o smoke roda com CONTRACTS_READER_URL apontando para readonly_bi'
+        - 'scripts/e2e/contracts.sh:45 — comentário: Dual-pool, writer=root, reader=readonly_bi (SELECT-only)'
+        - 'scripts/e2e/collaborators.sh:10 — mesmo arranjo dual-pool para o smoke de collaborators'
+        - 'nota: o GRANT SELECT-only faz o próprio MySQL recusar mutação pelo reader, então o e2e já falharia se algum caminho de leitura tentasse escrever'
+      verify: |
+        grep -n "readonly_bi\|READER_URL" scripts/e2e/contracts.sh scripts/e2e/collaborators.sh
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado o pool reader apontando para um usuário MySQL com GRANT somente-leitura, quando
+        qualquer repo emite INSERT/UPDATE/DELETE por ele, então o driver devolve erro de permissão
+        e o teste falha. A guarda é do próprio banco, não da aplicação.
+      expected_error: null
+      blocker: null
+      enforced_by: ['scripts/e2e/contracts.sh', 'scripts/e2e/collaborators.sh']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        O pool reader MUST NOT emitir INSERT, UPDATE ou DELETE. MUST haver um único escritor por
+        database.
+      rationale: |
+        Preserva a regra de ouro do ADR-0014 e é a guarda que torna seguro apontar o reader para
+        uma réplica. Testável pelo GRANT, o que a torna barata de enforçar.
+
+findings:
+  - |
+    O `.claude/rules/adapters.md:44` NÃO afirmava que o split existe — afirmava o contrário, que é
+    "norma decidida e ainda não implementada", e mandava não escrever código assumindo os dois pools.
+    A caracterização de `context/SESSION-2026-07-31.md` §6 — "a rule afirmava um read/write split que
+    o código nunca implementou" — erra duas vezes: inverte o que a rule dizia, e "nunca implementou"
+    é falso para contracts e partners.
+  - |
+    O defeito real da rule é a EVIDÊNCIA, não a conclusão. Ela prova o "não implementado" com
+    `grep -rn "createPool" src/`, que devolve 7+ ocorrências; o que o grep não acha é um pool
+    nomeado reader. Evidência que ninguém re-roda envelhece em silêncio — é precisamente o mecanismo
+    que `reality.verify` existe para quebrar.
+  - |
+    O ADR previu o ganho "sobretudo nas queries de contracts/fin" (linha 22). `fin` é exatamente o
+    módulo onde a costura não existe e onde toda leitura passa pelo writer.
+  - |
+    Cinco arquivos de teste tocam pool MySQL (`mysql-pool-config`, `pool-registry`,
+    `driver-pool-delegation`, `module-driver-config`, `mysql-driver-tuning`) e apenas um cita este
+    ADR — e só para assegurar que as envs de réplica são OPCIONAIS. Nenhum teste cobre o
+    comportamento do split: nem o roteamento por intenção (C2), nem read-after-write (C4), nem a
+    proibição de mutação pelo reader (C5).
+
+provenance:
+  tickets:
+    - CORE-DB-POOL-CONFIG-INVARIANT
+    - CORE-WORKER-RUNNER-POOL-REGISTRY
+    - CTR-DB-DRIVER-POOL-TUNING
+  issues: []
+  note: |
+    Vazio de propósito. Há tickets de pool no acervo (CTR-DB-DRIVER-POOL-TUNING,
+    CORE-DB-POOL-CONFIG-INVARIANT, CORE-WORKER-RUNNER-POOL-REGISTRY) cujo vínculo com este ADR não
+    foi lido — preencher na Fase 3, não por inferência de nome.

@@ -1,0 +1,299 @@
+id: ADR-0037
+title: HTTP-first — aposentadoria da CLI embutida; validação E2E via Bruno
+source: handbook/architecture/adr/0037-http-first-retire-embedded-cli.md
+decided_on: 2026-06-07
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0006, ADR-0025, ADR-0027, ADR-0028, ADR-0032, ADR-0033, ADR-0034, ADR-0038]
+  note_on_supersession: |
+    Declara supersessão PARCIAL de um documento que não é ADR: o Princípio VII da constituição
+    (`/.specify/memory/constitution.md` — "CLI-first; HTTP é Fase 2+"). Único caso do inventário em que um
+    ADR supersede material de fora da série — e a constituição vem do spec-kit, que a spec 038/039 está
+    aposentando.
+
+assessment:
+  verdict: realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Décimo `realized`, e o mais completo em matéria de REMOÇÃO — categoria em que o inventário só tinha
+    encontrado pendências.
+    A CLI embutida não existe mais: nenhum diretório `src/modules/*/cli/`, nenhum script `cli:*` no
+    `package.json`. O ADR previa remoção FASEADA ("congela-se hoje, remove-se quando cada módulo for
+    tocado") e ela foi concluída inteira.
+    A doutrina acompanhou, o que é raro aqui: `AGENTS.md:132` marca a skill de CLI como
+    "~~Subcomando de CLI~~ (aposentado — ADR-0037; CLI embutida removida)" e `AGENTS.md:169` registra
+    "(CLI embutida removida — CLI-RETIRE-EMBEDDED / ADR-0037. Validação E2E via Bruno +
+    fastify.inject.)". As duas linhas citam o ADR pelo número.
+    O pacote irmão `cli/` existe fora do core-api, como o §4 prescreve. E o domínio segue intacto — a
+    troca de UX não deixou marca em `domain/` nem `application/`, que é a tese de ports & adapters que o
+    §5 usa para justificar a mudança ser barata.
+
+extraction:
+  state: complete
+  covers: |
+    5 alegações — as cinco decisões numeradas. As três alternativas rejeitadas convergem para a mesma
+    proibição (duas UX primárias) e estão cobertas pela C1 + C2; a citação de Fielding é fundamentação.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/http-edge.md']
+    gap: |
+      Destilou como HTTP sendo a borda primária, correto.
+      O que não registrou: a aposentadoria já está **concluída**, não em curso — e é o único caso do
+      acervo em que uma remoção faseada foi levada até o fim. Para uma rule isso muda o tom: não é
+      "não crie CLI nova", é "a CLI não existe; recriá-la seria reintroduzir uma UX aposentada".
+
+claims:
+  - id: ADR-0037-C1
+    text: |
+      HTTP/HTTPS é a UX PRIMÁRIA do core-api. Toda capacidade de negócio é exposta e exercitada pela borda
+      HTTP (`/api/v1`, Fastify + Zod/OpenAPI). Isto SUPERSEDE o Princípio VII ("CLI-first") da
+      constituição; o "Constitution Check" passa a tratar HTTP como a borda esperada.
+    kind: obligation
+    source_lines: ['34-37']
+    applies_to:
+      - 'src/modules/*/adapters/http/**/*.ts'
+      - 'src/server.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth, budget-plans, contracts, financial, partners, programs, reports]
+      absent_in: []
+      evidence:
+        - 'src/server.ts:346 — os plugins HTTP dos módulos são registrados sob prefixo de versão, e a borda é o único adapter de entrada'
+        - 'ausência: nenhum diretório src/modules/*/cli/ — não há segunda UX'
+        - 'AGENTS.md:169 — comentário do bloco de comandos: (CLI embutida removida — CLI-RETIRE-EMBEDDED / ADR-0037. Validação E2E via Bruno + fastify.inject.)'
+        - 'nota: o Princípio VII vive em /.specify/memory/constitution.md, do spec-kit, que a spec 038/039 está aposentando — a supersessão perde o sujeito junto'
+      verify: |
+        ls -d src/modules/*/cli/ 2>&1 | head -2; grep -n "CLI embutida" AGENTS.md
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/modules/`, quando aparecer um adapter de entrada que não seja HTTP (CLI, REPL, worker
+        que aceite comando de negócio), então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        A borda de entrada de capacidade de negócio MUST ser HTTP. MUST NOT existir segundo adapter de
+        entrada (CLI, REPL) dentro do core-api — cliente externo consome a borda HTTP.
+      rationale: |
+        O ADR nomeia o custo de violar em três lugares diferentes ao rejeitar as alternativas: "mantém
+        duas UX primárias e a manutenção dupla", "custo de manter dois adapters de entrada para cada use
+        case, sem ganho", e a fidelidade menor da CLI in-memory. A regra vale porque o caminho de volta é
+        tentador e local: um `cli:seed` "só para dev" é uma linha de `package.json`, e vira a segunda UX
+        que ninguém decidiu adotar.
+
+  - id: ADR-0037-C2
+    text: |
+      A CLI EMBUTIDA no core-api é APOSENTADA. NÃO se criam novos subcomandos em `src/modules/*/cli/` nem
+      novos scripts `cli:*` no `package.json`. A remoção do código existente é FASEADA (não-bloqueante):
+      congela hoje, remove quando cada módulo for tocado. A skill `application-cli-builder` deixa de ser
+      caminho para novas features.
+    kind: prohibition
+    source_lines: ['39-42']
+    applies_to:
+      - 'src/modules/**'
+      - 'package.json'
+      - 'AGENTS.md'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhum diretório src/modules/*/cli/ existe — a remoção faseada foi CONCLUÍDA, não só congelada'
+        - 'ausência: nenhum script "cli:*" no package.json'
+        - 'AGENTS.md:132 — a linha da skill está riscada: "~~Subcomando de CLI~~ (aposentado — ADR-0037; CLI embutida removida)"'
+        - 'nota: a doutrina foi atualizada citando o ADR pelo número, em dois pontos do AGENTS.md — comportamento raro neste acervo'
+      verify: |
+        ls -d src/modules/*/cli/ 2>&1 | head -1; grep -n '"cli:' package.json; grep -n "Subcomando de CLI" AGENTS.md
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/modules/`, quando aparecer diretório `cli/`, ou `package.json` ganhar script `cli:*`,
+        então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        MUST NOT existir `src/modules/*/cli/` nem script `cli:*` no `package.json` do core-api.
+      rationale: |
+        Proibição puramente mecânica — dois greps — e é a forma mais barata de proteger a `C1`. Vale
+        registrar que este é o **único caso do inventário em que uma remoção faseada terminou**: o ADR
+        autorizava congelar e remover aos poucos, e o resultado é zero ocorrências. Regra fácil de
+        cumprir quando o estado já é limpo; o valor dela é impedir a reentrada.
+
+  - id: ADR-0037-C3
+    text: |
+      A validação de regras de negócio passa a ser feita por TESTES DE INTEGRAÇÃO REAIS via HTTP: o que a
+      P.O. validava na CLI passa a ser validado por COLEÇÕES BRUNO (ADR-0034) contra a borda HTTP real
+      mais testes de borda (`fastify.inject`). A fidelidade é maior — exercita serialização, autorização,
+      versionamento e contratos como em produção.
+    kind: obligation
+    source_lines: ['44-47']
+    applies_to:
+      - 'api-collections/**'
+      - 'tests/**/*.test.ts'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'nota: api-collections/core-api/ tem 266 arquivos .bru exercitando a borda real'
+        - 'package.json:69 — "test:integration:all": "bash scripts/e2e/bruno-all.sh", o runner que os executa'
+        - 'scripts/e2e/bruno-all.sh:95 — ( cd api-collections/core-api && bru run "${MAIN_FOLDERS[@]}" --env local … ) — execução contra o servidor real'
+        - 'AGENTS.md:169 — a doutrina registra o par: Validação E2E via Bruno + fastify.inject'
+      verify: |
+        find api-collections -name '*.bru' | wc -l; grep -n "bru run" scripts/e2e/bruno-all.sh | head -2
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dada uma capacidade de negócio exposta na borda, quando não houver `.bru` nem teste de borda que a
+        exercite, então o teste de cobertura falha. É a versão executável de "toda capacidade é
+        exercitada pela borda".
+      expected_error: null
+      blocker: null
+      enforced_by: ['.claude/rules/api-collections.md']
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Capacidade de negócio exposta na borda MUST ter cobertura na coleção Bruno OU em teste de borda
+        (`fastify.inject`). Validação de regra de negócio MUST NOT depender de adapter que não seja o de
+        produção.
+      rationale: |
+        Estreitado para a razão que o ADR dá e que é a parte transferível: a CLI in-memory não exercitava
+        "serialização, autorização, versionamento e contratos". O problema não era a CLI ser CLI — era
+        validar por um caminho que não é o de produção. Escrita assim, a regra cobre o próximo atalho
+        (validar chamando o use case direto no teste) com o mesmo argumento.
+
+  - id: ADR-0037-C4
+    text: |
+      A CLI do domínio é uma APLICAÇÃO À PARTE (`cli/`, binário `bc`), que sucede a CLI embutida, com
+      package manager e deploy próprios (Bun). Ela CONSOME a borda HTTP do core-api como cliente — NÃO
+      compartilha processo nem importa `src/` do core-api.
+    kind: prohibition
+    source_lines: ['49-51']
+    applies_to:
+      - 'src/**'
+    reality:
+      verdict: partial
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'nota: o pacote irmão existe fora do core-api, como diretório vizinho no mono_repo'
+        - 'ausência: nenhuma referência ao pacote cli/ dentro de src/ do core-api — a dependência é unidirecional'
+        - 'nota: o conteúdo do pacote cli/ não foi inspecionado nesta fase; o que se verifica daqui é apenas que o core-api não o conhece'
+      verify: |
+        ls -d ../cli 2>&1 | head -1; grep -rn "\.\./cli\|@bc/\|from 'bc'" src/ --include='*.ts' | head
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/` do core-api, quando houver import do pacote `cli/`, então o teste falha. A direção da
+        dependência MUST ser sempre cliente → borda HTTP.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        O core-api MUST NOT importar nem referenciar o pacote `cli/`. Cliente externo MUST consumir apenas
+        a borda HTTP.
+      rationale: |
+        A proibição vale na direção que o core-api controla, e é a única verificável daqui. Se ela cair, o
+        `cli/` deixa de ser cliente e volta a ser segunda UX no mesmo processo — desfazendo a `C1` sem
+        recriar nenhum diretório `cli/` dentro de `src/modules/`, o que a `C2` não pegaria.
+
+  - id: ADR-0037-C5
+    text: |
+      Domínio e application permanecem INTACTOS. Ports & adapters (ADR-0006) garante que a UX é um adapter
+      de entrada (driving) plugável: trocar a UX primária de CLI para HTTP NÃO TOCA `domain/` nem
+      `application/`. Specs que previam "paridade CLI" removem esse item.
+    kind: obligation
+    source_lines: ['53-56', '88-90']
+    applies_to:
+      - 'src/modules/*/domain/**'
+      - 'src/modules/*/application/**'
+    reality:
+      verdict: holds
+      holds_in: [auth, budget-plans, contracts, financial, partners, programs, reports]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhuma referência a CLI, argv, process.argv ou prompt em src/modules/*/domain/ e application/'
+        - 'nota: os use cases são invocados tanto por rota HTTP quanto por worker/job (composition root) sem adaptação — é a evidência de que a UX é plugável'
+        - 'nota: o ADR registra "Impacto em BCs / outbox / migrations: nenhum" — e de fato a aposentadoria da CLI não deixou migration nem evento'
+      verify: |
+        grep -rn "process.argv\|argv\|prompt(" src/modules/*/domain/ src/modules/*/application/ --include='*.ts' | head
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `domain/` e `application/`, quando houver referência a mecanismo de entrada (`process.argv`,
+        `req`, `reply`, prompt), então o teste falha — a camada MUST ser agnóstica de UX.
+      expected_error: null
+      blocker: null
+      enforced_by: ['eslint.config.js']
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar: é a regra de camada do `ADR-0006` (domínio não conhece adapter), já coberta pelas
+        rules de `domain.md`/`application.md` e com enforcement de lint. Registrar aqui como a EVIDÊNCIA
+        mais forte da tese: uma troca de UX primária aconteceu, com remoção completa de um adapter de
+        entrada, e o domínio não mudou. É o retorno concreto de ports & adapters neste repo — e vale mais
+        citado do que reescrito.
+
+findings:
+  - |
+    **Único caso do inventário em que uma remoção faseada foi concluída.** O ADR autorizava congelar
+    ("não se criam novos subcomandos") e remover "quando cada módulo for tocado" — o padrão que
+    normalmente produz resíduo indefinido. Resultado: zero `src/modules/*/cli/`, zero scripts `cli:*`.
+    Contrasta com as pendências abertas encontradas nos outros lotes (`Timeline` sem persistência,
+    expurgo de outbox, backfill nunca disparado em produção). Vale investigar o que diferenciou: aqui a
+    remoção tinha ticket próprio (`CLI-RETIRE-EMBEDDED`, citado no `AGENTS.md:169`), como o `ADR-0047`
+    tinha tabela de fatiamento.
+  - |
+    **A doutrina acompanhou este ADR e não acompanhou o `ADR-0034`, três dias antes.** `AGENTS.md:132` e
+    `:169` citam o `ADR-0037` pelo número e registram a aposentadoria; já o `ADR-0034` afirma na seção de
+    referências que atualizou o agente do Bruno ("§Status atualizado: SUPORTE → ADOTADO") e o arquivo
+    continua dizendo o contrário em cinco pontos. Mesmo repositório, mesma semana, dois ADRs: um fechou o
+    ciclo documental, o outro afirmou tê-lo fechado. A diferença sugere que o que funciona não é a
+    intenção declarada no ADR, e sim a existência de um ticket que toque os arquivos.
+  - |
+    **Este é o único ADR do acervo que supersede material fora da série de ADRs**: o Princípio VII da
+    constituição do spec-kit (`/.specify/memory/constitution.md`). O problema é que o sujeito da
+    supersessão está sendo aposentado por outra frente — a spec 038/039 remove o spec-kit inteiro. Quando
+    isso fechar, o `ADR-0037` passará a supersedar um documento que não existe, e a única forma de saber
+    que "HTTP-first" venceu "CLI-first" será este ADR. Argumento a favor de a decisão viver na série de
+    ADRs e não no documento externo — que é exatamente o que ele fez.
+  - |
+    A prova mais concreta de ports & adapters que o inventário encontrou: uma UX primária foi trocada, um
+    adapter de entrada inteiro foi removido, e `domain/`/`application/` não mudaram — sem migration, sem
+    evento, sem alteração de agregado. O ADR registra "Impacto em BCs / outbox / migrations: **nenhum**" e
+    a verificação confirma. Vale como resposta pronta a "por que separar camadas se dá mais trabalho".
+
+provenance:
+  tickets:
+    - CLI-RETIRE-EMBEDDED
+  issues: []
+  note: |
+    O ticket `CLI-RETIRE-EMBEDDED` é citado no `AGENTS.md:169` e não foi lido nesta fase. A constituição
+    (`/.specify/memory/constitution.md`) também não — ela é do spec-kit, cuja aposentadoria é objeto das
+    specs 038/039.

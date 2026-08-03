@@ -1,0 +1,171 @@
+id: ADR-0002
+title: Manter Node.js como runtime nesta fase
+source: handbook/architecture/adr/0002-keep-nodejs-runtime.md
+decided_on: 2026-04-27
+
+declared:
+  status: Accepted (versão superseded parcialmente por ADR-0009)
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0001, ADR-0009]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Segundo caso de supersessão parcial do inventário, e o mais simples de todos: o ADR-0009 substituiu
+    UMA palavra deste documento — a versão. "Node.js como runtime único" segue vigente e realizado;
+    "20 LTS" está morto e o real é 24.
+    O `declared.superseded_by` fica vazio de propósito, como no ADR-0024: marcar o documento inteiro
+    mataria a decisão de runtime, que é a substância. É o caso que mostra que a supersessão parcial não
+    é exceção rara — apareceu em 2 dos 13 registros, e nos dois o campo de documento seria enganoso.
+    A cláusula de validade ("vale até o fim da fase de migração ou primeira reavaliação por ADR novo")
+    funcionou duas vezes: gerou o ADR-0009 em 2026-04-28, e a Inquiry-0023 acaba de disparar o gatilho
+    de novo.
+
+extraction:
+  state: complete
+  covers: |
+    3 alegações — a escolha de runtime, a versão e a cláusula de validade. As consequências
+    (continuidade de ecossistema com o legado) são fundamentação, não regra de edição.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: JÁ COBERTO — stack já vive no AGENTS.md e no tsconfig.json, este último enforcement real
+    applied_to: []
+    gap: |
+      Mesmo agrupamento que o ADR-0009 recebeu, e a mesma limitação: "coberto" abrange a versão fixada
+      em manifesto, não a cláusula de validade nem a distinção entre escolha de runtime e escolha de
+      versão — que é justamente o que separa a metade vigente da metade morta.
+
+claims:
+  - id: ADR-0002-C1
+    text: |
+      Manter Node.js como runtime ÚNICO para `bff-gateway` e `core-api`.
+    kind: obligation
+    source_lines: [27]
+    applies_to:
+      - 'package.json'
+      - 'Dockerfile*'
+    reality:
+      verdict: holds
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'package.json:8 — engines.node >=24.0.0; não há Deno nem Bun no manifesto'
+        - 'handbook/inquiries/0023-typescript-7-native-spike.md §3.5 — Deno e Bun foram MEDIDOS como alternativas e nenhum verifica tipos; o deno check é mais lento que o TS 6 avulso (68,57s vs 52,76s / 1000 arquivos)'
+      verify: |
+        node -e "const p=require('./package.json');console.log('node:',p.engines?.node,'| deno/bun no manifesto:',!!(p.dependencies?.deno||p.dependencies?.bun))"
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `package.json` e o Dockerfile, quando aparecer runtime alternativo como dependência de
+        execução, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Node.js MUST ser o runtime único de execução. MUST NOT introduzir runtime alternativo sem
+        registro de decisão próprio.
+      rationale: |
+        Vigente, e agora com base medida: a Inquiry-0023 comparou Node, Deno e Bun e nenhum dos três
+        verifica tipos, o que remove o principal argumento a favor da troca. O ganho de checagem vem do
+        compilador, não do runtime.
+
+  - id: ADR-0002-C2
+    text: |
+      A versão do runtime é Node.js 20 LTS.
+    kind: obligation
+    source_lines: [27]
+    applies_to:
+      - 'package.json'
+    superseded_by: ADR-0009
+    reality:
+      verdict: contradicted
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'package.json:8 — engines.node é >=24.0.0, não 20'
+        - 'handbook/inquiries/0023-typescript-7-native-spike.md §3.1 — Node medido: v24.16.0'
+        - 'nota: o ADR-0009 declara superseder exatamente esta seção, e a razão está registrada nele — Node 20 entrou em EOL em abril/2026'
+      verify: |
+        node -e "console.log(require('./package.json').engines.node)"
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `package.json`, quando a major do Node divergir da fixada pelo registro vigente, então o
+        teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Superseded pelo ADR-0009 e contraditada pelo código. Descartar sem hesitação — diferente das
+        quatro alegações superseded do ADR-0024, aqui não há transição em curso: a troca de versão
+        aconteceu e terminou. A norma de versão vigente está na `ADR-0009-C1`.
+
+  - id: ADR-0002-C3
+    text: |
+      A decisão vale até o fim da fase de migração, ou até a primeira reavaliação por ADR novo.
+    kind: aspiration
+    source_lines: [29]
+    applies_to: []
+    reality:
+      verdict: holds
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'handbook/architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md:5 — o ADR-0009 se declara supersessão parcial deste, cumprindo a cláusula em 1 dia'
+        - 'handbook/inquiries/0023-typescript-7-native-spike.md §4.1 — a cláusula disparou de novo em 2026-07-31, agora com medição'
+      verify: |
+        grep -n "supersedes parcialmente" handbook/architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md
+    testability:
+      verdict: not-applicable
+      layer: null
+      red: |
+        Cláusula de validade não é regra de edição — não há teste. Registrada porque funcionou duas
+        vezes, o que a torna evidência do achado transversal sobre gatilhos.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Cumpriu a função e não vira regra. Vale como contraprova: das quatro cadeias de supersessão
+        analisadas, as duas que PERDERAM o raciocínio (`0003`→`0014`, `0004`→`0015`) não tinham cláusula
+        de validade nem gatilho; este ADR tinha, e o sucessor a honrou nominalmente em 24 horas.
+
+findings:
+  - |
+    Supersessão parcial de uma única palavra. O ADR-0009 substitui só a versão ("20 LTS"), e a escolha
+    de runtime segue vigente. Com o ADR-0024, são 2 de 13 registros onde `declared.superseded_by` no
+    nível do documento seria enganoso — a supersessão parcial não é caso raro, é padrão recorrente.
+  - |
+    A cláusula de validade deste ADR é a mais curta do acervo e a que mais funcionou: disparou em 1 dia
+    (gerando o ADR-0009) e disparou de novo em 2026-07-31 pela Inquiry-0023. Comparar com `0014` e
+    `0015`, que não têm cláusula alguma e por isso ninguém sabe quando revisitá-los.
+  - |
+    A alternativa de trocar de runtime foi MEDIDA em 2026-07-31, não apenas argumentada: Node, Deno e
+    Bun produziram a mesma saída corrompida no teste de tipo mentiroso, e o `deno check` é mais lento
+    que o TS 6 avulso. O ADR de 2026-04-27 acertou por raciocínio o que a medição confirmou três meses
+    depois.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    Inquiry-0004 gerou o ADR-0009 que supersede a versão deste; Inquiry-0023 reabre a questão com
+    medição. Nenhuma das duas lida integralmente nesta fase — a 0023 foi escrita a partir do spike do
+    dono do repo, nesta sessão.

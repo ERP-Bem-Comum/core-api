@@ -1,0 +1,305 @@
+id: ADR-0040
+title: Achados de agente viram GitHub Issues testáveis (tracker primário); OpenAPI/`oasdiff` como evolução
+source: handbook/architecture/adr/0040-agent-findings-as-github-issues.md
+decided_on: 2026-06-15
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0006, ADR-0027, ADR-0034]
+  note_on_status: |
+    O header diz `Accepted`, mas a seção da decisão se intitula "## Decisão (proposta)". Discrepância
+    interna de um documento aceito — registrada, sem consequência prática: a F1 foi executada.
+
+assessment:
+  verdict: realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Décimo terceiro `realized`, e o de MAIOR retorno mensurável do acervo. O ADR foi escrito quando o
+    repositório tinha, nas palavras dele, "**0 issues** hoje — greenfield". Hoje: **343 issues** (96
+    abertas), das quais **128 com o label `agent-found`** que a própria decisão criou.
+    A F1 inteira está no lugar. A skill `.claude/skills/issue-report/SKILL.md` existe e implementa a
+    idempotência exatamente como o §3 prescreve: `:58` define a `dedup-key` estável
+    `<modulo>:<area>:<slug-curto>` com exemplo (`contracts:create:program-id`), `:66` manda comentar em vez
+    de duplicar quando acha aberta com a mesma chave, e `:69` faz
+    `gh issue reopen <n> && gh issue comment <n>` no caso de regressão. Os labels `agent-found` e
+    `needs-triage` estão criados pela skill (`:75`) e vêm por default no template
+    (`.github/ISSUE_TEMPLATE/agent-finding.md:5`).
+    E a regra de processo fechou o ciclo: `AGENTS.md:209` é o anti-padrão #15, com o texto
+    "registre-o via skill `issue-report` (GitHub Issue testável, com critérios de aceite + dedup) e siga o
+    ticket corrente. Não perca o achado **nem** desvie o foco (ADR-0040)" — o ADR citado pelo número no
+    ponto onde a regra é cobrada.
+    As três camadas pesadas seguem adiadas, como decidido: nenhum `oasdiff` nem `openapi:emit` no CI.
+
+extraction:
+  state: complete
+  covers: |
+    5 alegações — as cinco decisões numeradas. As quatro fases do faseamento, o veredito de ROI e as cinco
+    alternativas (A–E) são fundamentação da C5.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['AGENTS.md']
+    gap: |
+      A regra aterrissou no `AGENTS.md` como anti-padrão #15, e é o lugar certo — vale para todo turno, não
+      para um diretório.
+      O que não registrou: o retorno medido. 128 issues `agent-found` de 343 totais é a evidência mais
+      forte do acervo de que uma decisão de PROCESSO pegou — e muda o enquadramento de uma futura rule,
+      que documenta hábito estabelecido em vez de pedir hábito novo.
+
+claims:
+  - id: ADR-0040-C1
+    text: |
+      GitHub Issues é o TRACKER PRIMÁRIO do backlog de achados. Os índices/resumos em prosa de
+      `handbook/tickets/` DEIXAM de ser mantidos à mão; os cards existentes viram HISTÓRICO — não se
+      deletam.
+    kind: obligation
+    source_lines: [30]
+    applies_to:
+      - 'handbook/tickets/**'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'nota: o tracker tem 343 issues (96 abertas) — o ADR foi escrito com "0 issues hoje — greenfield"'
+        - 'nota: 128 issues carregam o label agent-found criado por esta decisão'
+        - 'AGENTS.md:209 — o anti-padrão #15 direciona achados para issue, citando ADR-0040'
+        - 'nota: os cards de handbook/tickets/ seguem no repo como histórico; o ADR-0039 ainda cita um deles (done/CTR-HTTP-CANCEL-PENDING.md) como origem'
+      verify: |
+        gh issue list --state all --limit 700 --json number --jq 'length'; gh issue list --state all --label agent-found --limit 700 --json number --jq 'length'
+    testability:
+      verdict: unfalsifiable
+      layer: null
+      red: |
+        "É o tracker primário" não tem violação verificável — não existe artefato cuja presença prove que
+        alguém usou outro tracker. O que é testável é a consequência (índice em prosa não desatualiza),
+        e ela se prova pela ausência do índice, não pela existência do tracker.
+      expected_error: null
+      blocker: 'Escolha de ferramenta de processo; nada no repositório a contradiz observavelmente.'
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: replace
+      text: |
+        MUST NOT existir índice ou resumo em prosa que replique o estado de itens de backlog. Estado de
+        trabalho MUST ter uma fonte única consultável.
+      rationale: |
+        SUBSTITUÍDO: "GitHub Issues é o tracker" é escolha de ferramenta e não gera obrigação de edição. O
+        que gera é a causa-raiz que o ADR diagnostica — "a mesma verdade em 3 lugares, mantida
+        manualmente" — e essa vale como proibição durável, independente de qual tracker esteja em uso.
+        Convergente com o achado de duplicação de regra que já apareceu em outros pontos do inventário:
+        cópia manual de estado apodrece por construção.
+
+  - id: ADR-0040-C2
+    text: |
+      O AGENTE é o produtor. Ao encontrar um problema FORA DO ESCOPO do ticket atual, registra via a skill
+      `issue-report`, que preenche o template `.github/ISSUE_TEMPLATE/agent-finding.md` com CRITÉRIOS DE
+      ACEITE TESTÁVEIS (Dado/Quando/Então + caminho de erro) e Definition of Done amarrada ao gate W3.
+      Reforçado pelo anti-padrão #15 do `AGENTS.md` (scope-creep → issue, não conserto no meio do caminho).
+    kind: obligation
+    source_lines: [31]
+    applies_to:
+      - '.claude/skills/issue-report/SKILL.md'
+      - '.github/ISSUE_TEMPLATE/agent-finding.md'
+      - 'AGENTS.md'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'nota: .claude/skills/issue-report/SKILL.md e .github/ISSUE_TEMPLATE/agent-finding.md existem'
+        - 'AGENTS.md:209 — anti-padrão #15: registre-o via skill issue-report (GitHub Issue testável, com critérios de aceite + dedup) e siga o ticket corrente. Não perca o achado nem desvie o foco (ADR-0040)'
+        - '.claude/skills/issue-report/SKILL.md:92 — a criação passa --label "agent-found,needs-triage,<tipo>,<severidade-opcional>"'
+        - '.github/ISSUE_TEMPLATE/agent-finding.md:5 — labels: [agent-found, needs-triage] por default no template'
+        - 'nota: o gate W3 a que a Definition of Done se amarra está em aposentadoria pela spec 038 — a amarra perde o sujeito'
+      verify: |
+        grep -n "issue-report" AGENTS.md; grep -n "labels" .github/ISSUE_TEMPLATE/agent-finding.md
+    testability:
+      verdict: testable-with-work
+      layer: static
+      red: |
+        Dada uma issue com label `agent-found`, quando ela não tiver critério de aceite no formato
+        Dado/Quando/Então, então o teste falha. Exige consultar a API do GitHub — daí o
+        `testable-with-work`; o template mitiga na origem, mas não impede edição posterior.
+      expected_error: null
+      blocker: 'Verificar corpo de issue exige chamada à API, não é grep no repo.'
+      enforced_by: ['.github/ISSUE_TEMPLATE/agent-finding.md', 'AGENTS.md']
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Achado fora do escopo do ticket corrente MUST virar issue com critério de aceite testável
+        (Dado/Quando/Então mais caminho de erro) e MUST NOT ser consertado no mesmo trabalho. A Definition
+        of Done MUST citar o gate de qualidade vigente pelo nome, não por número de wave.
+      rationale: |
+        Estreitado num ponto que a verificação expôs: a DoD do template se amarra ao "gate W3", e o
+        pipeline W0→W3 está em aposentadoria (spec 038). Amarra a nomenclatura de um processo que sai
+        deixa a DoD apontando para nada. Citar o gate pelo que ele faz (`typecheck + format + lint + test`)
+        sobrevive à troca de processo — que é exatamente o tipo de acoplamento documental que este
+        inventário existe para achar.
+
+  - id: ADR-0040-C3
+    text: |
+      IDEMPOTÊNCIA por `dedup-key` (`<modulo>:<area>:<slug>`): a skill busca (`gh issue list --search`)
+      ANTES de criar — reincidência → comentário; regressão (issue fechada que voltou) → `reopen`. NUNCA
+      duplica.
+    kind: obligation
+    source_lines: [32]
+    applies_to:
+      - '.claude/skills/issue-report/SKILL.md'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - '.claude/skills/issue-report/SKILL.md:56 — seção "1. Defina a `dedup-key` e procure duplicata (idempotência)" — a busca é o PRIMEIRO passo'
+        - '.claude/skills/issue-report/SKILL.md:58 — A `dedup-key` é estável: `<modulo>:<area>:<slug-curto>` (ex.: `contracts:create:program-id`)'
+        - '.claude/skills/issue-report/SKILL.md:66 — "Achou aberta com a mesma dedup-key" → não duplique. Comente o novo contexto'
+        - '.claude/skills/issue-report/SKILL.md:69 — gh issue reopen <n> && gh issue comment <n> --body "Regressão: <evidência>." — o caminho de regressão'
+        - '.claude/skills/issue-report/SKILL.md:91 — --body-file /tmp/issue-<dedup-key>.md, a chave também nomeia o arquivo intermediário'
+      verify: |
+        grep -n "dedup-key\|reopen" .claude/skills/issue-report/SKILL.md | head -6
+    testability:
+      verdict: testable-with-work
+      layer: integration
+      red: |
+        Dado um achado já registrado, quando a skill roda de novo, então MUST comentar na issue existente e
+        MUST NÃO criar uma segunda. Dado um achado cuja issue está fechada, MUST reabrir. Verificar exige
+        exercitar a skill contra o GitHub.
+      expected_error: null
+      blocker: 'Idempotência contra estado remoto; não é verificável por grep.'
+      enforced_by: ['.claude/skills/issue-report/SKILL.md']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Registro automatizado de achado MUST ser idempotente por chave estável: buscar antes de criar,
+        comentar na reincidência, reabrir na regressão. MUST NOT criar issue sem consultar a chave.
+      rationale: |
+        É a mesma invariante que o `ADR-0022-C3` exige de projeção de read-model, aplicada a um produtor
+        de issues — e o modo de falha é o mesmo: at-least-once sem de-duplicação produz N cópias do mesmo
+        fato. Aqui o custo é ruído de tracker, que degrada a decisão inteira: um backlog com duplicatas
+        deixa de ser índice confiável, que era o problema original. A distinção reincidência × regressão é
+        o detalhe fino — comentar e reabrir são ações diferentes para estados diferentes da mesma chave.
+
+  - id: ADR-0040-C4
+    text: |
+      NOTIFICAÇÃO no Discord pelo WEBHOOK NATIVO do GitHub — issue aberta/fechada cai no canal, ZERO
+      CÓDIGO.
+    kind: obligation
+    source_lines: [33]
+    applies_to: []
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        Não verificável a partir da árvore: webhook é configuração de repositório (settings do GitHub),
+        não artefato versionado. Conferir em Settings → Webhooks se existe entrega para o canal, e se
+        os eventos assinados incluem issues aberta/fechada.
+    testability:
+      verdict: not-applicable
+      layer: null
+      red: |
+        Não há artefato no repositório para exercitar. A escolha do webhook nativo é justamente o que
+        elimina o código que poderia ser testado.
+      expected_error: null
+      blocker: |
+        Configuração fora da árvore versionada. O próprio faseamento do ADR registra "falta plugar o
+        webhook do Discord — passo manual seu", logo o estado sempre dependeu de ação fora do repo.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar: é decisão de integração operacional com "zero código" por desenho — não há o que
+        normatizar em `src/` nem em `.github/`. Vale registrar o critério, que é bom e reusável: preferir
+        webhook nativo a código próprio quando o requisito é só notificar. Menos superfície, nada a manter.
+
+  - id: ADR-0040-C5
+    text: |
+      Detecção SISTEMÁTICA de gap de contrato (`openapi:emit` + `oasdiff` no CI), tracker git-backed
+      agent-native (Beads) e broker always-on (VPS-QA + Watchtower + Caddy) ficam como EVOLUÇÃO FUTURA
+      (F-Plus) — cada um vira só MAIS UM PRODUTOR de issues, sem reescrever o resto.
+    kind: permission
+    source_lines: [34, '63-68']
+    applies_to:
+      - '.github/workflows/*.yml'
+      - 'package.json'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhum oasdiff nem openapi:emit em package.json ou .github/workflows/ — a F-Plus(a) segue adiada'
+        - 'ausência: nenhum Beads/bd no repo — a F-Plus(b) segue adiada'
+        - 'nota: as três camadas seguem "desenhadas mas adiadas", como o veredito de ROI decidiu'
+      verify: |
+        grep -rn "oasdiff\|openapi:emit\|beads" package.json .github/workflows/*.yml 2>/dev/null
+    testability:
+      verdict: not-applicable
+      layer: null
+      red: |
+        Adiamento não tem violação: construir a F-Plus não seria erro, seria a evolução prevista. O que
+        seria violação é construí-la SUBSTITUINDO o tracker, e isso é a `C1`.
+      expected_error: null
+      blocker: 'Decisão de adiamento; não gera invariante.'
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Nova fonte de detecção de problema MUST ser modelada como produtor adicional de issues no tracker
+        existente. MUST NOT introduzir tracker paralelo nem canal próprio de backlog.
+      rationale: |
+        É a parte arquitetural de um ADR que parece ser só de processo, e é a que dá o retorno: as três
+        camadas adiadas foram desenhadas como **produtores** do mesmo tracker, então ligar qualquer uma
+        delas não reescreve nada. Sem essa forma, `oasdiff` traria o próprio relatório, Beads o próprio
+        banco, e o repositório voltaria ao problema original — a mesma verdade em três lugares.
+
+findings:
+  - |
+    **A decisão com o retorno mais mensurável do acervo.** O ADR foi escrito registrando "**0 issues**
+    hoje — greenfield" como fato do contexto. Hoje o tracker tem **343 issues**, 96 abertas, e **128 com o
+    label `agent-found`** que esta decisão criou. Nenhum outro ADR do inventário permite medir a própria
+    adoção com um número — e o número diz que uma decisão de processo, com quase zero infraestrutura,
+    produziu mais artefato de backlog que qualquer decisão de arquitetura produziu de código.
+  - |
+    **O ciclo documental fechou: skill, template, label e regra, todos no lugar e citando o ADR.** A
+    `dedup-key` está implementada com o formato exato (`SKILL.md:58`), a busca é o passo 1 (`:56`), o
+    caminho de regressão faz `reopen` (`:69`), os labels vêm por default no template (`:5`), e o
+    `AGENTS.md:209` cobra o comportamento citando "ADR-0040". Contrasta diretamente com o `ADR-0034`, que
+    afirmou ter atualizado seu agente e não atualizou — mesma classe de tarefa, resultado oposto.
+  - |
+    **A Definition of Done do template se amarra ao "gate W3", que está sendo aposentado.** A spec 038
+    retira o pipeline W0→W3, e a DoD das issues aponta para ele por nome de wave. Não quebra nada hoje, e
+    é o tipo de acoplamento documental que só aparece quando alguém confronta duas frentes — motivo pelo
+    qual a `C2` propõe citar o gate pelo que ele faz (`typecheck + format + lint + test`) em vez de pela
+    posição no processo.
+  - |
+    **Modelar cada nova fonte como "produtor adicional de issues" é a decisão arquitetural escondida num
+    ADR de processo.** As três camadas adiadas (`oasdiff`, Beads, broker) foram desenhadas para alimentar
+    o MESMO tracker, e é isso que torna o adiamento barato: ligar qualquer uma não reescreve o resto. A
+    alternativa — cada ferramenta com o próprio relatório — recriaria exatamente a dor diagnosticada no
+    contexto ("a mesma verdade em 3 lugares").
+  - |
+    O header diz `Accepted` e a seção se intitula "## Decisão (proposta)". Sem consequência prática — a F1
+    foi executada e medida —, mas é a segunda inconsistência de status encontrada no lote 8c, depois do
+    par `0048`/`0051`. Vale para o gate de numeração/status já proposto: conferir também se o corpo do
+    ADR concorda com o próprio header.
+
+provenance:
+  tickets:
+    - CTR-HTTP-CANCEL-PENDING
+  issues: []
+  note: |
+    A skill `issue-report` e o template `agent-finding.md` foram lidos nos pontos citados. O ADR também
+    referencia `src/shared/http/app.ts:148-162` (`/docs/json`) e `ERP-INFRA/platform/vps-qa` (infra para a
+    F-Plus) — não lidos. A contagem de issues foi obtida via `gh` em 2026-07-31.

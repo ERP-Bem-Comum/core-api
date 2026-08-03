@@ -1,0 +1,369 @@
+id: ADR-0022
+title: Read-Models via Projeção sobre o Event Stream (Timeline agora, AuditLog diferido)
+source: handbook/architecture/adr/0022-read-models-via-projection-over-event-stream.md
+decided_on: 2026-05-26
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0006, ADR-0014, ADR-0015, ADR-0020, ADR-0024, ADR-0045]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    O PADRÃO se realizou e se espalhou; o ALVO nomeado não saiu. O outbox é de fato o log append-only
+    canônico (nenhum event-store separado foi criado), e existem TRÊS projetores consumindo o
+    event-delivery: `contract-count-projection`, `payable-view-projection` e
+    `supplier-view-projection`, com read-models `par_contract_count_view`, `fin_payable_view` e
+    `fin_supplier_view`, e jobs de backfill para dois deles — o que prova a reconstrutibilidade.
+    O item 3 ("Timeline: **implementar agora**, projeção por contrato em `ctr_timeline_*`") está
+    construído — e sem persistência. Existem o domínio (`domain/timeline/`), o projetor
+    (`timeline-projection.delivery.ts`), o use case UC-08 (`get-contract-timeline.ts`) e o DTO de borda
+    (`timeline-dto.ts`). O que NÃO existe é a tabela: o único adapter do `TimelineRepository` é
+    `timeline-repository.in-memory.ts`. A rota responde, a trilha aparece, e o dado morre no restart —
+    falso-verde de funcionalidade, e a invariante de reconstrutibilidade da `C4` não se aplica a algo
+    que nunca foi persistido.
+    E o AuditLog segue diferido com o pré-requisito ATENDIDO: o ADR o condiciona a identidade/RBAC, que
+    existe desde o ADR-0024.
+
+extraction:
+  state: complete
+  covers: |
+    7 alegações — as três decisões numeradas mais as quatro invariantes normativas. A tabela de
+    alternativas rejeitadas é fundamentação.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/adapters.md']
+    gap: |
+      Destilou com precisão: "O outbox **é** o log append-only canônico — não criar event-store
+      separado. Read-model é **projeção** alimentada pelo event-delivery, nunca por query direta na
+      tabela de entrega. Projetor idempotente por `eventId`; read-model é derivado e reconstruível".
+      As quatro partes corretas.
+      O que não verificou, e são duas coisas: a Timeline de contrato está construída mas SEM
+      PERSISTÊNCIA (o único adapter é in-memory); e a idempotência por `eventId` só vale num dos três
+      projetores — os outros dois usam upsert com guard de recência (ADR-0045), mecanismo diferente.
+
+claims:
+  - id: ADR-0022-C1
+    text: |
+      O outbox é o log append-only canônico de eventos de domínio. NÃO criar tabela de event-store
+      separada — seria redundante com o que o outbox já é.
+    kind: prohibition
+    source_lines: [35, '27-29']
+    applies_to:
+      - 'src/modules/*/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth, budget-plans, contracts, financial, notifications, partners, programs]
+      absent_in: []
+      evidence:
+        - 'ausência: não existe tabela de event-store separada em nenhum dos sete módulos com persistência'
+        - 'nota: os sete outboxes retêm as entradas após entrega — o worker seta processed_at, não deleta (ver ADR-0015-C3)'
+        - 'src/modules/contracts/adapters/persistence/schemas/mysql.ts:361 — índice processed_at/occurred_at, que é o que torna o outbox varrível como log'
+      verify: |
+        grep -rhoE "'[a-z_]*(event_store|eventstore|event_log)[a-z_]*'" src/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado os schemas, quando aparecer tabela de event-store paralela ao outbox, então o teste falha
+        — duplicaria write-path e dado.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        O outbox MUST ser o único log de eventos de domínio. MUST NOT existir event-store separado.
+        A entrada MUST ser retida após a entrega (marcar processada, nunca deletar).
+      rationale: |
+        A retenção é a parte que sustenta tudo: sem ela o outbox é fila, não log, e a
+        reconstrutibilidade da `C4` cai. Vale explicitar as duas coisas juntas — o ADR as separa entre
+        o achado (linha 27) e a decisão (linha 35).
+
+  - id: ADR-0022-C2
+    text: |
+      Read-models são PROJEÇÕES sobre o stream, alimentadas pelo caminho de event-delivery existente
+      (worker → EventDelivery → handler projetor). NUNCA derivadas por query direta na tabela de
+      entrega.
+    kind: obligation
+    source_lines: [37, 52]
+    applies_to:
+      - 'src/workers/**/*.ts'
+      - 'src/modules/*/adapters/persistence/repos/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [partners, financial]
+      absent_in: []
+      evidence:
+        - 'nota: três projetores existem em src/workers/ — contract-count-projection, payable-view-projection, supplier-view-projection'
+        - 'src/workers/contract-count-projection/delivery.ts:18 — o handler recebe o eventId da row de entrega, consumindo o event-delivery'
+        - 'nota: os read-models são par_contract_count_view, fin_payable_view e fin_supplier_view'
+        - 'ausência: nenhuma leitura de negócio que faça SELECT na tabela de outbox para montar view'
+      verify: |
+        ls src/workers/; grep -rhoE "'[a-z_]+_view'" src/ --include='*.ts' | sort -u
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um read-model, quando ele for populado por SELECT na tabela de outbox em vez de pelo
+        handler de event-delivery, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Read-model MUST ser populado por handler de event-delivery. MUST NOT ser derivado por query na
+        tabela de outbox.
+      rationale: |
+        O ADR dá a razão e ela é boa: a tabela de entrega tem `payload` em `varchar` serializado
+        (consulta ruim) e auditoria transversal exigiria unir N outboxes, ofendendo o isolamento do
+        ADR-0006. A proibição protege as duas coisas de uma vez.
+
+  - id: ADR-0022-C3
+    text: |
+      Projetores são IDEMPOTENTES — reprocessar um evento não duplica linha, com chave por `eventId`.
+    kind: obligation
+    source_lines: [39, 78]
+    applies_to:
+      - 'src/workers/**/*.ts'
+    reality:
+      verdict: partial
+      holds_in: [partners]
+      absent_in: []
+      evidence:
+        - 'src/workers/contract-count-projection/delivery.ts:18 — usa eventId, com tabela par_contract_count_processed como registro de processados'
+        - 'nota: os outros dois projetores (payable-view, supplier-view) usam upsert com guard de recência por occurred_at, mecanismo do ADR-0045 — idempotentes, mas NÃO por eventId'
+        - 'nota: a divergência de mecanismo é a mesma registrada na ADR-0015-C6, onde propus admitir os dois'
+      verify: |
+        grep -rn "eventId\|onDuplicateKeyUpdate" src/workers/*/delivery.ts src/modules/financial/adapters/persistence/repos/*view*.ts | head
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado um evento já projetado, quando entregue de novo (at-least-once), então o read-model MUST
+        ficar idêntico. Se duplicar ou somar duas vezes, o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: replace
+      text: |
+        Projetor MUST ser idempotente. O mecanismo MAY ser registro de processados por `eventId` OU
+        upsert com guard de recência por `occurred_at` — mas MUST estar declarado no adapter.
+      rationale: |
+        Mesmo texto proposto na `ADR-0015-C6`, alcançado por caminho independente — quinto par de regras
+        convergentes do inventário. Exigir `eventId` como mecanismo único tornaria os dois projetores
+        de view em violação, quando eles usam a alternativa que o próprio ADR-0045 introduziu por bons
+        motivos.
+
+  - id: ADR-0022-C4
+    text: |
+      O read-model é DERIVADO — nunca fonte de verdade. Pode ser truncado e reconstruído reprocessando
+      o log.
+    kind: obligation
+    source_lines: [40, 79]
+    applies_to:
+      - 'src/jobs/**/*.ts'
+      - 'src/workers/**/*.ts'
+    reality:
+      verdict: partial
+      holds_in: [financial]
+      absent_in: [partners]
+      evidence:
+        - 'nota: existem jobs de backfill para dois read-models — src/jobs/financial/payable-view-backfill e src/jobs/financial/supplier-view-backfill'
+        - 'ausência: não existe backfill para par_contract_count_view'
+        - 'nota: a existência do backfill é a prova operacional da reconstrutibilidade; sem ele, "pode ser reconstruído" é afirmação sem mecanismo'
+      verify: |
+        ls src/jobs/*/
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um read-model, quando não existir caminho de reconstrução (job de backfill ou reprojeção),
+        então o teste falha. Hoje falha em `par_contract_count_view`.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Todo read-model MUST ter caminho de reconstrução a partir do log, executável de forma isolada.
+        MUST NOT ser tratado como fonte de verdade.
+      rationale: |
+        "É reconstruível" só vale se houver o comando que reconstrói. Dois dos três têm; o terceiro não.
+        E há precedente do custo de não ter: a memória do projeto registra que o `fin_payable_view`
+        exigiu backfill para a Posição de Pagamentos acender — a reconstrução não é hipótese, é operação.
+
+  - id: ADR-0022-C5
+    text: |
+      Timeline: IMPLEMENTAR AGORA. Projeção por contrato em tabela `ctr_timeline_*`, dentro do módulo
+      contracts. UC-02 devolve contrato + trilha; UC-08 lê a trilha. Ordenação por `occurredAt`.
+    kind: obligation
+    source_lines: [42, 71]
+    applies_to:
+      - 'src/modules/contracts/domain/timeline/**'
+      - 'src/modules/contracts/adapters/persistence/repos/timeline-repository.*.ts'
+      - 'src/modules/contracts/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: partial
+      holds_in: [contracts]
+      absent_in: []
+      evidence:
+        - 'src/modules/contracts/adapters/event-delivery/timeline-projection.delivery.ts:24 — o projetor trata ContractActivated, consumindo o event-delivery'
+        - 'src/modules/contracts/application/use-cases/get-contract-timeline.ts:19 — getContractTimeline, o UC-08 (ler a trilha)'
+        - 'src/modules/contracts/adapters/http/timeline-dto.ts:12 — timelineEntryToDto expõe a trilha na borda'
+        - 'src/modules/contracts/adapters/persistence/repos/timeline-repository.in-memory.ts:8 — InMemoryTimelineRepository é o ÚNICO adapter do TimelineRepository'
+        - 'nota: o domínio tem src/modules/contracts/domain/timeline com o port TimelineRepository e a função de projeção toTimelineEntry'
+        - 'ausência: não existe tabela ctr_timeline_*; as tabelas de contracts são ctr_contracts, ctr_amendments, ctr_documents, ctr_contract_homologated_amendments, ctr_outbox, ctr_outbox_dead_letter, ctr_job_runs e as duas de sequência'
+      verify: |
+        find src/modules/contracts -iname "*timeline*"; grep -rhoE "'ctr_[a-z_]+'" src/modules/contracts/adapters/persistence/schemas/mysql.ts | grep -vE "_idx|_chk|_fk|_uq|_dlq" | sort -u
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um port de read-model exposto na borda, quando o único adapter disponível for in-memory,
+        então o teste falha — read-model sem persistência morre com o processo e não é reconstruível a
+        partir do log, contradizendo a `C4`. Hoje falha na Timeline.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Read-model exposto na borda MUST ter adapter persistente. Adapter in-memory MUST existir apenas
+        para teste, nunca como única implementação.
+      rationale: |
+        A Timeline foi construída inteira — domínio, projetor, use case, DTO de borda — e ficou sem
+        tabela. O efeito é pior que "não implementada": a rota responde, a trilha aparece, e o dado
+        desaparece no próximo restart. É falso-verde de funcionalidade. E a `C4` (reconstruível do log)
+        não se aplica a algo que nunca foi persistido.
+
+  - id: ADR-0022-C6
+    text: |
+      AuditLog: mesmo padrão de projeção, transversal, mas DIFERIDO até identidade/RBAC — sem ator
+      autenticado, auditoria é de fachada. Reabrir quando RBAC existir.
+    kind: obligation
+    source_lines: [44, 72]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in: [core-api]
+      evidence:
+        - 'ausência: nenhuma tabela com audit no nome em src/ — o AuditLog segue não materializado'
+        - 'nota: o PRÉ-REQUISITO foi atendido — o ADR-0024 entregou identidade e RBAC, e o próprio ADR-0024 registra que destrava o AuditLog deste ADR'
+        - 'nota: mesma ausência registrada na ADR-0006-C7, que lista a auditoria atômica entre as garantias OBRIGATÓRIAS do modular monolith'
+      verify: |
+        grep -rhoE "'[a-z_]*audit[a-z_]*'" src/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dada uma mutação de domínio com ator autenticado, quando não gerar entrada de auditoria na
+        mesma transação, então o teste falha. Hoje não há o que exercitar.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Entrada de auditoria MUST ser gravada na mesma transação da mutação que a origina, com o ator
+        autenticado. O AuditLog MUST ser projeção transversal, fora dos prefixos de módulo.
+      rationale: |
+        Mesmo texto proposto na `ADR-0006-C7`, por caminho independente — e aqui com a informação que
+        falta lá: o diferimento tinha CONDIÇÃO explícita ("reabrir quando RBAC existir") e a condição
+        foi cumprida pelo ADR-0024. É diferimento com gatilho disparado, não decisão em aberto.
+
+  - id: ADR-0022-C7
+    text: |
+      Timeline é APPEND-ONLY (R1) — correção via evento de retificação, nunca update ou delete. Sem
+      JSON nativo: colunas decompostas e tipadas por tipo de evento.
+    kind: prohibition
+    source_lines: [80, 81, 38]
+    applies_to:
+      - 'src/modules/financial/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        grep -n "fin_document_timeline" -A 20 src/modules/financial/adapters/persistence/schemas/mysql.ts | grep -iE "update|delete|json"
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dada uma entrada de timeline, quando algum caminho emitir UPDATE ou DELETE sobre ela, então o
+        teste falha — correção MUST ser entrada nova de retificação.
+      expected_error: null
+      blocker: null
+      enforced_by: ['.semgrep/rules.yml']
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Tabela de timeline MUST ser append-only: correção MUST entrar como registro de retificação.
+        MUST NOT haver UPDATE nem DELETE sobre entrada existente.
+      rationale: |
+        A metade "sem JSON" já é enforçada pela rule semgrep e normatizada na `ADR-0020-C3` — estreitar
+        para a metade que é exclusiva deste ADR (append-only) evita duplicar. Não verificado nesta fase:
+        a Timeline de contrato só tem adapter in-memory (ver `C5`), e a de documento vive no financial
+        (`fin_document_timeline`, `fin_timeline_field_changes`) — auditar as duas é trabalho de Fase 2.
+
+findings:
+  - |
+    **Read-model completo e sem persistência** — nova classe de achado. A Timeline de contrato tem
+    domínio, projetor, use case e DTO de borda, e o único adapter do `TimelineRepository` é in-memory.
+    Não é "não implementada": é implementada e volátil. A rota responde, a trilha aparece, e o dado
+    desaparece no restart. Pior que ausência, porque ausência é visível e isto passa por pronto.
+    O ADR-0022 exige, na mesma decisão, que o read-model seja "derivado, truncável e reconstruído
+    reprocessando o log" (`C4`) — propriedade que não se aplica a algo que nunca foi gravado.
+  - |
+    Registro de método: minha primeira leitura marcou esta alegação como `absent`, com base num grep de
+    nome de tabela (`'ctr_*timeline*'`) que não retornou nada. O erro só apareceu porque o grep seguinte,
+    feito para outra alegação, encontrou `timeline-projection.delivery.ts`. Duas lições: nome de tabela é
+    proxy ruim para "a feature existe", e `mysqlTable(` multilinha derrota grep de uma linha — a mesma
+    armadilha que produziu o falso-negativo de `zod` no `ADR-0027` e o de `createPool` no `adapters.md`.
+  - |
+    O diferimento do AuditLog tem gatilho e o gatilho disparou. O ADR o condiciona a "quando RBAC
+    existir", e o RBAC existe desde o ADR-0024 — que inclusive registra, do seu lado, que destrava este
+    AuditLog. Dois ADRs apontando um para o outro, e o item continua não materializado. É o terceiro
+    gatilho cumprido do acervo cuja consequência não foi executada.
+  - |
+    Idempotência de projeção tem DOIS mecanismos no repo: registro de processados por `eventId`
+    (`par_contract_count_processed`) e upsert com guard de recência por `occurred_at` (ADR-0045). O ADR
+    prescreve só o primeiro. A regra proposta admite os dois, exigindo que o escolhido seja explícito —
+    quinto par de regras convergentes do inventário, junto com a `ADR-0015-C6`.
+  - |
+    "Read-model é reconstruível" tem prova operacional em dois dos três: existem jobs de backfill para
+    `fin_payable_view` e `fin_supplier_view`. Para `par_contract_count_view` não há. A diferença importa:
+    sem o job, a reconstrutibilidade é propriedade afirmada, não capacidade disponível.
+
+provenance:
+  tickets:
+    - CTR-TIMELINE-READ-MODEL
+    - FIN-LISTAGEM-TIMELINE
+    - FIN-TIMELINE-CHANGES-BOUNDS
+    - FIN-TIMELINE-MODEL-TIDY
+  issues: []
+  note: |
+    Inquiry-0017 (Timeline vs ADR-0020) e Inquiry-0018 (AuditLog transversal) são as origens declaradas
+    — nenhuma lida. O ADR dispara o ticket CTR-TIMELINE-READ-MODEL, que está no acervo e não foi lido;
+    dado que `ctr_timeline_*` não existe, vale verificar na Fase 3 se ele foi fechado, redirecionado ou
+    nunca executado. Os tickets de timeline que existem são do financial (FIN-LISTAGEM-TIMELINE,
+    FIN-TIMELINE-CHANGES-BOUNDS, FIN-TIMELINE-MODEL-TIDY).

@@ -1,0 +1,233 @@
+id: ADR-0032
+title: Composição de leitura transitória no adapter HTTP (rota gorda com Sunset) até o BFF v2
+source: handbook/architecture/adr/0032-transient-http-composition-read-until-bff.md
+decided_on: 2026-06-02
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0005, ADR-0006, ADR-0014, ADR-0025, ADR-0046, ADR-0049]
+
+assessment:
+  verdict: realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Terceiro `realized` do inventário, e o mais interessante: é uma DÍVIDA TÉCNICA cumprida à risca.
+    As quatro invariantes conferem. O núcleo ficou limpo — nenhum campo de `partners` entrou em
+    `contracts/domain` ou `application`. O cross-módulo passa pela `public-api`
+    (`composition.ts:63` importa `#src/modules/partners/public-api/index.ts`). E a transitoriedade está
+    declarada em três superfícies como o ADR pediu: header `Deprecation: true` (`plugin.ts:261,312`),
+    header `Sunset` com a condição de remoção em texto (`:262,313`), e comentário citando a RFC 8594.
+    O código chega a documentar a própria invariante:
+    `contractor-composition.ts:6` — "NUNCA toca `par_*` direto".
+    É o contraexemplo mais forte do inventário contra a tese de que doutrina não pega: aqui a dívida
+    nasceu marcada, com dono futuro nomeado e condição de saída explícita, e continua marcada dois
+    meses depois.
+
+extraction:
+  state: complete
+  covers: |
+    4 alegações — as quatro invariantes inegociáveis. A régua "dado de outro módulo → composição na
+    borda; atributo do próprio contrato → evolui o agregado" está na quarta.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/http-edge.md']
+    gap: |
+      Destilou como "Rota composta é transitória e marcada; **dado de outro módulo → borda; atributo
+      próprio → agregado**" — e a segunda metade é a parte que mais vale, porque é a régua que impede
+      tanto a corrupção do agregado quanto a composição desnecessária.
+      Não verificou se a marcação existe. Existe, nas três superfícies.
+
+claims:
+  - id: ADR-0032-C1
+    text: |
+      Núcleo limpo: `domain/` e `application/` não ganham nenhum campo de outro módulo nem lógica de
+      apresentação. O agregado `Contract` modela só o ciclo de vida.
+    kind: prohibition
+    source_lines: [32, 37]
+    applies_to:
+      - 'src/modules/contracts/domain/**/*.ts'
+      - 'src/modules/contracts/application/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhum import de partners em src/modules/contracts/domain/ ou application/ — verificado na varredura de fronteira do ADR-0006-C4, que deu zero violações nos oito módulos'
+        - 'src/modules/contracts/adapters/http/contractor-composition.ts:6 — a composição do contratado vive na BORDA, não no agregado'
+      verify: |
+        grep -rn "partners" src/modules/contracts/domain/ src/modules/contracts/application/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `contracts/domain/` ou `contracts/application/`, quando importar de `partners`, então o
+        teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como texto: é caso particular da `ADR-0006-C4` (cross-módulo só por `public-api`), já
+        proposta com escopo geral e com o mesmo RED. Manter aqui criaria regra por par de módulos, que
+        não escala para os 8.
+
+  - id: ADR-0032-C2
+    text: |
+      Cross-módulo só por `public-api`: a rota composta lê Parceiros pela public-api de LEITURA de
+      Parceiros — NUNCA por SELECT em `par_*`.
+    kind: prohibition
+    source_lines: [38, 33]
+    applies_to:
+      - 'src/modules/contracts/adapters/http/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts]
+      absent_in: []
+      evidence:
+        - 'src/modules/contracts/adapters/http/composition.ts:63 — importa de #src/modules/partners/public-api/index.ts'
+        - 'src/modules/contracts/adapters/http/composition.ts:263 — abre o partners read port pela public-api, com erro tipado se falhar'
+        - 'src/modules/contracts/adapters/http/contractor-composition.ts:6 — comentário declara a invariante: "NUNCA toca par_* direto"'
+        - 'ausência: nenhum acesso a tabela par_* de dentro de contracts fora do port injetado'
+      verify: |
+        grep -rn "par_" src/modules/contracts/ --include='*.ts' | grep -v "public-api"
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `contracts/`, quando aparecer referência a tabela `par_*` fora de port obtido pela
+        `public-api` de partners, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Leitura de dado de outro módulo MUST passar por port obtido da `public-api` daquele módulo.
+        MUST NOT haver referência a tabela de outro módulo (`par_*`, `fin_*`, `auth_*`…) fora do módulo
+        dono.
+      rationale: |
+        Complementa a `ADR-0006-C4` numa dimensão que ela não cobre: aquela proíbe IMPORT cross-módulo
+        de camada interna; esta proíbe acesso à TABELA de outro módulo. São dois caminhos distintos para
+        a mesma erosão, e o segundo não é pego por varredura de import. Verificável por nome de tabela.
+
+  - id: ADR-0032-C3
+    text: |
+      Transitoriedade declarada: a rota composta nasce marcada como provisória — comentário-cabeçalho
+      `@deprecated`/`@transient` no handler, headers `Deprecation` e `Sunset` (RFC 8594), e nota no
+      OpenAPI. Condição de remoção explícita: quando o BFF v2 assumir a composição.
+    kind: obligation
+    source_lines: [39]
+    applies_to:
+      - 'src/modules/contracts/adapters/http/plugin.ts'
+    reality:
+      verdict: holds
+      holds_in: [contracts]
+      absent_in: []
+      evidence:
+        - 'src/modules/contracts/adapters/http/plugin.ts:258 — comentário declara a transitoriedade via Deprecation/Sunset (RFC 8594) e nomeia a condição de saída: "Sai quando o BFF v2 assumir"'
+        - 'src/modules/contracts/adapters/http/plugin.ts:261 — reply.header(Deprecation, true)'
+        - 'src/modules/contracts/adapters/http/plugin.ts:262 — reply.header(Sunset, "quando o BFF v2 assumir a composição do contratado")'
+        - 'src/modules/contracts/adapters/http/plugin.ts:312 — a segunda rota composta repete as duas marcações'
+      verify: |
+        grep -n "Deprecation\|Sunset" src/modules/contracts/adapters/http/plugin.ts
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dada uma rota marcada como composição transitória, quando a resposta não trouxer `Deprecation` e
+        `Sunset`, então o teste falha. É verificável por `fastify.inject`, sem rede.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Rota de composição transitória MUST responder com `Deprecation: true` e `Sunset` contendo a
+        condição de remoção. A condição MUST nomear quem assume a responsabilidade.
+      rationale: |
+        Cumprida nas três superfícies, e é o melhor exemplo do acervo de dívida com data de validade em
+        vez de dívida escondida. O que a torna regra útil não é a marcação em si — é exigir que o
+        `Sunset` nomeie o SUCESSOR, que é o que impede a dívida de sobreviver ao esquecimento.
+
+  - id: ADR-0032-C4
+    text: |
+      A régua: dado de outro módulo → composição na borda; atributo do próprio contrato → evolui o
+      agregado. Campos intrínsecos (`classification`, `contractModel`, `contractType`, categorização,
+      centro de custo, observações) NÃO são composição — entram no agregado quando o produto precisar.
+    kind: obligation
+    source_lines: [42, 40]
+    applies_to:
+      - 'src/modules/contracts/domain/**/*.ts'
+      - 'src/modules/contracts/adapters/http/**/*.ts'
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        grep -rn "classification\|contractModel\|contractType" src/modules/contracts/domain/ --include='*.ts' | head
+    testability:
+      verdict: testable-with-work
+      layer: static
+      red: |
+        Dado um campo novo no DTO da rota composta, quando ele for atributo intrínseco do contrato e não
+        vier de outro módulo, então ele MUST estar no agregado — não montado na borda.
+      expected_error: null
+      blocker: |
+        Exige distinguir "atributo próprio" de "dado de outro módulo" campo a campo, o que nenhuma
+        varredura estática decide sozinha. Precisa da lista de campos intrínsecos, que o ADR começa mas
+        não fecha ("quando o produto precisar deles").
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Dado que vem de outro módulo MUST ser composto na borda. Atributo intrínseco do agregado
+        MUST evoluir o agregado. MUST NOT montar na borda o que é campo próprio.
+      rationale: |
+        É a metade que a 039 destacou, e com razão: sem ela, a rota composta vira o lugar onde qualquer
+        campo novo é "montado", e o agregado apodrece por omissão. A régua é clara na formulação e
+        difícil de mecanizar — candidata a item de code review, não a lint.
+
+findings:
+  - |
+    Melhor exemplo do acervo de dívida técnica que NÃO virou dívida escondida. O ADR exigiu marcação em
+    três superfícies e as três existem dois meses depois: comentário citando a RFC 8594, header
+    `Deprecation: true`, e header `Sunset` cujo valor é a própria condição de remoção — "quando o BFF v2
+    assumir a composição do contratado". Nomear o sucessor no `Sunset` é o detalhe que faz a dívida
+    sobreviver ao esquecimento.
+  - |
+    O código documenta a invariante que o ADR fixou:
+    `contracts/adapters/http/contractor-composition.ts:6` — "NUNCA toca `par_*` direto". Quarto caso do
+    inventário em que o comentário no ponto de aplicação torna a verificação um grep, junto com o
+    `ADR-0050`, o `ADR-0027` e o `ADR-0020`.
+  - |
+    A `C2` descobre uma dimensão de erosão que a `ADR-0006-C4` não cobre: aquela proíbe IMPORT
+    cross-módulo de camada interna; esta proíbe acesso à TABELA de outro módulo. Um módulo pode respeitar
+    a primeira e violar a segunda com um `SELECT` em `par_*` dentro do próprio adapter de persistência —
+    e varredura de import não pega. São dois enforcements distintos.
+  - |
+    Este ADR é a razão pela qual a proibição de composição do `ADR-0005` sobreviveu à pressão: quando a
+    necessidade apareceu, a composição foi para o adapter HTTP do core-api, não para o BFF. Registrado
+    também na `ADR-0005-C3` — os dois registros se sustentam mutuamente.
+
+provenance:
+  tickets:
+    - CONTRACTS-DETAIL-COMPOSITION-HTTP
+    - PARTNERS-CONTRACTOR-READ-PORT
+  issues: []
+  note: |
+    O ADR cria a necessidade de um READ na public-api de Parceiros, que o acervo atende em
+    PARTNERS-CONTRACTOR-READ-PORT e CONTRACTS-DETAIL-COMPOSITION-HTTP — nenhum lido. O ADR-0049
+    (fronteira core-api ↔ BFF, `Proposed`) é o estado-alvo que remove esta rota e entra no lote 8.
