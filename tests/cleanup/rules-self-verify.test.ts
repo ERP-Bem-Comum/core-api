@@ -1,0 +1,153 @@
+/**
+ * RULES-SELF-VERIFY — as rules de `.claude/rules/` se verificam contra o código.
+ *
+ * Origem: spec 040 (Fase 4). As 12 rules originais foram destiladas de ADRs sem confrontar `src/`,
+ * e 11 afirmações eram FALSAS — instrução que um agente obedece. Rule que não se verifica envelhece
+ * em silêncio, e o custo é código escrito a partir de premissa errada.
+ *
+ * Este gate cobre DUAS propriedades distintas:
+ *
+ *   1. ESTRUTURA  — todo glob de `paths:` casa com pelo menos um arquivo real. Um glob morto faz a
+ *                   rule nunca carregar, inclusive no arquivo que ela mesma governa.
+ *   2. ATUALIDADE — cada entrada de `verify:` ainda descreve o repositório. Note que este gate falha
+ *                   tanto na PIORA quanto na MELHORA: se alguém escrever o teste que hoje falta, a
+ *                   afirmação "não há teste" deixa de ser verdade e a linha tem de sair da rule.
+ *                   Nos dois casos a ação é a mesma — revisar a rule.
+ *
+ * NÃO cobre obediência: quando uma norma é mecanizável, ela vira teste próprio (ver
+ * `pool-builder-single-source.test.ts`) e SAI do texto da rule. Rule é o estágio anterior ao
+ * mecanismo, nunca o acompanhante dele — a mesma verdade em dois lugares é a fábrica de drift
+ * diagnosticada no ADR-0040.
+ *
+ * ESCOPO: apenas as rules que DECLARAM `verify:` — hoje as reconstruídas pela spec 040. As demais
+ * seguem fora até a fatia delas, para que dívida conhecida de uma rule não deixe o gate vermelho
+ * para todas. Quando a última for reconstruída, este escopo passa a ser o conjunto inteiro.
+ *
+ * Verificação declarativa, sem shell: o front-matter descreve CONJUNTOS de arquivos, não comandos.
+ * Este repositório é público — um gate que executasse comando declarado num `.md` seria execução
+ * arbitrária via pull request.
+ */
+
+import { describe, it } from 'node:test';
+import { strict as assert } from 'node:assert';
+import { readFileSync, readdirSync, statSync, globSync } from 'node:fs';
+import { join, resolve, relative, sep } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { parse } from 'yaml';
+
+const HERE = fileURLToPath(new URL('.', import.meta.url));
+const PROJECT_ROOT = resolve(HERE, '..', '..');
+const RULES_DIR = join(PROJECT_ROOT, '.claude', 'rules');
+
+type VerifyEntry = Readonly<{
+  claim: string;
+  root: string;
+  pattern: string;
+  expect: readonly string[];
+}>;
+
+type RuleDoc = Readonly<{
+  file: string;
+  paths: readonly string[];
+  verify: readonly VerifyEntry[];
+}>;
+
+const isRecord = (v: unknown): v is Record<string, unknown> =>
+  typeof v === 'object' && v !== null && !Array.isArray(v);
+
+const asStringArray = (v: unknown): readonly string[] =>
+  Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+
+const asVerifyEntries = (v: unknown): readonly VerifyEntry[] => {
+  if (!Array.isArray(v)) return [];
+  const out: VerifyEntry[] = [];
+  for (const raw of v) {
+    if (!isRecord(raw)) continue;
+    const { claim, root, pattern } = raw;
+    if (typeof claim !== 'string' || typeof root !== 'string' || typeof pattern !== 'string') {
+      continue;
+    }
+    out.push({ claim, root, pattern, expect: asStringArray(raw['expect']) });
+  }
+  return out;
+};
+
+/** Extrai o bloco YAML entre os dois `---` de abertura do arquivo. */
+const frontMatter = (content: string): unknown => {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---/.exec(content);
+  if (match?.[1] === undefined) return undefined;
+  return parse(match[1]) as unknown;
+};
+
+const readRules = (): readonly RuleDoc[] => {
+  const out: RuleDoc[] = [];
+  for (const entry of readdirSync(RULES_DIR).sort()) {
+    if (!entry.endsWith('.md')) continue;
+    const fm = frontMatter(readFileSync(join(RULES_DIR, entry), 'utf-8'));
+    if (!isRecord(fm)) continue;
+    const verify = asVerifyEntries(fm['verify']);
+    // Opt-in: sem `verify:` a rule ainda não foi reconstruída e fica fora deste gate.
+    if (verify.length === 0) continue;
+    out.push({ file: entry, paths: asStringArray(fm['paths']), verify });
+  }
+  return out;
+};
+
+/** Lista recursiva de arquivos sob `root`, em paths relativos ao projeto, formato posix. */
+const walk = (root: string): readonly string[] => {
+  const out: string[] = [];
+  const visit = (dir: string): void => {
+    for (const entry of readdirSync(dir)) {
+      if (entry.startsWith('.')) continue;
+      const full = join(dir, entry);
+      const st = statSync(full);
+      if (st.isDirectory()) visit(full);
+      else if (st.isFile()) out.push(relative(PROJECT_ROOT, full).split(sep).join('/'));
+    }
+  };
+  visit(join(PROJECT_ROOT, root));
+  return out;
+};
+
+const filesContaining = (root: string, pattern: string): readonly string[] =>
+  walk(root)
+    .filter((rel) => readFileSync(join(PROJECT_ROOT, rel), 'utf-8').includes(pattern))
+    .sort();
+
+const RULES = readRules();
+
+describe('RULES-SELF-VERIFY — rules reconstruídas se sustentam contra o código', () => {
+  it('há ao menos uma rule no gate (guarda contra escopo que esvaziou)', () => {
+    // Sem esta guarda, um erro de parse tornaria todo o resto verde por vacuidade.
+    assert.ok(RULES.length > 0, 'nenhuma rule com `verify:` encontrada em .claude/rules/');
+  });
+
+  for (const rule of RULES) {
+    describe(rule.file, () => {
+      it('todo glob de `paths:` casa com pelo menos um arquivo real', () => {
+        const dead = rule.paths.filter((p) => globSync(p, { cwd: PROJECT_ROOT }).length === 0);
+        assert.deepEqual(
+          dead,
+          [],
+          `globs de \`paths:\` que não casam nada em ${rule.file} — a rule nunca carrega neles:\n` +
+            dead.join('\n'),
+        );
+      });
+
+      for (const entry of rule.verify) {
+        it(`afirmação ainda vale: ${entry.claim}`, () => {
+          const found = filesContaining(entry.root, entry.pattern);
+          assert.deepEqual(
+            found,
+            [...entry.expect].sort(),
+            `A afirmação de ${rule.file} deixou de descrever o repositório.\n` +
+              `  afirmação: ${entry.claim}\n` +
+              `  esperado:  ${entry.expect.length > 0 ? entry.expect.join(', ') : '(nenhum arquivo)'}\n` +
+              `  encontrado: ${found.length > 0 ? found.join(', ') : '(nenhum arquivo)'}\n` +
+              'Atualize ou remova a linha da rule — inclusive se a mudança foi uma melhoria.',
+          );
+        });
+      }
+    });
+  }
+});
