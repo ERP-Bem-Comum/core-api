@@ -31,7 +31,7 @@ src/modules/contracts/
 └── public-api/                # Contrato público para outros módulos (ADR-0006)
     ├── events.ts              # ContractsModuleEvent + decoder versionado v1 + isContractsModuleEvent
     ├── http.ts, migrate.ts, permissions.ts, read.ts
-    └── index.ts               # Barrel — único ponto de import externo ao módulo
+    └── index.ts               # Barrel — um dos pontos de entrada, não o único (ver `public-api.md`)
 ```
 
 > VOs transversais (`Money`, `NonZeroMoney`, `Period`, `PlainDate`, `UserRef`, `Cpf`, `Cnpj`) vivem em [`src/shared/kernel/`](../../src/shared/kernel/), não em `domain/shared/`. A CLI embutida foi retirada (ADR-0037) — a UX primária é a borda HTTP em `adapters/http/`.
