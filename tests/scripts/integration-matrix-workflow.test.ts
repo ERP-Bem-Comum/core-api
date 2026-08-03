@@ -14,7 +14,7 @@
  * POR QUE RED AGORA: o workflow não existe → `tryRead` devolve '' → o guard `present()` de cada
  * `it()` falha com "workflow ... ausente". As invariantes específicas (matrix, gatilhos, gate,
  * SHA-pin, ausência de `|| true`) só passam depois que o W1 escrever o `integration.yml` honrando
- * o DRAFT da seção 8 de `.claude/.planning/ci-integration-gate-523/CI-INTEGRATION-DESIGN.md`.
+ * o DRAFT da seção 8 de `context/planning/ci-integration-gate-523/CI-INTEGRATION-DESIGN.md`.
  *
  * ─────────────────────────────────────────────────────────────────────────────────────────────
  * FASE 2 (atual) — a matriz é 100% verde: os 4 defeitos que a Fase 0 (report-only) expôs foram

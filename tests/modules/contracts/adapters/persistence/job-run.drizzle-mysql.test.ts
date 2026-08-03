@@ -2,7 +2,7 @@
 //
 // INSERT IGNORE em `ctr_job_runs` (PK job_name+run_key): a 1ª instância adquire (true), as demais
 // batem na PK e desistem (false). Backstop barato p/ "só uma instância roda o cron do dia"
-// (ADR-0041; ver .claude/.planning/SHARED-STORE-AND-JOB-COORDINATION.md — Kleppmann: lock de eficiência).
+// (ADR-0041; ver context/planning/SHARED-STORE-AND-JOB-COORDINATION.md — Kleppmann: lock de eficiência).
 // GATE: MYSQL_INTEGRATION=1. DEVE FALHAR em W0 (claimJobRun inexistente — erro já no import).
 
 import { describe, before, after, it } from 'node:test';

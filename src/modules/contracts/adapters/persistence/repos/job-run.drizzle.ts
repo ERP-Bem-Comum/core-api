@@ -3,7 +3,7 @@
 // `claimJobRun` faz `INSERT IGNORE` em `ctr_job_runs` (PK job_name+run_key): a 1ª instância insere
 // (affectedRows=1 → adquiriu) e roda o job; as demais batem na PK (affectedRows=0 → não adquiriu) e
 // desistem. Backstop barato sobre o cron singleton — lock de EFICIÊNCIA (jobs já idempotentes), sem
-// Redis/etcd (ver .claude/.planning/SHARED-STORE-AND-JOB-COORDINATION.md; Kleppmann).
+// Redis/etcd (ver context/planning/SHARED-STORE-AND-JOB-COORDINATION.md; Kleppmann).
 //
 // Boundary: try/catch → Result; nenhum Error cruza a borda (.claude/rules/adapters.md).
 
