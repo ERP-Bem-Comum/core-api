@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Guia canônico do projeto para agentes de IA (Claude Code e outros). Esta é a **fonte de verdade única** de contexto do repositório — o `CLAUDE.md` é apenas um stub que importa `@AGENTS.md`. Regras de camada estão escopadas em [`.claude/rules/`](./.claude/rules/) — carregam só quando o agente toca arquivos do diretório alvo (ver `paths:` em cada arquivo). Material de tooling do Claude Code (worktrees, checkpoints, commands, bug #47936) vive em [`.claude/runbooks/claude-code-cheatsheet.md`](./.claude/runbooks/claude-code-cheatsheet.md), fora do contexto default.
+Guia canônico do projeto para agentes de IA (Claude Code e outros). Esta é a **fonte de verdade única** de contexto do repositório — o `CLAUDE.md` é apenas um stub que importa `@AGENTS.md`. Regras de camada estão escopadas em [`.claude/rules/`](./.claude/rules/) — carregam só quando o agente toca arquivos do diretório alvo (ver `paths:` em cada arquivo). Material de tooling do Claude Code (worktrees, checkpoints, commands, bug #47936) vive em [`context/runbooks/claude-code-cheatsheet.md`](./context/runbooks/claude-code-cheatsheet.md), fora do contexto default.
 
 ---
 
@@ -51,7 +51,7 @@ Nunca contradizer um ADR aceito — abrir novo ADR que `supersedes` o anterior, 
 
 ## Idioma (regra invariante)
 
-**Fonte única.** Esta tabela é a única definição de idioma/nomenclatura por camada no repo. `.claude/output-styles/erp-contracts.md` e `.claude/README.md` apontam para cá — não replicar a tabela em outro arquivo.
+**Fonte única.** Esta tabela é a única definição de idioma/nomenclatura por camada no repo. `.claude/README.md` aponta para cá — não replicar a tabela em outro arquivo.
 
 | Camada                                                                      | Idioma                            | Exemplo                                                                                                                            |
 | --------------------------------------------------------------------------- | --------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
@@ -77,7 +77,7 @@ Este repo é desenvolvido com uso intensivo de IA. A política de contribuição
 - **Trailer `Assisted-by:` obrigatório** em todo commit gerado/materialmente modificado por IA — `Assisted-by: AGENT_NAME:MODEL_VERSION [ferramenta]` (ex.: `Assisted-by: Claude-Code:claude-opus-4-8`). Utilitários triviais (git, pnpm, tsc, editor) são omitidos.
 - **A IA NUNCA adiciona `Signed-off-by`.** Só um humano certifica o [DCO](https://developercertificate.org/) — quando houver DCO, quem assina é a pessoa.
 - **O humano é o dono de cada linha.** Quem submete revisa todo o código-IA, garante licença e **assume responsabilidade integral** — todo bug/falha de segurança de código-IA recai sobre a pessoa, não sobre a ferramenta.
-- **Mesmo processo, sem trilha paralela.** Código-IA passa pela mesma Pipeline W0→W3 e pelos mesmos gates required (`integração (gate)` + `typecheck + format + lint + test`) que código humano.
+- **Mesmo processo, sem trilha paralela.** Código-IA passa pelos mesmos gates required (`integração (gate)` + `typecheck + format + lint + test`) que código humano.
 
 ---
 
@@ -92,32 +92,9 @@ Regras por camada (domínio, application, adapters, testes, módulo contracts) e
 
 ---
 
-## Pipeline fail-first W0→W3
-
-**Toda mudança em código de produção** abre um ticket em `.claude/.pipeline/<TICKET-ID>/`. Bug fix trivial (1-3 linhas) ou mudança de config pode ir direto.
-
-```
-.claude/.pipeline/<TICKET-ID>/
-├── 000-request.md           # escopo (humano escreve antes)
-├── STATE.json               # canônico — gerenciado por `pnpm run pipeline:state` (CTR-PIPELINE-STATE-JSON)
-├── STATE.md                 # gerado de STATE.json — não editar à mão
-├── 002-tests/REPORT.md      # W0 — testes RED (falham por inexistência da API)
-├── 003-impl/REPORT.md       # W1 — implementação mínima até GREEN
-├── 004-code-review/REVIEW.md  # W2 — audit read-only (max 3 rounds)
-└── 005-quality/REPORT.md    # W3 — tsc + format + tests + build
-```
-
-**Disciplina:** W0 RED antes de tocar `src/`. W1 implementa o mínimo. W2 read-only, max 3 rounds antes de escalar. W3 = `pnpm run typecheck` + `pnpm run format:check` + `pnpm test` todos verdes.
-
-**STATE.json é canônico** a partir de `CTR-PIPELINE-STATE-JSON`. Tickets novos usam `pnpm run pipeline:state init <ticket> --size <X>` em vez de criar `STATE.md` à mão. Tickets legados (sem `STATE.json`) continuam válidos como histórico.
-
-Tickets fechados em `.claude/.pipeline/` são histórico auditável — **não deletar**.
-
----
-
 ## Roteamento via `contratos-orchestrator`
 
-[`./.claude/agents/contratos-orchestrator.md`](./.claude/agents/contratos-orchestrator.md) é o **ponto de entrada único**. Identifica intenção, decide se delega para um **agente especialista** (tecnologia) ou para uma **skill** (técnica/disciplina), e orquestra as 4 waves.
+[`./.claude/agents/contratos-orchestrator.md`](./.claude/agents/contratos-orchestrator.md) é o **ponto de entrada único**. Identifica intenção, decide se delega para um **agente especialista** (tecnologia) ou para uma **skill** (técnica/disciplina).
 
 ### Agentes especialistas (por tecnologia em `handbook/reference/`)
 
@@ -125,7 +102,7 @@ Carrega **um único** agente por turno.
 
 | Quando o tema é…                                                                  | Agente                                                                         |
 | --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Roteamento + pipeline W0→W3                                                       | [`contratos-orchestrator`](./.claude/agents/contratos-orchestrator.md)         |
+| Roteamento de tarefa                                                              | [`contratos-orchestrator`](./.claude/agents/contratos-orchestrator.md)         |
 | TypeScript / type system / Modules / tsconfig                                     | [`typescript-language-expert`](./.claude/agents/typescript-language-expert.md) |
 | Node.js runtime / `node:test` / ESM / signals / AsyncLocalStorage                 | [`nodejs-runtime-expert`](./.claude/agents/nodejs-runtime-expert.md)           |
 | Drizzle ORM (schema, query builder, Drizzle Kit, transações)                      | [`drizzle-orm-expert`](./.claude/agents/drizzle-orm-expert.md)                 |
@@ -195,26 +172,6 @@ pnpm run worker:outbox         # worker do outbox em foreground; env CONTRACTS_D
 pnpm run db:generate          # Drizzle Kit → src/modules/contracts/adapters/persistence/migrations/mysql/
 pnpm run secrets:setup        # gera ./secrets/*.txt para docker-compose
 
-# Pipeline state (CTR-PIPELINE-STATE-JSON)
-pnpm run pipeline:state init <ticket> --size S
-pnpm run pipeline:state wave-start <ticket> W0 --agent tdd-strategist
-pnpm run pipeline:state wave-finish <ticket> W0 --outcome RED --report 002-tests/REPORT.md
-pnpm run pipeline:state wave-round <ticket> W2     # incrementa round (max 3)
-pnpm run pipeline:state wave-reopen <ticket> W2    # reabre wave done+REJECTED → in-progress (round++, max 3)
-pnpm run pipeline:state wave-override <ticket> W2 --reason "<motivo>"  # autorização humana: destrava wave done+REJECTED já no teto (rounds>=3); grava motivo+instante no STATE
-pnpm run pipeline:state close <ticket>             # exige todas as 4 waves done
-pnpm run pipeline:state render <ticket>            # regenera STATE.md de STATE.json
-
-# Pipeline dashboard (CTR-PIPELINE-DASHBOARD)
-pnpm run pipeline:status                    # tabela markdown de todos os tickets com STATE.json
-pnpm run pipeline:status --filter open      # só open + in-progress
-pnpm run pipeline:status --filter closed    # só closed-green + closed-rejected
-pnpm run pipeline:status --json             # output JSON para tooling
-
-# Pipeline metrics (CTR-PIPELINE-METRICS)
-pnpm run pipeline:metrics                   # markdown com agregações
-pnpm run pipeline:metrics --json            # JSON
-pnpm run pipeline:metrics --write           # grava em .claude/.pipeline/_METRICS.md
 ```
 
 Pre-commit hook: `.claude/hooks/pre-commit-typecheck.sh` (ativar via `git config core.hooksPath .claude/hooks`).
@@ -270,14 +227,13 @@ Fechar `pnpm test`/W3 com falha não-endereçada (mesmo que "alheia") é o anti-
 ## Onde mais procurar
 
 - **Regras por camada (path-scoped):** [`.claude/rules/`](./.claude/rules/) — domain, application, adapters, testing, módulo contracts. Carregam sob demanda.
-- **Cheatsheet do Claude Code:** [`.claude/runbooks/claude-code-cheatsheet.md`](./.claude/runbooks/claude-code-cheatsheet.md) — `/clear`, `/compact`, `/rewind`, `/btw`, `/recap`, `!` prefix, `--from-pr`, worktrees, checkpoints, bug #47936, cache invalidation. Abrir sob demanda.
-- **Output style do projeto:** [`.claude/output-styles/erp-contracts.md`](./.claude/output-styles/erp-contracts.md) — idioma PT/EN por camada, citação literal do handbook, commit PT-BR. Ativo em `.claude/settings.json#outputStyle`. Aplica após `/clear` ou nova sessão.
+- **Cheatsheet do Claude Code:** [`context/runbooks/claude-code-cheatsheet.md`](./context/runbooks/claude-code-cheatsheet.md) — `/clear`, `/compact`, `/rewind`, `/btw`, `/recap`, `!` prefix, `--from-pr`, worktrees, checkpoints, bug #47936, cache invalidation. Abrir sob demanda.
 - **Statusline rica:** [`.claude/statusline.sh`](./.claude/statusline.sh) — modelo + ticket ativo + branch + PR + cache hit ratio + cost + rate limits. Atualiza após cada turn, cacheia git + ticket por 5s.
 - **`.worktreeinclude`:** [`.worktreeinclude`](./.worktreeinclude) — arquivos gitignored copiados automaticamente em todo novo `claude --worktree` (secrets/, .env).
 - **Auto memory:** `~/.claude/projects/<hash>/memory/MEMORY.md` (carregado integral no startup). Lições registradas: `pnpm always`, `Outbox MySQL planning paused`, `Announce skill+path before invoking`, `Maestro plugin blocked`, `Sub-agent #47936 mitigation`. Doc: [`handbook/reference/claude-code/memory.md`](./handbook/reference/claude-code/memory.md).
 - **Referências de tecnologia:** [`handbook/reference/<tech>/`](./handbook/reference/) — typescript, nodejs, drizzle, mysql, mysql2, docker, pnpm, fastify, nodemailer. Cada subdir tem agente especialista próprio (tabela acima).
 - **Domínio formal:** [`handbook/domain_questions/contratos/`](./handbook/domain_questions/contratos/) e [`handbook/domain/`](./handbook/domain/).
-- **Planejamento pausado:** [`.claude/.planning/`](./.claude/.planning/) — `OUTBOX-MYSQL.md`, `SUBAGENT-INTERRUPTION-FIX.md`.
+- **Planejamento pausado:** [`context/planning/`](./context/planning/) — `OUTBOX-MYSQL.md`, `SUBAGENT-INTERRUPTION-FIX.md`.
 
 ---
 

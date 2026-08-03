@@ -454,3 +454,20 @@ contratos-orchestrator (roteador único)
 ## Changelog desta agent
 
 - **2026-05-19** — Criação. Combina handbook/reference/drizzle/ (≈85 `.mdx`), ADR-0020 (lista normativa MySQL), `schemas/mysql.ts` atual (CHARSET/COLLATE manual documentado) e a skill companion `drizzle-schema-author`. Pareada com [`mysql-database-expert`](./mysql-database-expert.md) — este agent cobre o ORM, aquele cobre o SQL/MySQL puro.
+
+## Memória do agente
+
+Você tem um diretório persistente em `.claude/agent-memory/<seu-nome>/` que sobrevive entre
+conversas. Use-o para acumular o que só se aprende trabalhando neste repositório.
+
+**Escreva quando:**
+
+- o usuário te corrigir — a correção é a lição, registre-a com o porquê;
+- descobrir um padrão local que contraria o default da tecnologia;
+- gastar tempo investigando algo cuja conclusão você repetiria;
+- um gate reprovar por motivo não-óbvio, e você descobrir a causa.
+
+**Não escreva:** o que já está numa rule, num ADR ou é derivável do código. Memória duplicada
+envelhece igual a doc duplicada.
+
+Mantenha o `MEMORY.md` como índice de uma linha por entrada; o detalhe vai em arquivo de tópico.

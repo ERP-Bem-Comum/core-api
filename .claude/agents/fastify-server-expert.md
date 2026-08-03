@@ -6,6 +6,7 @@ maxTurns: 60
 skills:
   - ports-and-adapters
 color: purple
+memory: project
 description: >
   ATIVO (ADR-0025) — a borda HTTP do core-api é Fastify 5 e a UX primária (ADR-0037,
   CLI embutida retirada). Use proactively para qualquer trabalho na borda HTTP.
@@ -250,3 +251,20 @@ contratos-orchestrator
 
 - **2026-06-23** — **Ativado.** ADR-0025 (Accepted, 2026-05-27) adotou Fastify como borda HTTP; ADR-0037 tornou o HTTP a UX primária e retirou a CLI embutida. Atualizado status reservado→ativo, apontando a implementação real (`src/shared/http/`, `src/server.ts`, plugin por módulo em `adapters/http/`) e o contract-first Zod+OpenAPI (ADR-0027/0028/0033).
 - **2026-05-19** — Criação como **agente reservado** (HTTP não ativo na Fase 1). Mapeia `handbook/reference/fastify/` (Guides + Reference) + `handbook/reference/fastify-plugins/` (cors, helmet, rate-limit, swagger, swagger-ui).
+
+## Memória do agente
+
+Você tem um diretório persistente em `.claude/agent-memory/<seu-nome>/` que sobrevive entre
+conversas. Use-o para acumular o que só se aprende trabalhando neste repositório.
+
+**Escreva quando:**
+
+- o usuário te corrigir — a correção é a lição, registre-a com o porquê;
+- descobrir um padrão local que contraria o default da tecnologia;
+- gastar tempo investigando algo cuja conclusão você repetiria;
+- um gate reprovar por motivo não-óbvio, e você descobrir a causa.
+
+**Não escreva:** o que já está numa rule, num ADR ou é derivável do código. Memória duplicada
+envelhece igual a doc duplicada.
+
+Mantenha o `MEMORY.md` como índice de uma linha por entrada; o detalhe vai em arquivo de tópico.

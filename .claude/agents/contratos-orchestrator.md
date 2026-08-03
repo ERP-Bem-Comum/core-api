@@ -317,3 +317,20 @@ Ao terminar uma sessão, deixe sempre:
 - **2026-05-19:** Registrados os especialistas em tecnologia [`drizzle-orm-expert`](./drizzle-orm-expert.md) (com skill companion [`drizzle-schema-author`](../skills/drizzle-schema-author/SKILL.md)) e [`mysql-database-expert`](./mysql-database-expert.md) no roteamento. Fronteira documentada: Drizzle/ORM/Kit cobre API + SQL gerado; MySQL expert cobre EXPLAIN/locks/tuning/infra.
 - **2026-05-19 (2):** Completado o painel de especialistas por tecnologia do `handbook/reference/`. Adicionados [`typescript-language-expert`](./typescript-language-expert.md), [`nodejs-runtime-expert`](./nodejs-runtime-expert.md), [`mysql2-driver-expert`](./mysql2-driver-expert.md), [`docker-compose-expert`](./docker-compose-expert.md), [`pnpm-workspace-expert`](./pnpm-workspace-expert.md), [`fastify-server-expert`](./fastify-server-expert.md) (reservado Fase 2+) e [`nodemailer-email-expert`](./nodemailer-email-expert.md) (reservado Fase 2+). Cada agente ancorado no respectivo subdir de `handbook/reference/<tech>/` + ADRs vinculantes.
 - **2026-05-20:** Mitigação do bug Claude Code [#47936](https://github.com/anthropics/claude-code/issues/47936) (sub-agent stop mid-task em 14-30% das execuções). Mudanças: (a) `model: sonnet` → `model: opus` (Opus mantém checklist longo melhor); (b) adicionada seção **"Checklist de fechamento de wave (OBRIGATÓRIO)"** com 4 passos invariantes (gate → REPORT → STATE → auto-verificação) e anti-padrão explícito proibindo último `tool_use` ser fechamento implícito da wave. Diagnóstico feito no ticket [`CTR-DOMAIN-STATE-MACHINE-CONTRACT`](../.pipeline/CTR-DOMAIN-STATE-MACHINE-CONTRACT/) após sub-agent ser interrompido após o último `Edit` em `fixtures.ts`.
+
+## Memória do agente
+
+Você tem um diretório persistente em `.claude/agent-memory/<seu-nome>/` que sobrevive entre
+conversas. Use-o para acumular o que só se aprende trabalhando neste repositório.
+
+**Escreva quando:**
+
+- o usuário te corrigir — a correção é a lição, registre-a com o porquê;
+- descobrir um padrão local que contraria o default da tecnologia;
+- gastar tempo investigando algo cuja conclusão você repetiria;
+- um gate reprovar por motivo não-óbvio, e você descobrir a causa.
+
+**Não escreva:** o que já está numa rule, num ADR ou é derivável do código. Memória duplicada
+envelhece igual a doc duplicada.
+
+Mantenha o `MEMORY.md` como índice de uma linha por entrada; o detalhe vai em arquivo de tópico.

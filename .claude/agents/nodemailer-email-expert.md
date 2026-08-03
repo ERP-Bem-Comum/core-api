@@ -6,6 +6,7 @@ maxTurns: 60
 skills:
   - ports-and-adapters
 color: purple
+memory: project
 description: >
   Use proactively for Nodemailer SMTP adapter work (ATIVO desde
   CTR-EMAIL-ADAPTER-NODEMAILER, 2026-05-21). Trigger: "adapter SMTP do
@@ -271,3 +272,20 @@ contratos-orchestrator
 
 - **2026-05-19** — Criação como **agente reservado** (email não ativo na Fase 1). Ancora em `handbook/reference/nodemailer/` (≈35 `.md`) + ADR-0010. Adapter SMTP atrás do `EmailPort`; nunca importa no domínio.
 - **2026-05-21** — **Ativado** via `CTR-EMAIL-ADAPTER-NODEMAILER` (W1). Adapter de produção `createNodemailerEmailSender` em `src/modules/notifications/adapters/email/nodemailer.ts` + parser puro `parseSmtpConfig` em `nodemailer-config.ts`. Heurística `mapNodemailerError` traduz `EENVELOPE`/`EAUTH`/`5xx` → `EmailError` tagged. Tests Ethereal guarded por `NOTIFICATIONS_INTEGRATION=1`.
+
+## Memória do agente
+
+Você tem um diretório persistente em `.claude/agent-memory/<seu-nome>/` que sobrevive entre
+conversas. Use-o para acumular o que só se aprende trabalhando neste repositório.
+
+**Escreva quando:**
+
+- o usuário te corrigir — a correção é a lição, registre-a com o porquê;
+- descobrir um padrão local que contraria o default da tecnologia;
+- gastar tempo investigando algo cuja conclusão você repetiria;
+- um gate reprovar por motivo não-óbvio, e você descobrir a causa.
+
+**Não escreva:** o que já está numa rule, num ADR ou é derivável do código. Memória duplicada
+envelhece igual a doc duplicada.
+
+Mantenha o `MEMORY.md` como índice de uma linha por entrada; o detalhe vai em arquivo de tópico.

@@ -4,6 +4,7 @@ tools: Read, Glob, Grep, Edit, Bash
 model: haiku
 maxTurns: 30
 color: yellow
+memory: project
 description: >
   Use proactively for pnpm 10.x work (ADR-0012). Trigger: adicionar/remover
   dependência, editar `package.json` scripts, configurar `.npmrc`, definir
@@ -266,3 +267,20 @@ contratos-orchestrator
 ## Changelog
 
 - **2026-05-19** — Criação. Ancora em `handbook/reference/pnpm/` (≈70 `.md` + `cli/` + `settings/`) + ADR-0011 (supply-chain) + ADR-0012 (pnpm). Reforça invariantes do projeto: corepack, `only-allow=pnpm`, `--frozen-lockfile` em CI, postinstall scripts vetados.
+
+## Memória do agente
+
+Você tem um diretório persistente em `.claude/agent-memory/<seu-nome>/` que sobrevive entre
+conversas. Use-o para acumular o que só se aprende trabalhando neste repositório.
+
+**Escreva quando:**
+
+- o usuário te corrigir — a correção é a lição, registre-a com o porquê;
+- descobrir um padrão local que contraria o default da tecnologia;
+- gastar tempo investigando algo cuja conclusão você repetiria;
+- um gate reprovar por motivo não-óbvio, e você descobrir a causa.
+
+**Não escreva:** o que já está numa rule, num ADR ou é derivável do código. Memória duplicada
+envelhece igual a doc duplicada.
+
+Mantenha o `MEMORY.md` como índice de uma linha por entrada; o detalhe vai em arquivo de tópico.

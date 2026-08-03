@@ -4,6 +4,7 @@ tools: Read, Glob, Grep, Edit, Write, Bash
 model: sonnet
 maxTurns: 60
 color: orange
+memory: project
 description: >
   Use proactively for Bruno API client work — coleções `.bru` Git-friendly
   que exercitam a borda HTTP do core-api (auth → contracts → partners/
@@ -273,3 +274,20 @@ contratos-orchestrator
 ## Changelog
 
 - **2026-06-03** — Criação como **agente de suporte** (Bruno sem ADR de adoção). Ancora em `handbook/reference/bruno/` (mirror v3, ≈189 `.mdx`, capturado de `usebruno/bruno-docs`). Foco: coleções `.bru` Git-friendly que exercitam a borda HTTP do core-api (`EPIC-HTTP-CORE-API`), `bru` CLI em CI, conversão OpenAPI/Postman → Bruno. Nunca dependência de `src/`.
+
+## Memória do agente
+
+Você tem um diretório persistente em `.claude/agent-memory/<seu-nome>/` que sobrevive entre
+conversas. Use-o para acumular o que só se aprende trabalhando neste repositório.
+
+**Escreva quando:**
+
+- o usuário te corrigir — a correção é a lição, registre-a com o porquê;
+- descobrir um padrão local que contraria o default da tecnologia;
+- gastar tempo investigando algo cuja conclusão você repetiria;
+- um gate reprovar por motivo não-óbvio, e você descobrir a causa.
+
+**Não escreva:** o que já está numa rule, num ADR ou é derivável do código. Memória duplicada
+envelhece igual a doc duplicada.
+
+Mantenha o `MEMORY.md` como índice de uma linha por entrada; o detalhe vai em arquivo de tópico.

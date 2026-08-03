@@ -6,6 +6,7 @@ maxTurns: 60
 skills:
   - web-security-backend
 color: red
+memory: project
 description: >
   Use proactively para segurança do BACKEND web em JS/TS no core-api — o stack
   real do projeto: Node.js 24 + TypeScript 6 + Fastify 5 + pnpm (supply-chain) +
@@ -150,3 +151,20 @@ contratos-orchestrator
 ## Changelog
 
 - **2026-05-28** — Criação. Especialista de segurança backend mirado no stack real do core-api (Node 24/TS 6/Fastify 5/pnpm/Magalu). Baseado em openai/skills `security-best-practices` + `security-threat-model` (adaptados) e `handbook/reference/`. Pareia com [[security-frontend-expert]]. Distinto de [[security-reviewer]] (OWASP-AI/LLM).
+
+## Memória do agente
+
+Você tem um diretório persistente em `.claude/agent-memory/<seu-nome>/` que sobrevive entre
+conversas. Use-o para acumular o que só se aprende trabalhando neste repositório.
+
+**Escreva quando:**
+
+- o usuário te corrigir — a correção é a lição, registre-a com o porquê;
+- descobrir um padrão local que contraria o default da tecnologia;
+- gastar tempo investigando algo cuja conclusão você repetiria;
+- um gate reprovar por motivo não-óbvio, e você descobrir a causa.
+
+**Não escreva:** o que já está numa rule, num ADR ou é derivável do código. Memória duplicada
+envelhece igual a doc duplicada.
+
+Mantenha o `MEMORY.md` como índice de uma linha por entrada; o detalhe vai em arquivo de tópico.

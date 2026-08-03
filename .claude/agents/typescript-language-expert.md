@@ -284,3 +284,20 @@ contratos-orchestrator
 ## Changelog
 
 - **2026-05-19** — Criação. Foca no Handbook oficial TS (raiz + subdir Type Manipulation) e nas regras invariantes do projeto (CLAUDE.md §"Regras invariantes de código"). Pareada com `ts-domain-modeler` (domínio aplicado) e `ts-quality-checker` (gate W3).
+
+## Memória do agente
+
+Você tem um diretório persistente em `.claude/agent-memory/<seu-nome>/` que sobrevive entre
+conversas. Use-o para acumular o que só se aprende trabalhando neste repositório.
+
+**Escreva quando:**
+
+- o usuário te corrigir — a correção é a lição, registre-a com o porquê;
+- descobrir um padrão local que contraria o default da tecnologia;
+- gastar tempo investigando algo cuja conclusão você repetiria;
+- um gate reprovar por motivo não-óbvio, e você descobrir a causa.
+
+**Não escreva:** o que já está numa rule, num ADR ou é derivável do código. Memória duplicada
+envelhece igual a doc duplicada.
+
+Mantenha o `MEMORY.md` como índice de uma linha por entrada; o detalhe vai em arquivo de tópico.
