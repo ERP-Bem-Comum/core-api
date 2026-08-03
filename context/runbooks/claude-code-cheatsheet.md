@@ -227,4 +227,5 @@ Resumo do [`best-practices.md`](../../handbook/reference/claude-code/best-practi
 
 - `PreToolUse(Bash) → block-npm.sh` — `npm *` → deny com explicação.
 - `PostToolUse(Edit|Write) → prettier-write.sh` — formato em cada arquivo tocado.
-- `Stop → stop-typecheck.sh` (async) — typecheck em background no fim da sessão.
+- `Stop → stop-quality-gate.sh` (**bloqueante**, `exit 2`) — typecheck · format:check · lint · test
+  no fim do turno. Só dispara quando há `.ts` ou config alterados; leva ~145s quando roda.

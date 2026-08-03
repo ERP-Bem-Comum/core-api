@@ -186,7 +186,7 @@ Pre-commit hook: `.claude/hooks/pre-commit-typecheck.sh` (ativar via `git config
 | `PreToolUse(Bash)` if `Bash(npm *)` | `block-npm.sh`                  | Bloqueia `npm` (ADR-0012).                  |
 | `PreToolUse(Bash)`                  | `block-cross-project-docker.sh` | Bloqueia Docker cruzando core-api ↔ legacy. |
 | `PostToolUse(Edit\|Write)`          | `prettier-write.sh`             | Formata o arquivo tocado.                   |
-| `Stop` (async)                      | `stop-typecheck.sh`             | Typecheck em background no fim.             |
+| `Stop` (bloqueante)                 | `stop-quality-gate.sh`          | Gate: typecheck · format · lint · test.     |
 
 ---
 
@@ -220,7 +220,7 @@ Diante de uma falha, exatamente uma destas saídas é aceitável:
 2. **Corrigir o gate que classifica errado** — quando a falha é um teste mal-gateado (ex.: integração que roda em `pnpm test` puro em vez de atrás de opt-in `*_INTEGRATION=1`), conserta-se o gate **e prova-se** que o caminho correto (`pnpm run test:integration:*`) fica verde. Nunca se "esconde" atrás de um `skip` sem provar que o teste passa no home dele.
 3. **Escalar ao humano** com diagnóstico da causa-raiz — só quando 1 e 2 estão fora do alcance/escopo, e sempre explícito, nunca silencioso.
 
-Fechar `pnpm test`/W3 com falha não-endereçada (mesmo que "alheia") é o anti-padrão #14. O backstop mecânico é o gate W3 (`typecheck` + `format:check` + `lint` + `test`) e o hook `Stop` (`stop-typecheck.sh`) — mas a disciplina é de julgamento, não delegável ao hook.
+Fechar com falha não-endereçada (mesmo que "alheia") é o anti-padrão #14. O backstop mecânico é o hook `Stop` (`stop-quality-gate.sh`), que roda `typecheck` + `format:check` + `lint` + `test` e **bloqueia** o fim do turno enquanto algum estiver vermelho — mas a disciplina é de julgamento, não delegável ao hook.
 
 ---
 
