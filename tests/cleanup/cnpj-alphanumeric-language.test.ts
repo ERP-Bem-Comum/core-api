@@ -34,9 +34,13 @@ const claimsDigits = /d[ií]gito|somente n[uú]mero|apenas n[uú]mero/i;
  * Registrados, não anistiados; cada um precisa de decisão própria.
  */
 const KNOWN_CODE_DEFECTS: readonly string[] = [
-  // Leitor de documento fiscal (#566): o regex de captura aceita só `[\d.\-/\s]` e o
-  // `normalizeTaxId` faz `replace(/\D/g,'')`. Documento com CNPJ alfanumérico fica sem emitente
-  // reconhecido. Corrigir exige as fixtures fiscais reais, gitignored por LGPD.
+  // Leitor de documento fiscal (#566). O braço do bloco EMITENTE (`CNPJ / CPF / NIF`) FOI corrigido:
+  // captura alfanumérica + `Cnpj.isValidCnpj`, com fixture sintética — as fiscais reais seguem
+  // gitignored por LGPD, mas não eram necessárias. O que RESTA é o defeito nos dois primeiros braços
+  // da cascata (`CNPJ:` e `CPF:`), que continuam com classe numérica e, por serem `??`, vencem o
+  // braço já corrigido: `CNPJ: 12.345.678/000A-08` devolve `12345678000` — 11 caracteres que o
+  // consumidor não distingue de um CPF. Corrigir muda comportamento e pede ciclo próprio: #627 —
+  // que inclui, na DoD, revisar se esta entrada ainda deve existir depois do conserto.
   'src/modules/financial/adapters/document-reader/native-pdf.ts',
 ];
 
