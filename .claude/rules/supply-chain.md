@@ -1,60 +1,33 @@
 ---
 paths:
-  - "package.json"
-  - "pnpm-workspace.yaml"
-  - "Dockerfile*"
-  - ".npmrc"
+  - 'package.json'
+  - 'pnpm-workspace.yaml'
+  - 'Dockerfile*'
+  - '.npmrc'
+  - 'compose*.yaml'
+verify:
+  - claim: 'os composes da raiz são três, e a rule carrega em todos'
+    glob: 'compose*.yaml'
+    expect:
+      - 'compose.ci.yaml'
+      - 'compose.etl.yaml'
+      - 'compose.yaml'
 ---
-
-# Regras invariantes — Supply chain e manifesto
 
 Estes arquivos carregam **decisão de segurança**, não configuração incidental. A política nasceu de um incidente real: o comprometimento do `axios` em março/2026 ([ADR-0011](../../handbook/architecture/adr/0011-supply-chain-hardening.md)).
 
-> ⚠️ **Cite [ADR-0029](../../handbook/architecture/adr/0029-pnpm-11-supply-chain-defaults.md), não o ADR-0012.** O ADR-0012 está **Superseded** desde 2026-05-30 — a escolha do pnpm continua válida, mas a norma vigente (major 11 + defaults) é o 0029.
+As quatro settings de quarentena e a concordância de versão do pnpm entre `packageManager`, `engines.pnpm` e `ENV PNPM_VERSION` são cobradas por `tests/cleanup/supply-chain-settings.test.ts`. A lista de libs banidas do ADR-0011 §4 é enforced por `@typescript-eslint/no-restricted-imports`, com a mensagem do ADR dentro do erro. Nenhuma das duas se repete aqui.
 
-## As 4 settings de supply-chain são intocáveis ([ADR-0029](../../handbook/architecture/adr/0029-pnpm-11-supply-chain-defaults.md))
+> ⚠️ **Cite [ADR-0029](../../handbook/architecture/adr/0029-pnpm-11-supply-chain-defaults.md), não o ADR-0012.** O 0012 está **Superseded** desde 2026-05-30 — a escolha do pnpm continua válida, mas a norma vigente (major 11 + defaults) é o 0029.
 
-Em `pnpm-workspace.yaml` — mantidas **explícitas** mesmo quando coincidem com o default do pnpm 11, porque explícito é auditável em diff de PR:
+- **Setting de supply-chain não se afrouxa para destravar install.** As quatro de `pnpm-workspace.yaml` são mantidas explícitas mesmo coincidindo com o default do pnpm 11, porque explícito é auditável em diff de PR — e `trustPolicy: no-downgrade` é literalmente o vetor usado no caso `axios`. Se uma dependência recém-publicada travar a resolução, a saída é `minimumReleaseAgeExclude` **por pacote**; desligar a setting troca um bloqueio de minutos por uma janela permanente.
 
-| Setting                        | Valor           | Por que existe                                                       |
-| ------------------------------ | --------------- | -------------------------------------------------------------------- |
-| `minimumReleaseAge`            | `1440`          | 1 dia de quarentena para versão recém-publicada                      |
-| `minimumReleaseAgeStrict`      | `true`          | **falha** a resolução em vez de cair silenciosamente para versão nova |
-| `trustPolicy`                  | `no-downgrade`  | bloqueia queda de trust evidence — **o vetor exato do caso `axios`**  |
-| `blockExoticSubdeps`           | `true`          | transitivas só de fonte confiável (nada de git/tarball URL)          |
+- **Dependência nova se justifica no PR, antes do merge** ([ADR-0011](../../handbook/architecture/adr/0011-supply-chain-hardening.md) §5): por que **esta** lib e não a alternativa — inclusive "implementar interno"; mantenedor com 2FA, atividade recente, bus factor; última publicação dentro de 6 meses. Antes disso, verificar se o **Node 24 já resolve**: `fetch` global, `crypto.randomUUID()`, `crypto.subtle`, `node --env-file`, `structuredClone`, `node --watch`, `node:test`. Cada dep removida é superfície de ataque a menos.
 
-**Remover qualquer uma reabre o vetor do incidente.** Se uma dependência muito recente (< 24h) travar o install, a saída é `minimumReleaseAgeExclude` por pacote — nunca desligar a setting.
+- **Ferramenta de teste nunca vira dependência de produção.** `@usebruno/cli` é `devDependency` pinada; o `src/` não a conhece. A exceção de supply-chain que ela exige é **cirúrgica, por versão**, no espírito do `undici-types@6.21.0` — não afrouxar a política global para acomodar uma ferramenta.
 
-## Versão e runtime
+- **PBE (MagaluCloud) não recebe dado real** ([ADR-0021](../../handbook/architecture/adr/0021-aws-primary-magalu-pbe-supersedes-0007.md)). Ao editar config de deploy, `compose*.yaml` ou connection string de homologação: **sem** dump do legado, **sem** dado real ou pessoal, **sem** integração Bradesco real — só sandbox e dataset sintético. Produção e dado pessoal vivem na AWS (`sa-east-1`, residência BR). Esta restrição é de LGPD e **não tem enforcement mecânico**: depende de quem edita.
 
-- `packageManager` **pinado** em `pnpm@11.x` com hash; `engines.pnpm` em `">=11.0.0 <12"`.
-- Corepack ativa a versão pinada; o `Dockerfile` acompanha via `ENV PNPM_VERSION`. Os três precisam concordar.
-- **Nunca `npm`** ([ADR-0029](../../handbook/architecture/adr/0029-pnpm-11-supply-chain-defaults.md) §4; hook `block-npm.sh` barra o comando, mas não impede doc/script escrito com `npm`).
-- `pnpm-lock.yaml` committed; CI sempre com `--frozen-lockfile`. Lockfile binário é proibido.
+> **Dívida aberta — "dep crítica" nunca foi definida.** O ADR-0011 §3 manda pinar versão exata "se for dep crítica" e não diz o que é crítica. Resultado medido: **7 das 19 dependências de produção usam `^`**, e entre elas estão `jose` (assina e verifica JWT), `mysql2` (driver de banco), `@aws-sdk/client-s3` (cliente único de storage — ADR-0019), `nodemailer` e `resend` (envio em produção). `fastify`, `drizzle-orm` e `zod` foram pinadas. Não é norma vigente — é lacuna registrada, e por isso não virou gate: nasceria vermelho. A saída proposta pelo inventário de decisões é definir crítica **por função** (o que assina, o que fala com banco, o que sai pela rede), não por nome — critério por nome envelhece a cada dependência nova.
 
-## Adicionar dependência exige justificar ([ADR-0011](../../handbook/architecture/adr/0011-supply-chain-hardening.md) §5)
-
-Toda dep nova responde no PR, antes do merge:
-
-- Por que **esta** lib? Que alternativas foram avaliadas — inclusive "implementar interno"?
-- Mantenedor tem 2FA? Atividade recente? Qual o bus factor?
-- Última publicação dentro de 6 meses?
-- Versão **pinada**, sem `^`/`~`, se for dep crítica (ADR-0011 §3).
-
-## Ferramenta de teste nunca vira dependência de produção ([ADR-0034](../../handbook/architecture/adr/0034-adopt-bruno-api-client-cli.md))
-
-`@usebruno/cli` entra como **`devDependency` pinada — nunca `dependencies`**. Bruno é ferramenta de teste/doc da borda HTTP; o `src/` não o conhece. A exceção de supply-chain que ele exige é **cirúrgica, por versão**, no `pnpm-workspace.yaml` — no espírito do `undici-types@6.21.0`. **Não afrouxe a política globalmente para acomodar uma ferramenta.**
-
-## Ambiente PBE não recebe dado real ([ADR-0021](../../handbook/architecture/adr/0021-aws-primary-magalu-pbe-supersedes-0007.md))
-
-Ao editar config de deploy, compose ou connection string do **MagaluCloud (PBE/homologação)**: **sem** dump do banco legado, **sem** dados reais ou pessoais, **sem** integração Bradesco real (só sandbox/fake). Dataset sintético apenas. Produção real e dado pessoal vivem na AWS (`sa-east-1`, residência BR).
-
-## Preferir o nativo do Node 24
-
-Se o runtime já oferece, não adicione dep — cada dep removida é uma superfície de ataque a menos: `fetch` global (não `axios`/`node-fetch`), `crypto.randomUUID()` (não `uuid`), `crypto.subtle` (não `crypto-js`), `node --env-file` (não `dotenv`), `structuredClone` (não `lodash.clonedeep`), `node --watch` (não `nodemon`), `node:test` (não Jest).
-
-> A **lista de libs proibidas** do ADR-0011 §4 não é repetida aqui: já é enforced por `@typescript-eslint/no-restricted-imports` (`eslint.config.js:77`), com a mensagem do ADR no próprio erro. Regra mecânica não vira texto.
-
-## Especialista
-
-[`pnpm-workspace-expert`](../agents/pnpm-workspace-expert.md) para lockfile, settings e corepack · [`security-backend-expert`](../agents/security-backend-expert.md) para avaliação de risco de dependência.
+Lockfile, settings e corepack: [`pnpm-workspace-expert`](../agents/pnpm-workspace-expert.md) · risco de dependência: [`security-backend-expert`](../agents/security-backend-expert.md).
