@@ -3,51 +3,51 @@
   "ticket": "FIN-UNDO-RECON-DESTINATION",
   "size": "M",
   "createdAt": "2026-08-04T17:35:47.883Z",
-  "closedAt": null,
+  "closedAt": "2026-08-04T18:46:22.389Z",
   "currentWave": null,
-  "status": "open",
+  "status": "closed-green",
   "waves": [
     {
       "id": "W0",
-      "status": "pending",
-      "agent": null,
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "agent": "general-purpose",
+      "startedAt": "2026-08-04T18:46:20.368Z",
+      "finishedAt": "2026-08-04T18:46:20.632Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "002-tests/REPORT.md",
+      "outcome": "RED"
     },
     {
       "id": "W1",
-      "status": "pending",
-      "agent": null,
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "agent": "general-purpose",
+      "startedAt": "2026-08-04T18:46:20.887Z",
+      "finishedAt": "2026-08-04T18:46:21.138Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "003-impl/REPORT.md",
+      "outcome": "GREEN"
     },
     {
       "id": "W2",
-      "status": "pending",
-      "agent": null,
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "agent": "code-reviewer",
+      "startedAt": "2026-08-04T18:46:21.392Z",
+      "finishedAt": "2026-08-04T18:46:21.638Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "004-code-review/REVIEW.md",
+      "outcome": "APPROVED"
     },
     {
       "id": "W3",
-      "status": "pending",
-      "agent": null,
-      "startedAt": null,
-      "finishedAt": null,
+      "status": "done",
+      "agent": "ts-quality-checker",
+      "startedAt": "2026-08-04T18:46:21.887Z",
+      "finishedAt": "2026-08-04T18:46:22.138Z",
       "rounds": 1,
-      "reportPath": null,
-      "outcome": null
+      "reportPath": "005-quality/REPORT.md",
+      "outcome": "GREEN"
     }
   ],
   "blockers": [],
-  "lastEvent": "init"
+  "lastEvent": "closed-green"
 }
