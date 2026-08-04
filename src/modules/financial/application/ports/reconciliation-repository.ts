@@ -60,4 +60,12 @@ export type ReconciliationRepository = Readonly<{
     matchedLeg: Reconciliation | null,
     events?: readonly FinancialAppendableEvent[],
   ) => Promise<Result<void, ReconciliationRepositoryError>>;
+  // #450: desfaz a perna de DESTINO (B) casada. Reabre a contrapartida (`reopened`, já Matched→Pending no
+  // domínio) + `undone` (perna B, já `Undone`) → `Reconciled→Pending` na transação de B — na MESMA tx
+  // (atômico — ADR-0015). Guard de simetria: NÃO cascateia outra conciliação nem toca a origem/perna A.
+  undoCounterpartDestination: (
+    undone: Reconciliation,
+    reopened: ExpectedCounterpart,
+    events?: readonly FinancialAppendableEvent[],
+  ) => Promise<Result<void, ReconciliationRepositoryError>>;
 }>;

@@ -419,5 +419,49 @@ export const createDrizzleReconciliationRepository = (
         return err('reconciliation-repository-failure');
       }
     },
+
+    undoCounterpartDestination: async (
+      undone: Reconciliation,
+      reopened: ExpectedCounterpart,
+      events?: readonly FinancialAppendableEvent[],
+    ): Promise<Result<void, ReconciliationRepositoryError>> => {
+      // #450: perna B (`undone`) → Undone + `Reconciled→Pending` na sua transação + contrapartida reaberta
+      // (Matched→Pending, `matched_transaction_ref` = null) — na MESMA tx. NÃO toca a origem/perna A.
+      try {
+        await db.transaction(async (tx) => {
+          await tx
+            .update(finReconciliations)
+            .set({
+              status: undone.status,
+              undoneAt: undone.audit.undoneAt,
+              undoneBy: undone.audit.undoneBy,
+              undoReason: undone.audit.undoReason,
+            })
+            .where(eq(finReconciliations.id, String(undone.id)));
+          await tx
+            .update(finStatementTransactions)
+            .set({ reconciliationStatus: 'Pending' })
+            .where(
+              and(
+                eq(finStatementTransactions.id, String(undone.transactionId)),
+                eq(finStatementTransactions.reconciliationStatus, 'Reconciled'),
+              ),
+            );
+          await tx
+            .update(finExpectedCounterpart)
+            .set({
+              status: reopened.status,
+              matchedTransactionRef: reopened.matchedTransactionRef,
+              updatedAt: new Date(),
+            })
+            .where(eq(finExpectedCounterpart.id, String(reopened.id)));
+          await appendFinOutboxInTx(tx, events ?? []);
+        });
+        return ok(undefined);
+      } catch (cause) {
+        logStore('undoCounterpartDestination', cause);
+        return err('reconciliation-repository-failure');
+      }
+    },
   };
 };

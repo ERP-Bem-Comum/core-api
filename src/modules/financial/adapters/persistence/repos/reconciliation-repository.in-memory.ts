@@ -212,5 +212,19 @@ export const createInMemoryReconciliationRepository = (
       }
       return ok(undefined);
     },
+
+    undoCounterpartDestination: async (
+      undone: Reconciliation,
+      reopened: ExpectedCounterpart,
+      events?: readonly FinancialAppendableEvent[],
+    ): Promise<Result<void, ReconciliationRepositoryError>> => {
+      // #450: B → Undone + contrapartida reaberta (Matched→Pending), atômico. NÃO toca a origem/perna A.
+      const published = await appendOrFail(events);
+      if (!published.ok) return published;
+      reconciliations.set(String(undone.id), undone);
+      flipTransaction(statements, String(undone.transactionId), 'Reconciled', 'Pending');
+      expectedCounterparts.set(String(reopened.id), reopened);
+      return ok(undefined);
+    },
   };
 };

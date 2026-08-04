@@ -1,6 +1,7 @@
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type { CedenteAccountId } from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
 import type { ReconciliationId } from '#src/modules/financial/domain/reconciliation/reconciliation-id.ts';
+import type { StatementTransactionId } from '#src/modules/financial/domain/statement/statement-transaction-id.ts';
 import type { ExpectedCounterpartId } from '#src/modules/financial/domain/expected-counterpart/expected-counterpart-id.ts';
 import type { ExpectedCounterpart } from '#src/modules/financial/domain/expected-counterpart/types.ts';
 import type { ExpectedCounterpartEvent } from '#src/modules/financial/domain/expected-counterpart/events.ts';
@@ -52,6 +53,19 @@ export const createInMemoryExpectedCounterpartStore = (
     ): Promise<Result<ExpectedCounterpart | null, ExpectedCounterpartStoreError>> => {
       for (const c of store.values()) {
         if (String(c.originReconciliationRef) === String(reconciliationRef)) {
+          return Promise.resolve(ok(c));
+        }
+      }
+      return Promise.resolve(ok(null));
+    },
+
+    // #450: espelha o `WHERE matched_transaction_ref = ?` do Drizzle — filtra pela transação casada.
+    findByMatchedTransaction: async (
+      transactionRef: StatementTransactionId,
+    ): Promise<Result<ExpectedCounterpart | null, ExpectedCounterpartStoreError>> => {
+      for (const c of store.values()) {
+        // `matchedTransactionRef` null (nunca casada) nunca iguala uma transação → sem null-guard extra.
+        if (c.matchedTransactionRef === String(transactionRef)) {
           return Promise.resolve(ok(c));
         }
       }
