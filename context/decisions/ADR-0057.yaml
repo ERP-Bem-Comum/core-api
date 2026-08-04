@@ -1,0 +1,370 @@
+id: ADR-0057
+title: '`CLAUDE.md` como doc canônica de agente — aposentadoria do `AGENTS.md` e errata das referências'
+source: handbook/architecture/adr/0057-claude-md-as-canonical-agent-doc.md
+decided_on: 2026-08-03
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0037, ADR-0040, ADR-0054]
+
+assessment:
+  verdict: realized
+  checked_at: 2026-08-04
+  checked_against: 0afab74c
+  summary: |
+    O único ADR do acervo escrito DEPOIS do inventário de decisões, e por isso o único que nasceu
+    sabendo que seria confrontado. Isso se nota no desenho: as três invariantes normativas (§1, §3, §5)
+    já vêm com mecanismo nomeado, e os mecanismos existem.
+    `AGENTS.md` está ausente da raiz; `CLAUDE.md` ocupa o lugar e tem gate próprio
+    (`tests/cleanup/claude-md-links.test.ts`), o que nenhuma doc canônica anterior teve. A separação
+    que o §5 faz entre REGISTRO HISTÓRICO e PONTEIRO VIVO se sustenta na medida: 16 evidências
+    ancoradas no formato `AGENTS.md:NNN` seguem intactas em `context/decisions/`, enquanto
+    `applied_to`/`enforced_by` citando `AGENTS.md` são ZERO — os 4 ponteiros vivos dos ADR-0040/0054
+    apontam para `CLAUDE.md`.
+    Os três ADRs da errata (§4) continuam citando `AGENTS.md` — 2, 3 e 3 ocorrências — o que É o
+    comportamento exigido, não uma pendência: editá-los feriria a imutabilidade de ADR aceito.
+    Uma divergência menor, registrada em C1: o ADR declara que a doc canônica passou a ter 110 linhas;
+    hoje tem 118. Crescimento de 8 linhas em um dia — não contradiz norma alguma (nenhuma alegação
+    fixa tamanho), mas é exatamente o tipo de número que envelhece sem ninguém notar, e é a razão de
+    `reality.verify` existir.
+
+extraction:
+  state: complete
+  covers: |
+    7 alegações — as cinco seções numeradas da Decisão (§1 rende duas: a obrigação e a proibição
+    correlata) e o Gatilho de reavaliação.
+    Fora: "Consequências" e "Alternativas consideradas" são justificativa, não norma. A tabela do
+    Contexto (as 5 afirmações falsas do `AGENTS.md`) é evidência do diagnóstico, não alegação
+    normativa — e o arquivo que ela descreve não existe mais.
+
+prior_art: []
+
+claims:
+  - id: ADR-0057-C1
+    text: |
+      O contexto canônico do repositório MUST viver em `CLAUDE.md`, na raiz.
+    kind: obligation
+    source_lines: ['29-31']
+    applies_to:
+      - 'CLAUDE.md'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'CLAUDE.md:1 — o arquivo existe na raiz e abre com o título `# CLAUDE.md`'
+        - 'CLAUDE.md:3 — declara-se "Contexto canônico do `core-api`", assumindo o papel que o ADR lhe atribui'
+        - 'CLAUDE.md:13 — a §"Hierarquia de fontes" vive aqui, e é ela que ordena ADR > handbook > CLAUDE.md > rules'
+        - 'nota: o ADR declara 110 linhas para a doc canônica (§Consequências); hoje são 118 — cresceu 8 em um dia. Nenhuma alegação fixa tamanho, então não há contradição, mas o número do ADR já está velho.'
+      verify: |
+        test -f CLAUDE.md; and grep -n "Contexto canônico" CLAUDE.md; and wc -l < CLAUDE.md
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o repositório, quando `CLAUDE.md` não existir na raiz ou não contiver a seção de hierarquia
+        de fontes, então o gate de doc canônica falha.
+      expected_error: null
+      blocker: null
+      enforced_by: ['tests/cleanup/claude-md-links.test.ts', 'tests/cleanup/docs-update.test.ts']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        O contexto canônico do repositório MUST viver em `CLAUDE.md`, na raiz, e MUST conter a hierarquia
+        de fontes que ordena ADR > handbook > CLAUDE.md > `.claude/rules/`.
+      rationale: |
+        Adotada como está: a alegação é curta, verificável por presença de arquivo e já tem dois gates
+        apontando para ela. Não há escopo a estreitar — ou o arquivo é a doc canônica, ou não é.
+
+  - id: ADR-0057-C2
+    text: |
+      O `AGENTS.md` está DELETADO e MUST NOT ser recriado enquanto o Claude Code for o único agente
+      suportado. PRESERVADO `handbook/reference/mysql2/AGENTS.md` — documentação vendored do driver,
+      arquivo distinto e sem relação com esta decisão.
+    kind: prohibition
+    source_lines: ['31', '69']
+    applies_to:
+      - 'AGENTS.md'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'ausência: não há `AGENTS.md` na raiz do repositório — `test -f AGENTS.md` falha'
+        - 'handbook/reference/mysql2/AGENTS.md:1 — o arquivo vendored do driver segue no lugar, como a ressalva do ADR exige'
+        - 'nota: o commit 7ac90494 ("chore(harness): aposenta o AGENTS.md") é o que removeu o arquivo da raiz'
+      verify: |
+        test -f AGENTS.md; and echo "VIOLADO: AGENTS.md voltou"; or echo ok; test -f handbook/reference/mysql2/AGENTS.md
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o repositório, quando um `AGENTS.md` for recriado na raiz, então o gate falha. A exceção
+        `handbook/reference/mysql2/AGENTS.md` MUST continuar passando.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        `AGENTS.md` MUST NOT existir na raiz do repositório enquanto o Claude Code for o único agente
+        suportado. A proibição MUST excetuar `handbook/reference/mysql2/AGENTS.md`, que é doc vendored.
+      rationale: |
+        Adotada como está, MAS com `enforced_by` vazio de propósito: hoje nada barra a recriação do
+        arquivo. É a alegação deste registro com maior distância entre norma e mecanismo — o RED é
+        trivial (uma asserção de ausência em `tests/cleanup/`) e não existe. Candidata direta a virar
+        gate.
+
+  - id: ADR-0057-C3
+    text: |
+      Conteúdo já garantido por mecanismo MUST NOT ser duplicado na doc canônica — tabelas de roteamento
+      de agentes/skills (descoberta nativa), regras de sintaxe TS (`tsconfig.json`) e "não rode `npm`"
+      (hook `block-npm.sh`). PERMANECE no texto o anti-padrão de ESCREVER `npm` em doc, PR ou
+      comentário: o hook barra a execução, não o texto.
+    kind: prohibition
+    source_lines: ['33-43']
+    applies_to:
+      - 'CLAUDE.md'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'CLAUDE.md:69 — o anti-padrão sobrevivente está escrito exatamente com a justificativa do ADR: "O hook barra a execução, não o texto."'
+        - '.claude/settings.json:40 — o hook `block-npm.sh` está registrado, então a proibição de EXECUTAR npm é mecânica e não precisa de texto'
+        - 'ausência: não há tabela de roteamento de agentes nem de skills no `CLAUDE.md` — a descoberta é nativa, via `.claude/agents/` e `.claude/skills/`'
+        - 'ausência: não há seção de sintaxe TS (`import type`, extensão `.ts`, subpath `#src/*`) no `CLAUDE.md` — `tsconfig.json` cobra cada uma'
+      verify: |
+        grep -n "npm" CLAUDE.md; grep -n "block-npm" .claude/settings.json; grep -c "import type" CLAUDE.md
+    testability:
+      verdict: testable-with-work
+      layer: static
+      red: |
+        Dado o `CLAUDE.md`, quando ele reintroduzir uma regra já coberta por `tsconfig.json`, ESLint,
+        semgrep ou hook, então o gate falha apontando o mecanismo que já a garante.
+      expected_error: null
+      blocker: |
+        Falta o mapa "regra textual → mecanismo que a cobre". Sem ele o teste não distingue duplicação
+        de contexto legítimo, e vira grep por palavra — que acusaria o próprio anti-padrão #1, cujo
+        texto MENCIONA `npm` justamente para proibir escrevê-lo.
+      enforced_by: ['.claude/hooks/block-npm.sh', 'tsconfig.json']
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Regra que `tsconfig.json`, ESLint, semgrep, teste ou hook já cobram MUST NOT ser reescrita como
+        texto normativo no `CLAUDE.md`; a referência ao mecanismo basta. MUST permanecer no texto a
+        norma que o mecanismo NÃO alcança — o caso canônico é escrever `npm` em prosa.
+      rationale: |
+        Estreitada porque a alegação original é sobre TODA a doc canônica e não tem como ser cobrada em
+        bloco. O que é enunciável é a assimetria que o próprio ADR isola: mecanismo cobre execução,
+        texto cobre menção. Escrever a regra assim a torna aplicável caso a caso, em review, sem
+        prometer um gate que ainda não existe.
+
+  - id: ADR-0057-C4
+    text: |
+      O `CLAUDE.md` MUST ter todo caminho relativo que cita existente no disco, cobrado por
+      `tests/cleanup/claude-md-links.test.ts` no gate. As CAs de doc canônica em
+      `tests/cleanup/docs-update.test.ts` MUST apontar para o `CLAUDE.md`.
+    kind: obligation
+    source_lines: ['45-49']
+    applies_to:
+      - 'CLAUDE.md'
+      - 'tests/cleanup/claude-md-links.test.ts'
+      - 'tests/cleanup/docs-update.test.ts'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - "tests/cleanup/claude-md-links.test.ts:40 — describe('CLAUDE-MD-LINKS — a doc canônica não aponta para o vazio')"
+        - "tests/cleanup/claude-md-links.test.ts:41 — it('todo caminho relativo citado existe no disco')"
+        - "tests/cleanup/claude-md-links.test.ts:50 — it('há links a verificar (guarda contra regex que casa nada)') — o gate se protege do verde por vacuidade"
+        - 'tests/cleanup/docs-update.test.ts:30 — a seção CA-1..4 está rotulada "doc canônica (CLAUDE.md)"'
+        - 'tests/cleanup/docs-update.test.ts:9 — o docstring lista "CLAUDE.md (CA-1..4): stack, ADRs vigentes, exemplos de CLI, topologia"'
+        - 'nota: 14 ocorrências de `CLAUDE.md` em docs-update.test.ts — as CAs migraram por inteiro'
+      verify: |
+        grep -c "CLAUDE.md" tests/cleanup/docs-update.test.ts; and node --test --experimental-strip-types tests/cleanup/claude-md-links.test.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um `CLAUDE.md` que cite `./caminho/que/nao/existe.md`, quando o gate rodar, então
+        `claude-md-links.test.ts` falha nomeando o caminho morto. Dado um `CLAUDE.md` sem nenhum link,
+        a segunda asserção falha — o gate recusa passar por vacuidade.
+      expected_error: null
+      blocker: null
+      enforced_by: ['tests/cleanup/claude-md-links.test.ts', 'tests/cleanup/docs-update.test.ts']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Todo caminho relativo citado no `CLAUDE.md` MUST existir no disco, cobrado em gate. O gate MUST
+        conter guarda contra verde por vacuidade — asserção de que há links a verificar.
+      rationale: |
+        Adotada com a guarda de vacuidade promovida ao texto da regra, porque é ela que separa este gate
+        de um grep que passaria com o arquivo vazio. O ADR já tinha esse cuidado no código; a regra só
+        o torna explícito.
+
+  - id: ADR-0057-C5
+    text: |
+      ERRATA — as referências a `AGENTS.md` nos ADR-0037 (`:23`, `:49`), ADR-0040 (`:31`, `:65`, `:104`)
+      e ADR-0054 (`:6`, `:12`, `:90`) MUST ser lidas como `CLAUDE.md`; no ADR-0040, `§Anti-padrões #15`
+      MUST ser lido como `§Anti-padrões #7`. Os três documentos MUST NOT ser editados — ADR aceito é
+      imutável. O conteúdo normativo dos três permanece integralmente vigente.
+    kind: obligation
+    source_lines: ['51-61']
+    applies_to:
+      - 'handbook/architecture/adr/0037-http-first-retire-embedded-cli.md'
+      - 'handbook/architecture/adr/0040-agent-findings-as-github-issues.md'
+      - 'handbook/architecture/adr/0054-ai-assisted-contribution-policy.md'
+    reality:
+      verdict: holds
+      holds_in: [handbook]
+      absent_in: []
+      evidence:
+        - 'handbook/architecture/adr/0037-http-first-retire-embedded-cli.md:23 — segue citando `AGENTS.md`, como a imutabilidade exige (2 ocorrências no arquivo)'
+        - 'handbook/architecture/adr/0040-agent-findings-as-github-issues.md:31 — idem (3 ocorrências)'
+        - 'handbook/architecture/adr/0054-ai-assisted-contribution-policy.md:6 — idem (3 ocorrências)'
+        - 'handbook/architecture/adr/0057-claude-md-as-canonical-agent-doc.md §4 — a errata canônica vive aqui, e é o único lugar onde a tradução está registrada'
+        - 'nota: a permanência das citações É o comportamento correto. Um agente que "consertasse" os três estaria violando a imutabilidade de ADR aceito, não zelando pela consistência.'
+      verify: |
+        grep -c "AGENTS.md" handbook/architecture/adr/0037-*.md handbook/architecture/adr/0040-*.md handbook/architecture/adr/0054-*.md
+    testability:
+      verdict: testable-with-work
+      layer: static
+      red: |
+        Dado um dos três ADRs da errata, quando alguém substituir `AGENTS.md` por `CLAUDE.md` no texto,
+        então o gate falha — ADR aceito é imutável e a errata é o único canal de correção.
+      expected_error: null
+      blocker: |
+        Exige congelar o conteúdo dos ADRs aceitos por hash, ou um gate que confira que a contagem de
+        `AGENTS.md` nos três não caiu. Nada disso existe: hoje a imutabilidade é convenção, cobrada só
+        por review.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        As citações a `AGENTS.md` nos ADR-0037, ADR-0040 e ADR-0054 MUST ser lidas como `CLAUDE.md`, e
+        `§Anti-padrões #15` do ADR-0040 como `#7`. Os três MUST NOT ser editados para refletir a
+        errata — ADR aceito é imutável e a errata do ADR-0057 §4 é o canal.
+      rationale: |
+        Adotada porque é a única mitigação que o processo do repo permite, e porque o modo de falha é
+        real e assimétrico: quem encontra a citação morta tende a "consertá-la", e o conserto é a
+        violação. A regra existe mais para impedir a correção bem-intencionada do que para orientar a
+        leitura.
+
+  - id: ADR-0057-C6
+    text: |
+      Referências ao `AGENTS.md` em `.claude/.pipeline/`, `specs/`, `handbook/` e nas EVIDÊNCIAS
+      ANCORADAS de `context/decisions/` (formato `AGENTS.md:209`) MUST NOT ser atualizadas — são
+      registro do que era verdade na data em que foram escritas. Reescrever `AGENTS.md:209` para
+      `CLAUDE.md:209` produziria âncora FALSA, porque a numeração de linha mudou.
+    kind: prohibition
+    source_lines: ['63-65']
+    applies_to:
+      - 'context/decisions/*.yaml'
+      - 'specs/**'
+      - '.claude/.pipeline/**'
+    reality:
+      verdict: holds
+      holds_in: [context, specs, handbook]
+      absent_in: []
+      evidence:
+        - 'context/decisions/ADR-0054.yaml:69 — evidência ancorada `AGENTS.md:77`, preservada com a numeração original'
+        - 'context/decisions/ADR-0054.yaml:70 — evidência ancorada `AGENTS.md:65`, idem'
+        - 'nota: 16 evidências no formato `AGENTS.md:NNN` seguem intactas em `context/decisions/*.yaml` — nenhuma foi reescrita'
+      verify: |
+        grep -rhoE "AGENTS\.md:[0-9]+" context/decisions/*.yaml | wc -l
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o inventário de decisões, quando uma evidência ancorada `AGENTS.md:NNN` for reescrita para
+        `CLAUDE.md:NNN`, então o gate falha — a âncora passaria a apontar para uma linha que não
+        contém aquilo.
+      expected_error: null
+      blocker: null
+      enforced_by: ['tests/decisions/decision-records.test.ts']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Evidência ancorada e registro histórico que citam `AGENTS.md` MUST NOT ser atualizados para
+        `CLAUDE.md`. A âncora registra o que era verdade na data em que foi escrita; reescrevê-la
+        produz âncora falsa, porque a numeração de linha do arquivo novo é outra.
+      rationale: |
+        Adotada como está. É a alegação mais contraintuitiva do ADR — parece descuido deixar referência
+        a arquivo deletado — e por isso a que mais precisa estar escrita: a intuição de "arrumar" é
+        exatamente o que produz o dado errado.
+
+  - id: ADR-0057-C7
+    text: |
+      Os PONTEIROS VIVOS — `prior_art.applied_to` e `enforced_by` em `context/decisions/` — MUST apontar
+      para o artefato ATUAL, e são cobrados por `tests/decisions/decision-records.test.ts`.
+    kind: obligation
+    source_lines: ['67']
+    applies_to:
+      - 'context/decisions/*.yaml'
+    reality:
+      verdict: holds
+      holds_in: [context]
+      absent_in: []
+      evidence:
+        - "context/decisions/ADR-0040.yaml:46 — `applied_to: ['CLAUDE.md']`, atualizado do `AGENTS.md`"
+        - "context/decisions/ADR-0040.yaml:131 — `enforced_by: ['.github/ISSUE_TEMPLATE/agent-finding.md', 'CLAUDE.md']`"
+        - "context/decisions/ADR-0054.yaml:45 — `applied_to: ['CLAUDE.md']`"
+        - "context/decisions/ADR-0054.yaml:87 — `enforced_by: ['.github/workflows/commit-policy.yml', 'CLAUDE.md']`"
+        - 'tests/decisions/decision-records.test.ts:128 — o gate assere `existsSync` de cada `applied_to`, então ponteiro morto quebra o build'
+        - 'tests/decisions/decision-records.test.ts:236 — idem para cada `enforced_by`'
+        - 'nota: zero ocorrências de `AGENTS.md` em `applied_to` ou `enforced_by` no inventário inteiro'
+      verify: |
+        grep -nE "applied_to:.*AGENTS|enforced_by:.*AGENTS" context/decisions/*.yaml | wc -l
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um registro cujo `applied_to` ou `enforced_by` cite um caminho inexistente, quando o gate
+        rodar, então falha com "applied_to inexistente" / "mecanismo declarado não existe".
+      expected_error: null
+      blocker: null
+      enforced_by: ['tests/decisions/decision-records.test.ts']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        `prior_art.applied_to` e `testability.enforced_by` MUST apontar para artefato existente no
+        disco. A distinção com a evidência ancorada é normativa: ponteiro vivo acompanha o repositório,
+        evidência ancorada congela a data.
+      rationale: |
+        Adotada porque já é mecânica — o gate falha sozinho — e porque o par com a C6 é o que dá sentido
+        às duas. Separar "ponteiro que deve acompanhar" de "âncora que deve congelar" é a decisão de
+        desenho que o ADR contribui, e ela some se as duas regras forem lidas isoladamente.
+
+findings:
+  - |
+    O ADR declara em §Consequências que a doc canônica passou de 256 para 110 linhas. Hoje o
+    `CLAUDE.md` tem 118 — 8 a mais, um dia depois. Nenhuma alegação normativa fixa tamanho, então não
+    há violação; o registro fica porque número em prosa de ADR não tem `verify` e envelhece calado.
+  - |
+    A C2 (`AGENTS.md` MUST NOT ser recriado) é a única alegação deste ADR com `enforced_by` vazio, e o
+    RED dela é uma asserção de ausência de duas linhas em `tests/cleanup/`. É a distância mais curta
+    entre norma e mecanismo em todo o inventário — candidata natural ao próximo gate.
+  - |
+    ADR-0057 não tem `prior_art`: foi escrito depois da destilação da spec 039, que julgou os 54
+    anteriores. É o primeiro ADR do acervo cujo registro nasce sem julgamento prévio a citar.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    O ADR cita `context/HARNESS-AUDIT-2026-07-31.md` e `context/decisions/` como contexto de origem, e
+    os commits `722b0371` (remove `.zed/` e `.agents/`) e `7ac90494` (aposenta o `AGENTS.md`) como
+    materialização. Nenhuma issue do GitHub foi lida para este registro, então a lista fica vazia —
+    vínculo por nome não é vínculo (guarda 6).
