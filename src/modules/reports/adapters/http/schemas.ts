@@ -221,6 +221,10 @@ export const generalReportRowSchema = z
     documentId: z.string(),
     code: z.string().nullable(),
     tipo: z.literal('a-pagar'),
+    // #611: displayStatus derivado (o MESMO do Contas a Pagar). String livre de propósito — inclui
+    // 'Reconciled' + estados fora dos 6 do filtro (Draft/Refused) se o documento estiver neles; NÃO
+    // restringir ao enum do filtro senão o serializer descartaria linhas válidas.
+    status: z.string(),
     dueDate: z.string(),
     // Slice B (#442): tipo do favorecido + nomes cross-módulo (Financiador/Colaborador).
     payeeKind: z.enum(['supplier', 'financier', 'act', 'collaborator']),

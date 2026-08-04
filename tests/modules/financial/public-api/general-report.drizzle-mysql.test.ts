@@ -51,6 +51,9 @@ if (!process.env['MYSQL_INTEGRATION']) {
       // Read-models sem seed → dono da tabela inteira na entrada.
       await handle.db.delete(handle.schema.finPayableView);
       await handle.db.delete(handle.schema.finSupplierView);
+      // #611: este arquivo agora escreve em fin_payables (recon do displayStatus). Limpa por TABELA na
+      // entrada (contrato de isolamento) — antes de fin_documents, pois referencia-o por FK.
+      await handle.db.delete(handle.schema.finPayables);
       await handle.db.delete(handle.schema.finDocuments);
       // fin_cost_centers/fin_categories TÊM seed (migrations) — limpar só os ids deste teste.
       await handle.db
@@ -497,6 +500,111 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const leg = byRef.get(SUP_REF)!;
       assert.equal(leg.payeeKind, 'supplier', 'payee_kind NULL → supplier (COALESCE)');
       assert.equal(leg.supplierRef, SUP_REF);
+    });
+
+    // #611 — a linha EXIBE e o filtro CASA pelo `displayStatus` (o MESMO do Contas a Pagar): derivado
+    // de fin_documents.status + recon sobre fin_payables. Cenário: doc Approved (sem títulos) +
+    // doc Paid TOTALMENTE Reconciled (todos os fin_payables Reconciled → displayStatus 'Reconciled') +
+    // doc Paid PARCIALMENTE conciliado (nem todos Reconciled → permanece 'Paid').
+    it('CA7 (#611): linha exibe displayStatus; filtro e total recortam pelo displayStatus', async () => {
+      const DOC_APP = 'd0000000-0000-4000-8000-00000000ba01'; // Approved (sem títulos)
+      const DOC_REC = 'd0000000-0000-4000-8000-00000000ba02'; // Paid + todos Reconciled → 'Reconciled'
+      const DOC_PAR = 'd0000000-0000-4000-8000-00000000ba03'; // Paid + parcial → permanece 'Paid'
+
+      await handle.db.insert(handle.schema.finDocuments).values([
+        { id: DOC_APP, status: 'Approved', createdAt: NOW },
+        { id: DOC_REC, status: 'Paid', createdAt: NOW },
+        { id: DOC_PAR, status: 'Paid', createdAt: NOW },
+      ]);
+
+      // fin_payables — a tabela-fonte com os 8 status (o recon usa ESTA, não o payable-view reduzido).
+      const finPayable = (
+        id: string,
+        documentId: string,
+        status: string,
+      ): typeof handle.schema.finPayables.$inferInsert => ({
+        id,
+        documentId,
+        kind: 'Parent',
+        retentionType: null,
+        status,
+        value: 100000,
+        dueDate: new Date('2026-07-01T00:00:00.000Z'),
+        paymentMethod: 'PIX',
+        paidAt: status === 'Paid' ? NOW : null, // CHECK: 'Paid' exige paid_at
+        createdAt: NOW,
+      });
+      await handle.db.insert(handle.schema.finPayables).values([
+        // DOC_REC: TODOS Reconciled → conciliado.
+        finPayable('ba100000-0000-4000-8000-000000000001', DOC_REC, 'Reconciled'),
+        finPayable('ba100000-0000-4000-8000-000000000002', DOC_REC, 'Reconciled'),
+        // DOC_PAR: um Reconciled + um Open → parcial (não conciliado).
+        finPayable('ba200000-0000-4000-8000-000000000001', DOC_PAR, 'Reconciled'),
+        finPayable('ba200000-0000-4000-8000-000000000002', DOC_PAR, 'Open'),
+      ]);
+
+      // Grid: 1 linha por documento (fin_payable_view; status próprio é o reduzido, irrelevante ao #611).
+      await handle.db.insert(handle.schema.finPayableView).values([
+        payable({
+          payableId: 'ba300000-0000-4000-8000-000000000001',
+          documentId: DOC_APP,
+          valueCents: 100000,
+          status: 'Approved',
+          dueDate: '2026-07-01',
+        }),
+        payable({
+          payableId: 'ba300000-0000-4000-8000-000000000002',
+          documentId: DOC_REC,
+          valueCents: 200000,
+          status: 'Paid',
+          dueDate: '2026-07-02',
+        }),
+        payable({
+          payableId: 'ba300000-0000-4000-8000-000000000003',
+          documentId: DOC_PAR,
+          valueCents: 300000,
+          status: 'Paid',
+          dueDate: '2026-07-03',
+        }),
+      ]);
+
+      const readerR = await openGeneralReportReader({ connectionString });
+      if (!readerR.ok) return assert.fail(JSON.stringify(readerR));
+      const reader = readerR.value;
+
+      // (a) a linha retorna status = displayStatus.
+      const all = await reader.list({}, { page: 1, limit: 50 });
+      assert.equal(all.ok, true, JSON.stringify(all));
+      if (!all.ok) return;
+      const byDoc = new Map(all.value.items.map((line) => [line.documentId, line.status]));
+      assert.equal(byDoc.get(DOC_APP), 'Approved', 'doc Approved sem títulos → Approved');
+      assert.equal(byDoc.get(DOC_REC), 'Reconciled', 'doc Paid + todos Reconciled → Reconciled');
+      assert.equal(byDoc.get(DOC_PAR), 'Paid', 'doc Paid parcial → permanece Paid');
+
+      // (b) filtro status=Approved traz a linha do doc Approved (o bug: dava 0 antes).
+      const app = await reader.list({ status: 'Approved' }, { page: 1, limit: 50 });
+      assert.equal(app.ok, true, JSON.stringify(app));
+      if (!app.ok) return;
+      assert.equal(app.value.total, 1, 'total recorta pelo displayStatus (Approved)');
+      assert.equal(app.value.items.length, 1);
+      assert.equal(app.value.items[0]!.documentId, DOC_APP);
+
+      // (c) filtro status=Reconciled traz só o totalmente conciliado.
+      const rec = await reader.list({ status: 'Reconciled' }, { page: 1, limit: 50 });
+      assert.equal(rec.ok, true, JSON.stringify(rec));
+      if (!rec.ok) return;
+      assert.equal(rec.value.total, 1, 'total recorta pelo displayStatus (Reconciled)');
+      assert.equal(rec.value.items.length, 1);
+      assert.equal(rec.value.items[0]!.documentId, DOC_REC);
+
+      // (d) filtro status=Paid isola o parcialmente conciliado (não vira Reconciled).
+      const paid = await reader.list({ status: 'Paid' }, { page: 1, limit: 50 });
+      assert.equal(paid.ok, true, JSON.stringify(paid));
+      if (!paid.ok) return;
+      assert.equal(paid.value.total, 1, 'Paid parcial não é recontado como Reconciled');
+      assert.equal(paid.value.items[0]!.documentId, DOC_PAR);
+
+      await reader.close();
     });
   });
 }
