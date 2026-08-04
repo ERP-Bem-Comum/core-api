@@ -1,6 +1,7 @@
 import { ok, err } from '../../../../shared/primitives/result.ts';
 import type { Result } from '../../../../shared/primitives/result.ts';
 import * as Money from '../../../../shared/kernel/money.ts';
+import * as Cnpj from '../../../../shared/kernel/cnpj.ts';
 import * as Competencia from '../../domain/document/competencia.ts';
 import * as Retention from '../../domain/shared/retention.ts';
 import type { DocumentType } from '../../domain/document/types.ts';
@@ -223,13 +224,55 @@ const parseBrCents = (raw: string): number | undefined => {
 
 const group1 = (text: string, re: RegExp): string | undefined => re.exec(text)?.[1];
 
-// #566: normaliza o CNPJ/CPF lido para APENAS dígitos, no comprimento canônico (CNPJ 14, CPF 11).
+// #566: normaliza o CNPJ/CPF lido para o comprimento canônico (CNPJ 14, CPF 11).
 // Menos que 11 → inválido (undefined). Slice protege contra dígitos vizinhos capturados junto.
+//
+// ADR-0044: CNPJ pode conter letras (12 alfanuméricos + 2 DVs numéricos), então a captura do bloco
+// emitente aceita `[0-9A-Za-z]` — e com isso o `raw` passa a atravessar o texto VIZINHO quando o
+// identificador não é um CNPJ (a captura não sabe onde ele termina). Os dois ramos abaixo tratam
+// esse `raw` largo de formas diferentes, e é essa assimetria que importa:
+//
+//   - ramo CNPJ: testa os 14 primeiros caracteres significativos contra o checksum do kernel. O
+//     comprimento canônico é o que delimita o identificador; o resto da captura é descartado.
+//   - ramo legado (CPF / CNPJ com checksum inválido): recorta o `raw` à corrida inicial de dígitos e
+//     máscara, ATÉ a primeira letra. Sem esse recorte, um CPF seguido de `IM 0012345` produziria
+//     `52998224725001` — 14 caracteres de comprimento plausível, montados com dígitos da inscrição
+//     municipal, que seguiriam silenciosos até o `resolveSupplierByCnpj` e o autofill do front.
+//     Foi exatamente a regressão que reprovou a tentativa anterior; ver
+//     `tests/reports/W2-2026-08-04-cnpj-alfanumerico-REPROVADO.md`. Alargar a captura exige
+//     estreitar o consumidor.
 const normalizeTaxId = (raw: string | undefined): string | undefined => {
   if (raw === undefined) return undefined;
-  const digits = raw.replace(/\D/g, '');
+  const cnpj = raw
+    .replace(/[.\-/\s]/g, '')
+    .toUpperCase()
+    .slice(0, 14);
+  if (Cnpj.isValidCnpj(cnpj)) return cnpj;
+  const digits = (/^[\d.\-/\s]*/.exec(raw)?.[0] ?? '').replace(/\D/g, '');
   if (digits.length >= 14) return digits.slice(0, 14);
   if (digits.length >= 11) return digits.slice(0, 11);
+  return undefined;
+};
+
+// Primeiro identificador NORMALIZÁVEL entre todas as ocorrências do rótulo.
+//
+// Enquanto a captura exigia `\d` logo após o rótulo, uma ocorrência de campo preenchido com texto
+// (`CNPJ / CPF / NIF NAO INFORMADO`) simplesmente não casava, e o motor seguia sozinho para a
+// ocorrência seguinte. Com a classe alargada do ADR-0044 ela passa a casar — e a captura gulosa
+// atravessa a quebra de linha e COME o rótulo seguinte, escondendo-o. O campo preenchido com lixo
+// passaria a apagar o identificador válido que vem depois.
+//
+// Por isso a varredura é sobre as posições do RÓTULO, não sobre os matches do identificador: o
+// `lastIndex` avança só até o fim do rótulo, então a ocorrência seguinte chega intacta. Estreitar a
+// classe de volta resolveria o sintoma e desfaria o ADR-0044; a gula precisa ser contida pelo laço.
+const TAX_ID_AT_START = /^([0-9A-Za-z][0-9A-Za-z.\-/\s]{9,24})/;
+
+const firstTaxId = (text: string): string | undefined => {
+  const label = /CNPJ\s*\/\s*CPF\s*\/\s*NIF\s*/gi;
+  for (let m = label.exec(text); m !== null; m = label.exec(text)) {
+    const id = normalizeTaxId(group1(text.slice(m.index + m[0].length), TAX_ID_AT_START));
+    if (id !== undefined) return id;
+  }
   return undefined;
 };
 
@@ -296,13 +339,23 @@ export const structureText = (
     group1(emitBlock, /Nome\s*\/\s*Nome Empresarial\s+(.+?)\s+E-?mail/i)
       ?.replace(/^[\d.\-/]+\s+/, '')
       .trim();
-  // #566: só dígitos, COMPLETOS — CNPJ 14 / CPF 11. O `\s` no run tolera a quebra de linha da camada
-  // de texto do unpdf (o "-90" pode cair na linha seguinte); `normalizeTaxId` corta no comprimento
-  // canônico. Menos que CPF → undefined (não seta supplier — evita o CNPJ truncado silencioso, #566).
+  // #566: identificador COMPLETO no comprimento canônico — 14 posições p/ CNPJ, 11 p/ CPF. O `\s` no
+  // run tolera a quebra de linha da camada de texto do unpdf (o "-90" pode cair na linha seguinte);
+  // `normalizeTaxId` corta no comprimento canônico. Menos que CPF → undefined (não seta supplier —
+  // evita o truncado silencioso, #566).
+  //
+  // ⚠️ Os dois primeiros braços ainda capturam classe NUMÉRICA, e por serem `??` eles VENCEM o braço
+  // 3. Um layout com rótulo `CNPJ:` e identificador alfanumérico (ADR-0044) para na 1ª letra e cai no
+  // ramo legado — `CNPJ: 12.345.678/000A-08` devolve `12345678000`, 11 caracteres que o consumidor
+  // não distingue de um CPF. É defeito PRÉ-EXISTENTE (idêntico em HEAD), fora do escopo desta
+  // mudança — registrado em #627, com os 4 CAs; ver também a allowlist de
+  // `tests/cleanup/cnpj-alphanumeric-language.test.ts`.
   const taxId =
     normalizeTaxId(group1(text, /CNPJ:\s*([\d.\-/\s]{11,25})/i)) ??
     normalizeTaxId(group1(text, /CPF:\s*([\d.\-/\s]{11,20})/i)) ??
-    normalizeTaxId(group1(emitBlock, /CNPJ\s*\/\s*CPF\s*\/\s*NIF\s*(\d[\d.\-/\s]{9,24})/i));
+    // ADR-0044: a 1ª posição do CNPJ é alfanumérica — exigir `\d` aqui é a mesma família de bug que
+    // "14 dígitos". Quem delimita o identificador é `normalizeTaxId`, não a classe de caracteres.
+    firstTaxId(emitBlock);
   // Basta o CNPJ para resolver o fornecedor (#FIN-OCR-AUTOFILL-SUPPLIER); legalName é auxiliar.
   const supplier: SupplierIdentity | undefined =
     taxId !== undefined ? { legalName: legalName ?? '', taxId } : undefined;
