@@ -13,9 +13,10 @@
  * O inventário de decisões registrou o caso como `ADR-0044-C5`, com 6 ocorrências; quando esta
  * sessão mediu, eram 10, todas em linguagem, nenhuma em validação.
  *
- * A allowlist NÃO é tolerância: são os três pontos onde o problema é de CÓDIGO, não de frase, e
- * cada um está registrado. Corrigi-los é mudança de comportamento e exige decisão — por isso o
- * gate os fixa em vez de escondê-los, e qualquer NOVA ocorrência reprova.
+ * A allowlist NÃO é tolerância: é o ponto onde o problema é de CÓDIGO, não de frase. A busca por
+ * CNPJ em `list-suppliers`/`list-financiers` estava lá e SAIU — foi corrigida, com teste em
+ * `tests/modules/partners/application/use-cases/cnpj-search-alphanumeric.test.ts`. Resta o leitor
+ * fiscal, cuja correção exige fixture real. Qualquer NOVA ocorrência reprova.
  */
 
 import { describe, it } from 'node:test';
@@ -33,13 +34,9 @@ const claimsDigits = /d[ií]gito|somente n[uú]mero|apenas n[uú]mero/i;
  * Registrados, não anistiados; cada um precisa de decisão própria.
  */
 const KNOWN_CODE_DEFECTS: readonly string[] = [
-  // Busca por CNPJ normaliza o termo com `replace(/\D/g,'')`: procurar `12ABC34501DE35` vira
-  // `12345135`, que não é substring do CNPJ real — a busca não encontra o cadastro.
-  'src/modules/partners/application/use-cases/list-financiers.ts',
-  'src/modules/partners/application/use-cases/list-suppliers.ts',
   // Leitor de documento fiscal (#566): o regex de captura aceita só `[\d.\-/\s]` e o
   // `normalizeTaxId` faz `replace(/\D/g,'')`. Documento com CNPJ alfanumérico fica sem emitente
-  // reconhecido. É o mais grave dos três — mexer aqui exige as fixtures fiscais reais.
+  // reconhecido. Corrigir exige as fixtures fiscais reais, gitignored por LGPD.
   'src/modules/financial/adapters/document-reader/native-pdf.ts',
 ];
 
@@ -67,8 +64,6 @@ describe('CNPJ-ALPHANUMERIC — a linguagem acompanha o formato', () => {
   it('a allowlist de defeitos de código está pinada', () => {
     assert.deepEqual([...KNOWN_CODE_DEFECTS].sort(), [
       'src/modules/financial/adapters/document-reader/native-pdf.ts',
-      'src/modules/partners/application/use-cases/list-financiers.ts',
-      'src/modules/partners/application/use-cases/list-suppliers.ts',
     ]);
   });
 
