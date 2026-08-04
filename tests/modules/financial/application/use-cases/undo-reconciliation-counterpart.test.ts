@@ -130,6 +130,7 @@ const buildWorld = async () => {
     confirmCp,
     undoRec,
     counterpartStore,
+    reconRepo,
     statementStore,
     accountB,
     txA: String(txA.id),
@@ -206,5 +207,96 @@ describe('financial/application — undoReconciliation trata a contrapartida (US
     assert.equal(cp.ok && cp.value?.status === 'Pending', true, 'contrapartida reaberta');
     if (cp.ok && cp.value) assert.equal(cp.value.matchedTransactionRef, null);
     assert.equal(bStatus(w.statementStore, w.txB), 'Pending', 'perna B desfeita (re-conciliável)');
+  });
+
+  // #450: desfazer a conciliação NA PERNA B (destino) deve REABRIR a contrapartida esperada (Matched →
+  // Pending) — não deixá-la presa em Matched. A origem (A) NÃO é tocada (guard de simetria).
+  it('#450: undo na perna B (destino) reabre a contrapartida e não toca a origem', async () => {
+    const w = await buildWorld();
+    const rec = await w.record({
+      transactionId: w.txA,
+      type: 'Transfer',
+      destinationAccountRef: String(w.accountB.id),
+      reconciledBy: 'u1',
+    });
+    assert.equal(rec.ok, true, JSON.stringify(rec));
+    if (!rec.ok) return;
+    const originReconciliationId = rec.value.reconciliationId;
+
+    const pending = await w.counterpartStore.listPendingByAccount(w.accountB.id);
+    if (!pending.ok || pending.value[0] === undefined) throw new Error('setup: pending');
+    const cpId = pending.value[0].id;
+
+    // Casa a perna B → contrapartida Matched; guarda a conciliação de B (é a que vamos desfazer).
+    const confirmed = await w.confirmCp({
+      transactionId: w.txB,
+      counterpartId: String(cpId),
+      reconciledBy: 'u1',
+    });
+    assert.equal(confirmed.ok, true, JSON.stringify(confirmed));
+    if (!confirmed.ok) return;
+    const legBReconciliationId = confirmed.value.reconciliationId;
+
+    // Desfaz a PERNA B (não a origem).
+    const undone = await w.undoRec({
+      reconciliationId: String(legBReconciliationId),
+      undoneBy: 'u1',
+    });
+    assert.equal(undone.ok, true, JSON.stringify(undone));
+
+    // Contrapartida VOLTA a Pending (não fica presa em Matched) e some o vínculo com a transação de B.
+    const cp = await w.counterpartStore.findById(cpId);
+    assert.equal(
+      cp.ok && cp.value?.status === 'Pending',
+      true,
+      'contrapartida reaberta (não presa em Matched)',
+    );
+    if (cp.ok && cp.value) assert.equal(cp.value.matchedTransactionRef, null);
+
+    // E reaparece na fila de pendentes do destino (regressão da issue #450).
+    const reopened = await w.counterpartStore.listPendingByAccount(w.accountB.id);
+    assert.equal(
+      reopened.ok && reopened.value.some((c) => String(c.id) === String(cpId)),
+      true,
+      'contrapartida reaberta reaparece em listPendingByAccount(destino)',
+    );
+
+    // Perna B volta a Pending (re-conciliável); a origem A permanece intacta.
+    assert.equal(bStatus(w.statementStore, w.txB), 'Pending', 'perna B desfeita (re-conciliável)');
+    assert.equal(
+      bStatus(w.statementStore, w.txA),
+      'Reconciled',
+      'origem A intacta (não tocada pelo undo de B)',
+    );
+    const originRec = await w.reconRepo.findById(originReconciliationId);
+    assert.equal(
+      originRec.ok && originRec.value?.status === 'Active',
+      true,
+      'conciliação de origem segue Active (guard de simetria)',
+    );
+  });
+
+  // Não-regressão: conciliação sem contrapartida (nem por origem nem por destino) → undo normal.
+  it('undo de conciliação sem contrapartida → undo normal (back-compat)', async () => {
+    const w = await buildWorld();
+    // Lançamento manual simples em A (Payment, sem destino) → NENHUMA contrapartida nasce.
+    const rec = await w.record({
+      transactionId: w.txA,
+      type: 'Payment',
+      reconciledBy: 'u1',
+    });
+    assert.equal(rec.ok, true, JSON.stringify(rec));
+    if (!rec.ok) return;
+    assert.equal(bStatus(w.statementStore, w.txA), 'Reconciled', 'A conciliada antes do undo');
+
+    const undone = await w.undoRec({
+      reconciliationId: String(rec.value.reconciliationId),
+      undoneBy: 'u1',
+    });
+    assert.equal(undone.ok, true, JSON.stringify(undone));
+    assert.equal(bStatus(w.statementStore, w.txA), 'Pending', 'A desfeita (undo normal)');
+
+    const undoneRec = await w.reconRepo.findById(rec.value.reconciliationId);
+    assert.equal(undoneRec.ok && undoneRec.value?.status === 'Undone', true, 'conciliação Undone');
   });
 });
