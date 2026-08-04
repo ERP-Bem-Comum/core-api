@@ -18,8 +18,12 @@
  * Filtros (todos opcionais, AND, ausente = sem restrição), no molde do #588 (REP-4):
  *  - refs em `fin_payable_view` (program/budget-plan/debit-account/cost-center/category/subcategory/
  *    supplier) + janela half-open [dueFrom, dueTo) sobre `due_date`;
- *  - `status` (1 dos 6 granulares) filtra o status VIVO em `fin_documents` via LEFT JOIN — o
- *    status do payable-view é reduzido a 4 e não distingue Transmitted/PartiallyReconciled/Reconciled;
+ *  - `status` (#611): EXIBIDO e FILTRADO pelo `displayStatus` — o MESMO status derivado do documento
+ *    que a tela **Contas a Pagar** mostra (espelha `document-summary-by-ids-view.drizzle`). Deriva de
+ *    `fin_documents.status` + subquery `recon` sobre `fin_payables` (a tabela-fonte com os 8 status;
+ *    o `fin_payable_view` reduzido NÃO distingue Reconciled): documento 'Paid' com ≥1 título e TODOS
+ *    Reconciled ⇒ 'Reconciled'; caso contrário, o próprio `fin_documents.status`. O filtro compara
+ *    contra esse displayStatus — antes chaveava pelo status cru do documento e a linha não o retornava;
  *  - `search` (LIKE contains, case-insensitive) em document_number + fin_supplier_view.name.
  * `Cancelled` é sempre excluído (exclusão padrão dos REPs).
  *
@@ -38,6 +42,7 @@ import {
   finCostCenters,
   finCategories,
   finDocuments,
+  finPayables,
 } from '../adapters/persistence/schemas/mysql.ts';
 
 // Ordenação servível no Slice A: só por vencimento (o grid ordena por dueDate). `sort:direção`.
@@ -78,6 +83,9 @@ export type GeneralReportRow = Readonly<{
   documentId: string;
   code: string | null; // fin_documents.document_number
   tipo: 'a-pagar'; // constante (v1 só a-pagar)
+  // #611: displayStatus derivado do DOCUMENTO (o MESMO que a tela Contas a Pagar exibe) — NÃO o
+  // status cru do payable-view (reduzido a 4). Pode ser qualquer DocumentStatus + 'Reconciled'.
+  status: string;
   dueDate: string; // 'YYYY-MM-DD'
   // Slice B (#442): tipo do favorecido (COALESCE de fin_documents.payee_kind). O NOME de
   // Financiador/Colaborador é cross-módulo (partners) e NÃO é resolvido aqui — Slice B costura na borda.
@@ -120,6 +128,24 @@ export const openGeneralReportReader = async (
   // Self-join da taxonomia (subcategoria = folha auto-referente por parent_id — #147 F3).
   const subcategory = alias(finCategories, 'fin_subcategories');
 
+  // #611 · displayStatus: espelha EXATAMENTE a derivação do Contas a Pagar
+  // (`document-summary-by-ids-view.drizzle`). A conciliação usa `fin_payables` — a tabela-fonte com os
+  // 8 status — e NÃO o `fin_payable_view` (reduzido a 4, que não distingue Reconciled). Subquery
+  // agrupada por documento (total de títulos + quantos Reconciled) → LEFT JOIN 1:0..1: cada payable do
+  // grid herda o displayStatus do seu documento. Reusada (como o alias `subcategory`) nas DUAS queries.
+  const recon = db
+    .select({
+      documentId: finPayables.documentId,
+      total: sql<number>`count(*)`.as('total'),
+      reconciled: sql<number>`sum(${finPayables.status} = 'Reconciled')`.as('reconciled'),
+    })
+    .from(finPayables)
+    .groupBy(finPayables.documentId)
+    .as('recon');
+  // Documento conta como Conciliado sse status='Paid' E tem ≥1 título E TODOS Reconciled (FR-004).
+  const isReconciled = sql`${finDocuments.status} = 'Paid' and ${recon.total} is not null and ${recon.total} = ${recon.reconciled}`;
+  const displayStatus = sql<string>`case when ${isReconciled} then 'Reconciled' else ${finDocuments.status} end`;
+
   const buildWhere = (f: GeneralReportFilter): SQL | undefined =>
     and(
       // Exclusão padrão dos REPs (Cancelled fora).
@@ -137,8 +163,8 @@ export const openGeneralReportReader = async (
         ? eq(finPayableView.subcategoryRef, f.subcategoryRef)
         : undefined,
       f.supplierRef !== undefined ? eq(finPayableView.supplierRef, f.supplierRef) : undefined,
-      // 6 granulares → status vivo do documento (o payable-view não os distingue).
-      f.status !== undefined ? eq(finDocuments.status, f.status) : undefined,
+      // #611: filtra pelo displayStatus derivado (o MESMO exibido), não pelo status cru do documento.
+      f.status !== undefined ? sql`${displayStatus} = ${f.status}` : undefined,
       // Busca textual: contains (case-insensitive pela collation) em número do doc OU nome do fornecedor.
       f.search !== undefined
         ? or(
@@ -155,12 +181,16 @@ export const openGeneralReportReader = async (
         const page = pagination.page;
         const pageSize = pagination.limit;
 
-        // Total com o MESMO WHERE (COUNT(*)). Os LEFT JOIN são 1:1 (PKs) — não alteram a contagem;
-        // fin_documents/fin_supplier_view são necessários porque o WHERE (status/search) os referencia.
+        // Total com o MESMO WHERE (COUNT(*)). Os LEFT JOIN são 1:0..1 (por documento/PK) — não
+        // alteram a contagem; fin_documents/fin_supplier_view são necessários porque o WHERE
+        // (status/search) os referencia. #611: o `recon` join TAMBÉM entra aqui, porque o WHERE de
+        // status compara o displayStatus (que depende de recon) — o count precisa recortar pelo mesmo
+        // critério das linhas, senão `total` e `items` divergiriam sob filtro de status.
         const totalRows = await db
           .select({ n: sql<number>`count(*)` })
           .from(finPayableView)
           .leftJoin(finDocuments, eq(finPayableView.documentId, finDocuments.id))
+          .leftJoin(recon, eq(recon.documentId, finPayableView.documentId))
           .leftJoin(finSupplierView, eq(finPayableView.supplierRef, finSupplierView.supplierRef))
           .where(where);
         const total = totalRows[0]?.n ?? 0;
@@ -173,6 +203,8 @@ export const openGeneralReportReader = async (
             payableId: finPayableView.payableId,
             documentId: finPayableView.documentId,
             code: finDocuments.documentNumber,
+            // #611: displayStatus derivado (o MESMO do Contas a Pagar), não o status cru do payable.
+            status: displayStatus,
             dueDate: finPayableView.dueDate,
             // Cru (nullable) — normalizado por `toPayeeKind` no map (NULL/valor fora do enum → 'supplier').
             payeeKind: finDocuments.payeeKind,
@@ -189,6 +221,7 @@ export const openGeneralReportReader = async (
           })
           .from(finPayableView)
           .leftJoin(finDocuments, eq(finPayableView.documentId, finDocuments.id))
+          .leftJoin(recon, eq(recon.documentId, finPayableView.documentId))
           .leftJoin(finSupplierView, eq(finPayableView.supplierRef, finSupplierView.supplierRef))
           .leftJoin(finCostCenters, eq(finPayableView.costCenterRef, finCostCenters.id))
           .leftJoin(finCategories, eq(finPayableView.categoryRef, finCategories.id))
@@ -203,6 +236,7 @@ export const openGeneralReportReader = async (
           documentId: row.documentId,
           code: row.code,
           tipo: 'a-pagar',
+          status: row.status,
           dueDate: row.dueDate,
           payeeKind: toPayeeKind(row.payeeKind),
           supplierRef: row.supplierRef,

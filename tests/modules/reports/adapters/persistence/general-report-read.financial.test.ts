@@ -45,6 +45,7 @@ const finRow = (over: Partial<FinancialRow> = {}): FinancialRow => ({
   documentId: 'dc000000-0000-4000-8000-00000000d001',
   code: 'NFS 1234',
   tipo: 'a-pagar',
+  status: 'Approved',
   dueDate: '2026-07-01',
   payeeKind: 'supplier',
   supplierRef: null,
@@ -199,7 +200,12 @@ describe('GeneralReportReadFromFinancial — stitch de Financiador/Colaborador (
     );
     const adapter = GeneralReportReadFromFinancial(
       fakeListReport([
-        finRow({ payableId: 'p-fin', payeeKind: 'financier', supplierRef: FIN }),
+        finRow({
+          payableId: 'p-fin',
+          payeeKind: 'financier',
+          supplierRef: FIN,
+          status: 'Reconciled',
+        }),
         finRow({ payableId: 'p-col', payeeKind: 'collaborator', supplierRef: COL }),
       ]),
       port,
@@ -214,6 +220,9 @@ describe('GeneralReportReadFromFinancial — stitch de Financiador/Colaborador (
     assert.equal(fin!.collaboratorName, null);
     assert.equal(col!.collaboratorName, 'Colaborador João');
     assert.equal(col!.financierName, null);
+    // #611: o displayStatus do financial atravessa o stitch sem alteração.
+    assert.equal(fin!.status, 'Reconciled');
+    assert.equal(col!.status, 'Approved');
   });
 
   it('DEDUPE: o mesmo ref repetido é resolvido só 1× por getter', async () => {
