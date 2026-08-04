@@ -54,9 +54,23 @@ Reporte, em três linhas:
 
 Não escreva `REPORT.md`. A saída do comando é a evidência; ela já está no turno.
 
-## Depois
+## 5. Vá para o verde — no MESMO turno
 
-A implementação vem no próximo passo. O Stop hook (`stop-quality-gate.sh`) bloqueia
-o fim do turno enquanto o gate estiver vermelho — não é preciso lembrar de rodar
-`pnpm test`: o turno não fecha sem ele. Antes de dar a mudança por encerrada,
-`/w2-review` revisa o diff em contexto isolado.
+**O W0 não fecha turno sozinho.** Escreva a implementação em seguida, aqui mesmo.
+
+O Stop hook (`stop-quality-gate.sh`) roda o gate no fim do turno e devolve `exit 2`
+em qualquer vermelho. Ele **não tem como distinguir** um RED deliberado de uma
+regressão: só enxerga o exit code do `pnpm test`, e o sintoma dos dois é idêntico.
+Um W0 que tenta encerrar o turno é bloqueado — até 8 vezes seguidas, cada bloqueio
+pagando o gate completo — antes de o Claude Code liberar.
+
+Isso não é defeito do hook. É a consequência de o RED ser um estado **transitório**:
+ele existe para ser observado e superado dentro do mesmo turno, não para ser
+persistido. A separação em waves é do raciocínio, não do turno.
+
+⚠️ **Não troque o vermelho por `skip`, `todo` ou asserção frouxa para o turno fechar.**
+Isso substitui um RED provado por um verde falso — a saída que a política de regressão
+zero proíbe explicitamente. Se o verde não vier, as saídas são consertar a causa ou
+escalar ao humano com causa-raiz.
+
+Antes de dar a mudança por encerrada, `/w2-review` revisa o diff em contexto isolado.
