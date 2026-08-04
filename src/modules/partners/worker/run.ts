@@ -9,6 +9,10 @@
 import process from 'node:process';
 
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
+import {
+  installLastResortHandlers,
+  processLastResortDeps,
+} from '#src/shared/runtime/last-resort.ts';
 import { openPartnersMysql } from '../adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleOutboxRepository } from '../adapters/persistence/repos/outbox-repository.drizzle.ts';
 import { LoggerEventDelivery } from '../adapters/event-delivery/event-delivery.logger.ts';
@@ -44,6 +48,14 @@ const main = async (): Promise<number> => {
   };
   process.once('SIGTERM', shutdown);
   process.once('SIGINT', shutdown);
+  // Drena de verdade: aborta o loop E fecha o(s) pool(s). Em `uncaughtException` o
+  // `finally` nunca roda, e sem isto o pool fica pendurado ate o `wait_timeout`
+  // (Incident-0001).
+  const drain = async (): Promise<void> => {
+    controller.abort();
+    await handle.close();
+  };
+  installLastResortHandlers(drain, processLastResortDeps());
 
   process.stderr.write(
     `[partners-outbox-worker] iniciando — batch=${config.loop.batchSize} maxAttempts=${config.loop.maxAttempts} ` +

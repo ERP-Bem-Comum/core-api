@@ -14,6 +14,10 @@ import { createDrizzleOutboxRepository } from '../adapters/persistence/repos/out
 import { LoggerEventDelivery } from '../adapters/event-delivery/event-delivery.logger.ts';
 import { runLoop } from './outbox-worker.ts';
 import { readWorkerConfig } from './config.ts';
+import {
+  installLastResortHandlers,
+  processLastResortDeps,
+} from '#src/shared/runtime/last-resort.ts';
 
 const EX_CONFIG = 78; // sysexits.h — erro de configuração.
 
@@ -44,6 +48,15 @@ const main = async (): Promise<number> => {
   };
   process.once('SIGTERM', shutdown);
   process.once('SIGINT', shutdown);
+  // Drena de verdade: aborta o loop E fecha o(s) pool(s). Em `uncaughtException` o
+  // `finally` nunca roda, e sem isto o pool fica pendurado ate o `wait_timeout`
+  // (Incident-0001).
+  const drain = async (): Promise<void> => {
+    controller.abort();
+    // caminho de erro (evita listener pendurado durante/após o handle.close()).
+    await handle.close();
+  };
+  installLastResortHandlers(drain, processLastResortDeps());
 
   // Daemon: logs operacionais vão para stderr (stdout reservado a dados consumíveis).
   process.stderr.write(

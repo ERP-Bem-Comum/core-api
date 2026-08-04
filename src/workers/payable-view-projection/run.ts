@@ -13,6 +13,10 @@ import process from 'node:process';
 
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import { runLoop } from '#src/shared/outbox/index.ts';
+import {
+  installLastResortHandlers,
+  processLastResortDeps,
+} from '#src/shared/runtime/last-resort.ts';
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleFinancialOutboxReader } from '#src/modules/financial/adapters/persistence/repos/fin-outbox-reader.drizzle.ts';
 import { createDrizzlePayableViewStore } from '#src/modules/financial/adapters/persistence/repos/payable-view-store.drizzle.ts';
@@ -49,6 +53,14 @@ const main = async (): Promise<number> => {
   };
   process.once('SIGTERM', shutdown);
   process.once('SIGINT', shutdown);
+  // Drena de verdade: aborta o loop E fecha o(s) pool(s). Em `uncaughtException` o
+  // `finally` nunca roda, e sem isto o pool fica pendurado ate o `wait_timeout`
+  // (Incident-0001).
+  const drain = async (): Promise<void> => {
+    controller.abort();
+    await handle.close();
+  };
+  installLastResortHandlers(drain, processLastResortDeps());
 
   process.stderr.write(`${TAG}iniciando — fin_outbox → fin_payable_view\n`);
 
