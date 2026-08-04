@@ -52,6 +52,9 @@ export type GeneralReportRow = Readonly<{
   documentId: string;
   code: string | null;
   tipo: 'a-pagar';
+  // #611: displayStatus derivado do documento (o MESMO que a tela Contas a Pagar exibe) — repassado
+  // do reader do financial. Qualquer DocumentStatus + 'Reconciled' (não restrito aos 6 do filtro).
+  status: string;
   dueDate: string;
   // Slice B (#442): tipo do favorecido (do financial) + NOMES cross-módulo costurados via partners.
   // Por kind: supplier → só supplierName; financier → só financierName; collaborator → só

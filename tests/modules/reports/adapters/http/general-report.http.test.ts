@@ -56,6 +56,7 @@ const row = (over: Partial<GeneralReportRow> = {}): GeneralReportRow => ({
   documentId: 'dc000000-0000-4000-8000-00000000d001',
   code: 'NFS 1234',
   tipo: 'a-pagar',
+  status: 'Approved',
   dueDate: '2026-07-01',
   payeeKind: 'supplier',
   supplierRef: '11111111-1111-4111-8111-111111111111',
@@ -167,15 +168,15 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice A)
     assert.equal(res.statusCode, 403, res.body);
   });
 
-  it('CA3: tipo sempre a-pagar; code = document_number; shape completo A+B+C+D (21 chaves)', async () => {
+  it('CA3: tipo sempre a-pagar; code = document_number; status exibido; shape A+B+C+D+status (22 chaves)', async () => {
     const res = await get(READER);
     const body = res.json() as { items: Record<string, unknown>[] };
     const first = body.items[0]!;
     assert.equal(first['tipo'], 'a-pagar');
     assert.equal(first['code'], 'NFS 1234');
-    // Contrato de saída completo (última fatia): 15 colunas do Slice A + 3 do Slice B (payeeKind +
-    // financierName + collaboratorName) + 2 do Slice C (pixKey + bankAccount) + 1 do Slice D
-    // (contractNumber) = 21 chaves. As 14 colunas do legado ficam completas.
+    // #611: a linha agora EXIBE o displayStatus (o MESMO do Contas a Pagar).
+    assert.equal(first['status'], 'Approved');
+    // Contrato de saída completo: 21 chaves anteriores + `status` (#611) = 22 chaves.
     assert.deepEqual(
       [...Object.keys(first)].sort(),
       [
@@ -194,6 +195,7 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice A)
         'payableId',
         'payeeKind',
         'pixKey',
+        'status',
         'subcategoryName',
         'subcategoryRef',
         'supplierName',
@@ -362,7 +364,7 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice B:
     await kindHandle.teardown();
   });
 
-  it('shape de 20 chaves + preenchimento por kind (financier/collaborator/supplier)', async () => {
+  it('shape de 22 chaves + preenchimento por kind (financier/collaborator/supplier)', async () => {
     const res = await kindHandle.app.inject({
       method: 'GET',
       url: '/api/v2/reports/generalReport',
@@ -372,9 +374,9 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice B:
     const body = res.json() as { items: Record<string, unknown>[] };
     assert.equal(body.items.length, 3);
 
-    // 21 chaves em toda linha (A+B+C+D).
+    // 22 chaves em toda linha (A+B+C+D + status/#611).
     for (const line of body.items) {
-      assert.equal(Object.keys(line).length, 21, JSON.stringify(line));
+      assert.equal(Object.keys(line).length, 22, JSON.stringify(line));
     }
 
     const [fin, col, sup] = body.items;
@@ -476,12 +478,13 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice C:
     }
   });
 
-  it('(d) shape de 21 chaves (pixKey/bankAccount/contractNumber incluídos)', async () => {
+  it('(d) shape de 22 chaves (status/pixKey/bankAccount/contractNumber incluídos)', async () => {
     grantBank = true;
     const res = await getC(READER);
     const body = res.json() as { items: Record<string, unknown>[] };
     for (const line of body.items) {
-      assert.equal(Object.keys(line).length, 21, JSON.stringify(line));
+      assert.equal(Object.keys(line).length, 22, JSON.stringify(line));
+      assert.equal('status' in line, true);
       assert.equal('pixKey' in line, true);
       assert.equal('bankAccount' in line, true);
       assert.equal('contractNumber' in line, true);
@@ -526,7 +529,7 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice D:
     await dHandle.teardown();
   });
 
-  it('linha com contrato → contractNumber; linha sem contractRef → null (21 chaves)', async () => {
+  it('linha com contrato → contractNumber; linha sem contractRef → null (22 chaves)', async () => {
     const res = await dHandle.app.inject({
       method: 'GET',
       url: '/api/v2/reports/generalReport',
@@ -536,7 +539,7 @@ describe('reports/http — GET /reports/generalReport (REP-6 · #442 · Slice D:
     const body = res.json() as { items: Record<string, unknown>[] };
     assert.equal(body.items.length, 2);
     for (const line of body.items) {
-      assert.equal(Object.keys(line).length, 21, JSON.stringify(line));
+      assert.equal(Object.keys(line).length, 22, JSON.stringify(line));
       assert.equal('contractNumber' in line, true);
     }
     assert.equal(body.items[0]!['contractNumber'], 'CT-2026-0001');

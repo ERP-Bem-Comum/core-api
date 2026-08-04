@@ -7,6 +7,10 @@ import type {
   ContractRepository,
   ContractRepositoryError,
 } from '../../domain/contract/repository.ts';
+import {
+  parseSequentialNumber,
+  formatSequentialNumber,
+} from '../../domain/contract/sequential-number.ts';
 
 // UC-11 v1 (CTR-IMPORT-LEGACY): use case `importContracts`.
 // Agnóstico de formato — recebe linhas já decodificadas (parser CSV/JSON vive no
@@ -59,10 +63,10 @@ type Deps = Readonly<{
   clock: Clock;
 }>;
 
-// Import PRESERVA o número legado (`row.numero`) — `BuildContractInput` exige o número
-// já resolvido (o import nunca gera; só `createContract` gera quando ausente).
-const toCreateCommand = (row: ImportContractRow): BuildContractInput => ({
-  sequentialNumber: row.numero,
+// issue #425: o número é derivado (ano de `YEAR(original_period_start)`), NÃO mais o
+// `row.numero` verbatim. `sequentialNumber` é resolvido no laço antes do build.
+const toCreateCommand = (row: ImportContractRow, sequentialNumber: string): BuildContractInput => ({
+  sequentialNumber,
   title: row.titulo,
   objective: row.objetivo,
   signedAt: row.assinadoEm,
@@ -92,14 +96,36 @@ export const importContracts =
         continue;
       }
 
-      const built = buildContract(toCreateCommand(row));
-      if (!built.ok) {
-        failures.push({ index, numero: row.numero, error: built.error });
+      // Build inicial com o número legado: valida formato/valor/período/contratado exatamente
+      // como antes (preserva a precedência de erro do import). O número é RE-derivado abaixo.
+      const builtInitial = buildContract(toCreateCommand(row, row.numero));
+      if (!builtInitial.ok) {
+        failures.push({ index, numero: row.numero, error: builtInitial.error });
         continue;
       }
 
-      // Duplicidade intra-arquivo (FR-4a).
-      if (seen.has(row.numero)) {
+      // Dry-run valida sem persistir nem mutar o contador (NFR-4: determinismo dry-run =
+      // persistente no VEREDITO — toda linha que passa no build também persistiria).
+      if (cmd.dryRun) {
+        succeeded += 1;
+        continue;
+      }
+
+      // issue #425: grava o número pelo ano de `YEAR(original_period_start)` (criação = vigência
+      // inicial), NÃO o `/YYYY` verbatim do legado — guarda contra a recorrência do bug. O número
+      // derivado é DETERMINÍSTICO (seq legado + ano de vigência): re-importar deriva o MESMO número
+      // → encontra no repo → rejeita (idempotente). Sem `legacy_id`, o `sequential_number` é a única
+      // chave de dedup — a colisão vira falha reportada, NUNCA reatribuição/duplicata.
+      const targetYear = builtInitial.value.contract.originalPeriod.start.year;
+      const parsed = parseSequentialNumber(row.numero);
+
+      // `parsed` nunca é null aqui (o build validou o formato NNN/AAAA); a guarda defensiva mantém
+      // o número original caso o formato escape.
+      const finalNumber =
+        parsed !== null ? formatSequentialNumber(parsed.seq, targetYear) : row.numero;
+
+      // Duplicidade intra-arquivo (FR-4a) — dedup pelo número DERIVADO.
+      if (seen.has(finalNumber)) {
         failures.push({
           index,
           numero: row.numero,
@@ -108,8 +134,8 @@ export const importContracts =
         continue;
       }
 
-      // Duplicidade vs repositório (FR-4b). Erro de infra aborta o lote.
-      const existing = await deps.contractRepo.findBySequentialNumber(row.numero);
+      // Duplicidade vs repositório (FR-4b) — dedup pelo número DERIVADO. Erro de infra aborta o lote.
+      const existing = await deps.contractRepo.findBySequentialNumber(finalNumber);
       if (!existing.ok) return existing;
       if (existing.value !== null) {
         failures.push({
@@ -120,12 +146,21 @@ export const importContracts =
         continue;
       }
 
-      seen.add(row.numero);
-
-      if (!cmd.dryRun) {
-        const saved = await deps.contractRepo.save(built.value.contract, [built.value.event]);
-        if (!saved.ok) return saved;
+      // Reusa o build inicial quando o número não mudou; senão reconstrói com o número final
+      // (mesmos dados, número válido → o rebuild sempre passa).
+      const built =
+        finalNumber === row.numero
+          ? builtInitial
+          : buildContract(toCreateCommand(row, finalNumber));
+      if (!built.ok) {
+        failures.push({ index, numero: row.numero, error: built.error });
+        continue;
       }
+
+      seen.add(finalNumber);
+
+      const saved = await deps.contractRepo.save(built.value.contract, [built.value.event]);
+      if (!saved.ok) return saved;
 
       succeeded += 1;
     }
