@@ -24,38 +24,16 @@
 
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, resolve, relative, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
-const HERE = fileURLToPath(new URL('.', import.meta.url));
-const PROJECT_ROOT = resolve(HERE, '..', '..');
+import { PROJECT_ROOT, filesUsing } from '../support/source-scan.ts';
 
 // Uso real, não menção. `new AbortController(` e `process.once('SIG` não aparecem em prosa.
 const SIGNAL_USE = /new AbortController\(|process\.(once|on)\(['"]SIG/;
 const SELF_SCHEDULING = /\bsetInterval\(/;
 
-const walk = (rel: string): readonly string[] => {
-  const out: string[] = [];
-  const visit = (dir: string): void => {
-    for (const entry of readdirSync(dir)) {
-      if (entry.startsWith('.')) continue;
-      const full = join(dir, entry);
-      const st = statSync(full);
-      if (st.isDirectory()) visit(full);
-      else if (st.isFile() && entry.endsWith('.ts')) {
-        out.push(relative(PROJECT_ROOT, full).split(sep).join('/'));
-      }
-    }
-  };
-  visit(join(PROJECT_ROOT, rel));
-  return out;
-};
-
 const matching = (rel: string, re: RegExp): readonly string[] =>
-  walk(rel)
-    .filter((f) => re.test(readFileSync(join(PROJECT_ROOT, f), 'utf-8')))
-    .sort();
+  filesUsing(join(PROJECT_ROOT, rel), re, { ext: '.ts' });
 
 describe('JOBS-ONESHOT — job não vira worker por acidente', () => {
   it('nenhum job instala listener de sinal ou AbortController', () => {

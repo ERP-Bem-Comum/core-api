@@ -21,50 +21,26 @@
 
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, resolve, relative, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
-const HERE = fileURLToPath(new URL('.', import.meta.url));
-const PROJECT_ROOT = resolve(HERE, '..', '..');
+import { PROJECT_ROOT, filesUsing, importSpecifiers } from '../support/source-scan.ts';
+
 const SRC_ROOT = join(PROJECT_ROOT, 'src');
 
 // `createPool(` com `(` imediato: NÃO casa `createPoolSafe(` nem `createPoolRegistry(`, que são
 // wrappers legítimos e não abrem pool por conta própria.
 const CREATE_POOL = /\bcreatePool\(/;
 
-// A declaração de import do builder, nas 3 formas em uso: './…', '../../…' e '#src/…'.
-// Casar a substring solta daria falso-verde: o caminho também aparece em COMENTÁRIO nos 7 drivers
-// ("Delega ao builder compartilhado (src/shared/persistence/mysql-pool-config.ts)").
-const IMPORTS_BUILDER = /from\s+['"][^'"]*mysql-pool-config\.ts['"]/;
+const poolCreators = (): readonly string[] => filesUsing(SRC_ROOT, CREATE_POOL, { ext: '.ts' });
 
-const walkSrc = (): string[] => {
-  const out: string[] = [];
-  const visit = (dir: string): void => {
-    for (const entry of readdirSync(dir)) {
-      if (entry.startsWith('.')) continue;
-      const full = join(dir, entry);
-      const st = statSync(full);
-      if (st.isDirectory()) visit(full);
-      else if (st.isFile() && entry.endsWith('.ts')) {
-        out.push(relative(PROJECT_ROOT, full).split(sep).join('/'));
-      }
-    }
-  };
-  visit(SRC_ROOT);
-  return out;
-};
-
-const poolCreators = (): readonly string[] =>
-  walkSrc()
-    .filter((rel) => CREATE_POOL.test(readFileSync(join(PROJECT_ROOT, rel), 'utf-8')))
-    .sort();
+// Dependência real, lida do specifier: o caminho do builder também aparece em COMENTÁRIO nos 7
+// drivers ("Delega ao builder compartilhado (src/shared/persistence/mysql-pool-config.ts)").
+const importsBuilder = (rel: string): boolean =>
+  importSpecifiers(rel).some((s) => s.includes('mysql-pool-config.ts'));
 
 describe('POOL-BUILDER — todo criador de pool passa pelo builder compartilhado', () => {
   it('nenhum arquivo chama createPool( sem importar mysql-pool-config.ts', () => {
-    const offenders = poolCreators().filter(
-      (rel) => !IMPORTS_BUILDER.test(readFileSync(join(PROJECT_ROOT, rel), 'utf-8')),
-    );
+    const offenders = poolCreators().filter((rel) => !importsBuilder(rel));
     assert.deepEqual(
       offenders,
       [],

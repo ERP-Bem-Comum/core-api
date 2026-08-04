@@ -25,15 +25,13 @@
 
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, resolve, relative, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 
-const HERE = fileURLToPath(new URL('.', import.meta.url));
-const PROJECT_ROOT = resolve(HERE, '..', '..');
+import { PROJECT_ROOT, importSpecifiers, walkFiles } from '../support/source-scan.ts';
+
 const MODULES_ROOT = join(PROJECT_ROOT, 'src', 'modules');
 
-const IMPORT_SPECIFIER = /from\s+['"]([^'"]+)['"]/g;
 const CROSS_MODULE = /modules\/([a-z-]+)\/(.*)/;
 
 const moduleNames = (): readonly string[] =>
@@ -41,22 +39,8 @@ const moduleNames = (): readonly string[] =>
     .filter((e) => statSync(join(MODULES_ROOT, e)).isDirectory())
     .sort();
 
-const tsFilesOf = (moduleName: string): readonly string[] => {
-  const out: string[] = [];
-  const visit = (dir: string): void => {
-    for (const entry of readdirSync(dir)) {
-      if (entry.startsWith('.')) continue;
-      const full = join(dir, entry);
-      const st = statSync(full);
-      if (st.isDirectory()) visit(full);
-      else if (st.isFile() && entry.endsWith('.ts')) {
-        out.push(relative(PROJECT_ROOT, full).split(sep).join('/'));
-      }
-    }
-  };
-  visit(join(MODULES_ROOT, moduleName));
-  return out;
-};
+const tsFilesOf = (moduleName: string): readonly string[] =>
+  walkFiles(join(MODULES_ROOT, moduleName), { ext: '.ts' });
 
 type Violation = Readonly<{ file: string; specifier: string }>;
 
@@ -65,10 +49,7 @@ const boundaryViolations = (): readonly Violation[] => {
   const out: Violation[] = [];
   for (const owner of mods) {
     for (const file of tsFilesOf(owner)) {
-      const content = readFileSync(join(PROJECT_ROOT, file), 'utf-8');
-      for (const match of content.matchAll(IMPORT_SPECIFIER)) {
-        const specifier = match[1];
-        if (specifier === undefined) continue;
+      for (const specifier of importSpecifiers(file)) {
         const hit = CROSS_MODULE.exec(specifier);
         if (hit === null) continue;
         const [, other, rest] = hit;
@@ -99,9 +80,7 @@ describe('MODULE-BOUNDARY — módulo só consome outro pela public-api (ADR-000
     assert.ok(mods.length >= 2, `esperado 2+ módulos em src/modules/, encontrado ${mods.length}`);
     const anyCrossModuleImport = mods.some((m) =>
       tsFilesOf(m).some((f) =>
-        [...readFileSync(join(PROJECT_ROOT, f), 'utf-8').matchAll(IMPORT_SPECIFIER)].some((mm) =>
-          /modules\/[a-z-]+\/public-api/.test(mm[1] ?? ''),
-        ),
+        importSpecifiers(f).some((s) => /modules\/[a-z-]+\/public-api/.test(s)),
       ),
     );
     assert.ok(

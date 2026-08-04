@@ -16,12 +16,11 @@
 
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, resolve, relative, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
-const HERE = fileURLToPath(new URL('.', import.meta.url));
-const PROJECT_ROOT = resolve(HERE, '..', '..');
+import { PROJECT_ROOT, filesContaining } from '../support/source-scan.ts';
+
 const TESTS_ROOT = join(PROJECT_ROOT, 'tests');
 
 // A substring proibida: host:porta fixos do MySQL de teste. (Este arquivo contém o needle → é
@@ -47,32 +46,11 @@ const ALLOWLIST: readonly string[] = [
   'tests/jobs/auth/sync-permissions.drizzle-mysql.test.ts',
 ];
 
-// Walk recursivo — lista todos os arquivos sob tests/ (exceto EXCLUDED_DIRS e dot-dirs),
-// devolvendo paths relativos ao PROJECT_ROOT em formato posix (/).
-const walkTests = (): string[] => {
-  const out: string[] = [];
-  const visit = (dir: string): void => {
-    for (const entry of readdirSync(dir)) {
-      if (entry.startsWith('.')) continue;
-      const full = join(dir, entry);
-      const st = statSync(full);
-      if (st.isDirectory()) {
-        if (dir === TESTS_ROOT && EXCLUDED_DIRS.has(entry)) continue;
-        visit(full);
-      } else if (st.isFile()) {
-        out.push(relative(PROJECT_ROOT, full).split(sep).join('/'));
-      }
-    }
-  };
-  visit(TESTS_ROOT);
-  return out;
-};
-
-// Equivalente a `grep -rl NEEDLE tests/` (fora dos excluídos), ordenado.
-const filesContainingNeedle = (): string[] =>
-  walkTests()
-    .filter((rel) => readFileSync(join(PROJECT_ROOT, rel), 'utf-8').includes(NEEDLE))
-    .sort();
+// Equivalente a `grep -rl NEEDLE tests/`, ordenado. Texto CRU de propósito: a allowlist inclui
+// arquivos que carregam o literal numa constante ou num comentário, e eles precisam ser vistos.
+// `excludeTopLevel` (não `excludeDirs`): tests/reports/ é forense e sai, tests/modules/reports/ fica.
+const filesContainingNeedle = (): readonly string[] =>
+  filesContaining(TESTS_ROOT, NEEDLE, { excludeTopLevel: [...EXCLUDED_DIRS] });
 
 // ─── CA1 — fonte única: 0 ocorrências fora da allowlist ─────────────────────
 describe('MYSQL-TEST-PORT — CA1: nenhum literal 127.0.0.1:3306 fora da allowlist', () => {

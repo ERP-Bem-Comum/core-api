@@ -15,35 +15,13 @@
 
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
-import { resolve, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { existsSync, readFileSync } from 'node:fs';
+import { join } from 'node:path';
 
-const HERE = fileURLToPath(new URL('.', import.meta.url));
-const PROJECT_ROOT = resolve(HERE, '..', '..');
+import { PROJECT_ROOT, walkFiles } from '../support/source-scan.ts';
 
 const src = (p: string): string => join(PROJECT_ROOT, 'src', p);
 const tests = (p: string): string => join(PROJECT_ROOT, 'tests', p);
-
-// Walk recursivo simples — lista todos os arquivos .ts sob um diretório.
-const walkTs = (root: string): string[] => {
-  if (!existsSync(root)) return [];
-  const out: string[] = [];
-  const visit = (dir: string): void => {
-    for (const entry of readdirSync(dir)) {
-      const full = join(dir, entry);
-      const st = statSync(full);
-      if (st.isDirectory()) {
-        if (entry === 'node_modules' || entry.startsWith('.')) continue;
-        visit(full);
-      } else if (st.isFile() && entry.endsWith('.ts')) {
-        out.push(full);
-      }
-    }
-  };
-  visit(root);
-  return out;
-};
 
 // ─── CA-1..8 — DELETE ─────────────────────────────────────────────────────
 describe('CTR-CLEANUP-SQLITE — CA-1..8: artefatos SQLite removidos', () => {
@@ -230,7 +208,7 @@ describe('CTR-CLEANUP-SQLITE — CA-14..17: CLI/Config', () => {
 describe('CTR-CLEANUP-SQLITE — CA-18: nenhuma referência a SQLite em src/', () => {
   it('CA-18: nenhum arquivo em src/ menciona better-sqlite3, SqliteHandle, SqliteDriverError, sqlite-driver-*', () => {
     const SRC = join(PROJECT_ROOT, 'src');
-    const files = walkTs(SRC);
+    const files = walkFiles(SRC, { ext: '.ts' }).map((r) => join(PROJECT_ROOT, r));
     const banned: RegExp[] = [
       /better-sqlite3/,
       /\bSqliteHandle\b/,

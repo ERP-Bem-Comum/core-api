@@ -25,37 +25,12 @@
 
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, resolve, relative, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readdirSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 
-const HERE = fileURLToPath(new URL('.', import.meta.url));
-const PROJECT_ROOT = resolve(HERE, '..', '..');
+import { PROJECT_ROOT, filesUsing, walkFiles } from '../support/source-scan.ts';
 
 const CLOCK_READ = /new Date\(\s*\)/;
-
-/** Linha de comentário de bloco (` * …`) ou de linha (`// …`). */
-const isCommentLine = (line: string): boolean => {
-  const t = line.trimStart();
-  return t.startsWith('*') || t.startsWith('//') || t.startsWith('/*');
-};
-
-const walk = (absDir: string): readonly string[] => {
-  const out: string[] = [];
-  const visit = (dir: string): void => {
-    for (const entry of readdirSync(dir)) {
-      if (entry.startsWith('.')) continue;
-      const full = join(dir, entry);
-      const st = statSync(full);
-      if (st.isDirectory()) visit(full);
-      else if (st.isFile() && entry.endsWith('.ts')) {
-        out.push(relative(PROJECT_ROOT, full).split(sep).join('/'));
-      }
-    }
-  };
-  visit(absDir);
-  return out;
-};
 
 /** Diretórios de domínio puro: os `domain/` de cada módulo, mais o shared kernel. */
 const domainDirs = (): readonly string[] => {
@@ -74,12 +49,7 @@ const domainDirs = (): readonly string[] => {
 
 const clockReaders = (): readonly string[] =>
   domainDirs()
-    .flatMap((d) => walk(d))
-    .filter((rel) =>
-      readFileSync(join(PROJECT_ROOT, rel), 'utf-8')
-        .split('\n')
-        .some((line) => !isCommentLine(line) && CLOCK_READ.test(line)),
-    )
+    .flatMap((d) => filesUsing(d, CLOCK_READ, { ext: '.ts' }))
     .sort();
 
 describe('DOMAIN-CLOCK — o domínio recebe o instante, não o lê', () => {
@@ -95,7 +65,7 @@ describe('DOMAIN-CLOCK — o domínio recebe o instante, não o lê', () => {
   });
 
   it('a varredura enxerga arquivos de domínio (guarda contra verde por vacuidade)', () => {
-    const scanned = domainDirs().flatMap((d) => walk(d)).length;
+    const scanned = domainDirs().flatMap((d) => walkFiles(d, { ext: '.ts' })).length;
     assert.ok(scanned > 50, `esperado 50+ arquivos de domínio varridos, encontrado ${scanned}`);
   });
 });

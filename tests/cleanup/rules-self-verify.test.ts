@@ -30,13 +30,12 @@
 
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { readFileSync, readdirSync, statSync, globSync } from 'node:fs';
-import { join, resolve, relative, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { readFileSync, readdirSync, globSync } from 'node:fs';
+import { join, sep } from 'node:path';
 import { parse } from 'yaml';
 
-const HERE = fileURLToPath(new URL('.', import.meta.url));
-const PROJECT_ROOT = resolve(HERE, '..', '..');
+import { PROJECT_ROOT, filesContaining } from '../support/source-scan.ts';
+
 const RULES_DIR = join(PROJECT_ROOT, '.claude', 'rules');
 
 /**
@@ -101,33 +100,12 @@ const readRules = (): readonly RuleDoc[] => {
   return out;
 };
 
-/** Lista recursiva de arquivos sob `root`, em paths relativos ao projeto, formato posix. */
-const walk = (root: string): readonly string[] => {
-  const out: string[] = [];
-  const visit = (dir: string): void => {
-    for (const entry of readdirSync(dir)) {
-      if (entry.startsWith('.')) continue;
-      const full = join(dir, entry);
-      const st = statSync(full);
-      if (st.isDirectory()) visit(full);
-      else if (st.isFile()) out.push(relative(PROJECT_ROOT, full).split(sep).join('/'));
-    }
-  };
-  visit(join(PROJECT_ROOT, root));
-  return out;
-};
-
-const filesContaining = (root: string, pattern: string): readonly string[] =>
-  walk(root)
-    .filter((rel) => readFileSync(join(PROJECT_ROOT, rel), 'utf-8').includes(pattern))
-    .sort();
-
 const resolveEntry = (entry: VerifyEntry): readonly string[] =>
   entry.mode === 'glob'
     ? globSync(entry.glob, { cwd: PROJECT_ROOT })
         .map((p) => p.split(sep).join('/'))
         .sort()
-    : filesContaining(entry.root, entry.pattern);
+    : filesContaining(join(PROJECT_ROOT, entry.root), entry.pattern);
 
 const RULES = readRules();
 

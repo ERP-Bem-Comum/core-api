@@ -22,39 +22,16 @@
 
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { readFileSync, readdirSync, statSync } from 'node:fs';
-import { join, resolve, relative, sep } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 
-const HERE = fileURLToPath(new URL('.', import.meta.url));
-const PROJECT_ROOT = resolve(HERE, '..', '..');
+import { PROJECT_ROOT, filesUsing } from '../support/source-scan.ts';
+
 const SRC_ROOT = join(PROJECT_ROOT, 'src');
 
-// String, não regex: o padrão não tem metacaractere, e `prefer-includes` cobra `includes()`.
 const FREEZE_CALL = 'Object.freeze(';
 const FACADE = 'src/shared/primitives/immutable.ts';
 
-const walkSrc = (): readonly string[] => {
-  const out: string[] = [];
-  const visit = (dir: string): void => {
-    for (const entry of readdirSync(dir)) {
-      if (entry.startsWith('.')) continue;
-      const full = join(dir, entry);
-      const st = statSync(full);
-      if (st.isDirectory()) visit(full);
-      else if (st.isFile() && entry.endsWith('.ts')) {
-        out.push(relative(PROJECT_ROOT, full).split(sep).join('/'));
-      }
-    }
-  };
-  visit(SRC_ROOT);
-  return out;
-};
-
-const freezeCallers = (): readonly string[] =>
-  walkSrc()
-    .filter((rel) => readFileSync(join(PROJECT_ROOT, rel), 'utf-8').includes(FREEZE_CALL))
-    .sort();
+const freezeCallers = (): readonly string[] => filesUsing(SRC_ROOT, FREEZE_CALL, { ext: '.ts' });
 
 describe('IMMUTABLE-FACADE — Object.freeze só na facade', () => {
   it('nenhum arquivo fora da facade chama Object.freeze(', () => {
