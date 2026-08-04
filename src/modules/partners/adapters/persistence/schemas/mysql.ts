@@ -10,7 +10,9 @@
 // ⚠️ CHARSET/COLLATE — aplicado em SQL manual (limitação Drizzle 0.45.x):
 //   - Por tabela:  `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
 //   - `id` varchar(36): `COLLATE utf8mb4_bin` (UUID — comparação binária).
-//   - `cnpj` varchar(14): `COLLATE utf8mb4_bin` (apenas dígitos; UNIQUE determinístico).
+//   - `cnpj` varchar(14): `COLLATE utf8mb4_bin` — comparação binária. Desde o CNPJ
+//     alfanumérico (ADR-0044) o collate também distingue maiúsculas, o que mantém o
+//     UNIQUE determinístico com letras no identificador.
 //
 // **RESPONSABILIDADE DO PRÓXIMO DEV**: ao rodar `pnpm db:generate:partners`, editar o
 // SQL gerado com ENGINE/charset e `COLLATE utf8mb4_bin` em novas colunas UUID/CNPJ.
@@ -40,7 +42,7 @@ export const parFinanciers = mysqlTable(
     name: varchar('name', { length: 255 }).notNull(),
     corporateName: varchar('corporate_name', { length: 255 }).notNull(),
     legalRepresentative: varchar('legal_representative', { length: 255 }).notNull(),
-    // 14 dígitos (sem máscara). UNIQUE + COLLATE utf8mb4_bin no SQL manual.
+    // 14 caracteres alfanuméricos, sem máscara (ADR-0044). UNIQUE + COLLATE utf8mb4_bin no SQL manual.
     cnpj: varchar('cnpj', { length: 14 }).notNull(),
     telephone: varchar('telephone', { length: 30 }).notNull(),
     address: varchar('address', { length: 500 }).notNull(),
@@ -96,7 +98,7 @@ export const parSuppliers = mysqlTable(
     id: varchar('id', { length: 36 }).primaryKey().notNull(),
     name: varchar('name', { length: 255 }).notNull(),
     email: varchar('email', { length: 255 }).notNull(),
-    // 14 dígitos (sem máscara). UNIQUE + COLLATE utf8mb4_bin no SQL manual.
+    // 14 caracteres alfanuméricos, sem máscara (ADR-0044). UNIQUE + COLLATE utf8mb4_bin no SQL manual.
     cnpj: varchar('cnpj', { length: 14 }).notNull(),
     corporateName: varchar('corporate_name', { length: 255 }).notNull(),
     fantasyName: varchar('fantasy_name', { length: 255 }).notNull(),
@@ -442,7 +444,7 @@ export const parActs = mysqlTable(
     actNumber: varchar('act_number', { length: 60 }).notNull(),
     name: varchar('name', { length: 255 }).notNull(), // objeto/título do acordo
     email: varchar('email', { length: 255 }).notNull(), // contato
-    // 14 dígitos (sem máscara). NÃO UNIQUE (uma instituição pode firmar vários acordos).
+    // 14 caracteres alfanuméricos, sem máscara (ADR-0044). NÃO UNIQUE (uma instituição pode firmar vários acordos).
     // COLLATE utf8mb4_bin no SQL manual.
     cnpj: varchar('cnpj', { length: 14 }).notNull(),
     corporateName: varchar('corporate_name', { length: 255 }).notNull(), // razão social
