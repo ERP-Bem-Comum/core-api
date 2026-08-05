@@ -57,7 +57,12 @@ import {
 } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
 
-import { uuidKey, uuidKeyFixed } from '#src/shared/persistence/identifier-columns.ts';
+import {
+  opaqueKey,
+  sha256HexKey,
+  uuidKey,
+  uuidKeyFixed,
+} from '#src/shared/persistence/identifier-columns.ts';
 
 export const contracts = mysqlTable(
   'ctr_contracts',
@@ -415,20 +420,20 @@ export const ctrOutboxDeadLetter = mysqlTable(
 export const ctrDocuments = mysqlTable(
   'ctr_documents',
   {
-    id: char('id', { length: 36 }).primaryKey().notNull(),
+    id: uuidKeyFixed('id').primaryKey().notNull(),
     parentType: varchar('parent_type', { length: 16 }).notNull(),
-    parentId: char('parent_id', { length: 36 }).notNull(),
+    parentId: uuidKeyFixed('parent_id').notNull(),
     categoria: varchar('categoria', { length: 32 }).notNull(),
     fileName: varchar('file_name', { length: 255 }).notNull(),
     mimeType: varchar('mime_type', { length: 127 }).notNull(),
     sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
-    hashSha256: char('hash_sha256', { length: 64 }).notNull(),
+    hashSha256: sha256HexKey('hash_sha256').notNull(),
     bucket: varchar('bucket', { length: 63 }).notNull(),
     storageKey: varchar('storage_key', { length: 1024 }).notNull(),
     signedElectronically: boolean('signed_electronically').notNull().default(false),
     version: smallint('version', { unsigned: true }).notNull().default(1),
     uploadedAt: datetime('uploaded_at', { mode: 'date', fsp: 3 }).notNull(),
-    uploadedBy: char('uploaded_by', { length: 36 }).notNull(),
+    uploadedBy: uuidKeyFixed('uploaded_by').notNull(),
     retentionUntil: datetime('retention_until', { mode: 'date', fsp: 3 }),
     status: varchar('status', { length: 16 }).notNull().default('Active'),
     // CTR-USECASE-DELETE-DOCUMENT: campos audit de exclusao logica (RN-11).
@@ -438,7 +443,7 @@ export const ctrDocuments = mysqlTable(
     // CTR-USECASE-SUPERSEDE-DOCUMENT: campos audit de substituicao (RN-AS-02).
     supersededAt: datetime('superseded_at', { mode: 'date', fsp: 3 }),
     supersededBy: char('superseded_by', { length: 36 }),
-    supersededByDocumentId: char('superseded_by_document_id', { length: 36 }),
+    supersededByDocumentId: uuidKeyFixed('superseded_by_document_id'),
   },
   (t) => [
     check('ctr_documents_parent_type_chk', sql`${t.parentType} IN ('Contract','Amendment')`),
@@ -483,7 +488,7 @@ export const eventosProcessados = mysqlTable(
   'eventos_processados',
   {
     // Identificador do consumidor (ex.: 'logger-default', 'financial-module').
-    consumerId: varchar('consumer_id', { length: 64 }).notNull(),
+    consumerId: opaqueKey('consumer_id').notNull(),
     // UUID v4 do evento (não é FK — tabela cross-módulo sem acoplamento direto).
     eventId: uuidKeyFixed('event_id').notNull(),
     // Timestamp de quando este consumer processou o evento.

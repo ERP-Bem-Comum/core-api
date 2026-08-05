@@ -127,6 +127,13 @@
       "when": 1782791347489,
       "tag": "0017_perpetual_iceman",
       "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "5",
+      "when": 1785969688500,
+      "tag": "0018_dapper_rocket_racer",
+      "breakpoints": true
     }
   ]
 }

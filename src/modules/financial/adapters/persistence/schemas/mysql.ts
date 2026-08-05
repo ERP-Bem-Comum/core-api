@@ -90,8 +90,8 @@ export const finDocuments = mysqlTable(
     budgetPlanRef: uuidKey('budget_plan_ref'),
     categoryRef: uuidKey('category_ref'),
     // Subcategoria = folha da árvore do plano (#502). Soft ref (sem FK — ADR-0014); aditiva/nullable.
-    subcategoryRef: varchar('subcategory_ref', { length: 36 }),
-    costCenterRef: varchar('cost_center_ref', { length: 36 }),
+    subcategoryRef: uuidKey('subcategory_ref'),
+    costCenterRef: uuidKey('cost_center_ref'),
     programRef: uuidKey('program_ref'),
 
     // Conta-cedente de débito (D-CEDENTE — de qual conta o pagamento sai). Ref lógica a
@@ -135,7 +135,7 @@ export const finDocuments = mysqlTable(
     // #62: comprovante-fonte (PDF/XML lido) guardado no storage — todas nullable (opcional + back-compat).
     sourceFileBucket: varchar('source_file_bucket', { length: 63 }),
     sourceFileKey: varchar('source_file_key', { length: 1024 }),
-    sourceFileHashSha256: varchar('source_file_hash_sha256', { length: 64 }),
+    sourceFileHashSha256: opaqueKey('source_file_hash_sha256'),
     sourceFileSizeBytes: bigint('source_file_size_bytes', { mode: 'number' }),
     sourceFileMime: varchar('source_file_mime', { length: 127 }),
 
@@ -156,7 +156,7 @@ export const finDocuments = mysqlTable(
 
     // Aprovador PRETENDIDO definido na inclusão (#148) — cross-BC (auth), sem FK física. Nullable
     // (opcional + back-compat). Distinto de approved_by (efetivado na aprovação).
-    approverRef: varchar('approver_ref', { length: 36 }),
+    approverRef: uuidKey('approver_ref'),
 
     // #273: complemento da forma de pagamento (texto livre opaco — linha digitável de boleto,
     // id de cartão corporativo, referência de câmbio). Nullable + sem CHECK (string livre).
@@ -555,25 +555,25 @@ export const finSupplierView = mysqlTable('fin_supplier_view', {
 export const finPayableView = mysqlTable(
   'fin_payable_view',
   {
-    payableId: varchar('payable_id', { length: 36 }).primaryKey().notNull(),
-    documentId: varchar('document_id', { length: 36 }).notNull(),
+    payableId: uuidKey('payable_id').primaryKey().notNull(),
+    documentId: uuidKey('document_id').notNull(),
     kind: varchar('kind', { length: 10 }).notNull(), // Parent | Child
     retentionType: varchar('retention_type', { length: 10 }),
-    supplierRef: varchar('supplier_ref', { length: 36 }),
-    contractRef: varchar('contract_ref', { length: 36 }),
-    categoryRef: varchar('category_ref', { length: 36 }),
+    supplierRef: uuidKey('supplier_ref'),
+    contractRef: uuidKey('contract_ref'),
+    categoryRef: uuidKey('category_ref'),
     // #446 (REP-3 / Slice B): Plano Orçamentário carimbado no documento (#502) — habilita o
     // agrupamento por Plano Orçamentário no REP-3.
-    budgetPlanRef: varchar('budget_plan_ref', { length: 36 }),
+    budgetPlanRef: uuidKey('budget_plan_ref'),
     // Subcategoria = folha da árvore do plano (#502). Projeção espelha a ref do documento (S5).
-    subcategoryRef: varchar('subcategory_ref', { length: 36 }),
-    costCenterRef: varchar('cost_center_ref', { length: 36 }),
-    programRef: varchar('program_ref', { length: 36 }),
+    subcategoryRef: uuidKey('subcategory_ref'),
+    costCenterRef: uuidKey('cost_center_ref'),
+    programRef: uuidKey('program_ref'),
     valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
     dueDate: date('due_date', { mode: 'string' }).notNull(),
     status: varchar('status', { length: 12 }).notNull(), // Open|Approved|Paid|Cancelled
     // #239: conta-débito (de qual conta cedente saiu) + data do pagamento (só quando Paid).
-    debitAccountRef: varchar('debit_account_ref', { length: 36 }),
+    debitAccountRef: uuidKey('debit_account_ref'),
     paidAt: date('paid_at', { mode: 'string' }),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
   },
@@ -667,7 +667,7 @@ export const finBankStatements = mysqlTable(
     periodEnd: datetime('period_end', { mode: 'date', fsp: 3 }).notNull(),
     fileName: varchar('file_name', { length: 255 }).notNull(),
     fileFormat: varchar('file_format', { length: 8 }).notNull(),
-    fileHash: varchar('file_hash', { length: 64 }).notNull(),
+    fileHash: opaqueKey('file_hash').notNull(),
     openingBalanceCents: bigint('opening_balance_cents', { mode: 'number' }).notNull(),
     closingBalanceCents: bigint('closing_balance_cents', { mode: 'number' }).notNull(),
   },
@@ -816,7 +816,7 @@ export const finManualEntries = mysqlTable(
     programRef: uuidKey('program_ref'),
     description: varchar('description', { length: 500 }),
     // #143: realocação patrimonial — conta de destino (Transfer) e produto livre (Investment/Redemption).
-    destinationAccountRef: varchar('destination_account_ref', { length: 36 }),
+    destinationAccountRef: uuidKey('destination_account_ref'),
     productLabel: varchar('product_label', { length: 120 }),
     // #370: campos de documento (rastreabilidade). `document_value_cents` default = valor da transação
     // (aplicado no domínio); pode divergir. Nullable — lançamentos antigos não têm documento.
@@ -878,11 +878,11 @@ export const finReconciliationPeriods = mysqlTable(
 export const finExpectedCounterpart = mysqlTable(
   'fin_expected_counterpart',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
-    destinationAccountRef: varchar('destination_account_ref', { length: 36 }).notNull(),
-    originAccountRef: varchar('origin_account_ref', { length: 36 }).notNull(),
-    originReconciliationRef: varchar('origin_reconciliation_ref', { length: 36 }).notNull(),
-    originTransactionRef: varchar('origin_transaction_ref', { length: 36 }).notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
+    destinationAccountRef: uuidKey('destination_account_ref').notNull(),
+    originAccountRef: uuidKey('origin_account_ref').notNull(),
+    originReconciliationRef: uuidKey('origin_reconciliation_ref').notNull(),
+    originTransactionRef: uuidKey('origin_transaction_ref').notNull(),
     type: varchar('type', { length: 20 }).notNull(),
     // #428: produto da operação (Investment/Redemption); NULL para Transfer. Espelhado na perna B.
     productLabel: varchar('product_label', { length: 120 }),
@@ -890,7 +890,7 @@ export const finExpectedCounterpart = mysqlTable(
     valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
     expectedDate: date('expected_date', { mode: 'date' }).notNull(),
     status: varchar('status', { length: 12 }).notNull(),
-    matchedTransactionRef: varchar('matched_transaction_ref', { length: 36 }),
+    matchedTransactionRef: uuidKey('matched_transaction_ref'),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
   },
@@ -976,17 +976,17 @@ export type NewExpectedCounterpartRow = typeof finExpectedCounterpart.$inferInse
 export const finCategories = mysqlTable(
   'fin_categories',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
     name: varchar('name', { length: 120 }).notNull(),
     group: varchar('group', { length: 12 }).notNull(),
     active: boolean('active').notNull().default(true),
     // Hierarquia auto-referente (#147 F3): pai da categoria (subcategoria). Nullable = top-level.
     // Sem FK física (mesma tabela; validação de existência é do seed) — ADR-0014.
-    parentId: varchar('parent_id', { length: 36 }),
+    parentId: uuidKey('parent_id'),
     // #341: nível Centro de Custo → Categoria. Soft ref a fin_cost_centers (sem FK — ADR-0014, igual
     // ao parent_id). Nullable = categoria sem centro (back-compat pré-#341). Cascata no front:
     // costCenterId (top-level) + parentId (subcategoria).
-    costCenterId: varchar('cost_center_id', { length: 36 }),
+    costCenterId: uuidKey('cost_center_id'),
   },
   (t) => [
     check('fin_categories_group_chk', sql`${t.group} IN ('despesa','receita','ajuste')`),
@@ -1008,7 +1008,7 @@ export type NewCategoryRow = typeof finCategories.$inferInsert;
 export const finCostCenters = mysqlTable(
   'fin_cost_centers',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
     code: varchar('code', { length: 20 }).notNull(),
     name: varchar('name', { length: 120 }).notNull(),
     active: boolean('active').notNull().default(true),
@@ -1032,9 +1032,9 @@ export const finOutbox = mysqlTable(
   'fin_outbox',
   {
     // UUID v4 do evento — gerado pelo domínio antes do INSERT (idempotência via PK).
-    eventId: varchar('event_id', { length: 36 }).primaryKey().notNull(),
+    eventId: uuidKey('event_id').primaryKey().notNull(),
     // id do agregado dono (documento / conciliação / extrato / período / contrapartida).
-    aggregateId: varchar('aggregate_id', { length: 36 }).notNull(),
+    aggregateId: uuidKey('aggregate_id').notNull(),
     // 'Document' | 'Reconciliation' | 'Statement' | 'ReconciliationPeriod' | 'ExpectedCounterpart' — CHECK abaixo.
     aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
     // PascalCase EN: DocumentSaved, PayableReconciled, …
@@ -1076,8 +1076,8 @@ export type NewFinOutboxRow = typeof finOutbox.$inferInsert;
 export const finOutboxDeadLetter = mysqlTable(
   'fin_outbox_dead_letter',
   {
-    eventId: varchar('event_id', { length: 36 }).primaryKey().notNull(),
-    aggregateId: varchar('aggregate_id', { length: 36 }).notNull(),
+    eventId: uuidKey('event_id').primaryKey().notNull(),
+    aggregateId: uuidKey('aggregate_id').notNull(),
     aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
     eventType: varchar('event_type', { length: 64 }).notNull(),
     schemaVersion: int('schema_version').notNull(),

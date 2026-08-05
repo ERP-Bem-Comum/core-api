@@ -1,5 +1,9 @@
 // Colunas de identificador com collation binária — a collation vem do TIPO, não de edição manual.
 //
+// A collation binária não é preferência: medido em MySQL 8.4.10 real, um JOIN entre coluna `bin` e
+// coluna `unicode_ci` cai de `type: eq_ref` para `type: ALL` — full scan, sem erro algum. E buscar o
+// mesmo UUID em caixa alta devolve 0 linhas em `bin` e 1 em `unicode_ci`.
+//
 // Antes do #636 o `COLLATE utf8mb4_bin` era inserido à mão no SQL que `drizzle-kit generate` emite,
 // conforme instrução em comentário nos `schemas/mysql.ts`. Isso transfere a garantia para a memória
 // de quem roda o comando: um identificador novo com a edição esquecida herda `utf8mb4_unicode_ci`

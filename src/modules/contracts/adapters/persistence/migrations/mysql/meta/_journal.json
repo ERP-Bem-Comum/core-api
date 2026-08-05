@@ -134,6 +134,13 @@
       "when": 1784826480502,
       "tag": "0018_bent_masque",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1785969687244,
+      "tag": "0019_wild_wither",
+      "breakpoints": true
     }
   ]
 }

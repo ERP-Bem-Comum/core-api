@@ -9,10 +9,20 @@
  *   `utf8mb4_bin`         identificador e chave natural — comparação determinística, case-sensitive
  *   `utf8mb4_unicode_ci`  texto de leitura humana — ordenação e busca sensíveis a acento/caixa
  *
- * A regra que se sustenta não é "use X", é **duas, e só duas**. Uma terceira collation é o que cria
- * o defeito caro: JOIN entre colunas de collations diferentes no MySQL 8.4 ou falha com
- * `Illegal mix of collations`, ou passa convertendo em runtime e derruba o índice — lentidão sem
- * erro, longe da causa.
+ * A regra que se sustenta não é "use X", é **duas, e só duas**. Uma terceira collation cria o
+ * defeito caro — e MEDIDO em MySQL 8.4.10 real (x99, 2026-08-05), porque a descrição anterior
+ * deste docblock estava pela metade errada:
+ *
+ *   JOIN bin↔bin      `type: eq_ref`, `key: PRIMARY`  — índice usado
+ *   JOIN bin↔ci       `type: ALL`,    `key: NULL`     — full scan, "Range checked for each record"
+ *
+ * O JOIN entre collations diferentes **NÃO** falha com `Illegal mix of collations` — o MySQL
+ * converte em silêncio e derruba o índice. Só isso: lentidão sem erro, longe da causa, e que
+ * cresce com o volume. `Illegal mix` aparece em outros contextos (UNION, funções de string), não
+ * no predicado de JOIN — não contar com ele como sinal.
+ *
+ * A diferença também é SEMÂNTICA: buscar `A1B2C3D4-…` (mesmo UUID em caixa alta) devolve 0 linhas
+ * na coluna `bin` e 1 na `unicode_ci`. Para identificador opaco, o casamento por caixa é errado.
  *
  * ## Por que o gate ataca o JOIN e não as colunas
  *

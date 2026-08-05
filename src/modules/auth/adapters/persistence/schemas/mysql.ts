@@ -45,6 +45,7 @@ import {
 import { sql } from 'drizzle-orm';
 
 import {
+  opaqueKey,
   permissionKey,
   sha256HexKey,
   uuidKey,
@@ -136,7 +137,10 @@ export const authUser = mysqlTable(
     cpf: varchar('cpf', { length: 11 }),
     telephone: varchar('telephone', { length: 13 }),
     imageUrl: varchar('image_url', { length: 1024 }),
-    collaboratorId: varchar('collaborator_id', { length: 64 }),
+    // ⚠️ varchar(64) aqui, varchar(36) em `par_collaborators.id` e
+    // `par_collaborator_history.collaborator_id` — o MESMO conceito com duas larguras. A divergência
+    // é anterior a este ticket e não se corrige junto (estreitar truncaria); só a collation entra.
+    collaboratorId: opaqueKey('collaborator_id'),
   },
   (t) => [
     // CHECK: status restrito ao enum do domínio (Decisão 1 do blueprint).

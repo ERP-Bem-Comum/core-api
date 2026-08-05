@@ -6,8 +6,9 @@
  *
  * Antes do #636 a collation binária era inserida à mão no SQL que `drizzle-kit generate` emite. A
  * garantia morava na memória de quem rodava o comando, e o esquecimento é silencioso: a coluna
- * herda `utf8mb4_unicode_ci` e só aparece quando alguém a usa num JOIN — onde o MySQL 8.4 ou
- * recusa com `Illegal mix of collations`, ou converte em runtime e derruba o índice.
+ * herda `utf8mb4_unicode_ci` e só aparece quando alguém a usa num JOIN — onde o MySQL 8.4 NÃO
+ * reclama: ele converte em silêncio e o plano cai de `eq_ref` para `ALL` (medido em 8.4.10 real).
+ * Lentidão sem erro, longe da causa.
  *
  * Isso não é hipótese: 34 identificadores vivos ficaram sem `bin` exatamente assim (#637).
  *

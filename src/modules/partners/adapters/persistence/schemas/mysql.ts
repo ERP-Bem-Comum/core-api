@@ -266,8 +266,8 @@ export type NewCollaboratorRow = typeof parCollaborators.$inferInsert;
 export const parCollaboratorHistory = mysqlTable(
   'par_collaborator_history',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
-    collaboratorId: varchar('collaborator_id', { length: 36 }).notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
+    collaboratorId: uuidKey('collaborator_id').notNull(),
     eventType: varchar('event_type', { length: 64 }).notNull(),
     fieldName: varchar('field_name', { length: 100 }).notNull(),
     fieldLabel: varchar('field_label', { length: 100 }).notNull(),
