@@ -177,9 +177,12 @@ claims:
       holds_in: []
       absent_in: []
       evidence:
-        - 'nota: src/modules/partners/domain/act/events.ts existe — eventos de domínio foram construídos apesar de o ADR os excluir do escopo'
-        - 'nota: os eventos ActRegistered, ActEdited, ActDeactivated e ActReactivated existem no módulo, apesar de o ADR excluir eventos de domínio do escopo'
-        - 'nota: não foi verificado se esses eventos atravessam a fronteira de integração; o filtro tipado do supplier (PublishableEventType) é o precedente de como isso seria contido'
+        - 'src/modules/partners/domain/act/events.ts:8 — `ActEvent` declara os 4: ActRegistered, ActEdited, ActDeactivated, ActReactivated'
+        - 'src/modules/partners/domain/act/act.ts:131 — o agregado devolve `{ act, event }`, ou seja emite de fato'
+        - 'ausência: não existe `act-outbox.mapper.ts` em src/modules/partners/adapters/persistence/mappers/ — só o do supplier'
+        - 'src/modules/partners/adapters/persistence/mappers/supplier-outbox.mapper.ts:20 — o filtro tipado `PublishableEventType` admite APENAS SupplierRegistered e SupplierEdited'
+        - 'ausência: nenhum repositório do Act persiste evento; `appendOutboxInTx` não é chamado em caminho de Act'
+        - 'nota: VERIFICADO em 2026-08-05 (a pendência que este registro anotava). Os 4 eventos NÃO atravessam a fronteira de integração — nascem no agregado e param ali. A violação é de LETRA e está contida.'
       verify: |
         ls src/modules/partners/domain/act/; grep -rhoE "'Act(Registered|Edited|Deactivated|Reactivated)'" src/modules/partners/ --include='*.ts' | sort -u
     testability:
@@ -192,7 +195,7 @@ claims:
       blocker: null
       enforced_by: []
     rule:
-      status: proposed
+      status: accepted
       disposition: replace
       text: |
         Escopo excluído por registro de decisão MUST permanecer excluído até o registro ser atualizado.
@@ -202,6 +205,22 @@ claims:
         que o ADR excluiu, e isso não é bug — pode ter sido necessidade real. O defeito é o registro não
         ter acompanhado: hoje o ADR diz que não há eventos e há quatro. É o inverso do padrão comum do
         inventário, onde o que está no escopo não sai; aqui saiu o que não estava.
+
+        PROMOVIDA em 2026-08-05, depois de fechar a pendência que este registro anotava: os 4 eventos
+        NÃO atravessam a fronteira de integração. Não há `act-outbox.mapper.ts`, o filtro tipado
+        `PublishableEventType` admite apenas `SupplierRegistered`/`SupplierEdited`, e nenhum caminho do
+        Act chama `appendOutboxInTx`. Os eventos nascem no agregado e param ali.
+
+        Isso rebaixa a gravidade e muda a saída. A opção escolhida foi "atualizar o escopo do ADR",
+        mas ADR aceito é IMUTÁVEL — e neste caso nem errata cabe: o próprio ADR-0036 tem a seção
+        "Natureza provisória (NÃO tratar como definitivo)", declarando que é placeholder e que "um novo
+        ADR substituirá este" quando as regras reais do Act chegarem. Clarificar escopo de documento
+        que já se anuncia temporário seria burocracia sem leitor.
+
+        O que fica, então, é a REGRA acima — construir fora de escopo obriga atualizar a decisão no
+        mesmo passo — e a evidência agora completa, para o próximo que ler não repetir a verificação.
+        Quando o épico do Act chegar, o ADR sucessor decide se os eventos passam a publicar; até lá o
+        `PublishableEventType` é a contenção de fato, e ela é tipada.
 
   - id: ADR-0036-C5
     text: |

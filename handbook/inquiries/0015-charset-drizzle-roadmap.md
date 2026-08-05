@@ -45,6 +45,47 @@ drizzle-orm@0.45.2: MySqlTableExtraConfigValue =
 - `drizzle-orm@0.45.2` confirmadamente **sem** suporte table-level `charset`/`collate`. Nem coluna-level `collate`.
 - Não há mention de `charset` ou `collate` em nenhum `.d.ts` sob `mysql-core/` ou `node_modules/.pnpm/drizzle-orm@0.45.2_*/`.
 
+### 2026-08-05 — MEDIDO: a pergunta 2 está respondida, e sem esperar upstream
+
+A pergunta 2 (`collate` por coluna, necessária para o `utf8mb4_bin` em UUIDs) **não depende de suporte
+novo**. O `customType` do `drizzle-orm@0.45.2` já resolve, e foi reproduzido — não é leitura de doc:
+
+```ts
+const binId = customType<{ data: string }>({
+  dataType: () => 'varchar(36) COLLATE utf8mb4_bin',
+});
+```
+
+`drizzle-kit generate` emitiu, verbatim:
+
+```sql
+`id` varchar(36) COLLATE utf8mb4_bin NOT NULL,
+```
+
+E a 2ª geração respondeu `No schema changes, nothing to migrate` — **idempotente, sem drift**, que
+era o risco real de injetar SQL num `dataType()`. Testado em worktree descartável com a config do
+repo.
+
+**O que isso muda no §"O que decide o futuro deste inquiry":** os passos 2 e 3 ficam disponíveis
+HOJE, sem bump de versão. A sintaxe especulativa que o passo 2 imaginava
+(`varchar('id', { length: 36, collate: 'utf8mb4_bin' })`) não existe e não é necessária — o caminho é
+o `customType`, que é API de primeira classe.
+
+**O que NÃO muda:** a pergunta 1 (charset/collate **table-level**) segue sem resposta. A doc viva de
+`orm.drizzle.team/docs/mysql/column-types` (verificada em 2026-08-05) não documenta nenhuma das duas,
+e `drizzle-orm@0.45.2` é o dist-tag `latest` — a próxima linha é `1.0.0`, hoje em `rc.4`. O
+table-level continua exigindo edição manual da migration.
+
+**Correção de um argumento que este repositório chegou a registrar:** durante a triagem da alegação
+`ADR-0014-C8` afirmei que expressar collation exigiria "passo manual permanente a cada
+`db:generate`". Está errado, e o erro foi ler documentação em vez de medir — ver a correção em
+`context/decisions/ADR-0014.yaml`.
+
+**Encaminhamento:** adotar o `customType` para identificadores toca schema de 8 módulos e muda o SQL
+gerado; merece ciclo próprio, não cabe nesta inquiry. Esta permanece `Open` pela pergunta 1
+(table-level), agora com o escopo reduzido à metade que de fato depende de upstream. Ver
+[Inquiry-0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) para a avaliação do `1.0.0`.
+
 ### Pendente — issues e roadmap upstream
 
 - Buscar issues em `drizzle-team/drizzle-orm` GitHub (palavras-chave: `mysql collate`, `charset table`, `utf8mb4_bin`).

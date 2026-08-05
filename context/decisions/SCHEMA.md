@@ -72,6 +72,23 @@ verificado e não é:
    pelo componente onde foi verificada — é o que distingue "vale onde olhei" de "vale em tudo".
 6. **Vínculo por nome não é vínculo.** `provenance` só recebe ticket/issue cujo conteúdo foi lido.
    Coincidência de nome vai para `note`, não para a lista.
+7. **Norma não nasce de decisão NUNCA sancionada.** Uma alegação não chega a `rule.status: accepted`
+   se o ADR de origem estiver `declared.status_normalized: proposed`. Promover alegação extraída de
+   um ADR `Proposed` cria norma vigente apoiada em documento que ainda pode mudar — e a norma não tem
+   como acompanhar a mudança.
+
+   Só `proposed` bloqueia. `superseded` e `deprecated` **foram** sancionados um dia e depois
+   substituídos: promover suas alegações — tipicamente com `drop` — é justamente como o acervo se
+   limpa, e foi o que fechou 10 das 21 contraditas em 2026-08-05. Bloqueá-los impediria o trabalho
+   que a Fase 1 existe para fazer.
+
+   A guarda existe porque o defeito já aconteceu **no acervo**, não em hipótese: o `ADR-0051`
+   (`Accepted`) declarava vigente o §D1 do `ADR-0048`, que seguia `Proposed` há três semanas. Ver
+   `ADR-0051-C6` e o gate `tests/cleanup/adr-status-chain.test.ts`, que cobre a mesma classe entre
+   ADRs. Esta guarda é o mesmo princípio uma camada abaixo: entre o ADR e a alegação extraída dele.
+
+   Saída quando a alegação vale mas o ADR não foi sancionado: **ratificar o ADR primeiro**. Nunca
+   promover a alegação e "resolver o ADR depois" — é assim que a cadeia inverte.
 
 ## 5. Toda alegação verificável carrega o comando que a verifica
 

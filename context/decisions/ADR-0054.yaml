@@ -254,7 +254,7 @@ claims:
       blocker: null
       enforced_by: ['.github/workflows/commit-policy.yml']
     rule:
-      status: proposed
+      status: accepted
       disposition: replace
       text: |
         Convenção de commit cuja violação é detectável MUST ter check mecânico. Quando a checagem completa

@@ -480,7 +480,7 @@ claims:
       blocker: null
       enforced_by: []
     rule:
-      status: proposed
+      status: accepted
       disposition: narrow
       text: |
         Pasta de expected-fail MUST ter um dono e uma condição de saída declarada. Quando todos os seus

@@ -62,6 +62,8 @@ O backstop mecânico é o hook `Stop`, mas a disciplina é de julgamento e não 
 
 Todo commit gerado por IA leva o trailer `Assisted-by: AGENT_NAME:MODEL_VERSION` — cobrado por `scripts/ci/check-commit-trailers.ts`. **A IA nunca adiciona `Signed-off-by`**: só um humano certifica o DCO. Quem submete é dono de cada linha e assume responsabilidade integral.
 
+**Convenção cuja violação é detectável ganha check mecânico.** Quando a checagem completa for indecidível, o gate cobra a parte decidível **sempre** e a indecidível **sob declaração explícita** — é o desenho do `commit-policy.yml`, que valida o FORMATO em todo PR e a COMPLETUDE quando o PR se declara `ai-assisted`. Nada no repositório distingue código gerado de código escrito, então prometer mais que isso seria enforcement de mentira. O ADR-0054 classificou esse check como "follow-up opcional" e alguém o construiu: a régua é o que dá para provar, não o que o registro imaginou.
+
 ## Anti-padrões — os que exigem julgamento
 
 Os mecânicos (rodar `npm`, sintaxe TS, casing, `class` no domínio, JSON/ENUM no MySQL) já são barrados por hook, `tsconfig`, ESLint e semgrep — não estão listados aqui.

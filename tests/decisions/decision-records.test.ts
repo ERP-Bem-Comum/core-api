@@ -275,6 +275,30 @@ for (const file of yamlFiles) {
         }
       });
 
+      // SCHEMA §4 guarda 7 — norma não nasce de decisão não sancionada. Promover alegação extraída
+      // de ADR `Proposed` cria norma vigente apoiada em documento que ainda pode mudar, e a norma
+      // não tem como acompanhar. Mesmo princípio do `adr-status-chain.test.ts`, uma camada abaixo:
+      // lá entre ADRs, aqui entre o ADR e a alegação. A saída é ratificar o ADR primeiro.
+      it('guarda 7: alegação de ADR não sancionado não vira norma', () => {
+        if (status !== 'accepted') return;
+        const declared = asObject(doc['declared'], `${docId}#declared`);
+        const docStatus = asString(
+          declared['status_normalized'],
+          `${docId}#declared.status_normalized`,
+        );
+        // Só `proposed` bloqueia. `superseded`/`deprecated` FORAM sancionados um dia e depois
+        // substituídos — promover suas alegações (tipicamente com `drop`) é justamente como o
+        // acervo se limpa. Bloqueá-los impediria o trabalho que a Fase 1 existe para fazer.
+        assert.notEqual(
+          docStatus,
+          'proposed',
+          `${id} está \`rule.status: accepted\`, mas o ${docId} nunca foi sancionado ` +
+            '(`declared.status_normalized: proposed`). Ratifique o ADR antes de promover a ' +
+            'alegação — promover primeiro e "resolver o ADR depois" é como a cadeia inverte ' +
+            '(ver ADR-0051-C6).',
+        );
+      });
+
       // SCHEMA §6 — alegação intestável não pode ser promovida sem antes ser reescrita.
       it('§6: alegação sem teste possível não é adotada nem estreitada', () => {
         if (tVerdict !== 'unfalsifiable') return;

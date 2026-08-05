@@ -4,8 +4,8 @@ source: handbook/architecture/adr/0048-legacy-categorization-installments-mappin
 decided_on: 2026-06-23
 
 declared:
-  status: Proposed
-  status_normalized: proposed
+  status: Accepted (ratificado em 2026-08-05)
+  status_normalized: accepted
   supersedes: []
   superseded_by: []
   related: [ADR-0001, ADR-0005, ADR-0006, ADR-0014, ADR-0015, ADR-0022, ADR-0051]

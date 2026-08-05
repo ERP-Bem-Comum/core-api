@@ -406,6 +406,10 @@ claims:
         um `customType` para identificador (`binId`) faria a collation deixar de depender de memória
         humana. Custa definir um tipo e trocar as declarações; não foi feito nesta fatia porque toca
         schema de oito módulos e é mudança de comportamento de geração — merece ciclo próprio.
+        Registrado em #636, com 4 CAs — entre eles o que exige que NENHUMA migration de alteração seja
+        gerada para as 51 colunas atuais. A medição também respondeu a pergunta 2 da Inquiry-0015,
+        aberta desde 2026-05-18 esperando suporte upstream que, para o caso per-column, não era
+        necessário.
 
 findings:
   - |

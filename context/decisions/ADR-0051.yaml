@@ -306,9 +306,9 @@ claims:
         `Proposed`, então o teste falha — decisão aceita MUST NOT repousar sobre decisão não ratificada.
       expected_error: null
       blocker: null
-      enforced_by: []
+      enforced_by: ['tests/cleanup/adr-status-chain.test.ts']
     rule:
-      status: proposed
+      status: accepted
       disposition: adopt
       text: |
         ADR `Accepted` MUST NOT declarar vigente uma seção de ADR `Proposed`. Se a construção depende dela,
