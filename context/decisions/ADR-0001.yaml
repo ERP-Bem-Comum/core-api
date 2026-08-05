@@ -109,7 +109,7 @@ claims:
       blocker: null
       enforced_by: []
     rule:
-      status: proposed
+      status: accepted
       disposition: drop
       text: null
       rationale: |

@@ -109,14 +109,22 @@ claims:
       blocker: null
       enforced_by: []
     rule:
-      status: proposed
+      status: accepted
       disposition: drop
       text: null
       rationale: |
-        Descartar a premissa do Windows: está refutada por consulta direta ao banco, registrada com
-        citação literal. Mas descartar aqui NÃO resolve o conflito — o `ADR-0021` afirma o contrário na
-        mesma data e segue `Accepted`, e este ADR mantém "Windows VM" no título. É decisão a tomar, não
-        alegação a arquivar.
+        ⚠️ PROMOVIDA em 2026-08-05, e a razão do descarte é OUTRA que a proposta pela extração. A
+        extração concluiu que a premissa do Windows estava refutada, citando
+        `context/planning/BRADESCO-EVITAR-WINDOWS.md`. O dono do repo corrigiu: a decisão real ainda
+        está sendo formulada, e a direção É Windows VM com o cliente STCPCLT do Bradesco.
+
+        Ou seja, a conclusão daquele documento de planejamento NÃO foi adotada. Quem o ler isolado vai
+        derivar o oposto do que vale — foi o que aconteceu comigo. O descarte aqui é por a alegação
+        estar em aberto, não por estar refutada: quando a decisão real fechar, ela merece ADR próprio,
+        e é lá que "Windows VM + STCPCLT" passa a ser norma com razão declarada.
+
+        O conflito com o `ADR-0021`, que afirma o contrário na mesma data e segue `Accepted`, permanece
+        aberto e não é resolvido por este descarte.
 
 findings:
   - |

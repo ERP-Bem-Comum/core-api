@@ -121,7 +121,7 @@ claims:
       blocker: null
       enforced_by: []
     rule:
-      status: proposed
+      status: accepted
       disposition: replace
       text: |
         Módulo MUST viver em `src/modules/<nome-en>/`, com o nome em inglês e kebab-case. Código

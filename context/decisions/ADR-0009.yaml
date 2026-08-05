@@ -232,7 +232,7 @@ claims:
       blocker: null
       enforced_by: []
     rule:
-      status: proposed
+      status: accepted
       disposition: drop
       text: null
       rationale: |
@@ -240,6 +240,11 @@ claims:
         que a Inquiry-0023 §6.1 já especifica: adoção side-by-side, lint preso no TS 6 até a #10940, e
         o breaking change semântico de template literal com emoji registrado como risco declarado.
         Terceiro gatilho de reavaliação do acervo a disparar — depois do `:117` do 0024 e do #1 do 0018.
+
+        PROMOVIDA em 2026-08-05. O dono do repo registrou no mesmo ato que outras inquiries virão —
+        coerente com a política declarada na `ADR-0002-C2`: troca de tecnologia se justifica por
+        inquiry, e a estimativa em ADR ("ajustes mínimos") foi justamente o que a medição refutou.
+        Estimar esforço futuro dentro de um ADR é o antipadrão que esta alegação documenta.
 
   - id: ADR-0009-C6
     text: |

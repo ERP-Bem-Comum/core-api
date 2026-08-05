@@ -119,7 +119,7 @@ claims:
       blocker: null
       enforced_by: ['.semgrep/rules.yml']
     rule:
-      status: proposed
+      status: accepted
       disposition: drop
       text: null
       rationale: |
@@ -349,14 +349,19 @@ claims:
       blocker: null
       enforced_by: []
     rule:
-      status: proposed
+      status: accepted
       disposition: drop
       text: null
       rationale: |
         A forma (passado, verbo de domínio, PascalCase) vale e já está na tabela de idioma do
-        `AGENTS.md`, que é a fonte única. Os exemplos em PORTUGUÊS deste ADR contradizem essa tabela
+        `CLAUDE.md`, que é a fonte única. Os exemplos em PORTUGUÊS deste ADR contradizem essa tabela
         e o código. Descartar a alegação daqui em vez de duplicar — quem legisla idioma é o
-        `AGENTS.md`.
+        `CLAUDE.md`.
+
+        PROMOVIDA em 2026-08-05. A menção ao `AGENTS.md` foi corrigida para `CLAUDE.md` porque este
+        texto afirma no PRESENTE onde a norma vive, e o `AGENTS.md` não existe mais (ADR-0057). Não é
+        reescrita de registro histórico — a proibição do `ADR-0057-C6` vale para EVIDÊNCIA ANCORADA
+        (`AGENTS.md:65`), cuja numeração de linha morreria com o arquivo. Aqui não há âncora.
 
   - id: ADR-0015-C9
     text: |
