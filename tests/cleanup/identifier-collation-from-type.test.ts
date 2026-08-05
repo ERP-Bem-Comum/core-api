@@ -17,7 +17,7 @@
  * O gate cobra que toda coluna que JÁ tem `utf8mb4_bin` no DDL aplicado seja declarada com um dos
  * tipos de `identifier-columns.ts`. Ele não cobra o inverso — "todo `*_id` deve ser binário" —
  * porque isso reprovaria as 24 colunas divergentes, que exigem `ALTER` em produção e decisão
- * própria. Este gate protege o que está certo; corrigir o que está errado é outro ciclo.
+ * própria (#637). Este gate protege o que está certo; corrigir o que está errado é outro ciclo.
  *
  * A fonte da verdade é o SQL das migrations, não o snapshot: o snapshot descreve o que o Drizzle
  * acha que existe, e foi justamente ele que divergiu quando a edição manual começou.

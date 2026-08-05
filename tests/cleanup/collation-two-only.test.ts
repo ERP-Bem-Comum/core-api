@@ -37,7 +37,7 @@
  *     `fin_outbox.event_id`, `fin_categories.id`…), e o predicado
  *     `finPayableView.costCenterRef = finCostCenters.id` junta dois deles. Não há mistura porque os
  *     DOIS lados herdaram `unicode_ci`, não porque ambos sejam binários. A ausência de mistura é
- *     real; a homogeneidade é que é acidental, e é o que a issue de follow-up ataca.
+ *     real; a homogeneidade é que é acidental, e é o que o #637 ataca.
  *
  * Conclusão: o risco nunca foram as 293 colunas — é a COMBINAÇÃO, juntar uma coluna `bin` com uma
  * que herdou `unicode_ci`. Como toda coluna `bin` é identificador, isso só acontece se alguém fizer
