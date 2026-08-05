@@ -4,8 +4,8 @@ source: handbook/architecture/adr/0049-core-api-bff-boundary.md
 decided_on: 2026-07-07
 
 declared:
-  status: Proposed
-  status_normalized: proposed
+  status: Accepted (ratificado em 2026-08-05)
+  status_normalized: accepted
   supersedes: []
   superseded_by: []
   related:
@@ -143,9 +143,9 @@ claims:
         core.
       expected_error: null
       blocker: null
-      enforced_by: []
+      enforced_by: ['tests/cleanup/canonical-units-on-edge.test.ts']
     rule:
-      status: proposed
+      status: accepted
       disposition: narrow
       text: |
         Resposta da borda do core MUST usar unidades canônicas (cents em `bigint`, ISO-8601, união EN).
@@ -297,14 +297,17 @@ claims:
     source_lines: [98, 101]
     applies_to: []
     reality:
-      verdict: unverified
-      holds_in: []
+      verdict: holds
+      holds_in: [bff, front]
       absent_in: []
-      evidence: []
+      evidence:
+        - 'nota: RESPONDIDO pelo dono do repo em 2026-08-05. Regras de negócio da API NÃO são validadas no BFF — a proibição se sustenta.'
+        - 'nota: o client-side não enxerga nem consome NADA sem passar pelo barramento do BFF (server-side). A segunda cláusula se sustenta para o front.'
+        - 'nota: ⚠️ a mesma resposta revelou contradição com OUTRO ADR. O BFF é AGREGADOR — "busca as ferramentas que o client precisa, mastiga e entrega processado". O ADR-0005 decide literalmente "Zero regra de negócio. Zero composição de respostas", alvo 200-300 linhas, e `.claude/rules/http-edge.md:56` repete que ele "continua burro". Agregar É composição. Endereçado pelo ADR-0059, que supersede parcialmente o 0005.'
       verify: |
-        Não verificável a partir deste repositório: as duas cláusulas normatizam o BFF e o front, que
-        vivem em outros pacotes. Conferir no repo do web-app se há validação de escrita duplicada e se
-        algum componente client chama o core diretamente.
+        Fonte é declaração do dono do repo, não medição — o BFF e o front vivem em outros repositórios.
+        Reconfirmar se a divisão de responsabilidade mudar. O que É verificável daqui: que o core não
+        afrouxe guardrails contando com o BFF (ver `ADR-0049-C8`).
     testability:
       verdict: testable
       layer: static
@@ -379,13 +382,17 @@ claims:
     source_lines: [67, 110]
     applies_to: []
     reality:
-      verdict: unverified
+      verdict: contradicted
       holds_in: []
       absent_in: []
-      evidence: []
+      evidence:
+        - 'nota: RESPONDIDO pelo dono do repo em 2026-08-05, na triagem do gate humano da Fase 1. A topologia MUDOU: o core-api permanece público PERMANENTEMENTE, não "até o go-live". Razão declarada: servir a API não deve depender de tudo estar numa rede só. Não há Fase 2 de rede privada.'
+        - 'nota: a segunda metade da alegação (regra de ouro) se sustenta com escopo mais estreito — nenhum componente CLIENT-SIDE fala direto com o core, mas a API PODE ter outros consumidores. A redação original sugeria exclusividade que nunca foi a intenção.'
+        - 'handbook/architecture/adr/0049-core-api-bff-boundary.md:5 — as duas cláusulas foram corrigidas no texto ANTES da ratificação, enquanto o ADR ainda era `Proposed`'
       verify: |
-        Topologia de rede não é verificável a partir do código-fonte. Conferir na infraestrutura se o core
-        está exposto publicamente e se existe caminho de rede direto do front até ele.
+        Topologia de rede não é verificável a partir do código-fonte, e a fonte desta evidência é
+        declaração do dono do repo — não medição. Reconfirmar com ele se a decisão de manter o core
+        público em definitivo mudar.
     testability:
       verdict: testable-with-work
       layer: e2e
@@ -397,17 +404,30 @@ claims:
       blocker: 'Depende de configuração de rede, fora deste repositório.'
       enforced_by: []
     rule:
-      status: proposed
-      disposition: narrow
+      status: accepted
+      disposition: replace
       text: |
-        Enquanto o core estiver acessível fora da rede privada, os guardrails de authz e isolamento
-        multi-tenant MUST estar ativos. Relaxá-los MUST exigir prova de que a borda pública foi fechada.
+        O core-api é PÚBLICO em definitivo. Os guardrails de authz e isolamento multi-tenant MUST estar
+        ativos de forma PERMANENTE — não há fechamento de rede futuro que os torne dispensáveis.
+        Relaxá-los MUST exigir decisão registrada, nunca a expectativa de uma topologia que não virá.
+        Componente CLIENT-SIDE MUST NOT falar direto com o core; outros consumidores da API são
+        permitidos.
       rationale: |
-        Estreitado para a única parte com consequência de segurança e que sobrevive à mudança de
-        topologia. É a inversão condicional que importa: o ganho de PII da arquitetura nova depende de o
-        core sair da internet, e o risco é alguém antecipar o relaxamento contando com um fechamento de
-        rede que ainda não aconteceu. Tem tensão direta com o `ADR-0052`/`ADR-0053`, cuja decisão vigente
-        é operar em `bypass` durante a aceitação.
+        `replace`, não `narrow` — e a diferença é a que importa. A versão anterior desta regra dizia
+        "ENQUANTO o core estiver acessível fora da rede privada", condicionando os guardrails a uma fase
+        que o dono do repo eliminou em 2026-08-05: o core permanece público em definitivo, porque servir
+        a API não deve depender de tudo estar numa rede só.
+
+        Isso ENDURECE a norma em vez de afrouxá-la. A redação condicional carregava um risco real —
+        alguém antecipar o relaxamento contando com um fechamento de rede que agora se sabe que nunca
+        virá. Sem a condicional, authz e multi-tenant deixam de ser ponte e viram defesa final.
+
+        Mantém a tensão declarada com o `ADR-0052`/`ADR-0053`, cuja decisão vigente é operar em `bypass`
+        durante a aceitação — que passa a ser dívida com prazo, não estado tolerável indefinidamente.
+
+        A segunda metade foi estreitada com base na resposta do dono: a proibição é de CLIENT-SIDE, não
+        de exclusividade de consumo. O texto do ADR foi corrigido nos dois pontos ANTES da ratificação,
+        enquanto ele ainda era `Proposed`.
 
   - id: ADR-0049-C9
     text: |
@@ -437,9 +457,9 @@ claims:
         teste falha — é o módulo designado como conformidade rigorosa.
       expected_error: null
       blocker: null
-      enforced_by: []
+      enforced_by: ['tests/cleanup/canonical-units-on-edge.test.ts']
     rule:
-      status: proposed
+      status: accepted
       disposition: replace
       text: |
         Módulo designado como conformidade rigorosa a uma régua nova MUST ter a régua verificada por teste

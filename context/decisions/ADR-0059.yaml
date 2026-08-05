@@ -1,0 +1,218 @@
+id: ADR-0059
+title: O BFF agrega, mas não decide — "burro" passa a significar sem regra de negócio
+source: handbook/architecture/adr/0059-bff-aggregates-without-business-rules.md
+decided_on: 2026-08-05
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: [ADR-0005]
+  superseded_by: []
+  related: [ADR-0049]
+
+assessment:
+  verdict: unverified
+  checked_at: 2026-08-05
+  checked_against: 1d80f55b
+  summary: |
+    O primeiro ADR do acervo cujo assessment é `unverified` POR DESENHO, não por preguiça: as quatro
+    invariantes normatizam o BFF, que não vive neste repositório. Nenhuma é confrontável com `src/`.
+    Isso é o limite estrutural do método sendo exposto, e vale registrar: o inventário confronta ADR
+    com `src/`, então TODA decisão sobre serviço externo é um ponto cego. O `ADR-0005` esteve
+    contraditado desde que o BFF ganhou agregação, e ninguém viu — não porque o inventário falhou, mas
+    porque não havia código aqui para confrontar. A contradição só emergiu quando a alegação
+    `ADR-0049-C6` foi levada à verificação HUMANA, em 2026-08-05.
+    A §4 é a exceção parcial: "o core não afrouxa contando com o BFF" tem consequência DESTE lado, e é
+    verificável indiretamente pelo `ADR-0049-C8` (guardrails permanentes, core público em definitivo).
+
+extraction:
+  state: complete
+  covers: |
+    4 alegações — as quatro invariantes numeradas da Decisão. Fora: Consequências e Alternativas são
+    justificativa. O Gatilho de reavaliação é condição sobre evento futuro, mesma natureza do
+    `ADR-0058-C5`, e por isso não vira alegação própria aqui.
+
+prior_art: []
+
+claims:
+  - id: ADR-0059-C1
+    text: |
+      O BFF MUST NOT conter regra de negócio, invariante de domínio ou validação de escrita. Quem
+      decide é o core-api, sempre.
+    kind: prohibition
+    source_lines: ['35-37']
+    applies_to: []
+    reality:
+      verdict: holds
+      holds_in: [bff]
+      absent_in: []
+      evidence:
+        - 'nota: declarado pelo dono do repo em 2026-08-05 — "regras de negócio do serviço da API não são validadas no BFF". Fonte é declaração, não medição: o BFF vive noutro repositório.'
+        - 'handbook/architecture/adr/0005-thin-bff-gateway.md:27 — "Zero regra de negócio" permanece vigente; é a única das três cláusulas daquela linha que o ADR-0059 NÃO supersede'
+      verify: |
+        Não verificável deste repositório. Reconfirmar com o dono do repo, ou inspecionar o repo do BFF
+        procurando validação de escrita e invariante de domínio duplicados.
+    testability:
+      verdict: testable-with-work
+      layer: static
+      red: |
+        Dado o código do BFF, quando ele contiver validação de regra de negócio (não de forma de
+        input), então o gate falha nomeando o arquivo.
+      expected_error: null
+      blocker: |
+        O BFF não está neste repositório. Exigiria monorepo com o core, ou inventário próprio do BFF.
+        Registrado como pendência no §Gatilho do próprio ADR.
+      enforced_by: []
+    rule:
+      status: accepted
+      disposition: adopt
+      text: |
+        O BFF MUST NOT conter regra de negócio, invariante de domínio ou validação de escrita.
+      rationale: |
+        Adotada como está — é o núcleo do ADR-0005 que sobrevive intacto, e a única barreira entre o
+        BFF atual e a "opção 3" que aquele ADR rejeitou. Sem gate por ora, e o ADR declara isso.
+
+  - id: ADR-0059-C2
+    text: |
+      O BFF MAY compor respostas de múltiplas chamadas ao core, remodelar payload por tela e entregar
+      view-model pronto para exibição. A cláusula "Zero composição de respostas" do ADR-0005 fica
+      SUPERSEDED.
+    kind: permission
+    source_lines: ['39-43']
+    applies_to: []
+    reality:
+      verdict: exercised
+      holds_in: [bff]
+      absent_in: []
+      evidence:
+        - 'nota: declarado pelo dono do repo em 2026-08-05 — o BFF é "agregador de serviços (…) busca todas as ferramentas que o client precisa, mastiga e entrega tudo já processado e pronto para o client só se preocupar com a exibição"'
+        - 'handbook/architecture/adr/0005-thin-bff-gateway.md:27 — "Zero composição de respostas", a cláusula que esta alegação supersede'
+        - 'handbook/architecture/adr/0049-core-api-bff-boundary.md:26 — o critério que separa o permitido do proibido: "O banco precisa fazer isso? → core-api. É montar/formatar o que já veio? → BFF"'
+      verify: |
+        Não verificável deste repositório. O que É verificável daqui é a contraparte: que o core NÃO
+        componha view-model — cobrado por `tests/cleanup/canonical-units-on-edge.test.ts`.
+    testability:
+      verdict: not-applicable
+      layer: null
+      red: |
+        `permission` sem obrigação embutida — não há estado do repositório que a viole. A obrigação
+        correlata (o core não compor) vive na `ADR-0049-C2` e tem gate próprio.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: accepted
+      disposition: adopt
+      text: |
+        Composição de respostas e remodelagem por tela MAY viver no BFF. O core MUST NOT fazê-las —
+        ver `ADR-0049-C2`.
+      rationale: |
+        Adotada. O par com a `ADR-0049-C2` é o que dá sentido às duas: a permissão de um lado só é
+        norma porque existe a proibição do outro. Separadas, "o BFF pode compor" seria trivial.
+
+  - id: ADR-0059-C3
+    text: |
+      O alvo de 200-300 linhas do ADR-0005 fica SUPERSEDED. Era proxy para "não deixe virar a opção 3",
+      e proxy numérico envelhece.
+    kind: permission
+    source_lines: ['45-47']
+    applies_to: []
+    reality:
+      verdict: exercised
+      holds_in: [bff]
+      absent_in: []
+      evidence:
+        - 'handbook/architecture/adr/0005-thin-bff-gateway.md:29 — "Tamanho-alvo inicial: 200-300 linhas"'
+        - 'nota: o BFF agrega múltiplas telas, o que ultrapassa o alvo sem ganhar uma linha de regra de negócio — a métrica media a coisa errada'
+        - 'handbook/architecture/adr/0058-runtime-tracks-recommended-lts.md:19 — o mesmo defeito de forma documentado para versão de runtime: fixar número produz afirmação que envelhece sozinha'
+      verify: |
+        Não verificável deste repositório; e mesmo com acesso ao BFF, contar linhas mediria a coisa
+        errada — que é justamente o argumento desta alegação.
+    testability:
+      verdict: unfalsifiable
+      layer: null
+      red: |
+        Não há teste possível: a alegação REMOVE um critério em vez de criar um. O que a substitui é a
+        `ADR-0059-C1`, que tem RED próprio.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: accepted
+      disposition: drop
+      text: null
+      rationale: |
+        `drop` porque a alegação é a remoção de uma regra, não uma regra nova — não há o que adotar. O
+        conteúdo normativo migrou inteiro para a `C1`. Registrar como descarte deixa o histórico claro:
+        o alvo existiu, serviu de proxy e foi substituído por critério verificável.
+
+  - id: ADR-0059-C4
+    text: |
+      Nada nesta decisão autoriza o core a delegar authz, validação ou isolamento multi-tenant ao BFF.
+      Guardrail do core é permanente.
+    kind: prohibition
+    source_lines: ['49-51']
+    applies_to:
+      - 'src/modules/*/adapters/http/**/*.ts'
+      - 'src/shared/http/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'handbook/architecture/adr/0049-core-api-bff-boundary.md:111 — o core é público em DEFINITIVO, ratificado em 2026-08-05; não há topologia futura em que o BFF seja a única porta'
+        - 'nota: a alegação ADR-0049-C8, promovida na mesma data, fixa que authz e multi-tenant são defesa PERMANENTE e não ponte até uma rede privada'
+        - 'nota: é a única das quatro invariantes deste ADR com consequência DESTE lado da fronteira — as outras três normatizam o BFF'
+      verify: |
+        grep -rn "AUTH_RBAC_MODE" src/ --include='*.ts' | head; and grep -n "público em DEFINITIVO" handbook/architecture/adr/0049-core-api-bff-boundary.md
+    testability:
+      verdict: testable-with-work
+      layer: integration
+      red: |
+        Dado um request sem credencial válida, quando o core responder dado de domínio, então o gate
+        falha — independentemente de haver BFF na frente.
+      expected_error: null
+      blocker: |
+        Existe `AUTH_RBAC_MODE=bypass` (ADR-0052/PR #476), decisão vigente durante a aceitação: todo
+        logado vira super-user. Um gate de authz precisa distinguir o bypass declarado de afrouxamento
+        acidental, e isso exige a data de fim do bypass, que ainda não foi fixada.
+      enforced_by: []
+    rule:
+      status: accepted
+      disposition: adopt
+      text: |
+        O core MUST manter authz e isolamento multi-tenant ativos de forma permanente. MUST NOT
+        delegá-los ao BFF nem relaxá-los contando com topologia de rede futura.
+      rationale: |
+        Adotada, e é a alegação mais consequente deste ADR apesar de parecer a mais óbvia. O risco real
+        que ela barra não é alguém decidir "vou tirar o authz" — é alguém raciocinar "o BFF já valida,
+        posso simplificar aqui". Com o core público em definitivo (ADR-0049 ratificado), esse raciocínio
+        passa a ser incorreto por construção, e a regra torna isso explícito.
+
+findings:
+  - |
+    ⚠️ PONTO CEGO ESTRUTURAL do inventário, exposto por este ADR. O método confronta ADR com `src/`;
+    logo, toda decisão sobre serviço EXTERNO é invisível a ele. O `ADR-0005` esteve contraditado desde
+    que o BFF ganhou agregação, e as 300 alegações do acervo nunca o acusaram — não por falha de
+    extração, mas porque não há código aqui para confrontar. A contradição só apareceu quando a
+    alegação `ADR-0049-C6` foi levada à verificação HUMANA.
+    Consequência prática: os ADRs que normatizam BFF, front ou infraestrutura precisam de um canal de
+    verificação diferente do `verify` por grep. Hoje esse canal é perguntar ao dono do repo, e as
+    evidências ficam com prefixo `nota:` declarando a fonte.
+  - |
+    Três das quatro alegações têm `enforced_by` vazio e não é omissão: o BFF não vive neste
+    repositório. A quarta (`C4`) é a única com consequência local, e o blocker dela é real — o
+    `AUTH_RBAC_MODE=bypass` do ADR-0052 torna um gate de authz ambíguo enquanto a data de fim do bypass
+    não for fixada.
+  - |
+    Este ADR nasce da mesma família de defeito que o `ADR-0058`: fixar um NÚMERO (200-300 linhas) como
+    proxy de uma propriedade (não virar BFF inteligente). O número envelhece sozinho; a propriedade,
+    não. É a segunda ocorrência do padrão no acervo em dois dias, o que sugere procurá-lo nos demais.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    Nasce da verificação da alegação `ADR-0049-C6` com o dono do repo, no gate humano da Fase 1 da
+    spec 040. Nenhuma issue do GitHub foi lida para este registro — vínculo por nome não é vínculo
+    (guarda 6).

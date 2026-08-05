@@ -53,6 +53,6 @@ Rota que compõe visão rica vive na borda e é **transitória até o BFF assumi
 
 ## Fastify ([ADR-0025](../../handbook/architecture/adr/0025-http-server-fastify-core-api.md))
 
-A borda é adapter: traduz `Result<T, E>` em status HTTP, e `throw` é permitido **aqui**, convertido antes de cruzar para dentro. Logging estruturado (Pino) com `request-id` propagado. **Não duplicar o BFF** — ele continua burro (o ADR-0005 **não** foi superseded): roteia, valida JWT, aplica rate limit. Quem tem a regra e emite credencial é o core-api.
+A borda é adapter: traduz `Result<T, E>` em status HTTP, e `throw` é permitido **aqui**, convertido antes de cruzar para dentro. Logging estruturado (Pino) com `request-id` propagado. **Não duplicar o BFF** — mas "burro" significa **sem regra de negócio**, não sem composição ([ADR-0059](../../handbook/architecture/adr/0059-bff-aggregates-without-business-rules.md), supersessão parcial do ADR-0005). O BFF agrega chamadas e monta view-model por tela; o que ele **MUST NOT** ter é invariante de domínio ou validação de escrita. Quem tem a regra e emite credencial é o core-api — e o core **não afrouxa contando com o BFF**: o [ADR-0049](../../handbook/architecture/adr/0049-core-api-bff-boundary.md) fixa que o core é público em definitivo, então authz e multi-tenant são defesa permanente, não ponte até uma rede privada que não virá.
 
 Borda: [`fastify-server-expert`](../agents/fastify-server-expert.md) · schemas: [`zod-expert`](../agents/zod-expert.md) — sempre em par.

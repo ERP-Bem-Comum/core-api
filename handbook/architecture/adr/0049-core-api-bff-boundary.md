@@ -2,9 +2,10 @@
 
 # ADR-0049: Fronteira de responsabilidade core-api ↔ BFF (Domain API + Experience API)
 
-- **Status:** Proposed
+- **Status:** Accepted (ratificado em 2026-08-05, após correção de duas cláusulas — ver abaixo)
 - **Date:** 2026-07-07
 - **Deciders:** Gabriel Aderaldo (TL) + Product Owner + Arquitetura Frontend v2
+- **Correções antes da ratificação (2026-08-05):** duas cláusulas foram corrigidas enquanto o ADR ainda era `Proposed`, no gate humano da Fase 1 da spec 040. **(1) Topologia** — o core-api permanece público **em definitivo**, não "até o go-live": servir a API não deve depender de tudo estar numa rede só. Isso ENDURECE a decisão, porque os guardrails deixam de ser ponte e viram defesa final. **(2) Regra de ouro** — a proibição é de **client-side** falar com o core, não de exclusividade de consumo: a API pode ter outros consumidores. Ratificar sem corrigir teria sancionado um `MUST` que a decisão nova já contradizia.
 - **Relacionado:** [ADR-0006](./0006-modular-monolith-core-api.md) (modular monolith; cross-módulo por public-api), [ADR-0014](./0014-mysql-database-isolation.md) (isolamento por database), [ADR-0022](./0022-read-models-via-projection-over-event-stream.md) (read-models via projeção), [ADR-0025](./0025-http-server-fastify-core-api.md)/[ADR-0028](./0028-http-edge-shell-location.md)/[ADR-0037](./0037-http-first-retire-embedded-cli.md) (HTTP é adapter; borda em `adapters/http/`), [ADR-0027](./0027-zod-openapi-contract-first-http-edge.md) (Zod+OpenAPI contract-first), [ADR-0045](./0045-financial-supplier-read-model.md) (read-model de fornecedor).
 - **Relação:** é o **estado-alvo** do [ADR-0032](./0032-transient-http-composition-read-until-bff.md) — quando esta fronteira entra, a "rota gorda transitória" do 0032 é removida.
 
@@ -64,7 +65,7 @@ A fundamentação de *por que a agregação fica no banco* está no **Apêndice 
 O "cru" do core é cru em **estrutura** (não formatado), **nunca** em **autorização**. Duas regras que a leitura ingênua da inversão ("core cru, BFF protege") violaria:
 
 1. **Authz de recurso, multi-tenant e minimização de dado sensível ficam NO CORE**, aplicadas por **escopo do token** (de serviço/usuário). O BFF **não** é a barreira de PII — é a *última* projeção de conveniência, não a *única*. Provas vivas: **#53** (leitura de `fin_documents` deve filtrar por organização) e **#238** (CPF/RG/salário **não saem** do core sem a permissão `collaborator:read`). Se o core entregasse tudo e "confiasse" no BFF, um bug no BFF vazaria a base inteira.
-2. **Enquanto o core for público (topologia híbrida/faseada), os guardrails não relaxam.** O ganho de PII da inversão só se materializa quando o core sai da borda pública — até lá, authz + multi-tenant no core são obrigatórios, não opcionais.
+2. **O core é público em definitivo, então os guardrails são permanentes.** Não há inversão de rede que os torne redundantes: authz + multi-tenant no core são a defesa final, não uma ponte até a Fase 2. (Redação corrigida em 2026-08-05 — a original condicionava os guardrails a uma fase que deixou de existir.)
 
 Ou seja: **o core decide *o que aquele principal pode ver*; o BFF decide *como a tela mostra*.**
 
@@ -98,7 +99,7 @@ Ou seja: **o core decide *o que aquele principal pode ver*; o BFF decide *como a
 1. **MUST NOT** — o BFF reimplementar invariante de domínio ou validação de escrita. Regra de negócio é do core, sempre.
 2. **MUST NOT** — o core retornar DTO de tela (formatação PT, `R$`, `%` de layout, labels i18n).
 3. **MUST** — authz de recurso + isolamento multi-tenant + minimização LGPD no **core**, por escopo do token.
-4. **MUST NOT** — componente client falar direto com o core. Todo dado do front passa pelo BFF (habilita a Fase 2 de rede sem refactor).
+4. **MUST NOT** — componente CLIENT-SIDE falar direto com o core. Todo dado do front passa pelo BFF, que é a camada intermediária do front. **A API pode ter outros consumidores** (integrações, serviços) — a proibição é sobre o client-side, não sobre exclusividade de consumo.
 5. **MUST** — agregação (`SUM`/`GROUP-BY`/`TOP-N`) e filtro/sort/paginação/full-text no **core** (banco). Ver Apêndice A.
 6. **MUST NOT** — JOIN cross-módulo ([ADR-0014](./0014-mysql-database-isolation.md)). Composição cross-agregado para tela é feita pelo BFF via batch-by-id; se ficar cara (N+1), materializa-se read-model ([ADR-0022](./0022-read-models-via-projection-over-event-stream.md)).
 7. **SHOULD** — todo endpoint core↔BFF é contract-first (Zod → OpenAPI, [ADR-0027](./0027-zod-openapi-contract-first-http-edge.md)).
@@ -107,7 +108,11 @@ Ou seja: **o core decide *o que aquele principal pode ver*; o BFF decide *como a
 
 ## Topologia (decisão: híbrido/faseado)
 
-Core-api permanece público POR ORA; migra para trás do BFF (rede privada / service-auth) após o go-live. **Enquanto público, os guardrails no core NÃO relaxam** — #53 (multi-tenant) e #238 (RBAC+LGPD) são pré-go-live. Regra de ouro: nenhum front novo fala direto com o core — sempre via BFF, para a Fase 2 ser só configuração de rede.
+Core-api permanece público **PERMANENTEMENTE** — decisão do dono do repo em 2026-08-05, corrigindo a redação anterior ("por ora; migra para trás do BFF após o go-live"). A razão é explícita: **servir a API não deve depender de tudo estar numa rede só.** Não há Fase 2 de rede privada.
+
+Consequência direta: **os guardrails no core não são temporários — são permanentes.** #53 (multi-tenant) e #238 (RBAC+LGPD) deixam de ser "pré-go-live" e passam a ser a defesa definitiva, porque nunca haverá uma camada de rede atrás da qual relaxá-los. É um endurecimento da decisão, não um afrouxamento.
+
+Regra de ouro, com o escopo corrigido: **nenhum componente CLIENT-SIDE fala direto com o core** — todo dado do front passa pelo BFF, que é a camada intermediária do front. A API, porém, **pode ter outros consumidores** além do BFF (integrações, serviços). A redação anterior sugeria exclusividade que nunca foi a intenção.
 
 ## Rollout (decisão: só novos + apresentação pura)
 

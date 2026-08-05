@@ -4,6 +4,22 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-08-05 — 📄 `ADR-0059` (Accepted) + ratificação do `ADR-0048` e do `ADR-0049`: a fronteira com o BFF fica descrita como ela é
+
+Três movimentos do **gate humano da Fase 1** da spec 040, todos disparados por uma coisa só: levar as alegações do inventário ao dono do repo em vez de inferi-las do código.
+
+**Ratificação do [ADR-0048](./architecture/adr/0048-legacy-categorization-installments-mapping.md).** O [ADR-0051](./architecture/adr/0051-taxonomy-owner-budget-plan-scoped.md), `Accepted` desde 2026-07-14, declarava vigente o §D1 do 0048 — que seguia `Proposed`, com o texto "aguardando ratificação", **três semanas depois**. Cadeia de decisão apoiada em documento não sancionado. Ratificar não fere a imutabilidade: o `README` dos ADRs prevê `Proposed → Accepted` como ciclo normal. O que impede a reincidência é mecânico: `tests/cleanup/adr-status-chain.test.ts` (novo) barra ADR `Accepted` que declare `Complementa:`/`Conformidade com:` apontando para `Proposed`, e a **guarda 7** do `SCHEMA.md` faz o mesmo uma camada abaixo, entre o ADR e a alegação extraída dele.
+
+**Ratificação do [ADR-0049](./architecture/adr/0049-core-api-bff-boundary.md), com duas cláusulas CORRIGIDAS antes.** A verificação com o dono do repo mostrou que a topologia tinha mudado: o core-api permanece público **em definitivo**, não "até o go-live" — servir a API não deve depender de tudo estar numa rede só. Isso **endurece** a decisão: os guardrails de authz e multi-tenant deixam de ser ponte até uma Fase 2 de rede e viram defesa final. A regra de ouro também foi estreitada — a proibição é de **client-side** falar com o core, não de exclusividade de consumo. Corrigir enquanto o ADR ainda era `Proposed` é legítimo; ratificar antes teria sancionado um `MUST` que a decisão nova já contradizia.
+
+**Novo [ADR-0059](./architecture/adr/0059-bff-aggregates-without-business-rules.md)**, supersedendo **parcialmente** o [ADR-0005](./architecture/adr/0005-thin-bff-gateway.md). O 0005 enumerou três opções — front escolhe URL, BFF burro, BFF inteligente — e escolheu a segunda, decidindo "**Zero regra de negócio. Zero composição de respostas**", alvo de 200-300 linhas. **O BFF real ficou entre a 2 e a 3, e o ADR não previa esse ponto:** ele agrega chamadas e entrega view-model pronto, mas não valida regra de negócio. Agregar É composição; não É regra de negócio. O 0005 tratou as duas como pacote, e elas não são. Caem "Zero composição" e o alvo numérico; permanecem "zero regra de negócio", roteamento por prefixo, cross-cutting e "zero cache de domínio".
+
+**Por que isso nunca apareceu no inventário:** ele confronta ADRs com `src/`, e o BFF **não vive neste repositório**. O `ADR-0005` jamais foi verificado contra o BFF real — a contradição só emergiu quando a alegação `ADR-0049-C6` foi levada à verificação humana. É o limite estrutural do método, e está declarado no ADR-0059 §Negativas: nenhuma cláusula dele é verificável daqui.
+
+**O alvo de 200-300 linhas sai pelo mesmo motivo que o [ADR-0058](./architecture/adr/0058-runtime-tracks-recommended-lts.md) tirou a versão do ADR:** proxy numérico envelhece sozinho. Um BFF que agrega dez telas passa disso sem ganhar uma linha de regra de negócio. A régua que substitui é verificável por leitura, não por contagem.
+
+`.claude/rules/http-edge.md` foi atualizada junto — ela enumerava "roteia, valida JWT, aplica rate limit", descrição da opção 2 que o BFF deixou de ser. Duas fontes divergindo sobre a mesma norma é a fábrica de drift que este acervo passou a semana desfazendo.
+
 ## 2026-08-05 — 📄 `ADR-0058` (Accepted): o runtime acompanha o LTS recomendado — critério em vez de versão fixa
 
 Novo [ADR-0058](./architecture/adr/0058-runtime-tracks-recommended-lts.md) (**Accepted**), supersedendo **parcialmente** o [0002](./architecture/adr/0002-keep-nodejs-runtime.md) e o [0009](./architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md) — apenas a **forma de fixar versão**, não a escolha de Node como runtime nem de TypeScript como linguagem, que permanecem integralmente vigentes.
