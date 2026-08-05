@@ -290,6 +290,15 @@ services:
       # reports é read-only e não tem writer próprio: as URLs dele caem no *_DATABASE_URL do
       # módulo-fonte (server.ts:247-249) — basta o driver, sem secret novo.
       REPORTS_DRIVER: mysql
+      # ⚠️⚠️⚠️ TEMPORÁRIO — LIBERAÇÃO TOTAL DE ACESSO (ADR-0052) ⚠️⚠️⚠️
+      # AUTH_RBAC_MODE=bypass → autorização por permissão DESLIGADA: todo usuário AUTENTICADO é
+      # super-usuário e vê 100% das ferramentas/relatórios/campos, INCLUSIVE dados sensíveis
+      # (bancário/PIX, raça/gênero/CPF). `requireAuth` (login) permanece ativo.
+      # Decisão da P.O. (2026-08-05): entrega inicial precisa de acesso total para o cliente validar
+      # as funcionalidades; as permissões serão estruturadas e restringidas em breve (espelha o legado).
+      # REVERTER assim que as regras de permissão do cliente forem definidas: remover esta linha
+      # (default volta a `enforced`, fail-secure). Rastreado em GitHub.
+      AUTH_RBAC_MODE: bypass
     # Injeção de DATABASE_URL via $(cat) — padrão ADR-0011. tini permanece PID 1.
     # `exec tini -- node src/server.ts` substitui o sh pelo processo node após
     # exportar as envs, mantendo sinalização correta (SIGTERM → Node → graceful).
