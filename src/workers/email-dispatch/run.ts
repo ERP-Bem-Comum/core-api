@@ -104,10 +104,14 @@ const main = async (): Promise<number> => {
   // Drena de verdade: aborta o loop E fecha o(s) pool(s). Em `uncaughtException` o
   // `finally` nunca roda, e sem isto o pool fica pendurado ate o `wait_timeout`
   // (Incident-0001).
+  // `allSettled`, não `await` em sequência (#632) — ver a nota em contract-count-projection/run.ts.
+  // O `partnersHandle` é opcional aqui, então entra na lista só quando existe.
   const drain = async (): Promise<void> => {
     controller.abort();
-    await authHandle.close();
-    if (partnersHandle !== null) await partnersHandle.close();
+    await Promise.allSettled([
+      authHandle.close(),
+      ...(partnersHandle !== null ? [partnersHandle.close()] : []),
+    ]);
   };
   installLastResortHandlers(drain, processLastResortDeps());
 

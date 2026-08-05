@@ -64,10 +64,12 @@ const main = async (): Promise<number> => {
   // Drena de verdade: aborta o loop E fecha o(s) pool(s). Em `uncaughtException` o
   // `finally` nunca roda, e sem isto o pool fica pendurado ate o `wait_timeout`
   // (Incident-0001).
+  // `allSettled`, não `await` em sequência (#632): no caminho fatal, um `close()` que rejeita NÃO
+  // pode impedir os demais. Sequência curto-circuita e deixa o pool restante pendurado até o
+  // `wait_timeout` — o Incident-0001 de novo, e aqui o `finally` do fluxo normal não roda.
   const drain = async (): Promise<void> => {
     controller.abort();
-    await contractsHandle.close();
-    await partnersHandle.close();
+    await Promise.allSettled([contractsHandle.close(), partnersHandle.close()]);
   };
   installLastResortHandlers(drain, processLastResortDeps());
 
