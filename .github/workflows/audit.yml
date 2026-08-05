@@ -32,6 +32,7 @@ concurrency:
 
 permissions:
   contents: read
+  issues: write # payload mínimo do alerta agendado — ver o step "Alerta" em `prod`
 
 jobs:
   prod:
@@ -44,7 +45,72 @@ jobs:
       - name: Habilita pnpm (corepack — packageManager pinado em package.json)
         run: corepack enable
       - name: Audit (dependencies de runtime ≥ high)
-        run: pnpm audit --prod --audit-level=high --ignore-registry-errors
+        id: audit
+        run: |
+          set -o pipefail
+          pnpm audit --prod --audit-level=high --ignore-registry-errors 2>&1 | tee /tmp/audit.txt
+
+      # Alerta do agendado. NÃO dispara em `pull_request`: ali o check vermelho JÁ é o sinal, e
+      # abrir issue a cada PR com dep vulnerável produziria exatamente o ruído que o dedup abaixo
+      # existe para evitar. O buraco que este step fecha é outro — o agendado rodou e falhou 8 dias
+      # seguidos na `main` sem ninguém saber (#633), porque o vermelho só existia na aba Actions.
+      - name: Alerta — abre ou atualiza a issue do audit vermelho
+        if: failure() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DEADMAN_DISCORD_WEBHOOK: ${{ secrets.DEADMAN_DISCORD_WEBHOOK }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          # Marcador ESTÁVEL no título: é a chave de dedup. `gh issue create` NÃO é idempotente —
+          # cada chamada abre uma issue nova, e foi assim que o #368 gerou 14 issues idênticas
+          # (ver a nota longa em `deadman-audit.yml`). Aqui a defesa é buscar antes de criar.
+          MARKER='[audit-prod] advisories high em dependência de produção'
+          PKGS=$(grep -oE '^│ (high|critical) +│ [^│]+' /tmp/audit.txt 2>/dev/null \
+                 | sed -E 's/.*│ +//' | sort -u | head -20)
+          [ -z "$PKGS" ] && PKGS='(não foi possível extrair a lista — ver o log do run)'
+          BODY=$(printf '%s\n\n%s\n\n```\n%s\n```\n\n%s\n' \
+            "O \`audit --prod\` agendado falhou em **$(date -u +%Y-%m-%d)**." \
+            'Advisories `high`/`critical` em dependência de **produção**:' \
+            "$PKGS" \
+            "Run: ${RUN_URL}")
+
+          EXISTING=$(gh issue list --state open --search "\"$MARKER\" in:title" \
+                       --json number --jq '.[0].number' 2>/dev/null || true)
+
+          if [ -n "$EXISTING" ]; then
+            gh issue comment "$EXISTING" --body "$BODY" || echo "::warning::falha ao comentar na #$EXISTING"
+            echo "::notice::alerta anexado à issue #$EXISTING (dedup)"
+          else
+            gh issue create --title "🔴 $MARKER" --body "$BODY" \
+              --label "seguranca,needs-triage" || echo "::warning::falha ao abrir a issue"
+          fi
+
+          # Discord é BEST-EFFORT, mesma semântica do `deadman-audit.yml`: a issue é o registro
+          # auditável; o webhook é o empurrão. Falha dele não suprime nem retenta a issue.
+          if [ -n "${DEADMAN_DISCORD_WEBHOOK:-}" ]; then
+            curl -fsS -X POST "$DEADMAN_DISCORD_WEBHOOK" -H 'Content-Type: application/json' \
+              -d "$(jq -nc --arg c "🔴 audit --prod vermelho na main — ${RUN_URL}" '{content:$c}')" \
+              >/dev/null || echo "::warning::Discord não notificado (best-effort)"
+          fi
+          exit 1 # o step de alerta NÃO mascara a falha do audit
+
+      # Fecha o ciclo: sem isto a issue fica presa ligada e vira ruído permanente — o mesmo
+      # mecanismo que deixou o cabeçalho do `bruno-all.sh` apodrecer por meses.
+      - name: Resolve — comenta na issue quando o audit voltar a verde
+        if: success() && github.event_name == 'schedule'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -uo pipefail
+          MARKER='[audit-prod] advisories high em dependência de produção'
+          EXISTING=$(gh issue list --state open --search "\"$MARKER\" in:title" \
+                       --json number --jq '.[0].number' 2>/dev/null || true)
+          if [ -n "$EXISTING" ]; then
+            gh issue close "$EXISTING" --comment "✅ \`audit --prod\` voltou a verde em $(date -u +%Y-%m-%d). Run: ${RUN_URL}" \
+              || echo "::warning::falha ao fechar a #$EXISTING"
+          fi
 
   full:
     name: audit (todas as deps — report-only)

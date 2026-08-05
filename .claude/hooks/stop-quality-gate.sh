@@ -8,9 +8,16 @@
 #
 # Custo controlado: o gate completo leva minutos, e o Stop dispara a cada
 # turno. O hook decide sozinho o que rodar, pelo que mudou:
-#   - nada em src/tests/config  → exit 0 imediato (turno de conversa/doc)
-#   - só .md                    → exit 0 (format já roda no PostToolUse)
-#   - .ts em src/ ou tests/     → gate completo
+#   - nenhum arquivo alterado                → exit 0 imediato
+#   - só .md / .yaml / .sh / qualquer não-.ts → exit 0 (format já roda no PostToolUse)
+#   - QUALQUER .ts, em qualquer diretório     → gate completo
+#   - tsconfig.json, eslint.config.js, package.json → gate completo
+#
+# ⚠️ O escopo é o REPOSITÓRIO INTEIRO, não `src/` e `tests/`. Um `.ts` em `scripts/`,
+# `db/drizzle/` ou na raiz dispara o gate igual — e deve mesmo: `scripts/ci/*.ts` roda em
+# CI e `db/drizzle/*.ts` decide o que a migration gera. A versão anterior deste comentário
+# dizia ".ts em src/ ou tests/" e omitia os três arquivos de config, descrevendo um recorte
+# que o código nunca teve.
 #
 # Exit code:
 #   0 → nada a verificar, ou gate verde
@@ -30,8 +37,10 @@ changed=$(git status --porcelain 2>/dev/null | awk '{print $NF}')
 needs_gate=0
 while IFS= read -r f; do
   case "$f" in
-    src/*.ts|tests/*.ts|src/*/*.ts|tests/*/*.ts|*.ts) needs_gate=1; break ;;
-    tsconfig.json|eslint.config.js|package.json)      needs_gate=1; break ;;
+    # `*.ts` casa QUALQUER caminho — em `case`, o `*` atravessa `/`. As alternativas
+    # `src/*.ts|tests/*.ts|…` que existiam aqui eram código morto, subsumidas por ele.
+    *.ts) needs_gate=1; break ;;
+    tsconfig.json | eslint.config.js | package.json) needs_gate=1; break ;;
   esac
 done <<< "$changed"
 
