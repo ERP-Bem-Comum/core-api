@@ -1,6 +1,7 @@
 import type { Result } from '#src/shared/primitives/result.ts';
 import type { CedenteAccountId } from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
 import type { ReconciliationId } from '#src/modules/financial/domain/reconciliation/reconciliation-id.ts';
+import type { StatementTransactionId } from '#src/modules/financial/domain/statement/statement-transaction-id.ts';
 import type { ExpectedCounterpartId } from '#src/modules/financial/domain/expected-counterpart/expected-counterpart-id.ts';
 import type { ExpectedCounterpart } from '#src/modules/financial/domain/expected-counterpart/types.ts';
 import type { ExpectedCounterpartEvent } from '#src/modules/financial/domain/expected-counterpart/events.ts';
@@ -23,5 +24,11 @@ export type ExpectedCounterpartStore = Readonly<{
   ) => Promise<Result<readonly ExpectedCounterpart[], ExpectedCounterpartStoreError>>;
   findByOriginReconciliation: (
     reconciliationRef: ReconciliationId,
+  ) => Promise<Result<ExpectedCounterpart | null, ExpectedCounterpartStoreError>>;
+  // #450: localiza a contrapartida PELA PERNA DE DESTINO — a transação real que a casou
+  // (`matched_transaction_ref`). Destrava o undo da perna B: sem isto, desfazer B deixava a
+  // contrapartida presa em `Matched`. Retorna `null` se nenhuma contrapartida referencia a transação.
+  findByMatchedTransaction: (
+    transactionRef: StatementTransactionId,
   ) => Promise<Result<ExpectedCounterpart | null, ExpectedCounterpartStoreError>>;
 }>;

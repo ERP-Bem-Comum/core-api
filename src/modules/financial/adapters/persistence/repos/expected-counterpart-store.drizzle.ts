@@ -8,6 +8,7 @@ import process from 'node:process';
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type { CedenteAccountId } from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
 import type { ReconciliationId } from '#src/modules/financial/domain/reconciliation/reconciliation-id.ts';
+import type { StatementTransactionId } from '#src/modules/financial/domain/statement/statement-transaction-id.ts';
 import type { ExpectedCounterpartId } from '#src/modules/financial/domain/expected-counterpart/expected-counterpart-id.ts';
 import type { ExpectedCounterpart } from '#src/modules/financial/domain/expected-counterpart/types.ts';
 import type { ExpectedCounterpartEvent } from '#src/modules/financial/domain/expected-counterpart/events.ts';
@@ -117,6 +118,30 @@ export const createDrizzleExpectedCounterpartStore = (
         return ok(mapped.value);
       } catch (cause) {
         logStore('findByOriginReconciliation', cause);
+        return err('expected-counterpart-store-unavailable');
+      }
+    },
+
+    // #450: SELECT ... WHERE matched_transaction_ref = ? — localiza a contrapartida pela perna de destino.
+    findByMatchedTransaction: async (
+      transactionRef: StatementTransactionId,
+    ): Promise<Result<ExpectedCounterpart | null, ExpectedCounterpartStoreError>> => {
+      try {
+        const rows = await db
+          .select()
+          .from(finExpectedCounterpart)
+          .where(eq(finExpectedCounterpart.matchedTransactionRef, String(transactionRef)))
+          .limit(1);
+        const row = rows[0];
+        if (row === undefined) return ok(null);
+        const mapped = toDomain(row);
+        if (!mapped.ok) {
+          logStore('findByMatchedTransaction:map', mapped.error);
+          return err('expected-counterpart-store-unavailable');
+        }
+        return ok(mapped.value);
+      } catch (cause) {
+        logStore('findByMatchedTransaction', cause);
         return err('expected-counterpart-store-unavailable');
       }
     },

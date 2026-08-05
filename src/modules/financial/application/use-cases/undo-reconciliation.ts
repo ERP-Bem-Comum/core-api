@@ -28,14 +28,22 @@ import type {
 export type UndoReconciliationDeps = Readonly<{
   reconciliationRepo: Pick<
     ReconciliationRepository,
-    'findById' | 'undo' | 'findActiveByTransaction' | 'undoCounterpartOrigin'
+    | 'findById'
+    | 'undo'
+    | 'findActiveByTransaction'
+    | 'undoCounterpartOrigin'
+    | 'undoCounterpartDestination'
   >;
   // Guard R18: localiza a transação (data+conta) para checar período fechado.
   statements: Pick<BankStatementRepository, 'findTransaction'>;
   periods: Pick<ReconciliationPeriodStore, 'isClosed'>;
   clock: Pick<Clock, 'now'>;
-  // #269/US3: se esta conciliação é a origem (A) de uma contrapartida, tratá-la no mesmo undo.
-  expectedCounterpartStore: Pick<ExpectedCounterpartStore, 'findByOriginReconciliation'>;
+  // #269/US3 + #450: se esta conciliação é a origem (A) de uma contrapartida, ou a perna de destino (B)
+  // que a casou, tratá-la no mesmo undo — busca por origem (A) e, quando não for origem, por destino (B).
+  expectedCounterpartStore: Pick<
+    ExpectedCounterpartStore,
+    'findByOriginReconciliation' | 'findByMatchedTransaction'
+  >;
 }>;
 
 export type UndoReconciliationInput = Readonly<{
@@ -134,12 +142,34 @@ export const undoReconciliation =
       );
       if (!saved.ok) return err(saved.error);
     } else {
-      // Sem contrapartida (ou já Discarded) → undo normal (back-compat).
-      const saved = await deps.reconciliationRepo.undo(
-        undone.value.reconciliation,
-        undone.value.events,
+      // #450: não é ORIGEM (ou origem já Discarded). Esta conciliação pode ser a PERNA B (destino) que
+      // casou uma contrapartida — localiza pela transação casada (`matched_transaction_ref` = a transação
+      // desta perna B). (Origem e destino são mutuamente exclusivos: origem A ≠ transação de B.)
+      const cpDestR = await deps.expectedCounterpartStore.findByMatchedTransaction(
+        found.value.transactionId,
       );
-      if (!saved.ok) return err(saved.error);
+      if (!cpDestR.ok) return err(cpDestR.error);
+      const cpDest = cpDestR.value;
+
+      if (cpDest !== null && cpDest.status === 'Matched') {
+        // Guard de simetria: só REABRE a expectativa (Matched → Pending) na conta de destino. NÃO
+        // cascateia outra conciliação (a própria B já é o `undone` principal) e NÃO toca a origem/perna A.
+        const reopened = reopen(cpDest);
+        if (!reopened.ok) return err(reopened.error);
+        const saved = await deps.reconciliationRepo.undoCounterpartDestination(
+          undone.value.reconciliation,
+          reopened.value.counterpart,
+          [...undone.value.events, ...reopened.value.events],
+        );
+        if (!saved.ok) return err(saved.error);
+      } else {
+        // Sem contrapartida por origem nem por destino (ou já Discarded) → undo normal (back-compat).
+        const saved = await deps.reconciliationRepo.undo(
+          undone.value.reconciliation,
+          undone.value.events,
+        );
+        if (!saved.ok) return err(saved.error);
+      }
     }
 
     return ok({ reconciliationId: found.value.id, status: 'Undone' });
