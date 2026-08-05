@@ -86,6 +86,27 @@ gerado; merece ciclo próprio, não cabe nesta inquiry. Esta permanece `Open` pe
 (table-level), agora com o escopo reduzido à metade que de fato depende de upstream. Ver
 [Inquiry-0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) para a avaliação do `1.0.0`.
 
+### 2026-08-05 — Pergunta 2 FECHADA: o ciclo próprio aconteceu (#636)
+
+Os tipos vivem em `src/shared/persistence/identifier-columns.ts` e cobrem as **119** colunas
+binárias dos 6 módulos que as têm. `db:generate` responde `No schema changes` em todos — nenhum
+`ALTER` foi gerado para coluna existente.
+
+Duas coisas que só apareceram na execução, e que a medição de maio/agosto não previa:
+
+1. **O `binId` único da prova de conceito não bastava.** A collation binária vale para 7 larguras
+   distintas, e a largura carrega significado (`varchar(14)` é CNPJ do ADR-0044, `varchar(11)` é
+   CPF, `char(64)` é SHA-256 hex). Um tipo parametrizado por `length` devolveria ao schema a decisão
+   de qual número usar — que é onde o erro mora. Viraram 7 tipos nomeados pelo que a coluna É.
+
+2. **O CA4 exigiu corrigir o snapshot, e a razão é que ele MENTIA.** O `meta/*_snapshot.json`
+   gravava `varchar(36)` enquanto o banco tem `utf8mb4_bin`, porque a migration foi editada à mão —
+   a divergência nasceu na edição manual, não na adoção do `customType`. Sem corrigir, o diff via
+   mudança de tipo e gerava `MODIFY COLUMN` em cada uma das colunas.
+
+**A pergunta 1 (table-level) segue `Open`** — o `CHARSET`/`COLLATE` de tabela continua exigindo
+edição manual da migration, e é o que mantém esta inquiry aberta.
+
 ### Pendente — issues e roadmap upstream
 
 - Buscar issues em `drizzle-team/drizzle-orm` GitHub (palavras-chave: `mysql collate`, `charset table`, `utf8mb4_bin`).

@@ -330,6 +330,9 @@ claims:
       evidence:
         - 'nota: nas migrations, utf8mb4_bin aparece 160 vezes contra 65 de utf8mb4_unicode_ci — a collation dominante não é nenhuma das duas que o ADR permite'
         - 'nota: nos schemas Drizzle, 51 utf8mb4_bin contra 17 utf8mb4_unicode_ci'
+        - 'nota: CORREÇÃO (#636, 2026-08-05): o "51" acima subconta. O DDL aplicado tem 119 colunas binárias VIVAS, em 7 larguras — varchar(36) 100, char(36) 9, varchar(14) 3, char(64) 2, varchar(11) 2, varchar(64) 2, varchar(128) 1. A contagem original casava COLLATE apenas logo após o tipo e não via a forma `char(64) NOT NULL COLLATE utf8mb4_bin`.'
+        - 'nota: ACHADO (#636): 24 identificadores VIVOS não têm utf8mb4_bin — entre eles fin_payable_view.* (8 colunas), fin_outbox.event_id/aggregate_id, fin_categories.id, fin_cost_centers.id, ctr_documents.id/parent_id, par_collaborator_history.*. É o risco desta alegação já REALIZADO, não hipotético.'
+        - 'nota: TENSÃO com a rule.text abaixo: o predicado `finPayableView.costCenterRef = finCostCenters.id` (src/modules/financial/public-api/payables-analysis-projection.ts:68) junta duas colunas SEM utf8mb4_bin. Não há mistura de collation — os dois lados herdaram unicode_ci —, mas a letra "todo predicado de JOIN entre colunas com utf8mb4_bin explícito" não descreve o código. O gate passa porque cobra a AUSÊNCIA DE MISTURA, que é a propriedade que evita o defeito. Ratificar o enunciado real ou corrigir as 24 colunas é decisão humana pendente.'
         - 'src/modules/auth/adapters/persistence/migrations/mysql/0000_charming_mastermind.sql:2 — id varchar(36) COLLATE utf8mb4_bin'
         - 'compose.yaml:7 — o comentário do compose repete o ADR ("charset utf8mb4_unicode_ci") enquanto os schemas usam majoritariamente _bin'
       verify: |
@@ -346,7 +349,16 @@ claims:
         norma a redecidir, não código a corrigir em massa. Foi o que levou ao `replace`.
       expected_error: null
       blocker: null
-      enforced_by: ['tests/cleanup/collation-two-only.test.ts']
+      # #636 mudou a natureza do enforcement. O gate de JOIN deixou de ser a rede ÚNICA:
+      # a collation agora nasce do tipo da coluna (identifier-columns.ts), e um gate próprio
+      # cobra que toda coluna binária seja declarada com um deles. O de JOIN vira defesa em
+      # profundidade — pega a combinação errada; o de tipo evita que ela exista.
+      enforced_by:
+        [
+          'tests/cleanup/collation-two-only.test.ts',
+          'tests/cleanup/identifier-collation-from-type.test.ts',
+          'tests/shared/persistence/identifier-columns.test.ts',
+        ]
     rule:
       status: accepted
       disposition: replace
