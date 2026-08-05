@@ -30,10 +30,12 @@
  *     table-level, que a API do Drizzle 0.45.x realmente não expressa.
  *
  *     ⚠️ Os números desta pesquisa foram corrigidos pelo levantamento do #636. Onde se lia "51
- *     colunas `bin`", o SQL aplicado tem **119** em 7 larguras distintas — a contagem original
- *     casava `COLLATE` apenas logo após o tipo, e não via a forma `char(64) NOT NULL COLLATE ...`.
+ *     colunas `bin`", o SQL aplicado tem **130** em 7 larguras distintas. Duas causas de
+ *     subcontagem, ambas corrigidas: casar `COLLATE` só logo após o tipo (perdia
+ *     `char(64) NOT NULL COLLATE …`) e ler apenas colunas de `CREATE TABLE` (perdia tudo que
+ *     nasceu de `ALTER TABLE … ADD`).
  *  3. **Nenhum JOIN cruza collation hoje** — mas não porque toda coluna de JOIN seja `bin`. O
- *     levantamento do #636 achou **24 identificadores vivos SEM `bin`** (`fin_payable_view.*`,
+ *     levantamento achou **34 identificadores vivos SEM `bin`** (`fin_payable_view.*`,
  *     `fin_outbox.event_id`, `fin_categories.id`…), e o predicado
  *     `finPayableView.costCenterRef = finCostCenters.id` junta dois deles. Não há mistura porque os
  *     DOIS lados herdaram `unicode_ci`, não porque ambos sejam binários. A ausência de mistura é

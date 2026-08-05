@@ -29,10 +29,10 @@
 // `shared/persistence/identifier-columns.ts` — comparação binária, mais rápida e sem drift
 // Unicode em FK matches, agora garantida pelo tipo em vez da memória de quem gera a migration.
 //
-// **RESPONSABILIDADE DO PRÓXIMO DEV**: se `drizzle-kit generate` emitir uma
-// migration 0001+, edite o SQL gerado para inserir `ENGINE=InnoDB DEFAULT
-// CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci` em qualquer CREATE TABLE novo, e
-// `COLLATE utf8mb4_bin` em qualquer coluna UUID nova. Os testes em
+// **RESPONSABILIDADE DO PRÓXIMO DEV**: se `drizzle-kit generate` emitir uma migration nova, edite
+// o SQL gerado para inserir `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci` em
+// qualquer CREATE TABLE novo — isso segue manual. Coluna UUID nova NÃO: declare com o tipo de
+// `identifier-columns.ts` e o `COLLATE utf8mb4_bin` sai no DDL sozinho. Os testes em
 // `schema-hardening.test.ts` (CA-15/16) cobrem `0000_*.sql` apenas — estender
 // para novas migrations conforme aparecerem.
 //
@@ -83,22 +83,22 @@ export const contracts = mysqlTable(
     terminationReason: varchar('termination_reason', { length: 1000 }),
     // Contratado (referência cross-módulo a Parceiros) — sem FK física (cross-db, ADR-0014).
     contractorType: varchar('contractor_type', { length: 16 }).notNull(),
-    contractorId: varchar('contractor_id', { length: 36 }).notNull(),
+    contractorId: uuidKey('contractor_id').notNull(),
     // CTR-NUMBER-PROGRAM: classificação (CT/OS) + metadados de cadastro. `program_id`/`budget_plan_id`
     // são refs leves (UUID) cross-módulo/cross-BC — sem FK física (ADR-0014). `categorizacao`/
     // `centro_de_custo` são rótulos livres. classification NOT NULL DEFAULT 'CT' (legado vira CT).
     classification: varchar('classification', { length: 8 }).notNull().default('CT'),
-    programId: varchar('program_id', { length: 36 }),
-    budgetPlanId: varchar('budget_plan_id', { length: 36 }),
+    programId: uuidKey('program_id'),
+    budgetPlanId: uuidKey('budget_plan_id'),
     categorizacao: varchar('categorizacao', { length: 255 }),
     centroDeCusto: varchar('centro_de_custo', { length: 255 }),
     // CTR-TAXONOMY-REFS (S3 do épico #502): Centro de Custo / Categoria / Subcategoria como refs
     // reais da árvore do plano (bgp_*). Refs leves (UUID) — sem FK física (ADR-0014), opacos. `null`
     // quando ausentes. Convivem com `categorizacao`/`centro_de_custo` (texto livre, back-compat).
-    // COLLATE utf8mb4_bin na migration (UUID — header §CHARSET/COLLATE).
-    costCenterRef: varchar('cost_center_ref', { length: 36 }),
-    categoryRef: varchar('category_ref', { length: 36 }),
-    subcategoryRef: varchar('subcategory_ref', { length: 36 }),
+    // `uuidKey` carrega o COLLATE utf8mb4_bin (#636).
+    costCenterRef: uuidKey('cost_center_ref'),
+    categoryRef: uuidKey('category_ref'),
+    subcategoryRef: uuidKey('subcategory_ref'),
     // Metadados de cadastro editáveis (FR-009) — nullable.
     observations: varchar('observations', { length: 1000 }),
     email: varchar('email', { length: 255 }),

@@ -561,7 +561,7 @@
         },
         "debit_account_ref": {
           "name": "debit_account_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -1046,14 +1046,14 @@
         },
         "budget_plan_ref": {
           "name": "budget_plan_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "subcategory_ref": {
           "name": "subcategory_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false

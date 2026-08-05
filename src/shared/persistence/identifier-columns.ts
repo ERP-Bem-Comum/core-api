@@ -3,7 +3,7 @@
 // Antes do #636 o `COLLATE utf8mb4_bin` era inserido à mão no SQL que `drizzle-kit generate` emite,
 // conforme instrução em comentário nos `schemas/mysql.ts`. Isso transfere a garantia para a memória
 // de quem roda o comando: um identificador novo com a edição esquecida herda `utf8mb4_unicode_ci`
-// em silêncio. Já aconteceu com 24 colunas vivas — ver #637.
+// em silêncio. Já aconteceu com 34 colunas vivas — ver #637.
 //
 // `customType` resolve porque `dataType()` é emitido VERBATIM no DDL. Medido em worktree
 // descartável (2026-08-05): a 1ª geração emite `` `id` varchar(36) COLLATE utf8mb4_bin NOT NULL ``,

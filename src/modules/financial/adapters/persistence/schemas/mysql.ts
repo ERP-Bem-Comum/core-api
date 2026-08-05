@@ -96,7 +96,7 @@ export const finDocuments = mysqlTable(
 
     // Conta-cedente de débito (D-CEDENTE — de qual conta o pagamento sai). Ref lógica a
     // fin_cedente_accounts; sem FK física (ADR-0014 §cross-acoplamento). Nullable até a remessa atribuir.
-    debitAccountRef: varchar('debit_account_ref', { length: 36 }),
+    debitAccountRef: uuidKey('debit_account_ref'),
 
     // Método de pagamento. CHECK = enum de domínio (8 valores — domain/document/types.ts §PaymentMethod).
     paymentMethod: varchar('payment_method', { length: 24 }),
@@ -809,8 +809,8 @@ export const finManualEntries = mysqlTable(
     supplierRef: uuidKey('supplier_ref'),
     // #502/S2: taxonomia planejável no título manual — plano orçamentário + subcategoria (folha da
     // árvore do plano). Refs opacos por identidade (varchar(36), sem FK — ADR-0014), como os irmãos.
-    budgetPlanRef: varchar('budget_plan_ref', { length: 36 }),
-    subcategoryRef: varchar('subcategory_ref', { length: 36 }),
+    budgetPlanRef: uuidKey('budget_plan_ref'),
+    subcategoryRef: uuidKey('subcategory_ref'),
     categoryRef: uuidKey('category_ref'),
     costCenterRef: uuidKey('cost_center_ref'),
     programRef: uuidKey('program_ref'),

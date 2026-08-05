@@ -43,7 +43,7 @@ export const budgetPlans = mysqlTable(
     versionMajor: int('version_major').notNull(),
     versionMinor: int('version_minor').notNull(),
     status: varchar('status', { length: 16 }).notNull(),
-    parentId: varchar('parent_id', { length: 36 }), // nullable: raiz = null
+    parentId: uuidKey('parent_id'), // nullable: raiz = null
     scenarioName: varchar('scenario_name', { length: 255 }), // nullable: só cenários preenchem
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
@@ -51,7 +51,7 @@ export const budgetPlans = mysqlTable(
     // (migrations 0000-0004) não têm valor; UUID do usuário (auth), soft FK cross-módulo
     // sem `references()` (ADR-0014) — molde `financial.approvedBy`. Mapper que preenche
     // é fase B do ticket.
-    updatedBy: varchar('updated_by', { length: 36 }),
+    updatedBy: uuidKey('updated_by'),
     // Idempotencia da ETL: id da linha no legado (nullable — linha nativa criada na tela nao tem).
     legacyId: int('legacy_id'),
   },
