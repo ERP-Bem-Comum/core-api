@@ -23,7 +23,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { PROJECT_ROOT, readSource } from '../support/source-scan.ts';
+import { PROJECT_ROOT, filesUsing, readSource } from '../support/source-scan.ts';
 
 /** Prefixo canônico de cada módulo que tem schema próprio. */
 const MODULE_PREFIX: Readonly<Record<string, string>> = {
@@ -95,5 +95,32 @@ describe('TABLE-PREFIX — o prefixo é a única fronteira física entre módulo
 
   it('a allowlist de tabelas cross-módulo está pinada', () => {
     assert.deepEqual([...CROSS_MODULE_TABLES].sort(), ['eventos_processados']);
+  });
+
+  // `ADR-0014-C7`, promovida a `accepted` em 2026-08-05. A metade PROIBITIVA da norma — "nenhuma
+  // outbox compartilhada" — já é coberta pelas asserções acima: uma tabela `outbox` sem prefixo cai
+  // fora da allowlist e reprova. O que faltava é a metade POSITIVA, que nenhum gate cobria: quem
+  // publica é dono da própria outbox. Um módulo que escrevesse na outbox alheia não seria pego pelo
+  // `module-boundary` (o append passa por helper de `shared/`, não por import de módulo).
+  //
+  // O ADR-0014 previa outbox por DATABASE (`core.outbox`); o que existe é uma por MÓDULO, sete no
+  // total. A propriedade que vale é a de PROPRIEDADE, não a de localização.
+  it('todo módulo que escreve na outbox declara a própria, com o seu prefixo', () => {
+    const publishers = Object.keys(MODULE_PREFIX).filter((m) =>
+      existsSync(join(PROJECT_ROOT, 'src/modules', m))
+        ? filesUsing(join(PROJECT_ROOT, 'src/modules', m), 'appendOutboxInTx(').length > 0
+        : false,
+    );
+    const semOutboxPropria = publishers
+      .filter((m) => !declaredTables(m).some((t) => t === `${MODULE_PREFIX[m] ?? ''}outbox`))
+      .sort();
+    assert.deepEqual(
+      semOutboxPropria,
+      [],
+      'Módulo que escreve na outbox sem declarar a sua — estaria publicando na outbox de outro, e ' +
+        'o dono do evento deixaria de ser o dono da tabela:\n' +
+        semOutboxPropria.join('\n'),
+    );
+    assert.ok(publishers.length > 0, 'nenhum publisher encontrado — a varredura não vê o append');
   });
 });
