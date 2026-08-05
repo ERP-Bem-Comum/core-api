@@ -34,14 +34,14 @@ const claimsDigits = /d[ií]gito|somente n[uú]mero|apenas n[uú]mero/i;
  * Registrados, não anistiados; cada um precisa de decisão própria.
  */
 const KNOWN_CODE_DEFECTS: readonly string[] = [
-  // Leitor de documento fiscal (#566). O braço do bloco EMITENTE (`CNPJ / CPF / NIF`) FOI corrigido:
-  // captura alfanumérica + `Cnpj.isValidCnpj`, com fixture sintética — as fiscais reais seguem
-  // gitignored por LGPD, mas não eram necessárias. O que RESTA é o defeito nos dois primeiros braços
-  // da cascata (`CNPJ:` e `CPF:`), que continuam com classe numérica e, por serem `??`, vencem o
-  // braço já corrigido: `CNPJ: 12.345.678/000A-08` devolve `12345678000` — 11 caracteres que o
-  // consumidor não distingue de um CPF. Corrigir muda comportamento e pede ciclo próprio: #627 —
-  // que inclui, na DoD, revisar se esta entrada ainda deve existir depois do conserto.
-  'src/modules/financial/adapters/document-reader/native-pdf.ts',
+  // VAZIA por desenho — não é lacuna. A única entrada era o leitor de documento fiscal
+  // (`native-pdf.ts`), e o #627 fechou o defeito que a sustentava: o braço `CNPJ:` da cascata passou
+  // a aceitar letras (ADR-0044). Com o conserto, a entrada ficaria MORTA — e allowlist morta anistia
+  // o arquivo inteiro contra regressões futuras, que é o oposto do que ela existe para fazer.
+  //
+  // A linha que ainda acionava a varredura descrevia o recorte do ramo legado de `normalizeTaxId`,
+  // não uma afirmação de que CNPJ é numérico: menção, não uso. Foi reescrita citando o próprio
+  // regex (`[\d.\-/\s]`) em vez da palavra — mais precisa, e sem o falso positivo.
 ];
 
 const offendingFiles = (): readonly string[] =>
@@ -65,10 +65,12 @@ describe('CNPJ-ALPHANUMERIC — a linguagem acompanha o formato', () => {
     );
   });
 
-  it('a allowlist de defeitos de código está pinada', () => {
-    assert.deepEqual([...KNOWN_CODE_DEFECTS].sort(), [
-      'src/modules/financial/adapters/document-reader/native-pdf.ts',
-    ]);
+  it('a allowlist de defeitos de código está pinada (vazia desde o #627)', () => {
+    assert.deepEqual(
+      [...KNOWN_CODE_DEFECTS].sort(),
+      [],
+      'entrada nova na allowlist exige decisão própria: ela anistia o ARQUIVO inteiro, não a linha',
+    );
   });
 
   it('o VO do kernel aceita letras (guarda contra regressão na fonte)', () => {

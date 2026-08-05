@@ -234,10 +234,11 @@ const group1 = (text: string, re: RegExp): string | undefined => re.exec(text)?.
 //
 //   - ramo CNPJ: testa os 14 primeiros caracteres significativos contra o checksum do kernel. O
 //     comprimento canônico é o que delimita o identificador; o resto da captura é descartado.
-//   - ramo legado (CPF / CNPJ com checksum inválido): recorta o `raw` à corrida inicial de dígitos e
-//     máscara, ATÉ a primeira letra. Sem esse recorte, um CPF seguido de `IM 0012345` produziria
-//     `52998224725001` — 14 caracteres de comprimento plausível, montados com dígitos da inscrição
-//     municipal, que seguiriam silenciosos até o `resolveSupplierByCnpj` e o autofill do front.
+//   - ramo legado (CPF, ou identificador que o checksum do kernel recusa): recorta o `raw` à corrida
+//     inicial de `[\d.\-/\s]` — ATÉ a primeira letra. Sem esse recorte, um CPF seguido de
+//     `IM 0012345` produziria `52998224725001` — 14 caracteres de comprimento plausível, montados
+//     com os algarismos da inscrição municipal, que seguiriam silenciosos até o
+//     `resolveSupplierByCnpj` e o autofill do front.
 //     Foi exatamente a regressão que reprovou a tentativa anterior; ver
 //     `tests/reports/W2-2026-08-04-cnpj-alfanumerico-REPROVADO.md`. Alargar a captura exige
 //     estreitar o consumidor.
@@ -344,14 +345,20 @@ export const structureText = (
   // `normalizeTaxId` corta no comprimento canônico. Menos que CPF → undefined (não seta supplier —
   // evita o truncado silencioso, #566).
   //
-  // ⚠️ Os dois primeiros braços ainda capturam classe NUMÉRICA, e por serem `??` eles VENCEM o braço
-  // 3. Um layout com rótulo `CNPJ:` e identificador alfanumérico (ADR-0044) para na 1ª letra e cai no
-  // ramo legado — `CNPJ: 12.345.678/000A-08` devolve `12345678000`, 11 caracteres que o consumidor
-  // não distingue de um CPF. É defeito PRÉ-EXISTENTE (idêntico em HEAD), fora do escopo desta
-  // mudança — registrado em #627, com os 4 CAs; ver também a allowlist de
-  // `tests/cleanup/cnpj-alphanumeric-language.test.ts`.
+  // #627: o braço `CNPJ:` aceita LETRAS (ADR-0044) — antes ele parava na 1ª letra e, por a cascata
+  // ser `??`, vencia o braço 3 devolvendo 11 caracteres indistinguíveis de um CPF.
+  //
+  // Alargar a captura só é seguro porque o ramo legado de `normalizeTaxId` deriva os dígitos do
+  // PREFIXO numérico do `raw` (`/^[\d.\-/\s]*/`), não do `raw` inteiro. É o que impede um CPF seguido
+  // de `IM 0012345` de virar 14 caracteres montados com dígitos do texto vizinho — a regressão que
+  // reprovou a tentativa de 2026-08-04 (`tests/reports/W2-2026-08-04-cnpj-alfanumerico-REPROVADO.md`),
+  // cujo diagnóstico foi: alargar a captura sem estreitar o consumidor. O consumidor já está
+  // estreito, e é por isso — e só por isso — que esta linha pôde mudar.
+  //
+  // O braço `CPF:` segue NUMÉRICO de propósito: CPF não é alfanumérico, e alargá-lo apenas ampliaria
+  // a janela em que dígitos vizinhos podem se colar ao identificador.
   const taxId =
-    normalizeTaxId(group1(text, /CNPJ:\s*([\d.\-/\s]{11,25})/i)) ??
+    normalizeTaxId(group1(text, /CNPJ:\s*([0-9A-Za-z.\-/\s]{11,25})/i)) ??
     normalizeTaxId(group1(text, /CPF:\s*([\d.\-/\s]{11,20})/i)) ??
     // ADR-0044: a 1ª posição do CNPJ é alfanumérica — exigir `\d` aqui é a mesma família de bug que
     // "14 dígitos". Quem delimita o identificador é `normalizeTaxId`, não a classe de caracteres.
