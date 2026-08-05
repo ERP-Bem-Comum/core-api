@@ -4,6 +4,20 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-08-05 — 📄 `ADR-0058` (Accepted): o runtime acompanha o LTS recomendado — critério em vez de versão fixa
+
+Novo [ADR-0058](./architecture/adr/0058-runtime-tracks-recommended-lts.md) (**Accepted**), supersedendo **parcialmente** o [0002](./architecture/adr/0002-keep-nodejs-runtime.md) e o [0009](./architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md) — apenas a **forma de fixar versão**, não a escolha de Node como runtime nem de TypeScript como linguagem, que permanecem integralmente vigentes.
+
+**A decisão nasceu de uma medição, não de uma intuição.** O inventário de decisões (spec 040) encontrou 21 alegações com veredito `contradicted`, e duas delas — `ADR-0002-C2` ("a versão do runtime é Node.js 20 LTS") e `ADR-0009-C5` ("espera-se troca de comando e **ajustes mínimos**") — contradizem o código **pela mesma causa**. Nenhuma foi erro de julgamento: em abril/2026 o Node 20 **era** o LTS, e "ajustes mínimos" era estimativa razoável. O defeito é de forma — um ADR que fixa versão, ou que estima esforço futuro, produz afirmação que **envelhece sozinha**, sem ninguém errar e sem nada acontecer. Como ADR é imutável, a afirmação envelhecida fica lá e quem lê o documento isolado age sobre ela.
+
+**O que muda.** O runtime passa a acompanhar o **LTS recomendado** por atualização **gradual** (subida deliberada, verificável em diff, gate verde antes e depois — nunca salto arrastado por dependência). A versão corrente **não vive mais em ADR**: vive em `engines.node` (o piso), no `Dockerfile` (o que roda em produção, pinado por digest) e nos workflows (o que testa). E trocar runtime, linguagem ou compilador passa a exigir **inquiry que MEÇA** a alternativa — o precedente é a [Inquiry-0023](./inquiries/0023-typescript-7-native-spike.md), que mediu Node 24/26, Deno, Bun e `tsgo` num harness executável e **refutou** uma premissa que estava num ADR aceito.
+
+**O ADR não escreve a versão-alvo, e isso é deliberado.** Escrever "Node 24.19" no texto repetiria exatamente o defeito que ele corrige: em 12 meses `ADR-0058-C2` estaria no inventário como `contradicted`, ao lado das duas que o originaram. Foi a alternativa mais tentadora e está registrada como rejeitada, junto com "fixar cadência" (reintroduz número que o repositório não controla — a cadência de release do Node não é decisão nossa).
+
+**O que impede a reincidência:** `tests/cleanup/node-version-single-source.test.ts` (novo), irmão do gate que já faz o mesmo para o pnpm. Cobra que `engines.node`, o `FROM node:` do Dockerfile e o `node-version` dos workflows concordem no **major** — não no patch, e a distinção é deliberada: patch diverge por motivo legítimo, major divergente significa que produção roda um runtime que ninguém testou. Provado que discrimina antes de ser aceito: Dockerfile num major antigo e workflow em outro major reprovam, um por asserção.
+
+**Limite declarado, não escondido:** o gate cobra a concordância **interna**, não a aderência ao LTS **externo** — isso exigiria rede, e o gate local é offline e determinístico por desenho (mesma razão pela qual `pnpm audit` vive no CI). Um repositório inteiro coerente numa versão EOL passa em todos os gates. A mitigação seria CI agendado e **ela ainda não existe**; o ADR registra isso em vez de fingir cobertura, e é o primeiro item do gatilho de reavaliação.
+
 ## 2026-08-03 — 📄 `ADR-0057` (Accepted): o `CLAUDE.md` volta a ser a doc canônica de agente; o `AGENTS.md` é aposentado e deletado
 
 Novo [ADR-0057](./architecture/adr/0057-claude-md-as-canonical-agent-doc.md) (**Accepted**). O `AGENTS.md` existia para ser **padrão aberto multi-ferramenta**, com o `CLAUDE.md` reduzido a um stub de 14 linhas contendo `@AGENTS.md`. A premissa caiu em **2026-07-31**, quando o dono do repo decidiu que o Claude Code é o único agente suportado (decisão já materializada na remoção de `.zed/` e `.agents/`, commit `722b0371`). Sem uma segunda ferramenta, a indireção passou a custar sem pagar.

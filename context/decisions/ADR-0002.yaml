@@ -169,15 +169,16 @@ findings:
     que o TS 6 avulso. O ADR de 2026-04-27 acertou por raciocínio o que a medição confirmou três meses
     depois.
   - |
-    ⚠️ PENDÊNCIA ABERTA pela promoção de 2026-08-05. Ao aceitar o descarte da `C2`, o dono do repo
-    declarou uma política nova: o runtime acompanha SEMPRE o LTS recomendado, por atualização GRADUAL,
-    e a troca de tecnologia se justifica por inquiry. Essa política NÃO tem casa: ela está registrada
-    apenas no `rationale` de uma alegação descartada, que é o pior lugar possível — `drop` significa
-    "não é norma", e ninguém procura norma ali.
-    O conteúdo dela é exatamente o antídoto do defeito que produziu esta contradição: o ADR fixou uma
-    VERSÃO ("Node.js 20 LTS") em vez de um CRITÉRIO, e versão envelhece sozinha. Precisa de ADR próprio
-    ou de linha em `.claude/rules/supply-chain.md`. Enquanto não tiver, a política vale por
-    conversa — que é o estado que este inventário inteiro existe para acabar.
+    RESOLVIDA em 2026-08-05, no mesmo dia em que foi aberta. Ao aceitar o descarte da `C2`, o dono do
+    repo declarou uma política nova — runtime acompanha SEMPRE o LTS recomendado, por atualização
+    GRADUAL, e troca de tecnologia se justifica por inquiry. Ela ficou primeiro só no `rationale` de
+    uma alegação descartada, que é o pior lugar possível: `drop` significa "não é norma", e ninguém
+    procura norma ali.
+    Ganhou casa própria no ADR-0058, que supersede parcialmente este ADR e o 0009 — apenas a FORMA de
+    fixar versão. O conteúdo dele é o antídoto do defeito que produziu esta contradição: o ADR fixou
+    uma VERSÃO ("Node.js 20 LTS") em vez de um CRITÉRIO, e versão envelhece sozinha. O 0058
+    deliberadamente NÃO escreve a versão-alvo, para não repetir o defeito, e a concordância entre os
+    pontos que a declaram passou a ser cobrada por `tests/cleanup/node-version-single-source.test.ts`.
 
 provenance:
   tickets: []
