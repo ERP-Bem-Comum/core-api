@@ -303,9 +303,9 @@ claims:
         módulo, então o teste falha.
       expected_error: null
       blocker: null
-      enforced_by: []
+      enforced_by: ['tests/cleanup/table-prefix-isolation.test.ts']
     rule:
-      status: proposed
+      status: accepted
       disposition: replace
       text: |
         Cada MÓDULO que publica evento MUST ter outbox própria, prefixada com o prefixo do módulo
@@ -338,26 +338,74 @@ claims:
       verdict: testable
       layer: static
       red: |
-        Dado o conjunto de schemas e migrations, quando uma coluna declarar collation fora da lista
-        permitida, então o teste falha. Contra a lista do ADR, o RED seria de 211 declarações — tamanho
-        que indica norma a redecidir, não código a corrigir em massa.
+        Dado uma migration que declare collation fora das duas permitidas, quando o gate rodar, então
+        falha nomeando a collation. E dado um JOIN por coluna sem `utf8mb4_bin` explícito (`email`,
+        `code`, `name`), o gate falha nomeando o predicado — provado em worktree descartável com um
+        JOIN forjado por `email`.
+        Contra a lista ORIGINAL do ADR (só `_ci`), o RED seria de 211 declarações — tamanho que indica
+        norma a redecidir, não código a corrigir em massa. Foi o que levou ao `replace`.
       expected_error: null
       blocker: null
-      enforced_by: []
+      enforced_by: ['tests/cleanup/collation-two-only.test.ts']
     rule:
-      status: proposed
+      status: accepted
       disposition: replace
       text: |
-        A collation MUST ser declarada explicitamente por coluna, escolhida entre duas: `utf8mb4_bin`
-        para identificador e chave natural (comparação determinística, case-sensitive) e
-        `utf8mb4_unicode_ci` para texto de leitura humana. MUST NOT existir JOIN entre colunas de
-        collations diferentes.
+        O repositório MUST usar DUAS collations e nunca uma terceira: `utf8mb4_bin` para
+        identificador e chave natural (comparação determinística, case-sensitive) e
+        `utf8mb4_unicode_ci` para texto de leitura humana. Todo predicado de JOIN MUST ser entre
+        colunas com `utf8mb4_bin` explícito — na prática, entre identificadores.
       rationale: |
-        O ADR permite só a `_ci` e o código usa majoritariamente `_bin` — quase certamente de
-        propósito, porque ID brandado e chave natural precisam de comparação exata. Mas ninguém
-        escreveu o critério, então as duas coexistem sem regra. Propor o critério em vez do
-        alinhamento cego: forçar tudo para `_ci` mudaria a semântica de comparação em 160 pontos, e
-        misturar collations num JOIN é erro de runtime no MySQL, não detalhe estético.
+        O ADR permite só a `_ci` e o código usa majoritariamente `_bin` — de propósito, porque ID
+        brandado e chave natural precisam de comparação exata. Ninguém escreveu o critério, então as
+        duas coexistiam sem regra.
+
+        PROMOVIDA em 2026-08-05, com o enunciado REESCRITO depois de medir. A versão anterior desta
+        regra exigia "collation explícita por coluna", e a pesquisa mostrou que isso não é
+        construível hoje:
+
+          - 293 de 428 colunas de texto NÃO declaram COLLATE; herdam o default da tabela. Como gate,
+            nasceria com 293 violações — projeto de migração, não gate.
+          - A collation das 51 colunas `bin` depende de EDIÇÃO MANUAL da migration gerada. O
+            `varchar()` do Drizzle não tem opção de collate — verificado na doc VIVA
+            (`orm.drizzle.team/docs/mysql/column-types`, 2026-08-05) e na vendorizada —, e por isso
+            `src/modules/financial/adapters/persistence/schemas/mysql.ts:17-20` instrui a inserir o
+            `COLLATE` à mão no SQL gerado.
+          - Nenhum JOIN cruza collation hoje. Dos 37 JOINs em `adapters/persistence/` há 8 predicados
+            distintos, TODOS identificador↔identificador, todos com `bin` explícito. As 51 colunas
+            `bin` do repositório são, sem exceção, identificador, ref ou chave natural.
+
+        O risco nunca foram as 293 colunas — é a COMBINAÇÃO: juntar uma coluna `bin` com uma que
+        herdou `unicode_ci`. Como toda coluna `bin` é identificador, isso só ocorre em JOIN por algo
+        que NÃO é identificador (`email`, `code`, `name`). Barrar essa forma custa uma asserção, passa
+        verde na chegada e fecha o flanco que as 293 deixariam aberto — enquanto exigir a declaração
+        de todas custaria um passo manual eterno para prevenir um defeito que não existe.
+
+        Fundamento canônico: MySQL 8.4 Reference Manual §12.8.4, "Collation Coercibility in
+        Expressions" (Oracle Corporation, p. 1976) — "In the great majority of statements, it is
+        obvious what collation MySQL uses to resolve a comparison operation. (…) However, with
+        multiple operands, there can be ambiguity." A ambiguidade exige MÚLTIPLOS OPERANDOS, que é o
+        JOIN e não a coluna isolada. É o texto que justifica atacar o predicado em vez da declaração.
+
+        ⚠️ CORREÇÃO de 2026-08-05, no mesmo dia: a primeira versão deste rationale afirmava que
+        tornar a collation explícita seria "passo manual permanente a cada db:generate", porque o
+        Drizzle não a expõe. Está ERRADO na forma forte, e a correção veio de MEDIR em vez de ler.
+        `customType` com `dataType()` devolvendo `'varchar(36) COLLATE utf8mb4_bin'` emite o COLLATE
+        VERBATIM no DDL gerado, e a 2ª geração responde "No schema changes" — idempotente, sem drift.
+        Reproduzido em worktree descartável com `drizzle-kit generate`. O que o Drizzle não tem é
+        OPÇÃO no `varchar()`; o mecanismo existe e é de primeira classe.
+
+        Isso reposiciona a dívida. O problema não são as 293 colunas — para texto de leitura humana,
+        herdar `utf8mb4_unicode_ci` da tabela é o comportamento CORRETO, e declarar em 293 lugares
+        seria ruído. O problema é que as 51 colunas `bin` dependem de alguém lembrar de editar o SQL
+        gerado: um `*_id` novo com a edição esquecida herda `unicode_ci` em silêncio, e o defeito só
+        aparece quando alguém o usa num JOIN.
+
+        DÍVIDA CONHECIDA, com flanco fechado: o gate de JOIN pega exatamente esse esquecimento — é a
+        rede sob o processo manual, não sob as 293 colunas. MELHORIA DISPONÍVEL e não adotada aqui:
+        um `customType` para identificador (`binId`) faria a collation deixar de depender de memória
+        humana. Custa definir um tipo e trocar as declarações; não foi feito nesta fatia porque toca
+        schema de oito módulos e é mudança de comportamento de geração — merece ciclo próprio.
 
 findings:
   - |

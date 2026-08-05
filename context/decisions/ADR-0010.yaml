@@ -180,7 +180,7 @@ claims:
       blocker: null
       enforced_by: []
     rule:
-      status: proposed
+      status: accepted
       disposition: replace
       text: |
         Comportamento transversal de envio (rate limit, redirecionamento de sandbox, retry) MUST ser

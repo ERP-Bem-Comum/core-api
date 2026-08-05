@@ -94,7 +94,7 @@ claims:
       blocker: null
       enforced_by: []
     rule:
-      status: proposed
+      status: accepted
       disposition: replace
       text: |
         Worker MUST ser escrito como SPEC isolada por responsabilidade (domínio próprio, sem acoplar

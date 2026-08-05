@@ -63,6 +63,7 @@ _Nenhuma._
 | :--- | :--- | :--- | :--- |
 | [0016](./0016-nodejs-native-eventbus-pubsub-observer.md) | Soluções nativas Node.js para EventBus / Pub-Sub / Observer | Quando surgir o primeiro caso real de evento intra-módulo (provavelmente `ContractCreated` → adapter outbox) | Nenhum — estudo arquivado como watchlist; regra provisória definida na seção 5 |
 | [0025](./0025-typedarrays-immutability-tc39-watchlist.md) | Imutabilidade real de `Uint8Array` em TS 6 — TC39 watchlist | Quando `Immutable ArrayBuffer` chegar a Stage 3 **e** a V8 embarcar | Nenhum — decisão provisória é `eslint-disable` + defensive copy nos adapters. **Criada como `0011` e renumerada em 2026-08-03** (ver Notas de numeração) |
+| [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) | Assíncrono com humano no meio (aprovação por e-mail → callback → máquina de estado) e se o Drizzle 1.0 muda a resposta | **Dois gatilhos independentes:** (a) o épico de aprovação entrar no roadmap; (b) o `drizzle-orm@1.0.0` sair com dist-tag `latest` **e** passar a quarentena de 24h | Nenhum — instrumento exigido pelo [ADR-0058](../architecture/adr/0058-runtime-tracks-recommended-lts.md) §3 (troca estrutural se justifica por inquiry que MEDE). Já registra 3 medições feitas, entre elas que **não existe `0.98`** (a linha é `1.0.0-rc.4`) e que collation por coluna **já é possível** no `0.45.2` via `customType` |
 
 ### Notas de numeração
 

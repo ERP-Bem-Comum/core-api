@@ -359,9 +359,9 @@ claims:
         outbox ou leitura por `public-api`, então o teste falha.
       expected_error: null
       blocker: null
-      enforced_by: []
+      enforced_by: ['tests/cleanup/no-inprocess-event-bus.test.ts']
     rule:
-      status: proposed
+      status: accepted
       disposition: replace
       text: |
         Comunicação cross-módulo MUST ser assíncrona por outbox, ou leitura síncrona por
