@@ -8,21 +8,22 @@
 //   - Índices: `auth_<abreviação>_<coluna(s)>_idx`.
 //   - FKs: `auth_<abreviação>_<col>_fk`.
 //
-// ⚠️ CHARSET/COLLATE — aplicado em SQL manual (limitação Drizzle 0.45.x)
+// ⚠️ CHARSET table-level — em SQL manual (limitação Drizzle 0.45.x)
 // =============================================================================
-// `drizzle-orm@0.45.x` NÃO expõe `charset`/`collate` na API table-level.
-// Aplicamos em SQL puro na migration `0000_*.sql`:
-//   - Por tabela:     `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
-//   - Em UUIDs (id, user_id, role_id, permission_id, replaced_by):
-//                     `COLLATE utf8mb4_bin` — comparação binária, elimina drift Unicode em FK matches.
-//   - Em token_hash char(64): `COLLATE utf8mb4_bin` — hash SHA-256 hex é ASCII; bin evita
-//                     colação case-insensitive acidental.
-//   - email varchar(254): mantém `utf8mb4_unicode_ci` (case-insensitive, blueprint §"Riscos").
-//   - auth_permission.name varchar(128): `utf8mb4_bin` (formato resource:action, sensível a caso).
+// `drizzle-orm@0.45.x` NÃO expõe `charset`/`collate` na API table-level. Aplicamos em SQL puro na
+// migration `0000_*.sql`: `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`.
 //
-// **RESPONSABILIDADE DO PRÓXIMO DEV**: ao rodar `pnpm db:generate:auth` para migration
-// 0001+, editar o SQL gerado com ENGINE/charset/collate nas novas tabelas, e
-// `COLLATE utf8mb4_bin` em novas colunas UUID.
+// A collation das COLUNAS deixou de ser manual (#636) — vem dos tipos de
+// `shared/persistence/identifier-columns.ts`, e o tipo escolhido diz o porquê:
+//   - `uuidKey` em id/user_id/role_id/permission_id/replaced_by — sem drift Unicode em FK matches.
+//   - `sha256HexKey` em token_hash — hash hex é ASCII; binário evita colação case-insensitive.
+//   - `permissionKey` em auth_permission.name — formato resource:action, sensível a caso.
+//   - email varchar(254) NÃO entra: mantém `utf8mb4_unicode_ci` por ser case-insensitive de
+//     propósito (blueprint §"Riscos"). Texto de leitura humana não é identificador.
+//
+// **RESPONSABILIDADE DO PRÓXIMO DEV**: ao rodar `pnpm db:generate:auth` para migration 0001+,
+// editar o SQL gerado com ENGINE/charset nas novas tabelas — isso segue manual. Coluna de
+// identificador NÃO: declare com o tipo de `identifier-columns.ts` e o `COLLATE` vem no DDL.
 //
 // Ordem de criação (respeita FK deps — blueprint §"Ordem de criação"):
 //   auth_permission → auth_role → auth_user →
@@ -30,7 +31,6 @@
 
 import {
   bigint,
-  char,
   check,
   datetime,
   foreignKey,
@@ -44,6 +44,12 @@ import {
 } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
 
+import {
+  permissionKey,
+  sha256HexKey,
+  uuidKey,
+} from '#src/shared/persistence/identifier-columns.ts';
+
 // ─── auth_permission ──────────────────────────────────────────────────────────
 // Entidade de permissão. Domínio modela Permission como branded string
 // (resource:action); este schema armazena a entidade com id para FK.
@@ -52,11 +58,11 @@ import { sql } from 'drizzle-orm';
 export const authPermission = mysqlTable(
   'auth_permission',
   {
-    // UUID v4 gerado no domínio. COLLATE utf8mb4_bin aplicado manualmente no SQL.
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
-    // formato resource:action — case-sensitive (utf8mb4_bin no SQL manual).
+    // UUID v4 gerado no domínio. COLLATE utf8mb4_bin pelo tipo.
+    id: uuidKey('id').primaryKey().notNull(),
+    // formato resource:action — case-sensitive (utf8mb4_bin pelo tipo `permissionKey`).
     // Unicidade via uniqueIndex nomeado abaixo (mapper resolve name→id; idempotência do upsert).
-    name: varchar('name', { length: 128 }).notNull(),
+    name: permissionKey('name').notNull(),
     // Instante de criação (UTC, milissegundo). Sem updated_at (permissões são imutáveis após criação).
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
   },
@@ -77,7 +83,7 @@ export const authPermission = mysqlTable(
 export const authRole = mysqlTable(
   'auth_role',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
     // varchar(64) — suficiente para nomes de role (blueprint §auth_role).
     // utf8mb4_unicode_ci no SQL manual (herdado do charset da tabela).
     name: varchar('name', { length: 64 }).notNull(),
@@ -108,7 +114,7 @@ export const authRole = mysqlTable(
 export const authUser = mysqlTable(
   'auth_user',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
     // Q1: findByEmail. Unicidade via uniqueIndex nomeado abaixo; utf8mb4_unicode_ci
     // (case-insensitive) conforme blueprint §"Riscos" (escolhido ci para unicidade de rede).
     email: varchar('email', { length: 254 }).notNull(),
@@ -165,9 +171,9 @@ export const authUser = mysqlTable(
 export const authRolePermission = mysqlTable(
   'auth_role_permission',
   {
-    // COLLATE utf8mb4_bin nas duas colunas (UUID) — aplicado manualmente no SQL.
-    roleId: varchar('role_id', { length: 36 }).notNull(),
-    permissionId: varchar('permission_id', { length: 36 }).notNull(),
+    // COLLATE utf8mb4_bin nas duas colunas (UUID) — pelo tipo `uuidKey`.
+    roleId: uuidKey('role_id').notNull(),
+    permissionId: uuidKey('permission_id').notNull(),
   },
   (t) => [
     // PK composta (blueprint §auth_role_permission).
@@ -203,8 +209,8 @@ export const authRolePermission = mysqlTable(
 export const authUserRole = mysqlTable(
   'auth_user_role',
   {
-    userId: varchar('user_id', { length: 36 }).notNull(),
-    roleId: varchar('role_id', { length: 36 }).notNull(),
+    userId: uuidKey('user_id').notNull(),
+    roleId: uuidKey('role_id').notNull(),
     // Rastreabilidade de atribuição (blueprint §"Nota 9"). assigned_by vai no evento,
     // não nesta junção (evita coluna de auditoria desnaturada em tabela pivô).
     assignedAt: datetime('assigned_at', { mode: 'date', fsp: 3 }).notNull(),
@@ -241,15 +247,15 @@ export const authUserRole = mysqlTable(
 export const authRefreshToken = mysqlTable(
   'auth_refresh_token',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
     // user_id: soft FK (FK física abaixo: auth_rt_user_fk).
-    // COLLATE utf8mb4_bin no SQL manual.
-    userId: varchar('user_id', { length: 36 }).notNull(),
+    // COLLATE utf8mb4_bin pelo tipo `uuidKey`.
+    userId: uuidKey('user_id').notNull(),
 
     // SHA-256 hex (64 chars fixos). CHAR(64) por clareza semântica (blueprint §"Riscos").
     // UNIQUE (Q4: findByTokenHash). COLLATE utf8mb4_bin (hash ASCII — sem risco de
     // colação case-insensitive, embora hex seja case-neutral na prática).
-    tokenHash: char('token_hash', { length: 64 }).notNull(),
+    tokenHash: sha256HexKey('token_hash').notNull(),
 
     issuedAt: datetime('issued_at', { mode: 'date', fsp: 3 }).notNull(),
     expiresAt: datetime('expires_at', { mode: 'date', fsp: 3 }).notNull(),
@@ -260,7 +266,7 @@ export const authRefreshToken = mysqlTable(
     // VARCHAR(36) SEM .references() (Decisão 4 do blueprint): evita self-FK que
     // exigiria ordem de insert específica em rotação atômica e cria ciclo no purge.
     // O mapper valida com RefreshTokenId.parse → Result<T, MapperError>.
-    replacedBy: varchar('replaced_by', { length: 36 }),
+    replacedBy: uuidKey('replaced_by'),
   },
   (t) => [
     // CHECK: expires_at > issued_at (blueprint §auth_refresh_token).
@@ -295,11 +301,11 @@ export const authRefreshToken = mysqlTable(
 export const authPasswordReset = mysqlTable(
   'auth_password_reset',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
-    // user_id: soft FK (FK física abaixo: auth_pr_user_fk). COLLATE utf8mb4_bin no SQL manual.
-    userId: varchar('user_id', { length: 36 }).notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
+    // user_id: soft FK (FK física abaixo: auth_pr_user_fk). COLLATE utf8mb4_bin pelo tipo `uuidKey`.
+    userId: uuidKey('user_id').notNull(),
     // SHA-256 hex (64 chars). UNIQUE (findByTokenHash). COLLATE utf8mb4_bin (hash ASCII).
-    tokenHash: char('token_hash', { length: 64 }).notNull(),
+    tokenHash: sha256HexKey('token_hash').notNull(),
     requestedAt: datetime('requested_at', { mode: 'date', fsp: 3 }).notNull(),
     expiresAt: datetime('expires_at', { mode: 'date', fsp: 3 }).notNull(),
     // null = pending; NOT NULL = consumido (one-time).
@@ -332,7 +338,7 @@ export const authLoginLockout = mysqlTable(
   'auth_login_lockout',
   {
     // PK = user_id: 1 lockout por conta. FK física abaixo (auth_ll_user_fk).
-    userId: varchar('user_id', { length: 36 }).primaryKey().notNull(),
+    userId: uuidKey('user_id').primaryKey().notNull(),
     failedAttempts: int('failed_attempts').notNull(),
     // null = sem bloqueio ativo; Date = bloqueado até este instante.
     lockedUntil: datetime('locked_until', { mode: 'date', fsp: 3 }),
@@ -360,14 +366,14 @@ export const authLoginLockout = mysqlTable(
 //
 // payload: VARCHAR(8192) JSON serializado (sem JSON nativo — ADR-0020 §proibido). Carrega
 // link/token de uso unico (SENSIVEL): outbox interno (nunca cruza public-api publica — ADR-0006),
-// nao logado. IDs em varchar(36) (COLLATE utf8mb4_bin no SQL manual).
+// nao logado. IDs em varchar(36) ( COLLATE utf8mb4_bin pelo tipo).
 export const authOutbox = mysqlTable(
   'auth_outbox',
   {
-    // UUID v4 do evento — gerado antes do INSERT. COLLATE utf8mb4_bin no SQL manual.
-    eventId: varchar('event_id', { length: 36 }).primaryKey().notNull(),
-    // userId (UUID v4). COLLATE utf8mb4_bin no SQL manual.
-    aggregateId: varchar('aggregate_id', { length: 36 }).notNull(),
+    // UUID v4 do evento — gerado antes do INSERT. COLLATE utf8mb4_bin pelo tipo.
+    eventId: uuidKey('event_id').primaryKey().notNull(),
+    // userId (UUID v4). COLLATE utf8mb4_bin pelo tipo.
+    aggregateId: uuidKey('aggregate_id').notNull(),
     // 'User' — controlado por CHECK abaixo.
     aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
     // PascalCase EN passado: PasswordResetRequested, UserInvited.

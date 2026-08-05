@@ -9,14 +9,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "contract_id": {
           "name": "contract_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -72,7 +72,7 @@
         },
         "signed_document_ref": {
           "name": "signed_document_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -93,7 +93,7 @@
         },
         "homologated_by": {
           "name": "homologated_by",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -156,14 +156,14 @@
       "columns": {
         "contract_id": {
           "name": "contract_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "amendment_id": {
           "name": "amendment_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -215,7 +215,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -508,7 +508,7 @@
       "columns": {
         "contract_id": {
           "name": "contract_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -838,14 +838,14 @@
       "columns": {
         "event_id": {
           "name": "event_id",
-          "type": "char(36)",
+          "type": "char(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "aggregate_id": {
           "name": "aggregate_id",
-          "type": "char(36)",
+          "type": "char(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -955,14 +955,14 @@
       "columns": {
         "event_id": {
           "name": "event_id",
-          "type": "char(36)",
+          "type": "char(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "aggregate_id": {
           "name": "aggregate_id",
-          "type": "char(36)",
+          "type": "char(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -1069,7 +1069,7 @@
         },
         "event_id": {
           "name": "event_id",
-          "type": "char(36)",
+          "type": "char(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false

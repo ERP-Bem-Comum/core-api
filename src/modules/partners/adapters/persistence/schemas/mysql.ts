@@ -31,19 +31,21 @@ import {
 } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
 
+import { cnpjKey, cpfKey, opaqueKey, uuidKey } from '#src/shared/persistence/identifier-columns.ts';
+
 // ─── par_financiers ─────────────────────────────────────────────────────────
 // Financiador (legado `financiers`, database-er.md:175-184). `cnpj` UNIQUE.
 // Soft-delete via `active` + `deactivated_at` (estado Inactive do agregado).
 export const parFinanciers = mysqlTable(
   'par_financiers',
   {
-    // UUID v4 gerado no domínio. COLLATE utf8mb4_bin no SQL manual.
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    // UUID v4 gerado no domínio. COLLATE utf8mb4_bin pelo tipo.
+    id: uuidKey('id').primaryKey().notNull(),
     name: varchar('name', { length: 255 }).notNull(),
     corporateName: varchar('corporate_name', { length: 255 }).notNull(),
     legalRepresentative: varchar('legal_representative', { length: 255 }).notNull(),
-    // 14 caracteres alfanuméricos, sem máscara (ADR-0044). UNIQUE + COLLATE utf8mb4_bin no SQL manual.
-    cnpj: varchar('cnpj', { length: 14 }).notNull(),
+    // 14 caracteres alfanuméricos, sem máscara (ADR-0044). UNIQUE; COLLATE utf8mb4_bin pelo tipo.
+    cnpj: cnpjKey('cnpj').notNull(),
     telephone: varchar('telephone', { length: 30 }).notNull(),
     address: varchar('address', { length: 500 }).notNull(),
     // Payment target (US1 feature 015) — banco/PIX OPCIONAIS (sem invariante "ao menos um").
@@ -94,12 +96,12 @@ export type NewFinancierRow = typeof parFinanciers.$inferInsert;
 export const parSuppliers = mysqlTable(
   'par_suppliers',
   {
-    // UUID v4 gerado no domínio. COLLATE utf8mb4_bin no SQL manual.
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    // UUID v4 gerado no domínio. COLLATE utf8mb4_bin pelo tipo.
+    id: uuidKey('id').primaryKey().notNull(),
     name: varchar('name', { length: 255 }).notNull(),
     email: varchar('email', { length: 255 }).notNull(),
-    // 14 caracteres alfanuméricos, sem máscara (ADR-0044). UNIQUE + COLLATE utf8mb4_bin no SQL manual.
-    cnpj: varchar('cnpj', { length: 14 }).notNull(),
+    // 14 caracteres alfanuméricos, sem máscara (ADR-0044). UNIQUE; COLLATE utf8mb4_bin pelo tipo.
+    cnpj: cnpjKey('cnpj').notNull(),
     corporateName: varchar('corporate_name', { length: 255 }).notNull(),
     fantasyName: varchar('fantasy_name', { length: 255 }).notNull(),
     // Literal legado (ex.: INFORMATICA). varchar, NÃO ENUM (ADR-0020).
@@ -166,12 +168,12 @@ export type NewSupplierRow = typeof parSuppliers.$inferInsert;
 export const parCollaborators = mysqlTable(
   'par_collaborators',
   {
-    // UUID v4 gerado no domínio. COLLATE utf8mb4_bin no SQL manual.
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    // UUID v4 gerado no domínio. COLLATE utf8mb4_bin pelo tipo.
+    id: uuidKey('id').primaryKey().notNull(),
     name: varchar('name', { length: 255 }).notNull(),
     email: varchar('email', { length: 255 }).notNull(),
-    // 11 dígitos (sem máscara). UNIQUE + COLLATE utf8mb4_bin no SQL manual.
-    cpf: varchar('cpf', { length: 11 }).notNull(),
+    // 11 dígitos (sem máscara). UNIQUE; COLLATE utf8mb4_bin pelo tipo.
+    cpf: cpfKey('cpf').notNull(),
     occupationArea: varchar('occupation_area', { length: 10 }).notNull(),
     role: varchar('role', { length: 255 }).notNull(),
     startOfContract: datetime('start_of_contract', { mode: 'date', fsp: 3 }).notNull(),
@@ -296,11 +298,11 @@ export type NewCollaboratorHistoryRow = typeof parCollaboratorHistory.$inferInse
 export const parInviteTokens = mysqlTable(
   'par_invite_tokens',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
-    collaboratorId: varchar('collaborator_id', { length: 36 }).notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
+    collaboratorId: uuidKey('collaborator_id').notNull(),
     // sha256 hex (64 chars). UNIQUE: lookup do fluxo público (`findByTokenHash`); `COLLATE
-    // utf8mb4_bin` no SQL manual (comparação binária determinística — como `id`/`cnpj`).
-    tokenHash: varchar('token_hash', { length: 64 }).notNull(),
+    // utf8mb4_bin` pelo tipo `opaqueKey` (comparação binária determinística — como `id`/`cnpj`).
+    tokenHash: opaqueKey('token_hash').notNull(),
     issuedAt: datetime('issued_at', { mode: 'date', fsp: 3 }).notNull(),
     expiresAt: datetime('expires_at', { mode: 'date', fsp: 3 }).notNull(),
     // null = pending; preenchido = consumido (uso-único). `markUsed`: UPDATE ... WHERE used_at IS NULL.
@@ -322,7 +324,7 @@ export type NewInviteTokenRow = typeof parInviteTokens.$inferInsert;
 // reconstruível: projeção sobre o `ctr_outbox` (via `contracts/public-api`), idempotente por
 // eventId. Chaveado por `contractor_ref` (UUID do contratado). `count` aplicado por delta (±1).
 export const parContractCountView = mysqlTable('par_contract_count_view', {
-  contractorRef: varchar('contractor_ref', { length: 36 }).primaryKey().notNull(),
+  contractorRef: uuidKey('contractor_ref').primaryKey().notNull(),
   // ADR-0046 §4: `active_count` (contratos vigentes — delta −1 em Ended/Cancelled).
   activeCount: int('active_count').notNull().default(0),
 });
@@ -334,7 +336,7 @@ export type NewContractCountRow = typeof parContractCountView.$inferInsert;
 // Dedup de eventId da projeção de contagem (idempotência por message ID — Vernon, IDDD, p.412).
 // `event_id` PK: o INSERT no processed gateia a aplicação do delta (at-least-once → exactly-once).
 export const parContractCountProcessed = mysqlTable('par_contract_count_processed', {
-  eventId: varchar('event_id', { length: 36 }).primaryKey().notNull(),
+  eventId: uuidKey('event_id').primaryKey().notNull(),
   processedAt: datetime('processed_at', { mode: 'date', fsp: 3 }).notNull(),
 });
 
@@ -348,15 +350,15 @@ export type ContractCountProcessedRow = typeof parContractCountProcessed.$inferS
 export const parUserProfiles = mysqlTable(
   'par_user_profiles',
   {
-    // UUID v4 do auth.User. COLLATE utf8mb4_bin no SQL manual.
-    userRef: varchar('user_ref', { length: 36 }).primaryKey().notNull(),
+    // UUID v4 do auth.User. COLLATE utf8mb4_bin pelo tipo.
+    userRef: uuidKey('user_ref').primaryKey().notNull(),
     name: varchar('name', { length: 255 }).notNull(),
-    // 11 dígitos. UNIQUE + COLLATE utf8mb4_bin no SQL manual.
-    cpf: varchar('cpf', { length: 11 }).notNull(),
+    // 11 dígitos. UNIQUE; COLLATE utf8mb4_bin pelo tipo.
+    cpf: cpfKey('cpf').notNull(),
     telephone: varchar('telephone', { length: 30 }).notNull(),
     avatarUrl: varchar('avatar_url', { length: 500 }),
-    // UUID do colaborador (referência por ID, sem FK). COLLATE utf8mb4_bin no SQL manual.
-    collaboratorRef: varchar('collaborator_ref', { length: 36 }),
+    // UUID do colaborador (referência por ID, sem FK). COLLATE utf8mb4_bin pelo tipo.
+    collaboratorRef: uuidKey('collaborator_ref'),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),
     updatedAt: datetime('updated_at', { mode: 'date', fsp: 3 }).notNull(),
     // Correlação ETL (P2): id de origem no legado (`users.id`). NULL = nativo; não-NULL = migrado.
@@ -434,19 +436,19 @@ export type NewMunicipalityRow = typeof parMunicipalities.$inferInsert;
 // CONDICIONAL: `has_financial_transfer = TRUE` ⇒ ao menos um destino de pagamento.
 // Destino achatado em colunas (ADR-0020 — sem JSON). Enums (occupation_area) são
 // varchar (ADR-0020 — sem ENUM nativo). Soft-delete via `active`/`deactivated_at`.
-// COLLATE utf8mb4_bin em `id`/`cnpj` (aplicar no SQL manual — limitação Drizzle 0.45.x).
+// COLLATE utf8mb4_bin em `id`/`cnpj` — pelos tipos `uuidKey`/`cnpjKey` (#636).
 export const parActs = mysqlTable(
   'par_acts',
   {
-    // UUID v4 gerado no domínio. COLLATE utf8mb4_bin no SQL manual.
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    // UUID v4 gerado no domínio. COLLATE utf8mb4_bin pelo tipo.
+    id: uuidKey('id').primaryKey().notNull(),
     // Nº do instrumento jurídico, fornecido pelo operador (D1). UNIQUE.
     actNumber: varchar('act_number', { length: 60 }).notNull(),
     name: varchar('name', { length: 255 }).notNull(), // objeto/título do acordo
     email: varchar('email', { length: 255 }).notNull(), // contato
     // 14 caracteres alfanuméricos, sem máscara (ADR-0044). NÃO UNIQUE (uma instituição pode firmar vários acordos).
-    // COLLATE utf8mb4_bin no SQL manual.
-    cnpj: varchar('cnpj', { length: 14 }).notNull(),
+    // COLLATE utf8mb4_bin pelo tipo.
+    cnpj: cnpjKey('cnpj').notNull(),
     corporateName: varchar('corporate_name', { length: 255 }).notNull(), // razão social
     fantasyName: varchar('fantasy_name', { length: 255 }).notNull(), // nome fantasia/sigla
     // Literal legado (ex.: PARC). varchar, NÃO ENUM (ADR-0020).
@@ -510,15 +512,15 @@ export type NewActRow = typeof parActs.$inferInsert;
 // WHERE processed_at IS NULL ORDER BY occurred_at LIMIT N FOR UPDATE SKIP LOCKED.
 //
 // payload: VARCHAR(8192) serializado (sem JSON nativo — ADR-0020 §"proibido").
-// IDs em varchar(36) (convenção do módulo partners; COLLATE utf8mb4_bin no SQL manual)
+// IDs em varchar(36) (convenção do módulo partners COLLATE utf8mb4_bin pelo tipo)
 // — diverge do `ctr_outbox` (que usa char(36)) para alinhar com as demais tabelas par_*.
 export const parOutbox = mysqlTable(
   'par_outbox',
   {
-    // UUID v4 do evento — gerado antes do INSERT. COLLATE utf8mb4_bin no SQL manual.
-    eventId: varchar('event_id', { length: 36 }).primaryKey().notNull(),
-    // supplierId (UUID v4). COLLATE utf8mb4_bin no SQL manual.
-    aggregateId: varchar('aggregate_id', { length: 36 }).notNull(),
+    // UUID v4 do evento — gerado antes do INSERT. COLLATE utf8mb4_bin pelo tipo.
+    eventId: uuidKey('event_id').primaryKey().notNull(),
+    // supplierId (UUID v4). COLLATE utf8mb4_bin pelo tipo.
+    aggregateId: uuidKey('aggregate_id').notNull(),
     // 'Supplier' — controlado por CHECK abaixo.
     aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
     // PascalCase EN: SupplierRegistered, SupplierEdited, …
@@ -562,8 +564,8 @@ export type NewOutboxRow = typeof parOutbox.$inferInsert;
 export const parOutboxDeadLetter = mysqlTable(
   'par_outbox_dead_letter',
   {
-    eventId: varchar('event_id', { length: 36 }).primaryKey().notNull(),
-    aggregateId: varchar('aggregate_id', { length: 36 }).notNull(),
+    eventId: uuidKey('event_id').primaryKey().notNull(),
+    aggregateId: uuidKey('aggregate_id').notNull(),
     aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
     eventType: varchar('event_type', { length: 64 }).notNull(),
     schemaVersion: smallint('schema_version').notNull(),
@@ -600,14 +602,14 @@ export type NewOutboxDeadLetterRow = typeof parOutboxDeadLetter.$inferInsert;
 // evento <=> commit da operacao (ADR-0015). payload: VARCHAR(8192) JSON serializado (sem JSON nativo
 // — ADR-0020 §proibido). Carrega o link de autocadastro com token de uso unico (SENSIVEL): outbox
 // interno (nunca cruza public-api publica — ADR-0006), nao logado. IDs em varchar(36) (COLLATE
-// utf8mb4_bin no SQL manual).
+// utf8mb4_bin pelo tipo).
 export const parEmailOutbox = mysqlTable(
   'par_email_outbox',
   {
-    // UUID v4 do evento — gerado antes do INSERT. COLLATE utf8mb4_bin no SQL manual.
-    eventId: varchar('event_id', { length: 36 }).primaryKey().notNull(),
-    // collaboratorId (UUID v4). COLLATE utf8mb4_bin no SQL manual.
-    aggregateId: varchar('aggregate_id', { length: 36 }).notNull(),
+    // UUID v4 do evento — gerado antes do INSERT. COLLATE utf8mb4_bin pelo tipo.
+    eventId: uuidKey('event_id').primaryKey().notNull(),
+    // collaboratorId (UUID v4). COLLATE utf8mb4_bin pelo tipo.
+    aggregateId: uuidKey('aggregate_id').notNull(),
     // 'Collaborator' — controlado por CHECK abaixo.
     aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
     // PascalCase EN passado: CollaboratorInvited.

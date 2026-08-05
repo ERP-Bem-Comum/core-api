@@ -9,14 +9,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "debit_account_ref": {
           "name": "debit_account_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -182,7 +182,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -376,21 +376,21 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "event_id": {
           "name": "event_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "document_id": {
           "name": "document_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -404,7 +404,7 @@
         },
         "target_id": {
           "name": "target_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -425,7 +425,7 @@
         },
         "actor_ref": {
           "name": "actor_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -477,7 +477,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -505,7 +505,7 @@
         },
         "supplier_ref": {
           "name": "supplier_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -519,21 +519,21 @@
         },
         "contract_ref": {
           "name": "contract_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "budget_plan_ref": {
           "name": "budget_plan_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "category_ref": {
           "name": "category_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -554,7 +554,7 @@
         },
         "program_ref": {
           "name": "program_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -743,7 +743,7 @@
         },
         "approved_by": {
           "name": "approved_by",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -1011,14 +1011,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "reconciliation_id": {
           "name": "reconciliation_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -1039,7 +1039,7 @@
         },
         "supplier_ref": {
           "name": "supplier_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -1060,21 +1060,21 @@
         },
         "category_ref": {
           "name": "category_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "cost_center_ref": {
           "name": "cost_center_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
         },
         "program_ref": {
           "name": "program_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -1580,14 +1580,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "document_id": {
           "name": "document_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -1715,14 +1715,14 @@
       "columns": {
         "reconciliation_id": {
           "name": "reconciliation_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "payable_id": {
           "name": "payable_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -1767,14 +1767,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "debit_account_ref": {
           "name": "debit_account_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -1809,7 +1809,7 @@
         },
         "closed_by": {
           "name": "closed_by",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -1842,14 +1842,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "transaction_id": {
           "name": "transaction_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -1891,7 +1891,7 @@
         },
         "reconciled_by": {
           "name": "reconciled_by",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -1905,7 +1905,7 @@
         },
         "undone_by": {
           "name": "undone_by",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": false,
           "autoincrement": false
@@ -1953,14 +1953,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "document_id": {
           "name": "document_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -2043,21 +2043,21 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "transaction_id": {
           "name": "transaction_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "payable_id": {
           "name": "payable_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -2071,7 +2071,7 @@
         },
         "rejected_by": {
           "name": "rejected_by",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -2099,14 +2099,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "document_id": {
           "name": "document_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -2189,28 +2189,28 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "statement_id": {
           "name": "statement_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "debit_account_ref": {
           "name": "debit_account_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "fitid": {
           "name": "fitid",
-          "type": "varchar(64)",
+          "type": "varchar(64) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -2322,7 +2322,7 @@
       "columns": {
         "supplier_ref": {
           "name": "supplier_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -2372,14 +2372,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "timeline_entry_id": {
           "name": "timeline_entry_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false

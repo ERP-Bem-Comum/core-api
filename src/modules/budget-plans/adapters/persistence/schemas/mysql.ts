@@ -1,10 +1,10 @@
 // Schema Drizzle (mysql-core) do módulo budget-plans. Prefixo `bgp_*` (ADR-0014).
 //
-// ⚠️ CHARSET/COLLATE — aplicado em SQL manual na migration (drizzle-orm 0.45.x não
-// expõe charset/collate table-level):
-//   - Por tabela: `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`
-//   - Em colunas UUID (`id`, `program_ref`, `budget_plan_id`, `partner_ref`,
-//     `event_id`/`aggregate_id` do outbox): `COLLATE utf8mb4_bin`
+// ⚠️ CHARSET table-level — segue em SQL manual na migration (drizzle-orm 0.45.x não expõe
+// charset/collate table-level): `ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci`.
+//
+// A collation das COLUNAS de identificador não é mais manual (#636): vem dos tipos de
+// `shared/persistence/identifier-columns.ts`, que emitem `COLLATE utf8mb4_bin` no DDL gerado.
 //
 // ADR-0020: sem JSON nativo (payload do outbox é varchar), sem ENUM (status/kind via
 // varchar + CHECK), sem AUTO_INCREMENT em PK de domínio (id é UUID v4 do domínio).
@@ -14,7 +14,6 @@
 import {
   bigint,
   boolean,
-  char,
   check,
   datetime,
   foreignKey,
@@ -28,6 +27,8 @@ import {
 } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
 
+import { uuidKey, uuidKeyFixed } from '#src/shared/persistence/identifier-columns.ts';
+
 // ─── bgp_budget_plans ───────────────────────────────────────────────────────
 // Árvore de planos (US4/#318, legado @Tree): raiz + calibrações/cenários filhos na MESMA tabela.
 // `parent_id` (auto-ref) NULL na raiz; `scenario_name` NULL exceto em cenários. FK auto-referente
@@ -36,9 +37,9 @@ import { sql } from 'drizzle-orm';
 export const budgetPlans = mysqlTable(
   'bgp_budget_plans',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
     year: int('year').notNull(),
-    programRef: varchar('program_ref', { length: 36 }).notNull(),
+    programRef: uuidKey('program_ref').notNull(),
     versionMajor: int('version_major').notNull(),
     versionMinor: int('version_minor').notNull(),
     status: varchar('status', { length: 16 }).notNull(),
@@ -89,10 +90,10 @@ export const budgetPlans = mysqlTable(
 export const budgets = mysqlTable(
   'bgp_budgets',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
-    budgetPlanId: varchar('budget_plan_id', { length: 36 }).notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
+    budgetPlanId: uuidKey('budget_plan_id').notNull(),
     partnerKind: varchar('partner_kind', { length: 16 }).notNull(),
-    partnerRef: varchar('partner_ref', { length: 36 }).notNull(),
+    partnerRef: uuidKey('partner_ref').notNull(),
     // #458 — `value_cents` REMOVIDO: o total por Rede é derivado dos bgp_budget_results. A coluna
     // era o `valueInCents` informado, uma segunda fonte de verdade que a P.O. decidiu não existir
     // (o legado nunca a escrevia). Orçamento = plano + Rede.
@@ -125,8 +126,8 @@ export const budgets = mysqlTable(
 export const bgpOutbox = mysqlTable(
   'bgp_outbox',
   {
-    eventId: char('event_id', { length: 36 }).primaryKey().notNull(),
-    aggregateId: char('aggregate_id', { length: 36 }).notNull(),
+    eventId: uuidKeyFixed('event_id').primaryKey().notNull(),
+    aggregateId: uuidKeyFixed('aggregate_id').notNull(),
     aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
     eventType: varchar('event_type', { length: 64 }).notNull(),
     schemaVersion: smallint('schema_version').notNull(),
@@ -152,8 +153,8 @@ export const bgpOutbox = mysqlTable(
 export const costCenters = mysqlTable(
   'bgp_cost_centers',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
-    budgetPlanId: varchar('budget_plan_id', { length: 36 }).notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
+    budgetPlanId: uuidKey('budget_plan_id').notNull(),
     name: varchar('name', { length: 255 }).notNull(),
     direction: varchar('direction', { length: 16 }).notNull(),
     // #454 gap 3 — intenção do PRÓPRIO nó (soft). O efetivo (nó ∧ ancestrais) é derivado na
@@ -182,8 +183,8 @@ export const costCenters = mysqlTable(
 export const categories = mysqlTable(
   'bgp_categories',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
-    costCenterId: varchar('cost_center_id', { length: 36 }).notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
+    costCenterId: uuidKey('cost_center_id').notNull(),
     name: varchar('name', { length: 255 }).notNull(),
     // #454 gap 3 — intenção do próprio nó; o efetivo herda do centro na leitura.
     active: boolean('active').notNull().default(true),
@@ -207,8 +208,8 @@ export const categories = mysqlTable(
 export const subcategories = mysqlTable(
   'bgp_subcategories',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
-    categoryId: varchar('category_id', { length: 36 }).notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
+    categoryId: uuidKey('category_id').notNull(),
     name: varchar('name', { length: 255 }).notNull(),
     launchType: varchar('launch_type', { length: 24 }).notNull(),
     // #454 gap 3 — intenção do próprio nó; o efetivo herda de categoria e centro na leitura.
@@ -247,9 +248,9 @@ export const subcategories = mysqlTable(
 export const budgetResults = mysqlTable(
   'bgp_budget_results',
   {
-    id: varchar('id', { length: 36 }).primaryKey().notNull(),
-    budgetId: varchar('budget_id', { length: 36 }).notNull(),
-    subcategoryId: varchar('subcategory_id', { length: 36 }).notNull(),
+    id: uuidKey('id').primaryKey().notNull(),
+    budgetId: uuidKey('budget_id').notNull(),
+    subcategoryId: uuidKey('subcategory_id').notNull(),
     // Mês do exercício (1..12) — TINYINT basta e sem DEFAULT: greenfield (nenhum ambiente tem plano).
     month: tinyint('month').notNull(),
     model: varchar('model', { length: 24 }).notNull(),

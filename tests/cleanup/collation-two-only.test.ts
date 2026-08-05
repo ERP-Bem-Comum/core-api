@@ -22,22 +22,22 @@
  *  1. **293 de 428** colunas de texto NÃO declaram `COLLATE` e herdam o default da tabela. Um gate
  *     de "collation explícita por coluna" nasceria com 293 violações — é projeto de migração, não
  *     gate.
- *  2. **A collation das 51 colunas `bin` depende de EDIÇÃO MANUAL da migration gerada.** O
- *     `varchar()` do Drizzle não tem opção de collate — nem a doc viva
- *     (`orm.drizzle.team/docs/mysql/column-types`, verificada em 2026-08-05) nem a vendorizada
- *     documentam uma —, e por isso `schemas/mysql.ts:17-20` instrui a inserir `COLLATE` à mão no
- *     SQL gerado. Uma coluna `*_id` nova cuja edição manual for esquecida herda `unicode_ci` em
- *     silêncio, e só aparece quando alguém a usa num JOIN.
+ *  2. **A collation dependia de EDIÇÃO MANUAL da migration gerada — não depende mais (#636).** O
+ *     `varchar()` do Drizzle não tem opção de collate, mas `customType` tem: `dataType()` é emitido
+ *     VERBATIM no DDL. Os tipos de `src/shared/persistence/identifier-columns.ts` carregam o
+ *     `COLLATE utf8mb4_bin`, e `tests/cleanup/identifier-collation-from-type.test.ts` cobra que
+ *     toda coluna binária seja declarada com um deles. O que sobrou de manual é o CHARSET
+ *     table-level, que a API do Drizzle 0.45.x realmente não expressa.
  *
- *     ⚠️ Isso NÃO significa que o Drizzle seja incapaz de expressar collation. Medido em worktree
- *     descartável (2026-08-05): `customType` com `dataType()` devolvendo
- *     `'varchar(36) COLLATE utf8mb4_bin'` emite o `COLLATE` VERBATIM no DDL, e a 2ª geração responde
- *     "No schema changes" — é idempotente, sem drift. O passo manual é evitável; ver o `rationale`
- *     da `ADR-0014-C8` para a decisão de adotar ou não.
- *  3. **Nenhum JOIN cruza collation hoje.** Dos 37 JOINs em `adapters/persistence/`, há 8 predicados
- *     distintos e TODOS são identificador↔identificador (`*_id`, `*_ref`), todos com `utf8mb4_bin`
- *     explícito. As 51 colunas `bin` do repositório são, sem exceção, identificador, ref ou chave
- *     natural (`cnpj`, `cpf`).
+ *     ⚠️ Os números desta pesquisa foram corrigidos pelo levantamento do #636. Onde se lia "51
+ *     colunas `bin`", o SQL aplicado tem **119** em 7 larguras distintas — a contagem original
+ *     casava `COLLATE` apenas logo após o tipo, e não via a forma `char(64) NOT NULL COLLATE ...`.
+ *  3. **Nenhum JOIN cruza collation hoje** — mas não porque toda coluna de JOIN seja `bin`. O
+ *     levantamento do #636 achou **24 identificadores vivos SEM `bin`** (`fin_payable_view.*`,
+ *     `fin_outbox.event_id`, `fin_categories.id`…), e o predicado
+ *     `finPayableView.costCenterRef = finCostCenters.id` junta dois deles. Não há mistura porque os
+ *     DOIS lados herdaram `unicode_ci`, não porque ambos sejam binários. A ausência de mistura é
+ *     real; a homogeneidade é que é acidental, e é o que a issue de follow-up ataca.
  *
  * Conclusão: o risco nunca foram as 293 colunas — é a COMBINAÇÃO, juntar uma coluna `bin` com uma
  * que herdou `unicode_ci`. Como toda coluna `bin` é identificador, isso só acontece se alguém fizer

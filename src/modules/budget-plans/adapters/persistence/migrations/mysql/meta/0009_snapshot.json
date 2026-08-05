@@ -9,14 +9,14 @@
       "columns": {
         "event_id": {
           "name": "event_id",
-          "type": "char(36)",
+          "type": "char(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "aggregate_id": {
           "name": "aggregate_id",
-          "type": "char(36)",
+          "type": "char(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -119,7 +119,7 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -133,7 +133,7 @@
         },
         "program_ref": {
           "name": "program_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -254,21 +254,21 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "budget_id": {
           "name": "budget_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "subcategory_id": {
           "name": "subcategory_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -343,14 +343,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "budget_plan_id": {
           "name": "budget_plan_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -364,7 +364,7 @@
         },
         "partner_ref": {
           "name": "partner_ref",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -419,14 +419,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "cost_center_id": {
           "name": "cost_center_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -486,14 +486,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "budget_plan_id": {
           "name": "budget_plan_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
@@ -565,14 +565,14 @@
       "columns": {
         "id": {
           "name": "id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
         },
         "category_id": {
           "name": "category_id",
-          "type": "varchar(36)",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
           "primaryKey": false,
           "notNull": true,
           "autoincrement": false
