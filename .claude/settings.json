@@ -19,18 +19,6 @@
     ]
   },
   "hooks": {
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/inject-ticket-context.sh",
-            "timeout": 10,
-            "statusMessage": "Detectando ticket ativo da pipeline..."
-          }
-        ]
-      }
-    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -71,31 +59,6 @@
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/stop-quality-gate.sh",
             "timeout": 420,
             "statusMessage": "Gate de qualidade (typecheck · format · lint · test)..."
-          }
-        ]
-      }
-    ],
-    "SubagentStop": [
-      {
-        "matcher": "contratos-orchestrator",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/subagent-stop-validate.sh",
-            "timeout": 15,
-            "statusMessage": "Validando fechamento da wave pelo sub-agent..."
-          }
-        ]
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/session-start-context.sh",
-            "timeout": 10,
-            "statusMessage": "Carregando contexto do projeto..."
           }
         ]
       }
