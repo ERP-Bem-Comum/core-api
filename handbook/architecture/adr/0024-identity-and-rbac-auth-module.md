@@ -2,7 +2,8 @@
 
 # ADR-0024: Identidade & RBAC — Módulo `auth` (identidade própria OIDC-ready, sessão híbrida, permissions granulares)
 
-- **Status:** Accepted
+- **Status:** Accepted — **authN superseded parcialmente pelo [ADR-0055](./0055-cognito-external-idp-supersedes-0024-authn.md)**
+- **Superseded by (parcial):** [ADR-0055](./0055-cognito-external-idp-supersedes-0024-authn.md) (2026-07-29) — caem as §§ "fonte de identidade", "emissão de token", "refresh opaco server-side" e a invariante de emissão. **Todo o RBAC permanece vigente e inalterado:** permissions granulares, `authorize` puro, catálogo e o schema de papéis.
 - **Date:** 2026-05-27
 - **Deciders:** Gabriel Aderaldo + Arquiteto técnico
 - **Decide:** pré-requisito de identidade/RBAC registrado em [ADR-0022](./0022-read-models-via-projection-over-event-stream.md) (`:44`, `:72`)
@@ -32,6 +33,22 @@ Criar o **módulo `auth`** no core-api, seguindo o modular monolith ([ADR-0006](
 ### 1. Identidade própria, OIDC-ready
 
 O core-api é a fonte de identidade: guarda usuários e verifica credencial localmente (hash via port). A **fonte de autenticação é abstraída** por um port `Authenticator` — um `OidcAuthenticator` pode ser plugado depois sem refactor de domínio. Decisão **reversível**: federação não é descartada, é adiada.
+
+> ⚠️ **Errata (2026-08-06) — o port `Authenticator` nunca foi construído.** O texto acima permanece
+> como escrito, por imutabilidade; esta nota registra o que a implementação de fato entregou.
+> **Não há nenhuma ocorrência de `Authenticator` em `src/` ou `tests/`** — nem do `OidcAuthenticator`
+> citado em `:103`/`:117`, nem da abstração de fonte citada aqui e em `:84`. A verificação de
+> credencial é o **corpo** de `authenticate-user.ts`, apoiada em `PasswordHasher`, `TokenIssuer`,
+> `RefreshTokenMinter` e `LoginLockoutStore` — quatro ports que abstraem o **como**, nenhum deles a
+> **fonte** da autenticação. O único preparo real para identidade externa é o que a `:68` descreve e
+> que existe mesmo: **`password_hash` nullable**.
+>
+> Isto foi **decisão não executada**, não decisão errada — e o caminho de federação seguiu viável
+> assim mesmo, como o [ADR-0055](./0055-cognito-external-idp-supersedes-0024-authn.md) demonstra ao
+> desenhá-lo sem depender de port algum. Registrado pela issue
+> [#642](https://github.com/ERP-Bem-Comum/core-api/issues/642); cobrado mecanicamente por
+> `.claude/rules/auth-module.md` (`verify:` com `pattern: Authenticator`, `expect: []`), que acende
+> se o nome reaparecer.
 
 ### 2. RBAC com permissions granulares
 
