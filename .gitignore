@@ -33,8 +33,6 @@ coverage/
 
 # Memória local de sub-agentes — notas geradas por agents durante a sessão
 # (efêmero, específico da máquina; não é fonte de verdade do projeto)
-.claude/agent-memory/
-.agents/agent-memory/
 
 # Guidelines locais — material de referência com copyright/restrição de terceiros
 # (PDFs do Bradesco, guias internos não-distribuíveis). Visível para IAs CLI via
