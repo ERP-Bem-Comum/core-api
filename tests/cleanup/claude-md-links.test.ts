@@ -1,18 +1,29 @@
 /**
- * CLAUDE-MD-LINKS — todo caminho que a doc canônica cita existe.
+ * CLAUDE-MD-LINKS — todo caminho que a doc canônica de agente cita existe.
  *
- * O `CLAUDE.md` é o único documento que carrega em TODA sessão de agente. Um link para caminho
- * inexistente ali é a forma mais barata de fazer um agente procurar no lugar errado — e o
- * histórico deste repositório mostra que acontece: o `AGENTS.md` que este arquivo substituiu
- * citava `.claude/output-styles/erp-contracts.md` e `handbook/domain/`, nenhum dos dois existente.
+ * O `CLAUDE.md` é o único documento que carrega em TODA sessão. Um link para caminho inexistente ali
+ * é a forma mais barata de fazer um agente procurar no lugar errado — e o histórico deste repositório
+ * mostra que acontece: o `AGENTS.md` que este arquivo substituiu citava
+ * `.claude/output-styles/erp-contracts.md` e `handbook/domain/`, nenhum dos dois existente.
  *
  * A própria PROPOSTA de substituição (`context/CLAUDE-md-proposta.md`) nasceu com três caminhos
  * mortos — `.claude/runbooks/claude-code-cheatsheet.md` (o real é `context/runbooks/`),
  * `context/playbooks/` e `handbook/domain/`. Trocar um documento não-verificado por outro
  * não-verificado só reinicia o relógio; este gate é o que impede a reincidência.
  *
- * Escopo: links markdown relativos — `[texto](./caminho)`. URLs e âncoras puras (`#secao`) ficam
- * de fora; a âncora é validada pelo leitor, não pelo filesystem.
+ * ESCOPO — o `CLAUDE.md` **e** as `.claude/rules/*.md` (issue #641). As rules ficaram de fora até
+ * 2026-08-06 e o custo apareceu no mesmo dia, duas vezes: a `contracts-module.md` citava
+ * `handbook/domain/`, morto havia tempo, e um link de ADR escrito com o nome de arquivo errado passou
+ * verde no gate. Nos dois casos o erro só foi pego por conferência manual, link a link. Rule é doc
+ * canônica pelo mesmo motivo que o `CLAUDE.md` é: carrega sozinha por `paths:` e instrui a edição —
+ * o ADR-0057 §3 institui a verificação de caminho como invariante da doc canônica, e a rule é dela.
+ *
+ * ⚠️ O NOME deste arquivo é normativo e não deve mudar: o ADR-0057 `:47` o cita literalmente, e ADR
+ * aceito é imutável. Ampliar o escopo mantendo o nome preserva a referência.
+ *
+ * Escopo de sintaxe: links markdown relativos — `[texto](./caminho)` e `[texto](../caminho)`,
+ * resolvidos a partir do diretório do arquivo QUE CITA (uma rule usa `../../handbook/…`). URLs e
+ * âncoras puras (`#secao`) ficam de fora; a âncora é validada pelo leitor, não pelo filesystem.
  *
  * ⚠️ A pergunta é "existe no REPOSITÓRIO", não "existe neste disco". A primeira versão usava
  * `existsSync` e passava na minha máquina enquanto falhava no CI: o `CLAUDE.md` cita
@@ -24,19 +35,26 @@
 
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { readFileSync } from 'node:fs';
+import { readFileSync, globSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
-import { join, resolve } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = fileURLToPath(new URL('.', import.meta.url));
 const PROJECT_ROOT = resolve(HERE, '..', '..');
 
-// `[texto](./algum/caminho)` — só relativos iniciados por `./`, que é a convenção do arquivo.
-const RELATIVE_LINK = /\]\((\.\/[^)\s#]+)/g;
+const posix = (p: string): string => p.split(sep).join('/');
 
-const linkedPaths = (): readonly string[] => {
-  const content = readFileSync(join(PROJECT_ROOT, 'CLAUDE.md'), 'utf-8');
+/** Documentos que instruem o agente e, por isso, não podem apontar para o vazio. */
+const SOURCES = (): readonly string[] =>
+  ['CLAUDE.md', ...globSync('.claude/rules/*.md', { cwd: PROJECT_ROOT }).map(posix)].sort();
+
+// `[texto](./x)` ou `[texto](../x)`. O `[^)\s#]+` para no `#`, então `arquivo.md#secao` é verificado
+// como `arquivo.md` — o arquivo tem de existir, a âncora dentro dele não é problema do filesystem.
+const RELATIVE_LINK = /\]\((\.{1,2}\/[^)\s#]+)/g;
+
+/** Função pura: os alvos relativos citados num conteúdo markdown. */
+const extractLinks = (content: string): readonly string[] => {
   const out = new Set<string>();
   for (const m of content.matchAll(RELATIVE_LINK)) {
     const raw = m[1];
@@ -44,6 +62,10 @@ const linkedPaths = (): readonly string[] => {
   }
   return [...out].sort();
 };
+
+/** Alvo do link resolvido a partir do diretório de QUEM CITA, devolvido relativo ao root. */
+const resolveFromSource = (sourceRel: string, linkRel: string): string =>
+  posix(relative(PROJECT_ROOT, resolve(PROJECT_ROOT, dirname(sourceRel), linkRel)));
 
 const git = (args: readonly string[]): string =>
   execFileSync('git', [...args], { cwd: PROJECT_ROOT, encoding: 'utf-8' });
@@ -71,18 +93,63 @@ describe('CLAUDE-MD-LINKS — a doc canônica não aponta para o vazio', () => {
       for (const p of tracked) if (p.startsWith(`${clean}/`)) return true; // diretório com conteúdo
       return false;
     };
-    const dead = linkedPaths().filter((rel) => !inRepo(rel) && !isDeliberatelyIgnored(rel));
+
+    const dead: string[] = [];
+    for (const source of SOURCES()) {
+      const content = readFileSync(join(PROJECT_ROOT, source), 'utf-8');
+      for (const link of extractLinks(content)) {
+        const target = resolveFromSource(source, link);
+        if (!inRepo(target) && !isDeliberatelyIgnored(target)) dead.push(`${source} → ${link}`);
+      }
+    }
+
     assert.deepEqual(
       dead,
       [],
-      'CLAUDE.md cita caminhos que não existem — todo agente lê este arquivo:\n' + dead.join('\n'),
+      'doc canônica cita caminhos que não existem (arquivo → link):\n' + dead.join('\n'),
+    );
+  });
+
+  it('as rules estão no escopo (guarda contra glob que esvaziou)', () => {
+    // Sem esta guarda, um glob quebrado faria o gate voltar a cobrir só o CLAUDE.md — verde e cego,
+    // que é exatamente o estado que a #641 corrigiu.
+    const rules = SOURCES().filter((s) => s.startsWith('.claude/rules/'));
+    assert.ok(rules.length > 0, 'nenhuma rule no escopo: o glob `.claude/rules/*.md` casa nada');
+    assert.ok(
+      SOURCES().includes('CLAUDE.md'),
+      'o CLAUDE.md saiu do escopo — o ADR-0057 §3 o exige verificado',
     );
   });
 
   it('há links a verificar (guarda contra regex que casa nada)', () => {
+    const total = SOURCES().reduce(
+      (n, s) => n + extractLinks(readFileSync(join(PROJECT_ROOT, s), 'utf-8')).length,
+      0,
+    );
     assert.ok(
-      linkedPaths().length > 0,
+      total > 0,
       'nenhum link relativo encontrado: a regex ou a convenção do arquivo mudou',
+    );
+  });
+
+  it('extrai `./` e `../`, e a âncora não vira parte do caminho', () => {
+    // `../` é a forma que as rules usam; a versão anterior só casava `./` e por isso não as via.
+    assert.deepEqual(extractLinks('[a](./x.md) [b](../../y.md)'), ['../../y.md', './x.md']);
+    // Âncora: verifica-se o ARQUIVO, nunca o fragmento.
+    assert.deepEqual(extractLinks('[c](./z.md#uma-secao)'), ['./z.md']);
+    // Âncora pura e URL não são caminho de filesystem.
+    assert.deepEqual(extractLinks('[d](#secao) [e](https://exemplo.dev/x)'), []);
+  });
+
+  it('resolve o caminho a partir de quem cita, não da raiz', () => {
+    // O erro que este gate precisa evitar: tratar `../../handbook/x` como se fosse relativo ao root.
+    assert.equal(
+      resolveFromSource('.claude/rules/auth-module.md', '../../handbook/architecture/adr/0024.md'),
+      'handbook/architecture/adr/0024.md',
+    );
+    assert.equal(
+      resolveFromSource('CLAUDE.md', './handbook/CHANGELOG.md'),
+      'handbook/CHANGELOG.md',
     );
   });
 
