@@ -1,61 +1,36 @@
 ---
 paths:
-  - "src/modules/contracts/**/*.ts"
-  - "tests/modules/contracts/**/*.ts"
+  - 'src/modules/contracts/**/*.ts'
+  - 'tests/modules/contracts/**/*.ts'
+verify:
+  - claim: 'o auto-expire só varre contrato Active — o filtro vive no repositório, não no domínio'
+    root: 'src/modules/contracts/adapters/persistence/repos'
+    pattern: "eq(schema.contracts.status, 'Active')"
+    expect:
+      - 'src/modules/contracts/adapters/persistence/repos/contract-repository.drizzle.ts'
+  - claim: 'os cinco estados do Contract são cobrados pelo CHECK da tabela'
+    root: 'src/modules/contracts/adapters/persistence/schemas'
+    pattern: "IN ('Pending','Active','Expired','Terminated','Cancelled')"
+    expect:
+      - 'src/modules/contracts/adapters/persistence/schemas/mysql.ts'
 ---
 
-# Módulo Contracts — mapa de camadas e regras de negócio
+Ciclo de vida de contrato e aditivo. Que outro módulo só alcance `contracts/public-api/` **já é cobrado** por `tests/cleanup/module-boundary.test.ts`; a pureza do domínio, por `domain-no-throw` e `domain-clock-injection`. Não repetir aqui. VOs transversais (`Money`, `NonZeroMoney`, `Period`, `PlainDate`, `UserRef`, `Cpf`, `Cnpj`) vivem em `src/shared/kernel/`, **não** em `domain/shared/` — este último guarda só os IDs do módulo. Regras formais: [`handbook/domain_questions/contratos/`](../../handbook/domain_questions/contratos/).
 
-Aplicáveis ao módulo `src/modules/contracts/`.
+**Cinco estados** ([ADR-0023](../../handbook/architecture/adr/0023-contract-lifecycle-pending-state.md) + [ADR-0039](../../handbook/architecture/adr/0039-contract-cancelled-state.md)) — identificador em EN no código, termo PT só na borda, e a P.O. é a autoridade dos termos de UI:
 
-## Estrutura
+| `status`     | Borda (PT)   | Saídas                                                          |
+| ------------ | ------------ | --------------------------------------------------------------- |
+| `Pending`    | Pendente     | → `Active` · → `Cancelled`                                       |
+| `Active`     | Em Andamento | → `Active` (aditivo homologado) · → `Expired` · → `Terminated`   |
+| `Expired`    | Finalizado   | terminal                                                         |
+| `Terminated` | Distrato     | terminal                                                         |
+| `Cancelled`  | Cancelado    | terminal                                                         |
 
-```
-src/modules/contracts/
-├── domain/                    # PURO. Sem infra. Result<T,E>, branded, Readonly.
-│   ├── shared/                # IDs do módulo: ContractId, AmendmentId, DocumentId, Contractor
-│   ├── contract/              # Agregado Contract: types, events, errors, repository, sequential-number, contract.ts (operações)
-│   ├── amendment/             # Agregado Amendment: types, events, errors, repository, amendment-number, amendment.ts
-│   ├── document/              # Agregado Document: types, events, errors, repository, document.ts
-│   └── timeline/              # Projeção de linha do tempo: types, repository, projection.ts
-├── application/
-│   ├── ports/                 # type contracts: EventBus, Outbox, EventDelivery, DocumentStorage, *-read
-│   └── use-cases/             # createContract, createAmendment, attachSignedDocument, homologateAmendment, uploadDocument, getContractTimeline, importContracts, listContracts…
-├── adapters/                  # Implementações concretas
-│   ├── http/                  # Borda Fastify: plugin, schemas (Zod), DTOs, composition
-│   ├── persistence/           # Drizzle/mysql2: schemas, mappers, repos (`*.drizzle.ts` + `*.in-memory.ts`), drivers, migrations
-│   ├── storage/               # DocumentStorage: S3/Magalu (`*.s3.ts`) + `*.in-memory.ts`
-│   ├── outbox/                # Outbox in-memory (o drizzle vive em persistence/repos)
-│   └── event-delivery/        # Entrega de eventos: logger, in-memory, timeline-projection
-├── worker/                    # Worker do outbox: config, outbox-worker, run
-└── public-api/                # Contrato público para outros módulos (ADR-0006)
-    ├── events.ts              # ContractsModuleEvent + decoder versionado v1 + isContractsModuleEvent
-    ├── http.ts, migrate.ts, permissions.ts, read.ts
-    └── index.ts               # Barrel — um dos pontos de entrada, não o único (ver `public-api.md`)
-```
+- **`Cancelled` só é alcançável a partir de `Pending`** — é o descarte de rascunho. Contrato que já vigorou termina em `Expired` ou `Terminated`, **nunca** em `Cancelled`. Contrato nasce `Pending` (sem documento assinado) ou já `Active` (com documento + data).
 
-> VOs transversais (`Money`, `NonZeroMoney`, `Period`, `PlainDate`, `UserRef`, `Cpf`, `Cnpj`) vivem em [`src/shared/kernel/`](../../src/shared/kernel/), não em `domain/shared/`. A CLI embutida foi retirada (ADR-0037) — a UX primária é a borda HTTP em `adapters/http/`.
+- **O auto-expire não alcança tudo que a tabela sugere, e as duas exceções são invisíveis daqui.** Quem transiciona `Active → Expired` é um job **fora do módulo** (`src/jobs/contracts/sweeper/`, ADR-0041), e o `findExpirable` do repositório filtra `status = 'Active'` **e** `currentPeriodKind = 'Fixed'`. Duas consequências: contrato **`Pending` com vigência vencida fica preso em `Pending` para sempre** — é a issue [#426](https://github.com/ERP-Bem-Comum/core-api/issues/426), comportamento atual e não bug de escrita recente; e contrato `Active` de período **indefinido** nunca expira por varredura (`contractCannotExpireIndefinitePeriod`). ⚠️ Ler a tabela acima como "todo contrato vencido vira `Expired`" produz relatório que não bate com o banco.
 
-## Máquina de estado do `Contract` — 5 estados ([ADR-0023](../../handbook/architecture/adr/0023-contract-lifecycle-pending-state.md) + [ADR-0039](../../handbook/architecture/adr/0039-contract-cancelled-state.md))
+- **O estado vigente é derivado, nunca editado.** `currentValue`/`currentPeriod` saem de `originalValue`/`originalPeriod` + Σ aditivos homologados (RN-06/RN-07). A operação canônica é `Contract.applyHomologatedAdjustment(contract, adjustment, at)`. Atribuir o valor corrente direto passa no compilador e **desalinha o contrato do seu histórico de aditivos**, sem nenhum erro no caminho.
 
-| `status` (código EN) | Termo de negócio (PT, borda) | Transições de saída          |
-| -------------------- | ---------------------------- | ---------------------------- |
-| `Pending`            | Pendente                     | → `Active` · → `Cancelled`   |
-| `Active`             | Em Andamento                 | → `Active` (aditivo homologado) · → `Expired` · → `Terminated` |
-| `Expired`            | Finalizado                   | terminal                     |
-| `Terminated`         | Distrato                     | terminal                     |
-| `Cancelled`          | Cancelado                    | terminal                     |
-
-- Contrato nasce `Pending` (sem documento assinado) ou já `Active` (com documento assinado + data).
-- **`Cancelled` só é alcançável a partir de `Pending`** — é o descarte de rascunho. Contrato que já vigorou termina em `Expired` ou `Terminated`, nunca em `Cancelled`.
-- Identificador em **EN** no código; termo PT só na borda. A P.O. é a autoridade dos termos de UI.
-
-## Regras de negócio invariantes
-
-- **Estado vigente do contrato** (`currentValue`, `currentPeriod`) é **derivado** de `originalValue/Period + Σ aditivos homologados`. Nunca editado diretamente. Operação canônica: `Contract.applyHomologatedAdjustment(contract, adjustment, at)`. Regra de negócio principal (RN-06, RN-07).
-- **Aditivo** tem 4 kinds (`Addition`, `Suppression`, `TermChange`, `Misc`) e 2 status (`Pending`, `Homologated`). Homologação **exige** `signedDocumentRef` (RN-12). `homologate(amendment, by, at)` muda status; o use case `homologateAmendment` traduz o aditivo para `ContractAdjustment` (discriminated union para o domínio do Contract) e aplica no contrato.
-- **Cross-module imports proibidos** em `domain/` e `application/`. Outros módulos consomem **exclusivamente** `contracts/public-api/` (ADR-0006).
-
-## Fonte canônica
-
-Eventos, commands e regras formais: [`handbook/domain_questions/contratos/`](../../handbook/domain_questions/contratos/) e [`handbook/domain/`](../../handbook/domain/).
+- **`Amendment` são três variantes, não dois status — o discriminador é composto.** A union é `PendingWithoutDocument` | `PendingWithDocument` | `Homologated`: o `status` (`Pending`/`Homologated`) sozinho não narrowa, porque `Pending` se subdivide pela **presença de `signedDocumentRef`**. É esse desenho que faz a RN-12 (homologar exige documento assinado) ser cobrada **em compile time** em vez de por `if` — `homologate` não aceita a variante sem documento. Os quatro `kind` (`Addition`, `Suppression`, `TermChange`, `Misc`) são ortogonais ao status; o use case `homologateAmendment` traduz o aditivo para `ContractAdjustment` antes de aplicar no contrato.

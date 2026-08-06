@@ -1,35 +1,33 @@
 ---
 paths:
-  - "api-collections/**"
-  - "scripts/e2e-bruno-*.sh"
+  - 'api-collections/**'
+  - 'scripts/e2e/bruno-all.sh'
+verify:
+  - claim: 'um único script executa a coleção — só ele chama `bru run`'
+    root: 'scripts'
+    pattern: 'bru run'
+    expect:
+      - 'scripts/e2e/bruno-all.sh'
+  - claim: 'a lista de pastas rodadas é literal e não inclui budget-plans'
+    root: 'scripts'
+    pattern: 'MAIN_FOLDERS=(0-auth 1-users 2-me 3-roles-permissions 4-auth-security 5-auth-improvements 6-contracts 7-partners 8-programs)'
+    expect:
+      - 'scripts/e2e/bruno-all.sh'
+  - claim: 'o rc de z-pending-fixes entra no exit code do gate'
+    root: 'scripts'
+    pattern: '[ $RC_MAIN -eq 0 ] && [ $RC_PENDING -eq 0 ]'
+    expect:
+      - 'scripts/e2e/bruno-all.sh'
 ---
 
-# Regras invariantes — Coleções Bruno (`.bru`)
+Coleções `.bru` que exercitam a borda HTTP. Normativo: **[ADR-0038](../../handbook/architecture/adr/0038-bruno-cli-mandatory-and-bru-authoring.md)** — um `.bru` escrito e não executado é cobertura ilusória, e **o resultado do `bru run` é a fonte de verdade, nunca a leitura do arquivo**. Rodar via `pnpm run test:integration:all`, que sobe MySQL + MinIO e boota o servidor real. Para inspecionar o body de uma resposta: `E2E_JSON_REPORT=1 pnpm run test:integration:all` → `test-results/main.json`.
 
-Aplicáveis a tudo sob `api-collections/`. Normativo: **[ADR-0038](../../handbook/architecture/adr/0038-bruno-cli-mandatory-and-bru-authoring.md)** (vence). Contexto HTTP-first: [ADR-0037](../../handbook/architecture/adr/0037-http-first-retire-embedded-cli.md).
+- **O nome `z-pending-fixes` mente — a pasta BLOQUEIA o gate.** Ela nasceu expected-fail, como o ADR-0038 §2 manda isolar, mas os cinco tickets foram implementados e ela virou suíte de **regressão**: a linha final do runner é `[ $RC_MAIN -eq 0 ] && [ $RC_PENDING -eq 0 ]`, e o rc dela entra no exit code. ⚠️ **Não existe hoje pasta expected-fail de verdade** — pôr ali um `.bru` que reprova de propósito derruba o gate inteiro. Renomear foi avaliado e recusado em 2026-08-05: tocaria 17 registros históricos que o [ADR-0057](../../handbook/architecture/adr/0057-claude-md-as-canonical-agent-doc.md) §5 proíbe reescrever, mais errata num ADR imutável — custo maior que o do nome errado. A [Inquiry-0026](../../handbook/inquiries/0026-async-human-in-the-loop-and-drizzle-1-0.md) mede se o Bruno permanece.
 
-## Invariante #1 — RODAR o CLI é obrigatório (não negociável)
+- **Existir na coleção não é ser executado: `budget-plans/` tem 14 `.bru` que nenhum runner roda.** As pastas rodadas são uma **lista literal** dentro do script (`MAIN_FOLDERS=(…)`), e `budget-plans` não está nela — nem em nenhum outro script, porque `bruno-all.sh` é o único lugar do repositório que chama `bru run`. São casos reais (403 de bare-user, not-found, payload malformado) parados em cobertura ilusória, exatamente o que a norma do ADR-0038 condena. **Criar `.bru` numa pasta nova não a coloca no gate** — sem editar a lista, o arquivo nasce morto.
 
-Um `.bru` **escrito mas não executado** é cobertura ilusória. **Todo `.bru` criado ou alterado DEVE ser executado** via `bru run` contra o servidor real (`pnpm run test:integration:all`, que sobe MySQL+MinIO + boota todos os módulos) e **passar** — ou **reprovar conscientemente** como expected-fail isolado. Nunca dar por "pronto" um `.bru` só lido. O **resultado do CLI é a fonte de verdade**, não a leitura do arquivo.
+- **Um único `bru run` para toda a suíte, senão o token some.** O login por perfil acontece uma vez, em `0-auth/`, e viaja por `bru.setVar`; o encadeamento entre requisições é por `seq` + `setVar`. Rodar pasta a pasta abre processos distintos e **perde a variável** — é o bug do 401 que já custou investigação. Em E2E o rate-limit de login é afrouxado por `AUTH_LOGIN_RATE_LIMIT_MAX`.
 
-> Para inspecionar o body real de uma resposta (quando o status não basta): `E2E_JSON_REPORT=1 pnpm run test:integration:all` → `test-results/main.json`.
+- **Sintaxe e fidelidade ao schema real, não ao esperado.** O arquivo começa em `meta {` — **comentário `#` no topo faz o parser do Bruno rejeitar**; nota vai em `meta { docs }`, `folder.bru` ou `//` dentro de `script:*`. O body se escreve **depois de ler o schema Zod da rota**: `z.discriminatedUnion` exige o discriminador (`mode`, `kind`), e `min(1)` e nome exato de campo não perdoam. Dados precisam ser válidos de verdade — CPF/CNPJ por módulo 11 (`scripts/seed-partners.ts`) e UUID v4 real, porque o nil UUID `0000…0000` devolve **400, não 404**.
 
-## Invariante #2 — Sintaxe e fidelidade ao schema
-
-- **Sem comentário `#` no topo** — o parser do Bruno rejeita. O arquivo começa com `meta {`. Notas em `meta { docs }`, `folder.bru`, ou `//` dentro de `script:*`.
-- **Body alinhado ao schema Zod real da rota** — ler o schema antes. Cuidado com `z.discriminatedUnion` (exige o discriminador: `mode`, `kind`), `min(1)`, e nomes exatos dos campos.
-- **Dados válidos** — CPF/CNPJ por módulo 11 (`scripts/seed-partners.ts`); UUID v4 real (nil UUID `0000…0000` → 400, não 404).
-
-## Invariante #3 — Auth, ordem e asserções
-
-- **Um login por perfil** em `0-auth/` (token via `bru.setVar`, reusado por todos os módulos). Não duplicar login. Respeitar o rate-limit de login (em E2E, `AUTH_LOGIN_RATE_LIMIT_MAX`).
-- **Encadeamento por `seq` + `setVar`**; rodar tudo num **único `bru run`** (múltiplas pastas no mesmo processo) para o token/var persistir — pasta-a-pasta perde o estado (bug do 401).
-- **Asserções tolerantes ao código real, invariante forte**: validação de querystring pode ser **400** (Zod), não 422 — aceitar o real (`expect([400,422,200]).to.include(status)`), mas **nunca 500**.
-
-## Invariante #4 — Expected-fail isolado
-
-Testes que reprovam por design (regressão de fix / feature pendente) vivem em pasta própria (ex. `z-pending-fixes/`), rodados à parte; não bloqueiam o gate verde principal.
-
-## Especialista
-
-[`bruno-api-client-expert`](../agents/bruno-api-client-expert.md) — autoria/execução de coleções `.bru`. Ancorado em [`handbook/reference/bruno/`](../../handbook/reference/bruno/).
+- **Asserção tolerante ao código real, invariante forte.** Validação de querystring pode responder **400** (Zod) onde se esperaria 422 — aceitar o real (`expect([400, 422]).to.include(status)`) em vez de afrouxar a rota para caber no teste. O que **nunca** se aceita é **500**.
