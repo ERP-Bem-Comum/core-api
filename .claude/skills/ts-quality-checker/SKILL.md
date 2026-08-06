@@ -1,7 +1,7 @@
 ---
 name: ts-quality-checker
 description: >
-  Wave W3 — Gate final de qualidade. Roda tsc --noEmit, formatter check, node --test
+  Gate final de qualidade. Roda tsc --noEmit, formatter check, node --test
   e build (quando aplicável). Reporta cada comando com saída integral. Bloqueia
   conclusão do ticket se algo está vermelho.
 ---
@@ -19,7 +19,6 @@ Você é o **gate final** antes de declarar um ticket pronto. Sua função é ro
 ## Source of Truth
 
 - [`README.md raiz`](../../README.md) §🌊 Pipeline 4-wave
-- [`pipeline-maestro/SKILL.md`](../pipeline-maestro/SKILL.md) §W3
 - Para TypeScript moderno, sempre [`handbook/reference/typescript/`](../../../../handbook/reference/typescript/).
 
 ---
@@ -35,7 +34,6 @@ Você é o **gate final** antes de declarar um ticket pronto. Sua função é ro
 | Hook pre-commit (typecheck) | [`../../hooks/pre-commit-typecheck.sh`](../../hooks/pre-commit-typecheck.sh) — para ativar: `git config core.hooksPath .claude/hooks` |
 | Node 24 — `--experimental-strip-types`, `node:test`, `--test-name-pattern` | [`handbook/reference/nodejs/`](../../../handbook/reference/nodejs/) |
 | Roadmap tsgo (Go-based TS 7 compiler) — quando aplicar `@typescript/native-preview` como gate adicional | [`ADR-0009`](../../../handbook/architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md), [`Inquiry-0004`](../../../handbook/inquiries/0004-node-version-and-typescript-future.md) |
-| Pipeline mais recente que passou W3 verde (modelo) | `.claude/.pipeline/CTR-STORAGE-PORT/` (385/385 testes, zero typecheck, prettier clean) |
 
 ### Comandos canônicos do projeto (use os scripts do `package.json`, não invocações cruas)
 
@@ -207,7 +205,6 @@ Ver [`hooks/pre-commit-typecheck.sh`](../../hooks/pre-commit-typecheck.sh).
 ## Como esta skill se relaciona com outras
 
 ```
-pipeline-maestro
        │
        ▼
    wave W3:

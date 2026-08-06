@@ -80,6 +80,4 @@ Ver [`modules/anti-padroes-locais.md`](modules/anti-padroes-locais.md).
 | Skill irmã do W2 (review específica do pipeline core-api) | [`../code-reviewer/SKILL.md`](../code-reviewer/SKILL.md) |
 | Skill irmã para reviewer de DB | [`../database-engineer/SKILL.md`](../database-engineer/SKILL.md) |
 | Reviews já realizadas (exemplos de severidade + escopo) | `tests/reports/REVIEW.md`, `tests/reports/E2E-SECURITY-REVIEW.md`, `tests/bdd/QA-REPORT.md` |
-| Exemplos vivos de tickets aprovados (round 1) | `.claude/.pipeline/CTR-STORAGE-PORT/`, `CTR-ADAPTER-DRIZZLE-DUAL/` |
-| Refactor com rede de segurança aplicado (tickets de defect-fix com testes regressão) | `.claude/.pipeline/CTR-DEFECTS-CRITICAL/`, `CTR-DEFECTS-MEDIUM/`, `.pipeline/CTR-REGRESSION-2026-05-15/` |
 | Comandos para gerar evidência durante a review | `npm run lint`, `npm run typecheck`, `npm test` — ver [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Comandos" |

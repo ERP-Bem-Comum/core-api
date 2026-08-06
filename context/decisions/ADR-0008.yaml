@@ -35,7 +35,7 @@ extraction:
     sobre uma decisão que está em conflito aberto.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: NÃO GERA — o módulo `banco` ainda não existe em src/modules/, sem path alvo; reavaliar quando nascer
     applied_to: []
     gap: |

@@ -35,7 +35,7 @@ extraction:
     decisão, não alegação própria.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: GERA REGRA (agrupado com o ADR-0039)
     applied_to: ['.claude/rules/contracts-module.md']
     gap: |

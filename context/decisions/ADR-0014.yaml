@@ -34,7 +34,7 @@ extraction:
     (linhas 113-121) ficaram fora: são requisitos de infra provisionada, sem path neste repositório.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: GERA REGRA
     applied_to: ['.claude/rules/adapters.md']
     gap: |

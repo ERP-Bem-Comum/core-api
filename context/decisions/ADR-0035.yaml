@@ -34,7 +34,7 @@ extraction:
     fundamentação.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: GERA REGRA
     applied_to: ['.claude/rules/partners-module.md']
     gap: |
@@ -238,7 +238,7 @@ provenance:
     - PARTNERS-TERRITORY-TOGGLE-DTO
   issues: []
   note: |
-    Origem declarada: épico `specs/001-partners-http-gaps/` e o ticket PARTNERS-TERRITORY; promove o ADR
-    de feature `specs/001-partners-http-gaps/adr/0001-territorial-partnership-soft-delete.md` — nenhum
+    Origem declarada: épico `handbook/specs/001-partners-http-gaps/` e o ticket PARTNERS-TERRITORY; promove o ADR
+    de feature `handbook/specs/001-partners-http-gaps/adr/0001-territorial-partnership-soft-delete.md` — nenhum
     lido. O acervo tem PARTNERS-TERRITORY, PARTNERS-TERRITORY-TOGGLE-DTO, PARTNERS-STATE-LOOKUP,
     PARTNERS-MUNICIPALITY-LOOKUP e PAR-GEO-ADDED-MUNICIPALITIES.

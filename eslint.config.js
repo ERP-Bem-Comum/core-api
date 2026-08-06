@@ -19,9 +19,12 @@ export default tseslint.config(
       // tools/bugs-scripts/ — scripts de diagnóstico black-box descartáveis
       // (já gitignored); não entram em nenhum tsconfig (projectService falha).
       'tools/bugs-scripts/**',
-      // specs/ guarda artefatos spec-kit (SDD). Os contracts/*.ts são esboços
-      // de ports para documentar design — não entram em nenhum tsconfig.
-      'specs/**',
+      // handbook/specs/ guarda o histórico de especificação das features. Os
+      // contracts/*.ts de lá são esboços de port para documentar design — nunca
+      // entraram em tsconfig algum, e o projectService type-aware falha neles.
+      // (Viviam na raiz como `specs/` até 2026-08-06, quando o spec-kit saiu e o
+      // acervo virou documento no handbook.)
+      'handbook/specs/**',
       // Worktrees de sessões paralelas do Claude Code são cópias completas de
       // src/ e tests/ de outras branches. O .gitignore já as exclui, mas o flat
       // config do ESLint NÃO lê .gitignore — sem isto o projectService type-aware

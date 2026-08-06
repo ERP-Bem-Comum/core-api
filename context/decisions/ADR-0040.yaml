@@ -41,7 +41,7 @@ extraction:
     alternativas (A–E) são fundamentação da C5.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: GERA REGRA
     applied_to: ['CLAUDE.md']
     gap: |

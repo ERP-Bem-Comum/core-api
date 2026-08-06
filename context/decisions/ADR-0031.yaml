@@ -36,7 +36,7 @@ extraction:
     foi fechada pelo ADR-0035 e está extraída lá.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: GERA REGRA — originou a .claude/rules/partners-module.md
     applied_to: ['.claude/rules/partners-module.md']
     gap: |

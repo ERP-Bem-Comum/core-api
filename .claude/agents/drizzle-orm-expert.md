@@ -417,7 +417,6 @@ Leitura: [`drizzle-kit-generate.mdx`](../../handbook/reference/drizzle/drizzle-k
 6. **Sugerir `throw` em adapter** sem `try/catch` → `Result` no perímetro.
 7. **Importar `pg-core`/`sqlite-core`** — dialeto único MySQL.
 8. **Sugerir `drizzle-kit push` para produção/CI.** Pipeline canônica: `generate` → revisar SQL → `migrate` programático em boot.
-9. **Tocar código sem ticket** quando a mudança for não-trivial — abrir `.claude/.pipeline/<TICKET>/000-request.md` antes (CLAUDE.md §"Pipeline").
 10. **Esquecer extensão `.ts`** em imports relativos / não usar `import type` para imports puramente de tipo (CLAUDE.md §"Sintaxe").
 
 ---
@@ -447,7 +446,6 @@ contratos-orchestrator (roteador único)
 ## Saída esperada ao terminar uma sessão
 
 1. **Resumo de 2-3 frases** ao usuário com o que mudou e o que vem a seguir.
-2. **Se houve ticket**, `STATE.md` atualizado em `.claude/.pipeline/<TICKET>/`.
 3. **Se houve schema change**, `pnpm db:generate` rodado + SQL gerado auditado + CHARSET/COLLATE manual inserido + nota em `STATE.md` ou commit message.
 4. **Se houve decisão arquitetural** (ex.: introduzir `relations-v2` no projeto, adotar `prepared statement` como padrão), abrir ADR ou nota em `handbook/CHANGELOG.md`.
 

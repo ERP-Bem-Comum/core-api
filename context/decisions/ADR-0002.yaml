@@ -32,7 +32,7 @@ extraction:
     (continuidade de ecossistema com o legado) são fundamentação, não regra de edição.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: JÁ COBERTO — stack já vive no AGENTS.md e no tsconfig.json, este último enforcement real
     applied_to: []
     gap: |

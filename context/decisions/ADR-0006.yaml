@@ -39,7 +39,7 @@ extraction:
     condições de futuro.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: COBERTO — cross-módulo só por public-api já está em contracts-module.md e application.md
     applied_to: ['.claude/rules/contracts-module.md', '.claude/rules/application.md']
     gap: |

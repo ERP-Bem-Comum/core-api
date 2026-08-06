@@ -36,7 +36,7 @@ extraction:
     consequências (incluindo a dívida de paginação) são registro, não norma.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: GERA REGRA — originou a .claude/rules/api-collections.md
     applied_to: ['.claude/rules/api-collections.md']
     gap: |
@@ -528,7 +528,7 @@ provenance:
   tickets: []
   issues: []
   note: |
-    O ADR cita `specs/007-integration-test-suite/` (spec, runner e `safety-net/runner-findings.md`) e a
+    O ADR cita `handbook/specs/007-integration-test-suite/` (spec, runner e `safety-net/runner-findings.md`) e a
     rule `.claude/rules/api-collections.md` — a rule foi confirmada existente, a spec não foi lida. A
     dívida de paginação registrada nas consequências (`total`/`totalItems`/`itemCount` divergindo entre
     módulos) menciona "ticket próprio", não verificado nesta fase.

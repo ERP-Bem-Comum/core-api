@@ -34,7 +34,7 @@ extraction:
     borda; atributo do próprio contrato → evolui o agregado" está na quarta.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: GERA REGRA
     applied_to: ['.claude/rules/http-edge.md']
     gap: |

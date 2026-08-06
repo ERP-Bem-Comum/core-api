@@ -41,8 +41,6 @@ Para TypeScript moderno, sempre [`handbook/reference/typescript/`](../../../../h
 | mysql2 driver (quando MySQL real for wired) | [`handbook/reference/mysql2/`](../../../handbook/reference/mysql2/) |
 | Node 24 + ESM/NodeNext | [`handbook/reference/nodejs/`](../../../handbook/reference/nodejs/) |
 | Handbook §07 (ACL/fronteira externa) — vocabulário aceito na borda | [`handbook/domain_questions/contratos/07-external-context.md`](../../../handbook/domain_questions/contratos/07-external-context.md) |
-| Exemplos vivos: use cases entregues | `.claude/.pipeline/CTR-USECASE-CREATE-CONTRACT/`, `CTR-USECASE-CREATE-AMENDMENT/`, `CTR-USECASE-HOMOLOGATE-AMENDMENT/`, `CTR-USECASE-ATTACH-DOCUMENT/`, `CTR-USECASE-QUERIES/` |
-| Exemplos vivos: adapters entregues | `.claude/.pipeline/CTR-ADAPTER-DRIZZLE-DUAL/`, `CTR-STORAGE-PORT/` |
 | Código de produção que materializa este padrão | `src/modules/contracts/application/{ports,use-cases}/`, `src/modules/contracts/adapters/persistence/{drivers,schemas,mappers,repos,migrations}/` |
 
 ---

@@ -262,7 +262,7 @@ claims:
 
   - id: ADR-0057-C6
     text: |
-      Referências ao `AGENTS.md` em `.claude/.pipeline/`, `specs/`, `handbook/` e nas EVIDÊNCIAS
+      Referências ao `AGENTS.md` em `.claude/.pipeline/`, `handbook/specs/`, `handbook/` e nas EVIDÊNCIAS
       ANCORADAS de `context/decisions/` (formato `AGENTS.md:209`) MUST NOT ser atualizadas — são
       registro do que era verdade na data em que foram escritas. Reescrever `AGENTS.md:209` para
       `CLAUDE.md:209` produziria âncora FALSA, porque a numeração de linha mudou.
@@ -270,7 +270,7 @@ claims:
     source_lines: ['63-65']
     applies_to:
       - 'context/decisions/*.yaml'
-      - 'specs/**'
+      - 'handbook/specs/**'
       - '.claude/.pipeline/**'
     reality:
       verdict: holds

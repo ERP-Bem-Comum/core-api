@@ -81,7 +81,7 @@ Sempre a documentação oficial do Node 24 espelhada no handbook do projeto:
 ## Estrutura típica de um script
 
 ```
-scripts/                                  # ou tools/, ou .claude/.pipeline/<TICKET>/scripts/
+scripts/                                  # ou tools/scripts/
 ├── limpar-pipelines-antigos.ts
 ├── snapshot-state-cli.ts
 ├── verificar-migrations-orfaas.ts
@@ -115,7 +115,7 @@ Atalho recomendado em `package.json#scripts`:
 #!/usr/bin/env -S node --experimental-strip-types --no-warnings
 // scripts/limpar-pipelines-antigos.ts
 //
-// Substitui:  find .claude/.pipeline -mindepth 1 -maxdepth 1 -type d -mtime +30 -exec rm -rf {} \;
+// Substitui:  find .claude/tmp -mindepth 1 -maxdepth 1 -type d -mtime +30 -exec rm -rf {} \;
 // Uso:        pnpm exec node scripts/limpar-pipelines-antigos.ts --older-than 30d [--dry-run]
 
 import { opendir, rm, stat } from 'node:fs/promises';
@@ -192,7 +192,7 @@ const main = async (): Promise<number> => {
     return 64;
   }
 
-  const r = await limparPipelines(join(cwd(), '.claude/.pipeline'), flags, new Date());
+  const r = await limparDiretorios(join(cwd(), '.claude/tmp'), flags, new Date());
   if (!r.ok) {
     stderr.write(`Falha: ${r.error}\n`);
     return r.error === 'pipeline-dir-not-found' ? 66 : 74;

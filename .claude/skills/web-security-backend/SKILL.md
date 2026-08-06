@@ -96,7 +96,7 @@ Varre o escopo e escreve **`security_backend_report.md`** (ou onde o usuário pe
 - Um finding por vez; comentário curto explicando o "porquê" da prática (não o quê).
 - Sem regressão: rodar `pnpm test` (+ `typecheck`/`lint`) após cada fix.
 - Seguir o fluxo de commit do projeto (PT-BR, escopo de módulo); não agrupar findings não-relacionadas.
-- Mudança não-trivial em `src/` → abrir ticket de pipeline (W0→W3) como manda o `CLAUDE.md`.
+- Mudança não-trivial em `src/` → rodar o gate de qualidade como manda o `CLAUDE.md`.
 
 ---
 

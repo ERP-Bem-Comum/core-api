@@ -31,7 +31,7 @@ extraction:
     framework, não duplicar o BFF, e as convenções (prefixo, composition root único, Pino).
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: GERA REGRA
     applied_to: ['.claude/rules/http-edge.md']
     gap: |

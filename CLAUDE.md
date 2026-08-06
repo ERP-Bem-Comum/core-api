@@ -111,10 +111,21 @@ Agentes e skills não são listados aqui: o Claude Code os descobre em [`.claude
 
 [`handbook/guidelines/`](./handbook/guidelines/) está no `.gitignore` — PDFs Bradesco (CNAB/Pix/WebService) com restrição de redistribuição. Leitura autorizada localmente; **não copiar trechos para código commitável**.
 
-<!-- SPECKIT START -->
+## O harness é o nativo do Claude Code — e só ele
 
-**Plano corrente:** [`specs/040-rules-match-code-reality/plan.md`](specs/040-rules-match-code-reality/plan.md) — reconstrução das `.claude/rules/` ancorada no código real. Em execução por **fatia vertical**: um diretório de `src/` por vez, com a rule nascendo do código e o que for mecanizável virando teste em `tests/cleanup/` em vez de texto. Entregues: `shared-persistence`, `shared-primitives`. Invariante: **zero mudanças de comportamento em `src/`**.
+Em 2026-08-06 o repositório expurgou os dois aparatos de processo que viviam por cima das primitivas nativas. Não existe mais pipeline W0→W3, ticket com `STATE.json`, wave, nem spec-kit. Quem procurar por `.claude/.pipeline/`, `scripts/pipeline/`, `.specify/` ou pelas skills `speckit-*` não vai achar: foram removidos, executando [`handbook/specs/038-retire-pipeline-w0w3`](./handbook/specs/038-retire-pipeline-w0w3/spec.md) e [`039-claude-native-harness`](./handbook/specs/039-claude-native-harness/spec.md).
 
-**Também abertas, não commitadas:** [`038-retire-pipeline-w0w3`](specs/038-retire-pipeline-w0w3/plan.md) (aposentadoria da pipeline W0→W3) e [`039-claude-native-harness`](specs/039-claude-native-harness/spec.md) (consolidação do harness nas primitivas nativas). Nenhuma das três presume que as outras fecharam.
+A superfície oficial é a que a documentação do Claude Code define, e nada além dela:
 
-<!-- SPECKIT END -->
+| O que                               | Onde                                                         |
+| ----------------------------------- | ------------------------------------------------------------ |
+| Contexto sempre carregado           | este `CLAUDE.md`                                             |
+| Regras por caminho                  | [`.claude/rules/`](./.claude/rules/) — carregam por `paths:` |
+| Conhecimento e workflows invocáveis | [`.claude/skills/`](./.claude/skills/)                       |
+| Trabalho em contexto isolado        | [`.claude/agents/`](./.claude/agents/)                       |
+| Enforcement determinístico          | [`.claude/hooks/`](./.claude/hooks/) + `settings.json`       |
+| Memória de subagente                | `.claude/agent-memory/` (local, no `.gitignore`)             |
+
+**Trabalho novo não abre ticket de processo.** Faz a mudança, roda o gate (`typecheck` + `format:check` + `lint` + `test`) e commita. O hook `Stop` cobra o gate quando o diff toca `.ts`; o `.githooks/pre-commit` cobra antes do commit. Registro de decisão continua em [`handbook/architecture/adr/`](./handbook/architecture/adr/) e [`handbook/inquiries/`](./handbook/inquiries/); o histórico de especificação das 37 features está em [`handbook/specs/`](./handbook/specs/), como documento — nada mais o gera automaticamente.
+
+**Plano corrente:** [`handbook/specs/040-rules-match-code-reality/plan.md`](./handbook/specs/040-rules-match-code-reality/plan.md) — reconstrução das `.claude/rules/` ancorada no código real, por **fatia vertical**: um diretório de `src/` por vez, com a rule nascendo do código e o que for mecanizável virando teste em `tests/cleanup/` em vez de texto. Entregues: `shared-persistence`, `shared-primitives`. Invariante: **zero mudanças de comportamento em `src/`**.

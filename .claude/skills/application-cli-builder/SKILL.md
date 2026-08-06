@@ -32,7 +32,6 @@ Você é o **construtor da CLI de validação de regras** do módulo Contratos. 
 | `--state` (snapshot/restore JSON) | `src/modules/contracts/cli/state.ts` + ticket `CTR-CLI-MVP/` |
 | Subcomando upload de documento (planejado, depende de S3/MinIO) | [`ADR-0019`](../../../handbook/architecture/adr/0019-document-storage-s3-with-minio-dev.md) (ticket `CTR-CLI-UPLOAD` futuro) |
 | Node 24 — `--experimental-strip-types`, `node:test`, ESM/NodeNext, sysexits.h, `process.stdout/stderr.write` | [`handbook/reference/nodejs/`](../../../handbook/reference/nodejs/) |
-| Tickets já executados (exemplos vivos completos) | `.claude/.pipeline/CTR-CLI-MVP/`, `CTR-CLI-DRIVER-FLAG/`, `CTR-CLI-E2E-TESTS/` |
 | Código de produção que materializa este padrão (ler antes de adicionar novo subcomando) | `src/modules/contracts/cli/{main,registry,context,state,parse-flags,parse-driver-flags}.ts`, `src/modules/contracts/cli/commands/`, `src/modules/contracts/cli/drivers/{memory,mysql}.ts`, `src/modules/contracts/cli/formatters/` |
 | Exit codes vigentes | `cli/main.ts`: `EXIT_USAGE=64`, `EXIT_SOFTWARE=70`, `EXIT_IOERR=74` (sysexits.h). Use também: `0` sucesso, `1` erro de regra. |
 

@@ -35,7 +35,7 @@ extraction:
     própria e não detalhe da regra 2. A seção de evidência (registry/sandbox) é fundamentação.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: GERA REGRA — originou a .claude/rules/api-collections.md
     applied_to: ['.claude/rules/api-collections.md']
     gap: |

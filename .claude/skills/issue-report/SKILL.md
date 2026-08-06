@@ -19,7 +19,7 @@ description: >-
 ## Quando usar / quando NÃO usar
 
 - **USE** quando encontrar um problema **fora do escopo do ticket atual** e decidir **não consertar agora**.
-- **NÃO use** para o trabalho do ticket corrente (isso é o pipeline W0→W3). NÃO use para abrir issue de algo que
+- **NÃO use** para o trabalho do ticket corrente (isso é o trabalho corrente). NÃO use para abrir issue de algo que
   você vai consertar nos próximos minutos.
 - **NÃO abra** uma issue se não conseguir escrever **critérios de aceite testáveis** — então o problema ainda não
   está entendido; investigue mais primeiro (ver Fundamento canônico).
@@ -44,7 +44,7 @@ Citações do fallback local `acdg/skills_base/shared-references/` (MCP `acdg-sk
 > — _Gerenciamento de Requisitos_ (`requirements/gerenciamento-de-requisitos.md:248`)
 
 Daí as 3 exigências do template: **(1)** problema em 1 frase sem ambiguidade; **(2)** critérios de aceite
-**Dado/Quando/Então** com exemplo concreto e **caminho de erro** (slug/status); **(3)** Definition of Done amarrada ao gate W3.
+**Dado/Quando/Então** com exemplo concreto e **caminho de erro** (slug/status); **(3)** Definition of Done amarrada ao gate de qualidade.
 
 ## Procedimento
 

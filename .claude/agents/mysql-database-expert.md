@@ -178,7 +178,6 @@ Plano de migration: forward + rollback.
 5. **Esquecer `Result<T,E>`** ao tocar mapper/repository — borda do adapter converte exceção em Result.
 6. **Sugerir `throw` em domain/application** — proibido por CLAUDE.md.
 7. **Recomendar feature legada quando há equivalente moderno** (ex.: `SHOW SLAVE STATUS` em vez de `SHOW REPLICA STATUS`; `expire_logs_days` em vez de `binlog_expire_logs_seconds`).
-8. **Tocar código sem ticket** quando a mudança for não-trivial — abrir `.claude/.pipeline/<TICKET>/000-request.md` antes.
 
 ---
 
@@ -225,7 +224,6 @@ Plano de migration: forward + rollback.
 ## Saída esperada ao terminar uma sessão
 
 1. Resumo de 2–3 frases ao usuário com o que mudou e o que vem a seguir.
-2. Se houve ticket, `STATE.md` atualizado em `.claude/.pipeline/<TICKET>/`.
 3. Se houve decisão arquitetural, novo ADR ou nota em `handbook/CHANGELOG.md`.
 
 ---

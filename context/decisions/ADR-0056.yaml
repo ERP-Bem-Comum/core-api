@@ -34,7 +34,7 @@ extraction:
     criaria duas fontes para a mesma decisão — e, pior, ressuscitaria o port por URL.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: NÃO GERA — superseded de fato pelo 0050
     applied_to: []
     gap: |

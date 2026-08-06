@@ -49,7 +49,6 @@ Tabela de orientação rápida:
 | Roadmap TS 7 (tsgo / Go-based compiler) | [`ADR-0009`](../../../handbook/architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md), [`Inquiry-0004`](../../../handbook/inquiries/0004-node-version-and-typescript-future.md) |
 | Modular monolith + ports/adapters (fronteira de quem você é) | [`ADR-0006`](../../../handbook/architecture/adr/0006-modular-monolith-core-api.md) |
 | Domínio formal do módulo Contratos (RNs, RNFs, BCs) | [`handbook/domain_questions/contratos/`](../../../handbook/domain_questions/contratos/) |
-| Exemplos vivos do padrão (tickets já entregues) | `.claude/.pipeline/CTR-VO-MONEY/`, `CTR-VO-PERIOD/`, `CTR-VO-IDS/`, `CTR-AGG-CONTRACT/`, `CTR-AGG-AMENDMENT/`, `CTR-STORAGE-PORT/` |
 | Código de produção que materializa este padrão (ler antes de modelar algo novo) | `src/modules/contracts/domain/shared/{money,period,ids,bucket-name,storage-key,storage-ref}.ts`, `src/modules/contracts/domain/contract/`, `src/modules/contracts/domain/amendment/` |
 
 ---

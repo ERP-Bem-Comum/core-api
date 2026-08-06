@@ -34,7 +34,7 @@ extraction:
     proibido (107), e a tabela de conformidade e auditoria (209-216).
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: PARCIAL
     applied_to: ['.claude/rules/adapters.md']
     gap: |

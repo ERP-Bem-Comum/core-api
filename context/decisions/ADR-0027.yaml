@@ -36,7 +36,7 @@ extraction:
     Zod × smart constructor está extraída na terceira.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: GERA REGRA + RULE NOVA — originou a .claude/rules/http-edge.md
     applied_to: ['.claude/rules/http-edge.md']
     gap: |

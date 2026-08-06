@@ -36,7 +36,7 @@ extraction:
     está avaliada.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: GERA REGRA
     applied_to: ['.claude/rules/adapters.md', '.claude/rules/application.md']
     gap: |

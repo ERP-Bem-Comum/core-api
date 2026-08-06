@@ -35,7 +35,7 @@ extraction:
     regra de edição, e o AuditLog segue diferido.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: GERA REGRA
     applied_to: ['.claude/rules/auth-module.md']
     gap: |

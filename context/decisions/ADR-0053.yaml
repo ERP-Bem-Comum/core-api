@@ -43,7 +43,7 @@ extraction:
     gatilhos de reavaliação). As alternativas descartadas são fundamentação; uma delas é o estado atual.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: INELEGÍVEL (status Rejected)
     applied_to: []
     gap: |

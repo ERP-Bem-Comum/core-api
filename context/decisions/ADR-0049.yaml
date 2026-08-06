@@ -56,7 +56,7 @@ extraction:
     rollout. O Apêndice A é fundamentação medida; os exemplos de view-model são ilustração.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: INELEGÍVEL (status Proposed)
     applied_to: []
     gap: |

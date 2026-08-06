@@ -35,7 +35,7 @@ extraction:
     do contrato de contagem. O fatiamento em US6a/US6b é organização de trabalho, não norma.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: GERA REGRA (agrupado com o ADR-0043)
     applied_to: ['.claude/rules/adapters.md']
     gap: |

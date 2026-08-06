@@ -33,7 +33,7 @@ extraction:
     que a `ADR-0027-C1` já carrega, e é referenciada em vez de duplicada).
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: GERA REGRA
     applied_to: ['.claude/rules/http-edge.md']
     gap: |

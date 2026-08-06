@@ -42,7 +42,7 @@ extraction:
     de negócio da P.O. e o grounding em Evans/Vernon são fundamentação.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: JÁ COBERTO (isolamento de módulo)
     applied_to: []
     gap: |

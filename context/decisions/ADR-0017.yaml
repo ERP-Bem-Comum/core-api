@@ -34,7 +34,7 @@ extraction:
     O Componente 2 (gatilhos de adiamento) está extraído junto com a terceira.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: Inelegível na triagem por status (Proposed) — não gera ainda, reavaliar se aceito
     applied_to: []
     gap: |

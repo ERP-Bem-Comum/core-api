@@ -34,7 +34,7 @@ extraction:
     contexto, não regra de edição.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: NÃO GERA — estratégia macro de migração, não é acionável ao editar arquivo algum
     applied_to: []
     gap: |

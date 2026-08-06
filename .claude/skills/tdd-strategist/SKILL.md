@@ -84,8 +84,6 @@ Ver [`modules/anti-padroes-locais.md`](modules/anti-padroes-locais.md).
 | Estrutura mirror: `tests/` espelha `src/`. Sufixo `.test.ts` é descoberto. `.contract.ts` e `.suite.ts` são suites parametrizadas reutilizáveis (function factory que recebe `makeImpl`) | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Convenções de testes" |
 | Subpath imports em testes: `import { Money } from '#src/modules/contracts/domain/shared/money.ts'` | [`../../../package.json`](../../../package.json) `imports` field |
 | Fakes do projeto (NÃO mocks) | `src/shared/adapters/clock-fixed.ts`, `src/modules/contracts/adapters/*.in-memory.ts` |
-| Exemplos de tickets com W0 RED-first auditável | `.claude/.pipeline/CTR-VO-MONEY/`, `CTR-VO-PERIOD/`, `CTR-AGG-CONTRACT/`, `CTR-AGG-AMENDMENT/`, `CTR-USECASE-*/`, `CTR-STORAGE-PORT/` |
 | Exemplos de E2E rodando a CLI real (sem mock) | `tests/cli/contracts.cli.test.ts` (driver `memory`), `tests/cli/contracts.cli.mysql.test.ts` (driver `mysql` — `pnpm test:integration`) |
 | Exemplos de testes de contrato parametrizados (dois adapters consumindo a mesma suite) | `tests/modules/contracts/adapters/persistence/contract-repository.suite.ts` + `inmemory.test.ts` + `drizzle-mysql.test.ts` |
 | Regressão dirigida por defeito (defect-driven test) | `tests/regression/reports-2026-05-15.test.ts` (lista REGR #N que cada teste cobre, com vínculo a tickets `CTR-DEFECTS-CRITICAL` e `CTR-DEFECTS-MEDIUM`) |
-| Critérios de aceite testáveis no template do ticket | `.claude/.pipeline/<TICKET>/000-request.md` §"Critérios de aceite" — lista `- [ ]` que vira `it()` no W0 |

@@ -42,7 +42,7 @@ extraction:
     Conformist que fundamenta D1. As tabelas de mapeamento são detalhamento das alegações.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: INELEGÍVEL (status Proposed)
     applied_to: []
     gap: |

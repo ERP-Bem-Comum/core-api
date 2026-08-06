@@ -32,7 +32,7 @@ extraction:
     As alternativas rejeitadas (front escolhe URL, BFF inteligente, service mesh) são fundamentação.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: COBERTO — "BFF é burro, zero regra de negócio" já entrou na http-edge.md via ADR-0025
     applied_to: ['.claude/rules/http-edge.md']
     gap: |

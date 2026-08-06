@@ -40,7 +40,7 @@ extraction:
     proibição de SaaS/Python que fundamenta a D1. Os contratos de dados são delegados ao doc 07.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: NÃO GERA REGRA (infraestrutura, fora de src/)
     applied_to: []
     gap: |

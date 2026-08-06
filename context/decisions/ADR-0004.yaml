@@ -30,7 +30,7 @@ extraction:
     `findings`.
 
 prior_art:
-  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+  - source: handbook/specs/039-claude-native-harness/adr-rules-distillation.md
     verdict: Inelegível na triagem por status — não gera regra
     applied_to: []
     gap: |
