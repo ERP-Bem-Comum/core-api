@@ -164,7 +164,7 @@ ADRs do handbook são **imutáveis**. Nunca contradizer um ADR aceito — abrir 
 - "`ERR_PNPM_FROZEN_LOCKFILE_*` / peer issues" → [`pnpm-workspace-expert`](./pnpm-workspace-expert.md)
 - "alguém escreveu `npm install` num doc/PR" → [`pnpm-workspace-expert`](./pnpm-workspace-expert.md)
 
-> **NUNCA `npm`. SEMPRE `pnpm`.** (CLAUDE.md raiz + ADR-0012.)
+> **NUNCA `npm`. SEMPRE `pnpm`.** (CLAUDE.md raiz + ADR-0029.)
 
 ### 🌐 Fastify (HTTP server — **reservado, Fase 2+**)
 

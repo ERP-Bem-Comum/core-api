@@ -65,7 +65,7 @@ Varre o escopo e escreve **`security_backend_report.md`** (ou onde o usuário pe
 - **IDs opacos (UUID v4):** nunca auto-incremento exposto (IDOR/enumeração).
 - **Zod só na borda, regra nos smart constructors (ADR-0006/0027).**
 - **MySQL parametrizado, sem UPSERT nativo (ADR-0020).**
-- **`pnpm` sempre, `npm` nunca (ADR-0012); `approve-builds` + lockfile congelado (ADR-0011).**
+- **`pnpm` sempre, `npm` nunca (ADR-0029); `approve-builds` + lockfile congelado (ADR-0011).**
 
 ---
 

@@ -382,7 +382,7 @@ export const readJson = async <T>(path: string): Promise<Result<T, ReadJsonError
 | `process.exit(0)` dentro de função utilitária | Só `main()` decide exit; utilitários devolvem `Result` ou número |
 | `console.log` para resultado consumível | `process.stdout.write` — `console.log` adiciona newline e formatação não previsível |
 | Escrever direto sobre `arquivo.json` | `writeAtomic(path, data)` (tmp + rename) |
-| `npm exec node …` em qualquer doc/script do repo | `pnpm exec node …` — [ADR-0012, reiterado no CLAUDE.md](../../../CLAUDE.md) |
+| `npm exec node …` em qualquer doc/script do repo | `pnpm exec node …` — [ADR-0029, reiterado no CLAUDE.md](../../../CLAUDE.md) |
 | `any` no `catch` | `catch (e: unknown)` + narrowing `instanceof Error && 'code' in e` |
 | `import { Stats } from 'node:fs'` (valor) | `import { type Stats } from 'node:fs'` (`verbatimModuleSyntax`) |
 

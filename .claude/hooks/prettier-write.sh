@@ -47,7 +47,7 @@ case "$FILE" in
 esac
 
 # Roda Prettier via pnpm (NUNCA npx: npm aborta com EBADDEVENGINES quando a versão
-# de Node diverge de package.json#devEngines.runtime — ADR-0012, pnpm é canônico).
+# de Node diverge de package.json#devEngines.runtime — ADR-0029, pnpm é canônico).
 # Ignora código de saída pra não bloquear o turno (apenas log).
 if ! pnpm exec prettier --write --ignore-unknown --log-level warn "$FILE" 2>&1 | grep -v '^$' >&2; then
   # Prettier não instalado ou erro real — silencioso (não atrapalha o Claude).

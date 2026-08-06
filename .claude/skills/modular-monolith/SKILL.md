@@ -38,7 +38,7 @@ Reference local: [`./references/module-isolation-rules.md`](./references/module-
 | Tópico | Onde olhar |
 | :--- | :--- |
 | Regras transversais (boundary rules, isolamento por pasta) | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"Regras invariantes" |
-| Persistência dual-dialect + lista normativa de features SQL | [`ADR-0018`](../../../handbook/architecture/adr/0018-persistence-dual-dialect-drizzle.md) |
+| Persistência dual-dialect + lista normativa de features SQL | [`ADR-0020`](../../../handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) |
 | Storage como serviço externo (S3/MinIO) — extensibilidade futura para outros módulos | [`ADR-0019`](../../../handbook/architecture/adr/0019-document-storage-s3-with-minio-dev.md) |
 | Email como port/adapter (mesmo padrão aplicado a outro recurso externo) | [`ADR-0010`](../../../handbook/architecture/adr/0010-email-port-adapter-pattern.md) |
 | Drizzle ORM (organização de schemas por módulo no futuro) | [`handbook/reference/drizzle/`](../../../handbook/reference/drizzle/) |

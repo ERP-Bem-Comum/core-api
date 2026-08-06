@@ -102,7 +102,7 @@ Re-leia [ADR-0020](../../handbook/architecture/adr/0020-mysql-only-supersedes-du
 - **Money:** `bigint('..._cents', { mode: 'number' })`. **Nunca** `decimal`, **nunca** JSON. Currency separada em `char(3)` quando aplicável.
 - **Period:** colunas escalares (`*_start`, `*_end`, `*_kind`). Sem JSON.
 - **Timestamps:** `datetime('...', { mode: 'date', fsp: 3 })`. **Não usar** `timestamp` do MySQL (timezone implícito).
-- **Status / enums de domínio:** `varchar(16)` + `check('..._chk', sql\`... IN ('A','B','C')\`)`. **Sem `mysqlEnum`** ([ADR-0018](../../handbook/architecture/adr/0018-persistence-dual-dialect-drizzle.md) §"Features proibidas" + [ADR-0020](../../handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) §"Lista normativa").
+- **Status / enums de domínio:** `varchar(16)` + `check('..._chk', sql\`... IN ('A','B','C')\`)`. **Sem `mysqlEnum`** ([ADR-0020](../../handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) §"Lista normativa atualizada", que substitui a lista do ADR-0018).
 - **Upsert:** `SELECT-then-UPDATE-or-INSERT` dentro de `db.transaction`. **Não** usar `.onDuplicateKeyUpdate()` sem ADR.
 - **Mappers retornam `Result<T, MapperError>`.** Row corrompida = erro tipado, não exception.
 - **Adapter converte `try/catch` em `Result`** antes de cruzar a borda para application.

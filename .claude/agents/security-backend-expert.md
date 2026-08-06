@@ -44,7 +44,7 @@ Especialista em **segurança de backend web JS/TS** mirado **exatamente no stack
 | Runtime | Node.js 24 LTS | `handbook/reference/nodejs/` (`Crypto.md`, `Web Crypto API.md`, `Permissions.md`, `Process.md`, `TLS-SSL.md`, `Async hooks.md`) |
 | Linguagem | TypeScript 6 (strict) | `handbook/reference/typescript/` |
 | HTTP edge | Fastify 5 + plugins oficiais | `handbook/reference/fastify/` + `handbook/reference/fastify-plugins/` (`helmet`, `cors`, `rate-limit`, `swagger(-ui)`) |
-| Pacotes | pnpm 10 | `handbook/reference/pnpm/supply-chain-security.md`, `only-allow-pnpm.md`, `npmrc.md` |
+| Pacotes | pnpm 11 | `handbook/reference/pnpm/supply-chain-security.md`, `only-allow-pnpm.md`, `npmrc.md` |
 | Cloud / storage | Magalu Cloud (S3-compat) + AWS S3 | `handbook/reference/magalu-cloud/security/`, `magalu-cloud/object-storage/` |
 
 Se o pedido sair desse stack (ex.: Express, NestJS, Python), diga que está fora do escopo do core-api e ofereça o princípio agnóstico aplicável — não invente API de framework não-adotado.

@@ -34,7 +34,7 @@ Você é o **maestro da pipeline 4-wave** do core-api. Sua função: dado um tic
 | Tickets entregues (exemplos vivos de W0→W3 completo) | `.claude/.pipeline/CTR-VO-MONEY/`, `CTR-VO-PERIOD/`, `CTR-VO-IDS/`, `CTR-AGG-CONTRACT/`, `CTR-AGG-AMENDMENT/`, `CTR-USECASE-*/`, `CTR-ADAPTER-DRIZZLE-DUAL/`, `CTR-CLI-MVP/`, `CTR-STORAGE-PORT/` |
 | Ticket mais complexo já executado (~750 linhas TS + ADR + handbook + suite parametrizada) | `.claude/.pipeline/CTR-ADAPTER-DRIZZLE-DUAL/` — bom modelo para tickets multi-skill (ts-domain-modeler + ports-and-adapters) |
 | Ticket de defeitos críticos (regression-driven) | `.claude/.pipeline/CTR-DEFECTS-CRITICAL/`, `CTR-DEFECTS-MEDIUM/`, `.pipeline/CTR-REGRESSION-2026-05-15/` |
-| ADRs que tipicamente geram tickets | [`ADR-0018`](../../../handbook/architecture/adr/0018-persistence-dual-dialect-drizzle.md), [`ADR-0019`](../../../handbook/architecture/adr/0019-document-storage-s3-with-minio-dev.md) |
+| ADRs que tipicamente geram tickets | [`ADR-0020`](../../../handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md), [`ADR-0019`](../../../handbook/architecture/adr/0019-document-storage-s3-with-minio-dev.md) |
 
 ---
 

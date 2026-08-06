@@ -140,7 +140,7 @@ Entrada e sumário completo: [`index.md`](../../handbook/reference/bruno/index.m
 - **Environments por ambiente.** `local` (`http://127.0.0.1:PORT`), `qa` (Magalu mirror) — `baseUrl` como variável, nunca host hardcoded no request.
 - **Request chaining explícito.** Login captura o JWT em `vars` pós-resposta; requests seguintes usam `Authorization: Bearer {{accessToken}}`. Sem estado oculto.
 - **`bru run` em CI é opt-in e gateado** — como todo gate de integração do repo (ex.: `*_INTEGRATION=1`). Não roda em `pnpm test` puro. Reporter JUnit para o CI consumir.
-- **Sem `npm`.** Se instruir instalação do `bru` CLI, é **`pnpm add -g @usebruno/cli`** ou `pnpm dlx @usebruno/cli` (ADR-0012; hook bloqueia `npm`).
+- **Sem `npm`.** Se instruir instalação do `bru` CLI, é **`pnpm add -g @usebruno/cli`** ou `pnpm dlx @usebruno/cli` (ADR-0029; hook bloqueia `npm`).
 - **A borda é a fonte de verdade do contrato.** As coleções refletem os schemas Zod da borda (ADR-0027), não inventam shape. Se a borda expuser OpenAPI, preferir `openapi-to-bruno`/sync a escrever `.bru` à mão.
 
 ---
@@ -220,7 +220,7 @@ tests {
 ## `bru` CLI — invocação típica em CI
 
 ```bash
-# instalação (NUNCA npm — ADR-0012)
+# instalação (NUNCA npm — ADR-0029)
 pnpm add -g @usebruno/cli        # ou: pnpm dlx @usebruno/cli ...
 
 # rodar coleção contra o env local, com reporter JUnit p/ o CI
@@ -248,7 +248,7 @@ Detalhes de flags em [`bru-cli/commandOptions.mdx`](../../handbook/reference/bru
 2. **`baseUrl` hardcoded** no request em vez de variável de environment.
 3. **Tratar a coleção como dependência de `src/`** — Bruno é teste/doc, não produção.
 4. **Oficializar `bru run` no CI sem ADR** de adoção.
-5. **`npm install -g bruno`** em qualquer doc/script — sempre `pnpm` (ADR-0012).
+5. **`npm install -g bruno`** em qualquer doc/script — sempre `pnpm` (ADR-0029).
 6. **Citar a doc do Bruno de memória** — abrir `handbook/reference/bruno/<arquivo>.mdx` (anti-padrão #12).
 7. **`.bru` inventando shape** divergente dos schemas Zod da borda (ADR-0027).
 8. **Workspace de nuvem** como source of truth em vez do `.bru` versionado.

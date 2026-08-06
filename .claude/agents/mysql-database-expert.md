@@ -82,7 +82,7 @@ Resumo das amarras do `core-api` (re-leia [ADR-0020](../../handbook/architecture
 - **Isolamento por database:** prefixos `ctr_*`, `fin_*`, `outbox` (ADR-0014). Tabelas de um módulo NUNCA são lidas/escritas por outro. Cross-módulo só por evento via outbox (ADR-0015).
 - **Lista normativa ADR-0020** — features permitidas: `SELECT/INSERT/UPDATE/DELETE`, JOIN, FK, transações, índices, `CHECK`, agregações simples, `ON DUPLICATE KEY UPDATE`, **window functions**, **CTEs recursivas**, **FULLTEXT**.
 - **Proibidas por razão própria:** colunas JSON nativas, `JSON_EXTRACT`, JSON arrays, stored procedures, triggers, `ENUM` nativo, tipos espaciais, `AUTO_INCREMENT` em PK de domínio, isolation level explícito. Toda PR que adicionar qualquer item proibido **exige novo ADR**.
-- **IDs:** UUID v4 em `VARCHAR(36)` (legibilidade > 16 bytes — ADR-0018 §"Mapeamentos canônicos").
+- **IDs:** UUID v4 em `VARCHAR(36)` (legibilidade > 16 bytes — ADR-0020 §"Mapeamentos canônicos").
 - **Money:** `BIGINT` de cents + `CHAR(3)` de currency (nunca `DECIMAL`, nunca `JSON`).
 - **Period:** decomposto em colunas escalares (`start_date`, `end_date`); inclusividade em colunas booleanas se necessário.
 - **Domain validation acontece em TS** — sem `CHECK` substituindo regra de negócio; sem stored procedures.
@@ -216,7 +216,7 @@ Plano de migration: forward + rollback.
 - [ADR-0013](../../handbook/architecture/adr/0013-mysql-database-engine.md) — MySQL + InnoDB.
 - [ADR-0014](../../handbook/architecture/adr/0014-mysql-database-isolation.md) — isolamento por database.
 - [ADR-0015](../../handbook/architecture/adr/0015-mysql-outbox-pattern.md) — outbox.
-- [ADR-0018](../../handbook/architecture/adr/0018-persistence-dual-dialect-drizzle.md) — mapeamentos canônicos (superseded em parte).
+- [ADR-0020](../../handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) — mapeamentos canônicos (superseded em parte).
 - [ADR-0019](../../handbook/architecture/adr/0019-document-storage-s3-with-minio-dev.md) — storage de documento.
 - [ADR-0020](../../handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) — MySQL como dialeto único + lista normativa.
 

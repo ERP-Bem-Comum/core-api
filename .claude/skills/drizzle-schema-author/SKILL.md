@@ -4,10 +4,11 @@ description: >
   Modelagem aplicada de schemas Drizzle 0.45.x em `mysql-core` para o core-api.
   Define `mysqlTable`, colunas, índices (`index`, `uniqueIndex`), `primaryKey`,
   `foreignKey`, `check`, generated columns e exporta `$inferSelect`/`$inferInsert`
-  respeitando integralmente ADR-0020 (MySQL como dialeto único, lista normativa de
-  features permitidas/proibidas), ADR-0014 (isolamento por prefixo `ctr_*`/`fin_*`)
-  e ADR-0018 (mapeamentos canônicos: UUID em varchar(36), Money em bigint cents,
-  Period decomposto, sem JSON, sem ENUM, sem AUTO_INCREMENT em PK de domínio).
+  respeitando integralmente ADR-0020 (MySQL como dialeto único; lista normativa de
+  features permitidas/proibidas; e os mapeamentos canônicos preservados do ADR-0018
+  que ele supersedes: UUID em varchar(36), Money em bigint cents, Period decomposto,
+  sem JSON, sem ENUM, sem AUTO_INCREMENT em PK de domínio) e ADR-0014 (isolamento
+  por prefixo `ctr_*`/`fin_*`).
   SKILL CANÔNICA para `src/modules/*/adapters/persistence/schemas/*.ts`.
 ---
 
@@ -40,8 +41,7 @@ Você é **modelador(a) de schema Drizzle/MySQL** focado em **uma tarefa** — p
 - [ADR-0013](../../../handbook/architecture/adr/0013-mysql-database-engine.md) — MySQL 8.4 + InnoDB.
 - [ADR-0014](../../../handbook/architecture/adr/0014-mysql-database-isolation.md) — Isolamento por prefixo (`ctr_*`, `fin_*`, `outbox`).
 - [ADR-0015](../../../handbook/architecture/adr/0015-mysql-outbox-pattern.md) — Outbox no mesmo schema do módulo.
-- [ADR-0018](../../../handbook/architecture/adr/0018-persistence-dual-dialect-drizzle.md) — Mapeamentos canônicos (UUID/Money/Period).
-- [ADR-0020](../../../handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) — Lista normativa de features SQL permitidas/proibidas.
+- [ADR-0020](../../../handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) — Mapeamentos canônicos (UUID/Money/Period) **e** lista normativa de features SQL permitidas/proibidas. Ambos vieram do ADR-0018, que ele supersedes.
 
 Quando handbook e código divergem, **handbook vence**. Quando ADR e handbook divergem, **ADR vence**.
 
@@ -59,7 +59,7 @@ Quando handbook e código divergem, **handbook vence**. Quando ADR e handbook di
 
 ---
 
-## Mapeamentos canônicos (ADR-0018 + ADR-0020)
+## Mapeamentos canônicos (ADR-0020)
 
 | Conceito de domínio       | Coluna Drizzle                                                       | Por quê                              |
 | :------------------------ | :------------------------------------------------------------------- | :----------------------------------- |
@@ -69,7 +69,7 @@ Quando handbook e código divergem, **handbook vence**. Quando ADR e handbook di
 | **Period (Fixed)**        | `*_start datetime(fsp:3)`, `*_end datetime(fsp:3)`, `*_kind varchar(16)` | Decomposto; sem JSON                 |
 | **Period (Indefinite)**   | `*_end = NULL` + `*_kind = 'Indefinite'`                             | Sem flag boolean redundante          |
 | **Timestamp UTC**         | `datetime('created_at', { mode: 'date', fsp: 3 }).notNull()`         | `timestamp` MySQL tem tz implícito   |
-| **Enum de domínio**       | `varchar('status', { length: 16 }).notNull()` + `check(..., sql\`status IN (...)\`)` | `mysqlEnum` proibido (ADR-0018/0020) |
+| **Enum de domínio**       | `varchar('status', { length: 16 }).notNull()` + `check(..., sql\`status IN (...)\`)` | `mysqlEnum` proibido (ADR-0020) |
 | **Soft FK (cross-modulo)**| `varchar(36)` **sem `references()`**; valida no outbox               | Cross-módulo via evento, não FK física (ADR-0014) |
 | **FK intra-módulo**       | `foreignKey({...}).onDelete('restrict').onUpdate('restrict')`        | Padrão; `cascade` somente com justificativa documentada |
 | **Texto livre curto**     | `varchar(255)`                                                       | Limite explícito                     |
@@ -164,7 +164,7 @@ export const contracts = mysqlTable(
     sequentialNumber: varchar('sequential_number', { length: 16 }).notNull().unique(),
     title: varchar('title', { length: 255 }).notNull(),
     status: varchar('status', { length: 16 }).notNull(),
-    // Money cents: ADR-0018 §"Mapeamentos canônicos" — bigint cents, nunca decimal/JSON
+    // Money cents: ADR-0020 §"Mapeamentos canônicos" — bigint cents, nunca decimal/JSON
     originalValueCents: bigint('original_value_cents', { mode: 'number' }).notNull(),
     signedAt: datetime('signed_at', { mode: 'date', fsp: 3 }).notNull(),
     endedAt: datetime('ended_at', { mode: 'date', fsp: 3 }), // nullable: status terminal

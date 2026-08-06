@@ -50,7 +50,7 @@ Sempre a documentação oficial do Node 24 espelhada no handbook:
 | Exit codes sysexits.h vigentes | [`../application-cli-builder/SKILL.md`](../application-cli-builder/SKILL.md) §"Exit codes" |
 | Skill irmã para tudo que é só filesystem (sem disparar binário) | [`../nodejs-fs-scripter/SKILL.md`](../nodejs-fs-scripter/SKILL.md) |
 | Quando isso vira **port** (ex.: `GitVcsPort`, `ContainerRuntimePort`) | [`../ports-and-adapters/SKILL.md`](../ports-and-adapters/SKILL.md) |
-| Comandos do projeto (`pnpm`, nunca `npm`) — ADR-0012 reiterado no CLAUDE.md | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"IMPORTANTE" |
+| Comandos do projeto (`pnpm`, nunca `npm`) — ADR-0029 reiterado no CLAUDE.md | [`../../../CLAUDE.md`](../../../CLAUDE.md) §"IMPORTANTE" |
 
 ---
 
@@ -479,7 +479,7 @@ const esperarSaudavel = async (url: string, totalMs: number): Promise<boolean> =
 | `child.kill()` sem timeout para `SIGKILL` | `child.kill('SIGTERM')`, espera 5s, `child.kill('SIGKILL')` se ainda vivo |
 | `child.stdout.on('data', ...)` acumulando em string sem limite | Use `for await (const chunk of child.stdout)` + limite explícito, ou `stream/consumers` |
 | Esquecer `windowsHide: true` em CI Windows | Sempre passar — esconde janela do filho |
-| Chamar `npm` em qualquer lugar | `pnpm` — [ADR-0012](../../../CLAUDE.md) |
+| Chamar `npm` em qualquer lugar | `pnpm` — [ADR-0029](../../../CLAUDE.md) |
 | `console.log(child.stderr)` (Buffer) | `process.stderr.write(child.stderr.toString())` |
 | `subprocess.stdout!.pipe(otherStream)` sem `pipeline()` | `await pipeline(subprocess.stdout!, otherStream)` — propaga erro |
 | Re-executar `pnpm install` para forçar exit code 0 | Logar o erro real; falha é informação, não falha do script |

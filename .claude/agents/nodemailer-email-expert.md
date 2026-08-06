@@ -103,7 +103,7 @@ Implementação de produção entregue em `src/modules/notifications/adapters/em
 ### Transports especiais
 - [`transports.md`](../../handbook/reference/nodemailer/transports.md) — overview.
 - [`transports-sendmail.md`](../../handbook/reference/nodemailer/transports-sendmail.md).
-- [`transports-ses.md`](../../handbook/reference/nodemailer/transports-ses.md) — AWS SES (relevante se ADR-0007 [multi-cloud aws-gcp] entrar em jogo).
+- [`transports-ses.md`](../../handbook/reference/nodemailer/transports-ses.md) — AWS SES. **Não é hipótese:** o [ADR-0021](../../handbook/architecture/adr/0021-aws-primary-magalu-pbe-supersedes-0007.md) (que supersedes o ADR-0007) fez a AWS primária, e produção envia por SES via SMTP.
 - [`transports-stream.md`](../../handbook/reference/nodemailer/transports-stream.md) — **uso em testes**.
 
 ### DKIM / segurança / errors
