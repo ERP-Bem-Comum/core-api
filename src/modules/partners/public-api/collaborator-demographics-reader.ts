@@ -18,8 +18,11 @@
  */
 import process from 'node:process';
 
+import { eq } from 'drizzle-orm';
+
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type { Clock } from '#src/shared/ports/clock.ts';
+import type { RegistrationStatus } from '../domain/collaborator/types.ts';
 import { openPartnersMysql } from '../adapters/persistence/drivers/mysql-driver.ts';
 import { parCollaborators } from '../adapters/persistence/schemas/mysql.ts';
 import {
@@ -27,8 +30,18 @@ import {
   type TeamDemographicsSummary,
 } from './collaborator-demographics.ts';
 
+/**
+ * Filtro OPCIONAL da leitura demográfica. `registrationStatus` presente vira `WHERE
+ * registration_status = ?` — recorta a POPULAÇÃO de entrada da agregação; ausente = todos.
+ */
+export type CollaboratorDemographicsFilter = Readonly<{
+  registrationStatus?: RegistrationStatus;
+}>;
+
 export type CollaboratorDemographicsReader = Readonly<{
-  list: () => Promise<Result<TeamDemographicsSummary, string>>;
+  list: (
+    filter?: CollaboratorDemographicsFilter,
+  ) => Promise<Result<TeamDemographicsSummary, string>>;
   close: () => Promise<void>;
 }>;
 
@@ -44,8 +57,11 @@ export const openCollaboratorDemographicsReader = async (
   const { db } = handle;
 
   return ok({
-    list: async () => {
+    list: async (filter) => {
       try {
+        // `.where(undefined)` é no-op no Drizzle: sem `registrationStatus`, lê todos (todos os
+        // colaboradores). Com o filtro, recorta a população — o que cobre as 3 distribuições E o
+        // `totalActive`, porque a agregação vem sempre da mesma população SELECTada.
         const rows = await db
           .select({
             active: parCollaborators.active,
@@ -53,7 +69,12 @@ export const openCollaboratorDemographicsReader = async (
             race: parCollaborators.race,
             dateOfBirth: parCollaborators.dateOfBirth,
           })
-          .from(parCollaborators);
+          .from(parCollaborators)
+          .where(
+            filter?.registrationStatus !== undefined
+              ? eq(parCollaborators.registrationStatus, filter.registrationStatus)
+              : undefined,
+          );
 
         return ok(aggregateTeamDemographics(rows, { referenceDate: opts.clock.now() }));
       } catch (cause) {

@@ -103,6 +103,8 @@ const SUITES: Readonly<Record<string, Suite>> = {
     'tests/modules/partners/public-api/partners-etl-port.integration.test.ts',
     // #238 REP-1: projeção de collaborators p/ o módulo reports (9 colunas LGPD-safe)
     'tests/modules/partners/public-api/collaborator-projection.drizzle-mysql.test.ts',
+    // REP-1: filtro OPCIONAL por status de cadastro no reader demográfico (WHERE registration_status)
+    'tests/modules/partners/public-api/collaborator-demographics-reader.drizzle-mysql.test.ts',
     'tests/modules/partners/public-api/partners-etl-store-integrity.integration.test.ts',
     'tests/modules/partners/public-api/partners-read-port.integration.test.ts',
   ]),

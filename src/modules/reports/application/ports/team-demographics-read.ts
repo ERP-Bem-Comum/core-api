@@ -27,6 +27,20 @@ export type TeamDemographics = Readonly<{
 
 export type TeamDemographicsReadError = 'team-demographics-read-unavailable';
 
+/** Status de cadastro do colaborador (dimensão ORTOGONAL ao soft-delete). Tipo próprio do reports. */
+export type TeamDemographicsRegistrationStatus = 'PreRegistration' | 'Complete';
+
+/**
+ * Filtro OPCIONAL do gráfico demográfico (REP-1). `registrationStatus` recorta a POPULAÇÃO agregada
+ * — logo cobre as 3 distribuições E o `totalActive` de uma vez. Ausente = todos os colaboradores
+ * (comportamento atual preservado; zero regressão nos consumidores que chamam sem filtro).
+ */
+export type TeamDemographicsReadFilter = Readonly<{
+  registrationStatus?: TeamDemographicsRegistrationStatus;
+}>;
+
 export type TeamDemographicsReadPort = Readonly<{
-  list: () => Promise<Result<TeamDemographics, TeamDemographicsReadError>>;
+  list: (
+    filter?: TeamDemographicsReadFilter,
+  ) => Promise<Result<TeamDemographics, TeamDemographicsReadError>>;
 }>;

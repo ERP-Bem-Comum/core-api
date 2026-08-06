@@ -54,6 +54,17 @@ export const teamDemographicsResponseSchema = z
 
 export type TeamDemographicsResponseDto = z.infer<typeof teamDemographicsResponseSchema>;
 
+// REP-1 — filtro OPCIONAL por status de cadastro do gráfico demográfico. Os 2 valores =
+// `RegistrationStatus` do domínio `collaborator`. Objeto simples (SEM `.strict()`, como o REP-4/
+// #588): parâmetro desconhecido é ignorado, não vira 400. Ausente ⇒ todos os colaboradores.
+export const teamDemographicsRegistrationStatusValues = ['PreRegistration', 'Complete'] as const;
+
+export const teamDemographicsQuerySchema = z.object({
+  registrationStatus: z.enum(teamDemographicsRegistrationStatusValues).optional(),
+});
+
+export type TeamDemographicsQueryDto = z.infer<typeof teamDemographicsQuerySchema>;
+
 // REP-2 (#240) — "Fornecedores sem Contrato": agregação por fornecedor.
 // `.strict()` — fail-loud se o mapper de DTO vazar campo extra (alinha ao padrão do `financial`).
 export const supplierWithoutContractSchema = z

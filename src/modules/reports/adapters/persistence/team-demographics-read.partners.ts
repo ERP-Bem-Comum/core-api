@@ -16,8 +16,10 @@ import type {
 export const TeamDemographicsReadFromPartners = (
   listDemographics: CollaboratorDemographicsReader['list'],
 ): TeamDemographicsReadPort => ({
-  list: async () => {
-    const listed = await listDemographics();
+  // Repassa o filtro OPCIONAL ao reader do partners (vira WHERE registration_status). O shape do
+  // filtro do port e o do reader são estruturalmente idênticos (`{ registrationStatus? }`).
+  list: async (filter) => {
+    const listed = await listDemographics(filter);
     if (!listed.ok) return err<TeamDemographicsReadError>('team-demographics-read-unavailable');
     return ok(listed.value);
   },

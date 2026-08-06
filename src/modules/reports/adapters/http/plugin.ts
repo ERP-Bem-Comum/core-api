@@ -31,6 +31,7 @@ import type {
   GeneralReportFilter,
   GeneralReportPagination,
 } from '../../application/ports/general-report-read.ts';
+import type { TeamDemographicsReadFilter } from '../../application/ports/team-demographics-read.ts';
 
 import type { ReportsHttpDeps } from './composition.ts';
 import {
@@ -64,11 +65,13 @@ import {
   dashboardRealizedResponseSchema,
   generalReportQuerySchema,
   generalReportResponseSchema,
+  teamDemographicsQuerySchema,
   type AnalysisQueryDto,
   type PaymentPositionQueryDto,
   type CashflowQueryDto,
   type RealizedQueryDto,
   type GeneralReportQueryDto,
+  type TeamDemographicsQueryDto,
 } from './schemas.ts';
 
 // Defaults de paginação do Relatório Geral (borda). Teto de `limit` (200) fica no Zod.
@@ -95,6 +98,12 @@ const toGeneralReportFilter = (q: GeneralReportQueryDto): GeneralReportFilter =>
 const toGeneralReportPagination = (q: GeneralReportQueryDto): GeneralReportPagination => ({
   page: q.page ?? GENERAL_REPORT_DEFAULT_PAGE,
   limit: q.limit ?? GENERAL_REPORT_DEFAULT_LIMIT,
+});
+
+// REP-1: query (borda, validada) → TeamDemographicsReadFilter. Só inclui a chave quando presente
+// (`exactOptionalPropertyTypes`: nunca gravar `undefined` explícito). Ausente ⇒ filtro vazio ⇒ todos.
+const toTeamDemographicsFilter = (q: TeamDemographicsQueryDto): TeamDemographicsReadFilter => ({
+  ...(q.registrationStatus !== undefined ? { registrationStatus: q.registrationStatus } : {}),
 });
 
 const toAnalysisFilter = (q: AnalysisQueryDto): AnalysisFilter => ({
@@ -202,10 +211,13 @@ const reportsRoutes =
       // aplicada aos DOIS endpoints juntos (issue #497).
       preHandler: [hooks.requireAuth, hooks.authorize(COLLABORATOR_PERMISSION.read)],
       schema: {
+        // Filtro OPCIONAL `registrationStatus` (REP-1): recorta a população agregada — cobre as 3
+        // distribuições E o `totalActive`. Ausente ⇒ todos. A RESPOSTA não muda (agregada-only, LGPD).
+        querystring: teamDemographicsQuerySchema,
         response: { 200: teamDemographicsResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
-      handler: async (_req, reply) => {
-        const result = await deps.listTeamDemographics();
+      handler: async (req, reply) => {
+        const result = await deps.listTeamDemographics(toTeamDemographicsFilter(req.query));
         if (!result.ok) {
           return sendResult(reply, result, {
             errors: { 'team-demographics-read-unavailable': 503 },
