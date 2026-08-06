@@ -1,10 +1,10 @@
 ---
 inquiry: 0029
 title: "Linter type-aware sob TypeScript 7 — oxlint/tsgolint · Biome · ESLint pinado"
-state: open
+state: decided
 opened: 2026-08-06
+decided: 2026-08-06
 last_reviewed: 2026-08-06
-open_outputs: 4  # migrar para issue — ver README §Saídas
 ---
 
 [← Voltar ao Índice de Inquiries](./INDEX.md)
@@ -95,6 +95,11 @@ aplica; o risco real está no outro eixo.
 
 ### 4.1 Por que as 8 regras acopladas a ADR mudam a natureza da decisão
 
+> ⚠️ **Corrigido pela medição de §4.3: não são 8 regras — é UMA.** O parágrafo abaixo permanece como
+> escrito porque foi o raciocínio que motivou o experimento; o que ele afirma sobre a *natureza* do
+> `eslint.config.js` (enforcement, não estilo) segue verdadeiro. O que estava errado era a **contagem**,
+> e ela era o bloqueador declarado da decisão.
+
 O `eslint.config.js` não é só estilo — é **enforcement mecânico de decisão arquitetural**. Ele cita ADR em
 8 pontos e usa `no-restricted-syntax` para banir `class` com a mensagem da regra do projeto, e
 `no-restricted-imports` citando ADR-0011 §4.
@@ -120,12 +125,64 @@ exatamente o modo de falha que a T6b identificou.
 
 ---
 
+## 4.3 O experimento que a §6 pedia — executado em 2026-08-06
+
+A decisão estava bloqueada por três medições. Elas foram feitas, e **duas delas inverteram premissas
+deste documento**.
+
+### (a) As "8 regras acopladas a ADR" são **uma** regra
+
+`grep -nE "ADR-[0-9]+" eslint.config.js` devolve 8 linhas. Classificadas uma a uma:
+
+| Linhas | O que é |
+| :--- | :--- |
+| 77, 86, 90, 94, 98, 104 | **Uma única regra** — `@typescript-eslint/no-restricted-imports`: 1 comentário de cabeçalho + 5 mensagens de erro do ADR-0011 §4 |
+| 294, 297 | **Comentários** de um bloco `files:` que apenas **desliga** regras (`prefer-readonly-parameter-types`, `promise-function-async`, `require-await`). São exceções documentadas, não enforcement |
+
+**O enforcement de ADR no linter é `no-restricted-imports` e nada mais** — a regra mais trivialmente
+portável que existe, presente em qualquer linter do mercado. O `no-restricted-syntax` que bane `class`
+é norma do `CLAUDE.md`, não de ADR, e é igualmente portável.
+
+O risco que sustentava o veredito "🔬 candidata a spike" para B **não existe na dimensão descrita**.
+
+### (b) O lint custa 27% do gate — não 1,55s
+
+A §5 deste documento argumentava que migrar era *"pagar risco de enforcement por um ganho que não é o
+gargalo medido"*, apoiada no `eslint src/` = 1,55s da [0023](./0023-typescript-7-native-spike.md) §3.8.
+Mas o gate roda `eslint .` sobre os **1.775 arquivos** do `include`, não só `src/`:
+
+| Etapa do gate | Medido (3 execuções) | Fatia |
+| :--- | ---: | ---: |
+| `test` | 107s | 67% |
+| **`lint`** | **44s** (48,1 · 43,7 · 43,4) | **27%** |
+| `typecheck` | 8,7s | 5% |
+
+O lint é o **segundo maior custo** e **5× o typecheck**. A premissa "o lint não é o gargalo" media outro
+escopo.
+
+### (c) O `--cache` entrega o ganho que a migração prometia
+
+| Cenário | Medido |
+| :--- | ---: |
+| `eslint .` sem cache | ~44-52s |
+| `eslint . --cache` (frio) | 52,0s |
+| **`eslint . --cache` (quente)** | **1,97s · 1,52s** |
+
+**~29×**, com uma flag, sem portar 108 regras, sem perder 2 das 61 type-aware, sem alpha e sem tocar no
+enforcement. Cache de 1,0 MB.
+
+> **A inversão:** (a) e (b) **fortaleciam** o caso de migrar — o risco era menor e o ganho maior do que
+> este documento supunha. Foi (c) que fechou a questão, e não por cobertura de regra: **a razão para
+> migrar era velocidade, e a velocidade estava disponível sem migrar.**
+
+---
+
 ## 5. Alternativas avaliadas
 
 | Alternativa | Prós | Contras | Veredito |
 | :--- | :--- | :--- | :--- |
-| **A — ESLint + `@typescript/typescript6` pinado** | cobertura integral; **zero** risco às 8 regras de ADR; caminho já validado na [0023](./0023-typescript-7-native-spike.md) §3.7; reversível | lint não herda a velocidade do TS 7; carrega dois compiladores até o 7.1 | ⏳ **Provisória recomendada** |
-| **B — oxlint + tsgolint** | único que usa `typescript-go` de fato; 59/61 regras; alinhado ao alvo TS 7 | precisa portar 45 regras e provar as 8 de ADR; alpha em evolução | 🔬 **Candidata a spike** |
+| **A — ESLint + `@typescript/typescript6` pinado** | cobertura integral; **zero** risco ao enforcement; caminho já validado na [0023](./0023-typescript-7-native-spike.md) §3.7; reversível | lint não herda a velocidade do TS 7; carrega dois compiladores até o 7.1 | ✅ **ADOTADA** (§6) — com `--cache`, que resolve o contra |
+| **B — oxlint + tsgolint** | único que usa `typescript-go` de fato; 59/61 regras; alinhado ao alvo TS 7 | ~~precisa provar as 8 de ADR~~ (é 1 regra, §4.3a) — o custo real é portar 108 regras ativas; alpha em evolução | ❌ **Descartada — perdeu o motivo** (§4.3c) |
 | **C — Biome v2** | imune ao ciclo de releases do TS; formatter no mesmo binário (substituiria Prettier) | inferência própria e parcial (~85%); **falso-negativo silencioso**; troca dois componentes de uma vez | ❌ **Não agora** |
 | **D — não fazer nada** | — | o `typescript-eslint` **recusa instalar** com `typescript@7` (ERESOLVE): não é inércia, é impedimento | ❌ **Indisponível** |
 
@@ -138,16 +195,34 @@ typecheck). Migrar o linter agora é pagar risco de enforcement por um ganho que
 
 ## 6. Decisão final
 
-**PENDENTE.** Bloqueador: falta a medição que distingue B de A com fato em vez de preferência.
+**DECIDIDA (2026-08-06) — Alternativa A: ESLint com o compilador pinado, acrescida do `--cache`.**
 
-O experimento que decide, e é barato:
+O experimento de §4.3 foi executado e **inverteu o raciocínio que sustentava a provisória**. As duas
+primeiras medições tornaram a migração *mais* atraente, não menos: o enforcement de ADR era uma regra
+trivialmente portável, e o lint custava 27% do gate em vez de ser irrelevante. Foi a terceira que
+decidiu — **não por cobertura, mas porque o ganho que se buscava na troca estava disponível sem ela**.
 
-1. Levantar **quais** das 61 regras type-aware este repositório efetivamente aciona (via `--report-unused-disable-directives` e inventário do config).
-2. Cruzar com as **59** que o tsgolint cobre → a interseção diz se a perda é nominal ou real.
-3. Verificar se as **8 regras acopladas a ADR** têm equivalente em oxlint.
-4. Só então comparar tempo de lint.
+**O que fica decidido:**
 
-Sem o passo 3, trocar de linter é apostar o enforcement arquitetural numa métrica de velocidade.
+1. **Permanecer no ESLint + `typescript-eslint`**, com o compilador pinado em `@typescript/typescript6`
+   quando o TS 7 entrar (receita medida na [0023](./0023-typescript-7-native-spike.md) §3.7). Cobertura
+   integral das 61 regras type-aware, zero risco ao enforcement.
+2. **`--cache` ligado** em `lint` e `lint:fix`, com `.eslintcache` no `.gitignore` e restauração via
+   `actions/cache` no `ci.yml` — **sem a restauração o ganho no CI é literalmente zero**, porque o
+   runner nasce limpo e o cache é sempre frio.
+3. **B (oxlint/tsgolint) e C (Biome) descartadas por ora** — e é importante registrar **por quê**: não
+   por cobertura insuficiente nem por risco de enforcement, mas porque **perderam o motivo**. Se
+   alguém reabrir a discussão alegando velocidade, a resposta está em §4.3(c).
+
+**Gatilho de reavaliação — reformulado.** Deixa de ser a data do TS 7.1 e passa a ser **o que vier
+primeiro**:
+
+- o lint com cache quente voltar a ser custo relevante no gate (>10s), **ou**
+- o TS 7.1 sair com API programática estável (~out/2026, [#10940](https://github.com/typescript-eslint/typescript-eslint/issues/10940)), **ou**
+- surgir necessidade de lint type-aware que o `typescript-eslint` não cubra.
+
+A mudança de gatilho é a consequência mais importante desta decisão: **velocidade deixou de ser razão
+para migrar de linter.**
 
 ---
 
@@ -155,11 +230,17 @@ Sem o passo 3, trocar de linter é apostar o enforcement arquitetural numa métr
 
 - [x] Verificação das 9 alegações do texto externo — 8 confirmadas, 1 desatualizada (Biome 75%→85%)
 - [x] Agravante localizado: ERESOLVE impede coexistência `typescript-eslint` + `typescript@7`
-- [x] Perfil local medido: 3 plugins · 2 presets completos · 45 regras · 8 acopladas a ADR
-- [ ] Inventário das regras type-aware efetivamente acionadas
-- [ ] Cruzamento com as 59 do tsgolint + checagem das 8 de ADR
-- [ ] Decidir A (provisória) formalmente, com gatilho de reavaliação no **TS 7.1** (~out/2026)
-- [ ] Alimentar o **ADR novo que supersedes o ADR-0009** — cujo gatilho a [0023](./0023-typescript-7-native-spike.md) §4.1 já declarou disparado; esta inquiry acrescenta a dimensão de *tooling*
+- [x] Perfil local medido: 3 plugins · 2 presets completos · 45 regras · 8 citações de ADR
+- [x] **Inventário das regras acionadas** — 158 ativas no config resolvido, 108 do `typescript-eslint`
+- [x] **Checagem das citações de ADR** — são **1 regra** (`no-restricted-imports`) + 2 comentários, não 8 regras (§4.3a)
+- [x] **Custo real do lint medido** — 44s, 27% do gate, 5× o typecheck (§4.3b)
+- [x] **`--cache` medido** — 29× (44s → 1,5-2,0s), o ganho que a migração prometia (§4.3c)
+- [x] Decidir A formalmente, com gatilho **reformulado** (não mais a data do 7.1)
+- [ ] Alimentar o **ADR novo que supersedes o ADR-0009** — cujo gatilho a [0023](./0023-typescript-7-native-spike.md) §4.1 já declarou disparado; esta inquiry acrescenta a dimensão de *tooling* **e o registro de que a decisão de linter está fechada**
+
+> O cruzamento com as **59 regras do tsgolint** ficou **deliberadamente não feito**. Ele só importaria
+> para decidir *migrar*, e §4.3(c) removeu a razão de migrar. Fazê-lo agora seria trabalho para
+> responder uma pergunta que deixou de existir — quando o gatilho reabrir, é o primeiro passo.
 
 ---
 

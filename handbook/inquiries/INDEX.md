@@ -9,9 +9,9 @@
 
 | Estado | Quantas | Quem destrava |
 | :--- | ---: | :--- |
-| `open` | 4 | quem trabalha nela |
+| `open` | 3 | quem trabalha nela |
 | `blocked` | 5 | terceiro (banca, upstream, P.O.) |
-| `decided` | 16 | ninguém — fechada |
+| `decided` | 17 | ninguém — fechada |
 | `deferred` | 3 | o gatilho declarado |
 | `superseded` | 1 | — |
 
@@ -26,7 +26,6 @@ Total: **29**. Última geração: 2026-08-06.
 | [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) | Três trocas estruturais em aberto — assíncrono human-in-the-loop, Drizzle 1.0 e Bruno × TS | 2026-08-05 |  |
 | [0027](./0027-teses-orfas-de-branches-contaminadas.md) | Teses órfãs — o que 7 branches contaminadas tentavam provar | 2026-08-06 |  |
 | [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) | O EDD da P.O. (M1–M4 + relatórios Nibo) — o que sobrevive à verificação | 2026-08-06 |  |
-| [0029](./0029-linter-type-aware-sob-typescript-7.md) | Linter type-aware sob TypeScript 7 — oxlint/tsgolint · Biome · ESLint pinado | 2026-08-06 |  |
 
 ---
 
@@ -62,6 +61,7 @@ Total: **29**. Última geração: 2026-08-06.
 | [0022](./0022-jobs-anti-pattern-essential-vs-accidental.md) | Inquiry 0022 — `src/jobs/`/auto-expire: anti-pattern ou complexidade essencial? |  |  |
 | [0023](./0023-typescript-7-native-spike.md) | TypeScript 7 nativo — spike medido e diagnóstico de lentidão do `core-api` | 2026-07-31 | 2026-07-31 |
 | [0024](./0024-adr-format-for-llm-agents.md) | Inquiry 0024 — ADR como contexto de agente: o que o campo convergiu, e onde estamos fora |  |  |
+| [0029](./0029-linter-type-aware-sob-typescript-7.md) | Linter type-aware sob TypeScript 7 — oxlint/tsgolint · Biome · ESLint pinado | 2026-08-06 | 2026-08-06 |
 
 ---
 
