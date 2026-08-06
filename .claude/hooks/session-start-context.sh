@@ -12,7 +12,7 @@ set -uo pipefail
 
 PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(pwd)}"
 PIPELINE_DIR="${PROJECT_DIR}/.claude/.pipeline"
-PLANNING_DIR="${PROJECT_DIR}/.claude/.planning"
+PLANNING_DIR="${PROJECT_DIR}/context/planning"
 
 # 1. Contar tickets fechados vs abertos
 closed_count=0
@@ -72,7 +72,7 @@ cat <<EOF
 Padrões ativos:
 - Pipeline W0→W3 fail-first em \`.claude/.pipeline/<ticket>/\`
 - Sub-agent \`contratos-orchestrator\` (Opus + checklist + Bug #47936 mitigado via maxTurns + SubagentStop hook)
-- Série Outbox MySQL (ADR-0015) entregue — ver \`.claude/.planning/OUTBOX-MYSQL.md\` para histórico
+- Série Outbox MySQL (ADR-0015) entregue — ver \`context/planning/OUTBOX-MYSQL.md\` para histórico
 
 EOF
 

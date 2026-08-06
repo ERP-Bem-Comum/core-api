@@ -1,0 +1,74 @@
+id: ADR-0007
+title: Topologia Multi-Cloud (AWS legado + GCP novo)
+source: handbook/architecture/adr/0007-multi-cloud-aws-gcp.md
+decided_on: 2026-04-28
+
+declared:
+  status: Superseded by ADR-0021 (2026-05-22)
+  status_normalized: superseded
+  supersedes: []
+  superseded_by: [ADR-0021]
+  related: [ADR-0001, ADR-0008]
+
+assessment:
+  verdict: obsolete
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Morto, e de um jeito diferente dos outros superseded do inventário: este ADR nunca foi `Accepted`.
+    Ficou `Proposed` com uma checklist de seis confirmações pendentes, e a inferência central —
+    "legado em AWS, novo em GCP" — foi FALSIFICADA pelos fatos, não substituída por decisão melhor.
+    O ADR-0021 preservou o raciocínio: tem consequências, alternativas e gatilhos próprios, e cita
+    nominalmente as alternativas deste. A supersessão aqui foi feita com cuidado.
+    Valor residual: é o registro de uma inferência bem-construída que deu errado. Duas fontes
+    independentes (e-mail de fornecedor e ticket de operação) apontavam na mesma direção, e a
+    conclusão ainda assim estava errada — porque nenhuma das duas respondia a pergunta que decidia
+    (quem paga a infra).
+
+extraction:
+  state: complete
+  covers: |
+    Zero alegações. A norma vigente está integralmente no ADR-0021, extraída lá em 6 alegações.
+    O valor deste registro são os `findings`.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: Inelegível na triagem por status — não gera regra
+    applied_to: []
+    gap: |
+      Correto para o propósito da 039. Não captura o valor epistêmico: este é o único ADR do acervo
+      que documenta uma inferência refutada, com as fontes que a sustentavam nomeadas.
+
+claims: []
+
+findings:
+  - |
+    Único ADR do inventário que morreu por FALSIFICAÇÃO, não por evolução. A inferência "legado em
+    AWS, novo em GCP" vinha de duas fontes independentes — e-mail de fornecedor mencionando "novo
+    ambiente (GCP)" e ticket de operação tratando de serviços AWS. Ambas verdadeiras; a conclusão,
+    falsa. O que decidiu foi um fato que nenhuma das duas cobria: a Bem Comum queria fornecedor único
+    por razão financeira. Lição transferível: convergência de fontes não substitui a pergunta
+    decisiva.
+  - |
+    Ficou `Proposed` com checklist explícita de seis confirmações necessárias para promover a
+    `Accepted` — e o ADR-0021 resolveu todas, incluindo a localização da VM Windows do Bradesco, que
+    era pendência do ADR-0008. O padrão "Proposed com checklist de bloqueio" funcionou: impediu que
+    uma inferência virasse norma. Vale como contraexemplo dos ADRs que ficaram `Accepted` sem
+    verificação — o `ADR-0056` passou dois meses assim.
+  - |
+    As consequências negativas que este ADR levantou (latência cross-cloud, custo de egress AWS↔GCP,
+    necessidade de VPN e TLS no legado, gap de segurança da Inquiry-0012 §4.2) são justamente o que o
+    ADR-0021 diz que "evapora". Elas só existem aqui — quem quiser reabrir multi-cloud de produção
+    não encontra no ADR vigente o inventário do que custava.
+  - |
+    Quatro ADRs do acervo têm `Proposed` até hoje (`0017`, `0030`, `0048`, `0049`) e foram
+    classificados pela 039 como "não gera ainda — reavaliar se aceito". Nenhum tem checklist de
+    bloqueio como este tinha. Sem o critério explícito de promoção, `Proposed` vira limbo em vez de
+    etapa.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    Inquiry-0003 (estratégia multi-cloud) foi fechada como `Decided` em 2026-05-22 apontando para o
+    ADR-0021; Inquiry-0002 e Inquiry-0012 são citadas. Nenhuma lida nesta fase.

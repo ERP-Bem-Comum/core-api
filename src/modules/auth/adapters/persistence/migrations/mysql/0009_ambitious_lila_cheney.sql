@@ -1,0 +1,1 @@
+ALTER TABLE `auth_user` MODIFY COLUMN `collaborator_id` varchar(64) COLLATE utf8mb4_bin;

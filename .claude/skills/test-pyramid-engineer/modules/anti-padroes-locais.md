@@ -10,6 +10,6 @@
 - ❌ Testar método privado / estrutura interna em vez de comportamento observável.
 - ❌ Confundir "contract test" local (port↔adapter, via `.suite.ts`) com CDC de microserviço.
 - ❌ Esconder vermelho de integração com `skip` sem provar verde no home `test:integration`
-  (ofende a política de regressão zero do AGENTS.md).
+  (ofende a política de regressão zero do CLAUDE.md).
 - ❌ Invadir o terreno do `tdd-strategist` (qual o próximo teste / red-green-refactor) — aqui
   decidimos **arquitetura** da suíte; handoff para a skill irmã quando o foco mudar.

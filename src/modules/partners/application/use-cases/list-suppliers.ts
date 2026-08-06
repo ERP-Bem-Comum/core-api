@@ -21,8 +21,8 @@ export type SupplierListFilter = Readonly<{
   categories?: readonly string[];
 }>;
 
-// `search` casa name / fantasyName / corporateName (substring case-insensitive) OU cnpj (só
-// dígitos do termo). #288: apelido = fantasyName; razão social = corporateName.
+// `search` casa name / fantasyName / corporateName (substring case-insensitive) OU cnpj.
+// #288: apelido = fantasyName; razão social = corporateName.
 const matchesSearch = (s: Supplier, search: string | undefined): boolean => {
   const q = search?.trim() ?? '';
   if (q === '') return true;
@@ -34,8 +34,10 @@ const matchesSearch = (s: Supplier, search: string | undefined): boolean => {
   ) {
     return true;
   }
-  const digits = q.replace(/\D/g, '');
-  return digits.length > 0 && String(s.cnpj).includes(digits);
+  // ADR-0044: o CNPJ é alfanumérico. Remover só a MÁSCARA — tirar letras faria a busca pelo
+  // CNPJ real não encontrar o cadastro. O VO guarda uppercase sem máscara.
+  const cnpjTerm = q.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
+  return cnpjTerm.length > 0 && String(s.cnpj).toUpperCase().includes(cnpjTerm);
 };
 
 export const supplierMatchesFilter = (s: Supplier, filter: SupplierListFilter): boolean => {

@@ -95,7 +95,7 @@ versionado v1). Ver [`handbook/architecture/adr/0015-mysql-outbox-pattern.md`](.
 
 > ⚠️ **Limitação MVP conhecida** (débito registrado): `homologateAmendment` e o upload+attach de documento
 > fazem 2 saves sequenciais sem atomicidade distribuída — ver
-> [`.claude/.planning/HOMOLOGATE-DISTRIBUTED-ATOMICITY.md`](../.claude/.planning/HOMOLOGATE-DISTRIBUTED-ATOMICITY.md).
+> [`context/planning/HOMOLOGATE-DISTRIBUTED-ATOMICITY.md`](../context/planning/HOMOLOGATE-DISTRIBUTED-ATOMICITY.md).
 
 ## 8. RN formais (numeradas)
 

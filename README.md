@@ -4,7 +4,7 @@ Backend do ERP Bem Comum, modelado como **modular monolith**. Vários módulos d
 
 > **Stack:** Node.js 24 LTS · TypeScript 6.0 (roadmap TS 7 / compilador nativo — ADR-0009) · ESM (`"type": "module"`, `NodeNext`) · pnpm 11 · Drizzle ORM 0.45 + mysql2 3.22 (MySQL 8.4 — ADR-0020) · **borda HTTP Fastify 5** com Zod **contract-first** + OpenAPI 3.1 (ADR-0025/0027) · storage S3/MinIO (ADR-0019) · auth próprio com JWT ES256 via `jose` (ADR-0024).
 >
-> **Source of Truth:** [`handbook/`](./handbook/) (`handbook/architecture/adr/` vence tudo). Contexto canônico em [`AGENTS.md`](./AGENTS.md) (o `CLAUDE.md` é stub que o importa). Orquestrador, agentes e skills em [`./.claude/`](./.claude/).
+> **Source of Truth:** [`handbook/`](./handbook/) (`handbook/architecture/adr/` vence tudo). Contexto canônico em [`CLAUDE.md`](./CLAUDE.md). Orquestrador, agentes e skills em [`./.claude/`](./.claude/).
 >
 > **Regras invariantes:** sempre `pnpm`, nunca `npm` (ADR-0012) · borda HTTP é a UX primária; **a CLI embutida foi retirada** (ADR-0037) — validação E2E é feita via Bruno (ADR-0034/0038).
 
@@ -27,7 +27,7 @@ Seis Bounded Contexts sob `src/modules/`, cada um com a mesma anatomia (`domain/
 
 ## 🏗️ Estrutura
 
-Identificadores em **EN** (regra invariante de `AGENTS.md §"Idioma"`). Strings ao humano e mensagens de erro formatadas em PT.
+Identificadores em **EN** (regra invariante de `CLAUDE.md §"Idioma"`). Strings ao humano e mensagens de erro formatadas em PT.
 
 ```
 src/
@@ -161,7 +161,7 @@ pnpm run pipeline:status               # dashboard de todos os tickets
 pnpm run pipeline:metrics              # agregações
 ```
 
-Detalhes completos: [`AGENTS.md §Comandos essenciais`](./AGENTS.md#comandos-essenciais).
+Detalhes completos: [`CLAUDE.md §Comandos não-óbvios`](./CLAUDE.md#comandos-n%C3%A3o-%C3%B3bvios).
 
 ---
 
@@ -176,7 +176,7 @@ Detalhes completos: [`AGENTS.md §Comandos essenciais`](./AGENTS.md#comandos-ess
 Todo trabalho não-trivial passa pela **pipeline 4-wave fail-first** (W0 RED → W1 GREEN → W2 REVIEW → W3 QUALITY), com um ticket em `.claude/.pipeline/<TICKET-ID>/` e `STATE.json` canônico. Bug fix trivial (1-3 linhas) ou config pode ir direto.
 
 - [`./.claude/agents/contratos-orchestrator.md`](./.claude/agents/contratos-orchestrator.md) — **ponto de entrada único**: roteia para agente especialista ou skill e orquestra as waves.
-- [`AGENTS.md`](./AGENTS.md) — regras transversais (idioma, hierarquia de fontes, anti-padrões, política de regressão zero).
+- [`CLAUDE.md`](./CLAUDE.md) — regras transversais (idioma, hierarquia de fontes, anti-padrões, política de regressão zero).
 - [`handbook/architecture/adr/`](./handbook/architecture/adr/) — ADRs aceitos (IMUTÁVEIS).
 
 Achado fora do escopo do ticket atual? Não conserte na hora (scope-creep): registre via skill [`issue-report`](./.claude/skills/issue-report/SKILL.md) (ADR-0040).
@@ -204,7 +204,7 @@ Cada agente é ancorado num subdir de [`handbook/reference/`](./handbook/referen
 | [`security-backend-expert`](./.claude/agents/security-backend-expert.md)       | Segurança backend (Node/TS/Fastify) | ✅ ativo            |
 | [`security-frontend-expert`](./.claude/agents/security-frontend-expert.md)     | Segurança frontend (TanStack/React) | ✅ ativo            |
 
-As **42 skills** cobrem disciplinas aplicadas: `ts-domain-modeler`, `ports-and-adapters`, `drizzle-schema-author`, `modular-monolith`, `pipeline-maestro`, `code-reviewer`, `ts-quality-checker`, `issue-report`, a família **speckit-\*** (spec-driven), as famílias `database-*`, `tdd-*`, `clean-code-*`, `requirements-*`, `web-security-*`, e os scripters `nodejs-fs-scripter`/`nodejs-process-runner`. Tabela completa em [`AGENTS.md §Roteamento`](./AGENTS.md#roteamento-via-contratos-orchestrator).
+As **44 skills** cobrem disciplinas aplicadas: `ts-domain-modeler`, `ports-and-adapters`, `drizzle-schema-author`, `modular-monolith`, `pipeline-maestro`, `code-reviewer`, `ts-quality-checker`, `issue-report`, a família **speckit-\*** (spec-driven), as famílias `database-*`, `tdd-*`, `clean-code-*`, `requirements-*`, `web-security-*`, e os scripters `nodejs-fs-scripter`/`nodejs-process-runner`. São descobertas nativamente pelo Claude Code em [`.claude/skills/`](./.claude/skills/), cada uma com a descrição de quando usar — não há tabela a manter.
 
 ---
 
@@ -221,7 +221,7 @@ As **42 skills** cobrem disciplinas aplicadas: `ts-domain-modeler`, `ports-and-a
 - **Isolamento de módulo:** importar de outro módulo **só** via `<module>/public-api/` (nunca `domain/`/`application/` alheios) — ADR-0006.
 - **Idioma:** código em **EN**; documentação (handbook, ADRs, `.claude/`, `.pipeline/`) em **PT**; strings ao humano em **PT**.
 
-Lista completa em [`AGENTS.md §"Regras invariantes — sintaxe TS"`](./AGENTS.md#regras-invariantes--sintaxe-ts) e nas regras path-scoped de [`.claude/rules/`](./.claude/rules/).
+A sintaxe é enforced pelo [`tsconfig.json`](./tsconfig.json) — `strict` completo, `verbatimModuleSyntax` (exige `import type`), `NodeNext` + `allowImportingTsExtensions` (exige extensão `.ts`). O resto vive nas regras path-scoped de [`.claude/rules/`](./.claude/rules/).
 
 ---
 
@@ -247,7 +247,7 @@ Lista completa em [`AGENTS.md §"Regras invariantes — sintaxe TS"`](./AGENTS.m
 
 ## 📚 Documentação canônica
 
-- **Contexto do projeto:** [`AGENTS.md`](./AGENTS.md) (fonte única; `CLAUDE.md` é stub que importa) + regras path-scoped em [`.claude/rules/`](./.claude/rules/).
+- **Contexto do projeto:** [`CLAUDE.md`](./CLAUDE.md) (fonte única) + regras path-scoped em [`.claude/rules/`](./.claude/rules/).
 - **Doc consolidada (humanos + IA):** [`docs/`](./docs/) e [`llms.txt`](./llms.txt).
 - **Decisões formais:** [`handbook/architecture/adr/`](./handbook/architecture/adr/) (48 ADRs IMUTÁVEIS) + [`handbook/CHANGELOG.md`](./handbook/CHANGELOG.md).
 - **Domínio de negócio:** [`handbook/domain/`](./handbook/domain/) + [`handbook/domain_questions/`](./handbook/domain_questions/).

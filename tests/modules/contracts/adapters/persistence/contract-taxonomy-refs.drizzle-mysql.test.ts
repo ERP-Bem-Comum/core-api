@@ -47,7 +47,11 @@ const SUBCATEGORY_REF = 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee';
 // 1) ESTRUTURAL (sempre roda, sem DB) — CA1 no nível do schema Drizzle.
 //    RED até as 3 colunas existirem em `contracts` no mysql.ts.
 // ─────────────────────────────────────────────────────────────────────────────
-type ColumnShape = Readonly<{ name: string; columnType: string; notNull: boolean }>;
+type ColumnShape = Readonly<{
+  name: string;
+  notNull: boolean;
+  getSQLType: () => string;
+}>;
 
 // property key no schema Drizzle → nome físico da coluna MySQL.
 const REF_COLUMNS: readonly (readonly [prop: string, physical: string])[] = [
@@ -63,7 +67,13 @@ describe('CTR-TAXONOMY-REFS — colunas de taxonomia no schema Drizzle de ctr_co
       const col = cols[prop];
       assert.ok(col !== undefined, `ctr_contracts: coluna ${prop} ausente no schema Drizzle`);
       assert.equal(col.name, physical, `ctr_contracts: nome físico deve ser ${physical}`);
-      assert.equal(col.columnType, 'MySqlVarChar', `ctr_contracts: ${physical} deve ser varchar`);
+      // #636: o tipo carrega a collation. Asserir `getSQLType()` em vez de `columnType`
+      // descreve o DDL EMITIDO, não a classe interna do Drizzle — e cobre o COLLATE de graça.
+      assert.equal(
+        col.getSQLType(),
+        'varchar(36) COLLATE utf8mb4_bin',
+        `ctr_contracts: ${physical} deve ser varchar(36) binário`,
+      );
       assert.equal(col.notNull, false, `ctr_contracts: ${physical} deve ser NULL (nullable)`);
     });
   }

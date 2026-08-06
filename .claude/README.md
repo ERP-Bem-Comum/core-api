@@ -87,7 +87,7 @@ Aplicáveis em **todo** código do `core-api`:
 
 ### 🌐 Regra invariante de idioma
 
-**Fonte única: [`AGENTS.md` §"Idioma (regra invariante)"](../AGENTS.md).** A tabela por camada (com exemplos) e o enforcement mecânico de casing vivem lá — este README não replica.
+**Fonte única: [`CLAUDE.md` §"Idioma — invariante"](../CLAUDE.md).** A tabela por camada (com exemplos) e o enforcement mecânico de casing vivem lá — este README não replica.
 
 ### Regras de modelagem (TS funcional puro)
 

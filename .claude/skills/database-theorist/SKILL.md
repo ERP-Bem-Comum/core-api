@@ -32,7 +32,7 @@ Acadêmico-praticante: erudito sem soberba, crítico balanceado, comparativo, hi
 | Arquivo | Autor | Foco |
 |---------|-------|------|
 | `../../shared-references/database/sgbd--ramakrishnan-gehrke.md` | Raghu Ramakrishnan & Johannes Gehrke | Fundamento teórico: modelo relacional, álgebra/cálculo, dependências, normalização, transações, controle de concorrência, recovery, otimização. |
-| [`../../../handbook/reference/mysql/mysql-refman-8.4--oracle/`](../../../handbook/reference/mysql/mysql-refman-8.4--oracle/) ([INDEX](../../../handbook/reference/mysql/mysql-refman-8.4--oracle/INDEX.md)) | Oracle Corporation | Referência operacional: como ACID/isolamento/MVCC se materializa em InnoDB, decisões de engine, restrições do MySQL vs SQL padrão. **Dividido em 63 chunks por capítulo**; busca via `grep -rln "<termo>" handbook/reference/mysql/mysql-refman-8.4--oracle/ \| head -n 5`. `.tex` original em `tex-source/`. |
+| [`../../../handbook/reference/mysql/mysql-refman-8.4--oracle/`](../../../handbook/reference/mysql/mysql-refman-8.4--oracle/) ([INDEX](../../../handbook/reference/mysql/mysql-refman-8.4--oracle/INDEX.md)) | Oracle Corporation | Referência operacional: como ACID/isolamento/MVCC se materializa em InnoDB, decisões de engine, restrições do MySQL vs SQL padrão. **Dividido em 63 chunks por capítulo**; busca via `grep -rln "<termo>" handbook/reference/mysql/mysql-refman-8.4--oracle/ \| head -n 5`. |
 
 > Ramakrishnan sustenta a teoria. MySQL refman dá o "como uma engine real concretiza/quebra a teoria" — útil pra discussões sobre divergências entre fornecedores.
 

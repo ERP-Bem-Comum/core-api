@@ -33,7 +33,9 @@ export const actDetailSchema = z.object({
   actNumber: z.string(),
   name: z.string(),
   email: z.string(),
-  cnpj: z.string().meta({ description: 'CNPJ (14 dígitos)' }),
+  cnpj: z
+    .string()
+    .meta({ description: 'CNPJ — 14 caracteres sem máscara, alfanumérico (ADR-0044)' }),
   corporateName: z.string(),
   fantasyName: z.string(),
   occupationArea: z.string(),
@@ -101,14 +103,16 @@ const pixKeyInputSchema = z.object({
 
 /**
  * Body do POST /acts. A invariante de repasse (hasFinancialTransfer ⇒ ≥1 payment target)
- * é do domínio (422), não do Zod. `cnpj` 14 dígitos (DV no domínio); vigência via `startDate`/
+ * é do domínio (422), não do Zod. `cnpj` 14 caracteres alfanuméricos (DV no domínio); vigência via `startDate`/
  * `endDate` (validade da data e ordem validadas no domínio → 422).
  */
 export const createActBodySchema = z.object({
   actNumber: z.string().min(1),
   name: z.string().min(1),
   email: z.string().min(1),
-  cnpj: z.string().length(14).meta({ description: 'CNPJ — 14 dígitos (DV validado no domínio)' }),
+  cnpj: z.string().length(14).meta({
+    description: 'CNPJ — 14 caracteres sem máscara, alfanumérico; DV validado no domínio',
+  }),
   corporateName: z.string().min(1),
   fantasyName: z.string().min(1),
   occupationArea: z.enum(['PARC', 'DDI', 'DCE', 'EPV']),

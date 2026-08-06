@@ -34,7 +34,7 @@ const integrationEnabled = (): boolean => process.env['MYSQL_INTEGRATION'] === '
 // 1) ESTRUTURAL (sempre roda, sem DB) — CA1 no nível do schema Drizzle.
 //    RED até `budgetPlanRef`/`subcategoryRef` existirem em `finManualEntries`.
 // ─────────────────────────────────────────────────────────────────────────────
-type ColumnShape = Readonly<{ name: string; columnType: string; notNull: boolean }>;
+type ColumnShape = Readonly<{ name: string; notNull: boolean; getSQLType: () => string }>;
 
 const NEW_REFS: readonly Readonly<{ prop: string; physical: string }>[] = [
   { prop: 'budgetPlanRef', physical: 'budget_plan_ref' },
@@ -48,10 +48,11 @@ describe('FIN-MANUAL-ENTRY-TAXONOMY — refs no schema Drizzle de fin_manual_ent
       const col = cols[prop];
       assert.ok(col !== undefined, `fin_manual_entries: coluna ${prop} ausente no schema Drizzle`);
       assert.equal(col.name, physical, `fin_manual_entries: nome físico deve ser ${physical}`);
+      // #636: o tipo carrega a collation — `getSQLType()` descreve o DDL emitido.
       assert.equal(
-        col.columnType,
-        'MySqlVarChar',
-        `fin_manual_entries: ${physical} deve ser varchar`,
+        col.getSQLType(),
+        'varchar(36) COLLATE utf8mb4_bin',
+        `fin_manual_entries: ${physical} deve ser varchar(36) binário`,
       );
       assert.equal(col.notNull, false, `fin_manual_entries: ${physical} deve ser NULL (nullable)`);
     });

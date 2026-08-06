@@ -1,0 +1,2 @@
+ALTER TABLE `par_collaborator_history` MODIFY COLUMN `id` varchar(36) COLLATE utf8mb4_bin NOT NULL;--> statement-breakpoint
+ALTER TABLE `par_collaborator_history` MODIFY COLUMN `collaborator_id` varchar(36) COLLATE utf8mb4_bin NOT NULL;

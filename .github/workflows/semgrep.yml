@@ -1,6 +1,6 @@
 name: semgrep
 
-# Gate de enforcement dos invariantes de ADR/AGENTS.md (SEMGREP-ADR-ENFORCER, #548).
+# Gate de enforcement dos invariantes de ADR/CLAUDE.md (SEMGREP-ADR-ENFORCER, #548).
 # Roda o Semgrep com as rules locais `.semgrep/rules.yml`; um finding falha o job — gate REAL,
 # sem `continue-on-error`/`|| true` (a licao de gate-integrity da Fase 2 do #523, CWE-703).
 # Free: repo publico, sem app/token pago (Semgrep OSS via pipx). Actions SHA-pinadas (ADR-0011).

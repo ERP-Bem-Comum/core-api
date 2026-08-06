@@ -1,40 +1,51 @@
 ---
 paths:
-  - "tests/**/*.ts"
+  - 'tests/**/*.ts'
+verify:
+  - claim: 'bdd/ e reports/ não guardam teste executável — são documento e forense'
+    glob: 'tests/{bdd,reports}/**/*.test.ts'
+    expect: []
 ---
 
-# Convenções de testes
+Runner: Node test runner nativo + `--experimental-strip-types`. O glob de descoberta é **um só** — `tests/**/*.test.ts` — e `tests/cleanup/test-discovery.test.ts` garante que nada de teste caia fora dele. As regras ESLint relaxadas aqui (`floating-promises`, `non-null-assertion`, `return-type`, `naming-convention`) estão em `eslint.config.js`, no bloco `files: ['tests/**/*.ts']`.
 
-Aplicáveis a tudo sob `tests/`. Runner: Node test runner nativo + `--experimental-strip-types`.
+## Quatro naturezas de arquivo, e só uma roda no gate
 
-- **Discovery:** apenas `tests/**/*.test.ts` é descoberto pelo runner.
-- **Suítes parametrizadas reutilizáveis:** sufixo `.contract.ts` ou `.suite.ts`. **Não são executadas direto** — exportam uma função `(makeImpl) => void` que adapters consomem dentro do próprio `describe()`. Exemplos: `tests/modules/contracts/adapters/persistence/contract-repository.suite.ts`, `tests/modules/contracts/application/ports/document-storage.contract.ts`.
-- **Mirror do `src/`:** `tests/modules/contracts/domain/shared/money.test.ts` testa `src/modules/contracts/domain/shared/money.ts`.
-- **Tests podem importar via `#src/*`** (subpath imports declarados no `package.json`).
-- **Regras ESLint relaxadas em `tests/**`** (ver `eslint.config.js` final): `floating-promises`, `non-null-assertion`, `return-type`, `naming-convention` — todos `off` em testes.
+| Sufixo | Roda em `pnpm test`? | O que é |
+| --- | --- | --- |
+| `.test.ts` | **sim** | o teste propriamente dito — 785 arquivos |
+| `.suite.ts` · `.contract.ts` | não, por desenho | suíte parametrizada: exporta `(makeImpl) => void` que o adapter consome dentro do próprio `describe()`. 9 e 10 arquivos |
+| `.e2e.ts` | **não** | smoke contra servidor real, por `pnpm run test:e2e:*` (`scripts/e2e/*.sh`). Vivem só em `tests/e2e/` |
+| `.md` · `.log` | não | cenário BDD e artefato forense — `tests/bdd/`, `tests/reports/` |
 
-## Comandos úteis
+⚠️ Escrever um `.e2e.ts` esperando que o gate o execute deixa o caso **sem cobertura e sem aviso**. O caminho do arquivo é o que torna a distinção visível.
 
-```bash
-pnpm test                                                                       # todos os tests
-pnpm run test:integration                                                       # sobe MySQL via Docker --wait + integration
-node --test --experimental-strip-types --no-warnings <path>                     # arquivo específico
-node --test --experimental-strip-types --no-warnings --test-name-pattern="..."  # filtro por nome
-```
+## Mirror é a convenção de `tests/modules/`, não de `tests/`
 
-## Contrato de isolamento (testes de integração contra MySQL real)
+676 dos 785 testes espelham `src/` (`tests/modules/contracts/domain/shared/money.test.ts` ↔ `src/modules/contracts/domain/shared/money.ts`). Os outros 109 se organizam por **natureza**, não por caminho de origem: `cleanup/` (invariantes estruturais que varrem o fonte), `infra/`, `scripts/`, `etl/`, `jobs/`, `workers/`, `pipeline/`, `decisions/`, `regression/`, `support/` (helpers, sem teste próprio além do `source-scan`).
 
-Suítes de integração (`*.drizzle*.test.ts`, `*.integration.test.ts`) rodam **no mesmo banco**, arquivo a arquivo, com `--test-concurrency=1` — o runner **não recria** o schema entre arquivos irmãos. Logo, o resíduo de um arquivo é visível ao próximo. O contrato abaixo torna cada arquivo **independente de ordem**:
+Ao criar teste novo, a pergunta é o que ele testa: **um arquivo de `src/`** → mirror; **uma propriedade do repositório inteiro** → `tests/cleanup/`. Nem todo teste tem um arquivo-espelho, e forçar um inventa hierarquia falsa.
 
-- **Limpe na ENTRADA, não na saída.** Faça a limpeza em `before`/`beforeEach` das tabelas cujo espaço de chave o arquivo escreve. Um arquivo que só limpa em `after`/`afterEach` (ou não limpa) fica à mercê da ordem — e um `beforeEach` **sem** `afterEach` deixa resíduo do último caso para o próximo arquivo.
-- **Limpe por TABELA, nunca por PK quando há UNIQUE natural.** `await db.delete(t)` — não `db.delete(t).where(inArray(t.id, [...]))`. A limpeza por PK não pega resíduo inserido com **outro id** que colide na UNIQUE de negócio (CNPJ `par_suppliers_cnpj_idx`, CPF `par_collaborators_cpf_idx`, `code`, `legacy_id`). Foi exatamente essa a colisão do **#521**.
-- **Nenhum arquivo depende de outro ter (ou não) rodado antes.** Cada arquivo semeia o que precisa e deixa as tabelas que tocou num estado que o próximo consegue limpar por tabela.
-- **Prova mecânica:** a suíte tem de passar **em ordem invertida**. Ex.: `sed -n '/^  partners: mysqlSuite(/,/^  ]),/p' scripts/ci/test-integration.ts | grep -oE "'tests/[^']+'" | tr -d "'" | tail -r | xargs node --test --test-concurrency=1 --experimental-strip-types`. Se inverter a ordem quebra, há dependência de ordem escondida.
-- **Não afrouxe o teste para “passar”.** Colisão de UNIQUE em setup é falha de isolamento (limpe por tabela na entrada), **não** motivo para trocar `assert.rejects` por um matcher frouxo nem para remover o índice. Duplicata **intencional** (teste de `integrity-violation`) é asserção legítima — não confundir com resíduo.
+> O mirror já divergiu uma vez sem ninguém notar: os testes das primitivas estão em `tests/shared/result.test.ts`, enquanto o código foi para `src/shared/primitives/` no commit `e03a146a`. Ver [`shared-primitives.md`](./shared-primitives.md).
 
-> Verificado nesta base (2026-07-23, MySQL 8.4 isolado): após o #521, as suítes `partners` (50/50) e `financial` (119/119) passam em ordem invertida — **order-independent**. O helper `resetPartnersTables`/`resetFinancialTables` (limpeza por tabela numa chamada) é o encapsulamento natural deste contrato quando um terceiro arquivo precisar da mesma limpeza; enquanto cada arquivo já limpa por tabela na entrada, o contrato está satisfeito sem o helper (YAGNI).
+## Contrato de isolamento — integração contra MySQL real
 
-## Skills canônicas
+Suítes de integração (`*.drizzle*.test.ts`, `*.integration.test.ts`) rodam **no mesmo banco**, arquivo a arquivo, com `--test-concurrency=1`. O runner **não recria** o schema entre arquivos irmãos: o resíduo de um é visível ao próximo. O contrato abaixo é o que torna cada arquivo independente de ordem.
 
-- `tdd-strategist` — red-green-refactor aplicado, qual o **próximo** teste ([`SKILL.md`](../skills/tdd-strategist/SKILL.md)).
-- `test-pyramid-engineer` — **arquitetura** da suíte: em que camada (unit/integration/contract/e2e) o teste vive, política de test doubles (fakes, não mocks), o que falta cobrir, duplicação entre camadas e gating por velocidade ([`SKILL.md`](../skills/test-pyramid-engineer/SKILL.md)).
+- **Limpe na ENTRADA, não na saída.** Em `before`/`beforeEach`, das tabelas cujo espaço de chave o arquivo escreve. Quem só limpa em `after` fica à mercê da ordem — e um `beforeEach` **sem** `afterEach` entrega o resíduo do último caso ao próximo arquivo.
+- **Limpe por TABELA, nunca por PK quando há UNIQUE natural.** `await db.delete(t)`, não `db.delete(t).where(inArray(t.id, […]))`. A limpeza por PK não pega resíduo inserido com **outro id** que colide na UNIQUE de negócio (CNPJ, CPF, `code`, `legacy_id`) — foi exatamente a colisão do **#521**.
+- **Não afrouxe o teste para "passar".** Colisão de UNIQUE em setup é falha de isolamento, não motivo para trocar `assert.rejects` por matcher frouxo nem para remover o índice. Duplicata **intencional** (teste de `integrity-violation`) é asserção legítima — não confundir com resíduo.
+- **Prova mecânica: a suíte tem de passar em ordem invertida.** Se inverter quebra, há dependência escondida.
+
+  ```bash
+  sed -n '/^  partners: mysqlSuite(/,/^  ]),/p' scripts/ci/test-integration.ts \
+    | grep -oE "'tests/[^']+'" | tr -d "'" \
+    | awk '{a[NR]=$0} END{for(i=NR;i>0;i--) print a[i]}' \
+    | xargs node --test --test-concurrency=1 --experimental-strip-types
+  ```
+
+  A inversão usa `awk` de propósito: a versão anterior desta rule usava `tail -r`, que **só existe no macOS** — no CI Linux o comando falhava antes de rodar teste algum.
+
+Verificado em 2026-07-23 (MySQL 8.4 isolado): após o #521, `partners` (50/50) e `financial` (119/119) passam invertidas. Os helpers `resetPartnersTables`/`resetFinancialTables` **não existem** e não precisam existir enquanto cada arquivo limpar por tabela na entrada — YAGNI.
+
+Próximo teste do ciclo: [`tdd-strategist`](../skills/tdd-strategist/SKILL.md) · arquitetura da suíte (camada, doubles, o que falta): [`test-pyramid-engineer`](../skills/test-pyramid-engineer/SKILL.md).

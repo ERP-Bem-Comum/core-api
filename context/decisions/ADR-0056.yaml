@@ -1,0 +1,79 @@
+id: ADR-0056
+title: OCR como Port/Adapter Pattern
+source: handbook/architecture/adr/0056-ocr-port-adapter.md
+decided_on: 2026-06-06
+
+declared:
+  status: Superseded by ADR-0050
+  status_normalized: superseded
+  supersedes: []
+  superseded_by: [ADR-0050]
+  related: [ADR-0006, ADR-0019]
+
+assessment:
+  verdict: obsolete
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Morto, e com a história mais acidentada do acervo. Foi criado como `ADR-0034`, colidindo com o
+    número da adoção do Bruno; entrou pela importação de um baseline vindo de outra árvore de docs;
+    ficou declarando `Accepted` por quase dois meses depois de o ADR-0050 o superseder; e só foi
+    renumerado para `0056` em 2026-07-31, durante este inventário.
+    O conteúdo foi substituído por completo, e a substituição foi de qualidade: nada do desenho aqui
+    sobreviveu no código. Nenhum dos três adapters previstos (`mock`, Tesseract, Textract) existe —
+    o caminho real é XML, parser nativo in-house e `unpdf`. E o port desenhado aqui,
+    `extract(pdfUrl: string)`, é justamente o vetor de SSRF que o ADR-0050 rejeitou nominalmente.
+    Valor residual: é o registro de um desenho que estava tecnicamente correto em forma
+    (Port/Adapter, factory functions, `Readonly`) e errado em substância (OCR como caminho principal,
+    URL como entrada).
+
+extraction:
+  state: complete
+  covers: |
+    Zero alegações. A norma vigente está no ADR-0050, extraída lá em 9 alegações. Duplicar aqui
+    criaria duas fontes para a mesma decisão — e, pior, ressuscitaria o port por URL.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: NÃO GERA — superseded de fato pelo 0050
+    applied_to: []
+    gap: |
+      A 039 acertou o veredito e, mais importante, DETECTOU que o `Status` dizia `Accepted` enquanto o
+      ADR-0050 o superseava — registrou como "segundo achado de status desatualizado" e classificou
+      como padrão, não caso isolado ("o repo supersede ADRs sem atualizar o Status do superseded").
+      Também registrou a numeração duplicada. Os dois achados ficaram na lista de pendências dela e
+      foram executados agora.
+
+claims: []
+
+findings:
+  - |
+    O port desenhado aqui — `OcrPort.extract(pdfUrl: string)` — é o vetor de SSRF que o ADR-0050
+    rejeita nominalmente na alternativa 5 ("Port recebendo `pdfUrl: string`: rejeitado — SSRF +
+    vazamento de URL assinada a terceiro"). O desenho nunca chegou ao código: o port real recebe
+    `bytes: Uint8Array`. É o caso mais claro do acervo de decisão perigosa interceptada por ADR
+    posterior ANTES da implementação — o oposto do padrão comum deste inventário.
+  - |
+    A origem do desenho por URL está rastreável na própria referência deste ADR (linha 69): "ADR-0019
+    — Document Storage S3 + MinIO (PDFs armazenados separadamente; **OCR recebe URL**)". A leitura do
+    ADR de storage induziu o formato do port. Não foi descuido isolado: foi inferência a partir de
+    outro ADR, do mesmo tipo que produziu o `ADR-0007`.
+  - |
+    Os três adapters previstos (`createOcrMockAdapter`, `createTesseractOcrAdapter`,
+    `createAwsTextractAdapter`) NÃO existem. Os adapters reais em
+    `src/modules/financial/adapters/document-reader/` são `xml`, `native-pdf`, `unpdf-reader`, `mock`
+    e `cascade`. Só o `mock` sobreviveu como nome, e por coincidência de propósito.
+  - |
+    Histórico de defeitos de processo acumulados neste único arquivo: número duplicado (importação de
+    baseline sem checar), `Status` desatualizado por quase dois meses, e ausência do índice do README.
+    Os três só foram corrigidos porque a chave `ADR-NNNN` deste formato exige unicidade. É o argumento
+    mais concreto a favor do gate de numeração proposto no `_PROGRESS.md`.
+
+provenance:
+  tickets:
+    - FIN-DOCUMENTO-INGESTAO
+  issues: []
+  note: |
+    Importado pelo commit `0b88bade` (2026-06-08) como baseline de FIN-DOCUMENTO-INGESTAO, cujos
+    REPORTs em `.claude/.pipeline/FIN-DOCUMENTO-INGESTAO/` referenciam o caminho antigo do arquivo e
+    foram preservados como registro histórico. Issue #62 (ingestão OCR) segue aberta e adiada.

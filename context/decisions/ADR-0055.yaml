@@ -1,0 +1,554 @@
+id: ADR-0055
+title: Amazon Cognito como autoridade de autenticação (supersede parcial do ADR-0024 — authN)
+source: handbook/architecture/adr/0055-cognito-external-idp-supersedes-0024-authn.md
+decided_on: 2026-07-29
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: [ADR-0024]
+  superseded_by: []
+  related: [ADR-0005, ADR-0011, ADR-0027, ADR-0028, ADR-0030, ADR-0052]
+
+assessment:
+  verdict: unrealized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Decisão de DIRETORIA, `Accepted` há dois dias, com ZERO linhas de código. Nem `external_subject`
+    nem `identity_provider` existem no schema; `aws-jwt-verify` não está nas dependências; o único
+    verificador é o ES256 legado. Isso é esperado — a execução está na issue #603 — e é justamente o
+    que torna o registro útil: a decisão existe, é vinculante, e nada no harness a menciona.
+    Duas alegações já se sustentam por antecipação, sem esforço: o token atual tem payload vazio
+    (`token-issuer.es256.ts:30`), então a invariante "nenhuma claim de autorização no token" nasce
+    satisfeita; e o molde fail-secure de flag que o ADR manda copiar existe em `rbac-mode.ts:12`.
+    O ponto cego: NENHUMA das 12 rules de `.claude/rules/` menciona Cognito ou este ADR, e a
+    `auth-module.md:9` segue afirmando que a federação "foi adiada". Um agente editando
+    `src/modules/auth/` hoje é instruído pelo modelo que esta decisão substituiu.
+
+extraction:
+  state: complete
+  covers: |
+    12 alegações — a fronteira authN/authZ, o vínculo de identidade, a transição com dois
+    verificadores, o estado da transação OAuth, as invariantes de verificação, a biblioteca e a dívida
+    de store compartilhado. As alternativas rejeitadas (A-F) e as 4 dependências bloqueantes ficaram
+    fora das alegações: as primeiras são registro de due diligence, as segundas são pré-condições de
+    execução rastreadas em issues — ambas anotadas em `findings`.
+
+prior_art: []
+
+claims:
+  - id: ADR-0055-C1
+    text: |
+      O Cognito é a autoridade de autenticação — responde "quem é você". A autorização permanece
+      integralmente no core-api, que responde "o que você pode fazer".
+    kind: obligation
+    source_lines: ['46-48']
+    applies_to:
+      - 'src/modules/auth/**/*.ts'
+      - 'src/server.ts'
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in: [auth]
+      evidence:
+        - 'ausência: nenhuma referência a Cognito, User Pool ou JWKS em src/'
+        - 'src/modules/auth/adapters/crypto/token-issuer.es256.ts:27 — a autenticação segue local, emitindo ES256'
+      verify: |
+        grep -rniE "cognito|jwks|user.?pool" src/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado um token RS256 válido do User Pool configurado, quando chega em rota autenticada, então
+        MUST ser aceito e resolver o usuário local. Hoje falha — não há verificador RS256.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        A autenticação MUST ser delegada ao IdP externo. A autorização MUST permanecer no core-api,
+        resolvida contra o banco a cada requisição.
+      rationale: |
+        Decisão de diretoria, explicitamente fora de discussão técnica. A separação authN/authZ é o
+        que mantém o raio de mudança pequeno — e é a única razão pela qual esta migração é de baixo
+        risco.
+
+  - id: ADR-0055-C2
+    text: |
+      Invariante inegociável: nenhuma claim de autorização trafega no token. O claim
+      `cognito:groups` NÃO é fonte de autorização e não deve ser lido.
+    kind: prohibition
+    source_lines: ['50-56', '224-227']
+    applies_to:
+      - 'src/modules/auth/**/*.ts'
+      - 'src/shared/http/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - 'src/modules/auth/adapters/crypto/token-issuer.es256.ts:30 — SignJWT({}) com payload vazio; só sub, iat, iss, exp'
+        - 'src/modules/auth/domain/authorization/authorize.ts:16 — a decisão de permissão varre user.roles, resolvido do banco, nunca do token'
+        - 'ausência: nenhuma leitura de cognito:groups em src/ — trivialmente, porque a integração não existe'
+      verify: |
+        grep -rn "cognito:groups\|groups" src/modules/auth/ --include='*.ts' | head
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado o verificador de token, quando alguma decisão de autorização depender de claim do token
+        em vez do banco, então o teste falha. Simétrico: emissor que inclua papel no payload falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Decisão de autorização MUST ser resolvida contra o banco a cada requisição.
+        MUST NOT ler papel ou permissão de claim de token, inclusive `cognito:groups`.
+      rationale: |
+        Já satisfeita hoje por construção, e é o que garante revogação de papel imediata em vez de
+        dependente do ciclo do token. Adotar agora custa nada e protege a propriedade durante a
+        migração, que é justamente quando ela corre risco.
+
+  - id: ADR-0055-C3
+    text: |
+      O vínculo de identidade usa coluna NEUTRA ao fornecedor: `external_subject VARCHAR(36) NULL
+      UNIQUE COLLATE utf8mb4_bin`, com `identity_provider VARCHAR(32) NULL` quando houver mais de uma
+      origem. O nome da coluna NÃO carrega o fornecedor.
+    kind: obligation
+    source_lines: ['58-66']
+    applies_to:
+      - 'src/modules/auth/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in: [auth]
+      evidence:
+        - 'ausência: external_subject, externalSubject e identity_provider não aparecem em src/'
+        - 'src/modules/auth/adapters/persistence/schemas/mysql.ts:116 — password_hash já é nullable, o espaço para usuário federado que o ADR-0024 preparou'
+      verify: |
+        grep -rn "external_subject\|externalSubject\|identity_provider" src/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o schema de `auth_user`, quando a coluna de vínculo externo tiver nome de fornecedor
+        (`cognito_sub`) em vez do neutro, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        A coluna de vínculo com identidade externa MUST ter nome neutro ao fornecedor
+        (`external_subject`). MUST NOT nomear a coluna com o fornecedor.
+      rationale: |
+        Nomear `cognito_sub` desfaria a abstração que o port `Authenticator` do ADR-0024 criou, sem
+        ganho — e o precedente `legacy_id` já mostra a forma. É o tipo de decisão que só custa caro
+        depois de estar em produção com migration aplicada.
+
+  - id: ADR-0055-C4
+    text: |
+      Resolução de identidade em ordem obrigatória: por `external_subject`; só então por e-mail
+      normalizado via `Email.parse()`; vincula se estiver nulo; ERRO se já tiver outro valor —
+      nunca sobrescreve; ERRO tipado se não encontrar — o sistema NUNCA cria usuário automaticamente.
+    kind: obligation
+    source_lines: ['68-78', '229-231']
+    applies_to:
+      - 'src/modules/auth/application/**/*.ts'
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in: [auth]
+      evidence:
+        - 'ausência: não existe findByExternalSubject nem fluxo de find-or-link em src/modules/auth/'
+      verify: |
+        grep -rn "findByExternalSubject\|findOrLink" src/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado um subject externo válido cujo e-mail não existe localmente, quando o login é tentado,
+        então MUST retornar erro tipado e MUST NOT criar usuário. Se criar, o teste falha.
+      expected_error: 'user-not-provisioned'
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        O vínculo de identidade MUST resolver primeiro por `external_subject`, depois por e-mail
+        normalizado. MUST NOT sobrescrever vínculo existente. MUST NOT criar usuário automaticamente.
+      rationale: |
+        Sob `AUTH_RBAC_MODE=bypass` — o estado atual — qualquer usuário criado por acidente é
+        super-usuário. Esta é a alegação com maior consequência de segurança do ADR, e o próprio
+        documento rejeita a alternativa de criação automática por isso (alternativa D).
+
+  - id: ADR-0055-C5
+    text: |
+      A escrita do vínculo é atômica: `db.transaction` mais `SELECT ... FOR UPDATE` por e-mail.
+      PROIBIDO usar `ON DUPLICATE KEY UPDATE` — `auth_user` terá três UNIQUEs concorrentes e o ODKU
+      do MySQL dispara em qualquer uma delas, sem ser dirigível a uma coluna.
+    kind: prohibition
+    source_lines: ['80-84']
+    applies_to:
+      - 'src/modules/auth/adapters/persistence/repos/*.ts'
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in: [auth]
+      evidence:
+        - 'ausência: o fluxo de vínculo não existe, logo não há o que auditar ainda'
+        - 'nota: o ADR aponta provisioned-user-store.drizzle.ts:87-108 como precedente direto — o ETL faz o mesmo padrão com legacy_id'
+      verify: |
+        grep -rn "onDuplicateKeyUpdate" src/modules/auth/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o repo de vínculo de identidade, quando usar `onDuplicateKeyUpdate` em `auth_user`,
+        então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Escrita em `auth_user` com múltiplos UNIQUE MUST usar transação com `SELECT ... FOR UPDATE`.
+        MUST NOT usar `ON DUPLICATE KEY UPDATE` nessa tabela.
+      rationale: |
+        Exceção LOCAL e bem fundamentada à permissão geral da `ADR-0020-C7`: onde há UNIQUEs
+        concorrentes, o ODKU não é dirigível e resolve a chave errada. Vale registrar como exceção
+        explícita, não como contradição — a permissão geral segue válida fora deste caso.
+
+  - id: ADR-0055-C6
+    text: |
+      Dois verificadores COMPLETAMENTE isolados, sem compartilhar chave, configuração ou allowlist de
+      algoritmo: legado ES256, Cognito RS256. Roteamento por `iss` decodificado apenas para
+      selecionar o verificador; `iss` desconhecido → 401. PROIBIDO passar lista combinada
+      `['ES256','RS256']` a uma única verificação, e proibido verificador default.
+    kind: prohibition
+    source_lines: ['86-96', 158]
+    applies_to:
+      - 'src/modules/auth/adapters/crypto/*.ts'
+      - 'src/shared/http/**/*.ts'
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in: [auth]
+      evidence:
+        - 'ausência: existe um verificador só; nenhuma referência a RS256 em src/'
+        - 'src/modules/auth/adapters/crypto/token-issuer.es256.ts:30 — alg ES256 fixado no header, sem lista'
+      verify: |
+        grep -rn "RS256\|ES256" src/ --include='*.ts' | head
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado um token assinado com ES256 apresentado ao verificador do Cognito (ou vice-versa), quando
+        verificado, então MUST ser rejeitado. Se qualquer verificador aceitar os dois algoritmos, ou
+        se um `iss` desconhecido não der 401, o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Cada emissor MUST ter verificador próprio, com algoritmo fixado e chave própria. O roteamento
+        MUST ser por `iss` exato vindo de configuração. MUST NOT existir verificador default, lista
+        combinada de algoritmos, nem tentativa em cascata.
+      rationale: |
+        Lista combinada de algoritmos é classe de vulnerabilidade conhecida, e o
+        `token-issuer.es256.ts:6` já a evita explicitamente hoje. A transição é exatamente o momento
+        em que a tentação de "aceitar os dois" aparece.
+
+  - id: ADR-0055-C7
+    text: |
+      As flags `AUTH_COGNITO_ENABLED` e `AUTH_LEGACY_ENABLED` seguem o molde fail-secure do
+      `rbac-mode.ts` (igualdade estrita de string; ausente ou malformado cai no lado seguro).
+      Configuração ausente ou inválida IMPEDE a inicialização, com `exitCode = 78`, nomeando a
+      variável faltante.
+    kind: obligation
+    source_lines: ['98-100', 160]
+    applies_to:
+      - 'src/modules/auth/adapters/http/*.ts'
+      - 'src/server.ts'
+    reality:
+      verdict: partial
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - 'src/modules/auth/adapters/http/rbac-mode.ts:12 — o molde existe: igualdade estrita, qualquer outro valor cai em enforced'
+        - 'src/modules/auth/adapters/http/rbac-mode.ts:3 — comentário declara a semântica fail-secure'
+        - 'ausência: AUTH_COGNITO_ENABLED e AUTH_LEGACY_ENABLED não existem em src/'
+      verify: |
+        grep -rn "AUTH_COGNITO_ENABLED\|AUTH_LEGACY_ENABLED\|AUTH_RBAC_MODE" src/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dada a flag com valor malformado ("Bypass", "true", ""), quando o modo é resolvido, então MUST
+        cair no lado seguro. Dada configuração obrigatória ausente, o boot MUST falhar com código 78.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Flag de segurança MUST ligar apenas por igualdade estrita com o valor esperado; qualquer outro
+        valor MUST cair no lado seguro. Configuração obrigatória ausente MUST impedir o boot,
+        nomeando a variável.
+      rationale: |
+        O molde já existe e é testável isoladamente — o ADR pede literalmente para copiá-lo. Vale
+        generalizar a regra para toda flag de segurança, não só as duas novas.
+
+  - id: ADR-0055-C8
+    text: |
+      O desligamento do emissor legado cobre TRÊS superfícies — login, RENOVAÇÃO e verificação. A
+      revogação em massa das sessões legadas ocorre no mesmo passo lógico do desligamento.
+    kind: obligation
+    source_lines: ['102-104']
+    applies_to:
+      - 'src/modules/auth/adapters/http/*.ts'
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in: [auth]
+      evidence:
+        - 'ausência: não existe gate de desligamento do emissor legado em src/'
+      verify: |
+        grep -rn "AUTH_LEGACY_ENABLED" src/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado o legado desligado, quando um refresh token legado ainda válido é apresentado, então MUST
+        ser recusado. Se ele emitir novo access token, o teste falha — é a brecha de até 30 dias que o
+        ADR nomeia.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Desligar um emissor MUST gatear login, renovação e verificação simultaneamente, com revogação
+        em massa no mesmo passo. MUST NOT gatear apenas o login.
+      rationale: |
+        Gatear só o login deixa refresh tokens válidos emitindo access tokens por até 30 dias após o
+        corte — falha silenciosa que só aparece em auditoria. O ADR já identificou a armadilha; a
+        regra impede que a implementação a reintroduza.
+
+  - id: ADR-0055-C9
+    text: |
+      O estado da transação OAuth (`state`, `code_verifier`, `nonce`) vive em cookie selado
+      `__Host-oauth-tx` com `SameSite=Lax`, não em store server-side. O `__Host-session` permanece
+      `Strict`. `/auth/callback` NÃO pode reaproveitar o helper `isSameOriginRequest`.
+    kind: obligation
+    source_lines: ['106-124']
+    applies_to: []
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        echo 'O BFF vive no repositório web-app, fora do core-api. Verificar de lá.'
+    testability:
+      verdict: testable-with-work
+      layer: integration
+      red: |
+        Dado o callback do IdP como navegação de topo cross-site, quando o cookie de transação for
+        `Strict`, então o login falha 100% das vezes. O teste deve provar que o cookie chega no
+        callback e que o de sessão segue `Strict`.
+      blocker: |
+        Não é executável a partir deste repositório — o BFF é outro código-base. Exige teste no
+        web-app, ou um e2e cruzando os dois.
+      expected_error: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        O cookie de transação OAuth MUST ser `SameSite=Lax` e selado; o cookie de sessão MUST
+        permanecer `Strict`. O callback MUST NOT aplicar checagem de same-origin.
+      rationale: |
+        O ADR chama isto de "o erro mais provável desta implementação", porque o código atual usa
+        `'Strict'` como literal de tipo e copiar o padrão existente quebra o login de forma
+        determinística. Regra que existe para impedir um copiar-colar.
+
+  - id: ADR-0055-C10
+    text: |
+      Nove invariantes de verificação de token, entre elas: `token_use === 'access'` (o único cujo
+      esquecimento passa em silêncio); NÃO validar `aud` (o access token do Cognito não tem);
+      `iss` por igualdade exata vinda da configuração; algoritmo fixado por verificador; JWKS
+      indisponível → 401 (falha fechada); `email_verified !== true` → vínculo recusado; todo vínculo
+      gera evento de auditoria; o cookie de sessão do BFF permanece opaco com tokens server-side.
+    kind: obligation
+    source_lines: ['151-164']
+    applies_to:
+      - 'src/modules/auth/adapters/crypto/*.ts'
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in: [auth]
+      evidence:
+        - 'ausência: não existe verificador de token externo em src/, logo nenhuma das nove está implementada'
+      verify: |
+        grep -rn "token_use\|email_verified\|jwks" src/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Uma asserção por invariante. A de maior risco: dado um ID token (não access), quando
+        verificado sem checar `token_use`, então passa — e é exatamente isso que o teste deve pegar.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        O verificador MUST checar `token_use === 'access'`, `client_id`, e `iss` por igualdade exata
+        vinda de configuração. MUST NOT validar `aud`. JWKS indisponível MUST resultar em 401.
+        `email_verified !== true` MUST recusar o vínculo.
+      rationale: |
+        Nove invariantes com uma característica em comum: falham silenciosamente. O ADR marca a
+        primeira como "a única cujo esquecimento passa em silêncio" — o que a torna candidata número
+        um a teste, porque nenhum sintoma vai aparecer em produção até o incidente.
+
+  - id: ADR-0055-C11
+    text: |
+      A biblioteca é `aws-jwt-verify`, com `jose` em devDependencies para fabricar tokens de teste;
+      `jose` permanece em produção servindo o emissor legado até sua remoção. Testes de verificação
+      rodam SEM rede, com JWKS local e `verifySync()`.
+    kind: obligation
+    source_lines: ['165-174', 210]
+    applies_to:
+      - 'package.json'
+      - 'tests/modules/auth/**/*.ts'
+    reality:
+      verdict: partial
+      holds_in: []
+      absent_in: [auth]
+      evidence:
+        - 'ausência: aws-jwt-verify não está em dependencies nem devDependencies'
+        - 'package.json:109 — jose ^6.2.3 em dependencies, que é o estado CORRETO hoje: serve o emissor legado ES256'
+      verify: |
+        node -e "const p=require('./package.json');console.log('aws-jwt-verify:',p.dependencies['aws-jwt-verify']??'ausente','| jose:',p.dependencies?.jose??'ausente')"
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `package.json`, quando `aws-jwt-verify` estiver ausente com o Cognito habilitado, ou
+        quando `jose` sair de produção antes da remoção do emissor legado, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        A verificação de token do IdP MUST usar `aws-jwt-verify`. `jose` MUST permanecer em
+        `dependencies` enquanto o emissor legado existir, e MUST sair junto com ele. Teste de
+        verificação MUST rodar sem rede, com JWKS local e `verifySync()`.
+      rationale: |
+        A cláusula "sem rede" não é preferência de estilo: `verify()` assíncrono faz fetch ao
+        encontrar `kid` desconhecido, o que transforma teste unitário em teste de integração
+        silencioso — verde na máquina do dev, vermelho intermitente no CI.
+
+  - id: ADR-0055-C12
+    text: |
+      A sessão pós-login permanece no `SessionStore` in-memory do BFF, correto enquanto ele for
+      single-instance. GATILHO: antes da 2ª réplica, adotar store compartilhado por trás do port
+      `SessionStore<T>`. Condição obrigatória: qualquer adoção inclui guard distribuído, porque o
+      single-flight de refresh é um `Map` em processo. O MySQL está FORA (ADR-0005:60 proíbe o BFF de
+      acessar banco).
+    kind: obligation
+    source_lines: ['126-149']
+    applies_to: []
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        echo 'SessionStore vive no BFF (web-app), fora deste repositório. Verificar de lá.'
+    testability:
+      verdict: testable-with-work
+      layer: integration
+      red: |
+        Dado store compartilhado e duas réplicas, quando dois refreshes concorrentes usam o mesmo
+        token, então a detecção de reúso NÃO deve revogar a cadeia. Sem guard distribuído, revoga — e
+        o teste deve pegar isso ANTES de a 2ª réplica subir.
+      blocker: |
+        Exige o BFF, duas réplicas e um store real. Nada disso é montável a partir do core-api.
+      expected_error: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Adotar store de sessão compartilhado MUST incluir guard distribuído para o single-flight de
+        refresh, no mesmo pacote. O BFF MUST NOT usar MySQL como store (ADR-0005).
+      rationale: |
+        O ADR é explícito: sem o guard, a troca INTRODUZ um defeito de revogação em cascata — a
+        "melhoria" piora o sistema. É o tipo de acoplamento que só se enxerga escrevendo, e que se
+        perde se a dívida for registrada como "trocar o store depois".
+
+findings:
+  - |
+    Nenhuma das 12 rules de `.claude/rules/` menciona Cognito ou este ADR, e a `auth-module.md:9`
+    afirma que a federação "não foi descartada — foi adiada", citando o ADR-0024. A federação foi
+    decidida pela diretoria dois dias antes desta verificação. É o mesmo defeito que a spec 039
+    documentou para o ADR-0012 (citação em massa de ADR superseded) — reproduzido pela própria 039.
+  - |
+    Este ADR não é julgado em nenhum ponto da destilação da spec 039, que declara cobertura de 100%
+    dos 54 ADRs. A ausência não aparece como lacuna porque a contagem da 039 usa a numeração antiga —
+    o que sugere que a lista de ADRs foi montada uma vez e não reconciliada com o diretório.
+    Candidato a gate: teste que compare o índice do README com os arquivos no disco.
+  - |
+    Dependências bloqueantes declaradas e não extraídas como alegações, porque são pré-condições de
+    execução e não regra de edição — mas travam fases: issue #515 (inicialização silenciosa com chave
+    efêmera) trava a Fase 3; criação de contas restrita a administradores no pool trava a Fase 1
+    (sem isso o vínculo JIT entrega permissões de usuário privilegiado a quem cadastrar o e-mail);
+    segundo método de MFA trava a Fase 2.
+  - |
+    Duas invariantes deste ADR já nascem satisfeitas, sem esforço: o payload do token é vazio
+    (`token-issuer.es256.ts:30`) e o molde fail-secure de flag existe (`rbac-mode.ts:12`). Os dois
+    são do ADR-0024 e do ADR-0052 — decisões anteriores que deixaram o caminho pronto. Vale registrar
+    porque é o oposto do padrão comum deste inventário.
+  - |
+    A análise técnica prévia (`inquiries/0024-cognito-vs-identidade-propria-seguranca.md`) recomendou
+    o CONTRÁRIO desta decisão e permanece no handbook como due diligence. O ADR declara que a
+    conclusão dela não reabre a decisão. Um agente que encontre a inquiry sem ler este ADR pode
+    concluir que a questão está aberta — ela não está.
+  - |
+    O ADR reconhece que a justificativa do ADR-0030 para rejeitar MySQL como store ("argumento de
+    alta frequência") está MAL FUNDAMENTADA para este caso, e que a razão correta é arquitetural
+    (ADR-0005 proíbe o BFF de acessar banco). É uma correção de raciocínio de outro ADR feita de
+    passagem, sem gerar ADR próprio — fácil de perder.
+
+provenance:
+  tickets:
+    - AUTH-JWT-KEY-BOOT-GUARD
+  issues: []
+  note: |
+    Cruzamento com a `.claude/.pipeline/` em 2026-07-31: **nenhum ticket implementa o Cognito** — a
+    varredura por `COGNITO|EXTERNAL-SUBJECT` nos 482 `000-request.md` devolve UM arquivo, e é um
+    pré-requisito, não a implementação. `AUTH-JWT-KEY-BOOT-GUARD` (closed-green) declara na linha 4
+    "**Bloqueia:** Fase 3 do ADR-0055 (cutover do Cognito) · **Épico:** #603" e na linha 20 que é
+    "dependência bloqueante do cutover". Ou seja: as sete alegações `absent` deste ADR são ausência por
+    FASE NÃO INICIADA, com um pré-requisito já entregue e épico aberto — não drift.
+    Issues citadas pelo ADR e NÃO lidas: #603 (briefing de implementação), #515 (inicialização com
+    chave efêmera, bloqueante da Fase 3), #514. Também citado: `ERP-INFRA` PR #23 (runbook de
+    infraestrutura), fora deste repositório.

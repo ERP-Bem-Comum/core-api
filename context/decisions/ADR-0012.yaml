@@ -1,0 +1,157 @@
+id: ADR-0012
+title: pnpm como Package Manager (legado e novo)
+source: handbook/architecture/adr/0012-pnpm-package-manager.md
+decided_on: 2026-04-28
+
+declared:
+  status: Superseded by ADR-0029 em 2026-05-30
+  status_normalized: superseded
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0001, ADR-0011, ADR-0029]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    TERCEIRA supersessão parcial do inventário, e o `declared.superseded_by` fica vazio pelo mesmo
+    motivo do `ADR-0002` e do `ADR-0024`: o próprio banner deste ADR diz o que morreu e o que vive —
+    "a escolha de pnpm como package manager único PERMANECE VÁLIDA; o que mudou foi a major fixada".
+    Só a major foi superseded (10.x → 11.x pelo ADR-0029). O real é `pnpm@11.15.1`.
+    O banner é o melhor do acervo: marca explicitamente qual seção está desatualizada, aponta o
+    sucessor, e diz o que continua servindo como evidência. Compare com o `ADR-0056`, que passou dois
+    meses declarando `Accepted` depois de superseded, sem aviso nenhum.
+    E aqui está o problema real, que não é do ADR e sim de quem o cita: **~18 arquivos de doutrina VIVA
+    apontam para este documento superseded, e apenas 2 apontam para o ADR-0029 vigente.** Um deles é o
+    `AGENTS.md`, ponto de entrada canônico do repositório, na seção `IMPORTANTE`.
+
+extraction:
+  state: complete
+  covers: |
+    2 alegações — a escolha de package manager (vigente) e a major fixada (superseded). O "por que NÃO
+    Bun" e a migração do legado são fundamentação; a segunda trata do `legacy_project`, fora deste repo.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: Inelegível na triagem por status — não gera regra
+    applied_to: []
+    gap: |
+      A 039 foi além da triagem aqui, e bem: registrou como "achado crítico" que o ADR-0012 é citado
+      como fonte normativa em ~20 arquivos vivos enquanto o ADR-0029 não é citado em nenhum, e fez a
+      precisão importante — o CONTEÚDO do ADR-0029 está aplicado (verificou as 7 exigências, todas ✅),
+      então o repo não viola a norma; o defeito é de REFERÊNCIA.
+      Duas atualizações: (1) a 039 corrigiu parte do próprio achado ao criar `supply-chain.md`, que
+      hoje cita o ADR-0029 com aviso explícito; (2) o desequilíbrio persiste em ~18 arquivos vivos,
+      incluindo `AGENTS.md`, e segue na lista de pendências dela como escopo de outra US.
+
+claims:
+  - id: ADR-0012-C1
+    text: |
+      `pnpm` é o package manager ÚNICO, em ambos os projetos — o novo desde o dia 1, o legado após
+      migração de yarn 1 classic em janela controlada.
+    kind: obligation
+    source_lines: ['25-28', 9]
+    applies_to:
+      - 'package.json'
+      - '.npmrc'
+    reality:
+      verdict: holds
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'package.json:18 — packageManager declara pnpm@11.15.1 com hash de integridade sha512'
+        - 'package.json:30 — preinstall roda scripts/ci/only-allow-pnpm.ts, bloqueando outro PM'
+        - 'nota: existe hook PreToolUse em .claude/settings.json que bloqueia comando npm (block-npm.sh)'
+        - 'nota: a migração do legado é fora deste repositório e não verificável aqui'
+      verify: |
+        node -e "console.log(require('./package.json').packageManager)"; ls scripts/ci/only-allow-pnpm.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o repositório, quando existir `package-lock.json`, `yarn.lock` ou `bun.lockb`, ou quando o
+        `preinstall` não barrar outro package manager, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: ['scripts/ci/only-allow-pnpm.ts']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        `pnpm` MUST ser o package manager único, fixado em `packageManager` com hash de integridade.
+        MUST NOT existir lockfile de outro gerenciador. O bloqueio MUST ser mecânico, no `preinstall`.
+      rationale: |
+        Metade vigente do ADR e a mais bem enforçada do inventário — tem gate no `preinstall` E hook no
+        harness. Adotar como está; a referência normativa, porém, MUST apontar para o ADR-0029, não
+        para este.
+
+  - id: ADR-0012-C2
+    text: |
+      A major fixada é `pnpm 10.x`, com `engines.pnpm >=10`.
+    kind: obligation
+    source_lines: [25, 9]
+    applies_to:
+      - 'package.json'
+    superseded_by: ADR-0029
+    reality:
+      verdict: contradicted
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'package.json:18 — packageManager é pnpm@11.15.1, não 10.x'
+        - 'nota: o próprio banner deste ADR (linha 9) declara a seção "Configurações padrão" DESATUALIZADA e aponta o ADR-0029'
+      verify: |
+        node -e "const p=require('./package.json');console.log(p.packageManager,'|',JSON.stringify(p.engines))"
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `package.json`, quando a major do pnpm divergir da fixada pelo registro vigente, então o
+        teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: accepted
+      disposition: drop
+      text: null
+      rationale: |
+        Superseded pelo ADR-0029, contraditada pelo código, e o próprio ADR já marca a seção como
+        desatualizada. Descartar sem ressalva — a norma de versão vigente vive no ADR-0029, junto com
+        as quatro settings de supply-chain que a major 11 tornou default.
+
+findings:
+  - |
+    Desequilíbrio de citação confirmado e ainda aberto: **~18 arquivos de doutrina viva citam o
+    ADR-0012** (superseded) — `AGENTS.md`, `README.md`, `docs/01-architecture.md`,
+    `docs/04-dev-guide.md`, `.claude/README.md`, 3 agentes, 2 hooks, 3 skills,
+    `.specify/memory/constitution.md`, `scripts/README.md`, 2 runbooks de `context/` e o doc de
+    processo — **contra 2 que citam o ADR-0029** vigente (`.claude/rules/supply-chain.md` e
+    `handbook/reference/README.md`).
+    O pior deles é o `AGENTS.md`: é o ponto de entrada canônico e cita o superseded na seção
+    `IMPORTANTE`, que é a primeira coisa que um agente lê.
+  - |
+    O conteúdo do ADR-0029 ESTÁ aplicado — a 039 verificou as 7 exigências, todas presentes. Então o
+    repositório não viola a norma; o defeito é puramente de referência. É a forma mais silenciosa de
+    drift: um agente que siga a doutrina até o ADR-0012 encontra "pnpm 10.x" e um documento marcado
+    `Superseded`, sem saber onde está o vigente.
+  - |
+    O banner deste ADR é o modelo a copiar. Ele faz três coisas que nenhum outro superseded do acervo
+    faz juntas: declara o que PERMANECE válido, aponta o sucessor com link, e marca qual seção
+    específica está desatualizada. O `ADR-0003` e o `ADR-0004` têm banner de premissa errada; o
+    `ADR-0056` não tinha nenhum. Candidato a virar exigência do template de supersessão.
+  - |
+    Terceira supersessão parcial do inventário (`0002`, `0012`, `0024`), agora em 3 de 20 registros.
+    Nos três, o `superseded_by` no nível do documento seria enganoso, e nos três a divisão é a mesma
+    forma: a ESCOLHA permanece, o PARÂMETRO muda.
+
+provenance:
+  tickets:
+    - CTR-PNPM-11-MIGRATION
+    - CTR-PNPM-ONLY-ALLOW
+  issues: []
+  note: |
+    Inquiry-0006 (pnpm vs Bun) embasou este ADR — não lida. O acervo tem CTR-PNPM-ONLY-ALLOW e
+    CTR-PNPM-11-MIGRATION, o segundo sendo a execução do ADR-0029; nenhum lido. A pendência de corrigir
+    as citações está registrada na lista da spec 039 como escopo de outra US.

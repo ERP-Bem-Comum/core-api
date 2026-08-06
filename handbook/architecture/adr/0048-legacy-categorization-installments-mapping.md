@@ -2,9 +2,9 @@
 
 # ADR-0048: Reuso da categorização 020 + Anticorruption Layer de `installments → payables` + dashboard fatiado (gate Camadas 0–2)
 
-- **Status:** Proposed
+- **Status:** Accepted (ratificado em 2026-08-05)
 - **Date:** 2026-06-23
-- **Deciders:** Gabriel (tech lead / arquiteto) — aguardando ratificação. P.O. já ratificou o RBAC (ver §Decisão D3).
+- **Deciders:** Gabriel (tech lead / arquiteto). P.O. já ratificou o RBAC (ver §Decisão D3). **Ratificação em 2026-08-05**, no gate humano da Fase 1 da spec 040: a alegação `ADR-0051-C6` do inventário mostrou que o [ADR-0051](./0051-taxonomy-owner-budget-plan-scoped.md), `Accepted` desde 2026-07-14, declara vigente o §D1 deste ADR — que seguia `Proposed` há três semanas. Cadeia de decisão apoiada em documento não ratificado; ratificar fecha a lacuna sem reabrir o mérito.
 - **Origem:** Spike [#233](https://github.com/ERP-Bem-Comum/core-api/issues/233) (research time-boxed). Relatório completo em [`.claude/.planning/SPIKE-233-CATEGORIZACAO-INSTALLMENTS.md`](../../../.claude/.planning/SPIKE-233-CATEGORIZACAO-INSTALLMENTS.md).
 - **Gate de:** Camada 2 do épico [#169](https://github.com/ERP-Bem-Comum/core-api/issues/169) — Dashboard ([#112](https://github.com/ERP-Bem-Comum/core-api/issues/112)), Reports ([#114](https://github.com/ERP-Bem-Comum/core-api/issues/114)), Budget Plans ([#113](https://github.com/ERP-Bem-Comum/core-api/issues/113)).
 - **Conformidade com:** [ADR-0001](./0001-strangler-fig-over-rewrite.md) (strangler fig — **vence**), [ADR-0005](./0005-thin-bff-gateway.md) (thin BFF), [ADR-0006](./0006-modular-monolith-core-api.md) / [ADR-0014](./0014-mysql-database-isolation.md) (modular monolith / isolamento), [ADR-0015](./0015-mysql-outbox-pattern.md) (outbox), [ADR-0022](./0022-read-models-via-projection-over-event-stream.md) (read-models por projeção). **Não cria modelo novo nem altera a 020** — apenas fixa a tradução legado↔novo.

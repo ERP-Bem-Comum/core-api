@@ -1,0 +1,491 @@
+id: ADR-0048
+title: Reuso da categorização 020 + Anticorruption Layer de `installments → payables` + dashboard fatiado
+source: handbook/architecture/adr/0048-legacy-categorization-installments-mapping.md
+decided_on: 2026-06-23
+
+declared:
+  status: Accepted (ratificado em 2026-08-05)
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0001, ADR-0005, ADR-0006, ADR-0014, ADR-0015, ADR-0022, ADR-0051]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Um ADR `Proposed` "aguardando ratificação" cujos mapas de tradução estão implementados quase ao pé da
+    letra — e sobre o qual um ADR `Accepted` posterior foi construído.
+    O Mapa A confere: `fin_categories.group` é `varchar(12)` com CHECK
+    `IN ('despesa','receita','ajuste')` (`financial/.../mysql.ts:989`), a subcategoria usa `parent_id`
+    (`:982`) e não existe `release_type` em `fin_*`. O Mapa B confere: `PayableKind` é `Parent | Child`
+    (`domain/payable/query.ts:26` — "Parent (líquido) | Child (retenção)"). E a derivação de "atrasado" do
+    Mapa C está codificada **literalmente**: `payment-position-projection.ts:94` faz
+    `sum(case when status in ('Open','Approved') and dueDate < today …)` — a expressão exata
+    `status∈{Open,Approved} ∧ dueDate<hoje`.
+    O D3 está em QUATRO dos cinco (corrigido no cruzamento com a `.pipeline/` — ver `findings`):
+    `/financial/dashboard/no-contract-suppliers` (`plugin.ts:1803`, nome exato do ADR),
+    `/financial/dashboard/cost-centers` (`:1821`), `/financial/dashboard/recent-payments` (`:1785`, o
+    `…/last-payments` renomeado) e `/reports/dashboard/realized` (`reports/.../plugin.ts:407`, DASH-F4).
+    Falta só `…/dashboard/kpis`. Os endpoints estão distribuídos por dois módulos conforme quem é dono do
+    dado — o `…` do ADR resolveu-se em dois prefixos, que é o correto num monolito modular.
+    Duas divergências pontuais no Mapa A: o `fin_documents` tem CINCO refs, não quatro — ganhou
+    `subcategory_ref` (`:91`, citando a #502) —, e `fin_categories` ganhou `cost_center_id` (`:986`, da
+    #341). O achatamento que o Mapa A prescrevia foi parcialmente desfeito por decisões posteriores.
+
+extraction:
+  state: complete
+  covers: |
+    9 alegações — as três decisões (D1 decomposto em achatamento, refs leves e ausência de `paymentType`;
+    D2 em granularidade, fórmula-chave e derivação de status; D3 em fatiamento e RBAC) mais a proibição
+    Conformist que fundamenta D1. As tabelas de mapeamento são detalhamento das alegações.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: INELEGÍVEL (status Proposed)
+    applied_to: []
+    gap: |
+      A 039 descartou este ADR pelo status — dez dos 54 saíram por isso, e o critério é razoável para uma
+      destilação que produz regras normativas.
+      Mas o custo aqui é alto e mensurável: a fórmula-chave `SUM(Payable.value WHERE status='Paid')` e a
+      derivação de "atrasado" já estão no código, e o `ADR-0051` (Accepted, três semanas depois) declara
+      o §D1 deste "segue válido" e constrói sobre ele. Filtrar por status deixou de fora uma decisão
+      **vigente na prática e referenciada por uma decisão aceita**.
+
+claims:
+  - id: ADR-0048-C1
+    text: |
+      D1 — REUSAR a categorização 020 intocada; a hierarquia legada de 3 níveis é ACHATADA em duas
+      dimensões (`CostCenter` plano + `Category` com `parentId` hierárquico opcional). `Category.group` ∈
+      `despesa`/`receita`/`ajuste`, sendo `ajuste` novo (sem origem legada).
+    kind: obligation
+    source_lines: [33, 39, 41, 42]
+    applies_to:
+      - 'src/modules/financial/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: partial
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - "src/modules/financial/adapters/persistence/schemas/mysql.ts:989 — check('fin_categories_group_chk', sql`group IN ('despesa','receita','ajuste')`)"
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:978 — group: varchar(group, { length: 12 }).notNull()'
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:971 — comentário: group varchar(12) + CHECK (ADR-0020 — sem ENUM nativo); cast row→union seguro pós-CHECK'
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:982 — parentId: varchar(parent_id, { length: 36 }), a hierarquia opcional'
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:986 — costCenterId no fin_categories, com o comentário :984 registrando "Nullable = categoria sem centro (back-compat pré-#341)"'
+        - 'ausência: nenhum release_type/releaseType em fin_* — o conceito ficou fora da categorização de lançamento, como o Mapa A prescreve'
+        - 'nota: o costCenterId em fin_categories é posterior ao ADR (#341) e acopla as duas dimensões que o Mapa A tratava como ortogonais — o achatamento foi parcialmente desfeito'
+      verify: |
+        grep -n "group\|parentId\|costCenterId" src/modules/financial/adapters/persistence/schemas/mysql.ts | sed -n '1,10p'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `fin_categories`, quando o CHECK de `group` não tiver exatamente os três valores, ou quando
+        aparecer coluna de tipo de lançamento (`release_type`, `launch_type`) em `fin_*`, então o teste
+        falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        `fin_*` MUST NOT ter coluna de tipo de lançamento (`release_type`, `launch_type`) — o conceito
+        pertence ao `budget-plans` (ADR-0051). A hierarquia de categoria MUST usar `parent_id`, nunca
+        tabelas por nível.
+      rationale: |
+        Estreitado para as duas proibições verificáveis, e a primeira ganhou a âncora que o `ADR-0051`
+        deu depois: hoje o `launch_type` existe em `bgp_subcategories` com os quatro valores legados
+        exatos, então a fronteira deixou de ser hipótese e virou fato. A parte do ADR sobre `ajuste` ser
+        novo não é regra de edição — é semântica, e o `ADR-0051` a transformou no seu argumento central.
+
+  - id: ADR-0048-C2
+    text: |
+      O core NÃO tem tabela-pivô de `Categorization`: a categorização vive como REFS LEVES no `Document`
+      (`categoryRef`, `costCenterRef`, `programRef`, `budgetPlanRef`) — ADR-0014, sem FK cross-módulo.
+    kind: obligation
+    source_lines: [44]
+    applies_to:
+      - 'src/modules/financial/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: partial
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:88 — budgetPlanRef: varchar(budget_plan_ref, { length: 36 })'
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:89 — categoryRef'
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:92 — costCenterRef'
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:93 — programRef'
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:91 — subcategoryRef, a QUINTA ref, com o comentário :90 "Subcategoria = folha da árvore do plano (#502). Soft ref (sem FK — ADR-0014); aditiva/nullable"'
+        - 'ausência: nenhuma tabela-pivô de categorização em fin_* — as refs vivem na própria linha do documento'
+        - 'nota: a ref extra é posterior ao ADR e coerente com o ADR-0051 (a folha é do plano); ela contradiz o Mapa A, que resolvia a folha por parentId da Category'
+      verify: |
+        grep -n "Ref: varchar" src/modules/financial/adapters/persistence/schemas/mysql.ts | sed -n '1,8p'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `fin_*`, quando uma ref de categorização tiver `.references()` para tabela de outro módulo,
+        então o teste falha. E toda ref de categorização MUST ser nullable — a categorização é opcional.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar: "ref leve sem FK cross-módulo" é a `ADR-0014-C3`, já proposta com escopo geral.
+        Registrar como evidência de que a proibição vale também para refs de TAXONOMIA, não só de
+        agregado — e que o conjunto de refs cresceu de quatro para cinco sem que nada barrasse.
+
+  - id: ADR-0048-C3
+    text: |
+      NÃO existe enum `paymentType` no core. "Sem contrato" = `Document.contractRef IS NULL`.
+      **R-5:** `{contractRef IS NULL} ⊇ {paymentType=NO_CONTRACT}` — o conjunto do core é MAIOR, logo o
+      relatório "Fornecedores sem Contrato" SUPERESTIMA em relação ao legado. `payeeKind` é tipo de
+      favorecido, NÃO de pagamento.
+    kind: obligation
+    source_lines: [45, 92]
+    applies_to:
+      - 'src/modules/financial/**/*.ts'
+      - 'src/modules/reports/**/*.ts'
+    reality:
+      verdict: partial
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhum paymentType em src/modules/financial/ — o enum legado não foi portado'
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:87 — contractRef: varchar(contract_ref, { length: 36 }), nullable, que é o discriminador de fato'
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:83 — comentário: CHECK = enum de domínio (4 valores — domain/document/types.ts §PayeeKind), confirmando que payeeKind é outro eixo'
+        - 'nota: a divergência de CONJUNTO (R-5) é semântica e não observável no schema; auditá-la exigiria comparar resultado do relatório com o legado, fora do alcance desta fase'
+      verify: |
+        grep -rn "paymentType\|NO_CONTRACT" src/modules/ --include='*.ts' | head; grep -n "contractRef" src/modules/financial/adapters/persistence/schemas/mysql.ts | head -2
+    testability:
+      verdict: testable-with-work
+      layer: integration
+      red: |
+        Dado um documento sem contrato e um com `payeeKind` diverso, quando o relatório "Fornecedores sem
+        Contrato" roda, então o critério MUST ser `contractRef IS NULL` e MUST NOT usar `payeeKind`.
+        Provar a superestimação em relação ao legado exigiria dataset legado pareado — daí o
+        `testable-with-work`.
+      expected_error: null
+      blocker: 'Comparar conjuntos com o legado exige dump pareado; sem ele só o critério é testável.'
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        "Sem contrato" MUST ser definido como `contractRef IS NULL`. MUST NOT usar `payeeKind` como
+        discriminador de vínculo contratual. Relatório cuja definição diverge do legado em CONJUNTO
+        (não em fórmula) MUST declarar a divergência no próprio contrato de saída.
+      rationale: |
+        A terceira cláusula é a que o ADR pede sem escrever como norma. O R-5 é o tipo de divergência
+        mais perigosa possível: a fórmula está certa, o número está "certo" pelo critério novo, e ninguém
+        percebe que ele não bate com o relatório antigo — porque não bater é o comportamento correto. Sem
+        declarar, a primeira conferência contra o legado vira investigação de bug inexistente.
+
+  - id: ADR-0048-C4
+    text: |
+      D2 — `Payable` cumpre o papel da parcela legada PARA TÍTULOS SEM PARCELAMENTO
+      (1 `Document` = 1 vencimento = 1 `Payable` Parent). `Installment.type=LIQUIDO` → `Payable`
+      `kind='Parent'` (`value=netValue`); `Installment.type=IMPOSTO` → `kind='Child'` (retenção
+      ISS/IRRF/INSS/CSRF). SEM parcelamento temporal agora.
+    kind: obligation
+    source_lines: [49, 56, 57, 58]
+    applies_to:
+      - 'src/modules/financial/domain/payable/*.ts'
+      - 'src/modules/financial/domain/document/document.ts'
+    reality:
+      verdict: holds
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'src/modules/financial/domain/payable/query.ts:26 — kind: PayableKind; // Parent (líquido) | Child (retenção)'
+        - "src/modules/financial/domain/document/document.ts:93 — kind: 'Parent' na construção do título líquido"
+        - "src/modules/financial/domain/document/document.ts:105 — kind: 'Child' para a retenção"
+        - "src/modules/financial/domain/document/events.ts:14 — kind: 'Parent' | 'Child' atravessa o contrato de evento"
+        - 'ausência: nenhum parcelamento temporal — não há tabela nem VO de parcela/installment em financial; o documento tem um dueDate'
+      verify: |
+        grep -rn "'Parent'\|'Child'" src/modules/financial/domain/ --include='*.ts' | head -5; grep -rn "installment" src/modules/financial/ --include='*.ts' | head -3
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado um documento com retenção, quando os títulos são gerados, então MUST existir exatamente um
+        `Parent` com `value = netValue` e um `Child` por retenção. Se aparecer parcelamento temporal
+        (mais de um `Parent` por documento), o teste falha — é o gatilho de reabertura do D2.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Um `Document` MUST gerar exatamente UM `Payable` `kind='Parent'`. Fração de título MUST ser por
+        RETENÇÃO (`Child`), nunca temporal. Introduzir parcelamento temporal MUST exigir decisão própria.
+      rationale: |
+        A primeira frase é o invariante que torna o resto verificável, e o ADR só a implica. É a lacuna
+        que o R-1 nomeia como risco da migração histórica — se o dump legado trouxer título parcelado, o
+        mapeamento não tem onde pôr as parcelas, e a saída fácil (um `Document` por parcela) mudaria a
+        contagem de documentos em todo KPI. Fixar o "exatamente um Parent" faz a violação aparecer no
+        teste em vez de aparecer no relatório.
+
+  - id: ADR-0048-C5
+    text: |
+      FÓRMULA-CHAVE de `totalExpenses`/realizado: `SUM(Installment.value WHERE status='PAGO')` do legado
+      equivale a `SUM(Payable.value WHERE status='Paid')` no core.
+    kind: obligation
+    source_lines: [59]
+    applies_to:
+      - 'src/modules/financial/public-api/*.ts'
+      - 'src/modules/reports/**/*.ts'
+    reality:
+      verdict: partial
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'src/modules/financial/domain/payable/types.ts:16 — status: DocumentStatus; // espelha o documento nesta fatia'
+        - "src/modules/financial/adapters/persistence/repos/document-repository.drizzle.ts:444 — o critério de conciliado usa finDocuments.status = 'Paid' junto da contagem de títulos"
+        - 'nota: o Payable NÃO tem status próprio — ele espelha o DocumentStatus, então a fórmula do Mapa C opera sobre o status do documento, não sobre um estado do título'
+        - 'nota: a fórmula agregada de realizado não foi localizada num único ponto; o que existe são derivações por caso de uso (conciliado, posição de pagamentos)'
+      verify: |
+        grep -rn "status: DocumentStatus" src/modules/financial/domain/payable/types.ts; grep -rn "'Paid'" src/modules/financial/public-api/*.ts | head
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado um conjunto de títulos pagos e não pagos, quando o realizado é computado, então MUST somar
+        apenas os `Paid`. E o teste MUST fixar a fonte do status — se o `Payable` passar a ter status
+        próprio divergente do documento, a fórmula muda de significado sem mudar de forma.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        "Realizado" MUST ser `SUM(value) WHERE status = 'Paid'` sobre títulos. A fonte do status do título
+        MUST ser declarada — hoje ele ESPELHA o `DocumentStatus`, e divergir disso MUST exigir decisão.
+      rationale: |
+        Estreitado com o que a verificação revelou e o ADR assume implícito: `payable/types.ts:16` diz
+        `status: DocumentStatus; // espelha o documento nesta fatia`. A fórmula do Mapa C fala de
+        `Payable.status` como se fosse próprio; ele é herdado. Enquanto espelha, tanto faz — no dia em que
+        o título ganhar ciclo próprio (baixa parcial, por exemplo), a mesma fórmula passa a somar outra
+        coisa sem nenhum sinal.
+
+  - id: ADR-0048-C6
+    text: |
+      Mapa C — o core NÃO materializa "atrasado": ele é DERIVADO como
+      `status ∈ {Open, Approved} ∧ dueDate < hoje`. PENDENTE legado abrange dois estados
+      (`Open`/`Approved`); CANCELADO vira hard delete em `Open` ou `Refused`.
+    kind: obligation
+    source_lines: [65, 67, 68]
+    applies_to:
+      - 'src/modules/financial/public-api/*.ts'
+      - 'src/modules/financial/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: holds
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - "src/modules/financial/public-api/payment-position-projection.ts:94 — sum(case when status in ('Open','Approved') and dueDate < today then valueCents else 0 end): a expressão literal do Mapa C"
+        - 'src/modules/financial/public-api/payment-position-projection.ts:59 — overdueCents: number no contrato de saída — derivado, não coluna'
+        - 'ausência: nenhuma coluna de status "atrasado"/"overdue" em fin_* — a derivação é o único caminho'
+        - 'src/modules/financial/domain/document/types.ts:31 — Transmitted/Refused/Paid/Reconciled são reservados (sem transição), o que situa Refused como estado previsto'
+      verify: |
+        grep -n "overdue" src/modules/financial/public-api/payment-position-projection.ts | head -4
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado um título `Approved` com `dueDate` no passado, quando a posição é computada, então ele MUST
+        contar como atrasado. Dado um `Paid` com `dueDate` no passado, MUST NÃO contar. E MUST NÃO existir
+        coluna persistida de atraso — atraso depende de "hoje" e materializar convida a dado velho.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Estado que depende do tempo corrente (atrasado, a vencer, vencido hoje) MUST ser derivado na
+        consulta. MUST NOT ser persistido como coluna de status.
+      rationale: |
+        Generalizado de "atrasado" para "estado dependente do tempo corrente", porque o modo de falha é o
+        mesmo em todos: uma coluna materializada fica correta no instante da escrita e errada no dia
+        seguinte, sem nada indicando. É uma das poucas alegações deste ADR `Proposed` cuja implementação
+        está **idêntica** ao especificado — `payment-position-projection.ts:94` é a expressão do Mapa C
+        transcrita em SQL.
+
+  - id: ADR-0048-C7
+    text: |
+      D3 — Endpoint de Dashboard FATIADO, um por widget: `…/dashboard/kpis`, `…/dashboard/cost-centers`,
+      `…/dashboard/realized`, `…/dashboard/last-payments`, `…/dashboard/no-contract-suppliers`
+      (ADR-0005, thin BFF). Desacopla a entrega no front — 1 widget = 1 PR.
+    kind: obligation
+    source_lines: [72]
+    applies_to:
+      - 'src/modules/*/adapters/http/**/*.ts'
+      - 'src/server.ts'
+    reality:
+      verdict: partial
+      holds_in: [financial, reports]
+      absent_in: []
+      evidence:
+        - "src/modules/financial/adapters/http/plugin.ts:1803 — url: '/financial/dashboard/no-contract-suppliers' — o NOME EXATO do ADR"
+        - "src/modules/financial/adapters/http/plugin.ts:1821 — url: '/financial/dashboard/cost-centers' (#241)"
+        - "src/modules/financial/adapters/http/plugin.ts:1785 — url: '/financial/dashboard/recent-payments' (#239) — o …/last-payments do ADR, renomeado"
+        - "src/modules/reports/adapters/http/plugin.ts:407 — url: '/reports/dashboard/realized' — DASH-F4 (#112): widget Realizado x Previsto mensal"
+        - 'ausência: nenhuma rota …/dashboard/kpis em módulo algum — é o único dos cinco que não existe'
+        - 'nota: QUATRO dos cinco endpoints existem, todos com a forma …/dashboard/<widget> que o ADR prescreve, distribuídos entre financial e reports conforme quem é dono do dado'
+        - 'nota: os tickets DASH-F1-KPI-COST-CENTERS, DASH-F4-REALIZED-VS-PLANNED e DASH-F5-NO-CONTRACT-TOP5 estão closed-green em .claude/.pipeline/'
+      verify: |
+        grep -rn "url: '/financial/dashboard\|url: '/reports/dashboard" src/modules/*/adapters/http/plugin.ts; grep -rn "kpis" src/modules/*/adapters/http/plugin.ts
+    testability:
+      verdict: testable
+      layer: contract
+      red: |
+        Dado o conjunto de widgets do dashboard, quando um endpoint servir mais de um widget, então o teste
+        falha — o fatiamento é 1 widget = 1 endpoint. E cada rota MUST viver no módulo dono do dado.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Endpoint de dashboard MUST servir exatamente um widget e MUST viver no módulo dono do dado, sob o
+        prefixo `<módulo>/dashboard/<widget>`. MUST NOT existir endpoint agregador multi-widget nem módulo
+        `dashboard` próprio.
+      rationale: |
+        CORRIGIDO após o cruzamento com a `.pipeline/`: eu havia registrado esta alegação como `absent`
+        porque procurei um MÓDULO chamado `dashboard` (`ls src/modules/`), quando o ADR escreve
+        `…/dashboard/kpis` com prefixo elidido. Quatro dos cinco endpoints existem com a forma exata,
+        espalhados por `financial` e `reports`. A cláusula final é a lição: o `…` do ADR resolveu-se em DOIS
+        prefixos de módulo, o que é o comportamento correto num monolito modular — o widget mora onde o dado
+        mora, e um módulo `dashboard` transversal violaria o `ADR-0006`.
+
+  - id: ADR-0048-C8
+    text: |
+      RBAC (ratificado pela P.O. em 2026-06-23): Dashboard e Reports SEM `authorize(permission)` — só
+      autenticação, espelhando o legado (qualquer usuário autenticado vê os agregados). Budget Plans
+      decide o RBAC ao entrar.
+    kind: permission
+    source_lines: [74]
+    applies_to:
+      - 'src/modules/reports/adapters/http/**/*.ts'
+      - 'src/modules/budget-plans/adapters/http/**/*.ts'
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        grep -rn "authorize(" src/modules/reports/adapters/http/*.ts src/modules/budget-plans/adapters/http/*.ts | head
+    testability:
+      verdict: testable
+      layer: contract
+      red: |
+        Dado um usuário autenticado sem permissão específica, quando pede um agregado de Reports, então
+        MUST receber 200. Se receber 403, a decisão da P.O. foi contrariada — e o inverso (rota sem
+        autenticação alguma) também MUST falhar.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Rota deliberadamente SEM `authorize(permission)` MUST registrar a decisão no ponto da rota,
+        citando quem a tomou. Ausência de `authorize` sem registro MUST ser tratada como esquecimento.
+      rationale: |
+        Estreitado da permissão para a exigência de RASTRO, porque "não tem RBAC" e "esqueceram o RBAC"
+        são indistinguíveis no código — e o segundo caso é uma falha de segurança silenciosa. O
+        `AUTH_RBAC_MODE=bypass` (ADR-0052) já mostra que este repo tem mais de um caminho para uma rota
+        ficar sem autorização; sem marcação explícita, nenhuma auditoria consegue separar decisão de
+        omissão.
+
+  - id: ADR-0048-C9
+    text: |
+      PROIBIDO adotar o relacionamento Conformist com o legado: portar
+      `CostCenter→Category→SubCategory`+`releaseType` para a categorização de lançamento contradiz o
+      ADR-0001 (modelo novo soberano). O caminho canônico é o Anticorruption Layer.
+    kind: prohibition
+    source_lines: [29, 33]
+    applies_to:
+      - 'src/modules/financial/domain/**/*.ts'
+      - 'src/modules/financial/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: holds
+      holds_in: [budget-plans, financial]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhuma estrutura de 3 níveis por tabela em fin_* — a hierarquia é parent_id sobre uma tabela'
+        - 'src/modules/budget-plans/adapters/persistence/schemas/mysql.ts:225 — o releaseType legado reapareceu como launch_type em bgp_subcategories, com os quatro valores exatos, no módulo de PLANEJAMENTO'
+        - 'handbook/architecture/adr/0051-taxonomy-owner-budget-plan-scoped.md:106 — o ADR-0051 registra que reproduzir o legado no budget-plans é "decisão de domínio deliberada e já vigente", não submissão acidental'
+      verify: |
+        grep -n "launch_type" src/modules/budget-plans/adapters/persistence/schemas/mysql.ts | head -3
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `fin_*`, quando aparecer coluna ou tabela que reproduza a estrutura legada de categorização
+        (três níveis, `release_type`), então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como duplicata: a proibição operacional já está na `C1` (`fin_*` sem tipo de
+        lançamento). O que vale guardar é a RAZÃO — Conformist contradiz o `ADR-0001` —, e ela está mais
+        bem contada no `ADR-0051`, que distingue reproduzir o legado onde é deliberado (`budget-plans`)
+        de reproduzi-lo onde seria submissão (`financial`).
+
+findings:
+  - |
+    **Um ADR `Proposed` que sustenta um `Accepted`.** O `ADR-0051` (Accepted, 2026-07-15) declara
+    "§D1 segue válido", "este ADR **não reabre** essa decisão" e constrói a fronteira de owner sobre ela.
+    Ou seja: uma decisão aceita repousa sobre uma não ratificada. Isto é pior que o limbo do `ADR-0017` —
+    lá o `Proposed` só envelhecia; aqui ele é **carregado como fundamento** por uma decisão posterior. A
+    saída barata é ratificar o `0048` (o `0051` já o faz na prática, por referência); a saída errada é
+    deixar como está e perder a rastreabilidade de qual decisão vale.
+  - |
+    **CORREÇÃO (cruzamento com a `.pipeline/`): o D3 existe em 4 de 5, e eu havia registrado `absent`.**
+    Meu `verify` foi `ls src/modules/` procurando um MÓDULO chamado `dashboard`; o ADR escreve
+    `…/dashboard/kpis` com o prefixo elidido. Os tickets `DASH-F1-KPI-COST-CENTERS`,
+    `DASH-F4-REALIZED-VS-PLANNED` e `DASH-F5-NO-CONTRACT-TOP5` estão closed-green, e as rotas estão em
+    `financial/adapters/http/plugin.ts:1785,1803,1821` e `reports/.../plugin.ts:407`.
+    O `…` resolveu-se em DOIS prefixos de módulo, cada widget no módulo dono do dado — que é o comportamento
+    exigido pelo `ADR-0006`, e um módulo `dashboard` transversal teria sido a violação. **Ler a elipse de um
+    ADR como se fosse literal foi o erro; o ticket foi o que me corrigiu.**
+    O que sobrevive do padrão original: os Mapas A, B e C estão no código, um ao pé da letra
+    (`payment-position-projection.ts:94`). Mas a tese "tradução se implementa melhor que endpoint" **não se
+    sustenta** — os endpoints também foram construídos, e por cards próprios.
+  - |
+    **O achatamento do Mapa A foi parcialmente desfeito por duas decisões posteriores.** O Mapa A resolvia
+    a folha da hierarquia com `parent_id` da `Category` e listava quatro refs no documento. Hoje
+    `fin_documents` tem CINCO (`subcategory_ref`, `:91`, citando a #502) e `fin_categories` ganhou
+    `cost_center_id` (`:986`, da #341) acoplando as duas dimensões que o Mapa tratava como ortogonais.
+    Nenhuma das duas é violação — ambas vêm de tickets legítimos, e a `subcategory_ref` é coerente com o
+    `ADR-0051`. Mas o Mapa A, lido hoje, descreve uma estrutura que não é mais a do banco.
+  - |
+    O R-5 é a classe de divergência mais difícil de auditar do inventário: **a fórmula está certa e o
+    conjunto é outro.** `{contractRef IS NULL} ⊇ {paymentType=NO_CONTRACT}` significa que o relatório
+    "Fornecedores sem Contrato" do core mostra MAIS fornecedores que o legado — corretamente, pelo
+    critério novo. Não há teste que pegue isso, porque não é erro; e a primeira conferência contra o
+    legado vira caça a bug inexistente. Daí a cláusula proposta na `C3`: divergência de conjunto tem de
+    ser declarada no contrato de saída, não só no ADR.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    O ADR cita o spike #233 (relatório em `context/planning/SPIKE-233-CATEGORIZACAO-INSTALLMENTS.md`), o
+    épico #169 e as issues #112, #113, #114 e #179 — nenhum lido nesta fase. O R-1 (parcelamento temporal
+    na migração histórica) pede issue própria "antes da migração de histórico" e não foi verificado se ela
+    existe.

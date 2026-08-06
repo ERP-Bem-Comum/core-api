@@ -34,7 +34,7 @@ labels: ['agent-found', 'needs-triage']
 ## 🧠 Por quê (causa-raiz + impacto) — o "por que consertar"
 
 - **Causa-raiz:** <!-- a CAUSA, não o sintoma. Ex.: "o createContractBodySchema não inclui o campo, então o use case nunca recebe." -->
-- **Regra/princípio violado:** <!-- ancore: ADR-XXXX, regra do AGENTS.md/.claude/rules, invariante de domínio, OWASP, etc. Se nada é violado, explique por que ainda assim é um problema. -->
+- **Regra/princípio violado:** <!-- ancore: ADR-XXXX, regra do CLAUDE.md/.claude/rules, invariante de domínio, OWASP, etc. Se nada é violado, explique por que ainda assim é um problema. -->
 - **Impacto:** <!-- quem/o que é afetado e quão grave (dado errado? bloqueia front? segurança? só legibilidade?). -->
 
 ## 🔁 Reprodução / evidência

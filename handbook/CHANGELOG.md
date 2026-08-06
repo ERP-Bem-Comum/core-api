@@ -4,6 +4,62 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-08-05 — 📄 `ADR-0059` (Accepted) + ratificação do `ADR-0048` e do `ADR-0049`: a fronteira com o BFF fica descrita como ela é
+
+Três movimentos do **gate humano da Fase 1** da spec 040, todos disparados por uma coisa só: levar as alegações do inventário ao dono do repo em vez de inferi-las do código.
+
+**Ratificação do [ADR-0048](./architecture/adr/0048-legacy-categorization-installments-mapping.md).** O [ADR-0051](./architecture/adr/0051-taxonomy-owner-budget-plan-scoped.md), `Accepted` desde 2026-07-14, declarava vigente o §D1 do 0048 — que seguia `Proposed`, com o texto "aguardando ratificação", **três semanas depois**. Cadeia de decisão apoiada em documento não sancionado. Ratificar não fere a imutabilidade: o `README` dos ADRs prevê `Proposed → Accepted` como ciclo normal. O que impede a reincidência é mecânico: `tests/cleanup/adr-status-chain.test.ts` (novo) barra ADR `Accepted` que declare `Complementa:`/`Conformidade com:` apontando para `Proposed`, e a **guarda 7** do `SCHEMA.md` faz o mesmo uma camada abaixo, entre o ADR e a alegação extraída dele.
+
+**Ratificação do [ADR-0049](./architecture/adr/0049-core-api-bff-boundary.md), com duas cláusulas CORRIGIDAS antes.** A verificação com o dono do repo mostrou que a topologia tinha mudado: o core-api permanece público **em definitivo**, não "até o go-live" — servir a API não deve depender de tudo estar numa rede só. Isso **endurece** a decisão: os guardrails de authz e multi-tenant deixam de ser ponte até uma Fase 2 de rede e viram defesa final. A regra de ouro também foi estreitada — a proibição é de **client-side** falar com o core, não de exclusividade de consumo. Corrigir enquanto o ADR ainda era `Proposed` é legítimo; ratificar antes teria sancionado um `MUST` que a decisão nova já contradizia.
+
+**Novo [ADR-0059](./architecture/adr/0059-bff-aggregates-without-business-rules.md)**, supersedendo **parcialmente** o [ADR-0005](./architecture/adr/0005-thin-bff-gateway.md). O 0005 enumerou três opções — front escolhe URL, BFF burro, BFF inteligente — e escolheu a segunda, decidindo "**Zero regra de negócio. Zero composição de respostas**", alvo de 200-300 linhas. **O BFF real ficou entre a 2 e a 3, e o ADR não previa esse ponto:** ele agrega chamadas e entrega view-model pronto, mas não valida regra de negócio. Agregar É composição; não É regra de negócio. O 0005 tratou as duas como pacote, e elas não são. Caem "Zero composição" e o alvo numérico; permanecem "zero regra de negócio", roteamento por prefixo, cross-cutting e "zero cache de domínio".
+
+**Por que isso nunca apareceu no inventário:** ele confronta ADRs com `src/`, e o BFF **não vive neste repositório**. O `ADR-0005` jamais foi verificado contra o BFF real — a contradição só emergiu quando a alegação `ADR-0049-C6` foi levada à verificação humana. É o limite estrutural do método, e está declarado no ADR-0059 §Negativas: nenhuma cláusula dele é verificável daqui.
+
+**O alvo de 200-300 linhas sai pelo mesmo motivo que o [ADR-0058](./architecture/adr/0058-runtime-tracks-recommended-lts.md) tirou a versão do ADR:** proxy numérico envelhece sozinho. Um BFF que agrega dez telas passa disso sem ganhar uma linha de regra de negócio. A régua que substitui é verificável por leitura, não por contagem.
+
+`.claude/rules/http-edge.md` foi atualizada junto — ela enumerava "roteia, valida JWT, aplica rate limit", descrição da opção 2 que o BFF deixou de ser. Duas fontes divergindo sobre a mesma norma é a fábrica de drift que este acervo passou a semana desfazendo.
+
+## 2026-08-05 — 📄 `ADR-0058` (Accepted): o runtime acompanha o LTS recomendado — critério em vez de versão fixa
+
+Novo [ADR-0058](./architecture/adr/0058-runtime-tracks-recommended-lts.md) (**Accepted**), supersedendo **parcialmente** o [0002](./architecture/adr/0002-keep-nodejs-runtime.md) e o [0009](./architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md) — apenas a **forma de fixar versão**, não a escolha de Node como runtime nem de TypeScript como linguagem, que permanecem integralmente vigentes.
+
+**A decisão nasceu de uma medição, não de uma intuição.** O inventário de decisões (spec 040) encontrou 21 alegações com veredito `contradicted`, e duas delas — `ADR-0002-C2` ("a versão do runtime é Node.js 20 LTS") e `ADR-0009-C5` ("espera-se troca de comando e **ajustes mínimos**") — contradizem o código **pela mesma causa**. Nenhuma foi erro de julgamento: em abril/2026 o Node 20 **era** o LTS, e "ajustes mínimos" era estimativa razoável. O defeito é de forma — um ADR que fixa versão, ou que estima esforço futuro, produz afirmação que **envelhece sozinha**, sem ninguém errar e sem nada acontecer. Como ADR é imutável, a afirmação envelhecida fica lá e quem lê o documento isolado age sobre ela.
+
+**O que muda.** O runtime passa a acompanhar o **LTS recomendado** por atualização **gradual** (subida deliberada, verificável em diff, gate verde antes e depois — nunca salto arrastado por dependência). A versão corrente **não vive mais em ADR**: vive em `engines.node` (o piso), no `Dockerfile` (o que roda em produção, pinado por digest) e nos workflows (o que testa). E trocar runtime, linguagem ou compilador passa a exigir **inquiry que MEÇA** a alternativa — o precedente é a [Inquiry-0023](./inquiries/0023-typescript-7-native-spike.md), que mediu Node 24/26, Deno, Bun e `tsgo` num harness executável e **refutou** uma premissa que estava num ADR aceito.
+
+**O ADR não escreve a versão-alvo, e isso é deliberado.** Escrever "Node 24.19" no texto repetiria exatamente o defeito que ele corrige: em 12 meses `ADR-0058-C2` estaria no inventário como `contradicted`, ao lado das duas que o originaram. Foi a alternativa mais tentadora e está registrada como rejeitada, junto com "fixar cadência" (reintroduz número que o repositório não controla — a cadência de release do Node não é decisão nossa).
+
+**O que impede a reincidência:** `tests/cleanup/node-version-single-source.test.ts` (novo), irmão do gate que já faz o mesmo para o pnpm. Cobra que `engines.node`, o `FROM node:` do Dockerfile e o `node-version` dos workflows concordem no **major** — não no patch, e a distinção é deliberada: patch diverge por motivo legítimo, major divergente significa que produção roda um runtime que ninguém testou. Provado que discrimina antes de ser aceito: Dockerfile num major antigo e workflow em outro major reprovam, um por asserção.
+
+**Limite declarado, não escondido:** o gate cobra a concordância **interna**, não a aderência ao LTS **externo** — isso exigiria rede, e o gate local é offline e determinístico por desenho (mesma razão pela qual `pnpm audit` vive no CI). Um repositório inteiro coerente numa versão EOL passa em todos os gates. A mitigação seria CI agendado e **ela ainda não existe**; o ADR registra isso em vez de fingir cobertura, e é o primeiro item do gatilho de reavaliação.
+
+## 2026-08-03 — 📄 `ADR-0057` (Accepted): o `CLAUDE.md` volta a ser a doc canônica de agente; o `AGENTS.md` é aposentado e deletado
+
+Novo [ADR-0057](./architecture/adr/0057-claude-md-as-canonical-agent-doc.md) (**Accepted**). O `AGENTS.md` existia para ser **padrão aberto multi-ferramenta**, com o `CLAUDE.md` reduzido a um stub de 14 linhas contendo `@AGENTS.md`. A premissa caiu em **2026-07-31**, quando o dono do repo decidiu que o Claude Code é o único agente suportado (decisão já materializada na remoção de `.zed/` e `.agents/`, commit `722b0371`). Sem uma segunda ferramenta, a indireção passou a custar sem pagar.
+
+**256 linhas (242 + 14 de stub) passam a 110, sem perda de norma.** O corte é de duplicação, e cada item foi verificado antes de sair: as **tabelas de roteamento** de agentes e skills (o Claude Code já descobre `.claude/agents/` e `.claude/skills/` nativamente, com descrição de uso em cada um — e a tabela já divergia, listando **25 skills contra 44** em disco); a seção **"Regras invariantes — sintaxe TS"** (`verbatimModuleSyntax`, `allowImportingTsExtensions`, `NodeNext`, `strict` e mais cinco flags estão ligados no `tsconfig.json`, e o `tsc` barra cada regra que o texto pedia); e **"não rode `npm`"** (hook `block-npm.sh`). Permanece o anti-padrão de **escrever** `npm` em doc ou PR — isso o hook não pega.
+
+**Três afirmações falsas morreram junto:** "Fase 1 entrega apenas o módulo Contratos" (são **8** em `src/modules/`), "CLI como UX primária, nenhum servidor HTTP ainda" (contradizia o próprio documento cinco linhas abaixo, que lista o Fastify como ativo) e o `ADR-0012` no topo da seção `IMPORTANTE`, superseded pelo [ADR-0029](./architecture/adr/0029-pnpm-11-supply-chain-defaults.md). Também saíram `.claude/output-styles/erp-contracts.md` e `handbook/domain/`, que não existem.
+
+**Errata, e por que ela é necessária:** três ADRs **aceitos** — [0037](./architecture/adr/0037-http-first-retire-embedded-cli.md), [0040](./architecture/adr/0040-agent-findings-as-github-issues.md) e [0054](./architecture/adr/0054-ai-assisted-contribution-policy.md) — citam o `AGENTS.md` pelo nome. ADR aceito é imutável, então **nenhum foi editado**; a §4 do ADR-0057 é a errata canônica. Atenção ao caso do **0040**, que cita `§Anti-padrões #15`: na lista nova esse item é o **#7**, porque a numeração encolheu ao perder os anti-padrões que viraram mecanismo. **O conteúdo normativo dos três permanece integralmente vigente** — mudou o endereço, não a norma.
+
+**Registro histórico preservado de propósito:** as ~70 referências ao `AGENTS.md` em `.claude/.pipeline/`, `specs/` e `handbook/` **não** foram atualizadas, nem as **evidências ancoradas** de `context/decisions/` no formato `AGENTS.md:209` — reescrevê-las para `CLAUDE.md:209` produziria âncora falsa, porque a numeração de linha mudou. Só os **ponteiros vivos** (`prior_art.applied_to` e `enforced_by` do ADR-0040 e do ADR-0054) foram redirecionados, e o gate `decision-records` foi quem os acusou. Preservado também `handbook/reference/mysql2/AGENTS.md`, documentação vendored do driver e arquivo distinto.
+
+**O que impede a reincidência:** dois gates. `tests/cleanup/claude-md-links.test.ts` (novo) exige que todo caminho relativo citado na doc canônica exista — a **proposta** que serviu de base à substituição nasceu com três caminhos mortos, e sem esse gate a troca apenas reiniciaria o relógio do apodrecimento. E `tests/cleanup/docs-update.test.ts` passou a ler o `CLAUDE.md`, tendo pego de imediato que os links dos ADRs estavam escritos como `[0020](…)` quando a asserção exige `ADR-0020` literal.
+
+## 2026-07-31 — 🔢 Colisão do `ADR-0034` resolvida: o ADR de OCR renumerado para `0056`, com `Status` corrigido
+
+Dois arquivos reivindicavam o número `0034` desde 2026-06-08: [`0034-adopt-bruno-api-client-cli.md`](./architecture/adr/0034-adopt-bruno-api-client-cli.md) (adoção do Bruno, no índice) e o de OCR Port/Adapter (fora do índice). A colisão entrou pela importação do baseline `FIN-DOCUMENTO-INGESTAO` (commit `0b88bade`), que trouxe o arquivo de uma árvore de docs com numeração independente.
+
+**Por que não era cosmético:** o [ADR-0050](./architecture/adr/0050-document-reader-cascade-supersedes-0034.md) declara *"Supersedes ADR-0034"* e supersede o de **OCR**. Como o índice registrava apenas o do **Bruno** sob esse número, resolver a referência pela via natural concluía que **o Bruno havia sido superseded** — falso: o [ADR-0038](./architecture/adr/0038-bruno-cli-mandatory-and-bru-authoring.md) tornou o Bruno CLI obrigatório e existe agente dedicado a ele.
+
+**Correções:** (1) o ADR de OCR passa a ser [ADR-0056](./architecture/adr/0056-ocr-port-adapter.md), com nota de renumeração explicando a origem; (2) seu `Status` sai de `Accepted` para **`Superseded by ADR-0050`** — o campo nunca havia sido atualizado, e uma triagem por status o classificaria como vigente e destilaria norma morta (mesma classe do `ADR-0012`, registrada na spec 039); (3) o `ADR-0050` cita `ADR-0056` no corpo, com nota de que o **nome do arquivo** (`…-supersedes-0034.md`) foi preservado de propósito, para não quebrar as referências do CHANGELOG e da spec 039 — vale o conteúdo, não o nome; (4) o índice de ADRs ganhou seção **"Notas de numeração"**.
+
+**Registrado no mesmo passo:** o **`ADR-0016` não existe e é reservado de propósito** para a estratégia de implementação dos módulos (prefixos `ctr_*`/`fin_*`, outbox in-process), conforme reserva de 2026-04-28. A consequência prática ficou explícita no índice: enquanto não for escrito, **não existe lista canônica de prefixo de tabela por módulo** — `auth`, `partners`, `programs`, `budget-plans` e `notifications` operam por convenção tácita.
+
+Achados originados do inventário de decisões em `context/decisions/`, que verifica cada alegação de ADR contra `src/`.
+
 ## 2026-07-29 — 🔐 ADR-0055 (Accepted): Amazon Cognito como autoridade de autenticação — supersede parcial do ADR-0024 (authN); autorização permanece no `core-api`
 
 Novo [ADR-0055](./architecture/adr/0055-cognito-external-idp-supersedes-0024-authn.md) (**Accepted**), registrando a **decisão de diretoria** de adotar o Amazon Cognito como autoridade única de autenticação (identidade nativa, MFA/TOTP obrigatório, Threat Protection). Supersede **parcialmente** o [ADR-0024](./architecture/adr/0024-identity-and-rbac-auth-module.md): caem a "fonte de identidade", a emissão de token e o refresh opaco server-side; **permanecem vigentes e inalterados** o RBAC, o catálogo de permissões, a autorização pura e o schema de papéis. O próprio 0024 previa este gatilho (`:117`) e já deixara `password_hash` nullable para isso (`:68`).
@@ -69,7 +125,7 @@ Encerra a _"divergência aceita por ora"_ que o [`07-categorization-taxonomy.md`
 
 ## 2026-07-08 — 🔀 ADR-0050 (Accepted): leitura de documento fiscal em cascata (nativo-first) — supersedes ADR-0034
 
-Novo [ADR-0050](./architecture/adr/0050-document-reader-cascade-supersedes-0034.md) (**Accepted**), que **supersede** o [ADR-0034](./architecture/adr/0034-ocr-port-adapter.md) (OCR como Port/Adapter). Reorienta a leitura de documento fiscal de "OCR-engine-first" para uma **cascata nativo-first**: `XML estruturado → parser de texto nativo (in-house, node:zlib) → OCR self-hosted (microserviço externo, escaneado, adiado) → exceção manual`. Fundamentado em benchmark real do dono (parser nativo: **12/12 campos, ~10 ms CPU, 0 alucinação**; amostra 100% PDF nativo), varredura byte-level empírica (docs fiscais BR = xref clássico + FlateDecode, sem `/Encrypt`/`/ObjStm`) e pesquisa multi-fonte (LGPD bloqueia cloud OCR; `fast-xml-parser` já no lockfile; `mupdf` AGPL descartado). Muda o port de `OcrPort.extract(pdfUrl)` para **`DocumentReaderPort.read(bytes)`** — recebe bytes (anti-SSRF), nunca URL de input. Grounding DDD: ACL (Evans p.224) + Ports & Adapters (Vernon p.182). Pesquisa consolidada em `specs/034-fin-documento-reader/research.md`. Issues: [#62](https://github.com/ERP-Bem-Comum/core-api/issues/62), [#145](https://github.com/ERP-Bem-Comum/core-api/issues/145), [#290](https://github.com/ERP-Bem-Comum/core-api/issues/290).
+Novo [ADR-0050](./architecture/adr/0050-document-reader-cascade-supersedes-0034.md) (**Accepted**), que **supersede** o [ADR-0034](./architecture/adr/0056-ocr-port-adapter.md) (OCR como Port/Adapter — renumerado para `ADR-0056` em 2026-07-31; o link aponta para o destino atual). Reorienta a leitura de documento fiscal de "OCR-engine-first" para uma **cascata nativo-first**: `XML estruturado → parser de texto nativo (in-house, node:zlib) → OCR self-hosted (microserviço externo, escaneado, adiado) → exceção manual`. Fundamentado em benchmark real do dono (parser nativo: **12/12 campos, ~10 ms CPU, 0 alucinação**; amostra 100% PDF nativo), varredura byte-level empírica (docs fiscais BR = xref clássico + FlateDecode, sem `/Encrypt`/`/ObjStm`) e pesquisa multi-fonte (LGPD bloqueia cloud OCR; `fast-xml-parser` já no lockfile; `mupdf` AGPL descartado). Muda o port de `OcrPort.extract(pdfUrl)` para **`DocumentReaderPort.read(bytes)`** — recebe bytes (anti-SSRF), nunca URL de input. Grounding DDD: ACL (Evans p.224) + Ports & Adapters (Vernon p.182). Pesquisa consolidada em `specs/034-fin-documento-reader/research.md`. Issues: [#62](https://github.com/ERP-Bem-Comum/core-api/issues/62), [#145](https://github.com/ERP-Bem-Comum/core-api/issues/145), [#290](https://github.com/ERP-Bem-Comum/core-api/issues/290).
 
 ---
 
@@ -91,7 +147,7 @@ Três decisões, todas via **Anticorruption Layer** (Evans cap.14 — translatio
 **(D1)** reusar a **020**, não portar a hierarquia legada `CostCenter→Category→SubCategory`+`releaseType` (achatar 3 níveis → 2 dimensões + hierarquia opcional de `Category`);
 **(D2)** mapear `installments→payables` — `Payable`(legado)→`Document`, `Installment`→`Payable`, e a fórmula-chave `SUM(Installment.value WHERE 'PAGO')` → `SUM(Payable.value WHERE 'Paid')`; **sem parcelamento temporal no core** (lacuna R-1 para migração de histórico);
 **(D3)** dashboard **fatiado** (1 endpoint por widget). RBAC de Dashboard/Reports = **só autenticação** (ratificado pela P.O. em #233).
-Destrava `DASH-F1`, `DASH-F5`, `REP-3`, `REP-4`. Relatório de pesquisa completo em [`.claude/.planning/SPIKE-233-CATEGORIZACAO-INSTALLMENTS.md`](../.claude/.planning/SPIKE-233-CATEGORIZACAO-INSTALLMENTS.md).
+Destrava `DASH-F1`, `DASH-F5`, `REP-3`, `REP-4`. Relatório de pesquisa completo em [`context/planning/SPIKE-233-CATEGORIZACAO-INSTALLMENTS.md`](../context/planning/SPIKE-233-CATEGORIZACAO-INSTALLMENTS.md).
 
 ---
 
@@ -136,7 +192,7 @@ Feature [`014-financial-supplier-readmodel`](../specs/014-financial-supplier-rea
 - **Consumer** em worker dedicado (composition root `src/workers/supplier-view-projection/`) sobre o worker
   de outbox genérico (`src/shared/outbox`); nenhum módulo importa o outro. Upsert idempotente com guard de
   `occurred_at` (at-least-once + fora de ordem). **Backfill** one-shot dos fornecedores legados.
-- Decisão de manter outbox-MySQL (sem broker/Go) registrada em `.claude/.planning/ASYNC-MESSAGING-STRATEGY.md`.
+- Decisão de manter outbox-MySQL (sem broker/Go) registrada em `context/planning/ASYNC-MESSAGING-STRATEGY.md`.
 
 ## 2026-06-16 — 🔤 ADR-0044: CNPJ alfanumérico (Serpro/Receita 2026) no VO `Cnpj` do kernel
 
@@ -359,12 +415,12 @@ Borda HTTP de Fornecedores sob `/api/v1/suppliers` (módulo `partners`), espelha
 (`SupplierReader`, `GET /suppliers` paginado + filtros search/active/categories, `GET /:id`); **S2**
 cadastro (`POST` 201+Location, invariante de payment target → 422); **S3** lifecycle (`POST`
 deactivate/reactivate, sem `disableBy`). Permissões `supplier:read`/`supplier:write`. Design em
-`.claude/.planning/EPIC-SUPPLIERS-HTTP-V1.md`. Pendentes: S-EDIT (`PUT` — exige `Supplier.edit`, gap de
+`context/planning/EPIC-SUPPLIERS-HTTP-V1.md`. Pendentes: S-EDIT (`PUT` — exige `Supplier.edit`, gap de
 domínio) e extras (`/options`,`/csv`,`/nameOrCNPJ`). Suite: 2048 testes verdes.
 
 ## 2026-06-03 — 🔢 ADR-0033 (versionamento de API: `/api/v1` espelha o legado) + EPIC-COLLABORATORS-HTTP-V1
 
-> Borda HTTP de Colaboradores. Design do épico em `.claude/.planning/EPIC-COLLABORATORS-HTTP-V1.md`.
+> Borda HTTP de Colaboradores. Design do épico em `context/planning/EPIC-COLLABORATORS-HTTP-V1.md`.
 
 ### EPIC-COLLABORATORS-HTTP-V1 — CRUD de Colaboradores no `/api/v1` (6 fatias closed-green)
 
@@ -440,7 +496,7 @@ ETL fatiado em 5 slices, cada um W0→W3. Pré-requisitos P2 (`legacy_id`) + P3 
 
 ### Planejamento
 
-- **Design consolidado** em `.claude/.planning/EPIC-PARTNERS-CADASTROS.md` — convergências, 9 decisões (4 fechadas pela banca, 5 P.O./ETL pendentes) e fatiamento em ~13 tickets W0→W3.
+- **Design consolidado** em `context/planning/EPIC-PARTNERS-CADASTROS.md` — convergências, 9 decisões (4 fechadas pela banca, 5 P.O./ETL pendentes) e fatiamento em ~13 tickets W0→W3.
 
 ### Manutenção
 
@@ -450,7 +506,7 @@ ETL fatiado em 5 slices, cada um W0→W3. Pré-requisitos P2 (`legacy_id`) + P3 
 
 ### Decisões (ADR)
 
-- **ADR-0030 proposto** — store compartilhado (**Valkey** via `ioredis`) para rate-limit/cache **adiado** enquanto o core-api for single-instance (YAGNI); direção fixada para quando escalar horizontalmente. Discussão em `.claude/.planning/REDIS-RATE-LIMIT-STORE.md`.
+- **ADR-0030 proposto** — store compartilhado (**Valkey** via `ioredis`) para rate-limit/cache **adiado** enquanto o core-api for single-instance (YAGNI); direção fixada para quando escalar horizontalmente. Discussão em `context/planning/REDIS-RATE-LIMIT-STORE.md`.
 
 ### Segurança (módulo auth — spec 003)
 
@@ -503,8 +559,8 @@ ETL fatiado em 5 slices, cada um W0→W3. Pré-requisitos P2 (`legacy_id`) + P3 
 
 ### Planejamento (sem código de produção)
 
-- **Método spec-driven nativo** adotado — **sem** instalar o spec-kit oficial (conflito com ADR-0011 supply-chain + ADR-0012 Node/pnpm puro; exigiria Python/uv e duplicaria o W0→W3). Template `.claude/templates/spec.md` + runbook `.claude/runbooks/spec-driven-pipeline.md`; artefato `001-spec/SPEC.md` como gate pré-W0.
-- **Épico `EPIC-HTTP-CORE-API`** especificado (`.claude/.planning/EPIC-HTTP-CORE-API.md`): borda HTTP de auth (primeiro) + contracts; TLS termina no BFF (ADR-0005); fatiado em H0 (bootstrap Fastify) → H1/H2 (rotas+authz auth) → I1 (RW split, ADR-0026), contracts em spec-filha. Recursos (agente·skill·docs) mapeados por etapa. Aguarda aprovação para abrir o H0.
+- **Método spec-driven nativo** adotado — **sem** instalar o spec-kit oficial (conflito com ADR-0011 supply-chain + ADR-0012 Node/pnpm puro; exigiria Python/uv e duplicaria o W0→W3). Template `context/templates/spec.md` + runbook `context/runbooks/spec-driven-pipeline.md`; artefato `001-spec/SPEC.md` como gate pré-W0.
+- **Épico `EPIC-HTTP-CORE-API`** especificado (`context/planning/EPIC-HTTP-CORE-API.md`): borda HTTP de auth (primeiro) + contracts; TLS termina no BFF (ADR-0005); fatiado em H0 (bootstrap Fastify) → H1/H2 (rotas+authz auth) → I1 (RW split, ADR-0026), contracts em spec-filha. Recursos (agente·skill·docs) mapeados por etapa. Aguarda aprovação para abrir o H0.
 - **Tickets fechados** `closed-green`: `AUTH-DB-REPO-SESSION` (W2/W3 reconciliados) e `AUTH-TEST-INTEGRATION-SCRIPT` (runner `pnpm run test:integration:auth` — fecha o gap de integração auth fora do gate padrão).
 
 ---

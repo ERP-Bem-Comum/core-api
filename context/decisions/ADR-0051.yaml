@@ -1,0 +1,367 @@
+id: ADR-0051
+title: Owner da taxonomia de categorização — o Plano é dono do planejável, o Financeiro guarda o operacional
+source: handbook/architecture/adr/0051-taxonomy-owner-budget-plan-scoped.md
+decided_on: 2026-07-15
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0001, ADR-0006, ADR-0014, ADR-0022, ADR-0032, ADR-0048]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    O ADR mais bem fundamentado do acervo, e o único cuja decisão gira em torno de um fato MEDIDO. A
+    evidência decisiva — "as 2 categorias `ajuste` são `Estorno` e `Ajuste de conciliação`" — não é
+    argumento de arquitetura: é uma consulta ao banco de QA que torna a alternativa (A) impossível de
+    sustentar, porque uma projeção pura da árvore do plano não teria onde pôr um estorno. Ninguém planeja
+    um estorno.
+    A estrutura confere. `bgp_cost_centers.budget_plan_id` é `NOT NULL`
+    (`budget-plans/.../mysql.ts:156`) — a árvore já é por plano. O `launch_type` existe em
+    `bgp_subcategories` com CHECK `IN ('IPCA','CAED','DESPESAS_PESSOAIS','DESPESAS_LOGISTICAS')` (`:225`),
+    os quatro valores legados exatos, no módulo de planejamento. `CostDirection` é `'A PAGAR' | 'A RECEBER'`
+    (`cost-direction.ts:9`), dois valores, contra os três de `group` — não se unificaram, como o §4 fixa.
+    E `fin_categories` NÃO ganhou `program_ref`: a alternativa rejeitada como "(B) disfarçada" continua
+    rejeitada.
+    O que falta é o §2 — o ACL de leitura. `financial/public-api/payables-analysis-projection.ts` cita
+    `budget-plans/public-api` no comentário (`:11`) e não importa nada de lá: os imports são drizzle,
+    `Result`, o próprio driver e dois schemas de `fin_*`. Consistente com o que o ADR declara ("0 de 91
+    documentos com plano", "estado transitório", "nada regride"), mas a fronteira ainda não foi exercida.
+    Movimento posterior: a #502 carimbou `budget_plan_ref` e `subcategory_ref` no documento e espelhou
+    ambos em `fin_payable_view` — o primeiro passo da lista "Fora deste ADR" já foi dado.
+
+extraction:
+  state: complete
+  covers: |
+    6 alegações — as cinco seções numeradas da decisão (com a §5 decomposta em destino da árvore legada e
+    preservação do §D1 do 0048) mais a proibição que sustenta as três alternativas rejeitadas. A premissa
+    de negócio da P.O. e o grounding em Evans/Vernon são fundamentação.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: JÁ COBERTO (isolamento de módulo)
+    applied_to: []
+    gap: |
+      Classificado como já coberto pelas regras de isolamento — e é defensável no que diz respeito ao
+      mecanismo: ler via `public-api` é o `ADR-0006`.
+      Mas o conteúdo próprio deste ADR não é mecanismo, é **owner**: qual das duas taxonomias é a
+      verdadeira, e por quê as duas continuam existindo. Isso não está em nenhuma regra de isolamento, e é
+      exatamente a pergunta que ficou aberta no #341 e travou quatro frentes. "Já coberto" respondeu ao
+      "como" e perdeu o "quem".
+
+claims:
+  - id: ADR-0051-C1
+    text: |
+      O `budget-plans` é o OWNER da taxonomia do que é planejável. A árvore
+      Centro de Custo → Categoria → Subcategoria é ESCOPADA POR PLANO e o `budget-plans` é a fonte de
+      verdade — NÃO há taxonomia canônica GLOBAL. A hierarquia canônica tem QUATRO níveis:
+      Plano Orçamentário → Centro de Custo → Categoria → Subcategoria.
+    kind: obligation
+    source_lines: [20, 62, 66]
+    applies_to:
+      - 'src/modules/budget-plans/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: holds
+      holds_in: [budget-plans]
+      absent_in: []
+      evidence:
+        - 'src/modules/budget-plans/adapters/persistence/schemas/mysql.ts:156 — budgetPlanId: varchar(budget_plan_id, { length: 36 }).notNull() em bgp_cost_centers'
+        - 'src/modules/budget-plans/adapters/persistence/schemas/mysql.ts:152 — export const costCenters = mysqlTable(…), a raiz da árvore por plano'
+        - 'src/modules/budget-plans/adapters/persistence/schemas/mysql.ts:181 — o nível intermediário existe: "Sem direction/launch_type (herdados só na raiz/folha)"'
+        - 'src/modules/budget-plans/adapters/persistence/schemas/mysql.ts:206 — "Folha da árvore. launch_type (modelo de lançamento, US3) só existe aqui"'
+        - 'nota: os três níveis abaixo do plano existem como tabelas próprias em bgp_*, e o NOT NULL do budget_plan_id é o que torna a árvore escopada por construção'
+      verify: |
+        grep -n "budget_plan_id\|mysqlTable" src/modules/budget-plans/adapters/persistence/schemas/mysql.ts | sed -n '1,10p'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `bgp_*`, quando uma tabela da árvore de estrutura não tiver `budget_plan_id NOT NULL`, então
+        o teste falha — sem isso a árvore volta a ser global e a pergunta "de qual plano?" reaparece.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        A árvore de estrutura de custo MUST ser escopada por plano (`budget_plan_id NOT NULL`). MUST NOT
+        existir taxonomia de planejamento global — nem tabela, nem view, nem "plano default".
+      rationale: |
+        A segunda frase é a que protege, e o ADR conta por quê: o estado anterior era "duas taxonomias
+        convivem e nenhuma decisão diz qual é a verdadeira", com o handbook registrando "divergência
+        aceita por ora". O `NOT NULL` já está no banco; o que faltava era a norma que impede o atalho
+        seguinte — uma view global "para facilitar a consulta", que reintroduziria a ambiguidade sem
+        remover a coluna.
+
+  - id: ADR-0051-C2
+    text: |
+      O `financial` (e demais consumidores) LÊ a árvore DO PLANO DO DOCUMENTO via
+      `budget-plans/public-api` — Open Host Service do lado do owner, Anticorruption Layer do lado do
+      consumidor. O `financial` traduz para o próprio modelo, NUNCA importa `budget-plans/domain`, e NÃO
+      espelha nem copia a árvore.
+    kind: obligation
+    source_lines: [70]
+    applies_to:
+      - 'src/modules/financial/**/*.ts'
+    reality:
+      verdict: partial
+      holds_in: [financial]
+      absent_in: [financial]
+      evidence:
+        - 'ausência: nenhum import de budget-plans/domain em src/modules/financial/ — a proibição se sustenta'
+        - 'src/modules/financial/public-api/payables-analysis-projection.ts:11 — o comentário descreve a leitura via budget-plans/public-api (sem JOIN cross-módulo aqui — ADR-0006/0014)'
+        - 'src/modules/financial/public-api/payables-analysis-projection.ts:22 — os imports reais são drizzle, Result, o driver do financial e finPayableView/finCostCenters — nenhum de budget-plans'
+        - 'nota: a metade proibitiva (não importar domain, não espelhar) HOLDS; a metade positiva (ler a árvore do plano) ainda não foi exercida'
+        - 'nota: o ADR declara o motivo — "Documento sem plano não acessa a árvore de planejamento. Hoje isso é 100% dos casos (0/91)"'
+      verify: |
+        grep -rn "budget-plans/domain\|budget-plans/public-api" src/modules/financial/ --include='*.ts' | head
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/modules/financial/`, quando houver import de `budget-plans/domain` ou `application`, ou
+        referência a tabela `bgp_*`, então o teste falha. A leitura MUST passar por
+        `budget-plans/public-api`.
+      expected_error: null
+      blocker: null
+      enforced_by: ['eslint.config.js']
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como texto: é a `ADR-0006-C4` (cross-módulo só via `public-api`) mais a `ADR-0014-C1`
+        (nenhuma leitura de tabela de outro prefixo), ambas já propostas com escopo geral e uma delas com
+        enforcement de lint. Registrar aqui a parte que só este ADR diz: o consumidor **traduz** para o
+        próprio modelo, não espelha — o que o `ADR-0045` mostraria como legítimo em outro contexto
+        (read-model local). A diferença é que ali o dado é do outro módulo; aqui a ÁRVORE é do outro
+        módulo e copiá-la recriaria as duas fontes.
+
+  - id: ADR-0051-C3
+    text: |
+      `fin_categories`/`fin_cost_centers` NÃO são fonte, NÃO são projeção e NÃO são deprecadas. Elas
+      retêm o que NÃO é planejável — a classificação OPERACIONAL de lançamentos que não pertencem a plano
+      algum (`group = ajuste` e afins). Evidência irredutível: `Estorno` e `Ajuste de conciliação` não
+      existem, e nunca existirão, num plano orçamentário.
+    kind: obligation
+    source_lines: [74, 78, 79, 80, 81]
+    applies_to:
+      - 'src/modules/financial/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: holds
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - "src/modules/financial/adapters/persistence/schemas/mysql.ts:989 — o CHECK mantém os três valores IN ('despesa','receita','ajuste'), com ajuste preservado"
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:968 — comentário: agrupadas por natureza (group ∈ despesa/receita/ajuste). Povoadas por seed'
+        - 'ausência: fin_categories não foi deprecada nem convertida em view/projeção — segue tabela própria com seed'
+        - 'nota: as duas categorias ajuste medidas em QA (Estorno, Ajuste de conciliação) não são verificáveis no código — são dado de ambiente, e o ADR as registra como medição de 2026-07-15'
+      verify: |
+        grep -n "fin_categories" -A 25 src/modules/financial/adapters/persistence/schemas/mysql.ts | grep -n "group\|ajuste\|seed" | head
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado um lançamento sem plano, quando categorizado, então MUST conseguir usar `fin_categories`. Se
+        a tabela virar projeção da árvore do plano, o `ajuste` não tem origem e o teste falha — que é
+        exatamente a razão pela qual a alternativa (A) foi rejeitada.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Taxonomia MUST ter uma fonte por REGIME: planejável lê a árvore do plano; operacional (sem plano)
+        usa `fin_categories`. Uma das duas MUST NOT ser convertida em projeção da outra.
+      rationale: |
+        É a única regra do inventário derivada de um fato medido em vez de um princípio, e é o que a torna
+        forte: `Estorno` e `Ajuste de conciliação` são contraexemplos concretos que qualquer unificação
+        futura precisa responder. A proibição final é o que impede a "limpeza" bem-intencionada — duas
+        tabelas com nomes parecidos convidam à consolidação, e consolidar aqui deixa o estorno sem
+        classificação possível.
+
+  - id: ADR-0051-C4
+    text: |
+      `direction` (`A PAGAR`/`A RECEBER`) e `group` (`despesa`/`receita`/`ajuste`) NÃO se unificam:
+      `direction` é vocabulário do PLANEJAMENTO, `group` é do LANÇAMENTO REAL. O mapeamento é do ACL do
+      consumidor (`A PAGAR`→`despesa`, `A RECEBER`→`receita`); `ajuste` NÃO tem contraparte no plano — por
+      definição.
+    kind: prohibition
+    source_lines: [85]
+    applies_to:
+      - 'src/modules/budget-plans/domain/cost-structure/cost-direction.ts'
+      - 'src/modules/financial/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: holds
+      holds_in: [budget-plans, financial]
+      absent_in: []
+      evidence:
+        - "src/modules/budget-plans/domain/cost-structure/cost-direction.ts:9 — export type CostDirection = 'A PAGAR' | 'A RECEBER', dois valores"
+        - "src/modules/budget-plans/domain/cost-structure/cost-direction.ts:12 — const VALUES: readonly CostDirection[] = ['A PAGAR', 'A RECEBER'] as const"
+        - "src/modules/financial/adapters/persistence/schemas/mysql.ts:989 — group com três valores IN ('despesa','receita','ajuste')"
+        - 'src/modules/budget-plans/adapters/persistence/schemas/mysql.ts:158 — direction: varchar(direction, { length: 16 }).notNull() em bgp_cost_centers, ou seja o vocabulário do plano vive no plano'
+        - 'ausência: nenhum tradutor direction↔group foi encontrado — coerente com a ADR-0051-C2, cujo ACL ainda não foi exercido'
+      verify: |
+        grep -n "CostDirection" src/modules/budget-plans/domain/cost-structure/cost-direction.ts | head -4
+    testability:
+      verdict: testable
+      layer: unit
+      red: |
+        Dado o VO de direção do plano, quando ele aceitar valor de `group` (`despesa`, `ajuste`), então o
+        teste falha. E o tradutor do ACL MUST rejeitar (ou não produzir) `ajuste` a partir de `direction`
+        — não há origem possível.
+      expected_error: 'cost-direction-invalid'
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Vocabulários de contextos diferentes MUST permanecer tipos distintos, traduzidos no ACL do
+        consumidor. MUST NOT haver enum compartilhado entre planejamento e lançamento. A tradução MUST ser
+        parcial e explícita quando um lado tiver valor sem contraparte.
+      rationale: |
+        A terceira frase é a lição transferível: `ajuste` não tem origem no plano **por definição**, e um
+        tradutor total mentiria ao mapeá-lo. O ADR usa a passagem de Evans (p.199) sobre o `Charge` de dois
+        times — "each made assumptions about the nature of a charge that were useful in their context" — e
+        aqui a assimetria é exatamente essa: dois valores num lado, três no outro, sem bijeção. Tradutor
+        que finge totalidade é pior que ausência de tradutor.
+
+  - id: ADR-0051-C5
+    text: |
+      Regra do ETL do legado: a árvore de planejamento do legado (34 categorias + 158 subcategorias, por
+      programa, 100% despesa, uma cópia por plano/ano) migra como ESTRUTURA DE PLANOS (`bgp_*`).
+      `fin_categories` NÃO recebe as 158 subcategorias do legado.
+    kind: prohibition
+    source_lines: [89, 91]
+    applies_to:
+      - 'src/modules/budget-plans/**/*.ts'
+      - 'src/modules/financial/adapters/persistence/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [budget-plans, financial]
+      absent_in: []
+      evidence:
+        - "src/modules/budget-plans/adapters/persistence/schemas/mysql.ts:225 — check('bgp_subcategories_launch_type_chk', launchType IN ('IPCA','CAED','DESPESAS_PESSOAIS','DESPESAS_LOGISTICAS')) — os quatro valores legados no módulo de plano"
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:968 — fin_categories segue "povoadas por seed", não por ETL de 158 subcategorias'
+        - 'ausência: fin_categories não tem program_ref — a alternativa rejeitada como (B) disfarçada segue rejeitada'
+        - 'nota: a contagem de registros (11 categorias, 5 centros, 0/91 documentos com plano) é medição de ambiente e não verificável no código'
+      verify: |
+        grep -n "launch_type" src/modules/budget-plans/adapters/persistence/schemas/mysql.ts | head -3; grep -n "program_ref" src/modules/financial/adapters/persistence/schemas/mysql.ts | head -3
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado o ETL do legado, quando ele rodar, então as subcategorias legadas MUST aterrissar em `bgp_*` e
+        `fin_categories` MUST manter apenas o catálogo operacional semeado. Crescimento de
+        `fin_categories` para a ordem de 158 registros reprova.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        ETL de árvore legada MUST aterrissar em `bgp_*`. `fin_categories` MUST NOT receber taxonomia
+        importada do legado — nem por ETL, nem por seed derivado dele.
+      rationale: |
+        É a regra que salva o ETL de si mesmo, e o ADR nomeia o custo com precisão: "migrar o legado antes
+        de decidir o owner ancora o dado numa taxonomia que talvez não seja a canônica; depois, ou se
+        remigra, ou se convive com duas fontes para sempre". Regra escrita ANTES da migração vale muito
+        mais que a mesma regra escrita depois — e este é o único caso do inventário em que isso aconteceu.
+
+  - id: ADR-0051-C6
+    text: |
+      Este ADR COMPLEMENTA o ADR-0048 e NÃO o substitui: a categorização dos documentos/títulos legados
+      continua valendo o §D1 do 0048 — a 020 fica INTOCADA e a hierarquia legada é ACHATADA via o Mapa A.
+      Este ADR NÃO REABRE essa decisão.
+    kind: obligation
+    source_lines: [92, 104, 106]
+    applies_to:
+      - 'handbook/architecture/adr/0048-legacy-categorization-installments-mapping.md'
+    reality:
+      verdict: contradicted
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'handbook/architecture/adr/0048-legacy-categorization-installments-mapping.md:5 — Status: Proposed'
+        - 'handbook/architecture/adr/0048-legacy-categorization-installments-mapping.md:7 — "aguardando ratificação"'
+        - 'handbook/architecture/adr/0051-taxonomy-owner-budget-plan-scoped.md:3 — Status: Accepted deste ADR, três semanas depois'
+        - 'handbook/architecture/adr/0051-taxonomy-owner-budget-plan-scoped.md:7 — "Complementa: ADR-0048 (§D1 segue válido)"'
+        - 'nota: uma decisão ACEITA declara válido e constrói sobre um §D1 de uma decisão que segue PROPOSED e aguardando ratificação — a cadeia tem fundamento não ratificado'
+        - 'nota: no CÓDIGO a fronteira é coerente (launch_type em bgp_*, sem release_type em fin_*); a contradição é de STATUS documental, não de implementação'
+      verify: |
+        grep -n "^- \*\*Status" handbook/architecture/adr/0048-legacy-categorization-installments-mapping.md handbook/architecture/adr/0051-taxonomy-owner-budget-plan-scoped.md
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um ADR `Accepted`, quando ele declarar como válida uma seção de um ADR cujo status é
+        `Proposed`, então o teste falha — decisão aceita MUST NOT repousar sobre decisão não ratificada.
+      expected_error: null
+      blocker: null
+      enforced_by: ['tests/cleanup/adr-status-chain.test.ts']
+    rule:
+      status: accepted
+      disposition: adopt
+      text: |
+        ADR `Accepted` MUST NOT declarar vigente uma seção de ADR `Proposed`. Se a construção depende dela,
+        o ADR anterior MUST ser ratificado (ou a seção MUST ser reafirmada por inteiro no novo).
+      rationale: |
+        A cadeia `0048`→`0051` é o caso: o `0051` diz "§D1 segue válido" e "não reabre", que são atos de
+        ratificação POR REFERÊNCIA — sem mudar o header do `0048`, que segue "aguardando ratificação".
+        Quem ler o `0048` amanhã não sabe se pode confiar nele. É um gate barato (comparar status de
+        ADR citado como vigente) e fecha uma classe de ambiguidade que o `ADR-0017` já mostrou ser
+        duradoura.
+
+findings:
+  - |
+    **A única decisão do acervo cujo argumento central é um dado medido.** "As 2 categorias `ajuste` são
+    `Estorno` e `Ajuste de conciliação`" — o ADR marca essa linha com "← o fato decisivo deste ADR", e é
+    literal: ela sozinha derruba a alternativa (A), porque uma projeção da árvore do plano não tem onde pôr
+    um estorno. Ninguém planeja um estorno. Os outros ADRs decidem por princípio (isolamento, soberania do
+    modelo novo) e acertam; este decide por contraexemplo, e o resultado é mais difícil de reabrir por
+    engano — quem quiser unificar tem de responder onde vive o `Estorno`.
+  - |
+    **Uma decisão `Accepted` construída sobre uma `Proposed`.** O `ADR-0051` declara "§D1 segue válido" e
+    "não reabre essa decisão" a respeito do `ADR-0048`, que segue `Proposed` / "aguardando ratificação"
+    desde 2026-06-23. Isso é ratificação por referência sem atualizar o documento ratificado. No CÓDIGO a
+    fronteira é coerente; o problema é de rastreabilidade — quem abrir o `0048` amanhã não tem como saber
+    que ele foi aceito de fato. Segunda evidência, depois do `ADR-0017`, de que este repositório não tem
+    mecanismo para mover status.
+  - |
+    **O `ADR-0048` antecipou a fronteira antes de o módulo existir, e o `0051` registra isso.** O `0051`
+    §"Relação com o ADR-0048" mostra que o `0048` (2026-06-23) já dizia que o `releaseType` pertence ao
+    Orçamento e que `ajuste` não tem origem legada — três semanas antes de o `budget-plans` existir
+    (Fatia 1 = 2026-07-07). Hoje `bgp_subcategories.launch_type` tem os quatro valores legados exatos
+    (`mysql.ts:225`). Um ADR de tradução previu corretamente uma fronteira de módulo por duas vias
+    independentes; vale como argumento de que mapas de ACL bem-feitos têm poder preditivo, não só
+    descritivo.
+  - |
+    **A #502 começou a executar a lista "Fora deste ADR".** O `0051` registra como pendências não-defeito
+    que o documento "persista `budget_plan_ref`" e que `fin_payable_view` "projete o plano". Hoje
+    `fin_documents:88,91` tem `budget_plan_ref` e `subcategory_ref` (citando a #502) e
+    `fin_payable_view:565,566` espelha os dois. O "0 de 91" que sustentava o estado transitório é a
+    medição de 2026-07-15; a estrutura para sair dele já está no lugar. A frente que o ADR chamava de
+    destravável (#446) tem o carimbo de que precisava.
+  - |
+    A separação `direction` (2 valores) × `group` (3 valores) é o exemplo mais limpo do inventário de
+    **vocabulário que não deve unificar**. Não é preferência estética: não existe bijeção, porque `ajuste`
+    não tem contraparte no planejamento por definição. Qualquer enum compartilhado entre os dois
+    contextos precisaria inventar um valor de plano para "estorno" — e é exatamente o `Charge` de dois
+    times que Evans descreve na p.199, citada pelo ADR.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    O ADR cita as issues #448 (origem), #341 (o critério de aceite que ficou aberto), #316, #443, #343,
+    #446, #113 e #374 (Gap 2) e a spec `030-budget-plans-reproducao` — nenhuma lida nesta fase. A medição
+    de QA de 2026-07-15 (11 categorias, 5 centros, 0/91 documentos com plano) é dado de ambiente e não
+    verificável a partir do código.

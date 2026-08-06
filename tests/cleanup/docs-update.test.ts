@@ -27,13 +27,15 @@ const PROJECT_ROOT = resolve(HERE, '..', '..');
 
 const read = (relPath: string): string => readFileSync(join(PROJECT_ROOT, relPath), 'utf-8');
 
-// ─── CA-1..4 — doc canônica (AGENTS.md) ─────────────────────────────────────
-// CLAUDE.md passou a ser um stub `@AGENTS.md` (commit da2d25d); o conteúdo canônico
-// (stack, ADRs, topologia) vive em AGENTS.md. Estas CAs validam a doc canônica de fato.
-describe('CTR-DOCS-UPDATE — CA-1..4: AGENTS.md (doc canônica; CLAUDE.md é stub @AGENTS.md)', () => {
-  const canonicalDoc = (): string => read('AGENTS.md');
+// ─── CA-1..4 — doc canônica (CLAUDE.md) ─────────────────────────────────────
+// O alvo destas CAs é "a doc canônica", e ele já mudou duas vezes: era o CLAUDE.md, virou
+// `AGENTS.md` quando o CLAUDE.md passou a ser um stub `@AGENTS.md` (commit da2d25d), e voltou
+// ao CLAUDE.md quando o AGENTS.md foi aposentado — o repo suporta um agente só, então o padrão
+// aberto multi-ferramenta deixou de pagar seu custo.
+describe('CTR-DOCS-UPDATE — CA-1..4: CLAUDE.md (doc canônica)', () => {
+  const canonicalDoc = (): string => read('CLAUDE.md');
 
-  it('CA-1: AGENTS.md sem strings operacionais SQLite (flags CLI, scripts, paths)', () => {
+  it('CA-1: CLAUDE.md sem strings operacionais SQLite (flags CLI, scripts, paths)', () => {
     const content = canonicalDoc();
     const offenders: string[] = [];
 
@@ -52,22 +54,22 @@ describe('CTR-DOCS-UPDATE — CA-1..4: AGENTS.md (doc canônica; CLAUDE.md é st
     assert.equal(offenders.length, 0, `CLAUDE.md ainda menciona: ${offenders.join(', ')}`);
   });
 
-  it('CA-2: AGENTS.md cita ADR-0020 entre os ADRs críticos', () => {
+  it('CA-2: CLAUDE.md cita ADR-0020 entre os ADRs críticos', () => {
     const content = canonicalDoc();
     assert.match(
       content,
       /\bADR-0020\b/,
-      'AGENTS.md não menciona ADR-0020 — deve estar entre os ADRs críticos vigentes',
+      'CLAUDE.md não menciona ADR-0020 — deve estar entre os ADRs críticos vigentes',
     );
   });
 
-  it('CA-3: AGENTS.md stack diz mysql2 (sem "better-sqlite3 dev")', () => {
+  it('CA-3: CLAUDE.md stack diz mysql2 (sem "better-sqlite3 dev")', () => {
     const content = canonicalDoc();
     assert.doesNotMatch(content, /better-sqlite3\s+dev/i, 'stack ainda diz "better-sqlite3 dev"');
     assert.match(content, /mysql2/, 'stack deve mencionar mysql2');
   });
 
-  it('CA-4: AGENTS.md topologia por driver lista só memory e mysql', () => {
+  it('CA-4: CLAUDE.md topologia por driver lista só memory e mysql', () => {
     const content = canonicalDoc();
     // Procura a tabela "Topologia de execução por driver" (ou similar) e
     // verifica que não há linha "sqlite" como driver vigente.

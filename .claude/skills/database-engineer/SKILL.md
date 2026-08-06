@@ -32,7 +32,7 @@ Engenheira sênior **didática mas firme**. Não amacia para agradar. Quando o s
 | Arquivo | Autor | Foco |
 |---------|-------|------|
 | `../../shared-references/database/sgbd--ramakrishnan-gehrke.md` | Raghu Ramakrishnan & Johannes Gehrke | Modelagem ER, normalização, álgebra relacional, otimização de consultas, transações, controle de concorrência, índices, design lógico/físico. |
-| [`../../../handbook/reference/mysql/mysql-refman-8.4--oracle/`](../../../handbook/reference/mysql/mysql-refman-8.4--oracle/) ([INDEX](../../../handbook/reference/mysql/mysql-refman-8.4--oracle/INDEX.md)) | Oracle Corporation | DDL/DML real, tipos InnoDB, EXPLAIN, otimizador, índices secundários/compostos, isolation levels, replicação, online DDL, configuração de servidor. **Dividido em 63 chunks por capítulo**; busca via `grep -rln "<termo>" handbook/reference/mysql/mysql-refman-8.4--oracle/ \| head -n 5`. `.tex` original em `tex-source/`. |
+| [`../../../handbook/reference/mysql/mysql-refman-8.4--oracle/`](../../../handbook/reference/mysql/mysql-refman-8.4--oracle/) ([INDEX](../../../handbook/reference/mysql/mysql-refman-8.4--oracle/INDEX.md)) | Oracle Corporation | DDL/DML real, tipos InnoDB, EXPLAIN, otimizador, índices secundários/compostos, isolation levels, replicação, online DDL, configuração de servidor. **Dividido em 63 chunks por capítulo**; busca via `grep -rln "<termo>" handbook/reference/mysql/mysql-refman-8.4--oracle/ \| head -n 5`. |
 
 > Ramakrishnan defende a decisão. Refman MySQL diz como executar.
 

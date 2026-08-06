@@ -1,74 +1,40 @@
 ---
 paths:
-  - "src/modules/*/adapters/**/*.ts"
-  - "tests/modules/*/adapters/**/*.ts"
+  - 'src/modules/*/adapters/**/*.ts'
+  - 'tests/modules/*/adapters/**/*.ts'
+verify:
+  - claim: 'o read/write split existe em contracts e partners, não nos outros seis módulos'
+    root: 'src/modules'
+    pattern: 'readerUrl'
+    expect:
+      - 'src/modules/contracts/adapters/http/composition.ts'
+      - 'src/modules/partners/adapters/http/composition.ts'
+  - claim: 'a tabela cross-módulo sem prefixo é uma só'
+    root: 'src/modules'
+    pattern: "mysqlTable(\n  'eventos_processados'"
+    expect:
+      - 'src/modules/contracts/adapters/persistence/schemas/mysql.ts'
+  - claim: 'existe UM único ponto que compõe os decorators do EmailSender'
+    root: 'src/modules/notifications'
+    pattern: 'withRateLimit('
+    expect:
+      - 'src/modules/notifications/adapters/email/build-email-sender.ts'
 ---
 
-# Regras invariantes — Adapters
+Única camada que toca infra real (Drizzle, mysql2, S3, FS, processo externo). `ENUM` e JSON nativos são barrados por [`.semgrep/rules.yml`](../../.semgrep/rules.yml); `class` por ESLint; o prefixo de tabela por `tests/cleanup/table-prefix-isolation.test.ts`; o pool boot-scoped está em [`shared-persistence.md`](./shared-persistence.md). Nada disso se repete aqui.
 
-Aplicáveis a `src/modules/*/adapters/`. É a única camada que pode tocar infra real (Drizzle, mysql2, S3, FS, processo externo).
+- **A borda do adapter converte exceção em `Result` — e é a única que pode.** `try/catch` é permitido aqui e em lugar nenhum acima: nem `Error`, nem exception, nem `null` cru sobem para application ou domain. Vale também para os mappers row↔domínio, que retornam `Result` porque o banco pode conter estado que o domínio rejeita. Uma exceção que vaza daqui destrói a propriedade que o `Result` existe para dar: erro visível na assinatura.
 
-- `try/catch` permitido aqui, mas **converter para `Result` na borda** antes de devolver ao application/domain.
-- Implementações concretas dos ports. Cada port tem ao menos: adapter `InMemory` (testes) + adapter real (Drizzle, S3, etc.).
-- **Nunca** vazar `Error` ou exception para application/domain.
-- Mappers (row ↔ domínio) devem retornar `Result<T, E>` — domínio rejeita estado inválido vindo do banco.
+- **O read/write split existe em `contracts` e `partners`, e só neles.** Os dois aceitam `readerUrl` opcional no composition root (`CONTRACTS_READER_URL`/`PARTNERS_READER_URL`); ausente, o reader reusa o writer — single-node, como o [ADR-0026](../../handbook/architecture/adr/0026-mysql-read-write-split-connection.md) previu. `financial` e `programs` recebem só `writerUrl` e roteiam **toda** leitura pelo writer: ligar réplica ali exige mudança de código, não configuração. Não inferir nem que o split existe, nem que não existe — depende do módulo que você está editando.
 
-## Driver de persistência: `memory` vs `mysql` (ADR-0020 — MySQL único)
+- **O `INSERT` na outbox vai DENTRO da transação da mudança de domínio** ([ADR-0015](../../handbook/architecture/adr/0015-mysql-outbox-pattern.md)). O evento existe **se e somente se** o estado foi persistido; "publicar depois do save" não satisfaz. O helper é `appendOutboxInTx`. MySQL não tem `LISTEN/NOTIFY`, então a leitura é **polling**, sempre — e o outbox É o log append-only canônico ([ADR-0022](../../handbook/architecture/adr/0022-read-models-via-projection-over-event-stream.md)): não criar event-store separado. Read-model é projeção idempotente por `eventId`, derivada, truncável e reconstruível — `ON DUPLICATE KEY UPDATE` + guard de recência por `occurred_at` absorve at-least-once e evento fora de ordem sem SELECT-then-UPDATE ([ADR-0045](../../handbook/architecture/adr/0045-financial-supplier-read-model.md)).
 
-A CLI embutida foi removida (CLI-RETIRE-EMBEDDED / ADR-0037). A escolha de backend agora é da **borda
-HTTP** (`src/server.ts`), por env var por módulo (ex.: `CONTRACTS_DRIVER=mysql` + `CONTRACTS_DATABASE_URL`),
-e do **worker de outbox** (`worker/run.ts`, sempre mysql). Os mesmos dois adapters seguem valendo:
+- **Comportamento transversal de envio é decorator, nunca código dentro do provedor.** Rate limit, redirecionamento de sandbox e retry envolvem o `EmailSender` preservando a assinatura do port (`(sender, …) => EmailSender`) e são compostos num ponto só — `buildEmailSender` em `adapters/email/build-email-sender.ts`, na ordem base → sandbox → rate limit. Embutir qualquer um deles em `nodemailer.ts` ou `resend.ts` faz o comportamento valer para UM provedor: o `in-memory` que os testes usam não o teria, e a suíte ficaria verde descrevendo produção errado. O [ADR-0010](../../handbook/architecture/adr/0010-email-port-adapter-pattern.md) previu `withRetry`/`withLogging`, que não existem — o que pegou foi a convenção `with*`, e é ela que vale para o próximo.
 
-| Driver | Repositórios | Persistência | Quando usar |
-|---|---|---|---|
-| `memory` (default) | `InMemory*Repository` + `InMemoryOutbox` | Em processo, efêmero | Testes (`fastify.inject`), boot HTTP sem DB |
-| `mysql` | Drizzle/mysql2 — pool + transação + SELECT-then-UPDATE-or-INSERT | MySQL 8 (Docker dev / managed prod); migration no boot do writer pool | Dev com persistência real, CI E2E, prod |
+- **`eventos_processados` é a única tabela sem prefixo de módulo — e é deliberada.** Cross-módulo por desenho (ADR-0014 §"Exceção linguística"), com nome em PT-BR justificado no ADR-0015 §"Idempotência". É a única entrada da allowlist do gate de prefixo; qualquer outra tabela sem `<mod>_` é engano.
 
-ADR-0020 lista features SQL **permitidas** (SELECT/INSERT/UPDATE/DELETE, JOIN, FK, transações, índices, CHECK, agregações simples, `ON DUPLICATE KEY UPDATE`, window functions, CTEs recursivas, FULLTEXT) e **proibidas** (JSON nativo, stored procs/triggers, `ENUM` nativo, tipos espaciais, `AUTO_INCREMENT` em PK de domínio, isolation level explícito).
+- **Payload de evento de integração é montado no adapter, a partir do snapshot do agregado** — nunca do evento de domínio, que não muda para servir integração ([ADR-0043](../../handbook/architecture/adr/0043-partners-supplier-integration-events.md) §Opção A). Serializado com `JSON.stringify` em `varchar`. **Campo aditivo nunca quebra `schema_version = 1`**: acrescentar não exige bump, porque o consumidor ignora campo desconhecido ([ADR-0046](../../handbook/architecture/adr/0046-contracts-contractor-ref-integration-events.md)).
 
-## Mapeamentos canônicos domínio → MySQL ([ADR-0020](../../handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md))
+- **Storage e leitura fiscal têm a mesma regra de superfície.** O cliente é o SDK oficial da AWS — `@aws-sdk/client-s3` mais `@aws-sdk/s3-request-presigner` para URL assinada — sem wrapper caseiro e sem emulador custom; MinIO e S3 rodam o mesmo código, mudando só `forcePathStyle` ([ADR-0019](../../handbook/architecture/adr/0019-document-storage-s3-with-minio-dev.md)). E o `DocumentReaderPort` recebe **bytes** (`Uint8Array`), nunca URL vinda do cliente ([ADR-0050](../../handbook/architecture/adr/0050-document-reader-cascade-supersedes-0034.md)) — é anti-SSRF, e a cascata termina em **erro explícito**, nunca em valor errado silencioso.
 
-| Tipo de domínio        | Coluna MySQL                                                              |
-| ---------------------- | ------------------------------------------------------------------------- |
-| `Money` (cents)        | `BIGINT`                                                                  |
-| `Date` (timestamp)     | `DATETIME(3)` — UTC via `default-time-zone=+00:00`                        |
-| `Period`               | **3 colunas**: `period_kind VARCHAR(16)+CHECK`, `period_start`, `period_end` (nullable) |
-| Enum de domínio        | `VARCHAR(16) + CHECK` — **nunca** `ENUM` nativo                          |
-| ID brandado            | `VARCHAR(36)` como PK — legibilidade vence os 16 bytes                    |
-| Coleção de IDs         | **tabela de junção** com PK composta — nunca array nem JSON               |
-
-## Escrita, leitura e a regra de ouro
-
-- **Um único escritor por database** ([ADR-0014](../../handbook/architecture/adr/0014-mysql-database-isolation.md)). `core.*` só o core-api escreve. **Eventos via outbox são o único canal cross-database** — nunca `SELECT` na tabela de outro módulo.
-- **Pool é boot-scoped, via registry** — `src/shared/persistence/pool-registry.ts`. URLs idênticas colapsam num único pool por processo. Nasceu de incidente real de exaustão de conexões no RDS; não abra pool por módulo nem por repositório.
-  > O read/write split writer/reader do [ADR-0026](../../handbook/architecture/adr/0026-mysql-read-write-split-connection.md) é **norma decidida e ainda não implementada** — `grep -rn "createPool" src/` não encontra split algum. Não escreva código assumindo que os dois pools existem.
-
-## Outbox e projeções
-
-- **O `INSERT` na outbox vai DENTRO da mesma transação** da mudança de domínio ([ADR-0015](../../handbook/architecture/adr/0015-mysql-outbox-pattern.md)): o evento existe **se e somente se** o estado foi persistido. "Publicar depois do save" não satisfaz — precisa ser atômico (`appendOutboxInTx`).
-- MySQL **não tem** `LISTEN/NOTIFY`: a leitura do outbox é **polling**, sempre.
-- **O outbox É o log append-only canônico** ([ADR-0022](../../handbook/architecture/adr/0022-read-models-via-projection-over-event-stream.md)) — não criar event-store separado. Read-model é **projeção** alimentada pelo event-delivery, **nunca** query direta na tabela de entrega. Projetor **idempotente por `eventId`**; o read-model é derivado e pode ser truncado e reconstruído.
-- **Idempotência de projeção** ([ADR-0045](../../handbook/architecture/adr/0045-financial-supplier-read-model.md)): `ON DUPLICATE KEY UPDATE` + **guard de recência** por `occurred_at` — absorve at-least-once e evento fora de ordem atomicamente, sem SELECT-then-UPDATE.
-
-## Eventos de integração cross-módulo
-
-- O payload é montado **no adapter de persistência, a partir do snapshot do agregado** — nunca do evento de domínio. O domínio **não muda** para servir integração ([ADR-0043](../../handbook/architecture/adr/0043-partners-supplier-integration-events.md) §Opção A).
-- Serializado com `JSON.stringify` em `varchar` — sem JSON nativo (ADR-0020).
-- **Campo aditivo NUNCA quebra o `schema_version = 1`**: acrescentar não exige bump; consumidores existentes ignoram o campo novo ([ADR-0046](../../handbook/architecture/adr/0046-contracts-contractor-ref-integration-events.md)).
-
-## Storage de documentos ([ADR-0019](../../handbook/architecture/adr/0019-document-storage-s3-with-minio-dev.md))
-
-> **1 port, 1 adapter, 1 SDK, 2 endpoints, 0 emulação custom.**
-
-`@aws-sdk/client-s3` é o **único** cliente — sem wrapper caseiro, sem `s3rver`/FlatDoc. MinIO e AWS S3 usam o mesmo código; muda só a config: `forcePathStyle: true` para MinIO, `false` para S3.
-
-## Leitura de documento fiscal ([ADR-0050](../../handbook/architecture/adr/0050-document-reader-cascade-supersedes-0034.md))
-
-- O `DocumentReaderPort` **recebe bytes** (`Buffer`/`Uint8Array`) ou uma `StorageKey` resolvida server-side — **nunca uma URL vinda do cliente** (anti-SSRF, anti-vazamento de URL assinada).
-- Cascata: XML estruturado → parser de texto nativo → OCR externo → **erro explícito**. **Nunca valor errado silencioso** — é invariante fiscal.
-- O domínio recebe **campos tipados** + `resolvedVia`, **não texto bruto** (minimização, LGPD art. 6 III). **Log nunca contém bytes, texto ou resultado.**
-
-## Skills canônicas
-
-- `drizzle-schema-author` — modelar `mysqlTable`, índices, FKs ([`SKILL.md`](../skills/drizzle-schema-author/SKILL.md)).
-- `nodejs-fs-scripter` / `nodejs-process-runner` — scripts FS e invocação de processos externos.
+Modelagem de `mysqlTable`, índices e FKs: skill [`drizzle-schema-author`](../skills/drizzle-schema-author/SKILL.md). A lista normativa de features SQL permitidas e proibidas vive no [ADR-0020](../../handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) — abrir lá em vez de confiar em resumo.

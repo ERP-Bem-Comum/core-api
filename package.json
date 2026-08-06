@@ -15,7 +15,7 @@
       "onFail": "download"
     }
   },
-  "packageManager": "pnpm@11.15.1+sha512.81350b07e53c9538a02f1f2303b4290fa2d7be04e56e2a970c4cc4b417dc761de196edabd49d55c7dc9580db81007c44143e4e3d7e462b3000d23c255122d065",
+  "packageManager": "pnpm@11.18.0+sha512.33d83c77da82f49fba836925c6f1b841181ec3132b670639bd012f7075f5c7cf634c5f870147c19aae7478fac01df09d8892e880454896edd23ee9b33757563c",
   "imports": {
     "#src/*": "./src/*",
     "#scripts/*": "./scripts/*",
@@ -90,11 +90,12 @@
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.8.3",
     "typescript": "^6.0.0",
-    "typescript-eslint": "^8.59.3"
+    "typescript-eslint": "^8.59.3",
+    "yaml": "^2.9.0"
   },
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1052.0",
-    "@aws-sdk/s3-request-presigner": "^3.1052.0",
+    "@aws-sdk/client-s3": "3.1052.0",
+    "@aws-sdk/s3-request-presigner": "3.1052.0",
     "@fastify/cors": "11.2.0",
     "@fastify/helmet": "13.0.2",
     "@fastify/rate-limit": "10.3.0",
@@ -104,11 +105,11 @@
     "fast-xml-parser": "5.7.3",
     "fastify": "5.8.5",
     "fastify-zod-openapi": "5.6.1",
-    "hash-wasm": "^4.12.0",
-    "jose": "^6.2.3",
-    "mysql2": "^3.22.3",
-    "nodemailer": "^9.0.1",
-    "resend": "^6.12.4",
+    "hash-wasm": "4.12.0",
+    "jose": "6.2.3",
+    "mysql2": "3.22.3",
+    "nodemailer": "9.0.1",
+    "resend": "6.12.4",
     "unpdf": "1.6.2",
     "zod": "4.4.3",
     "zod-openapi": "5.4.6"

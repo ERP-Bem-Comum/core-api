@@ -40,7 +40,7 @@ const integrationEnabled = (): boolean => process.env['MYSQL_INTEGRATION'] === '
 // 1) ESTRUTURAL (sempre roda, sem DB) — CA1 no nível do schema Drizzle.
 //    RED até `subcategoryRef` existir em mysql.ts nas duas tabelas.
 // ─────────────────────────────────────────────────────────────────────────────
-type ColumnShape = Readonly<{ name: string; columnType: string; notNull: boolean }>;
+type ColumnShape = Readonly<{ name: string; notNull: boolean; getSQLType: () => string }>;
 
 type Target = Readonly<{ dbName: string; table: AnyMySqlTable }>;
 
@@ -61,7 +61,12 @@ describe('FIN-DOC-SUBCATEGORY-STAMP — subcategory_ref no schema Drizzle (CA1)'
           'subcategory_ref',
           `${dbName}: nome físico deve ser subcategory_ref`,
         );
-        assert.equal(col.columnType, 'MySqlVarChar', `${dbName}: subcategory_ref deve ser varchar`);
+        // #636: o tipo carrega a collation — `getSQLType()` descreve o DDL emitido.
+        assert.equal(
+          col.getSQLType(),
+          'varchar(36) COLLATE utf8mb4_bin',
+          `${dbName}: subcategory_ref deve ser varchar(36) binário`,
+        );
         assert.equal(col.notNull, false, `${dbName}: subcategory_ref deve ser NULL (nullable)`);
       });
     });

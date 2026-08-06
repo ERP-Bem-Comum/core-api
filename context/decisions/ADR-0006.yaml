@@ -1,0 +1,447 @@
+id: ADR-0006
+title: Modular Monolith para o core-api (Granularidade de Serviço)
+source: handbook/architecture/adr/0006-modular-monolith-core-api.md
+decided_on: 2026-04-27
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0001, ADR-0003, ADR-0004, ADR-0005, ADR-0014, ADR-0041]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    A DECISÃO se realizou; a DESCRIÇÃO não sobrou nada. Um único código-base com módulos internos,
+    camadas `domain`/`application`/`adapters` por módulo, domínio puro sem framework — tudo confere.
+    Mas a estrutura que o ADR desenha (`apps/core-api/src/contexts/{documentos,titulos,banco,ocr}/`)
+    não existe em nenhum pedaço: o real é `src/modules/` com oito módulos em inglês, nenhum deles
+    entre os quatro BCs nomeados. Ler este ADR hoje é exercício de tradução.
+    O achado que importa: a invariante de fronteira é respeitada **integralmente** — zero imports de
+    `domain/` ou `application/` entre módulos, medido nos oito — e **não existe nenhum mecanismo que
+    a proteja**. O ADR nomeia a ESLint rule `no-cross-context-import` como a garantia contra "a
+    tentação de violar fronteiras sob pressão", e essa rule não existe. A arquitetura está de pé por
+    disciplina, exatamente onde o próprio ADR disse que disciplina não bastaria.
+    Duas garantias listadas como obrigatórias estão ausentes: a auditoria atômica em `core.audit_log`
+    (diferida) e os eventos in-process (o EventBus nativo foi estudado e arquivado; cross-módulo vai
+    por outbox e `public-api`).
+
+extraction:
+  state: complete
+  covers: |
+    9 alegações — a decisão de granularidade, a estrutura de pastas, as camadas, as cinco garantias
+    técnicas obrigatórias, o prefixo de tabela e a invariante "Documentos e Títulos juntos". Os cinco
+    invariantes cross-BC do handbook (linhas 37-43) e os cinco gatilhos de reavaliação não geram
+    alegação: os primeiros são regra de domínio (vivem em `handbook/domain/`), os segundos são
+    condições de futuro.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: COBERTO — cross-módulo só por public-api já está em contracts-module.md e application.md
+    applied_to: ['.claude/rules/contracts-module.md', '.claude/rules/application.md']
+    gap: |
+      A 039 detectou a divergência estrutural e a classificou como "projeção inicial, não drift a
+      corrigir (ADR é imutável)" — leitura defensável sob a premissa antiga. Sob a premissa vigente
+      (ADR é evidência, não lei), a alegação é `contradicted` e o que sobrevive é a invariante, não a
+      descrição.
+      O que ela não verificou: se o "cross-módulo só por public-api" que ela declarou coberto tem
+      algum enforcement. Não tem. E se há violação real. Não há — zero em oito módulos. As duas
+      respostas juntas mudam a prioridade: a regra não precisa ser escrita melhor, precisa ser barrada
+      mecanicamente enquanto está em 100% de adesão.
+
+claims:
+  - id: ADR-0006-C1
+    text: |
+      O core-api é implementado como Modular Monolith — um único serviço deployável contendo os BCs
+      como módulos internos. Durante a transição, 3 serviços; após o desligamento do legado, 2.
+    kind: obligation
+    source_lines: [49, '67-70']
+    applies_to:
+      - 'src/**'
+      - 'compose.yaml'
+    reality:
+      verdict: partial
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'nota: um único código-base em src/ com oito módulos internos — a decisão de granularidade se sustenta'
+        - 'src/server.ts:289 — composition root único da borda HTTP, via buildApp'
+        - 'nota: mas há múltiplos ENTRYPOINTS do mesmo código-base: src/workers/ e src/jobs/, formalizados depois pelo ADR-0041 (workers especializados por entrypoint + jobs one-shot)'
+        - 'nota: package.json declara 6 scripts worker:* e 6 scripts job:*, cada um um processo próprio'
+      verify: |
+        ls src/; node -e "const s=require('./package.json').scripts;console.log(Object.keys(s).filter(k=>/^(worker|job):/.test(k)).length,'entrypoints de worker/job')"
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/`, quando existir mais de um código-base deployável para os módulos de domínio,
+        então o teste falha. Entrypoints múltiplos do MESMO código-base são permitidos.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Os módulos de domínio MUST viver num único código-base deployável. MAY haver múltiplos
+        entrypoints (borda HTTP, workers, jobs) sobre o mesmo código-base — MUST NOT haver
+        código-base separado por módulo.
+      rationale: |
+        "Um único serviço deployável" ficou imprecisa: são 13 processos possíveis do mesmo artefato.
+        Estreitar para "um código-base, N entrypoints" descreve a realidade e preserva a decisão — que
+        é sobre não fragmentar o domínio, não sobre contar processos.
+
+  - id: ADR-0006-C2
+    text: |
+      Estrutura interna: `apps/core-api/src/contexts/{documentos,titulos,banco,ocr}/`, mais `shared/`
+      e `server.ts`.
+    kind: obligation
+    source_lines: ['53-63']
+    applies_to:
+      - 'src/**'
+    reality:
+      verdict: contradicted
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'ausência: não existe apps/ nem src/contexts/ — a raiz é src/{jobs,modules,shared,workers,server.ts}'
+        - 'nota: os oito módulos reais são auth, budget-plans, contracts, financial, notifications, partners, programs, reports — nenhum dos quatro BCs nomeados pelo ADR'
+        - 'nota: shared/ e server.ts sobreviveram; contexts/ virou modules/ e o vocabulário passou de PT para EN'
+      verify: |
+        ls src/; ls src/modules/
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/`, quando a estrutura divergir da declarada no registro vigente, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: accepted
+      disposition: replace
+      text: |
+        Módulo MUST viver em `src/modules/<nome-en>/`, com o nome em inglês e kebab-case. Código
+        transversal MUST viver em `src/shared/`. O composition root da borda MUST ser `src/server.ts`.
+      rationale: |
+        A descrição do ADR é a projeção inicial de abril, feita antes de existir código, com o
+        vocabulário de domínio em PT e uma decomposição de 4 BCs que virou 8 módulos. Substituir pelo
+        que existe — e é a estrutura que oito módulos seguem sem exceção, logo já é norma de fato.
+
+  - id: ADR-0006-C3
+    text: |
+      Cada BC organiza-se internamente em camadas: `domain/`, `application/`, `adapters/`.
+    kind: obligation
+    source_lines: [65, 152]
+    applies_to:
+      - 'src/modules/*/**'
+    reality:
+      verdict: holds
+      holds_in:
+        [auth, budget-plans, contracts, financial, notifications, partners, programs, reports]
+      absent_in: []
+      evidence:
+        - 'nota: as três camadas existem por módulo; verificado ao percorrer src/modules/ inteiro na checagem de fronteira'
+        - 'src/modules/financial/application/ports/document-reader.ts:17 — exemplo de port na camada application'
+        - 'src/modules/auth/domain/authorization/authorize.ts:16 — exemplo de regra pura na camada domain'
+      verify: |
+        for m in src/modules/*/; do echo "$m: $(ls $m | tr '\n' ' ')"; done
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um módulo em `src/modules/`, quando faltar `domain/`, `application/` ou `adapters/`, ou
+        quando existir camada fora dessas mais `public-api/` e `worker/`, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Todo módulo MUST organizar-se em `domain/`, `application/` e `adapters/`. Exposição
+        cross-módulo MUST ficar em `public-api/`.
+      rationale: |
+        Adesão total nos oito módulos e é a base sobre a qual a fronteira do C4 é verificável — sem
+        camadas nomeadas, não há como distinguir import legítimo de violação.
+
+  - id: ADR-0006-C4
+    text: |
+      Sem cross-import entre BCs: a ESLint rule `no-cross-context-import` impede `import` direto entre
+      BCs, exceto via contratos. Sem ela, o risco é "acoplamento implícito entre BCs" e a "tentação de
+      violar fronteiras sob pressão".
+    kind: prohibition
+    source_lines: [79, 103, 150]
+    applies_to:
+      - 'src/modules/*/**/*.ts'
+      - 'eslint.config.js'
+    reality:
+      verdict: partial
+      holds_in:
+        [auth, budget-plans, contracts, financial, notifications, partners, programs, reports]
+      absent_in: []
+      evidence:
+        - 'nota: ZERO violações medidas — nenhum arquivo de src/modules/ importa domain/ ou application/ de outro módulo, resolvendo #src/ e caminhos relativos nos oito módulos'
+        - 'ausência: não existe rule no-cross-context-import nem equivalente em eslint.config.js; o no-restricted-imports de lá cobre apenas libs proibidas do ADR-0011'
+        - 'ausência: nenhuma rule em .semgrep/rules.yml sobre fronteira de módulo'
+        - 'nota: a invariante está de pé por disciplina, exatamente no ponto onde o ADR previu que disciplina não bastaria'
+      verify: |
+        grep -n "no-cross-context\|public-api" eslint.config.js .semgrep/rules.yml
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/modules/`, quando um arquivo importar de `domain/` ou `application/` de OUTRO módulo,
+        então o teste falha nomeando origem e destino. Import via `public-api/` do outro módulo é
+        permitido. O RED passa hoje em 100% — é o cenário ideal para promover: protege o futuro sem
+        exigir refactor.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Módulo MUST NOT importar de `domain/` ou `application/` de outro módulo. Acesso cross-módulo
+        MUST passar exclusivamente por `public-api/`.
+      rationale: |
+        É a alegação de maior valor deste ADR e uma das melhores do inventário: 100% de adesão e zero
+        proteção. O ADR nomeia o mecanismo (`no-cross-context-import`) e o mecanismo não existe.
+        Promover como `no-restricted-imports` por glob custa uma entrada no `eslint.config.js`, não
+        quebra nada hoje, e é o quarto candidato a enforcement que a 039 já havia listado por outro
+        caminho (`server.ts` importando domínio de módulo).
+
+  - id: ADR-0006-C5
+    text: |
+      Domínio sem framework: a lógica de negócio não é acoplada ao framework HTTP.
+    kind: prohibition
+    source_lines: [152, 85]
+    applies_to:
+      - 'src/modules/*/domain/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in:
+        [auth, budget-plans, contracts, financial, notifications, partners, programs, reports]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhum import de fastify, drizzle-orm ou mysql2 em src/modules/*/domain/'
+        - 'ausência: nenhuma capability de runtime (node:fs, node:process, process.env) no domínio — ver ADR-0009-C7'
+        - 'src/modules/auth/domain/authorization/authorize.ts:16 — importa apenas Result, Role, Permission e ActiveUser'
+      verify: |
+        grep -rn "from 'fastify'\|from 'drizzle-orm'\|from 'mysql2'" src/modules/*/domain/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/modules/*/domain/`, quando algum arquivo importar framework HTTP, ORM ou driver de
+        banco, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Camada `domain/` MUST NOT importar framework HTTP, ORM, driver de banco nem SDK de
+        infraestrutura.
+      rationale: |
+        Adesão total, verificável por import, e é o que sustenta a promessa de extração futura do
+        módulo. Mesmo perfil da C4 — invariante saudável sem rede mecânica, candidata a
+        `no-restricted-imports` no mesmo esforço.
+
+  - id: ADR-0006-C6
+    text: |
+      Schema namespaceado: tabelas prefixadas por BC dentro do database único — `core.documentos_*`,
+      `core.titulos_*`. A falha esperada sem isso é "joins acidentais cross-BC".
+    kind: obligation
+    source_lines: [82, 154]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: partial
+      holds_in: [auth, contracts, financial, partners, programs, budget-plans]
+      absent_in: []
+      evidence:
+        - 'nota: o princípio se realizou com prefixos diferentes dos nomeados — ctr_, fin_, auth_, par_, prg_, bgp_'
+        - 'ausência: não existem tabelas documentos_* nem titulos_*'
+        - 'nota: o ADR-0020 §"Convenção de nomenclatura" formalizou ctr_ e antecipou fin_; a lista canônica dos oito nunca foi escrita — ver ADR-0020-C9 e o ADR-0016 reservado'
+      verify: |
+        grep -rhoE "mysqlTable\(\s*'[a-z]+_" src/modules/*/adapters/persistence/schemas/mysql.ts | sort -u
+    testability:
+      verdict: testable-with-work
+      layer: static
+      red: |
+        Dado o schema de um módulo, quando uma tabela não usar o prefixo registrado do módulo, então o
+        teste falha.
+      expected_error: null
+      blocker: |
+        Depende da lista canônica de prefixo por módulo, que não existe — o mesmo bloqueio da
+        `ADR-0020-C9`. O `ADR-0016` foi reservado para isso em 2026-04-28 e nunca escrito.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: replace
+      text: |
+        Toda tabela MUST usar o prefixo registrado do módulo dono. O prefixo MUST constar de lista
+        canônica única, cobrindo os oito módulos.
+      rationale: |
+        Mesmo texto proposto na `ADR-0020-C9`, alcançado por dois ADRs independentes — sinal forte de
+        que é a regra certa. Substituir em vez de adotar porque os prefixos nomeados aqui
+        (`documentos_`, `titulos_`) não existem.
+
+  - id: ADR-0006-C7
+    text: |
+      Auditoria atômica como Shared Kernel: tabela `core.audit_log` recebe entradas via commit ACID na
+      mesma transação da mutação de origem, dando Time Travel ordenado pela ordem real do banco. A
+      falha esperada sem isso é "Time Travel inconsistente".
+    kind: obligation
+    source_lines: [91, 153, '42-43']
+    applies_to:
+      - 'src/modules/*/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in:
+        [auth, budget-plans, contracts, financial, notifications, partners, programs, reports]
+      evidence:
+        - 'ausência: não existe nenhuma tabela com audit no nome em src/'
+        - 'nota: o ADR-0022 diferiu o AuditLog explicitamente até existir identidade/RBAC ("sem ator autenticado, auditoria é de fachada")'
+        - 'nota: o ADR-0024 destravou o pré-requisito ao entregar identidade e RBAC, e o AuditLog segue não materializado'
+      verify: |
+        grep -rhoE "'[a-z_]*audit[a-z_]*'" src/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dada uma mutação de domínio, quando o commit falha, então nenhuma entrada de auditoria MUST
+        existir — e vice-versa. Hoje o teste não tem o que exercitar: a tabela não existe.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Entrada de auditoria MUST ser gravada na mesma transação da mutação que a origina.
+        MUST NOT ser gravada após o commit nem em transação separada.
+      rationale: |
+        Listada como garantia OBRIGATÓRIA pelo ADR e ausente há três meses, com o pré-requisito
+        (identidade/RBAC) entregue desde o ADR-0024. Adotar a forma agora fixa a invariante ANTES da
+        implementação — é a mesma invariante do outbox (`ADR-0015-C1`), que já está implementada e
+        serve de precedente direto.
+
+  - id: ADR-0006-C8
+    text: |
+      Comunicação cross-BC por eventos in-process, com contrato versionado — mesmo contrato dos eventos
+      cross-deployable. A falha esperada sem isso é "deus-classe emergente".
+    kind: obligation
+    source_lines: [81, 151]
+    applies_to:
+      - 'src/modules/*/adapters/**/*.ts'
+    reality:
+      verdict: contradicted
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'ausência: não existe EventBus in-process; a Inquiry-0016 estudou soluções nativas de Node para EventBus/Pub-Sub/Observer e foi arquivada como watchlist, sem adoção'
+        - 'nota: o cross-módulo real é assíncrono por outbox (sete tabelas *_outbox, ADR-0015/0043) ou leitura síncrona por public-api (ADR-0032)'
+        - 'nota: o contrato versionado existe, mas no payload do outbox (schema_version), não em evento in-process'
+      verify: |
+        grep -rn "EventBus\|eventBus" src/shared/ --include='*.ts' | head -5
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um módulo, quando ele publicar evento para outro por chamada direta de função em vez de
+        outbox ou leitura por `public-api`, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: ['tests/cleanup/no-inprocess-event-bus.test.ts']
+    rule:
+      status: accepted
+      disposition: replace
+      text: |
+        Comunicação cross-módulo MUST ser assíncrona por outbox, ou leitura síncrona por
+        `public-api/`. MUST NOT haver barramento de eventos in-process entre módulos.
+      rationale: |
+        O mecanismo previsto foi estudado e recusado (Inquiry-0016, arquivada). O que se consolidou é
+        melhor para a promessa de extração futura: outbox já é o contrato cross-deployable, então
+        extrair um módulo não muda o canal. Substituir pelo que existe, e registrar a proibição do
+        barramento in-process — que é o atalho que reintroduziria acoplamento.
+
+  - id: ADR-0006-C9
+    text: |
+      Documentos e Títulos devem permanecer juntos sempre — os invariantes R3 Sincronia, R3 Reabertura
+      e R8 Integridade tornam essa fronteira a mais cara de atravessar.
+    kind: prohibition
+    source_lines: [184, '169-182']
+    applies_to: []
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        echo 'Os BCs Documentos e Títulos não existem com esses nomes. Requer mapeamento de domínio para saber quais módulos herdaram os invariantes R3/R8.'
+    testability:
+      verdict: unfalsifiable
+      layer: null
+      red: |
+        Nenhum enquanto o mapeamento não existir: os dois BCs nomeados não têm correspondente óbvio
+        em `src/modules/`. Sem saber quem herdou R3 Sincronia, R3 Reabertura e R8 Integridade, não há
+        fronteira a proteger.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como regra e preservar como pergunta aberta. A invariante de domínio por trás (título
+        só transmite se o documento estiver selado; reabrir documento exige tratar os títulos filhos) é
+        real e vive em `handbook/domain/`. O que se perdeu foi o vínculo: nenhum registro diz qual
+        módulo herdou esses invariantes. É trabalho de mapeamento de domínio, não de regra de edição.
+
+findings:
+  - |
+    A alegação de maior valor do inventário até aqui. A invariante de fronteira do modular monolith é
+    respeitada em 100% — ZERO imports de `domain/` ou `application/` entre módulos, medido nos oito,
+    resolvendo `#src/` e caminhos relativos. E não existe NENHUM mecanismo que a proteja: a ESLint rule
+    `no-cross-context-import` que o ADR nomeia como a garantia não existe, e o `no-restricted-imports`
+    do `eslint.config.js` cobre só libs proibidas do ADR-0011.
+    O ADR previu exatamente este risco: "conviver no mesmo processo facilita o atalho `import`,
+    mitigado por ESLint rule". A mitigação nunca foi implementada e a arquitetura está de pé por
+    disciplina — o que funcionou até agora e não é rede.
+  - |
+    Duas das seis garantias listadas como OBRIGATÓRIAS pelo ADR ("Modular Monolith mal feito é
+    monolito disfarçado. As garantias abaixo são obrigatórias") estão ausentes: a auditoria atômica em
+    `core.audit_log` (diferida desde o ADR-0022, com o pré-requisito de RBAC entregue desde o ADR-0024)
+    e os eventos in-process (mecanismo estudado e recusado pela Inquiry-0016).
+  - |
+    Nenhum dos quatro BCs nomeados por este ADR e pelo ADR-0001 (Documentos, Títulos, Bradesco, OCR)
+    existe. A consequência prática mais séria não é estética: a invariante "Documentos e Títulos devem
+    permanecer juntos sempre" — que o ADR marca com ⚠️ e chama de "a fronteira mais cara de
+    atravessar" — ficou sem endereço. Ninguém sabe qual dos oito módulos herdou R3 Sincronia, R3
+    Reabertura e R8 Integridade.
+  - |
+    "Um único serviço deployável" é imprecisa hoje: são 13 entrypoints possíveis do mesmo código-base
+    (borda HTTP mais 6 workers e 6 jobs), formalizados depois pelo ADR-0041. A decisão de granularidade
+    (não fragmentar o domínio) se sustenta; a contagem de processos não.
+  - |
+    Terceiro ADR do inventário cuja regra proposta converge com outro por caminho independente: a
+    `C6` (prefixo de tabela) chegou ao mesmo texto da `ADR-0020-C9`, e ambas travam na mesma lista
+    canônica inexistente, cujo dono previsto é o `ADR-0016` reservado e nunca escrito. Três ADRs
+    apontando para a mesma lacuna é sinal de que ela deveria ser a próxima decisão escrita.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    Inquiry-0001 (Granularidade de serviço — Modular Monolith vs. Microservices) embasou este ADR e não
+    foi lida. Inquiry-0016 (EventBus nativo, arquivada como watchlist) é a que explica a ausência dos
+    eventos in-process da `C8` — citada pelo INDEX, não lida. O ADR-0041 (workers especializados)
+    formaliza os entrypoints da `C1` e está no lote 8.

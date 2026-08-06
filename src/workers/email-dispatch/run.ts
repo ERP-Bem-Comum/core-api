@@ -17,6 +17,10 @@ import process from 'node:process';
 
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import { runLoop } from '#src/shared/outbox/index.ts';
+import {
+  installLastResortHandlers,
+  processLastResortDeps,
+} from '#src/shared/runtime/last-resort.ts';
 import { openAuthMysql } from '#src/modules/auth/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleAuthOutboxRepository } from '#src/modules/auth/adapters/persistence/repos/outbox-repository.drizzle.ts';
 import {
@@ -97,6 +101,19 @@ const main = async (): Promise<number> => {
   };
   process.once('SIGTERM', shutdown);
   process.once('SIGINT', shutdown);
+  // Drena de verdade: aborta o loop E fecha o(s) pool(s). Em `uncaughtException` o
+  // `finally` nunca roda, e sem isto o pool fica pendurado ate o `wait_timeout`
+  // (Incident-0001).
+  // `allSettled`, não `await` em sequência (#632) — ver a nota em contract-count-projection/run.ts.
+  // O `partnersHandle` é opcional aqui, então entra na lista só quando existe.
+  const drain = async (): Promise<void> => {
+    controller.abort();
+    await Promise.allSettled([
+      authHandle.close(),
+      ...(partnersHandle !== null ? [partnersHandle.close()] : []),
+    ]);
+  };
+  installLastResortHandlers(drain, processLastResortDeps());
 
   process.stderr.write(
     `${TAG}iniciando — auth_outbox${partnersHandle !== null ? ' + par_email_outbox' : ''} -> EmailSender\n`,

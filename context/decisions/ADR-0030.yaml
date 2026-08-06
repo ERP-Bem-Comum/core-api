@@ -1,0 +1,199 @@
+id: ADR-0030
+title: Store compartilhado (Valkey via ioredis) — adiado até multi-instância
+source: handbook/architecture/adr/0030-valkey-shared-store-deferred.md
+decided_on: 2026-05-30
+
+declared:
+  status: Proposed
+  status_normalized: proposed
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0011, ADR-0024, ADR-0025, ADR-0055]
+
+assessment:
+  verdict: realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Único ADR `Proposed` do inventário com veredito `realized`, e o caso mostra por quê: o que ele decide
+    é ADIAR, e o adiamento está cumprido à risca.
+    O rate-limit é in-memory, `ioredis`/`valkey`/`redis` estão ausentes do manifesto, e — o detalhe que
+    importa — a dívida está documentada exatamente onde o ADR pediu: `src/shared/http/app.ts:126-127`
+    cita "ADR-0030 Proposed" nominalmente e nomeia o sucessor ("store compartilhado, Valkey via ioredis,
+    quando o core-api escalar horizontalmente").
+    Contraste direto com o `ADR-0017`, o outro `Proposed` com consequência prática: aquele tinha prazo
+    ("a janela fecha quando o schema começar"), o prazo venceu e a decisão foi tomada num comentário de
+    schema sem promover o ADR. Este tem GATILHO ("antes de subir a 2ª instância"), o gatilho não
+    disparou, e a dívida está visível no código. `Proposed` com gatilho e âncora funciona; `Proposed` com
+    prazo e sem critério de promoção, não.
+    Um erro de fundamentação deste ADR foi corrigido de passagem pelo `ADR-0055`: a razão para rejeitar
+    MySQL como store não é frequência de acesso, é arquitetural (`ADR-0005` proíbe o BFF de acessar
+    banco).
+
+extraction:
+  state: complete
+  covers: |
+    3 alegações — o adiamento com a dívida documentada, a decisão condicional de adoção, e o gatilho.
+    A justificativa "por que Valkey e não Redis" (licença RSALv2/SSPL) é fundamentação.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: Inelegível na triagem por status (Proposed) — não gera ainda, reavaliar se aceito
+    applied_to: []
+    gap: |
+      Correto como filtro para gerar rule. Mas trata este `Proposed` igual aos outros três do acervo, e
+      ele é de natureza diferente: os outros propõem CONSTRUIR algo; este propõe NÃO construir. Um
+      adiamento é verificável hoje — e está cumprido. "Reavaliar se aceito" é o veredito errado para uma
+      decisão cuja execução é a inação.
+
+claims:
+  - id: ADR-0030-C1
+    text: |
+      ADIAR a adoção de store compartilhado enquanto o core-api for single-instance (YAGNI). Manter o
+      rate-limit in-memory e DOCUMENTAR a dívida — neste ADR e em comentário em `src/shared/http/app.ts`.
+    kind: obligation
+    source_lines: ['23-24']
+    applies_to:
+      - 'src/shared/http/app.ts'
+      - 'package.json'
+    reality:
+      verdict: holds
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'src/shared/http/app.ts:126 — comentário: store in-memory enquanto single-instance, citando ADR-0030 Proposed'
+        - 'src/shared/http/app.ts:127 — o mesmo comentário nomeia o sucessor: store compartilhado (Valkey via ioredis) quando o core-api escalar horizontalmente'
+        - 'src/shared/http/app.ts:19 — o rate-limit vem de @fastify/rate-limit, sem store externo configurado'
+        - 'ausência: ioredis, valkey e redis não estão em dependencies nem devDependencies'
+      verify: |
+        grep -n "0030\|in-memory\|Valkey" src/shared/http/app.ts; node -e "const p=require('./package.json');const d={...p.dependencies,...p.devDependencies};for(const k of ['ioredis','valkey','redis'])if(d[k])console.log('presente:',k)"
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `package.json`, quando `ioredis` aparecer sem que este ADR tenha sido promovido a `Accepted`,
+        então o teste falha — a adoção teria acontecido sem a decisão. Simétrico: se o comentário de
+        dívida sair do `app.ts` enquanto o store continuar in-memory, a dívida vira invisível.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Dívida técnica aceita por YAGNI MUST estar documentada no ponto do código que a carrega, citando o
+        registro de decisão e nomeando o sucessor. MUST NOT viver apenas no documento.
+      rationale: |
+        É a regra que este ADR exemplifica melhor que qualquer outro do acervo, e ela generaliza: a dívida
+        sobrevive porque está ANCORADA no arquivo onde alguém vai mexer, não porque está escrita num ADR
+        que ninguém abre. Mesmo mecanismo que fez o `ADR-0032` funcionar (header `Sunset` nomeando o
+        sucessor) e que faltou ao `ADR-0017` (decisão num comentário, sem vínculo com o ADR).
+
+  - id: ADR-0030-C2
+    text: |
+      QUANDO a escala horizontal entrar no roadmap, adotar Valkey (engine) via `ioredis` (cliente exigido
+      pelo `@fastify/rate-limit`), escopo store compartilhado — rate-limit, cache e sessão futura —
+      promovendo este ADR a `Accepted` mais tickets de infra e wiring (`redis:` + `skipOnError: true`).
+    kind: permission
+    source_lines: ['25-28']
+    applies_to:
+      - 'package.json'
+      - 'src/shared/http/app.ts'
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in: [core-api]
+      evidence:
+        - 'ausência: nenhuma dependência de ioredis; nenhum wiring de store externo no rate-limit'
+        - 'nota: ausência é CONFORMIDADE aqui — a permissão é condicional e a condição (escala horizontal) não entrou no roadmap'
+      verify: |
+        grep -rn "ioredis\|skipOnError" src/ package.json --include='*.ts' --include='*.json'
+    testability:
+      verdict: not-applicable
+      layer: null
+      red: |
+        Não há obrigação a falsificar: é permissão condicional cuja condição não ocorreu. A ausência é o
+        estado correto.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Adotar store compartilhado MUST vir acompanhado da promoção deste registro a `accepted`, e do
+        guard distribuído para o single-flight de refresh (ADR-0055). O cliente MUST ser wire-compatible
+        com Valkey; MUST NOT adotar Redis upstream sem verificar licença.
+      rationale: |
+        Estreitado para acrescentar a condição que o `ADR-0055` descobriu depois e que este ADR não podia
+        saber: sem guard distribuído, trocar o store INTRODUZ um defeito de revogação em cascata. Sem
+        isso, a permissão condicional deste ADR autoriza uma mudança que piora o sistema — e é o tipo de
+        acoplamento entre decisões que só aparece cruzando os dois registros.
+
+  - id: ADR-0030-C3
+    text: |
+      GATILHO de ativação: abrir o ticket de adoção ANTES de subir a 2ª instância do core-api. Enquanto
+      single-instance, o lockout por conta (MySQL) cobre brute force e o teto in-memory é funcionalmente
+      correto.
+    kind: obligation
+    source_lines: ['36-39']
+    applies_to: []
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        echo 'Depende do estado de deploy (número de instâncias do core-api), provisionado fora deste repositório. O lockout por conta é verificável: tabela auth_login_lockout existe (ver ADR-0024-C8).'
+    testability:
+      verdict: testable-with-work
+      layer: static
+      red: |
+        Dada a configuração de deploy, quando o número de réplicas do core-api passar de 1 sem que este
+        registro esteja `accepted`, então o gate falha.
+      expected_error: null
+      blocker: |
+        A contagem de réplicas vive na configuração de deploy, fora deste repositório (taskdef/compose de
+        produção). Verificável de lá, ou por um gate no pipeline de deploy.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Subir a segunda réplica MUST ser precedido da adoção de store compartilhado. O gatilho MUST ser
+        verificado no pipeline de deploy, não na revisão de código.
+      rationale: |
+        O gatilho é bom e está no lugar errado para ser cobrado: quem sobe réplica não está editando
+        `app.ts`. Adotar com a nota de ONDE verificar — é o mesmo problema do `ADR-0021-C5` (promoção sem
+        pipeline) e do `ADR-0055-C12` (guard distribuído antes da 2ª réplica), que apontam para o mesmo
+        gate de deploy inexistente.
+
+findings:
+  - |
+    Melhor exemplo do acervo de dívida adiada com ancoragem correta. O ADR pediu duas coisas — adiar e
+    documentar a dívida em `src/shared/http/app.ts` — e as duas estão feitas, com o comentário citando o
+    ADR nominalmente e nomeando o sucessor. É o mesmo mecanismo que fez o `ADR-0032` funcionar: a dívida
+    sobrevive porque está no arquivo onde alguém vai mexer.
+  - |
+    Contraste que fecha o padrão dos `Proposed`. Dos quatro do acervo: o `0007` tinha CHECKLIST de
+    promoção e virou o `0021`; este tem GATILHO e âncora no código, e o adiamento está cumprido; o `0017`
+    tinha PRAZO sem critério de promoção, o prazo venceu e a decisão foi tomada num comentário de schema
+    sem promover o ADR. `Proposed` funciona quando traz o critério de saída; vira limbo quando não traz.
+  - |
+    Três alegações do inventário apontam para o MESMO gate de deploy inexistente: esta `C3` (2ª réplica
+    exige store compartilhado), a `ADR-0021-C5` (promoção PBE→produção sem pipeline) e a `ADR-0055-C12`
+    (guard distribuído antes da 2ª réplica). Nenhuma é verificável em revisão de código, e todas são
+    verificáveis num gate de deploy. É a lacuna de enforcement mais concentrada do acervo.
+  - |
+    O `ADR-0055` corrige de passagem a fundamentação deste ADR: a razão para excluir MySQL como store não
+    é frequência de acesso (argumento deste ADR), é arquitetural — o `ADR-0005:60` proíbe o BFF de acessar
+    banco. Correção de raciocínio de um ADR feita dentro de outro, sem gerar registro próprio; já anotada
+    no `ADR-0055#findings` e repetida aqui porque é aqui que o argumento fraco mora.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    O ADR-0055 §5 retoma esta decisão para a sessão do BFF e acrescenta a condição do guard distribuído —
+    é o registro mais atual sobre store compartilhado e está extraído em `ADR-0055.yaml` (`C12`). Nenhum
+    ticket do acervo lido.

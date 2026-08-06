@@ -1,0 +1,158 @@
+id: ADR-0008
+title: Arquitetura da Integração Bradesco (REST API + VAN via Windows VM)
+source: handbook/architecture/adr/0008-bradesco-integration-architecture.md
+decided_on: 2026-04-28
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0006, ADR-0009, ADR-0013, ADR-0021]
+
+assessment:
+  verdict: contradicted
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Único ADR do inventário cujo veredito de documento é `contradicted`, e por uma razão que não é
+    drift de implementação: **a premissa central foi derrubada por decisão de negócio registrada em
+    outro lugar, e o ADR segue `Accepted` com ela no título.**
+    O título diz "REST API + VAN via Windows VM". O `context/planning/BRADESCO-EVITAR-WINDOWS.md:4`
+    registra, em 2026-05-22, que a P.O. consultou o gerente do Bradesco e **não há trilho que exija
+    Windows** para o fluxo CNAB via VAN — as 2× EC2 Windows do orçamento podem ser retiradas. E o
+    `ADR-0021`, do MESMO DIA, afirma que "a VM Windows com STCPCLT fica confirmada em AWS, eliminando
+    uma das pendências do ADR-0007".
+    Dois documentos da mesma data dizendo o oposto, e nenhum dos dois é `Proposed`.
+    Nada disso está implementado: não há uma linha de código Bradesco em `src/`, nem módulo `banco`.
+
+extraction:
+  state: sample
+  covers: |
+    2 alegações — os dois adapters da decisão e a premissa do Windows. As variáveis de ambiente, o
+    detalhamento de mTLS/OAuth2 e o adapter CNAB não foram extraídos como alegações próprias: sem
+    módulo e com a premissa em disputa, extraí-los seria registrar norma para código que não existe
+    sobre uma decisão que está em conflito aberto.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: NÃO GERA — o módulo `banco` ainda não existe em src/modules/, sem path alvo; reavaliar quando nascer
+    applied_to: []
+    gap: |
+      Correto quanto a não gerar rule — sem path, não há o que uma rule morda. O que a 039 não viu é
+      que a premissa do ADR está CONTRADITA por decisão de negócio de 2026-05-22, e que o `ADR-0021`
+      do mesmo dia afirma o contrário do planning. "Reavaliar quando o módulo nascer" trata como
+      pendência de implementação o que é conflito de decisão.
+
+claims:
+  - id: ADR-0008-C1
+    text: |
+      O módulo `contexts/banco/` implementa DOIS adapters distintos: `BradescoRestAdapter` (consulta de
+      saldo e extrato via REST API, `fetch` nativo com mTLS e OAuth2 client credentials) e o adapter de
+      VAN/CNAB.
+    kind: obligation
+    source_lines: ['24-45']
+    applies_to:
+      - 'src/modules/**'
+    reality:
+      verdict: absent
+      holds_in: []
+      absent_in: [core-api]
+      evidence:
+        - 'ausência: nenhuma referência a Bradesco em src/ — grep case-insensitive não retorna nada'
+        - 'ausência: não existe módulo banco nem contexts/ em src/modules/'
+        - 'nota: os oito módulos reais são auth, budget-plans, contracts, financial, notifications, partners, programs, reports'
+      verify: |
+        grep -rln "bradesco" src/ --include='*.ts'; ls src/modules/
+    testability:
+      verdict: testable-with-work
+      layer: static
+      red: |
+        Dado o módulo de integração bancária, quando os adapters não estiverem separados por camada
+        (REST versus arquivo CNAB), então o teste falha.
+      expected_error: null
+      blocker: |
+        O módulo não existe. E antes de existir, a premissa precisa ser resolvida: o planning de
+        2026-05-22 registra que o cliente exige CNAB via VAN e que Windows não é necessário, o que muda
+        o desenho dos dois adapters.
+      enforced_by: []
+    rule:
+      status: pending
+      disposition: null
+      text: null
+      rationale: null
+
+  - id: ADR-0008-C2
+    text: |
+      A VAN é operada via VM Windows (STCPCLT), conforme o título e o desenho da decisão.
+    kind: obligation
+    source_lines: [3, '24-26']
+    applies_to: []
+    reality:
+      verdict: contradicted
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'context/planning/BRADESCO-EVITAR-WINDOWS.md:4 — DECISÃO TOMADA em 2026-05-22: a P.O. consultou o gerente Bradesco e não há trilho que exija Windows; as 2× EC2 t3.small Windows podem ser retiradas'
+        - 'context/planning/BRADESCO-EVITAR-WINDOWS.md:19 — CNAB via VAN não passa pelo Portal Developers; é tratado pelo setor de Cash Management do banco'
+        - 'context/planning/BRADESCO-EVITAR-WINDOWS.md:36 — transmissão via VAN (Finnet/NDD/ScopusVAN/ProsperItS) não exige Windows; todas oferecem cliente Linux'
+        - 'nota: o ADR-0021, de 2026-05-22 — a MESMA data — afirma que a VM Windows com STCPCLT fica confirmada em AWS'
+      verify: |
+        grep -n "Windows\|VAN" context/planning/BRADESCO-EVITAR-WINDOWS.md | head -6
+    testability:
+      verdict: unfalsifiable
+      layer: null
+      red: |
+        Nenhum. É premissa de infraestrutura sobre integração não implementada — não há estado do
+        sistema que a falsifique. A refutação veio de consulta ao banco, não de teste.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: accepted
+      disposition: drop
+      text: null
+      rationale: |
+        ⚠️ PROMOVIDA em 2026-08-05, e a razão do descarte é OUTRA que a proposta pela extração. A
+        extração concluiu que a premissa do Windows estava refutada, citando
+        `context/planning/BRADESCO-EVITAR-WINDOWS.md`. O dono do repo corrigiu: a decisão real ainda
+        está sendo formulada, e a direção É Windows VM com o cliente STCPCLT do Bradesco.
+
+        Ou seja, a conclusão daquele documento de planejamento NÃO foi adotada. Quem o ler isolado vai
+        derivar o oposto do que vale — foi o que aconteceu comigo. O descarte aqui é por a alegação
+        estar em aberto, não por estar refutada: quando a decisão real fechar, ela merece ADR próprio,
+        e é lá que "Windows VM + STCPCLT" passa a ser norma com razão declarada.
+
+        O conflito com o `ADR-0021`, que afirma o contrário na mesma data e segue `Accepted`, permanece
+        aberto e não é resolvido por este descarte.
+
+findings:
+  - |
+    Contradição frontal entre dois documentos da MESMA DATA, ambos vigentes. O
+    `context/planning/BRADESCO-EVITAR-WINDOWS.md:4` registra em 2026-05-22 que não há trilho Bradesco
+    que exija Windows e que as duas EC2 Windows podem sair do orçamento. O `ADR-0021`, também de
+    2026-05-22, lista entre suas consequências neutras que "a VM Windows com STCPCLT fica confirmada em
+    AWS, eliminando uma das pendências do ADR-0007". Um agente que leia os ADRs conclui que precisa de
+    Windows; um que leia o planning conclui o contrário.
+  - |
+    O `ADR-0008` segue `Accepted` com a premissa refutada NO TÍTULO. É o caso mais grave da classe que
+    o `ADR-0056` inaugurou (status desatualizado), porque aqui não é o campo `Status` que está errado —
+    é o conteúdo, e o título propaga o erro em toda citação.
+  - |
+    A decisão que substitui está em `context/planning/`, não em ADR. O planning inclusive registra
+    (linha 50) que "o time técnico escolher a VAN virará ADR próprio quando o módulo Financeiro
+    entrar" — ou seja, a decisão de negócio foi tomada e o registro arquitetural foi deliberadamente
+    adiado. Enquanto isso, a norma vigente segundo a hierarquia do `AGENTS.md` é o ADR errado.
+  - |
+    Terceiro ADR do acervo a nomear a estrutura `contexts/` que nunca existiu, junto com o `ADR-0006` e
+    o `ADR-0010`. Aqui o efeito é maior porque o módulo `banco` também nunca nasceu: o ADR descreve um
+    lugar inexistente dentro de uma estrutura inexistente.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    Inquiry-0002 (arquitetura real da integração Bradesco) embasou este ADR — não lida.
+    `context/planning/BRADESCO-EVITAR-WINDOWS.md` foi lido parcialmente (seções de decisão e matriz de
+    trilhos) e é a fonte da contradição. `handbook/guidelines/bradesco_guideline/` é material local-only
+    com restrição de redistribuição, não consultado.

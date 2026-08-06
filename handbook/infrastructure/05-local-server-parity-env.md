@@ -9,7 +9,7 @@
 > Em caso de divergência, **o código vence**.
 >
 > Este guia foca no **`.env` e no e-mail**. Para o passo-a-passo de MySQL/MinIO/RBAC já existe o
-> runbook [`.claude/runbooks/local-stack-setup.md`](../../.claude/runbooks/local-stack-setup.md) —
+> runbook [`context/runbooks/local-stack-setup.md`](../../context/runbooks/local-stack-setup.md) —
 > aqui a gente fecha o que falta (e-mail, JWT estável) e entrega um `.env` completo copia-e-cola.
 
 ---

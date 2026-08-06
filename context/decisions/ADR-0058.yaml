@@ -1,0 +1,269 @@
+id: ADR-0058
+title: O runtime acompanha o LTS recomendado — critério em vez de versão fixa
+source: handbook/architecture/adr/0058-runtime-tracks-recommended-lts.md
+decided_on: 2026-08-05
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: [ADR-0002, ADR-0009]
+  superseded_by: []
+  related: [ADR-0011, ADR-0029]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-08-05
+  checked_against: 1b59dd64
+  summary: |
+    O primeiro ADR do acervo escrito A PARTIR do inventário — a causa dele é literalmente duas
+    alegações deste diretório (`ADR-0002-C2` e `ADR-0009-C5`), que foram para `contradicted` pela MESMA
+    razão de forma: fixar versão ou estimar esforço produz afirmação que envelhece sozinha.
+    `partially-realized`, e a parte que falta é declarada pelo próprio ADR, não descoberta aqui: a §4
+    (concordância entre os pontos que declaram a versão) nasceu com gate; a §1 (acompanhar o LTS
+    RECOMENDADO) não é verificável offline e depende de CI agendado que NÃO existe. O ADR registra isso
+    na Negativa 1 e no gatilho, em vez de fingir cobertura — é a diferença entre limite declarado e
+    lacuna escondida.
+    Vale registrar o que o ADR fez de incomum: a §2 restringe a forma de escrever ADRs FUTUROS, e ele
+    se aplica a si mesmo — deliberadamente não escreve a versão-alvo no texto, e trata "escrever Node
+    24.19 aqui" como alternativa rejeitada. Sem isso, `ADR-0058-C2` estaria em `contradicted` dentro de
+    um ano, ao lado das duas que o originaram.
+
+extraction:
+  state: complete
+  covers: |
+    5 alegações — as quatro invariantes numeradas da Decisão e o gatilho de reavaliação. Fora:
+    Consequências e Alternativas Consideradas são justificativa, não norma. A "Observação, não norma"
+    da §2 (`:41`) é registro de estado na data, e o próprio texto a marca como não-normativa.
+
+prior_art: []
+
+claims:
+  - id: ADR-0058-C1
+    text: |
+      A versão do runtime MUST acompanhar o LTS RECOMENDADO (a linha `Active LTS` do Node.js), por
+      atualização GRADUAL — subida deliberada, verificável em diff, com o gate verde antes e depois.
+      MUST NOT ser salto de major arrastado por dependência.
+    kind: obligation
+    source_lines: ['25-27']
+    applies_to:
+      - 'package.json'
+      - 'Dockerfile'
+      - '.github/workflows/*.yml'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'package.json:8 — `"node": ">=24.0.0"`; o Node 24 é a linha Active LTS na data desta verificação'
+        - 'Dockerfile:38 — `FROM node:24.15-bookworm-slim@sha256:…`, pinado por digest'
+        - 'nota: a subida de 20 para 24 aconteceu por ADR próprio (0009), um dia após o 0002 — foi deliberada, não arrastada'
+      verify: |
+        node -e "console.log(require('./package.json').engines.node)"; and grep -m1 '^FROM node:' Dockerfile
+    testability:
+      verdict: testable-with-work
+      layer: static
+      red: |
+        Dado o repositório numa linha que deixou de ser Active LTS, quando o CI agendado rodar, então
+        falha nomeando a linha corrente e a adotada.
+      expected_error: null
+      blocker: |
+        Exige consultar a rede (endpoint de releases do Node) para saber qual é a linha Active LTS. O
+        gate local é offline e determinístico por desenho — mesma razão pela qual `pnpm audit` vive no
+        CI. Precisa de job agendado, que não existe.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        A versão do runtime MUST acompanhar a linha Active LTS, por subida deliberada e verificável em
+        diff. MUST NOT haver salto de major motivado por resolução de dependência.
+      rationale: |
+        Adotada como está. É o critério que substitui a versão fixa, e o valor dele é justamente não
+        ter número — não envelhece. O `enforced_by` vazio não é descuido: está declarado como Negativa
+        1 do próprio ADR, e é o primeiro item do gatilho de reavaliação.
+
+  - id: ADR-0058-C2
+    text: |
+      A versão corrente MUST NOT viver em ADR. Ela vive onde é verificável e executável:
+      `engines.node` (o piso aceito), `Dockerfile` → `FROM node:<versão>` (o que roda em produção,
+      pinado por digest) e `.github/workflows/*.yml` → `node-version` (o que o CI usa).
+    kind: prohibition
+    source_lines: ['29-41']
+    applies_to:
+      - 'handbook/architecture/adr/*.md'
+    reality:
+      verdict: holds
+      holds_in: [handbook]
+      absent_in: []
+      evidence:
+        - 'handbook/architecture/adr/0058-runtime-tracks-recommended-lts.md:39 — "Este ADR deliberadamente não escreve a versão-alvo no próprio texto. Escrevê-la aqui repetiria o defeito que ele corrige"'
+        - 'handbook/architecture/adr/0058-runtime-tracks-recommended-lts.md:81 — a alternativa "Fixar a versão-alvo neste ADR (Node 24.19)" está registrada como REJEITADA, com a consequência prevista por escrito'
+        - 'nota: a única menção a versão no 0058 está marcada como "Observação, não norma" (`:41`) e registra estado na data, não obrigação'
+        - 'nota: é a alegação que se aplica ao próprio documento que a enuncia — o ADR cumpre a regra que cria'
+      verify: |
+        grep -nE "24\.19|Node [0-9]+ LTS" handbook/architecture/adr/0058-runtime-tracks-recommended-lts.md
+    testability:
+      verdict: testable-with-work
+      layer: static
+      red: |
+        Dado um ADR novo que fixe versão literal de runtime no texto normativo, quando o gate rodar,
+        então falha apontando o ADR e a linha.
+      expected_error: null
+      blocker: |
+        Distinguir versão NORMATIVA de versão citada em contexto histórico exige heurística: metade
+        dos ADRs do acervo menciona versões legitimamente, ao narrar o que existia na data. Um grep por
+        `\d+\.\d+` acusaria justamente os que documentam bem. É o mesmo modo de falha que o scanner de
+        linguagem de CNPJ já teve — varredura que não distingue uso de menção.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        ADR MUST NOT fixar versão corrente de runtime como norma. A versão MUST viver em
+        `engines.node`, `Dockerfile` e nos workflows, que são lidos por máquina.
+      rationale: |
+        Adotada. É a alegação com maior alcance do ADR, porque restringe a forma de escrever ADRs
+        futuros em vez de decidir sobre o sistema — incomum, e deliberado: a causa das duas
+        contradições que originaram este ADR era de forma, não de conteúdo.
+
+  - id: ADR-0058-C3
+    text: |
+      Trocar runtime, linguagem, compilador ou qualquer tecnologia estrutural MUST ser justificado por
+      uma INQUIRY em `handbook/inquiries/` que MEÇA a alternativa, não que a argumente. A inquiry
+      precede o ADR; o ADR registra o veredito.
+    kind: obligation
+    source_lines: ['43-47']
+    applies_to:
+      - 'handbook/inquiries/'
+      - 'handbook/architecture/adr/*.md'
+    reality:
+      verdict: holds
+      holds_in: [handbook]
+      absent_in: []
+      evidence:
+        - 'handbook/inquiries/0023-typescript-7-native-spike.md §1 — mediu que `typescript@latest` é 7.0.2 e o gatilho disparou'
+        - 'handbook/inquiries/0023-typescript-7-native-spike.md §3.7 — mediu que `typescript-eslint` NÃO importa sob TS 7 e nenhuma regra roda'
+        - 'handbook/inquiries/0023-typescript-7-native-spike.md §4.2 — registrou "ajustes mínimos" como premissa REFUTADA'
+        - 'nota: a inquiry refutou uma premissa que estava num ADR ACEITO — medir mudou a conclusão, que é o que distingue inquiry de opinião'
+      verify: |
+        ls handbook/inquiries/; and grep -n "REFUTADA" handbook/inquiries/0023-typescript-7-native-spike.md
+    testability:
+      verdict: unfalsifiable
+      layer: null
+      red: |
+        Não há teste possível como escrita: "justificado por inquiry que meça" é julgamento sobre a
+        qualidade do estudo, não propriedade verificável do repositório. O que seria testável é uma
+        forma bem mais fraca — "todo ADR que troca tecnologia estrutural cita uma inquiry existente" —
+        e essa não captura o que a alegação exige, que é a medição ter acontecido.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: replace
+      text: |
+        ADR que decide troca de tecnologia estrutural MUST citar a inquiry que a mediu, e a inquiry
+        MUST existir em `handbook/inquiries/` antes do ADR. A qualidade da medição é julgada em review,
+        não por gate.
+      rationale: |
+        `replace` porque a alegação original é `unfalsifiable` e o SCHEMA §6 proíbe adotar alegação sem
+        teste possível. A forma reescrita separa o que dá para cobrar (a inquiry existe e é citada) do
+        que não dá (a medição é boa) — e ser explícito sobre a segunda parte é melhor que fingir que o
+        gate a cobre.
+
+  - id: ADR-0058-C4
+    text: |
+      Os lugares que declaram a versão do runtime MUST concordar entre si, cobrado por gate.
+    kind: obligation
+    source_lines: ['49-53']
+    applies_to:
+      - 'package.json'
+      - 'Dockerfile'
+      - '.github/workflows/*.yml'
+    reality:
+      verdict: holds
+      holds_in: [repo]
+      absent_in: []
+      evidence:
+        - 'tests/cleanup/node-version-single-source.test.ts:55 — assere que `engines.node` e o `FROM node:` do Dockerfile declaram o mesmo major'
+        - 'tests/cleanup/node-version-single-source.test.ts:68 — assere que todo workflow com `node-version` usa o mesmo major'
+        - 'tests/cleanup/node-version-single-source.test.ts:86 — guarda contra verde por vacuidade: exige que haja workflow declarando `node-version`'
+        - 'nota: provado que discrimina antes de ser aceito — Dockerfile num major antigo e workflow em outro major reprovam, um por asserção'
+      verify: |
+        node --test --experimental-strip-types tests/cleanup/node-version-single-source.test.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um `Dockerfile` com `FROM node:22` e `engines.node` em `>=24`, quando o gate rodar, então
+        falha dizendo que produção executaria um major que o repositório não declara suportar.
+      expected_error: null
+      blocker: null
+      enforced_by: ['tests/cleanup/node-version-single-source.test.ts']
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        `engines.node`, o `FROM node:` do Dockerfile e o `node-version` dos workflows MUST concordar no
+        MAJOR. O patch MUST NOT ser cobrado.
+      rationale: |
+        Estreitada para o MAJOR, que é o que o gate cobra e o que importa. Exigir patch idêntico
+        produziria vermelho a cada release do Node — a imagem base sobe quando o mantenedor publica, o
+        CI usa a linha — e vermelho recorrente por motivo legítimo treina o time a ignorar o gate. Foi
+        a mesma escolha do gate irmão do pnpm.
+
+  - id: ADR-0058-C5
+    text: |
+      Este ADR MUST ser reaberto por um ADR que o supersede se: o gate da §4 provar-se insuficiente
+      (concordância interna verde com o repositório numa linha EOL por mais de um ciclo de release); o
+      projeto adotar runtime sem linha LTS; ou a §2 mostrar-se excessiva.
+    kind: obligation
+    source_lines: ['93-101']
+    applies_to: []
+    reality:
+      verdict: unverified
+      holds_in: []
+      absent_in: []
+      evidence: []
+      verify: |
+        grep -n "Gatilho de reavaliação" -A12 handbook/architecture/adr/0058-runtime-tracks-recommended-lts.md
+    testability:
+      verdict: unfalsifiable
+      layer: null
+      red: |
+        Condição sobre evento futuro. Não há estado do repositório hoje que a satisfaça ou a viole — é
+        a mesma natureza dos gatilhos do 0002 e do 0009, que dispararam por leitura humana.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: pending
+      disposition: null
+      text: null
+      rationale: null
+
+findings:
+  - |
+    O ADR se aplica a si mesmo, e isso é verificável: a §2 proíbe fixar versão em ADR, e o documento
+    não escreve a versão-alvo em nenhum ponto normativo — trata "escrever Node 24.19 aqui" como
+    alternativa REJEITADA, com a consequência prevista por escrito ("em 12 meses `ADR-0058-C2` estaria
+    no inventário com veredito `contradicted`"). É o primeiro ADR do acervo que antecipa o próprio
+    veredito de inventário.
+  - |
+    Das 5 alegações, 2 são `unfalsifiable` e 2 são `testable-with-work` — só a C4 nasceu com gate. A
+    proporção é honesta e não é defeito: um ADR sobre COMO decidir versão tem menos superfície
+    mecanizável que um sobre onde código mora. O que importa é que os limites estão declarados no
+    próprio ADR (Negativa 1, gatilho), não descobertos por este inventário.
+  - |
+    A C2 tem o mesmo modo de falha que o scanner de linguagem de CNPJ já sofreu: um gate ingênuo por
+    `\d+\.\d+` acusaria os ADRs que MENCIONAM versões ao narrar contexto histórico — que são
+    justamente os bem escritos. Varredura que não distingue uso de menção é o padrão a evitar, e está
+    registrado no `blocker` em vez de virar gate ruim.
+
+provenance:
+  tickets: []
+  issues: []
+  note: |
+    O ADR nasce das alegações `ADR-0002-C2` e `ADR-0009-C5` deste mesmo inventário, promovidas a
+    `accepted` com disposição `drop` em 2026-08-05, no gate humano da Fase 1 da spec 040. Nenhuma issue
+    do GitHub foi lida para este registro — vínculo por nome não é vínculo (guarda 6).

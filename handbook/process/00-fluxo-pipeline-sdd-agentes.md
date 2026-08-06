@@ -702,13 +702,13 @@ O `bdd-template.md` fixa também a regra de idioma: **Gherkin em PT** (`# langua
 | :--- | :--- | :--- |
 | `000-request.md` | inline em [`pipeline-maestro/SKILL.md:63-89`](../../.claude/skills/pipeline-maestro/SKILL.md) e `.pipeline/README.md` | **humano**, antes de qualquer wave |
 | `STATE.md` | **gerado** por `render-state-md.ts` | ninguém — é derivado do `STATE.json` |
-| SPEC de ticket/épico | [`.claude/templates/spec.md`](../../.claude/templates/spec.md) | agente, em `001-spec/SPEC.md` ou `.planning/EPIC-*.md` |
+| SPEC de ticket/épico | [`context/templates/spec.md`](../../context/templates/spec.md) | agente, em `001-spec/SPEC.md` ou `.planning/EPIC-*.md` |
 
 O `000-request.md` tem 5 seções: **Contexto** (por quê), **Escopo** (o que entra), **Fora de escopo**
 (anti scope-creep), **Critérios de aceite** (testáveis, viram os testes de W0) e **Referências**
 (handbook, ADR, inquiry).
 
-O `.claude/templates/spec.md` é o mais rigoroso dos três — 10 seções, com dois diferenciais:
+O `context/templates/spec.md` é o mais rigoroso dos três — 10 seções, com dois diferenciais:
 
 - **§5 Clarificações** — *"Ambiguidade não resolvida = NÃO pode sair de draft."*
 - **§7 Constitution check** — tabela `Fonte | Exigência | Como a spec adere`, uma linha por ADR ou
@@ -1208,7 +1208,7 @@ Registrados por honestidade documental — nenhum é bloqueante, mas quem chega 
 | **`pipeline-maestro/SKILL.md`** | Descreve o fluxo em torno do `STATE.md`; o canônico desde `CTR-PIPELINE-STATE-JSON` é o **`STATE.json`** via CLI. O `STATE.md` é gerado |
 | **`contratos-orchestrator.md` §Status** | Tabela de 2026-05-14 ainda cita `src/modules/contratos/` (PT) e Fastify/Nodemailer como "reservados". O código está em `src/modules/contracts/` (EN) e os dois foram ativados (ADR-0025, `CTR-EMAIL-ADAPTER-NODEMAILER`) |
 | **`bruno-api-client-expert`** | O `description` do agente ainda diz *"Sem ADR de adoção ainda: estado de SUPORTE"*, mas [ADR-0034](../architecture/adr/0034-adopt-bruno-api-client-cli.md) e [ADR-0038](../architecture/adr/0038-bruno-cli-mandatory-and-bru-authoring.md) existem e são normativos — `.claude/rules/api-collections.md` declara *"Normativo: ADR-0038 (vence)"* |
-| **Numeração duplicada de ADR** | Existem `0034-adopt-bruno-api-client-cli.md` e `0034-ocr-port-adapter.md` |
+| **Numeração duplicada de ADR** | ~~Existem `0034-adopt-bruno-api-client-cli.md` e `0034-ocr-port-adapter.md`~~ — **resolvido em 2026-07-31**: o de OCR foi renumerado para [`0056`](../architecture/adr/0056-ocr-port-adapter.md) e teve o `Status` corrigido para `Superseded by ADR-0050`, que nunca havia sido atualizado. `ADR-0034` passa a significar, sem ambiguidade, a adoção do Bruno |
 
 ---
 

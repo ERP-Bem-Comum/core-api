@@ -1,0 +1,261 @@
+id: ADR-0025
+title: Servidor HTTP no core-api com Fastify (adapter de borda)
+source: handbook/architecture/adr/0025-http-server-fastify-core-api.md
+decided_on: 2026-05-27
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0005, ADR-0006, ADR-0023, ADR-0024, ADR-0027, ADR-0028, ADR-0033, ADR-0037]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    A invariante mais forte deste ADR se sustenta de forma limpa e medida: **zero `throw new` em
+    `domain/` e `application/` nos oito módulos.** "`throw` permitido só na borda" é regra que costuma
+    erodir em silêncio e não erodiu.
+    A tradução `Result → HTTP` está centralizada no shell (`src/shared/http/reply.ts`), o que é melhor
+    que espalhada por handler. E o `fastify@5.8.5` está pinado, conforme o ADR-0011.
+    A única alegação que envelheceu é a convenção de roteamento: o ADR fixa "roteamento sob
+    `/api/v2/*`" e o `ADR-0033` (posterior) passou a versionar POR RECURSO — hoje 11 plugins estão em
+    `/api/v1`. Não é violação: é supersessão parcial não declarada.
+
+extraction:
+  state: complete
+  covers: |
+    5 alegações — a borda como adapter, a tradução Result→HTTP com `throw` só na borda, domínio sem
+    framework, não duplicar o BFF, e as convenções (prefixo, composition root único, Pino).
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/http-edge.md']
+    gap: |
+      Destilou como "Borda é adapter: traduz `Result`→HTTP; `throw` só aqui; não duplicar o BFF
+      (ADR-0005 **não** é superseded)" — as três partes corretas, e a ressalva sobre o ADR-0005 é
+      precisa e importante.
+      O que não registrou: o "roteamento sob `/api/v2/*`" deste ADR foi superado pelo ADR-0033 sem
+      declaração de supersessão, e a `http-edge.md` documenta os dois lados (§Fastify e §Versionamento)
+      sem dizer que um substituiu o outro.
+
+claims:
+  - id: ADR-0025-C1
+    text: |
+      O servidor HTTP é um ADAPTER na camada `adapters/`. Recebe request, valida payload, chama use
+      case e traduz `Result<T,E>` em status HTTP. `throw` é permitido SÓ aqui, convertido na borda.
+    kind: obligation
+    source_lines: [29]
+    applies_to:
+      - 'src/modules/*/adapters/http/**/*.ts'
+      - 'src/modules/*/domain/**/*.ts'
+      - 'src/modules/*/application/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in:
+        [auth, budget-plans, contracts, financial, notifications, partners, programs, reports]
+      absent_in: []
+      evidence:
+        - 'ausência: ZERO ocorrências de throw new em src/modules/*/domain/ e src/modules/*/application/, nos oito módulos'
+        - 'src/shared/http/reply.ts:21 — sendResult centraliza a tradução Result→HTTP no shell, não replicada por handler'
+      verify: |
+        grep -rn "throw new" src/modules/*/domain/ src/modules/*/application/ --include='*.ts' | wc -l
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `domain/` ou `application/` de qualquer módulo, quando aparecer `throw`, então o teste
+        falha — erro de domínio MUST ser `Result`, não exceção.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        `domain/` e `application/` MUST expressar erro por `Result<T,E>`. `throw` MUST ocorrer apenas
+        em `adapters/`, convertido antes de sair da borda.
+      rationale: |
+        Zero violações em oito módulos, e é o tipo de invariante que erode com uma linha ("aqui é mais
+        simples lançar"). Verificável por varredura de texto — candidata a `no-restricted-syntax` do
+        ESLint por glob, custo de uma entrada.
+
+  - id: ADR-0025-C2
+    text: |
+      Domínio e application permanecem SEM framework — a lógica de negócio não é acoplada a
+      Hono/Fastify.
+    kind: prohibition
+    source_lines: [30]
+    applies_to:
+      - 'src/modules/*/domain/**/*.ts'
+      - 'src/modules/*/application/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in:
+        [auth, budget-plans, contracts, financial, notifications, partners, programs, reports]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhum import de fastify em src/modules/*/domain/ — verificado junto com o ADR-0006-C5'
+        - 'ausência: nenhum import de zod/v4 fora de adapters/http/ e shared/http/ — ver ADR-0027-C1'
+      verify: |
+        grep -rn "from 'fastify'" src/modules/*/domain/ src/modules/*/application/ --include='*.ts'
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `domain/` ou `application/`, quando importar framework de borda, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar como texto: é a mesma regra do `ADR-0006-C5`, já proposta lá com escopo mais amplo
+        (framework, ORM, driver, SDK). Manter as duas criaria fontes concorrentes para uma invariante
+        que precisa de UM enforcement.
+
+  - id: ADR-0025-C3
+    text: |
+      Não duplica o BFF. O BFF continua burro (ADR-0005 NÃO é superseded): roteia, valida o access
+      token, aplica rate limit. O core-api emite credencial e contém a regra; o BFF nunca acessa banco
+      nem contém regra.
+    kind: prohibition
+    source_lines: [31]
+    applies_to:
+      - 'src/modules/*/adapters/http/**/*.ts'
+    reality:
+      verdict: partial
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'nota: a parte "o core-api emite credencial" foi superseded pelo ADR-0055 (Cognito) e está registrada no ADR-0024-C4'
+        - 'nota: a parte "o BFF nunca acessa banco" é citada por dois ADRs posteriores para vetar caminhos — ver ADR-0005-C3'
+        - 'nota: o lado BFF não é verificável a partir deste repositório'
+      verify: |
+        grep -rn "0005" handbook/architecture/adr/0032-*.md handbook/architecture/adr/0055-*.md | head
+    testability:
+      verdict: testable-with-work
+      layer: static
+      red: |
+        Dado o código-base do BFF, quando ele contiver regra de negócio ou acesso a banco, então o
+        teste falha. Não escrevível aqui.
+      expected_error: null
+      blocker: |
+        O BFF é outro repositório. Mesmo bloqueio da `ADR-0005-C3`.
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar daqui: a fronteira é do `ADR-0005`, já extraída como `ADR-0005-C3` com o texto de
+        substituição. E a metade "core-api emite credencial" está superseded pelo `ADR-0055`. Repetir
+        aqui criaria terceira fonte de uma regra que já tem duas versões em disputa.
+
+  - id: ADR-0025-C4
+    text: |
+      Roteamento sob `/api/v2/*` — o BFF mapeia para o core-api.
+    kind: obligation
+    source_lines: [35]
+    applies_to:
+      - 'src/server.ts'
+      - 'src/shared/http/app.ts'
+    superseded_by: ADR-0033
+    reality:
+      verdict: contradicted
+      holds_in: []
+      absent_in: []
+      evidence:
+        - 'nota: 11 plugins estão registrados sob prefix /api/v1 em src/server.ts — partners (6), auth (4) e programs (1)'
+        - 'nota: apenas os plugins sem prefixo explícito caem no default /api/v2, conforme o ADR-0033'
+        - 'handbook/architecture/adr/0033-api-versioning-v1-legacy-mirror.md:24 — registra que o buildApp hardcodava /api/v2 e que isso mudou'
+      verify: |
+        grep -c "prefix: '/api/v1'" src/server.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o composition root, quando um recurso for registrado em prefixo divergente do registrado
+        para ele, então o teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: accepted
+      disposition: drop
+      text: null
+      rationale: |
+        Superseded de fato pelo `ADR-0033`, que versiona POR RECURSO — e o `0033` declara explicitamente
+        que "não superseda ADR-0025/0027/0028, ela os cumpre". Não cumpre neste ponto: substitui. A
+        norma vigente é a `ADR-0033-C1`. Descartar daqui.
+
+  - id: ADR-0025-C5
+    text: |
+      Composition root ÚNICO monta o servidor e injeta os adapters (repos, hasher, token issuer,
+      clock). Logging estruturado via Pino com `request-id` propagado do BFF.
+    kind: obligation
+    source_lines: ['37-38']
+    applies_to:
+      - 'src/server.ts'
+      - 'src/shared/http/app.ts'
+    reality:
+      verdict: holds
+      holds_in: [core-api]
+      absent_in: []
+      evidence:
+        - 'src/server.ts:289 — buildApp chamado uma única vez, com as rotas injetadas'
+        - 'src/shared/observability/correlation.ts:14 — CorrelationStore com correlationId, propagado por AsyncLocalStorage'
+        - 'src/shared/outbox/outbox-worker.ts:37 — o log do worker anexa correlation-id quando há escopo ativo'
+      verify: |
+        grep -c "buildApp(" src/server.ts; ls src/shared/observability/
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/`, quando existir mais de uma chamada de `listen()` no entrypoint HTTP, então o teste
+        falha — composition root único é o que permite um binário deployável.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        MUST haver um composition root único para a borda HTTP (`src/server.ts`), com um só `listen()`.
+        Adapter MUST ser injetado por referência, nunca instanciado dentro do handler.
+      rationale: |
+        Sustenta a promessa do `ADR-0055` de que "makeRequireAuth é instanciado uma única vez e injetado
+        por referência; os 25 arquivos consumidores não mudam" — que é o que torna a migração de
+        autenticação de raio pequeno. A regra protege essa propriedade.
+
+findings:
+  - |
+    "`throw` só na borda" tem ZERO violações em `domain/` e `application/` nos oito módulos. É a
+    invariante mais fácil de erodir de todo o acervo — basta um dev achar mais simples lançar — e não
+    erodiu. Não tem enforcement mecânico; é candidata a `no-restricted-syntax` por glob, mesmo perfil
+    das fronteiras do `ADR-0006-C4` e do `ADR-0027-C1`.
+  - |
+    Supersessão parcial NÃO DECLARADA: o `ADR-0033` afirma que "não superseda ADR-0025/0027/0028, ela
+    os cumpre", mas no ponto do roteamento ele SUBSTITUI — o `0025` fixa `/api/v2/*` e o `0033` versiona
+    por recurso, com 11 plugins em `/api/v1`. É a primeira supersessão do acervo que o próprio sucessor
+    nega estar fazendo.
+  - |
+    A tradução `Result→HTTP` está centralizada em `src/shared/http/reply.ts`, não replicada por handler.
+    O ADR não pediu centralização — pediu que a tradução ocorresse na borda. Terceiro caso de
+    implementação acima do ADR, junto com o pin por digest do MinIO e os CHECKs dos outbox.
+
+provenance:
+  tickets:
+    - CORE-HTTP-FASTIFY-BOOTSTRAP
+    - CORE-HTTP-SECURITY-BASELINE
+    - CORE-HTTP-SHELL-RELOCATE
+  issues: []
+  note: |
+    Inquiry-0007 (Fastify vs Express) embasou este ADR — não lida, e o INDEX a registra como "sem ADR —
+    decisão tática", o que é impreciso: ela desembocou aqui. O acervo tem CORE-HTTP-FASTIFY-BOOTSTRAP,
+    CORE-HTTP-SHELL-RELOCATE e CORE-HTTP-SECURITY-BASELINE — nenhum lido.

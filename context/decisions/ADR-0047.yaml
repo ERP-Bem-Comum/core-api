@@ -1,0 +1,441 @@
+id: ADR-0047
+title: E-mail transacional como evento de domínio no outbox do módulo produtor
+source: handbook/architecture/adr/0047-transactional-email-via-producer-domain-event.md
+decided_on: 2026-06-18
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0006, ADR-0010, ADR-0014, ADR-0015, ADR-0022, ADR-0043, ADR-0045]
+
+assessment:
+  verdict: partially-realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Este é o ADR com o melhor FOLLOW-THROUGH do inventário, e a distinção importa: não é só que ele foi
+    implementado — é que ele previu um custo alto, uma aposentadoria e três tickets, e as três coisas
+    aconteceram.
+    O `auth` ganhou o outbox que o ADR §3 dizia que ele "ainda NÃO tem", chamando isso de "o maior custo
+    desta decisão": `auth/adapters/persistence/schemas/mysql.ts:354` traz o cabeçalho
+    `auth_outbox — eventos de dominio pendentes (AUTH-DOMAIN-OUTBOX / ADR-0047)` — o nome literal do
+    ticket da tabela de fatiamento. A escrita é na mesma transação
+    (`request-password-reset.ts:79` — "grava o reset-token E o evento PasswordResetRequested na MESMA
+    tx"). E a aposentadoria do §4 foi CUMPRIDA:
+    `notifications/adapters/persistence/schemas/mysql.ts:5` registra que a dupla
+    `notifications_email_outbox` + dead-letter "foi APOSENTADA".
+    Uma recomendação não foi seguida, e é a única: o §5 pede "TTL curto e expurgo pós-processamento"
+    para o payload que carrega link/token. Não existe expurgo de outbox em nenhum lugar do repo — os
+    cinco jobs one-shot são backfill, sweeper, migrate e sync-permissions. A linha fica com
+    `processed_at` estampado e o payload intacto.
+
+extraction:
+  state: complete
+  covers: |
+    8 alegações — as quatro seções numeradas da decisão, as quatro invariantes herdadas do §5, e a
+    proibição que sustenta a rejeição da alternativa (b). A tabela de fatiamento é organização de
+    trabalho; a citação de Vernon é fundamentação.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/application.md']
+    gap: |
+      Destilou o núcleo — e-mail transacional é evento de domínio do produtor na mesma tx, `notifications`
+      é consumidor, nunca chamada síncrona. Os três pontos certos.
+      O que não registrou: que a decisão **já estava implementada**, incluindo a aposentadoria do segundo
+      outbox. É a diferença mais relevante deste ADR para uma rule — regra que descreve prática existente
+      tem custo de adoção zero; regra que descreve intenção precisa de plano.
+
+claims:
+  - id: ADR-0047-C1
+    text: |
+      E-mails transacionais disparados por operação de negócio são modelados como EVENTO DE DOMÍNIO do
+      módulo produtor, gravado no outbox DO PRÓPRIO PRODUTOR na MESMA TRANSAÇÃO do save (via
+      `appendOutboxInTx`). O evento existe se e somente se a operação confirmou.
+    kind: obligation
+    source_lines: [26, 30, 46]
+    applies_to:
+      - 'src/modules/auth/application/use-cases/*.ts'
+      - 'src/modules/partners/application/use-cases/*.ts'
+      - 'src/modules/*/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth, partners]
+      absent_in: []
+      evidence:
+        - 'src/modules/auth/application/use-cases/request-password-reset.ts:79 — comentário: ADR-0047 (fatia 02): grava o reset-token E o evento PasswordResetRequested na MESMA tx'
+        - 'src/modules/auth/adapters/persistence/schemas/mysql.ts:357 — o save do reset/invite-token insere aqui na MESMA tx (via appendOutboxInTx) — atomicidade evento <=> commit da operacao'
+        - 'src/modules/auth/public-api/email-events.ts:27 — type: PasswordResetRequested'
+        - 'src/modules/auth/public-api/email-events.ts:35 — type: UserInvited'
+        - 'src/modules/partners/public-api/email-events.ts:135 — case CollaboratorInvited, o terceiro evento do ADR'
+        - "nota: as tabelas de outbox de e-mail são 'auth_outbox' e 'par_email_outbox' — uma por produtor, como o ADR §1 prescreve"
+        - 'ausência: nenhum enqueue best-effort pós-save sobreviveu em auth ou partners/application — a alternativa (a), declarada interina, foi retirada'
+      verify: |
+        grep -n "MESMA tx" src/modules/auth/application/use-cases/request-password-reset.ts; grep -rhoE "'(auth_outbox|par_email_outbox)'" src/modules/*/adapters/persistence/schemas/mysql.ts | sort -u
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dada uma operação de negócio que dispara e-mail, quando a transação do save falha, então MUST NÃO
+        existir linha no outbox. E quando ela commita, a linha MUST existir — verificável rodando o save
+        com um erro injetado após o append e conferindo que nada sobrou.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Efeito colateral que precisa acontecer "se e somente se" a operação confirmou MUST ser gravado no
+        outbox do próprio módulo, dentro da transação do save. MUST NOT ser disparado por chamada
+        pós-commit (best-effort).
+      rationale: |
+        Generalizado de "e-mail transacional" para "efeito colateral com garantia de exatamente-se",
+        porque o modo de falha não é específico de e-mail: qualquer chamada pós-commit tem a janela em que
+        a operação confirmou e o efeito não saiu. O ADR nomeia o custo com precisão — "o usuário pode
+        repetir, mas a garantia não existe" — e a issue #127 registra o mesmo problema no `financial`, o
+        que confirma que é padrão e não caso isolado.
+
+  - id: ADR-0047-C2
+    text: |
+      O `notifications` é CONSUMIDOR, não dependência síncrona: um consumer entrega o evento e o
+      `notifications` mapeia TIPO DE EVENTO → TEMPLATE (templates ficam no consumidor — ADR-0010) e envia
+      via `EmailSender` resolvido por deploy (`buildEmailSender`).
+    kind: obligation
+    source_lines: [34]
+    applies_to:
+      - 'src/modules/notifications/adapters/event-delivery/*.ts'
+      - 'src/workers/email-dispatch/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [notifications]
+      absent_in: []
+      evidence:
+        - 'src/modules/notifications/adapters/event-delivery/email-event-delivery.ts:254 — case PasswordResetRequested no mapeamento evento→template'
+        - 'src/modules/notifications/adapters/event-delivery/email-event-delivery.ts:268 — case UserInvited'
+        - 'src/modules/notifications/adapters/event-delivery/email-event-delivery.ts:282 — case CollaboratorInvited'
+        - 'src/workers/email-dispatch/run.ts:4 — Le o auth_outbox (pool do auth) E o par_email_outbox (pool do partners) e entrega os eventos'
+        - 'src/workers/email-dispatch/run.ts:5 — os três eventos nomeados no comentário do worker'
+        - 'nota: a decodificação da linha do outbox fica na public-api do PRODUTOR (auth/public-api/email-events.ts:142, partners/public-api/email-events.ts:135) e o mapeamento para template no CONSUMIDOR — divisão exata do ADR-0010'
+      verify: |
+        grep -rn "case 'PasswordResetRequested'" src/modules/notifications/adapters/event-delivery/email-event-delivery.ts src/modules/auth/public-api/email-events.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/modules/`, quando um módulo produtor importar o `notifications` ou chamar `EmailSender`
+        diretamente, então o teste falha. O produtor MUST conhecer apenas o próprio outbox.
+      expected_error: null
+      blocker: null
+      enforced_by: ['eslint.config.js']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Módulo produtor MUST NOT importar `notifications` nem chamar `EmailSender`. A decodificação da
+        linha de outbox MUST viver na `public-api/` do produtor; o mapeamento evento→template, no
+        consumidor.
+      rationale: |
+        A segunda frase é o que o ADR só implica e o código já faz: o produtor sabe traduzir a própria
+        linha em evento tipado, e o consumidor sabe traduzir evento em e-mail. Sem essa divisão explícita,
+        a tentação natural é o consumidor ler o `payload` cru do outro módulo — o que reintroduz
+        acoplamento de formato sem nenhum import cruzado para o lint pegar.
+
+  - id: ADR-0047-C3
+    text: |
+      Consequência estrutural: CADA PRODUTOR precisa de outbox de eventos. O `partners` já tem
+      (`par_outbox`); o `auth` ainda NÃO tem e ganhará um (molde `partners`) — é o MAIOR CUSTO desta
+      decisão.
+    kind: obligation
+    source_lines: [38, 70]
+    applies_to:
+      - 'src/modules/auth/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - 'src/modules/auth/adapters/persistence/schemas/mysql.ts:354 — cabeçalho: auth_outbox — eventos de dominio pendentes (AUTH-DOMAIN-OUTBOX / ADR-0047)'
+        - 'src/modules/auth/adapters/persistence/schemas/mysql.ts:356 — comentário: Espelha par_outbox (ADR-0015) — o molde prescrito'
+        - 'src/modules/auth/adapters/persistence/schemas/mysql.ts:364 — export const authOutbox = mysqlTable(auth_outbox, …)'
+        - 'src/modules/auth/adapters/persistence/schemas/mysql.ts:386 — payload: varchar(payload, { length: 8192 }), o mesmo formato dos outros seis outboxes'
+        - 'src/workers/runner/specs.ts:277 — createDrizzleAuthOutboxRepository, com o outbox do auth já registrado no runner de workers'
+        - 'nota: o cabeçalho cita o ticket AUTH-DOMAIN-OUTBOX pelo nome exato da tabela de fatiamento do ADR — a fatia foi executada, não reinventada'
+        - 'nota: a linha 358 registra "Dark-launch nesta fatia (nenhum consumidor; worker e a fatia 02)", e request-password-reset.ts:79 cita "fatia 02" — as duas fatias fecharam'
+      verify: |
+        grep -n "auth_outbox" src/modules/auth/adapters/persistence/schemas/mysql.ts | head -3
+    testability:
+      verdict: not-applicable
+      layer: null
+      red: |
+        Não é norma de edição — é registro de que uma consequência custosa foi paga. Não há violação
+        possível a testar.
+      expected_error: null
+      blocker: 'Alegação de estado, não de invariante.'
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar: a existência de `auth_outbox` é fato consumado, não regra. O que vale como regra é a
+        `C1` (gravar na mesma tx), que é o motivo pelo qual o outbox tem de existir. Registrar aqui como
+        evidência de follow-through — o ADR marcou o custo e o custo foi pago.
+
+  - id: ADR-0047-C4
+    text: |
+      Outbox ÚNICO (recomendado): o do produtor. O retry/at-least-once passa a vir do outbox do produtor,
+      e o `notifications_email_outbox` torna-se REDUNDANTE como fila — candidato a APOSENTADORIA. Manter
+      um 2º outbox de envio duplica garantias e é REJEITADO salvo necessidade.
+    kind: prohibition
+    source_lines: [42, 58]
+    applies_to:
+      - 'src/modules/notifications/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: holds
+      holds_in: [notifications]
+      absent_in: []
+      evidence:
+        - 'src/modules/notifications/adapters/persistence/schemas/mysql.ts:5 — comentário: (notifications_email_outbox + notifications_email_outbox_dead_letter) foi APOSENTADA'
+        - "ausência: nenhuma tabela 'notifications_email_outbox' nos schemas — as únicas de e-mail são 'auth_outbox' e 'par_email_outbox', uma por produtor"
+        - 'src/shared/outbox/outbox-worker.ts:7 — o retry vive no worker genérico: delivery + marcação na MESMA transação, retry com attempts, DLQ ao atingir maxAttempts'
+        - 'nota: o EmailSender, os adapters e o buildEmailSender permaneceram — a aposentadoria atingiu a FILA, não a infra de envio, exatamente como o ADR previu'
+      verify: |
+        grep -rn "APOSENTADA" src/modules/notifications/adapters/persistence/schemas/mysql.ts; grep -rn "notifications_email_outbox" src/ --include='*.ts' | head
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o fluxo de e-mail, quando existir uma segunda fila (tabela de outbox no `notifications`),
+        então o teste falha — retry e idempotência MUST ter fonte única.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Um efeito colateral MUST ter uma única fila com garantia de retry — a do produtor. MUST NOT haver
+        segundo outbox reenfileirando o mesmo efeito.
+      rationale: |
+        O ADR nomeia o custo de violar melhor do que qualquer reformulação: "duplica retry/idempotência
+        sem ganho; mais superfície de falha". Vale como regra porque o segundo outbox é sempre a decisão
+        localmente razoável — cada camada quer garantir a própria entrega — e o resultado é dois relógios
+        de at-least-once que multiplicam entregas em vez de somá-las.
+
+  - id: ADR-0047-C5
+    text: |
+      Invariante herdada: AT-LEAST-ONCE com IDEMPOTÊNCIA POR `eventId` no consumidor (ADR-0022
+      §Invariantes; Vernon p. 412).
+    kind: obligation
+    source_lines: [47]
+    applies_to:
+      - 'src/shared/outbox/*.ts'
+      - 'src/workers/email-dispatch/**/*.ts'
+    reality:
+      verdict: partial
+      holds_in: [notifications]
+      absent_in: []
+      evidence:
+        - 'src/shared/outbox/outbox-worker.ts:47 — runOnce: claim batch (SKIP LOCKED) → para cada row'
+        - 'src/shared/outbox/outbox-worker.ts:7 — delivery + marcação na MESMA transação, retry com attempts, DLQ ao atingir maxAttempts'
+        - 'src/shared/outbox/outbox-worker.ts:95 — markProcessed é por row.eventId'
+        - 'src/shared/outbox/types.ts:26 — attempts: number faz parte do contrato da row'
+        - 'nota: a de-duplicação vem do CLAIM (SKIP LOCKED) + markProcessed na mesma tx, não de uma tabela de eventos processados no consumidor como em par_contract_count_processed (ADR-0022-C3)'
+        - 'nota: para envio de e-mail a diferença importa — se a entrega ao SMTP suceder e o markProcessed falhar, a linha volta para retry e o e-mail sai duas vezes; o outbox-worker.ts:95 loga esse caso mas não o previne'
+      verify: |
+        grep -n "markProcessed\|SKIP LOCKED\|claim" src/shared/outbox/outbox-worker.ts | head
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado um evento cuja entrega sucedeu e cujo `markProcessed` falhou, quando o worker roda de novo,
+        então o e-mail MUST NÃO ser enviado outra vez. Hoje seria enviado — o teste falha por design do
+        mecanismo, não por bug de implementação.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Consumidor de outbox cujo efeito é EXTERNO e não idempotente (envio de e-mail, chamada a
+        terceiro) MUST ter de-duplicação própria por `eventId`, independente do `markProcessed`. Claim +
+        `markProcessed` na mesma transação bastam apenas quando o efeito é interno e idempotente.
+      rationale: |
+        Estreitado com a distinção que o ADR não faz e o `ADR-0045` mostra por contraste: lá o efeito é
+        um upsert idempotente, e claim + marcação bastam. Aqui o efeito é um e-mail — irreversível e
+        visível ao usuário. A janela entre "SMTP aceitou" e "markProcessed commitou" é pequena e real, e o
+        próprio código a reconhece escrevendo em stderr quando ela ocorre. Idempotência do outbox não é
+        idempotência do efeito.
+
+  - id: ADR-0047-C6
+    text: |
+      Invariante herdada: ANTI-ENUMERAÇÃO preservada — o produtor só emite o evento quando a conta
+      existe/está ativa (mantém o comportamento do `requestPasswordReset`).
+    kind: obligation
+    source_lines: [48]
+    applies_to:
+      - 'src/modules/auth/application/use-cases/request-password-reset.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth]
+      absent_in: []
+      evidence:
+        - 'src/modules/auth/application/use-cases/request-password-reset.ts:4 — Anti-enumeracao (OWASP WSTG): o resultado NAO revela se a conta existe'
+        - 'src/modules/auth/application/use-cases/request-password-reset.ts:5 — email malformado, inexistente ou desabilitado retornam ok(undefined) sem enviar nada; a rota responde sempre 202'
+        - 'src/modules/auth/application/use-cases/request-password-reset.ts:51 — if (!active.ok) return ok(undefined), via User.parseActive — o early-return é o mecanismo'
+        - 'src/modules/auth/application/use-cases/request-password-reset.ts:80 — o evento so e montado aqui (conta existe/ativa), preservando a anti-enumeracao dos early-returns acima'
+      verify: |
+        grep -n "Anti-enumeracao\|parseActive\|202" src/modules/auth/application/use-cases/request-password-reset.ts | head
+    testability:
+      verdict: testable
+      layer: contract
+      red: |
+        Dado um e-mail inexistente e um existente, quando ambos pedem reset, então as duas respostas MUST
+        ser indistinguíveis (mesmo status 202, mesmo corpo) e MUST NÃO existir linha de outbox para o
+        inexistente. Diferença de status, de corpo ou de latência mensurável reprova.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Endpoint que revela existência de conta MUST responder de forma indistinguível para conta
+        existente e inexistente. O evento/efeito MUST ser montado somente depois do guard de existência,
+        nunca antes com descarte posterior.
+      rationale: |
+        A segunda frase é a que o refactor quebra. Montar o evento antes e descartar depois passa em todo
+        teste funcional e vaza pelo tempo de resposta — e é a forma natural de escrever quando se
+        introduz o outbox, porque montar o payload junto do lookup parece mais limpo. O código acertou e
+        documentou por quê (`:80`); a regra existe para que continue assim depois do próximo refactor.
+
+  - id: ADR-0047-C7
+    text: |
+      Invariante herdada: SEGURANÇA DO PAYLOAD — o evento carrega o link/token de uso único; o outbox é
+      INTERNO (não cruza `public-api` pública) e NÃO LOGADO; TTL curto e expurgo pós-processamento
+      RECOMENDADOS (o token também vive como hash na tabela de reset).
+    kind: aspiration
+    source_lines: [49]
+    applies_to:
+      - 'src/modules/auth/adapters/persistence/schemas/mysql.ts'
+      - 'src/modules/*/public-api/email-events.ts'
+      - 'src/jobs/**/*.ts'
+    reality:
+      verdict: partial
+      holds_in: [auth, partners]
+      absent_in: [auth, partners]
+      evidence:
+        - 'src/modules/auth/adapters/persistence/schemas/mysql.ts:362 — link/token de uso unico (SENSIVEL): outbox interno (nunca cruza public-api publica — ADR-0006), nao logado'
+        - 'src/modules/auth/public-api/email-events.ts:12 — SEGURANCA (ADR-0047 §5): o payload carrega link/token (sensivel). Quem decodifica NAO loga o link'
+        - 'ausência: nenhum expurgo/purge/retention de outbox em src/ — os cinco jobs one-shot são sync-permissions, sweeper, migrate, payable-view-backfill e supplier-view-backfill'
+        - 'src/modules/auth/adapters/persistence/schemas/mysql.ts:382 — processedAt é estampado, mas a linha (com payload) permanece'
+        - 'nota: o impacto é limitado pelo que o próprio ADR registra — o token é de uso único e tem validade própria na tabela de reset, logo uma linha antiga guarda credencial já gasta ou expirada'
+      verify: |
+        grep -rn "purge\|expurg\|retention" src/ --include='*.ts' | grep -i outbox; ls src/jobs/*/
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dada uma linha de outbox processada há mais que a janela de retenção, quando o expurgo roda, então
+        a linha MUST ter sido removida. Sem job de expurgo o teste não tem o que exercitar — é o RED que
+        pede o mecanismo.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: narrow
+      text: |
+        Outbox cujo payload carrega segredo (token, link de uso único, credencial) MUST ter expurgo
+        pós-processamento com janela declarada. O decoder MUST NOT logar o payload.
+      rationale: |
+        Estreitado de "recomendados" para `MUST`, e limitado a outbox com payload sensível — não a todo
+        outbox. A parte já cumprida (não logar) foi implementada porque é local e visível no code review;
+        a não cumprida (expurgo) exige um job, e recomendação sem mecanismo não se cobra. O impacto real é
+        moderado, e vale dizer por quê: o token é de uso único com validade própria, então a linha antiga
+        guarda credencial já gasta. Mas a retenção é **ilimitada** e o ADR pediu janela — a regra fecha
+        isso sem exagerar a gravidade.
+
+  - id: ADR-0047-C8
+    text: |
+      REJEITADO: unit-of-work cross-pool — fazer o enqueue no pool do `notifications` dentro da transação
+      do produtor. Fura o isolamento do ADR-0014, acopla pools e impede a extração futura do módulo.
+    kind: prohibition
+    source_lines: [56]
+    applies_to:
+      - 'src/modules/*/adapters/persistence/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [auth, notifications, partners]
+      absent_in: []
+      evidence:
+        - 'ausência: nenhuma transação abrange dois pools — cada outbox de e-mail vive no pool do próprio produtor'
+        - 'src/workers/email-dispatch/run.ts:4 — os dois pools (auth e partners) são lidos pelo WORKER, no composition root, nunca dentro de uma transação de negócio'
+        - 'src/modules/auth/adapters/persistence/schemas/mysql.ts:357 — a tx do save toca só auth_outbox, no pool do auth'
+      verify: |
+        grep -rn "transaction(" src/modules/*/adapters/persistence/repos/*.ts | wc -l; grep -rn "DATABASE_URL" src/workers/email-dispatch/run.ts | head -3
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado um bloco `db.transaction`, quando ele referenciar tabela de outro prefixo de módulo, então o
+        teste falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar: é a `ADR-0014-C2` (nenhuma transação cruza pools/prefixos), já proposta com escopo
+        geral. Registrar aqui porque este ADR é o caso em que a violação era mais tentadora — a
+        atomicidade DESEJADA era exatamente a cross-pool, e a decisão foi remodelar o problema em vez de
+        furar o isolamento. Vale como precedente citável.
+
+findings:
+  - |
+    **O melhor follow-through do inventário, e é uma classe nova de achado.** Os ADRs deste acervo falham
+    de dois modos conhecidos — não implementados (`0026`) ou com consequência esquecida (`0044`). Este é o
+    oposto nos dois eixos: previu um custo ("o `auth` ainda NÃO tem outbox — é o maior custo desta
+    decisão") e ele foi pago; planejou uma aposentadoria e ela foi executada, com o schema do
+    `notifications` registrando "foi APOSENTADA"; listou três tickets e os nomes aparecem nos comentários
+    do código (`AUTH-DOMAIN-OUTBOX` em `mysql.ts:354`). Vale estudar o que o diferencia: **a tabela de
+    fatiamento**. É o único ADR do lote que fecha com tickets nomeados e escopo por módulo.
+  - |
+    **Idempotência do outbox não é idempotência do efeito.** O worker genérico de-duplica por claim
+    (`SKIP LOCKED`) + `markProcessed` na mesma transação — suficiente para o `ADR-0045`, cujo efeito é um
+    upsert idempotente. Aqui o efeito é um e-mail: se o SMTP aceita e o `markProcessed` falha, a linha
+    volta para retry e o e-mail sai duas vezes. O código **reconhece** a janela — `outbox-worker.ts:95`
+    escreve em stderr exatamente nesse caso — mas registrar não é prevenir. O `ADR-0022-C3` usa tabela de
+    processados (`par_contract_count_processed`); o caminho de e-mail não tem equivalente.
+  - |
+    **A única recomendação do ADR é a única coisa não feita.** O §5 pede "TTL curto e expurgo
+    pós-processamento" para linhas cujo payload carrega link/token; não existe expurgo de outbox em
+    nenhum ponto do repo. As partes escritas como invariante (atomicidade, anti-enumeração, não logar)
+    foram todas cumpridas. Terceira confirmação do padrão do inventário: **o que é escrito como
+    recomendação não se cumpre** — vale para o `Proposed` sem critério (`0017`), para a consequência com
+    prazo (`0044`) e para a recomendação dentro de invariante (aqui).
+  - |
+    A anti-enumeração usa `User.parseActive` como guard (`request-password-reset.ts:51`) — o mesmo padrão
+    de type-narrowing das regras de domínio, aplicado a um requisito de segurança. E o comentário da
+    linha 80 explica a ORDEM ("o evento so e montado aqui... preservando a anti-enumeracao dos
+    early-returns acima"), que é a parte que um refactor quebraria sem falhar nenhum teste funcional. Bom
+    exemplo de comentário que carrega a razão, não a mecânica.
+
+provenance:
+  tickets:
+    - AUTH-DOMAIN-OUTBOX
+    - NOTIF-EMAIL-EVENT-CONSUMER
+    - PARTNERS-INVITE-DOMAIN-EVENT
+  issues: []
+  note: |
+    O ADR nomeia issues #134, #117 e #127 e três tickets (`AUTH-DOMAIN-OUTBOX`,
+    `NOTIF-EMAIL-EVENT-CONSUMER`, `PARTNERS-INVITE-DOMAIN-EVENT`) — nenhum lido nesta fase, mas os dois
+    primeiros aparecem citados no código verificado. A #127 (mesmo problema de atomicidade no `financial`)
+    o próprio ADR declara fora de escopo; permanece aberta como oportunidade de unificação.

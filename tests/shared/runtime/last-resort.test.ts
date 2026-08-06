@@ -80,4 +80,45 @@ describe('last-resort handlers', () => {
 
     assert.deepEqual(h.order, ['shutdown', 'exit']);
   });
+
+  // CA4 — #632. O docstring promete "roda `shutdown` (best-effort — não relança)", e isso NÃO era
+  // verdade por construção: `void p.finally(cb)` REPASSA a rejeição de `p`. Em produção não virava
+  // `unhandledRejection` só porque `deps.exit(1)` roda DENTRO do `finally` e `process.exit` é
+  // síncrono — o processo morre antes de a rejeição ser reportada. Depender de timing de
+  // `process.exit` para cumprir contrato declarado é frágil, e aqui o dublê de `exit` não encerra
+  // nada: a rejeição fica solta, exatamente como ficaria em qualquer teste do repositório.
+  it('CA4: shutdown que REJEITA não vira unhandledRejection, e exit(1) roda mesmo assim', async () => {
+    const h = makeHarness();
+    const solta: unknown[] = [];
+    const capturar = (reason: unknown): void => {
+      solta.push(reason);
+    };
+    process.on('unhandledRejection', capturar);
+
+    try {
+      installLastResortHandlers(async () => {
+        await Promise.resolve();
+        h.order.push('shutdown');
+        throw new Error('pool.end falhou');
+      }, h.deps);
+
+      h.listeners.get('uncaughtException')!('boom');
+      // Duas voltas: a 1ª resolve a cadeia do `finally`, a 2ª deixa o Node reportar rejeição solta.
+      await new Promise((r) => {
+        setImmediate(r);
+      });
+      await new Promise((r) => {
+        setImmediate(r);
+      });
+
+      assert.deepEqual(solta, [], 'shutdown que rejeita produziu unhandledRejection');
+      assert.deepEqual(
+        h.order,
+        ['shutdown', 'exit'],
+        'exit(1) MUST rodar mesmo com shutdown falho',
+      );
+    } finally {
+      process.off('unhandledRejection', capturar);
+    }
+  });
 });

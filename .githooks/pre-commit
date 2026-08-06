@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# Git pre-commit hook — ponto de entrada exigido pelo git (nome exato, sem extensão).
+#
+# Instalação: `git config core.hooksPath .githooks` (sem flag → grava em .git/config,
+# compartilhado entre o checkout principal e todas as worktrees). O caminho relativo
+# é resolvido a partir do toplevel de cada worktree, e como .githooks/ é versionado,
+# toda worktree tem a pasta.
+#
+# Este arquivo só delega. A lógica dos 4 gates vive em .claude/hooks/pre-commit-typecheck.sh,
+# que também é lido por humanos e testado por tests/scripts/gate-blocker.test.ts.
+#
+# Exit 0 = commit segue. Exit != 0 = commit recusado. Escape: git commit --no-verify.
+
+set -uo pipefail
+
+REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null || true)"
+if [ -z "${REPO_ROOT}" ]; then
+  exit 0
+fi
+
+GATE="${REPO_ROOT}/.claude/hooks/pre-commit-typecheck.sh"
+
+# Fail-closed, pela mesma razão do ramo "pnpm ausente" no gate: um hook que não
+# achou o que executar deve recusar, não liberar. O bit +x é rastreado pelo git,
+# então este caminho indica cópia corrompida ou checkout parcial — não rotina.
+if [ ! -x "${GATE}" ]; then
+  echo "❌ pre-commit: ${GATE} ausente ou não executável — o gate não pôde rodar." >&2
+  echo "   Se for deliberado: git commit --no-verify" >&2
+  exit 1
+fi
+
+exec "${GATE}"

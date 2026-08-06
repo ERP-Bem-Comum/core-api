@@ -15,13 +15,15 @@ export type FinancierListFilter = Readonly<{
   active?: boolean;
 }>;
 
-// `search` casa name (substring case-insensitive) OU cnpj (só dígitos do termo).
+// `search` casa name (substring case-insensitive) OU cnpj.
 const matchesSearch = (f: Financier, search: string | undefined): boolean => {
   const q = search?.trim() ?? '';
   if (q === '') return true;
   if (f.name.toLowerCase().includes(q.toLowerCase())) return true;
-  const digits = q.replace(/\D/g, '');
-  return digits.length > 0 && String(f.cnpj).includes(digits);
+  // ADR-0044: o CNPJ é alfanumérico. Remover só a MÁSCARA — tirar letras faria a busca pelo
+  // CNPJ real não encontrar o cadastro. O VO guarda uppercase sem máscara.
+  const term = q.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
+  return term.length > 0 && String(f.cnpj).toUpperCase().includes(term);
 };
 
 export const financierMatchesFilter = (f: Financier, filter: FinancierListFilter): boolean => {

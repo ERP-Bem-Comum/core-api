@@ -1,0 +1,357 @@
+id: ADR-0045
+title: Read-model de fornecedor no `financial` consumido do `par_outbox`
+source: handbook/architecture/adr/0045-financial-supplier-read-model.md
+decided_on: 2026-06-16
+
+declared:
+  status: Accepted
+  status_normalized: accepted
+  supersedes: []
+  superseded_by: []
+  related: [ADR-0006, ADR-0014, ADR-0015, ADR-0022, ADR-0041, ADR-0043, ADR-0044]
+
+assessment:
+  verdict: realized
+  checked_at: 2026-07-31
+  checked_against: 722b0371
+  summary: |
+    Nono `realized`, e o mais bem coberto por testes de todo o inventário: OITO arquivos de teste — o
+    store em memória e em MySQL, uma suíte compartilhada entre os dois, o join, o enriquecimento, o
+    worker (unitário e de integração) e o job de backfill.
+    Tudo o que o ADR desenha existe e no lugar prescrito. `fin_supplier_view` está em
+    `financial/adapters/persistence/schemas/mysql.ts:530`, com o comentário de origem em `:525` citando
+    o ADR-0043 e registrando a ausência deliberada de FK física para o `partners`. O worker vive em
+    `src/workers/supplier-view-projection/` (composition root, fora dos módulos), importa
+    `applySupplierEvent` da public-api do `financial` (`delivery.ts:10`) e abre dois pools por env
+    (`run.ts:24-25`) — nenhum módulo importa o outro.
+    O guard de recência é exatamente o que o ADR especifica, e é a parte mais elegante:
+    `supplier-view-store.drizzle.ts:43` define `fresher` e as linhas 55-59 aplicam
+    `if(fresher, entrante, gravado)` em cada coluna dentro de um `ON DUPLICATE KEY UPDATE` — upsert
+    atômico, sem SELECT-then-UPDATE, absorvendo at-least-once e fora-de-ordem numa ida ao banco.
+    Uma divergência de ESCOPO, para cima: o ADR fala de "o grid", e o read-model é hoje juntado em
+    QUATRO caminhos de leitura.
+
+extraction:
+  state: complete
+  covers: |
+    6 alegações — a decisão central, os três itens da topologia de consumo, o contrato exibido e a
+    ausência de FK física. As seções "Quando re-avaliar" e as referências são fundamentação.
+
+prior_art:
+  - source: specs/039-claude-native-harness/adr-rules-distillation.md
+    verdict: GERA REGRA
+    applied_to: ['.claude/rules/adapters.md']
+    gap: |
+      Destilou o mecanismo certo — read-model local alimentado por outbox, upsert com guard de recência,
+      worker no composition root. Os três pontos que importam.
+      O que não registrou: o read-model tem QUATRO consumidores, não um, e o backfill nunca foi disparado
+      em produção. Juntos, isso muda a leitura do trade-off de consistência eventual — ele vale para
+      quatro superfícies, e todas mostram `null` até o backfill rodar.
+
+claims:
+  - id: ADR-0045-C1
+    text: |
+      O `financial` mantém um read-model LOCAL denormalizado `fin_supplier_view`
+      (`supplier_ref → name, document, occurred_at`), alimentado SÓ por eventos do `partners` via
+      outbox. O grid lê esse read-model (LEFT JOIN intra-`financial`) e NUNCA consulta o `partners` em
+      runtime.
+    kind: obligation
+    source_lines: [23]
+    applies_to:
+      - 'src/modules/financial/adapters/persistence/schemas/mysql.ts'
+      - 'src/modules/financial/adapters/persistence/repos/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:530 — export const finSupplierView = mysqlTable(fin_supplier_view, …)'
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:532 — supplierRef como PK, varchar(36), referência do fornecedor no partners'
+        - 'src/modules/financial/adapters/persistence/repos/document-repository.drizzle.ts:508 — leftJoin(finSupplierView, eq(finDocuments.supplierRef, finSupplierView.supplierRef))'
+        - 'src/modules/financial/adapters/persistence/repos/document-repository.drizzle.ts:544 — um segundo LEFT JOIN no mesmo repo'
+        - 'src/modules/financial/adapters/persistence/repos/document-summary-by-ids-view.drizzle.ts:107 — terceiro caminho de leitura com o mesmo join'
+        - 'src/modules/financial/adapters/persistence/repos/payable-summary-by-ids-view.drizzle.ts:98 — quarto caminho'
+        - 'nota: o ADR fala de "o grid" (singular); são quatro superfícies de leitura hoje'
+      verify: |
+        grep -rn "leftJoin(finSupplierView" src/modules/financial/adapters/persistence/repos/*.ts
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado o caminho de leitura do grid, quando executado, então MUST NÃO haver consulta a tabela
+        `par_*` nem chamada à public-api do `partners` em runtime. O nome do fornecedor MUST vir do
+        `fin_supplier_view`.
+      expected_error: null
+      blocker: null
+      enforced_by:
+        - 'tests/modules/financial/adapters/persistence/document-supplier-view-join.drizzle-mysql.test.ts'
+        - 'tests/modules/financial/adapters/persistence/repos/document-supplier-view-enrich.test.ts'
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Dado de outro módulo exibido num caminho de leitura MUST vir de read-model local alimentado por
+        evento. MUST NOT haver chamada cross-módulo (síncrona ou por leitura de tabela) dentro de um
+        caminho de leitura.
+      rationale: |
+        Generalizado de "o grid" para "caminho de leitura", porque a realidade já são quatro e a regra
+        precisa cobrir o quinto. O custo que o ADR nomeia — N+1 e acoplamento — cresce com o número de
+        superfícies, não com o número de módulos: a mesma decisão errada tomada uma vez se replica em
+        cada join novo.
+
+  - id: ADR-0045-C2
+    text: |
+      Worker DEDICADO em composition root (`src/workers/supplier-view-projection/`, FORA dos módulos):
+      lê o `par_outbox` (pool do `partners`) e aplica no `fin_supplier_view` (pool do `financial`), via o
+      worker de outbox GENÉRICO (`src/shared/outbox`). NENHUM módulo importa o outro — a ligação vive no
+      composition root. A lógica de aplicação (`applySupplierEvent`) vem da PUBLIC-API do `financial`.
+    kind: obligation
+    source_lines: [27]
+    applies_to:
+      - 'src/workers/supplier-view-projection/**/*.ts'
+      - 'src/modules/financial/public-api/index.ts'
+    reality:
+      verdict: holds
+      holds_in: [financial, partners]
+      absent_in: []
+      evidence:
+        - 'src/workers/supplier-view-projection/delivery.ts:10 — import { applySupplierEvent } from #src/modules/financial/public-api/index.ts'
+        - 'src/modules/financial/public-api/index.ts:17 — export { applySupplierEvent } from ../application/use-cases/apply-supplier-event.ts'
+        - 'src/workers/supplier-view-projection/run.ts:24 — const partnersUrl = process.env[PARTNERS_DATABASE_URL]'
+        - 'src/workers/supplier-view-projection/run.ts:25 — const financialUrl = process.env[FINANCIAL_DATABASE_URL]'
+        - 'src/workers/supplier-view-projection/run.ts:5 — comentário: dois pools, um processo dedicado (ADR-0041); nenhum módulo importa o outro — a ligação é aqui'
+        - 'src/workers/supplier-view-projection/run.ts:27 — as duas URLs são obrigatórias, com erro em stderr se faltarem (fail-fast)'
+        - 'src/modules/financial/application/use-cases/apply-payable-event.ts:4 — comentário: "Molde de applySupplierEvent", indicando que este caso virou padrão para outra projeção'
+      verify: |
+        grep -rn "applySupplierEvent" src/workers/ src/modules/financial/public-api/; grep -n "DATABASE_URL" src/workers/supplier-view-projection/run.ts
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado `src/modules/`, quando um módulo importar de outro módulo fora de `public-api/`, então o
+        teste falha. Dado `src/workers/`, a ligação entre dois módulos MUST estar aqui, não dentro deles.
+      expected_error: null
+      blocker: null
+      enforced_by: ['eslint.config.js', 'tests/workers/supplier-view-projection/delivery.test.ts']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Ligação entre dois módulos MUST viver no composition root (`src/workers/`, `src/jobs/`,
+        `src/server.ts`), nunca dentro de um módulo. O worker MUST consumir a lógica de aplicação pela
+        `public-api/` do módulo dono do read-model.
+      rationale: |
+        É a aplicação mais rica do `ADR-0006` que o inventário encontrou: dois módulos, dois pools, zero
+        import cruzado — e a prova de que o padrão escala está no comentário de
+        `apply-payable-event.ts:4`, que se declara "molde de `applySupplierEvent`". O `ADR-0006-C4`
+        proíbe o import cruzado; esta diz **onde** a ligação deve morar em vez disso, que é a metade que
+        faltava para a proibição ser acionável.
+
+  - id: ADR-0045-C3
+    text: |
+      Idempotência mais ORDEM: `upsert` com `ON DUPLICATE KEY UPDATE` e guard de recência por
+      `occurred_at` (`if(values(occurred_at) >= occurred_at, …)`) — absorve at-least-once e eventos fora
+      de ordem, ATOMICAMENTE, sem SELECT-then-UPDATE.
+    kind: obligation
+    source_lines: [28]
+    applies_to:
+      - 'src/modules/financial/adapters/persistence/repos/supplier-view-store.drizzle.ts'
+    reality:
+      verdict: holds
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'src/modules/financial/adapters/persistence/repos/supplier-view-store.drizzle.ts:43 — const fresher = sql`${incoming(occurred_at)} >= ${finSupplierView.occurredAt}`'
+        - 'src/modules/financial/adapters/persistence/repos/supplier-view-store.drizzle.ts:42 — comentário: guard, só sobrescreve quando o evento entrante é >= o gravado (não regride)'
+        - 'src/modules/financial/adapters/persistence/repos/supplier-view-store.drizzle.ts:53 — .onDuplicateKeyUpdate com if(fresher, entrante, gravado) por coluna — name, document, occurredAt e updatedAt'
+        - 'ausência: nenhum SELECT antes do upsert — a decisão de sobrescrever é tomada dentro do próprio INSERT'
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:528 — o schema documenta occurred_at como o guard de recência do upsert (não regride)'
+        - 'src/modules/financial/adapters/persistence/repos/supplier-view-store.in-memory.ts:4 — o adapter em memória replica o mesmo contrato, citando o IF do Drizzle'
+      verify: |
+        grep -n "fresher\|onDuplicateKeyUpdate" src/modules/financial/adapters/persistence/repos/supplier-view-store.drizzle.ts
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado o mesmo evento aplicado duas vezes, então o estado MUST ser idêntico (idempotência). Dado um
+        evento MAIS ANTIGO aplicado depois de um mais novo, então o read-model MUST NÃO regredir. Se o
+        adapter fizer SELECT-then-UPDATE, os dois testes passam mas a atomicidade se perde sob
+        concorrência — daí a asserção adicional de que o upsert é uma única instrução.
+      expected_error: null
+      blocker: null
+      enforced_by:
+        - 'tests/modules/financial/adapters/persistence/supplier-view-store.suite.ts'
+        - 'tests/modules/financial/adapters/persistence/supplier-view-store.drizzle-mysql.test.ts'
+        - 'tests/modules/financial/adapters/persistence/repos/supplier-view-store.in-memory.test.ts'
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Projeção de read-model MUST ser idempotente E resistente a fora-de-ordem, por guard de recência
+        no próprio upsert. MUST NOT usar SELECT-then-UPDATE para decidir se aplica o evento.
+      rationale: |
+        O `ADR-0022-C3` já exige idempotência; esta acrescenta as duas coisas que a idempotência sozinha
+        não dá: resistência a **fora de ordem** e **atomicidade**. Um projetor idempotente com
+        SELECT-then-UPDATE passa em teste sequencial e corrompe sob dois workers — e o `ADR-0020` proíbe
+        UPSERT nativo, o que torna o `ON DUPLICATE KEY UPDATE` com `if()` a única forma correta aqui.
+        Mecanismo não óbvio, custo alto de errar: é exatamente o tipo de regra que vale escrever.
+
+  - id: ADR-0045-C4
+    text: |
+      BACKFILL: job one-shot (`src/jobs/financial/supplier-view-backfill/`) popula o read-model a partir
+      dos fornecedores EXISTENTES (lidos via public-api do `partners`), com `occurred_at` ANTIGO — assim
+      eventos reais sempre vencem o guard. Idempotente.
+    kind: obligation
+    source_lines: [29]
+    applies_to:
+      - 'src/jobs/financial/supplier-view-backfill/**/*.ts'
+    reality:
+      verdict: holds
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'src/jobs/financial/supplier-view-backfill/backfill.ts:3 — comentário: no SupplierViewStore com um occurredAt ANTIGO — assim eventos reais (mais novos) sempre vencem'
+        - 'src/jobs/financial/supplier-view-backfill/backfill.ts:20 — occurredAt: Date é parâmetro do job, não constante embutida'
+        - 'nota: o diretório src/jobs/financial/supplier-view-backfill/ tem backfill.ts e run.ts — lógica separada do runner, como nos demais jobs one-shot'
+        - 'nota: o job existe e é testado, mas DISPARÁ-LO é ato de operação; o inventário não verifica ambiente'
+      verify: |
+        grep -n "occurredAt\|ANTIGO" src/jobs/financial/supplier-view-backfill/backfill.ts | head
+    testability:
+      verdict: testable
+      layer: integration
+      red: |
+        Dado um read-model vazio e fornecedores existentes, quando o backfill roda, então o read-model
+        MUST ser populado. Rodado duas vezes, MUST ser idempotente. E um evento real posterior MUST
+        vencer o registro do backfill — o que só vale se o `occurred_at` do backfill for antigo.
+      expected_error: null
+      blocker: null
+      enforced_by: ['tests/jobs/financial/supplier-view-backfill.test.ts']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Read-model novo MUST vir com job de backfill idempotente, e o backfill MUST gravar `occurred_at`
+        antigo para que qualquer evento real o vença. Read-model sem backfill MUST NOT ser exposto num
+        caminho de leitura.
+      rationale: |
+        A segunda cláusula é a que o ADR não escreve e a realidade cobra: um read-model exposto antes do
+        backfill mostra `null` para todo registro pré-existente — e `null` num grid não parece erro,
+        parece dado ausente. O detalhe do `occurred_at` antigo é engenhoso e não óbvio: ele reusa o
+        próprio guard de recência da `C3` para garantir que backfill nunca sobrescreva evento real,
+        sem precisar de flag nem ordem de execução.
+
+  - id: ADR-0045-C5
+    text: |
+      Contrato exibido: o item do grid ganha `supplierName` e `supplierDocument` (CNPJ alfanumérico —
+      ADR-0044), `null` quando o `supplierRef` é nulo ou ainda NÃO está no read-model (consistência
+      eventual — FR-006).
+    kind: obligation
+    source_lines: [33]
+    applies_to:
+      - 'src/modules/financial/adapters/http/dto.ts'
+    reality:
+      verdict: holds
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'src/modules/financial/adapters/http/dto.ts:189 — supplierName: row.supplierName'
+        - 'src/modules/financial/adapters/http/dto.ts:190 — supplierDocument: row.supplierDocument'
+        - 'src/modules/financial/adapters/http/dto.ts:202 — o par aparece num segundo DTO'
+        - 'src/modules/financial/adapters/http/dto.ts:322 — supplierName: output.supplier?.legalName ?? null — o null explícito da consistência eventual'
+        - 'nota: o LEFT JOIN (e não INNER) é o que produz o null quando o supplierRef ainda não chegou ao read-model'
+      verify: |
+        grep -rn "supplierName\|supplierDocument" src/modules/financial/adapters/http/dto.ts | head
+    testability:
+      verdict: testable
+      layer: contract
+      red: |
+        Dado um documento cujo `supplierRef` não está no read-model, quando o grid é lido, então
+        `supplierName` e `supplierDocument` MUST ser `null` e a requisição MUST retornar 200 — nunca
+        erro. Se o join for INNER, a linha desaparece do grid, o que é pior que `null`.
+      expected_error: null
+      blocker: null
+      enforced_by:
+        ['tests/modules/financial/adapters/persistence/repos/document-supplier-view-enrich.test.ts']
+    rule:
+      status: proposed
+      disposition: adopt
+      text: |
+        Enriquecimento por read-model MUST usar LEFT JOIN e expor `null` quando a projeção ainda não
+        chegou. MUST NOT usar INNER JOIN — a linha principal nunca desaparece por atraso de projeção.
+      rationale: |
+        A regra converte a consequência aceita ("consistência eventual") em invariante verificável. O modo
+        de falhar com INNER JOIN é o mais perigoso possível num grid financeiro: a linha **desaparece** —
+        um documento a pagar deixa de ser exibido porque a projeção do fornecedor atrasou. Silencioso,
+        sem erro, e indistinguível de "não existe".
+
+  - id: ADR-0045-C6
+    text: |
+      NÃO há FK física para o `partners` (ADR-0014 — cross-módulo sem acoplamento direto). O `supplierRef`
+      é referência lógica.
+    kind: prohibition
+    source_lines: [23, 42]
+    applies_to:
+      - 'src/modules/financial/adapters/persistence/schemas/mysql.ts'
+    reality:
+      verdict: holds
+      holds_in: [financial]
+      absent_in: []
+      evidence:
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:527 — comentário: NÃO há FK física para o partners (ADR-0014 §cross-módulo sem acoplamento direto)'
+        - 'src/modules/financial/adapters/persistence/schemas/mysql.ts:532 — supplierRef é PK varchar(36) sem .references()'
+      verify: |
+        grep -n "fin_supplier_view" -A 20 src/modules/financial/adapters/persistence/schemas/mysql.ts | grep -c "references("
+    testability:
+      verdict: testable
+      layer: static
+      red: |
+        Dado o schema de um módulo, quando uma FK apontar para tabela de outro módulo, então o teste
+        falha.
+      expected_error: null
+      blocker: null
+      enforced_by: []
+    rule:
+      status: proposed
+      disposition: drop
+      text: null
+      rationale: |
+        Descartar: é a `ADR-0014-C3` (nenhuma FK cross-módulo), já proposta com escopo geral. Aqui vale
+        como evidência de que a proibição foi respeitada no caso mais tentador — um read-model cuja PK É
+        a chave do outro módulo, onde a FK pareceria natural e daria integridade referencial de graça.
+
+findings:
+  - |
+    **O ADR mais bem coberto por testes do inventário: oito arquivos.** Store em memória, store em MySQL,
+    uma **suíte compartilhada** entre os dois adapters (`supplier-view-store.suite.ts` — o mesmo contrato
+    verificado nas duas implementações), o join, o enriquecimento, o worker unitário, o worker de
+    integração e o job de backfill. Cinco das seis alegações têm `enforced_by` preenchido — a maior
+    densidade de enforcement por alegação de todo o acervo.
+  - |
+    **Read-model cresceu de um consumidor para quatro sem revisão de decisão.** O ADR fala de "o grid"
+    (`GET /api/v2/financial/documents`); hoje o `fin_supplier_view` é juntado em quatro caminhos —
+    `document-repository` (duas vezes), `document-summary-by-ids-view` e `payable-summary-by-ids-view`.
+    Não é violação: é o mesmo padrão reusado. Mas o trade-off aceito ("um fornecedor recém-editado leva
+    até um ciclo do worker para refletir") passou a valer para quatro superfícies, e a `C4` — read-model
+    sem backfill mostra `null` — quadruplica de alcance junto.
+  - |
+    **O guard de recência resolve três problemas com uma instrução.** `if(occurred_at_entrante >=
+    occurred_at_gravado, entrante, gravado)` dentro do `ON DUPLICATE KEY UPDATE` dá idempotência
+    (at-least-once), resistência a fora-de-ordem, e atomicidade sem SELECT-then-UPDATE — numa ida ao
+    banco. E o backfill reusa o MESMO guard, gravando `occurred_at` antigo, para garantir que nunca
+    sobrescreva evento real. Um mecanismo, quatro invariantes. É o desenho mais econômico que este
+    inventário encontrou.
+  - |
+    **O padrão virou molde declarado.** `apply-payable-event.ts:4` se descreve como "molde de
+    `applySupplierEvent`" — a segunda projeção do `financial` foi escrita copiando a primeira, e o
+    comentário registra isso. Vale como sinal para a extração de regras: quando um caso já se replicou
+    com atribuição explícita, a regra descreve prática existente, não impõe prática nova. Custo de adoção
+    perto de zero.
+
+provenance:
+  tickets:
+    - CORE-OUTBOX-WORKER-GENERIC
+  issues: []
+  note: |
+    O acervo tem a feature `specs/014-financial-supplier-readmodel/` (spec/plan/tasks), a issue #47 (US2)
+    e os tickets `CORE-OUTBOX-WORKER-GENERIC`, `FIN-SUPPLIER-VIEW-*` — nenhum lido nesta fase. O disparo
+    do backfill em produção é ato de operação, fora do que o inventário verifica.

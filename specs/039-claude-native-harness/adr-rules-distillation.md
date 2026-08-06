@@ -346,6 +346,16 @@ trabalho — classifica ambos como vigentes e destila norma morta.
 Efeito na contagem: **43 Accepted de fato**, não 44. Some-se a numeração duplicada de `0034` (dois ADRs
 com o mesmo número), já registrada no Apêndice C do doc de processo.
 
+> ✅ **Resolvido em 2026-07-31.** O ADR de OCR foi renumerado para
+> [`0056-ocr-port-adapter.md`](../../handbook/architecture/adr/0056-ocr-port-adapter.md) e teve o
+> `Status` corrigido para `Superseded by ADR-0050`. A colisão era mais grave do que "numeração
+> duplicada": o `0050` declara _"supersedes ADR-0034"_ e o índice do README registrava apenas o
+> **Bruno** sob esse número — resolver a referência pela via natural concluía que o Bruno havia sido
+> superseded, quando o `0038` o tornou obrigatório. É também a origem da divergência interna deste
+> documento, que abre dizendo "cada um dos **55** ADRs" e fecha com "**54** têm veredito": eram 55
+> arquivos disputando 54 números. Verificação alegação-por-alegação em
+> [`context/decisions/`](../../context/decisions/SCHEMA.md).
+
 ---
 
 ## Cobertura final — 44 de 44 julgados _(100%)_
@@ -407,7 +417,8 @@ Lição: citar um path no corpo de uma rule **não** o cobre. Só `paths:` cobre
 
 ## Pendente
 
-- [ ] Corrigir o `Status` de `0034-ocr` para `Superseded by ADR-0050` _(escopo de handbook)_
+- [x] Corrigir o `Status` de `0034-ocr` para `Superseded by ADR-0050` _(escopo de handbook)_ — feito
+      em 2026-07-31, junto com a renumeração para `0056` e as notas de numeração no índice de ADRs
 - [ ] Corrigir as ~20 citações a `ADR-0012` → `ADR-0029` _(escopo de US2)_
 - [ ] Registrar as 6 rules novas na tabela de `.claude/rules/` do `AGENTS.md` _(descoberta humana; o carregamento por `paths:` já funciona)_
 - [ ] Implementar os 4 candidatos a enforcement mecânico

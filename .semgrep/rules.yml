@@ -1,4 +1,4 @@
-# Gate de enforcement dos invariantes de ADR/AGENTS.md (SEMGREP-ADR-ENFORCER, #548).
+# Gate de enforcement dos invariantes de ADR/CLAUDE.md (SEMGREP-ADR-ENFORCER, #548).
 #
 # MVP = 2 rules PRECISAS (AST TypeScript), ancoradas em ADR-0020. Verificado (grep) que nenhuma
 # bate em codigo existente. Sao a classe de drift que nem tsc, nem ESLint, nem os hooks pegam.
