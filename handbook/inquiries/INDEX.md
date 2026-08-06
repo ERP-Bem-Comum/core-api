@@ -10,11 +10,11 @@
 
 | # | Status | Última atualização |
 | :--- | :--- | :--- |
-| Total | 27 | 2026-08-06 |
+| Total | 28 | 2026-08-06 |
 | `Decided` | 15 | — |
 | `Pending Response` | 0 | — |
 | `Obsoleta (revisada)` | 1 | — |
-| `Open` | 6 | — |
+| `Open` | 7 | — |
 | `Deferred` | 1 | — |
 | Outros rótulos no disco (`Concluída`, `Watchlist`) | 5 | — |
 
@@ -58,6 +58,7 @@ _Nenhuma._
 | [0015](./0015-charset-drizzle-roadmap.md) | Charset/collate por tabela via API drizzle-orm — roadmap | Upstream `drizzle-team/drizzle-orm` | **ESCOPO REDUZIDO À METADE em 2026-08-05**: o `collate` PER-COLUMN já é possível via `customType` — medido e idempotente, ver §3. Resta só o **table-level**, que segue exigindo SQL manual na migration. Reabrir quando drizzle-orm expuser table options |
 | [0019](./0019-hard-delete-tripwire-sem-superficie.md) | `TentativaDeExclusaoDetectada` — tripwire sem superfície | P.O. + decisão de infra/segurança | Não há comando de deleção física no sistema; melhor prevenir por privilégio MySQL que detectar por evento. Acopla a 0018 + RBAC |
 | [0027](./0027-teses-orfas-de-branches-contaminadas.md) | Teses órfãs — o que 7 branches contaminadas tentavam provar | Decisão de priorização (Gabriel) | Método comparativo sobre 7 branches não-mergeáveis por **colisão de numeração** (ADR-0033/0034/0035/0047, specs 009/010). Vereditos emitidos: **3 corroboradas** (imagem-base glibc já no `Dockerfile`; Caddy rodando no QA mas fora do `compose.yaml`; regra precisa bloquear), **1 refutada** (PROD EC2+Compose / QA Magalu — real é ECS + VPS), **2 absorvidas**, **4 não testadas** (observabilidade do outbox #131; discriminador exibe/consulta; auto-expire de contratos; remedição da regressão `fix:feat`). Bloqueio: escolher quais das 4 não testadas viram trabalho |
+| [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) | O EDD da P.O. (M1–M4 + relatórios Nibo) — o que sobrevive à verificação | P.O. (D3/D4) + TL (D1/D5/D6/D7) + spikes | Suspeita de "código muito desatualizado" **não se confirmou**: as **13 alegações com citação de arquivo/linha conferem no HEAD** (`7bf29e16`), inclusive `types.ts:30-32`, `confirm-batch.ts:56-60`, `mysql.ts:291`. Duas ressalvas: a **§0 é camada herdada, não verificada** (cita `AGENTS.md`, aposentado em 2026-08-03, dois dias *antes* da verificação declarada), e a **§5.2 subestima reuso** (existe `ReconciliationAllocation` #141/#247). Bloqueia ~470h de escopo comercial |
 
 ### 🔵 Deferred
 
