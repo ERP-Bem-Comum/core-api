@@ -1,10 +1,16 @@
+---
+inquiry: 0029
+title: "Linter type-aware sob TypeScript 7 — oxlint/tsgolint · Biome · ESLint pinado"
+state: open
+opened: 2026-08-06
+last_reviewed: 2026-08-06
+open_outputs: 4  # migrar para issue — ver README §Saídas
+---
+
 [← Voltar ao Índice de Inquiries](./INDEX.md)
 
 # Inquiry-0029: Linter type-aware sob TypeScript 7 — oxlint/tsgolint · Biome · ESLint pinado
 
-- **Status:** Open
-- **Opened:** 2026-08-06
-- **Closed/Decided:** —
 - **Opened by:** Gabriel Aderaldo
 - **Asked to:** IA externa (texto recebido) + verificação em fontes primárias + medição local
 - **Impact:** [ADR-0009](../architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md) · `eslint.config.js` (342 linhas, 45 regras, 8 acopladas a ADR) · gate de qualidade

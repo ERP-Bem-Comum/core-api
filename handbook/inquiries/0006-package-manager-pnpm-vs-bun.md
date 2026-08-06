@@ -1,8 +1,15 @@
+---
+inquiry: 0006
+title: "Package manager — pnpm vs Bun (e a migração yarn → pnpm no legado)"
+state: decided
+opened: 2026-04-28
+decided: 2026-04-28
+last_reviewed: 2026-08-06
+open_outputs: 1  # migrar para issue — ver README §Saídas
+---
+
 # Inquiry-0006: Package manager — pnpm vs Bun (e a migração yarn → pnpm no legado)
 
-- **Status:** Decided
-- **Opened:** 2026-04-28
-- **Closed/Decided:** 2026-04-28
 - **Opened by:** Gabriel Aderaldo
 - **Asked to:** Pesquisa em fontes públicas + análise crítica (PkgPulse, dev.to)
 - **Impact:** [ADR-0012](../architecture/adr/0012-pnpm-package-manager.md), runbook futuro `operations/runbooks/legacy-yarn-to-pnpm-migration.md`

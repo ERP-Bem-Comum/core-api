@@ -1,10 +1,16 @@
+---
+inquiry: 0028
+title: "O EDD da P.O. (M1–M4 + relatórios Nibo) — o que sobrevive à verificação"
+state: open
+opened: 2026-08-06
+last_reviewed: 2026-08-06
+open_outputs: 6  # migrar para issue — ver README §Saídas
+---
+
 [← Voltar ao Índice de Inquiries](./INDEX.md)
 
 # Inquiry-0028: O EDD da P.O. (M1–M4 + relatórios Nibo) — o que sobrevive à verificação
 
-- **Status:** Open
-- **Opened:** 2026-08-06
-- **Closed/Decided:** —
 - **Opened by:** Gabriel Aderaldo (Tech Lead)
 - **Asked to:** P.O./Consultora Alessandra — documentos recebidos em 2026-08-05/06
 - **Impact:** escopo comercial (~470h dev + ~350h do bundle P0) · 4 melhorias P0 · 2 relatórios Nibo · decisões D1–D6

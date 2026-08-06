@@ -1,10 +1,17 @@
+---
+inquiry: 0020
+title: "Adoção do Temporal API (ES2026) no core-api"
+state: decided
+opened: 2026-05-26
+decided: 2026-05-26
+last_reviewed: 2026-08-06
+open_outputs: 1  # migrar para issue — ver README §Saídas
+---
+
 [← Voltar ao Índice](./INDEX.md)
 
 # Inquiry-0020: Adoção do Temporal API (ES2026) no core-api
 
-- **Status:** Decided
-- **Opened:** 2026-05-26
-- **Closed/Decided:** 2026-05-26
 - **Opened by:** P.O.
 - **Asked to:** `nodejs-runtime-expert` (estudo interno)
 - **Impact:** estratégico · gatilho de ADR futuro (supersedes [ADR-0009](../architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md) em out/2026)

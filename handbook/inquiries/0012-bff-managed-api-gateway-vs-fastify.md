@@ -1,8 +1,14 @@
+---
+inquiry: 0012
+title: "Inquiry-0012 — BFF: AWS API Gateway managed vs. Fastify burro próprio"
+state: blocked
+last_reviewed: 2026-08-06
+---
+
 [← Voltar ao README de Inquiries](./README.md)
 
 # Inquiry-0012 — BFF: AWS API Gateway managed vs. Fastify burro próprio
 
-- **Status:** `Open` (revisitada em 2026-05-22 após ADR-0021)
 - **Aberta em:** 2026-05-07
 - **Última atualização:** 2026-05-22 — ver [§9](#9-atualização-2026-05-22--impacto-do-adr-0021)
 - **Aguardando:** Banca interna (squad) + alinhamento com DevOps (Codebit) + dono do legado.

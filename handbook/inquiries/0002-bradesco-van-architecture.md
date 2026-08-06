@@ -1,8 +1,14 @@
+---
+inquiry: 0002
+title: "Arquitetura real da integração Bradesco (VAN + REST)"
+state: decided
+opened: 2026-04-22
+decided: 2026-04-27
+last_reviewed: 2026-08-06
+---
+
 # Inquiry-0002: Arquitetura real da integração Bradesco (VAN + REST)
 
-- **Status:** Decided
-- **Opened:** 2026-04-22
-- **Closed/Decided:** 2026-04-27
 - **Opened by:** Alessandra Castro (P.O.)
 - **Asked to:** Carlos Eduardo "Cadu" Nunes (Going2 — time do legado)
 - **Impact:** [ADR-0008](../architecture/adr/0008-bradesco-integration-architecture.md), atualização de `infrastructure/01-infra-handoff.md`

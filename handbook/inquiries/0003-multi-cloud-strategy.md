@@ -1,8 +1,15 @@
+---
+inquiry: 0003
+title: "Estratégia multi-cloud (AWS legado + GCP novo)"
+state: decided
+opened: 2026-04-27
+decided: 2026-05-22
+last_reviewed: 2026-08-06
+open_outputs: 3  # migrar para issue — ver README §Saídas
+---
+
 # Inquiry-0003: Estratégia multi-cloud (AWS legado + GCP novo)
 
-- **Status:** Decided
-- **Opened:** 2026-04-27
-- **Closed/Decided:** 2026-05-22
 - **Opened by:** Gabriel Aderaldo (via Alessandra Castro)
 - **Asked to:** Codebit (infra) — Maria Isabel Martins ou ponto focal técnico (a maioria das perguntas técnicas ficou sem retorno; decisão final veio de fonte alternativa, ver §3)
 - **Impact:** [ADR-0007](../architecture/adr/0007-multi-cloud-aws-gcp.md) (Superseded por [ADR-0021](../architecture/adr/0021-aws-primary-magalu-pbe-supersedes-0007.md))

@@ -1,10 +1,16 @@
+---
+inquiry: 0027
+title: "Teses órfãs — o que 7 branches contaminadas tentavam provar"
+state: open
+opened: 2026-08-06
+last_reviewed: 2026-08-06
+open_outputs: 6  # migrar para issue — ver README §Saídas
+---
+
 [← Voltar ao Índice de Inquiries](./INDEX.md)
 
 # Inquiry-0027: Teses órfãs — o que 7 branches contaminadas tentavam provar
 
-- **Status:** Open
-- **Opened:** 2026-08-06
-- **Closed/Decided:** —
 - **Opened by:** Gabriel Aderaldo
 - **Asked to:** investigação interna (método comparativo sobre o próprio repositório)
 - **Impact:** ADR-0033 (colidido) · ADR-0034/0035 (colididos) · ADR-0047 (colidido) · specs 009/026/041/042 · issue #131 · lacuna de auto-expire de contratos

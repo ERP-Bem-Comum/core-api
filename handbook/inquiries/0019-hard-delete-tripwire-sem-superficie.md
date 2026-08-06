@@ -1,8 +1,14 @@
+---
+inquiry: 0019
+title: "`TentativaDeExclusaoDetectada` — tripwire sem superfície de ataque"
+state: blocked
+opened: 2026-05-25
+last_reviewed: 2026-08-06
+open_outputs: 3  # migrar para issue — ver README §Saídas
+---
+
 # Inquiry-0019: `TentativaDeExclusaoDetectada` — tripwire sem superfície de ataque
 
-- **Status:** Open
-- **Closed/Decided:** —
-- **Opened:** 2026-05-25
 - **Opened by:** Gabriel Aderaldo (via orquestrador)
 - **Asked to:** P.O. + análise interna do handbook + inspeção de `src/`
 - **Impact:** decide se/como implementar o evento de segurança do gap #5; cruza com identidade/RBAC e com o canal SIEM (ainda inexistente)

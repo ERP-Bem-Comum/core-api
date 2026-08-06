@@ -1,8 +1,14 @@
+---
+inquiry: 0015
+title: "Charset/collate por tabela via API drizzle-orm — roadmap"
+state: blocked
+opened: 2026-05-18
+last_reviewed: 2026-08-06
+open_outputs: 3  # migrar para issue — ver README §Saídas
+---
+
 # Inquiry-0015: Charset/collate por tabela via API drizzle-orm — roadmap
 
-- **Status:** Open
-- **Opened:** 2026-05-18
-- **Closed/Decided:** —
 - **Opened by:** Gabriel Aderaldo (via `pipeline-maestro`, ticket `CTR-DB-SCHEMA-HARDENING`)
 - **Asked to:** drizzle-orm maintainers / observação de roadmap upstream
 - **Impact:** `src/modules/contracts/adapters/persistence/schemas/mysql.ts`, qualquer migration emitida via `drizzle-kit generate` no futuro. Eventual ADR de **dependência tipográfica** quando suportado.

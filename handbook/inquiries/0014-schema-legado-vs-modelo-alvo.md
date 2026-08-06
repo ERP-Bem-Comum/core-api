@@ -1,7 +1,14 @@
+---
+inquiry: 0014
+title: "Schema legado real vs. modelo alvo do handbook"
+state: blocked
+opened: 2026-05-14
+last_reviewed: 2026-08-06
+open_outputs: 3  # migrar para issue — ver README §Saídas
+---
+
 # Inquiry-0014: Schema legado real vs. modelo alvo do handbook
 
-- **Status:** Open
-- **Opened:** 2026-05-14
 - **Opened by:** Gabriel Aderaldo
 - **Asked to:** Banca interna (squad de arquitetura) + P.O.
 - **Impact:** [ADR-0017](../architecture/adr/0017-correlation-keys-cross-period-audit.md) (revisar), [Inquiry-0011](./0011-auditoria-fiscal-cross-periodo.md) (atualizar premissa), [`../domain/02-context-map.md`](../domain/02-context-map.md) (faltam BCs), [`../architecture/03-data-architecture.md`](../architecture/03-data-architecture.md) (collation real).

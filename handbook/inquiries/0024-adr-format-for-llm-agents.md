@@ -1,8 +1,14 @@
+---
+inquiry: 0024
+title: "Inquiry 0024 — ADR como contexto de agente: o que o campo convergiu, e onde estamos fora"
+state: decided
+last_reviewed: 2026-08-06
+---
+
 [← Voltar para Inquiries](./README.md)
 
 # Inquiry 0024 — ADR como contexto de agente: o que o campo convergiu, e onde estamos fora
 
-- **Status:** Concluída
 - **Data:** 2026-07-31
 - **Gatilho:** Ao iniciar o hardening de `.claude/`, o dono do repo suspendeu uma decisão em curso com a pergunta certa: _"errei no jeito que estamos encarando os ADRs — pode ver como os ADRs em questão de política/filosofia e formato estão sendo usados para LLMs e principalmente para o Claude Code nos últimos meses?"_ A suspeita se confirmou: a decisão que eu havia formulado ("ADR vence ou código vence?") era um **falso dilema**.
 - **Método:** Pesquisa web (o recorte "últimos meses" cai depois do cutoff de conhecimento do modelo) + teoria canônica via MCP `acdg-skills`, citada literalmente com verificação de grounding. Confrontada com o inventário de 55 ADRs em [`context/decisions/`](../../context/decisions/) e com a auditoria em [`context/HARNESS-AUDIT-2026-07-31.md`](../../context/HARNESS-AUDIT-2026-07-31.md).

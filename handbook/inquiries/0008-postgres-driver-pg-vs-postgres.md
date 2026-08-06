@@ -1,8 +1,15 @@
+---
+inquiry: 0008
+title: "Driver Postgres — `pg` vs `postgres` (porsager)"
+state: superseded
+opened: 2026-04-28
+decided: 2026-04-28
+last_reviewed: 2026-08-06
+open_outputs: 2  # migrar para issue — ver README §Saídas
+---
+
 # Inquiry-0008: Driver Postgres — `pg` vs `postgres` (porsager)
 
-- **Status:** ⚠️ **OBSOLETA** — decisão revisada após correção de assunção de engine
-- **Opened:** 2026-04-28
-- **Closed/Decided:** 2026-04-28
 - **Obsoleted:** 2026-04-28 (mesmo dia, em revisão posterior)
 - **Opened by:** Gabriel Aderaldo
 - **Asked to:** Pesquisa em GitHub dos dois projetos + benchmarks de set/2025 + documentação Drizzle

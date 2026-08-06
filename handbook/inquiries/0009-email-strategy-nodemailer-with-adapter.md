@@ -1,8 +1,15 @@
+---
+inquiry: 0009
+title: "Estratégia de envio de email — Nodemailer com Service Adapter"
+state: decided
+opened: 2026-04-28
+decided: 2026-04-28
+last_reviewed: 2026-08-06
+open_outputs: 1  # migrar para issue — ver README §Saídas
+---
+
 # Inquiry-0009: Estratégia de envio de email — Nodemailer com Service Adapter
 
-- **Status:** Decided
-- **Opened:** 2026-04-28
-- **Closed/Decided:** 2026-04-28
 - **Opened by:** Gabriel Aderaldo
 - **Asked to:** Pesquisa em fontes públicas (mailtrap, pkgpulse) + análise interna
 - **Impact:** [ADR-0010](../architecture/adr/0010-email-port-adapter-pattern.md)

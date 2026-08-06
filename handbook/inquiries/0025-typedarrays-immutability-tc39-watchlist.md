@@ -1,8 +1,14 @@
+---
+inquiry: 0025
+title: "Imutabilidade real de `Uint8Array` em TS 6 — TC39 watchlist"
+state: deferred
+opened: 2026-05-22
+last_reviewed: 2026-08-06
+---
+
 # Inquiry-0025: Imutabilidade real de `Uint8Array` em TS 6 — TC39 watchlist
 
-- **Status:** Watch (sem decisão pendente; revisitar quando a watchlist mover)
 - **Renumerada:** criada como `Inquiry-0011` em 2026-05-22 e renumerada para `0025` em 2026-08-03 — o número já pertencia à [auditoria fiscal cross-período](./0011-auditoria-fiscal-cross-periodo.md), que é anterior (2026-05-19) e está no índice. Mesma mecânica da colisão do `ADR-0034`: arquivo posterior pegou número ocupado e nunca entrou no índice
-- **Opened:** 2026-05-22
 - **Opened by:** Gabriel Aderaldo (durante `CTR-STORAGE-INMEMORY` W1)
 - **Asked to:** Pesquisa em proposals TC39 + análise interna + audit pelo agente `nodejs-runtime-expert`
 - **Impact:** Nenhum imediato. Critério explícito de revisita registrado abaixo.

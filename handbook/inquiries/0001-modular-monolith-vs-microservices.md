@@ -1,8 +1,14 @@
+---
+inquiry: 0001
+title: "Granularidade de serviço — Modular Monolith vs. Microservices"
+state: decided
+opened: 2026-04-27
+decided: 2026-04-27
+last_reviewed: 2026-08-06
+---
+
 # Inquiry-0001: Granularidade de serviço — Modular Monolith vs. Microservices
 
-- **Status:** Decided
-- **Opened:** 2026-04-27
-- **Closed/Decided:** 2026-04-27
 - **Opened by:** Gabriel Aderaldo
 - **Asked to:** IA externa de pesquisa (literatura arquitetural) + análise interna do handbook
 - **Impact:** [ADR-0006](../architecture/adr/0006-modular-monolith-core-api.md)

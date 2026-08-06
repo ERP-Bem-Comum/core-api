@@ -1,8 +1,15 @@
+---
+inquiry: 0005
+title: "Supply chain — incidente Axios e hardening de dependências"
+state: decided
+opened: 2026-04-28
+decided: 2026-04-28
+last_reviewed: 2026-08-06
+open_outputs: 2  # migrar para issue — ver README §Saídas
+---
+
 # Inquiry-0005: Supply chain — incidente Axios e hardening de dependências
 
-- **Status:** Decided
-- **Opened:** 2026-04-28
-- **Closed/Decided:** 2026-04-28
 - **Opened by:** Gabriel Aderaldo
 - **Asked to:** Pesquisa em fontes públicas (CISA, Microsoft Security, Elastic Security Labs)
 - **Impact:** [ADR-0011](../architecture/adr/0011-supply-chain-hardening.md), runbook em `operations/runbooks/legacy-supply-chain-hardening.md`

@@ -1,8 +1,14 @@
+---
+inquiry: 0016
+title: "Soluções nativas do Node.js para EventBus / Pub-Sub / Observer"
+state: deferred
+opened: 2026-05-22
+last_reviewed: 2026-08-06
+open_outputs: 3  # migrar para issue — ver README §Saídas
+---
+
 # Inquiry-0016: Soluções nativas do Node.js para EventBus / Pub-Sub / Observer
 
-- **Status:** Deferred (watchlist — registrar agora, decidir quando houver caso de uso)
-- **Opened:** 2026-05-22
-- **Closed/Decided:** —
 - **Opened by:** Gabriel Aderaldo
 - **Asked to:** investigação interna sobre `handbook/reference/nodejs/`
 - **Impact:** futuro ADR sobre eventos in-process dentro de um módulo de `core-api`; possível complemento ao ADR-0015 (outbox MySQL cross-módulo)

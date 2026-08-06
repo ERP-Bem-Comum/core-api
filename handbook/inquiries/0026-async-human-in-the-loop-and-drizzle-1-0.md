@@ -1,8 +1,14 @@
+---
+inquiry: 0026
+title: "Três trocas estruturais em aberto — assíncrono human-in-the-loop, Drizzle 1.0 e Bruno × TS"
+state: open
+opened: 2026-08-05
+last_reviewed: 2026-08-06
+open_outputs: 14  # migrar para issue — ver README §Saídas
+---
+
 # Inquiry-0026: Três trocas estruturais em aberto — assíncrono human-in-the-loop, Drizzle 1.0 e Bruno × TS
 
-- **Status:** Open
-- **Opened:** 2026-08-05
-- **Closed/Decided:** —
 - **Opened by:** Claude Code (a pedido do dono do repo, no gate humano da Fase 1 da spec 040)
 - **Asked to:** investigação interna medida — sem consulta externa
 - **Impact:** ADR-0015 (outbox), ADR-0030 (fila diferida), ADR-0014/ADR-0058 (persistência e política de versão), ADR-0038 (Bruno CLI)

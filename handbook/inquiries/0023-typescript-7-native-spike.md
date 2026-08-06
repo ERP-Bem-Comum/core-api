@@ -1,8 +1,14 @@
+---
+inquiry: 0023
+title: "TypeScript 7 nativo — spike medido e diagnóstico de lentidão do `core-api`"
+state: decided
+opened: 2026-07-31
+decided: 2026-07-31
+last_reviewed: 2026-08-06
+---
+
 # Inquiry-0023: TypeScript 7 nativo — spike medido e diagnóstico de lentidão do `core-api`
 
-- **Status:** Decided (com saídas pendentes de execução)
-- **Opened:** 2026-07-31
-- **Closed/Decided:** 2026-07-31
 - **Opened by:** Gabriel Aderaldo
 - **Asked to:** Medição direta em máquina local (Apple M2, 8 cores, 8 GB) + fontes oficiais
 - **Impact:** [ADR-0009](../architecture/adr/0009-node-24-typescript-6-with-7-roadmap.md) — **o gatilho de reavaliação dele disparou**; ver §5 e §6

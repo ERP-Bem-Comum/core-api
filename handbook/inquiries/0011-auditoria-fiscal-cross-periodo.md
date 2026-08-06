@@ -1,7 +1,13 @@
+---
+inquiry: 0011
+title: "Auditoria fiscal cross-período em sistema sob Strangler Fig"
+state: blocked
+opened: 2026-05-07
+last_reviewed: 2026-08-06
+---
+
 # Inquiry-0011: Auditoria fiscal cross-período em sistema sob Strangler Fig
 
-- **Status:** Open — aguardando deliberação da banca/squad
-- **Opened:** 2026-05-07
 - **Last updated:** 2026-05-14 (Apêndice D — achado de schema)
 - **Opened by:** Gabriel Aderaldo (`gaderaldo10@gmail.com`)
 - **Asked to:** Banca interna de arquitetura (squad de engenharia)

@@ -1,8 +1,15 @@
+---
+inquiry: 0018
+title: "`AuditLogGenerated` — trilha de auditoria transversal a todos os BCs"
+state: deferred
+opened: 2026-05-25
+decided: 2026-05-26
+last_reviewed: 2026-08-06
+open_outputs: 4  # migrar para issue — ver README §Saídas
+---
+
 # Inquiry-0018: `AuditLogGenerated` — trilha de auditoria transversal a todos os BCs
 
-- **Status:** Decided (deferred)
-- **Opened:** 2026-05-25
-- **Closed/Decided:** 2026-05-26
 - **Opened by:** Gabriel Aderaldo (via orquestrador)
 - **Asked to:** P.O. + análise interna do handbook
 - **Impact:** [ADR-0022](../architecture/adr/0022-read-models-via-projection-over-event-stream.md) (padrão de projeção decidido; materialização diferida até RBAC)
