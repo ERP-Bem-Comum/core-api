@@ -78,7 +78,7 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^22.10.0",
+    "@types/node": "^24.0.0",
     "@types/nodemailer": "^8.0.1",
     "@typescript/native-preview": "7.0.0-dev.20260515.1",
     "@usebruno/cli": "3.4.2",
