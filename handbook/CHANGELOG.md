@@ -4,6 +4,18 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-08-06 — ⚠️ Errata nos `ADR-0024` e `ADR-0055`: o port `Authenticator` nunca foi construído, e a premissa já tinha se propagado
+
+O [ADR-0024](./architecture/adr/0024-identity-and-rbac-auth-module.md) afirma, em quatro pontos (`:34`, `:84`, `:103`, `:117`), que a fonte de autenticação está abstraída por um port `Authenticator`, plugável por um `OidcAuthenticator` "sem refactor de domínio". **Esse port nunca existiu** — zero ocorrências do nome em `src/` e `tests/`. O que existe de preparo real para identidade externa é uma coisa só, e é verdadeira: `password_hash` nullable (`:68`).
+
+**Não é decisão errada — é decisão não executada.** A errata registra isso sem tocar o texto original, no molde do [ADR-0057](./architecture/adr/0057-claude-md-as-canonical-agent-doc.md) §4.
+
+**A premissa já tinha se propagado.** O [ADR-0055](./architecture/adr/0055-cognito-external-idp-supersedes-0024-authn.md) §2 justifica o nome da coluna `external_subject` dizendo que "o ADR-0024 desenhou um port `Authenticator` abstrato" e que `cognito_sub` "desfaria essa abstração". Não há abstração a desfazer. **A decisão permanece correta pela outra razão que o próprio parágrafo já dava** — o precedente de `legacy_id`, coluna neutra ao fornecedor —, e é essa que se sustenta sozinha: nome que carrega fornecedor obriga migration quando o fornecedor muda, argumento que independe de port algum. A errata existe para que o argumento falso não seja reutilizado numa terceira decisão.
+
+**O `Status` do ADR-0024 passou a declarar o supersede parcial.** O índice de ADRs já registrava `Accepted (authN superseded por 0055)` desde a entrada do 0055; **o arquivo do ADR não**. Quem abrisse o 0024 direto — sem passar pelo índice — leria como norma corrente a fonte de identidade, a emissão de token e o refresh opaco, todos superseded. O campo agora aponta o 0055 e delimita o que caiu, preservando explicitamente o RBAC, o catálogo e a autorização pura, que seguem **vigentes e inalterados**.
+
+**Por que só apareceu agora:** o inventário da spec 040 confronta ADR com `src/`, e foi assim que a ausência do port saltou ao reconstruir a `.claude/rules/auth-module.md`. A rule passou a cobrar o fato mecanicamente (`verify:` com `pattern: Authenticator`, `expect: []`) e a apontar o 0055 como norma vigente de authN — ela citava só o 0024. Um segundo `verify:` acende quando `external_subject` chegar ao schema, forçando a revisão da rule no momento em que o ADR-0055 for implementado. Registrado pela issue [#642](https://github.com/ERP-Bem-Comum/core-api/issues/642).
+
 ## 2026-08-05 — 📄 `ADR-0059` (Accepted) + ratificação do `ADR-0048` e do `ADR-0049`: a fronteira com o BFF fica descrita como ela é
 
 Três movimentos do **gate humano da Fase 1** da spec 040, todos disparados por uma coisa só: levar as alegações do inventário ao dono do repo em vez de inferi-las do código.

@@ -65,6 +65,21 @@ para que a identidade externa não amarrasse o schema; nomear a coluna `cognito_
 abstração sem ganho. Segue o precedente de `legacy_id` (int, UNIQUE, nullable), já usado para
 identidade de sistema externo.
 
+> ⚠️ **Errata (2026-08-06) — a premissa do parágrafo acima é falsa; a decisão não.** O port
+> `Authenticator` do ADR-0024 **nunca foi construído** (zero ocorrências em `src/` e `tests/`; ver a
+> errata em [ADR-0024 §1](./0024-identity-and-rbac-auth-module.md)). Logo, `cognito_sub` **não
+> desfaria** abstração alguma — não há abstração a preservar.
+>
+> **A escolha por `external_subject` permanece correta**, pela outra razão já citada aqui e que se
+> sustenta sozinha: o precedente de `legacy_id`, coluna neutra ao fornecedor para identidade de
+> sistema externo. Um nome que carrega o fornecedor obriga migration quando o fornecedor muda —
+> argumento que independe de qualquer port.
+>
+> Fica o registro para que **este argumento não seja reutilizado** em decisão nova: a abstração de
+> fonte de autenticação prometida pelo ADR-0024 é decisão **não executada**, e invocá-la como
+> propriedade existente do sistema propaga a premissa mais uma vez. Registrado pela issue
+> [#642](https://github.com/ERP-Bem-Comum/core-api/issues/642).
+
 **Algoritmo de resolução, em ordem obrigatória:**
 
 1. `findByExternalSubject(sub)` → se encontrar, autentica. **Fim.**
