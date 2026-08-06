@@ -28,11 +28,26 @@ cd "${CLAUDE_PROJECT_DIR:-$(pwd)}"
 
 LOGFILE=".claude/.last-quality-gate.log"
 mkdir -p .claude
+
+# O log é o único testemunho de que este hook rodou, e é truncado a cada execução
+# (senão cresce sem limite). Por isso TODO caminho de saída registra seu veredito —
+# inclusive os dois que não rodam gate nenhum. Antes, o truncamento acontecia aqui e
+# as saídas antecipadas devolviam exit 0 sem escrever nada: um arquivo de zero byte
+# não distinguia "gate passou" de "gate nem rodou", e o mtime recente dizia apenas
+# que ALGO aconteceu. Com todo caminho registrado, zero byte passa a significar uma
+# única coisa — o hook começou e morreu antes de decidir.
 : > "$LOGFILE"
+log() { printf '%s\n' "$*" >> "$LOGFILE"; }
+log "=== Stop hook — $(date -Iseconds) ==="
 
 # ── o que mudou desde o último commit (working tree + staged) ────────────────
 changed=$(git status --porcelain 2>/dev/null | awk '{print $NF}')
-[ -z "$changed" ] && exit 0
+if [ -z "$changed" ]; then
+  log "veredito: NÃO SE APLICA — working tree limpa, nada a verificar."
+  exit 0
+fi
+
+n_changed=$(printf '%s\n' "$changed" | wc -l | tr -d ' ')
 
 needs_gate=0
 while IFS= read -r f; do
@@ -44,23 +59,29 @@ while IFS= read -r f; do
   esac
 done <<< "$changed"
 
-[ "$needs_gate" -eq 0 ] && exit 0
+log "arquivos alterados: ${n_changed}"
+
+if [ "$needs_gate" -eq 0 ]; then
+  log "veredito: PULADO — nenhum alterado aciona o gate (sem .ts, tsconfig.json,"
+  log "          eslint.config.js ou package.json). Formatação já rodou no PostToolUse."
+  log ""
+  log "alterados:"
+  printf '%s\n' "$changed" | sed 's/^/  /' >> "$LOGFILE"
+  exit 0
+fi
 
 # ── gate: os 4 comandos, na ordem mais barata primeiro ───────────────────────
-{
-  echo "=== gate de qualidade (Stop hook) — $(date -Iseconds) ==="
-  echo "arquivos alterados: $(echo "$changed" | wc -l | tr -d ' ')"
-} >> "$LOGFILE"
+log "veredito: EXECUTANDO — há .ts ou arquivo de config na lista."
 
 failed=""
 run() {
   local name="$1"; shift
-  echo "" >> "$LOGFILE"
-  echo "── $name" >> "$LOGFILE"
+  log ""
+  log "── $name"
   if "$@" >> "$LOGFILE" 2>&1; then
-    echo "   ✓ verde" >> "$LOGFILE"
+    log "   ✓ verde"
   else
-    echo "   ✗ VERMELHO" >> "$LOGFILE"
+    log "   ✗ VERMELHO"
     failed="${failed}${name} "
   fi
 }
@@ -70,7 +91,14 @@ run "format:check" pnpm run format:check
 run "lint"         pnpm run lint
 run "test"         pnpm test
 
-[ -z "$failed" ] && exit 0
+if [ -z "$failed" ]; then
+  log ""
+  log "veredito: VERDE — typecheck, format:check, lint e test passaram."
+  exit 0
+fi
+
+log ""
+log "veredito: VERMELHO — falharam: ${failed}"
 
 # ── vermelho: bloqueia e entrega o diagnóstico ───────────────────────────────
 {
