@@ -240,7 +240,7 @@ A sintaxe é enforced pelo [`tsconfig.json`](./tsconfig.json) — `strict` compl
 
 ### 🟡 Em andamento
 
-- **`024-fin-transactional-outbox`** — outbox transacional do Financeiro (tabela `fin_outbox` espelhando `ctr_outbox`; atomicidade estado+evento na mesma transação, issue #127 / ADR-0015). Ver `specs/024-fin-transactional-outbox/plan.md`.
+- **`024-fin-transactional-outbox`** — outbox transacional do Financeiro (tabela `fin_outbox` espelhando `ctr_outbox`; atomicidade estado+evento na mesma transação, issue #127 / ADR-0015). Ver `handbook/specs/024-fin-transactional-outbox/plan.md`.
 - **ADR-0048 (Proposed)** — Anticorruption Layer legado↔core, gate das Camadas 0–2 (spike #233 / épico #169).
 
 ---
