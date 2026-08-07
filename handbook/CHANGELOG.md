@@ -34,6 +34,8 @@ Duas asserções cuidam de a allowlist não virar desculpa. **Todo prefixo prote
 
 Verificado por mutação, com backup e restauração: documento novo com link morto, allowlist alargada para `.claude/skills/`, redirect apontando para destino inexistente e entrada sem motivo legível — os quatro ficam vermelhos, e o baseline volta verde.
 
+**Correção de rota, achada pelo CI e não pela máquina de quem escreveu.** O gate media existência com `existsSync`, e `handbook/guidelines/` está no `.gitignore` (PDFs Bradesco, restrição de redistribuição): **existe para quem tem os arquivos e não existe no runner**, o que fazia o mesmo link ser vivo aqui e morto lá. Gate cuja resposta depende de qual máquina o executa não verifica nada. A existência passou a ser **"está no repositório"** — `git ls-files` mais `git check-ignore` em lote —, exatamente o que o `claude-md-links.test.ts` já fazia desde a #641, e a quinta saída `local-only` nomeia os 46 links que apontam para material deliberadamente ausente. Escolher `existsSync` foi não ter olhado o gate irmão que já resolvera o mesmo problema.
+
 ## 2026-08-07 — ↪️ Plano 041 (Fase 3): 91 links mortos endereçados sem editar um único documento histórico
 
 `handbook/redirects.json` — o "301 do repositório". **44 entradas**, cada uma com destino, motivo e data. O passivo de referência caiu de **137 para 46**: 71 links passaram a resolver por redirect e 20 viraram lápide declarada. Os 46 restantes são exatamente a classe protegida pelo [ADR-0057](./architecture/adr/0057-claude-md-as-canonical-agent-doc.md) §5, que a Fase 4 declara em allowlist.

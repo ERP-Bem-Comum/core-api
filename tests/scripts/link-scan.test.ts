@@ -34,17 +34,20 @@ const link = (over: Partial<LinkRef> = {}): LinkRef => ({
   ...over,
 });
 
+/** `tracked` é "está no repositório", NUNCA "existe neste disco" — ver o comentário em ClassifyInput. */
 const classify = (
   over: Partial<LinkRef>,
-  exists: boolean,
+  tracked: boolean,
   opts: {
+    ignored?: boolean;
     historicalPrefixes?: readonly string[];
     redirects?: ReadonlyMap<string, string | null>;
   } = {},
 ): string =>
   classifyLink({
     link: link(over),
-    targetExists: exists,
+    targetTracked: tracked,
+    targetIgnored: opts.ignored ?? false,
     mirrorPrefix: 'handbook/reference/',
     historicalPrefixes: opts.historicalPrefixes ?? [],
     redirects: opts.redirects ?? new Map(),
@@ -89,6 +92,27 @@ describe('LINK-SCAN — classificação', () => {
 
   it('alvo que existe é vivo — inclusive citado por reference/', () => {
     assert.equal(classify({ from: 'handbook/reference/drizzle/x.md' }, true), 'live');
+  });
+
+  it('alvo gitignored deliberadamente é local-only, não passivo', () => {
+    // O caso real que derrubou o CI: `handbook/guidelines/` (PDFs Bradesco, restrição de
+    // redistribuição) existe na máquina de quem tem os arquivos e não existe no runner. Medir
+    // por disco fazia o mesmo link ser vivo aqui e morto lá — gate cuja resposta depende da
+    // máquina não verifica nada.
+    assert.equal(
+      classify({ target: 'handbook/guidelines' }, false, { ignored: true }),
+      'local-only',
+    );
+  });
+
+  it('local-only ganha de mirror e de historical — a política vem antes da origem', () => {
+    assert.equal(
+      classify({ from: 'handbook/reference/x.md', target: 'handbook/guidelines' }, false, {
+        ignored: true,
+        historicalPrefixes: ['handbook/guidelines'],
+      }),
+      'local-only',
+    );
   });
 
   it('quebrado dentro de reference/ é mirror, não passivo nosso', () => {

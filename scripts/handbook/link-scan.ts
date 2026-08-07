@@ -1,5 +1,6 @@
 import process from 'node:process';
 import { readdirSync, readFileSync, existsSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { join, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -29,6 +30,13 @@ export interface LinkRef {
 export type LinkClass =
   /** Resolve para fora da raiz — espelho de doc de terceiro, cópia fiel da origem. */
   | 'escapes-repo'
+  /**
+   * O alvo não está no repositório, mas o `.gitignore` o exclui DELIBERADAMENTE — caso do
+   * `handbook/guidelines/` (PDFs Bradesco, restrição de redistribuição; ver CLAUDE.md §Material
+   * local-only). Existe na máquina de quem tem os arquivos e não existe no CI, e as duas coisas
+   * estão certas. Conta como endereçado: a ausência é a política, não um defeito.
+   */
+  | 'local-only'
   /** Citado por `handbook/reference/` — material de terceiro, não autoral. */
   | 'mirror'
   /** O alvo existe. */
@@ -49,7 +57,17 @@ export type LinkClass =
 
 export interface ClassifyInput {
   readonly link: LinkRef;
-  readonly targetExists: boolean;
+  /**
+   * O alvo está NO REPOSITÓRIO — não "existe neste disco".
+   *
+   * A distinção custou um vermelho de CI: medindo por `existsSync`, o `handbook/guidelines/`
+   * (gitignored) contava como vivo na máquina de quem tem os PDFs e como link morto no runner.
+   * Gate cuja resposta depende de qual máquina o roda não verifica nada — é a mesma razão pela
+   * qual `tests/cleanup/claude-md-links.test.ts` já usava `git ls-files` em vez do disco.
+   */
+  readonly targetTracked: boolean;
+  /** O `.gitignore` exclui o alvo de propósito. */
+  readonly targetIgnored: boolean;
   /** Prefixo do material de terceiro espelhado. */
   readonly mirrorPrefix: string;
   /** Prefixos de aparato expurgado. Vazio na Fase 0; a Fase 4 os pina. */
@@ -117,9 +135,10 @@ export function extractRelativeLinks(markdown: string): readonly string[] {
  * espelhado, que não é nosso para consertar. Classe que mistura vivo e morto não mede nada.
  */
 export function classifyLink(input: ClassifyInput): LinkClass {
-  const { link, targetExists, mirrorPrefix, historicalPrefixes, redirects } = input;
+  const { link, targetTracked, targetIgnored, mirrorPrefix, historicalPrefixes, redirects } = input;
   if (link.target.startsWith('..')) return 'escapes-repo';
-  if (targetExists) return 'live';
+  if (targetTracked) return 'live';
+  if (targetIgnored) return 'local-only';
   if (link.from.startsWith(mirrorPrefix)) return 'mirror';
   if (historicalPrefixes.some((p) => link.target.startsWith(p))) return 'historical';
   if (redirects.has(link.target)) {
@@ -130,6 +149,9 @@ export function classifyLink(input: ClassifyInput): LinkClass {
 
 export interface ScanOptions {
   readonly mirrorPrefix?: string;
+  /** Injetáveis para teste; em produção vêm do git. */
+  readonly tracked?: ReadonlySet<string>;
+  readonly ignored?: ReadonlySet<string>;
   readonly historicalPrefixes?: readonly string[];
   readonly redirects?: ReadonlyMap<string, string | null>;
 }
@@ -143,29 +165,79 @@ export const markdownFiles = (dir: string): readonly string[] =>
     return e.name.endsWith('.md') ? [p] : [];
   });
 
+/** Caminhos rastreados pelo git — a resposta a "está no repositório", independente deste disco. */
+export function trackedPaths(root: string): ReadonlySet<string> {
+  const raw = execFileSync('git', ['ls-files'], { cwd: root, encoding: 'utf-8', maxBuffer: 64e6 });
+  return new Set(raw.split('\n').filter(Boolean));
+}
+
+/**
+ * Quais dos candidatos o `.gitignore` exclui. Uma chamada só, via `--stdin`: um processo por link
+ * tornaria a varredura de 1288 arquivos inviável no gate.
+ */
+export function ignoredPaths(root: string, candidates: readonly string[]): ReadonlySet<string> {
+  if (candidates.length === 0) return new Set();
+  try {
+    const out = execFileSync('git', ['check-ignore', '--stdin'], {
+      cwd: root,
+      input: candidates.join('\n'),
+      encoding: 'utf-8',
+      maxBuffer: 64e6,
+    });
+    return new Set(out.split('\n').filter(Boolean));
+  } catch {
+    // exit 1 = nenhum candidato ignorado; qualquer outra falha degrada para "nada ignorado", que
+    // é o lado seguro: acusa link em vez de escondê-lo.
+    return new Set();
+  }
+}
+
 /** Varre `<root>/handbook` e classifica todo link relativo encontrado. */
 export function scanHandbook(root: string, opts: ScanOptions = {}): ScanResult {
   const mirrorPrefix = opts.mirrorPrefix ?? 'handbook/reference/';
   const historicalPrefixes = opts.historicalPrefixes ?? HISTORICAL_PREFIXES;
   const redirects = opts.redirects ?? new Map<string, string | null>();
 
-  const out = new Map<LinkClass, LinkRef[]>();
+  const found: LinkRef[] = [];
   for (const file of markdownFiles(join(root, 'handbook'))) {
     const from = relative(root, file);
-    const body = readFileSync(file, 'utf-8');
-    for (const raw of extractRelativeLinks(body)) {
+    for (const raw of extractRelativeLinks(readFileSync(file, 'utf-8'))) {
       const clean = decodeURIComponent(raw.split('#')[0] ?? '');
-      const abs = resolve(dirname(file), clean);
-      const link: LinkRef = { from, raw, target: relative(root, abs) };
-      const cls = classifyLink({
-        link,
-        targetExists: existsSync(abs),
-        mirrorPrefix,
-        historicalPrefixes,
-        redirects,
-      });
-      out.set(cls, [...(out.get(cls) ?? []), link]);
+      found.push({ from, raw, target: relative(root, resolve(dirname(file), clean)) });
     }
+  }
+
+  const tracked = opts.tracked ?? trackedPaths(root);
+  /** Diretório conta como rastreado quando algum arquivo rastreado vive dentro dele. */
+  const isTracked = (target: string): boolean => {
+    const clean = target.replace(/\/$/, '');
+    if (tracked.has(clean)) return true;
+    for (const p of tracked) if (p.startsWith(`${clean}/`)) return true;
+    return false;
+  };
+
+  const candidates = [...new Set(found.map((l) => l.target))].filter(
+    (t) => !t.startsWith('..') && !isTracked(t),
+  );
+  const ignored = opts.ignored ?? ignoredPaths(root, candidates);
+  const isIgnored = (target: string): boolean => {
+    const clean = target.replace(/\/$/, '');
+    if (ignored.has(clean)) return true;
+    for (const p of ignored) if (clean.startsWith(`${p}/`)) return true;
+    return false;
+  };
+
+  const out = new Map<LinkClass, LinkRef[]>();
+  for (const link of found) {
+    const cls = classifyLink({
+      link,
+      targetTracked: isTracked(link.target),
+      targetIgnored: isIgnored(link.target),
+      mirrorPrefix,
+      historicalPrefixes,
+      redirects,
+    });
+    out.set(cls, [...(out.get(cls) ?? []), link]);
   }
   return out;
 }
@@ -197,6 +269,7 @@ function main(): void {
     'escapes-repo',
     'mirror',
     'live',
+    'local-only',
     'redirected',
     'tombstoned',
     'historical',
