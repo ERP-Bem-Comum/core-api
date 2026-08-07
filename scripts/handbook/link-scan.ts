@@ -177,14 +177,21 @@ export function trackedPaths(root: string): ReadonlySet<string> {
  */
 export function ignoredPaths(root: string, candidates: readonly string[]): ReadonlySet<string> {
   if (candidates.length === 0) return new Set();
+  // Consulta as DUAS formas, `x` e `x/`, e a razão é uma armadilha comprovada em repo isolado:
+  // padrão de DIRETÓRIO no .gitignore (`handbook/guidelines/`) só casa o caminho SEM barra quando
+  // o diretório existe no disco — o git não tem como saber que um caminho ausente seria um
+  // diretório. Como o material local-only justamente não existe no CI, consultar só a forma sem
+  // barra respondia "ignorado" na máquina de quem tem os arquivos e "não ignorado" no runner.
+  // Foi este detalhe, e não a lógica de classificação, que derrubou o gate duas vezes.
+  const probes = candidates.flatMap((c) => [c, `${c}/`]);
   try {
     const out = execFileSync('git', ['check-ignore', '--stdin'], {
       cwd: root,
-      input: candidates.join('\n'),
+      input: probes.join('\n'),
       encoding: 'utf-8',
       maxBuffer: 64e6,
     });
-    return new Set(out.split('\n').filter(Boolean));
+    return new Set(out.split('\n').filter(Boolean).map((p) => p.replace(/\/$/, '')));
   } catch {
     // exit 1 = nenhum candidato ignorado; qualquer outra falha degrada para "nada ignorado", que
     // é o lado seguro: acusa link em vez de escondê-lo.

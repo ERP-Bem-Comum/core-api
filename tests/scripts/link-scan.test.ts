@@ -12,9 +12,12 @@
  * forma quebrada, e extrator que não distingue uso de menção acusa quem a documenta.
  */
 
-import { describe, it } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { resolve } from 'node:path';
+import { join, resolve } from 'node:path';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 import {
@@ -22,6 +25,7 @@ import {
   extractRelativeLinks,
   classifyLink,
   scanHandbook,
+  ignoredPaths,
   type LinkRef,
 } from '../../scripts/handbook/link-scan.ts';
 
@@ -149,6 +153,39 @@ describe('LINK-SCAN — classificação', () => {
   it('alvo sem entrada alguma segue sendo o passivo', () => {
     const redirects = new Map<string, string | null>([['outro.md', null]]);
     assert.equal(classify({ target: 'handbook/domain/x.md' }, false, { redirects }), 'unaddressed');
+  });
+});
+
+describe('LINK-SCAN — gitignore de diretório ausente (o caso que derrubou o CI duas vezes)', () => {
+  let repo = '';
+
+  before(() => {
+    repo = mkdtempSync(join(tmpdir(), 'link-scan-ignore-'));
+    execFileSync('git', ['init', '--quiet'], { cwd: repo });
+    // Padrão de DIRETÓRIO, e o diretório NÃO é criado — é a situação exata do runner de CI, onde
+    // `handbook/guidelines/` (PDFs sob restrição de redistribuição) não existe.
+    writeFileSync(join(repo, '.gitignore'), 'material-local/\n');
+  });
+
+  after(() => {
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  it('reconhece como ignorado mesmo com o diretório ausente do disco', () => {
+    // Com a consulta feita só na forma sem barra, este caso responde "não ignorado" — e foi assim
+    // que o gate passou na máquina de quem escreveu e falhou no CI, duas vezes seguidas.
+    assert.ok(
+      ignoredPaths(repo, ['material-local']).has('material-local'),
+      'padrão de diretório precisa ser reconhecido mesmo quando o diretório não existe no disco',
+    );
+  });
+
+  it('caminho que ninguém ignora segue de fora', () => {
+    assert.equal(ignoredPaths(repo, ['outro-diretorio']).has('outro-diretorio'), false);
+  });
+
+  it('lista vazia não invoca o git', () => {
+    assert.equal(ignoredPaths(repo, []).size, 0);
   });
 });
 
