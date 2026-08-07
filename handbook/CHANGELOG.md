@@ -4,6 +4,76 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-08-07 — 🆔 Plano 041 (Fases 6 e 5): frescor vira sinal, e a referência deixa de ser um caminho
+
+**Fase 6 — `last_reviewed` deixa de ser decoração.** As 29 inquiries preenchiam o campo e **nada o lia**. Agora inquiry `open` ou `blocked` que passe **90 dias** sem revisão falha o gate. A janela é generosa de propósito: inquiry bloqueada em terceiro não anda por vontade própria, e alarme mensal vira ruído que se aprende a silenciar. As [0011](./inquiries/0011-auditoria-fiscal-cross-periodo.md) e [0012](./inquiries/0012-bff-managed-api-gateway-vs-fastify.md) esperam a **mesma banca desde maio**, e ninguém tinha percebido — em novembro elas acendem sozinhas.
+
+Revisar não é carimbar a data, e o gate diz isso na mensagem de erro: releia e responda se o bloqueio ainda é o mesmo. Uma segunda asserção fecha o atalho óbvio — **`last_reviewed` no futuro** ganharia meses de silêncio com um toque, e revisão que ainda não aconteceu não conta como revisão.
+
+**Fase 5 — o identificador passa a ser a referência.** As fases anteriores *contiveram* o link morto; nenhuma atacou a causa, que é o caminho do arquivo ser a identidade do documento. `scripts/handbook/refs.ts` registra **124 identificadores** (`adr-NNNN`, `inquiry-NNNN`, `spec-NNN`) derivados do prefixo numérico que o `handbook-numbering` já garante único, e `tests/cleanup/handbook-refs.test.ts` cobra que todo `[[id]]` resolva.
+
+**A prova do ganho foi feita por mutação:** renomear o arquivo `0018-auditlog-transversal-todos-bcs.md` **não quebrou** nenhuma citação `[[inquiry-0018]]` — o gate seguiu verde. Com citação por caminho, o mesmo rename produziria três links mortos, dois deles em documento que não se pode editar.
+
+**A forma antiga de `[[…]]` era o pior dos dois mundos.** O repositório já usava `[[0018-auditlog-transversal-todos-bcs]]` — o nome do arquivo —, que **não é clicável no GitHub nem sobrevive a rename**. Normalizada para `[[inquiry-0018]]`, que ao menos entrega a segunda coisa.
+
+**A sintaxe colide, e o padrão é restritivo por causa disso.** `[[` … `]]` aparece no repositório em teste de bash (`[[ "$x" == y ]]`) e em array aninhado de exemplo. O regex exige `tipo-numero` em minúsculas, sem espaço nem aspas — e há teste para cada uma dessas colisões, porque descobri as duas varrendo o repo, não imaginando.
+
+⚠️ **Limitação declarada, não resolvida:** `[[id]]` não é clicável no GitHub. O ganho é sobreviver a rename; o custo é um clique. A convenção registrada no [README das inquiries](./inquiries/README.md) recomenda **identificador onde o alvo é volátil** (inquiry, spec, ADR citado de longe) e **caminho onde é estável e a navegação importa**. Expandir `[[id]]` para link markdown no disco resolveria os dois lados, mas criaria mais um derivado a manter em dia — fica em aberto.
+
+## 2026-08-07 — 🚦 Plano 041 (Fase 4): o gate de referência do handbook liga, com **zero** links não endereçados
+
+`tests/cleanup/handbook-links.test.ts` entra no `pnpm test`: link do handbook sem destino, sem redirect e sem lápide **falha o gate**. O passivo que abriu o plano — 137 — está em **0**.
+
+**Este gate só pôde nascer agora, e a ordem não foi preferência.** Ligá-lo junto com o scanner, três fases atrás, obrigaria a violar o [ADR-0057](./architecture/adr/0057-claude-md-as-canonical-agent-doc.md) §5 para ficar verde: 46 dos 137 apontam para o aparato expurgado pelas specs 038/039, cujas referências aquele ADR declara invariantes. Gate que só se satisfaz com a quebra de um invariante não é gate, é armadilha.
+
+Os 46 passaram a ser **declarados**, não consertados: oito prefixos em `HISTORICAL_PREFIXES`, cada um com a razão de existir, **pinados por `deepEqual`** no molde do `KNOWN_COLLISIONS` do `handbook-numbering`. Acrescentar prefixo ali afrouxa o gate e por isso tem de aparecer em diff de PR, com justificativa.
+
+Duas asserções cuidam de a allowlist não virar desculpa. **Todo prefixo protegido precisa estar mesmo ausente do disco** — o ADR-0057 §5 protege referência a coisa que não existe mais; se `.specify/` ressuscitar, a entrada deixa de proteger e passa a esconder um link que teria destino real. E **nenhum prefixo pode ser largo demais**: a lista nomeia `.claude/skills/pipeline-maestro/` e `.claude/skills/speckit-` justamente porque `.claude/skills/` cobriria as skills em uso.
+
+**Quatro saídas, e "consertar o link" é só a primeira.** Corrigir o texto quando o documento é editável; redirect quando mudou de lugar; lápide quando morreu; allowlist quando é registro histórico protegido. Editar ADR aceito continua não sendo saída.
+
+Verificado por mutação, com backup e restauração: documento novo com link morto, allowlist alargada para `.claude/skills/`, redirect apontando para destino inexistente e entrada sem motivo legível — os quatro ficam vermelhos, e o baseline volta verde.
+
+**Correção de rota, achada pelo CI e não pela máquina de quem escreveu.** O gate media existência com `existsSync`, e `handbook/guidelines/` está no `.gitignore` (PDFs Bradesco, restrição de redistribuição): **existe para quem tem os arquivos e não existe no runner**, o que fazia o mesmo link ser vivo aqui e morto lá. Gate cuja resposta depende de qual máquina o executa não verifica nada. A existência passou a ser **"está no repositório"** — `git ls-files` mais `git check-ignore` em lote —, exatamente o que o `claude-md-links.test.ts` já fazia desde a #641, e a quinta saída `local-only` nomeia os 46 links que apontam para material deliberadamente ausente. Escolher `existsSync` foi não ter olhado o gate irmão que já resolvera o mesmo problema.
+
+## 2026-08-07 — ↪️ Plano 041 (Fase 3): 91 links mortos endereçados sem editar um único documento histórico
+
+`handbook/redirects.json` — o "301 do repositório". **44 entradas**, cada uma com destino, motivo e data. O passivo de referência caiu de **137 para 46**: 71 links passaram a resolver por redirect e 20 viraram lápide declarada. Os 46 restantes são exatamente a classe protegida pelo [ADR-0057](./architecture/adr/0057-claude-md-as-canonical-agent-doc.md) §5, que a Fase 4 declara em allowlist.
+
+**Nenhum documento foi editado para isso** — nem os 7 links quebrados que vivem dentro de ADR aceito, nem `specs/`, `reviews/` ou `po-feedback/`, todos registro datado. Era exatamente o ponto do desenho: endereçar sem reescrever história.
+
+**A reorganização `domain/` → `domain_questions/` não foi um rename, e o mapa mostra por quê.** A raiz de `domain/` era o módulo **financeiro** (contratos vivia em `domain/contratos/`), e os BCs perderam o prefixo numérico ao virar `bounded-contexts/*.md`. Duas correspondências saíram do texto de quem cita, não do nome do arquivo: o `DOCUMENTO_MESTRE.md` da raiz é a Especificação Mestra do Financeiro — quem o cita descreve "modelo centrado em **Fato Gerador** (documento fiscal soberano)" —, e `06-event-line-context.md` é a matriz de eventos do financeiro, porque quem cita a chama assim.
+
+**Cinco documentos ganharam lápide em vez de destino**, e a razão é a mesma nos cinco: redirect que aponta para documento diferente engana com aparência de sucesso, o que é pior que link morto — este ao menos avisa. O mais caro é o `domain/10-mapeamento-legado-schema.md`, mapeamento das 32 tabelas do dump legado, citado 11 vezes e **inexistente no repositório**: a [inquiry 0014](./inquiries/0014-schema-legado-vs-modelo-alvo.md) recebeu o aviso de que retomá-la exige refazer o mapeamento a partir de `database/.dump/schema-only.sql`.
+
+**A lápide passou a contar como endereçada, e isso foi uma decisão da fase.** A Fase 0 a classificava como passivo, com o comentário "até a Fase 3 decidir". Decidiu-se que sim: o link segue quebrado para quem clica, mas alguém decidiu, escreveu por quê e datou — é tudo o que um gate pode exigir. Proibir que documento morra seria outra política. A classe `tombstoned` existe separada de `redirected` para que o custo continue visível.
+
+Três achados que só o `git log` deu: `PAR-ACT-ACORDO.md` não morreu, **mudou de `tickets/todo/` para `tickets/done/`**; dois cards de grid foram **consolidados** num sucessor que declara absorvê-los; e a entrevista `Pergunta_H2` existe com outro sufixo de skill — foi conduzida com `ports-and-adapters`, não `ts-domain-modeler`. Nenhum dos três era lápide, e supor teria enterrado documento vivo.
+
+## 2026-08-07 — 🪦 Plano 041 (Fase 2): apagar documento citado deixa de ser silencioso
+
+`handbook/domain/` deixou de existir num commit levando **59 referências** junto, e nada acusou — três meses depois o custo caiu sobre quem foi seguir os links, e metade deles não pode nem ser consertada, porque vive em ADR imutável. Esta é a única fase do plano que ataca a **causa** e não o estoque.
+
+O `.githooks/pre-commit` passou a encadear [`pre-commit-tombstone.sh`](../.claude/hooks/pre-commit-tombstone.sh) antes do gate de qualidade: `.md` deletado ou renomeado que outro documento ainda cita **recusa o commit**, até haver declaração em `handbook/redirects.json` — destino novo, ou lápide (`to: null` + motivo).
+
+**A lápide passa de propósito.** O gate não decide se um documento pode morrer; decide que a morte precisa ser declarada. Quem escreve "morreu, sem substituto, por isto" deixou rastro; quem apaga em silêncio transfere o custo para o próximo leitor.
+
+**Por que não vive dentro do `pre-commit-typecheck.sh`:** aquele gate sai cedo quando não há `.ts` staged — e o commit que apaga só documentação é exatamente o que ele nunca inspecionaria. O filtro barato mora no shell: só invoca o node quando o diff staged tem `.md` removido, então commit comum não paga nada além de um `git diff --cached`.
+
+Os backlinks são construídos com o mesmo extrator do `link-scan`, e por isso herdam a regra de menção × uso: documento que só **exibe** a sintaxe de um link, dentro de crase, não impede a remoção do alvo.
+
+## 2026-08-07 — 🔗 Plano 041 (Fases 0 e 1): o handbook ganha medição de referência, e o índice das inquiries passa a ser gerado de fato
+
+**O `INDEX.md` das inquiries dizia "Gerado a partir do disco. Não editar à mão" e o `inquiry-hygiene.test.ts` mandava "regere com o script do README" — esse script nunca existiu.** O índice era mantido à mão fingindo ser derivado, e o teste era a muleta que segurava a ficção. `scripts/handbook/inquiry-index.ts` é o script que faltava: gera o `INDEX.md` inteiro e a região marcada do [`PERGUNTAS-EM-ABERTO.md`](./inquiries/PERGUNTAS-EM-ABERTO.md) a partir do frontmatter, com `pnpm run docs:index`. A prova de que o gerador está certo é o diff da adoção: **três linhas** — ele reproduziu o arquivo mantido à mão quase byte a byte.
+
+**O derivado não carrega data de geração, e isso é decisão.** O índice trazia "Última geração: 2026-08-06"; carimbar a data de hoje num arquivo gerado faz o `--check` acender amanhã sem ninguém ter tocado em nada, e gate que acende sozinho é gate que se aprende a ignorar. Quem data o índice é o `git log`.
+
+**Antes disso, a medição.** `scripts/handbook/link-scan.ts` (`pnpm run docs:links`) classifica todo link relativo do handbook em `escapes-repo` · `mirror` · `live` · `redirected` · `historical` · `unaddressed`. O passivo autoral é de **137 links não endereçados** — e o número foi reconciliado, não estimado: a contagem manual dizia 138, e a diferença são **duas menções** que um extrator ingênuo lia como uso. Daí a regra que o scanner implementa: remover blocos cercados **e código inline** antes de procurar link, porque todo documento que **documenta** a convenção cita a forma quebrada. O `plan.md` da spec 041 foi o primeiro a ser acusado por explicar o próprio defeito.
+
+**Nenhum gate de link foi ligado**, e é deliberado: 46 dos 137 apontam para o aparato expurgado pelas specs 038/039, que o [ADR-0057](./architecture/adr/0057-claude-md-as-canonical-agent-doc.md) §5 proíbe reescrever. Gate que nasce vermelho obriga a violar um ADR aceito para ficar verde. A Fase 4 o liga, depois que redirects e allowlist histórica endereçarem o estoque — plano completo em [`specs/041-handbook-reference-integrity/plan.md`](./specs/041-handbook-reference-integrity/plan.md).
+
+**O `README` das inquiries deixou de mentir em dois pontos:** mandava atualizar o índice à mão, e listava sete status em prosa livre (`Pending Response`, `Under Analysis`, `Closed`, `Cancelled`) que o gate nunca aceitou — o conjunto fechado é `open` · `blocked` · `decided` · `deferred` · `superseded`.
+
 ## 2026-08-06 — ⚠️ Errata nos `ADR-0024` e `ADR-0055`: o port `Authenticator` nunca foi construído, e a premissa já tinha se propagado
 
 O [ADR-0024](./architecture/adr/0024-identity-and-rbac-auth-module.md) afirma, em quatro pontos (`:34`, `:84`, `:103`, `:117`), que a fonte de autenticação está abstraída por um port `Authenticator`, plugável por um `OidcAuthenticator` "sem refactor de domínio". **Esse port nunca existiu** — zero ocorrências do nome em `src/` e `tests/`. O que existe de preparo real para identidade externa é uma coisa só, e é verdadeira: `password_hash` nullable (`:68`).
@@ -197,7 +267,7 @@ via worker dedicado (molde da feature 014), idempotente por `eventId` (Vernon, _
 
 Novo [ADR-0045](./architecture/adr/0045-financial-supplier-read-model.md) (**Accepted**), **estende**
 [ADR-0015](./architecture/adr/0015-mysql-outbox-pattern.md)/[ADR-0022](./architecture/adr/0022-read-models-via-projection-over-event-stream.md)/[ADR-0043](./architecture/adr/0043-partners-supplier-integration-events.md).
-Feature [`014-financial-supplier-readmodel`](../specs/014-financial-supplier-readmodel/) (issue #47 US2).
+Feature [`014-financial-supplier-readmodel`](./specs/014-financial-supplier-readmodel/) (issue #47 US2).
 
 - O `financial` mantém `fin_supplier_view` (read-model local) alimentado **só** por eventos do `partners`
   via `par_outbox` — o grid resolve nome+CNPJ sem chamada cross-módulo em runtime (LEFT JOIN intra-`financial`).
@@ -222,7 +292,7 @@ módulo 11 com `valor(c) = ASCII(c) − 48`. **Retrocompatível** (numérico val
 
 Novo [ADR-0043](./architecture/adr/0043-partners-supplier-integration-events.md) (**Accepted**), **estende**
 [ADR-0015](./architecture/adr/0015-mysql-outbox-pattern.md) (outbox) e [ADR-0006](./architecture/adr/0006-modular-monolith-core-api.md)
-(comunicação cross-módulo por eventos). Feature [`013-partners-supplier-outbox`](../specs/013-partners-supplier-outbox/) ·
+(comunicação cross-módulo por eventos). Feature [`013-partners-supplier-outbox`](./specs/013-partners-supplier-outbox/) ·
 issue [#92](https://github.com/ERP-Bem-Comum/core-api/issues/92) (pré-requisito da US2 da #47, read-model de fornecedor no `financial`).
 
 - O `partners` passa a **publicar** `SupplierRegistered` e `SupplierEdited` no outbox `par_outbox` (ticket `PAR-SUPPLIER-EVENTS`).
@@ -252,7 +322,7 @@ Feature `specs/010-fin-listagem-timeline/` (FR-009/ADR-0002 da feature). O token
 ser **devolvido em toda resposta de documento** (`POST`/`PATCH`/`approve`/`undo-approval`, `GET /:id`, e em cada item de
 `GET /documents`), permitindo ao **frontend** participar do controle de concorrência.
 
-- **Contrato de consumo (frontend):** [`specs/010-fin-listagem-timeline/frontend-optimistic-lock.md`](../specs/010-fin-listagem-timeline/frontend-optimistic-lock.md)
+- **Contrato de consumo (frontend):** [`specs/010-fin-listagem-timeline/frontend-optimistic-lock.md`](./specs/010-fin-listagem-timeline/frontend-optimistic-lock.md)
   — ler o `version` da resposta → reenviar no `PATCH`/`approve`/`undo-approval` → em `409 document-version-conflict`,
   re-buscar (`GET /:id`) e repetir. Mapa de status + exemplos de request/response.
 - **Por quê (canônico):** Vernon, _Implementing DDD_ (`ddd--vernon-livro-vermelho.md:8869`) — a checagem compara a versão
@@ -342,7 +412,7 @@ inversão de prioridade **CLI → HTTP** já consumada pelos ADRs 0025/0027/0028
 
 ## 2026-06-06 — 🔎 Épico `003-partners-aggregator-export` — agregador `/partners` + paridade de export CSV (`/api/v1`)
 
-Épico [`specs/003-partners-aggregator-export/`](../specs/003-partners-aggregator-export/), originado dos
+Épico [`specs/003-partners-aggregator-export/`](./specs/003-partners-aggregator-export/), originado dos
 **ITENs 3 e 4** do retorno do front (gaps restantes de `partners` `/api/v1`, fora do escopo da spec `001`).
 Entregue via pipeline `core-api-sdd` (2 tickets W0→W3 closed-green). **Sem schema/migration** — leitura e
 serialização na borda; cross-BC inexistente (só o módulo `partners`).
@@ -358,7 +428,7 @@ Fecha gaps da família partners `/api/v1` do `web-app/specs/008-partners/api-rea
 
 ## 2026-06-06 — 🔗 Épico `002-contracts-http-gaps` — vínculo de contratado + PATCH de metadados (`/api/v2`)
 
-Épico [`specs/002-contracts-http-gaps/`](../specs/002-contracts-http-gaps/) (PR #18 → `dev`), originado do
+Épico [`specs/002-contracts-http-gaps/`](./specs/002-contracts-http-gaps/) (PR #18 → `dev`), originado do
 [`po-feedback/0001`](./po-feedback/0001-gap-api-v2-contracts.md) + [ADR-0032](./architecture/adr/0032-transient-http-composition-read-until-bff.md).
 Fecha os ITENs 1 e 2 do retorno do front (Bucket B/D). Entregue via pipeline `core-api-sdd` (5 tickets W0→W3).
 
