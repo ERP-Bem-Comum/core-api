@@ -19,14 +19,14 @@
 
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import {
   scanHandbook,
   loadRedirects,
   HISTORICAL_PREFIXES,
+  repoPaths,
 } from '../../scripts/handbook/link-scan.ts';
 
 const PROJECT_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
@@ -74,17 +74,19 @@ describe('HANDBOOK-LINKS — a allowlist histórica não cresce em silêncio', (
     ]);
   });
 
-  it('todo prefixo protegido está mesmo ausente do disco', () => {
+  it('todo prefixo protegido está mesmo ausente do repositório', () => {
     // O ADR-0057 §5 protege referência a coisa que NÃO EXISTE MAIS. Se um destes ressuscitar, a
     // entrada deixa de ser proteção e vira desculpa: o link passaria a ter destino real e o gate
     // estaria escondendo isso.
-    const alive = HISTORICAL_PREFIXES.filter((p) =>
-      existsSync(join(PROJECT_ROOT, p.replace(/\/$/, ''))),
-    ).sort();
+    //
+    // "Ausente do REPOSITÓRIO", não do disco: um aparato que alguém recriasse localmente sem
+    // commitar continuaria ausente para quem clona, e é a versão clonada que o gate defende.
+    const repo = repoPaths(PROJECT_ROOT, [...HISTORICAL_PREFIXES]);
+    const alive = HISTORICAL_PREFIXES.filter((p) => repo.isTracked(p)).sort();
     assert.deepEqual(
       alive,
       [],
-      'prefixo na allowlist histórica existe no disco — remova a entrada e deixe os links resolverem:\n' +
+      'prefixo na allowlist histórica existe no repositório — remova a entrada e deixe os links resolverem:\n' +
         alive.join('\n'),
     );
   });

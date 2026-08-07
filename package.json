@@ -28,6 +28,7 @@
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --cache",
     "lint:fix": "eslint . --fix --cache",
+    "docs:inventory": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/inventory.ts",
     "docs:index": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/inquiry-index.ts",
     "docs:refs": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/refs.ts",
     "docs:links": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/link-scan.ts",

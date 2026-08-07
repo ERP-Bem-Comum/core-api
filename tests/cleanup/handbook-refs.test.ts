@@ -16,10 +16,10 @@
 
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { existsSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+import { repoPaths } from '../../scripts/handbook/link-scan.ts';
 import {
   buildRegistry,
   findRefs,
@@ -47,9 +47,12 @@ describe('HANDBOOK-REFS — todo identificador citado existe', () => {
     );
   });
 
-  it('todo caminho do registro existe no disco', () => {
-    const dead = [...registry()]
-      .filter(([, path]) => !existsSync(join(PROJECT_ROOT, path)))
+  it('todo caminho do registro está no repositório', () => {
+    // Pelo git, não pelo disco — ver .claude/rules/testing.md §"Gate estrutural pergunta ao git".
+    const reg = registry();
+    const repo = repoPaths(PROJECT_ROOT, [...reg.values()]);
+    const dead = [...reg]
+      .filter(([, path]) => !repo.exists(path))
       .map(([id, path]) => `${id} → ${path}`)
       .sort();
     assert.deepEqual(dead, [], 'registro aponta para caminho inexistente:\n' + dead.join('\n'));
