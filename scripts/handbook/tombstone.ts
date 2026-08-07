@@ -81,16 +81,27 @@ export function buildBacklinks(
   return out;
 }
 
-/** `.md` deletados (D) ou renomeados (R) no índice do git. */
+/**
+ * `.md` que DEIXARAM de existir no caminho antigo — deletados (D) ou renomeados (R).
+ *
+ * `--name-status`, e não `--name-only`, porque num rename o `--name-only` devolve o caminho de
+ * DESTINO: o gate lia o arquivo recém-criado como removido e recusava toda reorganização, inclusive
+ * a que preserva os links. Foi o que aconteceu na primeira movimentação real de pasta.
+ *
+ * Formato: `D<TAB>caminho` para deleção, `R100<TAB>antigo<TAB>novo` para rename. O que interessa
+ * nos dois casos é o PRIMEIRO caminho — o endereço que deixou de responder.
+ */
 export function stagedRemovedMarkdown(root: string): readonly string[] {
-  const raw = execFileSync('git', ['diff', '--cached', '--diff-filter=DR', '--name-only'], {
+  const raw = execFileSync('git', ['diff', '--cached', '--diff-filter=DR', '--name-status'], {
     cwd: root,
     encoding: 'utf-8',
   });
   return raw
     .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l.endsWith('.md'));
+    .filter(Boolean)
+    .map((line) => line.split('\t')[1] ?? '')
+    .map((p) => p.trim())
+    .filter((p) => p.endsWith('.md'));
 }
 
 export function formatViolations(violations: readonly TombstoneViolation[]): string {

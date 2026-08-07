@@ -34,7 +34,7 @@ Este inventário mede três coisas por diretório, e nenhuma delas é qualidade:
 | `handbook/architecture` | 66 | 8.665 | **0** | **117** | 1d |
 | `handbook/interviews` | 51 | 8.392 | 2 | 3 | 80d |
 | `handbook/inquiries` | 33 | 5.878 | **0** | 30 | 0d |
-| `handbook/tickets` | 33 | 2.178 | 8 | 6 | 53d |
+| `handbook/tickets` | 33 | 2.110 | **1** | 2 | 53d |
 | `.claude/agent-memory` | 25 | 516 | 7 | **0** | 1d |
 | `handbook/domain_questions` | 22 | 3.243 | 0 | 37 | 23d |
 | `.claude/rules` | 16 | 571 | 4 | 24 | 0d |
@@ -110,7 +110,7 @@ da conta muda a escala do problema: o material **autoral** são ~730 arquivos, n
 | diretório | sinal | leitura |
 | :--- | :--- | :--- |
 | `handbook/research` | 5 arquivos, **0 órfãos**, 4 citadores, 58d | ✅ **resolvido** — `feture_propose/` é fonte canônica de 4 specs entregues e **ficou**; os 3 cookbooks de terceiro foram para `reference/ia-tooling/` |
-| `handbook/tickets` | 8 de 33 órfãos, 6 citadores, 53d | kanban migrou para issues do GitHub; resta saber o que em `todo/` ainda é backlog |
+| `handbook/tickets` | 33 arquivos, **1 órfão**, 53d | ✅ **resolvido** — os 14 cards de `todo/` descreviam trabalho concluído; `todo/` foi absorvido por `done/` e o README declara o handoff encerrado |
 | `handbook/interviews` | 51 arquivos, 2 órfãos, 80d | o mais silencioso, mas quase tudo é citado — arquivo histórico legítimo |
 | `handbook/legacy_docs` · `runbooks` | 2 arquivos cada, **zero citadores** | os únicos com alcance realmente nulo |
 
@@ -129,8 +129,10 @@ Nenhuma destas é decisão de ferramenta; todas são de quem conhece o conteúdo
    é fonte canônica de 4 specs entregues e **ficou**. Os 3 cookbooks de terceiro (4.256 linhas, 62% do
    diretório) foram para `reference/ia-tooling/`, com entrada em `redirects.json`. O diretório passou a
    ter **5 arquivos e zero órfãos** — material autoral, todo referenciado.
-2. **`handbook/tickets`** — o kanban migrou para issues do GitHub. O que resta em `todo/` ainda é
-   backlog vivo, ou é registro do que já foi absorvido?
+2. ✅ **`handbook/tickets` — RESOLVIDO em 2026-08-07.** A triagem confrontou os 14 cards de `todo/` contra
+   a borda HTTP: **todos descreviam trabalho concluído**. `todo/` foi absorvido por `done/`, o README passou
+   a declarar o diretório como arquivo de handoff encerrado, e o único tema vivo (auto-expire em estado
+   `Pendente`) já tinha issue própria — a #426.
 3. **`handbook/interviews`** — 51 arquivos de uma entrevista fechada. Arquivo histórico (fica como
    está, quieto e legítimo) ou material a consolidar num documento só?
 4. **`handbook/api_documentations`** — 2 YAML, 71 dias. É gerado pelo ADR-0027 (contract-first) ou é

@@ -12,6 +12,7 @@
 import { describe, it, before, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { execFileSync } from 'node:child_process';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -19,6 +20,7 @@ import {
   checkTombstones,
   buildBacklinks,
   formatViolations,
+  stagedRemovedMarkdown,
   type TombstoneViolation,
 } from '../../scripts/handbook/tombstone.ts';
 
@@ -119,6 +121,36 @@ describe('TOMBSTONE — backlinks a partir do disco', () => {
 
   it('diretório de origem inexistente não quebra a varredura', () => {
     assert.doesNotThrow(() => buildBacklinks(root, ['handbook', 'nao-existe']));
+  });
+});
+
+describe('TOMBSTONE — rename devolve o caminho ANTIGO (o que derrubou a 1ª reorganização)', () => {
+  let repo = '';
+
+  before(() => {
+    repo = mkdtempSync(join(tmpdir(), 'tombstone-rename-'));
+    const git = (...args: readonly string[]): void => {
+      execFileSync('git', [...args], { cwd: repo, stdio: 'ignore' });
+    };
+    git('init', '--quiet');
+    git('config', 'user.email', 'teste@exemplo.dev');
+    git('config', 'user.name', 'Teste');
+    mkdirSync(join(repo, 'todo'), { recursive: true });
+    writeFileSync(join(repo, 'todo/card.md'), '# card\n');
+    git('add', '.');
+    git('commit', '--quiet', '-m', 'inicial');
+    mkdirSync(join(repo, 'done'), { recursive: true });
+    git('mv', 'todo/card.md', 'done/card.md');
+  });
+
+  after(() => {
+    rmSync(repo, { recursive: true, force: true });
+  });
+
+  it('reporta o caminho que deixou de existir, não o recém-criado', () => {
+    // Com `--name-only`, o git devolve o DESTINO do rename: o gate lia o arquivo novo como
+    // removido e recusava toda reorganização de pasta — inclusive a que preserva os links.
+    assert.deepEqual(stagedRemovedMarkdown(repo), ['todo/card.md']);
   });
 });
 
