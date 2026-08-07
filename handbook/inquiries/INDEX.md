@@ -2,8 +2,8 @@
 
 # 📑 Índice de Inquiries
 
-> **Gerado a partir do disco.** Não editar à mão — o estado de cada inquiry vive no frontmatter
-> do próprio arquivo, e `tests/cleanup/inquiry-hygiene.test.ts` trava qualquer divergência.
+> **Gerado por `pnpm run docs:index`.** Não editar à mão — o estado de cada inquiry vive no
+> frontmatter do próprio arquivo, e `tests/cleanup/inquiry-hygiene.test.ts` trava qualquer divergência.
 
 ## Panorama
 
@@ -15,7 +15,7 @@
 | `deferred` | 3 | o gatilho declarado |
 | `superseded` | 1 | — |
 
-Total: **29**. Última geração: 2026-08-06.
+Total: **29**.
 
 ---
 

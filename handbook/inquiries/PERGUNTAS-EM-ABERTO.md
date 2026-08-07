@@ -2,208 +2,268 @@
 
 # ❓ Perguntas em Aberto
 
-> Consolidação de **todas as perguntas pendentes** extraídas das inquiries com status `Open` ou `Pending Response`. Este arquivo é gerado a partir das inquiries-fonte e serve como _checklist_ executivo — para detalhe, contexto e fundamentação, sempre voltar ao arquivo original linkado em cada bloco.
+> Checklist executivo das perguntas pendentes nas inquiries de estado **`open`** e **`blocked`**. O estado
+> canônico vive no frontmatter de cada arquivo — este documento **não** é fonte de verdade de estado, é
+> recorte de _o que ainda falta responder_. Para contexto, fundamentação e alternativas pesadas, sempre
+> voltar à inquiry-fonte linkada em cada bloco.
 
-- **Última atualização:** 2026-05-14 (síntese pós-comentários 11–14 da Codebit/Samuel + descoberta do schema legado)
-- **Inquiries cobertas:** [0003](#inquiry-0003--estratégia-multi-cloud-aws--gcp), [0011](#inquiry-0011--auditoria-fiscal-cross-período-strangler-fig), [0012](#inquiry-0012--bff-aws-api-gateway-managed-vs-fastify-burro), [0014](#inquiry-0014--schema-legado-vs-modelo-alvo)
-- **Total de perguntas em aberto:** 28 _(8 da 0003 resolvidas, 3 parciais; +7 novas da 0014 após descoberta do schema)_
+- **Última revisão da prosa:** 2026-08-07 (reconstrução a partir do disco — a versão anterior parou em 2026-05-14)
+
+<!-- BEGIN:generated -->
+
+- **Inquiries cobertas:** 8 de 29 — [0011](./0011-auditoria-fiscal-cross-periodo.md) · [0012](./0012-bff-managed-api-gateway-vs-fastify.md) · [0014](./0014-schema-legado-vs-modelo-alvo.md) · [0015](./0015-charset-drizzle-roadmap.md) · [0019](./0019-hard-delete-tripwire-sem-superficie.md) · [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0027](./0027-teses-orfas-de-branches-contaminadas.md) · [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md)
+- **Total de perguntas em aberto:** **47**
+
+As demais 21 estão `decided` (17), `deferred` (3, com gatilho declarado) ou `superseded` (1) — nenhuma
+espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
+
+<!-- END:generated -->
 
 ---
 
 ## Visão geral
 
-| Inquiry | Status | Aguardando | Bloqueia | # perguntas |
+| Inquiry | Estado | Aguardando | Bloqueia | # |
 | :--- | :--- | :--- | :--- | ---: |
-| [0003](./0003-multi-cloud-strategy.md) | `Mostly Decided` | Codebit (Samuel Ribeiro) — itens residuais + acessos | Provisionamento real (gap orçamentário R$ 142,76 → R$ 982,93 com Caratti); reescrita do [ADR-0007](../architecture/adr/0007-multi-cloud-aws-gcp.md) como "Strangler cross-cloud GCP→AWS transitório, alvo AWS sa-east-1"; abertura da **Inquiry-0013** (conectividade cross-cloud) | 10 |
-| [0011](./0011-auditoria-fiscal-cross-periodo.md) | `Open` | Banca interna (squad) | Schema de `core.fin_documentos` no marco M3; promoção do [ADR-0017](../architecture/adr/0017-correlation-keys-cross-period-audit.md) para `Accepted` | 6 |
-| [0012](./0012-bff-managed-api-gateway-vs-fastify.md) | `Decisão de fato (formalizar)` | Banca + DevOps + dono do legado | Diagrama do Samuel já adota **Hipótese A** (API Gateway managed → core-api em ECS). Formalizar **ADR-0018** (`Proposed`) e marcar [ADR-0005](../architecture/adr/0005-thin-bff-gateway.md) como `Superseded` | 5 |
-| [0014](./0014-schema-legado-vs-modelo-alvo.md) | `Open` | Banca interna + P.O. | (Q1) Revisão do [ADR-0017](../architecture/adr/0017-correlation-keys-cross-period-audit.md) — não há campos NFe no legado; (Q2) BC novo de Planejamento Orçamentário (gap); (Q3) política de migração de `contracts`; (Q4) confirmação do primeiro vertical slice (Identity & Access recomendado) | 7 |
+| [0011](#inquiry-0011--auditoria-fiscal-cross-período) | `blocked` | Banca interna (squad) | Schema de `core.fin_documentos` no marco M3; promoção do [ADR-0017](../architecture/adr/0017-correlation-keys-cross-period-audit.md) a `Accepted` | 7 |
+| [0012](#inquiry-0012--bff-api-gateway-managed-vs-fastify) | `blocked` | Banca + DevOps (Codebit) + dono do legado | Ponto de entrada HTTP; ADR-0018 candidato; possível supersede do [ADR-0005](../architecture/adr/0005-thin-bff-gateway.md) | 7 |
+| [0014](#inquiry-0014--schema-legado-vs-modelo-alvo) | `blocked` | Banca interna + P.O. | Migração do Financial Core; revisão do ADR-0017; BC ausente de Planejamento Orçamentário | 9 |
+| [0015](#inquiry-0015--charsetcollate-por-tabela-no-drizzle) | `blocked` | **Upstream** (`drizzle-team/drizzle-orm`) | Nada agora — mantém dívida de edição manual em toda migration nova | 3 |
+| [0019](#inquiry-0019--tripwire-de-hard-delete) | `blocked` | P.O. + decisão de infra/segurança | Gap #5 do relatório de cobertura; acoplada a RBAC e à [0018](./0018-auditlog-transversal-todos-bcs.md) (`deferred`) | 4 |
+| [0026](#inquiry-0026--assíncrono-human-in-the-loop-drizzle-10-e-bruno--ts) | `open` | Gatilho declarado — só (c) é medível hoje | Épico de aprovação por e-mail; major do ORM; possível supersede do ADR-0038 | 4 |
+| [0027](#inquiry-0027--teses-órfãs-de-branches-contaminadas) | `open` | Dono do repo — escolher o que vira trabalho | Descarte das 7 branches; 2 ADRs novos; ticket de auto-expire | 6 |
+| [0028](#inquiry-0028--o-edd-da-po-m1m4--relatórios-nibo) | `open` | P.O./consultoria + spikes do TL | Escopo comercial (~470h dev + ~350h do bundle P0); M1 e M4 | 7 |
 
 ---
 
-## Inquiry-0003 — Estratégia multi-cloud (AWS + GCP)
+## Inquiry-0011 — Auditoria fiscal cross-período
 
-> **Origem:** [`0003-multi-cloud-strategy.md`](./0003-multi-cloud-strategy.md)
-> **Aberta em:** 2026-04-27
-> **Destinatário:** Codebit — Maria Isabel Martins / Samuel Ribeiro (ponto focal técnico)
-> **Por que importa:** sem essas respostas, [ADR-0007](../architecture/adr/0007-multi-cloud-aws-gcp.md) (Multi-cloud AWS + GCP) fica em `Proposed` e o provisionamento real não pode começar.
+> **Origem:** [`0011-auditoria-fiscal-cross-periodo.md`](./0011-auditoria-fiscal-cross-periodo.md) §7 e Apêndice D.5
+> **Aberta em:** 2026-05-07 · **Destinatário:** banca interna de arquitetura
+> **Por que importa:** a chave de correlação entre o legado e `core.fin_documentos` precisa existir **antes**
+> do schema do marco M3 — adicionar coluna depois custa migration; adicionar hoje custa uma linha.
+> **Hipótese de trabalho do autor:** **D agora, B como solução-alvo no gatilho.**
 
-### 🆕 Síntese 2026-05-14 — pivôs descobertos via comentários da Codebit
+⚠️ **Ler §7 → Apêndice D → Apêndice A nessa ordem.** O Apêndice D (2026-05-14) mudou a base empírica de
+7.3 e 7.5: o schema real do legado **não tem campos de NFe** (chave de 44 dígitos, número, série, modelo).
 
-A premissa original do [ADR-0007](../architecture/adr/0007-multi-cloud-aws-gcp.md) (**"legado AWS → novo GCP"**) está **invertida**. O diagrama do Samuel (comentários 11–14 do ticket) e o achado da `going2` confirmam:
+- [ ] **7.1.** Existe padrão estabelecido na literatura para "auditoria cross-período sob Strangler Fig", ou cada equipe inventa do zero? Newman trata Reporting Database (p. 115) mas não o caso cross-temporal de migração.
+- [ ] **7.2.** Reporting Database (Newman) vs. Read Model CQRS (Vernon) é diferença real ou superficial no nosso caso? Em ambos projetamos via worker, o consumidor é externo ao domínio e o schema é versionado — a diferença está só em **onde o database vive**, ou há propriedade arquitetural mais profunda?
+- [ ] **7.3.** A chave `cnpj_emitente + numero_documento_original` tem armadilhas (CNPJ reorganizado, numeração reiniciada, série fiscal)? _Parcialmente vazia após o Apêndice D — esses campos não existem no legado._ Reconhecida em §C.9 como **fora do corpus técnico** (validar com contabilidade).
+- [ ] **7.4.** Sob Hipótese C, qual a recomendação para o **bootstrap dos dados pré-existentes** — ETL one-shot, eventos sintéticos no `legacy.outbox`, ou projeção lendo direto do legado? Os trade-offs estão documentados ou cada equipe escolhe ad hoc?
+- [ ] **7.5.** Latência aceitável de Read Model para reporting fiscal — lag de minutos vs. segundos vs. imediato diante de um auditor. Também **fora do corpus técnico** (§C.9).
+- [ ] **7.6.** **Pergunta principal.** A recomendação da banca é **A**, **B**, **C**, **D** ou híbrido? Em que sequência temporal?
+- [ ] **7.7.** _(nova, Apêndice D.5)_ Dada a ausência de campos fiscais no legado, a **Hipótese D refinada** (`id_legado + tipo + createdAt` como tripla simbólica, legado preservado read-only) continua sendo a recomendação — ou o achado desloca a deliberação para C ou B?
 
-- **Legado roda em GCP** (`legacy-api` no box do GCP). _Inverte A1._
-- **Novo ERP é provisionado em AWS** — conta `270011658274`, região `sa-east-1`. _Inverte A2._
-- **Estratégia real:** Strangler Fig **cross-cloud GCP→AWS transitório**, alvo final AWS. _Refina A3._
-- **Pivô de runtime:** core-api roda em **ECS em EC2** (aplicação já containerizada), não EC2 puro. Diagrama: API Gateway em public subnet, ECS em private subnet, EC2 Windows STCPCLT em public subnet. _Impacta [02-system-topology.md](../architecture/02-system-topology.md) §3/§5 e converge com Hipótese A da [Inquiry-0012](#inquiry-0012--bff-aws-api-gateway-managed-vs-fastify-burro)._
-- **Estratégia de repositórios:** **multi-repo** (Codebit recomenda — "segregação das pipelines e melhor organização"). _Impacta o [ADR-0012](../architecture/adr/0012-package-manager.md) e demanda novo ADR de estratégia git._
-- **Gap orçamentário:** valor previsto R$ 142,76 → real R$ 982,93. **Bloqueia provisionamento** até aprovação do Caratti.
-
-**Ações disparadas:**
-1. Falar com Caratti sobre o gap R$ 142,76 → R$ 982,93 (sem aprovação, Samuel não provisiona).
-2. Liberar acesso de leitura ao(s) repositório(s) para `codebit-br` no GitHub.
-3. Compartilhar pasta **DUMP PROD** (Drive da Nicole Ruivo, 30/abr) com `samuel.ribeiro@codebit.com.br`.
-4. Confirmar à Codebit que a diretriz de **multi-repo** foi aceita.
-5. Abrir **Inquiry-0013** — conectividade cross-cloud GCP↔AWS (A5 segue omisso no diagrama).
-6. Reescrever/superceder [ADR-0007](../architecture/adr/0007-multi-cloud-aws-gcp.md) como "Strangler cross-cloud transitório, alvo AWS sa-east-1".
-
-### A. Estratégia de cloud
-
-- [x] **A1.** ~~ERP legado em AWS?~~ → **Não.** Legado roda em **GCP** (going2/Cadu/Nicole). Pergunta original partia de premissa invertida.
-- [x] **A2.** ~~Novo ERP em GCP?~~ → **Não.** Novo ERP provisionado em **AWS** `sa-east-1`, conta `270011658274` (operada pela Codebit).
-- [x] **A3.** Estratégia: **Strangler Fig cross-cloud GCP→AWS transitório**, alvo final AWS. Não é multi-cloud permanente.
-- [x] **A4.** **Codebit** opera AWS (Samuel Ribeiro como ponto focal técnico). **going2** (Cadu / Nicole Ruivo) cuida do legado e do GCP.
-- [ ] **A5.** Haverá VPN/Interconnect dedicado entre GCP e AWS, ou comunicação via internet pública com mTLS? _Diagrama do Samuel mostra conexão cross-cloud direta sem explicitar o canal._ → **Promover para [Inquiry-0013](./0013-cross-cloud-connectivity.md)** (a criar).
-
-### B. Bradesco / VAN
-
-- [x] **B6.** VM Windows com STCPCLT — **AWS** (EC2 Windows, public subnet, `sa-east-1`).
-- [x] **B7.** Migração: **AWS MGN** (lift-and-shift) como abordagem primária; recriação como fallback.
-- [ ] **B8.** Versão do STCPCLT confirmada como **STCPCli 4.0 (Riversoft)** _(via manual)_. **Pendente:** condições de licenciamento e prazo de renovação do certificado.
-- [x] **B9.** **Odette ID** e senha configurados diretamente na VM (resposta do Cadu em 2026-04-22). ⚠️ **Risco operacional:** valores enviados por email em 2026-05-06 — recomendar rotação e migração para secret manager (AWS Secrets Manager) antes do go-live.
-- [ ] **B10.** Existe sandbox/homologação Bradesco? _Sem resposta._
-
-### C. Migração de dados
-
-- [x] **C11.** ~~Postgres em RDS AWS?~~ → **Não.** Engine confirmada como **MySQL 8.4 LTS em RDS** _(ver [Inquiry-0010](./0010-mysql-engine-correction.md))_, mesma instância com 2 databases, collation `utf8mb4_unicode_ci`.
-- [ ] **C12.** **Parcial.** Dump produzido por **Nicole Ruivo / going2** e disponibilizado em pasta do Drive em 2026-04-30. **Pendência:** compartilhamento efetivo com `samuel.ribeiro@codebit.com.br` para que a Codebit possa fazer o restore.
-- [ ] **C13.** Manter dados históricos por 5 anos fiscais? _Sem resposta — deslocar para [Inquiry-0011](#inquiry-0011--auditoria-fiscal-cross-período-strangler-fig)._
-
-### D. Observabilidade
-
-- [ ] **D14.** Existe agregador central de logs (Datadog, Splunk, etc.)? _CloudWatch nativo da AWS está implícito mas não confirmado._
-- [ ] **D15.** Retenção de 5 anos para auditoria fiscal já está implementada? Como?
-- [ ] **D16.** Estratégia de tracing distribuído atual?
-
-### E. Coordenação
-
-- [ ] **E17.** Ferramenta de IaC (Terraform, Pulumi, etc.)? _Samuel mencionou "preparação para o provisionamento" sem nomear a ferramenta._
-- [ ] **E18.** **Parcial.** Estratégia de repositórios: **multi-repo** (decisão da Codebit). Codebit monta a CI/CD após receber acesso de leitura aos repositórios — esteira em si (GitHub Actions? GitLab CI? CodePipeline?) ainda não nomeada.
-
-> ✅ **Status atualizado:** 8 perguntas com resposta concreta, 3 parciais, 7 ainda em aberto. Saiu de `Pending Response (~17 dias)` para `Mostly Decided`. **Bloqueador residual:** aprovação do gap orçamentário com Caratti + entrega dos acessos (repos + dump) à Codebit.
+> 📎 **Se a banca confirmar a D refinada:** revisar o [ADR-0017](../architecture/adr/0017-correlation-keys-cross-period-audit.md) para "chaves simbólicas" e ajustar as 3 colunas; documentar a política de "legado read-only frozen" em [`../architecture/01-migration-strategy.md`](../architecture/01-migration-strategy.md) §6; registrar no [`../CHANGELOG.md`](../CHANGELOG.md).
 
 ---
 
-## Inquiry-0011 — Auditoria fiscal cross-período (Strangler Fig)
+## Inquiry-0012 — BFF: API Gateway managed vs. Fastify
 
-> **Origem:** [`0011-auditoria-fiscal-cross-periodo.md`](./0011-auditoria-fiscal-cross-periodo.md) — §7 "Pontos onde gostaria de orientação explícita"
-> **Aberta em:** 2026-05-07
-> **Destinatário:** Banca interna de arquitetura (squad de engenharia)
-> **Por que importa:** chave de correlação entre `legacy.*` e `core.fin_documentos` precisa ser definida **antes** do desenho do schema do marco M3 — janela de oportunidade fechando. Hipótese de trabalho do autor: **Hipótese D** ("Adiar com gatilho explícito + chave de correlação preservada hoje").
+> **Origem:** [`0012-bff-managed-api-gateway-vs-fastify.md`](./0012-bff-managed-api-gateway-vs-fastify.md) §6 e §9.7
+> **Aberta em:** 2026-05-07 · **Última atualização:** 2026-05-22 · **Destinatário:** banca + DevOps + dono do legado
+> **Por que importa:** define a fronteira de entrada e pode `supersede` o [ADR-0005](../architecture/adr/0005-thin-bff-gateway.md).
 
-- [ ] **7.1.** Existe um padrão estabelecido na literatura para "auditoria cross-período em sistemas sob Strangler Fig", ou cada equipe inventa do zero? Caso exista, qual a referência? Newman trata Reporting Database em geral (p. 115) mas **não** trata o caso especificamente cross-temporal de migração.
-- [ ] **7.2.** A escolha entre **Reporting Database** (Newman) e **Read Model CQRS** (Vernon) para o nosso caso é uma diferença real ou superficial? Em ambos projetamos via worker, em ambos o consumidor é externo ao domínio, em ambos o schema é estável e versionado. A diferença está apenas em **onde** o database vive (terceiro DB vs schema dentro do core), ou há propriedades arquiteturais mais profundas?
-- [ ] **7.3.** A chave de correlação `cnpj_emitente + numero_documento_original` é suficiente, ou tem armadilhas (CNPJ que se reorganiza, numeração reiniciada, série fiscal, chave NF-e 44 dígitos)? Existe padrão consolidado no domínio fiscal brasileiro? _(Reconhecida em §C.9 como **fora do corpus técnico** — validação direta com contabilidade.)_
-- [ ] **7.4.** Se adotarmos **Hipótese C (Read Model CQRS)**, qual é a recomendação para o **bootstrap dos dados pré-existentes**? As três alternativas — (i) ETL one-shot direto na tabela / (ii) eventos sintéticos no `legacy.outbox` / (iii) projeção que lê direto do legado — têm trade-offs documentados, ou cada equipe escolhe ad hoc?
-- [ ] **7.5.** Latência de Read Model: para reporting fiscal, qual é o limite aceitável? Há jurisprudência (literal ou de comunidade) sobre apresentar a um auditor um dado com lag de minutos vs segundos vs imediato? _(Reconhecida em §C.9 como **fora do corpus técnico**.)_
-- [ ] **7.6.** **Pergunta principal.** Qual seria a recomendação da banca — **A**, **B**, **C**, **D** ou um híbrido? Qual a sequência temporal recomendada? A hipótese de trabalho do autor é **D agora, B como solução-alvo no gatilho**. É razoável, ou tem armadilhas não enxergadas?
+ℹ️ **O [ADR-0021](../architecture/adr/0021-aws-primary-magalu-pbe-supersedes-0007.md) fechou a premissa cross-cloud** (AWS-único em produção + MagaluCloud como PBE interno). Isso **resolveu a pergunta 4** e tornou o §4.2 superseded — mas, por §9.6, **não mexe** no argumento de design: a escolha A/B/C continua canônica pela fundamentação Newman do §3.
 
-> 📎 **Próximo passo se a banca aprovar a Hipótese D:** promover [ADR-0017](../architecture/adr/0017-correlation-keys-cross-period-audit.md) de `Proposed` para `Accepted`, adicionar parágrafo em [`01-migration-strategy.md §6`](../architecture/01-migration-strategy.md), incluir 3 colunas em `core.fin_documentos` e registrar entrada no [`CHANGELOG.md`](../CHANGELOG.md).
+- [ ] **Decisão central.** Hipótese **A** (API Gateway managed substitui o BFF Fastify), **B** (API Gateway na frente do BFF) ou **C** (API Gateway + ALB direto)? O autor inclina para A; o diagrama do DevOps já a adota **de fato**, sem ADR formal.
+- [ ] **6.1. Quem aceita a mudança no legado?** Adicionar `setGlobalPrefix('api/v1')` no `main.ts` é **uma linha** — confirmado pela análise do schema (TypeORM 0.3 + NestJS) —, mas contradiz o "não editar" do legado. Exige OK do dono e janela coordenada com o frontend (`NEXT_PUBLIC_API_URL` é build-time).
+- [ ] **6.2. Qual autenticação no API Gateway?** Lambda authorizer validando JWT, Cognito, ou mTLS interno? Pode caber em ADR próprio ou no ADR-0018.
+- [ ] **6.3. Como o Gateway termina no `core-api`?** IP público vs. **VPC Link** (→ NLB privado → subnet privada, sem IP público). A boa prática AWS é a segunda. Confirmar com DevOps.
+- [x] ~~**6.4. Conectividade cross-cloud até o legado no GCP?**~~ **Resolvida em 2026-05-22** — não aplicável. Produção é single-cloud; legado e `core-api` no mesmo VPC, comunicação por security group.
+- [ ] **6.5. Custo por requisição** (≈ US$ 3,50/milhão REST + transferência). Desprezível para volume ERP típico, mas validar com a Codebit contra estimativa de tráfego.
+- [ ] **9.7-4.** _(novo)_ Ponto de entrada do **PBE MagaluCloud**: MGC-i, MGC-ii ou MGC-iii (§9.4)? Pode virar inquiry separada ou apêndice do ADR-0018.
+- [ ] **9.7-5.** _(novo)_ Ratificar o reaproveitamento de `fake-stcpclt` + `fake-bradesco` (originais da [0013](./0013-local-dev-simulator-and-ci.md)) dentro do PBE MagaluCloud.
 
----
-
-## Inquiry-0012 — BFF: AWS API Gateway managed vs. Fastify burro
-
-> **Origem:** [`0012-bff-managed-api-gateway-vs-fastify.md`](./0012-bff-managed-api-gateway-vs-fastify.md) — §6 "Perguntas em aberto (para a banca)"
-> **Aberta em:** 2026-05-07
-> **Destinatário:** Banca interna + DevOps (Codebit) + dono do legado
-> **Por que importa:** bloqueia o skeleton do `bff-gateway` e pode `supersede` o [ADR-0005](../architecture/adr/0005-thin-bff-gateway.md). Decisão recomendada (a confirmar): **Hipótese A** — API Gateway managed substitui o BFF Fastify, com restrições estritas ancoradas em Newman §3.2 e §3.3.
-
-> 🆕 **Atualização 2026-05-14:** o diagrama do Samuel (comentários 11–14 do ticket de provisionamento) **já adota Hipótese A de fato** — API Gateway em public subnet termina diretamente no `core-api` (ECS em EC2, private subnet). Parte significativa da deliberação está acontecendo no ticket sem ADR formal. **Próximo passo imediato:** formalizar **ADR-0018** (`Proposed`), marcar [ADR-0005](../architecture/adr/0005-thin-bff-gateway.md) como `Superseded by ADR-0018`, e reescrever [`02-system-topology.md`](../architecture/02-system-topology.md) §3/§5 com o runtime real (ECS em EC2, não EC2 puro).
-
-> 🆕 **Confirmação adicional via schema legado (2026-05-14):** análise do dump real (`database/.dump/schema-only.sql`) confirma TypeORM 0.3 + NestJS no legado. Adicionar `app.setGlobalPrefix('api/v1')` no `main.ts` é literalmente **uma linha** (a frase do §6.1 não era retórica) — viabiliza Hipótese A sem refactor estrutural. Ver [`../domain/10-mapeamento-legado-schema.md`](../domain/10-mapeamento-legado-schema.md).
+> 📎 **Se a banca aprovar a Hipótese A:** abrir o ADR-0018 candidato (`Proposed`); marcar o ADR-0005 como `Superseded`; reescrever [`../architecture/02-system-topology.md`](../architecture/02-system-topology.md) §3 e §5 com o runtime real; registrar no [`../CHANGELOG.md`](../CHANGELOG.md).
 
 ---
 
 ## Inquiry-0014 — Schema legado vs. modelo alvo
 
-> **Origem:** [`0014-schema-legado-vs-modelo-alvo.md`](./0014-schema-legado-vs-modelo-alvo.md)
-> **Aberta em:** 2026-05-14
-> **Destinatário:** Banca interna de arquitetura + P.O.
-> **Por que importa:** a análise do schema real (`database/.dump/schema-only.sql` derivado do dump da Cloud SQL) revelou que o legado **não modela documento fiscal** — só "fluxo financeiro de obrigações". Isso muda a base empírica do [ADR-0017](../architecture/adr/0017-correlation-keys-cross-period-audit.md) e abre gap de BC novo no handbook (Planejamento Orçamentário não está em [`../domain/02-context-map.md`](../domain/02-context-map.md)).
-> **Documento mestre:** [`../domain/10-mapeamento-legado-schema.md`](../domain/10-mapeamento-legado-schema.md).
+> **Origem:** [`0014-schema-legado-vs-modelo-alvo.md`](./0014-schema-legado-vs-modelo-alvo.md) §3
+> **Aberta em:** 2026-05-14 · **Destinatário:** banca interna + P.O.
+> **Por que importa:** o mapeamento das 32 tabelas do dump real revelou que o legado **não modela documento
+> fiscal** — só "fluxo financeiro de obrigações". Isso muda a base empírica do ADR-0017 e abre um BC ausente.
 
-### Q1. Chave de correlação cross-período (impacta ADR-0017 e Inquiry-0011)
+⚠️ **O "documento mestre" que esta inquiry cita (`domain/10-mapeamento-legado-schema.md`) não existe mais no
+disco** — o diretório `handbook/domain/` virou [`../domain_questions/`](../domain_questions/) e esse arquivo
+não migrou. Quem retomar a inquiry precisa reconstruir o mapeamento a partir do dump ou localizar o arquivo.
 
-- [ ] **Q1.1.** A chave de correlação deve ser repensada como **"id_legado + tipo_origem + createdAt_legado"** (tripla simbólica) em vez de chave fiscal natural?
-- [ ] **Q1.2.** O [ADR-0017](../architecture/adr/0017-correlation-keys-cross-period-audit.md) precisa ser revisado/superseded, ou só a justificativa precisa atualização?
-- [ ] **Q1.3.** A auditoria fiscal cross-período passa a depender de **manter o legado vivo + readonly indefinidamente**? Isso muda o desenho do Strangler Fig.
+### Q1 — Chave de correlação cross-período _(impacta ADR-0017 e a [0011](#inquiry-0011--auditoria-fiscal-cross-período))_
 
-### Q2. Modelagem de `categorization` e BC novo de Planejamento Orçamentário
+Das 3 colunas que o ADR-0017 propõe, apenas **`id_legado`** é preservável a partir do legado real.
 
-- [ ] **Q2.1.** Existe um **BC "Planejamento Orçamentário"** que deveria estar no handbook e foi omitido?
-- [ ] **Q2.2.** Ou esse comportamento é uma **funcionalidade transversal** que será descontinuada/repensada no modelo novo?
-- [ ] **Q2.3.** Sem decidir Q2, **não é possível migrar Financial Core** — `payables` e `receivables` aparecem em `categorization` e perderiam sentido analítico sem ela.
+- [ ] **Q1.1.** A chave deve ser repensada como **surrogate id + business event timestamp** (`id_legado + createdAt`), em vez de chave fiscal natural?
+- [ ] **Q1.2.** O ADR-0017 precisa ser revisado/superseded, ou basta atualizar a justificativa?
+- [ ] **Q1.3.** A auditoria cross-período passa a depender de **manter o legado vivo e read-only indefinidamente**? Isso muda o desenho do Strangler Fig.
 
-### Q3. Migração de `contracts` legado → "Contrato Mãe + Aditivos"
+### Q2 — `categorization` e o BC ausente de Planejamento Orçamentário
 
-- [ ] **Q3.1.** Bootstrap one-shot que cria 1 Contrato Mãe + N aditivos sintéticos "homologados" a partir do snapshot atual?
-- [ ] **Q3.2.** Ou legado preservado para "contratos anteriores ao corte" e modelo novo só para contratos pós-go-live?
+A tabela `categorization` tem 10 FKs e é o **hub analítico do legado** — é onde as regras de rateio orçamentário estão implícitas. O modelo alvo não tem equivalente.
 
-### Q4. Primeiro vertical slice (recomendação: Identity & Access)
+- [ ] **Q2.1.** Existe um **BC "Planejamento Orçamentário"** que deveria estar no handbook e foi omitido? _(Confrontar com [`../domain_questions/financeiro/02-context-map.md`](../domain_questions/financeiro/02-context-map.md).)_
+- [ ] **Q2.2.** Ou é funcionalidade transversal a ser descontinuada/repensada (orçamento vivendo em `budget_plans` ligado a `programs`, categorização virando evento derivado)?
+- [ ] **Q2.3.** Sem decidir Q2, **não é possível migrar o Financial Core** — `payables` e `receivables` perdem sentido analítico sem a categorização.
 
-- [ ] **Q4.1.** Banca confirma **Identity & Access** (`users` + `collaborators`, ~5 tabelas folha) como primeiro slice, ou prefere começar pela **Integração Bancária** (Bradesco/CNAB) conforme roadmap atual do handbook?
+### Q3 — `contracts` legado → "Contrato Mãe + Aditivos"
 
-> 📎 **Próximo passo se a banca confirmar as 4 hipóteses do autor:** (i) revisar ADR-0017; (ii) criar `domain/11-planejamento-orcamentario-context.md`; (iii) abrir ADR sobre estratégia de bootstrap de contratos; (iv) iniciar implementação do BC Identity & Access no `core-api`.
+O legado representa hierarquia por `parentId` (self-FK), sem tabela de aditivo, sem status de homologação, sem histórico de mudança com causa.
 
-- [ ] **6.1. Quem aceita a mudança no legado?**
-   Adicionar `app.setGlobalPrefix('api/v1')` no `main.ts` do legado é **uma linha**, mas contradiz o "não editar" do `sistemas_legado_referencia/`. Precisa de OK explícito do dono do legado e janela de release coordenada com o frontend (`NEXT_PUBLIC_API_URL` rebuild).
-- [ ] **6.2. Qual mecanismo de autenticação no API Gateway?**
-   Custom Lambda authorizer validando JWT do Zitadel/NextAuth? Cognito? mTLS interno? Pode caber em ADR próprio ou na ADR-0018.
-- [ ] **6.3. Como o API Gateway termina no `core-api`?**
-   IP público vs **VPC Link** (Private Link → NLB privado → EC2 em Private Subnet, sem IP público). Boa prática AWS é a segunda. Confirmar com DevOps.
-- [ ] **6.4. Qual o modo de conectividade cross-cloud até o legado no GCP?**
-   VPN/Interconnect ou internet com mTLS? **Abrir Inquiry-0013 dedicada** se a decisão demorar — sobreposição com [Inquiry-0003 §A5](#a-estratégia-de-cloud) e [B6](#b-bradesco--van).
-- [ ] **6.5. Custo estimado.**
-   API Gateway tem custo por requisição (≈ US$ 3,50 / milhão REST requests + transferência). Para volumes ERP típicos é desprezível, mas vale validar com Codebit em estimativa de tráfego.
+- [ ] **Q3.1.** Bootstrap one-shot criando 1 Contrato Mãe + N aditivos sintéticos "homologados" a partir do snapshot?
+- [ ] **Q3.2.** Ou legado vivo para contratos anteriores ao corte, modelo novo só pós-go-live? _(Mais aderente ao Strangler Fig, mas exige UI que apresente ambos.)_
 
-> 📎 **Próximo passo se a banca aprovar a Hipótese A:** abrir candidato **ADR-0018** (`Proposed`); marcar [ADR-0005](../architecture/adr/0005-thin-bff-gateway.md) como `Superseded by ADR-0018`; reescrever [`02-system-topology.md`](../architecture/02-system-topology.md) §3 e §5; abrir Inquiry-0013 (Conectividade cross-cloud) como follow-up; nova entrada no [`CHANGELOG.md`](../CHANGELOG.md).
+### Q4 — Primeiro vertical slice
+
+- [ ] **Q4.1.** A banca confirma **Identity & Access** (`users` + `collaborators`, ~5 tabelas folha do grafo) como primeiro slice, ou prefere começar pela **Integração Bancária** (Bradesco/CNAB)?
 
 ---
 
-## Caminho crítico (atualizado 2026-05-14)
+## Inquiry-0015 — Charset/collate por tabela no Drizzle
+
+> **Origem:** [`0015-charset-drizzle-roadmap.md`](./0015-charset-drizzle-roadmap.md) §2 e §6
+> **Aberta em:** 2026-05-18 · **Destinatário:** roadmap upstream do `drizzle-orm` — **não há interlocutor interno**
+> **Por que importa:** MySQL 8.4 rejeita FK quando a collation diverge. Hoje o `CHARSET`/`COLLATE` de tabela
+> é SQL manual editado após cada `drizzle-kit generate` — disciplina humana como único gate.
+
+✅ **A pergunta 2 (collate por coluna) fechou em 2026-08-05 pelo #636**, sem esperar upstream: `customType` com
+`dataType()` devolvendo o tipo verbatim resolve, e os 7 tipos nomeados em `src/shared/persistence/identifier-columns.ts`
+cobrem as 119 colunas binárias dos 6 módulos. `db:generate` responde `No schema changes`.
+
+- [ ] **P1.** O `drizzle-orm` tem **charset/collate table-level** no roadmap? Em qual versão? Há issue/PR aberta? _(É esta pergunta que mantém a inquiry aberta.)_
+- [ ] **P3.** Quando o suporte chegar, o `drizzle-kit generate` passa a **emitir** `ENGINE=InnoDB DEFAULT CHARSET=…`, ou segue produzindo `CREATE TABLE` sem table options?
+- [ ] **P4.** Existe helper community-driven que já faça isso hoje, aceitável até o suporte nativo?
+
+> 📎 **Ação de vigília (sem interlocutor):** revisar a cada bump de minor do `drizzle-orm`, e varrer issues/PRs
+> em `drizzle-team/drizzle-orm` por `mysql collate` / `charset table`. Quando a primeira migration `0001_*.sql`
+> for emitida, estender `CA-15`/`CA-16` para varrer **todas** as migrations — é o sinal de que a dívida cresceu.
+> A [0026](#inquiry-0026--assíncrono-human-in-the-loop-drizzle-10-e-bruno--ts) já pergunta se o 1.0 resolve isso.
+
+---
+
+## Inquiry-0019 — Tripwire de hard-delete
+
+> **Origem:** [`0019-hard-delete-tripwire-sem-superficie.md`](./0019-hard-delete-tripwire-sem-superficie.md) §2 e §6
+> **Aberta em:** 2026-05-25 · **Destinatário:** P.O. + decisão de infra/segurança
+> **Por que importa:** o gap #5 pede o evento `TentativaDeExclusaoDetectada`, mas a inspeção de `src/` não
+> encontrou **nenhuma superfície de exclusão física** — a exclusão é 100% lógica e o port não tem método destrutivo.
+
+- [ ] **1.** O que constitui uma "tentativa de exclusão física" num sistema sem hard-delete?
+- [ ] **2.** Onde a violação seria **detectada** — app (port tripwire), banco (trigger é proibido pelo ADR-0020) ou infra/DBA fora do processo?
+- [ ] **3.** Para onde vai o alerta? Não há canal SIEM, e o outbox ([ADR-0015](../architecture/adr/0015-mysql-outbox-pattern.md)) entrega a outros **módulos**, não a Segurança.
+- [ ] **4.** Faz sentido construir o detector antes de existirem a superfície e o ator autenticado (o "Quem" da violação)?
+
+> **Recomendação interna já registrada (não é decisão):** não implementar como evento de domínio. A política
+> "documento nunca é apagado fisicamente" é melhor **prevenida** por _least privilege_ no MySQL (`REVOKE DELETE`
+> do app user) do que **detectada** por evento — o que a move para o audit log do banco, junto da
+> [0018](./0018-auditlog-transversal-todos-bcs.md), e a torna decisão de infra, não ticket de código de módulo.
+
+---
+
+## Inquiry-0026 — Assíncrono human-in-the-loop, Drizzle 1.0 e Bruno × TS
+
+> **Origem:** [`0026-async-human-in-the-loop-and-drizzle-1-0.md`](./0026-async-human-in-the-loop-and-drizzle-1-0.md) §2 e §3
+> **Aberta em:** 2026-08-05 · **Destinatário:** investigação interna medida — sem consulta externa
+> **Por que importa:** o [ADR-0058](../architecture/adr/0058-runtime-tracks-recommended-lts.md) §3 exige que troca
+> estrutural seja justificada por inquiry que **meça**, não que argumente. Esta é o instrumento que ele nomeia.
+
+- [ ] **1.** O outbox + polling atual sustenta um fluxo **human-in-the-loop** (solicitação → e-mail → callback externo → transição de estado), ou o desenho pede fila/workflow engine? _Falta medir: latência do `runLoop`; se o callback é entrada HTTP comum e já cabe; retry e dead-letter; agendamento futuro ("reenviar em 3 dias"); coordenação multi-instância do worker de outbox._
+- [ ] **2.** Quais limitações do outbox são reais **neste** volume e quais são teóricas?
+- [ ] **3.** O `drizzle-orm@1.0.0` muda alguma premissa de (1), e o que custa em 8 módulos? _Falta medir: breaking changes em `mysql-core`; se `relations-v2` obriga reescrever repositórios; se collation ganhou suporte de primeira classe (aposentando o `customType`); estabilidade do differ do `drizzle-kit`._
+- [ ] **4.** Os 242 `.bru` cobrem algo que os 179 `inject` não cobrem, ou são camada duplicada com supply-chain próprio? _Falta medir: quanto é duplicata; o que só o servidor real pega (rede, CORS, helmet, rate-limit); o que se perde sem o app do Bruno; se as 2 exceções de supply-chain saem junto; o custo dos 17 ponteiros históricos._
+
+**Gatilhos declarados — o que destrava cada uma:**
+
+| Troca | Gatilho | Medível hoje? |
+| :--- | :--- | :--- |
+| (a) assíncrono | o épico de aprovação entrar no roadmap | não — seria especular sobre requisito inexistente |
+| (b) Drizzle 1.0 | `1.0.0` sair com dist-tag `latest` **e** cumprir a quarentena de 24h (`minimumReleaseAge`) | não — hoje é `1.0.0-rc.4`, alvo móvel |
+| (c) Bruno × TS | nenhum evento externo | **sim, e barato** — cruzar as rotas dos 242 `.bru` com as dos 179 `inject` responde em uma sessão |
+
+⚠️ **A armadilha que (c) precisa evitar:** o ADR-0038 nasceu de 24 de 26 falhas serem `.bru` desalinhados com o
+servidor, porque a coleção não tinha runner e apodreceu sem ninguém ver. Trocar Bruno por TS resolve isso **se e
+somente se as coleções morrerem junto** — se sobreviverem como documentação, o problema volta com os papéis invertidos.
+
+---
+
+## Inquiry-0027 — Teses órfãs de branches contaminadas
+
+> **Origem:** [`0027-teses-orfas-de-branches-contaminadas.md`](./0027-teses-orfas-de-branches-contaminadas.md) §6 e §8
+> **Aberta em:** 2026-08-06 · **Destinatário:** dono do repo
+> **Por que importa:** 7 branches carregam commits ausentes da `dev` e **nenhuma é mergeável** — o problema não é
+> conflito de linha, é **colisão de identidade** (a `dev` reaproveitou os números ADR-0033/0034/0035/0047).
+> A inquiry preserva as teses; o que falta é decidir quais viram trabalho novo contra o código atual.
+
+**Bloqueador para fechar:** escolher quais das quatro teses **não testadas** viram trabalho, e em que ordem.
+Nada aqui envolve tocar as branches.
+
+- [ ] **I1.** Refazer as medições de T6a com corte em 2026-08-06 — se a razão `fix:feat` caiu após o trabalho de harness (specs 038–040), a intervenção funcionou; se subiu, a causa-raiz é outra. **Fazer primeiro: é barata e informa o resto.**
+- [ ] **I3.** Abrir ADR novo (número livre) para **imagem-base glibc** — tira o racional de T5a do comentário e o põe onde se cita.
+- [ ] **I4.** Ratificar ou refutar o **discriminador "exibe vs. consulta"** de T3, e investigar a anomalia `fin_document_timeline`.
+- [ ] **I5.** Abrir ticket de **auto-expire de contratos** (T4a) — lacuna funcional com caso reproduzível (CT 0776/2026).
+- [ ] **I6.** Decidir o destino da **#131** à luz da spec de T1 — a spec é reaproveitável como _texto_, não como código.
+- [ ] **Descarte.** Decidir se as 7 branches podem ser deletadas depois que esta inquiry absorver o conteúdo.
+
+> _(I2 — versionar a topologia real do QA — e I7 — remover os hooks de T2 — constam do programa mas não das
+> saídas da inquiry; ver §6 para o quadro completo.)_
+
+---
+
+## Inquiry-0028 — O EDD da P.O. (M1–M4 + relatórios Nibo)
+
+> **Origem:** [`0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md`](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) §6 e §7
+> **Aberta em:** 2026-08-06 · **Destinatário:** P.O./consultora Alessandra + spikes do TL
+> **Por que importa:** trava ~470h de escopo comercial (M1–M4 + ~350h do bundle P0).
+
+✅ **A suspeita que abriu a inquiry não se confirmou.** As 13 alegações com citação de arquivo/linha **conferem
+todas** com o HEAD — o EDD descreve o código atual com precisão de linha. A recomendação é **aceitar a camada
+verificada e descartar a §0** (herdada do `AGENTS.md`, aposentado em 2026-08-03), em vez de aceitar ou rejeitar
+em bloco. O que trava escopo são as decisões abaixo, não o documento.
+
+- [ ] **D1.** Escopo real da **M2** — o override já existe e foi confirmado; falta **medir o que sobra**. _(TL)_
+- [ ] **D2.** **V-Expenses**: API, webhook ou arquivo? _Intocada — **bloqueia a M4 inteira**._ _(spike + cliente)_
+- [ ] **D3.** Fallback do regime de **Competência** quando `competencia` é nula. _(P.O.)_
+- [ ] **D4.** Mapa de **reclassificação contábil** das categorias. _(P.O./consultoria)_
+- [ ] **D5.** **Portador**: referência a colaborador/parceiro ou cadastro próprio? _Gap confirmado real._ _(TL)_
+- [ ] **D6.** Spike de **segurança do magic-link** (M1). _(TL)_
+- [ ] **D7.** _(acrescentada pela verificação)_ Reavaliar a §5.2 à luz do precedente `ReconciliationAllocation` (#141/#247) **antes** de travar as 40h da fundação — a estimativa está superestimada.
+
+**Ainda pendentes, fora das decisões:** devolver à P.O. que a §0 está desatualizada (pedindo que futuras versões
+separem camada verificada de camada herdada) e decidir se as 4 melhorias viram issues `enhancement · P0`.
+
+> ⚠️ **D3 e D4 bloqueiam os dois relatórios Nibo. D2 e D6 são spikes que precisam acontecer antes de travar orçamento.**
+
+---
+
+## O que bloqueia o quê
 
 ```
-   ┌──────────────────────────────┐    ┌─────────────────────────────┐
-   │ Gap orçamentário com Caratti │    │ Liberar acessos à Codebit:  │
-   │ R$ 142,76 → R$ 982,93        │    │ • repos (codebit-br GitHub) │
-   │ ⛔ Bloqueia provisionamento  │    │ • pasta DUMP PROD no Drive  │
-   └──────────────┬───────────────┘    └──────────────┬──────────────┘
-                  └───────────────┬───────────────────┘
-                                  ▼
-              ┌────────────────────────────────────┐
-              │ Codebit/Samuel provisiona AWS      │
-              │ sa-east-1 (conta 270011658274)     │
-              │ → ECS em EC2 + API Gateway + RDS   │
-              └──────────────────┬─────────────────┘
-                                 │
-   ┌─────────────────────────────┼──────────────────────────────┐
-   ▼                             ▼                              ▼
-┌─────────────────┐   ┌───────────────────────┐   ┌────────────────────────┐
-│ Inquiry-0013    │   │ Inquiry-0012 → ADR-   │   │ Inquiry-0011 (Banca)   │
-│ (a abrir):      │   │ 0018 (formalizar      │   │ decisão A/B/C/D        │
-│ conectividade   │   │ Hipótese A) +         │   │ → ADR-0017 (Accepted)  │
-│ cross-cloud     │   │ Superseded ADR-0005   │   │                        │
-│ GCP↔AWS         │   │                       │   │                        │
-└─────────────────┘   └───────────┬───────────┘   └────────────┬───────────┘
-                                  │                            │
-                                  ▼                            ▼
-                  Reescrita 02-system-topology    Schema core.fin_documentos
-                  + ADR-0007 superseded            no marco M3
-                  (Strangler cross-cloud)
+0014 Q1 ──(muda a premissa)──► 0011 ──► ADR-0017 Accepted ──► schema core.fin_documentos (M3)
+0014 Q2 ─────────────────────────────────────────────────► migração do Financial Core
+0012 A/B/C ──► ADR-0018 (Proposed) ──► ADR-0005 Superseded ──► reescrita 02-system-topology §3/§5
+0019 ──(espera)──► RBAC/identidade + canal SIEM ──► junto da 0018 (deferred)
+0028 D2/D6 ──(spike)──► orçamento de M1 e M4      0028 D3/D4 ──► os dois relatórios Nibo
+0026 (a),(b) ──(gatilho)──► nada hoje             0026 (c) ──► medível agora, decide o ADR-0038
+0027 I1 ──(barata, informa o resto)──► reordena o próprio programa I3–I6
+0015 ──► upstream drizzle-orm — sem interlocutor, só vigília
 ```
 
-**Bloqueador #1 (novo):** Gap orçamentário R$ 142,76 → R$ 982,93. Sem aprovação do Caratti, Samuel não provisiona.
-**Bloqueador #2:** Entrega dos acessos `codebit-br` (repos) + compartilhamento da pasta DUMP PROD com `samuel.ribeiro@codebit.com.br`.
-**Em paralelo:** Inquiry-0011 e formalização do ADR-0018 (Inquiry-0012) seguem independentes desses bloqueios.
+**Duas cadeias concentram o bloqueio real:** a fiscal (`0014 Q1 → 0011 → ADR-0017 → M3`) e a de borda
+(`0012 → ADR-0018`). Ambas esperam a mesma banca interna há **3 meses**. As demais ou esperam terceiro externo
+(0015, 0028) ou esperam um gatilho que ninguém precisa destravar (0026).
 
 ---
 
 ## Como atualizar este arquivo
 
-1. Sempre que uma inquiry for fechada (`Decided`), remover o bloco correspondente e atualizar o **total** no topo.
-2. Sempre que uma nova inquiry abrir com perguntas pendentes, adicionar bloco aqui referenciando o arquivo-fonte.
-3. Marcar perguntas individuais com `[x]` quando respondidas, mesmo antes do fechamento da inquiry — preserva trilha de quais ficam em aberto.
-4. Atualizar o campo **Última atualização** no topo.
+1. O estado canônico é o `state:` do frontmatter da inquiry, validado por [`tests/cleanup/inquiry-hygiene.test.ts`](../../tests/cleanup/inquiry-hygiene.test.ts) contra o conjunto fechado `open · blocked · decided · deferred · superseded`. Este arquivo **segue** aquele campo, nunca o contradiz.
+2. Inquiry que sai de `open`/`blocked` → remover o bloco daqui e atualizar a contagem do topo.
+3. Inquiry que entra em `open`/`blocked` com perguntas pendentes → adicionar bloco referenciando a fonte.
+4. Pergunta respondida antes do fechamento → marcar `[x]` e riscar o texto, preservando o registro de que existiu (ver 6.4 da [0012](#inquiry-0012--bff-api-gateway-managed-vs-fastify)).
+5. Atualizar **Última atualização** no topo.
 
-> 🔁 Este arquivo é um índice executivo — a fonte de verdade continua sendo cada inquiry individual.
+> ⚠️ Este arquivo é mantido à mão e **nenhum gate o cobre** — a versão anterior ficou 3 meses divergindo do disco
+> sem que nada acusasse. Ao mexer numa inquiry `open`/`blocked`, passe aqui no mesmo commit.
+
+> 🔁 Índice executivo — a fonte de verdade continua sendo cada inquiry individual.
