@@ -778,6 +778,22 @@ export const exportReconciliationQuerySchema = z.object({
   }),
 });
 
+// #649: export por CONTA + INTERVALO (sem periodId) — permite exportar a qualquer momento, sem período
+// fechado. `periodStart`/`periodEnd` são datas `YYYY-MM-DD` (parseadas com `new Date(...)` na borda,
+// idêntico ao POST /reconciliation-periods/close → export idêntico ao de um período com essas datas).
+export const exportReconciliationByRangeQuerySchema = z.object({
+  debitAccountRef: z.uuid(),
+  periodStart: z.iso.date(),
+  periodEnd: z.iso.date(),
+  format: z.enum(['ofx', 'csv', 'csv-nibo']).meta({
+    description: 'ofx | csv | csv-nibo',
+  }),
+});
+
+export type ExportReconciliationByRangeQuery = z.infer<
+  typeof exportReconciliationByRangeQuerySchema
+>;
+
 // ─── Conta-cedente (019 — CRUD + encerrar) ─────────────────────────────────────
 
 const accountTypeSchema = z.enum(['corrente', 'poupanca', 'investimento', 'cartao', 'outro']);
