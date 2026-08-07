@@ -4,6 +4,18 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-08-07 — 🧹 Débito dos gates pago, e o inventário que precede a higienização
+
+**Os três gates escritos hoje passaram a perguntar ao git.** `redirects`, `handbook-refs` e `handbook-links` ainda decidiam existência com `existsSync` — passavam, mas repetiam o padrão que o CI derrubou duas vezes. A lógica saiu de dentro do `scanHandbook`, onde estava inline, e virou `repoPaths()`: `isTracked` · `isIgnored` · `exists`. Uma fonte, quatro consumidores.
+
+A prova do ganho é a mutação que **passa**: um redirect apontando para `handbook/guidelines` (gitignored) agora é aceito como `local-only`. Com `existsSync` isso passava aqui e falhava no runner — o defeito nasceria de novo, silencioso.
+
+**`pnpm run docs:inventory`** mede `handbook/` e `.claude/` por diretório: arquivos, linhas, órfãos, alcance (quem cita de fora) e silêncio (dias desde o último commit). O retrato datado e sua leitura estão em [`reviews/0004`](./reviews/0004-inventario-handbook-e-claude.md) — os números **gerados**, a interpretação escrita, porque foi escrever número à mão que deixou o `PERGUNTAS-EM-ABERTO.md` três meses divergente.
+
+O que o retrato mostrou: **`handbook/reference` é 85% das linhas** e é espelho de terceiro — o material autoral são ~730 arquivos, não 1.417. `architecture` (zero órfãos, citado por 85) e `inquiries` (zero órfãos, citado por 28) são o centro vivo. E três diretórios estão quietos há mais de 50 dias com alcance quase nulo: `research`, `tickets` e `interviews`.
+
+⚠️ **O documento dedica uma seção a como NÃO ler os números**, e ela nasceu de erro real: `.claude/rules` aparece com 12 de 16 "órfãs" — falso positivo, porque rule carrega por `paths:` e não precisa ser citada. `api_documentations` aparece com 0 arquivos — o inventário conta só `.md`, e lá vivem 2 YAML. Métrica sem leitura condena documento vivo.
+
 ## 2026-08-07 — 🆔 Plano 041 (Fases 6 e 5): frescor vira sinal, e a referência deixa de ser um caminho
 
 **Fase 6 — `last_reviewed` deixa de ser decoração.** As 29 inquiries preenchiam o campo e **nada o lia**. Agora inquiry `open` ou `blocked` que passe **90 dias** sem revisão falha o gate. A janela é generosa de propósito: inquiry bloqueada em terceiro não anda por vontade própria, e alarme mensal vira ruído que se aprende a silenciar. As [0011](./inquiries/0011-auditoria-fiscal-cross-periodo.md) e [0012](./inquiries/0012-bff-managed-api-gateway-vs-fastify.md) esperam a **mesma banca desde maio**, e ninguém tinha percebido — em novembro elas acendem sozinhas.

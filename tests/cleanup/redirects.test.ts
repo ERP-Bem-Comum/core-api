@@ -13,9 +13,11 @@
 
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { existsSync, readFileSync } from 'node:fs';
+import { readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+
+import { repoPaths } from '../../scripts/handbook/link-scan.ts';
 
 const PROJECT_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
 const FILE = join(PROJECT_ROOT, 'handbook/redirects.json');
@@ -33,10 +35,22 @@ const entries = (): readonly (readonly [string, Entry])[] => {
     .map(([k, v]) => [k, v as Entry] as const);
 };
 
+/**
+ * Existência pelo git, não pelo disco (`.claude/rules/testing.md`). Um destino gitignored — como o
+ * `handbook/guidelines/` — existiria para quem tem os arquivos e não para o CI; o mapa passaria
+ * aqui e falharia lá, que é o defeito que custou dois vermelhos na spec 041.
+ */
+const repo = (): ReturnType<typeof repoPaths> =>
+  repoPaths(
+    PROJECT_ROOT,
+    entries().flatMap(([from, e]) => (typeof e.to === 'string' ? [from, e.to] : [from])),
+  );
+
 describe('REDIRECTS — toda entrada é verificável', () => {
-  it('todo destino declarado existe no disco', () => {
+  it('todo destino declarado está no repositório', () => {
+    const r = repo();
     const dead = entries()
-      .filter(([, e]) => typeof e.to === 'string' && !existsSync(join(PROJECT_ROOT, e.to)))
+      .filter(([, e]) => typeof e.to === 'string' && !r.exists(e.to))
       .map(([from, e]) => `${from} → ${String(e.to)}`)
       .sort();
     assert.deepEqual(
@@ -50,9 +64,10 @@ describe('REDIRECTS — toda entrada é verificável', () => {
   it('nenhuma origem voltou a existir', () => {
     // Entrada cuja origem ressuscitou é lixo que confunde: o link resolve sozinho, e o mapa
     // continua alegando que ele mudou de lugar.
+    const r = repo();
     const revived = entries()
       .map(([from]) => from)
-      .filter((from) => existsSync(join(PROJECT_ROOT, from)))
+      .filter((from) => r.exists(from))
       .sort();
     assert.deepEqual(
       revived,

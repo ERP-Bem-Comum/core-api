@@ -199,6 +199,54 @@ export function ignoredPaths(root: string, candidates: readonly string[]): Reado
   }
 }
 
+export interface RepoPaths {
+  /** O caminho está versionado. Diretório conta quando algum rastreado vive dentro dele. */
+  readonly isTracked: (target: string) => boolean;
+  /** O `.gitignore` exclui o caminho de propósito. */
+  readonly isIgnored: (target: string) => boolean;
+  /**
+   * "Está no repositório" — a única pergunta que um gate estrutural deve fazer sobre existência.
+   * Rastreado **ou** deliberadamente ignorado: nos dois casos a ausência no disco não é defeito.
+   */
+  readonly exists: (target: string) => boolean;
+}
+
+/**
+ * Resolve existência pelo git, nunca pelo disco — ver `.claude/rules/testing.md` §"Gate estrutural
+ * pergunta ao git".
+ *
+ * Recebe TODOS os candidatos de uma vez porque `check-ignore` é consultado em lote: um processo por
+ * caminho inviabiliza um gate que varre milhares de arquivos. Quem só precisa de alguns caminhos
+ * passa esses caminhos; quem varre tudo passa tudo.
+ */
+export function repoPaths(
+  root: string,
+  candidates: readonly string[],
+  injected: {
+    readonly tracked?: ReadonlySet<string> | undefined;
+    readonly ignored?: ReadonlySet<string> | undefined;
+  } = {},
+): RepoPaths {
+  const tracked = injected.tracked ?? trackedPaths(root);
+  const isTracked = (target: string): boolean => {
+    const clean = target.replace(/\/$/, '');
+    if (tracked.has(clean)) return true;
+    for (const p of tracked) if (p.startsWith(`${clean}/`)) return true;
+    return false;
+  };
+
+  const toAsk = candidates.filter((t) => !t.startsWith('..') && !isTracked(t));
+  const ignored = injected.ignored ?? ignoredPaths(root, toAsk);
+  const isIgnored = (target: string): boolean => {
+    const clean = target.replace(/\/$/, '');
+    if (ignored.has(clean)) return true;
+    for (const p of ignored) if (clean.startsWith(`${p}/`)) return true;
+    return false;
+  };
+
+  return { isTracked, isIgnored, exists: (t) => isTracked(t) || isIgnored(t) };
+}
+
 /** Varre `<root>/handbook` e classifica todo link relativo encontrado. */
 export function scanHandbook(root: string, opts: ScanOptions = {}): ScanResult {
   const mirrorPrefix = opts.mirrorPrefix ?? 'handbook/reference/';
@@ -214,32 +262,17 @@ export function scanHandbook(root: string, opts: ScanOptions = {}): ScanResult {
     }
   }
 
-  const tracked = opts.tracked ?? trackedPaths(root);
-  /** Diretório conta como rastreado quando algum arquivo rastreado vive dentro dele. */
-  const isTracked = (target: string): boolean => {
-    const clean = target.replace(/\/$/, '');
-    if (tracked.has(clean)) return true;
-    for (const p of tracked) if (p.startsWith(`${clean}/`)) return true;
-    return false;
-  };
-
-  const candidates = [...new Set(found.map((l) => l.target))].filter(
-    (t) => !t.startsWith('..') && !isTracked(t),
-  );
-  const ignored = opts.ignored ?? ignoredPaths(root, candidates);
-  const isIgnored = (target: string): boolean => {
-    const clean = target.replace(/\/$/, '');
-    if (ignored.has(clean)) return true;
-    for (const p of ignored) if (clean.startsWith(`${p}/`)) return true;
-    return false;
-  };
+  const repo = repoPaths(root, [...new Set(found.map((l) => l.target))], {
+    tracked: opts.tracked,
+    ignored: opts.ignored,
+  });
 
   const out = new Map<LinkClass, LinkRef[]>();
   for (const link of found) {
     const cls = classifyLink({
       link,
-      targetTracked: isTracked(link.target),
-      targetIgnored: isIgnored(link.target),
+      targetTracked: repo.isTracked(link.target),
+      targetIgnored: repo.isIgnored(link.target),
       mirrorPrefix,
       historicalPrefixes,
       redirects,
