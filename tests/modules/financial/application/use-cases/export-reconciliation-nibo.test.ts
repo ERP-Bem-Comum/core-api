@@ -180,7 +180,16 @@ const buildDeps = (cfg: Deps) => {
 };
 
 const run = async (cfg: Deps, periodId = PERIOD_ID): Promise<Result<{ content: string }, string>> =>
-  exportReconciliationNibo(buildDeps(cfg))({ periodId });
+  exportReconciliationNibo(buildDeps(cfg))({ by: 'period', periodId });
+
+// #649: caminho por RANGE (conta + intervalo direto), sem `:id`.
+const runByRange = async (cfg: Deps): Promise<Result<{ content: string }, string>> =>
+  exportReconciliationNibo(buildDeps(cfg))({
+    by: 'range',
+    debitAccountRef: DEBIT_ACCOUNT,
+    periodStart: new Date('2026-03-01T00:00:00.000Z'),
+    periodEnd: new Date('2026-03-31T00:00:00.000Z'),
+  });
 
 const baseCfg = (over: Partial<Deps> = {}): Deps => ({
   period: makePeriod(),
@@ -193,6 +202,26 @@ const baseCfg = (over: Partial<Deps> = {}): Deps => ({
 
 // ── testes ───────────────────────────────────────────────────────────────────
 describe('financial/application — exportReconciliationNibo (#146)', () => {
+  it('#649: por RANGE (conta+intervalo) exporta SEM depender do período (period:null) e bate com o :id', async () => {
+    const tx = makeTx('tx-1');
+    const rec = makeReconciliation('tx-1', { items: [item('pay-1', 200000)] });
+    const seed = {
+      txs: [tx],
+      reconciliations: new Map([['tx-1', rec]]),
+      docRows: [docRow('pay-1')],
+    };
+    // period:null → se o caminho RANGE chamasse findById, daria 'reconciliation-period-not-found'.
+    const rangeR = await runByRange(baseCfg({ period: null, ...seed }));
+    assert.ok(rangeR.ok, JSON.stringify(rangeR));
+    const periodR = await run(baseCfg(seed));
+    assert.ok(periodR.ok);
+    assert.equal(
+      rangeR.value.content,
+      periodR.value.content,
+      'range == período com a mesma tripla',
+    );
+  });
+
   it('A: lançamento de título conciliado → 1 linha com nomes resolvidos e sinal negativo (Debit)', async () => {
     const tx = makeTx('tx-1');
     const rec = makeReconciliation('tx-1', { items: [item('pay-1', 200000)] });

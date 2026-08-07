@@ -74,14 +74,27 @@ const git = (args: readonly string[]): string =>
 const trackedPaths = (): ReadonlySet<string> =>
   new Set(git(['ls-files']).split('\n').filter(Boolean));
 
-/** `true` se o caminho foi DELIBERADAMENTE excluído do repositório (entrada de `.gitignore`). */
+/**
+ * `true` se o caminho foi DELIBERADAMENTE excluído do repositório (entrada de `.gitignore`).
+ *
+ * ⚠️ Um padrão só-diretório do `.gitignore` (`handbook/guidelines/`, com barra final) só casa no
+ * `check-ignore` quando o alvo TAMBÉM traz a barra — ou quando o diretório existe neste disco. Mas
+ * `resolveFromSource` passa por `path.resolve`, que remove a barra final: o alvo chega aqui como
+ * `handbook/guidelines`, e num clone limpo (CI, ou máquina sem o material local-only) o diretório
+ * não existe, então a forma sem barra NÃO casa e o local-only virava falso "link morto". Por isso
+ * tentamos as duas formas — a barra restaura a semântica de diretório do padrão.
+ */
 const isDeliberatelyIgnored = (rel: string): boolean => {
-  try {
-    git(['check-ignore', '--quiet', '--', rel.replace(/^\.\//, '')]);
-    return true;
-  } catch {
-    return false; // exit != 0 → não está ignorado
+  const clean = rel.replace(/^\.\//, '').replace(/\/$/, '');
+  for (const candidate of [clean, `${clean}/`]) {
+    try {
+      git(['check-ignore', '--quiet', '--', candidate]);
+      return true;
+    } catch {
+      // este candidato não está ignorado — tenta a próxima forma
+    }
   }
+  return false; // nenhuma forma casou → não está ignorado
 };
 
 describe('CLAUDE-MD-LINKS — a doc canônica não aponta para o vazio', () => {

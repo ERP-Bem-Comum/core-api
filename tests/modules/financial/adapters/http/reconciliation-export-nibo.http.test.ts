@@ -99,6 +99,31 @@ const NIBO_HEADER =
   'Tipo de transação;Nome do contato;Descrição;Categoria;Valor;Vencimento;Previsto para;Competência;Centro de custo;Favorito;Tipo de contato;Referência;Conta;Data pag/rec/transferência;Anotação';
 
 describe('financial/http — reconciliation export Nibo CSV (#146)', () => {
+  it('#649: GET /reconciliation/export por conta+intervalo, SEM período fechado → 200 + cabeçalho Nibo', async () => {
+    // Conta que NUNCA teve período fechado — a rota `:id` seria impossível; a por-range exporta igual.
+    const FRESH_ACCOUNT = 'b2222222-2222-4222-8222-222222222222';
+    const res = await handle.app.inject({
+      method: 'GET',
+      url: `/api/v2/financial/reconciliation/export?debitAccountRef=${FRESH_ACCOUNT}&periodStart=2026-03-01&periodEnd=2026-03-31&format=csv-nibo`,
+      headers: { authorization: `Bearer ${READER}` },
+    });
+    assert.equal(res.statusCode, 200, `esperado 200, obtido ${res.statusCode}: ${res.body}`);
+    assert.match(res.headers['content-type'] ?? '', /text\/csv/);
+    assert.ok(
+      res.body.includes('Tipo de transação'),
+      'cabeçalho Nibo presente (export vazio, sem período)',
+    );
+  });
+
+  it('#649: GET /reconciliation/export sem periodEnd → 400 (schema)', async () => {
+    const res = await handle.app.inject({
+      method: 'GET',
+      url: `/api/v2/financial/reconciliation/export?debitAccountRef=${ACCOUNT}&periodStart=2026-03-01&format=csv-nibo`,
+      headers: { authorization: `Bearer ${READER}` },
+    });
+    assert.equal(res.statusCode, 400, `esperado 400, obtido ${res.statusCode}: ${res.body}`);
+  });
+
   it('CA1: GET export?format=csv-nibo (período vazio) → 200 + text/csv + cabeçalho Nibo 15 colunas', async () => {
     const res = await handle.app.inject({
       method: 'GET',
