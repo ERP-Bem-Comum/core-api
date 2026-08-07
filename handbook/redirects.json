@@ -1,0 +1,228 @@
+{
+  "$schema-nota": "Mapa de redirecionamento do handbook — Fase 3 da spec 041. Chave: caminho MORTO, relativo à raiz do repo. `to`: destino vivo, ou null para LÁPIDE (documento morto sem substituto). `reason`: por que, em uma linha. `since`: quando foi declarado. Consumido por scripts/handbook/link-scan.ts e pelo gate de tombstone; validado por tests/cleanup/redirects.test.ts. Existe para endereçar link morto SEM editar documento histórico ou ADR aceito, que o ADR-0057 §5 e o anti-padrão #3 do CLAUDE.md proíbem tocar.",
+
+  "handbook/domain": {
+    "to": "handbook/domain_questions",
+    "reason": "Diretório renomeado: o material de DDD passou a viver em domain_questions/, organizado por módulo",
+    "since": "2026-08-07"
+  },
+  "handbook/domain/README.md": {
+    "to": "handbook/domain_questions/README.md",
+    "reason": "Índice do domínio, no diretório renomeado",
+    "since": "2026-08-07"
+  },
+  "handbook/domain/contratos": {
+    "to": "handbook/domain_questions/contratos",
+    "reason": "Módulo contratos, no diretório renomeado",
+    "since": "2026-08-07"
+  },
+  "handbook/domain/contratos/DOCUMENTO_MESTRE.md": {
+    "to": "handbook/domain_questions/contratos/especificacao-dominio.md",
+    "reason": "Mesmo documento, renomeado — 'Especificação de Domínio: Reestruturação do Módulo de Contratos'",
+    "since": "2026-08-07"
+  },
+  "handbook/domain/contratos/04-aditivos-context.md": {
+    "to": "handbook/domain_questions/contratos/bounded-contexts/aditivos.md",
+    "reason": "O BC virou arquivo dentro de bounded-contexts/, sem o prefixo numérico",
+    "since": "2026-08-07"
+  },
+  "handbook/domain/contratos/05-timeline-context.md": {
+    "to": "handbook/domain_questions/contratos/bounded-contexts/timeline.md",
+    "reason": "O BC virou arquivo dentro de bounded-contexts/, sem o prefixo numérico",
+    "since": "2026-08-07"
+  },
+  "handbook/domain/contratos/06-event-line-context.md": {
+    "to": "handbook/domain_questions/contratos/06-event-flow.md",
+    "reason": "Mesma 'Matriz de Fluxo de Eventos' do módulo contratos, renomeada de event-line para event-flow",
+    "since": "2026-08-07"
+  },
+
+  "handbook/domain/02-context-map.md": {
+    "to": "handbook/domain_questions/financeiro/02-context-map.md",
+    "reason": "A raiz de domain/ era o módulo FINANCEIRO (contratos vivia em domain/contratos/); o mapa de contextos da raiz é o do financeiro",
+    "since": "2026-08-07"
+  },
+  "handbook/domain/DOCUMENTO_MESTRE.md": {
+    "to": "handbook/domain_questions/financeiro/especificacao-mestre.md",
+    "reason": "Confirmado pelo texto de quem cita: 'modelo centrado em Fato Gerador (documento fiscal soberano)' é a Especificação Mestra do Financeiro",
+    "since": "2026-08-07"
+  },
+  "handbook/domain/03-gestao-documentos-context.md": {
+    "to": "handbook/domain_questions/financeiro/bounded-contexts/gestao-documentos.md",
+    "reason": "O BC virou arquivo dentro de bounded-contexts/, sem o prefixo numérico",
+    "since": "2026-08-07"
+  },
+  "handbook/domain/04-titulos-liquidacao-context.md": {
+    "to": "handbook/domain_questions/financeiro/bounded-contexts/titulos-liquidacao.md",
+    "reason": "O BC virou arquivo dentro de bounded-contexts/, sem o prefixo numérico",
+    "since": "2026-08-07"
+  },
+  "handbook/domain/05-integracao-bancaria-context.md": {
+    "to": "handbook/domain_questions/financeiro/bounded-contexts/integracao-bancaria.md",
+    "reason": "O BC virou arquivo dentro de bounded-contexts/, sem o prefixo numérico",
+    "since": "2026-08-07"
+  },
+  "handbook/domain/06-event-line-context.md": {
+    "to": "handbook/domain_questions/financeiro/06-event-flow.md",
+    "reason": "Quem cita chama de 'matriz interna completa do módulo Financeiro'; renomeada de event-line para event-flow",
+    "since": "2026-08-07"
+  },
+
+  "handbook/domain/10-mapeamento-legado-schema.md": {
+    "to": null,
+    "reason": "LÁPIDE. Mapeamento das 32 tabelas do dump legado — não sobreviveu à reorganização e não existe em lugar nenhum do repo. Era o 'documento mestre da descoberta' da inquiry 0014, que registra o aviso: retomá-la exige refazer o mapeamento a partir de database/.dump/schema-only.sql",
+    "since": "2026-08-07"
+  },
+  "handbook/domain/08-glossario-ubiquo.md": {
+    "to": null,
+    "reason": "LÁPIDE. Glossário ubíquo sem arquivo sucessor; o tema foi absorvido dentro de domain_questions/financeiro/especificacao-mestre.md. Redirecionar para lá enganaria — seção não é documento",
+    "since": "2026-08-07"
+  },
+  "handbook/domain/09-status-maquina-estados.md": {
+    "to": null,
+    "reason": "LÁPIDE. Máquina de estados sem arquivo sucessor; o tema aparece dentro de especificacao-mestre.md e de bounded-contexts/titulos-liquidacao.md, em nenhum deles como documento próprio",
+    "since": "2026-08-07"
+  },
+  "handbook/domain/11-parceiros-cadastros-context.md": {
+    "to": null,
+    "reason": "LÁPIDE. O BC de Parceiros nunca foi para domain_questions/; o módulo partners tem ADR-0031 e specs, mas não documento de domínio equivalente",
+    "since": "2026-08-07"
+  },
+  "handbook/domain/auth/design-decisions.md": {
+    "to": null,
+    "reason": "LÁPIDE. Decisões de design de auth sem sucessor em domain_questions/; a norma vigente está nos ADR-0024 (RBAC) e ADR-0055 (authN)",
+    "since": "2026-08-07"
+  },
+  "cloud_representation.yaml": {
+    "to": null,
+    "reason": "LÁPIDE. Representação declarativa da topologia cloud citada pela inquiry 0013; nunca chegou a existir na raiz do repositório",
+    "since": "2026-08-07"
+  },
+
+  "handbook/tickets/todo/PAR-ACT-ACORDO.md": {
+    "to": "handbook/tickets/done/PAR-ACT-ACORDO.md",
+    "reason": "Ticket concluído e movido de todo/ para done/ no commit da26d91e",
+    "since": "2026-08-07"
+  },
+  "handbook/tickets/todo/PAR-GRID-FILTROS-EXPORT.md": {
+    "to": "handbook/tickets/todo/PAR-GRID-CONTRACTS-COUNT.md",
+    "reason": "Consolidado: o card sucessor declara absorver o resíduo deste após verificação em código (~70% já entregue)",
+    "since": "2026-08-07"
+  },
+  "handbook/tickets/todo/PAR-COLLABORATOR-GRID-GAPS.md": {
+    "to": "handbook/tickets/todo/PAR-GRID-CONTRACTS-COUNT.md",
+    "reason": "Consolidado: o card sucessor declara absorver o resíduo deste após verificação em código (~70% já entregue)",
+    "since": "2026-08-07"
+  },
+  "handbook/inquiries/0023-language-runtime-reevaluation.md": {
+    "to": "handbook/inquiries/0023-typescript-7-native-spike.md",
+    "reason": "Mesma inquiry 0023, renomeada quando o estudo de runtime virou o spike medido de TypeScript 7",
+    "since": "2026-08-07"
+  },
+  "handbook/interviews/0001/Pergunta_H2_tec_lider_using_skill_ts-domain-modeler.md": {
+    "to": "handbook/interviews/0001/Pergunta_H2_tec_lider_using_skill_ports-and-adapters.md",
+    "reason": "O arquivo existe com outro sufixo de skill: a H2 foi conduzida com ports-and-adapters, não ts-domain-modeler",
+    "since": "2026-08-07"
+  },
+  "handbook/reviews/03-data-architecture.md": {
+    "to": "handbook/architecture/03-data-architecture.md",
+    "reason": "Citação escrita como se o arquivo fosse irmão da review; ele sempre viveu em architecture/",
+    "since": "2026-08-07"
+  },
+  "handbook/reviews/adr/0003-shared-db-isolated-schemas.md": {
+    "to": "handbook/architecture/adr/0003-shared-db-isolated-schemas.md",
+    "reason": "Citação escrita como se houvesse adr/ dentro de reviews/; o ADR sempre viveu em architecture/adr/",
+    "since": "2026-08-07"
+  },
+  "handbook/reference/mysql/mysql-refman-8.4--oracle.md": {
+    "to": "handbook/reference/mysql/mysql-refman-8.4--oracle",
+    "reason": "O manual é um DIRETÓRIO de partes, não um arquivo .md único",
+    "since": "2026-08-07"
+  },
+
+  "handbook/architecture/adr/adr/0017-correlation-keys-cross-period-audit.md": {
+    "to": "handbook/architecture/adr/0017-correlation-keys-cross-period-audit.md",
+    "reason": "Prefixo duplicado: o ADR cita um irmão como se estivesse em adr/adr/. Dentro de ADR aceito — imutável, então se endereça por aqui",
+    "since": "2026-08-07"
+  },
+  "specs/002-contracts-http-gaps": {
+    "to": "handbook/specs/002-contracts-http-gaps",
+    "reason": "Caminho escrito relativo à raiz do repo dentro do handbook; as specs vivem em handbook/specs/",
+    "since": "2026-08-07"
+  },
+  "specs/013-partners-supplier-outbox": {
+    "to": "handbook/specs/013-partners-supplier-outbox",
+    "reason": "Caminho escrito relativo à raiz do repo dentro de ADR aceito — imutável, então se endereça por aqui",
+    "since": "2026-08-07"
+  },
+  "specs/013-partners-supplier-outbox/contracts/README.md": {
+    "to": "handbook/specs/013-partners-supplier-outbox/contracts/README.md",
+    "reason": "Caminho escrito relativo à raiz do repo dentro de ADR aceito — imutável, então se endereça por aqui",
+    "since": "2026-08-07"
+  },
+  "specs/014-financial-supplier-readmodel": {
+    "to": "handbook/specs/014-financial-supplier-readmodel",
+    "reason": "Caminho escrito relativo à raiz do repo dentro de ADR aceito — imutável, então se endereça por aqui",
+    "since": "2026-08-07"
+  },
+  "specs/015-collaborator-complete-registration": {
+    "to": "handbook/specs/015-collaborator-complete-registration",
+    "reason": "Caminho escrito relativo à raiz do repo dentro de ADR aceito — imutável, então se endereça por aqui",
+    "since": "2026-08-07"
+  },
+  "specs/039-claude-native-harness/adr-rules-distillation.md": {
+    "to": "handbook/specs/039-claude-native-harness/adr-rules-distillation.md",
+    "reason": "Caminho escrito relativo à raiz do repo dentro de ADR aceito — imutável, então se endereça por aqui",
+    "since": "2026-08-07"
+  },
+  "handbook/handbook/architecture/adr/0035-partner-territory-soft-delete.md": {
+    "to": "handbook/architecture/adr/0035-partner-territory-soft-delete.md",
+    "reason": "Prefixo 'handbook/' duplicado: caminho de raiz escrito dentro de um documento que já vive no handbook",
+    "since": "2026-08-07"
+  },
+  "handbook/handbook/architecture/adr/0054-ai-assisted-contribution-policy.md": {
+    "to": "handbook/architecture/adr/0054-ai-assisted-contribution-policy.md",
+    "reason": "Prefixo 'handbook/' duplicado: caminho de raiz escrito dentro de um documento que já vive no handbook",
+    "since": "2026-08-07"
+  },
+  "handbook/handbook/architecture/adr/0056-ocr-port-adapter.md": {
+    "to": "handbook/architecture/adr/0056-ocr-port-adapter.md",
+    "reason": "Prefixo 'handbook/' duplicado: caminho de raiz escrito dentro de um documento que já vive no handbook",
+    "since": "2026-08-07"
+  },
+  "handbook/handbook/research/feture_propose/gestao_programas/back_referncias.md": {
+    "to": "handbook/research/feture_propose/gestao_programas/back_referncias.md",
+    "reason": "Prefixo 'handbook/' duplicado (o typo 'referncias' está no nome real do arquivo)",
+    "since": "2026-08-07"
+  },
+  "handbook/handbook/research/feture_propose/gestao_programas/front_referencias.md": {
+    "to": "handbook/research/feture_propose/gestao_programas/front_referencias.md",
+    "reason": "Prefixo 'handbook/' duplicado",
+    "since": "2026-08-07"
+  },
+  "handbook/.claude/skills/ts-domain-modeler/SKILL.md": {
+    "to": ".claude/skills/ts-domain-modeler/SKILL.md",
+    "reason": "A skill vive na raiz do repo, não dentro do handbook",
+    "since": "2026-08-07"
+  },
+  "handbook/.claude/skills/modular-monolith/SKILL.md": {
+    "to": ".claude/skills/modular-monolith/SKILL.md",
+    "reason": "A skill vive na raiz do repo, não dentro do handbook",
+    "since": "2026-08-07"
+  },
+  "handbook/.claude/skills/web-security-backend/SKILL.md": {
+    "to": ".claude/skills/web-security-backend/SKILL.md",
+    "reason": "A skill vive na raiz do repo, não dentro do handbook",
+    "since": "2026-08-07"
+  },
+  "handbook/.mcp.json": {
+    "to": ".mcp.json",
+    "reason": "O manifesto de MCP vive na raiz do repo, não dentro do handbook",
+    "since": "2026-08-07"
+  },
+  "handbook/context/decisions/SCHEMA.md": {
+    "to": "context/decisions/SCHEMA.md",
+    "reason": "O diretório context/ vive na raiz do repo, não dentro do handbook",
+    "since": "2026-08-07"
+  }
+}
