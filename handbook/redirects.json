@@ -104,14 +104,29 @@
     "reason": "Ticket concluído e movido de todo/ para done/ no commit da26d91e",
     "since": "2026-08-07"
   },
+  "handbook/tickets/todo": {
+    "to": "handbook/tickets/done",
+    "reason": "O handoff front→core-api encerrou: a triagem de 2026-08-07 confrontou os 14 cards contra a borda HTTP e todos descreviam trabalho concluído. `todo/` deixou de existir; trabalho novo vai para issues (ADR-0040)",
+    "since": "2026-08-07"
+  },
   "handbook/tickets/todo/PAR-GRID-FILTROS-EXPORT.md": {
-    "to": "handbook/tickets/todo/PAR-GRID-CONTRACTS-COUNT.md",
+    "to": "handbook/tickets/done/PAR-GRID-CONTRACTS-COUNT.md",
     "reason": "Consolidado: o card sucessor declara absorver o resíduo deste após verificação em código (~70% já entregue)",
     "since": "2026-08-07"
   },
   "handbook/tickets/todo/PAR-COLLABORATOR-GRID-GAPS.md": {
-    "to": "handbook/tickets/todo/PAR-GRID-CONTRACTS-COUNT.md",
+    "to": "handbook/tickets/done/PAR-GRID-CONTRACTS-COUNT.md",
     "reason": "Consolidado: o card sucessor declara absorver o resíduo deste após verificação em código (~70% já entregue)",
+    "since": "2026-08-07"
+  },
+  "handbook/tickets/done/PAR-GRID-FILTROS-EXPORT.md": {
+    "to": "handbook/tickets/done/PAR-GRID-CONTRACTS-COUNT.md",
+    "reason": "O card nunca chegou a done/ — foi consolidado antes. A entrada existe porque o índice PAR-PARCEIROS-RESUMO o cita por caminho relativo, que passou a resolver aqui quando o diretório mudou",
+    "since": "2026-08-07"
+  },
+  "handbook/tickets/done/PAR-COLLABORATOR-GRID-GAPS.md": {
+    "to": "handbook/tickets/done/PAR-GRID-CONTRACTS-COUNT.md",
+    "reason": "O card nunca chegou a done/ — foi consolidado antes. A entrada existe porque o índice PAR-PARCEIROS-RESUMO o cita por caminho relativo, que passou a resolver aqui quando o diretório mudou",
     "since": "2026-08-07"
   },
   "handbook/inquiries/0023-language-runtime-reevaluation.md": {
