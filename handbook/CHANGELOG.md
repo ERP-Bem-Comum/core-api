@@ -4,6 +4,16 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-08-07 — 📚 Higienização (1/4): `research/` volta a ser só material autoral
+
+**A primeira aplicação do inventário quase enterrou material vivo, e a leitura salvou.** `handbook/research` aparecia com 8 arquivos, 8 órfãos e **zero citadores** — perfil de resíduo. É a **fonte canônica declarada de quatro specs entregues**: a [spec 008](./specs/008-gestao-programas/spec.md) escreve que os dois arquivos de `gestao_programas/` "são a fonte canônica desta spec", a 036 cita linha específica como evidência, a 005 declara a pasta como insumo, e os quatro módulos correspondentes existem em `src/` com 43 a 205 arquivos.
+
+O número estava errado por defeito da métrica — corrigido antes desta mudança, com errata em [`reviews/0004`](./reviews/0004-inventario-handbook-e-claude.md).
+
+**O que de fato saiu foram os 3 cookbooks da Anthropic** (memória de agente, context engineering, workflows multi-LLM): 4.256 linhas, **62% do diretório**, e material de **terceiro**. Foram para [`reference/ia-tooling/`](./reference/ia-tooling/), que é o cache declarado de documentação externa — `research/` é para trabalho autoral. Entrada em `redirects.json`, linha no índice do `reference/`.
+
+`handbook/research` passou de 8 arquivos com 3 órfãos para **5 arquivos com zero órfãos**: tudo o que resta é autoral e referenciado por alguém.
+
 ## 2026-08-07 — 🧹 Débito dos gates pago, e o inventário que precede a higienização
 
 **Os três gates escritos hoje passaram a perguntar ao git.** `redirects`, `handbook-refs` e `handbook-links` ainda decidiam existência com `existsSync` — passavam, mas repetiam o padrão que o CI derrubou duas vezes. A lógica saiu de dentro do `scanHandbook`, onde estava inline, e virou `repoPaths()`: `isTracked` · `isIgnored` · `exists`. Uma fonte, quatro consumidores.
