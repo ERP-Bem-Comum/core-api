@@ -9,6 +9,7 @@
  */
 
 import { err, ok, type Result } from '#src/shared/primitives/result.ts';
+import { isProductionEnv } from '#src/shared/runtime/node-env.ts';
 
 const FIELDS = [
   ['resetBaseUrl', 'AUTH_RESET_BASE_URL'],
@@ -32,7 +33,7 @@ const isAbsoluteHttpUrl = (value: string): boolean => {
 export const readEmailLinkBaseUrls = (
   env: Readonly<Record<string, string | undefined>>,
 ): Result<EmailLinkBaseUrls, readonly string[]> => {
-  const isProduction = env['NODE_ENV'] === 'production';
+  const isProduction = isProductionEnv(env);
   const errors: string[] = [];
   const urls: Partial<Record<Field, string>> = {};
   for (const [field, name] of FIELDS) {
