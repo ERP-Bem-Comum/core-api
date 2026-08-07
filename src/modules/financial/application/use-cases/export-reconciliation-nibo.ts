@@ -43,7 +43,11 @@ export type ExportReconciliationNiboDeps = Readonly<{
   niboExporter: NiboExporter;
 }>;
 
-export type ExportReconciliationNiboInput = Readonly<{ periodId: string }>;
+// #649: por PERÍODO (`:id`) OU por RANGE direto (conta + intervalo), sem depender de período fechado.
+// O período sempre foi só carona da tripla `(debitAccountRef, periodStart, periodEnd)`.
+export type ExportReconciliationNiboInput =
+  | Readonly<{ by: 'period'; periodId: string }>
+  | Readonly<{ by: 'range'; debitAccountRef: string; periodStart: Date; periodEnd: Date }>;
 
 export type ExportReconciliationNiboOutput = Readonly<{ content: string }>;
 
@@ -58,6 +62,37 @@ export type ExportReconciliationNiboError =
   | CostCenterReadError
   | SupplierViewStoreError
   | CedenteAccountStoreError;
+
+type ExportTriple = Readonly<{ debitAccountRef: string; periodStart: Date; periodEnd: Date }>;
+
+// Resolve a tripla `(debitAccountRef, periodStart, periodEnd)`: do range direto, ou do período
+// (`:id`) via findById. O período sempre foi só carona da tripla — nenhum caminho checa `status`.
+const resolveTriple = async (
+  input: ExportReconciliationNiboInput,
+  periodStore: Pick<ReconciliationPeriodStore, 'findById'>,
+): Promise<
+  Result<
+    ExportTriple,
+    | 'reconciliation-period-id-invalid'
+    | 'reconciliation-period-not-found'
+    | ReconciliationPeriodStoreError
+  >
+> => {
+  if (input.by === 'range') {
+    return ok({
+      debitAccountRef: input.debitAccountRef,
+      periodStart: input.periodStart,
+      periodEnd: input.periodEnd,
+    });
+  }
+  const idR = ReconciliationPeriodId.rehydrate(input.periodId);
+  if (!idR.ok) return err('reconciliation-period-id-invalid');
+  const periodR = await periodStore.findById(idR.value);
+  if (!periodR.ok) return err(periodR.error);
+  if (periodR.value === null) return err('reconciliation-period-not-found');
+  const { debitAccountRef, periodStart, periodEnd } = periodR.value;
+  return ok({ debitAccountRef, periodStart, periodEnd });
+};
 
 // Projeção concreta (não-domínio): mapeamento de apresentação do layout Nibo. Espelha o EXPORT-
 // ABSTRACTION-DESIGN — a composição da visão é da borda/app, transitória; `domain/` permanece intocado.
@@ -106,18 +141,14 @@ export const exportReconciliationNibo =
   async (
     input: ExportReconciliationNiboInput,
   ): Promise<Result<ExportReconciliationNiboOutput, ExportReconciliationNiboError>> => {
-    const idR = ReconciliationPeriodId.rehydrate(input.periodId);
-    if (!idR.ok) return err('reconciliation-period-id-invalid');
-
-    const periodR = await deps.periodStore.findById(idR.value);
-    if (!periodR.ok) return err(periodR.error);
-    if (periodR.value === null) return err('reconciliation-period-not-found');
-    const period = periodR.value;
+    const tripleR = await resolveTriple(input, deps.periodStore);
+    if (!tripleR.ok) return err(tripleR.error);
+    const { debitAccountRef, periodStart, periodEnd } = tripleR.value;
 
     const txsR = await deps.statements.listTransactionsByPeriod(
-      period.debitAccountRef,
-      period.periodStart,
-      period.periodEnd,
+      debitAccountRef,
+      periodStart,
+      periodEnd,
     );
     if (!txsR.ok) return err(txsR.error);
 
@@ -179,7 +210,7 @@ export const exportReconciliationNibo =
       return ok(nickname);
     };
 
-    const periodAccountR = await resolveAccount(period.debitAccountRef);
+    const periodAccountR = await resolveAccount(debitAccountRef);
     if (!periodAccountR.ok) return err(periodAccountR.error);
     const periodAccount = periodAccountR.value;
 
