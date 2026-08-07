@@ -87,6 +87,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
         statements,
         exporter: reconciliationExporter,
       })({
+        by: 'period',
         periodId: String(closed.value.periodId),
         format: 'csv',
       });
