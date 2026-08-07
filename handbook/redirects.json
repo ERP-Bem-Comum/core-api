@@ -134,6 +134,11 @@
     "reason": "Citação escrita como se houvesse adr/ dentro de reviews/; o ADR sempre viveu em architecture/adr/",
     "since": "2026-08-07"
   },
+  "handbook/research/ia_tooling": {
+    "to": "handbook/reference/ia-tooling",
+    "reason": "Material de terceiro (cookbooks da Anthropic) movido de research/, que é para trabalho autoral, para reference/, que é o cache de documentação externa",
+    "since": "2026-08-07"
+  },
   "handbook/reference/mysql/mysql-refman-8.4--oracle.md": {
     "to": "handbook/reference/mysql/mysql-refman-8.4--oracle",
     "reason": "O manual é um DIRETÓRIO de partes, não um arquivo .md único",

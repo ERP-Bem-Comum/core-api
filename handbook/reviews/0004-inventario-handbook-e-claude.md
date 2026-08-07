@@ -28,7 +28,7 @@ Este inventário mede três coisas por diretório, e nenhuma delas é qualidade:
 
 | diretório | arqs | linhas | órfãos | citado | quieto |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `handbook/reference` | 685 | 509.762 | 0 | 79 | 4d |
+| `handbook/reference` | 688 | 514.022 | 3 | 79 | 4d |
 | `handbook/specs` | 329 | 34.473 | 188 | 10 | 0d |
 | `.claude/skills` | 106 | 12.503 | 3 | 37 | 1d |
 | `handbook/architecture` | 66 | 8.665 | **0** | **117** | 1d |
@@ -40,7 +40,7 @@ Este inventário mede três coisas por diretório, e nenhuma delas é qualidade:
 | `.claude/rules` | 16 | 571 | 4 | 24 | 0d |
 | `.claude/agents` | 14 | 3.727 | 0 | 18 | 1d |
 | `handbook/infrastructure` | 13 | 2.583 | 5 | 8 | 4d |
-| `handbook/research` | 8 | 6.830 | 3 | 4 | 58d |
+| `handbook/research` | 5 | 2.571 | **0** | 4 | 58d |
 | `handbook/reviews` | 4 | 846 | 1 | 4 | 0d |
 | `handbook/incidents` | 3 | 444 | 1 | 4 | 1d |
 | `handbook/operations` | 3 | 575 | 2 | 4 | 58d |
@@ -109,7 +109,7 @@ da conta muda a escala do problema: o material **autoral** são ~730 arquivos, n
 
 | diretório | sinal | leitura |
 | :--- | :--- | :--- |
-| `handbook/research` | 8 arquivos, 3 órfãos, 4 citadores, 58d | ~~resíduo~~ — **`feture_propose/` é fonte canônica de 4 specs entregues**; os 3 órfãos são cookbooks de terceiro em `ia_tooling/`, que pertencem a `reference/` |
+| `handbook/research` | 5 arquivos, **0 órfãos**, 4 citadores, 58d | ✅ **resolvido** — `feture_propose/` é fonte canônica de 4 specs entregues e **ficou**; os 3 cookbooks de terceiro foram para `reference/ia-tooling/` |
 | `handbook/tickets` | 8 de 33 órfãos, 6 citadores, 53d | kanban migrou para issues do GitHub; resta saber o que em `todo/` ainda é backlog |
 | `handbook/interviews` | 51 arquivos, 2 órfãos, 80d | o mais silencioso, mas quase tudo é citado — arquivo histórico legítimo |
 | `handbook/legacy_docs` · `runbooks` | 2 arquivos cada, **zero citadores** | os únicos com alcance realmente nulo |
@@ -125,9 +125,10 @@ versionado como conhecimento compartilhado.
 
 Nenhuma destas é decisão de ferramenta; todas são de quem conhece o conteúdo.
 
-1. **`handbook/research`** — a leitura desfez a suspeita: `feture_propose/` é fonte canônica de 4 specs
-   entregues e **fica**. O que resta decidir é menor: os 3 cookbooks de terceiro em `ia_tooling/`
-   (4.256 linhas, 62% do diretório) pertencem a `reference/`, onde material espelhado vive?
+1. ✅ **`handbook/research` — RESOLVIDO em 2026-08-07.** A leitura desfez a suspeita: `feture_propose/`
+   é fonte canônica de 4 specs entregues e **ficou**. Os 3 cookbooks de terceiro (4.256 linhas, 62% do
+   diretório) foram para `reference/ia-tooling/`, com entrada em `redirects.json`. O diretório passou a
+   ter **5 arquivos e zero órfãos** — material autoral, todo referenciado.
 2. **`handbook/tickets`** — o kanban migrou para issues do GitHub. O que resta em `todo/` ainda é
    backlog vivo, ou é registro do que já foi absorvido?
 3. **`handbook/interviews`** — 51 arquivos de uma entrevista fechada. Arquivo histórico (fica como
