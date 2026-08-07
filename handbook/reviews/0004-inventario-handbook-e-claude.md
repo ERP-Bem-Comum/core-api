@@ -24,32 +24,56 @@ Este inventário mede três coisas por diretório, e nenhuma delas é qualidade:
 
 ---
 
-## 2. O retrato (2026-08-07)
+## 2. O retrato (2026-08-07, **corrigido** — ver §2.1)
 
 | diretório | arqs | linhas | órfãos | citado | quieto |
 | :--- | ---: | ---: | ---: | ---: | ---: |
-| `handbook/reference` | 685 | 509.762 | 323 | 22 | 4d |
-| `handbook/specs` | 329 | 34.473 | 239 | 3 | 0d |
-| `.claude/skills` | 106 | 12.503 | 3 | 20 | 1d |
-| `handbook/architecture` | 66 | 8.665 | **0** | **85** | 1d |
-| `handbook/interviews` | 51 | 8.392 | 8 | 2 | 80d |
-| `handbook/inquiries` | 33 | 5.878 | **0** | 28 | 0d |
-| `handbook/tickets` | 33 | 2.178 | 18 | 1 | 53d |
-| `.claude/agent-memory` | 25 | 516 | 7 | 0 | 1d |
-| `handbook/domain_questions` | 22 | 3.243 | 4 | 7 | 23d |
-| `.claude/rules` | 16 | 571 | 12 | 2 | 0d |
-| `.claude/agents` | 14 | 3.727 | 1 | 10 | 1d |
-| `handbook/infrastructure` | 13 | 2.583 | 8 | 5 | 4d |
-| `handbook/research` | 8 | 6.830 | **8** | **0** | 58d |
-| `handbook/incidents` | 3 | 444 | 1 | 3 | 1d |
+| `handbook/reference` | 685 | 509.762 | 0 | 79 | 4d |
+| `handbook/specs` | 329 | 34.473 | 188 | 10 | 0d |
+| `.claude/skills` | 106 | 12.503 | 3 | 37 | 1d |
+| `handbook/architecture` | 66 | 8.665 | **0** | **117** | 1d |
+| `handbook/interviews` | 51 | 8.392 | 2 | 3 | 80d |
+| `handbook/inquiries` | 33 | 5.878 | **0** | 30 | 0d |
+| `handbook/tickets` | 33 | 2.178 | 8 | 6 | 53d |
+| `.claude/agent-memory` | 25 | 516 | 7 | **0** | 1d |
+| `handbook/domain_questions` | 22 | 3.243 | 0 | 37 | 23d |
+| `.claude/rules` | 16 | 571 | 4 | 24 | 0d |
+| `.claude/agents` | 14 | 3.727 | 0 | 18 | 1d |
+| `handbook/infrastructure` | 13 | 2.583 | 5 | 8 | 4d |
+| `handbook/research` | 8 | 6.830 | 3 | 4 | 58d |
+| `handbook/reviews` | 4 | 846 | 1 | 4 | 0d |
+| `handbook/incidents` | 3 | 444 | 1 | 4 | 1d |
 | `handbook/operations` | 3 | 575 | 2 | 4 | 58d |
-| `handbook/reviews` | 3 | 722 | 2 | 2 | 4d |
-| `handbook/legacy_docs` | 2 | 570 | 1 | 0 | 67d |
+| `handbook/legacy_docs` | 2 | 570 | 1 | **0** | 67d |
 | `handbook/po-feedback` | 2 | 249 | 1 | 2 | 62d |
-| `handbook/runbooks` | 2 | 276 | 1 | 0 | 30d |
-| `handbook/process` | 1 | 1.227 | 0 | 2 | 4d |
+| `handbook/runbooks` | 2 | 276 | 1 | **0** | 30d |
+| `handbook/process` | 1 | 1.227 | 0 | 4 | 4d |
 | `handbook/api_documentations` | 0 | 0 | 0 | 0 | 71d |
-| **TOTAL** | **1.417** | **603.384** | **639** | | |
+| **TOTAL** | **1.418** | **603.508** | **227** | | |
+
+### 2.1 Errata — a primeira medição estava errada, e o erro era da ferramenta
+
+A versão original deste retrato contava **639 órfãos**; são **227**. A diferença não foi mudança no
+repositório: foi defeito na métrica, descoberto ao aplicá-la pela primeira vez — em `handbook/research`,
+que aparecia com **8 órfãos e zero citadores** e é a **fonte canônica declarada de quatro specs entregues**.
+Seguir aquele número teria arquivado material vivo.
+
+Três causas, todas corrigidas e agora cobertas por teste em `tests/scripts/inventory.test.ts`:
+
+| Causa | Efeito |
+| :--- | :--- |
+| Só link markdown contava | 4 das 6 citações ao `research` estão **em crase**, e o extrator as descartava — a regra "menção não é uso", certa para o tombstone, é **errada** para medir alcance |
+| Redirects não eram resolvidos | citação escrita com prefixo errado aponta para caminho inexistente, mas **referencia documento vivo** |
+| Referência a diretório não creditava o conteúdo | a spec 005 declara como insumo a **pasta** `…/gestao_de_usuarios`; os dois arquivos dentro apareciam sem citador |
+
+> ⚠️ **Duas perguntas diferentes, e confundi-las foi o erro de origem.** O tombstone pergunta *"alguém
+> quebra se eu apagar?"* — só link clicável quebra. O inventário pergunta *"alguém referencia isto?"* —
+> menção em prosa referencia. `buildBacklinks` seguiu como estava; `buildReferences` nasceu ao lado.
+
+**A calibragem tem limite declarado.** Creditar diretório de **topo** foi tentado e revertido: fazia
+este próprio review — que lista todos os diretórios numa tabela — "citar" os 1.418 arquivos e zerar os
+órfãos do repositório inteiro. Hoje só diretório com **dois segmentos abaixo da raiz** credita conteúdo.
+É heurística, não verdade: serve para **priorizar leitura**, nunca para decidir remoção sozinha.
 
 ---
 
@@ -57,14 +81,17 @@ Este inventário mede três coisas por diretório, e nenhuma delas é qualidade:
 
 Três armadilhas, todas verificadas antes de escrever este documento:
 
-- **`.claude/rules` com 12 de 16 "órfãs" é falso positivo.** Rule carrega por `paths:`, não por
+- **`.claude/rules` com 4 "órfãs" segue sendo falso positivo.** Rule carrega por `paths:`, não por
   citação — nenhuma precisa ser linkada para funcionar. As 16 têm `paths:` preenchido e são cobradas
   por `rules-self-verify.test.ts`. Aqui, órfão significa apenas "não citada em prosa".
 - **`handbook/api_documentations` não está vazio.** Tem 2 arquivos versionados (`openapi.yaml`,
   `doc.yaml`); o inventário conta só `.md`. Diretório sem markdown ≠ diretório morto.
-- **Órfão não é condenado.** `handbook/specs` tem 239 órfãos e é **histórico de especificação por
+- **Órfão não é condenado.** `handbook/specs` tem 188 órfãos e é **histórico de especificação por
   desenho** — o `CLAUDE.md` diz isso. Documento que ninguém cita pode ser exatamente o registro que
   se consulta uma vez por ano.
+- **Zero órfão também engana.** `handbook/reference` aparece com 0, mas é porque uma menção a
+  `handbook/reference/<tech>` credita a árvore inteira daquela tecnologia. O número diz "alguém
+  apontou para este conjunto", não "cada arquivo tem leitor".
 
 ---
 
@@ -72,24 +99,24 @@ Três armadilhas, todas verificadas antes de escrever este documento:
 
 **O volume não é o passivo.** `handbook/reference` sozinho é **85% das linhas** do handbook — e é
 material de terceiro espelhado (Node, Drizzle, Fastify, MySQL). Não se edita, se reespelha. Tirá-lo
-da conta muda a escala do problema: o material **autoral** são ~730 arquivos, não 1.417.
+da conta muda a escala do problema: o material **autoral** são ~730 arquivos, não 1.418.
 
 **Dois diretórios estão claramente vivos e saudáveis:** `handbook/architecture` (66 arquivos, **zero
-órfãos**, citado por **85** documentos — é o centro de gravidade real do repositório) e
-`handbook/inquiries` (zero órfãos, citado por 28, tocado hoje).
+órfãos**, citado por **117** documentos — é o centro de gravidade real do repositório) e
+`handbook/inquiries` (zero órfãos, citado por 30, tocado hoje).
 
-**Três estão quietos há mais de 50 dias com alcance quase nulo** — são os candidatos naturais a uma
-decisão explícita:
+**Os candidatos a decisão explícita, depois da correção da métrica:**
 
-| diretório | sinal |
-| :--- | :--- |
-| `handbook/research` | 8 arquivos, **8 órfãos**, **ninguém cita**, 58 dias parado |
-| `handbook/tickets` | 18 de 33 órfãos, 1 citador, 53 dias — e o kanban já migrou para issues do GitHub |
-| `handbook/interviews` | 51 arquivos, 80 dias — o mais silencioso do acervo |
+| diretório | sinal | leitura |
+| :--- | :--- | :--- |
+| `handbook/research` | 8 arquivos, 3 órfãos, 4 citadores, 58d | ~~resíduo~~ — **`feture_propose/` é fonte canônica de 4 specs entregues**; os 3 órfãos são cookbooks de terceiro em `ia_tooling/`, que pertencem a `reference/` |
+| `handbook/tickets` | 8 de 33 órfãos, 6 citadores, 53d | kanban migrou para issues do GitHub; resta saber o que em `todo/` ainda é backlog |
+| `handbook/interviews` | 51 arquivos, 2 órfãos, 80d | o mais silencioso, mas quase tudo é citado — arquivo histórico legítimo |
+| `handbook/legacy_docs` · `runbooks` | 2 arquivos cada, **zero citadores** | os únicos com alcance realmente nulo |
 
-**`.claude/` está saudável.** `skills` (106 arquivos, 3 órfãos, citado por 20), `agents` (14, 1
-órfão, citado por 10) e `rules` (16, todas com `paths:`) são material vivo e recém-tocado. O único
-ponto de atenção é `agent-memory`: 25 arquivos, **zero citadores**, e é local por desenho — não é
+**`.claude/` está saudável.** `skills` (106 arquivos, 3 órfãos, citado por 37), `agents` (14, **zero
+órfãos**, citado por 18) e `rules` (16, todas com `paths:`) são material vivo e recém-tocado. O único
+ponto de atenção é `agent-memory`: 25 arquivos, **zero citadores** — e é local por desenho, não
 versionado como conhecimento compartilhado.
 
 ---
@@ -98,8 +125,9 @@ versionado como conhecimento compartilhado.
 
 Nenhuma destas é decisão de ferramenta; todas são de quem conhece o conteúdo.
 
-1. **`handbook/research`** — 8 documentos que ninguém cita há 2 meses. Vira `legacy_docs`, morre com
-   lápide em `redirects.json`, ou volta a ser citado por quem deveria?
+1. **`handbook/research`** — a leitura desfez a suspeita: `feture_propose/` é fonte canônica de 4 specs
+   entregues e **fica**. O que resta decidir é menor: os 3 cookbooks de terceiro em `ia_tooling/`
+   (4.256 linhas, 62% do diretório) pertencem a `reference/`, onde material espelhado vive?
 2. **`handbook/tickets`** — o kanban migrou para issues do GitHub. O que resta em `todo/` ainda é
    backlog vivo, ou é registro do que já foi absorvido?
 3. **`handbook/interviews`** — 51 arquivos de uma entrevista fechada. Arquivo histórico (fica como
