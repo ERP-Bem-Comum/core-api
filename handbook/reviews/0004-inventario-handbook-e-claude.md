@@ -84,8 +84,9 @@ Três armadilhas, todas verificadas antes de escrever este documento:
 - **`.claude/rules` com 4 "órfãs" segue sendo falso positivo.** Rule carrega por `paths:`, não por
   citação — nenhuma precisa ser linkada para funcionar. As 16 têm `paths:` preenchido e são cobradas
   por `rules-self-verify.test.ts`. Aqui, órfão significa apenas "não citada em prosa".
-- **`handbook/api_documentations` não está vazio.** Tem 2 arquivos versionados (`openapi.yaml`,
-  `doc.yaml`); o inventário conta só `.md`. Diretório sem markdown ≠ diretório morto.
+- **`handbook/api_documentations` não está vazio, e não é do core-api.** Tem 2 YAML versionados; o
+  inventário conta só `.md`. E o conteúdo é o contrato do **legado NestJS** — diretório sem markdown ≠
+  diretório morto, e nome de diretório ≠ o que há dentro. Ver o `README.md` que passou a declarar isso.
 - **Órfão não é condenado.** `handbook/specs` tem 188 órfãos e é **histórico de especificação por
   desenho** — o `CLAUDE.md` diz isso. Documento que ninguém cita pode ser exatamente o registro que
   se consulta uma vez por ano.
@@ -111,7 +112,7 @@ da conta muda a escala do problema: o material **autoral** são ~730 arquivos, n
 | :--- | :--- | :--- |
 | `handbook/research` | 5 arquivos, **0 órfãos**, 4 citadores, 58d | ✅ **resolvido** — `feture_propose/` é fonte canônica de 4 specs entregues e **ficou**; os 3 cookbooks de terceiro foram para `reference/ia-tooling/` |
 | `handbook/tickets` | 33 arquivos, **1 órfão**, 53d | ✅ **resolvido** — os 14 cards de `todo/` descreviam trabalho concluído; `todo/` foi absorvido por `done/` e o README declara o handoff encerrado |
-| `handbook/interviews` | 51 arquivos, 2 órfãos, 80d | o mais silencioso, mas quase tudo é citado — arquivo histórico legítimo |
+| `handbook/interviews` | 51 arquivos, 2 órfãos, 80d | ✅ **não mexer** — a skill `ts-domain-modeler` cita a entrevista 0001 como canônica em 2 blocos; silêncio é o correto para entrevista fechada |
 | `handbook/legacy_docs` · `runbooks` | 2 arquivos cada, **zero citadores** | os únicos com alcance realmente nulo |
 
 **`.claude/` está saudável.** `skills` (106 arquivos, 3 órfãos, citado por 37), `agents` (14, **zero
@@ -135,8 +136,10 @@ Nenhuma destas é decisão de ferramenta; todas são de quem conhece o conteúdo
    `Pendente`) já tinha issue própria — a #426.
 3. **`handbook/interviews`** — 51 arquivos de uma entrevista fechada. Arquivo histórico (fica como
    está, quieto e legítimo) ou material a consolidar num documento só?
-4. **`handbook/api_documentations`** — 2 YAML, 71 dias. É gerado pelo ADR-0027 (contract-first) ou é
-   cópia manual que envelhece?
+4. ✅ **`handbook/api_documentations` — RESOLVIDO em 2026-08-07.** Nem uma coisa nem outra: os 2 YAML são
+   o contrato do **legado NestJS**, não do core-api — insumo de migração, e o `contracts/openapi.yaml` tem
+   função declarada pelo ADR-0027 §39. **Ficam.** O que faltava era um README dizendo isso: sem ele, a
+   triagem classificou o `doc.yaml` como documentação obsoleta e ele quase virou lápide.
 
 ⚠️ **Qualquer remoção passa pelo gate de tombstone**: apagar `.md` citado exige entrada em
 [`../redirects.json`](../redirects.json). Isso é a rede de segurança, não um obstáculo — foi

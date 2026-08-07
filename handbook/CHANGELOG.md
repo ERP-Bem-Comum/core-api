@@ -4,6 +4,22 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-08-07 — 🏷️ Higienização (3 e 4/4): `interviews/` fica intacta, e `api_documentations/` passa a dizer que é do LEGADO
+
+**Duas frentes, dois vereditos de "não mexer" — e o segundo por muito pouco.**
+
+**`interviews/`** tem propósito declarado no próprio README e é material **vivo**: a skill [`ts-domain-modeler`](../.claude/skills/ts-domain-modeler/SKILL.md) cita a entrevista 0001 como **canônica** em dois blocos. Os 80 dias de silêncio são o comportamento correto de uma entrevista fechada — ela não muda porque o código mudou. Nada foi tocado.
+
+**`api_documentations/` quase perdeu o contrato do legado.** A triagem classificou o `doc.yaml` como documentação obsoleta do core-api: contradizia o [ADR-0027](./architecture/adr/0027-zod-openapi-contract-first-http-edge.md), que manda gerar o OpenAPI dos schemas Zod, e cobria "13 de 159 rotas".
+
+**A comparação era sem sentido.** O `servers:` do arquivo aponta para `localhost:3003 — Backend NestJS local`, e este CHANGELOG já o descrevia duas vezes como *"contrato REST do legado NestJS"*. As 13 rotas são do **legado**; as 159 são do **core-api**. São APIs de sistemas diferentes — `/contracts/aditive` contra `/contracts/:id/amendments`.
+
+Os dois YAML ficam, e ambos têm função: o `doc.yaml` foi o insumo que originou o design do módulo de **auth**, e o `contracts/openapi.yaml` é **referência de migração/ACL** por declaração explícita do ADR-0027 §39.
+
+**O defeito nunca foi o conteúdo — foi o nome.** `api_documentations/` promete "documentação de API" sem dizer de qual sistema, e o diretório não tinha README. Agora tem, e ele começa dizendo o que importa: *nada aqui documenta a API deste repositório*. O contrato vivo do core-api é gerado e servido em `/docs`, em OpenAPI 3.1.1.
+
+Com isto, as quatro decisões abertas em [`reviews/0004`](./reviews/0004-inventario-handbook-e-claude.md) estão fechadas — e em **três das quatro** a leitura impediu a limpeza que a métrica sugeria.
+
 ## 2026-08-07 — 📚 Higienização (1/4): `research/` volta a ser só material autoral
 
 **A primeira aplicação do inventário quase enterrou material vivo, e a leitura salvou.** `handbook/research` aparecia com 8 arquivos, 8 órfãos e **zero citadores** — perfil de resíduo. É a **fonte canônica declarada de quatro specs entregues**: a [spec 008](./specs/008-gestao-programas/spec.md) escreve que os dois arquivos de `gestao_programas/` "são a fonte canônica desta spec", a 036 cita linha específica como evidência, a 005 declara a pasta como insumo, e os quatro módulos correspondentes existem em `src/` com 43 a 205 arquivos.
