@@ -95,7 +95,12 @@ Gate de qualidade: `typecheck` + `format:check` + `lint` + `test`. Os demais scr
 git config core.hooksPath .githooks
 ```
 
-`core.hooksPath` é estado local (`.git/config`), não conteúdo versionado: um clone novo não o traz. Sem esse comando **não há hook de commit instalado**. O `.githooks/pre-commit` delega a `.claude/hooks/pre-commit-typecheck.sh`, que roda os 4 gates sobre `.ts` staged e recusa o commit se algum ficar vermelho. Escape de emergência: `git commit --no-verify`.
+`core.hooksPath` é estado local (`.git/config`), não conteúdo versionado: um clone novo não o traz. Sem esse comando **não há hook de commit instalado**. O `.githooks/pre-commit` encadeia dois:
+
+1. [`.claude/hooks/pre-commit-tombstone.sh`](./.claude/hooks/pre-commit-tombstone.sh) — recusa apagar ou renomear um `.md` ainda citado sem declarar destino ou lápide em `handbook/redirects.json`. Roda **antes**, porque o gate abaixo sai cedo sem `.ts` staged e nunca veria um commit só de documentação.
+2. [`.claude/hooks/pre-commit-typecheck.sh`](./.claude/hooks/pre-commit-typecheck.sh) — os 4 gates sobre `.ts` staged.
+
+Escape de emergência: `git commit --no-verify`.
 
 ## Onde procurar
 
