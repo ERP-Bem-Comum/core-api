@@ -20,6 +20,7 @@ import { importPKCS8, importSPKI } from 'jose';
 
 import { err, ok, type Result } from '#src/shared/primitives/result.ts';
 import type { Es256Config } from '../crypto/token-issuer.es256.ts';
+import { isProductionEnv } from '#src/shared/runtime/node-env.ts';
 
 type Env = Readonly<Record<string, string | undefined>>;
 
@@ -84,7 +85,7 @@ const importOrUndefined = async (importKey: () => Promise<JwtKey>): Promise<JwtK
 export const readAuthJwtKeys = async (
   env: Env,
 ): Promise<Result<AuthJwtKeyConfig, readonly string[]>> => {
-  const isProduction = env['NODE_ENV'] === 'production';
+  const isProduction = isProductionEnv(env);
   const priv = readVar(env, PRIVATE_VAR);
   const pub = readVar(env, PUBLIC_VAR);
 
