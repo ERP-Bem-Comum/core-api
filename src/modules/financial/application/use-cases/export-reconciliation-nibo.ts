@@ -127,6 +127,11 @@ const parseCompetencia = (raw: string | null): Date | null => {
 const lookup = (names: ReadonlyMap<string, string>, ref: string | null | undefined): string =>
   ref == null ? '' : (names.get(ref) ?? '');
 
+// Descrição da linha NÃO conciliada: só o que o extrato já traz (favorecido + memo, o que houver, sem
+// duplicar). O enriquecimento (contato/categoria/centro/documento) fica em branco até a conciliação.
+const statementText = (tx: StatementTransaction): string =>
+  [...new Set([tx.payeeName, tx.memo].map((s) => s.trim()).filter((s) => s !== ''))].join(' — ');
+
 const TRANSFER_TYPES: ReadonlySet<ManualEntry['type']> = new Set([
   'Transfer',
   'Investment',
@@ -152,19 +157,22 @@ export const exportReconciliationNibo =
     );
     if (!txsR.ok) return err(txsR.error);
 
-    // Conciliações ativas das transações conciliadas (Pending é ignorada; ausência de conciliação ativa
-    // numa transação não-Pending é inconsistência tolerada — degrada sem 5xx).
-    const reconciled: { tx: StatementTransaction; rec: Reconciliation }[] = [];
+    // Conciliação ativa por transação. Pending não tem conciliação (vira linha crua do extrato no loop
+    // final); ausência de conciliação ativa numa transação não-Pending é inconsistência tolerada (degrada
+    // sem 5xx). Mapa por txId para o loop final poder iterar o extrato NA ORDEM e decidir por transação.
+    const recByTx = new Map<string, Reconciliation>();
     for (const tx of txsR.value) {
       if (tx.reconciliationStatus === 'Pending') continue;
       const recR = await deps.reconciliationRepo.findActiveByTransaction(tx.id);
       if (!recR.ok) return err(recR.error);
       if (recR.value === null) continue;
-      reconciled.push({ tx, rec: recR.value });
+      recByTx.set(String(tx.id), recR.value);
     }
 
     // Documentos dos títulos — uma única leitura batch (sem N+1).
-    const payableIds = reconciled.flatMap(({ rec }) => rec.items.map((i) => String(i.payableId)));
+    const payableIds = [...recByTx.values()].flatMap((rec) =>
+      rec.items.map((i) => String(i.payableId)),
+    );
     const docsR = await deps.payableDocView.findByPayableIds(payableIds);
     if (!docsR.ok) return err(docsR.error);
     const docByPayable = new Map<string, PayableDocumentRow>(
@@ -214,8 +222,36 @@ export const exportReconciliationNibo =
     if (!periodAccountR.ok) return err(periodAccountR.error);
     const periodAccount = periodAccountR.value;
 
+    // Itera o extrato NA ORDEM: conciliada → linha enriquecida; não conciliada → linha crua do extrato.
     const rows: NiboExportRow[] = [];
-    for (const { tx, rec } of reconciled) {
+    for (const tx of txsR.value) {
+      const rec = recByTx.get(String(tx.id));
+      if (rec === undefined) {
+        // Requisito P.O.: o arquivo mostra TODAS as movimentações, não só as conciliadas (#649 permite
+        // exportar antes de concluir a conciliação). A linha traz só o que o extrato já tem — valor, data
+        // e descrição (favorecido/memo); o enriquecimento (contato/categoria/centro/documento) fica em
+        // branco até conciliar. Não-Pending sem conciliação ativa é inconsistência tolerada → sem linha.
+        if (tx.reconciliationStatus === 'Pending') {
+          rows.push({
+            transactionType: 'Lançamento',
+            contactName: '',
+            description: statementText(tx),
+            category: '',
+            valueCents: signed(tx.valueCents, tx.movement),
+            dueDate: null,
+            forecastDate: null,
+            competencia: null,
+            costCenter: '',
+            favorite: 'Não',
+            contactType: '',
+            reference: '',
+            account: periodAccount,
+            paymentDate: tx.date,
+            annotation: '',
+          });
+        }
+        continue;
+      }
       const manualEntry = rec.manualEntry;
       if (manualEntry !== null && TRANSFER_TYPES.has(manualEntry.type)) {
         // #143 — transferência/aplicação/resgate. Conta = destino (Transfer) ou produto (Investment/Redemption).
