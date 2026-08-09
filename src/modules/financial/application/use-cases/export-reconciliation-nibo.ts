@@ -132,6 +132,23 @@ const lookup = (names: ReadonlyMap<string, string>, ref: string | null | undefin
 const favorecido = (resolved: string, payeeName: string): string =>
   resolved !== '' ? resolved : payeeName;
 
+// Coluna "Conta": DADOS da conta (banco + agência + conta), não o apelido interno — o arquivo vai para
+// terceiros (Nibo), que precisam identificar a conta, não o nome que demos a ela (regra da P.O.).
+const formatAccountData = (
+  a: Readonly<{
+    bankCode: string;
+    bankName?: string;
+    agency: string;
+    accountNumber: string;
+    accountDigit: string;
+  }>,
+): string => {
+  const banco =
+    a.bankName !== undefined && a.bankName !== '' ? `${a.bankCode} ${a.bankName}` : a.bankCode;
+  const conta = a.accountDigit !== '' ? `${a.accountNumber}-${a.accountDigit}` : a.accountNumber;
+  return `Banco ${banco} · Ag ${a.agency} · Conta ${conta}`;
+};
+
 const TRANSFER_TYPES: ReadonlySet<ManualEntry['type']> = new Set([
   'Transfer',
   'Investment',
@@ -213,9 +230,9 @@ export const exportReconciliationNibo =
       if (!refIdR.ok) return ok(''); // ref não-resolvível → célula vazia (CA5)
       const r = await deps.cedenteStore.findById(refIdR.value);
       if (!r.ok) return err(r.error);
-      const nickname = r.value?.nickname ?? '';
-      accountCache.set(ref, nickname);
-      return ok(nickname);
+      const data = r.value === null ? '' : formatAccountData(r.value);
+      accountCache.set(ref, data);
+      return ok(data);
     };
 
     const periodAccountR = await resolveAccount(debitAccountRef);
