@@ -211,6 +211,8 @@ const SLUG_MESSAGES: Record<string, string> = {
   'counterpart-same-account': 'A conta de destino não pode ser igual à de origem.',
   // Lançamento manual / lote (US5).
   'manual-entry-value-not-positive': 'O valor do lançamento manual deve ser positivo.',
+  'manual-entry-classification-required':
+    'Informe categoria e centro de custo para conciliar (obrigatório, exceto em transferência, aplicação e resgate).',
   'empty-batch': 'Informe ao menos uma transação para o lote.',
   // Período (US6).
   'period-has-pending-transactions':

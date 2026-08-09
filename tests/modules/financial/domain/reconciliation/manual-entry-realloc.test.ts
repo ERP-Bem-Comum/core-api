@@ -94,18 +94,24 @@ describe('financial/domain/reconciliation — confirmManualEntry realocação (#
     assert.equal(r.value.reconciliation.manualEntry?.destinationAccountRef, DEST);
   });
 
-  // ── Tipos não-realocação seguem inalterados (back-compat) ─────────────────────
-  it('back-compat: Payment sem destino/produto continua ok', () => {
-    const r = confirmManualEntry(baseInput('Payment'));
+  // ── Tipos não-realocação: classificação obrigatória (categoria + centro de custo) ──
+  const CLASSIFICATION = {
+    categoryRef: '44444444-4444-4444-8444-444444444444',
+    costCenterRef: '55555555-5555-4555-8555-555555555555',
+  } as const;
+
+  it('Payment classificado sem destino/produto → ok', () => {
+    const r = confirmManualEntry({ ...baseInput('Payment'), ...CLASSIFICATION });
     assert.equal(r.ok, true, JSON.stringify(r));
     if (!r.ok) return;
     assert.equal(r.value.manualEntry.destinationAccountRef, null);
     assert.equal(r.value.manualEntry.productLabel, null);
   });
 
-  it('back-compat: FeePenaltyInterest aceita supplierRef (não é realocação)', () => {
+  it('FeePenaltyInterest classificado aceita supplierRef (não é realocação)', () => {
     const r = confirmManualEntry({
       ...baseInput('FeePenaltyInterest'),
+      ...CLASSIFICATION,
       supplierRef: '33333333-3333-4333-8333-333333333333',
     });
     assert.equal(r.ok, true, JSON.stringify(r));

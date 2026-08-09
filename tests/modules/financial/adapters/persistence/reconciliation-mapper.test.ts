@@ -20,6 +20,8 @@ describe('financial/adapters — reconciliation.mapper toDomain (#191)', () => {
       transactionId: StatementTransactionId.generate(),
       type: 'FeePenaltyInterest',
       valueCents: 1000,
+      categoryRef: '22222222-2222-4222-8222-222222222222',
+      costCenterRef: '33333333-3333-4333-8333-333333333333',
       reconciledBy: '11111111-1111-4111-8111-111111111111',
       occurredAt: new Date('2024-05-20T12:00:00.000Z'),
     });
