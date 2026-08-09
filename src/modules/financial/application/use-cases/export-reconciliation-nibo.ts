@@ -127,6 +127,11 @@ const parseCompetencia = (raw: string | null): Date | null => {
 const lookup = (names: ReadonlyMap<string, string>, ref: string | null | undefined): string =>
   ref == null ? '' : (names.get(ref) ?? '');
 
+// "Nome do contato" = favorecido: o contato registrado (fornecedor) quando resolve; senão o `payeeName`
+// do extrato (coluna "NOME"). Garante que o nome nunca saia vazio numa linha conciliada (regra da P.O.).
+const favorecido = (resolved: string, payeeName: string): string =>
+  resolved !== '' ? resolved : payeeName;
+
 const TRANSFER_TYPES: ReadonlySet<ManualEntry['type']> = new Set([
   'Transfer',
   'Investment',
@@ -290,8 +295,10 @@ export const exportReconciliationNibo =
         if (!contactR.ok) return err(contactR.error);
         rows.push({
           transactionType: 'Lançamento',
-          contactName: contactR.value,
-          description: manualEntry.description ?? '',
+          // Nome e descrição nunca vazios (regra P.O.): fornecedor registrado ou o favorecido do extrato;
+          // descrição do manual ou o memo do extrato.
+          contactName: favorecido(contactR.value, tx.payeeName),
+          description: manualEntry.description ?? tx.memo,
           category: lookup(categoryName, manualEntry.categoryRef),
           valueCents: signed(manualEntry.valueCents, tx.movement),
           dueDate: null,
@@ -319,7 +326,8 @@ export const exportReconciliationNibo =
         if (!contactR.ok) return err(contactR.error);
         rows.push({
           transactionType: 'Lançamento',
-          contactName: contactR.value,
+          // Nome nunca vazio (regra P.O.): fornecedor registrado do título ou o favorecido do extrato.
+          contactName: favorecido(contactR.value, tx.payeeName),
           description: tx.memo,
           category: lookup(categoryName, doc?.categoryRef),
           valueCents: signed(item.reconciledValueCents, tx.movement),
