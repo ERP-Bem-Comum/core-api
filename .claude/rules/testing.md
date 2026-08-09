@@ -5,6 +5,14 @@ verify:
   - claim: 'bdd/ e reports/ não guardam teste executável — são documento e forense'
     glob: 'tests/{bdd,reports}/**/*.test.ts'
     expect: []
+  - claim: 'a classificação de referência decide por "está no git", nunca por "existe no disco"'
+    root: 'scripts/handbook'
+    pattern: 'targetExists'
+    expect: []
+  - claim: 'quem resolve ausência deliberada consulta o .gitignore pelo git'
+    root: 'scripts/handbook'
+    pattern: 'check-ignore'
+    expect: ['scripts/handbook/link-scan.ts']
 ---
 
 Runner: Node test runner nativo + `--experimental-strip-types`. O glob de descoberta é **um só** — `tests/**/*.test.ts` — e `tests/cleanup/test-discovery.test.ts` garante que nada de teste caia fora dele. As regras ESLint relaxadas aqui (`floating-promises`, `non-null-assertion`, `return-type`, `naming-convention`) estão em `eslint.config.js`, no bloco `files: ['tests/**/*.ts']`.
@@ -47,5 +55,24 @@ Suítes de integração (`*.drizzle*.test.ts`, `*.integration.test.ts`) rodam **
   A inversão usa `awk` de propósito: a versão anterior desta rule usava `tail -r`, que **só existe no macOS** — no CI Linux o comando falhava antes de rodar teste algum.
 
 Verificado em 2026-07-23 (MySQL 8.4 isolado): após o #521, `partners` (50/50) e `financial` (119/119) passam invertidas. Os helpers `resetPartnersTables`/`resetFinancialTables` **não existem** e não precisam existir enquanto cada arquivo limpar por tabela na entrada — YAGNI.
+
+## Gate estrutural pergunta ao git, não ao disco
+
+Teste de `tests/cleanup/` que decide "este caminho existe" **MUST** perguntar ao git — `git ls-files` para o que está versionado, `git check-ignore` para a ausência deliberada. `existsSync` responde diferente na máquina de quem escreve e no runner, e **gate cuja resposta depende de onde roda não verifica nada**.
+
+Custou dois vermelhos de CI seguidos na spec 041: `handbook/guidelines/` está no `.gitignore` (PDFs sob restrição de redistribuição), existe para quem tem os arquivos e não existe no runner — o mesmo link era vivo aqui e morto lá. E o erro nem era inédito: `claude-md-links.test.ts` já resolvia isso com `git ls-files` + `check-ignore` desde a #641. Escolher `existsSync` foi reinventar pior o que o repositório já tinha.
+
+- ⚠️ **Padrão de DIRETÓRIO no `.gitignore` (`foo/`) só casa o caminho SEM barra quando o diretório existe no disco** — o git não tem como saber que um caminho ausente seria diretório. Consultar **as duas formas**, `x` e `x/`. Foi este detalhe, e não a lógica de classificação, que derrubou o gate na segunda rodada.
+
+  | | diretório ausente (CI) | presente (local) |
+  | --- | --- | --- |
+  | `foo` | **não casa** | ignorado |
+  | `foo/` | ignorado | ignorado |
+
+- **Uma chamada por varredura, não uma por caminho.** `git check-ignore --stdin` em lote; um processo por link inviabiliza um gate que varre 1288 arquivos. A implementação de referência é `ignoredPaths` em `scripts/handbook/link-scan.ts`.
+
+- **Reproduza o runner no teste, não a sua máquina.** O caso acima só ficou coberto com um teste que cria repositório temporário, escreve o padrão de diretório e **não cria o diretório** — ver `tests/scripts/link-scan.test.ts`. Verde na máquina de quem escreveu não é evidência.
+
+> Débito conhecido: `redirects.test.ts`, `handbook-refs.test.ts` e `handbook-links.test.ts` ainda decidem existência com `existsSync`. Passam hoje porque todos os alvos que consultam são versionados — mas repetem o padrão e mentem no dia em que um alvo for gitignored.
 
 Próximo teste do ciclo: [`tdd-strategist`](../skills/tdd-strategist/SKILL.md) · arquitetura da suíte (camada, doubles, o que falta): [`test-pyramid-engineer`](../skills/test-pyramid-engineer/SKILL.md).

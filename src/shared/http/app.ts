@@ -31,6 +31,7 @@ import { randomUUID } from 'node:crypto';
 import { runWithCorrelation } from '#src/shared/observability/correlation.ts';
 import { installErrorHandlers } from '#src/shared/http/errors.ts';
 import { readHttpConfig, type HttpConfig } from '#src/shared/http/config.ts';
+import { isProductionEnv } from '#src/shared/runtime/node-env.ts';
 
 /**
  * Tipo do servidor retornado por buildApp. Preserva o FastifyZodOpenApiTypeProvider
@@ -144,7 +145,7 @@ export const buildApp = async (opts: BuildAppOptions = {}): Promise<FastifyAppWi
   // --- OpenAPI 3.1.1 (ADR-0027, CA6) — DEV-ONLY ---
   // A doc (/docs, /docs/json) expoe o mapa completo da API; mantida em dev/homolog (utilidade),
   // mas NUNCA em producao (nao entregar superficie de ataque). Gate por NODE_ENV (F1, security audit).
-  if (process.env['NODE_ENV'] !== 'production') {
+  if (!isProductionEnv(process.env)) {
     await app.register(swagger, {
       openapi: {
         openapi: '3.1.1',

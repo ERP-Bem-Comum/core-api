@@ -37,6 +37,7 @@ Verificado em 2026-07-31: os endpoints `llms.txt` destes projetos retornam 404.
 | `typescript` | 18 arq · 296 KB | Handbook oficial |
 | `mysql2` | 6 arq · 96 KB | Driver — changelog e `caching_sha2_password` |
 | `fastify-plugins` | 5 arq · 92 KB | `@fastify/swagger`, `cors`, `helmet`, `rate-limit` |
+| `ia-tooling` | 3 arq · 196 KB | Cookbooks da Anthropic — memória de agente, context engineering e workflows multi-LLM. Veio de `research/` em 2026-08-07: é material de terceiro, e `research/` é para trabalho autoral |
 
 ## `skills-base/` — livros canônicos
 
