@@ -224,6 +224,13 @@ export const exportReconciliationNibo =
             ? await resolveAccount(manualEntry.destinationAccountRef)
             : ok(manualEntry.productLabel ?? '');
         if (!accountR.ok) return err(accountR.error);
+        // #664: os vazios abaixo são INTENCIONAIS, não hardcode esquecido — a realocação patrimonial
+        // circula entre contas da própria empresa e não é despesa/receita:
+        //  · `contactName` — o domínio PROÍBE `supplierRef` em realocação (`realloc-forbids-supplier`),
+        //    então nunca há contato a resolver;
+        //  · `category`/`costCenter` — a P.O. definiu que Transferência/Aplicação/Resgate NÃO classificam
+        //    (mesma isenção da Opção 1 / `isCapitalReallocation`); o Nibo tampouco classifica uma
+        //    "Transferência". Preencher aqui contradiria a regra.
         rows.push({
           transactionType: 'Transferência',
           contactName: '',
@@ -259,8 +266,12 @@ export const exportReconciliationNibo =
           competencia: null,
           costCenter: lookup(costCenterName, manualEntry.costCenterRef),
           favorite: 'Não',
-          contactType: '',
-          reference: '',
+          // #664: o lançamento manual só referencia FORNECEDOR (`supplierRef`; o domínio não carrega
+          // outro tipo de contato), então o tipo de contato é 'Fornecedor' quando há fornecedor — espelha
+          // o `contactTypeOf(payeeKind)` da linha de título. Sem `supplierRef` → vazio.
+          contactType: manualEntry.supplierRef !== null ? PAYEE_KIND_TO_CONTACT_TYPE.supplier : '',
+          // #664: nº do documento do lançamento manual (#370) — o domínio já tem, o export descartava.
+          reference: manualEntry.documentNumber ?? '',
           account: periodAccount,
           paymentDate: tx.date,
           annotation: '',
