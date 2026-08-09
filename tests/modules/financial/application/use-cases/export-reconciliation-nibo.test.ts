@@ -304,6 +304,7 @@ describe('financial/application — exportReconciliationNibo (#146)', () => {
     assert.equal(rows.length, 1);
     const c = rows[0]!;
     assert.equal(c[0], 'Lançamento');
+    assert.equal(c[1], 'Banco'); // sem fornecedor → nome cai no favorecido do extrato (payeeName). Regra P.O.
     assert.equal(c[3], 'Despesas bancárias'); // categoria do manualEntry
     assert.equal(c[4], '-50,00'); // Debit → negativo
     assert.equal(c[8], 'Administrativo'); // centro do manualEntry
@@ -410,9 +411,10 @@ describe('financial/application — exportReconciliationNibo (#146)', () => {
     );
     assert.ok(r.ok);
     const c = dataRows(r.value.content)[0]!;
-    assert.equal(c[1], ''); // contato não resolvido
-    assert.equal(c[3], ''); // categoria não resolvida
-    assert.equal(c[8], ''); // centro de custo null
+    // Nome NÃO fica vazio: fornecedor não resolveu → cai no favorecido do extrato (payeeName). Regra P.O.
+    assert.equal(c[1], 'Banco'); // makeTx.payeeName
+    assert.equal(c[3], ''); // categoria não resolvida → degrada para vazio
+    assert.equal(c[8], ''); // centro de custo null → vazio
   });
 
   it('CA6: período inexistente → erro mapeado (sem 5xx)', async () => {
