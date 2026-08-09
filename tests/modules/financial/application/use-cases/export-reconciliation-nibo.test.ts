@@ -131,8 +131,15 @@ const supplier = (supplierRef: string, name: string): SupplierView =>
     document: '00000000000000',
     occurredAt: new Date(0),
   }) as unknown as SupplierView;
-const cedente = (nickname: string | undefined): CedenteAccount =>
-  ({ id: 'acc', nickname }) as unknown as CedenteAccount;
+const cedente = (bankName: string | undefined): CedenteAccount =>
+  ({
+    id: 'acc',
+    bankCode: '341',
+    bankName,
+    agency: '1234',
+    accountNumber: '567890',
+    accountDigit: '1',
+  }) as unknown as CedenteAccount;
 
 type Deps = Readonly<{
   period?: ReconciliationPeriod | null;
@@ -241,7 +248,7 @@ describe('financial/application — exportReconciliationNibo (#146)', () => {
     assert.equal(c[8], 'Financeiro'); // centro de custo resolvido
     assert.equal(c[10], 'Fornecedor'); // payeeKind=supplier → Fornecedor
     assert.equal(c[11], 'NF-123'); // referência = documentNumber
-    assert.equal(c[12], 'Itaú'); // conta = apelido da cedente do período
+    assert.equal(c[12], 'Banco 341 Itaú · Ag 1234 · Conta 567890-1'); // conta = DADOS da cedente do período
     assert.equal(c[13], '12/03/2026'); // data pag = tx.date
   });
 
@@ -371,7 +378,7 @@ describe('financial/application — exportReconciliationNibo (#146)', () => {
     assert.equal(c[8], ''); // sem centro de custo
     assert.equal(c[10], ''); // sem tipo de contato
     assert.equal(c[11], ''); // sem referência
-    assert.equal(c[12], 'Bradesco'); // conta destino
+    assert.equal(c[12], 'Banco 341 Bradesco · Ag 1234 · Conta 567890-1'); // conta destino (dados)
     assert.equal(c[4], '500,00');
   });
 
