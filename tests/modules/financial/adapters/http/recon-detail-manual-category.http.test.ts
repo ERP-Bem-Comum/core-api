@@ -179,6 +179,7 @@ describe('FIN-RECON-DETAIL-MANUAL-CATEGORY — categoria do lançamento manual (
     const created = await postManualEntry(String(txIds[0]), {
       type: 'Payment',
       categoryRef: CAT_TARIFAS,
+      costCenterRef: '22222222-2222-4222-8222-222222222222',
     });
     assert.equal(created.statusCode, 201, created.body);
 
@@ -189,13 +190,13 @@ describe('FIN-RECON-DETAIL-MANUAL-CATEGORY — categoria do lançamento manual (
     assert.equal(body.category, 'Tarifas bancárias');
   });
 
-  it('CA2: manual entry sem categoryRef → category null', async () => {
+  it('CA2: manual entry classificável sem categoria/centro de custo → 422 (regra P.O.)', async () => {
+    // Opção 1 (regra P.O.): tipo classificável exige categoria + centro de custo AO CONCILIAR.
+    // Sem eles, o domínio rejeita com `manual-entry-classification-required` (422) — o export
+    // segue permissivo só para transação NÃO conciliada (#649).
     const created = await postManualEntry(String(txIds[1]), { type: 'Payment' });
-    assert.equal(created.statusCode, 201, created.body);
-
-    const res = await getDetailReq(String(txIds[1]));
-    assert.equal(res.statusCode, 200, res.body);
-    const body = res.json() as DetailDto;
-    assert.equal(body.category, null);
+    assert.equal(created.statusCode, 422, created.body);
+    const body = created.json() as { error: { message: string } };
+    assert.match(body.error.message, /categoria e centro de custo/i);
   });
 });

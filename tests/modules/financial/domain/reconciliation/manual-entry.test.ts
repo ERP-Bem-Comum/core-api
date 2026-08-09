@@ -17,6 +17,7 @@ const baseInput = (valueCents: number) => ({
   type: 'FeePenaltyInterest' as const,
   valueCents,
   categoryRef: '11111111-1111-4111-8111-111111111111',
+  costCenterRef: '22222222-2222-4222-8222-222222222222',
   description: 'tarifa bancária',
   reconciledBy: '99999999-9999-4999-8999-999999999999',
   occurredAt: WHEN,
@@ -41,5 +42,30 @@ describe('financial/domain/reconciliation — confirmManualEntry (US5)', () => {
     const r = confirmManualEntry(baseInput(0));
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'manual-entry-value-not-positive');
+  });
+
+  // Classificação obrigatória (regra P.O.): tipo classificável exige categoria + centro de custo.
+  it('classificável sem categoria → manual-entry-classification-required', () => {
+    const { categoryRef: _omit, ...withoutCategory } = baseInput(2500);
+    const r = confirmManualEntry(withoutCategory);
+    assert.equal(isErr(r), true);
+    if (!r.ok) assert.equal(r.error, 'manual-entry-classification-required');
+  });
+
+  it('classificável sem centro de custo → manual-entry-classification-required', () => {
+    const { costCenterRef: _omit, ...withoutCostCenter } = baseInput(2500);
+    const r = confirmManualEntry(withoutCostCenter);
+    assert.equal(isErr(r), true);
+    if (!r.ok) assert.equal(r.error, 'manual-entry-classification-required');
+  });
+
+  it('realocação (Transfer) é isenta de classificação', () => {
+    const { categoryRef: _c, costCenterRef: _cc, ...base } = baseInput(2500);
+    const r = confirmManualEntry({
+      ...base,
+      type: 'Transfer',
+      destinationAccountRef: '66666666-6666-4666-8666-666666666666',
+    });
+    assert.equal(r.ok, true, JSON.stringify(r));
   });
 });

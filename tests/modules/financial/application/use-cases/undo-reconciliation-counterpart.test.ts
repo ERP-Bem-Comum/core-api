@@ -283,6 +283,8 @@ describe('financial/application — undoReconciliation trata a contrapartida (US
     const rec = await w.record({
       transactionId: w.txA,
       type: 'Payment',
+      categoryRef: '11111111-1111-4111-8111-111111111111',
+      costCenterRef: '22222222-2222-4222-8222-222222222222',
       reconciledBy: 'u1',
     });
     assert.equal(rec.ok, true, JSON.stringify(rec));
