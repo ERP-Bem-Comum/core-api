@@ -449,8 +449,8 @@ describe('financial/application — exportReconciliationNibo (#146)', () => {
     assert.equal(rows.length, 2); // #649/P.O.: pending TAMBÉM aparece
     const p = rows[0]!; // ordem do extrato preservada → pending primeiro
     assert.equal(p[0], 'Lançamento');
-    assert.equal(p[1], ''); // contato — em branco (não conciliado)
-    assert.equal(p[2], 'PAGAMENTO - LUIZA'); // descrição = texto do extrato
+    assert.equal(p[1], 'PAGAMENTO - LUIZA'); // Nome do contato = favorecido (payeeName)
+    assert.equal(p[2], ''); // Descrição = memo do extrato (vazio neste caso)
     assert.equal(p[3], ''); // categoria — em branco
     assert.equal(p[4], '-2000,00'); // valor do extrato, Debit → negativo
     assert.equal(p[8], ''); // centro de custo — em branco
@@ -460,7 +460,7 @@ describe('financial/application — exportReconciliationNibo (#146)', () => {
     assert.equal(rows[1]![0], 'Lançamento'); // a conciliada segue presente
   });
 
-  it('P.O.: descrição da linha Pending combina favorecido + memo do extrato (sem duplicar)', async () => {
+  it('P.O.: linha Pending mapeia favorecido→Nome do contato e memo→Descrição (1:1 com o extrato)', async () => {
     const pending = makeTx('tx-10', {
       reconciliationStatus: 'Pending',
       payeeName: 'FORNECEDOR X',
@@ -470,6 +470,7 @@ describe('financial/application — exportReconciliationNibo (#146)', () => {
     assert.ok(r.ok);
     const rows = dataRows(r.value.content);
     assert.equal(rows.length, 1);
-    assert.equal(rows[0]![2], 'FORNECEDOR X — NF 555');
+    assert.equal(rows[0]![1], 'FORNECEDOR X'); // Nome do contato = favorecido
+    assert.equal(rows[0]![2], 'NF 555'); // Descrição = memo
   });
 });

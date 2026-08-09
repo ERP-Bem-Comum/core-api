@@ -28,7 +28,7 @@ import type {
 } from '../ports/cedente-account-store.ts';
 import type { NiboExporter, NiboExportRow } from '../ports/nibo-exporter.ts';
 import type { ManualEntry, Reconciliation } from '../../domain/reconciliation/types.ts';
-import type { StatementTransaction, Movement } from '../../domain/statement/types.ts';
+import type { Movement } from '../../domain/statement/types.ts';
 import { type PayeeKind, isPayeeKind } from '../../domain/document/types.ts';
 
 export type ExportReconciliationNiboDeps = Readonly<{
@@ -126,11 +126,6 @@ const parseCompetencia = (raw: string | null): Date | null => {
 // Resolve ref → nome via read-model; ref ausente/não-resolvível → célula vazia (CA5).
 const lookup = (names: ReadonlyMap<string, string>, ref: string | null | undefined): string =>
   ref == null ? '' : (names.get(ref) ?? '');
-
-// Descrição da linha NÃO conciliada: só o que o extrato já traz (favorecido + memo, o que houver, sem
-// duplicar). O enriquecimento (contato/categoria/centro/documento) fica em branco até a conciliação.
-const statementText = (tx: StatementTransaction): string =>
-  [...new Set([tx.payeeName, tx.memo].map((s) => s.trim()).filter((s) => s !== ''))].join(' — ');
 
 const TRANSFER_TYPES: ReadonlySet<ManualEntry['type']> = new Set([
   'Transfer',
@@ -234,8 +229,10 @@ export const exportReconciliationNibo =
         if (tx.reconciliationStatus === 'Pending') {
           rows.push({
             transactionType: 'Lançamento',
-            contactName: '',
-            description: statementText(tx),
+            // Mapeamento 1:1 com as colunas do extrato (decisão da P.O.): o `payeeName` (coluna "NOME" =
+            // favorecido) vai para "Nome do contato"; o `memo` (coluna "DESCRIÇÃO") vai para "Descrição".
+            contactName: tx.payeeName,
+            description: tx.memo,
             category: '',
             valueCents: signed(tx.valueCents, tx.movement),
             dueDate: null,
