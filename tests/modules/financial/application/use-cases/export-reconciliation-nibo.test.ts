@@ -427,18 +427,49 @@ describe('financial/application — exportReconciliationNibo (#146)', () => {
     assert.equal(r.error, 'reconciliation-period-id-invalid');
   });
 
-  it('transação Pending (não conciliada) é ignorada — não gera linha', async () => {
-    const pending = makeTx('tx-8', { reconciliationStatus: 'Pending' });
-    const reconciled = makeTx('tx-9');
+  it('P.O.: transação Pending vira linha crua do extrato (dado do extrato preenchido, enriquecimento em branco), na ordem do extrato', async () => {
+    const pending = makeTx('tx-8', {
+      reconciliationStatus: 'Pending',
+      payeeName: 'PAGAMENTO - LUIZA',
+      memo: '',
+      valueCents: 200000,
+      movement: 'Debit',
+    });
+    const reconciledTx = makeTx('tx-9');
     const rec = makeReconciliation('tx-9', { items: [item('pay-1', 200000)] });
     const r = await run(
       baseCfg({
-        txs: [pending, reconciled],
+        txs: [pending, reconciledTx], // pending primeiro no extrato
         reconciliations: new Map([['tx-9', rec]]),
         docRows: [docRow('pay-1')],
       }),
     );
     assert.ok(r.ok);
-    assert.equal(dataRows(r.value.content).length, 1);
+    const rows = dataRows(r.value.content);
+    assert.equal(rows.length, 2); // #649/P.O.: pending TAMBÉM aparece
+    const p = rows[0]!; // ordem do extrato preservada → pending primeiro
+    assert.equal(p[0], 'Lançamento');
+    assert.equal(p[1], ''); // contato — em branco (não conciliado)
+    assert.equal(p[2], 'PAGAMENTO - LUIZA'); // descrição = texto do extrato
+    assert.equal(p[3], ''); // categoria — em branco
+    assert.equal(p[4], '-2000,00'); // valor do extrato, Debit → negativo
+    assert.equal(p[8], ''); // centro de custo — em branco
+    assert.equal(p[10], ''); // tipo de contato — em branco
+    assert.equal(p[11], ''); // referência — em branco
+    assert.equal(p[13], '12/03/2026'); // data do extrato
+    assert.equal(rows[1]![0], 'Lançamento'); // a conciliada segue presente
+  });
+
+  it('P.O.: descrição da linha Pending combina favorecido + memo do extrato (sem duplicar)', async () => {
+    const pending = makeTx('tx-10', {
+      reconciliationStatus: 'Pending',
+      payeeName: 'FORNECEDOR X',
+      memo: 'NF 555',
+    });
+    const r = await run(baseCfg({ txs: [pending], reconciliations: new Map() }));
+    assert.ok(r.ok);
+    const rows = dataRows(r.value.content);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]![2], 'FORNECEDOR X — NF 555');
   });
 });
