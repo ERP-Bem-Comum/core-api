@@ -307,7 +307,36 @@ describe('financial/application — exportReconciliationNibo (#146)', () => {
     assert.equal(c[3], 'Despesas bancárias'); // categoria do manualEntry
     assert.equal(c[4], '-50,00'); // Debit → negativo
     assert.equal(c[8], 'Administrativo'); // centro do manualEntry
+    assert.equal(c[10], ''); // sem fornecedor → tipo de contato vazio
     assert.equal(c[11], ''); // sem documento → referência vazia
+  });
+
+  it('B (#664): manual com fornecedor + nº de documento → tipo de contato "Fornecedor" e referência = documentNumber', async () => {
+    const tx = makeTx('tx-4b', { valueCents: 5000, memo: 'Tarifa bancária' });
+    const rec = makeReconciliation('tx-4b', {
+      type: 'ManualEntry',
+      manualEntry: makeManualEntry('Payment', {
+        valueCents: 5000,
+        supplierRef: 'sup-1',
+        categoryRef: 'cat-9',
+        costCenterRef: 'cc-9',
+        documentNumber: 'NF-777',
+        description: 'Pagamento manual',
+      }),
+    });
+    const r = await run(
+      baseCfg({
+        txs: [tx],
+        reconciliations: new Map([['tx-4b', rec]]),
+        categories: [cat('cat-9', 'Despesas bancárias')],
+        costCenters: [costCenter('cc-9', 'Administrativo')],
+      }),
+    );
+    assert.ok(r.ok);
+    const c = dataRows(r.value.content)[0]!;
+    assert.equal(c[1], 'Fornecedor Alfa'); // contato resolvido pelo supplierRef
+    assert.equal(c[10], 'Fornecedor'); // #664: há fornecedor → tipo de contato
+    assert.equal(c[11], 'NF-777'); // #664: referência = documentNumber (#370)
   });
 
   it('C: transferência #143 (Transfer) → 1 linha Transferência com Conta = apelido da conta destino', async () => {
@@ -334,9 +363,13 @@ describe('financial/application — exportReconciliationNibo (#146)', () => {
     assert.equal(rows.length, 1);
     const c = rows[0]!;
     assert.equal(c[0], 'Transferência');
+    // #664: vazios INTENCIONAIS — realocação não tem fornecedor (domínio proíbe) nem classifica
+    // (isenção da Opção 1); o Nibo não classifica uma Transferência.
     assert.equal(c[1], ''); // sem contato
     assert.equal(c[3], ''); // sem categoria
+    assert.equal(c[8], ''); // sem centro de custo
     assert.equal(c[10], ''); // sem tipo de contato
+    assert.equal(c[11], ''); // sem referência
     assert.equal(c[12], 'Bradesco'); // conta destino
     assert.equal(c[4], '500,00');
   });
