@@ -180,7 +180,7 @@ Em ambos os casos, a conciliação futura com o extrato permanece obrigatória.
 ### 5.1. Tradutor de Layouts
 
 Este componente isola o sistema das especificidades do Bradesco:
-* **CNAB 240**: Geração de arquivos de remessa e leitura de retorno (Segmentos P, Q, J).
+* **CNAB 240**: Geração de arquivos de remessa e leitura de retorno (layout **Multipag** — Segmentos **A** + **B** para crédito em conta/TED; **J** para pagamento de boleto).
 * **Extratos**: Processamento de arquivos **OFX**, PDF ou XLSX.
 
 ### 5.2. Regras de Integridade Bancária

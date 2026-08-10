@@ -85,4 +85,6 @@ Restrições ADR-0020: sem JSON/ENUM nativo/trigger. `status` = varchar + CHECK.
 
 ## Mapeamento domínio↔CNAB (na ACL, fora do data-model)
 
-`RemittanceOrder { cedente: CedenteAccount, payments: [{ favored, valueCents, paymentDate, bankDetails }] }` → segmentos P (título), Q (favorecido), J (se boleto — N/A aqui, só TED/Transferência) + header/trailer arquivo+lote. Detalhe de posições = `FIN-CNAB-ACL`, guiado pelo guideline local-only.
+`RemittanceOrder { cedente: CedenteAccount, payments: [{ favored, valueCents, paymentDate, bankDetails }] }` → **Segmento A** (dados gerais do pagamento + favorecido) e **Segmento B** (dados complementares do favorecido), ambos **obrigatórios** no Multipag para crédito em conta/TED/Transferência; C, 5 e Z são opcionais. O **Segmento J** é de pagamento de boleto — **N/A aqui**. Mais header/trailer de arquivo e de lote. Detalhe de posições = `FIN-CNAB-ACL`, guiado pelo guideline local-only.
+
+> ⚠️ Este mapeamento dizia "segmentos P (título), Q (favorecido)" — layout de **cobrança**, que não existe no Multipag. Corrigido em 2026-08-10; ver a errata no topo de [`spec.md`](./spec.md).

@@ -43,7 +43,7 @@ TransacaoBancaria {
 
 | Comando | Quem chama | Pré-condições | Efeito | Evento Publicado |
 | :--- | :--- | :--- | :--- | :--- |
-| **GerarArquivoRemessa** | BC Títulos | Títulos em `Aprovado` com forma de pagamento **TED** ou **Transferência Bancária** | Traduz títulos para o layout CNAB do banco (Segmentos P, Q, J). Gera hash de segurança. | `ArquivoRemessaGerado` |
+| **GerarArquivoRemessa** | BC Títulos | Títulos em `Aprovado` com forma de pagamento **TED** ou **Transferência Bancária** | Traduz títulos para o layout CNAB do banco (**Multipag — Segmentos A + B**). Gera hash de segurança. | `ArquivoRemessaGerado` |
 | **ImportarRetornoBancario** | Operador/VAN | Arquivo de retorno disponível | `ProcessadorRetornoService` lê o arquivo e identifica ocorrências. | `RetornoProcessado` |
 | **ProcessarAcatamento** | Sistema | Retorno positivo do banco | Ativa flag lógica `acatadoPeloBanco: true` no título. **Não altera o status persistido** (permanece `Transmitido`). | `TituloAcatado` |
 | **ProcessarRecusa** | Sistema | Retorno com erro do banco | Altera status do título para `Recusado`. Alerta o operador com código e descrição da ocorrência. | `TituloRecusado` |
@@ -86,7 +86,7 @@ TransacaoBancaria {
 
 ## 8. Padrões Aplicados
 
-* **Anticorruption Layer (ACL)**: Impede que termos como "Segmento P", "Segmento J" ou "Posição 212" invadam o domínio financeiro.
+* **Anticorruption Layer (ACL)**: Impede que termos como "Segmento A", "Segmento J" ou "Posição 212" invadam o domínio financeiro.
 * **Open Host Service (OHS)**: Define um protocolo único de "Pagamento" que qualquer banco integrado deve obedecer após a tradução.
 
 ## 9. Glossário Específico

@@ -8,6 +8,20 @@
 
 **Input**: Sub-fatia da Fatia 3 (#58) do épico Financeiro (#64) — APENAS a geração da remessa. O retorno/importação fica para a sub-fatia seguinte.
 
+> ⚠️ **ERRATA — 2026-08-10: os segmentos estavam errados.** Esta spec descrevia o arquivo com os **segmentos P e Q**, que pertencem ao layout de **COBRANÇA**. O arquivo de **pagamento** é o **Multipag**, e nele **P e Q não existem**.
+>
+> Verificado na fonte primária (`handbook/guidelines/bradesco_guideline/jun-19-layout-multipag.pdf`, 139 páginas): **zero** ocorrências de "Segmento P" ou "Segmento Q". O sumário do próprio layout define, para **Pagamento Através de Crédito em Conta** (que cobre TED/Transferência), **Segmento A (Obrigatório)** e **Segmento B (Obrigatório)**, com C, 5 e Z opcionais. O **Segmento J** é de **pagamento de título de cobrança (boleto)** — não se aplica a esta spec, que trata só de TED/Transferência.
+>
+> | Forma de pagamento | Segmentos |
+> | :--- | :--- |
+> | Crédito em Conta / TED / Transferência | **A** + **B** obrigatórios; C, 5, Z opcionais |
+> | Título de cobrança (boleto) | **J** + J-52 |
+> | Tributo com código de barras | **O** · sem código de barras: **N** (+ W) |
+>
+> **FR-004** e **SC-002** foram corrigidos no texto abaixo — um requisito funcional e um critério de aceite que, cumpridos à risca, produziriam arquivo recusado pelo banco. As demais menções nesta pasta foram corrigidas no mesmo commit.
+>
+> A transcrição em `.../AI_KNOWLEDGE_BASE/06_Layout_Multipag/` **sempre esteve correta** — a spec é que não a seguiu. Vale a regra do `CLAUDE.md`: citar fonte primária, nunca artefato que cita outro artefato.
+
 ## Clarifications
 
 ### Session 2026-06-17
@@ -81,7 +95,7 @@ Um título já `Transmitido` não pode ser re-selecionado, e uma seleção vazia
 - **FR-001**: O sistema MUST permitir que o operador **selecione um conjunto explícito** de títulos a transmitir e gere a remessa a partir dessa seleção.
 - **FR-002**: O sistema MUST validar que **cada** título selecionado está `Aprovado` e tem forma de pagamento **TED** ou **Transferência Bancária** (R5.1); se qualquer um falhar, a geração é recusada identificando os inválidos (nenhum efeito colateral).
 - **FR-003**: O sistema MUST agrupar os títulos selecionados **por conta-cedente** e produzir **um arquivo de remessa por conta**.
-- **FR-004**: O sistema MUST produzir cada arquivo no layout **CNAB 240 do Bradesco** (segmentos P/Q/J), por meio de uma camada de tradução que isola o formato do domínio — o núcleo financeiro não conhece posições/strings fixas do CNAB (R3, ACL).
+- **FR-004**: O sistema MUST produzir cada arquivo no layout **CNAB 240 do Bradesco — Multipag** (para TED/Transferência: **Segmento A** e **Segmento B**, ambos obrigatórios; C/5/Z opcionais), por meio de uma camada de tradução que isola o formato do domínio — o núcleo financeiro não conhece posições/strings fixas do CNAB (R3, ACL).
 - **FR-005**: O sistema MUST calcular e registrar um **hash de integridade** (checksum) de cada arquivo, calculado sobre o blob persistido (R2).
 - **FR-006**: O sistema MUST **persistir cada arquivo gerado em object-storage** (ADR-0019) e retornar uma referência para download/recuperação; o envio efetivo à VAN/banco é fora de escopo desta sub-fatia.
 - **FR-007**: O sistema MUST atribuir a cada lote um **NSA (numeração sequencial)** monotônico **por conta-cedente**, persistido e nunca reutilizado.
@@ -104,7 +118,7 @@ Um título já `Transmitido` não pode ser re-selecionado, e uma seleção vazia
 ### Measurable Outcomes
 
 - **SC-001**: 100% dos títulos selecionados **válidos** (`Aprovado` + TED/Transferência) entram na remessa da sua conta; 0% dos inválidos passam (seleção com inválido é recusada por inteiro).
-- **SC-002**: 100% dos arquivos gerados a partir de dados válidos são aceitos por uma validação do layout CNAB 240 Bradesco (segmentos P/Q/J + cabeçalhos/trailers corretos).
+- **SC-002**: 100% dos arquivos gerados a partir de dados válidos são aceitos por uma validação do layout CNAB 240 Bradesco **Multipag** (Segmentos **A** + **B** + cabeçalhos/trailers de arquivo e lote corretos).
 - **SC-003**: Após cada geração bem-sucedida, 100% dos títulos incluídos estão em `Transmitido`, cada lote tem hash que coincide com o blob persistido e NSA único por conta.
 - **SC-004**: Em qualquer falha de geração, 0 títulos ficam em estado inconsistente e nenhum lote órfão é registrado.
 - **SC-005**: Selecionar um título já `Transmitido` resulta em 0 transmissões duplicadas (recusa).

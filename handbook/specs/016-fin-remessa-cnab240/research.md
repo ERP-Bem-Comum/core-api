@@ -4,7 +4,7 @@ Decisões técnicas que resolvem os pontos do Technical Context. Cada decisão: 
 
 ## D-ACL — Tradução CNAB via Anticorruption Layer (port + adapter)
 
-- **Decisão**: O domínio expõe um `RemittanceOrder` limpo (cedente + lista de pagamentos: favorecido, valor, data, dados bancários). A tradução para CNAB 240 Bradesco (segmentos P/Q/J + header/trailer de arquivo e lote) é um **port** `CnabRemittanceTranslator` implementado por um adapter `bradesco-cnab240-translator.ts`. O domínio **nunca** vê posições/strings fixas (R3).
+- **Decisão**: O domínio expõe um `RemittanceOrder` limpo (cedente + lista de pagamentos: favorecido, valor, data, dados bancários). A tradução para CNAB 240 Bradesco **Multipag** (Segmentos **A** + **B** + header/trailer de arquivo e lote) é um **port** `CnabRemittanceTranslator` implementado por um adapter `bradesco-cnab240-translator.ts`. O domínio **nunca** vê posições/strings fixas (R3).
 - **Rationale**: o BC Integração Bancária é explicitamente uma ACL + Open Host Service (`integracao-bancaria.md` §1, §8). Isola o formato; trocar/adicionar banco = nova "receita" sem tocar o core.
 - **Alternativas**: gerar CNAB no domínio (rejeitado — vaza formato, ofende R3/Princípio V); biblioteca CNAB de terceiros (rejeitado por ora — supply-chain/ADR-0011 + guideline Bradesco específico local-only).
 - ⚠️ **Princípio IX**: fronteira da ACL exige citação literal de Evans (cap. _Anticorruption Layer_ / _Open Host Service_) — **pendente** (MCP acdg off; anexar no gate).
@@ -48,7 +48,9 @@ Decisões técnicas que resolvem os pontos do Technical Context. Cada decisão: 
 
 ## Resolução de NEEDS CLARIFICATION
 
-Nenhum `[NEEDS CLARIFICATION]` permanece no Technical Context — todos resolvidos acima. Layout exato dos campos dos segmentos P/Q/J é detalhe do adapter (ticket `FIN-CNAB-ACL`), guiado pelo guideline local-only.
+Nenhum `[NEEDS CLARIFICATION]` permanece no Technical Context — todos resolvidos acima. Layout exato dos campos dos Segmentos **A** e **B** é detalhe do adapter (ticket `FIN-CNAB-ACL`), guiado pelo guideline local-only.
+
+> ⚠️ Este documento dizia "segmentos P/Q/J" — layout de **cobrança**. Corrigido em 2026-08-10; ver a errata no topo de [`spec.md`](./spec.md).
 
 ## Pendência de processo (Princípio IX)
 
