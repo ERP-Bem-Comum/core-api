@@ -134,8 +134,10 @@ com domínio fora de `EMAIL_FROM_ALLOWED_DOMAINS`) = **boot falha**.
 > `localhost` de dev. Motivo: Q.A. 2026-07-02 flagrou convite com `http://localhost:3000/activate` e
 > reset com base sem protocolo em produção.
 
-> **Aliases legados (deprecados):** `AUTH_RESET_FROM`, `AUTH_INVITE_FROM`, `PARTNERS_INVITE_FROM` —
-> ainda lidos quando os `EMAIL_FROM*` correspondentes não estão setados. Secrets reais nesta seção:
+> **Aliases legados (deprecados):** `AUTH_RESET_FROM` e `AUTH_INVITE_FROM` — ainda lidos quando os
+> `EMAIL_FROM*` correspondentes não estão setados (`src/modules/notifications/adapters/email/email-config.ts`).
+> `PARTNERS_INVITE_FROM` **não é lido por nenhum código** e por isso saiu desta lista (#335): setá-lo
+> não produzia efeito algum, e a nota anterior prometia o contrário. Secrets reais nesta seção:
 > `SMTP_PASS`, `RESEND_API_KEY`.
 
 ---
