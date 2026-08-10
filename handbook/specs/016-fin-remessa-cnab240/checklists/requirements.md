@@ -6,7 +6,7 @@
 
 ## Content Quality
 
-- [x] No implementation details (languages, frameworks, APIs) — termos CNAB 240/segmentos P/Q/J/hash são vocabulário **de domínio** (BC Integração Bancária), não stack; detalhes técnicos confinados à seção "Impacto Arquitetural" (específica do core-api, por design do template).
+- [x] No implementation details (languages, frameworks, APIs) — termos CNAB 240/Segmentos A e B/hash são vocabulário **de domínio** (BC Integração Bancária), não stack; detalhes técnicos confinados à seção "Impacto Arquitetural" (específica do core-api, por design do template).
 - [x] Focused on user value and business needs
 - [x] Written for non-technical stakeholders
 - [x] All mandatory sections completed

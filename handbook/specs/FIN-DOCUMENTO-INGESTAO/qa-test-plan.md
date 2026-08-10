@@ -98,7 +98,7 @@ Garantir que a inclusão de documento com OCR atenda aos critérios de aceitaç�
 | **QA-GRID-04** | Seleção múltipla                | Selecionar 3 documentos com checkbox              | Barra de ações em lote aparece com contador "3 selecionados"                   |
 | **QA-GRID-05** | Baixar em lote                  | Selecionar 2 documentos Aprovados + clicar Baixar | Ambos mudam para status Pago                                                   |
 | **QA-GRID-06** | Exportar CSV                    | Selecionar 5 documentos + Exportar CSV            | Arquivo baixado com 5 linhas + cabeçalho correto                               |
-| **QA-GRID-07** | Exportar CNAB                   | Selecionar 2 documentos TED + Exportar CNAB       | Arquivo gerado no layout 240 com segmentos P, Q, J                             |
+| **QA-GRID-07** | Exportar CNAB                   | Selecionar 2 documentos TED + Exportar CNAB       | Arquivo gerado no layout 240 Multipag com Segmentos A + B                      |
 | **QA-GRID-08** | Mudar status em lote            | Selecionar 3 Rascunhos + Mudar para Aberto        | Status atualizado, toast de confirmação                                        |
 | **QA-GRID-09** | Busca exibe pai e filhos        | Buscar por número de NFS-e com filhos             | Grid exibe título pai + todos os filhos (ISS, IRRF, INSS, CSRF)                |
 | **QA-GRID-10** | Redirecionamento pós-salvamento | Clicar "Salvar Documento" em novo lançamento      | Sistema redireciona para grid com ordenação "Mais recente" e documento no topo |
