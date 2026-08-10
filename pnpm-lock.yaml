@@ -38,7 +38,7 @@ importers:
         version: 5.2.6
       drizzle-orm:
         specifier: 0.45.2
-        version: 0.45.2(mysql2@3.22.3(@types/node@22.19.19))
+        version: 0.45.2(mysql2@3.22.3(@types/node@24.13.3))
       fast-xml-parser:
         specifier: 5.7.3
         version: 5.7.3
@@ -56,7 +56,7 @@ importers:
         version: 6.2.3
       mysql2:
         specifier: 3.22.3
-        version: 3.22.3(@types/node@22.19.19)
+        version: 3.22.3(@types/node@24.13.3)
       nodemailer:
         specifier: 9.0.1
         version: 9.0.1
@@ -77,8 +77,8 @@ importers:
         specifier: ^10.0.1
         version: 10.0.1(eslint@10.3.0(supports-color@7.2.0))
       '@types/node':
-        specifier: ^22.10.0
-        version: 22.19.19
+        specifier: ^24.0.0
+        version: 24.13.3
       '@types/nodemailer':
         specifier: ^8.0.1
         version: 8.0.1
@@ -853,8 +853,8 @@ packages:
   '@types/nanoid@2.1.0':
     resolution: {integrity: sha512-xdkn/oRTA0GSNPLIKZgHWqDTWZsVrieKomxJBOQUK9YDD+zfSgmwD5t4WJYra5S7XyhTw7tfvwznW+pFexaepQ==}
 
-  '@types/node@22.19.19':
-    resolution: {integrity: sha512-dyh/xO2Fh5bYrfWaaqGrRQQGkNdmYw6AmaAUvYeUMNTWQtvb796ikLdmTchRmOlOiIJ1TDXfWgVx1QkUlQ6Hew==}
+  '@types/node@24.13.3':
+    resolution: {integrity: sha512-Dh8vAsV36ig5wa9OX4pXvMc9D3Veibfw2wix0CUwYODLD8nkj9UsLjASr49nPg+2eKzxhBV+v7L8pXvT4e639Q==}
 
   '@types/nodemailer@8.0.1':
     resolution: {integrity: sha512-PxpaInm8V1JQDd4j0ds5HfvWQk8JupS1C0Picb96QJsrrRDjBH+DlK7L4ZdNSqNULhiZRQHc40nLVShaGxXAMw==}
@@ -2607,8 +2607,8 @@ packages:
     engines: {node: '>=0.8.0'}
     hasBin: true
 
-  undici-types@6.21.0:
-    resolution: {integrity: sha512-iwDZqg0QAGrg9Rav5H4n0M64c3mkR59cJ6wQp+7C4nI0gsmExaedaYLNO44eT4AtBBwjbTiGPMlt2Md0T9H9JQ==}
+  undici-types@7.18.2:
+    resolution: {integrity: sha512-AsuCzffGHJybSaRrmr5eHr81mwJU3kjw6M+uprWvCXiNeN9SOGwQ3Jn8jb8m3Z6izVgknn1R0FTCEAP2QrLY/w==}
 
   undici@7.27.0:
     resolution: {integrity: sha512-+t2Z/GwkZQDtu00813aP66ygViGtPHKhhoFZpQKpKrE+9jIgES+Zw+mFNaDWOVRKiuJjuqKHzD3B1sfGg8+ZOQ==}
@@ -3692,15 +3692,15 @@ snapshots:
 
   '@types/nanoid@2.1.0':
     dependencies:
-      '@types/node': 22.19.19
+      '@types/node': 24.13.3
 
-  '@types/node@22.19.19':
+  '@types/node@24.13.3':
     dependencies:
-      undici-types: 6.21.0
+      undici-types: 7.18.2
 
   '@types/nodemailer@8.0.1':
     dependencies:
-      '@types/node': 22.19.19
+      '@types/node': 24.13.3
 
   '@types/qs@6.15.1': {}
 
@@ -4261,9 +4261,9 @@ snapshots:
       esbuild: 0.25.12
       tsx: 4.22.0
 
-  drizzle-orm@0.45.2(mysql2@3.22.3(@types/node@22.19.19)):
+  drizzle-orm@0.45.2(mysql2@3.22.3(@types/node@24.13.3)):
     optionalDependencies:
-      mysql2: 3.22.3(@types/node@22.19.19)
+      mysql2: 3.22.3(@types/node@24.13.3)
 
   dunder-proto@1.0.1:
     dependencies:
@@ -4933,9 +4933,9 @@ snapshots:
 
   ms@2.1.3: {}
 
-  mysql2@3.22.3(@types/node@22.19.19):
+  mysql2@3.22.3(@types/node@24.13.3):
     dependencies:
-      '@types/node': 22.19.19
+      '@types/node': 24.13.3
       aws-ssl-profiles: 1.1.2
       denque: 2.1.0
       generate-function: 2.3.1
@@ -5114,7 +5114,7 @@ snapshots:
       '@protobufjs/path': 1.1.2
       '@protobufjs/pool': 1.1.0
       '@protobufjs/utf8': 1.1.1
-      '@types/node': 22.19.19
+      '@types/node': 24.13.3
       long: 5.3.2
 
   protobufjs@8.5.0:
@@ -5384,7 +5384,7 @@ snapshots:
   uglify-js@3.19.3:
     optional: true
 
-  undici-types@6.21.0: {}
+  undici-types@7.18.2: {}
 
   undici@7.27.0: {}
 
