@@ -97,7 +97,8 @@ O **"Fato Gerador"**, raiz absoluta do Financeiro — princípio central _"nada 
 
 Máquina `Recebido`/`Processado`/`Falha_Layout` (`09-status-maquina-estados.md:105-124`). Não existe em `src/`.
 
-- Sem tradutor CNAB 240 (segmentos P/Q/J — `05-integracao-bancaria-context.md:26`).
+- Sem tradutor CNAB 240 (Multipag, Segmentos **A** + **B**).
+  > ⚠️ **Errata 2026-08-10:** o texto original dizia "segmentos P/Q/J" (layout de **cobrança**, inexistente no Multipag) e citava `05-integracao-bancaria-context.md:26` — **arquivo que não existe no repositório**. A constatação de ausência do tradutor segue válida; a estrutura citada é que estava errada.
 - Sem importação OFX/XLSX/PDF nem reconciliação por FITID (R4 — `04-titulos-liquidacao-context.md:57`).
 - Os VOs `FITID`/`beneficiary-bank-data` existem, mas não há adapter/ACL que os consuma.
 
