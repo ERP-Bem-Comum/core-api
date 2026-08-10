@@ -1,0 +1,2 @@
+- [Convenção de secret-por-arquivo](secrets-file-convention.md) — padrão certo (`sweeper/config.ts` `_FILE`) vs. padrão a não copiar (JWT keys direto em env)
+- [Diagnóstico VAN Bradesco 2026-08-07](bradesco-van-security-diagnosis-2026-08-07.md) — viável com lacunas; #634 bloqueia go-live. ⚠️ **Veredito P4 (SSH sobre S3) CAIU** em 2026-08-10 — ADR-0060 pôs o transporte no bucket e a app nunca toca a instância; o hardening de SSH (Ed25519, host key, CWE-78) foi junto

@@ -2,11 +2,14 @@
 
 # ADR-0008: Arquitetura da Integração Bradesco (REST API + VAN via Windows VM)
 
-- **Status:** Accepted
+- **Status:** Accepted — **o transporte da VAN (Adapter B) foi superseded parcialmente pelo [ADR-0060](./0060-van-transport-via-s3-bucket-supersedes-0008-relay.md)**
+- **Superseded by (parcial):** [ADR-0060](./0060-van-transport-via-s3-bucket-supersedes-0008-relay.md) (2026-08-10) — cai a §"Adapter B — `BradescoVanRelayAdapter`" (`:47-68`), incluindo `ssh2`, `ssh.exec()` e as nove envs `VAN_VM_SSH_*`/`STCPCLT_*`, mais as consequências e riscos que derivam de SSH (`:85`, `:93`, `:95`, `:107`). **O Adapter A (`BradescoRestAdapter` — saldo e extrato via REST/mTLS) permanece vigente e inalterado**, com todas as envs `BRADESCO_*`.
 - **Date:** 2026-04-28
 - **Deciders:** Arquiteto técnico (com base em troca de e-mail com Carlos Eduardo / Going2 e análise do código legado)
 
 ---
+
+> ⚠️ **AVISO:** a premissa de transporte deste ADR — *"o `core-api` se conecta por SSH/SFTP à VM Windows e dispara o `stcpclt.exe` remotamente"* — deixou de valer em **2026-08-10**. A infra que opera a instância fechou o desenho por **bucket S3 com agente rodando dentro da própria máquina**: a aplicação não se conecta à instância em momento algum. Ver [ADR-0060](./0060-van-transport-via-s3-bucket-supersedes-0008-relay.md). Nada do Adapter B chegou a ser construído — `ssh2` nunca entrou no `package.json`. O conteúdo abaixo permanece como evidência histórica do raciocínio válido em 2026-04-28, **e o Adapter A continua sendo a especificação vigente da parte REST**.
 
 ## Contexto
 
