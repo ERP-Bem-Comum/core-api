@@ -183,6 +183,8 @@ describe('financial/use-cases/record-manual-entry — taxonomia planejável (#50
       type: 'Receipt',
       budgetPlanRef: BUDGET,
       subcategoryRef: SUBCATEGORY,
+      categoryRef: CATEGORY,
+      costCenterRef: COSTCENTER,
       reconciledBy: 'u1',
     } as never);
     assert.equal(r.ok, true, JSON.stringify(r));
@@ -193,17 +195,21 @@ describe('financial/use-cases/record-manual-entry — taxonomia planejável (#50
     assert.equal(refs.subcategoryRef, SUBCATEGORY);
   });
 
-  it('CA4: sem os refs novos → nascem null (back-compat)', async () => {
+  it('CA4: sem os refs de PLANO (budgetPlan/subcategory) → nascem null; categoria/centro seguem obrigatórios', async () => {
     const w = buildWorld([txOf('f0', 2500)]);
     await w.cedenteStore.save(w.account);
     const txId = w.transactionIds[0];
     if (txId === undefined) throw new Error('setup');
 
+    // Categoria + centro de custo são obrigatórios ao conciliar (regra P.O.); os refs de PLANO
+    // (budgetPlanRef/subcategoryRef) continuam opcionais → nascem null quando não informados.
     const r = await w.record({
       transactionId: txId,
       type: 'Payment',
+      categoryRef: CATEGORY,
+      costCenterRef: COSTCENTER,
       reconciledBy: 'u1',
-    });
+    } as never);
     assert.equal(r.ok, true, JSON.stringify(r));
     if (!r.ok) return;
 

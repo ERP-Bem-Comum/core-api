@@ -148,12 +148,25 @@ after(async () => {
   await handle.teardown();
 });
 
+// Classificação default p/ tipos classificáveis (regra P.O.: categoria + centro de custo obrigatórios
+// ao conciliar; realocação isenta). O payload do caso sobrescreve — casos de borda com ref malformado
+// seguem sendo rejeitados no Zod pelo campo inválido.
+const withClassification = (payload: Record<string, unknown>): Record<string, unknown> => {
+  const type = payload['type'];
+  if (type === 'Transfer' || type === 'Investment' || type === 'Redemption') return payload;
+  return {
+    categoryRef: '11111111-1111-4111-8111-111111111111',
+    costCenterRef: '22222222-2222-4222-8222-222222222222',
+    ...payload,
+  };
+};
+
 const postManualEntry = (txId: string, payload: Record<string, unknown>) =>
   handle.app.inject({
     method: 'POST',
     url: `/api/v2/financial/statement-transactions/${txId}/manual-entry`,
     headers: { authorization: `Bearer ${WRITER}` },
-    payload,
+    payload: withClassification(payload),
   });
 
 interface ManualEntryDetail {

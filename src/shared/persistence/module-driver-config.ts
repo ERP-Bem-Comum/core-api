@@ -21,6 +21,7 @@
  */
 
 import { combine, err, ok, type Result } from '#src/shared/primitives/result.ts';
+import { isProductionEnv } from '#src/shared/runtime/node-env.ts';
 
 type Env = Readonly<Record<string, string | undefined>>;
 
@@ -320,7 +321,7 @@ const resolveReports = (env: Env, isProduction: boolean): Resolution<ReportsDriv
 export const readModuleDriverConfigs = (
   env: Env,
 ): Result<ModuleDriverConfigs, readonly string[]> => {
-  const isProduction = env['NODE_ENV'] === 'production';
+  const isProduction = isProductionEnv(env);
 
   const auth = resolveModule(env, MODULE_SPECS.auth, isProduction);
   const contracts = resolveModule(env, MODULE_SPECS.contracts, isProduction);

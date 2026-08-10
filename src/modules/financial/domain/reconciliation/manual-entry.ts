@@ -12,6 +12,7 @@ import type { ManualEntry, ManualEntryType, Reconciliation } from './types.ts';
 
 export type ManualEntryError =
   | 'manual-entry-value-not-positive'
+  | 'manual-entry-classification-required'
   | 'transfer-requires-destination'
   | 'investment-requires-product'
   | 'realloc-forbids-supplier';
@@ -67,6 +68,18 @@ export const confirmManualEntry = (
     input.productLabel === undefined
   ) {
     return err('investment-requires-product');
+  }
+
+  // Classificação obrigatória ao conciliar (regra da P.O.): tipos que NÃO são realocação patrimonial
+  // (Payment/Receipt/FeePenaltyInterest) exigem categoria + centro de custo — em título normal e manual.
+  // Transfer/Investment/Redemption circulam entre contas da própria empresa → isentos. A obrigatoriedade é
+  // no ATO de conciliar, não no export: transação não conciliada (sem ManualEntry) nunca passa por aqui, e
+  // segue exportável vazia (#649 — o arquivo pode ser gerado antes de a conciliação estar concluída).
+  if (
+    !isCapitalReallocation(input.type) &&
+    (input.categoryRef === undefined || input.costCenterRef === undefined)
+  ) {
+    return err('manual-entry-classification-required');
   }
 
   const manualEntry: ManualEntry = immutable<ManualEntry>({

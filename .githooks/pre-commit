@@ -19,6 +19,14 @@ if [ -z "${REPO_ROOT}" ]; then
 fi
 
 GATE="${REPO_ROOT}/.claude/hooks/pre-commit-typecheck.sh"
+TOMBSTONE="${REPO_ROOT}/.claude/hooks/pre-commit-tombstone.sh"
+
+# Tombstone ANTES do gate de qualidade, e não dentro dele: o gate sai cedo quando não há .ts
+# staged, então o commit que apaga só documentação nunca chegaria lá. Ausente, segue — este
+# não é gate de segurança, e o de qualidade continua sendo o fail-closed do arquivo.
+if [ -x "${TOMBSTONE}" ]; then
+  "${TOMBSTONE}" || exit 1
+fi
 
 # Fail-closed, pela mesma razão do ramo "pnpm ausente" no gate: um hook que não
 # achou o que executar deve recusar, não liberar. O bit +x é rastreado pelo git,

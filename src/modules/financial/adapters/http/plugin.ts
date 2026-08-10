@@ -126,6 +126,7 @@ import {
   reopenPeriodResponseSchema,
   reconciliationPeriodIdParamSchema,
   exportReconciliationQuerySchema,
+  exportReconciliationByRangeQuerySchema,
   createCedenteAccountBodySchema,
   editCedenteAccountBodySchema,
   cedenteAccountIdParamSchema,
@@ -1661,7 +1662,10 @@ const financialRoutes =
       handler: async (req, reply) => {
         const { format } = req.query;
         if (format === 'csv-nibo') {
-          const result = await deps.exportReconciliationNibo({ periodId: req.params.id });
+          const result = await deps.exportReconciliationNibo({
+            by: 'period',
+            periodId: req.params.id,
+          });
           if (!result.ok) return sendDomainError(reply, result.error);
           return reply
             .code(200)
@@ -1670,9 +1674,47 @@ const financialRoutes =
         }
         // format narrowed to 'ofx' | 'csv' após o branch csv-nibo acima.
         const result = await deps.exportReconciliation({
+          by: 'period',
           periodId: req.params.id,
           format,
         });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        const contentType = result.value.format === 'csv' ? 'text/csv' : 'application/x-ofx';
+        return reply
+          .code(200)
+          .header('content-type', `${contentType}; charset=utf-8`)
+          .send(result.value.content) as unknown as Promise<void>;
+      },
+    });
+
+    // GET /financial/reconciliation/export?debitAccountRef=…&periodStart=…&periodEnd=…&format=… (#649)
+    // Export por CONTA + INTERVALO, sem periodId — exporta a qualquer momento, sem período fechado
+    // (o export nunca dependeu de `status`; o período era só carona da tripla). Mantém a rota `:id`.
+    scope.route({
+      method: 'GET',
+      url: '/financial/reconciliation/export',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.reconciliationRead)],
+      schema: {
+        querystring: exportReconciliationByRangeQuerySchema,
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const { debitAccountRef, periodStart, periodEnd, format } = req.query;
+        // `new Date('YYYY-MM-DD')` = UTC 00:00 — IDÊNTICO ao close (schemas.ts) → export idêntico.
+        const range = {
+          by: 'range' as const,
+          debitAccountRef,
+          periodStart: new Date(periodStart),
+          periodEnd: new Date(periodEnd),
+        };
+        if (format === 'csv-nibo') {
+          const result = await deps.exportReconciliationNibo(range);
+          if (!result.ok) return sendDomainError(reply, result.error);
+          return reply
+            .code(200)
+            .header('content-type', 'text/csv; charset=utf-8')
+            .send(result.value.content) as unknown as Promise<void>;
+        }
+        const result = await deps.exportReconciliation({ ...range, format });
         if (!result.ok) return sendDomainError(reply, result.error);
         const contentType = result.value.format === 'csv' ? 'text/csv' : 'application/x-ofx';
         return reply

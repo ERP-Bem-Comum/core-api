@@ -26,8 +26,12 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix",
+    "lint": "eslint . --cache",
+    "lint:fix": "eslint . --fix --cache",
+    "docs:inventory": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/inventory.ts",
+    "docs:index": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/inquiry-index.ts",
+    "docs:refs": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/refs.ts",
+    "docs:links": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/link-scan.ts",
     "audit": "pnpm audit --prod --audit-level=high",
     "audit:all": "pnpm audit --audit-level=high",
     "test": "node --test --experimental-strip-types --enable-source-maps --no-warnings 'tests/**/*.test.ts'",
@@ -74,7 +78,8 @@
     "db:generate:notifications": "drizzle-kit generate --config db/drizzle/notifications.ts",
     "db:generate:budget-plans": "drizzle-kit generate --config db/drizzle/budget-plans.ts",
     "db:seed:partners": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/seed/partners.ts",
-    "seed:admin": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/seed/admin-user.ts"
+    "seed:admin": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/seed/admin-user.ts",
+    "financial:projection-health": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/financial/diagnostics/projection-health.ts"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

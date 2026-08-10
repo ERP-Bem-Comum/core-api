@@ -42,27 +42,59 @@ Crie uma `inquiry-NNNN-<slug>.md` quando:
 
 ## 3. Como criar
 
-1. Pegue o próximo número livre (`NNNN`).
+1. Pegue o próximo número livre (`NNNN`) — colisão é barrada por `tests/cleanup/handbook-numbering.test.ts`.
 2. Copie o [`_template.md`](./_template.md).
-3. Preencha conforme as informações forem chegando.
-4. Atualize o [`INDEX.md`](./INDEX.md) com status atual.
-5. Quando fechar (decisão tomada ou pergunta respondida), atualize o status.
+3. Preencha o frontmatter (`inquiry`, `title`, `state`) e o corpo conforme as informações chegarem.
+4. Rode **`pnpm run docs:index`**. O [`INDEX.md`](./INDEX.md) é **gerado** do frontmatter — não editar à mão.
+5. Quando fechar, mude o `state:` no frontmatter e regere. O índice acompanha sozinho.
 
 > ⚠️ Diferente de ADRs, **inquiries são editáveis** — elas vivem com o raciocínio em curso. Quando uma inquiry vira decisão final, ela referencia o ADR que foi gerado a partir dela.
 
 ---
 
-## 4. Status possíveis
+## 4. Estados possíveis
 
-| Status | Significado |
-| :--- | :--- |
-| `Open` | Pergunta aberta, sem resposta ainda |
-| `Pending Response` | Aguardando retorno externo (P.O., Codebit, fornecedor) |
-| `Under Analysis` | Resposta recebida, ainda analisando internamente |
-| `Decided` | Decisão tomada, ADR gerado se aplicável |
-| `Closed` | Resolvida sem necessidade de ADR |
-| `Deferred` | Adiada — não vai resolver agora |
-| `Cancelled` | Pergunta perdeu sentido |
+Conjunto **fechado**, no campo `state:` do frontmatter, cobrado por `tests/cleanup/inquiry-hygiene.test.ts`.
+Inspirado nos estados de RFD da Oxide, reduzido aos cinco que este repositório usa.
+
+| `state` | Significado | Quem destrava |
+| :--- | :--- | :--- |
+| `open` | Em investigação ativa | quem trabalha nela |
+| `blocked` | Espera resposta de terceiro (banca, P.O., upstream) | o terceiro |
+| `decided` | Decisão tomada, ADR gerado se aplicável | ninguém — fechada |
+| `deferred` | Adiada com **gatilho declarado** no corpo | o gatilho |
+| `superseded` | Revisada por outra inquiry ou ADR | — |
+
+> ⚠️ Estado novo exige editar o teste — que é o ponto. Esta tabela nasceu porque o acervo acumulou
+> **seis** rótulos ad-hoc em prosa livre (`Decided`, `Concluída`, `Watch`, `⚠️ OBSOLETA`…), e status que
+> cada arquivo preenche do seu jeito não responde "o que está aberto?".
+
+As inquiries que ainda esperam resposta têm suas perguntas consolidadas em
+[`PERGUNTAS-EM-ABERTO.md`](./PERGUNTAS-EM-ABERTO.md). Inquiry `open` ou `blocked` que passe **90 dias**
+sem revisão falha o gate: atualizar `last_reviewed` significa reler e responder se o bloqueio ainda é o
+mesmo — não carimbar a data.
+
+---
+
+## 5. Como citar outro documento
+
+Duas formas, e a escolha é sobre **quanto o alvo é volátil**:
+
+| Forma | Quando | Exemplo |
+| :--- | :--- | :--- |
+| **Identificador** | O alvo pode ser renomeado ou movido — outra inquiry, spec, ADR citado de longe | `[[inquiry-0018]]` · `[[adr-0017]]` · `[[spec-041]]` |
+| **Caminho markdown** | O alvo é estável e a navegação importa (o leitor precisa clicar) | `[texto](./0018-....md)` |
+
+O identificador é `tipo-numero` — o número vem do prefixo do arquivo, que já é único por
+`tests/cleanup/handbook-numbering.test.ts`. **Ele nunca muda**, então renomear o alvo não quebra a
+citação. `tests/cleanup/handbook-refs.test.ts` cobra que todo `[[id]]` resolva.
+
+> ⚠️ **O identificador não é clicável no GitHub.** É o custo consciente: sobreviver a rename em troca
+> de um clique. Por isso a forma antiga `[[0018-auditlog-transversal-todos-bcs]]` (nome do arquivo)
+> foi abandonada — ela não era clicável **nem** sobrevivia a rename, o pior dos dois mundos.
+
+Documento que morreu ou mudou de lugar entra em [`../redirects.json`](../redirects.json); apagar um
+`.md` citado sem declarar isso é recusado no `pre-commit`.
 
 ---
 

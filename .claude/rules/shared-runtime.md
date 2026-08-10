@@ -15,6 +15,7 @@ verify:
       - 'src/shared/observability/correlation.ts'
       - 'src/shared/ports/clock.ts'
       - 'src/shared/runtime/last-resort.ts'
+      - 'src/shared/runtime/node-env.ts'
       - 'src/shared/utils/csv.ts'
       - 'src/shared/utils/date.ts'
       - 'src/shared/utils/hash.ts'
@@ -22,11 +23,13 @@ verify:
       - 'src/shared/utils/string.ts'
 ---
 
-Nove arquivos pequenos e muito consumidos: `Clock` tem ~100 consumidores, `newUuid` 42, `correlation` 15. A proibição de ler o relógio no domínio é cobrada por `tests/cleanup/domain-clock-injection.test.ts`; a razão está no docblock de lá.
+Dez arquivos pequenos e muito consumidos: `Clock` tem ~100 consumidores, `newUuid` 42, `correlation` 15. A proibição de ler o relógio no domínio é cobrada por `tests/cleanup/domain-clock-injection.test.ts`; a razão está no docblock de lá.
 
 - **`utils/` NÃO é a fronteira com `node:`.** Os docblocks de `id.ts` e `hash.ts` dizem "encapsula `node:crypto`", e isso descreve o que aqueles dois arquivos fazem — não uma norma do repositório. **21 arquivos importam `node:crypto` diretamente**, a maioria em `adapters/crypto/` do `auth` e `partners`, onde a primitiva é o próprio assunto. Não tratar um import de `node:*` fora daqui como violação, e não centralizar por centralizar.
 
 - **`ClockFixed` é o mecanismo de determinismo, não um detalhe de teste.** 78 arquivos de `tests/` o usam. Ao escrever operação nova que dependa de tempo, o instante entra por parâmetro (`at`) resolvido pelo use case a partir do `Clock` — o que torna o teste determinístico sem congelar relógio global.
+
+- **"É produção?" se decide por `isProductionEnv`, nunca por comparação com literal.** Quatro guards liam `env['NODE_ENV'] === 'production'` com a mesma linha copiada, e `NODE_ENV=Production` num taskdef fazia três deles **degradarem em silêncio** — driver para memória, link de e-mail com default `localhost`, chave JWT efêmera — enquanto o quarto, invertido em `http/app.ts`, **expunha** a doc da API que o comentário dele promete nunca expor em produção (#606). `runtime/node-env.ts` normaliza caixa e espaço e aceita `prod`, porque entre reconhecer produção a mais (restringe) e a menos (degrada calado) o lado seguro é o restritivo — mesmo critério do default de `auth/adapters/http/rbac-mode.ts`.
 
 - **O `shutdown` passado ao `installLastResortHandlers` tem de DRENAR, não só abortar.** Em `uncaughtException` o `finally` do `try` **nunca roda** — então quem fecha o pool no caminho normal não é chamado. Passar um shutdown que só faz `controller.abort()` satisfaz o gate e não resolve nada: o processo morre com as conexões abertas, que ficam no servidor até o `wait_timeout` ([Incident-0001](../../handbook/incidents/0001-prod-rds-connection-exhaustion-2026-07-10.md)). O padrão do repo é um `drain` que aborta **e** fecha, usado tanto no `finally` quanto no handler. Quais entrypoints precisam instalar é cobrado por `tests/cleanup/longrunning-drains-pool.test.ts` — job one-shot fica de fora por desenho (ADR-0041).
 
