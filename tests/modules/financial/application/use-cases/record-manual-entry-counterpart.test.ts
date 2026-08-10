@@ -212,6 +212,8 @@ describe('financial/application — recordManualEntry cria contrapartida (Transf
     const r = await w.record({
       transactionId: txId,
       type: 'FeePenaltyInterest',
+      categoryRef: '11111111-1111-4111-8111-111111111111',
+      costCenterRef: '22222222-2222-4222-8222-222222222222',
       reconciledBy: 'u1',
     });
     assert.equal(r.ok, true, JSON.stringify(r));
@@ -235,6 +237,8 @@ describe('financial/application — recordManualEntry cria contrapartida (Transf
     const r = await w.record({
       transactionId: txId,
       type: 'Payment',
+      categoryRef: '11111111-1111-4111-8111-111111111111',
+      costCenterRef: '22222222-2222-4222-8222-222222222222',
       destinationAccountRef: String(dest.id),
       reconciledBy: 'u1',
     });

@@ -131,8 +131,15 @@ const supplier = (supplierRef: string, name: string): SupplierView =>
     document: '00000000000000',
     occurredAt: new Date(0),
   }) as unknown as SupplierView;
-const cedente = (nickname: string | undefined): CedenteAccount =>
-  ({ id: 'acc', nickname }) as unknown as CedenteAccount;
+const cedente = (bankName: string | undefined): CedenteAccount =>
+  ({
+    id: 'acc',
+    bankCode: '341',
+    bankName,
+    agency: '1234',
+    accountNumber: '567890',
+    accountDigit: '1',
+  }) as unknown as CedenteAccount;
 
 type Deps = Readonly<{
   period?: ReconciliationPeriod | null;
@@ -241,7 +248,7 @@ describe('financial/application — exportReconciliationNibo (#146)', () => {
     assert.equal(c[8], 'Financeiro'); // centro de custo resolvido
     assert.equal(c[10], 'Fornecedor'); // payeeKind=supplier → Fornecedor
     assert.equal(c[11], 'NF-123'); // referência = documentNumber
-    assert.equal(c[12], 'Itaú'); // conta = apelido da cedente do período
+    assert.equal(c[12], 'Banco 341 Itaú · Ag 1234 · Conta 567890-1'); // conta = DADOS da cedente do período
     assert.equal(c[13], '12/03/2026'); // data pag = tx.date
   });
 
@@ -304,10 +311,40 @@ describe('financial/application — exportReconciliationNibo (#146)', () => {
     assert.equal(rows.length, 1);
     const c = rows[0]!;
     assert.equal(c[0], 'Lançamento');
+    assert.equal(c[1], 'Banco'); // sem fornecedor → nome cai no favorecido do extrato (payeeName). Regra P.O.
     assert.equal(c[3], 'Despesas bancárias'); // categoria do manualEntry
     assert.equal(c[4], '-50,00'); // Debit → negativo
     assert.equal(c[8], 'Administrativo'); // centro do manualEntry
+    assert.equal(c[10], ''); // sem fornecedor → tipo de contato vazio
     assert.equal(c[11], ''); // sem documento → referência vazia
+  });
+
+  it('B (#664): manual com fornecedor + nº de documento → tipo de contato "Fornecedor" e referência = documentNumber', async () => {
+    const tx = makeTx('tx-4b', { valueCents: 5000, memo: 'Tarifa bancária' });
+    const rec = makeReconciliation('tx-4b', {
+      type: 'ManualEntry',
+      manualEntry: makeManualEntry('Payment', {
+        valueCents: 5000,
+        supplierRef: 'sup-1',
+        categoryRef: 'cat-9',
+        costCenterRef: 'cc-9',
+        documentNumber: 'NF-777',
+        description: 'Pagamento manual',
+      }),
+    });
+    const r = await run(
+      baseCfg({
+        txs: [tx],
+        reconciliations: new Map([['tx-4b', rec]]),
+        categories: [cat('cat-9', 'Despesas bancárias')],
+        costCenters: [costCenter('cc-9', 'Administrativo')],
+      }),
+    );
+    assert.ok(r.ok);
+    const c = dataRows(r.value.content)[0]!;
+    assert.equal(c[1], 'Fornecedor Alfa'); // contato resolvido pelo supplierRef
+    assert.equal(c[10], 'Fornecedor'); // #664: há fornecedor → tipo de contato
+    assert.equal(c[11], 'NF-777'); // #664: referência = documentNumber (#370)
   });
 
   it('C: transferência #143 (Transfer) → 1 linha Transferência com Conta = apelido da conta destino', async () => {
@@ -334,10 +371,14 @@ describe('financial/application — exportReconciliationNibo (#146)', () => {
     assert.equal(rows.length, 1);
     const c = rows[0]!;
     assert.equal(c[0], 'Transferência');
+    // #664: vazios INTENCIONAIS — realocação não tem fornecedor (domínio proíbe) nem classifica
+    // (isenção da Opção 1); o Nibo não classifica uma Transferência.
     assert.equal(c[1], ''); // sem contato
     assert.equal(c[3], ''); // sem categoria
+    assert.equal(c[8], ''); // sem centro de custo
     assert.equal(c[10], ''); // sem tipo de contato
-    assert.equal(c[12], 'Bradesco'); // conta destino
+    assert.equal(c[11], ''); // sem referência
+    assert.equal(c[12], 'Banco 341 Bradesco · Ag 1234 · Conta 567890-1'); // conta destino (dados)
     assert.equal(c[4], '500,00');
   });
 
@@ -377,9 +418,10 @@ describe('financial/application — exportReconciliationNibo (#146)', () => {
     );
     assert.ok(r.ok);
     const c = dataRows(r.value.content)[0]!;
-    assert.equal(c[1], ''); // contato não resolvido
-    assert.equal(c[3], ''); // categoria não resolvida
-    assert.equal(c[8], ''); // centro de custo null
+    // Nome NÃO fica vazio: fornecedor não resolveu → cai no favorecido do extrato (payeeName). Regra P.O.
+    assert.equal(c[1], 'Banco'); // makeTx.payeeName
+    assert.equal(c[3], ''); // categoria não resolvida → degrada para vazio
+    assert.equal(c[8], ''); // centro de custo null → vazio
   });
 
   it('CA6: período inexistente → erro mapeado (sem 5xx)', async () => {
@@ -394,18 +436,50 @@ describe('financial/application — exportReconciliationNibo (#146)', () => {
     assert.equal(r.error, 'reconciliation-period-id-invalid');
   });
 
-  it('transação Pending (não conciliada) é ignorada — não gera linha', async () => {
-    const pending = makeTx('tx-8', { reconciliationStatus: 'Pending' });
-    const reconciled = makeTx('tx-9');
+  it('P.O.: transação Pending vira linha crua do extrato (dado do extrato preenchido, enriquecimento em branco), na ordem do extrato', async () => {
+    const pending = makeTx('tx-8', {
+      reconciliationStatus: 'Pending',
+      payeeName: 'PAGAMENTO - LUIZA',
+      memo: '',
+      valueCents: 200000,
+      movement: 'Debit',
+    });
+    const reconciledTx = makeTx('tx-9');
     const rec = makeReconciliation('tx-9', { items: [item('pay-1', 200000)] });
     const r = await run(
       baseCfg({
-        txs: [pending, reconciled],
+        txs: [pending, reconciledTx], // pending primeiro no extrato
         reconciliations: new Map([['tx-9', rec]]),
         docRows: [docRow('pay-1')],
       }),
     );
     assert.ok(r.ok);
-    assert.equal(dataRows(r.value.content).length, 1);
+    const rows = dataRows(r.value.content);
+    assert.equal(rows.length, 2); // #649/P.O.: pending TAMBÉM aparece
+    const p = rows[0]!; // ordem do extrato preservada → pending primeiro
+    assert.equal(p[0], 'Lançamento');
+    assert.equal(p[1], 'PAGAMENTO - LUIZA'); // Nome do contato = favorecido (payeeName)
+    assert.equal(p[2], ''); // Descrição = memo do extrato (vazio neste caso)
+    assert.equal(p[3], ''); // categoria — em branco
+    assert.equal(p[4], '-2000,00'); // valor do extrato, Debit → negativo
+    assert.equal(p[8], ''); // centro de custo — em branco
+    assert.equal(p[10], ''); // tipo de contato — em branco
+    assert.equal(p[11], ''); // referência — em branco
+    assert.equal(p[13], '12/03/2026'); // data do extrato
+    assert.equal(rows[1]![0], 'Lançamento'); // a conciliada segue presente
+  });
+
+  it('P.O.: linha Pending mapeia favorecido→Nome do contato e memo→Descrição (1:1 com o extrato)', async () => {
+    const pending = makeTx('tx-10', {
+      reconciliationStatus: 'Pending',
+      payeeName: 'FORNECEDOR X',
+      memo: 'NF 555',
+    });
+    const r = await run(baseCfg({ txs: [pending], reconciliations: new Map() }));
+    assert.ok(r.ok);
+    const rows = dataRows(r.value.content);
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0]![1], 'FORNECEDOR X'); // Nome do contato = favorecido
+    assert.equal(rows[0]![2], 'NF 555'); // Descrição = memo
   });
 });

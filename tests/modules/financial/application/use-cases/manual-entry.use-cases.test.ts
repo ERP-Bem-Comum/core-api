@@ -90,12 +90,25 @@ const buildWorld = (txs: readonly ParsedTransaction[]) => {
     clock: ClockReal(),
     expectedCounterpartStore: createInMemoryExpectedCounterpartStore(),
   });
+  // Classificação default: tipos classificáveis (Payment/Receipt/FeePenaltyInterest) exigem categoria +
+  // centro de custo ao conciliar (regra P.O.); realocação é isenta. Casos que testam a própria
+  // classificação passam os refs e sobrescrevem.
+  const recordClassified: typeof record = (input) =>
+    record(
+      input.type === 'Transfer' || input.type === 'Investment' || input.type === 'Redemption'
+        ? input
+        : {
+            categoryRef: '11111111-1111-4111-8111-111111111111',
+            costCenterRef: '22222222-2222-4222-8222-222222222222',
+            ...input,
+          },
+    );
   return {
     account: account.value,
     cedenteStore,
     statementRepo,
     outbox,
-    record,
+    record: recordClassified,
     transactionIds: statement.transactions.map((t) => String(t.id)),
   };
 };
