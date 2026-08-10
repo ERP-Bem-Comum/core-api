@@ -7,8 +7,17 @@
 //
 // Esta camada é ACL (ADR-0006): o domínio entrega `RemittanceOrder` e nunca vê "posição 143-172".
 // Aqui NÃO entram os detalhes (Segmentos A e B) — envelope e conteúdo são fatias separadas.
-import { type Result, ok } from '../../../../shared/primitives/result.ts';
-import { alpha, cents, dateDDMMYYYY, num, timeHHMMSS } from './positional.ts';
+import type { Result } from '../../../../shared/primitives/result.ts';
+import {
+  blanks,
+  cents,
+  dateDDMMYYYY,
+  digits,
+  joinFields,
+  num,
+  text,
+  timeHHMMSS,
+} from './positional.ts';
 import type { PositionalFieldError } from './positional.ts';
 
 export type CnabRecordError = PositionalFieldError;
@@ -75,36 +84,19 @@ export type FileTrailerInput = Readonly<{
   recordCount: number; // TODOS os registros do arquivo, envelope incluído
 }>;
 
-// Concatena campos já formatados, propagando o primeiro erro. Sem isto, cada registro viraria uma
-// escada de quinze `if (isErr(...))` — e a escada é onde se esquece de checar um.
-const join = (
-  fields: readonly Result<string, CnabRecordError>[],
-): Result<string, CnabRecordError> => {
-  const parts: string[] = [];
-  for (const field of fields) {
-    if (!field.ok) return field;
-    parts.push(field.value);
-  }
-  return ok(parts.join(''));
-};
-
-const blanks = (size: number): Result<string, CnabRecordError> => ok(' '.repeat(size));
-const text = (value: string, size: number): Result<string, CnabRecordError> =>
-  ok(alpha(value, size));
-
 export const fileHeader = (input: FileHeaderInput): Result<string, CnabRecordError> => {
   const { cedente: c } = input;
-  return join([
+  return joinFields([
     num(c.bankCode, 3), // 001-003 banco
     num(0, 4), // 004-007 lote (0000 no header de arquivo)
     num(0, 1), // 008     tipo de registro
     blanks(9), // 009-017 uso FEBRABAN
     num(c.documentType, 1), // 018     tipo de inscrição
-    num(c.document, 14), // 019-032 nº de inscrição
+    digits(c.document, 14), // 019-032 nº de inscrição
     text(c.convenio, 20), // 033-052 convênio
-    num(c.agency, 5), // 053-057 agência
+    digits(c.agency, 5), // 053-057 agência
     text(c.agencyDigit, 1), // 058     DV agência
-    num(c.accountNumber, 12), // 059-070 conta
+    digits(c.accountNumber, 12), // 059-070 conta
     text(c.accountDigit, 1), // 071     DV conta
     text(c.accountAgencyDigit, 1), // 072     DV ag/conta
     text(c.companyName, 30), // 073-102 nome da empresa
@@ -124,7 +116,7 @@ export const fileHeader = (input: FileHeaderInput): Result<string, CnabRecordErr
 
 export const batchHeader = (input: BatchHeaderInput): Result<string, CnabRecordError> => {
   const { cedente: c, address: a } = input;
-  return join([
+  return joinFields([
     num(c.bankCode, 3), // 001-003 banco
     num(input.batchNumber, 4), // 004-007 lote
     num(1, 1), // 008     tipo de registro
@@ -134,11 +126,11 @@ export const batchHeader = (input: BatchHeaderInput): Result<string, CnabRecordE
     num(BATCH_LAYOUT_VERSION, 3), // 014-016 versão do layout de lote
     blanks(1), // 017     CNAB
     num(c.documentType, 1), // 018     tipo de inscrição
-    num(c.document, 14), // 019-032 nº de inscrição
+    digits(c.document, 14), // 019-032 nº de inscrição
     text(c.convenio, 20), // 033-052 convênio
-    num(c.agency, 5), // 053-057 agência
+    digits(c.agency, 5), // 053-057 agência
     text(c.agencyDigit, 1), // 058     DV agência
-    num(c.accountNumber, 12), // 059-070 conta
+    digits(c.accountNumber, 12), // 059-070 conta
     text(c.accountDigit, 1), // 071     DV conta
     text(c.accountAgencyDigit, 1), // 072     DV ag/conta
     text(c.companyName, 30), // 073-102 nome da empresa
@@ -147,7 +139,7 @@ export const batchHeader = (input: BatchHeaderInput): Result<string, CnabRecordE
     num(a?.number ?? 0, 5), // 173-177 número
     text(a?.complement ?? '', 15), // 178-192 complemento
     text(a?.city ?? '', 20), // 193-212 cidade
-    num(a?.zipCode ?? 0, 5), // 213-217 CEP
+    digits(a?.zipCode ?? '0', 5), // 213-217 CEP
     text(a?.zipSuffix ?? '', 3), // 218-220 complemento do CEP
     text(a?.state ?? '', 2), // 221-222 estado
     num('01', 2), // 223-224 indicativo de forma de pagamento
@@ -157,7 +149,7 @@ export const batchHeader = (input: BatchHeaderInput): Result<string, CnabRecordE
 };
 
 export const batchTrailer = (input: BatchTrailerInput): Result<string, CnabRecordError> =>
-  join([
+  joinFields([
     num(input.bankCode, 3), // 001-003 banco
     num(input.batchNumber, 4), // 004-007 lote
     num(5, 1), // 008     tipo de registro
@@ -171,7 +163,7 @@ export const batchTrailer = (input: BatchTrailerInput): Result<string, CnabRecor
   ]);
 
 export const fileTrailer = (input: FileTrailerInput): Result<string, CnabRecordError> =>
-  join([
+  joinFields([
     num(input.bankCode, 3), // 001-003 banco
     num(BATCH_TRAILER_RESERVED_LOT, 4), // 004-007 lote reservado do trailer de arquivo
     num(9, 1), // 008     tipo de registro

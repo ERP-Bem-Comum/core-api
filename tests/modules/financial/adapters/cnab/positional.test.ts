@@ -9,6 +9,7 @@ import {
   cents,
   dateDDMMYYYY,
   timeHHMMSS,
+  digits,
 } from '#src/modules/financial/adapters/cnab/positional.ts';
 
 const unwrap = (r: ReturnType<typeof num>): string => {
@@ -55,6 +56,19 @@ describe('CNAB positional — alfanumérico alinha à esquerda com brancos', () 
   it('normaliza para maiúsculas sem acento, que é o que o banco aceita', () => {
     assert.equal(alpha('Associação', 10), 'ASSOCIACAO');
     assert.equal(alpha('José Ç', 8), 'JOSE C  ');
+  });
+});
+
+describe('CNAB positional — campo mascarado vira dígito', () => {
+  it('tira a pontuação de documento, agência, conta e CEP', () => {
+    assert.equal(unwrap(digits('12.345.678/0001-99', 14)), '12345678000199');
+    assert.equal(unwrap(digits('123.456.789-00', 11)), '12345678900');
+    assert.equal(unwrap(digits('60000-000', 8)), '60000000');
+  });
+
+  it('normalizar não é engolir: vazio e estouro continuam erro', () => {
+    assert.ok(isErr(digits('///', 5)));
+    assert.ok(isErr(digits('12.345.678/0001-99', 5)));
   });
 });
 
