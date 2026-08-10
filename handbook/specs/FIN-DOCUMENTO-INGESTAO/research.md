@@ -99,7 +99,7 @@ MySQL 8.4 + Drizzle ORM + `drizzle-kit migrate` suportam migrações reversívei
 
 Consulta ao handbook/guidelines/bradesco_guideline/ confirma que:
 
-- TED e Transferência Bancária geram remessa CNAB 240 (Segmentos P, Q, J)
+- TED e Transferência Bancária geram remessa CNAB 240 Multipag (Segmentos **A** + **B**)
 - PIX, Boleto, Cartão Corporativo, Câmbio, Guia de Recolhimento e Outro são pagamentos manuais (fora da remessa)
 - Arquivo de retorno processado em alguns minutos (acatamento = flag lógica, não muda status)
 - Extrato D+1 confirma saída real (status → Pago)

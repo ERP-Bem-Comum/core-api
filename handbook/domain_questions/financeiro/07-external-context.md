@@ -27,12 +27,14 @@ O sistema foi desenhado para suportar as especificidades do Bradesco através do
 
 * **Padrão Utilizado**: CNAB 240 (preferencial para pagamentos estruturados).
 * **Ciclo de Arquivos**:
-  1. **Remessa**: Enviada à VAN com ordens de pagamento (Segmentos P, Q, J).
+  1. **Remessa**: Enviada à VAN com ordens de pagamento (layout **Multipag** — Segmentos **A** e **B** para crédito em conta/TED; **J** quando o pagamento é de boleto).
   2. **Retorno** (alguns minutos depois): Arquivo de confirmação do banco.
      * **Acatado (código 00)**: Título permanece `Transmitido` no Core (flag lógica ativada).
      * **Recusado (qualquer erro)**: Status muda para `Recusado`. Operador é alertado (ex: "03 - Agência Inválida").
   3. **Extrato D+1**: Arquivo bancário do dia seguinte. Única fonte de verdade para confirmação de saída de caixa (`Transmitido` → `Pago`).
-* **Segmentos (ACL)**: O Tradutor de Layouts converte os Títulos do Core para os Segmentos P, Q e J (específicos para pagamentos de títulos e tributos no Bradesco).
+* **Segmentos (ACL)**: O Tradutor de Layouts converte os Títulos do Core para os segmentos do **Multipag**: **A** + **B** (crédito em conta, TED, transferência), **J** (+ J-52) para pagamento de título de cobrança, **O** ou **N** para tributos.
+
+> ⚠️ **Errata 2026-08-10:** esta seção dizia "Segmentos P, Q e J". **P e Q são de COBRANÇA e não existem no Multipag** — verificado na fonte primária (`jun-19-layout-multipag.pdf`: zero ocorrências). Ver errata completa em [`handbook/specs/016-fin-remessa-cnab240/spec.md`](../../specs/016-fin-remessa-cnab240/spec.md).
 
 ## 4. Estratégia de Isolamento (ACL)
 

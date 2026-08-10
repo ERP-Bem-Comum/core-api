@@ -14,7 +14,7 @@ export type CnabRemittanceTranslator = Readonly<{
 - `RemittanceOrder`: `{ cedente: CedenteAccount; nsa: Nsa; payments: readonly RemittancePayment[] }` (linguagem do domínio — sem CNAB).
 - `RemittanceFileContent`: `{ bytes: Uint8Array; fileName: string }`.
 - `CnabTranslateError`: `'cnab-translation-failed' | 'cnab-unsupported-payment-method' | 'cnab-invalid-cedente'`.
-- **Adapters**: `bradesco-cnab240-translator.ts` (real, segmentos P/Q/J — guideline local-only) + `cnab-remittance-translator.fake.ts` (testes: gera conteúdo determinístico verificável).
+- **Adapters**: `bradesco-cnab240-translator.ts` (real, **Multipag — Segmentos A + B** — guideline local-only) + `cnab-remittance-translator.fake.ts` (testes: gera conteúdo determinístico verificável).
 
 ## RemittanceRepository
 

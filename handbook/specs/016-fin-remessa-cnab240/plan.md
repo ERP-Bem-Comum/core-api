@@ -6,7 +6,7 @@
 
 ## Summary
 
-Permitir que o operador **selecione** títulos `Approved` (forma `TED`/`TransferenciaBancaria`), **agrupe por conta-cedente** e gere **um arquivo CNAB 240 Bradesco por conta** (segmentos P/Q/J), persistido em object-storage com hash de integridade e NSA monotônico por conta; os documentos incluídos transicionam `Approved → Transmitted`. A complexidade do layout CNAB fica isolada numa **ACL** (port `CnabRemittanceTranslator`), fora do domínio. Eventos `RemittanceGenerated` (por lote) e `DocumentTransmitted` (por documento) via outbox. **Escopo: só geração** — retorno/extrato/conciliação são sub-fatias seguintes.
+Permitir que o operador **selecione** títulos `Approved` (forma `TED`/`TransferenciaBancaria`), **agrupe por conta-cedente** e gere **um arquivo CNAB 240 Bradesco Multipag por conta** (Segmentos **A** + **B**), persistido em object-storage com hash de integridade e NSA monotônico por conta; os documentos incluídos transicionam `Approved → Transmitted`. A complexidade do layout CNAB fica isolada numa **ACL** (port `CnabRemittanceTranslator`), fora do domínio. Eventos `RemittanceGenerated` (por lote) e `DocumentTransmitted` (por documento) via outbox. **Escopo: só geração** — retorno/extrato/conciliação são sub-fatias seguintes.
 
 ## Technical Context
 
@@ -20,7 +20,7 @@ Permitir que o operador **selecione** títulos `Approved` (forma `TED`/`Transfer
 **Constraints**: ACL isola CNAB (guideline `handbook/guidelines/bradesco_guideline/` é **local-only**, não commitável — R3); atomicidade de domínio (FR-011); não-duplicação (FR-012)
 **Scale/Scope**: 1 banco (Bradesco), N contas-cedente; multi-banco é evolução futura via novas "receitas" de tradução
 
-**Resolvido no Phase 0 (research.md)**: layout CNAB 240 (estrutura P/Q/J via ACL), algoritmo de hash (SHA-256), NSA por conta (contador persistido), modelagem de conta-cedente + **`debitAccountRef` no documento** (decisão D-CEDENTE), atomicidade storage×DB.
+**Resolvido no Phase 0 (research.md)**: layout CNAB 240 (estrutura Multipag (Segmentos A + B) via ACL), algoritmo de hash (SHA-256), NSA por conta (contador persistido), modelagem de conta-cedente + **`debitAccountRef` no documento** (decisão D-CEDENTE), atomicidade storage×DB.
 
 ## Constitution Check
 
@@ -71,7 +71,7 @@ src/modules/financial/
 │   │   ├── schemas/mysql.ts       # + fin_remittances, fin_remittance_items, fin_cedente_accounts, fin_documents.debit_account_ref
 │   │   ├── migrations/mysql/      # 0004 gerada por db:generate
 │   │   └── repos/                 # remittance-repository.{in-memory,drizzle}.ts, cedente-account-store.{...}
-│   ├── cnab/                      # NOVO — ACL Bradesco: bradesco-cnab240-translator.ts (segmentos P/Q/J); fake p/ testes
+│   ├── cnab/                      # NOVO — ACL Bradesco: bradesco-cnab240-translator.ts (Multipag, Segmentos A+B); fake p/ testes
 │   ├── storage/                   # document-storage.{in-memory,s3}.ts (molde contracts)
 │   └── http/plugin.ts             # + rotas de remessa; composition.ts + wiring
 └── public-api/events.ts          # + RemittanceGenerated, DocumentTransmitted
@@ -79,7 +79,7 @@ src/modules/financial/
 tests/modules/financial/
 ├── domain/remittance/*.test.ts
 ├── application/use-cases/generate-remittance.test.ts
-├── adapters/cnab/*.test.ts        # ACL: estrutura P/Q/J + hash
+├── adapters/cnab/*.test.ts        # ACL: estrutura Multipag (A + B) + hash
 └── adapters/http/financial-remittances.http.test.ts
 ```
 
@@ -109,11 +109,11 @@ tests/modules/financial/
 - **Tamanho**: [x] **L** (novo agregado + ACL + storage adapter + outbox + migration + borda)
 - **Justificativa**: cruza domínio (novo agregado + transição), application (use case + 4 ports), adapters (Drizzle + ACL CNAB + S3) e borda HTTP; envolve migration e eventos. **Recomendação: fatiar em tickets W0→W3 menores**:
   1. `FIN-REMITTANCE-DOMAIN` (M) — agregado `Remittance` + VOs (`Nsa`, `RemittanceHash`) + `Document.transmit()` + eventos. Puro.
-  2. `FIN-CNAB-ACL` (M) — port `CnabRemittanceTranslator` + adapter Bradesco (P/Q/J) + fake; testes de estrutura/hash.
+  2. `FIN-CNAB-ACL` (M) — port `CnabRemittanceTranslator` + adapter Bradesco (Multipag: Segmentos A + B) + fake; testes de estrutura/hash.
   3. `FIN-REMITTANCE-PERSIST` (M) — schema `fin_*` + migration `0004` + repos Drizzle/InMemory + `CedenteAccountStore` + `DocumentStorage`.
   4. `FIN-REMITTANCE-USECASE-HTTP` (M) — `generateRemittance` + rotas + composition + outbox + E2E `fastify.inject`.
 - **Plano de testes W0 (RED)**:
   - `tests/modules/financial/domain/remittance/remittance.test.ts` — criação do lote, NSA, hash, invariantes; `Document.transmit` Approved→Transmitted e recusa de não-Approved.
-  - `tests/modules/financial/adapters/cnab/bradesco-cnab240-translator.test.ts` — estrutura P/Q/J + checksum.
+  - `tests/modules/financial/adapters/cnab/bradesco-cnab240-translator.test.ts` — estrutura Multipag (Segmentos A + B) + checksum.
   - `tests/modules/financial/application/use-cases/generate-remittance.test.ts` — seleção válida/inválida, agrupamento por conta (N→N lotes), atomicidade, não-duplicação, seleção vazia.
   - `tests/modules/financial/adapters/http/financial-remittances.http.test.ts` — `POST /remittances` (201 multi-conta, 409 inválido, 400 vazio), `GET /:id`, download.
