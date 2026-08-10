@@ -19,7 +19,10 @@ import { ok } from '#src/shared/primitives/result.ts';
 import { buildApp } from '#src/shared/http/app.ts';
 import { readHttpConfig } from '#src/shared/http/config.ts';
 import { buildReportsHttpDeps, reportsHttpPlugin } from '#src/modules/reports/public-api/http.ts';
-import type { AnalysisRow } from '#src/modules/reports/application/ports/analysis-read.ts';
+import type {
+  AnalysisRow,
+  AnalysisFilter,
+} from '#src/modules/reports/application/ports/analysis-read.ts';
 
 const READER = 'fiscal-document:read';
 const NO_PERM = 'reconciliation:read';
@@ -94,12 +97,17 @@ interface AppHandle {
   teardown: () => Promise<void>;
 }
 let handle: AppHandle;
+// #682: captura o filtro que a borda montou, para provar o mapeamento query→filtro.
+let lastFilter: AnalysisFilter | null = null;
 
 before(async () => {
   const base = await buildReportsHttpDeps({ driver: 'memory' });
   const deps = {
     ...base,
-    listAnalysis: () => Promise.resolve(ok(ROWS)),
+    listAnalysis: (f: AnalysisFilter) => {
+      lastFilter = f;
+      return Promise.resolve(ok(ROWS));
+    },
     resolvePlanLabels: () => Promise.resolve(ok(LABELS)),
   };
   const config = readHttpConfig({ RATE_LIMIT_MAX: '10000' });
@@ -191,6 +199,28 @@ describe('reports/http — analysis (REP-3 · #446 — raiz = Plano Orçamentár
     assert.equal((await get(PAYABLES, NO_PERM)).statusCode, 403);
     const bad = await get('/api/v2/reports/analysis/payables', READER);
     assert.equal(bad.statusCode, 400, bad.body);
+  });
+
+  it('#682: aceita programId/accountId/categoryId/subCategoryId (sem 400) e mapeia para o filtro', async () => {
+    const PROGRAM = 'cc111111-1111-4111-8111-111111111111';
+    const ACCOUNT = 'dd222222-2222-4222-8222-222222222222';
+    const CATEGORY = 'ee333333-3333-4333-8333-333333333333';
+    const SUBCATEGORY = 'ff444444-4444-4444-8444-444444444444';
+    const res = await get(
+      `${PAYABLES}&programId=${PROGRAM}&accountId=${ACCOUNT}&categoryId=${CATEGORY}&subCategoryId=${SUBCATEGORY}`,
+      READER,
+    );
+    assert.equal(res.statusCode, 200, res.body); // antes do #682: .strict() → 400
+    assert.equal(lastFilter?.programRef, PROGRAM);
+    assert.equal(lastFilter?.debitAccountRef, ACCOUNT);
+    assert.equal(lastFilter?.categoryRef, CATEGORY);
+    assert.equal(lastFilter?.subcategoryRef, SUBCATEGORY);
+  });
+
+  it('#682: chart também aceita os filtros de servidor (mesmo schema)', async () => {
+    const res = await get(`${CHART}&categoryId=ee333333-3333-4333-8333-333333333333`, READER);
+    assert.equal(res.statusCode, 200, res.body);
+    assert.equal(lastFilter?.categoryRef, 'ee333333-3333-4333-8333-333333333333');
   });
 
   it('CA3: analysis/chart → [{id,name,total}] por Plano Orçamentário', async () => {

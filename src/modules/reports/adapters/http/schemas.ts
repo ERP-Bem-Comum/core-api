@@ -335,13 +335,18 @@ export const cashflowChartResponseSchema = z.array(cashflowChartRowSchema);
 export type CashflowChartResponseDto = z.infer<typeof cashflowChartResponseSchema>;
 
 // REP-3 (#114) — "Análise de Planejamento". Query de filtro (período half-open + status opcional).
-export const analysisQuerySchema = z
-  .object({
-    dueStart: z.iso.date(), // 'YYYY-MM-DD' inclusivo
-    dueEnd: z.iso.date(), // 'YYYY-MM-DD' exclusivo
-    status: z.string().min(1).optional(),
-  })
-  .strict();
+// #682: ganha os filtros de servidor de paridade com /payment-position (#588) — nomes iguais aos do
+// generalReport (o front já usa esse vocabulário). Objeto simples (sem `.strict()`, como os schemas
+// irmãos de filtro): parâmetro desconhecido é ignorado, não vira 400 — plano/centro seguem client-side.
+export const analysisQuerySchema = z.object({
+  dueStart: z.iso.date(), // 'YYYY-MM-DD' inclusivo
+  dueEnd: z.iso.date(), // 'YYYY-MM-DD' exclusivo
+  status: z.string().min(1).optional(),
+  programId: z.uuid().optional(), // → program_ref (fonte autoritativa; o front derivava do plano)
+  accountId: z.uuid().optional(), // → debit_account_ref
+  categoryId: z.uuid().optional(), // → category_ref
+  subCategoryId: z.uuid().optional(), // → subcategory_ref
+});
 
 export type AnalysisQueryDto = z.infer<typeof analysisQuerySchema>;
 

@@ -101,6 +101,11 @@ const toAnalysisFilter = (q: AnalysisQueryDto): AnalysisFilter => ({
   dueStart: q.dueStart,
   dueEnd: q.dueEnd,
   ...(q.status !== undefined ? { status: q.status } : {}),
+  // #682: filtros de servidor (paridade #588) — Id da borda → ref de árvore/opaco no filtro.
+  ...(q.programId !== undefined ? { programRef: q.programId } : {}),
+  ...(q.accountId !== undefined ? { debitAccountRef: q.accountId } : {}),
+  ...(q.categoryId !== undefined ? { categoryRef: q.categoryId } : {}),
+  ...(q.subCategoryId !== undefined ? { subcategoryRef: q.subCategoryId } : {}),
 });
 
 // #588: query (borda, validada) -> PaymentPositionFilter. Só inclui a chave quando presente
