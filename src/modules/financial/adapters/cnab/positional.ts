@@ -48,3 +48,34 @@ export const dateDDMMYYYY = (at: Date): Result<string, PositionalFieldError> =>
 
 export const timeHHMMSS = (at: Date): Result<string, PositionalFieldError> =>
   num(`${two(at.getUTCHours())}${two(at.getUTCMinutes())}${two(at.getUTCSeconds())}`, 6);
+
+// Campo que o domínio pode guardar COM máscara — documento, agência, conta, CEP. Tirar a pontuação
+// é tradução de formato, papel legítimo da ACL: "12.345.678/0001-99" e "12345678000199" são o mesmo
+// CNPJ. A borda HTTP já normaliza na entrada (`adapters/http/schemas.ts`), mas dado vindo de ETL
+// legado não passa por ela — e falhar a remessa inteira por causa de um ponto seria defeito bobo.
+// Continua sendo erro o que sobrar vazio ou não couber: normalizar não é engolir.
+export const digits = (value: string, size: number): Result<string, PositionalFieldError> =>
+  num(value.replace(/\D/g, ''), size);
+
+// ── Combinadores de registro ────────────────────────────────────────────────────────────────────
+// Vivem aqui, e não no módulo de registros, porque envelope (header/trailer) e detalhe (segmentos)
+// montam linha da mesma forma: uma lista de campos posicionais concatenada, com o primeiro erro
+// vencendo. Duplicá-los em cada módulo seria a terceira cópia da mesma regra.
+
+export const blanks = (size: number): Result<string, PositionalFieldError> => ok(' '.repeat(size));
+
+export const text = (value: string, size: number): Result<string, PositionalFieldError> =>
+  ok(alpha(value, size));
+
+// Propaga o primeiro erro. Sem isto, cada registro viraria uma escada de trinta `if (isErr(...))` —
+// e a escada é onde se esquece de checar um.
+export const joinFields = (
+  fields: readonly Result<string, PositionalFieldError>[],
+): Result<string, PositionalFieldError> => {
+  const parts: string[] = [];
+  for (const field of fields) {
+    if (!field.ok) return field;
+    parts.push(field.value);
+  }
+  return ok(parts.join(''));
+};
