@@ -2,7 +2,8 @@
 
 # ADR-0060: Transporte da VAN Bradesco por bucket S3 com agente na instância — supersede parcial do ADR-0008 (Adapter B)
 
-- **Status:** Accepted
+- **Status:** Accepted — **a tabela de prefixos e as pendências 1-3 foram superseded pelo [ADR-0061](./0061-van-bucket-contract-supersedes-0060-pendencies.md)**
+- **Superseded by (parcial):** [ADR-0061](./0061-van-bucket-contract-supersedes-0060-pendencies.md) (2026-08-10) — caem a tabela de prefixos (`:41-46`, são **cinco**, não quatro) e as pendências 1, 2 e 3 (`:94-97`), respondidas pela infra. **A decisão de rota permanece vigente e inalterada:** transporte por bucket, agente na instância, a aplicação nunca toca a máquina. ⚠️ Duas afirmações deste documento estão **erradas** e corrigidas no 0061: o `CLCP.ERR.TXT` **existe** (o manual é que não o documenta) e o teto de **26 caracteres no nome do arquivo não se aplica** (o perfil usa 128).
 - **Date:** 2026-08-10
 - **Deciders:** Infra (Codebit) — desenho do transporte, devolutiva do chamado em 2026-08-07 · Gabriel Aderaldo (Tech Lead) — aceite e fronteira da aplicação
 - **Supersedes (parcial):** [ADR-0008](./0008-bradesco-integration-architecture.md) — §"Adapter B — `BradescoVanRelayAdapter`" e suas variáveis de ambiente (`:47-68`), mais as linhas de risco e consequência que derivam de SSH (`:85`, `:93`, `:95`, `:107`). **O Adapter A (`BradescoRestAdapter` — saldo e extrato via REST/mTLS) permanece vigente e inalterado**, com todas as suas envs `BRADESCO_*`.
