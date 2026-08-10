@@ -277,10 +277,10 @@ const main = async (): Promise<void> => {
 
   // Módulo reports (épico Relatórios #114) → /api/v2/reports. Greenfield V2 (plugin direto).
   // Read-only, sem writer próprio — lê projeções via public-api (ADR-0006/0014): REP-1 (#238) do
-  // `partners` (par_*), REP-2 (#240) do `financial` (fin_*) e, desde #437, o conjunto de
-  // contratantes com contrato Active do `contracts` (ctr_*) para o anti-join do REP-2; S6 (#502)
-  // soma o orçado do `budget-plans` (bgp_*). A cascata `REPORTS_*_DATABASE_URL` → `*_DATABASE_URL`
-  // do módulo-fonte é resolvida pela guarda de boot, que entrega os quatro endereços já validados.
+  // `partners` (par_*), REP-2 (#240) do `financial` (fin_*), o NÚMERO do contrato do `contracts`
+  // (ctr_*) para o Relatório Geral (REP-6 · #442) e S6 (#502) soma o orçado do `budget-plans`
+  // (bgp_*). A cascata `REPORTS_*_DATABASE_URL` → `*_DATABASE_URL` do módulo-fonte é resolvida pela
+  // guarda de boot, que entrega os quatro endereços já validados.
   const reportsDeps = await buildReportsHttpDeps(modules.reports);
 
   // requireAuth do auth (cross-módulo via public-api, ADR-0006/0024) protege as rotas de contracts.

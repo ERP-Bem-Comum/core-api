@@ -16,7 +16,6 @@
  * W0 RED: `buildContractsContractNumberReadPort` ainda não existe.
  *
  * Contrato de isolamento (testing.md): limpa por tabela na ENTRADA os próprios refs; order-independent.
- * Molde: `active-contractor-read.drizzle-mysql.test.ts`.
  */
 
 import { describe, it, before, after } from 'node:test';
