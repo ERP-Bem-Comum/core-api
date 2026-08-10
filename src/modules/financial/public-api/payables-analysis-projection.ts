@@ -25,6 +25,12 @@ export type PayablesAnalysisFilter = Readonly<{
   dueStart: string; // 'YYYY-MM-DD' inclusivo
   dueEnd: string; // 'YYYY-MM-DD' exclusivo (half-open)
   status?: string;
+  // #682: filtros de servidor (paridade com /payment-position, #588) — recortam a mesma projeção SEM
+  // mudar o grão (`groupBy` Plano × CC × mês intocado). Refs opacos da `fin_payable_view` (indexados).
+  programRef?: string;
+  debitAccountRef?: string;
+  categoryRef?: string;
+  subcategoryRef?: string;
 }>;
 
 export type PayablesAnalysisRow = Readonly<{
@@ -72,6 +78,19 @@ export const openPayablesAnalysisReader = async (
               lt(finPayableView.dueDate, filter.dueEnd),
               ne(finPayableView.status, 'Cancelled'),
               filter.status !== undefined ? eq(finPayableView.status, filter.status) : undefined,
+              // #682: recortes opcionais (mesma cláusula que o #588; grão preservado no groupBy).
+              filter.programRef !== undefined
+                ? eq(finPayableView.programRef, filter.programRef)
+                : undefined,
+              filter.debitAccountRef !== undefined
+                ? eq(finPayableView.debitAccountRef, filter.debitAccountRef)
+                : undefined,
+              filter.categoryRef !== undefined
+                ? eq(finPayableView.categoryRef, filter.categoryRef)
+                : undefined,
+              filter.subcategoryRef !== undefined
+                ? eq(finPayableView.subcategoryRef, filter.subcategoryRef)
+                : undefined,
             ),
           )
           .groupBy(

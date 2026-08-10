@@ -13,6 +13,11 @@ export type AnalysisFilter = Readonly<{
   dueStart: string; // 'YYYY-MM-DD' inclusivo
   dueEnd: string; // 'YYYY-MM-DD' exclusivo (half-open)
   status?: string;
+  // #682: filtros de servidor (paridade #588). Grão inalterado (Plano × CC × mês); só recortam.
+  programRef?: string;
+  debitAccountRef?: string;
+  categoryRef?: string;
+  subcategoryRef?: string;
 }>;
 
 export type AnalysisRow = Readonly<{

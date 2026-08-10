@@ -65,15 +65,22 @@ if (!process.env['MYSQL_INTEGRATION']) {
       valueCents: number;
       status: string;
       dueDate: string;
+      categoryRef?: string | null;
+      subcategoryRef?: string | null;
+      programRef?: string | null;
+      debitAccountRef?: string | null;
     }) => ({
       payableId: over.payableId,
       documentId: 'dc000000-0000-4000-8000-00000000d001',
       kind: 'Parent',
       supplierRef: null,
       contractRef: null,
-      categoryRef: null,
+      categoryRef: over.categoryRef ?? null,
+      subcategoryRef: over.subcategoryRef ?? null,
       budgetPlanRef: over.budgetPlanRef,
       costCenterRef: over.costCenterRef,
+      programRef: over.programRef ?? null,
+      debitAccountRef: over.debitAccountRef ?? null,
       valueCents: over.valueCents,
       dueDate: over.dueDate,
       status: over.status,
@@ -169,6 +176,71 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const bJul = byKey.get(`${PLAN_B}|null|2026-07`)!;
       assert.equal(bJul.totalCents, 30000);
       assert.equal(bJul.costCenterName, null);
+    });
+
+    it('#682: filtros de servidor estreitam o TOTAL sem mudar o grão (plano×CC×mês)', async () => {
+      const CAT_X = 'c1000000-0000-4000-8000-000000000001';
+      const CAT_Y = 'c2000000-0000-4000-8000-000000000002';
+      const PROG_1 = 'a1000000-0000-4000-8000-000000000001';
+      const PROG_2 = 'a2000000-0000-4000-8000-000000000002';
+      const ACC_1 = 'd1000000-0000-4000-8000-000000000001';
+      const SUB_2 = 'b2000000-0000-4000-8000-000000000002';
+
+      await handle.db
+        .insert(handle.schema.finCostCenters)
+        .values({ id: CC_1, code: 'CC-001', name: 'Administrativo', active: true });
+
+      // Duas linhas no MESMO grão (Plano A × CC_1 × jul) — só diferem nos refs de recorte.
+      await handle.db.insert(handle.schema.finPayableView).values([
+        payable({
+          payableId: '12000000-0000-4000-8000-000000000012',
+          budgetPlanRef: PLAN_A,
+          costCenterRef: CC_1,
+          categoryRef: CAT_X,
+          programRef: PROG_1,
+          debitAccountRef: ACC_1,
+          valueCents: 100000,
+          status: 'Open',
+          dueDate: '2026-07-15',
+        }),
+        payable({
+          payableId: '22000000-0000-4000-8000-000000000022',
+          budgetPlanRef: PLAN_A,
+          costCenterRef: CC_1,
+          categoryRef: CAT_Y,
+          programRef: PROG_2,
+          subcategoryRef: SUB_2,
+          valueCents: 40000,
+          status: 'Open',
+          dueDate: '2026-07-20',
+        }),
+      ]);
+
+      const readerR = await openPayablesAnalysisReader({ connectionString });
+      assert.equal(readerR.ok, true, JSON.stringify(readerR));
+      if (!readerR.ok) return;
+      const reader = readerR.value;
+      const period = { dueStart: '2026-07-01', dueEnd: '2026-09-01' } as const;
+      const totalOf = async (
+        extra: Record<string, string>,
+      ): Promise<{ groups: number; total: number }> => {
+        const r = await reader.list({ ...period, ...extra });
+        assert.equal(r.ok, true, JSON.stringify(r));
+        if (!r.ok) return { groups: 0, total: 0 };
+        return {
+          groups: r.value.length,
+          total: r.value.reduce((s, x) => s + x.totalCents, 0),
+        };
+      };
+
+      // Sem filtro: 1 grupo (A×CC1×jul), soma das duas linhas.
+      assert.deepEqual(await totalOf({}), { groups: 1, total: 140000 });
+      // Cada recorte mantém 1 grupo (grão intocado) e estreita o total.
+      assert.deepEqual(await totalOf({ categoryRef: CAT_X }), { groups: 1, total: 100000 });
+      assert.deepEqual(await totalOf({ subcategoryRef: SUB_2 }), { groups: 1, total: 40000 });
+      assert.deepEqual(await totalOf({ programRef: PROG_2 }), { groups: 1, total: 40000 });
+      assert.deepEqual(await totalOf({ debitAccountRef: ACC_1 }), { groups: 1, total: 100000 });
+      await reader.close();
     });
   });
 }
