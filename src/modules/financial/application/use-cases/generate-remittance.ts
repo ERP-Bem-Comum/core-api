@@ -1,0 +1,151 @@
+import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
+import type { CedenteAccountId } from '../../domain/cedente/cedente-account-id.ts';
+import type { RemittanceId } from '../../domain/remittance/remittance-id.ts';
+import { create as createRemittance } from '../../domain/remittance/remittance.ts';
+import type { CedenteAccountStore } from '../ports/cedente-account-store.ts';
+import type { RemittanceRepository } from '../ports/remittance-repository.ts';
+import type { RemittancePaymentReader } from '../ports/remittance-payment-reader.ts';
+import type { VanStoragePort } from '../ports/van-storage.ts';
+import type { CnabRemittanceTranslator } from '../ports/cnab-remittance-translator.ts';
+
+export type GenerateRemittanceDeps = Readonly<{
+  cedenteAccounts: CedenteAccountStore;
+  remittances: RemittanceRepository;
+  payments: RemittancePaymentReader;
+  translator: CnabRemittanceTranslator;
+  storage: VanStoragePort;
+  now: () => Date;
+  newRemittanceId: () => RemittanceId;
+  hashContent: (content: string) => string;
+}>;
+
+export type GenerateRemittanceInput = Readonly<{
+  cedenteAccountId: CedenteAccountId;
+  documentIds: readonly string[];
+  serviceType: string;
+  launchForm: string;
+}>;
+
+export type GenerateRemittanceOutput = Readonly<{
+  remittanceId: RemittanceId;
+  fileName: string;
+  objectKey: string;
+  nsa: number;
+  totalCents: number;
+  lineCount: number;
+}>;
+
+export type GenerateRemittanceError =
+  | 'remittance-empty-selection'
+  | 'remittance-documents-already-held'
+  | 'remittance-payments-unavailable'
+  | 'remittance-nsa-unavailable'
+  | 'remittance-file-name-failed'
+  | 'remittance-build-failed'
+  | 'remittance-malformed-file'
+  | 'remittance-persist-failed'
+  | 'remittance-upload-failed';
+
+export const generateRemittance =
+  (deps: GenerateRemittanceDeps) =>
+  async (
+    input: GenerateRemittanceInput,
+  ): Promise<Result<GenerateRemittanceOutput, GenerateRemittanceError>> => {
+    if (input.documentIds.length === 0) return err('remittance-empty-selection');
+
+    // 1. Quem já está preso. A pergunta vai ao BANCO porque outra instância pode ter enfileirado o
+    // mesmo documento há segundos — e incluir de novo é pagar duas vezes.
+    const held = await deps.remittances.findHeldDocumentIds(input.documentIds);
+    if (!held.ok) return err('remittance-persist-failed');
+    if (held.value.length > 0) return err('remittance-documents-already-held');
+
+    // 2. Dados de pagamento. Faltar documento é erro: montar com menos do que foi selecionado
+    // pagaria parte e calaria sobre o resto.
+    const payments = await deps.payments.loadPayments(input.documentIds);
+    if (!payments.ok) return err('remittance-payments-unavailable');
+    if (payments.value.length !== input.documentIds.length) {
+      return err('remittance-payments-unavailable');
+    }
+
+    const account = await deps.cedenteAccounts.findById(input.cedenteAccountId);
+    if (!account.ok || account.value === null) return err('remittance-nsa-unavailable');
+
+    // 3. NSA sob lock de linha. A partir daqui o número está CONSUMIDO — se algo falhar adiante,
+    // ele não volta. É deliberado: um gap na sequência é inofensivo, reusar número é retransmissão
+    // aos olhos do banco.
+    const nsa = await deps.cedenteAccounts.allocateNsa(input.cedenteAccountId);
+    if (!nsa.ok) return err('remittance-nsa-unavailable');
+
+    const generatedAt = deps.now();
+
+    // O tradutor devolve o arquivo JÁ verificado — nome, montagem e inspeção estrutural são dele.
+    // A application não conhece layout: trocar de banco é trocar o adapter injetado aqui.
+    const translated = deps.translator.translate({
+      cedente: {
+        bankCode: account.value.bankCode,
+        documentType: '2',
+        document: account.value.document,
+        convenio: account.value.convenio,
+        agency: account.value.agency,
+        agencyDigit: '',
+        accountNumber: account.value.accountNumber,
+        accountDigit: account.value.accountDigit,
+        accountAgencyDigit: '',
+        companyName: account.value.bankName ?? '',
+        bankName: account.value.bankName ?? '',
+      },
+      nsa: nsa.value,
+      generatedAt,
+      serviceType: input.serviceType,
+      launchForm: input.launchForm,
+      payments: payments.value.map((p) => ({
+        payee: p.payee,
+        paymentDate: p.paymentDate,
+        valueCents: p.valueCents,
+      })),
+    });
+    if (!translated.ok) {
+      return translated.error === 'cnab-file-name-failed'
+        ? err('remittance-file-name-failed')
+        : translated.error === 'cnab-malformed-file'
+          ? err('remittance-malformed-file')
+          : err('remittance-build-failed');
+    }
+
+    const remittance = createRemittance({
+      id: deps.newRemittanceId(),
+      cedenteAccountId: input.cedenteAccountId,
+      nsa: nsa.value,
+      fileName: translated.value.fileName,
+      contentHash: deps.hashContent(translated.value.content),
+      documentIds: input.documentIds,
+      generatedAt: generatedAt.toISOString(),
+    });
+    if (!remittance.ok) return err('remittance-build-failed');
+
+    // 5. REGISTRAR ANTES DE ENFILEIRAR. A ordem é a decisão mais importante deste use case.
+    //
+    // Gravar no bucket é enfileirar pagamento. Se o upload viesse primeiro e a persistência
+    // falhasse, existiria um pagamento a caminho do banco SEM registro nosso — invisível, e os
+    // documentos continuariam livres para entrar noutra remessa.
+    //
+    // Nesta ordem, o pior caso é uma remessa `Queued` sem arquivo: visível, recuperável, e já
+    // prendendo os documentos. Erra-se para menos, como no resto do fluxo.
+    const persisted = await deps.remittances.save(remittance.value);
+    if (!persisted.ok) return err('remittance-persist-failed');
+
+    const uploaded = await deps.storage.putRemittance(
+      translated.value.fileName,
+      translated.value.content,
+    );
+    if (!uploaded.ok) return err('remittance-upload-failed');
+
+    return ok({
+      remittanceId: remittance.value.id,
+      fileName: translated.value.fileName,
+      objectKey: uploaded.value,
+      nsa: nsa.value,
+      totalCents: translated.value.totalCents,
+      lineCount: translated.value.lineCount,
+    });
+  };
