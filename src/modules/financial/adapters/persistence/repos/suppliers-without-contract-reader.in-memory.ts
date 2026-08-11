@@ -26,7 +26,9 @@ export const createInMemorySuppliersWithoutContractReader = (
         : a.supplierRef.localeCompare(b.supplierRef),
     );
   return {
-    list: async (): Promise<Result<readonly SupplierWithoutContractRow[], string>> => ok(rows),
+    // #694: o `list` do relatório quebra por plano; este double (usado só pelo Dashboard via `listTop`)
+    // não semeia plano → `budgetPlanRef: null`. O corte/ordenação autoritativos são provados na integração.
+    list: async () => ok(rows.map((r) => ({ ...r, budgetPlanRef: null }))),
     listTop: async (
       limit: number,
     ): Promise<Result<readonly SupplierWithoutContractRow[], string>> =>

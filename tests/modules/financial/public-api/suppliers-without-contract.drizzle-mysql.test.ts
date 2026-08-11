@@ -58,6 +58,10 @@ if (!process.env['MYSQL_INTEGRATION']) {
       status: string;
       kind?: 'Parent' | 'Child';
       retentionType?: string;
+      budgetPlanRef?: string | null;
+      programRef?: string | null;
+      categoryRef?: string | null;
+      dueDate?: string;
     }) => ({
       payableId: over.payableId,
       documentId: 'dc000000-0000-4000-8000-00000000d001',
@@ -66,8 +70,11 @@ if (!process.env['MYSQL_INTEGRATION']) {
       retentionType: over.kind === 'Child' ? (over.retentionType ?? 'ISS') : null,
       supplierRef: over.supplierRef,
       contractRef: over.contractRef,
+      budgetPlanRef: over.budgetPlanRef ?? null,
+      programRef: over.programRef ?? null,
+      categoryRef: over.categoryRef ?? null,
       valueCents: over.valueCents,
-      dueDate: '2026-08-01',
+      dueDate: over.dueDate ?? '2026-08-01',
       status: over.status,
       updatedAt: NOW,
     });
@@ -186,6 +193,73 @@ if (!process.env['MYSQL_INTEGRATION']) {
       // BRUTO (decisão de auditoria da P.O., #437): pai + filho de retenção.
       assert.equal(s1.totalCents, 100000, '90000 (pai) + 10000 (retenção ISS) = bruto');
       assert.equal(s1.payableCount, 2, 'pai e filho contam');
+    });
+
+    it('#694: quebra por Plano Orçamentário (uma linha por fornecedor×plano) + filtros recortam', async () => {
+      const PLAN_A = '10000000-0000-4000-8000-0000000000a0';
+      const PLAN_B = '20000000-0000-4000-8000-0000000000b0';
+      const PROG_1 = '30000000-0000-4000-8000-000000000c10';
+      await handle.db.insert(handle.schema.finSupplierView).values({
+        supplierRef: S1,
+        name: 'Fornecedor Alpha',
+        document: '11222333000181',
+        occurredAt: NOW,
+        updatedAt: NOW,
+      });
+      // Mesmo fornecedor S1, dois planos (ambos sem contrato) → duas linhas.
+      await handle.db.insert(handle.schema.finPayableView).values([
+        payable({
+          payableId: 'c1000000-0000-4000-8000-0000000000c1',
+          supplierRef: S1,
+          contractRef: null,
+          budgetPlanRef: PLAN_A,
+          programRef: PROG_1,
+          valueCents: 100000,
+          status: 'Open',
+        }),
+        payable({
+          payableId: 'c2000000-0000-4000-8000-0000000000c2',
+          supplierRef: S1,
+          contractRef: null,
+          budgetPlanRef: PLAN_B,
+          valueCents: 40000,
+          status: 'Open',
+        }),
+      ]);
+
+      const readerR = await openSuppliersWithoutContractReader({ connectionString });
+      assert.equal(readerR.ok, true, JSON.stringify(readerR));
+      if (!readerR.ok) return;
+      const reader = readerR.value;
+
+      // Sem filtro: duas linhas (S1×PLAN_A e S1×PLAN_B), o supplierRef repetido.
+      const all = await reader.list();
+      assert.equal(all.ok, true, JSON.stringify(all));
+      if (!all.ok) return;
+      const s1Rows = all.value.filter((r) => r.supplierRef === S1);
+      assert.equal(s1Rows.length, 2, 'uma linha por plano');
+      const byPlan = new Map(s1Rows.map((r) => [r.budgetPlanRef, r]));
+      assert.equal(byPlan.get(PLAN_A)!.totalCents, 100000);
+      assert.equal(byPlan.get(PLAN_B)!.totalCents, 40000);
+
+      // Filtro por plano: só a linha do PLAN_A.
+      const filtered = await reader.list({ budgetPlanRef: PLAN_A });
+      assert.equal(filtered.ok, true, JSON.stringify(filtered));
+      if (!filtered.ok) return;
+      const f = filtered.value.filter((r) => r.supplierRef === S1);
+      assert.equal(f.length, 1);
+      assert.equal(f[0]!.budgetPlanRef, PLAN_A);
+      assert.equal(f[0]!.totalCents, 100000);
+
+      // Filtro por programa: só a linha carimbada com PROG_1 (o PLAN_A).
+      const byProgram = await reader.list({ programRef: PROG_1 });
+      assert.equal(byProgram.ok, true, JSON.stringify(byProgram));
+      if (byProgram.ok) {
+        const p = byProgram.value.filter((r) => r.supplierRef === S1);
+        assert.equal(p.length, 1);
+        assert.equal(p[0]!.totalCents, 100000);
+      }
+      await reader.close();
     });
   });
 }
