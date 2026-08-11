@@ -70,36 +70,57 @@ export const createDrizzleRemittanceRepository = (
     // Cabeçalho e vínculos na MESMA transação: uma remessa sem seus documentos não prenderia nada,
     // e é justamente o vínculo que impede a segunda inclusão. Meia gravação aqui reabre o caminho
     // para pagamento em dobro.
+    //
+    // SELECT ... FOR UPDATE + UPDATE-ou-INSERT, NUNCA `ON DUPLICATE KEY UPDATE` (ADR-0020
+    // §"Padrão de upsert"). O ODKU dispara em QUALQUER UNIQUE violada, não só na PK: uma remessa
+    // NOVA com NSA já usado na conta cairia no ramo de update e SOBRESCREVERIA o status da remessa
+    // existente — que pode estar `Transmitted`. O UNIQUE deixaria de recusar, e uma remessa já
+    // enviada passaria a constar com o desfecho de outra. Foi exatamente esse defeito que o teste
+    // de integração pegou.
     save: async (remittance: Remittance): Promise<Result<void, RemittanceRepositoryError>> => {
       try {
         await db.transaction(async (tx) => {
-          const row = {
-            id: remittance.id,
-            cedenteAccountId: remittance.cedenteAccountId,
-            nsa: remittance.nsa,
-            fileName: remittance.fileName,
-            contentHash: remittance.contentHash,
-            status: remittance.status,
-            generatedAt: remittance.generatedAt,
-            settledAt: remittance.settledAt ?? null,
-            detail: remittance.detail ?? null,
-          };
+          const existing = await tx
+            .select({ id: finRemittances.id })
+            .from(finRemittances)
+            .where(eq(finRemittances.id, remittance.id))
+            .for('update');
 
-          await tx
-            .insert(finRemittances)
-            .values(row)
-            .onDuplicateKeyUpdate({
-              set: { status: row.status, settledAt: row.settledAt, detail: row.detail },
+          if (existing[0] === undefined) {
+            // Criação: INSERT puro. Violação de UNIQUE (NSA por conta, nome de arquivo) LANÇA e
+            // vira `Result` de erro no catch — que é o comportamento que se quer.
+            await tx.insert(finRemittances).values({
+              id: remittance.id,
+              cedenteAccountId: remittance.cedenteAccountId,
+              nsa: remittance.nsa,
+              fileName: remittance.fileName,
+              contentHash: remittance.contentHash,
+              status: remittance.status,
+              generatedAt: remittance.generatedAt,
+              settledAt: remittance.settledAt ?? null,
+              detail: remittance.detail ?? null,
             });
 
-          // Vínculo é imutável: os documentos de uma remessa não mudam depois de criada. `INSERT
-          // IGNORE` via ODKU no-op deixa o save idempotente sem apagar e reinserir.
-          for (const documentId of remittance.documentIds) {
-            await tx
-              .insert(finRemittanceDocuments)
-              .values({ remittanceId: remittance.id, documentId })
-              .onDuplicateKeyUpdate({ set: { documentId } });
+            // Vínculo é imutável: os documentos de uma remessa não mudam depois de criada, então
+            // só são gravados na criação.
+            for (const documentId of remittance.documentIds) {
+              await tx
+                .insert(finRemittanceDocuments)
+                .values({ remittanceId: remittance.id, documentId });
+            }
+            return;
           }
+
+          // Atualização de desfecho, por ID. Só o que a máquina de estados muda — nunca NSA, nome
+          // ou hash, que são imutáveis depois de gerada.
+          await tx
+            .update(finRemittances)
+            .set({
+              status: remittance.status,
+              settledAt: remittance.settledAt ?? null,
+              detail: remittance.detail ?? null,
+            })
+            .where(eq(finRemittances.id, remittance.id));
         });
         return ok(undefined);
       } catch (cause) {
