@@ -15,8 +15,8 @@ import type {
 export const SuppliersWithoutContractReadFromFinancial = (
   listAggregation: SuppliersWithoutContractReader['list'],
 ): SuppliersWithoutContractReadPort => ({
-  list: async () => {
-    const listed = await listAggregation();
+  list: async (filter) => {
+    const listed = await listAggregation(filter);
     if (!listed.ok) {
       return err<SuppliersWithoutContractReadError>('suppliers-without-contract-read-unavailable');
     }
