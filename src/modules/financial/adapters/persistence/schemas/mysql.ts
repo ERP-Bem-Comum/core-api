@@ -1102,3 +1102,71 @@ export const finOutboxDeadLetter = mysqlTable(
 
 export type FinOutboxDeadLetterRow = typeof finOutboxDeadLetter.$inferSelect;
 export type NewFinOutboxDeadLetterRow = typeof finOutboxDeadLetter.$inferInsert;
+
+// ─── fin_remittances ──────────────────────────────────────────────────────────
+//
+// Lote de comunicação: UM arquivo de remessa por conta-cedente (016). Existe porque o documento só
+// vira `Transmitted` quando o `status/` do agente confirma (ADR-0061): entre gravar no bucket e
+// confirmar há uma janela de até 5 minutos, e é esta linha que segura os documentos nela.
+//
+// `status` em varchar+CHECK (ADR-0020, sem ENUM nativo). `Failed` NÃO libera os documentos — só
+// `Discarded`, que exige decisão humana registrada em `detail`.
+//
+// ⚠️ CHARSET/COLLATE — inserir manualmente na migration gerada (limitação Drizzle 0.45.x):
+//   ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; coluna `id` em utf8mb4_bin.
+export const finRemittances = mysqlTable(
+  'fin_remittances',
+  {
+    id: uuidKey('id').primaryKey().notNull(),
+    // Ref lógica a fin_cedente_accounts; sem FK física (ADR-0014 §cross-acoplamento).
+    cedenteAccountId: uuidKey('cedente_account_id').notNull(),
+    nsa: int('nsa').notNull(),
+    fileName: varchar('file_name', { length: 128 }).notNull(),
+    contentHash: varchar('content_hash', { length: 64 }).notNull(),
+    status: varchar('status', { length: 16 }).notNull(),
+    generatedAt: datetime('generated_at', { mode: 'string', fsp: 3 }).notNull(),
+    settledAt: datetime('settled_at', { mode: 'string', fsp: 3 }),
+    detail: varchar('detail', { length: 512 }),
+  },
+  (t) => [
+    check(
+      'fin_remittances_status_chk',
+      sql`${t.status} IN ('Queued','Transmitted','Failed','Discarded')`,
+    ),
+    // O campo do header tem 6 dígitos (VO `Nsa`); o banco recusa o que não couber.
+    check('fin_remittances_nsa_range_chk', sql`${t.nsa} >= 1 AND ${t.nsa} <= 999999`),
+    // NSA é único POR CONTA-CEDENTE, não global: cada conta tem seu contador. Duas remessas com o
+    // mesmo NSA na mesma conta seriam retransmissão aos olhos do banco.
+    uniqueIndex('fin_remittances_account_nsa_uq').on(t.cedenteAccountId, t.nsa),
+    // O nome do arquivo é a chave de idempotência DO AGENTE: nome repetido não é retransmitido.
+    // Repetir aqui produziria uma remessa que o agente descarta em silêncio.
+    uniqueIndex('fin_remittances_file_name_uq').on(t.fileName),
+    index('fin_remittances_status_idx').on(t.status),
+  ],
+);
+
+export type FinRemittanceRow = typeof finRemittances.$inferSelect;
+export type NewFinRemittanceRow = typeof finRemittances.$inferInsert;
+
+// ─── fin_remittance_documents ─────────────────────────────────────────────────
+//
+// Vínculo remessa → documentos. É o que a seleção consulta para NÃO incluir de novo um documento
+// que já está numa remessa viva (`holdsDocuments`). Sem esta tabela, a janela entre gravar e
+// confirmar deixaria o mesmo documento ser selecionado duas vezes — pagamento em dobro.
+//
+// PK composta (remittance_id, document_id): o mesmo documento não entra duas vezes na mesma remessa,
+// e o índice por documento responde "este documento está preso em alguma remessa?" sem varredura.
+export const finRemittanceDocuments = mysqlTable(
+  'fin_remittance_documents',
+  {
+    remittanceId: uuidKey('remittance_id').notNull(),
+    documentId: uuidKey('document_id').notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.remittanceId, t.documentId] }),
+    index('fin_remittance_documents_document_idx').on(t.documentId),
+  ],
+);
+
+export type FinRemittanceDocumentRow = typeof finRemittanceDocuments.$inferSelect;
+export type NewFinRemittanceDocumentRow = typeof finRemittanceDocuments.$inferInsert;

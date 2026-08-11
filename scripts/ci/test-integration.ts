@@ -145,6 +145,9 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // Alocação de NSA sob concorrência real: prova que o SELECT ... FOR UPDATE serializa e que dois
     // pedidos simultâneos nunca recebem o mesmo número. NSA repetido = retransmissão para o banco.
     'tests/modules/financial/adapters/persistence/nsa-allocation.drizzle-mysql.test.ts',
+    // Remessa (migration 0044): cabeçalho + vínculos na mesma transação, anti-join de documento
+    // preso no BANCO, e os UNIQUEs de NSA-por-conta e nome de arquivo.
+    'tests/modules/financial/adapters/persistence/remittance-repository.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/bank-statement-repository.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/reconciliation-repository.drizzle-mysql.test.ts',
     // FIN-STATUS-VARCHAR-WIDTH (#519) — largura de fin_payables.status / fin_documents.status comporta
