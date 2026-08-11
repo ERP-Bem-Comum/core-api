@@ -13,7 +13,7 @@
  *
  * ADR-0020 §"Features permitidas": GROUP BY/agregação, LEFT JOIN, `is null`. ADR-0006/0014.
  */
-import { and, asc, desc, eq, isNull, isNotNull, sql } from 'drizzle-orm';
+import { and, asc, desc, eq, gte, isNull, isNotNull, lt, sql } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
@@ -27,8 +27,28 @@ export type SupplierWithoutContractRow = Readonly<{
   payableCount: number;
 }>;
 
+// #694: linha do RELATÓRIO (`list`), com quebra por Plano Orçamentário. O `listTop` (Dashboard) segue
+// no grão por-fornecedor com `SupplierWithoutContractRow`.
+export type SupplierWithoutContractPlanRow = SupplierWithoutContractRow &
+  Readonly<{ budgetPlanRef: string | null }>;
+
+// #694: filtros de servidor (paridade #588/#682). Refs opacos indexados na `fin_payable_view`; período
+// half-open `[dueFrom, dueTo)` (como o /payment-position).
+export type SuppliersWithoutContractFilter = Readonly<{
+  programRef?: string;
+  budgetPlanRef?: string;
+  costCenterRef?: string;
+  categoryRef?: string;
+  subcategoryRef?: string;
+  dueFrom?: string; // 'YYYY-MM-DD' inclusivo
+  dueTo?: string; // 'YYYY-MM-DD' exclusivo (half-open)
+}>;
+
 export type SuppliersWithoutContractReader = Readonly<{
-  list: () => Promise<Result<readonly SupplierWithoutContractRow[], string>>;
+  // #694: `list` recorta por filtro e quebra por Plano Orçamentário (uma linha por fornecedor×plano).
+  list: (
+    filter?: SuppliersWithoutContractFilter,
+  ) => Promise<Result<readonly SupplierWithoutContractPlanRow[], string>>;
   /**
    * Top-N por total decrescente — widget "Fornecedores sem Contrato" do Dashboard (DASH-F5 · #242).
    * Corte no SQL (`ORDER BY sum DESC, supplier_ref ASC LIMIT ?`), nunca em memória: `supplier_ref ASC`
@@ -92,15 +112,50 @@ export const openSuppliersWithoutContractReader = async (
   };
 
   return ok({
-    list: async () => {
+    list: async (filter = {}) => {
       try {
         const rows = await db
-          .select(selectShape)
+          .select({ ...selectShape, budgetPlanRef: finPayableView.budgetPlanRef })
           .from(finPayableView)
           .leftJoin(finSupplierView, eq(finPayableView.supplierRef, finSupplierView.supplierRef))
-          .where(whereClause)
-          .groupBy(finPayableView.supplierRef, finSupplierView.name);
-        return ok(toRows(rows));
+          .where(
+            and(
+              whereClause,
+              // #694: recortes opcionais (grão preservado no groupBy; refs indexados).
+              filter.programRef !== undefined
+                ? eq(finPayableView.programRef, filter.programRef)
+                : undefined,
+              filter.budgetPlanRef !== undefined
+                ? eq(finPayableView.budgetPlanRef, filter.budgetPlanRef)
+                : undefined,
+              filter.costCenterRef !== undefined
+                ? eq(finPayableView.costCenterRef, filter.costCenterRef)
+                : undefined,
+              filter.categoryRef !== undefined
+                ? eq(finPayableView.categoryRef, filter.categoryRef)
+                : undefined,
+              filter.subcategoryRef !== undefined
+                ? eq(finPayableView.subcategoryRef, filter.subcategoryRef)
+                : undefined,
+              filter.dueFrom !== undefined
+                ? gte(finPayableView.dueDate, filter.dueFrom)
+                : undefined,
+              filter.dueTo !== undefined ? lt(finPayableView.dueDate, filter.dueTo) : undefined,
+            ),
+          )
+          // #694: quebra por Plano Orçamentário — uma linha por fornecedor×plano (`supplierRef` repetido).
+          .groupBy(finPayableView.supplierRef, finSupplierView.name, finPayableView.budgetPlanRef);
+        return ok(
+          rows
+            .filter((row): row is typeof row & { supplierRef: string } => row.supplierRef !== null)
+            .map((row) => ({
+              supplierRef: row.supplierRef,
+              name: row.name,
+              totalCents: Number(row.totalCents),
+              payableCount: row.payableCount,
+              budgetPlanRef: row.budgetPlanRef,
+            })),
+        );
       } catch (cause) {
         process.stderr.write(`[fin-suppliers-without-contract:list] ${String(cause)}\n`);
         return err('suppliers-without-contract-read-failure');

@@ -62,8 +62,26 @@ export const supplierWithoutContractSchema = z
     name: z.string().nullable(),
     totalCents: z.number(),
     payableCount: z.number(),
+    // #694: quebra por Plano Orçamentário (uma linha por fornecedor×plano). `budgetPlanName` costurado
+    // via budget-plans/public-api; null quando sem plano ou a costura não resolve.
+    budgetPlanRef: z.string().nullable(),
+    budgetPlanName: z.string().nullable(),
   })
   .strict();
+
+// #694: filtros de servidor da rota /reports/suppliers-without-contract (paridade #588/#682). Objeto
+// simples (sem `.strict()`, como os schemas irmãos de filtro): parâmetro desconhecido é ignorado.
+export const suppliersWithoutContractQuerySchema = z.object({
+  programId: z.uuid().optional(), // → program_ref
+  budgetPlanId: z.uuid().optional(), // → budget_plan_ref
+  costCenterId: z.uuid().optional(), // → cost_center_ref
+  categoryId: z.uuid().optional(), // → category_ref
+  subCategoryId: z.uuid().optional(), // → subcategory_ref
+  dueFrom: z.iso.date().optional(), // 'YYYY-MM-DD' inclusivo
+  dueTo: z.iso.date().optional(), // 'YYYY-MM-DD' exclusivo (half-open)
+});
+
+export type SuppliersWithoutContractQueryDto = z.infer<typeof suppliersWithoutContractQuerySchema>;
 
 export type SupplierWithoutContractDto = z.infer<typeof supplierWithoutContractSchema>;
 

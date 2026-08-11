@@ -23,7 +23,8 @@ import { sendResult } from '#src/shared/http/reply.ts';
 import { COLLABORATOR_PERMISSION } from '#src/modules/partners/public-api/permissions.ts';
 import { FINANCIAL_PERMISSION } from '#src/modules/financial/public-api/permissions.ts';
 import { BUDGET_PLAN_PERMISSION } from '#src/modules/budget-plans/public-api/permissions.ts';
-import type { AnalysisFilter, AnalysisRow } from '../../application/ports/analysis-read.ts';
+import type { AnalysisFilter } from '../../application/ports/analysis-read.ts';
+import type { SuppliersWithoutContractFilter } from '../../application/ports/suppliers-without-contract-read.ts';
 import type { PaymentPositionFilter } from '../../application/ports/payment-position-read.ts';
 import type { CashflowFilter } from '../../application/ports/cashflow-read.ts';
 import type { RealizedFilter } from '../../application/ports/realized-read.ts';
@@ -50,6 +51,8 @@ import {
   teamReportResponseSchema,
   teamDemographicsResponseSchema,
   suppliersWithoutContractResponseSchema,
+  suppliersWithoutContractQuerySchema,
+  type SuppliersWithoutContractQueryDto,
   paymentPositionResponseSchema,
   paymentPositionQuerySchema,
   cashflowQuerySchema,
@@ -108,6 +111,19 @@ const toAnalysisFilter = (q: AnalysisQueryDto): AnalysisFilter => ({
   ...(q.subCategoryId !== undefined ? { subcategoryRef: q.subCategoryId } : {}),
 });
 
+// #694: query (borda, validada) → filtro do relatório Fornecedores sem Contrato. Id → ref.
+const toSuppliersWithoutContractFilter = (
+  q: SuppliersWithoutContractQueryDto,
+): SuppliersWithoutContractFilter => ({
+  ...(q.programId !== undefined ? { programRef: q.programId } : {}),
+  ...(q.budgetPlanId !== undefined ? { budgetPlanRef: q.budgetPlanId } : {}),
+  ...(q.costCenterId !== undefined ? { costCenterRef: q.costCenterId } : {}),
+  ...(q.categoryId !== undefined ? { categoryRef: q.categoryId } : {}),
+  ...(q.subCategoryId !== undefined ? { subcategoryRef: q.subCategoryId } : {}),
+  ...(q.dueFrom !== undefined ? { dueFrom: q.dueFrom } : {}),
+  ...(q.dueTo !== undefined ? { dueTo: q.dueTo } : {}),
+});
+
 // #588: query (borda, validada) -> PaymentPositionFilter. Só inclui a chave quando presente
 // (`exactOptionalPropertyTypes`: nunca gravar `undefined` explícito). Nomes 1:1 com a query.
 const toPaymentPositionFilter = (q: PaymentPositionQueryDto): PaymentPositionFilter => ({
@@ -144,7 +160,7 @@ const toCashflowFilter = (q: CashflowQueryDto): CashflowFilter => ({
 // o rótulo é decorativo. Nunca há JOIN cross-módulo (ADR-0014): o stitch é na aplicação.
 const resolveLabels = async (
   deps: ReportsHttpDeps,
-  rows: readonly AnalysisRow[],
+  rows: readonly { budgetPlanRef: string | null }[],
 ): Promise<ReadonlyMap<string, string>> => {
   const ids = [
     ...new Set(rows.map((r) => r.budgetPlanRef).filter((ref): ref is string => ref !== null)),
@@ -226,16 +242,22 @@ const reportsRoutes =
       url: '/reports/suppliers-without-contract',
       preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.read)],
       schema: {
+        querystring: suppliersWithoutContractQuerySchema,
         response: { 200: suppliersWithoutContractResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
-      handler: async (_req, reply) => {
-        const result = await deps.listSuppliersWithoutContract();
+      handler: async (req, reply) => {
+        const result = await deps.listSuppliersWithoutContract(
+          toSuppliersWithoutContractFilter(req.query),
+        );
         if (!result.ok) {
           return sendResult(reply, result, {
             errors: { 'suppliers-without-contract-read-unavailable': 503 },
           });
         }
-        return sendResult(reply, ok(suppliersWithoutContractToDto(result.value)), { ok: 200 });
+        const labels = await resolveLabels(deps, result.value);
+        return sendResult(reply, ok(suppliersWithoutContractToDto(result.value, labels)), {
+          ok: 200,
+        });
       },
     });
 
