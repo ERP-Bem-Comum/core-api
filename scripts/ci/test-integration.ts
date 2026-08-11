@@ -223,7 +223,12 @@ const SUITES: Readonly<Record<string, Suite>> = {
     secrets: false,
     env: { STORAGE_INTEGRATION: '1' },
     concurrency1: false,
-    paths: ['tests/modules/contracts/adapters/storage/s3.integration.test.ts'],
+    paths: [
+      'tests/modules/contracts/adapters/storage/s3.integration.test.ts',
+      // Bucket da VAN (ADR-0061): prova que a chave montada é a chave gravada, que a listagem por
+      // prefixo não vaza vizinho e que chave ausente vira not-found — contra S3 de verdade.
+      'tests/modules/financial/adapters/van/van-storage.s3.integration.test.ts',
+    ],
   },
   photo: {
     services: ['minio'],
