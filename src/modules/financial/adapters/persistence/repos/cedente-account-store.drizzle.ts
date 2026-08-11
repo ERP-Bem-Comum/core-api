@@ -13,7 +13,10 @@ import type {
   CedenteAccountNaturalKey,
   CedenteAccountStore,
   CedenteAccountStoreError,
+  NsaAllocationError,
 } from '#src/modules/financial/application/ports/cedente-account-store.ts';
+import { allocateNsa as allocateNsaOf } from '#src/modules/financial/domain/cedente/cedente-account.ts';
+import type { Nsa } from '#src/modules/financial/domain/cedente/nsa.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { finCedenteAccounts } from '../schemas/mysql.ts';
 import { toRow, toDomain } from '../mappers/cedente-account.mapper.ts';
@@ -128,6 +131,50 @@ export const createDrizzleCedenteAccountStore = (
         return ok(undefined);
       } catch (cause) {
         logStore('save', cause);
+        return err('cedente-account-store-unavailable');
+      }
+    },
+
+    // Alocação de NSA: SELECT ... FOR UPDATE + UPDATE na MESMA transação.
+    //
+    // O `.for('update')` adquire lock de linha (Refman §15.7.2.4): uma segunda transação que peça
+    // o mesmo NSA fica bloqueada até esta terminar, e então lê o valor JÁ incrementado. Sem o lock,
+    // duas remessas concorrentes leriam o mesmo número — e o banco trata NSA repetido como
+    // RETRANSMISSÃO, não como remessa nova. É o defeito mais caro que este adapter pode ter, e é
+    // por isso que a operação não é composição de `findById` + `save` no use case.
+    //
+    // A decisão de negócio continua no domínio: este método só empresta a serialização.
+    allocateNsa: async (id: CedenteAccountId): Promise<Result<Nsa, NsaAllocationError>> => {
+      try {
+        return await db.transaction(async (tx) => {
+          const rows = await tx
+            .select()
+            .from(finCedenteAccounts)
+            .where(eq(finCedenteAccounts.id, id))
+            .for('update')
+            .limit(1);
+
+          const row = rows[0];
+          if (row === undefined) return err('cedente-account-not-found');
+
+          const account = toDomain(row);
+          if (!account.ok) {
+            logStore('allocateNsa/toDomain', account.error);
+            return err('cedente-account-store-unavailable');
+          }
+
+          const allocation = allocateNsaOf(account.value);
+          if (!allocation.ok) return err(allocation.error);
+
+          await tx
+            .update(finCedenteAccounts)
+            .set({ nextNsa: allocation.value.account.nextNsa })
+            .where(eq(finCedenteAccounts.id, id));
+
+          return ok(allocation.value.nsa);
+        });
+      } catch (cause) {
+        logStore('allocateNsa', cause);
         return err('cedente-account-store-unavailable');
       }
     },
