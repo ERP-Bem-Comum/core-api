@@ -8,17 +8,31 @@
  */
 import type { Result } from '#src/shared/primitives/result.ts';
 
+// #694: uma linha por fornecedor×Plano Orçamentário. `budgetPlanRef` opaco (o rótulo é costurado na
+// borda via `budget-plans/public-api`, como a Análise).
 export type SupplierWithoutContract = Readonly<{
   supplierRef: string;
   name: string | null;
   totalCents: number;
   payableCount: number;
+  budgetPlanRef: string | null;
+}>;
+
+// #694: filtros de servidor (paridade #588/#682). Espelha `SuppliersWithoutContractFilter` do financial.
+export type SuppliersWithoutContractFilter = Readonly<{
+  programRef?: string;
+  budgetPlanRef?: string;
+  costCenterRef?: string;
+  categoryRef?: string;
+  subcategoryRef?: string;
+  dueFrom?: string;
+  dueTo?: string;
 }>;
 
 export type SuppliersWithoutContractReadError = 'suppliers-without-contract-read-unavailable';
 
 export type SuppliersWithoutContractReadPort = Readonly<{
-  list: () => Promise<
-    Result<readonly SupplierWithoutContract[], SuppliersWithoutContractReadError>
-  >;
+  list: (
+    filter: SuppliersWithoutContractFilter,
+  ) => Promise<Result<readonly SupplierWithoutContract[], SuppliersWithoutContractReadError>>;
 }>;

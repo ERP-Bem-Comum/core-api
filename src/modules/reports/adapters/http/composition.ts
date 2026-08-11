@@ -2,9 +2,8 @@
  * Composition root do módulo reports para a borda HTTP (ADR-0006/0025/0027, épico Relatórios #114).
  * Read-only, sem persistência/schema próprios — lê projeções de outros módulos via public-api (ACL):
  *  - REP-1 "Equipe ABC" (#238) ← `partners` (collaborators);
- *  - REP-2 "Fornecedores sem Contrato" (#240/#437) ← `financial` (candidatos: payables
- *    `contract_ref IS NULL`, `kind='Parent'`) MENOS `contracts` (contratantes com contrato Active),
- *    subtraídos em memória pelo use-case `listSuppliersWithoutActiveContract`;
+ *  - REP-2 "Fornecedores sem Contrato" (#240/#437) ← `financial` (payables `contract_ref IS NULL`,
+ *    por LANÇAMENTO e valor BRUTO — sem anti-join de contrato ativo, decisão de auditoria da P.O.);
  *  - REP-4 "Posição de Pagamentos" (#243) ← `financial` (fornecedor×CC×categoria, 3 baldes);
  *  - REP-3 "Análise de Planejamento" (#114) ← `financial` (categoria×CC×mês num período).
  *
@@ -12,7 +11,7 @@
  * fechados no `shutdown()`. Molde: `buildPartnersReadPort`.
  */
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
-import { type Result, ok } from '#src/shared/primitives/result.ts';
+import { ok } from '#src/shared/primitives/result.ts';
 import {
   openCollaboratorProjectionReader,
   openCollaboratorDemographicsReader,
@@ -30,28 +29,19 @@ import {
   buildBudgetPlansReadPort,
   type PlanLabelsReadPort,
 } from '#src/modules/budget-plans/public-api/read.ts';
-import {
-  buildContractsActiveContractorReadPort,
-  buildContractsContractNumberReadPort,
-} from '#src/modules/contracts/public-api/index.ts';
+import { buildContractsContractNumberReadPort } from '#src/modules/contracts/public-api/index.ts';
 import { TeamReportReadFromPartners } from '../persistence/team-report-read.partners.ts';
 import { InMemoryTeamReportRead } from '../persistence/team-report-read.in-memory.ts';
 import { TeamDemographicsReadFromPartners } from '../persistence/team-demographics-read.partners.ts';
 import { InMemoryTeamDemographicsRead } from '../persistence/team-demographics-read.in-memory.ts';
 import { SuppliersWithoutContractReadFromFinancial } from '../persistence/suppliers-without-contract-read.financial.ts';
 import { InMemorySuppliersWithoutContractRead } from '../persistence/suppliers-without-contract-read.in-memory.ts';
-import { ActiveContractorReadFromContracts } from '../persistence/active-contractor-read.contracts.ts';
-import { InMemoryActiveContractorRead } from '../persistence/active-contractor-read.in-memory.ts';
 import { PaymentPositionReadFromFinancial } from '../persistence/payment-position-read.financial.ts';
 import { InMemoryPaymentPositionRead } from '../persistence/payment-position-read.in-memory.ts';
 import { CashflowReadFromFinancial } from '../persistence/cashflow-read.financial.ts';
 import { InMemoryCashflowRead } from '../persistence/cashflow-read.in-memory.ts';
 import { GeneralReportReadFromFinancial } from '../persistence/general-report-read.financial.ts';
 import { InMemoryGeneralReportRead } from '../persistence/general-report-read.in-memory.ts';
-import {
-  listSuppliersWithoutActiveContract,
-  type ListSuppliersWithoutActiveContractError,
-} from '../../application/use-cases/list-suppliers-without-active-contract.ts';
 import { AnalysisReadFromFinancial } from '../persistence/analysis-read.financial.ts';
 import { InMemoryAnalysisRead } from '../persistence/analysis-read.in-memory.ts';
 import { RealizedReadFromSources } from '../persistence/realized-read.from-sources.ts';
@@ -60,11 +50,7 @@ import { DashboardRealizedReadFromSources } from '../persistence/dashboard-reali
 import { InMemoryDashboardRealizedRead } from '../persistence/dashboard-realized-read.in-memory.ts';
 import type { TeamReportReadPort } from '../../application/ports/team-report-read.ts';
 import type { TeamDemographicsReadPort } from '../../application/ports/team-demographics-read.ts';
-import type {
-  SupplierWithoutContract,
-  SuppliersWithoutContractReadPort,
-} from '../../application/ports/suppliers-without-contract-read.ts';
-import type { ActiveContractorReadPort } from '../../application/ports/active-contractor-read.ts';
+import type { SuppliersWithoutContractReadPort } from '../../application/ports/suppliers-without-contract-read.ts';
 import type { PaymentPositionReadPort } from '../../application/ports/payment-position-read.ts';
 import type { CashflowReadPort } from '../../application/ports/cashflow-read.ts';
 import type { GeneralReportReadPort } from '../../application/ports/general-report-read.ts';
@@ -89,7 +75,7 @@ export type ReportsCompositionConfig =
       partnersUrl: string;
       /** Connection string do `financial` — fonte do REP-2/REP-4 e do realizado (S6, ADR-0014). */
       financialUrl: string;
-      /** Connection string do `contracts` — subtraendo do anti-join do REP-2 (#437, ADR-0014). */
+      /** Connection string do `contracts` — fonte do NÚMERO do contrato no Relatório Geral (REP-6, ADR-0014). */
       contractsUrl: string;
       /** Connection string do `budget-plans` — fonte do orçado no Realizado × Planejado (S6). */
       budgetPlansUrl: string;
@@ -99,9 +85,7 @@ export type ReportsHttpDeps = Readonly<{
   listTeam: TeamReportReadPort['list'];
   /** REP-1 demográficos: contagem agregada (nunca linha por pessoa) — gate LGPD dedicado. */
   listTeamDemographics: TeamDemographicsReadPort['list'];
-  listSuppliersWithoutContract: () => Promise<
-    Result<readonly SupplierWithoutContract[], ListSuppliersWithoutActiveContractError>
-  >;
+  listSuppliersWithoutContract: SuppliersWithoutContractReadPort['list'];
   listPaymentPosition: PaymentPositionReadPort['list'];
   /** REP (#590 Slice A): Fluxo de Caixa — Payables por Categoria × Subcategoria (financial single-module). */
   listCashflow: CashflowReadPort['list'];
@@ -126,7 +110,6 @@ export const buildReportsHttpDeps = async (
     const team: TeamReportReadPort = InMemoryTeamReportRead();
     const demographics: TeamDemographicsReadPort = InMemoryTeamDemographicsRead();
     const suppliers: SuppliersWithoutContractReadPort = InMemorySuppliersWithoutContractRead();
-    const activeContractors: ActiveContractorReadPort = InMemoryActiveContractorRead();
     const position: PaymentPositionReadPort = InMemoryPaymentPositionRead();
     const cashflow: CashflowReadPort = InMemoryCashflowRead();
     const general: GeneralReportReadPort = InMemoryGeneralReportRead();
@@ -136,10 +119,7 @@ export const buildReportsHttpDeps = async (
     return {
       listTeam: team.list,
       listTeamDemographics: demographics.list,
-      listSuppliersWithoutContract: listSuppliersWithoutActiveContract({
-        suppliersRead: suppliers,
-        activeContractorsRead: activeContractors,
-      }),
+      listSuppliersWithoutContract: suppliers.list,
       listPaymentPosition: position.list,
       listCashflow: cashflow.list,
       listCashflowChart: cashflow.listChart,
@@ -216,27 +196,12 @@ export const buildReportsHttpDeps = async (
   }
   const positionReader = positionReaderR.value;
 
-  const contractorsReaderR = await buildContractsActiveContractorReadPort({
-    connectionString: contractsUrl,
-  });
-  if (!contractorsReaderR.ok) {
-    await teamReader.close();
-    await demographicsReader.close();
-    await suppliersReader.close();
-    await positionReader.close();
-    throw new Error(
-      `reports-composition: falha ao abrir reader (active-contractor) do contracts: ${contractorsReaderR.error}`,
-    );
-  }
-  const contractorsReader = contractorsReaderR.value;
-
   const analysisReaderR = await openPayablesAnalysisReader({ connectionString: financialUrl });
   if (!analysisReaderR.ok) {
     await teamReader.close();
     await demographicsReader.close();
     await suppliersReader.close();
     await positionReader.close();
-    await contractorsReader.close();
     throw new Error(
       `reports-composition: falha ao abrir reader (analysis) do financial: ${analysisReaderR.error}`,
     );
@@ -251,7 +216,6 @@ export const buildReportsHttpDeps = async (
     await demographicsReader.close();
     await suppliersReader.close();
     await positionReader.close();
-    await contractorsReader.close();
     await analysisReader.close();
     throw new Error(
       `reports-composition: falha ao abrir read port (planned-amounts) do budget-plans: ${budgetPlansReadR.error}`,
@@ -265,7 +229,6 @@ export const buildReportsHttpDeps = async (
     await demographicsReader.close();
     await suppliersReader.close();
     await positionReader.close();
-    await contractorsReader.close();
     await analysisReader.close();
     await budgetPlansRead.close();
     throw new Error(
@@ -283,7 +246,6 @@ export const buildReportsHttpDeps = async (
     await demographicsReader.close();
     await suppliersReader.close();
     await positionReader.close();
-    await contractorsReader.close();
     await analysisReader.close();
     await budgetPlansRead.close();
     await realizedReader.close();
@@ -301,7 +263,6 @@ export const buildReportsHttpDeps = async (
     await demographicsReader.close();
     await suppliersReader.close();
     await positionReader.close();
-    await contractorsReader.close();
     await analysisReader.close();
     await budgetPlansRead.close();
     await realizedReader.close();
@@ -324,7 +285,6 @@ export const buildReportsHttpDeps = async (
     await demographicsReader.close();
     await suppliersReader.close();
     await positionReader.close();
-    await contractorsReader.close();
     await analysisReader.close();
     await budgetPlansRead.close();
     await realizedReader.close();
@@ -345,7 +305,6 @@ export const buildReportsHttpDeps = async (
     await demographicsReader.close();
     await suppliersReader.close();
     await positionReader.close();
-    await contractorsReader.close();
     await analysisReader.close();
     await budgetPlansRead.close();
     await realizedReader.close();
@@ -361,9 +320,6 @@ export const buildReportsHttpDeps = async (
   const teamPort = TeamReportReadFromPartners(teamReader.list);
   const demographicsPort = TeamDemographicsReadFromPartners(demographicsReader.list);
   const suppliersPort = SuppliersWithoutContractReadFromFinancial(suppliersReader.list);
-  const contractorsPort = ActiveContractorReadFromContracts(
-    contractorsReader.listContractorsWithActiveContract,
-  );
   const positionPort = PaymentPositionReadFromFinancial(positionReader.list);
   // Slice B/C: costura nomes (financier/collaborator) e PIX/banco (supplier) cross-módulo com os
   // três getters do partners read port. `getSupplierView` só é chamado quando o gate concede.
@@ -394,10 +350,7 @@ export const buildReportsHttpDeps = async (
   return {
     listTeam: teamPort.list,
     listTeamDemographics: demographicsPort.list,
-    listSuppliersWithoutContract: listSuppliersWithoutActiveContract({
-      suppliersRead: suppliersPort,
-      activeContractorsRead: contractorsPort,
-    }),
+    listSuppliersWithoutContract: suppliersPort.list,
     listPaymentPosition: positionPort.list,
     listCashflow: cashflowPort.list,
     listCashflowChart: cashflowPort.listChart,
@@ -413,7 +366,6 @@ export const buildReportsHttpDeps = async (
       await demographicsReader.close();
       await suppliersReader.close();
       await positionReader.close();
-      await contractorsReader.close();
       await analysisReader.close();
       await budgetPlansRead.close();
       await realizedReader.close();
