@@ -28,7 +28,12 @@ export type VanStatus = Readonly<{
   executedAt: string;
   situation: VanStatusSituation;
   detail: string;
-  exitCode: number;
+  // `null` quando o STCPCLT NÃO chegou a ser executado — é o que o agente publica no caso de
+  // duplicidade, e é semanticamente correto: sem execução, não existe código de saída. Trocar por
+  // `0` seria pior, porque `0` significa "executou e deu certo". O agente também pode publicar
+  // `null` por um gotcha do PowerShell 5.1 (`Start-Process -PassThru` sem handle cacheado).
+  // Nenhuma decisão depende deste campo: quem decide é `situacao`.
+  exitCode: number | null;
   // Preservadas CRUAS, de propósito. O log de transferência é posicional (manual §12), mas a
   // amostra que temos veio truncada — decodificar offsets a partir de exemplo incompleto é o erro
   // que este projeto já pagou caro duas vezes. Decodificação vira fatia própria quando houver
@@ -95,11 +100,14 @@ export const parseStatus = (key: string, content: string): Result<VanStatus, Van
   const exitCode = body['exitCode'];
   const logLines = body['logTransferencia'];
 
+  // `exitCode` aceita null (ver o tipo). Exigir número aqui rejeitava TODO status de duplicado —
+  // justamente o caso que não pode ser mal lido, porque marcar como transmitida uma remessa que não
+  // saiu, ou o contrário, muda o que o operador faz.
   if (
     typeof fileName !== 'string' ||
     typeof executedAt !== 'string' ||
     typeof detail !== 'string' ||
-    typeof exitCode !== 'number' ||
+    (typeof exitCode !== 'number' && exitCode !== null) ||
     !Array.isArray(logLines)
   ) {
     return err('van-status-missing-field');
