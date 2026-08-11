@@ -38,8 +38,13 @@ export const teamDemographicsToDto = (
 
 export const suppliersWithoutContractToDto = (
   rows: readonly SupplierWithoutContract[],
+  labels: ReadonlyMap<string, string>,
 ): SuppliersWithoutContractResponseDto => ({
-  suppliers: rows.map((s) => ({ ...s })),
+  // #694: costura o rótulo do plano (budget-plans/public-api). Sem plano/costura → null.
+  suppliers: rows.map((s) => ({
+    ...s,
+    budgetPlanName: s.budgetPlanRef !== null ? (labels.get(s.budgetPlanRef) ?? null) : null,
+  })),
 });
 
 export const paymentPositionToDto = (

@@ -84,6 +84,26 @@ describe('status/ — envelope JSON', () => {
     assert.ok(isOk(r));
   });
 
+  // O agente publica `exitCode: null` quando o STCPCLT NÃO chegou a ser executado — é o caso do
+  // duplicado. Exigir número rejeitava esse envelope inteiro, e duplicado é justamente o status que
+  // não pode ficar ilegível: dele depende saber se a remessa saiu ou não.
+  it('aceita exitCode nulo — sem execução não existe código de saída', () => {
+    const r = parseStatus(
+      'status/X.REM.duplicado-20260811T1200.json',
+      envelope({ exitCode: null, situacao: 'revisao', codigoStcp: null }),
+    );
+    assert.ok(isOk(r));
+    assert.equal(r.value.exitCode, null);
+    assert.equal(r.value.kind, 'duplicate');
+    assert.equal(wasTransmitted(r.value), false);
+  });
+
+  it('continua recusando exitCode que não é número nem nulo', () => {
+    const r = parseStatus('status/X.REM.json', envelope({ exitCode: 'zero' }));
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'van-status-missing-field');
+  });
+
   it('preserva as linhas do log cruas, sem decodificar', () => {
     const raw = ['linha um', 'linha dois'];
     const r = parseStatus('status/X.REM.json', envelope({ logTransferencia: raw }));

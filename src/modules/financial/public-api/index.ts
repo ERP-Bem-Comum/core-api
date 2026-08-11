@@ -41,6 +41,8 @@ export type {
 export { openSuppliersWithoutContractReader } from './suppliers-without-contract-projection.ts';
 export type {
   SupplierWithoutContractRow,
+  SupplierWithoutContractPlanRow,
+  SuppliersWithoutContractFilter,
   SuppliersWithoutContractReader,
 } from './suppliers-without-contract-projection.ts';
 

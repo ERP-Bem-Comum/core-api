@@ -1,11 +1,14 @@
-import { type Result, ok } from '../../../../../shared/primitives/result.ts';
+import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
 import type { CedenteAccount } from '../../../domain/cedente/types.ts';
 import type { CedenteAccountId } from '../../../domain/cedente/cedente-account-id.ts';
 import type {
   CedenteAccountNaturalKey,
   CedenteAccountStore,
   CedenteAccountStoreError,
+  NsaAllocationError,
 } from '../../../application/ports/cedente-account-store.ts';
+import { allocateNsa } from '../../../domain/cedente/cedente-account.ts';
+import type { Nsa } from '../../../domain/cedente/nsa.ts';
 
 // Adapter in-memory do CedenteAccountStore (testes / boot sem DB).
 export const createInMemoryCedenteAccountStore = (): CedenteAccountStore => {
@@ -39,6 +42,21 @@ export const createInMemoryCedenteAccountStore = (): CedenteAccountStore => {
     save: async (account: CedenteAccount): Promise<Result<void, CedenteAccountStoreError>> => {
       accounts.set(account.id, account);
       return Promise.resolve(ok(undefined));
+    },
+
+    // Atômico por construção: o event loop não interrompe este corpo, que não tem `await` entre a
+    // leitura e a escrita. É o comportamento OBSERVÁVEL do adapter real — mas a garantia dele vem
+    // do lock de linha do InnoDB, e só o teste contra MySQL a prova. Um fake verde aqui não diz
+    // nada sobre concorrência real.
+    allocateNsa: async (id: CedenteAccountId): Promise<Result<Nsa, NsaAllocationError>> => {
+      const account = accounts.get(id);
+      if (account === undefined) return Promise.resolve(err('cedente-account-not-found'));
+
+      const allocation = allocateNsa(account);
+      if (!allocation.ok) return Promise.resolve(err(allocation.error));
+
+      accounts.set(id, allocation.value.account);
+      return Promise.resolve(ok(allocation.value.nsa));
     },
   };
 };
