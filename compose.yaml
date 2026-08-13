@@ -454,6 +454,41 @@ services:
       - partners_database_url
       - smtp_pass
 
+  # Grupo D — varredura do `status/` da VAN (ADR-0060/0061). 1 pool (financial).
+  #
+  # Profile PRÓPRIO (`van`), não `workers`, e a razão é o contrato do runner: spec que devolve
+  # `err` derruba o processo do grupo inteiro (run.ts → EX_CONFIG). Registrada junto das
+  # projeções, a ausência de VAN_S3_* — o estado de dev, QA e da produção enquanto a VAN não
+  # sobe — derrubaria supplier-view, payable-view e contract-count junto. Separada, o fail-fast
+  # fica honesto: quem sobe este profile quer a VAN, e config faltando DEVE parar o processo.
+  #
+  # Credencial: nenhuma por padrão. Em PROD quem autentica é o IAM role da task (provider chain,
+  # suportado sem código novo); VAN_S3_ACCESS_KEY_ID/SECRET existem para MinIO local e teste, e
+  # o parser exige as duas juntas ou nenhuma.
+  #
+  # Cadência do loop (5 min) NÃO é configurável por env de propósito: ela espelha a do agente na
+  # instância, e desalinhar as duas só gera request extra contra o bucket.
+  worker-van:
+    <<: *x-worker-base
+    profiles:
+      - van
+    environment:
+      WORKER_GROUP: van
+      VAN_S3_REGION: '${VAN_S3_REGION:-us-east-1}'
+      VAN_S3_BUCKET: '${VAN_S3_BUCKET:-}'
+      VAN_S3_ENDPOINT: '${VAN_S3_ENDPOINT:-}'
+      VAN_S3_ACCESS_KEY_ID: '${VAN_S3_ACCESS_KEY_ID:-}'
+      VAN_S3_SECRET_ACCESS_KEY: '${VAN_S3_SECRET_ACCESS_KEY:-}'
+    entrypoint:
+      - /bin/sh
+      - -c
+      - >-
+        export FINANCIAL_DATABASE_URL="$(cat /run/secrets/financial_database_url)";
+        exec tini -- node "$0"
+      - src/workers/runner/run.ts
+    secrets:
+      - financial_database_url
+
   # ──────────────────────────────────────────────────────────────────────────
   # Job one-shot contracts-sweeper (opt-in via profile `jobs` — ADR-0041).
   #
