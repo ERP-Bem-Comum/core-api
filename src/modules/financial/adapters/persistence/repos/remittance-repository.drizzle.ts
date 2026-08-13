@@ -10,6 +10,7 @@ import type {
   Remittance,
   RemittanceStatus,
 } from '#src/modules/financial/domain/remittance/types.ts';
+import type { RemittanceEvent } from '#src/modules/financial/domain/remittance/events.ts';
 import * as RemittanceId from '#src/modules/financial/domain/remittance/remittance-id.ts';
 import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
 import type {
@@ -18,6 +19,7 @@ import type {
 } from '#src/modules/financial/application/ports/remittance-repository.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { finRemittances, finRemittanceDocuments } from '../schemas/mysql.ts';
+import { appendFinOutboxInTx } from './fin-outbox-helpers.ts';
 import type { FinRemittanceRow } from '../schemas/mysql.ts';
 
 const logRepo = (op: string, cause: unknown): void => {
@@ -77,7 +79,10 @@ export const createDrizzleRemittanceRepository = (
     // existente — que pode estar `Transmitted`. O UNIQUE deixaria de recusar, e uma remessa já
     // enviada passaria a constar com o desfecho de outra. Foi exatamente esse defeito que o teste
     // de integração pegou.
-    save: async (remittance: Remittance): Promise<Result<void, RemittanceRepositoryError>> => {
+    save: async (
+      remittance: Remittance,
+      events: readonly RemittanceEvent[] = [],
+    ): Promise<Result<void, RemittanceRepositoryError>> => {
       try {
         await db.transaction(async (tx) => {
           const existing = await tx
@@ -108,19 +113,26 @@ export const createDrizzleRemittanceRepository = (
                 .insert(finRemittanceDocuments)
                 .values({ remittanceId: remittance.id, documentId });
             }
-            return;
+          } else {
+            // Atualização de desfecho, por ID. Só o que a máquina de estados muda — nunca NSA, nome
+            // ou hash, que são imutáveis depois de gerada.
+            await tx
+              .update(finRemittances)
+              .set({
+                status: remittance.status,
+                settledAt: remittance.settledAt ?? null,
+                detail: remittance.detail ?? null,
+              })
+              .where(eq(finRemittances.id, remittance.id));
           }
 
-          // Atualização de desfecho, por ID. Só o que a máquina de estados muda — nunca NSA, nome
-          // ou hash, que são imutáveis depois de gerada.
-          await tx
-            .update(finRemittances)
-            .set({
-              status: remittance.status,
-              settledAt: remittance.settledAt ?? null,
-              detail: remittance.detail ?? null,
-            })
-            .where(eq(finRemittances.id, remittance.id));
+          // Estado e evento na MESMA transação (ADR-0015): o evento existe se e somente se o
+          // desfecho foi persistido. Anunciar "remessa transmitida" e perder a gravação seria pior
+          // que não anunciar — o operador agiria sobre um estado que o banco de dados não tem.
+          //
+          // No-op quando `events` é vazio, que é o caso da revarredura idempotente: o desfecho já
+          // tinha sido anunciado, e reemitir encheria o outbox a cada 5 minutos, para sempre.
+          await appendFinOutboxInTx(tx, events);
         });
         return ok(undefined);
       } catch (cause) {

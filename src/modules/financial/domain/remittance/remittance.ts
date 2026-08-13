@@ -1,6 +1,35 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import { immutable } from '../../../../shared/primitives/immutable.ts';
 import type { CreateRemittanceInput, Remittance, RemittanceError } from './types.ts';
+import type { RemittanceEvent } from './events.ts';
+
+/**
+ * O que uma transição devolve: o agregado no estado novo mais o que houve de contar ao mundo.
+ *
+ * `events` vem VAZIO no caminho idempotente, e essa é a propriedade que sustenta a varredura. O
+ * agente não apaga objeto de status, então o mesmo envelope é relido a cada 5 minutos; se confirmar
+ * de novo reemitisse `RemittanceTransmitted`, o outbox cresceria sem teto e qualquer consumidor
+ * (notificação, projeção) anunciaria o mesmo pagamento para sempre.
+ */
+export type RemittanceOutcome = Readonly<{
+  remittance: Remittance;
+  events: readonly RemittanceEvent[];
+}>;
+
+const settled = (
+  remittance: Remittance,
+  type: RemittanceEvent['type'],
+  at: string,
+  detail: string,
+): RemittanceEvent => ({
+  type,
+  remittanceId: remittance.id,
+  nsa: remittance.nsa,
+  fileName: remittance.fileName,
+  documentIds: remittance.documentIds,
+  settledAt: at,
+  detail,
+});
 
 const isBlank = (value: string): boolean => value.trim().length === 0;
 
@@ -44,40 +73,66 @@ export const confirmTransmitted = (
   remittance: Remittance,
   at: string,
   detail: string,
-): Result<Remittance, RemittanceError> => {
-  if (remittance.status === 'Transmitted') return ok(remittance);
+): Result<RemittanceOutcome, RemittanceError> => {
+  // Confirmar de novo devolve o agregado intacto e NENHUM evento: o desfecho já foi anunciado.
+  if (remittance.status === 'Transmitted') return ok({ remittance, events: [] });
   if (remittance.status !== 'Queued') return err('remittance-not-settleable');
 
-  return ok(immutable<Remittance>({ ...remittance, status: 'Transmitted', settledAt: at, detail }));
+  const confirmed = immutable<Remittance>({
+    ...remittance,
+    status: 'Transmitted',
+    settledAt: at,
+    detail,
+  });
+  return ok({
+    remittance: confirmed,
+    events: [settled(confirmed, 'RemittanceTransmitted', at, detail)],
+  });
 };
 
 export const markFailed = (
   remittance: Remittance,
   at: string,
   detail: string,
-): Result<Remittance, RemittanceError> => {
+): Result<RemittanceOutcome, RemittanceError> => {
   // Uma remessa que o banco confirmou não é rebaixada por leitura tardia — a ordem de chegada dos
   // objetos de status não é garantida, e o desfecho positivo é o mais caro de perder.
   if (remittance.status === 'Transmitted') return err('remittance-already-transmitted');
-  if (remittance.status === 'Failed') return ok(remittance);
+  if (remittance.status === 'Failed') return ok({ remittance, events: [] });
   if (remittance.status !== 'Queued') return err('remittance-not-settleable');
 
-  return ok(immutable<Remittance>({ ...remittance, status: 'Failed', settledAt: at, detail }));
+  const failed = immutable<Remittance>({
+    ...remittance,
+    status: 'Failed',
+    settledAt: at,
+    detail,
+  });
+  return ok({ remittance: failed, events: [settled(failed, 'RemittanceFailed', at, detail)] });
 };
 
 // Único caminho que devolve os documentos para a fila. Exige motivo porque libera valor para nova
 // transmissão: sem registro do porquê, ninguém audita depois por que um pagamento saiu duas vezes.
+// Assinatura uniforme com as demais transições, mas `events` sempre vazio: o descarte ainda não tem
+// evento próprio. Não é esquecimento — é escopo. Quando houver consumidor para "estes documentos
+// voltaram à fila" (o mais consequente dos três, porque libera valor para nova transmissão), o
+// evento entra aqui sem mexer em quem chama.
 export const discard = (
   remittance: Remittance,
   at: string,
   reason: string,
-): Result<Remittance, RemittanceError> => {
+): Result<RemittanceOutcome, RemittanceError> => {
   if (remittance.status === 'Transmitted') return err('remittance-already-transmitted');
-  if (remittance.status === 'Discarded') return ok(remittance);
+  if (remittance.status === 'Discarded') return ok({ remittance, events: [] });
   if (remittance.status !== 'Failed') return err('remittance-discard-requires-failure');
   if (isBlank(reason)) return err('remittance-discard-requires-reason');
 
-  return ok(
-    immutable<Remittance>({ ...remittance, status: 'Discarded', settledAt: at, detail: reason }),
-  );
+  return ok({
+    remittance: immutable<Remittance>({
+      ...remittance,
+      status: 'Discarded',
+      settledAt: at,
+      detail: reason,
+    }),
+    events: [],
+  });
 };

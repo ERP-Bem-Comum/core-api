@@ -67,14 +67,14 @@ describe('Remittance — só o status do agente decide o desfecho', () => {
   it('confirma transmissão a partir de Queued', () => {
     const r = confirmTransmitted(queued(), LATER, 'Arquivo consta em BACKUP');
     assert.ok(isOk(r));
-    assert.equal(r.value.status, 'Transmitted');
-    assert.equal(r.value.settledAt, LATER);
+    assert.equal(r.value.remittance.status, 'Transmitted');
+    assert.equal(r.value.remittance.settledAt, LATER);
   });
 
   it('marca falha a partir de Queued', () => {
     const r = markFailed(queued(), LATER, 'Sem confirmacao');
     assert.ok(isOk(r));
-    assert.equal(r.value.status, 'Failed');
+    assert.equal(r.value.remittance.status, 'Failed');
   });
 
   // Idempotência: o mesmo objeto de status pode ser lido duas vezes (o agente não apaga nada, e a
@@ -83,9 +83,13 @@ describe('Remittance — só o status do agente decide o desfecho', () => {
     const first = confirmTransmitted(queued(), LATER, 'ok');
     assert.ok(isOk(first));
 
-    const second = confirmTransmitted(first.value, '2026-08-11T15:00:00.000Z', 'ok de novo');
+    const second = confirmTransmitted(
+      first.value.remittance,
+      '2026-08-11T15:00:00.000Z',
+      'ok de novo',
+    );
     assert.ok(isOk(second));
-    assert.equal(second.value.settledAt, LATER, 'mantém o primeiro desfecho');
+    assert.equal(second.value.remittance.settledAt, LATER, 'mantém o primeiro desfecho');
   });
 
   // Uma remessa que o banco confirmou NÃO pode ser rebaixada para falha por leitura tardia.
@@ -93,9 +97,65 @@ describe('Remittance — só o status do agente decide o desfecho', () => {
     const t = confirmTransmitted(queued(), LATER, 'ok');
     assert.ok(isOk(t));
 
-    const f = markFailed(t.value, '2026-08-11T16:00:00.000Z', 'tardio');
+    const f = markFailed(t.value.remittance, '2026-08-11T16:00:00.000Z', 'tardio');
     assert.ok(isErr(f));
     assert.equal(f.error, 'remittance-already-transmitted');
+  });
+});
+
+describe('Remittance — o que ela anuncia', () => {
+  it('confirmar emite RemittanceTransmitted com o que o consumidor precisa', () => {
+    const r = confirmTransmitted(queued(), LATER, 'Arquivo consta em BACKUP');
+    assert.ok(isOk(r));
+    assert.equal(r.value.events.length, 1);
+
+    const [event] = r.value.events;
+    assert.equal(event?.type, 'RemittanceTransmitted');
+    assert.equal(event?.settledAt, LATER);
+    assert.equal(event?.detail, 'Arquivo consta em BACKUP');
+    assert.equal(event?.nsa, queued().nsa);
+    assert.equal(event?.fileName, queued().fileName);
+    // Sem os documentos, "quais pagamentos saíram?" exigiria voltar ao nosso banco.
+    assert.deepEqual(event?.documentIds, queued().documentIds);
+  });
+
+  it('falhar emite RemittanceFailed', () => {
+    const r = markFailed(queued(), LATER, 'Sem confirmacao');
+    assert.ok(isOk(r));
+    assert.equal(r.value.events.length, 1);
+    assert.equal(r.value.events[0]?.type, 'RemittanceFailed');
+  });
+
+  // A propriedade que sustenta a varredura de 5 em 5 minutos. Sem ela, o outbox cresceria sem teto
+  // e qualquer consumidor anunciaria o mesmo pagamento para sempre.
+  it('reconfirmar NÃO reemite — o desfecho já foi anunciado', () => {
+    const first = confirmTransmitted(queued(), LATER, 'ok');
+    assert.ok(isOk(first));
+    assert.equal(first.value.events.length, 1);
+
+    const second = confirmTransmitted(first.value.remittance, LATER, 'ok');
+    assert.ok(isOk(second));
+    assert.deepEqual(second.value.events, [], 'segunda leitura do mesmo status não reemite');
+  });
+
+  it('remarcar falha NÃO reemite', () => {
+    const first = markFailed(queued(), LATER, 'sem confirmacao');
+    assert.ok(isOk(first));
+
+    const second = markFailed(first.value.remittance, LATER, 'sem confirmacao');
+    assert.ok(isOk(second));
+    assert.deepEqual(second.value.events, []);
+  });
+
+  // Escopo declarado: o descarte ainda não tem evento próprio. O teste existe para que a ausência
+  // seja deliberada e visível, em vez de descoberta como surpresa por quem consumir o outbox.
+  it('descartar ainda não emite evento', () => {
+    const failed = markFailed(queued(), LATER, 'sem confirmacao');
+    assert.ok(isOk(failed));
+
+    const discarded = discard(failed.value.remittance, LATER, 'operador confirmou com o banco');
+    assert.ok(isOk(discarded));
+    assert.deepEqual(discarded.value.events, []);
   });
 });
 
@@ -110,7 +170,7 @@ describe('Remittance — o que prende o documento', () => {
   it('remessa transmitida prende os documentos', () => {
     const r = confirmTransmitted(queued(), LATER, 'ok');
     assert.ok(isOk(r));
-    assert.equal(holdsDocuments(r.value), true);
+    assert.equal(holdsDocuments(r.value.remittance), true);
   });
 
   // Falha NÃO libera. "Sem confirmação" não é "não transmitiu": pode ter saído e o status ter se
@@ -119,24 +179,28 @@ describe('Remittance — o que prende o documento', () => {
   it('remessa em FALHA continua prendendo, até decisão humana', () => {
     const r = markFailed(queued(), LATER, 'sem confirmacao');
     assert.ok(isOk(r));
-    assert.equal(holdsDocuments(r.value), true);
+    assert.equal(holdsDocuments(r.value.remittance), true);
   });
 
   it('só o descarte explícito libera os documentos', () => {
     const failed = markFailed(queued(), LATER, 'sem confirmacao');
     assert.ok(isOk(failed));
 
-    const discarded = discard(failed.value, LATER, 'operador confirmou com o banco que nao saiu');
+    const discarded = discard(
+      failed.value.remittance,
+      LATER,
+      'operador confirmou com o banco que nao saiu',
+    );
     assert.ok(isOk(discarded));
-    assert.equal(discarded.value.status, 'Discarded');
-    assert.equal(holdsDocuments(discarded.value), false);
+    assert.equal(discarded.value.remittance.status, 'Discarded');
+    assert.equal(holdsDocuments(discarded.value.remittance), false);
   });
 
   it('não descarta remessa transmitida', () => {
     const t = confirmTransmitted(queued(), LATER, 'ok');
     assert.ok(isOk(t));
 
-    const d = discard(t.value, LATER, 'engano');
+    const d = discard(t.value.remittance, LATER, 'engano');
     assert.ok(isErr(d));
     assert.equal(d.error, 'remittance-already-transmitted');
   });
@@ -145,7 +209,7 @@ describe('Remittance — o que prende o documento', () => {
     const failed = markFailed(queued(), LATER, 'sem confirmacao');
     assert.ok(isOk(failed));
 
-    const d = discard(failed.value, LATER, '   ');
+    const d = discard(failed.value.remittance, LATER, '   ');
     assert.ok(isErr(d));
     assert.equal(d.error, 'remittance-discard-requires-reason');
   });

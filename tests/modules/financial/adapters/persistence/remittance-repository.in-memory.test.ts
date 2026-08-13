@@ -62,7 +62,7 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
     const rem = build(['doc-1']);
     const t = confirmTransmitted(rem, '2026-08-11T14:05:00.000Z', 'ok');
     assert.ok(isOk(t));
-    await repo.save(t.value);
+    await repo.save(t.value.remittance, t.value.events);
 
     const held = await repo.findHeldDocumentIds(['doc-1']);
     assert.ok(isOk(held) && held.value.length === 1);
@@ -73,7 +73,7 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
     const repo = createInMemoryRemittanceRepository();
     const f = markFailed(build(['doc-1']), '2026-08-11T14:05:00.000Z', 'sem confirmacao');
     assert.ok(isOk(f));
-    await repo.save(f.value);
+    await repo.save(f.value.remittance, f.value.events);
 
     const held = await repo.findHeldDocumentIds(['doc-1']);
     assert.ok(isOk(held) && held.value.length === 1);
@@ -83,9 +83,13 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
     const repo = createInMemoryRemittanceRepository();
     const f = markFailed(build(['doc-1']), '2026-08-11T14:05:00.000Z', 'sem confirmacao');
     assert.ok(isOk(f));
-    const d = discard(f.value, '2026-08-11T15:00:00.000Z', 'confirmado com o banco que nao saiu');
+    const d = discard(
+      f.value.remittance,
+      '2026-08-11T15:00:00.000Z',
+      'confirmado com o banco que nao saiu',
+    );
     assert.ok(isOk(d));
-    await repo.save(d.value);
+    await repo.save(d.value.remittance, d.value.events);
 
     const held = await repo.findHeldDocumentIds(['doc-1']);
     assert.ok(isOk(held));

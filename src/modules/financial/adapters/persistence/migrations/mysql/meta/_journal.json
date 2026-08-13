@@ -316,6 +316,20 @@
       "when": 1786469838458,
       "tag": "0044_public_amazoness",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "5",
+      "when": 1786646846465,
+      "tag": "0045_military_eddie_brock",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "5",
+      "when": 1786647052305,
+      "tag": "0046_familiar_mimic",
+      "breakpoints": true
     }
   ]
 }

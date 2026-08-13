@@ -10,18 +10,28 @@ import { randomUUID } from 'node:crypto';
 
 import type { FinancialAppendableEvent } from '../../../application/ports/outbox.ts';
 import type { FinancialMysqlHandle } from '../drivers/mysql-driver.ts';
-import { finOutbox, type NewFinOutboxRow } from '../schemas/mysql.ts';
+import { finOutbox, type FinOutboxAggregateType, type NewFinOutboxRow } from '../schemas/mysql.ts';
 
 /** Versão canônica do contrato do payload (wire format). */
 export const FIN_OUTBOX_SCHEMA_VERSION = 1;
 
 // Deriva o agregado dono do evento. Cada FinancialAppendableEvent carrega exatamente um id de
-// agregado (documento / conciliação / extrato / período). Adapter → uso de `in` é permitido aqui.
-const extractAggregateInfo = (e: FinancialAppendableEvent): { id: string; type: string } => {
+// agregado (documento / conciliação / extrato / período / remessa). Adapter → uso de `in` é
+// permitido aqui.
+//
+// O retorno é `FinOutboxAggregateType`, não `string`, e isso é o mecanismo: um agregado novo que
+// não esteja na fonte única NÃO COMPILA. Antes, com `string`, o valor só encontrava resistência no
+// CHECK do banco — em runtime, dentro de uma transação que revertia inteira.
+const extractAggregateInfo = (
+  e: FinancialAppendableEvent,
+): { id: string; type: FinOutboxAggregateType } => {
   if ('documentId' in e) return { id: String(e.documentId), type: 'Document' };
   if ('reconciliationId' in e) return { id: String(e.reconciliationId), type: 'Reconciliation' };
   if ('statementId' in e) return { id: String(e.statementId), type: 'Statement' };
   if ('counterpartId' in e) return { id: String(e.counterpartId), type: 'ExpectedCounterpart' };
+  // `remittanceId` não colide com o ramo do documento: o evento da remessa carrega `documentIds`
+  // (plural), e `'documentId' in e` não casa com ele.
+  if ('remittanceId' in e) return { id: String(e.remittanceId), type: 'Remittance' };
   return { id: String(e.periodId), type: 'ReconciliationPeriod' };
 };
 

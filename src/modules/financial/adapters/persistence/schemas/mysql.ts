@@ -46,7 +46,7 @@ import {
   uniqueIndex,
   varchar,
 } from 'drizzle-orm/mysql-core';
-import { sql } from 'drizzle-orm';
+import { sql, type SQL } from 'drizzle-orm';
 
 import { opaqueKey, uuidKey } from '#src/shared/persistence/identifier-columns.ts';
 
@@ -1028,6 +1028,38 @@ export type NewCostCenterRow = typeof finCostCenters.$inferInsert;
 // gravados na MESMA db.transaction (atomicidade; evento durável SSE estado persistido). Espelha
 // `ctr_outbox` (contracts). UUID v4 como varchar(36) — convenção do módulo (sem char). payload é
 // VARCHAR(8192) serializado — NUNCA JSON nativo (ADR-0020). Idempotência via PK `event_id`.
+
+/**
+ * FONTE ÚNICA dos agregados que podem publicar no outbox do Financeiro.
+ *
+ * Existe porque a lista viver escrita à mão em dois CHECKs custou um CI vermelho: `RemittanceEvent`
+ * entrou na union de eventos, o TypeScript aprovou, e todo `save` de remessa passou a reverter em
+ * runtime contra a constraint. O `Result` do repo devolvia erro de persistência sem dizer que a
+ * causa era um valor não previsto pelo banco.
+ *
+ * Consumida pelos dois CHECKs (tabela e DLQ) e pelo `extractAggregateInfo` do helper, que a usa
+ * como TIPO — então um agregado novo que não esteja aqui **não compila**. O que o compilador não
+ * alcança é "esqueci de rodar `db:generate`"; disso cuida
+ * `tests/cleanup/outbox-aggregate-types-in-check.test.ts`.
+ *
+ * ⚠️ Acrescentar valor aqui EXIGE `pnpm run db:generate:financial` — a constraint vive no banco.
+ */
+export const FIN_OUTBOX_AGGREGATE_TYPES = [
+  'Document',
+  'Reconciliation',
+  'Statement',
+  'ReconciliationPeriod',
+  'ExpectedCounterpart',
+  'Remittance',
+] as const;
+
+export type FinOutboxAggregateType = (typeof FIN_OUTBOX_AGGREGATE_TYPES)[number];
+
+// A DLQ usa a MESMA lista — o comentário dela sempre prometeu "espelha o CHECK da tabela-fonte", e
+// a promessa não se sustentava: `ExpectedCounterpart` existia na fonte e faltava lá desde a 0028,
+// o que faria o INSERT de DLQ falhar justamente quando um evento desse tipo esgotasse os retries.
+const aggregateTypeSqlList = (): SQL =>
+  sql.raw(FIN_OUTBOX_AGGREGATE_TYPES.map((t) => `'${t}'`).join(', '));
 export const finOutbox = mysqlTable(
   'fin_outbox',
   {
@@ -1035,7 +1067,8 @@ export const finOutbox = mysqlTable(
     eventId: uuidKey('event_id').primaryKey().notNull(),
     // id do agregado dono (documento / conciliação / extrato / período / contrapartida).
     aggregateId: uuidKey('aggregate_id').notNull(),
-    // 'Document' | 'Reconciliation' | 'Statement' | 'ReconciliationPeriod' | 'ExpectedCounterpart' — CHECK abaixo.
+    // 'Document' | 'Reconciliation' | 'Statement' | 'ReconciliationPeriod' | 'ExpectedCounterpart'
+    // | 'Remittance' — CHECK abaixo.
     aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
     // PascalCase EN: DocumentSaved, PayableReconciled, …
     eventType: varchar('event_type', { length: 64 }).notNull(),
@@ -1055,10 +1088,7 @@ export const finOutbox = mysqlTable(
   (t) => [
     check('fin_outbox_attempts_nonneg_chk', sql`${t.attempts} >= 0`),
     check('fin_outbox_event_type_nonempty_chk', sql`CHAR_LENGTH(${t.eventType}) > 0`),
-    check(
-      'fin_outbox_aggregate_type_chk',
-      sql`${t.aggregateType} IN ('Document', 'Reconciliation', 'Statement', 'ReconciliationPeriod', 'ExpectedCounterpart')`,
-    ),
+    check('fin_outbox_aggregate_type_chk', sql`${t.aggregateType} IN (${aggregateTypeSqlList()})`),
     // Índice do worker (ADR-0015): processed_at PRIMEIRO → NULLs agrupados → range scan eficiente.
     index('fin_outbox_processed_at_occurred_at_idx').on(t.processedAt, t.occurredAt),
     index('fin_outbox_aggregate_id_idx').on(t.aggregateId),
@@ -1094,7 +1124,7 @@ export const finOutboxDeadLetter = mysqlTable(
     // (ex.: borda admin de DLQ). Espelha o CHECK da tabela-fonte `fin_outbox`.
     check(
       'fin_outbox_dl_aggregate_type_chk',
-      sql`${t.aggregateType} IN ('Document', 'Reconciliation', 'Statement', 'ReconciliationPeriod')`,
+      sql`${t.aggregateType} IN (${aggregateTypeSqlList()})`,
     ),
     index('fin_outbox_dl_failed_at_idx').on(t.failedAt),
   ],
