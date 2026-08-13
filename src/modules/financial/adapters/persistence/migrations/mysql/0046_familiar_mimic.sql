@@ -1,0 +1,2 @@
+ALTER TABLE `fin_outbox_dead_letter` DROP CONSTRAINT `fin_outbox_dl_aggregate_type_chk`;--> statement-breakpoint
+ALTER TABLE `fin_outbox_dead_letter` ADD CONSTRAINT `fin_outbox_dl_aggregate_type_chk` CHECK (`fin_outbox_dead_letter`.`aggregate_type` IN ('Document', 'Reconciliation', 'Statement', 'ReconciliationPeriod', 'ExpectedCounterpart', 'Remittance'));
