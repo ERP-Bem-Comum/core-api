@@ -11,28 +11,9 @@ import process from 'node:process';
 
 import { type Result, err } from '#src/shared/primitives/result.ts';
 import { withNewCorrelation, currentCorrelationId } from '#src/shared/observability/correlation.ts';
+import { sleep } from '#src/shared/runtime/sleep.ts';
 import { deliveryUnavailable } from './types.ts';
 import type { SharedWorkerDeps, WorkerConfig, WorkerStats, OutboxQueryError } from './types.ts';
-
-// ─── sleep helper (cancelável por AbortSignal — padrão Node 24) ────────────────
-
-// eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
-const sleep = async (ms: number, signal?: AbortSignal): Promise<void> =>
-  new Promise((resolve) => {
-    if (signal?.aborted === true) {
-      resolve();
-      return;
-    }
-    const timer = setTimeout(resolve, ms);
-    signal?.addEventListener(
-      'abort',
-      () => {
-        clearTimeout(timer);
-        resolve();
-      },
-      { once: true },
-    );
-  });
 
 // ─── log tag (anexa correlation-id quando há escopo ativo) ─────────────────────
 

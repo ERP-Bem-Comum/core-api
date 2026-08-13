@@ -16,6 +16,7 @@ verify:
       - 'src/shared/ports/clock.ts'
       - 'src/shared/runtime/last-resort.ts'
       - 'src/shared/runtime/node-env.ts'
+      - 'src/shared/runtime/sleep.ts'
       - 'src/shared/utils/csv.ts'
       - 'src/shared/utils/date.ts'
       - 'src/shared/utils/hash.ts'
@@ -23,7 +24,7 @@ verify:
       - 'src/shared/utils/string.ts'
 ---
 
-Dez arquivos pequenos e muito consumidos: `Clock` tem ~100 consumidores, `newUuid` 42, `correlation` 15. A proibição de ler o relógio no domínio é cobrada por `tests/cleanup/domain-clock-injection.test.ts`; a razão está no docblock de lá.
+Onze arquivos pequenos e muito consumidos: `Clock` tem ~100 consumidores, `newUuid` 42, `correlation` 15. A proibição de ler o relógio no domínio é cobrada por `tests/cleanup/domain-clock-injection.test.ts`; a razão está no docblock de lá.
 
 - **`utils/` NÃO é a fronteira com `node:`.** Os docblocks de `id.ts` e `hash.ts` dizem "encapsula `node:crypto`", e isso descreve o que aqueles dois arquivos fazem — não uma norma do repositório. **21 arquivos importam `node:crypto` diretamente**, a maioria em `adapters/crypto/` do `auth` e `partners`, onde a primitiva é o próprio assunto. Não tratar um import de `node:*` fora daqui como violação, e não centralizar por centralizar.
 
