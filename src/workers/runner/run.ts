@@ -20,13 +20,13 @@ const EX_CONFIG = 78; // sysexits.h — erro de configuração.
 type GroupName = keyof typeof GROUPS;
 
 const isGroupName = (g: string | undefined): g is GroupName =>
-  g === 'outbox' || g === 'projections' || g === 'email';
+  g === 'outbox' || g === 'projections' || g === 'email' || g === 'van';
 
 const main = async (): Promise<number> => {
   const group = process.env['WORKER_GROUP'];
   if (!isGroupName(group)) {
     process.stderr.write(
-      `[worker-runner] WORKER_GROUP inválido: ${String(group)} — use outbox|projections|email\n`,
+      `[worker-runner] WORKER_GROUP inválido: ${String(group)} — use outbox|projections|email|van\n`,
     );
     return EX_CONFIG;
   }
