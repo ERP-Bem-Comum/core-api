@@ -100,11 +100,11 @@ export const confirmRemittance =
         continue;
       }
 
-      // As transições devolvem o MESMO objeto quando o desfecho já era esse. Comparar por
-      // referência evita reescrever, a cada varredura, toda remessa já resolvida — o agente nunca
-      // apaga o status, então sem isto a escrita cresceria sem teto.
-      if (decided.value !== found.value) {
-        const saved = await deps.remittances.save(decided.value);
+      // As transições devolvem o MESMO objeto e NENHUM evento quando o desfecho já era esse.
+      // Comparar por referência evita reescrever, a cada varredura, toda remessa já resolvida — o
+      // agente nunca apaga o status, então sem isto a escrita cresceria sem teto, e o outbox junto.
+      if (decided.value.remittance !== found.value) {
+        const saved = await deps.remittances.save(decided.value.remittance, decided.value.events);
         if (!saved.ok) return err('remittance-persist-failed');
       }
 

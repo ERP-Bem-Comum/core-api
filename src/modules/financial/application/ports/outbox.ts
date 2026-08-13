@@ -3,6 +3,7 @@ import type { DocumentEvent } from '../../domain/document/events.ts';
 import type { BankStatementEvent } from '../../domain/statement/events.ts';
 import type { ReconciliationEvent } from '../../domain/reconciliation/events.ts';
 import type { ExpectedCounterpartEvent } from '../../domain/expected-counterpart/events.ts';
+import type { RemittanceEvent } from '../../domain/remittance/events.ts';
 import type {
   ReconciliationPeriodClosed,
   ReconciliationPeriodReopened,
@@ -13,14 +14,16 @@ import type {
 export type OutboxAppendError = 'outbox-append-failed';
 
 // Eventos publicáveis: documento fiscal (Fatia 1) + extrato (US1) + conciliação (US2/3/4) +
-// período fechado (US6) + período reaberto (#203) + contrapartida esperada (#269).
+// período fechado (US6) + período reaberto (#203) + contrapartida esperada (#269) + desfecho da
+// remessa da VAN (ADR-0060/0061).
 export type FinancialAppendableEvent =
   | DocumentEvent
   | BankStatementEvent
   | ReconciliationEvent
   | ReconciliationPeriodClosed
   | ReconciliationPeriodReopened
-  | ExpectedCounterpartEvent;
+  | ExpectedCounterpartEvent
+  | RemittanceEvent;
 
 export type FinancialOutbox = Readonly<{
   append: (events: readonly FinancialAppendableEvent[]) => Promise<Result<void, OutboxAppendError>>;

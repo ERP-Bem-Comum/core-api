@@ -10,6 +10,7 @@
 import { describe, it, before, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
+import { eq } from 'drizzle-orm';
 
 import { isOk } from '#src/shared/index.ts';
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
@@ -23,6 +24,7 @@ import {
   markFailed,
   discard,
 } from '#src/modules/financial/domain/remittance/remittance.ts';
+import { finOutbox } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 const account = CedenteAccountId.generate();
@@ -110,14 +112,18 @@ if (!process.env['MYSQL_INTEGRATION']) {
 
       const failed = markFailed(rem, '2026-08-11 14:05:00.000', 'sem confirmacao');
       assert.ok(isOk(failed));
-      await repo.save(failed.value);
+      await repo.save(failed.value.remittance, failed.value.events);
 
       const aindaPreso = await repo.findHeldDocumentIds([d]);
       assert.ok(isOk(aindaPreso) && aindaPreso.value.length === 1);
 
-      const discarded = discard(failed.value, '2026-08-11 15:00:00.000', 'confirmado com o banco');
+      const discarded = discard(
+        failed.value.remittance,
+        '2026-08-11 15:00:00.000',
+        'confirmado com o banco',
+      );
       assert.ok(isOk(discarded));
-      await repo.save(discarded.value);
+      await repo.save(discarded.value.remittance, discarded.value.events);
 
       const liberado = await repo.findHeldDocumentIds([d]);
       assert.ok(isOk(liberado));
@@ -132,8 +138,8 @@ if (!process.env['MYSQL_INTEGRATION']) {
 
       const t = confirmTransmitted(rem, '2026-08-11 14:05:00.000', 'ok');
       assert.ok(isOk(t));
-      await repo.save(t.value);
-      await repo.save(t.value);
+      await repo.save(t.value.remittance, t.value.events);
+      await repo.save(t.value.remittance, t.value.events);
 
       const back = await repo.findById(rem.id);
       assert.ok(isOk(back) && back.value !== null);
@@ -164,6 +170,75 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const colidente = { ...build([doc()]), fileName: primeira.fileName };
       const r = await repo.save(colidente);
       assert.equal(r.ok, false, 'UNIQUE (file_name) deveria barrar');
+    });
+
+    // ADR-0015: o evento existe se e somente se o estado foi persistido. É o que o fake não pode
+    // provar — só o banco real mostra que as duas escritas caem na MESMA transação.
+    describe('outbox transacional', () => {
+      const outboxRowsOf = async (remittanceId: string) =>
+        handle.db
+          .select({
+            eventType: finOutbox.eventType,
+            aggregateType: finOutbox.aggregateType,
+            payload: finOutbox.payload,
+          })
+          .from(finOutbox)
+          .where(eq(finOutbox.aggregateId, remittanceId));
+
+      it('grava RemittanceTransmitted no fin_outbox junto do desfecho', async () => {
+        const repo = createDrizzleRemittanceRepository(handle);
+        const rem = build([doc()]);
+        await repo.save(rem);
+
+        const t = confirmTransmitted(rem, '2026-08-11 14:05:00.000', 'consta em BACKUP');
+        assert.ok(isOk(t));
+        assert.equal((await repo.save(t.value.remittance, t.value.events)).ok, true);
+
+        const rows = await outboxRowsOf(rem.id);
+        assert.equal(rows.length, 1);
+        assert.equal(rows[0]?.eventType, 'RemittanceTransmitted');
+        assert.equal(rows[0]?.aggregateType, 'Remittance');
+        assert.match(rows[0]?.payload ?? '', /consta em BACKUP/);
+      });
+
+      // A propriedade que a varredura de 5 em 5 minutos exige: sem ela o outbox cresceria sem teto.
+      it('reprocessar o mesmo status não duplica o evento', async () => {
+        const repo = createDrizzleRemittanceRepository(handle);
+        const rem = build([doc()]);
+        await repo.save(rem);
+
+        const t = confirmTransmitted(rem, '2026-08-11 14:05:00.000', 'ok');
+        assert.ok(isOk(t));
+        await repo.save(t.value.remittance, t.value.events);
+
+        // Segunda leitura do MESMO envelope: o agregado devolve `events: []`.
+        const again = confirmTransmitted(t.value.remittance, '2026-08-11 14:10:00.000', 'ok');
+        assert.ok(isOk(again));
+        await repo.save(again.value.remittance, again.value.events);
+
+        assert.equal((await outboxRowsOf(rem.id)).length, 1, 'um desfecho, um evento');
+      });
+
+      // Se o INSERT do outbox estivesse FORA da transação, o evento sobreviveria ao rollback e
+      // anunciaria um desfecho que o banco não tem.
+      it('save que falha não deixa evento órfão', async () => {
+        const repo = createDrizzleRemittanceRepository(handle);
+        const primeira = build([doc()]);
+        await repo.save(primeira);
+
+        // Colide no UNIQUE de nome: o INSERT lança e a transação inteira reverte.
+        const colidente = { ...build([doc()]), fileName: primeira.fileName };
+        const t = confirmTransmitted(colidente, '2026-08-11 14:05:00.000', 'ok');
+        assert.ok(isOk(t));
+        const r = await repo.save(t.value.remittance, t.value.events);
+        assert.equal(r.ok, false, 'a colisão deveria falhar o save');
+
+        assert.deepEqual(
+          await outboxRowsOf(colidente.id),
+          [],
+          'evento não pode sobreviver ao rollback do estado',
+        );
+      });
     });
   });
 }

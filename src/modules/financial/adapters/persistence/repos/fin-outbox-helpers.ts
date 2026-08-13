@@ -22,6 +22,9 @@ const extractAggregateInfo = (e: FinancialAppendableEvent): { id: string; type: 
   if ('reconciliationId' in e) return { id: String(e.reconciliationId), type: 'Reconciliation' };
   if ('statementId' in e) return { id: String(e.statementId), type: 'Statement' };
   if ('counterpartId' in e) return { id: String(e.counterpartId), type: 'ExpectedCounterpart' };
+  // `remittanceId` não colide com o ramo do documento: o evento da remessa carrega `documentIds`
+  // (plural), e `'documentId' in e` não casa com ele.
+  if ('remittanceId' in e) return { id: String(e.remittanceId), type: 'Remittance' };
   return { id: String(e.periodId), type: 'ReconciliationPeriod' };
 };
 

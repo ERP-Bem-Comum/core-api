@@ -1,5 +1,6 @@
 import { type Result, ok } from '../../../../../shared/primitives/result.ts';
 import type { Remittance } from '../../../domain/remittance/types.ts';
+import type { RemittanceEvent } from '../../../domain/remittance/events.ts';
 import type { RemittanceId } from '../../../domain/remittance/remittance-id.ts';
 import { holdsDocuments } from '../../../domain/remittance/remittance.ts';
 import type {
@@ -8,14 +9,26 @@ import type {
 } from '../../../application/ports/remittance-repository.ts';
 
 // Adapter in-memory do RemittanceRepository (testes / boot sem DB).
-export const createInMemoryRemittanceRepository = (): RemittanceRepository => {
+//
+// Guarda os eventos publicados junto do estado, e não porque o teste precisa espiar: o adapter real
+// grava os dois na MESMA transação, e um fake que aceitasse o evento e o jogasse fora deixaria
+// passar verde um caminho que em produção não publica nada.
+export const createInMemoryRemittanceRepository = (): RemittanceRepository &
+  Readonly<{ published: () => readonly RemittanceEvent[] }> => {
   const remittances = new Map<string, Remittance>();
+  const published: RemittanceEvent[] = [];
 
   return {
-    save: async (remittance: Remittance): Promise<Result<void, RemittanceRepositoryError>> => {
+    save: async (
+      remittance: Remittance,
+      events: readonly RemittanceEvent[] = [],
+    ): Promise<Result<void, RemittanceRepositoryError>> => {
       remittances.set(remittance.id, remittance);
+      published.push(...events);
       return Promise.resolve(ok(undefined));
     },
+
+    published: () => [...published],
 
     findById: async (
       id: RemittanceId,

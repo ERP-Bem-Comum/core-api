@@ -1,11 +1,18 @@
 import type { Result } from '../../../../shared/primitives/result.ts';
 import type { Remittance } from '../../domain/remittance/types.ts';
+import type { RemittanceEvent } from '../../domain/remittance/events.ts';
 import type { RemittanceId } from '../../domain/remittance/remittance-id.ts';
 
 export type RemittanceRepositoryError = 'remittance-repository-unavailable';
 
 export type RemittanceRepository = Readonly<{
-  save: (remittance: Remittance) => Promise<Result<void, RemittanceRepositoryError>>;
+  // `events` (opcional/trailing, como no `DocumentRepository`): gravados no `fin_outbox` NA MESMA
+  // transação do agregado. O evento existe se e somente se o desfecho foi persistido (ADR-0015) —
+  // anunciar "remessa transmitida" sem ter gravado a transmissão é pior que não anunciar.
+  save: (
+    remittance: Remittance,
+    events?: readonly RemittanceEvent[],
+  ) => Promise<Result<void, RemittanceRepositoryError>>;
   findById: (id: RemittanceId) => Promise<Result<Remittance | null, RemittanceRepositoryError>>;
   findByFileName: (
     fileName: string,

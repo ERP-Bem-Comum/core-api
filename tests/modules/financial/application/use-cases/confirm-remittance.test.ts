@@ -219,6 +219,55 @@ describe('confirmRemittance — resiliência da varredura', () => {
   });
 });
 
+describe('confirmRemittance — o que ele publica', () => {
+  it('publica RemittanceTransmitted quando o agente confirma', async () => {
+    const s = await setup();
+    s.storage.seed(`status/${FILE}.json`, envelope());
+
+    await confirmRemittance(s.deps)();
+
+    const events = s.remittances.published();
+    assert.equal(events.length, 1);
+    assert.equal(events[0]?.type, 'RemittanceTransmitted');
+    assert.equal(events[0]?.fileName, FILE);
+    assert.equal(events[0]?.settledAt, EXECUTED_AT);
+  });
+
+  it('publica RemittanceFailed quando o agente reporta falha', async () => {
+    const s = await setup();
+    s.storage.seed(`status/${FILE}.json`, envelope({ situacao: 'falha' }));
+
+    await confirmRemittance(s.deps)();
+
+    const events = s.remittances.published();
+    assert.equal(events.length, 1);
+    assert.equal(events[0]?.type, 'RemittanceFailed');
+  });
+
+  // O agente não apaga o status: sem esta propriedade, cada passagem de 5 minutos anunciaria de
+  // novo o mesmo pagamento — e quem consumisse o outbox notificaria para sempre.
+  it('a revarredura NÃO republica', async () => {
+    const s = await setup();
+    s.storage.seed(`status/${FILE}.json`, envelope());
+
+    await confirmRemittance(s.deps)();
+    await confirmRemittance(s.deps)();
+    await confirmRemittance(s.deps)();
+
+    assert.equal(s.remittances.published().length, 1, 'três varreduras, um anúncio');
+  });
+
+  it('duplicado e recepção não publicam nada', async () => {
+    const s = await setup();
+    s.storage.seed(`status/${FILE}.duplicado-20260811T1431.json`, envelope());
+    s.storage.seed('status/recepcao-20260811T1431.json', envelope({ situacao: 'recepcao' }));
+
+    await confirmRemittance(s.deps)();
+
+    assert.deepEqual(s.remittances.published(), []);
+  });
+});
+
 describe('confirmRemittance — idempotência', () => {
   // O agente não apaga objeto de status: o mesmo envelope é relido a cada passagem.
   it('reprocessar o mesmo status preserva o primeiro desfecho', async () => {
