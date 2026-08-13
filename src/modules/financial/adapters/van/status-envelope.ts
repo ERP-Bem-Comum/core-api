@@ -17,35 +17,27 @@
 //
 // Latência esperada: até 5 minutos para a execução começar, mais o tempo da transmissão.
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
+import type {
+  VanStatus,
+  VanStatusError,
+  VanStatusKind,
+  VanStatusReader,
+  VanStatusSituation,
+} from '../../application/ports/van-status-reader.ts';
 
-export type VanStatusSituation = 'transmitido' | 'falha' | 'revisao' | 'recepcao';
-
-export type VanStatusKind = 'remittance' | 'duplicate' | 'reception';
-
-export type VanStatus = Readonly<{
-  kind: VanStatusKind;
-  fileName: string;
-  executedAt: string;
-  situation: VanStatusSituation;
-  detail: string;
-  // `null` quando o STCPCLT NÃO chegou a ser executado — é o que o agente publica no caso de
-  // duplicidade, e é semanticamente correto: sem execução, não existe código de saída. Trocar por
-  // `0` seria pior, porque `0` significa "executou e deu certo". O agente também pode publicar
-  // `null` por um gotcha do PowerShell 5.1 (`Start-Process -PassThru` sem handle cacheado).
-  // Nenhuma decisão depende deste campo: quem decide é `situacao`.
-  exitCode: number | null;
-  // Preservadas CRUAS, de propósito. O log de transferência é posicional (manual §12), mas a
-  // amostra que temos veio truncada — decodificar offsets a partir de exemplo incompleto é o erro
-  // que este projeto já pagou caro duas vezes. Decodificação vira fatia própria quando houver
-  // amostra real e íntegra.
-  logLines: readonly string[];
-}>;
-
-export type VanStatusError =
-  | 'van-status-unknown-key'
-  | 'van-status-invalid-json'
-  | 'van-status-missing-field'
-  | 'van-status-unknown-situation';
+// Os tipos vivem no port (a seta aponta para dentro). Reexportados aqui porque este arquivo é o
+// lugar onde o contrato do agente está DOCUMENTADO — quem abre o parser encontra o vocabulário.
+//
+// Detalhes do contrato que o tipo sozinho não carrega:
+//   - `exitCode` é `null` quando o STCPCLT NÃO chegou a ser executado — é o que o agente publica no
+//     caso de duplicidade, e é semanticamente correto: sem execução, não existe código de saída.
+//     Trocar por `0` seria pior, porque `0` significa "executou e deu certo". O agente também pode
+//     publicar `null` por um gotcha do PowerShell 5.1 (`Start-Process -PassThru` sem handle cacheado).
+//   - `logLines` fica CRU de propósito. O log de transferência é posicional (manual §12), mas a
+//     amostra que temos veio truncada — decodificar offsets a partir de exemplo incompleto é o erro
+//     que este projeto já pagou caro duas vezes. Decodificação vira fatia própria quando houver
+//     amostra real e íntegra.
+export type { VanStatus, VanStatusError, VanStatusKind, VanStatusSituation };
 
 const SITUATIONS: readonly VanStatusSituation[] = ['transmitido', 'falha', 'revisao', 'recepcao'];
 
@@ -142,3 +134,11 @@ export const parseStatus = (key: string, content: string): Result<VanStatus, Van
 // remessa que não foi, e o efeito prático seria deixar de reenviar algo que o banco nunca recebeu.
 export const wasTransmitted = (status: VanStatus): boolean =>
   status.kind === 'remittance' && status.situation === 'transmitido';
+
+// O envelope como PORT — é isto que o use case de confirmação recebe injetado. As funções acima
+// seguem exportadas porque são puras e testadas diretamente; a factory apenas as apresenta sob a
+// assinatura que a application conhece.
+export const createVanStatusEnvelopeReader = (): VanStatusReader => ({
+  parse: parseStatus,
+  wasTransmitted,
+});
