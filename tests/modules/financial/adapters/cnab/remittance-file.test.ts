@@ -36,9 +36,26 @@ const payee = (n: number): Payee => ({
   accountAgencyDigit: ' ',
 });
 
+const PAYMENT_DATE = new Date(Date.UTC(2026, 7, 12));
+
 const payment = (n: number, valueCents: number): RemittancePayment => ({
+  route: 'transfer',
   payee: payee(n),
-  paymentDate: new Date(Date.UTC(2026, 7, 12)),
+  paymentDate: PAYMENT_DATE,
+  valueCents,
+});
+
+// Boleto de OUTRO banco (prefixo 341 ≠ 237 do cedente): forma de lançamento distinta da
+// transferência, logo lote distinto — é o que torna o multi-lote verificável.
+const barcodeOf = (issuerBank: string, n: number): string =>
+  `${issuerBank}9${String(n).padStart(3, '0')}`.padEnd(44, '7');
+
+const billet = (n: number, valueCents: number, issuerBank = '341'): RemittancePayment => ({
+  route: 'billet',
+  barcode: barcodeOf(issuerBank, n),
+  beneficiaryName: `FORNECEDOR ${n}`,
+  dueDate: new Date(Date.UTC(2026, 7, 20)),
+  paymentDate: PAYMENT_DATE,
   valueCents,
 });
 
@@ -47,8 +64,6 @@ const base = {
   bankName: 'BRADESCO',
   nsa: 7,
   generatedAt: new Date(Date.UTC(2026, 7, 10, 14, 5, 9)),
-  serviceType: '20',
-  launchForm: '01',
 };
 
 const at = (line: string, from: number, to: number): string => line.slice(from - 1, to);
@@ -123,10 +138,89 @@ describe('Remessa Multipag — os totais são DERIVADOS, não informados', () =>
     assert.equal(file.totalCents, 19135);
   });
 
-  it('declara um lote', () => {
+  it('declara um lote quando há uma forma só', () => {
     const file = build([payment(1, 100)]);
     const lines = linesOf(file.content);
     assert.equal(Number(at(lines[lines.length - 1] ?? '', 18, 23)), 1);
+  });
+});
+
+describe('Remessa Multipag — um lote por forma de lançamento (#711)', () => {
+  // O CA1. Antes desta fatia, o lote era a constante `SINGLE_BATCH` e todo pagamento virava o par
+  // de crédito em conta: um boleto na seleção sairia como transferência, com a câmara de TED e
+  // dados bancários que aquela rota não usa. Arquivo aceito pelo banco, pagamento errado.
+  it('separa transferência e boleto em lotes próprios, cada um com header e trailer', () => {
+    const file = build([payment(1, 1000), billet(2, 2000)]);
+    const lines = linesOf(file.content);
+    const types = lines.map((l) => at(l, 8, 8)).join('');
+
+    // header de arquivo · (header de lote, A, B, trailer de lote) · (header, J, trailer) · trailer
+    assert.equal(types, '013351359');
+    assert.equal(file.batchCount, 2);
+  });
+
+  it('numera os lotes a partir de 1, e todo registro repete o número do seu lote', () => {
+    const lines = linesOf(build([payment(1, 1000), billet(2, 2000)]).content);
+    const batchOf = (line: string): string => at(line, 4, 7);
+
+    assert.equal(batchOf(lines[1] ?? ''), '0001'); // header do 1º lote
+    assert.equal(batchOf(lines[2] ?? ''), '0001'); // Segmento A
+    assert.equal(batchOf(lines[3] ?? ''), '0001'); // Segmento B
+    assert.equal(batchOf(lines[4] ?? ''), '0001'); // trailer do 1º lote
+    assert.equal(batchOf(lines[5] ?? ''), '0002'); // header do 2º lote
+    assert.equal(batchOf(lines[6] ?? ''), '0002'); // Segmento J
+    assert.equal(batchOf(lines[7] ?? ''), '0002'); // trailer do 2º lote
+  });
+
+  // O CA2: sem isto, o segundo lote continuaria a contagem do primeiro e o banco recusaria o
+  // arquivo — o campo declara a posição do registro DENTRO do lote.
+  it('o sequencial do detalhe reinicia em 1 a cada lote', () => {
+    const lines = linesOf(build([payment(1, 1000), payment(2, 1000), billet(3, 2000)]).content);
+
+    assert.equal(at(lines[2] ?? '', 9, 13), '00001'); // A do 1º pagamento
+    assert.equal(at(lines[5] ?? '', 9, 13), '00004'); // B do 2º pagamento — ainda no lote 1
+    assert.equal(at(lines[8] ?? '', 9, 13), '00001'); // J — primeiro detalhe do lote 2
+  });
+
+  it('cada trailer de lote conta e soma APENAS o seu lote', () => {
+    const lines = linesOf(build([payment(1, 1500), billet(2, 700), billet(3, 300)]).content);
+    const transferTrailer = lines[4] ?? '';
+    const billetTrailer = lines[lines.length - 2] ?? '';
+
+    assert.equal(Number(at(transferTrailer, 18, 23)), 4); // header + A + B + trailer
+    assert.equal(Number(at(transferTrailer, 24, 41)), 1500);
+
+    assert.equal(Number(at(billetTrailer, 18, 23)), 4); // header + J + J + trailer
+    assert.equal(Number(at(billetTrailer, 24, 41)), 1000);
+  });
+
+  it('o trailer do arquivo declara a quantidade real de lotes, não 1', () => {
+    const lines = linesOf(build([payment(1, 100), billet(2, 200)]).content);
+    assert.equal(Number(at(lines[lines.length - 1] ?? '', 18, 23)), 2);
+  });
+
+  it('boletos do mesmo banco emissor ficam no mesmo lote, ainda que intercalados na seleção', () => {
+    const file = build([billet(1, 100), payment(2, 200), billet(3, 300)]);
+
+    // Dois lotes, não três: o agrupamento é por FORMA, não pela ordem de chegada.
+    assert.equal(file.batchCount, 2);
+  });
+
+  // A ordem dos lotes é parte do contrato: fosse implícita, dois arquivos com a mesma seleção
+  // sairiam diferentes conforme um detalhe que o operador não vê.
+  it('ordena os lotes pela primeira aparição da forma na seleção', () => {
+    const billetFirst = linesOf(build([billet(1, 100), payment(2, 200)]).content);
+    assert.equal(at(billetFirst[2] ?? '', 14, 14), 'J');
+
+    const transferFirst = linesOf(build([payment(1, 100), billet(2, 200)]).content);
+    assert.equal(at(transferFirst[2] ?? '', 14, 14), 'A');
+  });
+
+  // A forma sai do dado do título (CA11): o banco emissor está nos três primeiros dígitos do código
+  // de barras, e título do próprio banco é outra operação — logo, outro lote.
+  it('boleto do próprio banco e de outro banco não dividem lote', () => {
+    const file = build([billet(1, 100, '237'), billet(2, 200, '341')]);
+    assert.equal(file.batchCount, 2);
   });
 });
 
@@ -152,6 +246,31 @@ describe('Remessa Multipag — recusas', () => {
     const r = buildRemittanceFile({ ...base, payments: [] });
     assert.ok(isErr(r));
     assert.equal(r.error, 'remittance-without-payments');
+  });
+
+  // O CA3. A alternativa — emitir o par de crédito em conta por omissão — produziria arquivo
+  // bem-formado, aceito pelo banco, pagando pela rota errada. É a pior falha possível aqui, porque
+  // não deixa rastro: nada avisa, e o dinheiro sai.
+  it('recusa a remessa inteira quando um título é de rota sem emissor', () => {
+    for (const route of ['pix', 'tax-guide'] as const) {
+      const r = buildRemittanceFile({
+        ...base,
+        payments: [payment(1, 100), { route, valueCents: 500, paymentDate: PAYMENT_DATE }],
+      });
+      assert.ok(isErr(r), route);
+      assert.equal(r.error, 'remittance-launch-form-unsupported');
+    }
+  });
+
+  it('recusa boleto cujo código de barras não permite ler o banco emissor', () => {
+    const r = buildRemittanceFile({
+      ...base,
+      payments: [
+        { ...(billet(1, 100) as Extract<RemittancePayment, { route: 'billet' }>), barcode: 'XX' },
+      ],
+    });
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'remittance-billet-bank-unreadable');
   });
 
   it('propaga o erro de um pagamento sem emitir arquivo parcial', () => {
