@@ -34,7 +34,9 @@ const ready = (route: VanRoute): PayoutReadiness => immutable({ status: 'ready' 
 const incomplete = (route: VanRoute, gaps: readonly PayoutGap[]): PayoutReadiness =>
   immutable({ status: 'incomplete' as const, route, gaps });
 
-const missing = (route: VanRoute, field: PayoutGap['field']): PayoutReadiness =>
+// `missingField(route, 'pix-key')` devolve o READINESS incompleto — não o campo. O nome diz o
+// motivo da incompletude, que é o que o chamador está afirmando ao usá-lo.
+const missingField = (route: VanRoute, field: PayoutGap['field']): PayoutReadiness =>
   incomplete(route, immutable([immutable({ field, reason: 'missing' as const })]));
 
 export const checkPayoutReadiness = (candidate: PayoutCandidate): PayoutReadiness => {
@@ -52,7 +54,7 @@ export const checkPayoutReadiness = (candidate: PayoutCandidate): PayoutReadines
     // frequência que `null` (ver o CHECK do bloco bancário, em `types.ts`).
     case 'pix':
       return isBlank(candidate.payee?.pixKey?.key ?? null)
-        ? missing(route, 'pix-key')
+        ? missingField(route, 'pix-key')
         : ready(route);
 
     // Única rota que depende da conta estruturada — e, portanto, a única em que o desencaixe do
@@ -66,6 +68,8 @@ export const checkPayoutReadiness = (candidate: PayoutCandidate): PayoutReadines
     // paga normalmente por boleto. É o que sustenta a decisão da P.O. de não bloquear o lote.
     case 'billet':
     case 'tax-guide':
-      return isBlank(candidate.paymentDetail) ? missing(route, 'payment-detail') : ready(route);
+      return isBlank(candidate.paymentDetail)
+        ? missingField(route, 'payment-detail')
+        : ready(route);
   }
 };

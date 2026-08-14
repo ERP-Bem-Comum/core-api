@@ -18,7 +18,7 @@ import type { PayeePaymentTarget } from '#src/modules/financial/domain/payout/ty
 // de gravar `''`. Por isso existem DUAS fixtures de ausência, e um teste provando que as duas
 // levam ao mesmo veredito.
 
-const CONTA: PayeePaymentTarget = {
+const BANK_ACCOUNT_ONLY: PayeePaymentTarget = {
   bank: '237',
   agency: '1234-5',
   accountNumber: '123456',
@@ -26,7 +26,7 @@ const CONTA: PayeePaymentTarget = {
   pixKey: null,
 };
 
-const SO_PIX: PayeePaymentTarget = {
+const PIX_KEY_ONLY: PayeePaymentTarget = {
   bank: null,
   agency: null,
   accountNumber: null,
@@ -38,7 +38,7 @@ const SO_PIX: PayeePaymentTarget = {
 // `par_suppliers_payment_target_chk` exige `bank IS NOT NULL OR pix_key IS NOT NULL`. Ele é real
 // para `financier` e `collaborator`, que não têm esse CHECK — e é por isso que a regra precisa
 // sabê-lo tratar.
-const VAZIO_NULL: PayeePaymentTarget = {
+const NO_DESTINATION_NULLS: PayeePaymentTarget = {
   bank: null,
   agency: null,
   accountNumber: null,
@@ -47,7 +47,7 @@ const VAZIO_NULL: PayeePaymentTarget = {
 };
 
 // Ausência por string vazia — a forma que a ETL de fato gravou.
-const VAZIO_STR: PayeePaymentTarget = {
+const NO_DESTINATION_BLANKS: PayeePaymentTarget = {
   bank: '',
   agency: '   ',
   accountNumber: '',
@@ -60,7 +60,7 @@ const row = (over: Partial<RemittancePreviewRow>): RemittancePreviewRow => ({
   paymentMethod: 'TED',
   paymentDetail: null,
   netValueCents: 10_000,
-  payee: CONTA,
+  payee: BANK_ACCOUNT_ONLY,
   ...over,
 });
 
@@ -79,11 +79,11 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
   it('classifica cada título pela regra da forma de pagamento', async () => {
     const rows = [
       row({ documentId: 'ted-ok' }),
-      row({ documentId: 'ted-sem-banco', payee: VAZIO_NULL }),
-      row({ documentId: 'pix-ok', paymentMethod: 'PIX', payee: SO_PIX }),
-      row({ documentId: 'pix-sem-chave', paymentMethod: 'PIX', payee: CONTA }),
+      row({ documentId: 'ted-sem-banco', payee: NO_DESTINATION_NULLS }),
+      row({ documentId: 'pix-ok', paymentMethod: 'PIX', payee: PIX_KEY_ONLY }),
+      row({ documentId: 'pix-sem-chave', paymentMethod: 'PIX', payee: BANK_ACCOUNT_ONLY }),
       row({ documentId: 'boleto-ok', paymentMethod: 'Boleto', paymentDetail: '34191790010' }),
-      row({ documentId: 'boleto-sem-linha', paymentMethod: 'Boleto', payee: VAZIO_NULL }),
+      row({ documentId: 'boleto-sem-linha', paymentMethod: 'Boleto', payee: NO_DESTINATION_NULLS }),
       row({ documentId: 'cambio', paymentMethod: 'Cambio' }),
     ];
     const ids = rows.map((r) => r.documentId);
@@ -105,7 +105,7 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
   // O pedido literal da P.O.: "campo faltante ESTRUTURADO (ex.: missing: ['agencyDigit'])".
   // Uma string de mensagem não serve — o front precisa apontar o input.
   it('devolve os campos faltantes em lista, não em mensagem', async () => {
-    const rows = [row({ documentId: 'sem-nada', payee: VAZIO_NULL })];
+    const rows = [row({ documentId: 'sem-nada', payee: NO_DESTINATION_NULLS })];
     const r = await previewRemittance({ preview: reader(rows) })({ documentIds: ['sem-nada'] });
 
     const l = line(r, 'sem-nada');
@@ -125,10 +125,10 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
   // testes seguem verdes e produção quebra inteira: é este caso que acusa.
   it('ausência por string vazia e por null levam ao MESMO veredito', async () => {
     const rows = [
-      row({ documentId: 'nulo', payee: VAZIO_NULL }),
-      row({ documentId: 'vazio', payee: VAZIO_STR }),
-      row({ documentId: 'pix-nulo', paymentMethod: 'PIX', payee: VAZIO_NULL }),
-      row({ documentId: 'pix-vazio', paymentMethod: 'PIX', payee: VAZIO_STR }),
+      row({ documentId: 'nulo', payee: NO_DESTINATION_NULLS }),
+      row({ documentId: 'vazio', payee: NO_DESTINATION_BLANKS }),
+      row({ documentId: 'pix-nulo', paymentMethod: 'PIX', payee: NO_DESTINATION_NULLS }),
+      row({ documentId: 'pix-vazio', paymentMethod: 'PIX', payee: NO_DESTINATION_BLANKS }),
     ];
     const r = await previewRemittance({ preview: reader(rows) })({
       documentIds: rows.map((x) => x.documentId),
@@ -142,7 +142,9 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
   });
 
   it('distingue campo a corrigir de campo a preencher', async () => {
-    const rows = [row({ documentId: 'banco-nome', payee: { ...CONTA, bank: 'Bradesco S.A.' } })];
+    const rows = [
+      row({ documentId: 'banco-nome', payee: { ...BANK_ACCOUNT_ONLY, bank: 'Bradesco S.A.' } }),
+    ];
     const r = await previewRemittance({ preview: reader(rows) })({ documentIds: ['banco-nome'] });
 
     const l = line(r, 'banco-nome');
@@ -158,8 +160,8 @@ describe('previewRemittance — os números do pré-voo', () => {
     const rows = [
       row({ documentId: 'a', netValueCents: 10_000 }),
       row({ documentId: 'b', netValueCents: 25_000 }),
-      row({ documentId: 'c', netValueCents: 7_000, payee: VAZIO_NULL }),
-      row({ documentId: 'd', netValueCents: 3_000, payee: VAZIO_NULL }),
+      row({ documentId: 'c', netValueCents: 7_000, payee: NO_DESTINATION_NULLS }),
+      row({ documentId: 'd', netValueCents: 3_000, payee: NO_DESTINATION_NULLS }),
       row({ documentId: 'e', netValueCents: 99_000, paymentMethod: 'Cambio' }),
     ];
     const r = await previewRemittance({ preview: reader(rows) })({

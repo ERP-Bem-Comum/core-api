@@ -51,7 +51,10 @@ const gap = (field: PayoutGap['field'], reason: PayoutGap['reason']): PayoutGap 
 
 const trimmed = (value: string | null | undefined): string => value?.trim() ?? '';
 
-type Split = Readonly<{ base: string; digit: string | null }>;
+// O que sobra ao separar `1234-5`: a base e o dígito, quando há um. `digit: null` significa "não
+// veio", não "é vazio" — a diferença decide se o campo posicional sai em branco ou se o cadastro
+// está malformado.
+type CheckDigitSplit = Readonly<{ base: string; digit: string | null }>;
 
 // Separa `1234-5` em base + DV. SEM separador não decompõe: `12345` pode ser agência de cinco
 // dígitos ou quatro mais DV, e a escolha depende do banco. Devolver `digit: null` empurra a decisão
@@ -59,7 +62,7 @@ type Split = Readonly<{ base: string; digit: string | null }>;
 //
 // Quando o DV tem duas posições, só a PRIMEIRA vai para o campo (regra G011 citada acima). O
 // descarte da segunda é do layout, não nosso: o campo tem uma posição só.
-const splitCheckDigit = (raw: string): Split | null => {
+const splitCheckDigit = (raw: string): CheckDigitSplit | null => {
   const withDigit = WITH_CHECK_DIGIT_RE.exec(raw);
   if (withDigit !== null) {
     const [, base, digit] = withDigit;

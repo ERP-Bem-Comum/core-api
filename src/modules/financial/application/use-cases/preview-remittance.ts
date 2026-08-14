@@ -44,7 +44,7 @@ export type PreviewRemittanceInput = Readonly<{ documentIds: readonly string[] }
 
 export type PreviewRemittanceError = 'remittance-preview-unavailable';
 
-const NOT_FOUND = (documentId: string): RemittancePreviewLine => ({
+const notFoundLine = (documentId: string): RemittancePreviewLine => ({
   documentId,
   status: 'not-found',
   route: null,
@@ -53,7 +53,7 @@ const NOT_FOUND = (documentId: string): RemittancePreviewLine => ({
   netValueCents: 0,
 });
 
-const evaluate = (row: RemittancePreviewRow): RemittancePreviewLine => {
+const toPreviewLine = (row: RemittancePreviewRow): RemittancePreviewLine => {
   // Documento sem forma de pagamento (Draft) não tem rota: cai em `out-of-van` pelo mesmo caminho
   // de câmbio e cartão — não há campo do favorecido que o torne apto.
   if (row.paymentMethod === null) {
@@ -125,7 +125,7 @@ export const previewRemittance =
     // pré-voo sem explicação — o defeito que este use case existe para corrigir.
     const lines = input.documentIds.map((id) => {
       const row = byId.get(id);
-      return row === undefined ? NOT_FOUND(id) : evaluate(row);
+      return row === undefined ? notFoundLine(id) : toPreviewLine(row);
     });
 
     return ok({
