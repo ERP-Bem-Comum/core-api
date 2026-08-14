@@ -1,8 +1,9 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
-// W0 RED: a regra de completude por forma de pagamento ainda não existe.
+import { isOk } from '#src/shared/index.ts';
 import { checkPayoutReadiness } from '#src/modules/financial/domain/payout/payout-readiness.ts';
+import { decomposePayeeAccount } from '#src/modules/financial/domain/payout/payee-account.ts';
 import type {
   PayeePaymentTarget,
   PayoutCandidate,
@@ -130,7 +131,6 @@ describe('checkPayoutReadiness — TED/transferência é a única rota que exige
     assert.deepEqual(fieldsOf(r), [
       'payee-bank-code',
       'payee-agency',
-      'payee-agency-digit',
       'payee-account-number',
       'payee-account-digit',
     ]);
@@ -164,15 +164,23 @@ describe('checkPayoutReadiness — decomposição da agência (CA4)', () => {
     assert.equal(r.status, 'ready');
   });
 
-  // Sem separador a leitura é ambígua: `12345` pode ser agência de 5 dígitos ou 4 + DV. Escolher
-  // um dos dois inventaria o dígito que vai para a posição 029.
-  it('recusa o DV da agência quando não há separador — sem adivinhar', () => {
+  // O DV da agência é declarado OPCIONAL pelo layout (G009 — "Campo Não Obrigatório, Informação
+  // Opcional"). Sem separador, `12345` é a agência inteira e a posição 029 sai em branco. Recusar
+  // aqui tiraria da remessa um cadastro que o banco considera completo.
+  it('aprova agência sem DV — o layout declara o dígito opcional', () => {
     const r = checkPayoutReadiness(
       candidate({ payee: target({ ...fullAccount(), agency: '12345' }) }),
     );
-    assert.equal(r.status, 'incomplete');
-    assert.deepEqual(fieldsOf(r), ['payee-agency-digit']);
-    assert.equal(reasonFor(r, 'payee-agency-digit'), 'missing');
+    assert.equal(r.status, 'ready');
+  });
+
+  // Sem separador NUNCA se inventa o DV: `12345` é agência de cinco dígitos, jamais `1234` + `5`.
+  // A tolerância acima é sobre exigir o campo, não sobre adivinhar seu conteúdo.
+  it('não fabrica DV a partir do último dígito da agência', () => {
+    const r = decomposePayeeAccount(target({ ...fullAccount(), agency: '12345' }));
+    assert.ok(isOk(r));
+    assert.equal(r.value.agency, '12345');
+    assert.equal(r.value.agencyDigit, '');
   });
 
   it('recusa agência que não cabe nas 5 posições do segmento A', () => {
@@ -225,15 +233,35 @@ describe('checkPayoutReadiness — decomposição da conta (CA4)', () => {
     assert.equal(reasonFor(r, 'payee-account-number'), 'malformed');
   });
 
-  it('recusa DV da conta com mais de um caractere', () => {
+  // G011: "Para os Bancos que se utilizam de duas posições para o Dígito Verificador do Número da
+  // Conta Corrente, preencher este campo com a 1ª posição deste dígito. Exemplo: Número C/C =
+  // 45981-36. Neste caso Dígito Verificador da Conta = 3". O campo tem UMA posição; o descarte da
+  // segunda é decisão do layout, não nossa.
+  it('aceita DV de duas posições e usa a primeira, como o layout manda', () => {
+    const r = decomposePayeeAccount(target({ ...fullAccount(), checkDigit: '36' }));
+    assert.ok(isOk(r));
+    assert.equal(r.value.accountDigit, '3');
+  });
+
+  it('aceita DV de duas posições embutido na conta — o exemplo 45981-36 do layout', () => {
+    const r = decomposePayeeAccount(
+      target({ ...fullAccount(), accountNumber: '45981-36', checkDigit: null }),
+    );
+    assert.ok(isOk(r));
+    assert.equal(r.value.accountNumber, '000000045981');
+    assert.equal(r.value.accountDigit, '3');
+  });
+
+  it('recusa DV da conta com mais de duas posições', () => {
     const r = checkPayoutReadiness(
-      candidate({ payee: target({ ...fullAccount(), checkDigit: '78' }) }),
+      candidate({ payee: target({ ...fullAccount(), checkDigit: '789' }) }),
     );
     assert.equal(r.status, 'incomplete');
     assert.equal(reasonFor(r, 'payee-account-digit'), 'malformed');
   });
 
   // Todos os defeitos de uma vez: o operador corrige a linha inteira, não um campo por rodada.
+  // A agência `12345` NÃO entra na lista — sem DV ela já está completa (G009).
   it('acumula os defeitos em vez de parar no primeiro', () => {
     const r = checkPayoutReadiness(
       candidate({
@@ -243,7 +271,6 @@ describe('checkPayoutReadiness — decomposição da conta (CA4)', () => {
     assert.equal(r.status, 'incomplete');
     assert.deepEqual(fieldsOf(r), [
       'payee-bank-code',
-      'payee-agency-digit',
       'payee-account-number',
       'payee-account-digit',
     ]);

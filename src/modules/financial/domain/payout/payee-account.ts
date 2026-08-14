@@ -22,11 +22,17 @@ const ACCOUNT_WIDTH = 12;
 
 const BANK_CODE_RE = /^\d{1,3}$/;
 // Separador explícito é a única leitura não-ambígua do DV embutido. Ver `splitCheckDigit`.
-const WITH_CHECK_DIGIT_RE = /^(\d+)\s*[-./]\s*([0-9Xx])$/;
+//
+// O DV aceita DUAS posições porque o layout prevê o caso em G011: "Para os Bancos que se utilizam
+// de duas posições para o Dígito Verificador do Número da Conta Corrente, preencher este campo com
+// a 1ª posição deste dígito. Exemplo: Número C/C = 45981-36. Neste caso Dígito Verificador da
+// Conta = 3" (`jun-19-layout-multipag.pdf` p. 96, local-only). Recusar `45981-36` como malformado
+// descartaria um cadastro que o banco sabe processar.
+const WITH_CHECK_DIGIT_RE = /^(\d+)\s*[-./]\s*([0-9Xx]{1,2})$/;
 const DIGITS_ONLY_RE = /^\d+$/;
 // DV alfabético aparece quando o módulo 11 dá resto 10. Só `X` é aceito — qualquer outra letra é
 // erro de digitação, e adivinhar qual seria a intenção é o mesmo que inventar o dígito.
-const CHECK_DIGIT_RE = /^[0-9Xx]$/;
+const CHECK_DIGIT_RE = /^[0-9Xx]{1,2}$/;
 
 export type PayeeAccountParts = Readonly<{
   bankCode: string;
@@ -50,12 +56,15 @@ type Split = Readonly<{ base: string; digit: string | null }>;
 // Separa `1234-5` em base + DV. SEM separador não decompõe: `12345` pode ser agência de cinco
 // dígitos ou quatro mais DV, e a escolha depende do banco. Devolver `digit: null` empurra a decisão
 // para quem tem a informação — o operador — em vez de fixá-la aqui.
+//
+// Quando o DV tem duas posições, só a PRIMEIRA vai para o campo (regra G011 citada acima). O
+// descarte da segunda é do layout, não nosso: o campo tem uma posição só.
 const splitCheckDigit = (raw: string): Split | null => {
   const withDigit = WITH_CHECK_DIGIT_RE.exec(raw);
   if (withDigit !== null) {
     const [, base, digit] = withDigit;
     if (base === undefined || digit === undefined) return null;
-    return immutable({ base, digit: digit.toUpperCase() });
+    return immutable({ base, digit: (digit[0] ?? '').toUpperCase() });
   }
   if (DIGITS_ONLY_RE.test(raw)) return immutable({ base: raw, digit: null });
   return null;
@@ -75,22 +84,23 @@ type AgencyParts = Readonly<{ agency: string; agencyDigit: string }>;
 
 const NO_AGENCY: AgencyParts = { agency: '', agencyDigit: '' };
 
+// ⚠️ O DV da agência é OPCIONAL, e isso vem da fonte primária: G009 diz literalmente "(Campo Não
+// Obrigatório – Informação Opcional)" (`jun-19-layout-multipag.pdf` p. 95, local-only). Um cadastro
+// com `12345` e sem DV está completo aos olhos do banco — exigi-lo aqui recusaria pagamento por um
+// campo que o layout dispensa, que é o oposto do que a decisão (a) da P.O. pede na #708.
+//
+// Isso também dissolve a ambiguidade que antes obrigava a pedir separador: sem DV a agência é o
+// campo inteiro, e a posição 029 sai em branco (`Alfa` = brancos à direita, p. 14). O separador
+// continua sendo a única leitura válida quando o DV EXISTE — `12345` nunca vira `1234` + `5`.
 const readAgency = (raw: string): FieldRead<AgencyParts> => {
-  if (raw === '') {
-    return {
-      value: NO_AGENCY,
-      gaps: [gap('payee-agency', 'missing'), gap('payee-agency-digit', 'missing')],
-    };
-  }
+  if (raw === '') return { value: NO_AGENCY, gaps: [gap('payee-agency', 'missing')] };
+
   const split = splitCheckDigit(raw);
   if (split === null || split.base.length > AGENCY_WIDTH) {
     return { value: NO_AGENCY, gaps: [gap('payee-agency', 'malformed')] };
   }
   const agency = split.base.padStart(AGENCY_WIDTH, '0');
-  if (split.digit === null) {
-    return { value: { agency, agencyDigit: '' }, gaps: [gap('payee-agency-digit', 'missing')] };
-  }
-  return { value: { agency, agencyDigit: split.digit }, gaps: [] };
+  return { value: { agency, agencyDigit: split.digit ?? '' }, gaps: [] };
 };
 
 type AccountParts = Readonly<{ accountNumber: string; accountDigit: string }>;
@@ -127,7 +137,8 @@ const readAccount = (rawNumber: string, rawDigit: string): FieldRead<AccountPart
       gaps: [gap('payee-account-digit', 'malformed')],
     };
   }
-  return { value: { accountNumber, accountDigit: rawDigit.toUpperCase() }, gaps: [] };
+  // Só a 1ª posição, pela mesma regra G011 que vale para o DV embutido: o campo tem uma posição.
+  return { value: { accountNumber, accountDigit: (rawDigit[0] ?? '').toUpperCase() }, gaps: [] };
 };
 
 // Acumula TODAS as lacunas antes de recusar. Parar no primeiro defeito faria o operador corrigir um

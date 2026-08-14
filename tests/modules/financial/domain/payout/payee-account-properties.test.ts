@@ -28,7 +28,19 @@ const target = (patch: Partial<PayeePaymentTarget>): PayeePaymentTarget => ({
 // Produto cartesiano enxuto — o exaustivo roda fora do gate; aqui fica a amostra que ancora a
 // propriedade sem custar segundos na suíte.
 const BANKS = ['237', '1', '001', `237${NBSP}`, '\t237', ' 237 '];
-const AGENCIES = ['1234-5', '0001-2', '1-2', `1234${NBSP}-${NBSP}5`, ' 1234 - 5 ', '12345-6'];
+// `0001` e `00000` entram SEM DV de propósito: é o caminho que o layout declara opcional (G009) e
+// o único em que a posição 029 sai em branco. Uma lista só com DV presente deixaria o caso novo
+// sem cobertura — e foi assim que ele passou despercebido na primeira versão deste arquivo.
+const AGENCIES = [
+  '1234-5',
+  '0001-2',
+  '0001',
+  '00000',
+  '1-2',
+  `1234${NBSP}-${NBSP}5`,
+  ' 1234 - 5 ',
+  '12345-6',
+];
 const ACCOUNTS = ['123456', '123456-7', '123456-X', '123456789012', `123456${NBSP}`];
 const DIGITS = ['7', 'X', 'x', '0', `7${NBSP}`];
 
@@ -49,7 +61,9 @@ describe('decomposePayeeAccount — o que passa cabe no segmento A', () => {
             // 021-023 · 024-028 · 029 · 030-041 · DV da conta.
             assert.match(r.value.bankCode, /^\d{3}$/, where);
             assert.match(r.value.agency, /^\d{5}$/, where);
-            assert.match(r.value.agencyDigit, /^[0-9X]$/, where);
+            // O DV da agência é opcional (G009): vazio é resultado legítimo, e o campo Alfa de
+            // uma posição sai em branco. O que NÃO pode é vir com mais de um caractere.
+            assert.match(r.value.agencyDigit, /^[0-9X]?$/, where);
             assert.match(r.value.accountNumber, /^\d{12}$/, where);
             assert.match(r.value.accountDigit, /^[0-9X]$/, where);
           }
@@ -90,7 +104,10 @@ describe('decomposePayeeAccount — o que passa cabe no segmento A', () => {
         assert.equal(line.value.length, 240);
         assert.equal(line.value.slice(20, 23), r.value.bankCode);
         assert.equal(line.value.slice(23, 28), r.value.agency);
-        assert.equal(line.value.slice(28, 29), r.value.agencyDigit);
+        // DV ausente ocupa a posição com BRANCO — `Alfa` alinha à esquerda e completa com brancos
+        // à direita (p. 14 do layout). Comparar com a string vazia crua acusaria falha onde o
+        // comportamento está correto.
+        assert.equal(line.value.slice(28, 29), r.value.agencyDigit.padEnd(1, ' '));
         assert.equal(line.value.slice(29, 41), r.value.accountNumber);
       }
     }

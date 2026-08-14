@@ -17,11 +17,12 @@ export type VanRoute = 'pix' | 'transfer' | 'billet' | 'tax-guide';
 
 // O campo que falta, nomeado por CAMPO e não por mensagem: é o que o front usa para apontar o input
 // e o que a recusa carrega no lugar de um slug genérico.
+// Não há `payee-agency-digit`: o DV da agência é declarado opcional pelo layout (G009), então
+// nunca é lacuna. Ver `payee-account.ts` §readAgency.
 export type PayoutField =
   | 'pix-key'
   | 'payee-bank-code'
   | 'payee-agency'
-  | 'payee-agency-digit'
   | 'payee-account-number'
   | 'payee-account-digit'
   | 'payment-detail';
