@@ -39,6 +39,30 @@ const incomplete = (route: VanRoute, gaps: readonly PayoutGap[]): PayoutReadines
 const missingField = (route: VanRoute, field: PayoutGap['field']): PayoutReadiness =>
   incomplete(route, immutable([immutable({ field, reason: 'missing' as const })]));
 
+// O Segmento J grava CÓDIGO DE BARRAS: 44 dígitos, campo G063 (Carta-Circular Bacen 2.926).
+//
+// A linha digitável NÃO serve — são 47 dígitos, com DVs de campo que o código de barras não tem, e
+// numa ordem diferente. Converter uma na outra é reordenar blocos e descartar dígitos; enquanto
+// essa conversão não existir aqui, uma linha digitável é dado presente e inaproveitável — que é
+// exatamente o que `unmappable` significa, o mesmo desfecho do nome de banco sem código.
+//
+// Não é hipótese: no dump de produção do legado, 19 dos 20 títulos de boleto trazem 44 dígitos e
+// UM traz 47. Os dois formatos convivem no mesmo campo, e recusar em silêncio o segundo esconderia
+// do operador que só falta uma conversão.
+const BARCODE_RE = /^\d{44}$/;
+const DIGITABLE_LINE_RE = /^\d{47}$/;
+
+const readBarcode = (raw: string | null, route: VanRoute): PayoutReadiness => {
+  // Só dígitos: o cadastro guarda com pontuação em alguns casos, e o campo do arquivo é numérico.
+  const digitsOnly = (raw ?? '').replace(/\D/g, '');
+
+  if (isBlank(raw)) return missingField(route, 'payment-detail');
+  if (BARCODE_RE.test(digitsOnly)) return ready(route);
+
+  const reason = DIGITABLE_LINE_RE.test(digitsOnly) ? 'unmappable' : 'malformed';
+  return incomplete(route, immutable([immutable({ field: 'payment-detail' as const, reason })]));
+};
+
 export const checkPayoutReadiness = (candidate: PayoutCandidate): PayoutReadiness => {
   const route = routeOf(candidate.paymentMethod);
   if (route === null) {
@@ -64,12 +88,11 @@ export const checkPayoutReadiness = (candidate: PayoutCandidate): PayoutReadines
       return parts.ok ? ready(route) : incomplete(route, parts.error);
     }
 
-    // O dinheiro segue a linha digitável, não o favorecido: um fornecedor sem nenhum dado bancário
-    // paga normalmente por boleto. É o que sustenta a decisão da P.O. de não bloquear o lote.
+    // O dinheiro segue o código de barras, não o favorecido: um fornecedor sem nenhum dado bancário
+    // paga normalmente por boleto. É o que sustenta a decisão da P.O. de não bloquear o lote — e o
+    // Segmento J confirma na fonte, por não ter campo algum de agência ou conta do favorecido.
     case 'billet':
     case 'tax-guide':
-      return isBlank(candidate.paymentDetail)
-        ? missingField(route, 'payment-detail')
-        : ready(route);
+      return readBarcode(candidate.paymentDetail, route);
   }
 };
