@@ -8,27 +8,51 @@ import type {
   RemittancePreviewReader,
   RemittancePreviewRow,
 } from '#src/modules/financial/application/ports/remittance-preview-reader.ts';
+import type { PayeePaymentTarget } from '#src/modules/financial/domain/payout/types.ts';
 
-const CONTA = {
+// As fixtures espelham o que o CADASTRO produz, não o que é cômodo escrever.
+//
+// ⚠️ Cadastro incompleto chega como STRING VAZIA muito mais que como `null`:
+// `par_suppliers_bank_block_chk` e `par_acts_bank_block_chk` exigem as quatro colunas bancárias
+// juntas nulas ou juntas preenchidas, então o banco RECUSA bloco parcialmente nulo — e a ETL teve
+// de gravar `''`. Por isso existem DUAS fixtures de ausência, e um teste provando que as duas
+// levam ao mesmo veredito.
+
+const CONTA: PayeePaymentTarget = {
   bank: '237',
   agency: '1234-5',
   accountNumber: '123456',
   checkDigit: '7',
   pixKey: null,
 };
-const SO_PIX = {
+
+const SO_PIX: PayeePaymentTarget = {
   bank: null,
   agency: null,
   accountNumber: null,
   checkDigit: null,
-  pixKey: 'a@b.com',
+  pixKey: { keyType: 'email', key: 'a@b.com' },
 };
-const VAZIO = {
+
+// Ausência por `null`. ⚠️ Este arranjo é IMPOSSÍVEL para `supplier` e para `act` com repasse:
+// `par_suppliers_payment_target_chk` exige `bank IS NOT NULL OR pix_key IS NOT NULL`. Ele é real
+// para `financier` e `collaborator`, que não têm esse CHECK — e é por isso que a regra precisa
+// sabê-lo tratar.
+const VAZIO_NULL: PayeePaymentTarget = {
   bank: null,
   agency: null,
   accountNumber: null,
   checkDigit: null,
   pixKey: null,
+};
+
+// Ausência por string vazia — a forma que a ETL de fato gravou.
+const VAZIO_STR: PayeePaymentTarget = {
+  bank: '',
+  agency: '   ',
+  accountNumber: '',
+  checkDigit: '',
+  pixKey: { keyType: 'email', key: '' },
 };
 
 const row = (over: Partial<RemittancePreviewRow>): RemittancePreviewRow => ({
@@ -55,11 +79,11 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
   it('classifica cada título pela regra da forma de pagamento', async () => {
     const rows = [
       row({ documentId: 'ted-ok' }),
-      row({ documentId: 'ted-sem-banco', payee: VAZIO }),
+      row({ documentId: 'ted-sem-banco', payee: VAZIO_NULL }),
       row({ documentId: 'pix-ok', paymentMethod: 'PIX', payee: SO_PIX }),
       row({ documentId: 'pix-sem-chave', paymentMethod: 'PIX', payee: CONTA }),
       row({ documentId: 'boleto-ok', paymentMethod: 'Boleto', paymentDetail: '34191790010' }),
-      row({ documentId: 'boleto-sem-linha', paymentMethod: 'Boleto', payee: VAZIO }),
+      row({ documentId: 'boleto-sem-linha', paymentMethod: 'Boleto', payee: VAZIO_NULL }),
       row({ documentId: 'cambio', paymentMethod: 'Cambio' }),
     ];
     const ids = rows.map((r) => r.documentId);
@@ -81,7 +105,7 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
   // O pedido literal da P.O.: "campo faltante ESTRUTURADO (ex.: missing: ['agencyDigit'])".
   // Uma string de mensagem não serve — o front precisa apontar o input.
   it('devolve os campos faltantes em lista, não em mensagem', async () => {
-    const rows = [row({ documentId: 'sem-nada', payee: VAZIO })];
+    const rows = [row({ documentId: 'sem-nada', payee: VAZIO_NULL })];
     const r = await previewRemittance({ preview: reader(rows) })({ documentIds: ['sem-nada'] });
 
     const l = line(r, 'sem-nada');
@@ -91,6 +115,30 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
       'payee-account-number',
       'payee-account-digit',
     ]);
+  });
+
+  // A propriedade que ninguém guardava, e sem a qual as fixtures acima mediriam o caso raro.
+  //
+  // Cadastro incompleto chega como `''` (o CHECK do bloco bancário impede nulo parcial), mas a
+  // regra trata as duas formas pelo mesmo caminho — `trimmed()` em payee-account.ts e `isBlank()`
+  // em payout-readiness.ts colapsam ambas. Se alguém trocar isso por um `=== null`, os outros
+  // testes seguem verdes e produção quebra inteira: é este caso que acusa.
+  it('ausência por string vazia e por null levam ao MESMO veredito', async () => {
+    const rows = [
+      row({ documentId: 'nulo', payee: VAZIO_NULL }),
+      row({ documentId: 'vazio', payee: VAZIO_STR }),
+      row({ documentId: 'pix-nulo', paymentMethod: 'PIX', payee: VAZIO_NULL }),
+      row({ documentId: 'pix-vazio', paymentMethod: 'PIX', payee: VAZIO_STR }),
+    ];
+    const r = await previewRemittance({ preview: reader(rows) })({
+      documentIds: rows.map((x) => x.documentId),
+    });
+
+    assert.deepEqual(line(r, 'vazio').missing, line(r, 'nulo').missing);
+    assert.equal(line(r, 'vazio').status, line(r, 'nulo').status);
+    // Chave PIX em branco é chave ausente — não "presente e vazia".
+    assert.deepEqual(line(r, 'pix-vazio').missing, ['pix-key']);
+    assert.deepEqual(line(r, 'pix-vazio').missing, line(r, 'pix-nulo').missing);
   });
 
   it('distingue campo a corrigir de campo a preencher', async () => {
@@ -110,8 +158,8 @@ describe('previewRemittance — os números do pré-voo', () => {
     const rows = [
       row({ documentId: 'a', netValueCents: 10_000 }),
       row({ documentId: 'b', netValueCents: 25_000 }),
-      row({ documentId: 'c', netValueCents: 7_000, payee: VAZIO }),
-      row({ documentId: 'd', netValueCents: 3_000, payee: VAZIO }),
+      row({ documentId: 'c', netValueCents: 7_000, payee: VAZIO_NULL }),
+      row({ documentId: 'd', netValueCents: 3_000, payee: VAZIO_NULL }),
       row({ documentId: 'e', netValueCents: 99_000, paymentMethod: 'Cambio' }),
     ];
     const r = await previewRemittance({ preview: reader(rows) })({

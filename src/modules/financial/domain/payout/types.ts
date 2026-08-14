@@ -34,16 +34,37 @@ export type PayoutGapReason = 'missing' | 'unmappable' | 'malformed';
 
 export type PayoutGap = Readonly<{ field: PayoutField; reason: PayoutGapReason }>;
 
+// Chave PIX como o `financial` precisa dela.
+//
+// Tipo DESTE módulo, espelhando a forma sem importar o VO de `partners`: `public-api/refs.ts:6-7`
+// fixa que "Contratos e Financeiro guardam um parceiro por ID branded, NUNCA importam o domínio de
+// `partners`", e é a tradução no adapter que Evans chama de ACL (Blue Book, p. 226 — "our emphasis
+// is on translation between two models").
+//
+// `keyType` é OPACO aqui, e de propósito. O payout decide aptidão, e para isso basta haver chave —
+// não interpreta o tipo. Mas transporta-o, porque quem emite o registro PIX (#711) vai precisar
+// dele, e uma chave achatada em `string` perderia essa informação no caminho: é o "stringly typed"
+// que Fowler nomeia em Refactoring p. 68. Copiar aqui a união fechada de `partners`
+// (`'cpf' | 'cnpj' | …`) duplicaria vocabulário que já tem dono — e regra duplicada é fábrica de
+// divergência. Quem valida o tipo é `partners`, no `createPixKey`.
+export type PayeePixKey = Readonly<{ keyType: string; key: string }>;
+
 // Destino de pagamento do favorecido COMO ELE ESTÁ NO CADASTRO — texto livre, um único DV, tudo
 // anulável. Tipo estrutural próprio, não importado de `partners`: o `financial` declara o que
 // precisa e o adapter converte (ADR-0006/ADR-0032). Quando o cadastro for estruturado, muda o
 // adapter e esta regra continua valendo.
+//
+// ⚠️ Os campos de texto chegam do cadastro como STRING VAZIA com mais frequência do que como
+// `null`: `par_suppliers_bank_block_chk` e `par_acts_bank_block_chk` exigem as quatro colunas
+// bancárias juntas nulas ou juntas preenchidas, então o banco recusa bloco parcialmente nulo e o
+// cadastro incompleto entrou como `''`. As duas formas são tratadas igual — ver `trimmed` em
+// `payee-account.ts` e `isBlank` em `payout-readiness.ts` — e há teste fixando a equivalência.
 export type PayeePaymentTarget = Readonly<{
   bank: string | null;
   agency: string | null;
   accountNumber: string | null;
   checkDigit: string | null;
-  pixKey: string | null;
+  pixKey: PayeePixKey | null;
 }>;
 
 export type PayoutCandidate = Readonly<{

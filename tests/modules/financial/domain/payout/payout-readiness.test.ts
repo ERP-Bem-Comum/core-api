@@ -76,9 +76,36 @@ describe('checkPayoutReadiness — a forma de pagamento decide o que o arquivo e
 describe('checkPayoutReadiness — PIX exige a chave, e só a chave', () => {
   it('aprova PIX com chave mesmo sem nenhum dado bancário', () => {
     const r = checkPayoutReadiness(
-      candidate({ paymentMethod: 'PIX', payee: target({ pixKey: 'a@b.com' }) }),
+      candidate({
+        paymentMethod: 'PIX',
+        payee: target({ pixKey: { keyType: 'email', key: 'a@b.com' } }),
+      }),
     );
     assert.equal(r.status, 'ready');
+  });
+
+  // O `keyType` NÃO participa da decisão de aptidão — ele viaja para quem emite o registro. Um
+  // tipo desconhecido aqui não pode reprovar o título: quem valida o conjunto de tipos é
+  // `partners`, no `createPixKey`, e duplicar essa lista seria criar a segunda fonte da verdade.
+  it('não julga o tipo da chave, apenas a existência dela', () => {
+    for (const keyType of ['email', 'cpf', 'random-key', 'algo-que-partners-ainda-nao-tem']) {
+      const r = checkPayoutReadiness(
+        candidate({ paymentMethod: 'PIX', payee: target({ pixKey: { keyType, key: 'x' } }) }),
+      );
+      assert.equal(r.status, 'ready', keyType);
+    }
+  });
+
+  // Chave presente porém em branco é chave ausente — o cadastro guarda `''` com mais frequência
+  // que `null` (CHECK do bloco bancário).
+  it('trata chave em branco como ausente', () => {
+    const r = checkPayoutReadiness(
+      candidate({
+        paymentMethod: 'PIX',
+        payee: target({ pixKey: { keyType: 'email', key: '  ' } }),
+      }),
+    );
+    assert.equal(r.status, 'incomplete');
   });
 
   it('recusa PIX sem chave apontando o campo', () => {

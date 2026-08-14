@@ -47,8 +47,13 @@ export const checkPayoutReadiness = (candidate: PayoutCandidate): PayoutReadines
     // A chave é o destino inteiro: o arquivo não olha agência nem conta. Conta completa NÃO
     // substitui a chave — quem escolheu PIX no lançamento paga por PIX, e trocar a rota por conta
     // própria mudaria o custo e o prazo que o operador aceitou.
+    // Só a existência da chave decide aptidão — o `keyType` viaja para quem emite o registro, mas
+    // não participa desta decisão. Chave em branco é chave ausente: o cadastro guarda `''` com mais
+    // frequência que `null` (ver o CHECK do bloco bancário, em `types.ts`).
     case 'pix':
-      return isBlank(candidate.payee?.pixKey ?? null) ? missing(route, 'pix-key') : ready(route);
+      return isBlank(candidate.payee?.pixKey?.key ?? null)
+        ? missing(route, 'pix-key')
+        : ready(route);
 
     // Única rota que depende da conta estruturada — e, portanto, a única em que o desencaixe do
     // cadastro vira impedimento de pagamento.
