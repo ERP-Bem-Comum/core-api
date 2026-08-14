@@ -21,6 +21,18 @@ const AGENCY_WIDTH = 5;
 const ACCOUNT_WIDTH = 12;
 
 const BANK_CODE_RE = /^\d{1,3}$/;
+
+// O código de compensação vem PREFIXANDO o nome no cadastro real: `237 - Banco Bradesco S.A.`.
+// Medido no dump de produção do legado (14/08/2026): as 9 grafias distintas dos 85 fornecedores com
+// bloco bancário seguem esse formato, e a ETL copia o campo literal
+// (`scripts/etl/mappers/supplier.mapper.ts:94`), então o core-api guarda a mesma string.
+//
+// Isto desmonta a premissa que originou a #708 — "nome em texto livre, precisa de tabela de-para".
+// Não precisa: o código já está no dado.
+//
+// O `\S` final exige que EXISTA nome depois do separador. `237 - ` sozinho não é grafia de banco,
+// é campo pela metade — e tratá-lo como código aceitaria lixo com aparência de dado.
+const BANK_CODE_PREFIX_RE = /^(\d{1,3})[ \t]*[-–—][ \t]*\S/;
 // Separador explícito é a única leitura não-ambígua do DV embutido. Ver `splitCheckDigit`.
 //
 // O DV aceita DUAS posições porque o layout prevê o caso em G011: "Para os Bancos que se utilizam
@@ -73,14 +85,26 @@ const splitCheckDigit = (raw: string): CheckDigitSplit | null => {
   return null;
 };
 
-// Código do banco. Valor já numérico é alinhado à esquerda com zeros; nome em texto livre é
-// `unmappable` — distinto de ausente, porque o cadastro TEM o dado e o que falta é a tabela de-para
-// (decisão em aberto na #708, dimensionada pelo CA1). Emitir string vazia ou um código plausível
-// nas posições 021-023 mandaria o crédito para o banco errado.
+// Código do banco, por dois caminhos: o campo já numérico, ou o código que PREFIXA o nome
+// (`237 - Banco Bradesco S.A.` — a forma que o cadastro real usa). Os dois alinham em três dígitos.
+//
+// O que sobra é `unmappable`: o cadastro tem um banco escrito, e não há como saber qual código lhe
+// corresponde. É distinto de ausente porque a ação do operador é outra — corrigir, não preencher.
+//
+// ⚠️ O código tem de PREFIXAR. Procurá-lo em posição arbitrária faria `Banco 237` virar `237`, e
+// aí qualquer número no meio de um nome — um ano, um número de agência digitado errado — viraria
+// código de banco. As posições 021-023 decidem para QUAL instituição o crédito vai; um palpite ali
+// não falha o arquivo, credita a conta certa no banco errado.
 const readBankCode = (raw: string): FieldRead<string> => {
   if (raw === '') return { value: '', gaps: [gap('payee-bank-code', 'missing')] };
-  if (!BANK_CODE_RE.test(raw)) return { value: '', gaps: [gap('payee-bank-code', 'unmappable')] };
-  return { value: raw.padStart(BANK_CODE_WIDTH, '0'), gaps: [] };
+
+  if (BANK_CODE_RE.test(raw)) return { value: raw.padStart(BANK_CODE_WIDTH, '0'), gaps: [] };
+
+  const prefixed = BANK_CODE_PREFIX_RE.exec(raw);
+  const code = prefixed?.[1];
+  if (code !== undefined) return { value: code.padStart(BANK_CODE_WIDTH, '0'), gaps: [] };
+
+  return { value: '', gaps: [gap('payee-bank-code', 'unmappable')] };
 };
 
 type AgencyParts = Readonly<{ agency: string; agencyDigit: string }>;

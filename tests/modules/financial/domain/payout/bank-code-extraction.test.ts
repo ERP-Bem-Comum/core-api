@@ -1,0 +1,118 @@
+import { describe, it } from 'node:test';
+import { strict as assert } from 'node:assert';
+
+import { isOk } from '#src/shared/index.ts';
+import { decomposePayeeAccount } from '#src/modules/financial/domain/payout/payee-account.ts';
+import type { PayeePaymentTarget } from '#src/modules/financial/domain/payout/types.ts';
+
+/**
+ * Extração do código do banco a partir do formato REAL do cadastro.
+ *
+ * Origem: análise do dump de produção do legado (14/08/2026). A premissa que sustentava a issue
+ * #708 — "o cadastro guarda o banco como nome em texto livre, e converter exige uma tabela de-para
+ * com curadoria" — estava errada. O código de compensação **já está no dado**, prefixando o nome:
+ * `237 - Banco Bradesco S.A.`. Todas as 9 grafias distintas dos 85 fornecedores com bloco bancário
+ * seguem esse formato.
+ *
+ * A ETL não transforma o campo (`scripts/etl/mappers/supplier.mapper.ts:94` passa
+ * `row.bancaryInfoBank` literal), então o core-api guarda a mesma string.
+ *
+ * ⚠️ O que a extração NÃO faz: procurar dígitos em posição arbitrária. `Banco 237` não vira `237`.
+ * Um código só é código quando PREFIXA o nome, separado — em qualquer outro lugar, "achar" três
+ * dígitos é adivinhação, e adivinhar as posições 021-023 credita a conta de outro banco.
+ */
+
+const withBank = (bank: string): PayeePaymentTarget => ({
+  bank,
+  agency: '1234-5',
+  accountNumber: '123456',
+  checkDigit: '7',
+  pixKey: null,
+});
+
+const codeOf = (bank: string): string | null => {
+  const r = decomposePayeeAccount(withBank(bank));
+  return isOk(r) ? r.value.bankCode : null;
+};
+
+describe('readBankCode — as grafias que existem no cadastro real', () => {
+  // As 9 do dump, verbatim. Se o formato mudar em produção, é aqui que se descobre.
+  const REAL: readonly (readonly [string, string])[] = [
+    ['260 - NU Pagamentos S.A. – Nubank', '260'],
+    ['077 - Banco Inter S.A.', '077'],
+    ['237 - Banco Bradesco S.A.', '237'],
+    ['336 - Banco C6 S.A – C6 Bank', '336'],
+    ['001 - Banco do Brasil S.A.', '001'],
+    ['341 - Itaú Unibanco S.A.', '341'],
+    ['033 - Banco Santander (Brasil) S.A.', '033'],
+    ['290 - Pagseguro Internet S.A. – PagBank', '290'],
+    ['348 - Banco XP S.A.', '348'],
+  ];
+
+  for (const [raw, expected] of REAL) {
+    it(`extrai ${expected} de "${raw}"`, () => {
+      assert.equal(codeOf(raw), expected);
+    });
+  }
+
+  // O nome contém en-dash interno (`S.A. – Nubank`). O separador do PREFIXO é o que importa, e
+  // parar no primeiro é o que impede a extração de se confundir com a pontuação do nome.
+  it('não se confunde com o travessão dentro do nome', () => {
+    assert.equal(codeOf('260 - NU Pagamentos S.A. – Nubank'), '260');
+    assert.equal(codeOf('336 - Banco C6 S.A – C6 Bank'), '336');
+  });
+});
+
+describe('readBankCode — variações de formatação que o cadastro pode produzir', () => {
+  it('aceita o código puro, sem nome (o que já funcionava)', () => {
+    assert.equal(codeOf('237'), '237');
+    assert.equal(codeOf('1'), '001');
+  });
+
+  it('alinha o código em três dígitos', () => {
+    assert.equal(codeOf('1 - Banco do Brasil'), '001');
+    assert.equal(codeOf('77 - Inter'), '077');
+  });
+
+  it('tolera espaçamento irregular em volta do separador', () => {
+    for (const raw of ['237-Bradesco', '237 -Bradesco', '237  -  Bradesco', '  237 - Bradesco  ']) {
+      assert.equal(codeOf(raw), '237', raw);
+    }
+  });
+
+  it('aceita travessão e traço longo como separador', () => {
+    assert.equal(codeOf('237 – Bradesco'), '237');
+    assert.equal(codeOf('237 — Bradesco'), '237');
+  });
+});
+
+describe('readBankCode — o que continua sendo inconvertível', () => {
+  // A regra que protege as posições 021-023: código é PREFIXO, nunca dígito achado no meio.
+  it('recusa nome sem código, mesmo contendo dígitos', () => {
+    for (const raw of ['Bradesco S.A.', 'Banco 237', 'Itau 341 Unibanco', 'Banco do Brasil']) {
+      assert.equal(codeOf(raw), null, raw);
+    }
+  });
+
+  it('recusa prefixo numérico que não cabe em três dígitos', () => {
+    assert.equal(codeOf('2371 - Banco'), null);
+    assert.equal(codeOf('12345 - Banco'), null);
+  });
+
+  it('recusa código sem nome depois do separador', () => {
+    assert.equal(codeOf('237 - '), null);
+    assert.equal(codeOf('237-'), null);
+  });
+
+  it('recusa campo vazio ou só espaços', () => {
+    assert.equal(codeOf(''), null);
+    assert.equal(codeOf('   '), null);
+  });
+
+  // Separador que não separa: sem hífen, `237 Bradesco` é ambíguo — pode ser nome que começa com
+  // número. Recusar é a escolha conservadora, e o CA1 dirá se essa grafia existe.
+  it('recusa código colado ao nome sem separador', () => {
+    assert.equal(codeOf('237 Bradesco'), null);
+    assert.equal(codeOf('237Bradesco'), null);
+  });
+});
