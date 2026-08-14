@@ -2,6 +2,7 @@ import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import type { CedenteAccountId } from '../../domain/cedente/cedente-account-id.ts';
 import type { RemittanceId } from '../../domain/remittance/remittance-id.ts';
 import { create as createRemittance } from '../../domain/remittance/remittance.ts';
+import { distinctPaymentDays } from '../../domain/remittance/payment-dates.ts';
 import type { CedenteAccountStore } from '../ports/cedente-account-store.ts';
 import type { RemittanceRepository } from '../ports/remittance-repository.ts';
 import type { RemittancePaymentReader } from '../ports/remittance-payment-reader.ts';
@@ -39,6 +40,7 @@ export type GenerateRemittanceError =
   | 'remittance-empty-selection'
   | 'remittance-documents-already-held'
   | 'remittance-payments-unavailable'
+  | 'remittance-mixed-payment-dates'
   | 'remittance-nsa-unavailable'
   | 'remittance-file-name-failed'
   | 'remittance-build-failed'
@@ -67,10 +69,17 @@ export const generateRemittance =
       return err('remittance-payments-unavailable');
     }
 
+    // 3. Um arquivo, um dia. A checagem vem ANTES do NSA de propósito: o número não volta depois de
+    // alocado, e queimar um por erro de seleção deixaria um gap na sequência sem nenhum arquivo do
+    // outro lado. Sem isto, uma seleção com vencimentos distintos vira um arquivo bem-formado que o
+    // banco processa com datas misturadas — sem erro, sem retorno negativo, sem sinal.
+    const days = distinctPaymentDays(payments.value.map((p) => p.paymentDate));
+    if (days.length > 1) return err('remittance-mixed-payment-dates');
+
     const account = await deps.cedenteAccounts.findById(input.cedenteAccountId);
     if (!account.ok || account.value === null) return err('remittance-nsa-unavailable');
 
-    // 3. NSA sob lock de linha. A partir daqui o número está CONSUMIDO — se algo falhar adiante,
+    // 4. NSA sob lock de linha. A partir daqui o número está CONSUMIDO — se algo falhar adiante,
     // ele não volta. É deliberado: um gap na sequência é inofensivo, reusar número é retransmissão
     // aos olhos do banco.
     const nsa = await deps.cedenteAccounts.allocateNsa(input.cedenteAccountId);
