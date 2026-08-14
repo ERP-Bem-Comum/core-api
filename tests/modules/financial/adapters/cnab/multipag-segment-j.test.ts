@@ -16,8 +16,9 @@ import { segmentJ } from '#src/modules/financial/adapters/cnab/multipag-segments
  * CA5 da #708 — "boleto e guia não carregam agência/conta do favorecido" — e a razão pela qual
  * 38% dos títulos do dump de produção não dependem do cadastro bancário para serem pagos.
  *
- * O `Nome do Cedente` (62-91) é o do PAGADOR, não do favorecido: no boleto, quem recebe já está
- * embutido no código de barras.
+ * O `Nome do Cedente` (62-91) é de quem RECEBE — cedente, em cobrança, é quem emitiu o título. A
+ * mesma posição, na seção de PIX do manual (p. 41), chama-se "Nome do Beneficiário". O que o
+ * registro não carrega é o dado BANCÁRIO do favorecido, não o nome dele.
  */
 
 const AT = (iso: string): Date => new Date(iso);
@@ -28,7 +29,8 @@ const BASE = {
   recordNumber: 1,
   // 44 dígitos — o formato que o campo G063 exige (Carta-Circular Bacen 2.926).
   barcode: '23791234500000150000123456789012345678901234',
-  payerName: 'ASSOCIACAO BEM COMUM',
+  // Quem RECEBE. Usar aqui o nome da própria organização faria a fixture descrever o campo errado.
+  beneficiaryName: 'FORNECEDOR EXEMPLO LTDA',
   dueDate: AT('2026-08-20T00:00:00Z'),
   titleValueCents: 15_000,
   paymentDate: AT('2026-08-14T00:00:00Z'),
@@ -69,8 +71,8 @@ describe('Multipag — Segmento J (pagamento de título de cobrança)', () => {
     assert.equal(at(record, 18, 61).length, 44);
   });
 
-  it('grava o nome do cedente alinhado à esquerda em 30 posições', () => {
-    assert.equal(at(record, 62, 91), 'ASSOCIACAO BEM COMUM'.padEnd(30, ' '));
+  it('grava o nome do cedente — quem recebe — alinhado à esquerda em 30 posições', () => {
+    assert.equal(at(record, 62, 91), 'FORNECEDOR EXEMPLO LTDA'.padEnd(30, ' '));
   });
 
   it('grava as duas datas em DDMMAAAA', () => {

@@ -162,16 +162,21 @@ export const segmentB = (input: SegmentBInput): Result<string, CnabSegmentError>
 //
 // ⚠️ Este registro NÃO tem banco, agência nem conta do FAVORECIDO — quem identifica o beneficiário
 // é o código de barras. É a razão pela qual o boleto não depende do cadastro bancário, e a
-// confirmação na fonte do CA5 da #708. O `Nome do Cedente` (62-091) é o do PAGADOR: no boleto,
-// quem recebe já está embutido no código.
+// confirmação na fonte do CA5 da #708.
+//
+// O `Nome do Cedente` (62-091) é de quem RECEBE, não do pagador: cedente, no vocabulário de
+// cobrança, é quem emitiu o título. A mesma posição, na seção de PIX do manual (p. 41), aparece
+// nomeada "Nome do Beneficiário" — é a leitura que desfaz a ambiguidade do termo. Isso não
+// contradiz o parágrafo acima: o que o registro não carrega é o DADO BANCÁRIO do favorecido; o
+// nome dele viaja, e é informativo.
 export type SegmentJInput = Readonly<{
-  bankCode: string; // banco do CEDENTE (posições 001-003)
+  bankCode: string; // banco do CEDENTE do arquivo, isto é, o pagador (posições 001-003)
   batchNumber: number;
   recordNumber: number;
   // G063 — 44 posições numéricas. É o CÓDIGO DE BARRAS (Carta-Circular Bacen 2.926), não a linha
   // digitável de 47: são representações diferentes, e a linha traz DVs que o código não tem.
   barcode: string;
-  payerName: string; // G013 — nome do cedente/pagador
+  beneficiaryName: string; // G013 — nome do cedente do título: quem RECEBE
   dueDate: Date; // G044
   titleValueCents: number; // G042
   paymentDate: Date; // P009
@@ -205,7 +210,7 @@ export const segmentJ = (input: SegmentJInput): Result<string, CnabSegmentError>
     num(MOVEMENT_INCLUSION, 1), // 015     tipo de movimento
     num(MOVEMENT_INSTRUCTION_NONE, 2), // 016-017 código da instrução
     num(input.barcode, 44), // 018-061 código de barras
-    text(input.payerName, 30), // 062-091 nome do cedente
+    text(input.beneficiaryName, 30), // 062-091 nome do cedente (quem recebe)
     dateDDMMYYYY(input.dueDate), // 092-099 vencimento do título
     cents(input.titleValueCents, 15), // 100-114 valor do título (13 + 2)
     cents(input.discountCents ?? 0, 15), // 115-129 desconto + abatimento
