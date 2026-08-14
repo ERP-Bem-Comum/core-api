@@ -85,6 +85,21 @@ describe('Multipag — Segmento A (pagamento)', () => {
     assert.ok(isErr(r));
     assert.equal(r.error, 'numeric-field-overflow');
   });
+
+  // Teto do lote (#711/CA8). O sequencial do registro tem 5 posições — 99.999 registros de
+  // detalhe, e como cada pagamento gera o par A+B, ~49.999 pagamentos por lote. É o gargalo
+  // real: as contagens dos trailers têm 6 dígitos e só estourariam depois.
+  //
+  // Nenhuma remessa realista da operação chega perto disso. O teste existe porque o modo de
+  // falha importa: um sequencial truncado produziria arquivo que o banco ACEITA, com dois
+  // registros disputando a mesma posição no lote.
+  it('recusa o registro que passa do teto de 99.999 do lote, em vez de truncar', () => {
+    assert.ok(isOk(segmentA({ ...baseA, recordNumber: 99_999 })), 'o teto ainda cabe');
+
+    const r = segmentA({ ...baseA, recordNumber: 100_000 });
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'numeric-field-overflow');
+  });
 });
 
 describe('Multipag — Segmento B (dados complementares do favorecido)', () => {
