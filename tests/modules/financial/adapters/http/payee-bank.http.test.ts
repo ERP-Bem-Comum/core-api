@@ -181,7 +181,12 @@ describe('financial/http — dados bancários do favorecido no GET /:id (#255)',
     }
   });
 
-  it('CA4: favorecido não-supplier (financier) → payeeBank null', async () => {
+  // #708/CA5 — decisão (b) da P.O.: os QUATRO `payeeKind` entram na VAN. Este caso afirmava o
+  // contrário até 08/2026 ("não-supplier → payeeBank null"), fixando uma degradação que nunca foi
+  // decisão: era a premissa "bancário/PIX só existem em Supplier" sobrevivendo à mudança do
+  // domínio. Um financiador com conta cadastrada aparecia sem dados bancários na tela, e não
+  // havia como distinguir cadastro ausente de leitura ausente.
+  it('CA4: favorecido financier COM conta → payeeBank preenchido', async () => {
     const h = await buildWithPort(
       portReturning(null, {
         type: 'financier',
@@ -192,12 +197,43 @@ describe('financial/http — dados bancários do favorecido no GET /:id (#255)',
         legalRepresentative: 'Fulano',
         telephone: '11999999999',
         address: 'Rua Y, 100',
+        bankAccount: { bank: '341', agency: '1234-5', accountNumber: '99887', checkDigit: '6' },
+        pixKey: null,
         updatedAt: new Date('2026-06-01T00:00:00.000Z'),
       }),
     );
     try {
       const body = await createAndGet(h, { payeeKind: 'financier' });
-      assert.equal(body.payeeBank, null);
+      assert.deepEqual(body.payeeBank, {
+        bankAccount: { bank: '341', agency: '1234-5', accountNumber: '99887', checkDigit: '6' },
+        pixKey: null,
+      });
+    } finally {
+      await h.teardown();
+    }
+  });
+
+  // Favorecido sem destino cadastrado continua devolvendo o bloco com os dois campos nulos — o
+  // que distingue "não tem cadastro" de "não sei ler", que era exatamente o que se perdia antes.
+  it('CA5: favorecido financier SEM destino → bloco presente, campos nulos', async () => {
+    const h = await buildWithPort(
+      portReturning(null, {
+        type: 'financier',
+        id: SUP,
+        name: 'Banco X',
+        document: '99999999000199',
+        corporateName: 'Banco X S.A.',
+        legalRepresentative: 'Fulano',
+        telephone: '11999999999',
+        address: 'Rua Y, 100',
+        bankAccount: null,
+        pixKey: null,
+        updatedAt: new Date('2026-06-01T00:00:00.000Z'),
+      }),
+    );
+    try {
+      const body = await createAndGet(h, { payeeKind: 'financier' });
+      assert.deepEqual(body.payeeBank, { bankAccount: null, pixKey: null });
     } finally {
       await h.teardown();
     }

@@ -82,6 +82,11 @@ describe('composeContractor — não-supplier (sem bancário/PIX)', () => {
             document: '11144477735',
             role: 'Educador',
             occupationArea: 'PARC',
+            // A View passou a carregar o bloco para os 4 tipos (#708/CA5). O snapshot do
+            // `contracts` continua NÃO o expondo fora de supplier — a asserção abaixo é o que
+            // fixa isso: contrato desta borda não muda porque a View de partners cresceu.
+            bankAccount: null,
+            pixKey: null,
             updatedAt: UPDATED,
           }),
         ),
@@ -108,6 +113,8 @@ describe('composeContractor — act identifica-se pela razão social (CON-ACT-CO
             document: '11222333000181',
             role: 'Representante Legal',
             occupationArea: 'PARC',
+            bankAccount: null,
+            pixKey: null,
             updatedAt: UPDATED,
           }),
         ),
@@ -133,6 +140,8 @@ describe('composeContractor — act identifica-se pela razão social (CON-ACT-CO
             document: '11144477735',
             role: 'Educador',
             occupationArea: 'PARC',
+            bankAccount: null,
+            pixKey: null,
             updatedAt: UPDATED,
           }),
         ),
@@ -149,6 +158,8 @@ describe('composeContractor — act identifica-se pela razão social (CON-ACT-CO
             legalRepresentative: 'Maria',
             telephone: '+5511999998888',
             address: 'Av. Paulista, 1000',
+            bankAccount: null,
+            pixKey: null,
             updatedAt: UPDATED,
           }),
         ),

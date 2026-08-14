@@ -86,6 +86,8 @@ const actPort = (): ContractorReadPort => ({
               document: ACT_DOCUMENT,
               role: 'Representante Legal',
               occupationArea: 'PARC',
+              bankAccount: null,
+              pixKey: null,
               updatedAt: UPDATED,
             }
           : null,

@@ -70,6 +70,8 @@ const financierView = (id: string, name: string): FinancierView => ({
   legalRepresentative: 'Rep Legal',
   telephone: '11999999999',
   address: 'Rua X, 1',
+  bankAccount: null,
+  pixKey: null,
   updatedAt: NOW,
 });
 
@@ -81,6 +83,8 @@ const collaboratorView = (id: string, name: string): CollaboratorView => ({
   document: '12345678901',
   role: 'Analista',
   occupationArea: 'Financeiro',
+  bankAccount: null,
+  pixKey: null,
   updatedAt: NOW,
 });
 

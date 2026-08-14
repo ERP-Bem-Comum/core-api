@@ -7,8 +7,11 @@
  * Mappers PUROS, sem IO: `(aggregate, updatedAt) → View`. O `updatedAt` é injetado
  * pela borda (vem do row `par_*.updated_at`; o agregado puro não o carrega).
  *
- * Bancário/PIX read-only existem só em `Supplier` (o domínio só modela destino de
- * pagamento em supplier — `payment-target.ts`). A View reflete o domínio.
+ * Bancário/PIX read-only existem nos QUATRO — `payment-target.ts` declara os VOs
+ * "compartilhados pelos 4 tipos de parceiro", promovidos de `domain/supplier/` para
+ * `domain/shared/` na US1 da feature 015. Este cabeçalho afirmou o contrário até
+ * 08/2026: era verdade quando só `Supplier` os tinha, e ninguém o corrigiu quando o
+ * domínio mudou. A View reflete o domínio — agora de fato.
  */
 
 import type { Supplier } from '../domain/supplier/types.ts';
@@ -39,6 +42,8 @@ export type FinancierView = Readonly<{
   legalRepresentative: string;
   telephone: string;
   address: string;
+  bankAccount: BankAccount | null;
+  pixKey: PixKey | null;
   updatedAt: Date;
 }>;
 
@@ -50,6 +55,8 @@ export type CollaboratorView = Readonly<{
   document: string;
   role: string;
   occupationArea: string;
+  bankAccount: BankAccount | null;
+  pixKey: PixKey | null;
   updatedAt: Date;
 }>;
 
@@ -65,6 +72,8 @@ export type ActView = Readonly<{
   corporateName: string; // razão social (identificação do ACT como contratado)
   role: string;
   occupationArea: string;
+  bankAccount: BankAccount | null;
+  pixKey: PixKey | null;
   updatedAt: Date;
 }>;
 
@@ -92,6 +101,8 @@ export const financierToView = (financier: Financier, updatedAt: Date): Financie
   legalRepresentative: financier.legalRepresentative,
   telephone: financier.telephone,
   address: financier.address,
+  bankAccount: financier.bankAccount,
+  pixKey: financier.pixKey,
   updatedAt,
 });
 
@@ -106,6 +117,8 @@ export const collaboratorToView = (
   document: collaborator.cpf as unknown as string,
   role: collaborator.role,
   occupationArea: collaborator.occupationArea,
+  bankAccount: collaborator.bankAccount,
+  pixKey: collaborator.pixKey,
   updatedAt,
 });
 
@@ -118,5 +131,7 @@ export const actToView = (act: Act, updatedAt: Date): ActView => ({
   corporateName: act.corporateName,
   role: act.legalRepresentative,
   occupationArea: act.occupationArea as unknown as string,
+  bankAccount: act.bankAccount,
+  pixKey: act.pixKey,
   updatedAt,
 });
