@@ -206,3 +206,73 @@ describe('generateRemittance — a ordem importa mais que o resultado', () => {
     assert.equal(held.value.length, 2, 'documentos seguem presos, não voltam para a fila');
   });
 });
+
+describe('generateRemittance — um arquivo, um dia (#712)', () => {
+  // Reader que devolve datas distintas por documento — a seleção que o operador monta quando
+  // escolhe títulos de vencimentos diferentes no grid do Contas a Pagar.
+  const readerWithDates = (dates: readonly Date[]): RemittancePaymentReader => ({
+    loadPayments: async (ids) =>
+      Promise.resolve(
+        ok(
+          ids.map((id, i) => ({
+            documentId: id,
+            payee: payee(i + 1),
+            valueCents: (i + 1) * 1000,
+            paymentDate: dates[i] ?? dates[0] ?? new Date(Date.UTC(2026, 7, 12)),
+          })),
+        ),
+      ),
+  });
+
+  it('recusa a seleção com datas de pagamento distintas', async () => {
+    const s = await setup();
+    const deps = {
+      ...s.deps,
+      payments: readerWithDates([new Date(Date.UTC(2026, 7, 12)), new Date(Date.UTC(2026, 7, 13))]),
+    };
+
+    const r = await generateRemittance(deps)(input(s.cedenteAccountId, s.docs));
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'remittance-mixed-payment-dates');
+  });
+
+  // O NSA não volta depois de alocado. Validar DEPOIS dele deixaria um gap na sequência sem
+  // nenhum arquivo do outro lado — e a sequência é o que o banco usa para detectar retransmissão.
+  it('não consome NSA nem persiste remessa quando as datas divergem', async () => {
+    const s = await setup();
+    const deps = {
+      ...s.deps,
+      payments: readerWithDates([new Date(Date.UTC(2026, 7, 12)), new Date(Date.UTC(2026, 7, 13))]),
+    };
+
+    const r = await generateRemittance(deps)(input(s.cedenteAccountId, s.docs));
+    assert.ok(isErr(r));
+
+    // O próximo envio legítimo tem de receber o NSA 1 — prova de que nada foi consumido.
+    const ok2 = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
+    assert.ok(isOk(ok2), `esperava ok, veio ${isErr(ok2) ? ok2.error : '?'}`);
+    assert.equal(ok2.value.nsa, 1);
+  });
+
+  // Mesmo dia civil com horários diferentes emite o MESMO campo DDMMAAAA — recusar aqui rejeitaria
+  // seleção válida por um dado que nem viaja no arquivo.
+  it('aceita horários diferentes dentro do mesmo dia', async () => {
+    const s = await setup();
+    const deps = {
+      ...s.deps,
+      payments: readerWithDates([
+        new Date(Date.UTC(2026, 7, 12, 3, 0)),
+        new Date(Date.UTC(2026, 7, 12, 21, 30)),
+      ]),
+    };
+
+    const r = await generateRemittance(deps)(input(s.cedenteAccountId, s.docs));
+    assert.ok(isOk(r), `esperava ok, veio ${isErr(r) ? r.error : '?'}`);
+  });
+
+  it('aceita seleção de um único título', async () => {
+    const s = await setup({ docs: ['doc-1'] });
+    const r = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
+    assert.ok(isOk(r), `esperava ok, veio ${isErr(r) ? r.error : '?'}`);
+  });
+});
