@@ -123,24 +123,55 @@ describe('checkPayoutReadiness — PIX exige a chave, e só a chave', () => {
   });
 });
 
-describe('checkPayoutReadiness — boleto e guia dependem da linha digitável, não do favorecido', () => {
+// O Segmento J (p. 32 do layout) grava CÓDIGO DE BARRAS de 44 dígitos, e não tem campo algum de
+// agência ou conta do favorecido — é a confirmação, na fonte, de que o boleto não depende do
+// cadastro bancário.
+const BARCODE = '23791234500000150000123456789012345678901234'; // 44 dígitos
+const DIGITABLE_LINE = '23791234500000150000123456789012345678901234567'; // 47 — não serve
+
+describe('checkPayoutReadiness — boleto e guia dependem do código de barras, não do favorecido', () => {
   for (const paymentMethod of ['Boleto', 'GuiaRecolhimento'] as const) {
-    it(`aprova ${paymentMethod} com linha digitável e favorecido sem banco`, () => {
-      const r = checkPayoutReadiness(candidate({ paymentMethod, paymentDetail: '34191790010' }));
+    it(`aprova ${paymentMethod} com código de barras e favorecido sem banco`, () => {
+      const r = checkPayoutReadiness(candidate({ paymentMethod, paymentDetail: BARCODE }));
       assert.equal(r.status, 'ready');
     });
 
-    it(`recusa ${paymentMethod} sem linha digitável`, () => {
+    it(`recusa ${paymentMethod} sem código de barras`, () => {
       const r = checkPayoutReadiness(candidate({ paymentMethod, payee: fullAccount() }));
       assert.equal(r.status, 'incomplete');
       assert.deepEqual(fieldsOf(r), ['payment-detail']);
     });
   }
 
-  it('trata linha digitável em branco como ausente', () => {
+  it('trata código de barras em branco como ausente', () => {
     const r = checkPayoutReadiness(candidate({ paymentMethod: 'Boleto', paymentDetail: '   ' }));
     assert.equal(r.status, 'incomplete');
-    assert.deepEqual(fieldsOf(r), ['payment-detail']);
+    assert.equal(reasonFor(r, 'payment-detail'), 'missing');
+  });
+
+  // Aceita o dado com a pontuação que o cadastro às vezes guarda — o campo do arquivo é numérico.
+  it('ignora pontuação no código de barras', () => {
+    const dotted = '23791.23450 00001.500001 23456.789012 3 45678901234';
+    const r = checkPayoutReadiness(candidate({ paymentMethod: 'Boleto', paymentDetail: dotted }));
+    assert.equal(r.status, 'ready');
+  });
+
+  // 47 dígitos é LINHA DIGITÁVEL: dado presente e inaproveitável enquanto não houver conversão —
+  // o mesmo desfecho do nome de banco sem código. Não é hipótese: 1 dos 20 boletos do dump de
+  // produção está nesse formato.
+  it('marca a linha digitável como inconvertível, não como ausente', () => {
+    const r = checkPayoutReadiness(
+      candidate({ paymentMethod: 'Boleto', paymentDetail: DIGITABLE_LINE }),
+    );
+    assert.equal(r.status, 'incomplete');
+    assert.equal(reasonFor(r, 'payment-detail'), 'unmappable');
+  });
+
+  it('marca comprimento arbitrário como malformado', () => {
+    for (const detail of ['34191790010', '123', '9'.repeat(50)]) {
+      const r = checkPayoutReadiness(candidate({ paymentMethod: 'Boleto', paymentDetail: detail }));
+      assert.equal(reasonFor(r, 'payment-detail'), 'malformed', detail);
+    }
   });
 });
 

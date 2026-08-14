@@ -7,7 +7,7 @@
 // chamar `segmentA` isolado consegue montar um arquivo que o banco recusa.
 //
 // Esta camada é ACL (ADR-0006): recebe dados já resolvidos e não conhece agregado nem repositório.
-import { ok, type Result } from '../../../../shared/primitives/result.ts';
+import { ok, err, type Result } from '../../../../shared/primitives/result.ts';
 import {
   blanks,
   cents,
@@ -152,6 +152,72 @@ export const segmentB = (input: SegmentBInput): Result<string, CnabSegmentError>
     num(0, 1), // 226     aviso
     num(0, 6), // 227-232 código da UG centralizadora (SIAPE)
     num(0, 8), // 233-240 código ISPB
+  ]);
+};
+
+// ─── Segmento J — Pagamento de Títulos de Cobrança (boleto) ──────────────────────────────────
+//
+// Fonte primária: `jun-19-layout-multipag.pdf` p. 32 (local-only), campos 01.3J a 21.3J, declarado
+// **Obrigatório – Remessa / Retorno**. Posições conferidas no PDF, não em transcrição.
+//
+// ⚠️ Este registro NÃO tem banco, agência nem conta do FAVORECIDO — quem identifica o beneficiário
+// é o código de barras. É a razão pela qual o boleto não depende do cadastro bancário, e a
+// confirmação na fonte do CA5 da #708. O `Nome do Cedente` (62-091) é o do PAGADOR: no boleto,
+// quem recebe já está embutido no código.
+export type SegmentJInput = Readonly<{
+  bankCode: string; // banco do CEDENTE (posições 001-003)
+  batchNumber: number;
+  recordNumber: number;
+  // G063 — 44 posições numéricas. É o CÓDIGO DE BARRAS (Carta-Circular Bacen 2.926), não a linha
+  // digitável de 47: são representações diferentes, e a linha traz DVs que o código não tem.
+  barcode: string;
+  payerName: string; // G013 — nome do cedente/pagador
+  dueDate: Date; // G044
+  titleValueCents: number; // G042
+  paymentDate: Date; // P009
+  paymentValueCents: number; // P010
+  discountCents?: number; // L002
+  surchargeCents?: number; // L003 — mora + multa
+  yourNumber?: string; // G064 — referência do pagador
+}>;
+
+const CURRENCY_REAL = '09'; // G065 — domínio do layout: '09' = Real
+
+// 44 é comprimento EXATO, não máximo — e a diferença importa.
+//
+// `num()` alinha à direita com zeros à esquerda, que é o certo para agência (`1234` → `01234`,
+// mesma agência). Para código de barras não é: os 44 dígitos são posicionais e cada um significa
+// algo — banco, moeda, DV, fator de vencimento, valor. Preencher `123` com 41 zeros produz um
+// código sintaticamente válido e semanticamente outro, que o banco aceita e paga errado.
+const BARCODE_LENGTH = 44;
+const isBarcode = (raw: string): boolean =>
+  new RegExp(`^\\d{${String(BARCODE_LENGTH)}}$`).test(raw);
+
+export const segmentJ = (input: SegmentJInput): Result<string, CnabSegmentError> => {
+  if (!isBarcode(input.barcode)) return err('numeric-field-invalid');
+
+  return joinFields([
+    num(input.bankCode, 3), // 001-003 banco do cedente
+    num(input.batchNumber, 4), // 004-007 lote
+    num(DETAIL_RECORD_TYPE, 1), // 008     tipo de registro (detalhe)
+    num(input.recordNumber, 5), // 009-013 nº do registro no lote
+    text('J', 1), // 014     segmento
+    num(MOVEMENT_INCLUSION, 1), // 015     tipo de movimento
+    num(MOVEMENT_INSTRUCTION_NONE, 2), // 016-017 código da instrução
+    num(input.barcode, 44), // 018-061 código de barras
+    text(input.payerName, 30), // 062-091 nome do cedente
+    dateDDMMYYYY(input.dueDate), // 092-099 vencimento do título
+    cents(input.titleValueCents, 15), // 100-114 valor do título (13 + 2)
+    cents(input.discountCents ?? 0, 15), // 115-129 desconto + abatimento
+    cents(input.surchargeCents ?? 0, 15), // 130-144 mora + multa
+    dateDDMMYYYY(input.paymentDate), // 145-152 data do pagamento
+    cents(input.paymentValueCents, 15), // 153-167 valor do pagamento
+    num(0, 15), // 168-182 quantidade da moeda (10 + 5)
+    text(input.yourNumber ?? '', 20), // 183-202 referência do sacado
+    blanks(20), // 203-222 nosso número — o banco preenche no retorno
+    num(CURRENCY_REAL, 2), // 223-224 código da moeda
+    blanks(6), // 225-230 CNAB
+    blanks(10), // 231-240 ocorrências — preenchidas no retorno
   ]);
 };
 

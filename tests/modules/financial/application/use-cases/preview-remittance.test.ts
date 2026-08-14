@@ -82,7 +82,12 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
       row({ documentId: 'ted-sem-banco', payee: NO_DESTINATION_NULLS }),
       row({ documentId: 'pix-ok', paymentMethod: 'PIX', payee: PIX_KEY_ONLY }),
       row({ documentId: 'pix-sem-chave', paymentMethod: 'PIX', payee: BANK_ACCOUNT_ONLY }),
-      row({ documentId: 'boleto-ok', paymentMethod: 'Boleto', paymentDetail: '34191790010' }),
+      // 44 dígitos — o código de barras que o Segmento J grava (G063).
+      row({
+        documentId: 'boleto-ok',
+        paymentMethod: 'Boleto',
+        paymentDetail: '23791234500000150000123456789012345678901234',
+      }),
       row({ documentId: 'boleto-sem-linha', paymentMethod: 'Boleto', payee: NO_DESTINATION_NULLS }),
       row({ documentId: 'cambio', paymentMethod: 'Cambio' }),
     ];
