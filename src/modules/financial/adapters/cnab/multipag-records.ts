@@ -19,13 +19,17 @@ import {
   timeHHMMSS,
 } from './positional.ts';
 import type { PositionalFieldError } from './positional.ts';
+import type { CnabBatchProfile } from './batch-profile.ts';
 
 export type CnabRecordError = PositionalFieldError;
 
-// Versões de layout que o Bradesco espera. Fixas por documento, não configuráveis: mudam quando o
-// banco publica layout novo, e aí o valor vem acompanhado de um novo PDF.
+// Versão do layout DE ARQUIVO. Fixa por documento, não configurável: muda quando o banco publica
+// layout novo, e aí o valor vem acompanhado de um novo PDF.
+//
+// A versão do layout DE LOTE não mora aqui, e essa ausência é deliberada: ela varia por rota — cada
+// seção do manual declara a sua — e viver como constante única neste módulo foi o que fez o header
+// de lote parecer um formato só. Ela chega pelo `CnabBatchProfile` (#711).
 const FILE_LAYOUT_VERSION = '089';
-const BATCH_LAYOUT_VERSION = '045';
 const REMITTANCE_CODE = '1'; // 1 = remessa (arquivo que sai daqui); 2 = retorno.
 const BATCH_TRAILER_RESERVED_LOT = '9999';
 
@@ -65,8 +69,10 @@ export type FileHeaderInput = Readonly<{
 export type BatchHeaderInput = Readonly<{
   cedente: CedenteHeaderData;
   batchNumber: number;
-  serviceType: string; // G025 — tipo de serviço do lote
-  launchForm: string; // G029 — forma de lançamento (crédito em conta, TED, …)
+  // Serviço, forma, versão do layout e presença do indicativo vêm JUNTOS, do perfil da rota. Passá-
+  // los soltos permitiria combinar a forma de uma seção com a versão de layout de outra, que é
+  // exatamente o arquivo que o banco recusa sem dizer qual campo.
+  profile: CnabBatchProfile;
   message?: string;
   address?: CompanyAddress;
 }>;
@@ -115,15 +121,15 @@ export const fileHeader = (input: FileHeaderInput): Result<string, CnabRecordErr
 };
 
 export const batchHeader = (input: BatchHeaderInput): Result<string, CnabRecordError> => {
-  const { cedente: c, address: a } = input;
+  const { cedente: c, address: a, profile: p } = input;
   return joinFields([
     num(c.bankCode, 3), // 001-003 banco
     num(input.batchNumber, 4), // 004-007 lote
     num(1, 1), // 008     tipo de registro
     text('C', 1), // 009     tipo de operação (crédito)
-    num(input.serviceType, 2), // 010-011 tipo de serviço
-    num(input.launchForm, 2), // 012-013 forma de lançamento
-    num(BATCH_LAYOUT_VERSION, 3), // 014-016 versão do layout de lote
+    num(p.serviceType, 2), // 010-011 tipo de serviço
+    num(p.launchForm, 2), // 012-013 forma de lançamento
+    num(p.batchLayoutVersion, 3), // 014-016 versão do layout de lote — varia por rota
     blanks(1), // 017     CNAB
     num(c.documentType, 1), // 018     tipo de inscrição
     digits(c.document, 14), // 019-032 nº de inscrição
@@ -142,8 +148,10 @@ export const batchHeader = (input: BatchHeaderInput): Result<string, CnabRecordE
     digits(a?.zipCode ?? '0', 5), // 213-217 CEP
     text(a?.zipSuffix ?? '', 3), // 218-220 complemento do CEP
     text(a?.state ?? '', 2), // 221-222 estado
-    num('01', 2), // 223-224 indicativo de forma de pagamento
-    blanks(6), // 225-230 CNAB
+    // 223-230. Na seção de pagamentos o indicativo ocupa 223-224 e o CNAB vai de 225 a 230; na
+    // seção de cobrança o campo não existe e as oito posições são brancos. Emitir o indicativo num
+    // lote de boleto preencheria campo que aquela seção não prevê.
+    ...(p.paymentIndicator === null ? [blanks(8)] : [num(p.paymentIndicator, 2), blanks(6)]),
     blanks(10), // 231-240 ocorrências (preenchidas no retorno)
   ]);
 };

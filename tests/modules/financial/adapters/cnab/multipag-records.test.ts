@@ -26,6 +26,15 @@ const CEDENTE: CedenteHeaderData = {
 
 const AT = new Date(Date.UTC(2026, 7, 10, 14, 5, 9));
 
+// Serviço, forma, versão do layout e indicativo chegam JUNTOS, do perfil da rota: são a parte do
+// envelope que muda de uma seção do manual para outra.
+const TRANSFER_PROFILE = {
+  serviceType: '20',
+  launchForm: '41',
+  batchLayoutVersion: '045',
+  paymentIndicator: '01',
+} as const;
+
 // Campo do CNAB é 1-indexed e inclusivo nas duas pontas — o helper fala a mesma língua do layout,
 // para o teste poder ser conferido contra o PDF sem conversão mental.
 const at = (line: string, from: number, to: number): string => line.slice(from - 1, to);
@@ -76,9 +85,7 @@ describe('Multipag — Header de Arquivo (tipo 0)', () => {
 });
 
 describe('Multipag — Header de Lote (tipo 1)', () => {
-  const record = line(
-    batchHeader({ cedente: CEDENTE, batchNumber: 1, serviceType: '20', launchForm: '01' }),
-  );
+  const record = line(batchHeader({ cedente: CEDENTE, batchNumber: 1, profile: TRANSFER_PROFILE }));
 
   it('tem exatamente 240 posições', () => {
     assert.equal(record.length, 240);
@@ -90,11 +97,41 @@ describe('Multipag — Header de Lote (tipo 1)', () => {
     assert.equal(at(record, 8, 8), '1');
   });
 
-  it('marca operação C, serviço, forma de lançamento e layout de lote 045', () => {
+  it('marca operação C e escreve serviço, forma e versão de layout vindos do perfil', () => {
     assert.equal(at(record, 9, 9), 'C');
-    assert.equal(at(record, 10, 11), '20');
-    assert.equal(at(record, 12, 13), '01');
-    assert.equal(at(record, 14, 16), '045');
+    assert.equal(at(record, 10, 11), TRANSFER_PROFILE.serviceType);
+    assert.equal(at(record, 12, 13), TRANSFER_PROFILE.launchForm);
+    assert.equal(at(record, 14, 16), TRANSFER_PROFILE.batchLayoutVersion);
+  });
+
+  // A versão do layout do lote NÃO é constante do módulo: cada seção do manual declara a sua, e
+  // era ser uma constante única que fazia o header parecer um formato só (#711).
+  it('a versão do layout acompanha o perfil, não uma constante do módulo', () => {
+    const collection = line(
+      batchHeader({
+        cedente: CEDENTE,
+        batchNumber: 1,
+        profile: { ...TRANSFER_PROFILE, batchLayoutVersion: '040', paymentIndicator: null },
+      }),
+    );
+    assert.equal(at(collection, 14, 16), '040');
+  });
+
+  // O indicativo existe na seção de pagamentos e não existe na de cobrança, onde aquelas oito
+  // posições são brancos. Emiti-lo sempre preencheria campo que a seção do boleto não prevê.
+  it('emite o indicativo quando a seção o tem, e brancos quando não tem', () => {
+    assert.equal(at(record, 223, 224), '01');
+    assert.equal(at(record, 225, 230), ' '.repeat(6));
+
+    const collection = line(
+      batchHeader({
+        cedente: CEDENTE,
+        batchNumber: 1,
+        profile: { ...TRANSFER_PROFILE, paymentIndicator: null },
+      }),
+    );
+    assert.equal(at(collection, 223, 230), ' '.repeat(8));
+    assert.equal(collection.length, 240);
   });
 });
 
@@ -141,7 +178,7 @@ describe('Multipag — o envelope fecha sobre si mesmo', () => {
     const detailCount = 2;
     const records = [
       line(fileHeader({ cedente: CEDENTE, bankName: 'BRADESCO', nsa: 1, generatedAt: AT })),
-      line(batchHeader({ cedente: CEDENTE, batchNumber: 1, serviceType: '20', launchForm: '01' })),
+      line(batchHeader({ cedente: CEDENTE, batchNumber: 1, profile: TRANSFER_PROFILE })),
       ...Array.from({ length: detailCount }, () => 'x'.repeat(240)),
       line(
         batchTrailer({

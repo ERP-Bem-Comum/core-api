@@ -35,6 +35,7 @@ const reader = (docs: readonly string[]): RemittancePaymentReader => ({
           .filter((id) => docs.includes(id))
           .map((id, i) => ({
             documentId: id,
+            route: 'transfer' as const,
             payee: payee(i + 1),
             valueCents: (i + 1) * 1000,
             paymentDate: new Date(Date.UTC(2026, 7, 12)),
@@ -89,8 +90,6 @@ const input = (
 ) => ({
   cedenteAccountId,
   documentIds: docs,
-  serviceType: '20',
-  launchForm: '01',
 });
 
 describe('generateRemittance — caminho feliz', () => {
@@ -216,6 +215,7 @@ describe('generateRemittance — um arquivo, um dia (#712)', () => {
         ok(
           ids.map((id, i) => ({
             documentId: id,
+            route: 'transfer' as const,
             payee: payee(i + 1),
             valueCents: (i + 1) * 1000,
             paymentDate: dates[i] ?? dates[0] ?? new Date(Date.UTC(2026, 7, 12)),
@@ -274,5 +274,59 @@ describe('generateRemittance — um arquivo, um dia (#712)', () => {
     const s = await setup({ docs: ['doc-1'] });
     const r = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
     assert.ok(isOk(r), `esperava ok, veio ${isErr(r) ? r.error : '?'}`);
+  });
+});
+
+describe('generateRemittance — rota sem emissor (#711, CA3)', () => {
+  // PIX e guia são rotas que a P.O. contratou e o emissor ainda não cobre. Enquanto não cobre, a
+  // recusa tem de ser explícita: emiti-las pelo perfil de transferência mandaria ao banco um
+  // pagamento bem-formado para a operação errada.
+  const readerWithRoute = (route: 'pix' | 'tax-guide'): RemittancePaymentReader => ({
+    loadPayments: async (ids) =>
+      Promise.resolve(
+        ok(
+          ids.map((id, i) => ({
+            documentId: id,
+            route,
+            valueCents: (i + 1) * 1000,
+            paymentDate: new Date(Date.UTC(2026, 7, 12)),
+          })),
+        ),
+      ),
+  });
+
+  it('recusa com erro próprio, distinto de dado faltando', async () => {
+    for (const route of ['pix', 'tax-guide'] as const) {
+      const s = await setup();
+      const r = await generateRemittance({ ...s.deps, payments: readerWithRoute(route) })(
+        input(s.cedenteAccountId, s.docs),
+      );
+
+      assert.ok(isErr(r), route);
+      assert.equal(r.error, 'remittance-launch-form-unsupported');
+    }
+  });
+
+  // Nada de arquivo no bucket: gravar em `saida/` é enfileirar pagamento, e a rota sequer tem
+  // emissor. O NSA, esse já foi consumido — é deliberado, gap na sequência é inofensivo e reusar
+  // número é retransmissão aos olhos do banco.
+  it('não deposita nada na fila de saída', async () => {
+    const s = await setup();
+    let uploads = 0;
+    const deps = {
+      ...s.deps,
+      payments: readerWithRoute('pix'),
+      storage: {
+        ...s.storage,
+        putRemittance: async (name: string, content: string) => {
+          uploads += 1;
+          return s.storage.putRemittance(name, content);
+        },
+      },
+    };
+
+    await generateRemittance(deps)(input(s.cedenteAccountId, s.docs));
+
+    assert.equal(uploads, 0, 'gravar em saida/ é enfileirar pagamento — não pode acontecer aqui');
   });
 });

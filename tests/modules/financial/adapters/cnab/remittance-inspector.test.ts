@@ -42,13 +42,42 @@ const validFile = (count = 2): string => {
     bankName: 'BRADESCO',
     nsa: 7,
     generatedAt: new Date(Date.UTC(2026, 7, 10, 14, 5, 9)),
-    serviceType: '20',
-    launchForm: '01',
     payments: Array.from({ length: count }, (_, i) => ({
+      route: 'transfer' as const,
       payee: payee(i + 1),
       paymentDate: new Date(Date.UTC(2026, 7, 12)),
       valueCents: (i + 1) * 1000,
     })),
+  });
+  assert.ok(isOk(r));
+  return r.value.content;
+};
+
+// Dois lotes de verdade: transferência e boleto têm formas de lançamento distintas, logo lotes
+// distintos. É o arquivo que a versão anterior do inspetor reprovaria — ela procurava o header do
+// lote na segunda linha e o trailer na penúltima, o que só vale para lote único (#711, CA6).
+const multiBatchFile = (): string => {
+  const r = buildRemittanceFile({
+    cedente: CEDENTE,
+    bankName: 'BRADESCO',
+    nsa: 7,
+    generatedAt: new Date(Date.UTC(2026, 7, 10, 14, 5, 9)),
+    payments: [
+      {
+        route: 'transfer' as const,
+        payee: payee(1),
+        paymentDate: new Date(Date.UTC(2026, 7, 12)),
+        valueCents: 1000,
+      },
+      {
+        route: 'billet' as const,
+        barcode: '3419001'.padEnd(44, '7'),
+        beneficiaryName: 'FORNECEDOR BOLETO',
+        dueDate: new Date(Date.UTC(2026, 7, 20)),
+        paymentDate: new Date(Date.UTC(2026, 7, 12)),
+        valueCents: 2500,
+      },
+    ],
   });
   assert.ok(isOk(r));
   return r.value.content;
@@ -156,5 +185,61 @@ describe('Inspetor de remessa — reporta tudo, não só o primeiro', () => {
     const defect = inspectRemittanceFile(truncated).find((d) => d.code === 'line-length');
     assert.ok(defect !== undefined);
     assert.equal(defect.line, 3);
+  });
+});
+
+describe('Inspetor — arquivo de vários lotes (#711, CA6)', () => {
+  // O defeito que motivou a mudança: com a busca por POSIÇÃO, este arquivo — correto — era
+  // reprovado, porque a penúltima linha é o trailer do último lote e a contagem somava os detalhes
+  // dos dois lotes contra o trailer de um.
+  it('aprova o arquivo de dois lotes que a busca por posição reprovaria', () => {
+    assert.deepEqual(codes(multiBatchFile()), []);
+  });
+
+  it('confere cada trailer contra o SEU lote, não contra o arquivo', () => {
+    const file = multiBatchFile();
+    const lines = file.split(LINE_TERMINATOR);
+
+    // Estraga a somatória do PRIMEIRO trailer de lote: o segundo continua correto, e é isso que
+    // separa a conferência por lote da conferência global.
+    const trailerIndex = lines.findIndex((l) => l.slice(7, 8) === '5');
+    const corrupted = patch(file, trailerIndex, 24, '0'.repeat(17) + '9');
+
+    const found = codes(corrupted);
+    assert.deepEqual(found, ['batch-total-mismatch']);
+  });
+
+  it('acusa lote aberto que nunca fecha', () => {
+    const file = multiBatchFile();
+    const lines = file.split(LINE_TERMINATOR);
+    // Transforma o trailer do primeiro lote num detalhe: o lote fica aberto até o próximo header.
+    const trailerIndex = lines.findIndex((l) => l.slice(7, 8) === '5');
+
+    assert.ok(codes(patch(file, trailerIndex, 8, '3')).includes('missing-batch-trailer'));
+  });
+
+  it('acusa detalhe fora de qualquer lote', () => {
+    const file = validFile(1);
+    const lines = file.split(LINE_TERMINATOR);
+    // Descaracteriza o header do lote: os detalhes seguintes passam a não ter lote que os contenha.
+    const corrupted = patch(file, 1, 8, '0');
+
+    assert.ok(codes(corrupted).includes('detail-outside-batch'));
+    assert.ok(lines.length > 0);
+  });
+
+  it('acusa segmento de detalhe que a varredura não conhece, em vez de somar zero calado', () => {
+    const file = validFile(1);
+    // Troca o Segmento A por um segmento inexistente: a soma do lote deixaria de fechar em
+    // silêncio se o inspetor tratasse desconhecido como "não move dinheiro".
+    assert.ok(codes(patch(file, 2, 14, 'X')).includes('unknown-segment'));
+  });
+
+  it('acusa quantidade de lotes divergente no trailer do arquivo', () => {
+    const file = multiBatchFile();
+    const lines = file.split(LINE_TERMINATOR);
+    const corrupted = patch(file, lines.length - 1, 18, '000009');
+
+    assert.ok(codes(corrupted).includes('file-batch-count-mismatch'));
   });
 });

@@ -13,6 +13,10 @@
 // favorecido errado, o valor errado ou na data errada — nada disso é estrutura. "Zero defeitos"
 // aqui significa "o banco não recusa por forma", NUNCA "o pagamento está correto".
 //
+// A varredura acha os lotes pelo TIPO DE REGISTRO, nunca pela posição da linha. A versão anterior
+// assumia lote único — segunda linha é header, penúltima é trailer — e teria reprovado, com
+// `batch-record-count-mismatch`, todo arquivo multi-lote correto (#711, CA6).
+//
 // Acumula todos os defeitos numa passada, em vez de parar no primeiro: quem chama está prestes a
 // transmitir dinheiro e quer a lista inteira, não um defeito por rodada.
 import { LINE_TERMINATOR } from './remittance-file.ts';
@@ -21,14 +25,17 @@ export type RemittanceDefectCode =
   | 'empty-file'
   | 'line-length'
   | 'unknown-record-type'
+  | 'unknown-segment'
   | 'missing-file-header'
   | 'missing-file-trailer'
   | 'missing-batch-header'
   | 'missing-batch-trailer'
+  | 'detail-outside-batch'
   | 'detail-sequence-gap'
   | 'segment-a-without-b'
   | 'batch-record-count-mismatch'
   | 'file-record-count-mismatch'
+  | 'file-batch-count-mismatch'
   | 'batch-total-mismatch';
 
 export type RemittanceDefect = Readonly<{
@@ -45,10 +52,36 @@ const at = (line: string, from: number, to: number): string => line.slice(from -
 const recordType = (line: string): string => at(line, 8, 8);
 const segment = (line: string): string => at(line, 14, 14);
 const detailSequence = (line: string): number => Number(at(line, 9, 13));
-const paymentCents = (line: string): number => Number(at(line, 120, 134));
 const batchDeclaredCount = (line: string): number => Number(at(line, 18, 23));
 const batchDeclaredTotal = (line: string): number => Number(at(line, 24, 41));
+const fileDeclaredBatches = (line: string): number => Number(at(line, 18, 23));
 const fileDeclaredRecords = (line: string): number => Number(at(line, 24, 29));
+
+// Quanto o registro de detalhe move — e a posição do valor NÃO é a mesma em todo segmento. `null`
+// distingue "registro que não carrega valor" (o B, que complementa o A) de "segmento que a
+// varredura não conhece": somar zero por desconhecimento daria um trailer conferido contra uma
+// soma incompleta, que é o defeito passar despercebido em silêncio.
+const paymentCentsOf = (line: string): number | null => {
+  switch (segment(line)) {
+    case 'A':
+      return Number(at(line, 120, 134));
+    case 'J':
+      return Number(at(line, 153, 167));
+    case 'B':
+      return 0;
+    default:
+      return null;
+  }
+};
+
+// Estado do lote em aberto durante a varredura. Mutável de propósito e confinado a esta função: é
+// um acumulador, não um valor de domínio.
+interface OpenBatch {
+  headerLine: number;
+  detailCount: number;
+  sumCents: number;
+  sequence: number;
+}
 
 export const inspectRemittanceFile = (content: string): readonly RemittanceDefect[] => {
   const defects: RemittanceDefect[] = [];
@@ -73,90 +106,141 @@ export const inspectRemittanceFile = (content: string): readonly RemittanceDefec
     }
   });
 
-  // Envelope: o arquivo abre com tipo 0 e fecha com tipo 9; o lote abre com 1 e fecha com 5.
+  // Envelope do ARQUIVO: abre com tipo 0 e fecha com tipo 9.
   const first = lines[0] ?? '';
   const last = lines[lines.length - 1] ?? '';
   if (recordType(first) !== '0') add(1, 'missing-file-header', 'primeira linha não é tipo 0');
   if (recordType(last) !== '9') {
     add(lines.length, 'missing-file-trailer', 'última linha não é tipo 9');
   }
-  if (recordType(lines[1] ?? '') !== '1')
-    add(2, 'missing-batch-header', 'segunda linha não é tipo 1');
 
-  const batchTrailerIndex = lines.length - 2;
-  const batchTrailer = lines[batchTrailerIndex] ?? '';
-  if (recordType(batchTrailer) !== '5') {
-    add(batchTrailerIndex + 1, 'missing-batch-trailer', 'penúltima linha não é tipo 5');
-  }
-
-  // Detalhes: numeração sequencial a partir de 1, e todo Segmento A seguido de um B.
-  let expectedSequence = 0;
-  let sumCents = 0;
-  let detailCount = 0;
+  let open: OpenBatch | null = null;
   let pendingSegmentA = -1;
+  let batchCount = 0;
 
-  lines.forEach((line, i) => {
-    const type = recordType(line);
-    if (type !== '3') {
-      if (!['0', '1', '5', '9'].includes(type)) {
-        add(i + 1, 'unknown-record-type', `tipo '${type}' não pertence ao layout`);
-      }
-      return;
-    }
-
-    detailCount += 1;
-    expectedSequence += 1;
-    if (detailSequence(line) !== expectedSequence) {
-      add(
-        i + 1,
-        'detail-sequence-gap',
-        `sequencial ${String(detailSequence(line))}, esperado ${String(expectedSequence)}`,
-      );
-    }
-
-    const seg = segment(line);
-    if (seg === 'A') {
-      if (pendingSegmentA !== -1) {
-        add(pendingSegmentA + 1, 'segment-a-without-b', 'Segmento A seguido de outro A');
-      }
-      pendingSegmentA = i;
-      sumCents += paymentCents(line);
-    } else if (seg === 'B') {
+  const closePendingSegmentA = (): void => {
+    if (pendingSegmentA !== -1) {
+      add(pendingSegmentA + 1, 'segment-a-without-b', 'Segmento A sem o B correspondente');
       pendingSegmentA = -1;
     }
-  });
+  };
 
-  // O B é obrigatório no Multipag: um A sem par produz arquivo recusado.
-  if (pendingSegmentA !== -1) {
-    add(pendingSegmentA + 1, 'segment-a-without-b', 'Segmento A sem o B correspondente');
+  // `for…of`, e não `forEach`: o lote em aberto é estado que atravessa iterações, e dentro de um
+  // callback o compilador perde a reatribuição — o que obrigaria a um cast depois do laço para
+  // reconhecer que o lote pode ter ficado aberto.
+  for (const [i, line] of lines.entries()) {
+    const type = recordType(line);
+
+    switch (type) {
+      case '1': {
+        // Lote anterior que não fechou: o header seguinte é a prova de que faltou o trailer.
+        if (open !== null) {
+          add(open.headerLine, 'missing-batch-trailer', 'lote aberto sem registro tipo 5');
+          closePendingSegmentA();
+        }
+        batchCount += 1;
+        open = { headerLine: i + 1, detailCount: 0, sumCents: 0, sequence: 0 };
+        break;
+      }
+
+      case '3': {
+        if (open === null) {
+          add(i + 1, 'detail-outside-batch', 'registro de detalhe fora de um lote');
+          break;
+        }
+
+        open.detailCount += 1;
+        open.sequence += 1;
+        if (detailSequence(line) !== open.sequence) {
+          add(
+            i + 1,
+            'detail-sequence-gap',
+            `sequencial ${String(detailSequence(line))}, esperado ${String(open.sequence)} neste lote`,
+          );
+        }
+
+        const seg = segment(line);
+        const cents = paymentCentsOf(line);
+        if (cents === null) {
+          add(i + 1, 'unknown-segment', `segmento '${seg}' não pertence ao layout emitido`);
+          break;
+        }
+        open.sumCents += cents;
+
+        // O B é obrigatório no Multipag para o par de crédito em conta: um A sem par produz arquivo
+        // recusado. O J paga sozinho e não participa desta regra.
+        if (seg === 'A') {
+          if (pendingSegmentA !== -1) {
+            add(pendingSegmentA + 1, 'segment-a-without-b', 'Segmento A seguido de outro A');
+          }
+          pendingSegmentA = i;
+        } else if (seg === 'B') {
+          pendingSegmentA = -1;
+        }
+        break;
+      }
+
+      case '5': {
+        if (open === null) {
+          add(i + 1, 'missing-batch-header', 'trailer de lote sem header correspondente');
+          break;
+        }
+        closePendingSegmentA();
+
+        // Totais: é aqui que mora o defeito caro. Contagem ou somatória divergente é dinheiro que
+        // não fecha, e o banco recusa o arquivo inteiro sem dizer qual campo.
+        const expected = open.detailCount + 2; // header do lote + detalhes + este trailer
+        if (batchDeclaredCount(line) !== expected) {
+          add(
+            i + 1,
+            'batch-record-count-mismatch',
+            `declara ${String(batchDeclaredCount(line))}, o lote tem ${String(expected)}`,
+          );
+        }
+        if (batchDeclaredTotal(line) !== open.sumCents) {
+          add(
+            i + 1,
+            'batch-total-mismatch',
+            `declara ${String(batchDeclaredTotal(line))} centavos, o lote soma ${String(open.sumCents)}`,
+          );
+        }
+        open = null;
+        break;
+      }
+
+      case '0':
+      case '9':
+        break;
+
+      default:
+        add(i + 1, 'unknown-record-type', `tipo '${type}' não pertence ao layout`);
+    }
   }
 
-  // Totais: é aqui que mora o defeito caro. Contagem ou somatória divergente é dinheiro que não
-  // fecha, e o banco recusa o arquivo inteiro sem dizer qual campo.
-  const expectedBatchCount = detailCount + 2; // header de lote + detalhes + este trailer
-  if (recordType(batchTrailer) === '5') {
-    if (batchDeclaredCount(batchTrailer) !== expectedBatchCount) {
-      add(
-        batchTrailerIndex + 1,
-        'batch-record-count-mismatch',
-        `declara ${String(batchDeclaredCount(batchTrailer))}, arquivo tem ${String(expectedBatchCount)}`,
-      );
-    }
-    if (batchDeclaredTotal(batchTrailer) !== sumCents) {
-      add(
-        batchTrailerIndex + 1,
-        'batch-total-mismatch',
-        `declara ${String(batchDeclaredTotal(batchTrailer))} centavos, soma dos pagamentos é ${String(sumCents)}`,
-      );
-    }
+  if (open !== null) {
+    add(open.headerLine, 'missing-batch-trailer', 'lote aberto sem registro tipo 5');
   }
+  closePendingSegmentA();
 
-  if (recordType(last) === '9' && fileDeclaredRecords(last) !== lines.length) {
-    add(
-      lines.length,
-      'file-record-count-mismatch',
-      `declara ${String(fileDeclaredRecords(last))} registros, arquivo tem ${String(lines.length)} linhas`,
-    );
+  if (batchCount === 0) add(0, 'missing-batch-header', 'arquivo sem nenhum lote');
+
+  if (recordType(last) === '9') {
+    if (fileDeclaredRecords(last) !== lines.length) {
+      add(
+        lines.length,
+        'file-record-count-mismatch',
+        `declara ${String(fileDeclaredRecords(last))} registros, arquivo tem ${String(lines.length)} linhas`,
+      );
+    }
+    // A contagem de lotes deixou de ser sempre 1 — e é a declaração que o banco confere contra o
+    // que veio no arquivo.
+    if (fileDeclaredBatches(last) !== batchCount) {
+      add(
+        lines.length,
+        'file-batch-count-mismatch',
+        `declara ${String(fileDeclaredBatches(last))} lotes, arquivo tem ${String(batchCount)}`,
+      );
+    }
   }
 
   return defects;

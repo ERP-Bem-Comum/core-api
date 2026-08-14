@@ -30,15 +30,17 @@ export const createBradescoMultipagTranslator = (): CnabRemittanceTranslator => 
       bankName: input.cedente.bankName,
       nsa: input.nsa,
       generatedAt: input.generatedAt,
-      serviceType: input.serviceType,
-      launchForm: input.launchForm,
-      payments: input.payments.map((p) => ({
-        payee: p.payee,
-        paymentDate: p.paymentDate,
-        valueCents: p.valueCents,
-      })),
+      payments: input.payments,
     });
-    if (!file.ok) return err('cnab-translation-failed');
+    if (!file.ok) {
+      // A rota sem emissor sobe com nome próprio. Achatá-la em `translation-failed` mandaria o
+      // operador procurar dado faltando num título que está completo — o que falta é o emissor.
+      return err(
+        file.error === 'remittance-launch-form-unsupported'
+          ? 'cnab-launch-form-unsupported'
+          : 'cnab-translation-failed',
+      );
+    }
 
     // Última barreira antes de o use case enfileirar dinheiro. Sem ambiente de homologação
     // (ADR-0061), é a única validação que existe antes do banco — e fica DENTRO do tradutor para
@@ -50,6 +52,7 @@ export const createBradescoMultipagTranslator = (): CnabRemittanceTranslator => 
       content: file.value.content,
       totalCents: file.value.totalCents,
       lineCount: file.value.lineCount,
+      batchCount: file.value.batchCount,
     });
   },
 });

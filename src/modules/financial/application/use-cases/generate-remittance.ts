@@ -20,11 +20,12 @@ export type GenerateRemittanceDeps = Readonly<{
   hashContent: (content: string) => string;
 }>;
 
+// Nem tipo de serviço nem forma de lançamento entram por aqui: a forma é derivada da rota de cada
+// título, um lote por forma (#711, CA4). Recebê-la do chamador era aceitar uma afirmação que o
+// conteúdo do arquivo podia contradizer — e com uma rota só, os dois concordavam por acidente.
 export type GenerateRemittanceInput = Readonly<{
   cedenteAccountId: CedenteAccountId;
   documentIds: readonly string[];
-  serviceType: string;
-  launchForm: string;
 }>;
 
 export type GenerateRemittanceOutput = Readonly<{
@@ -41,6 +42,9 @@ export type GenerateRemittanceError =
   | 'remittance-documents-already-held'
   | 'remittance-payments-unavailable'
   | 'remittance-mixed-payment-dates'
+  // Título de rota que o emissor ainda não cobre (PIX, guia). Não é dado faltando: é o arquivo que
+  // ainda não sabe emitir aquela forma, e o operador não tem o que corrigir no cadastro.
+  | 'remittance-launch-form-unsupported'
   | 'remittance-nsa-unavailable'
   | 'remittance-file-name-failed'
   | 'remittance-build-failed'
@@ -105,20 +109,21 @@ export const generateRemittance =
       },
       nsa: nsa.value,
       generatedAt,
-      serviceType: input.serviceType,
-      launchForm: input.launchForm,
-      payments: payments.value.map((p) => ({
-        payee: p.payee,
-        paymentDate: p.paymentDate,
-        valueCents: p.valueCents,
-      })),
+      // O pagamento vai INTEIRO, como o reader o entregou: cada rota carrega os dados que ela usa,
+      // e achatá-los aqui num formato único perderia o que distingue boleto de transferência.
+      payments: payments.value,
     });
     if (!translated.ok) {
-      return translated.error === 'cnab-file-name-failed'
-        ? err('remittance-file-name-failed')
-        : translated.error === 'cnab-malformed-file'
-          ? err('remittance-malformed-file')
-          : err('remittance-build-failed');
+      switch (translated.error) {
+        case 'cnab-file-name-failed':
+          return err('remittance-file-name-failed');
+        case 'cnab-malformed-file':
+          return err('remittance-malformed-file');
+        case 'cnab-launch-form-unsupported':
+          return err('remittance-launch-form-unsupported');
+        case 'cnab-translation-failed':
+          return err('remittance-build-failed');
+      }
     }
 
     const remittance = createRemittance({
