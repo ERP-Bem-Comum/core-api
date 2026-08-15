@@ -1383,3 +1383,61 @@ export const parseDocumentResponseSchema = z
   .strict();
 
 export type ParseDocumentResponseDto = z.infer<typeof parseDocumentResponseSchema>;
+
+// ── Pré-voo da remessa (#720) ───────────────────────────────────────────────────────────────────
+//
+// Responde "o que sai e o que não sai" ANTES de gerar: sem consumir NSA, sem prender documento e
+// sem tocar no bucket. O teto de ids acompanha o do `payables:batch` — a seleção do operador vem
+// do mesmo grid.
+
+export const remittancePreviewBodySchema = z
+  .object({
+    documentIds: z.array(z.uuid()).min(1).max(200),
+  })
+  .strict();
+
+// O motivo viaja junto do campo, e não como frase: `missing` pede preenchimento, `unmappable` e
+// `malformed` pedem correção do que já está lá. O operador age diferente em cada caso, e uma
+// mensagem de texto obrigaria a interface a interpretar prosa para saber onde levá-lo.
+const payoutGapSchema = z
+  .object({
+    field: z.enum([
+      'pix-key',
+      'payee-bank-code',
+      'payee-agency',
+      'payee-account-number',
+      'payee-account-digit',
+      'payment-detail',
+    ]),
+    reason: z.enum(['missing', 'unmappable', 'malformed']),
+  })
+  .strict();
+
+export const remittancePreviewResponseSchema = z
+  .object({
+    lines: z.array(
+      z
+        .object({
+          documentId: z.uuid(),
+          // `not-found` é status de linha, não erro da chamada: o id que o operador selecionou tem
+          // de aparecer na resposta, ainda que o documento não exista mais.
+          status: z.enum(['ready', 'blocked', 'out-of-van', 'not-found']),
+          route: z.enum(['pix', 'transfer', 'billet', 'tax-guide']).nullable(),
+          missing: z.array(payoutGapSchema.shape.field),
+          gaps: z.array(payoutGapSchema),
+          netValueCents: centsStringSchema,
+        })
+        .strict(),
+    ),
+    readyCount: z.number().int().nonnegative(),
+    blockedCount: z.number().int().nonnegative(),
+    outOfVanCount: z.number().int().nonnegative(),
+    notFoundCount: z.number().int().nonnegative(),
+    readyTotalCents: centsStringSchema,
+    // O valor fora da VAN fica FORA dos dois totais: somá-lo ao impedido inflaria o número que o
+    // operador usa para decidir se vale correr atrás do cadastro — e cadastro nenhum resolve câmbio.
+    blockedTotalCents: centsStringSchema,
+  })
+  .strict();
+
+export type RemittancePreviewResponseDto = z.infer<typeof remittancePreviewResponseSchema>;

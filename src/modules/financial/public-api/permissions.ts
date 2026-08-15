@@ -25,6 +25,11 @@ export const FINANCIAL_PERMISSION = {
   // reference: dados de referência de categorização (020 — categoria/CC/programa). Transversal:
   // alimenta lançamento manual (#124), tratamento da diferença (#5) e categorização do documento (#147).
   referenceRead: 'reference:read',
+  // remittance: remessa bancária pela VAN (#720). Separadas de `payable:approve` de propósito —
+  // aprovar um título e mandar dinheiro ao banco são alçadas diferentes, e fundi-las é caro de
+  // desfazer depois, quando a permissão já tiver sido concedida a quem não deveria disparar.
+  remittanceRead: 'remittance:read',
+  remittanceGenerate: 'remittance:generate',
 } as const;
 
 export type FinancialPermission = (typeof FINANCIAL_PERMISSION)[keyof typeof FINANCIAL_PERMISSION];

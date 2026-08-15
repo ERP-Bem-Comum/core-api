@@ -58,6 +58,9 @@ const CATALOG_RAW = [
   'program:write',
   // reference:* (modulo financial - dados de referencia de categorizacao, #200)
   'reference:read',
+  // remittance:* (modulo financial - remessa bancaria pela VAN, #720)
+  'remittance:generate',
+  'remittance:read',
   // reconciliation:* (modulo financial - conciliacao bancaria, #176)
   'reconciliation:close',
   'reconciliation:import',

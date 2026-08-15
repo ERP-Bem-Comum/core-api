@@ -71,6 +71,7 @@ import {
   dashboardCostCentersToDto,
   payableBatchItemToDto,
   documentBatchItemToDto,
+  remittancePreviewToDto,
 } from './dto.ts';
 import type { DocumentListFilter } from '../../domain/document/query.ts';
 import type { PayableListFilter, PayableListItem } from '../../domain/payable/query.ts';
@@ -98,6 +99,8 @@ import {
   payablesBatchResponseSchema,
   documentsBatchBodySchema,
   documentsBatchResponseSchema,
+  remittancePreviewBodySchema,
+  remittancePreviewResponseSchema,
   documentTimelineResponseSchema,
   importBankStatementBodySchema,
   importBankStatementResponseSchema,
@@ -1104,6 +1107,28 @@ const financialRoutes =
         return sendResult(reply, ok({ items: rows.map(documentBatchItemToDto), missing }), {
           ok: 200,
         });
+      },
+    });
+
+    // POST /financial/remittances:preview — pré-voo do lote (#720). Custom method AIP-136, mesma
+    // técnica do `payables:batch`: a regex `^:preview$` fixa o literal, senão `/remittances*`
+    // capturaria paths irmãos.
+    //
+    // Leitura pura, e é isso que a separa da geração: não consome NSA, não prende documento e não
+    // toca no bucket. Por isso exige `remittance:read`, não `remittance:generate` — conferir o que
+    // sai não é disparar pagamento.
+    scope.route({
+      method: 'POST',
+      url: '/financial/remittances:action(^:preview$)',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.remittanceRead)],
+      schema: {
+        body: remittancePreviewBodySchema,
+        response: { 200: remittancePreviewResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.previewRemittance({ documentIds: req.body.documentIds });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(remittancePreviewToDto(result.value)), { ok: 200 });
       },
     });
 

@@ -10,7 +10,8 @@
 import type { Document } from '../../domain/document/types.ts';
 import * as Competencia from '../../domain/document/competencia.ts';
 import type { ParseDocumentOutput } from '../../application/use-cases/parse-document.ts';
-import type { ParseDocumentResponseDto } from './schemas.ts';
+import type { RemittancePreview } from '../../application/use-cases/preview-remittance.ts';
+import type { ParseDocumentResponseDto, RemittancePreviewResponseDto } from './schemas.ts';
 import type { DocumentListItem } from '../../domain/document/query.ts';
 import type { Payables } from '../../domain/payable/types.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
@@ -535,4 +536,29 @@ export const statementSuggestionsToDto = (
     topBand: i.topBand,
     topScore: i.topScore,
   })),
+});
+
+/**
+ * Serializa o pré-voo da remessa (#720).
+ *
+ * Centavos saem como string, como no resto da borda: o valor é dado, não apresentação, e string de
+ * dígitos atravessa JSON sem o risco de precisão que um `number` grande carrega.
+ */
+export const remittancePreviewToDto = (
+  preview: RemittancePreview,
+): RemittancePreviewResponseDto => ({
+  lines: preview.lines.map((l) => ({
+    documentId: l.documentId,
+    status: l.status,
+    route: l.route,
+    missing: [...l.missing],
+    gaps: l.gaps.map((g) => ({ field: g.field, reason: g.reason })),
+    netValueCents: String(l.netValueCents),
+  })),
+  readyCount: preview.readyCount,
+  blockedCount: preview.blockedCount,
+  outOfVanCount: preview.outOfVanCount,
+  notFoundCount: preview.notFoundCount,
+  readyTotalCents: String(preview.readyTotalCents),
+  blockedTotalCents: String(preview.blockedTotalCents),
 });
