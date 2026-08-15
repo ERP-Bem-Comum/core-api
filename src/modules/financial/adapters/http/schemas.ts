@@ -1441,3 +1441,26 @@ export const remittancePreviewResponseSchema = z
   .strict();
 
 export type RemittancePreviewResponseDto = z.infer<typeof remittancePreviewResponseSchema>;
+
+// Geração da remessa (#720). Nem tipo de serviço nem forma de lançamento entram: a forma é derivada
+// do conteúdo, um lote por forma (#711). Recebê-las seria aceitar do cliente uma afirmação que o
+// arquivo pode contradizer.
+export const generateRemittanceBodySchema = z
+  .object({
+    cedenteAccountId: z.uuid(),
+    documentIds: z.array(z.uuid()).min(1).max(200),
+  })
+  .strict();
+
+export const generateRemittanceResponseSchema = z
+  .object({
+    remittanceId: z.uuid(),
+    fileName: z.string(),
+    objectKey: z.string(),
+    nsa: z.number().int().positive(),
+    totalCents: centsStringSchema,
+    lineCount: z.number().int().positive(),
+  })
+  .strict();
+
+export type GenerateRemittanceResponseDto = z.infer<typeof generateRemittanceResponseSchema>;
