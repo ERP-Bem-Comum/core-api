@@ -20,7 +20,7 @@ import type {
   ContractorReadPort,
   PixKey,
 } from '#src/modules/partners/public-api/index.ts';
-import type { Result } from '#src/shared/primitives/result.ts';
+import { type Result, ok as okResult, err as errResult } from '#src/shared/primitives/result.ts';
 import type { PayeeKind } from '../../domain/document/types.ts';
 
 const DEFAULT_TIMEOUT_MS = 2_000;
@@ -67,12 +67,30 @@ const readByKind = (
   }
 };
 
-export const composePayeeBank = async (
+export type PayeeBankReadError = 'contractor-read-unavailable';
+
+/**
+ * A leitura que PRESERVA a distinção entre "não achei" e "não consegui perguntar".
+ *
+ * `null` significa favorecido sem referência ou inexistente; o erro significa que o `partners` não
+ * respondeu — timeout, IO ou port ausente.
+ *
+ * Existe porque há dois consumidores com necessidades opostas. A tela do documento prefere
+ * degradar: um bloco bancário faltando não deve derrubar a leitura do documento (ADR-0032). O
+ * pré-voo da remessa NÃO pode degradar: se ele tratar indisponibilidade como cadastro vazio, dirá
+ * ao operador que dezenas de títulos estão sem dados bancários e o mandará corrigir cadastro que
+ * está correto — e é justamente o pré-voo que existe para dizer o que falta.
+ *
+ * Uma leitura, dois desfechos declarados. `composePayeeBank` é esta função com o erro achatado.
+ */
+export const readPayeeBank = async (
   port: ContractorReadPort | null,
   ref: { kind: PayeeKind | null; id: string | null },
   opts: { timeoutMs?: number } = {},
-): Promise<PayeeBankBlock | null> => {
-  if (port === null || ref.id === null || ref.kind === null) return null;
+): Promise<Result<PayeeBankBlock | null, PayeeBankReadError>> => {
+  // Port ausente é configuração, não indisponibilidade: em ambiente sem `partners` ligado, não há
+  // o que esperar. Referência ausente é o documento sem favorecido resolvível.
+  if (port === null || ref.id === null || ref.kind === null) return okResult(null);
 
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const timeoutSentinel = {
@@ -81,6 +99,22 @@ export const composePayeeBank = async (
   };
   const result = await withTimeout(readByKind(port, ref.kind, ref.id), timeoutMs, timeoutSentinel);
 
-  if (!result.ok || result.value === null) return null;
-  return { bankAccount: result.value.bankAccount, pixKey: result.value.pixKey };
+  if (!result.ok) return errResult('contractor-read-unavailable');
+  if (result.value === null) return okResult(null);
+  return okResult({ bankAccount: result.value.bankAccount, pixKey: result.value.pixKey });
+};
+
+/**
+ * Variante que DEGRADA — o contrato que a borda do documento já consumia (ADR-0032).
+ *
+ * Não-encontrado, indisponibilidade, timeout e port nulo colapsam em `null`, porque nenhum deles
+ * deve derrubar a leitura do documento. Quem precisa distinguir usa `readPayeeBank`.
+ */
+export const composePayeeBank = async (
+  port: ContractorReadPort | null,
+  ref: { kind: PayeeKind | null; id: string | null },
+  opts: { timeoutMs?: number } = {},
+): Promise<PayeeBankBlock | null> => {
+  const result = await readPayeeBank(port, ref, opts);
+  return result.ok ? result.value : null;
 };

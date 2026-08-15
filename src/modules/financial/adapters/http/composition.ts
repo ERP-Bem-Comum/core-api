@@ -62,6 +62,8 @@ import {
   loadedDocumentToSummaryRow,
 } from '../persistence/repos/document-summary-by-ids-view.in-memory.ts';
 import { createDrizzleDocumentSummaryByIdsView } from '../persistence/repos/document-summary-by-ids-view.drizzle.ts';
+import { createDrizzleRemittancePreviewReader } from '../persistence/repos/remittance-preview-reader.drizzle.ts';
+import { createInMemoryRemittancePreviewReader } from '../persistence/repos/remittance-preview-reader.in-memory.ts';
 import type { DocumentSummaryByIdsView } from '../../application/ports/document-summary-by-ids-view.ts';
 import {
   createInMemoryTimelineRepository,
@@ -97,7 +99,7 @@ import {
   type AuthUserReadPort,
   type ApproverAuthorityReadPort,
 } from '#src/modules/auth/public-api/read.ts';
-import { composePayeeBank, type PayeeBankBlock } from './payee-bank-composition.ts';
+import { composePayeeBank, readPayeeBank, type PayeeBankBlock } from './payee-bank-composition.ts';
 import { resolveUserName } from './user-name-composition.ts';
 // #289: adapta o ApproverAuthorityReadPort do auth (ACL) → ApproverAuthorityReader do financial.
 import { createAuthApproverAuthorityReader } from '../read/approver-authority-reader.auth.ts';
@@ -139,6 +141,8 @@ import { saveDocument } from '../../application/use-cases/save-document.ts';
 import { saveDraft } from '../../application/use-cases/save-draft.ts';
 import { ingestDocument } from '../../application/use-cases/ingest-document.ts';
 import { parseDocument } from '../../application/use-cases/parse-document.ts';
+import { previewRemittance } from '../../application/use-cases/preview-remittance.ts';
+import type { RemittancePreviewReader } from '../../application/ports/remittance-preview-reader.ts';
 import type { SourceFileStoragePort } from '../../application/ports/source-file-storage.ts';
 import { createInMemorySourceFileStorage } from '../storage/source-file-storage.in-memory.ts';
 import { createS3SourceFileStorage } from '../storage/source-file-storage.s3.ts';
@@ -226,6 +230,10 @@ export type FinancialCompositionConfig = Readonly<{
   /** #241 · DASH-F1 — fonte da referência de "agora" (M-1/M-2). Injetável em testes (ClockFixed) para
    *  asserir as janelas de forma determinística; default `ClockReal()`. */
   clock?: Clock;
+  /** #720 · Pré-voo da remessa — leitura crua do documento + destino de pagamento. Injetável em
+   *  testes HTTP (memory) com linhas determinísticas; no driver mysql o reader Drizzle é montado
+   *  com a leitura de `partners` que preserva indisponibilidade. */
+  remittancePreviewReader?: RemittancePreviewReader;
 }>;
 
 export type FinancialHttpDeps = Readonly<{
@@ -332,6 +340,13 @@ export type FinancialHttpDeps = Readonly<{
     kind: PayeeKind | null;
     id: string | null;
   }) => Promise<PayeeBankBlock | null>;
+  /**
+   * #720 · Pré-voo da remessa — POST /financial/remittances:preview.
+   *
+   * Leitura pura: não consome NSA, não prende documento e não toca no bucket. É o que o operador
+   * consulta antes de decidir gerar, e o que responde "o que não sai, e por quê" por título.
+   */
+  previewRemittance: ReturnType<typeof previewRemittance>;
   /** Composição síncrona do NOME de usuário (#207 — ADR-0032). null = não-resolvido (graceful). */
   resolveUserName: (id: string | null) => Promise<string | null>;
   /** Resolve categoryRef → nome (detalhe da conciliação). null = sem ref ou não-resolvido (graceful). */
@@ -372,6 +387,9 @@ type Pools = Readonly<{
   payableSummaryByIdsView: PayableSummaryByIdsView;
   // #358: SELECT fin_documents ⟕ recon ⟕ fin_supplier_view p/ POST /financial/documents:batch.
   documentSummaryByIdsView: DocumentSummaryByIdsView;
+  // #720: leitura crua do pré-voo (documento + destino de pagamento do favorecido). Quem julga
+  // aptidão é `checkPayoutReadiness`, no domínio — este reader não decide nada.
+  remittancePreviewReader: RemittancePreviewReader;
   // #239: read-model de payables (Top-5 "Últimos pagamentos"). memory: vazio no boot (sem worker de
   // projeção síncrono — injetável em testes via config.payableViewStore); mysql: drizzle.
   payableViewStore: PayableViewStore;
@@ -445,6 +463,8 @@ type MemoryPoolSeams = Readonly<{
   suppliersWithoutContractReader?: SuppliersWithoutContractReader;
   // #241: fake vazio por padrão; testes HTTP injetam um reader semeado/capturador (janelas M-1/M-2).
   dashboardCostCentersReader?: DashboardCostCentersReader;
+  // #720: fake vazio por padrão; testes HTTP injetam linhas de pré-voo determinísticas.
+  remittancePreviewReader?: RemittancePreviewReader;
 }>;
 
 const buildMemoryPools = (
@@ -555,6 +575,11 @@ const buildMemoryPools = (
     documentSummaryByIdsView: createInMemoryDocumentSummaryByIdsView(() =>
       documentSource().map(loadedDocumentToSummaryRow),
     ),
+    // #720: no driver memory o pré-voo nasce VAZIO — sem `partners` ligado não há destino de
+    // pagamento a compor, e inventar um faria o pré-voo aprovar título que o arquivo recusaria.
+    // Teste HTTP injeta um reader semeado pelo seam, como os demais read-models.
+    remittancePreviewReader:
+      seams.remittancePreviewReader ?? createInMemoryRemittancePreviewReader(),
     suggestionView,
     rejectedSuggestionRepo,
     periodStore,
@@ -706,6 +731,12 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     // #357: JOIN fin_payables × fin_documents × fin_supplier_view via Drizzle.
     payableSummaryByIdsView: createDrizzlePayableSummaryByIdsView(handle),
     documentSummaryByIdsView: createDrizzleDocumentSummaryByIdsView(handle),
+    // #720: a leitura do favorecido usa a variante que PRESERVA o erro. Se o `partners` não
+    // responder, o pré-voo recusa em bloco — degradar aqui faria o operador ler "sem dados
+    // bancários" em títulos cujo cadastro está completo, e agir sobre isso.
+    remittancePreviewReader: createDrizzleRemittancePreviewReader(handle, (ref) =>
+      readPayeeBank(contractorReadPort, ref),
+    ),
     // #239: injetado tem precedência (testes); mysql constrói o adapter Drizzle por padrão.
     payableViewStore: config.payableViewStore ?? createDrizzlePayableViewStore(handle, ClockReal()),
     // #242: reader da agregação REP-2 reusado para o Top-5 do Dashboard (aberto acima, boot-scoped).
@@ -919,6 +950,7 @@ const makeDeps = (pools: Pools, clock: Clock = ClockReal()): FinancialHttpDeps =
     },
     getPayablesSummaryByIds: pools.payableSummaryByIdsView.getPayablesSummaryByIds,
     getDocumentsSummaryByIds: pools.documentSummaryByIdsView.getDocumentsSummaryByIds,
+    previewRemittance: previewRemittance({ preview: pools.remittancePreviewReader }),
     resolvePayeeBank: (ref) => composePayeeBank(pools.contractorReadPort, ref),
     resolveUserName: (id) => resolveUserName(pools.authUserReadPort, id),
     resolveCategoryName: async (ref) => {
@@ -950,6 +982,9 @@ export const buildFinancialHttpDeps = async (
           : {}),
         ...(config.dashboardCostCentersReader !== undefined
           ? { dashboardCostCentersReader: config.dashboardCostCentersReader }
+          : {}),
+        ...(config.remittancePreviewReader !== undefined
+          ? { remittancePreviewReader: config.remittancePreviewReader }
           : {}),
       }),
       config.clock,
