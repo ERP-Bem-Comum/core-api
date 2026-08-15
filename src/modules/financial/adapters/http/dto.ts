@@ -11,7 +11,12 @@ import type { Document } from '../../domain/document/types.ts';
 import * as Competencia from '../../domain/document/competencia.ts';
 import type { ParseDocumentOutput } from '../../application/use-cases/parse-document.ts';
 import type { RemittancePreview } from '../../application/use-cases/preview-remittance.ts';
-import type { ParseDocumentResponseDto, RemittancePreviewResponseDto } from './schemas.ts';
+import type { GenerateRemittanceOutput } from '../../application/use-cases/generate-remittance.ts';
+import type {
+  ParseDocumentResponseDto,
+  RemittancePreviewResponseDto,
+  GenerateRemittanceResponseDto,
+} from './schemas.ts';
 import type { DocumentListItem } from '../../domain/document/query.ts';
 import type { Payables } from '../../domain/payable/types.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
@@ -561,4 +566,21 @@ export const remittancePreviewToDto = (
   notFoundCount: preview.notFoundCount,
   readyTotalCents: String(preview.readyTotalCents),
   blockedTotalCents: String(preview.blockedTotalCents),
+});
+
+/**
+ * Serializa o resultado da geração (#720).
+ *
+ * O NSA vai no corpo de propósito: é o número que identifica a remessa junto ao banco e o que o
+ * operador cita ao abrir chamado. Sem ele, a única forma de descobri-lo seria abrir o arquivo.
+ */
+export const generatedRemittanceToDto = (
+  out: GenerateRemittanceOutput,
+): GenerateRemittanceResponseDto => ({
+  remittanceId: String(out.remittanceId),
+  fileName: out.fileName,
+  objectKey: out.objectKey,
+  nsa: out.nsa,
+  totalCents: String(out.totalCents),
+  lineCount: out.lineCount,
 });

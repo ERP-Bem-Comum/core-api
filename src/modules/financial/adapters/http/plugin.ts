@@ -34,7 +34,10 @@ import type {
   FastifyZodOpenApiTypeProvider,
 } from 'fastify-zod-openapi';
 
+import process from 'node:process';
+
 import { ok } from '#src/shared/primitives/result.ts';
+import { resolveRbacMode } from '#src/modules/auth/public-api/http.ts';
 import { sendResult } from '#src/shared/http/reply.ts';
 import { toErrorEnvelope } from '#src/shared/http/errors.ts';
 import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
@@ -72,6 +75,7 @@ import {
   payableBatchItemToDto,
   documentBatchItemToDto,
   remittancePreviewToDto,
+  generatedRemittanceToDto,
 } from './dto.ts';
 import type { DocumentListFilter } from '../../domain/document/query.ts';
 import type { PayableListFilter, PayableListItem } from '../../domain/payable/query.ts';
@@ -101,6 +105,8 @@ import {
   documentsBatchResponseSchema,
   remittancePreviewBodySchema,
   remittancePreviewResponseSchema,
+  generateRemittanceBodySchema,
+  generateRemittanceResponseSchema,
   documentTimelineResponseSchema,
   importBankStatementBodySchema,
   importBankStatementResponseSchema,
@@ -374,6 +380,32 @@ const sanitizeFilename = (name: string): string => {
 };
 
 // ─── Rotas ───────────────────────────────────────────────────────────────────
+
+/**
+ * Recusa a rota que MOVE DINHEIRO enquanto a autorização estiver desligada (#634 / ADR-0052).
+ *
+ * Sob `AUTH_RBAC_MODE=bypass` todo usuário autenticado é super-usuário — `authorize` deixa passar
+ * qualquer um. Para leitura isso é uma escolha operacional consciente; para disparar pagamento ao
+ * banco, não é escolha nenhuma.
+ *
+ * Lê o modo do ambiente em vez de recebê-lo por injeção, e isso é deliberado: uma guarda de
+ * segurança que depende de fiação correta falha exatamente quando a fiação estiver errada. Aqui,
+ * esquecer de passar o parâmetro não abre a rota.
+ *
+ * 503, não 403: não é o requisitante que está proibido — é o servidor que não deve oferecer esta
+ * operação nesta configuração.
+ */
+const refuseUnderRbacBypass: preHandlerAsyncHookHandler = async (_req, reply) => {
+  if (resolveRbacMode(process.env) !== 'bypass') return undefined;
+
+  return reply.code(503).send({
+    error: {
+      code: 'remittance-disabled-under-rbac-bypass',
+      message:
+        'Geração de remessa indisponível: a autorização por permissão está desligada neste ambiente.',
+    },
+  });
+};
 
 const financialRoutes =
   (deps: FinancialHttpDeps, hooks: FinancialHttpHooks): FastifyPluginAsyncZodOpenApi =>
@@ -1107,6 +1139,41 @@ const financialRoutes =
         return sendResult(reply, ok({ items: rows.map(documentBatchItemToDto), missing }), {
           ok: 200,
         });
+      },
+    });
+
+    // POST /financial/remittances — GERA a remessa (#720).
+    //
+    // ⚠️ Única rota do módulo cuja chamada MOVE DINHEIRO: consome NSA, prende os documentos e grava
+    // em `saida/`, e gravar ali é enfileirar pagamento no banco (ADR-0060).
+    //
+    // A guarda contra o bypass vem ANTES da autorização de propósito. Sob `AUTH_RBAC_MODE=bypass`
+    // todo usuário autenticado é super-usuário (ADR-0052) — e `authorize` deixaria passar qualquer
+    // um. Deixar isso por conta da disciplina de deploy é apostar que ninguém esquecerá; a rota
+    // recusa sozinha, e a #634 deixa de ser um item de checklist.
+    scope.route({
+      method: 'POST',
+      url: '/financial/remittances',
+      preHandler: [
+        refuseUnderRbacBypass,
+        hooks.requireAuth,
+        hooks.authorize(FINANCIAL_PERMISSION.remittanceGenerate),
+      ],
+      schema: {
+        body: generateRemittanceBodySchema,
+        response: { 201: generateRemittanceResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const cedenteAccountId = CedenteAccountId.rehydrate(req.body.cedenteAccountId);
+        if (!cedenteAccountId.ok) return sendDomainError(reply, 'financial-ref-invalid');
+
+        const result = await deps.generateRemittance({
+          cedenteAccountId: cedenteAccountId.value,
+          documentIds: req.body.documentIds,
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+
+        return sendResult(reply, ok(generatedRemittanceToDto(result.value)), { ok: 201 });
       },
     });
 

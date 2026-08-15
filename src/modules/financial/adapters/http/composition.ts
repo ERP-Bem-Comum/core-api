@@ -64,6 +64,20 @@ import {
 import { createDrizzleDocumentSummaryByIdsView } from '../persistence/repos/document-summary-by-ids-view.drizzle.ts';
 import { createDrizzleRemittancePreviewReader } from '../persistence/repos/remittance-preview-reader.drizzle.ts';
 import { createInMemoryRemittancePreviewReader } from '../persistence/repos/remittance-preview-reader.in-memory.ts';
+import { createDrizzleRemittancePaymentReader } from '../persistence/repos/remittance-payment-reader.drizzle.ts';
+import { createInMemoryRemittancePaymentReader } from '../persistence/repos/remittance-payment-reader.in-memory.ts';
+import { createDrizzleRemittanceRepository } from '../persistence/repos/remittance-repository.drizzle.ts';
+import { createInMemoryRemittanceRepository } from '../persistence/repos/remittance-repository.in-memory.ts';
+import { createS3VanStorage } from '../van/van-storage.s3.ts';
+import { createInMemoryVanStorage } from '../van/van-storage.in-memory.ts';
+import { parseVanS3Env } from '../van/van-s3-config.ts';
+import { createBradescoMultipagTranslator } from '../cnab/bradesco-multipag-translator.ts';
+import { generateRemittance } from '../../application/use-cases/generate-remittance.ts';
+import * as RemittanceIdVo from '../../domain/remittance/remittance-id.ts';
+import { sha256Hex } from '#src/shared/utils/hash.ts';
+import type { RemittancePaymentReader } from '../../application/ports/remittance-payment-reader.ts';
+import type { RemittanceRepository } from '../../application/ports/remittance-repository.ts';
+import type { VanStoragePort } from '../../application/ports/van-storage.ts';
 import type { DocumentSummaryByIdsView } from '../../application/ports/document-summary-by-ids-view.ts';
 import {
   createInMemoryTimelineRepository,
@@ -99,7 +113,12 @@ import {
   type AuthUserReadPort,
   type ApproverAuthorityReadPort,
 } from '#src/modules/auth/public-api/read.ts';
-import { composePayeeBank, readPayeeBank, type PayeeBankBlock } from './payee-bank-composition.ts';
+import {
+  composePayeeBank,
+  readPayeeBank,
+  readPayeeContractor,
+  type PayeeBankBlock,
+} from './payee-bank-composition.ts';
 import { resolveUserName } from './user-name-composition.ts';
 // #289: adapta o ApproverAuthorityReadPort do auth (ACL) → ApproverAuthorityReader do financial.
 import { createAuthApproverAuthorityReader } from '../read/approver-authority-reader.auth.ts';
@@ -234,6 +253,9 @@ export type FinancialCompositionConfig = Readonly<{
    *  testes HTTP (memory) com linhas determinísticas; no driver mysql o reader Drizzle é montado
    *  com a leitura de `partners` que preserva indisponibilidade. */
   remittancePreviewReader?: RemittancePreviewReader;
+  /** #720 · Títulos prontos para emitir. Injetável em testes HTTP (memory); no driver mysql o
+   *  reader Drizzle converte o cadastro pela mesma régua que o pré-voo usa para diagnosticar. */
+  remittancePaymentReader?: RemittancePaymentReader;
 }>;
 
 export type FinancialHttpDeps = Readonly<{
@@ -347,6 +369,13 @@ export type FinancialHttpDeps = Readonly<{
    * consulta antes de decidir gerar, e o que responde "o que não sai, e por quê" por título.
    */
   previewRemittance: ReturnType<typeof previewRemittance>;
+  /**
+   * #720 · Geração da remessa — POST /financial/remittances.
+   *
+   * Consome NSA, prende os documentos e grava em `saida/`. Gravar ali É enfileirar pagamento
+   * (ADR-0060), então esta é a única rota do módulo cuja chamada move dinheiro.
+   */
+  generateRemittance: ReturnType<typeof generateRemittance>;
   /** Composição síncrona do NOME de usuário (#207 — ADR-0032). null = não-resolvido (graceful). */
   resolveUserName: (id: string | null) => Promise<string | null>;
   /** Resolve categoryRef → nome (detalhe da conciliação). null = sem ref ou não-resolvido (graceful). */
@@ -390,6 +419,11 @@ type Pools = Readonly<{
   // #720: leitura crua do pré-voo (documento + destino de pagamento do favorecido). Quem julga
   // aptidão é `checkPayoutReadiness`, no domínio — este reader não decide nada.
   remittancePreviewReader: RemittancePreviewReader;
+  // #720: os mesmos títulos, convertidos para emissão. Tudo-ou-nada, ao contrário do pré-voo.
+  remittancePaymentReader: RemittancePaymentReader;
+  // #720: registro da remessa (o que segura o documento entre gravar e confirmar) e o bucket.
+  remittanceRepo: RemittanceRepository;
+  vanStorage: VanStoragePort;
   // #239: read-model de payables (Top-5 "Últimos pagamentos"). memory: vazio no boot (sem worker de
   // projeção síncrono — injetável em testes via config.payableViewStore); mysql: drizzle.
   payableViewStore: PayableViewStore;
@@ -465,6 +499,8 @@ type MemoryPoolSeams = Readonly<{
   dashboardCostCentersReader?: DashboardCostCentersReader;
   // #720: fake vazio por padrão; testes HTTP injetam linhas de pré-voo determinísticas.
   remittancePreviewReader?: RemittancePreviewReader;
+  // #720: fake vazio por padrão; testes HTTP injetam pagamentos prontos para emitir.
+  remittancePaymentReader?: RemittancePaymentReader;
 }>;
 
 const buildMemoryPools = (
@@ -580,6 +616,12 @@ const buildMemoryPools = (
     // Teste HTTP injeta um reader semeado pelo seam, como os demais read-models.
     remittancePreviewReader:
       seams.remittancePreviewReader ?? createInMemoryRemittancePreviewReader(),
+    remittancePaymentReader:
+      seams.remittancePaymentReader ?? createInMemoryRemittancePaymentReader(),
+    remittanceRepo: createInMemoryRemittanceRepository(),
+    // In-memory: gravar aqui NÃO enfileira pagamento nenhum. É o que permite exercitar a rota de
+    // geração em teste sem a menor chance de tocar no bucket real.
+    vanStorage: createInMemoryVanStorage(),
     suggestionView,
     rejectedSuggestionRepo,
     periodStore,
@@ -599,6 +641,14 @@ const buildDocumentStorage = (): SourceFileStoragePort => {
   return s3.ok
     ? createS3SourceFileStorage({ s3: s3.value, keyPrefix: 'financial-documents' })
     : createInMemorySourceFileStorage();
+};
+
+// Bucket da VAN — envs `VAN_S3_*` PRÓPRIAS, nunca o singleton `S3_*`: é outro bucket, possivelmente
+// em outra conta (ADR-0060). Sem configuração, in-memory: o boot não quebra, e o que não sobe para
+// `saida/` não vira pagamento.
+const buildVanStorage = (): VanStoragePort => {
+  const config = parseVanS3Env(process.env);
+  return config.ok ? createS3VanStorage(config.value) : createInMemoryVanStorage();
 };
 
 const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pools> => {
@@ -737,6 +787,11 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     remittancePreviewReader: createDrizzleRemittancePreviewReader(handle, (ref) =>
       readPayeeBank(contractorReadPort, ref),
     ),
+    remittancePaymentReader: createDrizzleRemittancePaymentReader(handle, (ref) =>
+      readPayeeContractor(contractorReadPort, ref),
+    ),
+    remittanceRepo: createDrizzleRemittanceRepository(handle),
+    vanStorage: buildVanStorage(),
     // #239: injetado tem precedência (testes); mysql constrói o adapter Drizzle por padrão.
     payableViewStore: config.payableViewStore ?? createDrizzlePayableViewStore(handle, ClockReal()),
     // #242: reader da agregação REP-2 reusado para o Top-5 do Dashboard (aberto acima, boot-scoped).
@@ -951,6 +1006,16 @@ const makeDeps = (pools: Pools, clock: Clock = ClockReal()): FinancialHttpDeps =
     getPayablesSummaryByIds: pools.payableSummaryByIdsView.getPayablesSummaryByIds,
     getDocumentsSummaryByIds: pools.documentSummaryByIdsView.getDocumentsSummaryByIds,
     previewRemittance: previewRemittance({ preview: pools.remittancePreviewReader }),
+    generateRemittance: generateRemittance({
+      cedenteAccounts: pools.cedenteStore,
+      remittances: pools.remittanceRepo,
+      payments: pools.remittancePaymentReader,
+      translator: createBradescoMultipagTranslator(),
+      storage: pools.vanStorage,
+      now: () => clock.now(),
+      newRemittanceId: RemittanceIdVo.generate,
+      hashContent: sha256Hex,
+    }),
     resolvePayeeBank: (ref) => composePayeeBank(pools.contractorReadPort, ref),
     resolveUserName: (id) => resolveUserName(pools.authUserReadPort, id),
     resolveCategoryName: async (ref) => {
@@ -985,6 +1050,9 @@ export const buildFinancialHttpDeps = async (
           : {}),
         ...(config.remittancePreviewReader !== undefined
           ? { remittancePreviewReader: config.remittancePreviewReader }
+          : {}),
+        ...(config.remittancePaymentReader !== undefined
+          ? { remittancePaymentReader: config.remittancePaymentReader }
           : {}),
       }),
       config.clock,

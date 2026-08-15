@@ -48,7 +48,15 @@ const withTimeout = async <T>(p: Promise<T>, ms: number, onTimeout: T): Promise<
 // Toda View de contratado carrega o bloco; o que muda por `kind` é só QUAL leitura chamar. O
 // switch é exaustivo de propósito: um `payeeKind` novo passa a falhar no compilador em vez de
 // cair num `default` que devolveria `null` e reintroduziria a degradação silenciosa.
-type BankBearingView = Readonly<{ bankAccount: BankAccount | null; pixKey: PixKey | null }>;
+// Nome e documento entram aqui porque o Segmento A os grava (#720): sem eles, emitir exigiria uma
+// segunda ida ao `partners` para buscar na mesma View o que esta leitura já trouxe. Os quatro
+// `payeeKind` os declaram.
+type BankBearingView = Readonly<{
+  name: string;
+  document: string;
+  bankAccount: BankAccount | null;
+  pixKey: PixKey | null;
+}>;
 
 const readByKind = (
   port: ContractorReadPort,
@@ -70,6 +78,45 @@ const readByKind = (
 export type PayeeBankReadError = 'contractor-read-unavailable';
 
 /**
+ * O favorecido como o ARQUIVO precisa dele: identidade mais destino de pagamento.
+ *
+ * O Segmento A grava nome e inscrição do favorecido, além da conta — dados que o bloco bancário
+ * sozinho não carrega. Em vez de uma segunda leitura ao `partners` para buscar o nome, a mesma
+ * View entrega tudo, e `readPayeeBank` passa a ser uma projeção desta.
+ */
+export type PayeeContractor = Readonly<{
+  name: string;
+  document: string;
+  bankAccount: BankAccount | null;
+  pixKey: PixKey | null;
+}>;
+
+export const readPayeeContractor = async (
+  port: ContractorReadPort | null,
+  ref: { kind: PayeeKind | null; id: string | null },
+  opts: { timeoutMs?: number } = {},
+): Promise<Result<PayeeContractor | null, PayeeBankReadError>> => {
+  if (port === null || ref.id === null || ref.kind === null) return okResult(null);
+
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutSentinel = {
+    ok: false as const,
+    error: 'contractor-read-unavailable' as const,
+  };
+  const result = await withTimeout(readByKind(port, ref.kind, ref.id), timeoutMs, timeoutSentinel);
+
+  if (!result.ok) return errResult('contractor-read-unavailable');
+  if (result.value === null) return okResult(null);
+
+  return okResult({
+    name: result.value.name,
+    document: result.value.document,
+    bankAccount: result.value.bankAccount,
+    pixKey: result.value.pixKey,
+  });
+};
+
+/**
  * A leitura que PRESERVA a distinção entre "não achei" e "não consegui perguntar".
  *
  * `null` significa favorecido sem referência ou inexistente; o erro significa que o `partners` não
@@ -88,20 +135,11 @@ export const readPayeeBank = async (
   ref: { kind: PayeeKind | null; id: string | null },
   opts: { timeoutMs?: number } = {},
 ): Promise<Result<PayeeBankBlock | null, PayeeBankReadError>> => {
-  // Port ausente é configuração, não indisponibilidade: em ambiente sem `partners` ligado, não há
-  // o que esperar. Referência ausente é o documento sem favorecido resolvível.
-  if (port === null || ref.id === null || ref.kind === null) return okResult(null);
+  const contractor = await readPayeeContractor(port, ref, opts);
+  if (!contractor.ok) return contractor;
+  if (contractor.value === null) return okResult(null);
 
-  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  const timeoutSentinel = {
-    ok: false as const,
-    error: 'contractor-read-unavailable' as const,
-  };
-  const result = await withTimeout(readByKind(port, ref.kind, ref.id), timeoutMs, timeoutSentinel);
-
-  if (!result.ok) return errResult('contractor-read-unavailable');
-  if (result.value === null) return okResult(null);
-  return okResult({ bankAccount: result.value.bankAccount, pixKey: result.value.pixKey });
+  return okResult({ bankAccount: contractor.value.bankAccount, pixKey: contractor.value.pixKey });
 };
 
 /**

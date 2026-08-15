@@ -38,6 +38,9 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'cedente-account-already-closed',
   'cedente-account-duplicate',
   'cedente-account-bank-data-locked',
+  // Remessa (#720): documento já preso em remessa viva. Incluí-lo de novo pagaria duas vezes — é
+  // conflito com o estado atual, não dado inválido.
+  'remittance-documents-already-held',
 ]);
 
 const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
@@ -98,6 +101,17 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   'approver-authority-unavailable',
   // Resolução em lote (#357): falha ao ler o JOIN fin_payables × fin_documents × fin_supplier_view.
   'payable-summary-by-ids-view-failure',
+  // Remessa (#720): infraestrutura que não respondeu. Nenhum deles é culpa do operador — tentar de
+  // novo é a ação certa, e mandá-lo procurar cadastro seria mandá-lo ao lugar errado.
+  'remittance-preview-unavailable',
+  'remittance-nsa-unavailable',
+  'remittance-persist-failed',
+  'remittance-upload-failed',
+  // Defeito NOSSO de montagem do arquivo: o operador não tem o que corrigir. Fica como 503 e não
+  // como 422 justamente para não sugerir que ele conserte algum dado.
+  'remittance-file-name-failed',
+  'remittance-build-failed',
+  'remittance-malformed-file',
 ]);
 
 // NOTA (019): `cedente-account-not-found` NÃO está em NOT_FOUND_CODES de propósito → default 422.
@@ -140,6 +154,17 @@ const PUBLIC_FALLBACK: Record<PublicErrorCode, string> = {
 };
 
 const SLUG_MESSAGES: Record<string, string> = {
+  // Remessa (#720). As duas primeiras dizem ao operador o que fazer, e são diferentes de propósito:
+  // uma pede correção de cadastro, a outra avisa que o arquivo ainda não emite aquela forma — e não
+  // há cadastro que resolva a segunda.
+  'remittance-payments-unavailable':
+    'Há títulos sem os dados necessários para a remessa. Confira o pré-voo do lote antes de gerar.',
+  'remittance-launch-form-unsupported':
+    'A remessa inclui título cuja forma de pagamento ainda não é emitida no arquivo. Retire-o da seleção.',
+  'remittance-mixed-payment-dates':
+    'A seleção mistura vencimentos diferentes. Uma remessa é de um único dia — gere por vencimento.',
+  'remittance-documents-already-held':
+    'Há título já incluído em outra remessa. Atualize a lista e refaça a seleção.',
   'document-not-found': 'Documento não encontrado.',
   'timeline-document-not-found': 'Documento não encontrado.',
   'document-version-conflict':
