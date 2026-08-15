@@ -38,6 +38,9 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'cedente-account-already-closed',
   'cedente-account-duplicate',
   'cedente-account-bank-data-locked',
+  // #722: convênio preenche uma vez. Trocar é conflito com o estado — ele identifica o contrato no
+  // banco e viaja no nome de toda remessa já transmitida.
+  'cedente-convenio-already-set',
   // Remessa (#720): documento já preso em remessa viva. Incluí-lo de novo pagaria duas vezes — é
   // conflito com o estado atual, não dado inválido.
   'remittance-documents-already-held',
@@ -165,6 +168,14 @@ const SLUG_MESSAGES: Record<string, string> = {
     'A seleção mistura vencimentos diferentes. Uma remessa é de um único dia — gere por vencimento.',
   'remittance-documents-already-held':
     'Há título já incluído em outra remessa. Atualize a lista e refaça a seleção.',
+  // #722: campo do CADASTRO da conta, não do título — por isso a mensagem diz onde corrigir. Sem
+  // ela, o operador recebia "erro interno" para um dado que ele mesmo preenche.
+  'cedente-convenio-missing':
+    'A conta bancária selecionada está sem o convênio. Informe-o no cadastro da conta para gerar remessas.',
+  'cedente-convenio-malformed':
+    'O convênio da conta bancária selecionada não é numérico. Corrija-o no cadastro da conta.',
+  'cedente-convenio-already-set':
+    'Esta conta já tem convênio. Ele identifica o contrato junto ao banco e não pode ser trocado.',
   'document-not-found': 'Documento não encontrado.',
   'timeline-document-not-found': 'Documento não encontrado.',
   'document-version-conflict':

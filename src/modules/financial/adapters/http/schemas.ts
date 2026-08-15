@@ -817,6 +817,9 @@ export const createCedenteAccountBodySchema = z.object({
 export type CreateCedenteAccountBody = z.infer<typeof createCedenteAccountBodySchema>;
 
 export const editCedenteAccountBodySchema = z.object({
+  // #722: preenchível quando ausente, para a conta cadastrada sem ele passar a gerar remessa. Trocar
+  // um convênio já preenchido é recusado no use case — ele viaja no nome de toda remessa transmitida.
+  convenio: z.string().min(1).max(20).optional(),
   bankCode: z.string().min(1).max(10).optional(),
   agency: z.string().min(1).max(10).optional(),
   accountNumber: z.string().min(1).max(20).optional(),

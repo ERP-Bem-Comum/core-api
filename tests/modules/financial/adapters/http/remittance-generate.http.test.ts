@@ -29,6 +29,9 @@ const URL = '/api/v2/financial/remittances';
 const DOC_A = '11111111-1111-4111-8111-111111111111';
 const DOC_B = '22222222-2222-4222-8222-222222222222';
 const DOC_PIX = '33333333-3333-4333-8333-333333333333';
+// Nunca entra numa remessa bem-sucedida: é o título dos cenários que devem falhar ANTES do NSA, e
+// reusar um já preso faria o 409 mascarar o que se quer medir.
+const DOC_LIVRE = '55555555-5555-4555-8555-555555555555';
 const ACCOUNT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 const PAYMENT_DATE = new Date(Date.UTC(2026, 8, 10));
@@ -85,6 +88,15 @@ const payments = createInMemoryRemittancePaymentReader([
     documentId: DOC_PIX,
     route: 'pix',
     valueCents: 40_00,
+    paymentDate: PAYMENT_DATE,
+  },
+  {
+    documentId: DOC_LIVRE,
+    route: 'billet',
+    barcode: '23791234500000200000123456789012345678901234',
+    beneficiaryName: 'FORNECEDOR TRES',
+    dueDate: PAYMENT_DATE,
+    valueCents: 20_00,
     paymentDate: PAYMENT_DATE,
   },
 ]);
@@ -244,6 +256,101 @@ describe('financial/http — POST /remittances (#720) · borda', () => {
       payload: { cedenteAccountId, documentIds: [DOC_A], launchForm: '41' },
     });
     assert.equal(res.statusCode, 400, res.body);
+  });
+});
+
+describe('financial/http — POST /remittances · conta-cedente sem convênio (#722)', () => {
+  // O convênio é opcional no cadastro (a conta serve à conciliação sem ele) e obrigatório aqui.
+  // Antes, a falha acontecia três camadas adiante, no montador do nome, e chegava como 503
+  // genérico: nada dizia ao operador que faltava um campo, nem em qual tela preenchê-lo.
+  // Criada UMA vez: a chave bancária é única por conta, e semear de novo colidiria em 409 —
+  // mascarando com um conflito de cadastro o que este bloco quer medir.
+  let accountId = '';
+
+  before(async () => {
+    const res = await handle.app.inject({
+      method: 'POST',
+      url: '/api/v2/financial/cedente-accounts',
+      headers: bearer('bank-account:write'),
+      payload: {
+        bankCode: '237',
+        bankName: 'Bradesco',
+        type: 'corrente',
+        agency: '4321',
+        accountNumber: '098765',
+        accountDigit: '2',
+        document: '12345678000190',
+        nickname: 'Conta sem convenio',
+      },
+    });
+    assert.equal(res.statusCode, 201, res.body);
+    accountId = (res.json() as { id: string }).id;
+  });
+
+  it('recusa com erro que o operador consegue agir, não com falha interna', async () => {
+    const res = await handle.app.inject({
+      method: 'POST',
+      url: URL,
+      headers: bearer(GENERATOR),
+      payload: { cedenteAccountId: accountId, documentIds: [DOC_LIVRE] },
+    });
+
+    // 422, não 503: é dado a corrigir, não defeito nosso.
+    assert.equal(res.statusCode, 422, res.body);
+    const body = res.json() as { error: { code: string; message: string } };
+    assert.equal(body.error.code, 'unprocessable');
+    assert.match(body.error.message, /convênio/i);
+    // A mensagem diz ONDE corrigir — sem isso o operador sabe o que falta e não sabe aonde ir.
+    assert.match(body.error.message, /cadastro da conta/i);
+  });
+
+  // A história completa do operador: ele recebe a recusa, corrige o cadastro e gera. Sem o convênio
+  // editável, a mensagem "informe no cadastro da conta" seria uma promessa que a API não cumpre —
+  // o PATCH não aceitava o campo, e não havia como consertar uma conta cadastrada sem ele.
+  //
+  // O NSA em 1 na primeira geração é a prova de que nenhuma das tentativas frustradas queimou
+  // número: ele não volta depois de alocado, e a sequência é o que o banco usa para detectar
+  // retransmissão.
+  it('depois de preencher o convênio, a conta gera — e o NSA começa em 1', async () => {
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const frustrada = await handle.app.inject({
+        method: 'POST',
+        url: URL,
+        headers: bearer(GENERATOR),
+        payload: { cedenteAccountId: accountId, documentIds: [DOC_LIVRE] },
+      });
+      assert.equal(frustrada.statusCode, 422, frustrada.body);
+    }
+
+    const fix = await handle.app.inject({
+      method: 'PATCH',
+      url: `/api/v2/financial/cedente-accounts/${accountId}`,
+      headers: bearer('bank-account:write'),
+      payload: { convenio: '7654321' },
+    });
+    assert.equal(fix.statusCode, 200, fix.body);
+
+    const res = await handle.app.inject({
+      method: 'POST',
+      url: URL,
+      headers: bearer(GENERATOR),
+      payload: { cedenteAccountId: accountId, documentIds: [DOC_LIVRE] },
+    });
+    assert.equal(res.statusCode, 201, res.body);
+    assert.equal((res.json() as { nsa: number }).nsa, 1);
+  });
+
+  it('o convênio preenche uma vez: trocar é recusado com 409', async () => {
+    const res = await handle.app.inject({
+      method: 'PATCH',
+      url: `/api/v2/financial/cedente-accounts/${accountId}`,
+      headers: bearer('bank-account:write'),
+      payload: { convenio: '9999999' },
+    });
+
+    assert.equal(res.statusCode, 409, res.body);
+    const body = res.json() as { error: { message: string } };
+    assert.match(body.error.message, /não pode ser trocado/i);
   });
 });
 
