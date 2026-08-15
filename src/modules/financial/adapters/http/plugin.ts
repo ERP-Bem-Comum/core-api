@@ -2049,6 +2049,7 @@ const financialRoutes =
         const b = req.body;
         const result = await deps.editCedenteAccount({
           id: req.params.id,
+          ...(b.convenio !== undefined ? { convenio: b.convenio } : {}),
           ...(b.bankCode !== undefined ? { bankCode: b.bankCode } : {}),
           ...(b.agency !== undefined ? { agency: b.agency } : {}),
           ...(b.accountNumber !== undefined ? { accountNumber: b.accountNumber } : {}),

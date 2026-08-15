@@ -3,6 +3,10 @@ import type { CedenteAccountId } from '../../domain/cedente/cedente-account-id.t
 import type { RemittanceId } from '../../domain/remittance/remittance-id.ts';
 import { create as createRemittance } from '../../domain/remittance/remittance.ts';
 import { distinctPaymentDays } from '../../domain/remittance/payment-dates.ts';
+import {
+  checkCedenteRemittanceReadiness,
+  type CedenteRemittanceGap,
+} from '../../domain/cedente/remittance-eligibility.ts';
 import type { CedenteAccountStore } from '../ports/cedente-account-store.ts';
 import type { RemittanceRepository } from '../ports/remittance-repository.ts';
 import type { RemittancePaymentReader } from '../ports/remittance-payment-reader.ts';
@@ -45,6 +49,9 @@ export type GenerateRemittanceError =
   // Título de rota que o emissor ainda não cobre (PIX, guia). Não é dado faltando: é o arquivo que
   // ainda não sabe emitir aquela forma, e o operador não tem o que corrigir no cadastro.
   | 'remittance-launch-form-unsupported'
+  // Conta-cedente sem convênio, ou com convênio ilegível (#722). É dado que o operador corrige, e
+  // por isso viaja com nome próprio em vez de virar falha interna do montador do nome.
+  | CedenteRemittanceGap
   | 'remittance-nsa-unavailable'
   | 'remittance-file-name-failed'
   | 'remittance-build-failed'
@@ -82,6 +89,14 @@ export const generateRemittance =
 
     const account = await deps.cedenteAccounts.findById(input.cedenteAccountId);
     if (!account.ok || account.value === null) return err('remittance-nsa-unavailable');
+
+    // 3.1. A conta serve para gerar? O convênio é opcional no cadastro e obrigatório aqui (#722).
+    //
+    // A verificação vem ANTES do NSA pelo mesmo motivo da checagem de datas: o número não volta
+    // depois de alocado, e sem isto cada tentativa com conta incompleta queimava um da sequência —
+    // falhando adiante, no montador do nome, e chegando ao operador como erro interno.
+    const eligible = checkCedenteRemittanceReadiness(account.value);
+    if (!eligible.ok) return err(eligible.error);
 
     // 4. NSA sob lock de linha. A partir daqui o número está CONSUMIDO — se algo falhar adiante,
     // ele não volta. É deliberado: um gap na sequência é inofensivo, reusar número é retransmissão
