@@ -12,6 +12,10 @@
 #   - só .md / .yaml / .sh / qualquer não-.ts → exit 0 (format já roda no PostToolUse)
 #   - QUALQUER .ts, em qualquer diretório     → gate completo
 #   - tsconfig.json, eslint.config.js, package.json → gate completo
+#   - .claude/rules/*.md                      → gate completo, apesar de ser .md: o bloco
+#     `verify:` dessas rules AFIRMA coisas sobre o código, e quem confere essas afirmações é
+#     `tests/cleanup/rules-self-verify.test.ts` — que só roda dentro de `pnpm test`. Sem esta
+#     linha, mexer apenas numa rule pulava o gate e a afirmação nova entrava sem conferência.
 #
 # ⚠️ O escopo é o REPOSITÓRIO INTEIRO, não `src/` e `tests/`. Um `.ts` em `scripts/`,
 # `db/drizzle/` ou na raiz dispara o gate igual — e deve mesmo: `scripts/ci/*.ts` roda em
@@ -55,6 +59,7 @@ while IFS= read -r f; do
     # `*.ts` casa QUALQUER caminho — em `case`, o `*` atravessa `/`. As alternativas
     # `src/*.ts|tests/*.ts|…` que existiam aqui eram código morto, subsumidas por ele.
     *.ts) needs_gate=1; break ;;
+    .claude/rules/*.md) needs_gate=1; break ;;
     tsconfig.json | eslint.config.js | package.json) needs_gate=1; break ;;
   esac
 done <<< "$changed"
@@ -70,7 +75,7 @@ if [ "$needs_gate" -eq 0 ]; then
   exit 0
 fi
 
-# ── gate: os 4 comandos, na ordem mais barata primeiro ───────────────────────
+# ── gate: os comandos, na ordem mais barata primeiro ─────────────────────────
 log "veredito: EXECUTANDO — há .ts ou arquivo de config na lista."
 
 failed=""
@@ -93,7 +98,7 @@ run "test"         pnpm test
 
 if [ -z "$failed" ]; then
   log ""
-  log "veredito: VERDE — typecheck, format:check, lint e test passaram."
+  log "veredito: VERDE — todos os comandos do gate passaram."
   exit 0
 fi
 
