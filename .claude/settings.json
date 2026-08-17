@@ -4,7 +4,8 @@
     "BASH_DEFAULT_TIMEOUT_MS": "300000"
   },
   "attribution": {
-    "commit": ""
+    "commit": "",
+    "pr": ""
   },
   "permissions": {
     "deny": [

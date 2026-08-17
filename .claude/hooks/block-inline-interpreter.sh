@@ -12,9 +12,11 @@
 # Stdin: JSON com `tool_name=Bash` + `tool_input.command=<string>`
 # Stdout: JSON com hookSpecificOutput.permissionDecision (allow|deny)
 #
-# IMPORTANTE (mesma nota do block-npm.sh): o `if:` do settings.json sempre dispara quando o comando
-# é complexo demais para parsear (heredoc, loop, multilinha) — que é justamente a forma dos casos
-# que este hook existe para pegar. A validação aqui dentro é a que vale.
+# IMPORTANTE (mesma nota do block-npm.sh): o `if:` do settings.json é best-effort e FALHA ABERTO —
+# https://code.claude.com/docs/en/hooks, §"Common fields": "The filter also fails open, running your
+# hook regardless of pattern, when the Bash command can't be parsed." Comando não-parseável é
+# justamente a forma dos casos que este hook existe para pegar (heredoc, loop, multilinha), então
+# este script roda SEM `if` registrado e a validação aqui dentro é a que vale.
 
 set -euo pipefail
 

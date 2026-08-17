@@ -8,10 +8,14 @@
 # Stdin: JSON com `tool_name=Bash` + `tool_input.command=<string>`
 # Stdout: JSON com hookSpecificOutput.permissionDecision (allow|deny)
 #
-# IMPORTANTE: a doc do Claude Code (hooks.md §304) diz que o `if: "Bash(npm *)"`
-# em settings.json **sempre dispara quando o comando é complexo demais para
-# parsear** (multilinha, loops, heredocs). Por isso este script TEM que validar
-# o comando de novo internamente — não pode confiar que o `if` filtrou.
+# IMPORTANTE: o `if: "Bash(npm *)"` do settings.json é best-effort. A doc oficial
+# (https://code.claude.com/docs/en/hooks, §"Common fields") diz literalmente:
+#   "The filter also fails open, running your hook regardless of pattern, when the
+#    Bash command can't be parsed."
+# — e, na sequência: "Because the `if` filter is best-effort, use the permission
+# system rather than a hook to enforce a hard allow or deny."
+# Por isso este script revalida o comando internamente, e o bloqueio DURO de `npm`
+# mora em `permissions.deny` do settings.json. O hook é a mensagem pedagógica.
 #
 # Estratégia de detecção:
 #   1. Lê command da stdin.
