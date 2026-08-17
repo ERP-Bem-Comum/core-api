@@ -2,7 +2,7 @@
 //
 // Boundary: todo try/catch converte para Result; nenhum Error cruza a borda
 // (.claude/rules/adapters.md §"converter para Result na borda").
-import { eq, inArray, and } from 'drizzle-orm';
+import { eq, inArray, and, desc, sql } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
@@ -234,6 +234,66 @@ export const createDrizzleRemittanceRepository = (
         return ok(out);
       } catch (cause) {
         logRepo('listByStatus', cause);
+        return err('remittance-repository-unavailable');
+      }
+    },
+
+    // #728: página de acompanhamento. Um COUNT para o total; um SELECT ordenado por `generatedAt`
+    // DESC (desempate por id desc, estável) com limit/offset; e os documentIds da página em UMA
+    // query batch (`WHERE remittance_id IN (ids)`) agrupada num Map — evita o N+1 de chamar
+    // `loadDocumentIds` por linha.
+    listPaged: async (
+      pagination: Readonly<{ limit: number; offset: number }>,
+    ): Promise<
+      Result<Readonly<{ items: readonly Remittance[]; total: number }>, RemittanceRepositoryError>
+    > => {
+      try {
+        const totalRows = await db.select({ n: sql<number>`count(*)` }).from(finRemittances);
+        const total = totalRows[0]?.n ?? 0;
+
+        const rows = await db
+          .select()
+          .from(finRemittances)
+          .orderBy(desc(finRemittances.generatedAt), desc(finRemittances.id))
+          .limit(pagination.limit)
+          .offset(pagination.offset);
+
+        // Vínculos da página inteira numa consulta só — depois agrupados por remessa.
+        const ids = rows.map((r) => r.id);
+        const linkRows =
+          ids.length === 0
+            ? []
+            : await db
+                .select({
+                  remittanceId: finRemittanceDocuments.remittanceId,
+                  documentId: finRemittanceDocuments.documentId,
+                })
+                .from(finRemittanceDocuments)
+                .where(inArray(finRemittanceDocuments.remittanceId, ids));
+
+        const documentIdsByRemittance = new Map<string, string[]>();
+        for (const link of linkRows) {
+          const bucket = documentIdsByRemittance.get(link.remittanceId);
+          if (bucket === undefined) {
+            documentIdsByRemittance.set(link.remittanceId, [link.documentId]);
+          } else {
+            bucket.push(link.documentId);
+          }
+        }
+
+        const items: Remittance[] = [];
+        for (const row of rows) {
+          const documentIds = (documentIdsByRemittance.get(row.id) ?? []).sort();
+          const mapped = toDomain(row, documentIds);
+          if (!mapped.ok) {
+            logRepo('listPaged:map', mapped.error);
+            return err('remittance-repository-unavailable');
+          }
+          items.push(mapped.value);
+        }
+        return ok({ items, total });
+      } catch (cause) {
+        logRepo('listPaged', cause);
         return err('remittance-repository-unavailable');
       }
     },

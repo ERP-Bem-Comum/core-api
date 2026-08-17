@@ -1,5 +1,7 @@
 # Contrato HTTP — Remessas (financial)
 
+> ⚠️ **SUPERADO — não implementar a partir deste arquivo.** O contrato que efetivamente subiu (#720) é **outro**: `POST /financial/remittances` recebe `{ cedenteAccountId, documentIds }` (não agrupa por `debitAccountRef`), há `POST /financial/remittances:preview` (pré-voo), a permissão é `remittance:generate`/`remittance:read` (não `payable:transmit`), e **não existe** `GET /:id` nem `/:id/download` (a VAN é bucket — ADR-0060 — o front não baixa arquivo). Fonte da verdade: o **handoff [frontend] #728** e o código em `src/modules/financial/adapters/http/`. Mantido só como registro histórico do desenho anterior.
+
 Borda Fastify + Zod (ADR-0027). Prefixo `/api/v2/financial`. Aditivo — nenhuma rota existente muda.
 
 ## POST /api/v2/financial/remittances

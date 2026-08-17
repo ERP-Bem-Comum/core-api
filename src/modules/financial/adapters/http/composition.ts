@@ -73,6 +73,8 @@ import { createInMemoryVanStorage } from '../van/van-storage.in-memory.ts';
 import { parseVanS3Env } from '../van/van-s3-config.ts';
 import { createBradescoMultipagTranslator } from '../cnab/bradesco-multipag-translator.ts';
 import { generateRemittance } from '../../application/use-cases/generate-remittance.ts';
+import { listRemittances } from '../../application/use-cases/list-remittances.ts';
+import { getRemittance } from '../../application/use-cases/get-remittance.ts';
 import * as RemittanceIdVo from '../../domain/remittance/remittance-id.ts';
 import { sha256Hex } from '#src/shared/utils/hash.ts';
 import type { RemittancePaymentReader } from '../../application/ports/remittance-payment-reader.ts';
@@ -256,6 +258,10 @@ export type FinancialCompositionConfig = Readonly<{
   /** #720 · Títulos prontos para emitir. Injetável em testes HTTP (memory); no driver mysql o
    *  reader Drizzle converte o cadastro pela mesma régua que o pré-voo usa para diagnosticar. */
   remittancePaymentReader?: RemittancePaymentReader;
+  /** #728 · Registro de remessa (acompanhamento — GET /financial/remittances[/:id]). Injetável em
+   *  testes HTTP (memory) para semear remessas determinísticas; ambos os drivers constroem o repo
+   *  por padrão se ausente (memory: in-memory vazio; mysql: adapter Drizzle). */
+  remittanceRepo?: RemittanceRepository;
 }>;
 
 export type FinancialHttpDeps = Readonly<{
@@ -376,6 +382,13 @@ export type FinancialHttpDeps = Readonly<{
    * (ADR-0060), então esta é a única rota do módulo cuja chamada move dinheiro.
    */
   generateRemittance: ReturnType<typeof generateRemittance>;
+  /**
+   * #728 · Acompanhamento — GET /financial/remittances (lista paginada) e
+   * GET /financial/remittances/:id (detalhe). Read-only: leem o registro que o generate/worker já
+   * mantém, sem consumir NSA nem tocar no bucket.
+   */
+  listRemittances: ReturnType<typeof listRemittances>;
+  getRemittance: ReturnType<typeof getRemittance>;
   /** Composição síncrona do NOME de usuário (#207 — ADR-0032). null = não-resolvido (graceful). */
   resolveUserName: (id: string | null) => Promise<string | null>;
   /** Resolve categoryRef → nome (detalhe da conciliação). null = sem ref ou não-resolvido (graceful). */
@@ -501,6 +514,8 @@ type MemoryPoolSeams = Readonly<{
   remittancePreviewReader?: RemittancePreviewReader;
   // #720: fake vazio por padrão; testes HTTP injetam pagamentos prontos para emitir.
   remittancePaymentReader?: RemittancePaymentReader;
+  // #728: in-memory vazio por padrão; testes HTTP injetam um repo semeado (acompanhamento).
+  remittanceRepo?: RemittanceRepository;
 }>;
 
 const buildMemoryPools = (
@@ -618,7 +633,7 @@ const buildMemoryPools = (
       seams.remittancePreviewReader ?? createInMemoryRemittancePreviewReader(),
     remittancePaymentReader:
       seams.remittancePaymentReader ?? createInMemoryRemittancePaymentReader(),
-    remittanceRepo: createInMemoryRemittanceRepository(),
+    remittanceRepo: seams.remittanceRepo ?? createInMemoryRemittanceRepository(),
     // In-memory: gravar aqui NÃO enfileira pagamento nenhum. É o que permite exercitar a rota de
     // geração em teste sem a menor chance de tocar no bucket real.
     vanStorage: createInMemoryVanStorage(),
@@ -1016,6 +1031,8 @@ const makeDeps = (pools: Pools, clock: Clock = ClockReal()): FinancialHttpDeps =
       newRemittanceId: RemittanceIdVo.generate,
       hashContent: sha256Hex,
     }),
+    listRemittances: listRemittances({ remittances: pools.remittanceRepo }),
+    getRemittance: getRemittance({ remittances: pools.remittanceRepo }),
     resolvePayeeBank: (ref) => composePayeeBank(pools.contractorReadPort, ref),
     resolveUserName: (id) => resolveUserName(pools.authUserReadPort, id),
     resolveCategoryName: async (ref) => {
@@ -1054,6 +1071,7 @@ export const buildFinancialHttpDeps = async (
         ...(config.remittancePaymentReader !== undefined
           ? { remittancePaymentReader: config.remittancePaymentReader }
           : {}),
+        ...(config.remittanceRepo !== undefined ? { remittanceRepo: config.remittanceRepo } : {}),
       }),
       config.clock,
     );

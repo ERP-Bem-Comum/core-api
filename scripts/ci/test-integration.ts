@@ -148,6 +148,9 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // Remessa (migration 0044): cabeçalho + vínculos na mesma transação, anti-join de documento
     // preso no BANCO, e os UNIQUEs de NSA-por-conta e nome de arquivo.
     'tests/modules/financial/adapters/persistence/remittance-repository.drizzle-mysql.test.ts',
+    // Acompanhamento de remessa (#728): listPaged ordena por generatedAt DESC no banco, total real,
+    // documentIds da página em batch (sem N+1), e findById com os vínculos.
+    'tests/modules/financial/adapters/persistence/remittance-read.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/bank-statement-repository.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/reconciliation-repository.drizzle-mysql.test.ts',
     // FIN-STATUS-VARCHAR-WIDTH (#519) — largura de fin_payables.status / fin_documents.status comporta
