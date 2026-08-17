@@ -9,13 +9,13 @@
 
 | Estado | Quantas | Quem destrava |
 | :--- | ---: | :--- |
-| `open` | 3 | quem trabalha nela |
+| `open` | 4 | quem trabalha nela |
 | `blocked` | 5 | terceiro (banca, upstream, P.O.) |
 | `decided` | 17 | ninguém — fechada |
 | `deferred` | 3 | o gatilho declarado |
 | `superseded` | 1 | — |
 
-Total: **29**.
+Total: **30**.
 
 ---
 
@@ -26,6 +26,7 @@ Total: **29**.
 | [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) | Três trocas estruturais em aberto — assíncrono human-in-the-loop, Drizzle 1.0 e Bruno × TS | 2026-08-05 |  |
 | [0027](./0027-teses-orfas-de-branches-contaminadas.md) | Teses órfãs — o que 7 branches contaminadas tentavam provar | 2026-08-06 |  |
 | [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) | O EDD da P.O. (M1–M4 + relatórios Nibo) — o que sobrevive à verificação | 2026-08-06 |  |
+| [0030](./0030-deadman-switch-nunca-vigiou.md) | O dead-man's switch que nunca vigiou — o ADR-0042 sai do código sem ser superado | 2026-08-17 |  |
 
 ---
 
