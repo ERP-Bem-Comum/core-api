@@ -18,6 +18,8 @@ const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
   'reconciliation-period-not-found',
   // #62/Feature 2: documento sem comprovante-fonte (ou bytes ausentes no storage).
   'source-file-not-found',
+  // Acompanhamento de remessa (#728): GET /financial/remittances/:id com id que não existe.
+  'remittance-not-found',
 ]);
 
 const CONFLICT_CODES: ReadonlySet<string> = new Set([
@@ -66,6 +68,8 @@ const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
   // #62 ingestão: magic-bytes mentido / entrada vazia.
   'document-magic-bytes-mismatch',
   'empty-input',
+  // Acompanhamento de remessa (#728): id malformado no GET /financial/remittances/:id.
+  'remittance-id-invalid',
 ]);
 
 // #62 ingestão: entrada grande demais / bomba de descompressão → 413 Payload Too Large.
@@ -115,6 +119,9 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   'remittance-file-name-failed',
   'remittance-build-failed',
   'remittance-malformed-file',
+  // Acompanhamento de remessa (#728): repositório de leitura indisponível → 503 (tentar de novo é a
+  // ação certa; não é culpa do operador).
+  'remittance-repository-unavailable',
 ]);
 
 // NOTA (019): `cedente-account-not-found` NÃO está em NOT_FOUND_CODES de propósito → default 422.
@@ -168,6 +175,9 @@ const SLUG_MESSAGES: Record<string, string> = {
     'A seleção mistura vencimentos diferentes. Uma remessa é de um único dia — gere por vencimento.',
   'remittance-documents-already-held':
     'Há título já incluído em outra remessa. Atualize a lista e refaça a seleção.',
+  // Acompanhamento de remessa (#728).
+  'remittance-not-found': 'Remessa não encontrada.',
+  'remittance-id-invalid': 'Identificador de remessa inválido.',
   // #722: campo do CADASTRO da conta, não do título — por isso a mensagem diz onde corrigir. Sem
   // ela, o operador recebia "erro interno" para um dado que ele mesmo preenche.
   'cedente-convenio-missing':

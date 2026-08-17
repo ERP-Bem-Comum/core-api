@@ -31,4 +31,13 @@ export type RemittanceRepository = Readonly<{
   listByStatus: (
     status: Remittance['status'],
   ) => Promise<Result<readonly Remittance[], RemittanceRepositoryError>>;
+
+  // #728: leitura da tela de acompanhamento — página ordenada por `generatedAt` DESC (mais recentes
+  // primeiro), com o total para a paginação do front. `status` sai do banco como está (o worker o
+  // mantém), nunca derivado de prefixo de objeto.
+  listPaged: (
+    pagination: Readonly<{ limit: number; offset: number }>,
+  ) => Promise<
+    Result<Readonly<{ items: readonly Remittance[]; total: number }>, RemittanceRepositoryError>
+  >;
 }>;

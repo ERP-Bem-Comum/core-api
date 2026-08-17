@@ -62,5 +62,20 @@ export const createInMemoryRemittanceRepository = (): RemittanceRepository &
       status: Remittance['status'],
     ): Promise<Result<readonly Remittance[], RemittanceRepositoryError>> =>
       Promise.resolve(ok([...remittances.values()].filter((r) => r.status === status))),
+
+    // #728: página de acompanhamento sobre o store semeado. Ordena por `generatedAt` DESC (desempate
+    // por id desc, estável — espelha o adapter Drizzle), fatia por limit/offset e devolve o total.
+    listPaged: async (
+      pagination: Readonly<{ limit: number; offset: number }>,
+    ): Promise<
+      Result<Readonly<{ items: readonly Remittance[]; total: number }>, RemittanceRepositoryError>
+    > => {
+      const ordered = [...remittances.values()].sort((a, b) => {
+        if (a.generatedAt !== b.generatedAt) return a.generatedAt < b.generatedAt ? 1 : -1;
+        return a.id < b.id ? 1 : -1;
+      });
+      const items = ordered.slice(pagination.offset, pagination.offset + pagination.limit);
+      return Promise.resolve(ok({ items, total: ordered.length }));
+    },
   };
 };
