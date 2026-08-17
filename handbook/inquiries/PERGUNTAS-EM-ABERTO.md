@@ -7,12 +7,12 @@
 > recorte de _o que ainda falta responder_. Para contexto, fundamentação e alternativas pesadas, sempre
 > voltar à inquiry-fonte linkada em cada bloco.
 
-- **Última revisão da prosa:** 2026-08-07 (reconstrução a partir do disco — a versão anterior parou em 2026-05-14)
+- **Última revisão da prosa:** 2026-08-17 (entrada da [0030](#inquiry-0030--o-dead-mans-switch-que-nunca-vigiou); revisão anterior em 2026-08-07, reconstruída a partir do disco)
 
 <!-- BEGIN:generated -->
 
-- **Inquiries cobertas:** 8 de 29 — [0011](./0011-auditoria-fiscal-cross-periodo.md) · [0012](./0012-bff-managed-api-gateway-vs-fastify.md) · [0014](./0014-schema-legado-vs-modelo-alvo.md) · [0015](./0015-charset-drizzle-roadmap.md) · [0019](./0019-hard-delete-tripwire-sem-superficie.md) · [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0027](./0027-teses-orfas-de-branches-contaminadas.md) · [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md)
-- **Total de perguntas em aberto:** **47**
+- **Inquiries cobertas:** 9 de 30 — [0011](./0011-auditoria-fiscal-cross-periodo.md) · [0012](./0012-bff-managed-api-gateway-vs-fastify.md) · [0014](./0014-schema-legado-vs-modelo-alvo.md) · [0015](./0015-charset-drizzle-roadmap.md) · [0019](./0019-hard-delete-tripwire-sem-superficie.md) · [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0027](./0027-teses-orfas-de-branches-contaminadas.md) · [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) · [0030](./0030-deadman-switch-nunca-vigiou.md)
+- **Total de perguntas em aberto:** **49**
 
 As demais 21 estão `decided` (17), `deferred` (3, com gatilho declarado) ou `superseded` (1) — nenhuma
 espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
@@ -33,6 +33,7 @@ espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
 | [0026](#inquiry-0026--assíncrono-human-in-the-loop-drizzle-10-e-bruno--ts) | `open` | Gatilho declarado — só (c) é medível hoje | Épico de aprovação por e-mail; major do ORM; possível supersede do ADR-0038 | 4 |
 | [0027](#inquiry-0027--teses-órfãs-de-branches-contaminadas) | `open` | Dono do repo — escolher o que vira trabalho | Descarte das 7 branches; 2 ADRs novos; ticket de auto-expire | 6 |
 | [0028](#inquiry-0028--o-edd-da-po-m1m4--relatórios-nibo) | `open` | P.O./consultoria + spikes do TL | Escopo comercial (~470h dev + ~350h do bundle P0); M1 e M4 | 7 |
+| [0030](#inquiry-0030--o-dead-mans-switch-que-nunca-vigiou) | `open` | Ninguém — falta desenho, não decisão | Supersede do [ADR-0042](../architecture/adr/0042-deadman-switch-redundant.md); detecção de job morto segue descoberta | 2 |
 
 ---
 
@@ -233,6 +234,35 @@ em bloco. O que trava escopo são as decisões abaixo, não o documento.
 separem camada verificada de camada herdada) e decidir se as 4 melhorias viram issues `enhancement · P0`.
 
 > ⚠️ **D3 e D4 bloqueiam os dois relatórios Nibo. D2 e D6 são spikes que precisam acontecer antes de travar orçamento.**
+
+---
+
+## Inquiry-0030 — O dead-man's switch que nunca vigiou
+
+> **Origem:** [`0030-deadman-switch-nunca-vigiou.md`](./0030-deadman-switch-nunca-vigiou.md) §5 e §7
+> **Aberta em:** 2026-08-17 · **Destinatário:** ninguém — não espera resposta de terceiro, espera **desenho**
+> **Por que importa:** o mecanismo do ADR-0042 foi construído inteiro (emissor Go com HMAC, dois planos de
+> ingestão, dois workflows, contratos de dados) e **nunca recebeu um único ping** — `deadman/history.jsonl`
+> ficou em 0 linhas do início ao fim, porque o emissor jamais foi implantado. O auditor rodou 23 vezes e
+> escreveu 22 vereditos, todos em bootstrap. Em 2026-07-24 parou até de rodar, quando a proteção da `main`
+> passou a recusar o `git push` do keep-alive — e ficou **24 dias vermelho sem ninguém notar**, porque o
+> único canal por onde ele se manifestava era justamente esse push. Código removido em 2026-08-17.
+
+**Bloqueador para fechar:** não há pergunta a responder nem terceiro a consultar — falta **desenhar a
+substituição**. O ADR-0042 segue `Accepted` e **não superado**: não decidimos parar de detectar job morto,
+decidimos parar de manter um mecanismo que nunca detectou. O ponto cego fica descoberto até lá.
+
+- [ ] **D1.** Desenhar a substituição atendendo aos cinco requisitos da §5 — com destaque para os dois que
+      mataram a tentativa anterior: **o vigia precisa de quem o vigie** (silêncio não pode ser
+      indistinguível de "tudo bem") e **custo de operação compatível com o valor** (o desenho antigo pedia
+      emissor compilado, deploy próprio, Object Storage e dois workflows para vigiar **um** job — foi caro
+      demais para ser terminado). Vira ADR novo com `supersedes: [ADR-0042]`, e esta inquiry fecha nele.
+- [ ] **D2.** Decidir o destino das issues abertas do épico #67 que descrevem o mecanismo removido
+      (#70, #71, #72 e a #368 dos 14 falsos positivos).
+
+> _(A §5 da inquiry pede explicitamente para reabrir a rejeição de SaaS de heartbeat: o ADR-0042 a
+> descartou pesando controle, custo e privacidade contra um custo de construção que se assumiu pagável — e
+> que, medido agora, nunca foi pago.)_
 
 ---
 

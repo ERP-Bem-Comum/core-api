@@ -11,27 +11,32 @@ declared:
   related: [ADR-0002, ADR-0009, ADR-0041]
 
 assessment:
-  verdict: partially-realized
-  checked_at: 2026-07-31
-  checked_against: 722b0371
+  verdict: unrealized
+  checked_at: 2026-08-17
+  checked_against: d8599aaa
   summary: |
-    O único ADR do inventário que fechou um item que ele próprio declarava ABERTO. As consequências
-    negativas dizem que "assinatura/integridade do ping (anti-spoof) é um item aberto"; hoje
-    `tools/deadman-emitter/ping.go:4` documenta que a linha é assinada por HMAC-SHA256, `:10` importa
-    `crypto/hmac`, e `config.go:59` faz fail-fast se a chave não estiver no ambiente. Não é opcional.
-    A D1 foi cumprida ao pé da letra: o emissor é **Go**, com `Dockerfile` de dois estágios terminando em
-    `FROM scratch` (`:12`) — o "binário estático único, imagem ~10–15 MB, zero runtime" que o critério do
-    P.O. pedia. `sigv4.go` e `dispatch.go` implementam os dois planos de ingestão (Object Storage e
-    `repository_dispatch`), e os dois workflows existem: `deadman-ingest.yml` e `deadman-audit.yml`.
-    `deadman/history.jsonl` está no repo — o plano de fallback gravando de fato.
-    Duas pendências, ambas declaradas como próximos passos e ambas parciais. A **D3** tem número mas
-    provisório: `deadman-audit.yml:23` traz `THRESHOLD_DAYS: '3'` com o comentário "SLO provisório — D3/#72
-    fixa o valor por emitter". E a **D2** (2º auditor independente, fora do GitHub Actions) só existe como
-    especificação — o doc 07 descreve o algoritmo, e a implementação vive no ERP-INFRA, fora deste
-    repositório.
-    Achado próprio: `deadman-audit.yml:78` registra que "o bash inline que decidia isso gerou 14 issues
-    `sem sinal há 0h`" — o detector disparou 14 falsos positivos. A lógica segue inline no workflow de 172
-    linhas; não existe `scripts/deadman/`.
+    **O mecanismo foi construído por inteiro e nunca vigiou nada. Removido do repositório em
+    2026-08-17.** A verificação anterior (2026-07-31, contra `722b0371`, veredito
+    `partially-realized`) inventariou peça por peça — emissor Go com HMAC, dois planos de ingestão,
+    dois workflows, auditor rodando — e concluiu que o desenho estava quase todo de pé. Ela conferiu
+    as peças; não conferiu se o sistema recebia sinal.
+    Recebia zero. `deadman/history.jsonl` esteve **vazio, 0 linhas**, do início ao fim: nenhum ping
+    jamais chegou por nenhum dos dois planos, porque o emissor nunca foi implantado em lugar algum.
+    O auditor rodou 23 vezes com sucesso e escreveu 22 vereditos em `deadman/audit.jsonl` — todos em
+    bootstrap, o estado que o próprio script trata como "não é morte" por não haver `last_seen`.
+    Um detector de ausência sem sinal de entrada não detecta ausência: ele apenas confirma, todo dia,
+    que nunca soube de nada.
+    Em 2026-07-24 ele parou até de rodar. A proteção da branch `main` (#523 Fase 2) passou a recusar
+    o `git push` do commit de keep-alive — `GH006: Protected branch update failed`. O workflow ficou
+    **24 dias vermelho** sem que ninguém notasse, e é aqui que a falha se fecha sobre si mesma: o
+    único canal pelo qual este sistema avisaria que algo morreu era o mesmo push que morreu. Ele não
+    tinha como anunciar a própria morte.
+    A decisão declarada segue `Accepted` e **não** foi superada — o problema que ela ataca (job que
+    morre em silêncio) continua real e sem cobertura. Falta o desenho que a substitua. Registro da
+    falha e do que a próxima tentativa precisa resolver:
+    `handbook/inquiries/0030-deadman-switch-nunca-vigiou.md`.
+    As `claims` abaixo são a aferição de 2026-07-31 contra `722b0371` e ficam como registro histórico:
+    suas evidências e comandos `verify` apontam para arquivos que esta remoção apagou.
 
 extraction:
   state: complete
@@ -81,7 +86,10 @@ claims:
         MUST chegar pelo outro plano. Se a falha de um plano impedir o registro, a redundância não existe.
       expected_error: null
       blocker: null
-      enforced_by: ['tools/deadman-emitter/s3_integration_test.go']
+      # Era `tools/deadman-emitter/s3_integration_test.go`, removido em 2026-08-17 junto com o
+      # mecanismo (ver `assessment`). O teste existia e passava — exercitava a gravação no Object
+      # Storage, não a chegada de um ping real ao auditor, que é o que nunca aconteceu.
+      enforced_by: []
     rule:
       status: proposed
       disposition: adopt
