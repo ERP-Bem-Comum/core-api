@@ -1467,3 +1467,57 @@ export const generateRemittanceResponseSchema = z
   .strict();
 
 export type GenerateRemittanceResponseDto = z.infer<typeof generateRemittanceResponseSchema>;
+
+// ── Acompanhamento de remessa (#728) ────────────────────────────────────────────────────────────
+//
+// Leitura da tela de acompanhamento: lista paginada + detalhe. `status` sai do banco como está
+// (persistido e atualizado pelo worker) — nunca derivado de prefixo de objeto.
+
+// Objeto simples, SEM `.strict()`, como os schemas de filtro irmãos (a borda ignora chave extra na
+// querystring). `page`/`limit` são coeridos (querystring chega como string) e opcionais — o handler
+// aplica o default (page=1, limit=25).
+export const remittanceListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});
+
+// #728: totalCents/lineCount NÃO são persistidos hoje em `fin_remittances` — exigiriam colunas +
+// mudança no generate. Fora deste PR read-only. Devolvemos apenas `documentCount` (= documentIds.length).
+const remittanceStatusSchema = z.enum(['Queued', 'Transmitted', 'Failed', 'Discarded']);
+
+export const remittanceListItemSchema = z
+  .object({
+    remittanceId: z.uuid(),
+    cedenteAccountId: z.uuid(),
+    nsa: z.number().int(),
+    fileName: z.string(),
+    status: remittanceStatusSchema,
+    generatedAt: z.string(),
+    settledAt: z.string().nullable(),
+    detail: z.string().nullable(),
+    documentCount: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export const remittanceListResponseSchema = z
+  .object({
+    remittances: z.array(remittanceListItemSchema),
+    total: z.number().int().nonnegative(),
+    page: z.number().int(),
+    limit: z.number().int(),
+  })
+  .strict();
+
+export type RemittanceListResponseDto = z.infer<typeof remittanceListResponseSchema>;
+
+export const remittanceDetailResponseSchema = remittanceListItemSchema
+  .extend({
+    documentIds: z.array(z.uuid()),
+  })
+  .strict();
+
+export type RemittanceDetailResponseDto = z.infer<typeof remittanceDetailResponseSchema>;
+
+export const remittanceIdParamSchema = z.object({
+  id: z.uuid().meta({ description: 'UUID da remessa' }),
+});

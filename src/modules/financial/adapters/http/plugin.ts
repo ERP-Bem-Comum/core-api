@@ -76,6 +76,8 @@ import {
   documentBatchItemToDto,
   remittancePreviewToDto,
   generatedRemittanceToDto,
+  remittanceToListItemDto,
+  remittanceToDetailDto,
 } from './dto.ts';
 import type { DocumentListFilter } from '../../domain/document/query.ts';
 import type { PayableListFilter, PayableListItem } from '../../domain/payable/query.ts';
@@ -107,6 +109,10 @@ import {
   remittancePreviewResponseSchema,
   generateRemittanceBodySchema,
   generateRemittanceResponseSchema,
+  remittanceListQuerySchema,
+  remittanceListResponseSchema,
+  remittanceDetailResponseSchema,
+  remittanceIdParamSchema,
   documentTimelineResponseSchema,
   importBankStatementBodySchema,
   importBankStatementResponseSchema,
@@ -1196,6 +1202,53 @@ const financialRoutes =
         const result = await deps.previewRemittance({ documentIds: req.body.documentIds });
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(reply, ok(remittancePreviewToDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /financial/remittances — lista paginada de acompanhamento (#728). Leitura pura: não
+    // consome NSA nem toca no bucket, por isso exige `remittance:read`. Ordem por generatedAt DESC.
+    scope.route({
+      method: 'GET',
+      url: '/financial/remittances',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.remittanceRead)],
+      schema: {
+        querystring: remittanceListQuerySchema,
+        response: { 200: remittanceListResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const page = req.query.page ?? 1;
+        const limit = req.query.limit ?? 25;
+        const result = await deps.listRemittances({ limit, offset: (page - 1) * limit });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(
+          reply,
+          ok({
+            remittances: result.value.items.map(remittanceToListItemDto),
+            total: result.value.total,
+            page,
+            limit,
+          }),
+          { ok: 200 },
+        );
+      },
+    });
+
+    // GET /financial/remittances/:id — detalhe de uma remessa (#728), com os documentIds presos.
+    // `null` (não existe) → 404; id malformado → 400 (remittance-id-invalid). Ambos via sendResult
+    // com o mapa de erros da rota, sem inflar o error-mapping de escrita.
+    scope.route({
+      method: 'GET',
+      url: '/financial/remittances/:id',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.remittanceRead)],
+      schema: {
+        params: remittanceIdParamSchema,
+        response: { 200: remittanceDetailResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.getRemittance(req.params.id);
+        if (!result.ok) return sendDomainError(reply, result.error);
+        if (result.value === null) return sendDomainError(reply, 'remittance-not-found');
+        return sendResult(reply, ok(remittanceToDetailDto(result.value)), { ok: 200 });
       },
     });
 

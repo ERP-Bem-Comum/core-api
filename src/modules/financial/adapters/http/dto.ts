@@ -12,10 +12,13 @@ import * as Competencia from '../../domain/document/competencia.ts';
 import type { ParseDocumentOutput } from '../../application/use-cases/parse-document.ts';
 import type { RemittancePreview } from '../../application/use-cases/preview-remittance.ts';
 import type { GenerateRemittanceOutput } from '../../application/use-cases/generate-remittance.ts';
+import type { Remittance } from '../../domain/remittance/types.ts';
 import type {
   ParseDocumentResponseDto,
   RemittancePreviewResponseDto,
   GenerateRemittanceResponseDto,
+  RemittanceListResponseDto,
+  RemittanceDetailResponseDto,
 } from './schemas.ts';
 import type { DocumentListItem } from '../../domain/document/query.ts';
 import type { Payables } from '../../domain/payable/types.ts';
@@ -583,4 +586,35 @@ export const generatedRemittanceToDto = (
   nsa: out.nsa,
   totalCents: String(out.totalCents),
   lineCount: out.lineCount,
+});
+
+/**
+ * Serializa uma remessa para item de lista (#728 — tela de acompanhamento).
+ *
+ * `settledAt`/`detail` são opcionais no agregado (ausentes enquanto não há desfecho): saem como
+ * `null` no contrato, nunca omitidos. `documentCount` = quantidade de documentos presos.
+ *
+ * #728: totalCents/lineCount NÃO são persistidos hoje em `fin_remittances` — exigiriam colunas +
+ * mudança no generate; fora deste PR read-only. Por isso o item carrega apenas `documentCount`.
+ */
+export const remittanceToListItemDto = (
+  r: Remittance,
+): RemittanceListResponseDto['remittances'][number] => ({
+  remittanceId: String(r.id),
+  cedenteAccountId: String(r.cedenteAccountId),
+  nsa: r.nsa,
+  fileName: r.fileName,
+  status: r.status,
+  generatedAt: r.generatedAt,
+  settledAt: r.settledAt ?? null,
+  detail: r.detail ?? null,
+  documentCount: r.documentIds.length,
+});
+
+/**
+ * Serializa uma remessa para o detalhe (#728): o item + a lista de `documentIds` presos.
+ */
+export const remittanceToDetailDto = (r: Remittance): RemittanceDetailResponseDto => ({
+  ...remittanceToListItemDto(r),
+  documentIds: [...r.documentIds],
 });
