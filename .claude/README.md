@@ -20,22 +20,39 @@
 | `agent-memory/` | Memória que os subagentes escrevem sozinhos | No subagente dono dela |
 | `settings.json` | Permissões e registro de hooks | Sessão |
 
-`agent-memory/` está no `.gitignore` — o aprendizado dos subagentes é **local**, não sobrevive a um
-clone novo nem existe no CI.
+`agent-memory/` é **versionado e compartilhado com o time** — não está no `.gitignore`, e o
+aprendizado dos subagentes chega a todo clone. O caminho é o oficial do campo `memory:` do
+frontmatter de subagente: `memory: project` grava em `.claude/agent-memory/<nome-do-agente>/`
+(`user` vai para `~/.claude/`, `local` para `.claude/agent-memory-local/`, esse sim fora do git).
+
+> ⚠️ Este repositório é **público**. O que um subagente escreve aqui é publicado junto — auditar
+> antes de commitar memória que cite host, credencial ou dado de cliente.
 
 ---
 
-## Os quatro hooks, e o que cada um garante
+## Os hooks, e o que cada um garante
+
+Registrados em `settings.json` — a lista canônica é o próprio arquivo, não esta tabela:
 
 | Evento | Script | Garante |
 | :--- | :--- | :--- |
+| `SessionStart` | `ensure-git-hookspath.sh` | `core.hooksPath` aponta para `.githooks` neste clone |
 | `PreToolUse` | `block-npm.sh` | `npm` nunca roda (ADR-0029) |
 | `PreToolUse` | `block-cross-project-docker.sh` | Docker não toca projeto vizinho |
+| `PreToolUse` | `block-inline-interpreter.sh` | Script utilitário não nasce como interpretador inline |
 | `PostToolUse` | `prettier-write.sh` | Arquivo editado sai formatado |
+| `PostToolUse` | `regen-inquiry-index.sh` | Índice de inquiries acompanha o que foi escrito |
 | `Stop` | `stop-quality-gate.sh` | Turno não fecha com gate vermelho |
+| `InstructionsLoaded` | `log-instructions-loaded.sh` | Registra quais rules entraram em contexto, e por quê |
 
-O `Stop` é o backstop da política de regressão zero: se o diff toca `.ts`, ele roda `typecheck`,
-`format:check`, `lint` e `test`, e devolve exit 2 se algo falhar. Todo caminho de saída dele
+⚠️ **Dois arquivos de `hooks/` não são hooks do Claude Code:** `pre-commit-typecheck.sh` e
+`pre-commit-tombstone.sh` são **git hooks**, invocados por `.githooks/pre-commit`, nunca por
+`settings.json`. Procurá-los no settings e não achar não significa que estejam mortos.
+
+O `Stop` é o backstop da política de regressão zero: se o diff toca `.ts`, um dos arquivos de config
+do gate ou uma `rules/*.md`, ele roda `typecheck`, `format:check`, `lint` e `test`, e devolve exit 2
+se algo falhar. A rule entra na lista porque o bloco `verify:` dela afirma coisas sobre o código, e
+quem confere essas afirmações — `tests/cleanup/rules-self-verify.test.ts` — só roda dentro de `test`. Todo caminho de saída dele
 registra o veredito em `.last-quality-gate.log` — inclusive quando decide **não** rodar, para que
 um log vazio signifique uma coisa só (o hook morreu antes de decidir).
 
