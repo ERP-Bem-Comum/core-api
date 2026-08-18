@@ -21,3 +21,5 @@ export type {
 } from '../adapters/http/composition.ts';
 export { PROGRAM_PERMISSION } from './permissions.ts';
 export type { ProgramPermission } from './permissions.ts';
+export { readProgramsLogoConfig } from '../adapters/http/logo-storage-config.ts';
+export type { ProgramsLogoConfigResult } from '../adapters/http/logo-storage-config.ts';
