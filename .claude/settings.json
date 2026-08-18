@@ -4,7 +4,8 @@
     "BASH_DEFAULT_TIMEOUT_MS": "300000"
   },
   "attribution": {
-    "commit": ""
+    "commit": "",
+    "pr": ""
   },
   "permissions": {
     "deny": [
@@ -19,6 +20,18 @@
     ]
   },
   "hooks": {
+    "SessionStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/ensure-git-hookspath.sh",
+            "timeout": 10,
+            "statusMessage": "Conferindo core.hooksPath deste clone..."
+          }
+        ]
+      }
+    ],
     "PreToolUse": [
       {
         "matcher": "Bash",
@@ -70,7 +83,20 @@
             "type": "command",
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/stop-quality-gate.sh",
             "timeout": 420,
+            "asyncRewake": true,
             "statusMessage": "Gate de qualidade (typecheck · format · lint · test)..."
+          }
+        ]
+      }
+    ],
+    "InstructionsLoaded": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/log-instructions-loaded.sh",
+            "timeout": 5,
+            "async": true
           }
         ]
       }
