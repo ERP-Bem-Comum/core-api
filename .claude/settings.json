@@ -28,6 +28,23 @@
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/ensure-git-hookspath.sh",
             "timeout": 10,
             "statusMessage": "Conferindo core.hooksPath deste clone..."
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/logbook.sh",
+            "timeout": 10,
+            "async": true
+          }
+        ]
+      },
+      {
+        "matcher": "compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/post-compact-rules-reminder.sh",
+            "timeout": 10,
+            "statusMessage": "Listando rules que a compactação derrubou..."
           }
         ]
       }
@@ -53,6 +70,12 @@
             "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-inline-interpreter.sh",
             "timeout": 10,
             "statusMessage": "Verificando interpretador inline (use Edit/Write)..."
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/block-bash-file-io.sh",
+            "timeout": 10,
+            "statusMessage": "Verificando leitura/escrita de código por Bash (rules)..."
           }
         ]
       }
@@ -85,6 +108,54 @@
             "timeout": 420,
             "asyncRewake": true,
             "statusMessage": "Gate de qualidade (typecheck · format · lint · test)..."
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/logbook.sh",
+            "timeout": 10,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "SessionEnd": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/logbook.sh",
+            "timeout": 10,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PreCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/logbook.sh",
+            "timeout": 10,
+            "async": true
+          }
+        ]
+      }
+    ],
+    "PostCompact": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/post-compact-rules-reminder.sh",
+            "timeout": 10,
+            "statusMessage": "Listando rules que a compactação derrubou..."
+          },
+          {
+            "type": "command",
+            "command": "${CLAUDE_PROJECT_DIR}/.claude/hooks/logbook.sh",
+            "timeout": 10,
+            "async": true
           }
         ]
       }
