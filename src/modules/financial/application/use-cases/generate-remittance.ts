@@ -45,6 +45,9 @@ export type GenerateRemittanceError =
   | 'remittance-empty-selection'
   | 'remittance-documents-already-held'
   | 'remittance-payments-unavailable'
+  // Título não-`Approved` na seleção (#736). É a barreira que importa: impede pagar o que ninguém
+  // aprovou, contornando a separação de funções que o `payable:approve` garante.
+  | 'document-not-approved'
   | 'remittance-mixed-payment-dates'
   // Título de rota que o emissor ainda não cobre (PIX, guia). Não é dado faltando: é o arquivo que
   // ainda não sabe emitir aquela forma, e o operador não tem o que corrigir no cadastro.
@@ -75,7 +78,15 @@ export const generateRemittance =
     // 2. Dados de pagamento. Faltar documento é erro: montar com menos do que foi selecionado
     // pagaria parte e calaria sobre o resto.
     const payments = await deps.payments.loadPayments(input.documentIds);
-    if (!payments.ok) return err('remittance-payments-unavailable');
+    if (!payments.ok) {
+      // Não-aprovado sobe com nome próprio (409): é regra de negócio que o operador entende, não a
+      // indisponibilidade genérica que os demais erros do reader viram. O pré-voo já mostra QUAIS.
+      return err(
+        payments.error === 'document-not-approved'
+          ? 'document-not-approved'
+          : 'remittance-payments-unavailable',
+      );
+    }
     if (payments.value.length !== input.documentIds.length) {
       return err('remittance-payments-unavailable');
     }

@@ -1,5 +1,5 @@
 import type { Result } from '../../../../shared/primitives/result.ts';
-import type { PaymentMethod } from '../../domain/document/types.ts';
+import type { DocumentStatus, PaymentMethod } from '../../domain/document/types.ts';
 import type { PayeePaymentTarget } from '../../domain/payout/types.ts';
 
 // Leitura CRUA para o pré-voo da remessa (#708, item 2 do adendo da P.O.).
@@ -16,6 +16,9 @@ import type { PayeePaymentTarget } from '../../domain/payout/types.ts';
 
 export type RemittancePreviewRow = Readonly<{
   documentId: string;
+  // Status do documento: só `Approved` entra em remessa (#736). Não-aprovado vira linha
+  // `not-approved` — distinto de `blocked`, que é falta de dado do cadastro.
+  status: DocumentStatus;
   paymentMethod: PaymentMethod | null; // null em Draft — o pré-voo trata como não apto
   paymentDetail: string | null; // linha digitável / código de barras (#273)
   netValueCents: number;

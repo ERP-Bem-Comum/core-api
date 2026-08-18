@@ -27,7 +27,12 @@ import type {
   RemittancePaymentReaderError,
 } from '#src/modules/financial/application/ports/remittance-payment-reader.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
-import type { PayeeKind, PaymentMethod } from '#src/modules/financial/domain/document/types.ts';
+import type {
+  DocumentStatus,
+  PayeeKind,
+  PaymentMethod,
+} from '#src/modules/financial/domain/document/types.ts';
+import { isApprovedForRemittance } from '#src/modules/financial/domain/document/remittance-approval.ts';
 import { decomposePayeeAccount } from '#src/modules/financial/domain/payout/payee-account.ts';
 import { checkPayoutReadiness } from '#src/modules/financial/domain/payout/payout-readiness.ts';
 import type { PayeeContractor } from '../../http/payee-bank-composition.ts';
@@ -56,6 +61,7 @@ const NO_AGENCY_ACCOUNT_DIGIT = '';
 
 type DocumentRow = Readonly<{
   documentId: string;
+  status: string | null;
   paymentMethod: string | null;
   paymentDetail: string | null;
   netValueCents: number | null;
@@ -68,6 +74,14 @@ const toPaymentData = (
   row: DocumentRow,
   contractor: PayeeContractor | null,
 ): Result<RemittancePaymentData, RemittancePaymentReaderError> => {
+  // Aprovação ANTES de tudo (#736): título não-`Approved` não é candidato a pagamento, tenha ou não
+  // dados de cadastro. É a barreira que impede pagar o que ninguém aprovou — e é a regra do domínio,
+  // não um `if` de status solto aqui. Vem primeiro para o erro dizer "falta aprovar", não "falta
+  // dado", que mandaria o operador ao lugar errado.
+  if (row.status === null || !isApprovedForRemittance(row.status as DocumentStatus)) {
+    return err('document-not-approved');
+  }
+
   // Sem forma de pagamento ou sem vencimento o título não é pagável — e o vencimento é a data que
   // o arquivo grava, porque a remessa é gerada POR vencimento (decisão da P.O. na #711).
   if (row.paymentMethod === null || row.dueDate === null || row.netValueCents === null) {
@@ -175,6 +189,7 @@ export const createDrizzleRemittancePaymentReader = (
         const rows = await db
           .select({
             documentId: finDocuments.id,
+            status: finDocuments.status,
             paymentMethod: finDocuments.paymentMethod,
             paymentDetail: finDocuments.paymentDetail,
             netValueCents: finDocuments.netValue,

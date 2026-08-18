@@ -21,7 +21,11 @@ import type {
   RemittancePreviewRow,
 } from '#src/modules/financial/application/ports/remittance-preview-reader.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
-import type { PayeeKind, PaymentMethod } from '#src/modules/financial/domain/document/types.ts';
+import type {
+  DocumentStatus,
+  PayeeKind,
+  PaymentMethod,
+} from '#src/modules/financial/domain/document/types.ts';
 import type { PayeePaymentTarget } from '#src/modules/financial/domain/payout/types.ts';
 import type { PayeeBankBlock } from '../../http/payee-bank-composition.ts';
 import { finDocuments } from '../schemas/mysql.ts';
@@ -72,6 +76,7 @@ export const createDrizzleRemittancePreviewReader = (
         const rows = await db
           .select({
             documentId: finDocuments.id,
+            status: finDocuments.status,
             paymentMethod: finDocuments.paymentMethod,
             paymentDetail: finDocuments.paymentDetail,
             netValueCents: finDocuments.netValue,
@@ -106,6 +111,9 @@ export const createDrizzleRemittancePreviewReader = (
 
           items.push({
             documentId: row.documentId,
+            // `status` é NOT NULL no schema; o cast reflete o vocabulário do domínio. Um valor fora
+            // da união (não deveria existir, há CHECK) não é `Approved`, então cai em `not-approved`.
+            status: row.status as DocumentStatus,
             paymentMethod: (row.paymentMethod as PaymentMethod | null) ?? null,
             paymentDetail: row.paymentDetail ?? null,
             // Documento sem valor líquido é rascunho incompleto: entra como zero e o pré-voo o

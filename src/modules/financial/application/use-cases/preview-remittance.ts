@@ -1,4 +1,5 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
+import { isApprovedForRemittance } from '../../domain/document/remittance-approval.ts';
 import { checkPayoutReadiness } from '../../domain/payout/payout-readiness.ts';
 import type { PayoutGap, PayoutField, VanRoute } from '../../domain/payout/types.ts';
 import type {
@@ -13,7 +14,10 @@ import type {
 // é a que responde aqui — não uma segunda regra "de tela". Duas regras divergem, e a divergência
 // aparece como título que o pré-voo aprova e o arquivo recusa, que é pior que não ter pré-voo.
 
-export type PreviewLineStatus = 'ready' | 'blocked' | 'out-of-van' | 'not-found';
+// `not-approved` é distinto de `blocked` de propósito (#736): `blocked` diz "falta dado do
+// cadastro" e manda o operador ao cadastro; `not-approved` diz "falta aprovar" e o manda ao fluxo
+// de aprovação. Ação diferente, status diferente.
+export type PreviewLineStatus = 'ready' | 'blocked' | 'out-of-van' | 'not-found' | 'not-approved';
 
 export type RemittancePreviewLine = Readonly<{
   documentId: string;
@@ -34,6 +38,7 @@ export type RemittancePreview = Readonly<{
   blockedCount: number;
   outOfVanCount: number;
   notFoundCount: number;
+  notApprovedCount: number;
   readyTotalCents: number;
   blockedTotalCents: number;
 }>;
@@ -54,6 +59,20 @@ const notFoundLine = (documentId: string): RemittancePreviewLine => ({
 });
 
 const toPreviewLine = (row: RemittancePreviewRow): RemittancePreviewLine => {
+  // Aprovação ANTES de tudo (#736): só título `Approved` entra em remessa. Vem primeiro porque um
+  // não-aprovado não deve mandar o operador procurar cadastro nem forma de pagamento — o que falta é
+  // a aprovação, e é o que a linha diz. `route` fica nulo: a rota não importa antes de aprovar.
+  if (!isApprovedForRemittance(row.status)) {
+    return {
+      documentId: row.documentId,
+      status: 'not-approved',
+      route: null,
+      missing: [],
+      gaps: [],
+      netValueCents: row.netValueCents,
+    };
+  }
+
   // Documento sem forma de pagamento (Draft) não tem rota: cai em `out-of-van` pelo mesmo caminho
   // de câmbio e cartão — não há campo do favorecido que o torne apto.
   if (row.paymentMethod === null) {
@@ -134,6 +153,7 @@ export const previewRemittance =
       blockedCount: countWhere(lines, 'blocked'),
       outOfVanCount: countWhere(lines, 'out-of-van'),
       notFoundCount: countWhere(lines, 'not-found'),
+      notApprovedCount: countWhere(lines, 'not-approved'),
       readyTotalCents: sumWhere(lines, 'ready'),
       // O valor fora da VAN fica FORA dos dois totais. Somá-lo ao impedido inflaria o número que o
       // operador usa para decidir se vale correr atrás do cadastro — e cadastro nenhum resolve

@@ -567,6 +567,7 @@ export const remittancePreviewToDto = (
   blockedCount: preview.blockedCount,
   outOfVanCount: preview.outOfVanCount,
   notFoundCount: preview.notFoundCount,
+  notApprovedCount: preview.notApprovedCount,
   readyTotalCents: String(preview.readyTotalCents),
   blockedTotalCents: String(preview.blockedTotalCents),
 });
