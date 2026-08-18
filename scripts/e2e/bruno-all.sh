@@ -19,12 +19,16 @@
 # capturado em 0-auth persiste). Rodar pasta-a-pasta perderia o token (bug do 401).
 set -uo pipefail
 
+# Projeto Docker isolado + backup/restore dos secrets (#517) — sem isto, o teardown apagava o
+# banco e os secrets do dev local.
+# shellcheck source=scripts/e2e/_e2e-env.sh
+source "$(dirname "$0")/_e2e-env.sh"
+
 SRV=""
 cleanup() {
   [ -n "$SRV" ] && kill "$SRV" 2>/dev/null || true
   pkill -f 'node .*src/server.ts' 2>/dev/null || true
-  docker compose down -v >/dev/null 2>&1 || true
-  rm -f secrets/mysql_*.txt
+  e2e_teardown
 }
 trap cleanup EXIT
 pkill -f 'node .*src/server.ts' 2>/dev/null || true
@@ -34,19 +38,15 @@ if ! command -v bru &>/dev/null; then
   exit 1
 fi
 
-mkdir -p secrets
-printf 'rootpw-migration-test-only' > secrets/mysql_root_password.txt
-printf 'apppw-migration-test-only' > secrets/mysql_app_password.txt
-printf 'ropw-migration-test-only' > secrets/mysql_readonly_password.txt
-chmod 644 secrets/mysql_*.txt
+e2e_setup
 
 MYSQL_PORT="${MYSQL_PORT:-3307}"
 export MYSQL_PORT
 
 echo "[e2e-all] Subindo MySQL + MinIO..."
-docker compose up -d mysql minio --wait || exit 1
+e2e_compose up -d mysql minio --wait || exit 1
 # Cria o bucket contracts-documents (minio-bootstrap roda uma vez e sai).
-docker compose up minio-bootstrap >/dev/null 2>&1 || true
+e2e_compose up minio-bootstrap >/dev/null 2>&1 || true
 
 # Seed RBAC unificado (SEED-CONTRACT): 5 usuarios (o bare-user e2e-bare e' registrado via /register no 0-auth).
 SEED_JSON='{"users":[
