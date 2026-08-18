@@ -227,6 +227,33 @@ const bump = (tally: EntityTally, outcome: ProvisionResult['outcome']): EntityTa
   }
 };
 
+/**
+ * Como o plano-filho se liga ao pai — os três casos que o `?? null` antigo achatava em dois.
+ *
+ * `root` e `orphaned` produziam o MESMO efeito (`parentId = null`) e significam o oposto: um é
+ * hierarquia que não existe no legado, o outro é hierarquia que existe e se perderia na migração.
+ * Separá-los no tipo é o que impede a confusão de voltar por descuido.
+ */
+export type ParentLink =
+  | Readonly<{ kind: 'root' }>
+  | Readonly<{ kind: 'linked'; parentLegacyId: number }>
+  | Readonly<{ kind: 'orphaned'; parentLegacyId: number }>;
+
+/**
+ * `provisioned` são os legacyIds que EXISTEM no destino — não os que passaram o mapper. A distinção
+ * é o ponto: um plano pode ter uuid reservado e nunca ter sido gravado (quarentenado, ou `provision`
+ * falhou), e ligar um filho a ele produz FK órfã.
+ */
+export const classifyParentLink = (
+  parentLegacyId: number | null,
+  provisioned: ReadonlySet<number>,
+): ParentLink => {
+  if (parentLegacyId === null) return { kind: 'root' };
+  return provisioned.has(parentLegacyId)
+    ? { kind: 'linked', parentLegacyId }
+    : { kind: 'orphaned', parentLegacyId };
+};
+
 // Ordena os planos pai-antes-de-filho (a FK auto-referente exige o pai inserido). N pequeno (5).
 const topoSortPlans = <T extends Readonly<{ legacyId: number; parentLegacyId: number | null }>>(
   mapped: readonly T[],
@@ -318,10 +345,42 @@ export const runBudgetPlansEtl = async (
         input: m.value.input,
       });
     }
+    // Quem REALMENTE existe no destino. `planUuidByLegacyId` não serve para isto: ele é
+    // pré-populado com um uuid candidato para todo plano que passou o mapper, antes de qualquer
+    // escrita — é o que permite resolver o `parentId` na topo-ordem. Um plano pode estar nele e
+    // mesmo assim não ter sido gravado (quarentenado, ou `provision` falhou).
+    const provisionedPlans = new Set<number>();
+
     for (const m of topoSortPlans(mappedPlans)) {
       const id = planUuidByLegacyId.get(m.legacyId) ?? randomUUID();
+
+      // Pai declarado que não foi provisionado → o FILHO vai para a quarentena, não vira raiz.
+      //
+      // Antes disto o código fazia `planUuidByLegacyId.get(parentLegacyId) ?? null`, e o `?? null`
+      // confundia dois casos opostos: "não tem pai" (raiz legítima) e "tinha pai, e ele não
+      // migrou". O segundo produzia um plano-filho **promovido a raiz em silêncio** — hierarquia
+      // perdida sem registro nenhum, contra o princípio que justifica as quarentenas deste ETL.
+      //
+      // Consultar o conjunto de provisionados, e não o mapa de uuids, cobre três casos com uma
+      // verificação só: pai quarentenado no mapper, pai cujo `provision` falhou (o mapa guardaria
+      // um uuid que não corresponde a linha alguma — FK órfã), e a CASCATA pai→filho→neto, porque
+      // o filho quarentenado aqui também não entra no conjunto e a topo-ordem garante que o neto
+      // é visitado depois.
+      //
+      // Mesmo tratamento que o centro de custo já dá ao `budget_plan_ref` órfão, logo abaixo.
+      const link = classifyParentLink(m.parentLegacyId, provisionedPlans);
+      if (link.kind === 'orphaned') {
+        plansT = countQuarantined(plansT);
+        await sink.quarantine('budget_plans', m.legacyId, [
+          { tag: 'RequiredFieldMissing', field: 'parent_ref' },
+        ]);
+        continue;
+      }
+
+      // Raiz legítima segue com `parentId: null` — o caso que NÃO pode ser confundido com o de
+      // cima, e a razão de o tipo `ParentLink` distinguir `root` de `orphaned`.
       const parentId =
-        m.parentLegacyId === null ? null : (planUuidByLegacyId.get(m.parentLegacyId) ?? null);
+        link.kind === 'root' ? null : (planUuidByLegacyId.get(link.parentLegacyId) ?? null);
       const res = await resolveOrProvision(port.plans, { ...m.input, id, parentId }, m.legacyId, {
         table: 'budget_plans',
         sink,
@@ -330,6 +389,7 @@ export const runBudgetPlansEtl = async (
       plansT = bump(plansT, res.outcome);
       if (res.uuid !== null) {
         planUuidByLegacyId.set(m.legacyId, res.uuid);
+        provisionedPlans.add(m.legacyId);
         await sink.depara({ entity: 'budget_plan', legacyId: m.legacyId, newId: res.uuid });
       }
     }
