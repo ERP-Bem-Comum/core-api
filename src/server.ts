@@ -45,13 +45,13 @@ import {
 import {
   programsHttpPlugin,
   buildProgramsHttpDeps,
+  readProgramsLogoConfig,
   type ProgramsCompositionConfig,
 } from '#src/modules/programs/public-api/http.ts';
 import {
   buildProgramsReadPort,
   type ProgramsReadPort,
 } from '#src/modules/programs/public-api/index.ts';
-import type { LogoS3Config } from '#src/modules/programs/adapters/storage/logo-storage.s3.ts';
 import {
   financialHttpPlugin,
   buildFinancialHttpDeps,
@@ -62,49 +62,6 @@ import {
   parseE2eBudgetPlansSeed,
 } from '#src/modules/budget-plans/public-api/http.ts';
 import { reportsHttpPlugin, buildReportsHttpDeps } from '#src/modules/reports/public-api/http.ts';
-
-// Config S3/MinIO do logo de programa (ADR-0019 / issue #244 IAM Role).
-// Retorna config quando endpoint + bucket presentes (minimo para S3); credentials opcionais:
-//   ambas presentes -> estaticas (dev/MinIO/Magalu);
-//   ambas ausentes  -> provider chain (IAM Role ECS/IMDS — prod AWS);
-//   XOR             -> undefined (config pela metade, fall-safe para in-memory).
-const readProgramsLogoConfig = (
-  env: Readonly<Record<string, string | undefined>>,
-): LogoS3Config | undefined => {
-  const endpoint = env['PROGRAMS_LOGO_S3_ENDPOINT'];
-  const region = env['PROGRAMS_LOGO_S3_REGION'];
-  const bucket = env['PROGRAMS_LOGO_S3_BUCKET'];
-
-  if (
-    endpoint === undefined ||
-    endpoint.length === 0 ||
-    bucket === undefined ||
-    bucket.length === 0
-  ) {
-    return undefined;
-  }
-
-  const accessKeyId = env['PROGRAMS_LOGO_S3_ACCESS_KEY_ID'];
-  const secretAccessKey = env['PROGRAMS_LOGO_S3_SECRET_ACCESS_KEY'];
-  const hasKey = accessKeyId !== undefined && accessKeyId.length > 0;
-  const hasSecret = secretAccessKey !== undefined && secretAccessKey.length > 0;
-
-  // XOR: config pela metade e erro — fall-safe p/ in-memory.
-  if (hasKey !== hasSecret) {
-    return undefined;
-  }
-
-  const credentialFields: Readonly<{ accessKeyId?: string; secretAccessKey?: string }> =
-    hasKey && hasSecret ? { accessKeyId, secretAccessKey } : {};
-
-  return {
-    endpoint,
-    region: region ?? 'us-east-1',
-    ...credentialFields,
-    bucket,
-    forcePathStyle: env['PROGRAMS_LOGO_S3_FORCE_PATH_STYLE'] !== 'false',
-  };
-};
 
 const main = async (): Promise<void> => {
   const config = readHttpConfig(process.env);
@@ -164,6 +121,19 @@ const main = async (): Promise<void> => {
     return;
   }
   for (const warning of jwtKeys.value.warnings) process.stderr.write(`server: ${warning}\n`);
+  // #516: storage de logo do programs. Ausente ou pela metade em produção → boot falha (EX_CONFIG)
+  // em vez de subir com store volátil, que aceitava o upload e perdia o arquivo no restart —
+  // exatamente o que produção e QA faziam, sem nenhuma pista. Fora de produção segue em memória,
+  // com aviso. Credenciais ausentes NÃO são erro: é a provider chain do IAM Role no ECS.
+  // Lido aqui, e não junto do `buildProgramsHttpDeps` lá embaixo, pela mesma razão do #515: depois
+  // de `buildAuthHttpDeps` (o primeiro handle do boot) `exitCode` + `return` deixa de ser seguro.
+  const programsLogo = readProgramsLogoConfig(process.env);
+  if (!programsLogo.ok) {
+    for (const message of programsLogo.error) process.stderr.write(`server: ${message}\n`);
+    process.exitCode = 78;
+    return;
+  }
+  for (const warning of programsLogo.value.warnings) process.stderr.write(`server: ${warning}\n`);
   // ADR-0052 — modo do RBAC. `bypass` desliga a autorização por permissão (todo autenticado é
   // super-usuário). NÃO pode ser silencioso: um banner gritante no boot torna o estado inconfundível.
   const rbacMode = resolveRbacMode(process.env);
@@ -237,20 +207,20 @@ const main = async (): Promise<void> => {
         },
   );
 
-  // Módulo programs (spec 008, ADR-0033) → /api/v1/programs. Logo storage S3/MinIO (ADR-0019)
-  // só quando todas as envs PROGRAMS_LOGO_* presentes; ausente → storage in-memory (degradado).
-  // Mesma connection string do read port acima.
-  const programsLogo = readProgramsLogoConfig(process.env);
+  // Módulo programs (spec 008, ADR-0033) → /api/v1/programs. Logo storage S3/MinIO (ADR-0019),
+  // decidido lá em cima com fail-fast (#516); `config` ausente aqui só acontece fora de produção,
+  // e já saiu com aviso. Mesma connection string do read port acima.
+  const programsLogoConfig = programsLogo.value.config;
   const programsDeps = await buildProgramsHttpDeps(
     programs.driver === 'mysql'
       ? ({
           driver: 'mysql',
           writerUrl: programs.connectionString,
-          ...(programsLogo !== undefined ? { logo: programsLogo } : {}),
+          ...(programsLogoConfig !== undefined ? { logo: programsLogoConfig } : {}),
         } satisfies ProgramsCompositionConfig)
       : ({
           driver: 'memory',
-          ...(programsLogo !== undefined ? { logo: programsLogo } : {}),
+          ...(programsLogoConfig !== undefined ? { logo: programsLogoConfig } : {}),
         } satisfies ProgramsCompositionConfig),
   );
 
