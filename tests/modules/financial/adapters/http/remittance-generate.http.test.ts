@@ -32,6 +32,9 @@ const DOC_PIX = '33333333-3333-4333-8333-333333333333';
 // Nunca entra numa remessa bem-sucedida: é o título dos cenários que devem falhar ANTES do NSA, e
 // reusar um já preso faria o 409 mascarar o que se quer medir.
 const DOC_LIVRE = '55555555-5555-4555-8555-555555555555';
+// #736: doc do cenário de não-aprovação. Dedicado para não colidir com o held-check — reusar um já
+// preso faria o 409 vir do "já incluído", mascarando a barreira de aprovação que se quer medir.
+const DOC_NAO_APROVADO = '66666666-6666-4666-8666-666666666666';
 const ACCOUNT_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 
 const PAYMENT_DATE = new Date(Date.UTC(2026, 8, 10));
@@ -97,6 +100,15 @@ const payments = createInMemoryRemittancePaymentReader([
     beneficiaryName: 'FORNECEDOR TRES',
     dueDate: PAYMENT_DATE,
     valueCents: 20_00,
+    paymentDate: PAYMENT_DATE,
+  },
+  {
+    documentId: DOC_NAO_APROVADO,
+    route: 'billet',
+    barcode: '23791234500000250000123456789012345678901234',
+    beneficiaryName: 'FORNECEDOR QUATRO',
+    dueDate: PAYMENT_DATE,
+    valueCents: 25_00,
     paymentDate: PAYMENT_DATE,
   },
 ]);
@@ -227,6 +239,22 @@ describe('financial/http — POST /remittances (#720) · geração', () => {
 
     const body = res.json() as { error: { message: string } };
     assert.match(body.error.message, /forma de pagamento ainda não é emitida/i);
+  });
+
+  // #736: só título Aprovado entra em remessa. A barreira é a ROTA, não só o front — 409 com nome
+  // próprio, e a mensagem manda ao pré-voo, não a "erro interno". `finally` reseta o toggle para
+  // não vazar não-aprovação para os testes irmãos que compartilham este reader.
+  it('#736: recusa com 409 documento não aprovado', async () => {
+    payments.setNotApproved([DOC_NAO_APROVADO]);
+    try {
+      const res = await generate([DOC_NAO_APROVADO]);
+      assert.equal(res.statusCode, 409, res.body);
+
+      const body = res.json() as { error: { message: string } };
+      assert.match(body.error.message, /não aprovado/i);
+    } finally {
+      payments.setNotApproved([]);
+    }
   });
 });
 

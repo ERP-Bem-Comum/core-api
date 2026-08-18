@@ -46,6 +46,9 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   // Remessa (#720): documento já preso em remessa viva. Incluí-lo de novo pagaria duas vezes — é
   // conflito com o estado atual, não dado inválido.
   'remittance-documents-already-held',
+  // Remessa (#736): título não-`Approved` na seleção. É conflito com o estado do documento (ainda
+  // não aprovado), não dado malformado — 409, como o contrato original previa.
+  'document-not-approved',
 ]);
 
 const BAD_REQUEST_CODES: ReadonlySet<string> = new Set([
@@ -175,6 +178,10 @@ const SLUG_MESSAGES: Record<string, string> = {
     'A seleção mistura vencimentos diferentes. Uma remessa é de um único dia — gere por vencimento.',
   'remittance-documents-already-held':
     'Há título já incluído em outra remessa. Atualize a lista e refaça a seleção.',
+  // #736: só título Aprovado entra em remessa. A mensagem diz o que fazer (aprovar), não "erro
+  // interno" — e o pré-voo aponta QUAIS títulos estão pendentes.
+  'document-not-approved':
+    'Há título não aprovado na seleção. Só títulos aprovados podem entrar em remessa — confira o pré-voo.',
   // Acompanhamento de remessa (#728).
   'remittance-not-found': 'Remessa não encontrada.',
   'remittance-id-invalid': 'Identificador de remessa inválido.',

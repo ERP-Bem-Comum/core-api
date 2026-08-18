@@ -14,7 +14,10 @@ export type RemittancePaymentData = Readonly<{ documentId: string }> & Remittanc
 
 export type RemittancePaymentReaderError =
   | 'remittance-payment-reader-unavailable'
-  | 'remittance-payment-incomplete';
+  | 'remittance-payment-incomplete'
+  // Título não-`Approved` na seleção (#736). Distinto de `incomplete`: não falta dado do cadastro,
+  // falta a APROVAÇÃO — e é a barreira que impede pagar o que ninguém aprovou.
+  | 'document-not-approved';
 
 export type RemittancePaymentReader = Readonly<{
   // Devolve UM item por documento pedido. Faltar algum é erro, nunca silêncio: montar remessa com

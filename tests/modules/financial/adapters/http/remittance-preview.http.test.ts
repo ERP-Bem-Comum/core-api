@@ -58,6 +58,7 @@ const bearer = (perms: string) => ({ authorization: `Bearer ${perms}` });
 const reader = createInMemoryRemittancePreviewReader([
   {
     documentId: DOC_BOLETO,
+    status: 'Approved',
     paymentMethod: 'Boleto',
     // 44 dígitos EXATOS — é o código de barras (G063), não a linha digitável de 47.
     paymentDetail: '23791234500000150000123456789012345678901234',
@@ -66,6 +67,7 @@ const reader = createInMemoryRemittancePreviewReader([
   },
   {
     documentId: DOC_PIX_SEM_CHAVE,
+    status: 'Approved',
     paymentMethod: 'PIX',
     paymentDetail: null,
     netValueCents: 80_00,
@@ -73,6 +75,7 @@ const reader = createInMemoryRemittancePreviewReader([
   },
   {
     documentId: DOC_CAMBIO,
+    status: 'Approved',
     paymentMethod: 'Cambio',
     paymentDetail: null,
     netValueCents: 500_00,

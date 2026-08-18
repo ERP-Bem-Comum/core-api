@@ -57,6 +57,9 @@ const NO_DESTINATION_BLANKS: PayeePaymentTarget = {
 
 const row = (over: Partial<RemittancePreviewRow>): RemittancePreviewRow => ({
   documentId: 'doc-1',
+  // Default APROVADO: a esmagadora maioria das fixtures testa aptidão de cadastro, que só faz
+  // sentido depois de aprovado. Os casos de não-aprovação (#736) sobrescrevem o status.
+  status: 'Approved',
   paymentMethod: 'TED',
   paymentDetail: null,
   netValueCents: 10_000,
@@ -210,10 +213,24 @@ describe('previewRemittance — o que não pode sumir', () => {
     );
   });
 
-  it('documento sem forma de pagamento (Draft) não é apto, e diz isso', async () => {
-    const rows = [row({ documentId: 'draft', paymentMethod: null })];
-    const r = await previewRemittance({ preview: reader(rows) })({ documentIds: ['draft'] });
-    assert.equal(line(r, 'draft').status, 'out-of-van');
+  // #736: só título Aprovado entra em remessa. Não-aprovado é `not-approved`, distinto de `blocked`
+  // (falta cadastro) e de `out-of-van` (forma que a VAN não transporta) — a ação do operador é
+  // aprovar, não mexer no cadastro. A checagem vem ANTES da forma: um Draft com cadastro completo
+  // ainda é não-aprovado, e é isso que ele precisa ler.
+  it('título não aprovado (Draft/Open) vira not-approved, mesmo com cadastro apto', async () => {
+    const rows = [
+      row({ documentId: 'draft', status: 'Draft', paymentMethod: null }),
+      row({ documentId: 'open', status: 'Open', payee: BANK_ACCOUNT_ONLY }),
+    ];
+    const r = await previewRemittance({ preview: reader(rows) })({
+      documentIds: ['draft', 'open'],
+    });
+    assert.ok(isOk(r));
+    assert.equal(line(r, 'draft').status, 'not-approved');
+    assert.equal(line(r, 'open').status, 'not-approved');
+    // route nulo: a rota não importa antes de aprovar.
+    assert.equal(line(r, 'open').route, null);
+    assert.equal(r.value.notApprovedCount, 2);
   });
 
   it('seleção vazia devolve pré-voo vazio, não erro', async () => {
