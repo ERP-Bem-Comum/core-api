@@ -32,6 +32,7 @@
     "docs:index": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/inquiry-index.ts",
     "docs:refs": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/refs.ts",
     "docs:links": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/link-scan.ts",
+    "logbook": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/claude/logbook.ts",
     "audit": "pnpm audit --prod --audit-level=high",
     "audit:all": "pnpm audit --audit-level=high",
     "test": "node --test --experimental-strip-types --enable-source-maps --no-warnings 'tests/**/*.test.ts'",

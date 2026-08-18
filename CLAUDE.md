@@ -72,6 +72,14 @@ git config core.hooksPath .githooks
 
 **[`handbook/guidelines/`](./handbook/guidelines/) está no `.gitignore`** — documentação Bradesco com restrição de redistribuição. Leitura autorizada localmente; **não copiar trechos para arquivo commitável**. É a fonte primária para qualquer coisa de CNAB.
 
+**Ler código por `cat` desliga as rules.** As 16 rules de [`.claude/rules/`](./.claude/rules/) entram em contexto por `load_reason: path_glob_match`, e o gatilho é a **ferramenta dedicada** — não o conteúdo lido. Medido em 18/08/2026 (Claude Code 2.1.234), com o hook `InstructionsLoaded` como testemunha: `head -15 src/shared/kernel/cnpj.ts` via Bash **não carrega rule nenhuma**; o `Read` do mesmo arquivo grava `path_glob_match` e injeta `rules/domain.md` na hora. Quem lê o código por shell trabalha **sem o harness, em silêncio** — e o modo `auto` do Claude Code induz exatamente isso. Do outro lado, escrita por `sed -i` ou `> arquivo.ts` fura o `PostToolUse(Edit|Write)`, então o Prettier não roda e o `format:check` reprova longe da causa. `block-bash-file-io.sh` barra as duas formas; pipeline (`cat x.ts | grep`), `git show`, `.log` e qualquer caminho fora do repo seguem liberados.
+
+**A compactação derruba as rules e não as devolve.** Medido na mesma sessão: 6 sessões produziram 14 `session_start` + 14 `path_glob_match` e **zero** `load_reason: compact`, apesar de 4 compactações registradas. É por isso que o agente começa aderente e degrada no meio de sessão longa. `compact` **é** um valor documentado do matcher de `InstructionsLoaded` — a divergência entre o documentado e o observado está registrada, não resolvida escolhendo um lado. O hook `post-compact-rules-reminder.sh` lista, no `PostCompact`, o que caiu; recarregar exige tocar um arquivo do glob com `Read`. Sessão curta é a profilaxia: o que nunca compacta nunca perde o harness.
+
+O testemunho de quais instruções valiam num momento é `.claude/.last-instructions.log` — consultar antes de supor que uma regra estava carregada.
+
+**Sessão que cai não avisa — quem avisa é a ausência.** `pnpm run logbook` lê o diário de bordo (`.claude/.session-logbook.log`, escrito pelo hook `logbook.sh` em SessionStart/SessionEnd/PreCompact/PostCompact/Stop) e lista as sessões; `pnpm run logbook --dead` mostra só as que **não** emitiram `SessionEnd` — essas caíram, e o horário do último evento é a hora do óbito, para cruzar com status.claude.com. O diário registra operação, nunca conteúdo de prompt ou de ferramenta.
+
 ## Harness
 
 Só primitivas nativas do Claude Code: `.claude/rules/` (por path), `.claude/skills/`, `.claude/agents/`, `.claude/hooks/` + `settings.json`. Não existe pipeline W0→W3, ticket com `STATE.json`, wave nem spec-kit — foram removidos em 2026-08-06.
