@@ -49,21 +49,11 @@ CMD_POS="(^|[;&|(]|&&|\\|\\|)[[:space:]]*${ASSIGN}"
 #
 # A linha que ABRE o heredoc é preservada, porque é justamente onde mora o caso a pegar
 # (`python3 - <<'PY'`). Some só o corpo, até o delimitador de fechamento.
-strip_heredoc_bodies() {
-  awk '
-    inhd { if ($0 == delim || $0 == delim ";") { inhd = 0 } ; next }
-    {
-      print
-      if (match($0, /<<-?[ \t]*"?'"'"'?[A-Za-z_][A-Za-z0-9_]*'"'"'?"?/)) {
-        d = substr($0, RSTART, RLENGTH)
-        sub(/^<<-?[ \t]*/, "", d)
-        gsub(/["'"'"']/, "", d)
-        delim = d
-        inhd = 1
-      }
-    }
-  '
-}
+#
+# A implementação saiu daqui para `lib/heredoc.sh` quando `block-bash-file-io.sh` passou a precisar
+# da mesma poda: duas cópias do mesmo awk divergem no dia em que só uma for corrigida.
+# shellcheck source=./lib/heredoc.sh
+. "${BASH_SOURCE[0]%/*}/lib/heredoc.sh"
 
 # `SCAN` é o que se inspeciona; `COMMAND` segue intacto para ser ecoado na recusa — quem lê a
 # mensagem precisa ver o que digitou, não a versão podada.
