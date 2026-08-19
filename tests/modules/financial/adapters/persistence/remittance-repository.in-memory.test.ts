@@ -21,7 +21,12 @@ const build = (documentIds: readonly string[]) => {
     nsa: seq,
     fileName: `PAG_1.1108202614000${seq}_00000${seq}.REM`,
     contentHash: 'a'.repeat(64),
-    documentIds,
+    // A referência de G064 (#752) sai de NSA + posição. Derivada aqui do mesmo `seq` que numera a
+    // remessa, para que duas remessas do fixture nunca colidam — que é a invariante do CA4.
+    documents: documentIds.map((documentId, i) => ({
+      documentId,
+      yourNumber: `${String(seq).padStart(6, '0')}${String(i + 1).padStart(6, '0')}`,
+    })),
     generatedAt: '2026-08-11T14:00:00.000Z',
   });
   assert.ok(isOk(r));

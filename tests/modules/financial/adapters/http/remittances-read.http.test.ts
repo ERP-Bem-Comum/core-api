@@ -70,7 +70,11 @@ const build = (id: string, nsa: number, generatedAt: string, documentIds: readon
     nsa,
     fileName: `PAG_1.11082026140000_${String(nsa).padStart(6, '0')}.REM`,
     contentHash: 'a'.repeat(64),
-    documentIds,
+    // #752: NSA + posição. O NSA distingue as remessas do fixture entre si.
+    documents: documentIds.map((documentId, i) => ({
+      documentId,
+      yourNumber: `${String(nsa).padStart(6, '0')}${String(i + 1).padStart(6, '0')}`,
+    })),
     generatedAt,
   });
   if (!r.ok) throw new Error(`test setup: remittance (${r.error})`);

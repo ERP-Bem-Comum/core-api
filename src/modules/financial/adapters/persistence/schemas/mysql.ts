@@ -1191,10 +1191,25 @@ export const finRemittanceDocuments = mysqlTable(
   {
     remittanceId: uuidKey('remittance_id').notNull(),
     documentId: uuidKey('document_id').notNull(),
+    // G064 "Seu Número" — a referência emitida por ESTE documento nesta remessa (#752).
+    //
+    // 20 é a largura do campo no Segmento A (colunas 074-093); hoje a derivação usa 12 (NSA + posição
+    // do pagamento), e a folga é do layout, não desperdício.
+    //
+    // `NOT NULL` sem default: a referência é o que liga o retorno ao título, e uma linha sem ela é um
+    // documento preso cuja chave de casamento ninguém sabe qual é. Sem default porque não existe
+    // valor plausível — inventar um reintroduziria, no schema, o mesmo fallback silencioso que a
+    // issue veio remover do emissor.
+    yourNumber: varchar('your_number', { length: 20 }).notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.remittanceId, t.documentId] }),
     index('fin_remittance_documents_document_idx').on(t.documentId),
+    // O caminho de leitura do RETORNO (#690): o banco devolve a referência, e é por ela que se
+    // chega ao documento. UNIQUE, e não índice comum, porque referência repetida torna o casamento
+    // ambíguo — o mesmo pagamento apontando para dois títulos. O domínio já recusa duplicata dentro
+    // de um arquivo; este índice é a rede que pega o caso entre arquivos, se o NSA algum dia repetir.
+    uniqueIndex('fin_remittance_documents_your_number_uk').on(t.yourNumber),
   ],
 );
 

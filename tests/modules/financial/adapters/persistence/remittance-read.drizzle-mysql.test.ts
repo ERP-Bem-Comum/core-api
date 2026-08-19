@@ -17,7 +17,7 @@ import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persi
 import { createDrizzleRemittanceRepository } from '#src/modules/financial/adapters/persistence/repos/remittance-repository.drizzle.ts';
 import * as RemittanceId from '#src/modules/financial/domain/remittance/remittance-id.ts';
 import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
-import { create } from '#src/modules/financial/domain/remittance/remittance.ts';
+import { create, documentIdsOf } from '#src/modules/financial/domain/remittance/remittance.ts';
 import {
   finRemittances,
   finRemittanceDocuments,
@@ -36,7 +36,12 @@ const build = (generatedAt: string, documentIds: readonly string[], cedente = ac
     nsa: nsaSeq,
     fileName: `PAG_INT_728.11082026140000_${String(nsaSeq).padStart(6, '0')}.REM`,
     contentHash: 'c'.repeat(64),
-    documentIds,
+    // #752: convênio + NSA + posição. `900002` é o discriminador deste arquivo — ver a nota gêmea
+    // em `remittance-repository.drizzle-mysql.test.ts`; `your_number` é UNIQUE na tabela.
+    documents: documentIds.map((documentId, i) => ({
+      documentId,
+      yourNumber: `900002${String(nsaSeq).padStart(6, '0')}${String(i + 1).padStart(6, '0')}`,
+    })),
     generatedAt,
   });
   if (!r.ok) throw new Error(`test setup: remittance (${r.error})`);
@@ -99,7 +104,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       // documentIds da página carregados em batch, agrupados por remessa.
       const mid = page.value.items.find((r) => r.id === middle.id);
       assert.ok(mid !== undefined);
-      assert.deepEqual([...mid.documentIds].sort(), [dMid1, dMid2].sort());
+      assert.deepEqual([...documentIdsOf(mid)].sort(), [dMid1, dMid2].sort());
     });
 
     it('respeita limit/offset preservando a ordem DESC entre páginas', async () => {
@@ -137,7 +142,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const back = await repo.findById(rem.id);
       assert.ok(isOk(back) && back.value !== null);
       assert.equal(back.value.status, 'Queued');
-      assert.deepEqual([...back.value.documentIds].sort(), [d1, d2].sort());
+      assert.deepEqual([...documentIdsOf(back.value)].sort(), [d1, d2].sort());
     });
 
     it('lista vazia devolve total 0 e nenhum item', async () => {

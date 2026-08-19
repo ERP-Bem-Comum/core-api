@@ -51,7 +51,10 @@ export type TransferPayment = Readonly<{
   paymentDate: Date;
   valueCents: number;
   address?: PayeeAddress;
-  yourNumber?: string;
+  // ⚠️ `yourNumber` NÃO entra aqui (#752). A referência de G064 é DERIVADA pelo montador a partir do
+  // NSA e da posição do pagamento — dados que o chamador não tem: o NSA é alocado no use case,
+  // depois de o reader já ter montado os pagamentos. Aceitá-la de fora reabriria o caminho para a
+  // string vazia, que é o defeito original. A ausência do campo faz o compilador cobrar quem tentar.
   tedPurpose?: string;
   message?: string;
 }>;
@@ -70,7 +73,7 @@ export type BilletPayment = Readonly<{
   titleValueCents?: number;
   discountCents?: number;
   surchargeCents?: number;
-  yourNumber?: string;
+  // Idem `TransferPayment`: derivado no montador, nunca recebido de fora.
 }>;
 
 // As rotas que a P.O. contratou e o emissor ainda não cobre. Existem no tipo de propósito: o dado
@@ -100,14 +103,76 @@ export type RemittanceFileInput = Readonly<{
 export type RemittanceFileError =
   | CnabSegmentError
   | BatchProfileError
-  | 'remittance-without-payments';
+  | 'remittance-without-payments'
+  // Um componente da referência de G064 não coube na sua largura (#752, CA5). Recusar é a única
+  // saída: truncar colapsaria duas referências distintas na mesma string, e o casamento do retorno
+  // apontaria para o título errado — sem nada indicando que houve truncamento.
+  | 'remittance-reference-overflow';
 
 export type RemittanceFile = Readonly<{
   content: string;
   lineCount: number;
   totalCents: number;
   batchCount: number;
+  // As referências de G064 emitidas, NA ORDEM DE ENTRADA de `payments` (#752).
+  //
+  // ⚠️ A ordem é o contrato inteiro deste campo, e é frágil de propósito: o chamador casa por
+  // índice com os `documentId` que ele possui, porque a camada CNAB não conhece identidade de
+  // domínio e não deve conhecer (ADR-0006). Devolver na ordem de EMISSÃO associaria a referência ao
+  // documento errado — arquivo válido, casamento de retorno errado, que é a pior classe de falha
+  // deste módulo. Ver `groupIntoBatches`, que reordena.
+  yourNumbers: readonly string[];
 }>;
+
+// A referência que a EMPRESA atribui ao pagamento e o banco devolve no retorno — G064, Segmento A,
+// colunas 074-093 (20 posições).
+//
+// Composição: convênio (8) + NSA (6) + posição do pagamento na seleção (6) = 20, o campo inteiro.
+//
+// A largura do convênio é 8 e não 6 porque o convênio real tem 7 dígitos — o layout lhe reserva 20
+// posições no header (`multipag-records.ts`, colunas 033-052), então nada garante 6. Oito é o que
+// sobra depois de NSA e posição, e cobre com folga o que a operação usa. Convênio maior que isso
+// RECUSA o arquivo, em vez de ser truncado.
+//
+//   • A posição dá unicidade DENTRO do arquivo — e é a posição na ENTRADA, não o sequencial do
+//     registro no lote (G038). Este último REINICIA a cada lote, então dois pagamentos em lotes
+//     diferentes teriam o mesmo número e a referência colidiria dentro do próprio arquivo.
+//   • O NSA dá unicidade entre arquivos DA MESMA CONTA-CEDENTE: é alocado sob lock de linha e nunca
+//     repete ali.
+//   • ⚠️ O convênio é o que fecha o CA4, e não é adorno. `allocateNsa` recebe `cedenteAccountId` —
+//     a sequência é POR CONTA. Com duas contas-cedente, o NSA 7 existe nas duas, e `NSA + posição`
+//     produziria a mesma referência para títulos diferentes. Como o banco devolve só este campo, o
+//     casamento ficaria ambíguo justamente no caso que a issue existe para evitar. O convênio já é o
+//     discriminador de conta no nome do arquivo (`buildRemittanceFileName`), e é o mesmo aqui.
+//
+// Reversibilidade (CA2): a resolução referência → título é uma consulta ao vínculo persistido, não
+// um recálculo. Recalcular exigiria reproduzir o agrupamento em lotes como ele estava no dia da
+// emissão, e o agrupamento depende do cadastro do favorecido, que muda.
+const CONVENIO_WIDTH = 8;
+const NSA_WIDTH = 6;
+const SEQUENCE_WIDTH = 6;
+
+// G064 tem 20 posições (Segmento A, colunas 074-093). A soma bater com a largura do campo não é
+// coincidência a preservar por acaso: se um componente crescer, outro precisa encolher, e a conta
+// tem de continuar fechando. Há teste fixando isto.
+const YOUR_NUMBER_WIDTH = CONVENIO_WIDTH + NSA_WIDTH + SEQUENCE_WIDTH;
+
+// Um componente que não cabe na sua largura RECUSA o arquivo. Truncar produziria referências
+// distintas colapsadas na mesma string — colisão silenciosa, que é o modo de falha do CA5.
+const fixedWidth = (value: string, width: number): string | null =>
+  value.length > width ? null : value.padStart(width, '0');
+
+export const referenceFor = (convenio: string, nsa: number, inputIndex: number): string | null => {
+  const c = fixedWidth(convenio.trim(), CONVENIO_WIDTH);
+  const n = fixedWidth(String(nsa), NSA_WIDTH);
+  const s = fixedWidth(String(inputIndex + 1), SEQUENCE_WIDTH);
+  if (c === null || n === null || s === null) return null;
+
+  const reference = `${c}${n}${s}`;
+  // Guarda de largura, e não asserção redundante: as três larguras são constantes independentes, e
+  // alguém que mexer numa delas descobre aqui — na emissão — em vez de descobrir no banco.
+  return reference.length === YOUR_NUMBER_WIDTH ? reference : null;
+};
 
 // O que o detalhe herda do LOTE em que está. Agrupado num tipo porque são as coordenadas de uma
 // coisa só — a posição do registro dentro do lote — e porque a forma entrou aqui para que o
@@ -125,6 +190,7 @@ type BatchContext = Readonly<{
 const detailsOf = (
   payment: RemittancePayment,
   batch: BatchContext,
+  yourNumber: string,
 ): Result<readonly string[], RemittanceFileError> => {
   const { bankCode, batchNumber, firstRecordNumber } = batch;
 
@@ -141,7 +207,7 @@ const detailsOf = (
         // descrevem a mesma operação e não podem divergir dentro de um registro.
         clearingHouse: clearingHouseFor(batch.launchForm),
         ...(payment.address !== undefined ? { address: payment.address } : {}),
-        ...(payment.yourNumber !== undefined ? { yourNumber: payment.yourNumber } : {}),
+        yourNumber,
         ...(payment.tedPurpose !== undefined ? { tedPurpose: payment.tedPurpose } : {}),
         ...(payment.message !== undefined ? { message: payment.message } : {}),
       });
@@ -159,7 +225,7 @@ const detailsOf = (
         paymentValueCents: payment.valueCents,
         ...(payment.discountCents !== undefined ? { discountCents: payment.discountCents } : {}),
         ...(payment.surchargeCents !== undefined ? { surchargeCents: payment.surchargeCents } : {}),
-        ...(payment.yourNumber !== undefined ? { yourNumber: payment.yourNumber } : {}),
+        yourNumber,
       });
       return record.ok ? ok([record.value]) : record;
     }
@@ -172,7 +238,16 @@ const detailsOf = (
   }
 };
 
-type Batch = Readonly<{ profile: CnabBatchProfile; payments: readonly RemittancePayment[] }>;
+// O pagamento COM a posição que ele ocupava na entrada.
+//
+// ⚠️ Este par é a defesa contra a armadilha da #752. `groupIntoBatches` reordena — agrupa por forma
+// de lançamento e banco do favorecido —, então a ordem de emissão não é a ordem de entrada. Sem
+// carregar o índice original, devolver as referências "na ordem de entrada" seria impossível, e
+// casá-las por posição no chamador associaria cada referência ao documento errado. O arquivo sairia
+// válido, o banco aceitaria, e o erro só apareceria meses depois, no primeiro retorno.
+type IndexedPayment = Readonly<{ payment: RemittancePayment; inputIndex: number }>;
+
+type Batch = Readonly<{ profile: CnabBatchProfile; payments: readonly IndexedPayment[] }>;
 
 // Do pagamento inteiro para o mínimo que decide o perfil. A conversão é explícita, e não o
 // pagamento passado direto, porque o perfil não deve enxergar valor, data nem endereço: o que
@@ -226,9 +301,9 @@ const groupIntoBatches = (
   cedenteBankCode: string,
 ): Result<readonly Batch[], RemittanceFileError> => {
   const order: string[] = [];
-  const byKey = new Map<string, { profile: CnabBatchProfile; payments: RemittancePayment[] }>();
+  const byKey = new Map<string, { profile: CnabBatchProfile; payments: IndexedPayment[] }>();
 
-  for (const payment of payments) {
+  for (const [inputIndex, payment] of payments.entries()) {
     const profile = batchProfileFor(profiledOf(payment), cedenteBankCode);
     // Uma rota sem emissor aborta o arquivo inteiro, em vez de sair como transferência por omissão.
     // Emitir o par de crédito em conta para um boleto produziria arquivo bem-formado, aceito pelo
@@ -236,12 +311,13 @@ const groupIntoBatches = (
     if (!profile.ok) return profile;
 
     const key = batchKeyOf(payment, profile.value);
+    const indexed: IndexedPayment = { payment, inputIndex };
     const group = byKey.get(key);
     if (group === undefined) {
       order.push(key);
-      byKey.set(key, { profile: profile.value, payments: [payment] });
+      byKey.set(key, { profile: profile.value, payments: [indexed] });
     } else {
-      group.payments.push(payment);
+      group.payments.push(indexed);
     }
   }
 
@@ -269,6 +345,11 @@ export const buildRemittanceFile = (
   const bodyLines: string[] = [header.value];
   let totalCents = 0;
 
+  // Indexado pela posição de ENTRADA — preenchido na ordem de emissão, lido na ordem de entrada. É o
+  // que permite ao chamador casar por índice com os `documentId` que ele já tem, sem que esta camada
+  // conheça documento algum.
+  const yourNumbers: string[] = new Array<string>(input.payments.length);
+
   for (const [index, batch] of batches.value.entries()) {
     // Lotes numerados a partir de 1, na ordem em que as formas apareceram na seleção.
     const batchNumber = index + 1;
@@ -285,15 +366,25 @@ export const buildRemittanceFile = (
     const details: string[] = [];
     let batchCents = 0;
 
-    for (const payment of batch.payments) {
+    for (const { payment, inputIndex } of batch.payments) {
+      // A referência vem da posição de ENTRADA, não do sequencial do registro — que reinicia por
+      // lote e colidiria entre lotes do mesmo arquivo. Ver `referenceFor`.
+      const yourNumber = referenceFor(input.cedente.convenio, input.nsa, inputIndex);
+      if (yourNumber === null) return err('remittance-reference-overflow');
+      yourNumbers[inputIndex] = yourNumber;
+
       // O sequencial REINICIA a cada lote: é o que o campo declara, e é o que o trailer daquele
       // lote confere. Continuar a contagem entre lotes produziria arquivo que o banco recusa.
-      const emitted = detailsOf(payment, {
-        bankCode: input.cedente.bankCode,
-        batchNumber,
-        firstRecordNumber: details.length + 1,
-        launchForm: batch.profile.launchForm,
-      });
+      const emitted = detailsOf(
+        payment,
+        {
+          bankCode: input.cedente.bankCode,
+          batchNumber,
+          firstRecordNumber: details.length + 1,
+          launchForm: batch.profile.launchForm,
+        },
+        yourNumber,
+      );
       // Um pagamento que falha aborta o arquivo inteiro. Emitir remessa parcial seria pagar parte
       // dos fornecedores e silenciar o resto — pior que não pagar ninguém.
       if (!emitted.ok) return emitted;
@@ -332,5 +423,6 @@ export const buildRemittanceFile = (
     lineCount: lines.length,
     totalCents,
     batchCount: batches.value.length,
+    yourNumbers,
   });
 };

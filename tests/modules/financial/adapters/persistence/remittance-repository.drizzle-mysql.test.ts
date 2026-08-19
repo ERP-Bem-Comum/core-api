@@ -7,7 +7,7 @@
 //
 // GATE: só roda com `MYSQL_INTEGRATION=1`.
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, beforeEach, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { eq } from 'drizzle-orm';
@@ -23,8 +23,13 @@ import {
   confirmTransmitted,
   markFailed,
   discard,
+  documentIdsOf,
 } from '#src/modules/financial/domain/remittance/remittance.ts';
-import { finOutbox } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
+import {
+  finOutbox,
+  finRemittances,
+  finRemittanceDocuments,
+} from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 const account = CedenteAccountId.generate();
@@ -38,7 +43,13 @@ const build = (documentIds: readonly string[], cedente = account) => {
     nsa: nsaSeq,
     fileName: `PAG_INT.11082026140000_${String(nsaSeq).padStart(6, '0')}.REM`,
     contentHash: 'b'.repeat(64),
-    documentIds,
+    // #752: convênio + NSA + posição. O convênio fictício `900001` é o discriminador DESTE arquivo
+    // de teste — `your_number` tem UNIQUE na tabela, e dois arquivos de integração que usassem o
+    // mesmo par NSA/posição colidiriam entre si, com a falha aparecendo no vizinho.
+    documents: documentIds.map((documentId, i) => ({
+      documentId,
+      yourNumber: `900001${String(nsaSeq).padStart(6, '0')}${String(i + 1).padStart(6, '0')}`,
+    })),
     generatedAt: '2026-08-11 14:00:00.000',
   });
   if (!r.ok) throw new Error(`test setup: remittance (${r.error})`);
@@ -64,6 +75,18 @@ if (!process.env['MYSQL_INTEGRATION']) {
       handle = r.value;
     });
 
+    // Limpa na ENTRADA, por tabela (testing.md §Contrato de isolamento).
+    //
+    // Passou a ser NECESSÁRIO com a #752: `your_number` ganhou UNIQUE, e `nsaSeq` reinicia a cada
+    // processo — sem limpar, a SEGUNDA execução deste arquivo tentaria gravar as mesmas referências
+    // e falharia na colisão, com o erro aparecendo como `save` recusado, longe da causa. É o caso
+    // que a inversão de ordem não pega, e que a rule chama de "passar duas vezes seguidas".
+    beforeEach(async () => {
+      await handle.db.delete(finRemittanceDocuments);
+      await handle.db.delete(finRemittances);
+      await handle.db.delete(finOutbox);
+    });
+
     after(async () => {
       await handle?.close();
     });
@@ -79,7 +102,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const back = await repo.findById(rem.id);
       assert.ok(isOk(back) && back.value !== null);
       assert.equal(back.value.status, 'Queued');
-      assert.deepEqual([...back.value.documentIds].sort(), [d1, d2].sort());
+      assert.deepEqual([...documentIdsOf(back.value)].sort(), [d1, d2].sort());
     });
 
     it('recupera por nome de arquivo — a chave de idempotência do agente', async () => {
@@ -144,7 +167,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const back = await repo.findById(rem.id);
       assert.ok(isOk(back) && back.value !== null);
       assert.equal(back.value.status, 'Transmitted');
-      assert.deepEqual(back.value.documentIds, [d]);
+      assert.deepEqual(documentIdsOf(back.value), [d]);
     });
 
     // O UNIQUE que impede duas remessas com o mesmo NSA na mesma conta — retransmissão, para o banco.

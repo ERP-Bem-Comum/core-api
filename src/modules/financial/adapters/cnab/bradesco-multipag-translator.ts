@@ -53,6 +53,9 @@ export const createBradescoMultipagTranslator = (): CnabRemittanceTranslator => 
       totalCents: file.value.totalCents,
       lineCount: file.value.lineCount,
       batchCount: file.value.batchCount,
+      // Repassado sem tocar: a ordem é o contrato, e reordenar aqui seria desfazer exatamente o que
+      // o montador se deu ao trabalho de preservar.
+      yourNumbers: file.value.yourNumbers,
     });
   },
 });

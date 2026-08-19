@@ -3,6 +3,14 @@ import { immutable } from '../../../../shared/primitives/immutable.ts';
 import type { CreateRemittanceInput, Remittance, RemittanceError } from './types.ts';
 import type { RemittanceEvent } from './events.ts';
 
+// Os ids dos documentos presos, sem a referência emitida. Existe porque quase todo consumidor
+// (evento, DTO, contagem, seleção) só pergunta QUAIS documentos estão presos — e fazê-los conhecer
+// o par inteiro espalharia o vocabulário da emissão por lugares que não emitem nada.
+//
+// Derivado, nunca armazenado em paralelo: duas listas que precisam concordar acabam discordando.
+export const documentIdsOf = (remittance: Remittance): readonly string[] =>
+  remittance.documents.map((d) => d.documentId);
+
 /**
  * O que uma transição devolve: o agregado no estado novo mais o que houve de contar ao mundo.
  *
@@ -26,7 +34,7 @@ const settled = (
   remittanceId: remittance.id,
   nsa: remittance.nsa,
   fileName: remittance.fileName,
-  documentIds: remittance.documentIds,
+  documentIds: documentIdsOf(remittance),
   settledAt: at,
   detail,
 });
@@ -34,10 +42,27 @@ const settled = (
 const isBlank = (value: string): boolean => value.trim().length === 0;
 
 export const create = (input: CreateRemittanceInput): Result<Remittance, RemittanceError> => {
-  if (input.documentIds.length === 0) return err('remittance-without-documents');
-  if (new Set(input.documentIds).size !== input.documentIds.length) {
+  if (input.documents.length === 0) return err('remittance-without-documents');
+
+  const documentIds = input.documents.map((d) => d.documentId);
+  if (new Set(documentIds).size !== documentIds.length) {
     return err('remittance-duplicated-document');
   }
+
+  // CA3 da #752: referência ausente RECUSA a remessa, com nome próprio. O fallback silencioso para
+  // string vazia é o que fazia o defeito ser invisível — o arquivo saía válido e o banco aceitava.
+  if (input.documents.some((d) => isBlank(d.yourNumber))) {
+    return err('remittance-document-without-reference');
+  }
+
+  // CA4/CA2: referência repetida dentro do mesmo arquivo torna o casamento do retorno AMBÍGUO — o
+  // banco devolveria uma referência que aponta para dois títulos. Entre remessas a unicidade vem do
+  // NSA, que é alocado sob lock e nunca repete; dentro do arquivo, é aqui que ela é cobrada.
+  const references = input.documents.map((d) => d.yourNumber);
+  if (new Set(references).size !== references.length) {
+    return err('remittance-duplicated-reference');
+  }
+
   if (isBlank(input.fileName)) return err('remittance-file-name-required');
   if (isBlank(input.contentHash)) return err('remittance-content-hash-required');
 
@@ -48,7 +73,7 @@ export const create = (input: CreateRemittanceInput): Result<Remittance, Remitta
       nsa: input.nsa,
       fileName: input.fileName,
       contentHash: input.contentHash,
-      documentIds: [...input.documentIds],
+      documents: input.documents.map((d) => immutable({ ...d })),
       // Nasce enfileirada, nunca transmitida: gravar no bucket não é transmitir.
       status: 'Queued',
       generatedAt: input.generatedAt,
@@ -57,7 +82,7 @@ export const create = (input: CreateRemittanceInput): Result<Remittance, Remitta
 };
 
 export const includes = (remittance: Remittance, documentId: string): boolean =>
-  remittance.documentIds.includes(documentId);
+  remittance.documents.some((d) => d.documentId === documentId);
 
 // A pergunta que a seleção de documentos faz. Enquanto a remessa "prende", nenhum dos seus
 // documentos pode entrar noutra — é o que substitui a transição imediata para `Transmitted`.
