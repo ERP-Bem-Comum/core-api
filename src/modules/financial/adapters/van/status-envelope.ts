@@ -18,6 +18,7 @@
 // Latência esperada: até 5 minutos para a execução começar, mais o tempo da transmissão.
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import type {
+  VanReceptionProvenance,
   VanStatus,
   VanStatusError,
   VanStatusKind,
@@ -37,7 +38,13 @@ import type {
 //     amostra que temos veio truncada — decodificar offsets a partir de exemplo incompleto é o erro
 //     que este projeto já pagou caro duas vezes. Decodificação vira fatia própria quando houver
 //     amostra real e íntegra.
-export type { VanStatus, VanStatusError, VanStatusKind, VanStatusSituation };
+export type {
+  VanReceptionProvenance,
+  VanStatus,
+  VanStatusError,
+  VanStatusKind,
+  VanStatusSituation,
+};
 
 const SITUATIONS: readonly VanStatusSituation[] = ['transmitido', 'falha', 'revisao', 'recepcao'];
 
@@ -78,6 +85,52 @@ const parseJson = (raw: string): Result<Record<string, unknown>, VanStatusError>
   }
 };
 
+/**
+ * Proveniência da recepção (`recepcao`), quando o envelope a traz.
+ *
+ * Devolve `undefined` — e não erro — em duas situações que são a mesma coisa para quem consome:
+ * o envelope não é de recepção, ou é de uma versão do agente anterior ao PR #12. Nos dois casos
+ * **não há proveniência**, e a #753 já sabe o que fazer com isso: quarentena, não processamento.
+ *
+ * ⚠️ Campo pela metade é DESCARTADO, não aproveitado. Um `sha256` ausente com `chave` presente
+ * passaria na conferência de integridade do CA4 por vacuidade — e integridade presumida é
+ * exatamente o que aquele critério existe para impedir.
+ */
+const parseReception = (raw: unknown): VanReceptionProvenance | undefined => {
+  if (typeof raw !== 'object' || raw === null) return undefined;
+  const r = raw as Record<string, unknown>;
+
+  const sha256 = r['sha256'];
+  const key = r['chave'];
+  const correlated = r['correlacionado'];
+  const cycleLogRead = r['logDoCicloLido'];
+
+  if (
+    typeof sha256 !== 'string' ||
+    sha256 === '' ||
+    typeof key !== 'string' ||
+    key === '' ||
+    typeof correlated !== 'boolean' ||
+    typeof cycleLogRead !== 'boolean'
+  ) {
+    return undefined;
+  }
+
+  const duplicate = r['duplicado'];
+  const duplicateOf = r['duplicadoDe'];
+
+  return {
+    sha256,
+    key,
+    correlated,
+    cycleLogRead,
+    // `omitempty` do lado do produtor: ausente significa `false`/vazio, e reproduzir a ausência aqui
+    // mantém a assimetria visível para quem inspeciona o objeto.
+    ...(typeof duplicate === 'boolean' ? { duplicate } : {}),
+    ...(typeof duplicateOf === 'string' && duplicateOf !== '' ? { duplicateOf } : {}),
+  };
+};
+
 export const parseStatus = (key: string, content: string): Result<VanStatus, VanStatusError> => {
   const kind = classifyKey(key);
   if (!kind.ok) return kind;
@@ -112,6 +165,8 @@ export const parseStatus = (key: string, content: string): Result<VanStatus, Van
   // `codigoStcp` (vindo do clcp.err.txt) é declarado pela infra como diagnóstico auxiliar, FORA do
   // contrato — por isso não entra no tipo. Depender dele acoplaria o backend a algo que a própria
   // infra disse que pode sumir.
+  const reception = parseReception(body['recepcao']);
+
   return ok({
     kind: kind.value,
     fileName,
@@ -119,6 +174,10 @@ export const parseStatus = (key: string, content: string): Result<VanStatus, Van
     situation: body['situacao'],
     detail,
     exitCode,
+    // Só entra quando o envelope traz o objeto BEM FORMADO. Proveniência pela metade é pior que
+    // ausente: a #753 decide o que processar a partir dela, e um `sha256` vazio aprovaria a
+    // conferência de integridade em vez de reprová-la.
+    ...(reception !== undefined ? { reception } : {}),
     // Elemento não-string no log é descartado em vez de falhar a leitura — e a assimetria com
     // `situacao` é deliberada: log é DIAGNÓSTICO, `situacao` é DECISÃO. Recusar o envelope por uma
     // linha estranha deixaria a remessa em estado desconhecido por causa de um campo que não decide
