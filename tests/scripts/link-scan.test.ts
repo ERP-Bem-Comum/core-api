@@ -28,6 +28,7 @@ import {
   ignoredPaths,
   type LinkRef,
 } from '../../scripts/handbook/link-scan.ts';
+import { gitFixtureEnv, withoutGitEnv } from '../support/git-fixture.ts';
 
 const PROJECT_ROOT = resolve(fileURLToPath(new URL('.', import.meta.url)), '..', '..');
 
@@ -159,9 +160,16 @@ describe('LINK-SCAN — classificação', () => {
 describe('LINK-SCAN — gitignore de diretório ausente (o caso que derrubou o CI duas vezes)', () => {
   let repo = '';
 
+  // `ignoredPaths` invoca `git check-ignore` herdando o ambiente do processo — e faz certo, porque
+  // no uso real roda no pre-commit, sobre o repositório do hook. Aqui o alvo é o fixture, e sem
+  // limpar as `GIT_*` a consulta responderia sobre o repositório de verdade.
+  const ignored = (paths: readonly string[]) => withoutGitEnv(() => ignoredPaths(repo, paths));
+
   before(() => {
     repo = mkdtempSync(join(tmpdir(), 'link-scan-ignore-'));
-    execFileSync('git', ['init', '--quiet'], { cwd: repo });
+    // `env` sanitizado além do `cwd`: dentro de um `git commit`, `GIT_DIR` vence o `cwd` e este
+    // `init` marcaria o repositório REAL como bare. Ver `tests/support/git-fixture.ts`.
+    execFileSync('git', ['init', '--quiet'], { cwd: repo, env: gitFixtureEnv() });
     // Padrão de DIRETÓRIO, e o diretório NÃO é criado — é a situação exata do runner de CI, onde
     // `handbook/guidelines/` (PDFs sob restrição de redistribuição) não existe.
     writeFileSync(join(repo, '.gitignore'), 'material-local/\n');
@@ -175,17 +183,17 @@ describe('LINK-SCAN — gitignore de diretório ausente (o caso que derrubou o C
     // Com a consulta feita só na forma sem barra, este caso responde "não ignorado" — e foi assim
     // que o gate passou na máquina de quem escreveu e falhou no CI, duas vezes seguidas.
     assert.ok(
-      ignoredPaths(repo, ['material-local']).has('material-local'),
+      ignored(['material-local']).has('material-local'),
       'padrão de diretório precisa ser reconhecido mesmo quando o diretório não existe no disco',
     );
   });
 
   it('caminho que ninguém ignora segue de fora', () => {
-    assert.equal(ignoredPaths(repo, ['outro-diretorio']).has('outro-diretorio'), false);
+    assert.equal(ignored(['outro-diretorio']).has('outro-diretorio'), false);
   });
 
   it('lista vazia não invoca o git', () => {
-    assert.equal(ignoredPaths(repo, []).size, 0);
+    assert.equal(ignored([]).size, 0);
   });
 });
 

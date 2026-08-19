@@ -40,6 +40,8 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
+import { gitFixtureEnv } from '../support/git-fixture.ts';
+
 const REPO_ROOT = resolve(fileURLToPath(new URL('../../', import.meta.url)));
 const PRE_COMMIT_SCRIPT = join(REPO_ROOT, '.claude/hooks/pre-commit-typecheck.sh');
 const GITHOOKS_PRE_COMMIT = join(REPO_ROOT, '.githooks/pre-commit');
@@ -193,11 +195,15 @@ describe('CA-4 — git commit é recusado com o gate vermelho e aceito com o gat
   const buildFixtureRepo = (scriptOverrides: Readonly<Record<string, string>> = {}): string => {
     const dir = mkdtempSync(join(tmpdir(), 'hrn-blocking-gate-'));
 
-    spawnSync('git', ['init', '-q'], { cwd: dir });
-    spawnSync('git', ['config', 'user.email', 'w0-fixture@example.com'], { cwd: dir });
-    spawnSync('git', ['config', 'user.name', 'W0 Fixture'], { cwd: dir });
-    spawnSync('git', ['config', 'commit.gpgsign', 'false'], { cwd: dir });
-    spawnSync('git', ['config', 'core.hooksPath', '.githooks'], { cwd: dir });
+    // `env` sanitizado além do `cwd`: dentro de um `git commit` o hook roda esta suíte com
+    // `GIT_DIR` exportado, e ele vence o `cwd` — estes cinco comandos reconfigurariam o
+    // repositório REAL. Ver `tests/support/git-fixture.ts`.
+    const env = gitFixtureEnv();
+    spawnSync('git', ['init', '-q'], { cwd: dir, env });
+    spawnSync('git', ['config', 'user.email', 'w0-fixture@example.com'], { cwd: dir, env });
+    spawnSync('git', ['config', 'user.name', 'W0 Fixture'], { cwd: dir, env });
+    spawnSync('git', ['config', 'commit.gpgsign', 'false'], { cwd: dir, env });
+    spawnSync('git', ['config', 'core.hooksPath', '.githooks'], { cwd: dir, env });
 
     mkdirSync(join(dir, '.githooks'), { recursive: true });
     cpSync(GITHOOKS_PRE_COMMIT, join(dir, '.githooks/pre-commit'));
@@ -234,16 +240,21 @@ describe('CA-4 — git commit é recusado com o gate vermelho e aceito com o gat
 
   const commitFixture = (dir: string, valid: boolean, message: string) => {
     writeFileSync(join(dir, 'fixture.ts'), tsFixtureContent(valid));
-    spawnSync('git', ['add', '-A'], { cwd: dir });
+    spawnSync('git', ['add', '-A'], { cwd: dir, env: gitFixtureEnv() });
     return spawnSync('git', ['commit', '-m', message], {
       cwd: dir,
+      env: gitFixtureEnv(),
       encoding: 'utf-8',
       timeout: 60_000,
     });
   };
 
   const commitCount = (dir: string): string =>
-    spawnSync('git', ['log', '--oneline'], { cwd: dir, encoding: 'utf-8' }).stdout.trim();
+    spawnSync('git', ['log', '--oneline'], {
+      cwd: dir,
+      env: gitFixtureEnv(),
+      encoding: 'utf-8',
+    }).stdout.trim();
 
   it('pré-condição: .githooks/pre-commit precisa existir para este teste ter sinal', () => {
     assert.ok(
