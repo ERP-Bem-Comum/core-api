@@ -95,7 +95,6 @@ describe('decomposePayeeAccount — o que passa cabe no segmento A', () => {
             agencyDigit: r.value.agencyDigit,
             accountNumber: r.value.accountNumber,
             accountDigit: r.value.accountDigit,
-            accountAgencyDigit: ' ',
           },
           paymentDate: new Date('2026-08-14T12:00:00Z'),
           valueCents: 123_456,
