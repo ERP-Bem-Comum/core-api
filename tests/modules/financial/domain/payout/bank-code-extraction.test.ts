@@ -2,7 +2,10 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';
-import { decomposePayeeAccount } from '#src/modules/financial/domain/payout/payee-account.ts';
+import {
+  decomposePayeeAccount,
+  readPayeeBankCode,
+} from '#src/modules/financial/domain/payout/payee-account.ts';
 import type { PayeePaymentTarget } from '#src/modules/financial/domain/payout/types.ts';
 
 /**
@@ -118,5 +121,66 @@ describe('readBankCode — o que continua sendo inconvertível', () => {
   it('recusa código colado ao nome sem separador', () => {
     assert.equal(codeOf('237 Bradesco'), null);
     assert.equal(codeOf('237Bradesco'), null);
+  });
+});
+
+/**
+ * `readPayeeBankCode` — a MESMA leitura, isolada do resto do cadastro (#755).
+ *
+ * A razão de existir está no helper `withBank` no topo deste arquivo: para testar a extração do
+ * banco, ele precisa montar um cadastro com agência, conta e um DV que o algoritmo do Bradesco
+ * aceite — senão os casos que resolvem para `237` são recusados pelo dígito e o arquivo fica
+ * vermelho por um motivo que não é o dele. Essa dependência é real e vale para quem MEDE: um
+ * cadastro do Bradesco com dígito divergente continua sendo do Bradesco, e some da contagem se a
+ * pergunta "de qual instituição é este?" tiver de passar pela pergunta "isto pode virar arquivo?".
+ */
+describe('readPayeeBankCode — lê a instituição sem exigir cadastro emitível', () => {
+  const bankOf = (raw: string | null): string | null => {
+    const r = readPayeeBankCode(raw);
+    return isOk(r) ? r.value : null;
+  };
+
+  it('concorda com a decomposição completa quando o cadastro é válido', () => {
+    for (const [raw, expected] of [
+      ['237 - Banco Bradesco S.A.', '237'],
+      ['001 - Banco do Brasil S.A.', '001'],
+      ['77 - Inter', '077'],
+    ] as const) {
+      assert.equal(bankOf(raw), expected, raw);
+      assert.equal(codeOf(raw), expected, `${raw} (decomposição completa)`);
+    }
+  });
+
+  // O caso que motiva a função. `decomposePayeeAccount` recusa este cadastro inteiro — e está certo,
+  // porque o emissor não pode aproveitar meio cadastro. Mas a MEDIÇÃO precisa saber que ele é do 237.
+  it('lê o banco mesmo quando o resto do cadastro é inválido', () => {
+    const dvErrado: PayeePaymentTarget = {
+      bank: '237 - Banco Bradesco S.A.',
+      agency: '1234-5',
+      accountNumber: '123456',
+      checkDigit: '9', // o algoritmo produz '0' para esta conta
+      pixKey: null,
+    };
+
+    assert.equal(isOk(decomposePayeeAccount(dvErrado)), false, 'o emissor recusa, e deve recusar');
+    assert.equal(bankOf(dvErrado.bank), '237', 'a medição continua sabendo de qual banco é');
+  });
+
+  it('devolve a lacuna nomeada quando o banco é ilegível — não string vazia', () => {
+    const semCodigo = readPayeeBankCode('Banco sem código');
+    assert.ok(!isOk(semCodigo));
+    assert.deepEqual(semCodigo.error, { field: 'payee-bank-code', reason: 'unmappable' });
+
+    const vazio = readPayeeBankCode('');
+    assert.ok(!isOk(vazio));
+    assert.deepEqual(vazio.error, { field: 'payee-bank-code', reason: 'missing' });
+  });
+
+  it('trata null, undefined e branco como ausência — as três formas que o cadastro produz', () => {
+    for (const raw of [null, undefined, '   ']) {
+      const r = readPayeeBankCode(raw);
+      assert.ok(!isOk(r), String(raw));
+      assert.equal(r.error.reason, 'missing', String(raw));
+    }
   });
 });

@@ -229,6 +229,25 @@ const readAccount = (
 // Acumula TODAS as lacunas antes de recusar. Parar no primeiro defeito faria o operador corrigir um
 // campo por rodada, descobrindo o próximo só depois de salvar — quatro idas ao cadastro para um
 // título que podia ser resolvido numa.
+/**
+ * O CÓDIGO DE COMPENSAÇÃO sozinho, sem exigir que o resto do cadastro decomponha.
+ *
+ * Existe para MEDIR, não para emitir. Um cadastro do Bradesco recusado por dígito divergente
+ * continua sendo do Bradesco — e é justamente essa população que a #755 precisa dimensionar e a
+ * #734 investiga. Passar por `decomposePayeeAccount` para contá-la a perderia inteira, porque
+ * aquela função é **tudo-ou-nada de propósito**: quem emite não pode aproveitar meio cadastro.
+ *
+ * ⚠️ A saída é a razão de NÃO relaxar `decomposePayeeAccount` para servir à medição. As duas
+ * perguntas são diferentes — "para qual instituição isto vai?" e "isto pode virar Segmento A?" —, e
+ * uma função que respondesse as duas ao mesmo tempo acabaria respondendo mal a segunda, que é a que
+ * move dinheiro. A régua continua sendo esta mesma leitura, não uma cópia no script.
+ */
+export const readPayeeBankCode = (raw: string | null | undefined): Result<string, PayoutGap> => {
+  const read = readBankCode(trimmed(raw));
+  const [firstGap] = read.gaps;
+  return firstGap === undefined ? ok(read.value) : err(firstGap);
+};
+
 export const decomposePayeeAccount = (
   target: PayeePaymentTarget | null,
 ): Result<PayeeAccountParts, readonly PayoutGap[]> => {
