@@ -7,7 +7,7 @@
 //
 // GATE: só roda com `MYSQL_INTEGRATION=1`.
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, beforeEach, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { eq } from 'drizzle-orm';
@@ -24,7 +24,11 @@ import {
   markFailed,
   discard,
 } from '#src/modules/financial/domain/remittance/remittance.ts';
-import { finOutbox } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
+import {
+  finOutbox,
+  finRemittanceDocuments,
+  finRemittances,
+} from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
 const account = CedenteAccountId.generate();
@@ -62,6 +66,19 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 4 });
       if (!r.ok) throw new Error(`[financial:remittance-repo] Falha ao conectar: ${r.error}`);
       handle = r.value;
+    });
+
+    // Limpeza na ENTRADA e por TABELA (#741 · `.claude/rules/testing.md`).
+    //
+    // `nsaSeq` é contador de PROCESSO e compõe `file_name`, que tem UNIQUE
+    // (`fin_remittances_file_name_uq`) — e o par (conta, NSA) tem outro. A 2ª execução repete os
+    // dois. Por tabela, não por PK: resíduo gravado com OUTRO id colide na mesma UNIQUE de negócio,
+    // e é justamente esse que a limpeza por PK não alcança.
+    //
+    // Filha antes da mãe: `fin_remittance_documents` referencia `fin_remittances`.
+    beforeEach(async () => {
+      await handle.db.delete(finRemittanceDocuments);
+      await handle.db.delete(finRemittances);
     });
 
     after(async () => {
