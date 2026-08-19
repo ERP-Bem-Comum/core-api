@@ -50,7 +50,14 @@ const build = (documentIds: readonly string[], cedente = account) => {
       documentId,
       yourNumber: `900001${String(nsaSeq).padStart(6, '0')}${String(i + 1).padStart(6, '0')}`,
     })),
-    generatedAt: '2026-08-11 14:00:00.000',
+    // ISO 8601 UTC — o formato que `generateRemittance` REALMENTE produz (`toISOString()`).
+    //
+    // ⚠️ Esta fixture já esteve no formato do MySQL (`2026-08-11 14:00:00.000`), escrito à mão. Com
+    // ele o teste passava contra MySQL real enquanto `POST /financial/remittances` falhava com 1292
+    // (`Incorrect datetime value`) — a coluna é `datetime` em `mode: 'string'` e o Drizzle repassa a
+    // string crua. Teste alimentado com dado que a aplicação nunca gera não prova o caminho da
+    // aplicação: prova outro caminho, e fica verde descrevendo um sistema que não funciona.
+    generatedAt: '2026-08-11T14:00:00.000Z',
   });
   if (!r.ok) throw new Error(`test setup: remittance (${r.error})`);
   return r.value;

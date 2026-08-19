@@ -27,6 +27,51 @@ const logRepo = (op: string, cause: unknown): void => {
   process.stderr.write(`[fin-remittance-repository] ${op} failed: ${String(cause)}\n`);
 };
 
+// ─── Tradução de instante entre o domínio e a coluna `datetime` ──────────────────────────────────
+//
+// O domínio guarda instante como STRING ISO 8601 UTC (`2026-08-18T15:01:24.615Z`) — é o que
+// `generate-remittance.ts` produz com `toISOString()`, e o que o agente publica em `executadoEm`.
+// A coluna é `datetime(3)` com `mode: 'string'`, e nesse modo o Drizzle repassa a string CRUA ao
+// driver: o MySQL recebe o `T` e o `Z` e recusa com **1292** (`Incorrect datetime value`).
+//
+// Medido contra MySQL 8.4 real:
+//
+//   INSERT INTO t VALUES ('2026-08-19T10:00:00.000Z');
+//   ERROR 1292 (22007): Incorrect datetime value: '2026-08-19T10:00:00.000Z' for column 'd'
+//
+// ⚠️ Consequência antes desta correção: **`POST /financial/remittances` nunca funcionou contra banco
+// real** — toda geração morria em `remittance-persist-failed` (503). O caminho só passava no repo
+// in-memory.
+//
+// E a suíte de integração ficava VERDE, porque a fixture escrevia `'2026-08-11 14:00:00.000'` à mão
+// — formato do MySQL, que o use case não produz. Teste alimentado com dado que a aplicação nunca
+// gera não prova o caminho da aplicação: prova outro caminho. A fixture foi corrigida junto.
+//
+// A conversão fica AQUI porque o formato é do MySQL, não do domínio: quem conhece o dialeto é o
+// adapter (ADR-0006). `datetime` não guarda fuso, então ida e volta são ambas em UTC — o instante
+// gravado é o mesmo que se lê, independente do `time_zone` da sessão.
+const pad = (value: number, width = 2): string => String(value).padStart(width, '0');
+
+// Exportadas para teste: são as duas regras que decidem se um pagamento consegue ser gravado, e a
+// suíte de integração só as exercita sob `MYSQL_INTEGRATION=1`. Sem cobertura no gate rápido, a
+// regressão volta a aparecer no ambiente, não no CI.
+export const toMysqlDateTime = (iso: string): string => {
+  const at = new Date(iso);
+  // String que não é instante reconhecível segue CRUA, de propósito: falhar no banco é melhor que
+  // gravar silenciosamente um valor inventado numa coluna que decide quando um pagamento saiu.
+  if (Number.isNaN(at.getTime())) return iso;
+  return (
+    `${at.getUTCFullYear()}-${pad(at.getUTCMonth() + 1)}-${pad(at.getUTCDate())} ` +
+    `${pad(at.getUTCHours())}:${pad(at.getUTCMinutes())}:${pad(at.getUTCSeconds())}.` +
+    pad(at.getUTCMilliseconds(), 3)
+  );
+};
+
+// Volta ao ISO que o domínio (e o contrato HTTP) espera. Sem isto, a leitura devolveria
+// `2026-08-18 15:01:24.615`, que `Date` não parseia de forma portável entre browsers.
+export const toIsoDateTime = (stored: string): string =>
+  stored.includes('T') ? stored : `${stored.replace(' ', 'T')}Z`;
+
 // Estados que PRENDEM o documento. `Discarded` fica de fora — é o único que devolve o documento
 // para a fila, e exige decisão humana. Espelha `holdsDocuments` do domínio; a lista está aqui
 // porque o filtro precisa ir para o SQL, não para a memória.
@@ -50,8 +95,8 @@ const toDomain = (
     contentHash: row.contentHash,
     documents,
     status: row.status as RemittanceStatus,
-    generatedAt: row.generatedAt,
-    ...(row.settledAt !== null ? { settledAt: row.settledAt } : {}),
+    generatedAt: toIsoDateTime(row.generatedAt),
+    ...(row.settledAt !== null ? { settledAt: toIsoDateTime(row.settledAt) } : {}),
     ...(row.detail !== null ? { detail: row.detail } : {}),
   });
 };
@@ -110,8 +155,9 @@ export const createDrizzleRemittanceRepository = (
               fileName: remittance.fileName,
               contentHash: remittance.contentHash,
               status: remittance.status,
-              generatedAt: remittance.generatedAt,
-              settledAt: remittance.settledAt ?? null,
+              generatedAt: toMysqlDateTime(remittance.generatedAt),
+              settledAt:
+                remittance.settledAt === undefined ? null : toMysqlDateTime(remittance.settledAt),
               detail: remittance.detail ?? null,
             });
 
@@ -133,7 +179,8 @@ export const createDrizzleRemittanceRepository = (
               .update(finRemittances)
               .set({
                 status: remittance.status,
-                settledAt: remittance.settledAt ?? null,
+                settledAt:
+                  remittance.settledAt === undefined ? null : toMysqlDateTime(remittance.settledAt),
                 detail: remittance.detail ?? null,
               })
               .where(eq(finRemittances.id, remittance.id));
