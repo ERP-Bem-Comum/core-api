@@ -66,9 +66,9 @@ src/
     ├── financial/supplier-view-backfill/  backfill do read-model de fornecedor
     └── migrate/                         aplica migrations Drizzle
 
-tests/                                   bdd · e2e · modules · workers · jobs · infra · etl · regression · shared · pipeline …
+tests/                                   modules (mirror de src/) · cleanup (invariantes estruturais) · e2e · etl · infra · workers · jobs …
 db/drizzle/                              configs do drizzle-kit por módulo (contracts, auth, partners, programs, financial, notifications)
-scripts/                                 ci · e2e (Bruno) · etl · pipeline · seed · setup
+scripts/                                 ci · claude · e2e (Bruno) · etl · financial · handbook · seed · setup
 
 handbook/                                Source of Truth — interno ao repo
 ├── architecture/adr/                    48 ADRs aceitos (IMUTÁVEIS)
@@ -78,10 +78,10 @@ handbook/                                Source of Truth — interno ao repo
 
 docs/                                    Doc consolidada IA-friendly (markdown plano) — ver também ./llms.txt
 .claude/
-├── agents/                              14 agentes especialistas (por tecnologia)
-├── skills/                              42 skills (técnicas/disciplinas)
-├── rules/                               Regras path-scoped (domain, application, adapters, testing, contracts-module, api-collections)
-├── .pipeline/                           Tickets W0→W3 (histórico auditável)
+├── agents/                              Especialistas por tecnologia
+├── skills/                              Técnicas e disciplinas aplicadas
+├── rules/                               Regras path-scoped (carregam quando o path casa)
+├── agent-memory/                        Memória entre sessões
 └── hooks/                               pre-commit-typecheck.sh, block-npm.sh, prettier-write.sh, …
 ```
 
@@ -129,7 +129,7 @@ Características da borda:
 pnpm install                           # respeita pnpm-lock.yaml
 pnpm install --frozen-lockfile         # em CI
 
-# Qualidade (parte do gate W3)
+# Gate de qualidade — os quatro, nesta ordem
 pnpm run typecheck                     # tsc --noEmit (strict completo)
 pnpm run format:check                  # prettier --check .
 pnpm run lint                          # eslint . (flat config, typescript-eslint strict + type-checked)
@@ -155,10 +155,8 @@ pnpm run db:generate                   # contracts  (idem :auth :partners :progr
 # Secrets locais p/ docker-compose
 pnpm run secrets:setup                 # gera ./secrets/*.txt
 
-# Pipeline fail-first (STATE.json canônico)
-pnpm run pipeline:state init <ticket> --size S
-pnpm run pipeline:status               # dashboard de todos os tickets
-pnpm run pipeline:metrics              # agregações
+# Diário de bordo das sessões (quem caiu sem emitir SessionEnd)
+pnpm run logbook                       # idem --dead
 ```
 
 Detalhes completos: [`CLAUDE.md §Comandos não-óbvios`](./CLAUDE.md#comandos-n%C3%A3o-%C3%B3bvios).
@@ -173,9 +171,9 @@ Detalhes completos: [`CLAUDE.md §Comandos não-óbvios`](./CLAUDE.md#comandos-n
 
 ## 🌊 Como contribuir
 
-Todo trabalho não-trivial passa pela **pipeline 4-wave fail-first** (W0 RED → W1 GREEN → W2 REVIEW → W3 QUALITY), com um ticket em `.claude/.pipeline/<TICKET-ID>/` e `STATE.json` canônico. Bug fix trivial (1-3 linhas) ou config pode ir direto.
+**Trabalho novo não abre ticket de processo:** faz a mudança, roda o gate (`typecheck` + `format:check` + `lint` + `test`), commita. Decisão nova vira ADR; achado fora de escopo vira issue. Não existe pipeline W0→W3, `STATE.json` nem wave — foram removidos em 2026-08-06.
 
-- [`./.claude/agents/contratos-orchestrator.md`](./.claude/agents/contratos-orchestrator.md) — **ponto de entrada único**: roteia para agente especialista ou skill e orquestra as waves.
+- [`./.claude/agents/contratos-orchestrator.md`](./.claude/agents/contratos-orchestrator.md) — **ponto de entrada único**: roteia para o agente especialista ou a skill canônica.
 - [`CLAUDE.md`](./CLAUDE.md) — regras transversais (idioma, hierarquia de fontes, anti-padrões, política de regressão zero).
 - [`handbook/architecture/adr/`](./handbook/architecture/adr/) — ADRs aceitos (IMUTÁVEIS).
 
@@ -185,11 +183,11 @@ Achado fora do escopo do ticket atual? Não conserte na hora (scope-creep): regi
 
 ## 🤖 Painel de agentes especialistas
 
-Cada agente é ancorado num subdir de [`handbook/reference/`](./handbook/reference/) + ADRs vinculantes, invocado pelo `contratos-orchestrator` (um agente **ou** uma skill por turno).
+Cada agente é ancorado num subdir de [`handbook/reference/`](./handbook/reference/) + ADRs vinculantes, invocado pelo `contratos-orchestrator` — um agente **ou** uma skill por turno.
 
 | Agente                                                                         | Tecnologia                          | Status              |
 | ------------------------------------------------------------------------------ | ----------------------------------- | ------------------- |
-| [`contratos-orchestrator`](./.claude/agents/contratos-orchestrator.md)         | Roteamento + pipeline W0→W3         | ✅ ativo            |
+| [`contratos-orchestrator`](./.claude/agents/contratos-orchestrator.md)         | Roteamento (agente **ou** skill)    | ✅ ativo            |
 | [`typescript-language-expert`](./.claude/agents/typescript-language-expert.md) | TypeScript 6 / type system          | ✅ ativo            |
 | [`nodejs-runtime-expert`](./.claude/agents/nodejs-runtime-expert.md)           | Node 24 / ESM / `node:test`         | ✅ ativo            |
 | [`drizzle-orm-expert`](./.claude/agents/drizzle-orm-expert.md)                 | Drizzle ORM + Drizzle Kit           | ✅ ativo            |
@@ -204,7 +202,7 @@ Cada agente é ancorado num subdir de [`handbook/reference/`](./handbook/referen
 | [`security-backend-expert`](./.claude/agents/security-backend-expert.md)       | Segurança backend (Node/TS/Fastify) | ✅ ativo            |
 | [`security-frontend-expert`](./.claude/agents/security-frontend-expert.md)     | Segurança frontend (TanStack/React) | ✅ ativo            |
 
-As **44 skills** cobrem disciplinas aplicadas: `ts-domain-modeler`, `ports-and-adapters`, `drizzle-schema-author`, `modular-monolith`, `pipeline-maestro`, `code-reviewer`, `ts-quality-checker`, `issue-report`, a família **speckit-\*** (spec-driven), as famílias `database-*`, `tdd-*`, `clean-code-*`, `requirements-*`, `web-security-*`, e os scripters `nodejs-fs-scripter`/`nodejs-process-runner`. São descobertas nativamente pelo Claude Code em [`.claude/skills/`](./.claude/skills/), cada uma com a descrição de quando usar — não há tabela a manter.
+As skills cobrem disciplinas aplicadas — domínio, ports & adapters, schema, testes, revisão, segurança, git local, registro de achado — em [`.claude/skills/`](./.claude/skills/), descobertas nativamente pelo Claude Code, cada uma declarando quando usar. **A lista é o diretório:** nem tabela nem contagem a manter aqui.
 
 ---
 
@@ -219,7 +217,7 @@ As **44 skills** cobrem disciplinas aplicadas: `ts-domain-modeler`, `ports-and-a
 - **Erros são string literal unions** EN kebab-case (`'contract-not-active' | 'amendment-pending'`), não classes.
 - **MySQL 8.4 único** em dev/CI/prod via Docker compose (ADR-0020); lista normativa de features SQL permitidas/proibidas.
 - **Isolamento de módulo:** importar de outro módulo **só** via `<module>/public-api/` (nunca `domain/`/`application/` alheios) — ADR-0006.
-- **Idioma:** código em **EN**; documentação (handbook, ADRs, `.claude/`, `.pipeline/`) em **PT**; strings ao humano em **PT**.
+- **Idioma:** código em **EN**; documentação (handbook, ADRs, `.claude/`) em **PT**; strings ao humano em **PT**.
 
 A sintaxe é enforced pelo [`tsconfig.json`](./tsconfig.json) — `strict` completo, `verbatimModuleSyntax` (exige `import type`), `NodeNext` + `allowImportingTsExtensions` (exige extensão `.ts`). O resto vive nas regras path-scoped de [`.claude/rules/`](./.claude/rules/).
 
@@ -236,7 +234,7 @@ A sintaxe é enforced pelo [`tsconfig.json`](./tsconfig.json) — `strict` compl
 - **Eventos cross-módulo** via **Outbox MySQL** (ADR-0015) + **read-models por projeção** idempotente (ADR-0022/0045/0046), processados por **workers dedicados** e **oneshot jobs** (ADR-0041).
 - **Persistência** Drizzle + mysql2 sobre MySQL 8.4 único (ADR-0020), com read/write split (ADR-0026). **Storage** S3 + MinIO via `@aws-sdk/client-s3` (ADR-0019). **E-mail** transacional como evento de domínio (ADR-0047).
 - **E2E HTTP** via **Bruno** (`scripts/e2e/`, ADR-0034/0038); integração via Docker compose `--wait`.
-- **`.claude/` populado:** 14 agentes + 42 skills + tickets W0→W3 em `.pipeline/`; spec-kit em `specs/` (24 features).
+- **`.claude/` populado:** agentes por tecnologia, skills por disciplina, rules path-scoped e hooks — só primitivas nativas do Claude Code.
 
 ### 🟡 Em andamento
 
