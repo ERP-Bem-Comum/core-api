@@ -67,10 +67,16 @@ const ENTRY_HOOK = /\bbefore(Each)?\(/;
  * silêncio: arquivo novo com o mesmo defeito reprova, e quem o adicionar aqui precisa justificar.
  */
 const KNOWN_DEBT: readonly string[] = [
-  // VAZIA desde 19/08/2026 — as duas dívidas com que este gate nasceu foram PAGAS, e a prova é o
-  // rerun contra MySQL 8.4.10 real (x99): a suíte `financial` passa duas vezes seguidas sem
-  // recriação do banco. #747 (`cedente-account-store`) e #741 (`remittance-repository`) ganharam
-  // limpeza na entrada, por tabela.
+  // VAZIA desde 19/08/2026 — as duas dívidas com que este gate nasceu foram PAGAS, por caminhos
+  // independentes que chegaram à mesma correção:
+  //
+  //   #741 (`remittance-repository`) caiu na **#752**: `your_number` ganhou UNIQUE, a 2ª execução
+  //     passaria a colidir, e a limpeza na entrada entrou por essa razão. O defeito que a #741
+  //     descrevia (`file_name` determinístico + `fin_remittances_file_name_uq`) era o mesmo, e foi
+  //     corrigido pela mesma linha.
+  //   #747 (`cedente-account-store`) caiu no rerun medido contra MySQL 8.4.10 real: a suíte
+  //     `financial` falhava 12 casos ao repetir sem recriar o banco. Hoje passa 169/169 nas três
+  //     medições — banco limpo, repetição sem recriar, e ordem invertida sobre o banco sujo.
   //
   // Lista vazia NÃO é gate frouxo: os quatro casos continuam sendo varridos, e arquivo novo com
   // contador de processo sem limpeza reprova sem ter onde se esconder.

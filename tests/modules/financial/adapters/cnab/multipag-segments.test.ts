@@ -19,7 +19,6 @@ const PAYEE: Payee = {
   agencyDigit: '0',
   accountNumber: '112233',
   accountDigit: '4',
-  accountAgencyDigit: ' ',
 };
 
 const PAY_DATE = new Date(Date.UTC(2026, 7, 12));
@@ -36,6 +35,10 @@ const line = (r: ReturnType<typeof segmentA>): string => {
 // da fixture é de outro banco (341 ≠ 237); quem deriva o par forma↔câmara é `batch-profile.ts`.
 const TED_CLEARING = '018';
 
+// G064 — obrigatório desde a #752: é a chave de casamento do retorno, e o `?? ''` que a tornava
+// dispensável era o defeito. O formato é o que `referenceFor` produz: NSA (6) + posição (6).
+const YOUR_NUMBER = '000042000001';
+
 const baseA = {
   bankCode: '237',
   batchNumber: 1,
@@ -44,6 +47,7 @@ const baseA = {
   paymentDate: PAY_DATE,
   valueCents: 123456,
   clearingHouse: TED_CLEARING,
+  yourNumber: YOUR_NUMBER,
 };
 
 describe('Multipag — Segmento A (pagamento)', () => {
@@ -67,6 +71,17 @@ describe('Multipag — Segmento A (pagamento)', () => {
     assert.equal(at(record, 29, 29), '0');
     assert.equal(at(record, 30, 41), '000000112233');
     assert.equal(at(record, 42, 42), '4');
+  });
+
+  // G012, coluna 043. O validador oficial trata a posição PREENCHIDA como erro (regra extraída em
+  // ERP-Bem-Comum/cnab-validator#2), então o branco aqui é a forma correta, não a insegura conhecida
+  // — que era como o PR #710 a deixara, por falta de fonte primária na época (#754).
+  //
+  // ⚠️ Este teste sozinho não é o que impede o preenchimento: `Payee` não tem mais o campo, então
+  // preencher a posição exige editar `segmentA`. A asserção existe para que essa edição apareça como
+  // vermelho nomeado, e não como um arquivo que o banco recusa depois de transmitido.
+  it('deixa o DV agência/conta (043) em branco — preenchê-lo é erro para o banco', () => {
+    assert.equal(at(record, 43, 43), ' ');
   });
 
   it('leva nome do favorecido, data e valor do pagamento', () => {
@@ -192,6 +207,7 @@ describe('Multipag — o par A+B de um pagamento', () => {
       paymentDate: PAY_DATE,
       valueCents: 5000,
       clearingHouse: TED_CLEARING,
+      yourNumber: YOUR_NUMBER,
     });
     assert.ok(isOk(r));
     const [a, b] = r.value;
@@ -215,6 +231,7 @@ describe('Multipag — o par A+B de um pagamento', () => {
       paymentDate: PAY_DATE,
       valueCents: 1,
       clearingHouse: TED_CLEARING,
+      yourNumber: YOUR_NUMBER,
     });
     assert.ok(isOk(r));
     assert.equal(r.value.length, 2);
@@ -229,6 +246,7 @@ describe('Multipag — o par A+B de um pagamento', () => {
       paymentDate: PAY_DATE,
       valueCents: 1,
       clearingHouse: TED_CLEARING,
+      yourNumber: YOUR_NUMBER,
     });
     assert.ok(isErr(r));
   });

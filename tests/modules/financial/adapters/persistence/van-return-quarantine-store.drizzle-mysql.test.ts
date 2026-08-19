@@ -5,7 +5,7 @@
 //   - que o ODKU deixa `first_seen_at` INTACTO — a idade da anomalia é o que separa incidente de
 //     agora de fila parada há semanas, e um `set` distraído a reescreveria a cada ciclo;
 //   - que reobservar REABRE (`released_at` volta a NULL) no SQL, não só na intenção;
-//   - que o CHECK da migration 0047 recusa motivo fora da união — a união literal do TypeScript não
+//   - que o CHECK da migration 0048 recusa motivo fora da união — a união literal do TypeScript não
 //     alcança quem escrever na tabela por fora;
 //   - que `object_key` compara em collation BINÁRIA: chave de S3 é case-sensitive, e `unicode_ci`
 //     faria dois objetos distintos colidirem na PK;

@@ -35,7 +35,7 @@ export type Payee = Readonly<{
   agencyDigit: string;
   accountNumber: string;
   accountDigit: string;
-  accountAgencyDigit: string;
+  // `accountAgencyDigit` NÃO existe aqui de propósito — ver a coluna 043 em `segmentA` (#754).
 }>;
 
 export type PayeeAddress = Readonly<{
@@ -60,7 +60,10 @@ export type SegmentAInput = Readonly<{
   // de lançamento, e quem monta o registro não tem como adivinhá-la. Quem deriva é
   // `clearingHouseFor`, em `batch-profile.ts`.
   clearingHouse: string;
-  yourNumber?: string; // G064 "Seu Número" — a referência do pagador
+  // G064 "Seu Número" — a referência do pagador, e a CHAVE DE CASAMENTO do retorno (#752).
+  // Obrigatória, e sem default: o `?? ''` que existia aqui emitia arquivo válido, aceito pelo banco,
+  // cujo retorno chegava sem nada a que se ligar. Quem deriva é `referenceFor`, no montador.
+  yourNumber: string;
   tedPurpose?: string; // P011
   message?: string; // G031 "Informação 2"
 }>;
@@ -82,7 +85,7 @@ export type PaymentRecordsInput = Readonly<{
   valueCents: number;
   address?: PayeeAddress;
   clearingHouse: string; // P001 — ver `SegmentAInput`
-  yourNumber?: string;
+  yourNumber: string; // ver `SegmentAInput` — obrigatório desde a #752
   tedPurpose?: string;
   message?: string;
 }>;
@@ -103,9 +106,16 @@ export const segmentA = (input: SegmentAInput): Result<string, CnabSegmentError>
     text(p.agencyDigit, 1), // 029     DV agência
     digits(p.accountNumber, 12), // 030-041 conta do favorecido
     text(p.accountDigit, 1), // 042     DV conta
-    text(p.accountAgencyDigit, 1), // 043     DV ag/conta
+    // 043 — G012, DV agência/conta do FAVORECIDO. Em branco por REGRA DO BANCO: o validador oficial
+    // trata a posição preenchida como erro (regra extraída em ERP-Bem-Comum/cnab-validator#2). Por
+    // isso `blanks`, e não um campo do `Payee`: o que o banco recusa não deve ser preenchível, e a
+    // ausência do campo faz o compilador cobrar quem tentar (#754).
+    //
+    // ⚠️ NÃO confundir com a coluna 072 de `multipag-records.ts`, que tem nome homônimo e é do
+    // CEDENTE, noutro contexto do layout. Os dois campos não compartilham regra.
+    blanks(1), // 043     DV ag/conta — sempre em branco
     text(p.name, 30), // 044-073 nome do favorecido
-    text(input.yourNumber ?? '', 20), // 074-093 seu número
+    text(input.yourNumber, 20), // 074-093 seu número
     dateDDMMYYYY(input.paymentDate), // 094-101 data do pagamento
     text(CURRENCY_BRL, 3), // 102-104 tipo da moeda
     num(0, 15), // 105-119 quantidade de moeda (10 + 5)
@@ -240,7 +250,7 @@ export const paymentRecords = (
     paymentDate: input.paymentDate,
     valueCents: input.valueCents,
     clearingHouse: input.clearingHouse,
-    ...(input.yourNumber !== undefined ? { yourNumber: input.yourNumber } : {}),
+    yourNumber: input.yourNumber,
     ...(input.tedPurpose !== undefined ? { tedPurpose: input.tedPurpose } : {}),
     ...(input.message !== undefined ? { message: input.message } : {}),
   });

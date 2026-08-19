@@ -26,8 +26,19 @@ const target = (patch: Partial<PayeePaymentTarget>): PayeePaymentTarget => ({
 });
 
 // Conta estruturada COMPLETA: o único arranjo que o segmento A aceita sem inventar campo.
+//
+// ⚠️ O DV é `0` e não pode ser qualquer dígito: desde a #734 o banco 237 tem o dígito CALCULADO
+// (módulo 11, pesos 2-7 — `account-check-digit.ts`), e `0` é o que o algoritmo do Bradesco produz
+// para a conta `123456`. Trocar um pelo outro sem recalcular derruba toda esta suíte — o que é o
+// gate funcionando, não ruído. Fixture com DV inventado descrevia um cadastro que o banco recusa.
 const fullAccount = (): PayeePaymentTarget =>
-  target({ bank: '237', agency: '1234-5', accountNumber: '123456', checkDigit: '7' });
+  target({ bank: '237', agency: '1234-5', accountNumber: '123456', checkDigit: '0' });
+
+// Banco cujo algoritmo de DV NÃO está no acervo — a verificação devolve `not-verifiable` e a conta
+// segue validada só por FORMA. É a fixture certa para todo caso cuja matéria é a leitura do campo,
+// e não a veracidade do dígito: usar 237 ali faria o teste depender de aritmética que não é o
+// assunto dele.
+const unverifiableBank = (): PayeePaymentTarget => target({ ...fullAccount(), bank: '001' });
 
 const candidate = (patch: Partial<PayoutCandidate>): PayoutCandidate => ({
   paymentMethod: 'TED',
@@ -262,7 +273,7 @@ describe('checkPayoutReadiness — decomposição da conta (CA4)', () => {
   it('aceita o DV embutido na conta, dispensando o campo separado', () => {
     const r = checkPayoutReadiness(
       candidate({
-        payee: target({ ...fullAccount(), accountNumber: '123456-7', checkDigit: null }),
+        payee: target({ ...fullAccount(), accountNumber: '123456-0', checkDigit: null }),
       }),
     );
     assert.equal(r.status, 'ready');
@@ -276,9 +287,12 @@ describe('checkPayoutReadiness — decomposição da conta (CA4)', () => {
     assert.deepEqual(fieldsOf(r), ['payee-account-digit']);
   });
 
+  // ⚠️ Banco NÃO-verificável de propósito. O `X` é convenção de outras instituições; o Bradesco,
+  // quando o resto é 1, usa `0` ou `P` — nunca `X` (manual 4008-523-0096 v16 p. 30). Manter 237
+  // aqui faria o caso afirmar que o Bradesco aceita um dígito que ele não emite.
   it('aceita DV alfabético X — módulo 11 produz resto 10', () => {
     const r = checkPayoutReadiness(
-      candidate({ payee: target({ ...fullAccount(), checkDigit: 'X' }) }),
+      candidate({ payee: target({ ...unverifiableBank(), checkDigit: 'X' }) }),
     );
     assert.equal(r.status, 'ready');
   });
@@ -295,15 +309,19 @@ describe('checkPayoutReadiness — decomposição da conta (CA4)', () => {
   // Conta Corrente, preencher este campo com a 1ª posição deste dígito. Exemplo: Número C/C =
   // 45981-36. Neste caso Dígito Verificador da Conta = 3". O campo tem UMA posição; o descarte da
   // segunda é decisão do layout, não nossa.
+  // ⚠️ Também não-verificável, e a própria G011 diz por quê: ela fala "para os Bancos que se
+  // utilizam de DUAS posições". O Bradesco usa uma — o cálculo da #734 confirma pelo outro lado, já
+  // que `45981` daria DV `0` ou `P`, nunca `3`. Este caso é sobre a leitura de um cadastro de OUTRA
+  // instituição, e é assim que ele deve estar escrito.
   it('aceita DV de duas posições e usa a primeira, como o layout manda', () => {
-    const r = decomposePayeeAccount(target({ ...fullAccount(), checkDigit: '36' }));
+    const r = decomposePayeeAccount(target({ ...unverifiableBank(), checkDigit: '36' }));
     assert.ok(isOk(r));
     assert.equal(r.value.accountDigit, '3');
   });
 
   it('aceita DV de duas posições embutido na conta — o exemplo 45981-36 do layout', () => {
     const r = decomposePayeeAccount(
-      target({ ...fullAccount(), accountNumber: '45981-36', checkDigit: null }),
+      target({ ...unverifiableBank(), accountNumber: '45981-36', checkDigit: null }),
     );
     assert.ok(isOk(r));
     assert.equal(r.value.accountNumber, '000000045981');
@@ -332,5 +350,104 @@ describe('checkPayoutReadiness — decomposição da conta (CA4)', () => {
       'payee-account-number',
       'payee-account-digit',
     ]);
+  });
+});
+
+/**
+ * A POLÍTICA do dígito verificador — issue #734.
+ *
+ * O cálculo em si é provado em `account-check-digit.test.ts`, contra o exemplo literal do manual.
+ * O que esta suíte fixa é a decisão: o que o pré-voo FAZ com cada veredito.
+ *
+ * A assimetria é o ponto. `mismatch` bloqueia porque sabemos, antes de enviar, que o banco recusaria
+ * — o manual 4008-523-0096 v16 p. 29 diz que na Modalidade 01 "serão validados os dígitos de
+ * controle da Agência e da conta corrente". `not-verifiable` não bloqueia porque é limite NOSSO, e
+ * fazer o fornecedor pagar pela nossa lacuna de documentação seria a recusa errada.
+ */
+describe('checkPayoutReadiness — dígito verificador por cálculo (#734)', () => {
+  it('bloqueia o título quando o dígito não é o que o banco calcula', () => {
+    // Conta `123456` no Bradesco tem DV `0`. Qualquer outro é recusa certa do banco.
+    const r = checkPayoutReadiness(
+      candidate({ payee: target({ ...fullAccount(), checkDigit: '1' }) }),
+    );
+    assert.equal(r.status, 'incomplete');
+    assert.deepEqual(fieldsOf(r), ['payee-account-digit']);
+    assert.equal(reasonFor(r, 'payee-account-digit'), 'check-digit-mismatch');
+  });
+
+  // O defeito que a #734 mediu, reproduzido: agência `1234-5` tem DV `5`, e o operador copiou esse
+  // `5` no campo da conta. É o padrão de 44 dos 86 cadastros, e o que o banco recusaria.
+  it('pega o DV da agência copiado no campo da conta — o defeito medido em produção', () => {
+    const r = checkPayoutReadiness(
+      candidate({ payee: target({ ...fullAccount(), agency: '1234-5', checkDigit: '5' }) }),
+    );
+    assert.equal(r.status, 'incomplete');
+    assert.equal(reasonFor(r, 'payee-account-digit'), 'check-digit-mismatch');
+  });
+
+  // `check-digit-mismatch` NÃO é `malformed`, e a distinção é a razão de ele existir: o campo está
+  // preenchido, é numérico e bem-formado. Quem mandar o operador "corrigir o formato" o manda
+  // consertar o que já está certo.
+  it('não confunde dígito errado com dígito malformado', () => {
+    const errado = checkPayoutReadiness(
+      candidate({ payee: target({ ...fullAccount(), checkDigit: '1' }) }),
+    );
+    const malformado = checkPayoutReadiness(
+      candidate({ payee: target({ ...fullAccount(), checkDigit: '#' }) }),
+    );
+    assert.equal(reasonFor(errado, 'payee-account-digit'), 'check-digit-mismatch');
+    assert.equal(reasonFor(malformado, 'payee-account-digit'), 'malformed');
+  });
+
+  it('confere também o DV EMBUTIDO — precedência diz de onde ele vem, não que esteja certo', () => {
+    const r = checkPayoutReadiness(
+      candidate({
+        payee: target({ ...fullAccount(), accountNumber: '123456-1', checkDigit: null }),
+      }),
+    );
+    assert.equal(r.status, 'incomplete');
+    assert.equal(reasonFor(r, 'payee-account-digit'), 'check-digit-mismatch');
+  });
+
+  // Resto 1 admite `0` e `P` (manual, p. 30). As DUAS respostas passam — reprovar uma delas seria
+  // recusa nossa, não do banco. A conta `100008` é um caso real desse resto.
+  it('aceita as duas respostas certas quando o resto é 1', () => {
+    for (const digito of ['0', 'P']) {
+      const r = checkPayoutReadiness(
+        candidate({
+          payee: target({ ...fullAccount(), accountNumber: '100008', checkDigit: digito }),
+        }),
+      );
+      assert.equal(r.status, 'ready', `esperava aprovar o DV ${digito}`);
+    }
+  });
+
+  // Sem esta linha, o `P` do manual era classificado `malformed` — recusado por parecer erro de
+  // digitação. O regex de forma não conhecia o alfabeto do próprio banco do convênio.
+  it('não trata o P do Bradesco como campo malformado', () => {
+    const r = decomposePayeeAccount(
+      target({ ...fullAccount(), accountNumber: '100008', checkDigit: 'P' }),
+    );
+    assert.ok(isOk(r));
+    assert.equal(r.value.accountDigit, 'P');
+  });
+
+  // O outro lado da política: fora do 237 nada muda. Um dígito que seria errado no Bradesco não
+  // diz nada sobre uma conta do Banco do Brasil, cujo algoritmo não está no acervo.
+  it('não recusa conta de banco cujo algoritmo não conhecemos', () => {
+    const r = checkPayoutReadiness(
+      candidate({ payee: target({ ...unverifiableBank(), checkDigit: '1' }) }),
+    );
+    assert.equal(r.status, 'ready');
+  });
+
+  // Banco ilegível já é lacuna própria; não deve ganhar uma SEGUNDA por causa do dígito, que ficou
+  // impossível de verificar justamente por não se saber o banco.
+  it('banco ilegível não gera lacuna extra de dígito', () => {
+    const r = checkPayoutReadiness(
+      candidate({ payee: target({ ...fullAccount(), bank: 'Bradesco S.A.' }) }),
+    );
+    assert.equal(r.status, 'incomplete');
+    assert.deepEqual(fieldsOf(r), ['payee-bank-code']);
   });
 });

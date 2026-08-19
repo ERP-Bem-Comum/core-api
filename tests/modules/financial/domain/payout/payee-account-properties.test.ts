@@ -95,8 +95,10 @@ describe('decomposePayeeAccount — o que passa cabe no segmento A', () => {
             agencyDigit: r.value.agencyDigit,
             accountNumber: r.value.accountNumber,
             accountDigit: r.value.accountDigit,
-            accountAgencyDigit: ' ',
           },
+          // G064 obrigatório desde a #752 — aqui é só cenário: o que este caso mede é a largura do
+          // registro montado a partir de um cadastro aprovado, não a referência em si.
+          yourNumber: '000001000001',
           paymentDate: new Date('2026-08-14T12:00:00Z'),
           valueCents: 123_456,
           // P001 — exigida desde a #751. Aqui é fixture: o que este teste mede é a LARGURA dos
@@ -132,7 +134,10 @@ describe('decomposePayeeAccount — whitespace invisível não decide pagamento'
           bank: `${ws}237${ws}`,
           agency: `${ws}1234-5${ws}`,
           accountNumber: `${ws}123456${ws}`,
-          checkDigit: `${ws}7${ws}`,
+          // `0` é o DV que o Bradesco calcula para `123456` (#734). O que este caso mede é o
+          // whitespace ser aparado antes de qualquer leitura — inclusive antes do cálculo do
+          // dígito, que receberia `\t7\t` e reprovaria por motivo errado.
+          checkDigit: `${ws}0${ws}`,
         }),
       );
       assert.ok(isOk(r), `esperava aprovar com ${nome}`);

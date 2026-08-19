@@ -8,7 +8,10 @@ import { createInMemoryVanStorage } from '#src/modules/financial/adapters/van/va
 import { createVanStatusEnvelopeReader } from '#src/modules/financial/adapters/van/status-envelope.ts';
 import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
 import * as RemittanceId from '#src/modules/financial/domain/remittance/remittance-id.ts';
-import { create as createRemittance } from '#src/modules/financial/domain/remittance/remittance.ts';
+import {
+  create as createRemittance,
+  documentIdsOf,
+} from '#src/modules/financial/domain/remittance/remittance.ts';
 import type { RemittanceRepository } from '#src/modules/financial/application/ports/remittance-repository.ts';
 import type { VanStoragePort } from '#src/modules/financial/application/ports/van-storage.ts';
 
@@ -48,7 +51,19 @@ const setup = async (over: Partial<{ files: readonly string[] }> = {}) => {
       nsa: i + 1,
       fileName,
       contentHash: `hash-${String(i)}`,
-      documentIds: [`doc-${String(i)}-a`, `doc-${String(i)}-b`],
+      // A referência de G064 (#752) é derivada de NSA + posição; aqui o NSA é `i + 1`, e as duas
+      // posições do par são 1 e 2. Não é o objeto deste arquivo, mas precisa ser coerente: o
+      // agregado recusa referência vazia ou repetida.
+      documents: [
+        {
+          documentId: `doc-${String(i)}-a`,
+          yourNumber: `${String(i + 1).padStart(6, '0')}000001`,
+        },
+        {
+          documentId: `doc-${String(i)}-b`,
+          yourNumber: `${String(i + 1).padStart(6, '0')}000002`,
+        },
+      ],
       generatedAt: '2026-08-11T14:26:05Z',
     });
     assert.ok(isOk(remittance));
@@ -112,9 +127,10 @@ describe('confirmRemittance — o que resolve uma remessa', () => {
     const remittance = await statusOf(s.remittances, FILE);
     assert.equal(remittance.status, 'Failed');
 
-    const held = await s.remittances.findHeldDocumentIds(remittance.documentIds);
+    const documentIds = documentIdsOf(remittance);
+    const held = await s.remittances.findHeldDocumentIds(documentIds);
     assert.ok(isOk(held));
-    assert.deepEqual(held.value, [...remittance.documentIds].sort(), 'Failed segue prendendo');
+    assert.deepEqual(held.value, [...documentIds].sort(), 'Failed segue prendendo');
   });
 
   // O veredito vem de evidência física (arquivo em BACKUP), não de código de retorno.

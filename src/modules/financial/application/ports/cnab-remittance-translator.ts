@@ -4,6 +4,9 @@ import type { Result } from '../../../../shared/primitives/result.ts';
 // "posição 120-134". Nenhum tipo daqui menciona CNAB, segmento ou coluna — é o que permite trocar
 // de banco, ou de layout, sem tocar no use case.
 
+// O DV agência/conta do favorecido não entra: o banco exige a posição correspondente em branco, e um
+// campo que não pode ser preenchido não deve existir na borda (#754). O homônimo em
+// `RemittanceCedenteData` é outro campo, noutro ponto do layout, e permanece.
 export type RemittancePayeeData = Readonly<{
   name: string;
   documentType: '1' | '2';
@@ -13,7 +16,6 @@ export type RemittancePayeeData = Readonly<{
   agencyDigit: string;
   accountNumber: string;
   accountDigit: string;
-  accountAgencyDigit: string;
 }>;
 
 export type RemittanceCedenteData = Readonly<{
@@ -87,6 +89,14 @@ export type TranslatedRemittance = Readonly<{
   // Quantos lotes o arquivo tem. Deixou de ser sempre 1 quando o arquivo passou a comportar uma
   // forma de lançamento por lote — e é o número que o operador vê no comprovante da remessa.
   batchCount: number;
+  // As referências de casamento do retorno (G064), NA ORDEM DE ENTRADA de `payments` (#752).
+  //
+  // Sobe pelo port porque o tradutor é quem sabe derivá-las — ele conhece NSA e posição — e o use
+  // case é quem sabe a quem elas pertencem. Nenhum dos dois sabe as duas coisas sozinho, e é essa
+  // divisão que mantém o layout fora da application e o documento fora do adapter CNAB.
+  //
+  // ⚠️ A ordem É o contrato: o chamador casa por índice. Ver `RemittanceFile.yourNumbers`.
+  yourNumbers: readonly string[];
 }>;
 
 export type CnabTranslateError =

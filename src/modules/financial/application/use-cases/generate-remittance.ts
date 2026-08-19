@@ -152,15 +152,34 @@ export const generateRemittance =
       }
     }
 
+    // A costura da #752, e o único ponto do sistema onde ela pode acontecer.
+    //
+    // O tradutor devolve as referências de G064 na ordem de ENTRADA dos pagamentos; `payments.value`
+    // está nessa mesma ordem e é quem carrega o `documentId`. A camada CNAB não conhece documento
+    // (ADR-0006) e a application não conhece layout — o par só existe aqui, e é por isso que a
+    // derivação não pôde ficar no reader nem a persistência no tradutor.
+    //
+    // ⚠️ Casar por índice só é correto porque `buildRemittanceFile` devolve na ordem de entrada,
+    // apesar de o agrupamento em lotes reordenar internamente. Se aquele contrato mudar, este casamento
+    // passa a associar a referência ao documento errado — em silêncio, e o erro só aparece no
+    // primeiro retorno real. O teste que fixa a ordem sob reordenação é o que segura isto.
+    const documents = payments.value.map((payment, index) => ({
+      documentId: payment.documentId,
+      yourNumber: translated.value.yourNumbers[index] ?? '',
+    }));
+
     const remittance = createRemittance({
       id: deps.newRemittanceId(),
       cedenteAccountId: input.cedenteAccountId,
       nsa: nsa.value,
       fileName: translated.value.fileName,
       contentHash: deps.hashContent(translated.value.content),
-      documentIds: input.documentIds,
+      documents,
       generatedAt: generatedAt.toISOString(),
     });
+    // A recusa por referência ausente (`remittance-document-without-reference`) chega aqui: o `?? ''`
+    // acima existe porque `noUncheckedIndexedAccess` o exige, e o agregado é quem transforma o vazio
+    // em erro nomeado, em vez de deixá-lo virar arquivo emitido sem chave.
     if (!remittance.ok) return err('remittance-build-failed');
 
     // 5. REGISTRAR ANTES DE ENFILEIRAR. A ordem é a decisão mais importante deste use case.

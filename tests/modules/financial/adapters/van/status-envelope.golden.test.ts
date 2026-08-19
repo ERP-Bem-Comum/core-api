@@ -24,6 +24,25 @@ import {
   wasTransmitted,
 } from '#src/modules/financial/adapters/van/status-envelope.ts';
 
+// Bloco de PROVENIÊNCIA da recepção, `omitempty` no produtor — os quatro casos de remessa seguem
+// byte a byte idênticos e o parser deles não é tocado.
+//
+// ⚠️ `duplicado` e `duplicadoDe` também são `omitempty`: quando falsos vêm AUSENTES, não `false`.
+// Quem escrever `recepcao.duplicado === false` erra o caso comum.
+type GoldenReception = Readonly<{
+  sha256: string;
+  chave: string;
+  // Houve linha, no log DESTE ciclo, correspondente a este arquivo. A semântica mudou em
+  // van-agent#12: só conta linha cujo carimbo cai na janela da execução — antes, uma linha de ciclo
+  // anterior com o mesmo nome correlacionava indevidamente.
+  correlacionado: boolean;
+  // Se o log deste ciclo pôde ser lido. Existe porque `correlacionado: false` colapsava dois casos
+  // opostos: "li e não tinha" (suspeito) e "não consegui ler" (defeito de configuração do agente).
+  logDoCicloLido: boolean;
+  duplicado?: boolean;
+  duplicadoDe?: string;
+}>;
+
 type GoldenCase = Readonly<{
   nome: string;
   tipo: 'remittance' | 'duplicate' | 'reception';
@@ -36,17 +55,7 @@ type GoldenCase = Readonly<{
     detalhe: string;
     exitCode: number | null;
     logTransferencia: readonly string[];
-    // Só em envelope de recepção (PR van-agent#12). `omitempty` no produtor: os quatro casos de
-    // remessa continuam byte a byte idênticos, e a adição fica contida no caso que precisava dela.
-    recepcao?: Readonly<{
-      sha256: string;
-      chave: string;
-      correlacionado: boolean;
-      // Separa "não sei" de "sei que não" — e as duas pedem AÇÕES OPOSTAS na quarentena (#753).
-      logDoCicloLido: boolean;
-      duplicado?: boolean;
-      duplicadoDe?: string;
-    }>;
+    recepcao?: GoldenReception;
   }>;
 }>;
 
@@ -58,6 +67,8 @@ const GOLDEN_FILE = 'status-envelope.golden.json';
 
 const readLocal = (name: string): string => readFileSync(join(import.meta.dirname, name), 'utf8');
 
+// O RAW fica guardado porque a proveniência confere o hash do arquivo como ele está no disco —
+// reserializar o objeto parseado compararia outra coisa.
 const goldenRaw = readLocal(GOLDEN_FILE);
 const golden = JSON.parse(goldenRaw) as GoldenFile;
 const provenance = JSON.parse(readLocal('status-envelope.golden.provenance.json')) as Provenance;
@@ -67,8 +78,8 @@ describe('status/ — o contrato com o van-agent (golden compartilhado)', () => 
   // cobrindo menos. A contagem é o piso; casos novos são bem-vindos, remoção precisa ser deliberada.
   it('carrega os casos do contrato', () => {
     assert.ok(
-      golden.casos.length >= 5,
-      `o golden tem ${golden.casos.length} caso(s), esperava ao menos 5`,
+      golden.casos.length >= 8,
+      `o golden tem ${golden.casos.length} caso(s), esperava ao menos 8`,
     );
   });
 
@@ -165,6 +176,123 @@ describe('status/ — os invariantes do produtor que quebram o consumidor em sil
   });
 });
 
+// O bloco de PROVENIÊNCIA da recepção — o que a #753 vai consumir para decidir o que entra e o que
+// vai para quarentena. Nada aqui é lido por `parseStatus` hoje: são asserções sobre o CONTRATO, para
+// que uma mudança do outro lado apareça como vermelho nomeado antes de o consumidor existir.
+//
+// A razão de cobrar agora, e não junto com o consumidor: este contrato já mudou duas vezes em dois
+// dias, e nas duas o campo mudou de SIGNIFICADO sem mudar de nome. Cobrar o formato pega renomeação;
+// só cobrar as combinações pega mudança de sentido.
+describe('status/ — proveniência da recepção (#753)', () => {
+  const recepcoes = golden.casos.filter((c) => c.tipo === 'reception');
+
+  it('todo caso de recepção declara o bloco de proveniência', () => {
+    assert.ok(recepcoes.length > 0, 'o golden precisa cobrir recepção');
+    for (const caso of recepcoes) {
+      const r = caso.envelope.recepcao;
+      assert.ok(r !== undefined, `"${caso.nome}" veio sem bloco de proveniência`);
+      // O hash é do CONTEÚDO — é o que permite decidir sem reabrir o objeto, e é a chave de
+      // idempotência do agente. Hex minúsculo de 64 posições.
+      assert.match(r.sha256, /^[0-9a-f]{64}$/, caso.nome);
+      // A chave aponta para onde o objeto foi depositado. Se um dia deixar de ser o prefixo de
+      // retorno, o consumidor estaria lendo de outro lugar sem saber.
+      assert.ok(r.chave.startsWith('retorno/'), `"${caso.nome}" depositou fora de retorno/`);
+      assert.equal(typeof r.correlacionado, 'boolean', caso.nome);
+      assert.equal(typeof r.logDoCicloLido, 'boolean', caso.nome);
+    }
+  });
+
+  // A PROPRIEDADE central, e a razão de o golden ter 8 casos e não 7: `correlacionado: false`
+  // significava duas coisas opostas, e o CA5 da #753 só vale sobre UMA delas.
+  //
+  //   correlacionado=false + logDoCicloLido=true  ⇒ li o log e não tinha a linha ⇒ QUARENTENA
+  //   correlacionado=false + logDoCicloLido=false ⇒ não li o log ⇒ defeito de CONFIGURAÇÃO
+  //
+  // Colapsar as duas quarentenaria todo retorno do primeiro ciclo de cada dia — o log é diário, e
+  // antes de o cliente escrever o de hoje a busca casa o de ontem. Se este teste quebrar porque uma
+  // combinação sumiu, o CA5 voltou a ser inseguro.
+  it('as três combinações de proveniência existem e são distintas', () => {
+    const combinacoes = new Set(
+      recepcoes.map(
+        (c) =>
+          `${String(c.envelope.recepcao?.correlacionado)}/${String(c.envelope.recepcao?.logDoCicloLido)}`,
+      ),
+    );
+
+    assert.ok(combinacoes.has('true/true'), 'falta o caminho feliz (correlacionado, log lido)');
+    assert.ok(combinacoes.has('false/true'), 'falta o caso do CA5 — suspeito genuíno');
+    assert.ok(combinacoes.has('false/false'), 'falta o caso "não sei" — defeito de configuração');
+  });
+
+  // `logDoCicloLido: false` com `correlacionado: true` seria o agente afirmando ter correlacionado
+  // sem ter lido o log — contradição que tornaria o campo inútil para decidir qualquer coisa.
+  it('nunca afirma correlação sem ter lido o log do ciclo', () => {
+    for (const caso of recepcoes) {
+      const r = caso.envelope.recepcao;
+      if (r?.correlacionado === true) {
+        assert.equal(r.logDoCicloLido, true, `"${caso.nome}" correlacionou sem ler o log`);
+      }
+    }
+  });
+
+  // As duas não-correlações mandam o operador a lugares DIFERENTES: uma manda conferir o arquivo,
+  // a outra a instalação. Redação idêntica apagaria a distinção justamente para quem age sobre ela.
+  it('as duas não-correlações têm redações distintas — as ações divergem', () => {
+    const naoCorrelacionadas = recepcoes.filter(
+      (c) => c.envelope.recepcao?.correlacionado === false,
+    );
+    const detalhes = new Set(naoCorrelacionadas.map((c) => c.envelope.detalhe));
+
+    assert.equal(naoCorrelacionadas.length, 2, 'esperava as duas não-correlações');
+    assert.equal(
+      detalhes.size,
+      2,
+      'as duas não-correlações compartilham redação — a distinção sumiu',
+    );
+  });
+
+  // `omitempty`: quando falso, o campo vem AUSENTE, não `false`. O consumidor precisa tratar
+  // `undefined` e `false` no mesmo ramo, e este teste existe para que o caso ausente esteja no
+  // golden — sem ele, alguém escreveria `=== false` e passaria.
+  it('duplicado vem AUSENTE quando falso, nunca `false`', () => {
+    for (const caso of recepcoes) {
+      const r = caso.envelope.recepcao;
+      assert.ok(
+        r?.duplicado !== false,
+        `"${caso.nome}" trouxe duplicado:false — devia ser ausente`,
+      );
+    }
+    assert.ok(
+      recepcoes.some((c) => c.envelope.recepcao?.duplicado === undefined),
+      'o golden precisa cobrir a recepção NÃO duplicada, com o campo ausente',
+    );
+  });
+
+  // O caso mais perigoso da #753: `duplicado: true` significa que o objeto em `chave` é o ANTERIOR,
+  // e que NADA foi depositado nesta execução. Processá-lo como recepção nova processa o mesmo
+  // retorno duas vezes. O `exitCode: null` é a evidência de que o cliente não foi acionado.
+  it('a recepção duplicada aponta o objeto anterior e não aciona o cliente', () => {
+    const duplicada = recepcoes.find((c) => c.envelope.recepcao?.duplicado === true);
+    assert.ok(duplicada, 'o golden precisa cobrir a recepção duplicada');
+    assert.equal(duplicada.envelope.exitCode, null, 'duplicado sem execução tem exitCode null');
+    assert.ok(
+      duplicada.envelope.recepcao?.duplicadoDe !== undefined,
+      'duplicado precisa dizer de qual recepção anterior',
+    );
+  });
+
+  // Recepção fala do RETORNO, nunca de remessa: nenhuma remessa muda de estado porque um arquivo
+  // chegou do banco. É o que `confirmRemittance` já assume ao mandar `reception` para `ignored`.
+  it('nenhuma recepção conta como transmissão', () => {
+    for (const caso of recepcoes) {
+      assert.equal(caso.contaComoTransmissao, false, caso.nome);
+      const parsed = parseStatus(caso.chave, JSON.stringify(caso.envelope));
+      assert.ok(isOk(parsed));
+      assert.equal(wasTransmitted(parsed.value), false, caso.nome);
+    }
+  });
+});
+
 // O golden é CÓPIA, e cópia sem proveniência é palpite com aparência de contrato. O cabeçalho deste
 // arquivo proíbe editar o golden para calar um vermelho; sem gate, a proibição é só um comentário.
 describe('status/ — a cópia do golden é verificável', () => {
@@ -189,17 +317,15 @@ describe('status/ — a cópia do golden é verificável', () => {
  * falha para sucesso. Um envelope de sucesso pode, nesse cenário, ficar de fora em silêncio.
  *
  * Isso é inofensivo hoje **porque o produtor não gera duas chaves**: `envelope.Key` é função só do
- * nome (van-agent, travado por três camadas no PR #15 dele, `main@5b1d135`). Ou seja: a razão pela
- * qual o nosso comportamento está correto mora no repositório DELE.
+ * nome (van-agent, travado por três camadas no PR #15 dele). Ou seja: a razão pela qual o nosso
+ * comportamento está correto mora no repositório DELE.
  *
- * Decisão do Gabriel em 20/08/2026: não trocar a ordenação — com a irreversibilidade atual, ordenar
- * por relógio faria o desfecho MAIS ANTIGO vencer, e o que se quereria ("transmitido prevalece") é
- * mudança na regra do agregado, não na ordenação. Em vez disso, **travar a premissa aqui**.
+ * Decisão do Gabriel: não trocar a ordenação — com a irreversibilidade atual, ordenar por relógio
+ * faria o desfecho MAIS ANTIGO vencer, e o que se quereria ("transmitido prevalece") é mudança na
+ * regra do agregado, não na ordenação. Em vez disso, **travar a premissa aqui**.
  *
- * ⚠️ Este teste afirma a PROPRIEDADE e não pergunta ao golden qual é a chave certa. A distinção é do
- * van-agent, que encontrou no próprio repositório um teste que montava a expectativa chamando o
- * produtor — e que por isso acompanharia a mudança e continuaria verde: "um teste que pergunta ao
- * produtor qual é a resposta certa não protege o consumidor".
+ * ⚠️ Este teste afirma a PROPRIEDADE e não pergunta ao golden qual é a chave certa — um teste que
+ * pergunta ao produtor qual é a resposta certa acompanha a mudança dele e não protege o consumidor.
  */
 /** Arquivos com mais de uma chave de remessa. Função pura — testável sem tocar o golden. */
 const arquivosComChaveAmbigua = (
@@ -279,49 +405,5 @@ describe('status/ — a premissa que sustenta a ordenação do desfecho', () => 
       },
     ];
     assert.deepEqual(arquivosComChaveAmbigua(sintetico), []);
-  });
-});
-
-// As quatro combinações de `correlacionado` × `logDoCicloLido` não são detalhe do produtor: elas
-// decidem ações OPOSTAS na quarentena do retorno (#753). Asseguramos a PROPRIEDADE — que o golden
-// cubra cada decisão possível —, nunca a contagem de casos, que quebraria a cada caso novo legítimo.
-describe('status/ — a recepção cobre as decisões que a quarentena precisa tomar', () => {
-  const recepcoes = golden.casos.filter((c) => c.tipo === 'reception');
-
-  const combinacao = (c: GoldenCase): string =>
-    `${String(c.envelope.recepcao?.correlacionado)}/${String(c.envelope.recepcao?.logDoCicloLido)}`;
-
-  it('todo envelope de recepção carrega o objeto `recepcao`', () => {
-    assert.ok(recepcoes.length > 0, 'o golden precisa cobrir recepção');
-    for (const caso of recepcoes) {
-      assert.ok(caso.envelope.recepcao, `"${caso.nome}" é recepção e não trouxe o objeto recepcao`);
-    }
-  });
-
-  it('cobre "correlacionado, com log lido" — o caso normal', () => {
-    assert.ok(recepcoes.some((c) => combinacao(c) === 'true/true'));
-  });
-
-  // Log lido e a linha não estava lá: a origem não foi registrada. É o ÚNICO que vai para quarentena.
-  it('cobre "não correlacionado, com log lido" — o único que quarentena', () => {
-    assert.ok(recepcoes.some((c) => combinacao(c) === 'false/true'));
-  });
-
-  // Log não lido: o agente NÃO SABE. É sinal sobre a configuração do glob, não sobre o arquivo —
-  // quarentenar aqui represaria pagamento confirmado por causa de log mal configurado. E o gatilho é
-  // banal: o log é diário, então no primeiro ciclo do dia o padrão casa o log de ontem.
-  it('cobre "sem o log do ciclo" — processa e alarma, não quarentena', () => {
-    assert.ok(recepcoes.some((c) => combinacao(c) === 'false/false'));
-  });
-
-  // Correlacionar exige ter lido o log. A combinação inversa é impossível por construção, e se
-  // aparecer significa que a semântica mudou do outro lado sem ninguém avisar.
-  it('nunca produz "correlacionado sem ter lido o log"', () => {
-    const impossivel = recepcoes.filter((c) => combinacao(c) === 'true/false');
-    assert.deepEqual(
-      impossivel.map((c) => c.nome),
-      [],
-      'correlacionado=true com logDoCicloLido=false não pode existir — o agente não pode casar linha de um log que não leu',
-    );
   });
 });

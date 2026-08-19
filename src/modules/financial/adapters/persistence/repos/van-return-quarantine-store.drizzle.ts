@@ -21,6 +21,17 @@ import type {
 } from '#src/modules/financial/application/ports/van-return-quarantine-store.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { finVanReturnQuarantine, type FinVanReturnQuarantineRow } from '../schemas/mysql.ts';
+// ─── instantes ───────────────────────────────────────────────────────────────
+//
+// O port trafega ISO-8601 UTC; a coluna é `datetime(3)`, que não guarda fuso e, em `mode: 'string'`,
+// recebe a string CRUA — o MySQL recusa o `T` e o `Z` com 1292 (`Incorrect datetime value`).
+//
+// Reusadas do adapter de remessa, onde nasceram com o #767, em vez de reescritas aqui. Duas cópias
+// da mesma conversão divergem no primeiro caso de borda que só uma delas tratar — e a de lá já trata
+// dois que uma versão ingênua erra: ISO com offset diferente de `Z` (fatiar a string gravaria a hora
+// local como se fosse UTC) e string que não é instante reconhecível, que segue CRUA de propósito,
+// porque falhar no banco é melhor que inventar valor numa coluna que decide quando algo aconteceu.
+import { toIsoDateTime, toMysqlDateTime } from './remittance-repository.drizzle.ts';
 
 const logStore = (op: string, cause: unknown): void => {
   process.stderr.write(`[fin-van-return-quarantine] ${op} failed: ${String(cause)}\n`);
@@ -29,20 +40,6 @@ const logStore = (op: string, cause: unknown): void => {
 // `values(col)` referencia o valor que SERIA inserido (lado do INSERT) no ON DUPLICATE KEY UPDATE.
 const incoming = (column: string): ReturnType<typeof sql.raw> => sql.raw(`values(\`${column}\`)`);
 
-// ─── instantes ────────────────────────────────────────────────────────────────
-//
-// O port trafega ISO-8601 UTC; a coluna é `datetime(3)`, que não guarda fuso. A conversão é
-// EXPLÍCITA nos dois sentidos porque round-trip infiel é defeito silencioso: gravar
-// `2026-08-19T12:05:00.000Z` e ler `2026-08-19 12:05:00.000` faz o adapter violar o contrato do
-// próprio port, e quem compara os dois lados descobre isso num diff de teste, longe da causa.
-//
-// ⚠️ Diverge do vizinho `remittance-repository.drizzle.ts`, que grava `toISOString()` direto e
-// devolve a string do banco como veio. Não replicar o padrão de lá é deliberado — mas a divergência
-// fica registrada em vez de resolvida em silêncio.
-const toColumn = (iso: string): string => iso.slice(0, 23).replace('T', ' ');
-
-const toIso = (column: string): string => `${column.replace(' ', 'T')}Z`;
-
 const toDomain = (row: Readonly<FinVanReturnQuarantineRow>): QuarantinedObject => ({
   key: row.objectKey,
   // A união literal é garantida pelo CHECK da tabela; motivo novo exige migration, e é lá que a
@@ -50,9 +47,9 @@ const toDomain = (row: Readonly<FinVanReturnQuarantineRow>): QuarantinedObject =
   reason: row.reason as ReturnQuarantineReason,
   observedSha256: row.observedSha256,
   ...(row.expectedSha256 !== null ? { expectedSha256: row.expectedSha256 } : {}),
-  firstSeenAt: toIso(row.firstSeenAt),
-  lastSeenAt: toIso(row.lastSeenAt),
-  ...(row.releasedAt !== null ? { releasedAt: toIso(row.releasedAt) } : {}),
+  firstSeenAt: toIsoDateTime(row.firstSeenAt),
+  lastSeenAt: toIsoDateTime(row.lastSeenAt),
+  ...(row.releasedAt !== null ? { releasedAt: toIsoDateTime(row.releasedAt) } : {}),
 });
 
 export const createDrizzleVanReturnQuarantineStore = (
@@ -73,8 +70,8 @@ export const createDrizzleVanReturnQuarantineStore = (
               reason: o.reason,
               observedSha256: o.observedSha256,
               expectedSha256: o.expectedSha256 ?? null,
-              firstSeenAt: toColumn(o.seenAt),
-              lastSeenAt: toColumn(o.seenAt),
+              firstSeenAt: toMysqlDateTime(o.seenAt),
+              lastSeenAt: toMysqlDateTime(o.seenAt),
             })),
           )
           .onDuplicateKeyUpdate({
@@ -106,7 +103,7 @@ export const createDrizzleVanReturnQuarantineStore = (
       try {
         await db
           .update(finVanReturnQuarantine)
-          .set({ releasedAt: toColumn(at) })
+          .set({ releasedAt: toMysqlDateTime(at) })
           // `IS NULL` preserva o instante da PRIMEIRA liberação. Sem ele, um objeto que passa a
           // aprovar em todo ciclo teria `released_at` reescrito indefinidamente, e o campo diria
           // "liberado agora" para algo resolvido há semanas.

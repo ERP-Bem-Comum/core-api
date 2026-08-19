@@ -1,8 +1,8 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "0ec1877d-5574-47b9-9e5f-96cbbd8c5eb8",
-  "prevId": "54c490ba-6ed8-4e25-a461-655debf57b9b",
+  "id": "a45dc7a4-2fc0-4890-90e1-fd5ef484b8bc",
+  "prevId": "0ec1877d-5574-47b9-9e5f-96cbbd8c5eb8",
   "tables": {
     "fin_bank_statements": {
       "name": "fin_bank_statements",
@@ -2582,6 +2582,81 @@
       },
       "uniqueConstraints": {},
       "checkConstraint": {}
+    },
+    "fin_van_return_quarantine": {
+      "name": "fin_van_return_quarantine",
+      "columns": {
+        "object_key": {
+          "name": "object_key",
+          "type": "varchar(255) COLLATE utf8mb4_bin",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "reason": {
+          "name": "reason",
+          "type": "varchar(32)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "observed_sha256": {
+          "name": "observed_sha256",
+          "type": "char(64) COLLATE utf8mb4_bin",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "expected_sha256": {
+          "name": "expected_sha256",
+          "type": "char(64) COLLATE utf8mb4_bin",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        },
+        "first_seen_at": {
+          "name": "first_seen_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "last_seen_at": {
+          "name": "last_seen_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "released_at": {
+          "name": "released_at",
+          "type": "datetime(3)",
+          "primaryKey": false,
+          "notNull": false,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "fin_van_return_quarantine_released_idx": {
+          "name": "fin_van_return_quarantine_released_idx",
+          "columns": ["released_at"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "fin_van_return_quarantine_object_key": {
+          "name": "fin_van_return_quarantine_object_key",
+          "columns": ["object_key"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {
+        "fin_van_return_quarantine_reason_chk": {
+          "name": "fin_van_return_quarantine_reason_chk",
+          "value": "`fin_van_return_quarantine`.`reason` IN ('missing-provenance','hash-mismatch','origin-not-logged')"
+        }
+      }
     }
   },
   "views": {},

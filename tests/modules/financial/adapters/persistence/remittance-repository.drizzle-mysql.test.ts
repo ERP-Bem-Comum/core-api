@@ -23,11 +23,12 @@ import {
   confirmTransmitted,
   markFailed,
   discard,
+  documentIdsOf,
 } from '#src/modules/financial/domain/remittance/remittance.ts';
 import {
   finOutbox,
-  finRemittanceDocuments,
   finRemittances,
+  finRemittanceDocuments,
 } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
@@ -42,8 +43,21 @@ const build = (documentIds: readonly string[], cedente = account) => {
     nsa: nsaSeq,
     fileName: `PAG_INT.11082026140000_${String(nsaSeq).padStart(6, '0')}.REM`,
     contentHash: 'b'.repeat(64),
-    documentIds,
-    generatedAt: '2026-08-11 14:00:00.000',
+    // #752: convênio + NSA + posição. O convênio fictício `900001` é o discriminador DESTE arquivo
+    // de teste — `your_number` tem UNIQUE na tabela, e dois arquivos de integração que usassem o
+    // mesmo par NSA/posição colidiriam entre si, com a falha aparecendo no vizinho.
+    documents: documentIds.map((documentId, i) => ({
+      documentId,
+      yourNumber: `900001${String(nsaSeq).padStart(6, '0')}${String(i + 1).padStart(6, '0')}`,
+    })),
+    // ISO 8601 UTC — o formato que `generateRemittance` REALMENTE produz (`toISOString()`).
+    //
+    // ⚠️ Esta fixture já esteve no formato do MySQL (`2026-08-11 14:00:00.000`), escrito à mão. Com
+    // ele o teste passava contra MySQL real enquanto `POST /financial/remittances` falhava com 1292
+    // (`Incorrect datetime value`) — a coluna é `datetime` em `mode: 'string'` e o Drizzle repassa a
+    // string crua. Teste alimentado com dado que a aplicação nunca gera não prova o caminho da
+    // aplicação: prova outro caminho, e fica verde descrevendo um sistema que não funciona.
+    generatedAt: '2026-08-11T14:00:00.000Z',
   });
   if (!r.ok) throw new Error(`test setup: remittance (${r.error})`);
   return r.value;
@@ -68,17 +82,16 @@ if (!process.env['MYSQL_INTEGRATION']) {
       handle = r.value;
     });
 
-    // Limpeza na ENTRADA e por TABELA (#741 · `.claude/rules/testing.md`).
+    // Limpa na ENTRADA, por tabela (testing.md §Contrato de isolamento).
     //
-    // `nsaSeq` é contador de PROCESSO e compõe `file_name`, que tem UNIQUE
-    // (`fin_remittances_file_name_uq`) — e o par (conta, NSA) tem outro. A 2ª execução repete os
-    // dois. Por tabela, não por PK: resíduo gravado com OUTRO id colide na mesma UNIQUE de negócio,
-    // e é justamente esse que a limpeza por PK não alcança.
-    //
-    // Filha antes da mãe: `fin_remittance_documents` referencia `fin_remittances`.
+    // Passou a ser NECESSÁRIO com a #752: `your_number` ganhou UNIQUE, e `nsaSeq` reinicia a cada
+    // processo — sem limpar, a SEGUNDA execução deste arquivo tentaria gravar as mesmas referências
+    // e falharia na colisão, com o erro aparecendo como `save` recusado, longe da causa. É o caso
+    // que a inversão de ordem não pega, e que a rule chama de "passar duas vezes seguidas".
     beforeEach(async () => {
       await handle.db.delete(finRemittanceDocuments);
       await handle.db.delete(finRemittances);
+      await handle.db.delete(finOutbox);
     });
 
     after(async () => {
@@ -96,7 +109,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const back = await repo.findById(rem.id);
       assert.ok(isOk(back) && back.value !== null);
       assert.equal(back.value.status, 'Queued');
-      assert.deepEqual([...back.value.documentIds].sort(), [d1, d2].sort());
+      assert.deepEqual([...documentIdsOf(back.value)].sort(), [d1, d2].sort());
     });
 
     it('recupera por nome de arquivo — a chave de idempotência do agente', async () => {
@@ -161,7 +174,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const back = await repo.findById(rem.id);
       assert.ok(isOk(back) && back.value !== null);
       assert.equal(back.value.status, 'Transmitted');
-      assert.deepEqual(back.value.documentIds, [d]);
+      assert.deepEqual(documentIdsOf(back.value), [d]);
     });
 
     // O UNIQUE que impede duas remessas com o mesmo NSA na mesma conta — retransmissão, para o banco.
