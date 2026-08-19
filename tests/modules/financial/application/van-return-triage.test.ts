@@ -56,7 +56,11 @@ describe('van-return-triage — o que tem direito de entrar (#753)', () => {
 
   it('CA4: hash divergente impede o processamento e é reportado', () => {
     const t = triageVanReturns([object(KEY_A, HASH_B)], [reception({ sha256: HASH_A })]);
-    assert.deepEqual(t.quarantined, [{ key: KEY_A, reason: 'hash-mismatch' }]);
+    // O hash ESPERADO acompanha o motivo: sem os dois lados, "divergiu" não distingue arquivo
+    // alterado de envelope apontando para outro objeto — e a ação do operador é outra em cada caso.
+    assert.deepEqual(t.quarantined, [
+      { key: KEY_A, reason: 'hash-mismatch', expectedSha256: HASH_A },
+    ]);
     assert.deepEqual(t.processable, [], 'integridade é verificada, não presumida');
   });
 
@@ -169,7 +173,7 @@ describe('van-return-triage — o que tem direito de entrar (#753)', () => {
     );
     assert.deepEqual(t.quarantined, [
       { key: semProva, reason: 'missing-provenance' },
-      { key: corrompido, reason: 'hash-mismatch' },
+      { key: corrompido, reason: 'hash-mismatch', expectedSha256: HASH_A },
     ]);
     assert.deepEqual(t.missingObjects, [ausente]);
     assert.equal(

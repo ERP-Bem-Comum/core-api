@@ -151,6 +151,10 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // Acompanhamento de remessa (#728): listPaged ordena por generatedAt DESC no banco, total real,
     // documentIds da página em batch (sem N+1), e findById com os vínculos.
     'tests/modules/financial/adapters/persistence/remittance-read.drizzle-mysql.test.ts',
+    // Quarentena do retorno (#753, migration 0047): o ODKU preserva `first_seen_at` e reabre o
+    // liberado, o CHECK recusa motivo fora da união, e `object_key` compara em collation binária —
+    // chave de S3 é case-sensitive, e `unicode_ci` faria dois objetos distintos colidirem na PK.
+    'tests/modules/financial/adapters/persistence/van-return-quarantine-store.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/bank-statement-repository.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/reconciliation-repository.drizzle-mysql.test.ts',
     // FIN-STATUS-VARCHAR-WIDTH (#519) — largura de fin_payables.status / fin_documents.status comporta

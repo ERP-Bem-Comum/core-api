@@ -73,3 +73,12 @@ export const opaqueKey = binaryText('varchar(64) COLLATE utf8mb4_bin');
  * É o único identificador binário que é legível por humano, e continua sendo identificador.
  */
 export const permissionKey = binaryText('varchar(128) COLLATE utf8mb4_bin');
+
+/**
+ * Chave de objeto em object storage — `prefixo/nome`, atribuída por quem depositou.
+ *
+ * Binária porque **chave de S3 é case-sensitive**: `unicode_ci` acharia `X.RET` igual a `x.ret` e
+ * dois objetos distintos colidiriam numa PK. Larga porque o prefixo é configurável por ambiente
+ * (`VAN_S3_PREFIX_*`) e o nome vem do banco — 64 não é margem, é aposta.
+ */
+export const objectStorageKey = binaryText('varchar(255) COLLATE utf8mb4_bin');

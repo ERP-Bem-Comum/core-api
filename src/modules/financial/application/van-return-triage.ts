@@ -38,6 +38,15 @@ export type ProcessableReturn = Readonly<{
 export type QuarantinedReturn = Readonly<{
   key: string;
   reason: ReturnQuarantineReason;
+  /**
+   * O hash que o ENVELOPE declarava — presente só em `hash-mismatch`.
+   *
+   * O hash observado quem tem é o chamador (está no `ReturnObject` que ele passou); o esperado
+   * morre aqui se não for devolvido. Sem os dois lados, o registro diz "divergiu" e não permite
+   * decidir se o arquivo mudou, se o envelope é de outro objeto, ou se o produtor trocou de
+   * algoritmo — que é a distinção pela qual o operador age.
+   */
+  expectedSha256?: string;
 }>;
 
 export type VanReturnTriage = Readonly<{
@@ -120,7 +129,7 @@ export const triageVanReturns = (
     // Integridade VERIFICADA, não presumida (CA4). Comparação exata: o contrato diz hex minúsculo, e
     // normalizar aqui esconderia um produtor que mudou de formato sem avisar.
     if (p.sha256 !== object.sha256) {
-      quarantined.push({ key: object.key, reason: 'hash-mismatch' });
+      quarantined.push({ key: object.key, reason: 'hash-mismatch', expectedSha256: p.sha256 });
       continue;
     }
 
