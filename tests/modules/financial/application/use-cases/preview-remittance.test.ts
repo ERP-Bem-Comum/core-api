@@ -18,11 +18,15 @@ import type { PayeePaymentTarget } from '#src/modules/financial/domain/payout/ty
 // de gravar `''`. Por isso existem DUAS fixtures de ausência, e um teste provando que as duas
 // levam ao mesmo veredito.
 
+// ⚠️ `checkDigit: '0'` é o dígito que o algoritmo do Bradesco produz para a conta `123456` (#734).
+// Um cadastro `ready` no pré-voo precisa ser um cadastro que o banco aceitaria — na Modalidade 01 os
+// dígitos são validados por ele. Fixture com DV inventado descrevia como apto um título que a
+// remessa perderia.
 const BANK_ACCOUNT_ONLY: PayeePaymentTarget = {
   bank: '237',
   agency: '1234-5',
   accountNumber: '123456',
-  checkDigit: '7',
+  checkDigit: '0',
   pixKey: null,
 };
 
