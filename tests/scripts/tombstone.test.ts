@@ -23,6 +23,7 @@ import {
   stagedRemovedMarkdown,
   type TombstoneViolation,
 } from '../../scripts/handbook/tombstone.ts';
+import { gitFixtureEnv, withoutGitEnv } from '../support/git-fixture.ts';
 
 const backlinks = (pairs: readonly (readonly [string, readonly string[]])[]) =>
   new Map<string, readonly string[]>(pairs);
@@ -129,8 +130,11 @@ describe('TOMBSTONE — rename devolve o caminho ANTIGO (o que derrubou a 1ª re
 
   before(() => {
     repo = mkdtempSync(join(tmpdir(), 'tombstone-rename-'));
+    // `env` sanitizado, e não só `cwd`: dentro do `git commit` o hook roda a suíte com `GIT_DIR`
+    // exportado, e ele VENCE o `cwd` — o fixture viraria decorativo e estes comandos operariam no
+    // repositório real. Ver `tests/support/git-fixture.ts` para o estrago medido.
     const git = (...args: readonly string[]): void => {
-      execFileSync('git', [...args], { cwd: repo, stdio: 'ignore' });
+      execFileSync('git', [...args], { cwd: repo, stdio: 'ignore', env: gitFixtureEnv() });
     };
     git('init', '--quiet');
     git('config', 'user.email', 'teste@exemplo.dev');
@@ -150,7 +154,14 @@ describe('TOMBSTONE — rename devolve o caminho ANTIGO (o que derrubou a 1ª re
   it('reporta o caminho que deixou de existir, não o recém-criado', () => {
     // Com `--name-only`, o git devolve o DESTINO do rename: o gate lia o arquivo novo como
     // removido e recusava toda reorganização de pasta — inclusive a que preserva os links.
-    assert.deepEqual(stagedRemovedMarkdown(repo), ['todo/card.md']);
+    //
+    // `withoutGitEnv` porque `stagedRemovedMarkdown` herda o ambiente do processo — e deve mesmo:
+    // no uso real ela roda dentro do pre-commit, sobre o repositório do hook. Aqui o alvo é o
+    // fixture, e sem limpar o ambiente ela leria o index do repositório de verdade.
+    assert.deepEqual(
+      withoutGitEnv(() => stagedRemovedMarkdown(repo)),
+      ['todo/card.md'],
+    );
   });
 });
 
