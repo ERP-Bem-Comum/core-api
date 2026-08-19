@@ -1,5 +1,6 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import { immutable } from '../../../../shared/primitives/immutable.ts';
+import { type CheckDigitVerdict, verifyAccountCheckDigit } from './account-check-digit.ts';
 import type { PayeePaymentTarget, PayoutGap } from './types.ts';
 
 // Decomposição do bloco bancário do cadastro nos campos POSICIONAIS que o segmento A exige.
@@ -40,11 +41,17 @@ const BANK_CODE_PREFIX_RE = /^(\d{1,3})[ \t]*[-–—][ \t]*\S/;
 // a 1ª posição deste dígito. Exemplo: Número C/C = 45981-36. Neste caso Dígito Verificador da
 // Conta = 3" (`jun-19-layout-multipag.pdf` p. 96, local-only). Recusar `45981-36` como malformado
 // descartaria um cadastro que o banco sabe processar.
-const WITH_CHECK_DIGIT_RE = /^(\d+)\s*[-./]\s*([0-9Xx]{1,2})$/;
+const WITH_CHECK_DIGIT_RE = /^(\d+)\s*[-./]\s*([0-9XxPp]{1,2})$/;
 const DIGITS_ONLY_RE = /^\d+$/;
-// DV alfabético aparece quando o módulo 11 dá resto 10. Só `X` é aceito — qualquer outra letra é
-// erro de digitação, e adivinhar qual seria a intenção é o mesmo que inventar o dígito.
-const CHECK_DIGIT_RE = /^[0-9Xx]{1,2}$/;
+// DV alfabético existe, e são DUAS letras — cada uma de uma convenção diferente:
+//   • `X` quando o módulo 11 dá resto 10, em instituições que usam essa notação;
+//   • `P` no BRADESCO quando o resto é 1 — "o dígito poderá ser igual a zero ou 'P'" (manual
+//     4008-523-0096 v16, p. 30). Não é hipótese: é o único dos dois que temos em fonte primária.
+//
+// ⚠️ O `P` faltava aqui, e a falta era invisível porque nada calculava o dígito: uma conta Bradesco
+// legítima terminada em `P` era classificada `malformed` — recusada por parecer erro de digitação.
+// Qualquer outra letra segue recusada: adivinhar a intenção é o mesmo que inventar o dígito.
+const CHECK_DIGIT_RE = /^[0-9XxPp]{1,2}$/;
 
 export type PayeeAccountParts = Readonly<{
   bankCode: string;
@@ -134,9 +141,48 @@ type AccountParts = Readonly<{ accountNumber: string; accountDigit: string }>;
 
 const NO_ACCOUNT: AccountParts = { accountNumber: '', accountDigit: '' };
 
+// Traduz o veredito do cálculo (issue #734) em lacunas. É o único ponto onde a POLÍTICA vive: o
+// cálculo diz o que é verdade sobre o dígito, e esta função decide o que o sistema faz com isso.
+//
+// A assimetria entre os dois ramos que não são `match` é deliberada, e a razão é de quem sabe o quê:
+//
+//   • `mismatch` BLOQUEIA. O manual 4008-523-0096 v16 p. 29 diz que na Modalidade 01 — a do piloto —
+//     "serão validados os dígitos de controle da Agência e da conta corrente". Sabemos, antes de
+//     enviar, que o banco vai recusar. Emitir assim mesmo gasta uma janela de remessa para receber
+//     de volta uma crítica que já era previsível aqui, e o operador descobre dias depois, pelo
+//     retorno, sem que nada aponte o campo. Bloquear pode segurar muitos fornecedores de uma vez —
+//     e é a leitura correta do tamanho do problema, não um efeito colateral dela.
+//
+//   • `not-verifiable` NÃO bloqueia, e os dois motivos ficam no mesmo ramo. `unsupported-bank` é
+//     limite NOSSO: o algoritmo daquele banco não está no acervo. Recusar pagamento por ignorância
+//     nossa inverte quem paga o preço da lacuna de documentação. `account-not-numeric` seria defeito
+//     do dado, mas `readAccount` já recusa conta não-numérica antes de chegar aqui — discriminá-lo
+//     produziria um ramo que nunca executa, e ramo que nunca executa é regra que ninguém testa.
+//
+// Fora do 237, portanto, nada muda: a conta segue validada por FORMA, como sempre foi.
+const checkDigitGaps = (verdict: CheckDigitVerdict): readonly PayoutGap[] => {
+  switch (verdict.status) {
+    // Dígito conferido e correto: nada a apontar.
+    case 'match':
+      return [];
+    case 'mismatch':
+      return [gap('payee-account-digit', 'check-digit-mismatch')];
+    case 'not-verifiable':
+      return [];
+  }
+};
+
 // A conta aceita o DV por dois caminhos: embutido no próprio número (`123456-7`) ou no campo
 // `check_digit`. O embutido tem precedência — é o que o operador enxergou ao digitar.
-const readAccount = (rawNumber: string, rawDigit: string): FieldRead<AccountParts> => {
+//
+// O `bankCode` entra porque o DV só é verificável quando se sabe QUAL banco calcula — e ele é lido
+// antes, em `decomposePayeeAccount`. Passá-lo aqui é o que permite confrontar o dígito informado
+// com o dígito calculado (#734) em vez de apenas conferir o formato.
+const readAccount = (
+  rawNumber: string,
+  rawDigit: string,
+  bankCode: string,
+): FieldRead<AccountParts> => {
   if (rawNumber === '') {
     return {
       value: NO_ACCOUNT,
@@ -150,7 +196,13 @@ const readAccount = (rawNumber: string, rawDigit: string): FieldRead<AccountPart
   const accountNumber = split.base.padStart(ACCOUNT_WIDTH, '0');
 
   if (split.digit !== null) {
-    return { value: { accountNumber, accountDigit: split.digit }, gaps: [] };
+    // O DV embutido também é conferido. Ele ter precedência diz de onde o dígito VEM, não que ele
+    // esteja certo: o operador que digitou `123456-7` errou o 7 tão facilmente quanto erraria o
+    // campo separado.
+    return {
+      value: { accountNumber, accountDigit: split.digit },
+      gaps: checkDigitGaps(verifyAccountCheckDigit(bankCode, accountNumber, split.digit)),
+    };
   }
   if (rawDigit === '') {
     return {
@@ -165,7 +217,13 @@ const readAccount = (rawNumber: string, rawDigit: string): FieldRead<AccountPart
     };
   }
   // Só a 1ª posição, pela mesma regra G011 que vale para o DV embutido: o campo tem uma posição.
-  return { value: { accountNumber, accountDigit: (rawDigit[0] ?? '').toUpperCase() }, gaps: [] };
+  const accountDigit = (rawDigit[0] ?? '').toUpperCase();
+  // Este é o caminho que a #734 mediu: 86 de 86 contas do cadastro chegam SEM DV embutido, então é
+  // sempre o `check_digit` que vira o DV do arquivo — e é nele que o dígito da agência foi copiado.
+  return {
+    value: { accountNumber, accountDigit },
+    gaps: checkDigitGaps(verifyAccountCheckDigit(bankCode, accountNumber, accountDigit)),
+  };
 };
 
 // Acumula TODAS as lacunas antes de recusar. Parar no primeiro defeito faria o operador corrigir um
@@ -176,7 +234,13 @@ export const decomposePayeeAccount = (
 ): Result<PayeeAccountParts, readonly PayoutGap[]> => {
   const bank = readBankCode(trimmed(target?.bank));
   const agency = readAgency(trimmed(target?.agency));
-  const account = readAccount(trimmed(target?.accountNumber), trimmed(target?.checkDigit));
+  // Banco ilegível entrega `''`, e `''` não é 237 — a verificação do DV devolve `not-verifiable` em
+  // vez de tentar calcular com o algoritmo errado. A lacuna do banco já foi registrada acima.
+  const account = readAccount(
+    trimmed(target?.accountNumber),
+    trimmed(target?.checkDigit),
+    bank.value,
+  );
 
   const gaps = [...bank.gaps, ...agency.gaps, ...account.gaps];
   if (gaps.length > 0) return err(immutable(gaps));

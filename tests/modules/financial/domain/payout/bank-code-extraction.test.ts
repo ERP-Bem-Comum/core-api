@@ -22,11 +22,15 @@ import type { PayeePaymentTarget } from '#src/modules/financial/domain/payout/ty
  * dígitos é adivinhação, e adivinhar as posições 021-023 credita a conta de outro banco.
  */
 
+// ⚠️ `checkDigit: '0'` é o DV que o algoritmo do Bradesco produz para a conta `123456` (#734,
+// `account-check-digit.ts`). A conta aqui é cenário, não a matéria do teste — mas precisa ser um
+// cadastro que o banco aceitaria, senão os casos cujo `bank` resolve para 237 passam a ser
+// recusados pelo dígito e o arquivo inteiro fica vermelho por um motivo que não é o dele.
 const withBank = (bank: string): PayeePaymentTarget => ({
   bank,
   agency: '1234-5',
   accountNumber: '123456',
-  checkDigit: '7',
+  checkDigit: '0',
   pixKey: null,
 });
 

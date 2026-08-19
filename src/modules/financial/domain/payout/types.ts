@@ -30,7 +30,13 @@ export type PayoutField =
 // `missing` pede preenchimento; `unmappable` e `malformed` pedem CORREÇÃO do que já está lá. A
 // distinção existe porque o operador age diferente em cada caso — e porque um nome de banco em
 // texto livre não é campo vazio, é campo que ninguém sabe converter.
-export type PayoutGapReason = 'missing' | 'unmappable' | 'malformed';
+//
+// `check-digit-mismatch` é o quarto, e nasce da issue #734 (CA2): o campo está preenchido, é
+// numérico e bem-formado — e mesmo assim está errado, porque o algoritmo do banco produz outro
+// dígito. Precisa de nome próprio justamente por não ser `malformed`: a interface que mandar o
+// operador "corrigir o formato" o manda consertar o que já está certo. O que ele precisa saber é
+// que o dígito não corresponde à conta, e qual seria o correto.
+export type PayoutGapReason = 'missing' | 'unmappable' | 'malformed' | 'check-digit-mismatch';
 
 export type PayoutGap = Readonly<{ field: PayoutField; reason: PayoutGapReason }>;
 
