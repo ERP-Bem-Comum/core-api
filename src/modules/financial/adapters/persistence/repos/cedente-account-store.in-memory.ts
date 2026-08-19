@@ -39,8 +39,22 @@ export const createInMemoryCedenteAccountStore = (): CedenteAccountStore => {
     list: async (): Promise<Result<readonly CedenteAccount[], CedenteAccountStoreError>> =>
       Promise.resolve(ok([...accounts.values()])),
 
+    // `nextNsa` FICA FORA do path de update, espelhando a regra do adapter Drizzle (ver
+    // `cedente-account-store.drizzle.ts` §`save`): o único caminho de escrita do contador é
+    // `allocateNsa`. Se este `save` sobrescrevesse `nextNsa` com o valor que o chamador tem em mãos
+    // (lido antes de uma alocação concorrente), o fake ficaria verde descrevendo produção errado —
+    // que é justamente o lost update que este arquivo corrigiu.
+    //
+    // ⚠️ O espelho é PARCIAL, e de propósito: aqui "a linha existe?" se decide por `id`; no MySQL,
+    // por QUALQUER índice único — o upsert real colide também na chave natural (FR-016). O segundo
+    // caminho de lost update, o determinístico, não é reproduzível neste fake e por isso vive só em
+    // `nsa-allocation.drizzle-mysql.test.ts`. Modelar a UNIQUE natural aqui seria reimplementar o
+    // InnoDB no `Map` — o contrato compartilhado cobra o que os dois adapters honram, e só isso.
     save: async (account: CedenteAccount): Promise<Result<void, CedenteAccountStoreError>> => {
-      accounts.set(account.id, account);
+      const existing = accounts.get(account.id);
+      const toPersist =
+        existing === undefined ? account : { ...account, nextNsa: existing.nextNsa };
+      accounts.set(account.id, toPersist);
       return Promise.resolve(ok(undefined));
     },
 

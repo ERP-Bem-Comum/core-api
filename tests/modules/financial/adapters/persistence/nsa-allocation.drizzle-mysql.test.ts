@@ -1,29 +1,34 @@
-// Teste de integração: alocação de NSA sob CONCORRÊNCIA REAL (Drizzle + MySQL).
+// Teste de integração: o CedenteAccountStore Drizzle+MySQL satisfaz o contrato do port, MAIS as
+// garantias que só o backend real pode demonstrar.
 //
-// A garantia que este arquivo existe para provar não é "aloca e incrementa" — isso o fake já
-// mostra. É que DUAS TRANSAÇÕES CONCORRENTES nunca recebem o mesmo NSA. Sem o `SELECT ... FOR
-// UPDATE`, ambas leem o mesmo valor, ambas gravam o mesmo incremento, e saem dois arquivos de
-// remessa com NSA idêntico — que o banco trata como RETRANSMISSÃO, não como remessa nova.
+// O contrato observável (`save` + `allocateNsa`) vive em `cedente-account-store.contract.ts` e é
+// consumido aqui e pelo fake in-memory — é o que impede uma regra de valer para um adapter só.
 //
-// O teste não controla timing: dispara N alocações em paralelo sobre um pool com várias conexões e
-// cobra que os N números sejam distintos. Sob lock correto isso é determinístico; sem lock, colide.
+// O que este arquivo acrescenta, e nenhum fake substitui:
+//   1. ATOMICIDADE — duas transações concorrentes nunca recebem o mesmo NSA. Sem o `SELECT ... FOR
+//      UPDATE`, ambas leem o mesmo valor, ambas gravam o mesmo incremento, e saem dois arquivos de
+//      remessa com NSA idêntico — que o banco trata como RETRANSMISSÃO, não como remessa nova.
+//   2. Colisão do upsert pela CHAVE NATURAL — `ON DUPLICATE KEY UPDATE` dispara em QUALQUER índice
+//      único, não só na PK. O `Map` do fake decide "existe?" por id e nunca reproduz isso.
 //
 // GATE: só roda com `MYSQL_INTEGRATION=1` (ver `package.json §test:integration:financial`).
 
 import { describe, it, before, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
+import { eq } from 'drizzle-orm';
 
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleCedenteAccountStore } from '#src/modules/financial/adapters/persistence/repos/cedente-account-store.drizzle.ts';
+import { finCedenteAccounts } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
-import { create, close } from '#src/modules/financial/domain/cedente/cedente-account.ts';
-import * as Nsa from '#src/modules/financial/domain/cedente/nsa.ts';
+import { create } from '#src/modules/financial/domain/cedente/cedente-account.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
+import { CONTRACT_AGENCY, cedenteAccountStoreContract } from './cedente-account-store.contract.ts';
 
 // Chave natural distinta por conta: o UNIQUE da migration 0009 colide se dois casos reusarem
-// 237/1234/567890/1.
+// 237/1234/567890/1. Agência própria deste arquivo — o contrato usa a sua (`CONTRACT_AGENCY`).
 let naturalKeySeq = 0;
 const buildAccount = (nextNsa?: number) => {
   naturalKeySeq += 1;
@@ -64,24 +69,22 @@ if (!process.env['MYSQL_INTEGRATION']) {
       await handle?.close();
     });
 
-    it('aloca em sequência e persiste o avanço', async () => {
-      const store = createDrizzleCedenteAccountStore(handle);
-      const account = buildAccount();
-      assert.equal((await store.save(account)).ok, true);
+    cedenteAccountStoreContract('Drizzle + MySQL', () => ({
+      store: createDrizzleCedenteAccountStore(handle),
+      // Limpa na ENTRADA, pelo espaço de chave que o contrato escreve — não por PK, que não pegaria
+      // resíduo de um run anterior inserido com OUTRO id na mesma chave natural
+      // (`.claude/rules/testing.md` §"Contrato de isolamento"). A agência é o recorte, então os
+      // arquivos irmãos de cedente (que usam outras) ficam intactos.
+      reset: async () => {
+        await handle.db
+          .delete(finCedenteAccounts)
+          .where(eq(finCedenteAccounts.agency, CONTRACT_AGENCY));
+      },
+    }));
 
-      const first = await store.allocateNsa(account.id);
-      const second = await store.allocateNsa(account.id);
-
-      assert.ok(first.ok && second.ok);
-      assert.equal(first.value, 1);
-      assert.equal(second.value, 2);
-
-      const reloaded = await store.findById(account.id);
-      assert.ok(reloaded.ok && reloaded.value !== null);
-      assert.equal(reloaded.value.nextNsa, 3);
-    });
-
-    // O caso que justifica o arquivo.
+    // O caso que justifica o arquivo. O teste não controla timing: dispara N alocações em paralelo
+    // sobre um pool com várias conexões e cobra que os N números sejam distintos. Sob lock correto
+    // isso é determinístico; sem lock, colide.
     it('DEZ alocações concorrentes produzem dez números DISTINTOS', async () => {
       const store = createDrizzleCedenteAccountStore(handle);
       const account = buildAccount();
@@ -108,40 +111,55 @@ if (!process.env['MYSQL_INTEGRATION']) {
       assert.equal(reloaded.value.nextNsa, 11);
     });
 
-    it('conta inexistente não aloca', async () => {
+    // O outro caminho de lost update — DETERMINÍSTICO, e por isso mais fácil de disparar que a
+    // corrida: `ON DUPLICATE KEY UPDATE` colide também na UNIQUE de chave natural (FR-016), não só na
+    // PK. `createCedenteAccount` faz check-then-insert (TOCTOU): duas criações da MESMA conta — duplo
+    // clique, ETL em paralelo — passam ambas pelo `findByNaturalKey`, e o `save` da segunda vira
+    // UPDATE da linha da primeira. Com `next_nsa` no `set`, um contador em 57 voltaria a 1 sem
+    // concorrência de leitura nenhuma. Este caso é o guarda dessa porta, e só existe contra MySQL: o
+    // fake in-memory decide "linha existe?" por id e nunca reproduz a colisão.
+    it('save de conta NOVA com chave natural já existente não zera o contador da linha existente', async () => {
       const store = createDrizzleCedenteAccountStore(handle);
-      const r = await store.allocateNsa(CedenteAccountId.generate());
-      assert.ok(!r.ok);
-      assert.equal(r.error, 'cedente-account-not-found');
-    });
+      const naturalKey = {
+        bankCode: '237',
+        agency: '4322',
+        accountNumber: '880011',
+        accountDigit: '9',
+        convenio: '9999999',
+        document: '12345678000190',
+      };
 
-    it('conta encerrada não aloca, e o contador não se move', async () => {
-      const store = createDrizzleCedenteAccountStore(handle);
-      const closed = close(buildAccount());
-      assert.ok(closed.ok);
-      assert.equal((await store.save(closed.value)).ok, true);
+      const first = create({ id: CedenteAccountId.generate(), ...naturalKey });
+      assert.ok(first.ok);
+      assert.equal((await store.save(first.value)).ok, true);
 
-      const r = await store.allocateNsa(closed.value.id);
-      assert.ok(!r.ok);
-      assert.equal(r.error, 'cedente-account-not-active');
+      // A conta roda e o contador avança.
+      for (let i = 0; i < 3; i += 1) {
+        assert.equal((await store.allocateNsa(first.value.id)).ok, true);
+      }
+      const advanced = await store.findById(first.value.id);
+      assert.ok(advanced.ok && advanced.value !== null);
+      assert.equal(advanced.value.nextNsa, 4);
 
-      const reloaded = await store.findById(closed.value.id);
+      // Segunda criação da MESMA conta bancária, com id novo e `nextNsa` inicial (1).
+      const second = create({ id: CedenteAccountId.generate(), ...naturalKey });
+      assert.ok(second.ok);
+      assert.equal((await store.save(second.value)).ok, true);
+
+      // O id de B nunca é inserido: o upsert colidiu na chave natural e atualizou a linha de A.
+      const foundB = await store.findById(second.value.id);
+      assert.ok(foundB.ok);
+      assert.equal(foundB.value, null);
+
+      // E o contador de A NÃO retrocedeu para 1 — `next_nsa` está fora do `set` do upsert.
+      const reloaded = await store.findById(first.value.id);
       assert.ok(reloaded.ok && reloaded.value !== null);
-      assert.equal(reloaded.value.nextNsa, 1);
-    });
+      assert.equal(reloaded.value.nextNsa, 4, 'o contador foi zerado pela recriação da conta');
 
-    it('faixa esgotada falha sem gravar número fora do campo', async () => {
-      const store = createDrizzleCedenteAccountStore(handle);
-      const account = buildAccount(Nsa.MAX);
-      assert.equal((await store.save(account)).ok, true);
-
-      const last = await store.allocateNsa(account.id);
-      assert.ok(last.ok);
-      assert.equal(last.value, Nsa.MAX);
-
-      const beyond = await store.allocateNsa(account.id);
-      assert.ok(!beyond.ok);
-      assert.equal(beyond.error, 'nsa-exhausted');
+      // O próximo NSA continua a série: os três já emitidos nunca se repetem.
+      const next = await store.allocateNsa(first.value.id);
+      assert.ok(next.ok);
+      assert.equal(next.value, 4);
     });
   });
 }
