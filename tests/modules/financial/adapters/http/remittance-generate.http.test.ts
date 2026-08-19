@@ -73,7 +73,6 @@ const payments = createInMemoryRemittancePaymentReader([
       agencyDigit: '0',
       accountNumber: '000000112234',
       accountDigit: '4',
-      accountAgencyDigit: '',
     },
     valueCents: 150_00,
     paymentDate: PAYMENT_DATE,

@@ -33,7 +33,6 @@ const payee = (n: number): Payee => ({
   agencyDigit: '0',
   accountNumber: `11223${n}`,
   accountDigit: '4',
-  accountAgencyDigit: ' ',
 });
 
 const validFile = (count = 2): string => {
