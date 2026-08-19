@@ -75,6 +75,10 @@ import { createBradescoMultipagTranslator } from '../cnab/bradesco-multipag-tran
 import { generateRemittance } from '../../application/use-cases/generate-remittance.ts';
 import { listRemittances } from '../../application/use-cases/list-remittances.ts';
 import { getRemittance } from '../../application/use-cases/get-remittance.ts';
+import { listVanReturnQuarantine } from '../../application/use-cases/list-van-return-quarantine.ts';
+import type { VanReturnQuarantineStore } from '../../application/ports/van-return-quarantine-store.ts';
+import { createInMemoryVanReturnQuarantine } from '../persistence/repos/van-return-quarantine-store.in-memory.ts';
+import { createDrizzleVanReturnQuarantineStore } from '../persistence/repos/van-return-quarantine-store.drizzle.ts';
 import * as RemittanceIdVo from '../../domain/remittance/remittance-id.ts';
 import { sha256Hex } from '#src/shared/utils/hash.ts';
 import type { RemittancePaymentReader } from '../../application/ports/remittance-payment-reader.ts';
@@ -262,6 +266,8 @@ export type FinancialCompositionConfig = Readonly<{
    *  testes HTTP (memory) para semear remessas determinísticas; ambos os drivers constroem o repo
    *  por padrão se ausente (memory: in-memory vazio; mysql: adapter Drizzle). */
   remittanceRepo?: RemittanceRepository;
+  /** #753 · Quarentena do retorno da VAN. Injetável para semear objetos presos no teste HTTP. */
+  vanReturnQuarantine?: VanReturnQuarantineStore;
 }>;
 
 export type FinancialHttpDeps = Readonly<{
@@ -389,6 +395,11 @@ export type FinancialHttpDeps = Readonly<{
    */
   listRemittances: ReturnType<typeof listRemittances>;
   getRemittance: ReturnType<typeof getRemittance>;
+  /**
+   * #753 · Quarentena do retorno — GET /financial/van-returns/quarantine. Read-only sobre o que o
+   * worker `van-return-scan` gravou; a borda nunca escreve na quarentena.
+   */
+  listVanReturnQuarantine: ReturnType<typeof listVanReturnQuarantine>;
   /** Composição síncrona do NOME de usuário (#207 — ADR-0032). null = não-resolvido (graceful). */
   resolveUserName: (id: string | null) => Promise<string | null>;
   /** Resolve categoryRef → nome (detalhe da conciliação). null = sem ref ou não-resolvido (graceful). */
@@ -437,6 +448,9 @@ type Pools = Readonly<{
   // #720: registro da remessa (o que segura o documento entre gravar e confirmar) e o bucket.
   remittanceRepo: RemittanceRepository;
   vanStorage: VanStoragePort;
+  // #753: a quarentena do prefixo de retorno — quem escreve é o worker `van-return-scan`; a borda
+  // só lê. Vive aqui, e não no grupo de leitura, porque é o mesmo assunto operacional da VAN.
+  vanReturnQuarantine: VanReturnQuarantineStore;
   // #239: read-model de payables (Top-5 "Últimos pagamentos"). memory: vazio no boot (sem worker de
   // projeção síncrono — injetável em testes via config.payableViewStore); mysql: drizzle.
   payableViewStore: PayableViewStore;
@@ -516,6 +530,8 @@ type MemoryPoolSeams = Readonly<{
   remittancePaymentReader?: RemittancePaymentReader;
   // #728: in-memory vazio por padrão; testes HTTP injetam um repo semeado (acompanhamento).
   remittanceRepo?: RemittanceRepository;
+  // #753: in-memory vazio por padrão; testes HTTP injetam objetos presos.
+  vanReturnQuarantine?: VanReturnQuarantineStore;
 }>;
 
 const buildMemoryPools = (
@@ -634,6 +650,7 @@ const buildMemoryPools = (
     remittancePaymentReader:
       seams.remittancePaymentReader ?? createInMemoryRemittancePaymentReader(),
     remittanceRepo: seams.remittanceRepo ?? createInMemoryRemittanceRepository(),
+    vanReturnQuarantine: seams.vanReturnQuarantine ?? createInMemoryVanReturnQuarantine(),
     // In-memory: gravar aqui NÃO enfileira pagamento nenhum. É o que permite exercitar a rota de
     // geração em teste sem a menor chance de tocar no bucket real.
     vanStorage: createInMemoryVanStorage(),
@@ -807,6 +824,7 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
     ),
     remittanceRepo: createDrizzleRemittanceRepository(handle),
     vanStorage: buildVanStorage(),
+    vanReturnQuarantine: createDrizzleVanReturnQuarantineStore(handle),
     // #239: injetado tem precedência (testes); mysql constrói o adapter Drizzle por padrão.
     payableViewStore: config.payableViewStore ?? createDrizzlePayableViewStore(handle, ClockReal()),
     // #242: reader da agregação REP-2 reusado para o Top-5 do Dashboard (aberto acima, boot-scoped).
@@ -1033,6 +1051,7 @@ const makeDeps = (pools: Pools, clock: Clock = ClockReal()): FinancialHttpDeps =
     }),
     listRemittances: listRemittances({ remittances: pools.remittanceRepo }),
     getRemittance: getRemittance({ remittances: pools.remittanceRepo }),
+    listVanReturnQuarantine: listVanReturnQuarantine({ quarantine: pools.vanReturnQuarantine }),
     resolvePayeeBank: (ref) => composePayeeBank(pools.contractorReadPort, ref),
     resolveUserName: (id) => resolveUserName(pools.authUserReadPort, id),
     resolveCategoryName: async (ref) => {
@@ -1072,6 +1091,9 @@ export const buildFinancialHttpDeps = async (
           ? { remittancePaymentReader: config.remittancePaymentReader }
           : {}),
         ...(config.remittanceRepo !== undefined ? { remittanceRepo: config.remittanceRepo } : {}),
+        ...(config.vanReturnQuarantine !== undefined
+          ? { vanReturnQuarantine: config.vanReturnQuarantine }
+          : {}),
       }),
       config.clock,
     );

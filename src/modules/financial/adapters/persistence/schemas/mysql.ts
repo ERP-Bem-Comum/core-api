@@ -48,7 +48,12 @@ import {
 } from 'drizzle-orm/mysql-core';
 import { sql, type SQL } from 'drizzle-orm';
 
-import { opaqueKey, uuidKey } from '#src/shared/persistence/identifier-columns.ts';
+import {
+  objectStorageKey,
+  opaqueKey,
+  sha256HexKey,
+  uuidKey,
+} from '#src/shared/persistence/identifier-columns.ts';
 
 // ─── fin_documents ────────────────────────────────────────────────────────────
 //
@@ -1215,3 +1220,50 @@ export const finRemittanceDocuments = mysqlTable(
 
 export type FinRemittanceDocumentRow = typeof finRemittanceDocuments.$inferSelect;
 export type NewFinRemittanceDocumentRow = typeof finRemittanceDocuments.$inferInsert;
+
+// ─── fin_van_return_quarantine ────────────────────────────────────────────────
+//
+// A quarentena do prefixo de retorno (#753). A caixa da VAN é do CONVÊNIO, não nossa: chegam ali
+// arquivos de operações que nunca passaram por este sistema. Esta tabela é o que responde "o que
+// está preso agora, desde quando e por quê" — a DoD da issue nomeia o anti-padrão que ela existe
+// para impedir: *"quarentena consultável, não apenas uma linha de log"*.
+//
+// A PK é a CHAVE DO OBJETO, e não um UUID nosso: a identidade aqui vem de fora, é atribuída por
+// quem depositou, e a linha existe para falar sobre aquele objeto específico. UUID próprio abriria
+// espaço para duas linhas sobre a mesma chave — que é exatamente o que a idempotência da varredura
+// (roda a cada ciclo, sobre um bucket onde o agente não apaga nada) precisa impedir.
+//
+// ⚠️ NÃO indexar nem casar por nome de arquivo: o nome é do banco e ganha sufixo desempatador em
+// colisão (van-agent, P3). Casar por nome perde objeto justamente quando dois disputam o mesmo.
+export const finVanReturnQuarantine = mysqlTable(
+  'fin_van_return_quarantine',
+  {
+    objectKey: objectStorageKey('object_key').primaryKey().notNull(),
+    reason: varchar('reason', { length: 32 }).notNull(),
+    // O que NÓS calculamos sobre os bytes do objeto.
+    observedSha256: sha256HexKey('observed_sha256').notNull(),
+    // O que o ENVELOPE declarava. Nulo fora de `hash-mismatch` — nos outros motivos não houve
+    // envelope válido para declarar coisa alguma, e string vazia faria a consulta mentir sobre ter
+    // havido uma declaração.
+    expectedSha256: sha256HexKey('expected_sha256'),
+    // Instantes como string ISO, seguindo a tabela irmã `fin_remittances` — o port da quarentena
+    // trafega string, e converter duas vezes só criaria lugar para divergir.
+    firstSeenAt: datetime('first_seen_at', { mode: 'string', fsp: 3 }).notNull(),
+    lastSeenAt: datetime('last_seen_at', { mode: 'string', fsp: 3 }).notNull(),
+    releasedAt: datetime('released_at', { mode: 'string', fsp: 3 }),
+  },
+  (t) => [
+    // Motivo novo exige decisão nossa, e o banco é o lugar que não deixa escapar. Mesma disciplina
+    // do parser do envelope, que recusa `situacao` desconhecida em vez de tratá-la como falha.
+    check(
+      'fin_van_return_quarantine_reason_chk',
+      sql`${t.reason} IN ('missing-provenance','hash-mismatch','origin-not-logged')`,
+    ),
+    // A consulta padrão é "o que está preso" — `released_at IS NULL`. Sem este índice ela varre a
+    // tabela inteira, e a tabela só cresce: o agente nunca apaga do prefixo de retorno.
+    index('fin_van_return_quarantine_released_idx').on(t.releasedAt),
+  ],
+);
+
+export type FinVanReturnQuarantineRow = typeof finVanReturnQuarantine.$inferSelect;
+export type NewFinVanReturnQuarantineRow = typeof finVanReturnQuarantine.$inferInsert;

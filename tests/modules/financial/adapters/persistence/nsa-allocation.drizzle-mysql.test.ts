@@ -13,7 +13,7 @@
 //
 // GATE: só roda com `MYSQL_INTEGRATION=1` (ver `package.json §test:integration:financial`).
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, beforeEach, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { eq } from 'drizzle-orm';
@@ -29,13 +29,19 @@ import { CONTRACT_AGENCY, cedenteAccountStoreContract } from './cedente-account-
 
 // Chave natural distinta por conta: o UNIQUE da migration 0009 colide se dois casos reusarem
 // 237/1234/567890/1. Agência própria deste arquivo — o contrato usa a sua (`CONTRACT_AGENCY`).
+/**
+ * Agência PRÓPRIA deste arquivo — o recorte que permite limpar na entrada sem tocar os irmãos, do
+ * mesmo jeito que o contrato usa a `CONTRACT_AGENCY` para o espaço de chave dele.
+ */
+const OWN_AGENCY = '4321';
+
 let naturalKeySeq = 0;
 const buildAccount = (nextNsa?: number) => {
   naturalKeySeq += 1;
   const r = create({
     id: CedenteAccountId.generate(),
     bankCode: '237',
-    agency: '4321',
+    agency: OWN_AGENCY,
     accountNumber: `9900${String(naturalKeySeq).padStart(2, '0')}`,
     accountDigit: '7',
     convenio: '9999999',
@@ -63,6 +69,14 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const r = await openMysqlFinancial({ connectionString, applyMigrations: true, poolLimit: 8 });
       if (!r.ok) throw new Error(`[financial:nsa-allocation] Falha ao conectar: ${r.error}`);
       handle = r.value;
+    });
+
+    // O contrato limpa o espaço de chave DELE (`CONTRACT_AGENCY`); os casos próprios deste arquivo
+    // usam `OWN_AGENCY` e precisam do mesmo tratamento. `naturalKeySeq` reinicia a cada processo, e
+    // sem esta limpeza a 2ª execução colide em `fin_cedente_accounts_natural_key_uq` — em silêncio,
+    // porque o `save` é upsert (vira UPDATE da linha antiga e o id novo nunca entra).
+    beforeEach(async () => {
+      await handle.db.delete(finCedenteAccounts).where(eq(finCedenteAccounts.agency, OWN_AGENCY));
     });
 
     after(async () => {

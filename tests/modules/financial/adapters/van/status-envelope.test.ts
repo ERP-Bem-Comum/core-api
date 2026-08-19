@@ -11,7 +11,7 @@ import {
 
 const envelope = (over: Record<string, unknown> = {}): string =>
   JSON.stringify({
-    arquivo: 'PAG_491939.10082026142600_0007.REM',
+    arquivo: 'PAG_000000.10082026142600_0007.REM',
     executadoEm: '2026-08-10T20:26:34.1234567Z',
     situacao: 'transmitido',
     detalhe: 'Arquivo transmitido e confirmado em BACKUP',
@@ -23,9 +23,9 @@ const envelope = (over: Record<string, unknown> = {}): string =>
 
 describe('status/ — a chave diz de que tipo é o objeto', () => {
   it('reconhece os três formatos combinados', () => {
-    const normal = classifyKey('status/PAG_491939.10082026142600_0007.REM.json');
+    const normal = classifyKey('status/PAG_000000.10082026142600_0007.REM.json');
     const dup = classifyKey(
-      'status/PAG_491939.10082026142600_0007.REM.duplicado-20260810T2026.json',
+      'status/PAG_000000.10082026142600_0007.REM.duplicado-20260810T2026.json',
     );
     const rec = classifyKey('status/recepcao-20260810T202634.json');
 
@@ -54,7 +54,7 @@ describe('status/ — envelope JSON', () => {
     assert.ok(isOk(r));
 
     assert.equal(r.value.kind, 'remittance');
-    assert.equal(r.value.fileName, 'PAG_491939.10082026142600_0007.REM');
+    assert.equal(r.value.fileName, 'PAG_000000.10082026142600_0007.REM');
     assert.equal(r.value.situation, 'transmitido');
     assert.equal(r.value.exitCode, 0);
     assert.equal(r.value.logLines.length, 1);

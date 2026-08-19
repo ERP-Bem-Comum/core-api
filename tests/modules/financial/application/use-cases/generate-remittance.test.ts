@@ -56,7 +56,7 @@ const setup = async (over: Partial<{ docs: readonly string[] }> = {}) => {
     agency: '1234',
     accountNumber: '567890',
     accountDigit: '1',
-    convenio: '491939',
+    convenio: '000000',
     document: '12345678000199',
     bankName: 'ASSOCIACAO BEM COMUM',
   });
@@ -237,7 +237,7 @@ describe('generateRemittance — a ordem importa mais que o resultado', () => {
     // Nada foi enfileirado: o bucket segue sem objeto algum em `saida/`.
     const returns = await s.storage.listReturns();
     assert.ok(isOk(returns));
-    const anySaida = await s.storage.getText('saida/PAG_491939.11082026142605_000001.REM');
+    const anySaida = await s.storage.getText('saida/PAG_000000.11082026142605_000001.REM');
     assert.ok(isErr(anySaida), 'nenhum arquivo deveria ter sido depositado');
   });
 

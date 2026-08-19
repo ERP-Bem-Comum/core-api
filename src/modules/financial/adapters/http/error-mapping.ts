@@ -125,6 +125,10 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   // Acompanhamento de remessa (#728): repositório de leitura indisponível → 503 (tentar de novo é a
   // ação certa; não é culpa do operador).
   'remittance-repository-unavailable',
+  // Quarentena do retorno (#753): a tabela não respondeu. Sem esta linha o erro cairia no default
+  // 422 — "regra de negócio inválida" —, mandando o operador procurar defeito num dado que está
+  // certo, enquanto o problema é o banco.
+  'van-quarantine-unavailable',
 ]);
 
 // NOTA (019): `cedente-account-not-found` NÃO está em NOT_FOUND_CODES de propósito → default 422.

@@ -7,11 +7,15 @@
 //
 // GATE: só roda com `MYSQL_INTEGRATION=1` (ver `package.json §test:integration:financial`).
 
-import { describe, it, before, after } from 'node:test';
+import { describe, it, before, beforeEach, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { sql } from 'drizzle-orm';
 
+import {
+  finBankStatements,
+  finStatementTransactions,
+} from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleBankStatementRepository } from '#src/modules/financial/adapters/persistence/repos/bank-statement-repository.drizzle.ts';
@@ -74,6 +78,19 @@ if (!process.env['MYSQL_INTEGRATION']) {
         throw new Error(`[financial:bank-statement-repo] Falha ao conectar ao MySQL: ${r.error}`);
       }
       handle = r.value;
+    });
+
+    // Limpeza na ENTRADA e por TABELA (`.claude/rules/testing.md` §"Contrato de isolamento").
+    //
+    // As chaves deste arquivo são LITERAIS — conta e FITID fixos —, então a 2ª execução colide em
+    // `(debit_account_ref, fitid)`. E o caso que verifica a própria UNIQUE fica ambíguo sem isto:
+    // ele passaria por resíduo em vez de pelo que acabou de inserir, provando menos do que diz.
+    //
+    // Filha antes da mãe: `fin_statement_transactions` referencia `fin_bank_statements`, e a ordem
+    // inversa esbarraria na FK. Nenhuma das duas tem seed de migration.
+    beforeEach(async () => {
+      await handle.db.delete(finStatementTransactions);
+      await handle.db.delete(finBankStatements);
     });
 
     after(async () => {

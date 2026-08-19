@@ -55,6 +55,7 @@ Os mecânicos (`npm`, sintaxe TS, casing, `class` no domínio, JSON/ENUM no MySQ
 6. **Dispensar vermelho como "não é meu erro"** — ver regressão zero.
 7. **Consertar problema fora do escopo atual** — registrar via skill [`issue-report`](./.claude/skills/issue-report/SKILL.md) e seguir a tarefa.
 8. **Duplicar regra que já vive numa rule ou SKILL.md** — referenciar, não copiar.
+9. **Pôr dado real de cadastro em fixture** — convênio, conta, agência, documento de parceiro. **Os três repositórios são públicos**, e fixture é o caminho por onde esse dado entra: um número de convênio copiado de arquivo recebido do banco viveu aqui em 16 ocorrências, num comentário e em cinco arquivos de teste. O convênio já é barrado por `tests/cleanup/bank-fixture-masking.test.ts` (reservados `000000` e `999999`); **os demais dependem de julgamento**. Nunca escrever o valor na mensagem de commit, no assert ou na issue — o CI é público, e explicar a correção citando o dado a repete.
 
 ## Gotchas que não se descobre lendo o código
 

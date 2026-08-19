@@ -26,4 +26,20 @@ export type VanStoragePort = Readonly<{
   listReturns: () => Promise<Result<readonly VanObjectKey[], VanStorageError>>;
   listStatus: () => Promise<Result<readonly VanObjectKey[], VanStorageError>>;
   getText: (key: VanObjectKey) => Promise<Result<string, VanStorageError>>;
+
+  /**
+   * O conteúdo CRU, sem decodificar.
+   *
+   * ⚠️ Não é uma variante de conveniência do `getText`: as duas respondem perguntas diferentes, e
+   * usar a errada corrompe a resposta em silêncio.
+   *
+   *   `getText`  → envelope de status. JSON, UTF-8 por contrato do agente. Texto é o que ele é.
+   *   `getBytes` → arquivo do banco. Posicional, encoding do BANCO, e o SHA-256 do envelope de
+   *                recepção é calculado sobre estes bytes.
+   *
+   * Decodificar o retorno como UTF-8 para hashear reprovaria o CA4 da #753 em todo arquivo com
+   * acento: o byte de um `Ç` em latin1 não é sequência UTF-8 válida, vira U+FFFD na leitura e sai
+   * como outros bytes na volta. O arquivo íntegro seria acusado de adulterado.
+   */
+  getBytes: (key: VanObjectKey) => Promise<Result<Uint8Array, VanStorageError>>;
 }>;

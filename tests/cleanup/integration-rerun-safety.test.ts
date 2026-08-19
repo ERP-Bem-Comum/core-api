@@ -67,12 +67,19 @@ const ENTRY_HOOK = /\bbefore(Each)?\(/;
  * silêncio: arquivo novo com o mesmo defeito reprova, e quem o adicionar aqui precisa justificar.
  */
 const KNOWN_DEBT: readonly string[] = [
-  // #747 — chave natural de contador + fin_cedente_accounts_natural_key_uq, sem limpeza na entrada.
-  'tests/modules/financial/adapters/persistence/cedente-account-store.drizzle-mysql.test.ts',
-  // #741 saiu daqui na #752: o arquivo passou a limpar na ENTRADA (`beforeEach` por tabela). A
-  // limpeza entrou porque `your_number` ganhou UNIQUE e a 2ª execução colidiria — o defeito que a
-  // #741 descrevia (`file_name` determinístico + `fin_remittances_file_name_uq`) era o mesmo, e foi
-  // corrigido pela mesma linha.
+  // VAZIA desde 19/08/2026 — as duas dívidas com que este gate nasceu foram PAGAS, por caminhos
+  // independentes que chegaram à mesma correção:
+  //
+  //   #741 (`remittance-repository`) caiu na **#752**: `your_number` ganhou UNIQUE, a 2ª execução
+  //     passaria a colidir, e a limpeza na entrada entrou por essa razão. O defeito que a #741
+  //     descrevia (`file_name` determinístico + `fin_remittances_file_name_uq`) era o mesmo, e foi
+  //     corrigido pela mesma linha.
+  //   #747 (`cedente-account-store`) caiu no rerun medido contra MySQL 8.4.10 real: a suíte
+  //     `financial` falhava 12 casos ao repetir sem recriar o banco. Hoje passa 169/169 nas três
+  //     medições — banco limpo, repetição sem recriar, e ordem invertida sobre o banco sujo.
+  //
+  // Lista vazia NÃO é gate frouxo: os quatro casos continuam sendo varridos, e arquivo novo com
+  // contador de processo sem limpeza reprova sem ter onde se esconder.
 ];
 
 /** Linhas de código do arquivo — comentário fora. */

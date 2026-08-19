@@ -27,7 +27,7 @@ const base = () => ({
   id: RemittanceId.generate(),
   cedenteAccountId: CedenteAccountId.generate(),
   nsa: 7,
-  fileName: 'PAG_491939.11082026140000_000007.REM',
+  fileName: 'PAG_000000.11082026140000_000007.REM',
   contentHash: 'a'.repeat(64),
   documents: docs(['doc-1', '000007000001'], ['doc-2', '000007000002']),
   generatedAt: AT,
