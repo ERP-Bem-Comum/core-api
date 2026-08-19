@@ -55,10 +55,6 @@ const CPF_LENGTH = 11;
 const cleanDocument = (raw: string): string => raw.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
 const documentTypeOf = (raw: string): '1' | '2' => (raw.length === CPF_LENGTH ? '1' : '2');
 
-// O DV de agência/conta (G012) tem descrição VAZIA no layout — nenhuma regra de preenchimento. Sendo
-// campo `Alfa`, sai em branco. Fixado aqui para não virar palpite de quem escreve o próximo emissor.
-const NO_AGENCY_ACCOUNT_DIGIT = '';
-
 type DocumentRow = Readonly<{
   documentId: string;
   status: string | null;
@@ -136,7 +132,6 @@ const toPaymentData = (
           agencyDigit: parts.value.agencyDigit,
           accountNumber: parts.value.accountNumber,
           accountDigit: parts.value.accountDigit,
-          accountAgencyDigit: NO_AGENCY_ACCOUNT_DIGIT,
         },
         valueCents,
         paymentDate,

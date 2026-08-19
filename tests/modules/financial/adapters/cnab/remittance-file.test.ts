@@ -35,7 +35,6 @@ const payee = (n: number, bankCode = '341'): Payee => ({
   agencyDigit: '0',
   accountNumber: `11223${n}`,
   accountDigit: '4',
-  accountAgencyDigit: ' ',
 });
 
 const PAYMENT_DATE = new Date(Date.UTC(2026, 7, 12));

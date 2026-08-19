@@ -19,7 +19,6 @@ const PAYEE: Payee = {
   agencyDigit: '0',
   accountNumber: '112233',
   accountDigit: '4',
-  accountAgencyDigit: ' ',
 };
 
 const PAY_DATE = new Date(Date.UTC(2026, 7, 12));
@@ -67,6 +66,17 @@ describe('Multipag — Segmento A (pagamento)', () => {
     assert.equal(at(record, 29, 29), '0');
     assert.equal(at(record, 30, 41), '000000112233');
     assert.equal(at(record, 42, 42), '4');
+  });
+
+  // G012, coluna 043. O validador oficial trata a posição PREENCHIDA como erro (regra extraída em
+  // ERP-Bem-Comum/cnab-validator#2), então o branco aqui é a forma correta, não a insegura conhecida
+  // — que era como o PR #710 a deixara, por falta de fonte primária na época (#754).
+  //
+  // ⚠️ Este teste sozinho não é o que impede o preenchimento: `Payee` não tem mais o campo, então
+  // preencher a posição exige editar `segmentA`. A asserção existe para que essa edição apareça como
+  // vermelho nomeado, e não como um arquivo que o banco recusa depois de transmitido.
+  it('deixa o DV agência/conta (043) em branco — preenchê-lo é erro para o banco', () => {
+    assert.equal(at(record, 43, 43), ' ');
   });
 
   it('leva nome do favorecido, data e valor do pagamento', () => {

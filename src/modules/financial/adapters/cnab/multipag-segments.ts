@@ -35,7 +35,7 @@ export type Payee = Readonly<{
   agencyDigit: string;
   accountNumber: string;
   accountDigit: string;
-  accountAgencyDigit: string;
+  // `accountAgencyDigit` NÃO existe aqui de propósito — ver a coluna 043 em `segmentA` (#754).
 }>;
 
 export type PayeeAddress = Readonly<{
@@ -103,7 +103,14 @@ export const segmentA = (input: SegmentAInput): Result<string, CnabSegmentError>
     text(p.agencyDigit, 1), // 029     DV agência
     digits(p.accountNumber, 12), // 030-041 conta do favorecido
     text(p.accountDigit, 1), // 042     DV conta
-    text(p.accountAgencyDigit, 1), // 043     DV ag/conta
+    // 043 — G012, DV agência/conta do FAVORECIDO. Em branco por REGRA DO BANCO: o validador oficial
+    // trata a posição preenchida como erro (regra extraída em ERP-Bem-Comum/cnab-validator#2). Por
+    // isso `blanks`, e não um campo do `Payee`: o que o banco recusa não deve ser preenchível, e a
+    // ausência do campo faz o compilador cobrar quem tentar (#754).
+    //
+    // ⚠️ NÃO confundir com a coluna 072 de `multipag-records.ts`, que tem nome homônimo e é do
+    // CEDENTE, noutro contexto do layout. Os dois campos não compartilham regra.
+    blanks(1), // 043     DV ag/conta — sempre em branco
     text(p.name, 30), // 044-073 nome do favorecido
     text(input.yourNumber ?? '', 20), // 074-093 seu número
     dateDDMMYYYY(input.paymentDate), // 094-101 data do pagamento

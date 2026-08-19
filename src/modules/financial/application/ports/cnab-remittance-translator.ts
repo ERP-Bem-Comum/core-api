@@ -4,6 +4,9 @@ import type { Result } from '../../../../shared/primitives/result.ts';
 // "posição 120-134". Nenhum tipo daqui menciona CNAB, segmento ou coluna — é o que permite trocar
 // de banco, ou de layout, sem tocar no use case.
 
+// O DV agência/conta do favorecido não entra: o banco exige a posição correspondente em branco, e um
+// campo que não pode ser preenchido não deve existir na borda (#754). O homônimo em
+// `RemittanceCedenteData` é outro campo, noutro ponto do layout, e permanece.
 export type RemittancePayeeData = Readonly<{
   name: string;
   documentType: '1' | '2';
@@ -13,7 +16,6 @@ export type RemittancePayeeData = Readonly<{
   agencyDigit: string;
   accountNumber: string;
   accountDigit: string;
-  accountAgencyDigit: string;
 }>;
 
 export type RemittanceCedenteData = Readonly<{
