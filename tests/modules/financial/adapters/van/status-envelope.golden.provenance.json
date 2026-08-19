@@ -1,0 +1,15 @@
+{
+  "descricao": "Proveniência da cópia do golden compartilhado do status/. O arquivo ao lado é cópia LITERAL da origem — nunca editado aqui. Este arquivo é o que torna a cópia verificável.",
+  "origem": "ERP-Bem-Comum/van-agent",
+  "caminho": "testdata/status-envelope.golden.json",
+  "ref": "7e04b3bbe72f2d7091589605028c01f93d18a477",
+  "sha256": "2c248de57f7aee3c8285ca00b1b63f62b199e7f09b98c15c844218783d100d34",
+  "copiadoEm": "2026-08-19",
+  "gerador": "go test ./internal/envelope -update",
+  "notas": [
+    "A unidade de imutabilidade é o COMMIT, não o número da issue — por isso `ref` é o SHA da main de onde a cópia veio, não uma tag ou branch.",
+    "Este gate pega a divergência LOCAL: alguém editar o golden aqui para calar um vermelho, que é exatamente o que o cabeçalho do teste proíbe.",
+    "Ele NÃO pega a divergência REMOTA: o van-agent regenerar o golden e esta cópia envelhecer. Isso exige rede, e o gate local é offline por desenho (mesma razão pela qual `pnpm audit` vive no CI). Enquanto não houver job agendado comparando `ref` com a main da origem, essa metade vale por disciplina — e está declarada aqui em vez de fingida.",
+    "O CI do van-agent (PR #9) regenera o golden e falha se o versionado lá divergir. Ele garante a origem; não sabe nada sobre esta cópia."
+  ]
+}
