@@ -330,6 +330,13 @@
       "when": 1786647052305,
       "tag": "0046_familiar_mimic",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "5",
+      "when": 1787135068042,
+      "tag": "0047_powerful_veda",
+      "breakpoints": true
     }
   ]
 }

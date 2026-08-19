@@ -69,8 +69,10 @@ const ENTRY_HOOK = /\bbefore(Each)?\(/;
 const KNOWN_DEBT: readonly string[] = [
   // #747 — chave natural de contador + fin_cedente_accounts_natural_key_uq, sem limpeza na entrada.
   'tests/modules/financial/adapters/persistence/cedente-account-store.drizzle-mysql.test.ts',
-  // #741 — file_name determinístico + fin_remittances_file_name_uq, sem limpeza na entrada.
-  'tests/modules/financial/adapters/persistence/remittance-repository.drizzle-mysql.test.ts',
+  // #741 saiu daqui na #752: o arquivo passou a limpar na ENTRADA (`beforeEach` por tabela). A
+  // limpeza entrou porque `your_number` ganhou UNIQUE e a 2ª execução colidiria — o defeito que a
+  // #741 descrevia (`file_name` determinístico + `fin_remittances_file_name_uq`) era o mesmo, e foi
+  // corrigido pela mesma linha.
 ];
 
 /** Linhas de código do arquivo — comentário fora. */

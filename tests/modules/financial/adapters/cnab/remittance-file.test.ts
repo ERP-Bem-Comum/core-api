@@ -376,3 +376,123 @@ describe('Remessa Multipag — recusas', () => {
     assert.equal(r.error, 'numeric-field-overflow');
   });
 });
+
+/**
+ * A referência de casamento do retorno — G064, colunas 074-093 (issue #752).
+ *
+ * O que esta suíte protege não é a aritmética da referência: é a CORRESPONDÊNCIA entre a referência
+ * devolvida e o pagamento que a recebeu. O montador devolve `yourNumbers` na ordem de ENTRADA, e o
+ * use case casa por índice com os `documentId` que possui — mas `groupIntoBatches` REORDENA os
+ * pagamentos por forma de lançamento e banco do favorecido.
+ *
+ * Se esse contrato quebrar, cada referência é gravada contra o documento errado. O arquivo continua
+ * válido, o banco continua aceitando, e o erro só aparece meses depois — no primeiro retorno real,
+ * quando o pagamento de um fornecedor for baixado no título de outro. É a pior classe de falha do
+ * módulo, e é silenciosa por construção: nenhum gate de layout a pega.
+ */
+describe('Remessa Multipag — a referência do retorno (G064, #752)', () => {
+  const yourNumberOf = (line: string): string => at(line, 74, 93);
+
+  it('preenche G064 em todo Segmento A — nunca em branco', () => {
+    const file = build([payment(1, 1000), payment(2, 2000)]);
+    const segmentsA = linesOf(file.content).filter(isSegmentA);
+
+    assert.equal(segmentsA.length, 2);
+    for (const line of segmentsA) {
+      assert.notEqual(yourNumberOf(line).trim(), '', 'G064 em branco é retorno sem chave');
+    }
+  });
+
+  it('compõe convênio + NSA + posição, ocupando as 20 posições do campo', () => {
+    // CEDENTE.convenio = '1234567' (7) → 8 posições; NSA 7 → 6; posição 1 → 6.
+    const file = build([payment(1, 1000)]);
+    const [firstA] = linesOf(file.content).filter(isSegmentA);
+
+    assert.equal(yourNumberOf(firstA ?? ''), '01234567000007000001');
+    assert.equal(yourNumberOf(firstA ?? '').length, 20);
+  });
+
+  it('devolve uma referência por pagamento, na ordem de ENTRADA', () => {
+    const file = build([payment(1, 1000), payment(2, 2000), payment(3, 3000)]);
+
+    assert.deepEqual(file.yourNumbers, [
+      '01234567000007000001',
+      '01234567000007000002',
+      '01234567000007000003',
+    ]);
+  });
+
+  // ⚠️ O teste central. Três transferências que o agrupamento REORDENA: as entradas 1 e 3 vão para
+  // um favorecido do banco 341 e a entrada 2 para o 033, e o lote é por banco do favorecido
+  // (#751/cnab-validator#2). A emissão passa a ver 1, 3, 2 — e mesmo assim `yourNumbers` tem de sair
+  // na ordem de ENTRADA, senão o casamento associa a referência ao documento errado.
+  //
+  // São três TRANSFERÊNCIAS de propósito, e não boletos: o boleto emite Segmento J, e a leitura de
+  // G064 aqui é por Segmento A. Misturar as rotas esconderia metade dos registros do leitor — foi o
+  // que aconteceu na primeira escrita deste caso, que passou a comparar uma lista de um item só.
+  it('mantém a ordem de ENTRADA mesmo quando o agrupamento reordena os pagamentos', () => {
+    const file = build([payment(1, 1000, '341'), payment(2, 2000, '033'), payment(3, 3000, '341')]);
+
+    // Primeiro a prova de que houve reordenação de verdade — sem ela o caso não testa nada.
+    assert.equal(file.batchCount, 2, 'o cenário precisa de dois lotes para reordenar');
+
+    const emittedOrder = batchDetailsOf(file.content).flat().filter(isSegmentA).map(yourNumberOf);
+
+    // Ordem de EMISSÃO: as entradas 1 e 3 (banco 341) saem juntas, a entrada 2 (banco 033) depois —
+    // logo a emissão vê 1, 3, 2, e NÃO 1, 2, 3.
+    assert.deepEqual(emittedOrder, [
+      '01234567000007000001',
+      '01234567000007000003',
+      '01234567000007000002',
+    ]);
+    assert.notDeepEqual(emittedOrder, file.yourNumbers, 'o cenário precisa mesmo reordenar');
+
+    // Ordem de ENTRADA: é o que o chamador recebe, e é o que casa com os documentIds dele.
+    assert.deepEqual(file.yourNumbers, [
+      '01234567000007000001',
+      '01234567000007000002',
+      '01234567000007000003',
+    ]);
+
+    // E as duas são o mesmo conjunto: nenhuma referência foi inventada nem perdida na reordenação.
+    assert.deepEqual([...emittedOrder].sort(), [...file.yourNumbers].sort());
+  });
+
+  it('não repete referência entre pagamentos do mesmo arquivo', () => {
+    const file = build([payment(1, 100), billet(2, 200), payment(3, 300), billet(4, 400)]);
+    assert.equal(new Set(file.yourNumbers).size, file.yourNumbers.length);
+  });
+
+  // CA4: o NSA distingue arquivos da mesma conta; o convênio distingue as contas entre si. Sem o
+  // convênio, duas contas-cedente com o mesmo NSA produziriam a MESMA referência — e o banco devolve
+  // só este campo, então o casamento ficaria ambíguo.
+  it('não repete referência entre remessas — NSA e convênio entram na composição', () => {
+    const a = build([payment(1, 100)]);
+    const b = buildRemittanceFile({ ...base, nsa: 8, payments: [payment(1, 100)] });
+    const outraConta = buildRemittanceFile({
+      ...base,
+      cedente: { ...CEDENTE, convenio: '7654321' },
+      payments: [payment(1, 100)],
+    });
+
+    assert.ok(isOk(b) && isOk(outraConta));
+    assert.notEqual(a.yourNumbers[0], b.value.yourNumbers[0], 'NSA distinto → referência distinta');
+    assert.notEqual(
+      a.yourNumbers[0],
+      outraConta.value.yourNumbers[0],
+      'conta distinta com o MESMO NSA → referência distinta',
+    );
+  });
+
+  // CA5: truncar colapsaria referências distintas na mesma string — colisão silenciosa. A recusa é
+  // nomeada para que o defeito apareça na emissão, não no retorno.
+  it('recusa o arquivo quando o convênio não cabe na referência, em vez de truncar', () => {
+    const r = buildRemittanceFile({
+      ...base,
+      cedente: { ...CEDENTE, convenio: '123456789' }, // 9 > 8
+      payments: [payment(1, 100)],
+    });
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'remittance-reference-overflow');
+  });
+});

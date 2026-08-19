@@ -50,8 +50,8 @@ export const createInMemoryRemittanceRepository = (): RemittanceRepository &
 
       for (const remittance of remittances.values()) {
         if (!holdsDocuments(remittance)) continue;
-        for (const id of remittance.documentIds) {
-          if (wanted.has(id)) held.add(id);
+        for (const { documentId } of remittance.documents) {
+          if (wanted.has(documentId)) held.add(documentId);
         }
       }
 

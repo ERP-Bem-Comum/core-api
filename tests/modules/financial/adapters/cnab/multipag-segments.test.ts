@@ -35,6 +35,10 @@ const line = (r: ReturnType<typeof segmentA>): string => {
 // da fixture é de outro banco (341 ≠ 237); quem deriva o par forma↔câmara é `batch-profile.ts`.
 const TED_CLEARING = '018';
 
+// G064 — obrigatório desde a #752: é a chave de casamento do retorno, e o `?? ''` que a tornava
+// dispensável era o defeito. O formato é o que `referenceFor` produz: NSA (6) + posição (6).
+const YOUR_NUMBER = '000042000001';
+
 const baseA = {
   bankCode: '237',
   batchNumber: 1,
@@ -43,6 +47,7 @@ const baseA = {
   paymentDate: PAY_DATE,
   valueCents: 123456,
   clearingHouse: TED_CLEARING,
+  yourNumber: YOUR_NUMBER,
 };
 
 describe('Multipag — Segmento A (pagamento)', () => {
@@ -202,6 +207,7 @@ describe('Multipag — o par A+B de um pagamento', () => {
       paymentDate: PAY_DATE,
       valueCents: 5000,
       clearingHouse: TED_CLEARING,
+      yourNumber: YOUR_NUMBER,
     });
     assert.ok(isOk(r));
     const [a, b] = r.value;
@@ -225,6 +231,7 @@ describe('Multipag — o par A+B de um pagamento', () => {
       paymentDate: PAY_DATE,
       valueCents: 1,
       clearingHouse: TED_CLEARING,
+      yourNumber: YOUR_NUMBER,
     });
     assert.ok(isOk(r));
     assert.equal(r.value.length, 2);
@@ -239,6 +246,7 @@ describe('Multipag — o par A+B de um pagamento', () => {
       paymentDate: PAY_DATE,
       valueCents: 1,
       clearingHouse: TED_CLEARING,
+      yourNumber: YOUR_NUMBER,
     });
     assert.ok(isErr(r));
   });

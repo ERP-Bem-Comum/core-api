@@ -8,6 +8,7 @@ import process from 'node:process';
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type {
   Remittance,
+  RemittanceDocument,
   RemittanceStatus,
 } from '#src/modules/financial/domain/remittance/types.ts';
 import type { RemittanceEvent } from '#src/modules/financial/domain/remittance/events.ts';
@@ -78,7 +79,7 @@ const HOLDING: readonly RemittanceStatus[] = ['Queued', 'Transmitted', 'Failed']
 
 const toDomain = (
   row: Readonly<FinRemittanceRow>,
-  documentIds: readonly string[],
+  documents: readonly RemittanceDocument[],
 ): Result<Remittance, 'remittance-row-invalid'> => {
   const id = RemittanceId.rehydrate(row.id);
   if (!id.ok) return err('remittance-row-invalid');
@@ -92,7 +93,7 @@ const toDomain = (
     nsa: row.nsa,
     fileName: row.fileName,
     contentHash: row.contentHash,
-    documentIds,
+    documents,
     status: row.status as RemittanceStatus,
     generatedAt: toIsoDateTime(row.generatedAt),
     ...(row.settledAt !== null ? { settledAt: toIsoDateTime(row.settledAt) } : {}),
@@ -105,12 +106,20 @@ export const createDrizzleRemittanceRepository = (
 ): RemittanceRepository => {
   const { db } = handle;
 
-  const loadDocumentIds = async (remittanceId: string): Promise<readonly string[]> => {
+  // A ordenação por `documentId` é deliberada e independe da ordem de emissão: o agregado não
+  // promete ordem, e uma leitura estável é o que torna a comparação em teste previsível. A ordem da
+  // emissão está preservada onde ela importa — dentro da própria referência, que carrega a posição.
+  const loadDocuments = async (remittanceId: string): Promise<readonly RemittanceDocument[]> => {
     const rows = await db
-      .select({ documentId: finRemittanceDocuments.documentId })
+      .select({
+        documentId: finRemittanceDocuments.documentId,
+        yourNumber: finRemittanceDocuments.yourNumber,
+      })
       .from(finRemittanceDocuments)
       .where(eq(finRemittanceDocuments.remittanceId, remittanceId));
-    return rows.map((r) => r.documentId).sort();
+    return rows
+      .map((r) => ({ documentId: r.documentId, yourNumber: r.yourNumber }))
+      .sort((a, b) => a.documentId.localeCompare(b.documentId));
   };
 
   return {
@@ -154,10 +163,14 @@ export const createDrizzleRemittanceRepository = (
 
             // Vínculo é imutável: os documentos de uma remessa não mudam depois de criada, então
             // só são gravados na criação.
-            for (const documentId of remittance.documentIds) {
+            //
+            // `yourNumber` (#752) é gravado JUNTO, e não num passo à parte, porque a referência não
+            // faz sentido sem o vínculo: um par gravado pela metade seria um documento preso cuja
+            // chave de casamento ninguém sabe qual é. A transação já cobre isso.
+            for (const { documentId, yourNumber } of remittance.documents) {
               await tx
                 .insert(finRemittanceDocuments)
-                .values({ remittanceId: remittance.id, documentId });
+                .values({ remittanceId: remittance.id, documentId, yourNumber });
             }
           } else {
             // Atualização de desfecho, por ID. Só o que a máquina de estados muda — nunca NSA, nome
@@ -198,7 +211,7 @@ export const createDrizzleRemittanceRepository = (
         const row = rows[0];
         if (row === undefined) return ok(null);
 
-        const mapped = toDomain(row, await loadDocumentIds(row.id));
+        const mapped = toDomain(row, await loadDocuments(row.id));
         if (!mapped.ok) {
           logRepo('findById:map', mapped.error);
           return err('remittance-repository-unavailable');
@@ -222,7 +235,7 @@ export const createDrizzleRemittanceRepository = (
         const row = rows[0];
         if (row === undefined) return ok(null);
 
-        const mapped = toDomain(row, await loadDocumentIds(row.id));
+        const mapped = toDomain(row, await loadDocuments(row.id));
         if (!mapped.ok) {
           logRepo('findByFileName:map', mapped.error);
           return err('remittance-repository-unavailable');
@@ -271,7 +284,7 @@ export const createDrizzleRemittanceRepository = (
         const out: Remittance[] = [];
 
         for (const row of rows) {
-          const mapped = toDomain(row, await loadDocumentIds(row.id));
+          const mapped = toDomain(row, await loadDocuments(row.id));
           if (!mapped.ok) {
             logRepo('listByStatus:map', mapped.error);
             return err('remittance-repository-unavailable');
@@ -314,24 +327,28 @@ export const createDrizzleRemittanceRepository = (
                 .select({
                   remittanceId: finRemittanceDocuments.remittanceId,
                   documentId: finRemittanceDocuments.documentId,
+                  yourNumber: finRemittanceDocuments.yourNumber,
                 })
                 .from(finRemittanceDocuments)
                 .where(inArray(finRemittanceDocuments.remittanceId, ids));
 
-        const documentIdsByRemittance = new Map<string, string[]>();
+        const documentsByRemittance = new Map<string, RemittanceDocument[]>();
         for (const link of linkRows) {
-          const bucket = documentIdsByRemittance.get(link.remittanceId);
+          const document = { documentId: link.documentId, yourNumber: link.yourNumber };
+          const bucket = documentsByRemittance.get(link.remittanceId);
           if (bucket === undefined) {
-            documentIdsByRemittance.set(link.remittanceId, [link.documentId]);
+            documentsByRemittance.set(link.remittanceId, [document]);
           } else {
-            bucket.push(link.documentId);
+            bucket.push(document);
           }
         }
 
         const items: Remittance[] = [];
         for (const row of rows) {
-          const documentIds = (documentIdsByRemittance.get(row.id) ?? []).sort();
-          const mapped = toDomain(row, documentIds);
+          const documents = (documentsByRemittance.get(row.id) ?? []).sort((a, b) =>
+            a.documentId.localeCompare(b.documentId),
+          );
+          const mapped = toDomain(row, documents);
           if (!mapped.ok) {
             logRepo('listPaged:map', mapped.error);
             return err('remittance-repository-unavailable');

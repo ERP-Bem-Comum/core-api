@@ -13,6 +13,7 @@ import type { ParseDocumentOutput } from '../../application/use-cases/parse-docu
 import type { RemittancePreview } from '../../application/use-cases/preview-remittance.ts';
 import type { GenerateRemittanceOutput } from '../../application/use-cases/generate-remittance.ts';
 import type { Remittance } from '../../domain/remittance/types.ts';
+import { documentIdsOf } from '../../domain/remittance/remittance.ts';
 import type {
   ParseDocumentResponseDto,
   RemittancePreviewResponseDto,
@@ -609,13 +610,17 @@ export const remittanceToListItemDto = (
   generatedAt: r.generatedAt,
   settledAt: r.settledAt ?? null,
   detail: r.detail ?? null,
-  documentCount: r.documentIds.length,
+  documentCount: r.documents.length,
 });
 
 /**
  * Serializa uma remessa para o detalhe (#728): o item + a lista de `documentIds` presos.
+ *
+ * A referência de G064 (#752) NÃO é exposta aqui. O contrato do detalhe responde "quais documentos
+ * esta remessa prende", e a referência pertence ao casamento do retorno — expô-la agora publicaria
+ * um campo antes de existir tela que o use, e contrato publicado não se recolhe.
  */
 export const remittanceToDetailDto = (r: Remittance): RemittanceDetailResponseDto => ({
   ...remittanceToListItemDto(r),
-  documentIds: [...r.documentIds],
+  documentIds: [...documentIdsOf(r)],
 });

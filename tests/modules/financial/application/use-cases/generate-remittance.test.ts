@@ -132,6 +132,63 @@ describe('generateRemittance — caminho feliz', () => {
   });
 });
 
+/**
+ * A costura da referência de retorno (#752) — o casamento referência ↔ documento.
+ *
+ * O montador devolve as referências na ordem de entrada e o use case as casa por índice com os
+ * `documentId` do reader. É o único ponto onde os dois vocabulários se encontram, e o único onde o
+ * erro pode acontecer: uma referência gravada contra o documento errado produz arquivo válido, aceito
+ * pelo banco, cujo retorno baixa o título de outro fornecedor.
+ */
+describe('generateRemittance — a chave de casamento do retorno (#752)', () => {
+  it('persiste uma referência não vazia para cada documento da remessa', async () => {
+    const s = await setup();
+    const r = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
+    assert.ok(isOk(r));
+
+    const saved = await s.remittances.findById(r.value.remittanceId);
+    assert.ok(isOk(saved) && saved.value !== null);
+
+    assert.equal(saved.value.documents.length, s.docs.length);
+    for (const d of saved.value.documents) {
+      assert.notEqual(d.yourNumber.trim(), '', `documento ${d.documentId} sem chave de casamento`);
+    }
+  });
+
+  it('a referência gravada é a MESMA que saiu no arquivo, para aquele documento', async () => {
+    const s = await setup();
+    const r = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
+    assert.ok(isOk(r));
+
+    const saved = await s.remittances.findById(r.value.remittanceId);
+    assert.ok(isOk(saved) && saved.value !== null);
+
+    const stored = await s.storage.getText(r.value.objectKey);
+    assert.ok(isOk(stored));
+
+    // Toda referência persistida tem de aparecer no conteúdo transmitido. Se o casamento por índice
+    // se deslocasse, a referência gravada seria de outro pagamento — e algumas não estariam lá.
+    for (const d of saved.value.documents) {
+      assert.ok(
+        stored.value.includes(d.yourNumber),
+        `referência ${d.yourNumber} não está no arquivo emitido`,
+      );
+    }
+  });
+
+  it('não repete referência entre documentos da mesma remessa', async () => {
+    const s = await setup();
+    const r = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
+    assert.ok(isOk(r));
+
+    const saved = await s.remittances.findById(r.value.remittanceId);
+    assert.ok(isOk(saved) && saved.value !== null);
+
+    const refs = saved.value.documents.map((d) => d.yourNumber);
+    assert.equal(new Set(refs).size, refs.length);
+  });
+});
+
 describe('generateRemittance — o que ele recusa', () => {
   it('recusa seleção vazia', async () => {
     const s = await setup();
