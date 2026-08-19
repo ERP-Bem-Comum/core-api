@@ -1412,7 +1412,10 @@ const payoutGapSchema = z
       'payee-account-digit',
       'payment-detail',
     ]),
-    reason: z.enum(['missing', 'unmappable', 'malformed']),
+    // `check-digit-mismatch` (#734) entra aqui porque o enum é o contrato publicado no OpenAPI: o
+    // domínio produzir um motivo que o schema não lista faria a resposta ser recusada na
+    // serialização, com 500 no lugar do pré-voo.
+    reason: z.enum(['missing', 'unmappable', 'malformed', 'check-digit-mismatch']),
   })
   .strict();
 

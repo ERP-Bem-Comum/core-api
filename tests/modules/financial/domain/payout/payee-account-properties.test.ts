@@ -134,7 +134,10 @@ describe('decomposePayeeAccount — whitespace invisível não decide pagamento'
           bank: `${ws}237${ws}`,
           agency: `${ws}1234-5${ws}`,
           accountNumber: `${ws}123456${ws}`,
-          checkDigit: `${ws}7${ws}`,
+          // `0` é o DV que o Bradesco calcula para `123456` (#734). O que este caso mede é o
+          // whitespace ser aparado antes de qualquer leitura — inclusive antes do cálculo do
+          // dígito, que receberia `\t7\t` e reprovaria por motivo errado.
+          checkDigit: `${ws}0${ws}`,
         }),
       );
       assert.ok(isOk(r), `esperava aprovar com ${nome}`);
