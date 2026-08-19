@@ -24,11 +24,13 @@ const CEDENTE: CedenteHeaderData = {
   companyName: 'ASSOCIACAO BEM COMUM',
 };
 
-const payee = (n: number): Payee => ({
+// O banco do favorecido decide a forma de lançamento e, através dela, a câmara (#751). O default
+// `341` é uma instituição DIFERENTE da do cedente — é o caso da transferência interbancária.
+const payee = (n: number, bankCode = '341'): Payee => ({
   name: `FORNECEDOR ${n}`,
   documentType: '2',
   document: `9876543200011${n}`,
-  bankCode: '341',
+  bankCode,
   agency: '4321',
   agencyDigit: '0',
   accountNumber: `11223${n}`,
@@ -38,9 +40,9 @@ const payee = (n: number): Payee => ({
 
 const PAYMENT_DATE = new Date(Date.UTC(2026, 7, 12));
 
-const payment = (n: number, valueCents: number): RemittancePayment => ({
+const payment = (n: number, valueCents: number, payeeBank = '341'): RemittancePayment => ({
   route: 'transfer',
-  payee: payee(n),
+  payee: payee(n, payeeBank),
   paymentDate: PAYMENT_DATE,
   valueCents,
 });
@@ -75,6 +77,26 @@ const build = (payments: readonly RemittancePayment[]) => {
 };
 
 const linesOf = (content: string): readonly string[] => content.split(LINE_TERMINATOR);
+
+// Posições que a #751 disputa. Nomeadas porque as três aparecem juntas em toda asserção daquele
+// grupo, e um deslocamento de coluna é exatamente o defeito que elas existem para pegar.
+const launchFormOf = (line: string): string => at(line, 12, 13); // G029, header de lote
+const clearingOf = (line: string): string => at(line, 18, 20); // P001, Segmento A
+const payeeBankOf = (line: string): string => at(line, 21, 23); // P002, Segmento A
+
+const isSegmentA = (line: string): boolean => at(line, 8, 8) === '3' && at(line, 14, 14) === 'A';
+
+// Os DETALHES de cada lote, na ordem dos lotes. Varre pelo tipo de registro — a mesma disciplina do
+// inspetor: posição de linha só funciona enquanto o arquivo tem um lote.
+const batchDetailsOf = (content: string): readonly (readonly string[])[] => {
+  const batches: string[][] = [];
+  for (const line of linesOf(content)) {
+    const type = at(line, 8, 8);
+    if (type === '1') batches.push([]);
+    else if (type === '3') batches[batches.length - 1]?.push(line);
+  }
+  return batches;
+};
 
 describe('Remessa Multipag — estrutura do arquivo', () => {
   it('um pagamento produz 6 linhas: envelope de arquivo, de lote e o par A+B', () => {
@@ -220,6 +242,79 @@ describe('Remessa Multipag — um lote por forma de lançamento (#711)', () => {
   // de barras, e título do próprio banco é outra operação — logo, outro lote.
   it('boleto do próprio banco e de outro banco não dividem lote', () => {
     const file = build([billet(1, 100, '237'), billet(2, 200, '341')]);
+    assert.equal(file.batchCount, 2);
+  });
+});
+
+/**
+ * O defeito da #751, medido no arquivo pronto — que é onde ele aparecia: toda transferência saía
+ * com forma `41` (TED outra titularidade) e câmara `018`, e para favorecido do próprio Bradesco
+ * esse par é registro que o validador oficial do banco RECUSA.
+ *
+ * Fonte primária (`jun-19-layout-multipag.pdf`, local-only): G029 na p. 100, nota (2) da mesma
+ * descrição na p. 101 (tabela forma → câmara) e a ocorrência 'AK' de G059 na p. 107 (`018` para
+ * TED, zeros para as demais modalidades, colunas 018 a 020 do Segmento A).
+ */
+describe('Remessa Multipag — crédito em conta e câmara, pelo banco do favorecido (#751)', () => {
+  // CA1.
+  it('favorecido no banco do cedente sai como crédito em conta, com a câmara zerada', () => {
+    const lines = linesOf(build([payment(1, 1000, CEDENTE.bankCode)]).content);
+
+    assert.equal(launchFormOf(lines[1] ?? ''), '01');
+    assert.equal(clearingOf(lines[2] ?? ''), '000');
+  });
+
+  // CA2. A segunda asserção é o que impede a "correção" preguiçosa de zerar a câmara para todos.
+  it('favorecido de outra instituição mantém transferência interbancária e a câmara dela', () => {
+    const lines = linesOf(build([payment(1, 1000, '341')]).content);
+
+    assert.equal(launchFormOf(lines[1] ?? ''), '41');
+    assert.equal(clearingOf(lines[2] ?? ''), '018');
+    assert.notEqual(clearingOf(lines[2] ?? ''), '000');
+  });
+
+  // CA6 — o defeito virado teste de regressão. Enquanto o validador oficial não vira gate (é a
+  // Onda 1 do épico #756), esta asserção é o único lugar que reprova o par proibido.
+  it('nenhum Segmento A de favorecido do próprio banco carrega câmara de TED', () => {
+    const file = build([
+      payment(1, 100, CEDENTE.bankCode),
+      payment(2, 200, '341'),
+      payment(3, 300, CEDENTE.bankCode),
+    ]);
+    const segmentsA = linesOf(file.content).filter(isSegmentA);
+
+    assert.equal(segmentsA.length, 3, 'guarda contra verde por vacuidade');
+    for (const a of segmentsA) {
+      const expected = payeeBankOf(a) === CEDENTE.bankCode ? '000' : '018';
+      assert.equal(clearingOf(a), expected, `banco ${payeeBankOf(a)}`);
+    }
+  });
+
+  // CA3. A regra é do validador oficial, não do manual: lote cujos Segmentos A misturem bancos é
+  // recusado (ERP-Bem-Comum/cnab-validator#2).
+  it('nenhum lote mistura bancos de favorecido', () => {
+    const file = build([
+      payment(1, 100, CEDENTE.bankCode),
+      payment(2, 200, '341'),
+      payment(3, 300, '001'),
+      payment(4, 400, CEDENTE.bankCode),
+    ]);
+
+    for (const details of batchDetailsOf(file.content)) {
+      const banks = new Set(details.filter(isSegmentA).map(payeeBankOf));
+      assert.equal(banks.size, 1, `um lote reuniu ${[...banks].join(', ')}`);
+    }
+  });
+
+  // O contrapeso do teste acima: sem ele, "um lote por pagamento" passaria e produziria um arquivo
+  // com tantos envelopes quantos títulos.
+  it('favorecidos do MESMO banco continuam num lote só, ainda que intercalados', () => {
+    const file = build([
+      payment(1, 100, '341'),
+      payment(2, 200, CEDENTE.bankCode),
+      payment(3, 300, '341'),
+    ]);
+
     assert.equal(file.batchCount, 2);
   });
 });

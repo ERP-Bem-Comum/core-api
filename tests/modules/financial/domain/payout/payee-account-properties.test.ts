@@ -99,6 +99,9 @@ describe('decomposePayeeAccount — o que passa cabe no segmento A', () => {
           },
           paymentDate: new Date('2026-08-14T12:00:00Z'),
           valueCents: 123_456,
+          // P001 — exigida desde a #751. Aqui é fixture: o que este teste mede é a LARGURA dos
+          // campos decompostos, não a escolha da câmara.
+          clearingHouse: '018',
         });
         assert.ok(isOk(line), `segmento A recusou cadastro aprovado: ${agency} / ${accountNumber}`);
         assert.equal(line.value.length, 240);

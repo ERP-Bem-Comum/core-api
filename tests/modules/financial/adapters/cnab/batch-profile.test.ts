@@ -5,6 +5,7 @@ import { isErr, isOk } from '#src/shared/index.ts';
 // W0 RED: o perfil de lote ainda não existe.
 import {
   batchProfileFor,
+  clearingHouseFor,
   type ProfiledPayment,
 } from '#src/modules/financial/adapters/cnab/batch-profile.ts';
 
@@ -22,7 +23,14 @@ import {
 
 const CEDENTE_BANK = '237';
 
-const transfer: ProfiledPayment = { route: 'transfer' };
+// A forma da transferência sai do banco de QUEM RECEBE: mesmo banco do cedente é crédito interno,
+// outro banco é transferência interbancária (#751).
+const transferTo = (payeeBankCode: string): ProfiledPayment => ({
+  route: 'transfer',
+  payeeBankCode,
+});
+
+const transfer = transferTo('341');
 
 // Os três primeiros dígitos do código de barras são o banco emissor do título (Bacen 2.926) — é o
 // dado que decide se o boleto é do próprio banco ou de outro.
@@ -52,11 +60,84 @@ describe('Perfil de lote — o envelope muda com a rota, não só a forma', () =
     assert.equal(profile(billetOf('341')).paymentIndicator, null);
   });
 
-  // Coerência dentro do próprio registro: o manual liga a câmara que o Segmento A já emite às
-  // formas de TED (nota (2) da descrição da forma de lançamento). Crédito em conta com câmara de
-  // TED seria contradição — e era o que o chamador podia produzir informando a forma por fora.
-  it('a transferência declara forma de TED, coerente com a câmara do Segmento A', () => {
+  // Coerência dentro do próprio registro: o manual liga a câmara que o Segmento A emite às formas
+  // de TED (nota (2) da descrição da forma de lançamento). Crédito em conta com câmara de TED seria
+  // contradição — e era o que o emissor produzia enquanto a forma era constante.
+  it('a transferência para outra instituição declara forma de TED', () => {
     assert.equal(profile(transfer).launchForm, '41');
+  });
+});
+
+/**
+ * O defeito da #751: a forma era a constante `41` (TED outra titularidade) para todo favorecido, e
+ * a câmara, `018` (TED), por default do Segmento A. Para quem tem conta no próprio banco do cedente
+ * esse par é o que o validador oficial do Bradesco RECUSA — e o caminho nunca fora exercitado,
+ * porque o emissor jamais produziu crédito em conta.
+ *
+ * Fonte primária (`jun-19-layout-multipag.pdf`, local-only): domínio de G029 na p. 100 (`01` =
+ * Crédito em Conta Corrente, `41` = TED Outra Titularidade); nota (2) da mesma descrição na p. 101,
+ * que tabula forma → câmara; e a ocorrência 'AK' de G059 na p. 107, que manda preencher `018` para
+ * TED e zeros para as outras modalidades, nas colunas 018 a 020 do Segmento A.
+ */
+describe('Perfil de lote — a forma da transferência sai do banco do favorecido (#751)', () => {
+  // CA1.
+  it('favorecido no mesmo banco do cedente recebe crédito em conta, sem câmara', () => {
+    const p = profile(transferTo(CEDENTE_BANK));
+
+    assert.equal(p.launchForm, '01');
+    assert.equal(clearingHouseFor(p.launchForm), '000');
+  });
+
+  // CA2 — e a segunda asserção é o que impede a "correção" de zerar a câmara para todo mundo.
+  it('favorecido em outra instituição mantém a transferência interbancária, com a câmara dela', () => {
+    for (const bank of ['341', '001', '033']) {
+      const p = profile(transferTo(bank));
+
+      assert.equal(p.launchForm, '41', bank);
+      assert.equal(clearingHouseFor(p.launchForm), '018', bank);
+      assert.notEqual(clearingHouseFor(p.launchForm), '000', bank);
+    }
+  });
+
+  // O zero à esquerda é do CAMPO, não do banco: `1` e `001` são o mesmo Banco do Brasil. Comparar
+  // as strings cruas classificaria um favorecido do próprio banco como sendo de fora — e o erro
+  // sairia num arquivo bem-formado.
+  it('compara os códigos já normalizados em três posições', () => {
+    // Banco do Brasil escrito das duas formas: mesmo destino, logo mesma forma de lançamento.
+    assert.equal(profile(transferTo('1')).launchForm, profile(transferTo('001')).launchForm);
+
+    // E a normalização vale para os DOIS lados da comparação: cedente escrito curto, favorecido
+    // escrito completo, mesmo banco — é crédito em conta, não transferência.
+    const r = batchProfileFor(transferTo('001'), '1');
+    assert.ok(isOk(r), `esperava ok, veio ${isErr(r) ? r.error : '?'}`);
+    assert.equal(r.value.launchForm, '01');
+  });
+
+  // CA5. O caminho por omissão erra nos dois sentidos — TED para quem é de casa vira registro
+  // recusado; crédito em conta para quem é de fora vira crédito que não sai. Recusar nomeando é a
+  // única saída que não escolhe um dos dois erros.
+  it('recusa favorecido sem banco legível, em vez de assumir uma das duas formas', () => {
+    for (const bank of ['', '   ', 'ABC', '1234', 'Bradesco']) {
+      const r = batchProfileFor(transferTo(bank), CEDENTE_BANK);
+      assert.ok(isErr(r), `esperava erro para '${bank}'`);
+      assert.equal(r.error, 'remittance-payee-bank-unreadable');
+    }
+  });
+});
+
+describe('Câmara centralizadora — função da forma, não escolha de quem monta (#751)', () => {
+  // CA4. A tabela do manual (nota (2) de G029, p. 101) lista só as formas de TED; a ocorrência 'AK'
+  // de G059 (p. 107) cobre o resto com zeros. Não há default a herdar: a função é TOTAL.
+  it('as formas de TED transitam pela câmara, e só elas', () => {
+    for (const tedForm of ['03', '41', '43']) assert.equal(clearingHouseFor(tedForm), '018');
+    for (const other of ['01', '05', '30', '31', '45'])
+      assert.equal(clearingHouseFor(other), '000');
+  });
+
+  // Uma forma nova sai com zeros — nunca herdando a câmara da forma anterior, que é o modo de falha
+  // que o default produzia.
+  it('forma desconhecida sai com zeros, não com a câmara da forma vizinha', () => {
+    assert.equal(clearingHouseFor('99'), '000');
   });
 });
 

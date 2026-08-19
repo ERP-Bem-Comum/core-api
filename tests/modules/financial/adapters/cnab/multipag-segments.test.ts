@@ -32,6 +32,10 @@ const line = (r: ReturnType<typeof segmentA>): string => {
   return r.value;
 };
 
+// P001 — a câmara é EXIGIDA do chamador desde a #751. O valor aqui é o de TED porque o favorecido
+// da fixture é de outro banco (341 ≠ 237); quem deriva o par forma↔câmara é `batch-profile.ts`.
+const TED_CLEARING = '018';
+
 const baseA = {
   bankCode: '237',
   batchNumber: 1,
@@ -39,6 +43,7 @@ const baseA = {
   payee: PAYEE,
   paymentDate: PAY_DATE,
   valueCents: 123456,
+  clearingHouse: TED_CLEARING,
 };
 
 describe('Multipag — Segmento A (pagamento)', () => {
@@ -77,6 +82,14 @@ describe('Multipag — Segmento A (pagamento)', () => {
 
   it('declara a moeda em real', () => {
     assert.equal(at(record, 102, 104), 'BRL');
+  });
+
+  // #751/CA4. Enquanto a câmara teve default, o valor de TED valia para TODO pagamento — inclusive
+  // para o favorecido do próprio banco, cujo registro o Bradesco recusa. O campo passou a ser
+  // exigido: o segmento escreve o que recebeu, e não tem opinião sobre qual câmara é a certa.
+  it('escreve a câmara que recebeu, sem valor por omissão', () => {
+    assert.equal(at(record, 18, 20), TED_CLEARING);
+    assert.equal(at(line(segmentA({ ...baseA, clearingHouse: '000' })), 18, 20), '000');
   });
 
   // Um valor que não cabe é recusado — truncar pagaria outro valor, e o banco aceitaria.
@@ -178,6 +191,7 @@ describe('Multipag — o par A+B de um pagamento', () => {
       payee: PAYEE,
       paymentDate: PAY_DATE,
       valueCents: 5000,
+      clearingHouse: TED_CLEARING,
     });
     assert.ok(isOk(r));
     const [a, b] = r.value;
@@ -200,6 +214,7 @@ describe('Multipag — o par A+B de um pagamento', () => {
       payee: PAYEE,
       paymentDate: PAY_DATE,
       valueCents: 1,
+      clearingHouse: TED_CLEARING,
     });
     assert.ok(isOk(r));
     assert.equal(r.value.length, 2);
@@ -213,6 +228,7 @@ describe('Multipag — o par A+B de um pagamento', () => {
       payee: { ...PAYEE, document: 'nao-e-numero' },
       paymentDate: PAY_DATE,
       valueCents: 1,
+      clearingHouse: TED_CLEARING,
     });
     assert.ok(isErr(r));
   });

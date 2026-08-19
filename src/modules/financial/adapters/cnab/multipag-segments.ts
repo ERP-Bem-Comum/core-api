@@ -25,9 +25,6 @@ const DETAIL_RECORD_TYPE = 3;
 const MOVEMENT_INCLUSION = '0'; // G060 — 0 = inclusão (remessa)
 const MOVEMENT_INSTRUCTION_NONE = '00'; // G061
 const CURRENCY_BRL = 'BRL'; // G040
-// Câmara centralizadora: 018 = TED. Fica como default explícito porque o campo é obrigatório e o
-// caso de uso desta fatia (TED/transferência) sempre o preenche.
-const CLEARING_TED = '018';
 
 export type Payee = Readonly<{
   name: string;
@@ -59,7 +56,10 @@ export type SegmentAInput = Readonly<{
   payee: Payee;
   paymentDate: Date;
   valueCents: number;
-  clearingHouse?: string;
+  // P001, colunas 018-020. OBRIGATÓRIO, e sem default de propósito (#751): o valor depende da forma
+  // de lançamento, e quem monta o registro não tem como adivinhá-la. Quem deriva é
+  // `clearingHouseFor`, em `batch-profile.ts`.
+  clearingHouse: string;
   yourNumber?: string; // G064 "Seu Número" — a referência do pagador
   tedPurpose?: string; // P011
   message?: string; // G031 "Informação 2"
@@ -81,7 +81,7 @@ export type PaymentRecordsInput = Readonly<{
   paymentDate: Date;
   valueCents: number;
   address?: PayeeAddress;
-  clearingHouse?: string;
+  clearingHouse: string; // P001 — ver `SegmentAInput`
   yourNumber?: string;
   tedPurpose?: string;
   message?: string;
@@ -97,7 +97,7 @@ export const segmentA = (input: SegmentAInput): Result<string, CnabSegmentError>
     text('A', 1), // 014     segmento
     num(MOVEMENT_INCLUSION, 1), // 015     tipo de movimento
     num(MOVEMENT_INSTRUCTION_NONE, 2), // 016-017 código da instrução
-    num(input.clearingHouse ?? CLEARING_TED, 3), // 018-020 câmara centralizadora
+    num(input.clearingHouse, 3), // 018-020 câmara centralizadora
     num(p.bankCode, 3), // 021-023 banco do FAVORECIDO
     digits(p.agency, 5), // 024-028 agência do favorecido
     text(p.agencyDigit, 1), // 029     DV agência
@@ -239,7 +239,7 @@ export const paymentRecords = (
     payee: input.payee,
     paymentDate: input.paymentDate,
     valueCents: input.valueCents,
-    ...(input.clearingHouse !== undefined ? { clearingHouse: input.clearingHouse } : {}),
+    clearingHouse: input.clearingHouse,
     ...(input.yourNumber !== undefined ? { yourNumber: input.yourNumber } : {}),
     ...(input.tedPurpose !== undefined ? { tedPurpose: input.tedPurpose } : {}),
     ...(input.message !== undefined ? { message: input.message } : {}),
