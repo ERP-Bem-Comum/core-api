@@ -11,7 +11,14 @@
 // A forma de cada lote é DERIVADA do conteúdo (`batch-profile.ts`), nunca recebida como parâmetro:
 // enquanto havia uma rota só, quem chamava e quem pagava concordavam por acidente.
 import { ok, err, type Result } from '../../../../shared/primitives/result.ts';
-import { batchProfileFor, type BatchProfileError, type CnabBatchProfile } from './batch-profile.ts';
+import {
+  batchProfileFor,
+  clearingHouseFor,
+  normalizeBankCode,
+  type BatchProfileError,
+  type CnabBatchProfile,
+  type ProfiledPayment,
+} from './batch-profile.ts';
 import {
   batchHeader,
   batchTrailer,
@@ -34,6 +41,10 @@ import {
 // é o primeiro suspeito, e a troca é de uma constante.
 export const LINE_TERMINATOR = '\r\n';
 
+// A câmara centralizadora NÃO entra aqui, pelo mesmo motivo que a forma de lançamento não entra:
+// ela é derivada do conteúdo (#751). Enquanto foi campo opcional, nenhum chamador a preencheu e o
+// default do Segmento A — câmara de TED — valeu para todo pagamento, inclusive para o favorecido
+// do próprio banco, cujo registro o Bradesco recusa.
 export type TransferPayment = Readonly<{
   route: 'transfer';
   payee: Payee;
@@ -41,7 +52,6 @@ export type TransferPayment = Readonly<{
   valueCents: number;
   address?: PayeeAddress;
   yourNumber?: string;
-  clearingHouse?: string;
   tedPurpose?: string;
   message?: string;
 }>;
@@ -99,15 +109,25 @@ export type RemittanceFile = Readonly<{
   batchCount: number;
 }>;
 
+// O que o detalhe herda do LOTE em que está. Agrupado num tipo porque são as coordenadas de uma
+// coisa só — a posição do registro dentro do lote — e porque a forma entrou aqui para que o
+// Segmento A derive dela a câmara, em vez de recebê-la de fora.
+type BatchContext = Readonly<{
+  bankCode: string; // banco do CEDENTE
+  batchNumber: number;
+  firstRecordNumber: number;
+  launchForm: string; // G029 do lote
+}>;
+
 // Os registros de detalhe de UM pagamento, na rota dele. O sequencial do registro no lote (G038)
 // numera os detalhes a partir de 1 dentro de CADA lote — centralizar a conta aqui é o que impede o
 // chamador de errá-la.
 const detailsOf = (
   payment: RemittancePayment,
-  bankCode: string,
-  batchNumber: number,
-  firstRecordNumber: number,
+  batch: BatchContext,
 ): Result<readonly string[], RemittanceFileError> => {
+  const { bankCode, batchNumber, firstRecordNumber } = batch;
+
   switch (payment.route) {
     case 'transfer':
       return paymentRecords({
@@ -117,9 +137,11 @@ const detailsOf = (
         payee: payment.payee,
         paymentDate: payment.paymentDate,
         valueCents: payment.valueCents,
+        // A câmara sai da forma do LOTE, não de um parâmetro do pagamento: os dois campos
+        // descrevem a mesma operação e não podem divergir dentro de um registro.
+        clearingHouse: clearingHouseFor(batch.launchForm),
         ...(payment.address !== undefined ? { address: payment.address } : {}),
         ...(payment.yourNumber !== undefined ? { yourNumber: payment.yourNumber } : {}),
-        ...(payment.clearingHouse !== undefined ? { clearingHouse: payment.clearingHouse } : {}),
         ...(payment.tedPurpose !== undefined ? { tedPurpose: payment.tedPurpose } : {}),
         ...(payment.message !== undefined ? { message: payment.message } : {}),
       });
@@ -152,7 +174,49 @@ const detailsOf = (
 
 type Batch = Readonly<{ profile: CnabBatchProfile; payments: readonly RemittancePayment[] }>;
 
-// Agrupa por forma de lançamento, preservando a ordem de PRIMEIRA APARIÇÃO da forma na seleção.
+// Do pagamento inteiro para o mínimo que decide o perfil. A conversão é explícita, e não o
+// pagamento passado direto, porque o perfil não deve enxergar valor, data nem endereço: o que
+// decide a forma é de QUEM RECEBE, e mais nada.
+const profiledOf = (payment: RemittancePayment): ProfiledPayment => {
+  switch (payment.route) {
+    case 'transfer':
+      return { route: 'transfer', payeeBankCode: payment.payee.bankCode };
+    case 'billet':
+      return { route: 'billet', barcode: payment.barcode };
+    case 'pix':
+      return { route: 'pix' };
+    case 'tax-guide':
+      return { route: 'tax-guide' };
+  }
+};
+
+// A chave que decide se dois pagamentos dividem lote.
+//
+// A forma de lançamento NÃO basta, e é o terceiro efeito da #751: o validador oficial do Bradesco
+// recusa lote cujos Segmentos A misturem favorecidos de bancos distintos
+// (ERP-Bem-Comum/cnab-validator#2), enquanto a forma só separa o próprio banco de todo o resto —
+// Itaú e Santander compartilham a forma `41` e cairiam juntos.
+//
+// O boleto fica fora da regra porque não tem favorecido bancário: quem recebe está no código de
+// barras e o Segmento J não carrega banco de destino (#708, CA5). Para ele a forma é a chave
+// inteira — e ela já separa título do próprio banco de título de outro.
+//
+// O banco entra NORMALIZADO, pela mesma função do perfil: `341` e `0341` são o mesmo destino e
+// escrevem as mesmas posições 021-023. Chaves cruas partiriam um lote legítimo em dois, cada um
+// válido e nenhum necessário.
+const BATCH_KEY_SEPARATOR = ':'; // fora do domínio de G029 e de código de banco, ambos numéricos
+
+const batchKeyOf = (payment: RemittancePayment, profile: CnabBatchProfile): string => {
+  if (payment.route !== 'transfer') return profile.launchForm;
+
+  // O `??` é inalcançável: um banco que não normaliza já derrubou o perfil com
+  // `remittance-payee-bank-unreadable`. Fica porque a alternativa seria um `!` afirmando o mesmo
+  // sem prova — e, se um dia divergirem, agrupar pelo código cru erra menos que estourar aqui.
+  const payeeBank = normalizeBankCode(payment.payee.bankCode) ?? payment.payee.bankCode;
+  return `${profile.launchForm}${BATCH_KEY_SEPARATOR}${payeeBank}`;
+};
+
+// Agrupa os pagamentos em lotes, preservando a ordem de PRIMEIRA APARIÇÃO de cada chave na seleção.
 //
 // A ordem é parte do contrato: uma ordenação implícita (alfabética, por rota) tornaria a numeração
 // dos lotes dependente de detalhe invisível ao operador, e dois arquivos com a mesma seleção sairiam
@@ -162,26 +226,26 @@ const groupIntoBatches = (
   cedenteBankCode: string,
 ): Result<readonly Batch[], RemittanceFileError> => {
   const order: string[] = [];
-  const byForm = new Map<string, { profile: CnabBatchProfile; payments: RemittancePayment[] }>();
+  const byKey = new Map<string, { profile: CnabBatchProfile; payments: RemittancePayment[] }>();
 
   for (const payment of payments) {
-    const profile = batchProfileFor(payment, cedenteBankCode);
+    const profile = batchProfileFor(profiledOf(payment), cedenteBankCode);
     // Uma rota sem emissor aborta o arquivo inteiro, em vez de sair como transferência por omissão.
     // Emitir o par de crédito em conta para um boleto produziria arquivo bem-formado, aceito pelo
     // banco, pagando errado — a pior classe de falha do módulo.
     if (!profile.ok) return profile;
 
-    const key = profile.value.launchForm;
-    const group = byForm.get(key);
+    const key = batchKeyOf(payment, profile.value);
+    const group = byKey.get(key);
     if (group === undefined) {
       order.push(key);
-      byForm.set(key, { profile: profile.value, payments: [payment] });
+      byKey.set(key, { profile: profile.value, payments: [payment] });
     } else {
       group.payments.push(payment);
     }
   }
 
-  return ok(order.map((key) => byForm.get(key) as Batch));
+  return ok(order.map((key) => byKey.get(key) as Batch));
 };
 
 export const buildRemittanceFile = (
@@ -224,7 +288,12 @@ export const buildRemittanceFile = (
     for (const payment of batch.payments) {
       // O sequencial REINICIA a cada lote: é o que o campo declara, e é o que o trailer daquele
       // lote confere. Continuar a contagem entre lotes produziria arquivo que o banco recusa.
-      const emitted = detailsOf(payment, input.cedente.bankCode, batchNumber, details.length + 1);
+      const emitted = detailsOf(payment, {
+        bankCode: input.cedente.bankCode,
+        batchNumber,
+        firstRecordNumber: details.length + 1,
+        launchForm: batch.profile.launchForm,
+      });
       // Um pagamento que falha aborta o arquivo inteiro. Emitir remessa parcial seria pagar parte
       // dos fornecedores e silenciar o resto — pior que não pagar ninguém.
       if (!emitted.ok) return emitted;
