@@ -54,7 +54,13 @@ Suítes de integração (`*.drizzle*.test.ts`, `*.integration.test.ts`) rodam **
 
   A inversão usa `awk` de propósito: a versão anterior desta rule usava `tail -r`, que **só existe no macOS** — no CI Linux o comando falhava antes de rodar teste algum.
 
-Verificado em 2026-07-23 (MySQL 8.4 isolado): após o #521, `partners` (50/50) e `financial` (119/119) passam invertidas. Os helpers `resetPartnersTables`/`resetFinancialTables` **não existem** e não precisam existir enquanto cada arquivo limpar por tabela na entrada — YAGNI.
+- **Segunda prova, que a inversão NÃO substitui: a suíte tem de passar DUAS VEZES seguidas, sem recriar o banco entre elas.** A ordem invertida acha dependência **entre arquivos**; ela é cega para a dependência do arquivo com o **próprio resíduo da execução anterior**, porque ambas as ordens partem de um banco limpo. Medido em 18/08/2026: `financial` passou 164/164 em ordem normal **e** invertida, e falhou **6** ao repetir sem limpar — todas em arquivos que a inversão aprovara minutos antes. Duas provas, dois defeitos diferentes; passar numa não diz nada sobre a outra.
+
+  ⚠️ **Quando o `save` é upsert, o sintoma mente.** `ON DUPLICATE KEY UPDATE` colide na UNIQUE **sem levantar erro**: vira UPDATE da linha antiga, o id novo nunca é inserido, e a falha só aparece como `findById` devolvendo `null` muitas asserções adiante. A mensagem manda quem depura para o adapter, que está certo. O caso detectável — chave composta por contador de processo — é cobrado por `tests/cleanup/integration-rerun-safety.test.ts`; o que sobra é julgamento.
+
+- **Rodar o arquivo isolado não é tê-lo executado.** O run isolado mede o código; o run dentro da suíte mede o código **mais o estado que os vizinhos deixam** — e é esse o ambiente do CI. Arquivo verde sozinho e vermelho na suíte não é flake: das duas medições, só a segunda valia.
+
+Verificado em 2026-07-23 (MySQL 8.4 isolado): após o #521, `partners` (50/50) e `financial` (119/119) passam invertidas. Remedido em 18/08/2026 contra MySQL 8.4.10: `financial` passa **164/164** nas duas ordens — mas só a partir de banco limpo, ver a segunda prova acima. Os helpers `resetPartnersTables`/`resetFinancialTables` **não existem** e não precisam existir enquanto cada arquivo limpar por tabela na entrada — YAGNI.
 
 ## Gate estrutural pergunta ao git, não ao disco
 
