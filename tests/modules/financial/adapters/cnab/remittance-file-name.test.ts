@@ -13,7 +13,7 @@ const AT = new Date(Date.UTC(2026, 7, 11, 14, 26, 5));
 
 const name = (over: Partial<Parameters<typeof buildRemittanceFileName>[0]> = {}) => {
   const r = buildRemittanceFileName({
-    convenio: '491939',
+    convenio: '000000',
     nsa: 7,
     generatedAt: AT,
     ...over,
@@ -23,11 +23,17 @@ const name = (over: Partial<Parameters<typeof buildRemittanceFileName>[0]> = {})
 };
 
 describe('Nome da remessa — espelha o padrão observado nos arquivos do banco', () => {
-  // O banco já nos envia arquivos como `PAG_491939.01072026070705_0001.RET` por este mesmo perfil.
+  // O banco já nos envia arquivos como `PAG_000000.01072026070705_0001.RET` por este mesmo perfil.
   // A remessa espelha a forma, trocando a extensão. ⚠️ PROVISÓRIO: o padrão definitivo depende de
   // confirmação do Bradesco — é pelo nome que ele identifica tipo de arquivo e fila de destino.
+  //
+  // ⚠️ O CONVÊNIO ESTÁ MASCARADO com zeros, e precisa continuar assim. Ele identifica o contrato
+  // junto ao banco (ADR-0061) e este repositório é PÚBLICO — a higiene do épico #756 proíbe dado
+  // real de cadastro em arquivo versionado. `000000` é a mesma máscara que o `van-agent` usa no
+  // golden compartilhado; os dois lados do contrato mascaram o mesmo campo do mesmo jeito.
+  // Substituir por um número real "para ficar fiel" reintroduz a exposição que isto corrige.
   it('monta PAG_<convenio>.<DDMMAAAAHHMMSS>_<NSA>.REM', () => {
-    assert.equal(name(), 'PAG_491939.11082026142605_000007.REM');
+    assert.equal(name(), 'PAG_000000.11082026142605_000007.REM');
   });
 
   it('usa a extensão de remessa, não a de retorno', () => {
@@ -49,7 +55,7 @@ describe('Nome da remessa — espelha o padrão observado nos arquivos do banco'
 describe('Nome da remessa — o que o protocolo recusa', () => {
   // Erro 1102 do STCPCLT: nome com espaço ou caractere inválido é rejeitado na transmissão.
   it('nunca produz espaço nem caractere fora de [A-Z0-9._]', () => {
-    for (const convenio of ['491939', '000001']) {
+    for (const convenio of ['000000', '000001']) {
       assert.ok(/^[A-Z0-9._]+$/.test(name({ convenio })));
     }
   });
@@ -61,9 +67,9 @@ describe('Nome da remessa — o que o protocolo recusa', () => {
   });
 
   it('recusa NSA fora da faixa do campo', () => {
-    assert.ok(isErr(buildRemittanceFileName({ convenio: '491939', nsa: 0, generatedAt: AT })));
+    assert.ok(isErr(buildRemittanceFileName({ convenio: '000000', nsa: 0, generatedAt: AT })));
     assert.ok(
-      isErr(buildRemittanceFileName({ convenio: '491939', nsa: 1_000_000, generatedAt: AT })),
+      isErr(buildRemittanceFileName({ convenio: '000000', nsa: 1_000_000, generatedAt: AT })),
     );
   });
 

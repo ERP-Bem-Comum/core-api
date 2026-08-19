@@ -12,8 +12,8 @@ import { create as createRemittance } from '#src/modules/financial/domain/remitt
 import type { RemittanceRepository } from '#src/modules/financial/application/ports/remittance-repository.ts';
 import type { VanStoragePort } from '#src/modules/financial/application/ports/van-storage.ts';
 
-const FILE = 'PAG_491939.11082026142605_000001.REM';
-const OTHER = 'PAG_491939.11082026143012_000002.REM';
+const FILE = 'PAG_000000.11082026142605_000001.REM';
+const OTHER = 'PAG_000000.11082026143012_000002.REM';
 const EXECUTED_AT = '2026-08-11T14:31:07Z';
 
 // O envelope que o AGENTE publica — chaves em PT-BR, como no contrato acordado com a infra.
@@ -151,7 +151,7 @@ describe('confirmRemittance — o que ele se recusa a concluir', () => {
     const s = await setup();
     s.storage.seed(
       'status/recepcao-20260811T1431.json',
-      envelope({ situacao: 'recepcao', arquivo: 'PAG_491939.RET' }),
+      envelope({ situacao: 'recepcao', arquivo: 'PAG_000000.RET' }),
     );
 
     const r = await confirmRemittance(s.deps)();
