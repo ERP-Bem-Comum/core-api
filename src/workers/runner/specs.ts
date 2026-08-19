@@ -49,6 +49,11 @@ import { parseVanS3Env } from '#src/modules/financial/adapters/van/van-s3-config
 import { confirmRemittance } from '#src/modules/financial/application/use-cases/confirm-remittance.ts';
 import { runScanLoop } from '../van-status-scan/scan-loop.ts';
 
+// ── van (varredura do retorno/ — proveniência e quarentena, #753) ─────────────
+import { createDrizzleVanReturnQuarantineStore } from '#src/modules/financial/adapters/persistence/repos/van-return-quarantine-store.drizzle.ts';
+import { scanVanReturns } from '#src/modules/financial/application/use-cases/scan-van-returns.ts';
+import { runReturnScanLoop } from '../van-return-scan/scan-loop.ts';
+
 // ── notifications (composição de e-mail por env) ──────────────────────────────
 import {
   buildEmailSender,
@@ -387,6 +392,60 @@ export const buildVanStatusScanSpec: SpecBuilder = (registry, env) => {
   });
 };
 
+// ── van: varredura do retorno/ (bucket → quarentena consultável) ─────────────
+
+/**
+ * Segunda varredura do grupo `van` (#753). Mesma cadência do agente, prefixo e pergunta diferentes:
+ * `status/` resolve o desfecho de uma remessa NOSSA; `retorno/` decide o que da caixa do CONVÊNIO
+ * tem direito de entrar.
+ *
+ * Spec PRÓPRIA, e não um segundo passo dentro do `van-status-scan`: são responsabilidades distintas
+ * (a rule `jobs-and-workers` pede spec nova, nunca processo novo), e fundi-las faria a falha de uma
+ * calar a outra. Convivem no mesmo grupo porque compartilham a condição de existência — sem
+ * `VAN_S3_*` nenhuma das duas faz sentido, e o fail-fast do grupo já é o desejado.
+ *
+ * ⚠️ Reusa o MESMO pool do `financial` pela chave da connection-string: o `PoolRegistry` deduplica,
+ * então a segunda spec do grupo não abre pool novo contra o RDS (Incident-0001).
+ */
+export const buildVanReturnScanSpec: SpecBuilder = (registry, env) => {
+  const financialUrl = env['FINANCIAL_DATABASE_URL'];
+  if (financialUrl === undefined || financialUrl === '') {
+    return err('van-return-scan: FINANCIAL_DATABASE_URL ausente');
+  }
+
+  const vanConfig = parseVanS3Env(env);
+  if (!vanConfig.ok) {
+    const detail =
+      vanConfig.error.tag === 'missing-env'
+        ? `${vanConfig.error.field} ausente`
+        : `${vanConfig.error.field} inválido (${vanConfig.error.raw})`;
+    return err(`van-return-scan: config S3 da VAN — ${detail}`);
+  }
+
+  const financialPool = registry.getOrCreate(financialUrl);
+  if (!financialPool.ok) return err(`pool config inválida (financial): ${financialPool.error}`);
+
+  const scan = scanVanReturns({
+    storage: createS3VanStorage(vanConfig.value),
+    statusReader: createVanStatusEnvelopeReader(),
+    quarantine: createDrizzleVanReturnQuarantineStore(
+      openMysqlFinancialOnPool(financialPool.value),
+    ),
+    clock: ClockReal(),
+  });
+
+  return ok({
+    name: 'van-return-scan',
+
+    run: async (signal) => {
+      await runReturnScanLoop(
+        { scan, tag: '[van-return-scan] ', abortSignal: signal },
+        VAN_SCAN_LOOP,
+      );
+    },
+  });
+};
+
 // ── grupos (consumidos pelo run.ts via WORKER_GROUP) ──────────────────────────
 
 export const GROUPS: Readonly<
@@ -395,5 +454,5 @@ export const GROUPS: Readonly<
   outbox: [buildContractsOutboxSpec, buildPartnersOutboxSpec],
   projections: [buildSupplierProjectionSpec, buildPayableProjectionSpec, buildContractCountSpec],
   email: [buildEmailDispatchSpec],
-  van: [buildVanStatusScanSpec],
+  van: [buildVanStatusScanSpec, buildVanReturnScanSpec],
 };

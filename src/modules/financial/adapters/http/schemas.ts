@@ -1512,6 +1512,47 @@ export const remittanceListResponseSchema = z
 
 export type RemittanceListResponseDto = z.infer<typeof remittanceListResponseSchema>;
 
+// ─── quarentena do retorno da VAN (#753) ─────────────────────────────────────
+
+/**
+ * ⚠️ `z.coerce.boolean()` NÃO serve aqui, e o erro seria silencioso: a coerção é `Boolean(valor)`,
+ * então `?includeReleased=false` — string não-vazia — vira `true`. O filtro faria o oposto do que o
+ * cliente pediu e devolveria o histórico inteiro onde ele queria só o que está preso.
+ *
+ * O enum das duas grafias válidas recusa qualquer outra coisa com 400 antes do use case, que é o
+ * que a dupla validação do ADR-0027 existe para dar.
+ */
+export const vanReturnQuarantineQuerySchema = z.object({
+  includeReleased: z.enum(['true', 'false']).optional(),
+});
+
+const quarantineReasonSchema = z.enum(['missing-provenance', 'hash-mismatch', 'origin-not-logged']);
+
+export const vanReturnQuarantineItemSchema = z
+  .object({
+    // Chave do objeto, não nome de arquivo: o nome é do banco e ganha sufixo desempatador em
+    // colisão, então é o caminho completo que identifica.
+    objectKey: z.string(),
+    reason: quarantineReasonSchema,
+    observedSha256: z.string(),
+    // Só existe em `hash-mismatch`. `null` — e não ausente — porque o consumidor precisa distinguir
+    // "não havia declaração" de "o campo não veio nesta versão da API".
+    expectedSha256: z.string().nullable(),
+    firstSeenAt: z.string(),
+    lastSeenAt: z.string(),
+    releasedAt: z.string().nullable(),
+  })
+  .strict();
+
+export const vanReturnQuarantineResponseSchema = z
+  .object({
+    quarantined: z.array(vanReturnQuarantineItemSchema),
+    total: z.number().int().nonnegative(),
+  })
+  .strict();
+
+export type VanReturnQuarantineResponseDto = z.infer<typeof vanReturnQuarantineResponseSchema>;
+
 export const remittanceDetailResponseSchema = remittanceListItemSchema
   .extend({
     documentIds: z.array(z.uuid()),
