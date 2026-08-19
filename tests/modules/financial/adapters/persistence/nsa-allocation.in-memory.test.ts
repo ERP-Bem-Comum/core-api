@@ -75,4 +75,44 @@ describe('allocateNsa (in-memory) — contrato do port', () => {
     assert.ok(isOk(reloaded) && reloaded.value !== null);
     assert.equal(reloaded.value.nextNsa, 3);
   });
+
+  // Regressão do lost update em produção: `edit-cedente-account.ts` lê a conta, monta `updated`
+  // por spread de `found.value` (sem tocar `nextNsa`) e chama `save`. Se uma alocação concorrente
+  // completar ENTRE a leitura e o `save`, o snapshot em mãos do use case carrega o `nextNsa`
+  // OBSOLETO — e um `save` que o gravasse apagaria o avanço, fazendo o contador RETROCEDER e
+  // abrindo caminho para reemitir um NSA já usado (o banco trata NSA repetido como retransmissão,
+  // não como remessa nova). A correção tira `nextNsa` do path de update do `save`: só `allocateNsa`
+  // escreve o contador.
+  it('save com snapshot anterior a uma alocação concorrente não retrocede o contador (lost update)', async () => {
+    const { store, id } = await seed(1);
+
+    // Snapshot que o use case teria em mãos ANTES de qualquer alocação concorrente.
+    const beforeAllocation = await store.findById(id);
+    assert.ok(isOk(beforeAllocation) && beforeAllocation.value !== null);
+    const staleSnapshot = beforeAllocation.value;
+    assert.equal(staleSnapshot.nextNsa, 1);
+
+    // Alocação concorrente avança o contador persistido para 2.
+    const allocated = await store.allocateNsa(id);
+    assert.ok(isOk(allocated));
+    assert.equal(allocated.value, 1);
+
+    // `save` chega DEPOIS, mas carrega o snapshot obsoleto (nextNsa: 1) — como faria
+    // `edit-cedente-account.ts` ao editar outro campo (ex.: `nickname`) sem saber da alocação.
+    const editedButStale = { ...staleSnapshot, nickname: 'apelido novo' };
+    const saved = await store.save(editedButStale);
+    assert.ok(isOk(saved));
+
+    const reloaded = await store.findById(id);
+    assert.ok(isOk(reloaded) && reloaded.value !== null);
+    // O contador NÃO retrocede para 1: o `save` preserva o valor avançado pela alocação.
+    assert.equal(reloaded.value.nextNsa, 2);
+    // A edição em si (campo que não é o contador) foi persistida normalmente.
+    assert.equal(reloaded.value.nickname, 'apelido novo');
+
+    // E o próximo NSA continua de onde a alocação concorrente deixou — nunca repete o 1 já emitido.
+    const next = await store.allocateNsa(id);
+    assert.ok(isOk(next));
+    assert.equal(next.value, 2);
+  });
 });

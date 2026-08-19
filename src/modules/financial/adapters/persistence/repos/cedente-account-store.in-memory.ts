@@ -39,8 +39,16 @@ export const createInMemoryCedenteAccountStore = (): CedenteAccountStore => {
     list: async (): Promise<Result<readonly CedenteAccount[], CedenteAccountStoreError>> =>
       Promise.resolve(ok([...accounts.values()])),
 
+    // `nextNsa` FICA FORA do path de update, espelhando a regra do adapter Drizzle (ver
+    // `cedente-account-store.drizzle.ts` §`save`): o único caminho de escrita do contador é
+    // `allocateNsa`. Se este `save` sobrescrevesse `nextNsa` com o valor que o chamador tem em mãos
+    // (lido antes de uma alocação concorrente), o fake ficaria verde descrevendo produção errado —
+    // que é justamente o lost update que este arquivo corrigiu.
     save: async (account: CedenteAccount): Promise<Result<void, CedenteAccountStoreError>> => {
-      accounts.set(account.id, account);
+      const existing = accounts.get(account.id);
+      const toPersist =
+        existing === undefined ? account : { ...account, nextNsa: existing.nextNsa };
+      accounts.set(account.id, toPersist);
       return Promise.resolve(ok(undefined));
     },
 

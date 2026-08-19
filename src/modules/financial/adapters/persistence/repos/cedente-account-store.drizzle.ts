@@ -105,6 +105,17 @@ export const createDrizzleCedenteAccountStore = (
       }
     },
 
+    // `next_nsa` FICA FORA do `set` do UPDATE, de propósito (correção de lost update em produção).
+    // O use case de edição (`edit-cedente-account.ts`) monta `updated` a partir de um `found` lido
+    // ANTES de qualquer `allocateNsa` concorrente; se este `save` reescrevesse `next_nsa` com esse
+    // valor obsoleto, uma alocação que completasse entre o `findById` e o `save` seria apagada — o
+    // contador RETROCEDE, e um NSA já emitido pode ser reemitido. O que o layout exige do campo está
+    // no G018: "evoluir um número seqüencial a cada header de arquivo" — retroceder viola isso. E o
+    // validador do banco recusa o arquivo se o contador chegar a zero ("Número sequencial de arquivo
+    // está zerado"). O único caminho de escrita do contador passa a ser
+    // `allocateNsa`, que serializa com `SELECT ... FOR UPDATE` na mesma transação. O `INSERT` inicial
+    // (linha ainda não existe) continua gravando `next_nsa`, porque ali não há valor concorrente a
+    // perder.
     save: async (account: CedenteAccount): Promise<Result<void, CedenteAccountStoreError>> => {
       try {
         const row = toRow(account);
@@ -120,7 +131,6 @@ export const createDrizzleCedenteAccountStore = (
               convenio: row.convenio,
               document: row.document,
               status: row.status,
-              nextNsa: row.nextNsa,
               type: row.type,
               nickname: row.nickname,
               bankName: row.bankName,
