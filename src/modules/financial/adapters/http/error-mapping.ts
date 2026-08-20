@@ -29,6 +29,10 @@ const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
 const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'invalid-state-transition',
   'document-version-conflict',
+  // #785 — o bucket contradiz o contrato de prefixos. É 409 e não 404 de propósito: 404 significa
+  // "não existe, nada a fazer", e aqui há o que fazer. E não é 5xx porque o envelope esconde o
+  // código em 5xx, e este é justamente o código que precisa chegar a quem pediu.
+  'remittance-file-prefix-drift',
   // Conciliação: pré-condições de estado.
   'transaction-already-reconciled',
   'reconciliation-already-undone',
@@ -198,7 +202,9 @@ const SLUG_MESSAGES: Record<string, string> = {
   // Acompanhamento de remessa (#728).
   'remittance-not-found': 'Remessa não encontrada.',
   'remittance-file-not-found':
-    'O arquivo desta remessa não está no armazenamento da VAN. Ele pode ter sido movido para fora dos prefixos conhecidos.',
+    'O arquivo desta remessa não está no armazenamento da VAN — provavelmente é uma remessa antiga, já expurgada.',
+  'remittance-file-prefix-drift':
+    'O arquivo não está nos prefixos do contrato, e o armazenamento tem prefixo fora do combinado com o agente de transporte. A fronteira mudou: consulte o log do servidor, que nomeia o prefixo inesperado.',
   // Mensagem deliberadamente alarmante: hash divergente significa que o objeto NÃO é o que foi
   // enviado ao banco. Servir assim mesmo entregaria evidência falsa numa conferência de pagamento.
   'remittance-file-corrupted':

@@ -64,6 +64,40 @@ export const createS3VanStorage = (config: VanS3Config): VanStoragePort => {
     }
   };
 
+  /**
+   * Distingue "arquivo antigo" de "o agente mudou de prefixo" (#785).
+   *
+   * Devolve SEMPRE um erro — é chamada só quando o objeto não foi achado. Qual erro é a informação:
+   * `van-storage-prefix-drift` quando o bucket tem prefixo de primeiro nível fora do configurado,
+   * `van-storage-object-not-found` quando não tem.
+   *
+   * ⚠️ Falha de rede aqui NÃO vira "prefixo mudou". Inferir divergência de fronteira a partir de um
+   * timeout inventaria um incidente entre repositórios — e mandaria alguém investigar o agente por
+   * causa de um bucket momentaneamente fora do ar.
+   */
+  const detectPrefixDrift = async (): Promise<Result<never, VanStorageError>> => {
+    try {
+      const res: ListObjectsV2CommandOutput = await client.send(
+        new ListObjectsV2Command({ Bucket: config.bucket, Delimiter: '/' }),
+      );
+
+      const known = new Set(Object.values(config.prefixes));
+      const unknown = (res.CommonPrefixes ?? [])
+        .map((p) => p.Prefix)
+        .filter((p): p is string => p !== undefined && !known.has(p));
+
+      if (unknown.length === 0) return err('van-storage-object-not-found');
+
+      // QUAL prefixo apareceu vai para o log do servidor, não para a resposta HTTP: nome de prefixo
+      // é topologia do bucket, e os repositórios são públicos. Quem investiga tem o log.
+      logStorage('prefix-drift', `prefixos fora do contrato: ${unknown.join(', ')}`);
+      return err('van-storage-prefix-drift');
+    } catch (cause) {
+      logStorage('detect prefix drift', cause);
+      return err('van-storage-unavailable');
+    }
+  };
+
   const list = async (
     prefix: string,
   ): Promise<Result<readonly VanObjectKey[], VanStorageError>> => {
@@ -158,7 +192,13 @@ export const createS3VanStorage = (config: VanS3Config): VanStoragePort => {
         if (found.error !== 'van-storage-object-not-found') return found;
       }
 
-      return err('van-storage-object-not-found');
+      // Os três prefixos falharam. Antes de dizer "não encontrado" — que significa "arquivo antigo,
+      // nada a fazer" — vale perguntar se o bucket ganhou prefixo que não conhecemos (#785). São
+      // duas situações com ações OPOSTAS saindo pela mesma porta, e a segunda é invisível sem isto.
+      //
+      // Uma chamada, com delimitador: `CommonPrefixes` devolve só o primeiro nível, sem varrer o
+      // bucket. E roda APENAS aqui, no caminho de ausência — o caminho feliz não paga nada.
+      return detectPrefixDrift();
     },
   };
 };
