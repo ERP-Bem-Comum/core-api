@@ -17,6 +17,16 @@ export type RemittanceDocumentRef = Readonly<{
   /** G064, exatamente como foi gravado na remessa. */
   yourNumber: string;
   remittanceId: string;
+  /**
+   * O TÍTULO que o banco confirmou — a unidade em que o pagamento de fato acontece.
+   *
+   * ⚠️ É o que impede a baixa errada. Uma nota pode sair em parte (o pai no arquivo, a retenção
+   * ainda em aberto); enquanto esta chave resolvia para o documento, confirmar um título baixaria a
+   * nota inteira, sem erro visível. A conciliação (`confirmReconciliation`) já fala `payableIds`,
+   * então o degrau que existia entre retorno e conciliação fecha aqui.
+   */
+  payableId: string;
+  /** A nota de origem, para dizer ao operador de onde veio — não é a unidade de baixa. */
   documentId: string;
   /** Nome do arquivo de remessa — o que permite dizer ao operador de qual envio aquilo veio. */
   fileName: string;

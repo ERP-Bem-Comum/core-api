@@ -17,7 +17,7 @@
 // usa para dizer o que falta. Uma segunda conversão aqui divergiria, e a divergência apareceria
 // como título que o pré-voo aprova e o arquivo recusa.
 
-import { inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
@@ -36,7 +36,7 @@ import { isApprovedForRemittance } from '#src/modules/financial/domain/document/
 import { decomposePayeeAccount } from '#src/modules/financial/domain/payout/payee-account.ts';
 import { checkPayoutReadiness } from '#src/modules/financial/domain/payout/payout-readiness.ts';
 import type { PayeeContractor } from '../../http/payee-bank-composition.ts';
-import { finDocuments } from '../schemas/mysql.ts';
+import { finDocuments, finPayables } from '../schemas/mysql.ts';
 
 const logStore = (op: string, cause: unknown): void => {
   process.stderr.write(`[fin-remittance-payment-reader] ${op} failed: ${String(cause)}\n`);
@@ -55,19 +55,20 @@ const CPF_LENGTH = 11;
 const cleanDocument = (raw: string): string => raw.replace(/[^0-9A-Za-z]/g, '').toUpperCase();
 const documentTypeOf = (raw: string): '1' | '2' => (raw.length === CPF_LENGTH ? '1' : '2');
 
-type DocumentRow = Readonly<{
+type PayableRow = Readonly<{
+  payableId: string;
   documentId: string;
   status: string | null;
   paymentMethod: string | null;
   paymentDetail: string | null;
-  netValueCents: number | null;
+  valueCents: number | null;
   dueDate: Date | null;
   payeeKind: string | null;
   payeeId: string | null;
 }>;
 
 const toPaymentData = (
-  row: DocumentRow,
+  row: PayableRow,
   contractor: PayeeContractor | null,
 ): Result<RemittancePaymentData, RemittancePaymentReaderError> => {
   // Aprovação ANTES de tudo (#736): título não-`Approved` não é candidato a pagamento, tenha ou não
@@ -80,12 +81,15 @@ const toPaymentData = (
 
   // Sem forma de pagamento ou sem vencimento o título não é pagável — e o vencimento é a data que
   // o arquivo grava, porque a remessa é gerada POR vencimento (decisão da P.O. na #711).
-  if (row.paymentMethod === null || row.dueDate === null || row.netValueCents === null) {
+  if (row.paymentMethod === null || row.dueDate === null || row.valueCents === null) {
     return err('remittance-payment-incomplete');
   }
 
+  // Vencimento e valor DO TÍTULO. Era aqui que a data do arquivo divergia do que o operador via na
+  // tela: o grid mostra o vencimento do título e a emissão lia o da nota, que a #270 permite alterar
+  // isoladamente. Lendo o título, as duas pontas passam a citar a mesma linha.
   const paymentDate = row.dueDate;
-  const valueCents = row.netValueCents;
+  const valueCents = row.valueCents;
 
   // A régua de aptidão é a MESMA do pré-voo. Chamá-la aqui não é redundância: entre o pré-voo e a
   // geração o cadastro pode ter mudado, e a última palavra tem de ser dada no momento de emitir.
@@ -121,6 +125,7 @@ const toPaymentData = (
 
       const document = cleanDocument(contractor.document);
       return ok({
+        payableId: row.payableId,
         documentId: row.documentId,
         route: 'transfer',
         payee: {
@@ -142,6 +147,7 @@ const toPaymentData = (
       // `ready` no boleto garante 44 dígitos — a régua já recusou linha digitável e código curto.
       const barcode = (row.paymentDetail ?? '').replace(/\D/g, '');
       return ok({
+        payableId: row.payableId,
         documentId: row.documentId,
         route: 'billet',
         barcode,
@@ -160,6 +166,7 @@ const toPaymentData = (
     case 'pix':
     case 'tax-guide':
       return ok({
+        payableId: row.payableId,
         documentId: row.documentId,
         route: readiness.route,
         valueCents,
@@ -176,24 +183,29 @@ export const createDrizzleRemittancePaymentReader = (
 
   return {
     loadPayments: async (
-      documentIds: readonly string[],
+      payableIds: readonly string[],
     ): Promise<Result<readonly RemittancePaymentData[], RemittancePaymentReaderError>> => {
-      if (documentIds.length === 0) return ok([]);
+      if (payableIds.length === 0) return ok([]);
 
       try {
         const rows = await db
           .select({
-            documentId: finDocuments.id,
-            status: finDocuments.status,
-            paymentMethod: finDocuments.paymentMethod,
-            paymentDetail: finDocuments.paymentDetail,
-            netValueCents: finDocuments.netValue,
-            dueDate: finDocuments.dueDate,
+            payableId: finPayables.id,
+            documentId: finPayables.documentId,
+            // Status, forma, complemento, valor e vencimento são DO TÍTULO — o mesmo grão que o
+            // pré-voo lê e que o grid de Contas a Pagar exibe.
+            status: finPayables.status,
+            paymentMethod: finPayables.paymentMethod,
+            paymentDetail: finPayables.paymentDetail,
+            valueCents: finPayables.value,
+            dueDate: finPayables.dueDate,
+            // O favorecido é da NOTA: o título não tem fornecedor próprio.
             payeeKind: finDocuments.payeeKind,
             payeeId: finDocuments.supplierRef,
           })
-          .from(finDocuments)
-          .where(inArray(finDocuments.id, [...documentIds]));
+          .from(finPayables)
+          .innerJoin(finDocuments, eq(finPayables.documentId, finDocuments.id))
+          .where(inArray(finPayables.id, [...payableIds]));
 
         // Uma leitura por favorecido, não por título — mesma razão do reader de pré-voo: o mesmo
         // fornecedor aparece em vários títulos e o pool é recurso escasso (#407).

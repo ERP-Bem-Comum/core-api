@@ -34,7 +34,10 @@ const reader = (docs: readonly string[]): RemittancePaymentReader => ({
         ids
           .filter((id) => docs.includes(id))
           .map((id, i) => ({
-            documentId: id,
+            payableId: id,
+            // A nota de origem: nas fixtures cada título vem de uma nota própria, salvo onde o
+            // caso testa justamente o contrário.
+            documentId: `doc-of-${id}`,
             route: 'transfer' as const,
             payee: payee(i + 1),
             valueCents: (i + 1) * 1000,
@@ -89,7 +92,7 @@ const input = (
   docs: readonly string[],
 ) => ({
   cedenteAccountId,
-  documentIds: docs,
+  payableIds: docs,
 });
 
 describe('generateRemittance — caminho feliz', () => {
@@ -117,7 +120,7 @@ describe('generateRemittance — caminho feliz', () => {
     assert.ok(isOk(saved) && saved.value !== null);
     assert.equal(saved.value.status, 'Queued');
 
-    const held = await s.remittances.findHeldDocumentIds(s.docs);
+    const held = await s.remittances.findHeldPayableIds(s.docs);
     assert.ok(isOk(held));
     assert.deepEqual(held.value, [...s.docs].sort());
   });
@@ -149,9 +152,9 @@ describe('generateRemittance — a chave de casamento do retorno (#752)', () => 
     const saved = await s.remittances.findById(r.value.remittanceId);
     assert.ok(isOk(saved) && saved.value !== null);
 
-    assert.equal(saved.value.documents.length, s.docs.length);
-    for (const d of saved.value.documents) {
-      assert.notEqual(d.yourNumber.trim(), '', `documento ${d.documentId} sem chave de casamento`);
+    assert.equal(saved.value.payables.length, s.docs.length);
+    for (const d of saved.value.payables) {
+      assert.notEqual(d.yourNumber.trim(), '', `título ${d.payableId} sem chave de casamento`);
     }
   });
 
@@ -168,7 +171,7 @@ describe('generateRemittance — a chave de casamento do retorno (#752)', () => 
 
     // Toda referência persistida tem de aparecer no conteúdo transmitido. Se o casamento por índice
     // se deslocasse, a referência gravada seria de outro pagamento — e algumas não estariam lá.
-    for (const d of saved.value.documents) {
+    for (const d of saved.value.payables) {
       assert.ok(
         stored.value.includes(d.yourNumber),
         `referência ${d.yourNumber} não está no arquivo emitido`,
@@ -184,7 +187,7 @@ describe('generateRemittance — a chave de casamento do retorno (#752)', () => 
     const saved = await s.remittances.findById(r.value.remittanceId);
     assert.ok(isOk(saved) && saved.value !== null);
 
-    const refs = saved.value.documents.map((d) => d.yourNumber);
+    const refs = saved.value.payables.map((d) => d.yourNumber);
     assert.equal(new Set(refs).size, refs.length);
   });
 });
@@ -198,14 +201,14 @@ describe('generateRemittance — o que ele recusa', () => {
   });
 
   // A defesa contra pagamento em dobro: documento já numa remessa viva não entra noutra.
-  it('recusa documento já preso em remessa viva', async () => {
+  it('recusa título já preso em remessa viva', async () => {
     const s = await setup();
     const first = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
     assert.ok(isOk(first));
 
     const second = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
     assert.ok(isErr(second));
-    assert.equal(second.error, 'remittance-documents-already-held');
+    assert.equal(second.error, 'remittance-payables-already-held');
   });
 
   it('recusa quando falta dado de pagamento de algum documento selecionado', async () => {
@@ -257,7 +260,7 @@ describe('generateRemittance — a ordem importa mais que o resultado', () => {
     assert.ok(isErr(r));
     assert.equal(r.error, 'remittance-upload-failed');
 
-    const held = await s.remittances.findHeldDocumentIds(s.docs);
+    const held = await s.remittances.findHeldPayableIds(s.docs);
     assert.ok(isOk(held));
     assert.equal(held.value.length, 2, 'documentos seguem presos, não voltam para a fila');
   });
@@ -271,7 +274,10 @@ describe('generateRemittance — um arquivo, um dia (#712)', () => {
       Promise.resolve(
         ok(
           ids.map((id, i) => ({
-            documentId: id,
+            payableId: id,
+            // A nota de origem: nas fixtures cada título vem de uma nota própria, salvo onde o
+            // caso testa justamente o contrário.
+            documentId: `doc-of-${id}`,
             route: 'transfer' as const,
             payee: payee(i + 1),
             valueCents: (i + 1) * 1000,
@@ -343,7 +349,10 @@ describe('generateRemittance — rota sem emissor (#711, CA3)', () => {
       Promise.resolve(
         ok(
           ids.map((id, i) => ({
-            documentId: id,
+            payableId: id,
+            // A nota de origem: nas fixtures cada título vem de uma nota própria, salvo onde o
+            // caso testa justamente o contrário.
+            documentId: `doc-of-${id}`,
             route,
             valueCents: (i + 1) * 1000,
             paymentDate: new Date(Date.UTC(2026, 7, 12)),

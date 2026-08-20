@@ -1178,7 +1178,7 @@ const financialRoutes =
 
         const result = await deps.generateRemittance({
           cedenteAccountId: cedenteAccountId.value,
-          documentIds: req.body.documentIds,
+          payableIds: req.body.payableIds,
         });
         if (!result.ok) return sendDomainError(reply, result.error);
 

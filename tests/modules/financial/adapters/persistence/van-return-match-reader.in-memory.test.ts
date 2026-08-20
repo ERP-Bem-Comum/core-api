@@ -26,6 +26,9 @@ const REF_B = '000000000001000002';
 const ref = (yourNumber: string, documentId: string): RemittanceDocumentRef => ({
   yourNumber,
   remittanceId: REMITTANCE,
+  // Neste arquivo cada nota tem um título só; o par recebe o mesmo valor porque o que se mede é o
+  // lookup por `yourNumber`, não o agrupamento.
+  payableId: documentId,
   documentId,
   fileName: FILE_NAME,
 });

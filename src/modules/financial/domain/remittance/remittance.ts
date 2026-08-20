@@ -3,13 +3,20 @@ import { immutable } from '../../../../shared/primitives/immutable.ts';
 import type { CreateRemittanceInput, Remittance, RemittanceError } from './types.ts';
 import type { RemittanceEvent } from './events.ts';
 
-// Os ids dos documentos presos, sem a referência emitida. Existe porque quase todo consumidor
-// (evento, DTO, contagem, seleção) só pergunta QUAIS documentos estão presos — e fazê-los conhecer
+// Os ids dos TÍTULOS presos, sem a referência emitida. Existe porque quase todo consumidor
+// (evento, DTO, contagem, seleção) só pergunta QUAIS títulos estão presos — e fazê-los conhecer
 // o par inteiro espalharia o vocabulário da emissão por lugares que não emitem nada.
 //
 // Derivado, nunca armazenado em paralelo: duas listas que precisam concordar acabam discordando.
-export const documentIdsOf = (remittance: Remittance): readonly string[] =>
-  remittance.documents.map((d) => d.documentId);
+export const payableIdsOf = (remittance: Remittance): readonly string[] =>
+  remittance.payables.map((p) => p.payableId);
+
+// As NOTAS que a remessa tocou, cada uma UMA vez. Deduplica porque títulos irmãos compartilham a
+// nota: sem o `Set`, uma remessa com o pai e duas retenções da mesma nota a reportaria três vezes,
+// e quem conta "quantas notas saíram neste arquivo" leria três.
+export const documentIdsOf = (remittance: Remittance): readonly string[] => [
+  ...new Set(remittance.payables.map((p) => p.documentId)),
+];
 
 /**
  * O que uma transição devolve: o agregado no estado novo mais o que houve de contar ao mundo.
@@ -34,7 +41,7 @@ const settled = (
   remittanceId: remittance.id,
   nsa: remittance.nsa,
   fileName: remittance.fileName,
-  documentIds: documentIdsOf(remittance),
+  payableIds: payableIdsOf(remittance),
   settledAt: at,
   detail,
 });
@@ -42,23 +49,26 @@ const settled = (
 const isBlank = (value: string): boolean => value.trim().length === 0;
 
 export const create = (input: CreateRemittanceInput): Result<Remittance, RemittanceError> => {
-  if (input.documents.length === 0) return err('remittance-without-documents');
+  if (input.payables.length === 0) return err('remittance-without-payables');
 
-  const documentIds = input.documents.map((d) => d.documentId);
-  if (new Set(documentIds).size !== documentIds.length) {
-    return err('remittance-duplicated-document');
+  // Unicidade pelo TÍTULO, nunca pela nota: o pai e a retenção de ISS são títulos distintos do
+  // mesmo documento e podem sair no mesmo arquivo. Cobrar aqui a unicidade do `documentId` recusaria
+  // essa seleção legítima e obrigaria o operador a emitir um arquivo por título da mesma nota.
+  const payableIds = input.payables.map((p) => p.payableId);
+  if (new Set(payableIds).size !== payableIds.length) {
+    return err('remittance-duplicated-payable');
   }
 
   // CA3 da #752: referência ausente RECUSA a remessa, com nome próprio. O fallback silencioso para
   // string vazia é o que fazia o defeito ser invisível — o arquivo saía válido e o banco aceitava.
-  if (input.documents.some((d) => isBlank(d.yourNumber))) {
-    return err('remittance-document-without-reference');
+  if (input.payables.some((p) => isBlank(p.yourNumber))) {
+    return err('remittance-payable-without-reference');
   }
 
   // CA4/CA2: referência repetida dentro do mesmo arquivo torna o casamento do retorno AMBÍGUO — o
   // banco devolveria uma referência que aponta para dois títulos. Entre remessas a unicidade vem do
   // NSA, que é alocado sob lock e nunca repete; dentro do arquivo, é aqui que ela é cobrada.
-  const references = input.documents.map((d) => d.yourNumber);
+  const references = input.payables.map((p) => p.yourNumber);
   if (new Set(references).size !== references.length) {
     return err('remittance-duplicated-reference');
   }
@@ -73,7 +83,7 @@ export const create = (input: CreateRemittanceInput): Result<Remittance, Remitta
       nsa: input.nsa,
       fileName: input.fileName,
       contentHash: input.contentHash,
-      documents: input.documents.map((d) => immutable({ ...d })),
+      payables: input.payables.map((p) => immutable({ ...p })),
       // Nasce enfileirada, nunca transmitida: gravar no bucket não é transmitir.
       status: 'Queued',
       generatedAt: input.generatedAt,
@@ -81,16 +91,19 @@ export const create = (input: CreateRemittanceInput): Result<Remittance, Remitta
   );
 };
 
-export const includes = (remittance: Remittance, documentId: string): boolean =>
-  remittance.documents.some((d) => d.documentId === documentId);
+export const includes = (remittance: Remittance, payableId: string): boolean =>
+  remittance.payables.some((p) => p.payableId === payableId);
 
-// A pergunta que a seleção de documentos faz. Enquanto a remessa "prende", nenhum dos seus
-// documentos pode entrar noutra — é o que substitui a transição imediata para `Transmitted`.
+// A pergunta que a seleção de títulos faz. Enquanto a remessa "prende", nenhum dos seus títulos
+// pode entrar noutra — é o que substitui a transição imediata para `Transmitted`.
+//
+// ⚠️ Prende o TÍTULO, não a nota: com o pai numa remessa, a retenção da mesma nota segue livre para
+// entrar noutra. É o que a premissa do negócio pede — pagar o pai sem pagar o filho — e o que
+// prender por documento impediria.
 //
 // `Failed` prende. "Sem confirmação" não é "não transmitiu", e liberar por conta própria reabriria
 // o caminho para pagamento em dobro. Só `Discarded` — decisão humana registrada — libera.
-export const holdsDocuments = (remittance: Remittance): boolean =>
-  remittance.status !== 'Discarded';
+export const holdsPayables = (remittance: Remittance): boolean => remittance.status !== 'Discarded';
 
 // Idempotente por desenho: o agente não apaga nada e a varredura pode reler o mesmo objeto de
 // status. Confirmar duas vezes preserva o PRIMEIRO desfecho, em vez de virar erro operacional.

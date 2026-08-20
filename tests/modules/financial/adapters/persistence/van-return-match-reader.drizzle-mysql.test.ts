@@ -19,7 +19,7 @@ import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleVanReturnMatchReader } from '#src/modules/financial/adapters/persistence/repos/van-return-match-reader.drizzle.ts';
 import {
-  finRemittanceDocuments,
+  finRemittancePayables,
   finRemittances,
 } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
@@ -54,7 +54,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
     // Limpeza na ENTRADA e por TABELA (`.claude/rules/testing.md`): as chaves aqui são literais, e
     // `your_number` tem UNIQUE — a 2ª execução colidiria no seed. Filha antes da mãe.
     beforeEach(async () => {
-      await handle.db.delete(finRemittanceDocuments);
+      await handle.db.delete(finRemittancePayables);
       await handle.db.delete(finRemittances);
 
       await handle.db.insert(finRemittances).values({
@@ -70,9 +70,9 @@ if (!process.env['MYSQL_INTEGRATION']) {
         // reproduziria o erro 1292 que o #767 diagnosticou, do outro lado.
         generatedAt: '2026-08-19 12:00:00.000',
       });
-      await handle.db.insert(finRemittanceDocuments).values([
-        { remittanceId: REMITTANCE, documentId: DOC_A, yourNumber: REF_A },
-        { remittanceId: REMITTANCE, documentId: DOC_B, yourNumber: REF_B },
+      await handle.db.insert(finRemittancePayables).values([
+        { remittanceId: REMITTANCE, payableId: DOC_A, documentId: DOC_A, yourNumber: REF_A },
+        { remittanceId: REMITTANCE, payableId: DOC_B, documentId: DOC_B, yourNumber: REF_B },
       ]);
     });
 
@@ -138,8 +138,9 @@ if (!process.env['MYSQL_INTEGRATION']) {
     // títulos e ninguém perceberia — a leitura devolveria duas linhas e a primeira venceria.
     it('a UNIQUE de `your_number` existe de verdade e recusa referência repetida', async () => {
       await assert.rejects(
-        handle.db.insert(finRemittanceDocuments).values({
+        handle.db.insert(finRemittancePayables).values({
           remittanceId: REMITTANCE,
+          payableId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
           documentId: 'eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee',
           yourNumber: REF_A,
         }),

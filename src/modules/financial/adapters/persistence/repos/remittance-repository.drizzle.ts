@@ -8,7 +8,7 @@ import process from 'node:process';
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type {
   Remittance,
-  RemittanceDocument,
+  RemittancePayable,
   RemittanceStatus,
 } from '#src/modules/financial/domain/remittance/types.ts';
 import type { RemittanceEvent } from '#src/modules/financial/domain/remittance/events.ts';
@@ -19,7 +19,7 @@ import type {
   RemittanceRepositoryError,
 } from '#src/modules/financial/application/ports/remittance-repository.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
-import { finRemittances, finRemittanceDocuments } from '../schemas/mysql.ts';
+import { finRemittances, finRemittancePayables } from '../schemas/mysql.ts';
 import { appendFinOutboxInTx } from './fin-outbox-helpers.ts';
 import type { FinRemittanceRow } from '../schemas/mysql.ts';
 
@@ -79,7 +79,7 @@ const HOLDING: readonly RemittanceStatus[] = ['Queued', 'Transmitted', 'Failed']
 
 const toDomain = (
   row: Readonly<FinRemittanceRow>,
-  documents: readonly RemittanceDocument[],
+  payables: readonly RemittancePayable[],
 ): Result<Remittance, 'remittance-row-invalid'> => {
   const id = RemittanceId.rehydrate(row.id);
   if (!id.ok) return err('remittance-row-invalid');
@@ -93,7 +93,7 @@ const toDomain = (
     nsa: row.nsa,
     fileName: row.fileName,
     contentHash: row.contentHash,
-    documents,
+    payables,
     status: row.status as RemittanceStatus,
     generatedAt: toIsoDateTime(row.generatedAt),
     ...(row.settledAt !== null ? { settledAt: toIsoDateTime(row.settledAt) } : {}),
@@ -106,20 +106,28 @@ export const createDrizzleRemittanceRepository = (
 ): RemittanceRepository => {
   const { db } = handle;
 
-  // A ordenação por `documentId` é deliberada e independe da ordem de emissão: o agregado não
+  // A ordenação por `payableId` é deliberada e independe da ordem de emissão: o agregado não
   // promete ordem, e uma leitura estável é o que torna a comparação em teste previsível. A ordem da
   // emissão está preservada onde ela importa — dentro da própria referência, que carrega a posição.
-  const loadDocuments = async (remittanceId: string): Promise<readonly RemittanceDocument[]> => {
+  //
+  // Ordenar por `documentId` não serviria: títulos irmãos compartilham a nota, e o desempate entre
+  // eles ficaria a cargo do otimizador.
+  const loadPayables = async (remittanceId: string): Promise<readonly RemittancePayable[]> => {
     const rows = await db
       .select({
-        documentId: finRemittanceDocuments.documentId,
-        yourNumber: finRemittanceDocuments.yourNumber,
+        payableId: finRemittancePayables.payableId,
+        documentId: finRemittancePayables.documentId,
+        yourNumber: finRemittancePayables.yourNumber,
       })
-      .from(finRemittanceDocuments)
-      .where(eq(finRemittanceDocuments.remittanceId, remittanceId));
+      .from(finRemittancePayables)
+      .where(eq(finRemittancePayables.remittanceId, remittanceId));
     return rows
-      .map((r) => ({ documentId: r.documentId, yourNumber: r.yourNumber }))
-      .sort((a, b) => a.documentId.localeCompare(b.documentId));
+      .map((r) => ({
+        payableId: r.payableId,
+        documentId: r.documentId,
+        yourNumber: r.yourNumber,
+      }))
+      .sort((a, b) => a.payableId.localeCompare(b.payableId));
   };
 
   return {
@@ -167,10 +175,10 @@ export const createDrizzleRemittanceRepository = (
             // `yourNumber` (#752) é gravado JUNTO, e não num passo à parte, porque a referência não
             // faz sentido sem o vínculo: um par gravado pela metade seria um documento preso cuja
             // chave de casamento ninguém sabe qual é. A transação já cobre isso.
-            for (const { documentId, yourNumber } of remittance.documents) {
+            for (const { payableId, documentId, yourNumber } of remittance.payables) {
               await tx
-                .insert(finRemittanceDocuments)
-                .values({ remittanceId: remittance.id, documentId, yourNumber });
+                .insert(finRemittancePayables)
+                .values({ remittanceId: remittance.id, payableId, documentId, yourNumber });
             }
           } else {
             // Atualização de desfecho, por ID. Só o que a máquina de estados muda — nunca NSA, nome
@@ -211,7 +219,7 @@ export const createDrizzleRemittanceRepository = (
         const row = rows[0];
         if (row === undefined) return ok(null);
 
-        const mapped = toDomain(row, await loadDocuments(row.id));
+        const mapped = toDomain(row, await loadPayables(row.id));
         if (!mapped.ok) {
           logRepo('findById:map', mapped.error);
           return err('remittance-repository-unavailable');
@@ -235,7 +243,7 @@ export const createDrizzleRemittanceRepository = (
         const row = rows[0];
         if (row === undefined) return ok(null);
 
-        const mapped = toDomain(row, await loadDocuments(row.id));
+        const mapped = toDomain(row, await loadPayables(row.id));
         if (!mapped.ok) {
           logRepo('findByFileName:map', mapped.error);
           return err('remittance-repository-unavailable');
@@ -247,28 +255,32 @@ export const createDrizzleRemittanceRepository = (
       }
     },
 
-    // JOIN no banco, não filtro em memória: outra instância pode ter enfileirado o mesmo documento
+    // JOIN no banco, não filtro em memória: outra instância pode ter enfileirado o mesmo título
     // há dois segundos, e uma resposta desatualizada aqui custa pagamento em dobro.
-    findHeldDocumentIds: async (
-      documentIds: readonly string[],
+    //
+    // ⚠️ Pergunta por TÍTULO. Filtrar por documento prenderia os irmãos junto: com o pai numa
+    // remessa viva, a retenção da mesma nota apareceria como presa e o operador não conseguiria
+    // pagá-la — o oposto da premissa de que cada título tem ciclo de vida próprio.
+    findHeldPayableIds: async (
+      payableIds: readonly string[],
     ): Promise<Result<readonly string[], RemittanceRepositoryError>> => {
-      if (documentIds.length === 0) return ok([]);
+      if (payableIds.length === 0) return ok([]);
 
       try {
         const rows = await db
-          .select({ documentId: finRemittanceDocuments.documentId })
-          .from(finRemittanceDocuments)
-          .innerJoin(finRemittances, eq(finRemittances.id, finRemittanceDocuments.remittanceId))
+          .select({ payableId: finRemittancePayables.payableId })
+          .from(finRemittancePayables)
+          .innerJoin(finRemittances, eq(finRemittances.id, finRemittancePayables.remittanceId))
           .where(
             and(
-              inArray(finRemittanceDocuments.documentId, [...documentIds]),
+              inArray(finRemittancePayables.payableId, [...payableIds]),
               inArray(finRemittances.status, [...HOLDING]),
             ),
           );
 
-        return ok([...new Set(rows.map((r) => r.documentId))].sort());
+        return ok([...new Set(rows.map((r) => r.payableId))].sort());
       } catch (cause) {
-        logRepo('findHeldDocumentIds', cause);
+        logRepo('findHeldPayableIds', cause);
         return err('remittance-repository-unavailable');
       }
     },
@@ -284,7 +296,7 @@ export const createDrizzleRemittanceRepository = (
         const out: Remittance[] = [];
 
         for (const row of rows) {
-          const mapped = toDomain(row, await loadDocuments(row.id));
+          const mapped = toDomain(row, await loadPayables(row.id));
           if (!mapped.ok) {
             logRepo('listByStatus:map', mapped.error);
             return err('remittance-repository-unavailable');
@@ -325,30 +337,35 @@ export const createDrizzleRemittanceRepository = (
             ? []
             : await db
                 .select({
-                  remittanceId: finRemittanceDocuments.remittanceId,
-                  documentId: finRemittanceDocuments.documentId,
-                  yourNumber: finRemittanceDocuments.yourNumber,
+                  remittanceId: finRemittancePayables.remittanceId,
+                  payableId: finRemittancePayables.payableId,
+                  documentId: finRemittancePayables.documentId,
+                  yourNumber: finRemittancePayables.yourNumber,
                 })
-                .from(finRemittanceDocuments)
-                .where(inArray(finRemittanceDocuments.remittanceId, ids));
+                .from(finRemittancePayables)
+                .where(inArray(finRemittancePayables.remittanceId, ids));
 
-        const documentsByRemittance = new Map<string, RemittanceDocument[]>();
+        const payablesByRemittance = new Map<string, RemittancePayable[]>();
         for (const link of linkRows) {
-          const document = { documentId: link.documentId, yourNumber: link.yourNumber };
-          const bucket = documentsByRemittance.get(link.remittanceId);
+          const payable = {
+            payableId: link.payableId,
+            documentId: link.documentId,
+            yourNumber: link.yourNumber,
+          };
+          const bucket = payablesByRemittance.get(link.remittanceId);
           if (bucket === undefined) {
-            documentsByRemittance.set(link.remittanceId, [document]);
+            payablesByRemittance.set(link.remittanceId, [payable]);
           } else {
-            bucket.push(document);
+            bucket.push(payable);
           }
         }
 
         const items: Remittance[] = [];
         for (const row of rows) {
-          const documents = (documentsByRemittance.get(row.id) ?? []).sort((a, b) =>
-            a.documentId.localeCompare(b.documentId),
+          const payables = (payablesByRemittance.get(row.id) ?? []).sort((a, b) =>
+            a.payableId.localeCompare(b.payableId),
           );
-          const mapped = toDomain(row, documents);
+          const mapped = toDomain(row, payables);
           if (!mapped.ok) {
             logRepo('listPaged:map', mapped.error);
             return err('remittance-repository-unavailable');

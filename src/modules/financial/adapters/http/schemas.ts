@@ -1463,7 +1463,8 @@ export type RemittancePreviewResponseDto = z.infer<typeof remittancePreviewRespo
 export const generateRemittanceBodySchema = z
   .object({
     cedenteAccountId: z.uuid(),
-    documentIds: z.array(z.uuid()).min(1).max(200),
+    // TÍTULOS. Mesma unidade do pré-voo e do grid — o operador confere e gera sobre a mesma lista.
+    payableIds: z.array(z.uuid()).min(1).max(200),
   })
   .strict();
 
@@ -1507,7 +1508,7 @@ export const remittanceListItemSchema = z
     generatedAt: z.string(),
     settledAt: z.string().nullable(),
     detail: z.string().nullable(),
-    documentCount: z.number().int().nonnegative(),
+    payableCount: z.number().int().nonnegative(),
   })
   .strict();
 
@@ -1565,6 +1566,8 @@ export type VanReturnQuarantineResponseDto = z.infer<typeof vanReturnQuarantineR
 
 export const remittanceDetailResponseSchema = remittanceListItemSchema
   .extend({
+    payableIds: z.array(z.uuid()),
+    // As notas tocadas, deduplicadas: dois títulos da mesma nota aparecem uma vez só aqui.
     documentIds: z.array(z.uuid()),
   })
   .strict();

@@ -29,7 +29,7 @@ export type GenerateRemittanceDeps = Readonly<{
 // conteúdo do arquivo podia contradizer — e com uma rota só, os dois concordavam por acidente.
 export type GenerateRemittanceInput = Readonly<{
   cedenteAccountId: CedenteAccountId;
-  documentIds: readonly string[];
+  payableIds: readonly string[];
 }>;
 
 export type GenerateRemittanceOutput = Readonly<{
@@ -43,7 +43,7 @@ export type GenerateRemittanceOutput = Readonly<{
 
 export type GenerateRemittanceError =
   | 'remittance-empty-selection'
-  | 'remittance-documents-already-held'
+  | 'remittance-payables-already-held'
   | 'remittance-payments-unavailable'
   // Título não-`Approved` na seleção (#736). É a barreira que importa: impede pagar o que ninguém
   // aprovou, contornando a separação de funções que o `payable:approve` garante.
@@ -67,17 +67,17 @@ export const generateRemittance =
   async (
     input: GenerateRemittanceInput,
   ): Promise<Result<GenerateRemittanceOutput, GenerateRemittanceError>> => {
-    if (input.documentIds.length === 0) return err('remittance-empty-selection');
+    if (input.payableIds.length === 0) return err('remittance-empty-selection');
 
     // 1. Quem já está preso. A pergunta vai ao BANCO porque outra instância pode ter enfileirado o
-    // mesmo documento há segundos — e incluir de novo é pagar duas vezes.
-    const held = await deps.remittances.findHeldDocumentIds(input.documentIds);
+    // mesmo título há segundos — e incluir de novo é pagar duas vezes.
+    const held = await deps.remittances.findHeldPayableIds(input.payableIds);
     if (!held.ok) return err('remittance-persist-failed');
-    if (held.value.length > 0) return err('remittance-documents-already-held');
+    if (held.value.length > 0) return err('remittance-payables-already-held');
 
-    // 2. Dados de pagamento. Faltar documento é erro: montar com menos do que foi selecionado
+    // 2. Dados de pagamento. Faltar título é erro: montar com menos do que foi selecionado
     // pagaria parte e calaria sobre o resto.
-    const payments = await deps.payments.loadPayments(input.documentIds);
+    const payments = await deps.payments.loadPayments(input.payableIds);
     if (!payments.ok) {
       // Não-aprovado sobe com nome próprio (409): é regra de negócio que o operador entende, não a
       // indisponibilidade genérica que os demais erros do reader viram. O pré-voo já mostra QUAIS.
@@ -87,7 +87,7 @@ export const generateRemittance =
           : 'remittance-payments-unavailable',
       );
     }
-    if (payments.value.length !== input.documentIds.length) {
+    if (payments.value.length !== input.payableIds.length) {
       return err('remittance-payments-unavailable');
     }
 
@@ -163,7 +163,8 @@ export const generateRemittance =
     // apesar de o agrupamento em lotes reordenar internamente. Se aquele contrato mudar, este casamento
     // passa a associar a referência ao documento errado — em silêncio, e o erro só aparece no
     // primeiro retorno real. O teste que fixa a ordem sob reordenação é o que segura isto.
-    const documents = payments.value.map((payment, index) => ({
+    const payables = payments.value.map((payment, index) => ({
+      payableId: payment.payableId,
       documentId: payment.documentId,
       yourNumber: translated.value.yourNumbers[index] ?? '',
     }));
@@ -174,7 +175,7 @@ export const generateRemittance =
       nsa: nsa.value,
       fileName: translated.value.fileName,
       contentHash: deps.hashContent(translated.value.content),
-      documents,
+      payables,
       generatedAt: generatedAt.toISOString(),
     });
     // A recusa por referência ausente (`remittance-document-without-reference`) chega aqui: o `?? ''`

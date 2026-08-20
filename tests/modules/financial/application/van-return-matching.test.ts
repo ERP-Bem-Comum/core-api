@@ -27,6 +27,7 @@ const payment = (over: Partial<ReturnPayment> = {}): ReturnPayment => ({
 const ref = (yourNumber: string): RemittanceDocumentRef => ({
   yourNumber,
   remittanceId: '11111111-1111-4111-8111-111111111111',
+  payableId: '33333333-3333-4333-8333-333333333333',
   documentId: '22222222-2222-4222-8222-222222222222',
   fileName: 'PAG_000000.19082026120000_000001.REM',
 });

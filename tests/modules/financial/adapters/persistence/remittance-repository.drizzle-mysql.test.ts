@@ -23,12 +23,12 @@ import {
   confirmTransmitted,
   markFailed,
   discard,
-  documentIdsOf,
+  payableIdsOf,
 } from '#src/modules/financial/domain/remittance/remittance.ts';
 import {
   finOutbox,
   finRemittances,
-  finRemittanceDocuments,
+  finRemittancePayables,
 } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 
@@ -46,8 +46,11 @@ const build = (documentIds: readonly string[], cedente = account) => {
     // #752: convênio + NSA + posição. O convênio fictício `900001` é o discriminador DESTE arquivo
     // de teste — `your_number` tem UNIQUE na tabela, e dois arquivos de integração que usassem o
     // mesmo par NSA/posição colidiriam entre si, com a falha aparecendo no vizinho.
-    documents: documentIds.map((documentId, i) => ({
-      documentId,
+    // Cada id do fixture nomeia UM título; a nota recebe o mesmo valor porque estes casos medem o
+    // vínculo remessa→título, não o agrupamento por nota.
+    payables: documentIds.map((payableId, i) => ({
+      payableId,
+      documentId: payableId,
       yourNumber: `900001${String(nsaSeq).padStart(6, '0')}${String(i + 1).padStart(6, '0')}`,
     })),
     // ISO 8601 UTC — o formato que `generateRemittance` REALMENTE produz (`toISOString()`).
@@ -89,7 +92,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
     // e falharia na colisão, com o erro aparecendo como `save` recusado, longe da causa. É o caso
     // que a inversão de ordem não pega, e que a rule chama de "passar duas vezes seguidas".
     beforeEach(async () => {
-      await handle.db.delete(finRemittanceDocuments);
+      await handle.db.delete(finRemittancePayables);
       await handle.db.delete(finRemittances);
       await handle.db.delete(finOutbox);
     });
@@ -109,7 +112,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const back = await repo.findById(rem.id);
       assert.ok(isOk(back) && back.value !== null);
       assert.equal(back.value.status, 'Queued');
-      assert.deepEqual([...documentIdsOf(back.value)].sort(), [d1, d2].sort());
+      assert.deepEqual([...payableIdsOf(back.value)].sort(), [d1, d2].sort());
     });
 
     it('recupera por nome de arquivo — a chave de idempotência do agente', async () => {
@@ -129,7 +132,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const livre = doc();
       await repo.save(build([preso]));
 
-      const held = await repo.findHeldDocumentIds([preso, livre]);
+      const held = await repo.findHeldPayableIds([preso, livre]);
       assert.ok(isOk(held));
       assert.deepEqual(held.value, [preso]);
     });
@@ -144,7 +147,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       assert.ok(isOk(failed));
       await repo.save(failed.value.remittance, failed.value.events);
 
-      const aindaPreso = await repo.findHeldDocumentIds([d]);
+      const aindaPreso = await repo.findHeldPayableIds([d]);
       assert.ok(isOk(aindaPreso) && aindaPreso.value.length === 1);
 
       const discarded = discard(
@@ -155,7 +158,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       assert.ok(isOk(discarded));
       await repo.save(discarded.value.remittance, discarded.value.events);
 
-      const liberado = await repo.findHeldDocumentIds([d]);
+      const liberado = await repo.findHeldPayableIds([d]);
       assert.ok(isOk(liberado));
       assert.deepEqual(liberado.value, []);
     });
@@ -174,7 +177,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const back = await repo.findById(rem.id);
       assert.ok(isOk(back) && back.value !== null);
       assert.equal(back.value.status, 'Transmitted');
-      assert.deepEqual(documentIdsOf(back.value), [d]);
+      assert.deepEqual(payableIdsOf(back.value), [d]);
     });
 
     // O UNIQUE que impede duas remessas com o mesmo NSA na mesma conta — retransmissão, para o banco.

@@ -5,16 +5,19 @@ import { exhaustiveStringUnion } from '../../../../shared/primitives/exhaustive.
 // pelo agente (ADR-0060/0061) —, e é por isso que carregam `settledAt`: o instante que importa é o
 // da execução na instância, não o da nossa varredura, que pode acontecer minutos depois.
 //
-// `documentIds` viaja junto de propósito. O consumidor típico ("quais pagamentos saíram?") não tem
-// como responder sem os documentos, e obrigá-lo a voltar ao banco para descobrir transformaria um
+// `payableIds` viaja junto de propósito. O consumidor típico ("quais pagamentos saíram?") não tem
+// como responder sem os títulos, e obrigá-lo a voltar ao banco para descobrir transformaria um
 // evento autocontido numa consulta acoplada ao nosso schema.
+//
+// São TÍTULOS, não notas: o pagamento é do título, e uma nota pode ter saído em parte — o pai no
+// arquivo e a retenção ainda em aberto. Anunciar a nota diria que ela foi paga inteira.
 
 export type RemittanceTransmitted = Readonly<{
   type: 'RemittanceTransmitted';
   remittanceId: RemittanceId;
   nsa: number;
   fileName: string;
-  documentIds: readonly string[];
+  payableIds: readonly string[];
   settledAt: string;
   detail: string;
 }>;
@@ -27,7 +30,7 @@ export type RemittanceFailed = Readonly<{
   remittanceId: RemittanceId;
   nsa: number;
   fileName: string;
-  documentIds: readonly string[];
+  payableIds: readonly string[];
   settledAt: string;
   detail: string;
 }>;

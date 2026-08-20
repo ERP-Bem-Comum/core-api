@@ -20,7 +20,7 @@ import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente
 import { create, documentIdsOf } from '#src/modules/financial/domain/remittance/remittance.ts';
 import {
   finRemittances,
-  finRemittanceDocuments,
+  finRemittancePayables,
   finOutbox,
 } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
@@ -38,8 +38,9 @@ const build = (generatedAt: string, documentIds: readonly string[], cedente = ac
     contentHash: 'c'.repeat(64),
     // #752: convênio + NSA + posição. `900002` é o discriminador deste arquivo — ver a nota gêmea
     // em `remittance-repository.drizzle-mysql.test.ts`; `your_number` é UNIQUE na tabela.
-    documents: documentIds.map((documentId, i) => ({
-      documentId,
+    payables: documentIds.map((payableId, i) => ({
+      payableId,
+      documentId: payableId,
       yourNumber: `900002${String(nsaSeq).padStart(6, '0')}${String(i + 1).padStart(6, '0')}`,
     })),
     generatedAt,
@@ -69,7 +70,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
 
     // Limpa na ENTRADA, por tabela (testing.md §Contrato de isolamento).
     beforeEach(async () => {
-      await handle.db.delete(finRemittanceDocuments);
+      await handle.db.delete(finRemittancePayables);
       await handle.db.delete(finRemittances);
       await handle.db.delete(finOutbox);
     });
