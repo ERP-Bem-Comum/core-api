@@ -31,6 +31,10 @@ import type { DocumentEvent, PayableSnapshot } from './events.ts';
 import type { DocumentError } from './errors.ts';
 import { computeNetValue } from './financial-data.ts';
 import { allowedRetentionsFor } from './document-type-metadata.ts';
+// A MESMA régua que o pré-voo e o gerador da remessa usam (#708). Uma segunda definição de "este
+// título paga?" divergiria da primeira, e a divergência apareceria como título que uma camada
+// aprova e a outra recusa.
+import { checkPayoutReadiness } from '../payout/payout-readiness.ts';
 
 // Padrão D (module-as-namespace): consumir com `import * as Document from './document.ts'`.
 
@@ -86,6 +90,7 @@ const buildOpenPayables = (params: {
   readonly netValue: Money;
   readonly dueDate: Date;
   readonly paymentMethod: PaymentMethod;
+  readonly paymentDetail: string | null;
 }): Payables => {
   const parent: Payable = immutable<Payable>({
     id: PayableId.generate(),
@@ -96,6 +101,7 @@ const buildOpenPayables = (params: {
     value: params.netValue,
     dueDate: params.dueDate,
     paymentMethod: params.paymentMethod,
+    paymentDetail: params.paymentDetail,
     paidAt: null,
   });
   const children: readonly Payable[] = params.retentions.map((r) =>
@@ -107,7 +113,11 @@ const buildOpenPayables = (params: {
       status: 'Open',
       value: r.value,
       dueDate: params.dueDate,
+      // O filho nasce herdando a forma e o complemento da nota — e é só uma SEMENTE. A guia de
+      // recolhimento do imposto tem código de barras próprio, que chega por `updatePayablePayment`.
+      // Herdar mantém a compatibilidade de quem já lançava sem distinguir; divergir é o caso novo.
       paymentMethod: params.paymentMethod,
+      paymentDetail: params.paymentDetail,
       paidAt: null,
     }),
   );
@@ -179,6 +189,7 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     netValue: net.value,
     dueDate: input.dueDate,
     paymentMethod: input.paymentMethod,
+    paymentDetail: input.paymentDetail ?? null,
   });
 
   // #115: formato (44 dígitos) e obrigatoriedade na DANFE são invariantes do documento submetido.
@@ -369,6 +380,71 @@ export const updatePayableDueDate = (
   );
 };
 
+export type UpdatePayablePaymentInput = Readonly<{
+  document: OpenDocument | ApprovedDocument;
+  payables: Payables;
+  payableId: PayableId.PayableId;
+  // Ambos opcionais e independentes: `undefined` preserva, e em `paymentDetail` o `null` APAGA —
+  // mesma semântica de `editMetadata`/`adjust`, para não haver duas convenções no mesmo agregado.
+  paymentMethod?: PaymentMethod;
+  paymentDetail?: string | null;
+}>;
+
+export type UpdatePayablePaymentOutput = Readonly<{
+  document: OpenDocument | ApprovedDocument;
+  payables: Payables;
+  events: readonly DocumentEvent[];
+}>;
+
+// Altera a FORMA DE PAGAMENTO e o COMPLEMENTO de UM título isolado, sem propagar ao documento-pai
+// nem aos irmãos — irmã de `updatePayableDueDate` (#270), mesma natureza e mesmo contrato de erro.
+//
+// A premissa que a justifica: retenção É título a pagar. O pai pode sair em boleto e o filho de ISS
+// em guia de recolhimento, cada um com o seu código de barras — e o pai pode ser pago sem que o
+// filho seja. Enquanto forma e complemento vivessem só na nota, esse arranjo não tinha onde existir.
+export const updatePayablePayment = (
+  input: UpdatePayablePaymentInput,
+): Result<UpdatePayablePaymentOutput, DocumentError> => {
+  const all = [input.payables.parent, ...input.payables.children];
+  const target = all.find((p) => p.id === input.payableId);
+  if (target === undefined) return err('payable-not-found');
+
+  const paymentMethod = input.paymentMethod ?? target.paymentMethod;
+  const paymentDetail =
+    input.paymentDetail !== undefined ? input.paymentDetail : target.paymentDetail;
+
+  // Decisão do P.O.: o dado entra limpo ou não entra. Complemento ausente e complemento torto são
+  // recusados igualmente — os dois terminam no mesmo lugar, um arquivo que o banco não processa, e
+  // o momento barato de descobrir é agora, com o operador ainda na tela do título.
+  //
+  // ⚠️ A régua vale só onde o dinheiro segue o CÓDIGO DE BARRAS. PIX e transferência pagam por
+  // chave e por conta do favorecido — dado do cadastro, que este agregado não alcança (o `payee`
+  // chega por composição na borda, ADR-0032). Julgá-las aqui com `payee: null` reprovaria toda
+  // troca para PIX, recusando por ignorância em vez de por dado sujo. Quem as julga é o pré-voo,
+  // que tem o favorecido em mãos.
+  const paysByBarcode = paymentMethod === 'Boleto' || paymentMethod === 'GuiaRecolhimento';
+  if (paysByBarcode) {
+    const readiness = checkPayoutReadiness({ paymentMethod, paymentDetail, payee: null });
+    if (readiness.status !== 'ready') return err('payable-payment-detail-invalid');
+  }
+
+  const repay = (p: Payable): Payable =>
+    p.id === input.payableId ? immutable<Payable>({ ...p, paymentMethod, paymentDetail }) : p;
+
+  const payables = immutable<Payables>({
+    parent: repay(input.payables.parent),
+    children: input.payables.children.map(repay),
+  });
+
+  return ok(
+    immutable<UpdatePayablePaymentOutput>({
+      document: input.document,
+      payables,
+      events: documentSavedEvents(input.document, payables),
+    }),
+  );
+};
+
 export type AdjustDocumentChanges = Readonly<{
   grossValue?: Money;
   sourceDiscounts?: Money;
@@ -406,6 +482,9 @@ export const adjust = (input: AdjustDocumentInput): Result<AdjustDocumentOutput,
   const penalty = c.penalty ?? d.penalty;
   const interest = c.interest ?? d.interest;
   const dueDate = c.dueDate ?? d.dueDate;
+  // null apaga (undefined preserva) — calculado ANTES dos payables porque a semente dos títulos usa
+  // o mesmo valor que o documento vai guardar; lê-lo em dois lugares abriria a porta para divergirem.
+  const paymentDetail = c.paymentDetail !== undefined ? c.paymentDetail : d.paymentDetail;
 
   const net = computeNetValue({
     grossValue,
@@ -417,12 +496,16 @@ export const adjust = (input: AdjustDocumentInput): Result<AdjustDocumentOutput,
   });
   if (!net.ok) return err(net.error);
 
+  // ⚠️ `adjust` REGENERA os títulos (R8.1): forma e complemento próprios de um título são perdidos
+  // aqui, junto com o id. É o contrato do ajuste completo, não um descuido — quem quer preservar o
+  // título usa `editMetadata` ou `updatePayablePayment`.
   const payables = buildOpenPayables({
     documentId: d.id,
     retentions,
     netValue: net.value,
     dueDate,
     paymentMethod: d.paymentMethod,
+    paymentDetail,
   });
 
   const document: OpenDocument = immutable<OpenDocument>({
@@ -436,8 +519,7 @@ export const adjust = (input: AdjustDocumentInput): Result<AdjustDocumentOutput,
     netValue: net.value,
     dueDate,
     description: c.description ?? d.description,
-    // null apaga (undefined preserva): semântica correta p/ CA6.2 mesmo no caminho completo.
-    paymentDetail: c.paymentDetail !== undefined ? c.paymentDetail : d.paymentDetail,
+    paymentDetail,
     status: 'Open',
   });
 

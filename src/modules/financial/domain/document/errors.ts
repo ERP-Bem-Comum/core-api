@@ -12,4 +12,9 @@ export type DocumentError =
   | 'invalid-access-key'
   | 'access-key-required-for-danfe'
   // #197: competência contábil.
-  | 'invalid-competencia';
+  | 'invalid-competencia'
+  // Complemento incompatível com a forma DO TÍTULO, nas rotas que pagam por código de barras
+  // (boleto e guia). Ausente e malformado caem no mesmo erro de propósito: os dois terminam em
+  // arquivo que o banco não processa, e a régua que os separa (`missing` vs `malformed`) é do
+  // pré-voo, que reporta por título. Aqui a pergunta é binária — entra ou não entra.
+  | 'payable-payment-detail-invalid';

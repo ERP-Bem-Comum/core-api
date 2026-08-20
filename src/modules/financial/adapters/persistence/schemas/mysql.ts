@@ -262,8 +262,14 @@ export const finPayables = mysqlTable(
     // Data de vencimento do título.
     dueDate: date('due_date', { mode: 'date' }).notNull(),
 
-    // Método de pagamento herdado do documento.
+    // Forma de pagamento DO TÍTULO. Nasce herdada do documento e diverge a partir daí: retenção é
+    // título a pagar, e a guia de recolhimento do imposto não sai pela mesma forma que o líquido.
     paymentMethod: varchar('payment_method', { length: 24 }).notNull(),
+
+    // Complemento da forma DO TÍTULO — código de barras do boleto, da guia. Espelha o comprimento de
+    // `fin_documents.payment_detail` (255) porque guarda a mesma natureza de dado; nullable porque a
+    // maioria das formas não usa complemento, e porque o título antigo nasce sem ele no backfill.
+    paymentDetail: varchar('payment_detail', { length: 255 }),
 
     // #231: data de pagamento (preenchida na baixa manual); null enquanto não pago.
     paidAt: date('paid_at', { mode: 'date' }),
