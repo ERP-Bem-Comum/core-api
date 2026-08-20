@@ -12,6 +12,11 @@ import type {
 // chave, leitura por chave. NÃO reproduz o agente: nada se move de `saida/` para `processados/`
 // sozinho, porque quem move é o agente na instância, e simular isso aqui daria a impressão falsa
 // de que o ciclo fecha dentro do nosso processo.
+//
+// ⚠️ O que ele guarda são BYTES, e isso não é detalhe de implementação: é o que um bucket guarda.
+// Um fake que guardasse `string` faria `getBytes` devolver sempre UTF-8 bem formado, e a suíte
+// passaria a descrever um mundo onde o arquivo do banco nunca vem em latin1 — que é exatamente o
+// caso em que a conferência de hash da #753 quebra.
 export const createInMemoryVanStorage = (
   prefixes: Readonly<{
     outbound: string;
@@ -19,8 +24,17 @@ export const createInMemoryVanStorage = (
     status: string;
     sandbox: string;
   }> = { outbound: 'saida/', returns: 'retorno/', status: 'status/', sandbox: 'sandbox/' },
-): VanStoragePort & Readonly<{ seed: (key: string, content: string) => void }> => {
-  const objects = new Map<string, string>();
+): VanStoragePort &
+  Readonly<{
+    seed: (key: string, content: string) => void;
+    // `Uint8Array` não tem forma readonly no TS — o índice é mutável e nenhum utilitário o congela.
+    // Mesmo disable que `contracts/adapters/storage/document-storage.in-memory.ts` já carrega.
+    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+    seedBytes: (key: string, bytes: Uint8Array) => void;
+  }> => {
+  const objects = new Map<string, Uint8Array>();
+  const encoder = new TextEncoder();
+  const decoder = new TextDecoder('utf-8');
 
   const put = (
     prefix: string,
@@ -29,7 +43,7 @@ export const createInMemoryVanStorage = (
   ): Result<VanObjectKey, VanStorageError> => {
     if (fileName === '' || fileName.includes('/')) return err('van-storage-invalid-file-name');
     const key = `${prefix}${fileName}`;
-    objects.set(key, content);
+    objects.set(key, encoder.encode(content));
     return ok(key);
   };
 
@@ -48,16 +62,27 @@ export const createInMemoryVanStorage = (
     listStatus: async () => Promise.resolve(ok(listByPrefix(prefixes.status))),
 
     getText: async (key) => {
-      const content = objects.get(key);
+      const bytes = objects.get(key);
       return Promise.resolve(
-        content === undefined ? err('van-storage-object-not-found') : ok(content),
+        bytes === undefined ? err('van-storage-object-not-found') : ok(decoder.decode(bytes)),
       );
+    },
+
+    getBytes: async (key) => {
+      const bytes = objects.get(key);
+      return Promise.resolve(bytes === undefined ? err('van-storage-object-not-found') : ok(bytes));
     },
 
     // Só do fake: injeta o que o AGENTE colocaria no bucket (retorno, status). Sem isto, testar a
     // leitura exigiria que o próprio teste escrevesse em prefixo que a aplicação não escreve.
     seed: (key, content) => {
-      objects.set(key, content);
+      objects.set(key, encoder.encode(content));
+    },
+
+    // Para o arquivo do banco, que não é UTF-8. `seed` codificaria a string e a suíte nunca veria
+    // o byte que quebra a leitura como texto.
+    seedBytes: (key, bytes) => {
+      objects.set(key, bytes);
     },
   };
 };

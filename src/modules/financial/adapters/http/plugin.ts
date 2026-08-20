@@ -110,6 +110,8 @@ import {
   generateRemittanceBodySchema,
   generateRemittanceResponseSchema,
   remittanceListQuerySchema,
+  vanReturnQuarantineQuerySchema,
+  vanReturnQuarantineResponseSchema,
   remittanceListResponseSchema,
   remittanceDetailResponseSchema,
   remittanceIdParamSchema,
@@ -1249,6 +1251,51 @@ const financialRoutes =
         if (!result.ok) return sendDomainError(reply, result.error);
         if (result.value === null) return sendDomainError(reply, 'remittance-not-found');
         return sendResult(reply, ok(remittanceToDetailDto(result.value)), { ok: 200 });
+      },
+    });
+
+    // GET /financial/van-returns/quarantine — o que do prefixo de retorno NÃO tem direito de entrar
+    // (#753). É o que fecha o "consultável" da issue: sem esta rota a quarentena existiria só para
+    // quem tem acesso ao banco.
+    //
+    // Reusa `remittance:read` em vez de estrear uma permissão própria, e a escolha é deliberada:
+    // quem acompanha remessa é quem investiga o retorno — é a mesma frente operacional —, e uma
+    // permissão nova nasceria sem estar atribuída a papel nenhum, produzindo o 403 mudo do #403 no
+    // primeiro operador que abrisse a tela. Separar passa a valer no dia em que a quarentena expuser
+    // conteúdo do arquivo; hoje ela devolve chave, motivo e hash, que é menos do que a lista de
+    // remessas já mostra.
+    scope.route({
+      method: 'GET',
+      url: '/financial/van-returns/quarantine',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.remittanceRead)],
+      schema: {
+        querystring: vanReturnQuarantineQuerySchema,
+        response: { 200: vanReturnQuarantineResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        // Default = só o que está PRESO. A pergunta operacional é "o que está parado agora"; o
+        // histórico sai apenas quando pedido explicitamente.
+        const includeReleased = req.query.includeReleased === 'true';
+        const result = await deps.listVanReturnQuarantine({ includeReleased });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(
+          reply,
+          ok({
+            quarantined: result.value.items.map((q) => ({
+              objectKey: q.key,
+              reason: q.reason,
+              observedSha256: q.observedSha256,
+              // O port omite o campo quando não há declaração; o DTO o expõe como `null`, para o
+              // consumidor distinguir "não havia" de "a API não manda este campo".
+              expectedSha256: q.expectedSha256 ?? null,
+              firstSeenAt: q.firstSeenAt,
+              lastSeenAt: q.lastSeenAt,
+              releasedAt: q.releasedAt ?? null,
+            })),
+            total: result.value.total,
+          }),
+          { ok: 200 },
+        );
       },
     });
 

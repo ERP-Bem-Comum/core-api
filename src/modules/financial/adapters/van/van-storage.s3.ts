@@ -11,6 +11,7 @@ import {
   PutObjectCommand,
   GetObjectCommand,
   ListObjectsV2Command,
+  type GetObjectCommandOutput,
   type ListObjectsV2CommandInput,
   type ListObjectsV2CommandOutput,
 } from '@aws-sdk/client-s3';
@@ -96,6 +97,28 @@ export const createS3VanStorage = (config: VanS3Config): VanStoragePort => {
     }
   };
 
+  // Uma leitura, duas decodificações. Só o `transform` muda entre texto e bytes; o tratamento de
+  // erro é o mesmo e não se duplica — duplicá-lo é como as duas metades divergem com o tempo.
+  const get = async <T>(
+    key: VanObjectKey,
+    // O corpo é um stream do SDK: tem estado por natureza e nenhuma forma readonly a oferecer.
+    // eslint-disable-next-line @typescript-eslint/prefer-readonly-parameter-types
+    transform: (body: NonNullable<GetObjectCommandOutput['Body']>) => Promise<T>,
+  ): Promise<Result<T, VanStorageError>> => {
+    try {
+      const res = await client.send(new GetObjectCommand({ Bucket: config.bucket, Key: key }));
+      if (res.Body === undefined) return err('van-storage-object-not-found');
+      return ok(await transform(res.Body));
+    } catch (cause) {
+      // Chave ausente é caso esperado (o status de uma remessa pode ainda não existir), não
+      // indisponibilidade — e a diferença muda o que o chamador faz: esperar vs. alarmar.
+      const name = (cause as Readonly<{ name?: string }>).name;
+      if (name === 'NoSuchKey' || name === 'NotFound') return err('van-storage-object-not-found');
+      logStorage(`get ${key}`, cause);
+      return err('van-storage-unavailable');
+    }
+  };
+
   return {
     putRemittance: async (fileName, content) =>
       putText(config.prefixes.outbound, fileName, content),
@@ -103,19 +126,10 @@ export const createS3VanStorage = (config: VanS3Config): VanStoragePort => {
     listReturns: async () => list(config.prefixes.returns),
     listStatus: async () => list(config.prefixes.status),
 
-    getText: async (key) => {
-      try {
-        const res = await client.send(new GetObjectCommand({ Bucket: config.bucket, Key: key }));
-        const body = await res.Body?.transformToString('utf-8');
-        return body === undefined ? err('van-storage-object-not-found') : ok(body);
-      } catch (cause) {
-        // Chave ausente é caso esperado (o status de uma remessa pode ainda não existir), não
-        // indisponibilidade — e a diferença muda o que o chamador faz: esperar vs. alarmar.
-        const name = (cause as Readonly<{ name?: string }>).name;
-        if (name === 'NoSuchKey' || name === 'NotFound') return err('van-storage-object-not-found');
-        logStorage(`get ${key}`, cause);
-        return err('van-storage-unavailable');
-      }
-    },
+    getText: async (key) => get(key, async (body) => body.transformToString('utf-8')),
+
+    // Os bytes como o banco os escreveu. Ver o aviso no port: hashear texto decodificado acusaria
+    // de adulterado todo arquivo de retorno com acento.
+    getBytes: async (key) => get(key, async (body) => body.transformToByteArray()),
   };
 };

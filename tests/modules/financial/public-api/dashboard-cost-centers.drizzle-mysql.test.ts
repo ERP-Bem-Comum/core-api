@@ -17,6 +17,7 @@
 import { describe, it, before, after, beforeEach } from 'node:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
+import { inArray } from 'drizzle-orm';
 
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
@@ -59,8 +60,19 @@ if (!process.env['MYSQL_INTEGRATION']) {
     });
 
     beforeEach(async () => {
+      // `fin_payable_view` é read-model puro, sem seed: apagar a tabela inteira é o certo aqui.
       await handle.db.delete(handle.schema.finPayableView);
-      await handle.db.delete(handle.schema.finCostCenters);
+      // ⚠️ `fin_cost_centers` NÃO, e a assimetria é a regra, não uma exceção deste arquivo: a
+      // tabela carrega o SEED das migrations 0013/0043. Um `delete` sem `WHERE` apagava o seed
+      // junto, e ele não volta — a migration já está aplicada. O efeito aparecia longe da causa,
+      // em `cost-center-read.drizzle-mysql.test.ts` ("list() lê o seed da migration 0013"), que
+      // passava sozinho e falhava depois deste arquivo.
+      //
+      // Apaga-se o que ESTE arquivo insere, como os três irmãos que também escrevem aqui
+      // (`general-report`, `payables-analysis`, `payment-position`) já faziam.
+      await handle.db
+        .delete(handle.schema.finCostCenters)
+        .where(inArray(handle.schema.finCostCenters.id, [cc(1), cc(2)]));
     });
 
     let pk = 0;
