@@ -9,7 +9,10 @@ import process from 'node:process';
 
 import { buildApp } from '#src/shared/http/app.ts';
 import { readHttpConfig } from '#src/shared/http/config.ts';
-import { readEmailLinkBaseUrls } from '#src/shared/http/email-link-base-urls.ts';
+import {
+  readEmailLinkBaseUrls,
+  resolveEmailLinkUrls,
+} from '#src/shared/http/email-link-base-urls.ts';
 import { readModuleDriverConfigs } from '#src/shared/persistence/module-driver-config.ts';
 import {
   installLastResortHandlers,
@@ -108,7 +111,11 @@ const main = async (): Promise<void> => {
     process.exitCode = 78;
     return;
   }
-  const { resetBaseUrl, activationBaseUrl, selfRegistrationBaseUrl } = emailLinkUrls.value;
+  // #739: ativação e autocadastro derivam da ORIGEM do reset quando a base própria não vem do env
+  // (o e-mail de reset é a fonte confiável do domínio do front). Ver `resolveEmailLinkUrls`.
+  const { resetBaseUrl, activationBaseUrl, autocadastroBaseUrl } = resolveEmailLinkUrls(
+    emailLinkUrls.value,
+  );
   // #515: chave de assinatura do access token. Ausente em produção → boot falha (EX_CONFIG) em vez
   // de gerar um par efêmero em silêncio, que fazia toda sessão morrer no restart e o BFF rejeitar
   // todo token novo, sem nenhuma pista aqui. Fora de produção segue efêmero, com aviso.
@@ -194,16 +201,12 @@ const main = async (): Promise<void> => {
           writerUrl: partners.connectionString,
           ...(partnersReaderUrl !== undefined ? { readerUrl: partnersReaderUrl } : {}),
           // campo legado PT do partners — rename rastreado na issue #333
-          ...(selfRegistrationBaseUrl !== undefined
-            ? { autocadastroBaseUrl: selfRegistrationBaseUrl }
-            : {}),
+          ...(autocadastroBaseUrl !== undefined ? { autocadastroBaseUrl } : {}),
         }
       : {
           driver: 'memory',
           // campo legado PT do partners — rename rastreado na issue #333
-          ...(selfRegistrationBaseUrl !== undefined
-            ? { autocadastroBaseUrl: selfRegistrationBaseUrl }
-            : {}),
+          ...(autocadastroBaseUrl !== undefined ? { autocadastroBaseUrl } : {}),
         },
   );
 
