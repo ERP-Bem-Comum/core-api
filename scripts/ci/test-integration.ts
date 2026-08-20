@@ -155,6 +155,9 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // liberado, o CHECK recusa motivo fora da união, e `object_key` compara em collation binária —
     // chave de S3 é case-sensitive, e `unicode_ci` faria dois objetos distintos colidirem na PK.
     'tests/modules/financial/adapters/persistence/van-return-quarantine-store.drizzle-mysql.test.ts',
+    // Casamento do retorno (#690): o JOIN que traz o arquivo de remessa, e a UNIQUE de
+    // `your_number` — que é o que torna o casamento uma decisão em vez de heurística.
+    'tests/modules/financial/adapters/persistence/van-return-match-reader.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/bank-statement-repository.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/reconciliation-repository.drizzle-mysql.test.ts',
     // FIN-STATUS-VARCHAR-WIDTH (#519) — largura de fin_payables.status / fin_documents.status comporta

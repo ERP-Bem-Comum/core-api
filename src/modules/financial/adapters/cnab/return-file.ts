@@ -33,11 +33,13 @@
 
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import { immutable } from '../../../../shared/primitives/immutable.ts';
-import {
-  classifyOccurrences,
-  splitOccurrences,
-  type ReturnOutcome,
-} from '../../domain/bank-return/occurrence.ts';
+import { classifyOccurrences, splitOccurrences } from '../../domain/bank-return/occurrence.ts';
+import type {
+  ParsedReturnFile,
+  ReturnFileError,
+  ReturnPayment,
+  VanReturnReader,
+} from '../../application/ports/van-return-reader.ts';
 import {
   RECORD_LENGTH,
   at,
@@ -62,45 +64,10 @@ const RECORD_FILE_TRAILER = '9';
 
 const SEGMENT_A = 'A';
 
-/** Um pagamento como o retorno o descreve. */
-export type ReturnPayment = Readonly<{
-  /** 1-indexed, como o operador conta linha ao abrir o arquivo. */
-  line: number;
-  /** Lote a que pertence — o mesmo `0001`/`0002` que o emissor escreveu. */
-  batch: string;
-  /**
-   * G064. **Pode vir vazio**, e isso é dado, não defeito: retorno de operação feita fora desta
-   * integração não tem referência nossa nenhuma. É o caso normal da caixa do convênio.
-   */
-  yourNumber: string;
-  /** G043 — a referência que o BANCO atribuiu. Serve de identificador quando o nosso falta. */
-  bankNumber: string;
-  /** P003 como `AAAA-MM-DD`. `null` quando zerada — o pagamento não foi efetivado. */
-  settledAt: string | null;
-  /** P004 em centavos. `0` quando não houve efetivação. */
-  settledValueCents: number;
-  /** G059, na ordem em que o banco listou. */
-  occurrences: readonly string[];
-  /** O desfecho que as ocorrências declaram — ver `domain/bank-return/occurrence.ts`. */
-  outcome: ReturnOutcome;
-}>;
-
-export type ParsedReturnFile = Readonly<{
-  payments: readonly ReturnPayment[];
-  /**
-   * Ocorrências de escopo ARQUIVO (header/trailer de arquivo) — `HI` e companhia.
-   * ⚠️ Recusa aqui invalida tudo que está dentro, mesmo que cada detalhe traga `00`.
-   */
-  fileOccurrences: readonly string[];
-  /** Ocorrências de escopo LOTE, por número de lote — `HA` e companhia. Mesma ressalva. */
-  batchOccurrences: ReadonlyMap<string, readonly string[]>;
-  /** Linhas que não são registro legível de 240 posições. Não abortam a leitura. */
-  unreadable: readonly number[];
-  /** Registros válidos de segmento que esta fatia não interpreta (B, C, J, O, Z, 5…). */
-  skipped: number;
-}>;
-
-export type ReturnFileError = 'return-file-empty' | 'return-file-no-records';
+// Os tipos vivem no PORT (a seta aponta para dentro) — `application/ports/van-return-reader.ts`.
+// Reexportados aqui porque este arquivo é o lugar onde o contrato do layout está DOCUMENTADO: quem
+// abre o parser encontra o vocabulário junto das posições que o produzem.
+export type { ParsedReturnFile, ReturnFileError, ReturnPayment };
 
 /** `DDMMAAAA` → `AAAA-MM-DD`. Zerada ou não-numérica vira `null` — data inventada é pior que ausente. */
 const readDate = (raw: string): string | null => {
@@ -208,3 +175,8 @@ export const parseReturnFile = (content: string): Result<ParsedReturnFile, Retur
     }),
   );
 };
+
+// O parser como PORT — é isto que a application recebe injetado. `parseReturnFile` segue exportada
+// porque é pura e testada diretamente; a factory apenas a apresenta sob a assinatura que a
+// application conhece. Mesmo desenho do `createVanStatusEnvelopeReader`.
+export const createReturnFileReader = (): VanReturnReader => ({ parse: parseReturnFile });
