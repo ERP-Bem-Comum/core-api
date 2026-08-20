@@ -11,7 +11,10 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
-import { readEmailLinkBaseUrls } from '#src/shared/http/email-link-base-urls.ts';
+import {
+  readEmailLinkBaseUrls,
+  resolveEmailLinkUrls,
+} from '#src/shared/http/email-link-base-urls.ts';
 
 const VALID = {
   AUTH_RESET_BASE_URL: 'https://erp.abemcomum.org/reset-password',
@@ -101,5 +104,43 @@ describe('AUTH-EMAIL-LINK-BASE-URLS — leitura e validacao das base URLs', () =
     assert.equal(r.ok, true);
     if (!r.ok) return;
     assert.equal(r.value.resetBaseUrl, 'http://localhost:5173/auth/reset-password');
+  });
+});
+
+describe('resolveEmailLinkUrls — #739: ativacao/autocadastro derivam da origem do reset', () => {
+  it('so o reset setado: ativacao e autocadastro derivam da ORIGEM do reset (+ /activate, /autocadastro)', () => {
+    const r = resolveEmailLinkUrls({ resetBaseUrl: 'https://erp.abemcomum.org/reset-password' });
+    assert.equal(r.resetBaseUrl, 'https://erp.abemcomum.org/reset-password');
+    assert.equal(r.activationBaseUrl, 'https://erp.abemcomum.org/activate');
+    assert.equal(r.autocadastroBaseUrl, 'https://erp.abemcomum.org/autocadastro');
+  });
+
+  it('origem ignora path e mantem host:porta do reset', () => {
+    const r = resolveEmailLinkUrls({ resetBaseUrl: 'http://localhost:5173/auth/reset-password' });
+    assert.equal(r.activationBaseUrl, 'http://localhost:5173/activate');
+    assert.equal(r.autocadastroBaseUrl, 'http://localhost:5173/autocadastro');
+  });
+
+  it('base propria vence a derivacao (override por env var)', () => {
+    const r = resolveEmailLinkUrls({
+      resetBaseUrl: 'https://erp.abemcomum.org/reset-password',
+      activationBaseUrl: 'https://outro.dominio/ativar',
+      selfRegistrationBaseUrl: 'https://terceiro.dominio/cadastro',
+    });
+    assert.equal(r.activationBaseUrl, 'https://outro.dominio/ativar');
+    assert.equal(r.autocadastroBaseUrl, 'https://terceiro.dominio/cadastro');
+  });
+
+  it('sem reset e sem bases proprias: tudo undefined (defaults de dev das composicoes valem)', () => {
+    const r = resolveEmailLinkUrls({});
+    assert.equal(Object.hasOwn(r, 'resetBaseUrl'), false);
+    assert.equal(Object.hasOwn(r, 'activationBaseUrl'), false);
+    assert.equal(Object.hasOwn(r, 'autocadastroBaseUrl'), false);
+  });
+
+  it('sem reset mas com base propria: usa a propria, sem derivar origem', () => {
+    const r = resolveEmailLinkUrls({ activationBaseUrl: 'https://erp.abemcomum.org/activate' });
+    assert.equal(r.activationBaseUrl, 'https://erp.abemcomum.org/activate');
+    assert.equal(Object.hasOwn(r, 'autocadastroBaseUrl'), false);
   });
 });
