@@ -20,6 +20,10 @@ const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
   'source-file-not-found',
   // Acompanhamento de remessa (#728): GET /financial/remittances/:id com id que não existe.
   'remittance-not-found',
+  // Download (homologação): a remessa existe no banco, o objeto não está em nenhum prefixo do
+  // agente. É 404 e não 500 porque não há defeito nosso — o objeto pode ser de antes do bucket
+  // atual, ou ter sido movido para fora do combinado.
+  'remittance-file-not-found',
 ]);
 
 const CONFLICT_CODES: ReadonlySet<string> = new Set([
@@ -122,6 +126,11 @@ const UNAVAILABLE_CODES: ReadonlySet<string> = new Set([
   'remittance-file-name-failed',
   'remittance-build-failed',
   'remittance-malformed-file',
+  // Download (homologação): o objeto existe mas não é o arquivo emitido. Fica no balde de 503, e não
+  // em 404, porque o arquivo ESTÁ lá — o que falhou é a identidade dele, e isso é anomalia do
+  // armazenamento, não pedido inválido do operador. Repetir também é a ação certa: se o objeto
+  // estava sendo escrito, a próxima leitura confere.
+  'remittance-file-corrupted',
   // Acompanhamento de remessa (#728): repositório de leitura indisponível → 503 (tentar de novo é a
   // ação certa; não é culpa do operador).
   'remittance-repository-unavailable',
@@ -188,6 +197,12 @@ const SLUG_MESSAGES: Record<string, string> = {
     'Há título não aprovado na seleção. Só títulos aprovados podem entrar em remessa — confira o pré-voo.',
   // Acompanhamento de remessa (#728).
   'remittance-not-found': 'Remessa não encontrada.',
+  'remittance-file-not-found':
+    'O arquivo desta remessa não está no armazenamento da VAN. Ele pode ter sido movido para fora dos prefixos conhecidos.',
+  // Mensagem deliberadamente alarmante: hash divergente significa que o objeto NÃO é o que foi
+  // enviado ao banco. Servir assim mesmo entregaria evidência falsa numa conferência de pagamento.
+  'remittance-file-corrupted':
+    'O arquivo encontrado não confere com a remessa emitida (hash divergente). Nada foi entregue — não use este objeto como evidência do que foi enviado.',
   'remittance-id-invalid': 'Identificador de remessa inválido.',
   // #722: campo do CADASTRO da conta, não do título — por isso a mensagem diz onde corrigir. Sem
   // ela, o operador recebia "erro interno" para um dado que ele mesmo preenche.

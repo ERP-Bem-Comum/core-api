@@ -17,6 +17,13 @@ export type VanStorageError =
 
 export type VanObjectKey = string;
 
+/** O objeto encontrado, com a chave em que ele ESTAVA — a chave é evidência, não parâmetro. */
+export type VanRemittanceObject = Readonly<{
+  key: VanObjectKey;
+  // `Uint8Array` não tem forma readonly no TS — o índice é mutável e nenhum utilitário o congela.
+  bytes: Uint8Array;
+}>;
+
 export type VanStoragePort = Readonly<{
   putRemittance: (
     fileName: string,
@@ -42,4 +49,20 @@ export type VanStoragePort = Readonly<{
    * como outros bytes na volta. O arquivo íntegro seria acusado de adulterado.
    */
   getBytes: (key: VanObjectKey) => Promise<Result<Uint8Array, VanStorageError>>;
+
+  /**
+   * O arquivo de remessa que está no bucket, procurado por NOME — onde quer que o agente o tenha
+   * deixado.
+   *
+   * Existe porque a chave do objeto é um dado com prazo de validade: nós escrevemos em `saida/`, e o
+   * agente MOVE para `processados/` ou `falhas/` quando o ciclo dele fecha (ADR-0060/0061). Guardar
+   * a chave da escrita resolveria o caso do arquivo que ainda não saiu, e falharia exatamente no
+   * caso de sucesso — que é o normal. Por isso a busca é por nome, e o retorno diz em que prefixo
+   * ele estava: essa informação é diagnóstico de verdade (`falhas/` significa que o envio não
+   * completou), e não parâmetro que alguém tenha de adivinhar.
+   *
+   * ⚠️ Devolve BYTES, não texto. O que se serve para download é o objeto como o banco o recebeu; a
+   * conferência de integridade é do chamador, contra o `contentHash` da remessa.
+   */
+  findRemittance: (fileName: string) => Promise<Result<VanRemittanceObject, VanStorageError>>;
 }>;

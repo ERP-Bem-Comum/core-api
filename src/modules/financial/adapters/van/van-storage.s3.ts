@@ -131,5 +131,34 @@ export const createS3VanStorage = (config: VanS3Config): VanStoragePort => {
     // Os bytes como o banco os escreveu. Ver o aviso no port: hashear texto decodificado acusaria
     // de adulterado todo arquivo de retorno com acento.
     getBytes: async (key) => get(key, async (body) => body.transformToByteArray()),
+
+    // A ordem é a do CICLO DE VIDA do objeto, não alfabética: `saida/` é onde ele nasce, e os outros
+    // dois são para onde o agente o move. Procurar nessa ordem devolve o estado mais recente
+    // primeiro em quase todo caso, e no único em que não devolveria — objeto reprocessado com o
+    // mesmo nome — a chave vem junto na resposta, então quem lê sabe de qual prefixo veio.
+    //
+    // `sandbox/` fica DE FORA de propósito: um arquivo de exercício tem o mesmo nome de um real, e
+    // servir o de sandbox no lugar do que foi ao banco seria indistinguível para quem baixa. É a
+    // conferência de hash do chamador que fecha essa porta — mas não procurar ali é a primeira
+    // tranca, e ela não depende de o chamador lembrar.
+    findRemittance: async (fileName) => {
+      if (fileName === '' || fileName.includes('/')) return err('van-storage-invalid-file-name');
+
+      for (const prefix of [
+        config.prefixes.outbound,
+        config.prefixes.processed,
+        config.prefixes.failed,
+      ]) {
+        const key = `${prefix}${fileName}`;
+        const found = await get(key, async (body) => body.transformToByteArray());
+        if (found.ok) return ok({ key, bytes: found.value });
+        // Ausente naquele prefixo é esperado — o objeto está em UM dos três. Indisponibilidade, não:
+        // continuar a varrer transformaria "o bucket caiu" em "arquivo não existe", e o operador
+        // procuraria o arquivo em vez de olhar a infra.
+        if (found.error !== 'van-storage-object-not-found') return found;
+      }
+
+      return err('van-storage-object-not-found');
+    },
   };
 };
