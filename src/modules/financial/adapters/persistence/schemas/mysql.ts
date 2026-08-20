@@ -54,6 +54,7 @@ import {
   sha256HexKey,
   uuidKey,
 } from '#src/shared/persistence/identifier-columns.ts';
+import { VAN_STATUS_DETAIL_MAX_LENGTH } from '#src/modules/financial/application/ports/van-status-reader.ts';
 
 // ─── fin_documents ────────────────────────────────────────────────────────────
 //
@@ -1161,7 +1162,11 @@ export const finRemittances = mysqlTable(
     status: varchar('status', { length: 16 }).notNull(),
     generatedAt: datetime('generated_at', { mode: 'string', fsp: 3 }).notNull(),
     settledAt: datetime('settled_at', { mode: 'string', fsp: 3 }),
-    detail: varchar('detail', { length: 512 }),
+    // O teto vem do CONTRATO do envelope, não o contrário (#781). Citar a constante em vez de
+    // repetir `512` é o que impede os dois números de divergirem — e a divergência aqui não é
+    // cosmética: um `detalhe` maior que a coluna falha o INSERT com 1406 no MySQL estrito, o que
+    // derrubaria o registro do desfecho por causa de um campo de diagnóstico.
+    detail: varchar('detail', { length: VAN_STATUS_DETAIL_MAX_LENGTH }),
   },
   (t) => [
     check(

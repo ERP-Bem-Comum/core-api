@@ -17,6 +17,7 @@
 //
 // Latência esperada: até 5 minutos para a execução começar, mais o tempo da transmissão.
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
+import { VAN_STATUS_DETAIL_MAX_LENGTH } from '../../application/ports/van-status-reader.ts';
 import type {
   VanReceptionProvenance,
   VanStatus,
@@ -131,6 +132,36 @@ const parseReception = (raw: unknown): VanReceptionProvenance | undefined => {
   };
 };
 
+/**
+ * Marca do corte. Nunca truncar em silêncio: um diagnóstico cortado sem aviso **parece completo**, e
+ * quem o lê conclui que o erro terminou ali. Ausente é melhor que falso.
+ */
+const TRUNCATION_MARK = '… [truncado]';
+
+/**
+ * Corta o `detalhe` ao teto do contrato, preservando o começo.
+ *
+ * Preserva o COMEÇO porque é onde mora o texto fixo — a frase que diz ao operador o que fazer. O que
+ * se perde é a cauda: caminho e mensagem localizada do sistema operacional, a parte de menor
+ * densidade da frase.
+ *
+ * ⚠️ Conta e fatia por PONTO DE CÓDIGO (`Array.from`), não por `String.prototype.slice`. O `slice`
+ * conta unidades UTF-16, e o teto do MySQL conta caracteres: num texto com par substituto, cortar
+ * por `slice` pode partir o par ao meio e ainda estourar a coluna. O texto é PT-BR e hoje as duas
+ * contas coincidem — o que muda é o dia em que não coincidirem.
+ *
+ * E é ponto de código de propósito, não **grafema**: `Intl.Segmenter` agruparia a família de emoji
+ * num "caractere" só, e o MySQL não faz isso. Contar diferente da coluna é justamente o defeito que
+ * este código existe para fechar.
+ */
+const capDetail = (detail: string): string => {
+  const points = Array.from(detail);
+  if (points.length <= VAN_STATUS_DETAIL_MAX_LENGTH) return detail;
+
+  const room = VAN_STATUS_DETAIL_MAX_LENGTH - Array.from(TRUNCATION_MARK).length;
+  return points.slice(0, room).join('') + TRUNCATION_MARK;
+};
+
 export const parseStatus = (key: string, content: string): Result<VanStatus, VanStatusError> => {
   const kind = classifyKey(key);
   if (!kind.ok) return kind;
@@ -172,7 +203,13 @@ export const parseStatus = (key: string, content: string): Result<VanStatus, Van
     fileName,
     executedAt,
     situation: body['situacao'],
-    detail,
+    // Truncado, NUNCA recusado — e a razão é a mesma que o comentário do log abaixo já dava: o
+    // `detalhe` é DIAGNÓSTICO, `situacao` é DECISÃO. Recusar o envelope por um diagnóstico longo
+    // deixaria a remessa em estado desconhecido por causa de um campo que não decide nada — e o
+    // caminho que estoura é justamente o desfecho AMBÍGUO, aquele cuja semântica é "pode ter saído,
+    // ninguém sabe, chame um humano". Campo de diagnóstico não derruba registro de desfecho de
+    // pagamento (#781).
+    detail: capDetail(detail),
     exitCode,
     // Só entra quando o envelope traz o objeto BEM FORMADO. Proveniência pela metade é pior que
     // ausente: a #753 decide o que processar a partir dela, e um `sha256` vazio aprovaria a

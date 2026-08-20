@@ -220,7 +220,38 @@ describe('confirmRemittance — resiliência da varredura', () => {
     assert.equal(r.error, 'van-status-unavailable');
   });
 
-  it('falha de persistência aborta — a varredura será repetida', async () => {
+  // Este caso já existiu asseverando o OPOSTO — que a falha de persistência abortava a varredura —,
+  // e era o defeito da #782 escrito como expectativa. A chave envenenada não parava em si mesma:
+  // como `listStatus` devolve em ordem, toda remessa cuja chave viesse depois nunca era confirmada,
+  // e o conjunto crescia a cada envio novo.
+  it('falha de persistência isola-se à sua chave — as demais confirmam na MESMA passagem', async () => {
+    const s = await setup({ files: [FILE, OTHER] });
+    s.storage.seed(`status/${FILE}.json`, envelope());
+    s.storage.seed(`status/${OTHER}.json`, envelope({ arquivo: OTHER }));
+
+    // Só a primeira chave falha. `FILE` ordena ANTES de `OTHER`, então no comportamento antigo a
+    // segunda nunca seria alcançada — é essa a propriedade sob teste, não a contagem de baldes.
+    const remittances: RemittanceRepository = {
+      ...s.remittances,
+      save: async (remittance, events) =>
+        remittance.fileName === FILE
+          ? Promise.resolve(err('remittance-repository-unavailable'))
+          : s.remittances.save(remittance, events),
+    };
+
+    const r = await confirmRemittance({ ...s.deps, remittances })();
+
+    assert.ok(isOk(r));
+    assert.deepEqual(
+      r.value.persistFailed.map((f) => f.key),
+      [`status/${FILE}.json`],
+      'a chave que falhou é nomeada — antes o erro não dizia qual objeto envenenou a passagem',
+    );
+    assert.deepEqual(r.value.confirmed, [OTHER], 'a chave seguinte foi alcançada e confirmada');
+    assert.equal((await statusOf(s.remittances, OTHER)).status, 'Transmitted');
+  });
+
+  it('a falha carrega o motivo junto da chave — diagnóstico não é adivinhação', async () => {
     const s = await setup();
     s.storage.seed(`status/${FILE}.json`, envelope());
     const remittances: RemittanceRepository = {
@@ -230,8 +261,8 @@ describe('confirmRemittance — resiliência da varredura', () => {
 
     const r = await confirmRemittance({ ...s.deps, remittances })();
 
-    assert.ok(isErr(r));
-    assert.equal(r.error, 'remittance-persist-failed');
+    assert.ok(isOk(r));
+    assert.equal(r.value.persistFailed[0]?.error, 'remittance-repository-unavailable');
   });
 });
 
@@ -355,6 +386,7 @@ describe('confirmRemittance — bucket vazio', () => {
       unmatched: [],
       unreadable: [],
       conflicted: [],
+      persistFailed: [],
     });
     assert.equal((await statusOf(s.remittances, FILE)).status, 'Queued');
   });

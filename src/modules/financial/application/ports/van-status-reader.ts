@@ -8,6 +8,26 @@ import type { Result } from '../../../../shared/primitives/result.ts';
 // case não pode importar de `adapters/` (cobrado por `tests/cleanup/application-depends-inward.test.ts`),
 // e declarar o tipo do lado de lá obrigaria exatamente esse import.
 
+/**
+ * Teto do `detalhe`, em CARACTERES — cláusula do contrato do envelope, acordada com o produtor
+ * (#781).
+ *
+ * Não é detalhe de persistência que vazou para cá: é o número que as duas metades da fronteira
+ * respeitam, no mesmo regime do golden. O produtor trunca preservando o texto fixo e marcando o
+ * corte; este lado defende, garantindo que exceder **nunca** derrube o desfecho. As duas metades
+ * protegem coisas diferentes — a de lá protege a informação, a daqui protege o registro do
+ * pagamento — e uma sem a outra deixa o sistema frágil pelo lado oposto.
+ *
+ * ⚠️ CARACTERES, não bytes. `varchar(512)` do MySQL conta caracteres; o texto é PT-BR e acentuado,
+ * então medir em bytes reprovaria frases que cabem. A coluna importa esta constante
+ * (`schemas/mysql.ts`) para que o número exista num lugar só.
+ *
+ * A medição que fixou o número, feita pelo produtor em 20/08/2026: o desfecho de evidência física
+ * ilegível interpola DOIS erros de sistema operacional, cada um com o caminho completo, e vai de 363
+ * a 829 caracteres — **um caminho de pasta de 102 caracteres já produz 513**.
+ */
+export const VAN_STATUS_DETAIL_MAX_LENGTH = 512;
+
 export type VanStatusSituation = 'transmitido' | 'falha' | 'revisao' | 'recepcao';
 
 // A distinção que decide o desfecho. `duplicate` existe porque o agente publica em chave própria
