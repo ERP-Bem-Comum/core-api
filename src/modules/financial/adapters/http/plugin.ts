@@ -1202,7 +1202,7 @@ const financialRoutes =
         response: { 200: remittancePreviewResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
-        const result = await deps.previewRemittance({ documentIds: req.body.documentIds });
+        const result = await deps.previewRemittance({ payableIds: req.body.payableIds });
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(reply, ok(remittancePreviewToDto(result.value)), { ok: 200 });
       },

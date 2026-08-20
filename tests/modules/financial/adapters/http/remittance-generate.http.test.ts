@@ -420,7 +420,10 @@ describe('financial/http — POST /remittances (#720) · guarda do bypass (#634)
       method: 'POST',
       url: '/api/v2/financial/remittances:preview',
       headers: bearer(READER_ONLY),
-      payload: { documentIds: [DOC_A] },
+      // O pré-voo recebe TÍTULOS. Este caso mede a guarda de bypass, não o conteúdo da resposta:
+      // um id que não existe volta como linha `not-found` e a chamada segue 200, que é o que se
+      // afirma aqui.
+      payload: { payableIds: [DOC_A] },
     });
     assert.equal(res.statusCode, 200, res.body);
   });

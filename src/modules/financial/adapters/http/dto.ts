@@ -557,12 +557,13 @@ export const remittancePreviewToDto = (
   preview: RemittancePreview,
 ): RemittancePreviewResponseDto => ({
   lines: preview.lines.map((l) => ({
+    payableId: l.payableId,
     documentId: l.documentId,
     status: l.status,
     route: l.route,
     missing: [...l.missing],
     gaps: l.gaps.map((g) => ({ field: g.field, reason: g.reason })),
-    netValueCents: String(l.netValueCents),
+    valueCents: String(l.valueCents),
   })),
   readyCount: preview.readyCount,
   blockedCount: preview.blockedCount,

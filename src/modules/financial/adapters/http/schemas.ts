@@ -1395,7 +1395,10 @@ export type ParseDocumentResponseDto = z.infer<typeof parseDocumentResponseSchem
 
 export const remittancePreviewBodySchema = z
   .object({
-    documentIds: z.array(z.uuid()).min(1).max(200),
+    // TÍTULOS, não notas: o grid de Contas a Pagar é payable-centric e é dele que a seleção sai.
+    // Cada título tem forma, vencimento e ciclo de vida próprios — inclusive as retenções, que são
+    // títulos a pagar como qualquer outro e podem ficar em aberto com o pai já pago.
+    payableIds: z.array(z.uuid()).min(1).max(200),
   })
   .strict();
 
@@ -1424,15 +1427,19 @@ export const remittancePreviewResponseSchema = z
     lines: z.array(
       z
         .object({
-          documentId: z.uuid(),
+          payableId: z.uuid(),
+          // A nota de origem, para o front agrupar os títulos dela no grid. `null` em `not-found`:
+          // sem o título lido não há vínculo a declarar.
+          documentId: z.uuid().nullable(),
           // `not-found` é status de linha, não erro da chamada: o id que o operador selecionou tem
-          // de aparecer na resposta, ainda que o documento não exista mais. `not-approved` (#736) é
+          // de aparecer na resposta, ainda que o título não exista mais. `not-approved` (#736) é
           // distinto de `blocked`: falta aprovar, não falta dado do cadastro.
           status: z.enum(['ready', 'blocked', 'out-of-van', 'not-found', 'not-approved']),
           route: z.enum(['pix', 'transfer', 'billet', 'tax-guide']).nullable(),
           missing: z.array(payoutGapSchema.shape.field),
           gaps: z.array(payoutGapSchema),
-          netValueCents: centsStringSchema,
+          // Valor DO TÍTULO — no filho de retenção não é o líquido da nota.
+          valueCents: centsStringSchema,
         })
         .strict(),
     ),
