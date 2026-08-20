@@ -24,9 +24,27 @@ export type ConfirmRemittanceOutput = Readonly<{
   unmatched: readonly string[];
   unreadable: readonly string[];
   conflicted: readonly string[];
+  /**
+   * Chaves que a varredura leu e não conseguiu persistir (#782).
+   *
+   * Carrega a CHAVE, não o nome do arquivo: é a chave que identifica o objeto no bucket, e é por ela
+   * que se investiga. Carrega o erro junto porque, sem ele, o diagnóstico vira adivinhação — o
+   * sintoma anterior era uma linha a cada 5 minutos dizendo que "a varredura falhou", sem dizer onde.
+   */
+  persistFailed: readonly VanStatusPersistFailure[];
 }>;
 
-export type ConfirmRemittanceError = 'van-status-unavailable' | 'remittance-persist-failed';
+export type VanStatusPersistFailure = Readonly<{ key: string; error: string }>;
+
+/**
+ * O ÚNICO erro que aborta a varredura — e a restrição é a correção (#782).
+ *
+ * `van-status-unavailable` significa "não consegui listar o prefixo": não há o que percorrer, e
+ * insistir por chave não faria sentido. Falha ao persistir UMA chave é outra categoria e não sobe
+ * mais para cá; vai para `persistFailed` e a varredura continua. A distinção precisa sobreviver a
+ * qualquer refatoração: fundir as duas devolve o bloqueio que esta issue removeu.
+ */
+export type ConfirmRemittanceError = 'van-status-unavailable';
 
 // Fecha a janela aberta pela geração: a remessa nasce `Queued` e só sai daí quando o `status/` do
 // agente diz o que aconteceu (ADR-0060/0061). É a ÚNICA leitura que resolve uma remessa.
@@ -45,6 +63,7 @@ export const confirmRemittance =
     const unmatched: string[] = [];
     const unreadable: string[] = [];
     const conflicted: string[] = [];
+    const persistFailed: VanStatusPersistFailure[] = [];
 
     for (const key of keys.value) {
       const content = await deps.storage.getText(key);
@@ -73,8 +92,16 @@ export const confirmRemittance =
         continue;
       }
 
+      // Isolado por chave, como o envelope ilegível logo acima (#782). O comentário de lá já dizia a
+      // regra — "dezenas de outras remessas dependem dela" — e a persistência era a única ramificação
+      // que não a seguia: um `return` daqui abandonava o laço, e como o `listStatus` devolve em
+      // ordem, TODA remessa cuja chave viesse depois nunca seria confirmada. O conjunto crescia a
+      // cada envio novo.
       const found = await deps.remittances.findByFileName(status.value.fileName);
-      if (!found.ok) return err('remittance-persist-failed');
+      if (!found.ok) {
+        persistFailed.push({ key, error: found.error });
+        continue;
+      }
       if (found.value === null) {
         unmatched.push(status.value.fileName);
         continue;
@@ -105,11 +132,16 @@ export const confirmRemittance =
       // agente nunca apaga o status, então sem isto a escrita cresceria sem teto, e o outbox junto.
       if (decided.value.remittance !== found.value) {
         const saved = await deps.remittances.save(decided.value.remittance, decided.value.events);
-        if (!saved.ok) return err('remittance-persist-failed');
+        // Mesma isolação do `findByFileName` acima, e o caso mais caro dos dois: é aqui que um
+        // `detalhe` acima do teto da coluna derrubava a varredura inteira (#781 + #782).
+        if (!saved.ok) {
+          persistFailed.push({ key, error: saved.error });
+          continue;
+        }
       }
 
       (transmitted ? confirmed : failed).push(status.value.fileName);
     }
 
-    return ok({ confirmed, failed, ignored, unmatched, unreadable, conflicted });
+    return ok({ confirmed, failed, ignored, unmatched, unreadable, conflicted, persistFailed });
   };

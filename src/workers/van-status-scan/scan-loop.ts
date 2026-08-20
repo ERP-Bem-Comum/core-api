@@ -33,7 +33,18 @@ export type VanStatusScanStats = Readonly<{
   failed: number;
   anomalies: number;
   errors: number;
+  /** As chaves que não persistiram NESTA passagem — é o que permite ao laço contar reincidência. */
+  persistFailedKeys: readonly string[];
 }>;
+
+/**
+ * Quantas passagens seguidas uma chave precisa falhar para o log mudar de tom (#782 CA4).
+ *
+ * Falha isolada é ruído normal — deadlock, indisponibilidade momentânea. Falha que se repete é outra
+ * coisa: aquele objeto **nunca** vai passar, e alguém precisa olhar. Repetir a mesma linha a cada 5
+ * minutos treinaria o time a ignorá-la, que é como o evento raro se esconde no log que ninguém lê.
+ */
+const REPEATED_FAILURE_THRESHOLD = 3;
 
 const taggedLog = (baseTag: string): string => {
   const id = currentCorrelationId();
@@ -56,11 +67,20 @@ export const scanOnce = async (deps: VanStatusScanDeps): Promise<VanStatusScanSt
   const result = await deps.confirm();
 
   if (!result.ok) {
+    // Sobra um erro só, e ele é da VARREDURA, não de uma chave: não deu para listar o prefixo. Falha
+    // de uma chave não chega mais aqui (#782) — vai em `persistFailed` e as demais seguem.
     write(deps.tag, `varredura falhou: ${result.error}`);
-    return { rounds: 1, confirmed: 0, failed: 0, anomalies: 0, errors: 1 };
+    return { rounds: 1, confirmed: 0, failed: 0, anomalies: 0, errors: 1, persistFailedKeys: [] };
   }
 
-  const { confirmed, failed, unmatched, unreadable, conflicted } = result.value;
+  const { confirmed, failed, unmatched, unreadable, conflicted, persistFailed } = result.value;
+
+  // A chave vem junto de propósito (#782). Antes, uma falha de persistência abortava a varredura e
+  // produzia `varredura falhou: remittance-persist-failed` — sem dizer QUAL objeto, porque o erro era
+  // do use case e não da chave. Diagnosticar exigia ler o bucket na mão e adivinhar.
+  for (const { key, error } of persistFailed) {
+    write(deps.tag, `⚠️ não persistiu (as demais seguiram): ${key} — ${error}`);
+  }
 
   if (confirmed.length > 0) {
     write(deps.tag, `confirmadas: ${confirmed.join(', ')}`);
@@ -91,8 +111,9 @@ export const scanOnce = async (deps: VanStatusScanDeps): Promise<VanStatusScanSt
     rounds: 1,
     confirmed: confirmed.length,
     failed: failed.length,
-    anomalies: unreadable.length + conflicted.length,
+    anomalies: unreadable.length + conflicted.length + persistFailed.length,
     errors: 0,
+    persistFailedKeys: persistFailed.map((f) => f.key),
   };
 };
 
@@ -108,11 +129,33 @@ export const runScanLoop = async (
     failed: 0,
     anomalies: 0,
     errors: 0,
+    persistFailedKeys: [],
   };
+
+  // Reincidência por chave, viva enquanto o processo viver. Não é estado durável de propósito: a
+  // pergunta que ela responde — "esta chave está travada AGORA?" — é sobre a janela em que alguém
+  // está olhando o log. Persistir isso pediria tabela, e tabela pediria limpeza.
+  const failureStreak = new Map<string, number>();
 
   while (deps.abortSignal?.aborted !== true) {
     // Correlation por passagem: as linhas de uma mesma varredura ficam amarráveis no log.
     const round = await withNewCorrelation(async () => scanOnce(deps));
+
+    const failedNow = new Set(round.persistFailedKeys);
+    // Chave que voltou a passar zera o contador: senão o alarme sobreviveria à cura, e um aviso que
+    // não desliga vale tanto quanto aviso que nunca acende.
+    for (const key of failureStreak.keys()) if (!failedNow.has(key)) failureStreak.delete(key);
+
+    for (const key of failedNow) {
+      const streak = (failureStreak.get(key) ?? 0) + 1;
+      failureStreak.set(key, streak);
+      if (streak === REPEATED_FAILURE_THRESHOLD) {
+        write(
+          deps.tag,
+          `⚠️ chave falha SEMPRE (${String(streak)} passagens seguidas), precisa de decisão humana: ${key}`,
+        );
+      }
+    }
 
     totals = {
       rounds: totals.rounds + round.rounds,
@@ -120,6 +163,7 @@ export const runScanLoop = async (
       failed: totals.failed + round.failed,
       anomalies: totals.anomalies + round.anomalies,
       errors: totals.errors + round.errors,
+      persistFailedKeys: round.persistFailedKeys,
     };
 
     await sleep(config.pollIntervalMs, deps.abortSignal);

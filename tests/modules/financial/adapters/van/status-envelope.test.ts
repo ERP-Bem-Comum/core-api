@@ -8,6 +8,7 @@ import {
   parseStatus,
   wasTransmitted,
 } from '#src/modules/financial/adapters/van/status-envelope.ts';
+import { VAN_STATUS_DETAIL_MAX_LENGTH } from '#src/modules/financial/application/ports/van-status-reader.ts';
 
 const envelope = (over: Record<string, unknown> = {}): string =>
   JSON.stringify({
@@ -135,5 +136,66 @@ describe('status/ — só uma coisa conta como transmissão', () => {
     const dup = parse({ situacao: 'transmitido' }, 'status/X.REM.duplicado-20260810T2026.json');
     assert.equal(dup.kind, 'duplicate');
     assert.equal(wasTransmitted(dup), false);
+  });
+});
+
+// O teto do `detalhe` (#781). O produtor mediu: o desfecho de evidência física ilegível interpola
+// DOIS erros de sistema operacional com o caminho completo, e um caminho de pasta de 102 caracteres
+// já produz 513. A coluna é `varchar(512)` — e no MySQL estrito exceder é erro 1406, não
+// truncamento: o INSERT falharia e o DESFECHO da remessa se perderia por causa de um campo de
+// diagnóstico.
+describe('status/ — o `detalhe` é diagnóstico: cortado, nunca causa de recusa', () => {
+  const parse = (detalhe: string): { detail: string } => {
+    const r = parseStatus('status/X.REM.json', envelope({ detalhe }));
+    assert.ok(isOk(r));
+    return r.value;
+  };
+
+  it('o que cabe passa intacto — inclusive no limite exato', () => {
+    const noLimite = 'á'.repeat(VAN_STATUS_DETAIL_MAX_LENGTH);
+
+    const detail = parse(noLimite).detail;
+
+    assert.equal(detail, noLimite, 'a fronteira é <=, não <');
+    assert.equal(Array.from(detail).length, VAN_STATUS_DETAIL_MAX_LENGTH);
+  });
+
+  it('o que excede é cortado ao teto, e o resultado CABE na coluna', () => {
+    const detail = parse('x'.repeat(900)).detail;
+
+    assert.equal(Array.from(detail).length, VAN_STATUS_DETAIL_MAX_LENGTH);
+  });
+
+  it('o corte é marcado — diagnóstico cortado em silêncio parece completo', () => {
+    const detail = parse('x'.repeat(900)).detail;
+
+    assert.match(detail, /\[truncado\]$/, 'sem a marca, quem lê conclui que o erro terminou ali');
+  });
+
+  it('preserva o COMEÇO, que é onde mora a instrução ao operador', () => {
+    const instrucao = 'ARQUIVO PODE TER SAÍDO — conferir com o banco antes de reenviar. ';
+
+    const detail = parse(instrucao + 'caminho longo '.repeat(60)).detail;
+
+    assert.ok(detail.startsWith(instrucao), 'cortar por trás sacrificaria o que dizer ao humano');
+  });
+
+  // Um `detalhe` acima do teto NÃO pode virar `van-status-missing-field`: o caminho que estoura é
+  // justamente o desfecho AMBÍGUO — "pode ter saído, ninguém sabe, chame um humano" —, e recusar o
+  // envelope perderia exatamente o desfecho que mais precisa de humano.
+  it('não vira erro: campo de diagnóstico não derruba o registro do desfecho', () => {
+    const r = parseStatus('status/X.REM.json', envelope({ detalhe: 'x'.repeat(5000) }));
+
+    assert.ok(isOk(r));
+    assert.equal(r.value.situation, 'transmitido', 'a DECISÃO sobrevive ao corte do diagnóstico');
+  });
+
+  // A conta do MySQL é por CARACTERE. Medir por `length` de JS (unidades UTF-16) daria um número
+  // maior num texto com par substituto, e o corte cairia no lugar errado — partindo o par.
+  it('conta pontos de código, não unidades UTF-16', () => {
+    const detail = parse('😀'.repeat(400)).detail;
+
+    assert.ok(Array.from(detail).length <= VAN_STATUS_DETAIL_MAX_LENGTH);
+    assert.ok(!detail.includes('�'), 'nenhum par substituto partido ao meio');
   });
 });
