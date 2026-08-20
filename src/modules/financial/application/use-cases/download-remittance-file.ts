@@ -34,6 +34,8 @@ export type DownloadRemittanceFileError =
   | 'remittance-id-invalid'
   | 'remittance-not-found'
   | 'remittance-file-not-found'
+  /** O objeto não está nos prefixos do contrato E o bucket tem prefixo desconhecido (#785). */
+  | 'remittance-file-prefix-drift'
   | 'remittance-file-corrupted'
   | 'remittance-repository-unavailable'
   | 'van-storage-unavailable';
@@ -54,14 +56,27 @@ export const downloadRemittanceFile =
 
     const object = await deps.storage.findRemittance(found.value.fileName);
     if (!object.ok) {
-      // Ausente e indisponível pedem ações opostas de quem investiga: no primeiro o arquivo não está
-      // em nenhum dos prefixos do agente — remessa antiga, ou objeto movido para fora do combinado;
-      // no segundo o bucket é que não respondeu, e o arquivo provavelmente está lá.
-      return err(
-        object.error === 'van-storage-object-not-found'
-          ? 'remittance-file-not-found'
-          : 'van-storage-unavailable',
-      );
+      // Três desfechos, três ações — e colapsá-los foi o defeito da #785.
+      //
+      //   `object-not-found` → o arquivo não está em prefixo NENHUM do bucket. Remessa antiga,
+      //                        expurgada: **nada a fazer**, é o caso normal.
+      //   `prefix-drift`     → o bucket tem prefixo fora do combinado. A fronteira com o agente
+      //                        mudou e **alguém precisa olhar agora** — o oposto do anterior.
+      //   qualquer outro     → o bucket não respondeu; o arquivo provavelmente está lá.
+      // Exaustivo de propósito, sem `default`: um valor novo em `VanStorageError` quebra o build
+      // aqui, em vez de cair calado no balde de indisponibilidade. Foi um desses colapsos que a
+      // #785 corrigiu — o `default` é onde categorias somem.
+      switch (object.error) {
+        case 'van-storage-object-not-found':
+          return err('remittance-file-not-found');
+        case 'van-storage-prefix-drift':
+          return err('remittance-file-prefix-drift');
+        // O nome do arquivo vem do agregado, não da borda — chegar aqui seria defeito nosso, e o
+        // balde de indisponibilidade é o honesto: não há o que o operador corrija.
+        case 'van-storage-invalid-file-name':
+        case 'van-storage-unavailable':
+          return err('van-storage-unavailable');
+      }
     }
 
     // A conferência que transforma "aqui está um arquivo" em "este é o arquivo que foi ao banco".

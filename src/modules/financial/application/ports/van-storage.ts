@@ -13,7 +13,19 @@ import type { Result } from '../../../../shared/primitives/result.ts';
 export type VanStorageError =
   | 'van-storage-unavailable'
   | 'van-storage-object-not-found'
-  | 'van-storage-invalid-file-name';
+  | 'van-storage-invalid-file-name'
+  /**
+   * O objeto não está em nenhum prefixo configurado **e o bucket tem prefixo que não conhecemos**
+   * (#785).
+   *
+   * É categoria própria porque a ação é OPOSTA à de "não encontrado": ali não há nada a fazer — o
+   * objeto é antigo e saiu —, aqui a fronteira com o agente mudou e alguém precisa olhar agora.
+   * Colapsar as duas faz o dia em que o ciclo mudar parecer expurgo normal.
+   *
+   * ⚠️ Não afirma que o arquivo está no prefixo desconhecido: afirma que **existe** prefixo fora do
+   * combinado. É o quanto a evidência permite dizer, e é suficiente para mandar investigar.
+   */
+  | 'van-storage-prefix-drift';
 
 export type VanObjectKey = string;
 

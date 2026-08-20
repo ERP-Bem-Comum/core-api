@@ -96,7 +96,22 @@ export const createInMemoryVanStorage = (
         if (bytes !== undefined) return Promise.resolve(ok({ key, bytes }));
       }
 
-      return Promise.resolve(err('van-storage-object-not-found'));
+      // Mesma distinção do adapter real (#785): não achar pode ser "arquivo antigo" ou "o agente
+      // passou a usar prefixo que não conhecemos", e as ações são opostas. O fake reproduz porque
+      // um fake que sempre dissesse "não encontrado" deixaria verde um teste que produção separa.
+      //
+      // O primeiro nível é derivado das chaves que o fake guarda — é o equivalente em memória do
+      // `CommonPrefixes` com delimitador.
+      const known = new Set<string>(Object.values(prefixes));
+      const seen = new Set(
+        [...objects.keys()]
+          .map((k) => k.slice(0, k.indexOf('/') + 1))
+          .filter((p) => p !== '' && !known.has(p)),
+      );
+
+      return Promise.resolve(
+        err(seen.size > 0 ? 'van-storage-prefix-drift' : 'van-storage-object-not-found'),
+      );
     },
 
     // Só do fake: injeta o que o AGENTE colocaria no bucket (retorno, status). Sem isto, testar a
