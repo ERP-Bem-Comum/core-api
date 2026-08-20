@@ -75,6 +75,7 @@ import { createBradescoMultipagTranslator } from '../cnab/bradesco-multipag-tran
 import { generateRemittance } from '../../application/use-cases/generate-remittance.ts';
 import { listRemittances } from '../../application/use-cases/list-remittances.ts';
 import { getRemittance } from '../../application/use-cases/get-remittance.ts';
+import { downloadRemittanceFile } from '../../application/use-cases/download-remittance-file.ts';
 import { listVanReturnQuarantine } from '../../application/use-cases/list-van-return-quarantine.ts';
 import type { VanReturnQuarantineStore } from '../../application/ports/van-return-quarantine-store.ts';
 import { createInMemoryVanReturnQuarantine } from '../persistence/repos/van-return-quarantine-store.in-memory.ts';
@@ -395,6 +396,12 @@ export type FinancialHttpDeps = Readonly<{
    */
   listRemittances: ReturnType<typeof listRemittances>;
   getRemittance: ReturnType<typeof getRemittance>;
+  /**
+   * GET /financial/remittances/:id/file — o arquivo que foi ao banco. **A rota só é registrada fora
+   * de produção**; a dep existe sempre, porque montá-la condicionalmente faria o composition root
+   * ter dois formatos e o teste de um deles nunca rodaria.
+   */
+  downloadRemittanceFile: ReturnType<typeof downloadRemittanceFile>;
   /**
    * #753 · Quarentena do retorno — GET /financial/van-returns/quarantine. Read-only sobre o que o
    * worker `van-return-scan` gravou; a borda nunca escreve na quarentena.
@@ -1051,6 +1058,13 @@ const makeDeps = (pools: Pools, clock: Clock = ClockReal()): FinancialHttpDeps =
     }),
     listRemittances: listRemittances({ remittances: pools.remittanceRepo }),
     getRemittance: getRemittance({ remittances: pools.remittanceRepo }),
+    // `sha256Hex` é o MESMO que o generate usa acima para gravar o `contentHash` — se um dia forem
+    // duas funções, a conferência do download passa a reprovar todo arquivo íntegro.
+    downloadRemittanceFile: downloadRemittanceFile({
+      remittances: pools.remittanceRepo,
+      storage: pools.vanStorage,
+      hashContent: sha256Hex,
+    }),
     listVanReturnQuarantine: listVanReturnQuarantine({ quarantine: pools.vanReturnQuarantine }),
     resolvePayeeBank: (ref) => composePayeeBank(pools.contractorReadPort, ref),
     resolveUserName: (id) => resolveUserName(pools.authUserReadPort, id),

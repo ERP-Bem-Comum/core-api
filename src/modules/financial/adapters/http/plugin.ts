@@ -81,6 +81,7 @@ import {
 } from './dto.ts';
 import type { DocumentListFilter } from '../../domain/document/query.ts';
 import type { PayableListFilter, PayableListItem } from '../../domain/payable/query.ts';
+import { isProductionEnv } from '#src/shared/runtime/node-env.ts';
 import type { FinancialHttpDeps } from './composition.ts';
 import {
   createDocumentBodySchema,
@@ -1253,6 +1254,49 @@ const financialRoutes =
         return sendResult(reply, ok(remittanceToDetailDto(result.value)), { ok: 200 });
       },
     });
+
+    // GET /financial/remittances/:id/file — baixa o arquivo QUE FOI AO BANCO. **Homologação apenas.**
+    //
+    // Não existe em produção: a rota nem é registrada, então lá o caminho é 404 por ausência, não 403
+    // por decisão. É o mesmo mecanismo do Swagger em `shared/http/app.ts:148` e a diferença importa —
+    // um 403 confirma que o recurso existe, e a superfície que não se registra não tem como vazar por
+    // erro de permissão, de ordem de preHandler ou de bypass de RBAC (ADR-0052).
+    //
+    // Por que homologação: o arquivo carrega o cadastro bancário de todos os favorecidos do lote. Em
+    // homologação o dado é sintético e baixá-lo é como se confere layout com o banco; em produção o
+    // mesmo GET é uma exportação de dados de pagamento por HTTP, e isso pede decisão de negócio e
+    // trilha de auditoria que esta rota não tem.
+    //
+    // Serve BYTES do objeto, nunca regeração (ver o docblock do use case) e nunca URL assinada
+    // (ADR-0050) — o backend lê do storage privado e repassa, como o proxy do comprovante-fonte.
+    if (!isProductionEnv(process.env)) {
+      scope.route({
+        method: 'GET',
+        url: '/financial/remittances/:id/file',
+        preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.remittanceRead)],
+        schema: {
+          params: remittanceIdParamSchema,
+        } satisfies FastifyZodOpenApiSchema,
+        handler: async (req, reply) => {
+          const result = await deps.downloadRemittanceFile(req.params.id);
+          if (!result.ok) return sendDomainError(reply, result.error);
+
+          // `application/octet-stream` mesmo o conteúdo sendo texto posicional: o que se entrega é um
+          // arquivo para conferir ou reenviar, não um documento para o browser interpretar. Com
+          // `text/plain` o navegador abriria na aba e poderia normalizar quebra de linha ao salvar —
+          // e CNAB com terminador trocado é arquivo recusado pelo banco.
+          reply.header('content-type', 'application/octet-stream');
+          reply.header(
+            'content-disposition',
+            `attachment; filename="${sanitizeFilename(result.value.fileName)}"`,
+          );
+          // De qual prefixo veio. `falhas/` significa que o envio não completou, e quem baixa
+          // precisa saber disso ANTES de comparar bytes com o banco.
+          reply.header('x-van-object-key', result.value.key);
+          return reply.send(Buffer.from(result.value.bytes)) as unknown as Promise<void>;
+        },
+      });
+    }
 
     // GET /financial/van-returns/quarantine — o que do prefixo de retorno NÃO tem direito de entrar
     // (#753). É o que fecha o "consultável" da issue: sem esta rota a quarentena existiria só para

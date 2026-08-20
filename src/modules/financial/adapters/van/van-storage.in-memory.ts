@@ -20,10 +20,19 @@ import type {
 export const createInMemoryVanStorage = (
   prefixes: Readonly<{
     outbound: string;
+    processed: string;
+    failed: string;
     returns: string;
     status: string;
     sandbox: string;
-  }> = { outbound: 'saida/', returns: 'retorno/', status: 'status/', sandbox: 'sandbox/' },
+  }> = {
+    outbound: 'saida/',
+    processed: 'processados/',
+    failed: 'falhas/',
+    returns: 'retorno/',
+    status: 'status/',
+    sandbox: 'sandbox/',
+  },
 ): VanStoragePort &
   Readonly<{
     seed: (key: string, content: string) => void;
@@ -71,6 +80,23 @@ export const createInMemoryVanStorage = (
     getBytes: async (key) => {
       const bytes = objects.get(key);
       return Promise.resolve(bytes === undefined ? err('van-storage-object-not-found') : ok(bytes));
+    },
+
+    // Mesma ordem de ciclo de vida do adapter real, e `sandbox/` de fora pela mesma razão: um
+    // exercício tem o mesmo nome de um envio real. Um fake que procurasse ali deixaria verde um
+    // teste que produção reprova — e este fake existe justamente para exercitar o fluxo sem risco,
+    // então seria o lugar mais fácil de a divergência nascer.
+    findRemittance: async (fileName) => {
+      if (fileName === '' || fileName.includes('/'))
+        return Promise.resolve(err('van-storage-invalid-file-name'));
+
+      for (const prefix of [prefixes.outbound, prefixes.processed, prefixes.failed]) {
+        const key = `${prefix}${fileName}`;
+        const bytes = objects.get(key);
+        if (bytes !== undefined) return Promise.resolve(ok({ key, bytes }));
+      }
+
+      return Promise.resolve(err('van-storage-object-not-found'));
     },
 
     // Só do fake: injeta o que o AGENTE colocaria no bucket (retorno, status). Sem isto, testar a
