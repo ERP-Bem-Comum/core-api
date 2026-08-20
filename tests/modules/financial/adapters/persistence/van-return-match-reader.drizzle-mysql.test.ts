@@ -64,6 +64,10 @@ if (!process.env['MYSQL_INTEGRATION']) {
         fileName: FILE_NAME,
         contentHash: 'a'.repeat(64),
         status: 'Transmitted',
+        // ⚠️ Formato do MySQL, e NÃO ISO — o oposto do que a fixture do `remittance-repository` usa
+        // depois do #767, de propósito. Lá o dado entra pelo REPO, que converte ISO → coluna; aqui
+        // o insert é direto no `db`, sem passar por adapter nenhum. Alimentar este insert com ISO
+        // reproduziria o erro 1292 que o #767 diagnosticou, do outro lado.
         generatedAt: '2026-08-19 12:00:00.000',
       });
       await handle.db.insert(finRemittanceDocuments).values([
@@ -87,6 +91,29 @@ if (!process.env['MYSQL_INTEGRATION']) {
       assert.equal(a?.documentId, DOC_A);
       assert.equal(a?.remittanceId, REMITTANCE);
       assert.equal(a?.fileName, FILE_NAME, 'o JOIN é o que permite dizer de qual envio veio');
+    });
+
+    // Pareado com o mesmo nome em `van-return-match-reader.in-memory.test.ts`. Lá o fake também
+    // afirma o que NÃO promete (a ordem devolvida diverge da pedida, de propósito); aqui isso não é
+    // asseverável sem flake — sem `ORDER BY`, o MySQL pode devolver na ordem pedida por acaso, e um
+    // assert nisso reprovaria o adapter num dia e o aprovaria no outro. O que os dois compartilham,
+    // e é o contrato, é a resposta ser um CONJUNTO.
+    //
+    // Medido em 20/08/2026 contra MySQL 8.4.10: perguntando `IN ('…002','…001')`, o banco devolveu
+    // `…001, …002` — ordem do índice, não da pergunta. O plano é `type: index` sobre
+    // `fin_remittance_documents_your_number_uk` com `Using index` (a UNIQUE cobre a consulta). É a
+    // evidência de que a ordem pedida NÃO sobrevive à ida ao banco, e de que asseverá-la aqui
+    // reprovaria o adapter hoje.
+    it('a resposta é um conjunto: a ordem da pergunta não atravessa o port', async () => {
+      const reader = createDrizzleVanReturnMatchReader(handle);
+
+      const found = await reader.findByYourNumbers([REF_B, REF_A]);
+      assert.ok(found.ok);
+      assert.deepEqual(
+        found.value.map((r) => r.yourNumber).sort(),
+        [REF_A, REF_B],
+        'os mesmos vínculos, seja qual for a ordem da pergunta',
+      );
     });
 
     it('chave desconhecida não vem na resposta — ausência é informação, não erro', async () => {

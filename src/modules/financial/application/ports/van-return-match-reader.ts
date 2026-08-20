@@ -28,6 +28,14 @@ export type VanReturnMatchReader = Readonly<{
   /**
    * Os vínculos conhecidos entre as chaves pedidas. Chave ausente da resposta significa
    * "não é nossa" — e essa ausência é informação, não erro.
+   *
+   * ⚠️ A resposta é um CONJUNTO: a ordem dela **não** é contrato, e nenhum adapter promete devolver
+   * na ordem em que as chaves foram pedidas. O Drizzle fatia a consulta em blocos e não tem
+   * `ORDER BY` — dentro de cada bloco quem ordena é o otimizador do MySQL. Quem precisar de ordem
+   * ordena no consumidor. O casamento (`van-return-matching.ts`) indexa por chave e itera os
+   * pagamentos LIDOS, então a ordem que chega ao operador é a do arquivo, não a desta resposta;
+   * prometer o contrário custaria ao adapter real reordenar linhas atravessando os blocos para
+   * servir ninguém.
    */
   findByYourNumbers: (
     yourNumbers: readonly string[],
