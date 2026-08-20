@@ -9,6 +9,17 @@ name: qa-image (deploy suspenso)
 # chamado `deploy-qa` ficando verde sem deployar é registro que mente, e alguém acabaria
 # lendo a imagem publicada como ambiente atualizado.
 #
+# O ARQUIVO foi renomeado em 20/08/2026 (`deploy-qa.yml` → `qa-image.yml`), e a razão é uma
+# falha medida: trocar só o `name:` não fecha o buraco. `gh run list --workflow=deploy-qa.yml`
+# e a aba Actions exibem o **caminho do arquivo** em vários pontos, então quem consultava o
+# histórico por ali continuava lendo "deploy-qa" e concluindo que a `dev` entrega em host.
+# Foi exatamente o que aconteceu: o estado do QA foi reportado errado três vezes num único
+# dia, com o `name:` correto já no lugar desde a véspera. Sinal só vale onde o leitor olha.
+#
+# Preço pago, para quem for restaurar: o histórico de execuções do GitHub é indexado pelo
+# caminho, então as execuções anteriores a 20/08 ficam sob a entrada `deploy-qa.yml` na aba
+# Actions. Nada se perde; o histórico é que fica em duas entradas.
+#
 # Por que saiu: o job `deploy` vinha vermelho desde o merge do #743 (`erp-bem-comum-qa-…-1
 # is unhealthy` no boot; suspeito é o fail-fast do #516), e o QA será retomado no contexto
 # PBE, em sessão própria. Vermelho crônico que ninguém vai tratar hoje treina o time a
@@ -34,7 +45,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: deploy-qa-${{ github.ref }}
+  group: qa-image-${{ github.ref }}
   cancel-in-progress: true
 
 permissions:
