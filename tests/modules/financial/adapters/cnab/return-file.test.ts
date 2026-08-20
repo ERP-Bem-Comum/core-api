@@ -10,7 +10,12 @@ import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
 import { isOk } from '#src/shared/index.ts';
-import { parseReturnFile } from '#src/modules/financial/adapters/cnab/return-file.ts';
+import {
+  createReturnFileReader,
+  parseReturnFile,
+} from '#src/modules/financial/adapters/cnab/return-file.ts';
+import { matchReturnPayments } from '#src/modules/financial/application/van-return-matching.ts';
+import type { RemittanceDocumentRef } from '#src/modules/financial/application/ports/van-return-match-reader.ts';
 
 const LENGTH = 240;
 
@@ -256,5 +261,47 @@ describe('parseReturnFile — os únicos erros que sobem', () => {
     const r = parseReturnFile([batchHeader(), segmentA()].join('\n'));
     assert.ok(isOk(r));
     assert.equal(r.value.payments.length, 1);
+  });
+});
+
+describe('createReturnFileReader — o parser sob a assinatura do port', () => {
+  it('o port entrega o MESMO resultado da função pura — a factory não reinterpreta nada', () => {
+    const conteudo = file(fileHeader(), batchHeader(), segmentA(), batchTrailer(), fileTrailer());
+
+    assert.deepEqual(createReturnFileReader().parse(conteudo), parseReturnFile(conteudo));
+  });
+
+  it('o erro também atravessa o port como `Result`, nunca como exceção', () => {
+    const r = createReturnFileReader().parse('');
+
+    assert.ok(!isOk(r));
+    assert.equal(r.error, 'return-file-empty');
+  });
+
+  it('o que o port devolve alimenta o casamento SEM adaptação no meio', () => {
+    // É o caminho que a fatia do efeito vai percorrer: ler pelo port, entregar à application. Um
+    // `map` necessário aqui significaria que o port descreve um formato que a application não
+    // consome — e isso só apareceria na fatia seguinte, longe do arquivo que causou.
+    const r = createReturnFileReader().parse(
+      file(batchHeader(), segmentA({ yourNumber: 'REF-A' }), 'CURTA'),
+    );
+    assert.ok(isOk(r));
+
+    const vinculo: RemittanceDocumentRef = {
+      yourNumber: 'REF-A',
+      remittanceId: '11111111-1111-4111-8111-111111111111',
+      documentId: '22222222-2222-4222-8222-222222222222',
+      fileName: 'PAG_000000.19082026120000_000001.REM',
+    };
+
+    const casamento = matchReturnPayments(r.value.payments, [vinculo], r.value.unreadable);
+
+    assert.equal(casamento.matched.length, 1);
+    assert.equal(casamento.matched[0]?.ref.documentId, vinculo.documentId);
+    assert.deepEqual(
+      casamento.segregated.map((s) => [s.reason, s.line]),
+      [['unreadable', 3]],
+      'a linha truncada que o parser contou é a mesma que o casamento segrega',
+    );
   });
 });
