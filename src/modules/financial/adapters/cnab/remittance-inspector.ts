@@ -20,6 +20,7 @@
 // Acumula todos os defeitos numa passada, em vez de parar no primeiro: quem chama está prestes a
 // transmitir dinheiro e quer a lista inteira, não um defeito por rodada.
 import { LINE_TERMINATOR } from './remittance-file.ts';
+import { RECORD_LENGTH, at, detailSequence, recordType, segment } from './positional-read.ts';
 
 export type RemittanceDefectCode =
   | 'empty-file'
@@ -45,13 +46,9 @@ export type RemittanceDefect = Readonly<{
   detail: string;
 }>;
 
-const RECORD_LENGTH = 240;
-
-// Posições do layout (1-indexed, inclusivas) — as mesmas que os módulos de escrita usam.
-const at = (line: string, from: number, to: number): string => line.slice(from - 1, to);
-const recordType = (line: string): string => at(line, 8, 8);
-const segment = (line: string): string => at(line, 14, 14);
-const detailSequence = (line: string): number => Number(at(line, 9, 13));
+// Posições do layout (1-indexed, inclusivas) — as mesmas que os módulos de escrita usam. Vivem em
+// `positional-read.ts` porque o PARSER DE RETORNO precisa exatamente delas: o Segmento A é o mesmo
+// registro nas duas direções, e duas cópias das posições divergem no dia em que o layout mudar.
 const batchDeclaredCount = (line: string): number => Number(at(line, 18, 23));
 const batchDeclaredTotal = (line: string): number => Number(at(line, 24, 41));
 const fileDeclaredBatches = (line: string): number => Number(at(line, 18, 23));
