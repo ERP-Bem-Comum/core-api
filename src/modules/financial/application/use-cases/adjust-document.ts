@@ -10,10 +10,20 @@ import type {
   DocumentRepositoryError,
 } from '../../domain/document/repository.ts';
 import { buildTimelineEntries } from '../timeline-recording.ts';
+import type {
+  RemittanceRepository,
+  RemittanceRepositoryError,
+} from '../ports/remittance-repository.ts';
+
+// Port estreito de propósito: este use case faz UMA pergunta à remessa — "algum destes títulos está
+// preso?". Injetar o `RemittanceRepository` inteiro daria a ele acesso a emitir e confirmar remessa,
+// que não é da sua alçada. `Pick` mantém o adapter existente compatível sem tipo novo a manter.
+export type HeldPayablesReader = Pick<RemittanceRepository, 'findHeldPayableIds'>;
 
 export type AdjustDocumentDeps = Readonly<{
   repo: DocumentRepository;
   clock: Clock;
+  remittances: HeldPayablesReader;
 }>;
 
 export type AdjustDocumentCommand = Readonly<{
@@ -37,7 +47,8 @@ export type AdjustDocumentError =
   | DocumentRepositoryError
   | DocumentId.DocumentIdError
   | Money.MoneyError
-  | Retention.RetentionError;
+  | Retention.RetentionError
+  | RemittanceRepositoryError;
 
 type ChangesError = Money.MoneyError | Retention.RetentionError;
 
@@ -154,10 +165,22 @@ export const adjustDocument =
     const changes = buildChanges(cmd);
     if (!changes.ok) return err(changes.error);
 
+    // Vai ao BANCO, não à memória: outra instância pode ter emitido remessa com estes títulos desde
+    // que este processo os leu. Só o caminho de VALOR consulta — o ajuste leve (`editMetadata`, mais
+    // acima) preserva os títulos e não muda o quanto se paga.
+    const ownIds: readonly string[] = [
+      found.value.payables.parent.id,
+      ...found.value.payables.children.map((child) => child.id),
+    ];
+    const held = await deps.remittances.findHeldPayableIds(ownIds);
+    if (!held.ok) return err(held.error);
+
     const adjusted = Document.adjust({
       document: open.value,
       payables: found.value.payables,
       changes: changes.value,
+      // A decisão de recusar é do domínio; a aplicação só entrega o fato apurado.
+      heldPayableIds: held.value,
     });
     if (!adjusted.ok) return err(adjusted.error);
 

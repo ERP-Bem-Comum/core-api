@@ -17,7 +17,7 @@ import type {
   VanReturnMatchReader,
 } from '#src/modules/financial/application/ports/van-return-match-reader.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
-import { finRemittanceDocuments, finRemittances } from '../schemas/mysql.ts';
+import { finRemittancePayables, finRemittances } from '../schemas/mysql.ts';
 
 const logReader = (op: string, cause: unknown): void => {
   process.stderr.write(`[fin-van-return-match] ${op} failed: ${String(cause)}\n`);
@@ -58,14 +58,17 @@ export const createDrizzleVanReturnMatchReader = (
         for (const chunk of chunked(yourNumbers, CHUNK)) {
           const rows = await db
             .select({
-              yourNumber: finRemittanceDocuments.yourNumber,
-              remittanceId: finRemittanceDocuments.remittanceId,
-              documentId: finRemittanceDocuments.documentId,
+              yourNumber: finRemittancePayables.yourNumber,
+              remittanceId: finRemittancePayables.remittanceId,
+              // O TÍTULO que o banco confirmou. Resolver para o documento aqui faria a conciliação
+              // baixar a nota inteira quando só um título foi pago — silenciosamente.
+              payableId: finRemittancePayables.payableId,
+              documentId: finRemittancePayables.documentId,
               fileName: finRemittances.fileName,
             })
-            .from(finRemittanceDocuments)
-            .innerJoin(finRemittances, eq(finRemittances.id, finRemittanceDocuments.remittanceId))
-            .where(inArray(finRemittanceDocuments.yourNumber, [...chunk]));
+            .from(finRemittancePayables)
+            .innerJoin(finRemittances, eq(finRemittances.id, finRemittancePayables.remittanceId))
+            .where(inArray(finRemittancePayables.yourNumber, [...chunk]));
 
           found.push(...rows);
         }

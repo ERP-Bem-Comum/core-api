@@ -1,8 +1,13 @@
 // Adapter Drizzle do RemittancePreviewReader (#720): o que o operador vê ANTES de gerar a remessa.
 //
-// Duas fontes, uma linha: o documento vem de `fin_documents` (forma de pagamento, linha digitável,
-// valor) e o destino de pagamento vem do `partners`, por composição em runtime (ADR-0032) — o
-// documento guarda apenas a referência ao favorecido.
+// Três fontes, uma linha: o TÍTULO vem de `fin_payables` (forma, complemento, valor, status), a
+// nota de `fin_documents` (o favorecido de quem se paga) e o destino de pagamento vem do
+// `partners`, por composição em runtime (ADR-0032).
+//
+// O grão é o TÍTULO, e o `INNER JOIN` é o mesmo de `payable-list-view.drizzle.ts` — o grid de
+// Contas a Pagar, que é de onde a seleção do operador sai. Ler por documento aqui e listar por
+// título lá foi exatamente o descasamento que originou esta mudança: o operador selecionava um
+// título e o pré-voo respondia sobre a nota inteira.
 //
 // Este adapter NÃO julga aptidão. Ele entrega o cadastro como está e quem decide é
 // `checkPayoutReadiness`, no domínio — a mesma função que a geração usa. É essa separação que faz
@@ -11,7 +16,7 @@
 //
 // Boundary: try/catch → Result (.claude/rules/adapters.md).
 
-import { inArray } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
@@ -28,7 +33,7 @@ import type {
 } from '#src/modules/financial/domain/document/types.ts';
 import type { PayeePaymentTarget } from '#src/modules/financial/domain/payout/types.ts';
 import type { PayeeBankBlock } from '../../http/payee-bank-composition.ts';
-import { finDocuments } from '../schemas/mysql.ts';
+import { finDocuments, finPayables } from '../schemas/mysql.ts';
 
 const logStore = (op: string, cause: unknown): void => {
   process.stderr.write(`[fin-remittance-preview-reader] ${op} failed: ${String(cause)}\n`);
@@ -66,25 +71,30 @@ export const createDrizzleRemittancePreviewReader = (
 
   return {
     loadPreviewRows: async (
-      documentIds: readonly string[],
+      payableIds: readonly string[],
     ): Promise<Result<readonly RemittancePreviewRow[], RemittancePreviewReaderError>> => {
       // Seleção vazia não vai ao banco. O use case percorre a seleção original, então id ausente
       // vira `not-found` lá — sumir com ele aqui é o defeito que o pré-voo existe para corrigir.
-      if (documentIds.length === 0) return ok([]);
+      if (payableIds.length === 0) return ok([]);
 
       try {
         const rows = await db
           .select({
-            documentId: finDocuments.id,
-            status: finDocuments.status,
-            paymentMethod: finDocuments.paymentMethod,
-            paymentDetail: finDocuments.paymentDetail,
-            netValueCents: finDocuments.netValue,
+            payableId: finPayables.id,
+            documentId: finPayables.documentId,
+            // Forma, complemento, valor e status são DO TÍTULO: o pai pode sair em boleto e o filho
+            // de retenção em guia, e o pai pode estar pago com o filho ainda em aberto.
+            status: finPayables.status,
+            paymentMethod: finPayables.paymentMethod,
+            paymentDetail: finPayables.paymentDetail,
+            valueCents: finPayables.value,
+            // O favorecido é da NOTA — o título não tem fornecedor próprio.
             payeeKind: finDocuments.payeeKind,
             payeeId: finDocuments.supplierRef,
           })
-          .from(finDocuments)
-          .where(inArray(finDocuments.id, [...documentIds]));
+          .from(finPayables)
+          .innerJoin(finDocuments, eq(finPayables.documentId, finDocuments.id))
+          .where(inArray(finPayables.id, [...payableIds]));
 
         // Uma leitura por FAVORECIDO, não por título: numa remessa real o mesmo fornecedor aparece
         // em vários títulos, e perguntar de novo ao `partners` a cada linha multiplicaria idas ao
@@ -110,15 +120,17 @@ export const createDrizzleRemittancePreviewReader = (
           }
 
           items.push({
+            payableId: row.payableId,
             documentId: row.documentId,
             // `status` é NOT NULL no schema; o cast reflete o vocabulário do domínio. Um valor fora
             // da união (não deveria existir, há CHECK) não é `Approved`, então cai em `not-approved`.
             status: row.status as DocumentStatus,
             paymentMethod: (row.paymentMethod as PaymentMethod | null) ?? null,
             paymentDetail: row.paymentDetail ?? null,
-            // Documento sem valor líquido é rascunho incompleto: entra como zero e o pré-voo o
-            // reporta pela forma de pagamento ausente, que é o impedimento real.
-            netValueCents: row.netValueCents ?? 0,
+            // Sem `?? 0`: `fin_payables.value` é NOT NULL com CHECK `>= 0`, e o tipo já prova. O
+            // documento tinha o fallback porque `fin_documents.net_value` é nullable (rascunho);
+            // no título não é, e mantê-lo descreveria um estado que o schema não admite.
+            valueCents: row.valueCents,
             payee: toPaymentTarget(cache.get(key) ?? null),
           });
         }

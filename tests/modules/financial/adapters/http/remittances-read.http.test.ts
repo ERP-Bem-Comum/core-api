@@ -71,8 +71,9 @@ const build = (id: string, nsa: number, generatedAt: string, documentIds: readon
     fileName: `PAG_1.11082026140000_${String(nsa).padStart(6, '0')}.REM`,
     contentHash: 'a'.repeat(64),
     // #752: NSA + posição. O NSA distingue as remessas do fixture entre si.
-    documents: documentIds.map((documentId, i) => ({
-      documentId,
+    payables: documentIds.map((payableId, i) => ({
+      payableId,
+      documentId: payableId,
       yourNumber: `${String(nsa).padStart(6, '0')}${String(i + 1).padStart(6, '0')}`,
     })),
     generatedAt,
@@ -99,7 +100,7 @@ type ListItem = Readonly<{
   generatedAt: string;
   settledAt: string | null;
   detail: string | null;
-  documentCount: number;
+  payableCount: number;
 }>;
 
 type ListBody = Readonly<{
@@ -109,7 +110,8 @@ type ListBody = Readonly<{
   limit: number;
 }>;
 
-type DetailBody = ListItem & Readonly<{ documentIds: readonly string[] }>;
+type DetailBody = ListItem &
+  Readonly<{ payableIds: readonly string[]; documentIds: readonly string[] }>;
 
 before(async () => {
   const repo = createInMemoryRemittanceRepository();
@@ -180,7 +182,7 @@ describe('financial/http — GET /remittances (#728) · lista', () => {
     );
   });
 
-  it('documentCount reflete a quantidade de documentos presos; status vem do registro', async () => {
+  it('payableCount reflete a quantidade de documentos presos; status vem do registro', async () => {
     const res = await list();
     const body = res.json() as ListBody;
 
@@ -190,11 +192,11 @@ describe('financial/http — GET /remittances (#728) · lista', () => {
     assert.equal(newest.status, 'Transmitted');
     assert.equal(newest.settledAt, '2026-08-13T15:00:00.000Z');
     assert.equal(newest.detail, 'consta em BACKUP');
-    assert.equal(newest.documentCount, 1);
+    assert.equal(newest.payableCount, 1);
     assert.equal(middle.status, 'Queued');
     assert.equal(middle.settledAt, null);
     assert.equal(middle.detail, null);
-    assert.equal(middle.documentCount, 2);
+    assert.equal(middle.payableCount, 2);
   });
 
   it('pagina por page/limit e mantém a ordem DESC entre páginas', async () => {
@@ -226,14 +228,14 @@ describe('financial/http — GET /remittances (#728) · lista', () => {
 });
 
 describe('financial/http — GET /remittances/:id (#728) · detalhe', () => {
-  it('devolve o detalhe com os documentIds presos', async () => {
+  it('devolve o detalhe com os títulos presos', async () => {
     const res = await detail(REM_MIDDLE);
     assert.equal(res.statusCode, 200, res.body);
 
     const body = res.json() as DetailBody;
     assert.equal(body.remittanceId, REM_MIDDLE);
-    assert.equal(body.documentCount, 2);
-    assert.deepEqual([...body.documentIds].sort(), [DOC_A, DOC_B].sort());
+    assert.equal(body.payableCount, 2);
+    assert.deepEqual([...body.payableIds].sort(), [DOC_A, DOC_B].sort());
   });
 
   it('remessa inexistente → 404', async () => {

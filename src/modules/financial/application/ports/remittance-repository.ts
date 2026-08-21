@@ -18,14 +18,17 @@ export type RemittanceRepository = Readonly<{
     fileName: string,
   ) => Promise<Result<Remittance | null, RemittanceRepositoryError>>;
 
-  // A pergunta que a SELEÇÃO faz antes de montar uma remessa nova: destes documentos, quais já
+  // A pergunta que a SELEÇÃO faz antes de montar uma remessa nova: destes TÍTULOS, quais já
   // estão presos numa remessa viva (`Queued`, `Transmitted` ou `Failed`)?
   //
   // Existe como operação do port, e não como filtro no chamador, porque a resposta tem de vir do
-  // BANCO: outra instância pode ter enfileirado o mesmo documento há dois segundos. Resolver isso
+  // BANCO: outra instância pode ter enfileirado o mesmo título há dois segundos. Resolver isso
   // em memória devolveria uma resposta desatualizada — e o preço do engano é pagamento em dobro.
-  findHeldDocumentIds: (
-    documentIds: readonly string[],
+  //
+  // ⚠️ Por TÍTULO, nunca por documento: o pai numa remessa viva não pode prender a retenção da mesma
+  // nota, que segue com ciclo de vida próprio e pode ser paga noutro arquivo.
+  findHeldPayableIds: (
+    payableIds: readonly string[],
   ) => Promise<Result<readonly string[], RemittanceRepositoryError>>;
 
   listByStatus: (

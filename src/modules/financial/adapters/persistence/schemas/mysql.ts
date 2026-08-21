@@ -262,8 +262,14 @@ export const finPayables = mysqlTable(
     // Data de vencimento do título.
     dueDate: date('due_date', { mode: 'date' }).notNull(),
 
-    // Método de pagamento herdado do documento.
+    // Forma de pagamento DO TÍTULO. Nasce herdada do documento e diverge a partir daí: retenção é
+    // título a pagar, e a guia de recolhimento do imposto não sai pela mesma forma que o líquido.
     paymentMethod: varchar('payment_method', { length: 24 }).notNull(),
+
+    // Complemento da forma DO TÍTULO — código de barras do boleto, da guia. Espelha o comprimento de
+    // `fin_documents.payment_detail` (255) porque guarda a mesma natureza de dado; nullable porque a
+    // maioria das formas não usa complemento, e porque o título antigo nasce sem ele no backfill.
+    paymentDetail: varchar('payment_detail', { length: 255 }),
 
     // #231: data de pagamento (preenchida na baixa manual); null enquanto não pago.
     paidAt: date('paid_at', { mode: 'date' }),
@@ -1188,43 +1194,111 @@ export const finRemittances = mysqlTable(
 export type FinRemittanceRow = typeof finRemittances.$inferSelect;
 export type NewFinRemittanceRow = typeof finRemittances.$inferInsert;
 
-// ─── fin_remittance_documents ─────────────────────────────────────────────────
+// ─── fin_remittance_documents (DEPRECADA — aguardando o `contract`) ───────────
 //
-// Vínculo remessa → documentos. É o que a seleção consulta para NÃO incluir de novo um documento
-// que já está numa remessa viva (`holdsDocuments`). Sem esta tabela, a janela entre gravar e
-// confirmar deixaria o mesmo documento ser selecionado duas vezes — pagamento em dobro.
+// ⚠️ Substituída por `fin_remittance_payables`, que vincula por TÍTULO. Não é lida nem escrita por
+// código de produção: existe apenas para que a tabela sobreviva à release que migra os vínculos.
 //
-// PK composta (remittance_id, document_id): o mesmo documento não entra duas vezes na mesma remessa,
-// e o índice por documento responde "este documento está preso em alguma remessa?" sem varredura.
+// É o `expand` do expand/contract. A migration 0050 copia os vínculos daqui para lá com um JOIN que
+// tem predicado (`p.kind = 'Parent'`) — e JOIN com predicado não é total por construção: documento
+// sem título `Parent` simplesmente não casa e fica de fora, em silêncio. Destruir a origem na mesma
+// leva tornaria essa perda irreversível, sem cópia e sem ninguém para notar.
+//
+// O `DROP` acontece numa release POSTERIOR, depois de conferido que a tabela nova está completa.
+// Enquanto as duas coexistem, qualquer linha perdida é recuperável — que é a única coisa que
+// `DROP TABLE` não oferece, por ser DDL: não é transacional e não tem undo.
 export const finRemittanceDocuments = mysqlTable(
   'fin_remittance_documents',
   {
     remittanceId: uuidKey('remittance_id').notNull(),
     documentId: uuidKey('document_id').notNull(),
-    // G064 "Seu Número" — a referência emitida por ESTE documento nesta remessa (#752).
-    //
-    // 20 é a largura do campo no Segmento A (colunas 074-093); hoje a derivação usa 12 (NSA + posição
-    // do pagamento), e a folga é do layout, não desperdício.
-    //
-    // `NOT NULL` sem default: a referência é o que liga o retorno ao título, e uma linha sem ela é um
-    // documento preso cuja chave de casamento ninguém sabe qual é. Sem default porque não existe
-    // valor plausível — inventar um reintroduziria, no schema, o mesmo fallback silencioso que a
-    // issue veio remover do emissor.
     yourNumber: varchar('your_number', { length: 20 }).notNull(),
   },
   (t) => [
     primaryKey({ columns: [t.remittanceId, t.documentId] }),
     index('fin_remittance_documents_document_idx').on(t.documentId),
-    // O caminho de leitura do RETORNO (#690): o banco devolve a referência, e é por ela que se
-    // chega ao documento. UNIQUE, e não índice comum, porque referência repetida torna o casamento
-    // ambíguo — o mesmo pagamento apontando para dois títulos. O domínio já recusa duplicata dentro
-    // de um arquivo; este índice é a rede que pega o caso entre arquivos, se o NSA algum dia repetir.
     uniqueIndex('fin_remittance_documents_your_number_uk').on(t.yourNumber),
   ],
 );
 
 export type FinRemittanceDocumentRow = typeof finRemittanceDocuments.$inferSelect;
 export type NewFinRemittanceDocumentRow = typeof finRemittanceDocuments.$inferInsert;
+
+// ─── fin_remittance_payables ──────────────────────────────────────────────────
+//
+// Vínculo remessa → TÍTULOS. É o que a seleção consulta para NÃO incluir de novo um título que já
+// está numa remessa viva (`holdsPayables`). Sem esta tabela, a janela entre gravar e confirmar
+// deixaria o mesmo título ser selecionado duas vezes — pagamento em dobro.
+//
+// ⚠️ O grão é o TÍTULO, e a mudança não é cosmética. Prender por documento fazia duas coisas
+// erradas ao mesmo tempo: recusava a seleção legítima de dois títulos da mesma nota, e — pior —
+// fazia o retorno do banco confirmar UM título e o sistema baixar a nota inteira, porque
+// `your_number` resolvia para um documento. Emissão por título e vínculo por título são a mesma
+// mudança; separá-las abriria exatamente essa janela de baixa errada.
+//
+// PK composta (remittance_id, payable_id): o mesmo título não entra duas vezes na mesma remessa, e
+// o índice por título responde "este título está preso em alguma remessa?" sem varredura.
+export const finRemittancePayables = mysqlTable(
+  'fin_remittance_payables',
+  {
+    remittanceId: uuidKey('remittance_id').notNull(),
+    payableId: uuidKey('payable_id').notNull(),
+    // A NOTA de origem, carimbada na emissão: quem lê o retorno precisa dizer ao operador de qual
+    // nota aquilo veio, e redescobrir exigiria join com `fin_payables` — que pode ter mudado.
+    // Não participa da PK: dois títulos da mesma nota compartilham este valor por desenho.
+    documentId: uuidKey('document_id').notNull(),
+    // G064 "Seu Número" — a referência emitida por ESTE título nesta remessa (#752).
+    //
+    // 20 é a largura do campo no Segmento A (colunas 074-093); hoje a derivação usa 12 (NSA + posição
+    // do pagamento), e a folga é do layout, não desperdício.
+    //
+    // `NOT NULL` sem default: a referência é o que liga o retorno ao título, e uma linha sem ela é um
+    // título preso cuja chave de casamento ninguém sabe qual é. Sem default porque não existe
+    // valor plausível — inventar um reintroduziria, no schema, o mesmo fallback silencioso que a
+    // issue veio remover do emissor.
+    yourNumber: varchar('your_number', { length: 20 }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.remittanceId, t.payableId] }),
+    // ⚠️ As três FKs são `RESTRICT`, e a de `payable_id` é a que importa: ela é o backstop mecânico
+    // do defeito que esta tabela nasceu para impedir. Enquanto o ajuste de documento regenerava os
+    // `PayableId` (hard replace, R8.1), o `DELETE FROM fin_payables` desta nota deixava a linha daqui
+    // apontando para um id que não existe mais — órfã, sem erro, sem CASCADE, sem RESTRICT. Com a
+    // FK, esse mesmo DELETE estoura `ER_ROW_IS_REFERENCED_2` em desenvolvimento, no lugar do defeito,
+    // em vez de virar pagamento em dobro meses depois.
+    //
+    // `RESTRICT` e não `CASCADE` nas três: remessa não é apagada fisicamente neste domínio (descarte
+    // é `status='Discarded'`), e cascatear apagaria justamente o rastro do que foi enviado ao banco —
+    // o oposto do propósito desta tabela.
+    foreignKey({
+      name: 'fin_remittance_payables_remittance_id_fk',
+      columns: [t.remittanceId],
+      foreignColumns: [finRemittances.id],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'fin_remittance_payables_payable_id_fk',
+      columns: [t.payableId],
+      foreignColumns: [finPayables.id],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'fin_remittance_payables_document_id_fk',
+      columns: [t.documentId],
+      foreignColumns: [finDocuments.id],
+    }).onDelete('restrict'),
+    index('fin_remittance_payables_payable_idx').on(t.payableId),
+    // Consulta de apoio: "quais títulos desta nota já saíram?" — a pergunta que a tela do documento
+    // faz quando a nota foi paga em parte.
+    index('fin_remittance_payables_document_idx').on(t.documentId),
+    // O caminho de leitura do RETORNO (#690): o banco devolve a referência, e é por ela que se
+    // chega ao título. UNIQUE, e não índice comum, porque referência repetida torna o casamento
+    // ambíguo — o mesmo pagamento apontando para dois títulos. O domínio já recusa duplicata dentro
+    // de um arquivo; este índice é a rede que pega o caso entre arquivos, se o NSA algum dia repetir.
+    uniqueIndex('fin_remittance_payables_your_number_uk').on(t.yourNumber),
+  ],
+);
+
+export type FinRemittancePayableRow = typeof finRemittancePayables.$inferSelect;
+export type NewFinRemittancePayableRow = typeof finRemittancePayables.$inferInsert;
 
 // ─── fin_van_return_quarantine ────────────────────────────────────────────────
 //

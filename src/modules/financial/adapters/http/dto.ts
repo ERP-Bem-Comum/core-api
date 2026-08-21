@@ -13,7 +13,7 @@ import type { ParseDocumentOutput } from '../../application/use-cases/parse-docu
 import type { RemittancePreview } from '../../application/use-cases/preview-remittance.ts';
 import type { GenerateRemittanceOutput } from '../../application/use-cases/generate-remittance.ts';
 import type { Remittance } from '../../domain/remittance/types.ts';
-import { documentIdsOf } from '../../domain/remittance/remittance.ts';
+import { documentIdsOf, payableIdsOf } from '../../domain/remittance/remittance.ts';
 import type {
   ParseDocumentResponseDto,
   RemittancePreviewResponseDto,
@@ -557,12 +557,13 @@ export const remittancePreviewToDto = (
   preview: RemittancePreview,
 ): RemittancePreviewResponseDto => ({
   lines: preview.lines.map((l) => ({
+    payableId: l.payableId,
     documentId: l.documentId,
     status: l.status,
     route: l.route,
     missing: [...l.missing],
     gaps: l.gaps.map((g) => ({ field: g.field, reason: g.reason })),
-    netValueCents: String(l.netValueCents),
+    valueCents: String(l.valueCents),
   })),
   readyCount: preview.readyCount,
   blockedCount: preview.blockedCount,
@@ -610,7 +611,9 @@ export const remittanceToListItemDto = (
   generatedAt: r.generatedAt,
   settledAt: r.settledAt ?? null,
   detail: r.detail ?? null,
-  documentCount: r.documents.length,
+  // Conta TÍTULOS — é a unidade emitida, e uma linha do arquivo por título. Contar notas diria
+  // menos do que o arquivo tem sempre que uma nota sair com o pai e uma retenção juntos.
+  payableCount: r.payables.length,
 });
 
 /**
@@ -622,5 +625,7 @@ export const remittanceToListItemDto = (
  */
 export const remittanceToDetailDto = (r: Remittance): RemittanceDetailResponseDto => ({
   ...remittanceToListItemDto(r),
+  payableIds: [...payableIdsOf(r)],
+  // As notas tocadas, cada uma UMA vez — a remessa pode carregar dois títulos da mesma nota.
   documentIds: [...documentIdsOf(r)],
 });

@@ -53,7 +53,7 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'cedente-convenio-already-set',
   // Remessa (#720): documento já preso em remessa viva. Incluí-lo de novo pagaria duas vezes — é
   // conflito com o estado atual, não dado inválido.
-  'remittance-documents-already-held',
+  'remittance-payables-already-held',
   // Remessa (#736): título não-`Approved` na seleção. É conflito com o estado do documento (ainda
   // não aprovado), não dado malformado — 409, como o contrato original previa.
   'document-not-approved',
@@ -193,7 +193,7 @@ const SLUG_MESSAGES: Record<string, string> = {
     'A remessa inclui título cuja forma de pagamento ainda não é emitida no arquivo. Retire-o da seleção.',
   'remittance-mixed-payment-dates':
     'A seleção mistura vencimentos diferentes. Uma remessa é de um único dia — gere por vencimento.',
-  'remittance-documents-already-held':
+  'remittance-payables-already-held':
     'Há título já incluído em outra remessa. Atualize a lista e refaça a seleção.',
   // #736: só título Aprovado entra em remessa. A mensagem diz o que fazer (aprovar), não "erro
   // interno" — e o pré-voo aponta QUAIS títulos estão pendentes.

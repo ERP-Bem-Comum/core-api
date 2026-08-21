@@ -60,24 +60,27 @@ const NO_DESTINATION_BLANKS: PayeePaymentTarget = {
 };
 
 const row = (over: Partial<RemittancePreviewRow>): RemittancePreviewRow => ({
+  payableId: 'pay-1',
+  // A NOTA de origem viaja junto: quem paga é o título, mas o favorecido é do documento (é dele o
+  // fornecedor). O front também precisa dela para agrupar os títulos da mesma nota no grid.
   documentId: 'doc-1',
   // Default APROVADO: a esmagadora maioria das fixtures testa aptidão de cadastro, que só faz
   // sentido depois de aprovado. Os casos de não-aprovação (#736) sobrescrevem o status.
   status: 'Approved',
   paymentMethod: 'TED',
   paymentDetail: null,
-  netValueCents: 10_000,
+  valueCents: 10_000,
   payee: BANK_ACCOUNT_ONLY,
   ...over,
 });
 
 const reader = (rows: readonly RemittancePreviewRow[]): RemittancePreviewReader => ({
-  loadPreviewRows: (ids) => Promise.resolve(ok(rows.filter((r) => ids.includes(r.documentId)))),
+  loadPreviewRows: (ids) => Promise.resolve(ok(rows.filter((r) => ids.includes(r.payableId)))),
 });
 
 const line = (r: Awaited<ReturnType<ReturnType<typeof previewRemittance>>>, id: string) => {
   assert.ok(isOk(r));
-  const found = r.value.lines.find((l) => l.documentId === id);
+  const found = r.value.lines.find((l) => l.payableId === id);
   assert.ok(found, `linha ${id} ausente no pré-voo`);
   return found;
 };
@@ -85,22 +88,22 @@ const line = (r: Awaited<ReturnType<ReturnType<typeof previewRemittance>>>, id: 
 describe('previewRemittance — responde por título, sem gerar arquivo', () => {
   it('classifica cada título pela regra da forma de pagamento', async () => {
     const rows = [
-      row({ documentId: 'ted-ok' }),
-      row({ documentId: 'ted-sem-banco', payee: NO_DESTINATION_NULLS }),
-      row({ documentId: 'pix-ok', paymentMethod: 'PIX', payee: PIX_KEY_ONLY }),
-      row({ documentId: 'pix-sem-chave', paymentMethod: 'PIX', payee: BANK_ACCOUNT_ONLY }),
+      row({ payableId: 'ted-ok' }),
+      row({ payableId: 'ted-sem-banco', payee: NO_DESTINATION_NULLS }),
+      row({ payableId: 'pix-ok', paymentMethod: 'PIX', payee: PIX_KEY_ONLY }),
+      row({ payableId: 'pix-sem-chave', paymentMethod: 'PIX', payee: BANK_ACCOUNT_ONLY }),
       // 44 dígitos — o código de barras que o Segmento J grava (G063).
       row({
-        documentId: 'boleto-ok',
+        payableId: 'boleto-ok',
         paymentMethod: 'Boleto',
         paymentDetail: '23791234500000150000123456789012345678901234',
       }),
-      row({ documentId: 'boleto-sem-linha', paymentMethod: 'Boleto', payee: NO_DESTINATION_NULLS }),
-      row({ documentId: 'cambio', paymentMethod: 'Cambio' }),
+      row({ payableId: 'boleto-sem-linha', paymentMethod: 'Boleto', payee: NO_DESTINATION_NULLS }),
+      row({ payableId: 'cambio', paymentMethod: 'Cambio' }),
     ];
-    const ids = rows.map((r) => r.documentId);
+    const ids = rows.map((r) => r.payableId);
 
-    const r = await previewRemittance({ preview: reader(rows) })({ documentIds: ids });
+    const r = await previewRemittance({ preview: reader(rows) })({ payableIds: ids });
     assert.ok(isOk(r));
 
     assert.equal(line(r, 'ted-ok').status, 'ready');
@@ -117,8 +120,8 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
   // O pedido literal da P.O.: "campo faltante ESTRUTURADO (ex.: missing: ['agencyDigit'])".
   // Uma string de mensagem não serve — o front precisa apontar o input.
   it('devolve os campos faltantes em lista, não em mensagem', async () => {
-    const rows = [row({ documentId: 'sem-nada', payee: NO_DESTINATION_NULLS })];
-    const r = await previewRemittance({ preview: reader(rows) })({ documentIds: ['sem-nada'] });
+    const rows = [row({ payableId: 'sem-nada', payee: NO_DESTINATION_NULLS })];
+    const r = await previewRemittance({ preview: reader(rows) })({ payableIds: ['sem-nada'] });
 
     const l = line(r, 'sem-nada');
     assert.deepEqual(l.missing, [
@@ -137,13 +140,13 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
   // testes seguem verdes e produção quebra inteira: é este caso que acusa.
   it('ausência por string vazia e por null levam ao MESMO veredito', async () => {
     const rows = [
-      row({ documentId: 'nulo', payee: NO_DESTINATION_NULLS }),
-      row({ documentId: 'vazio', payee: NO_DESTINATION_BLANKS }),
-      row({ documentId: 'pix-nulo', paymentMethod: 'PIX', payee: NO_DESTINATION_NULLS }),
-      row({ documentId: 'pix-vazio', paymentMethod: 'PIX', payee: NO_DESTINATION_BLANKS }),
+      row({ payableId: 'nulo', payee: NO_DESTINATION_NULLS }),
+      row({ payableId: 'vazio', payee: NO_DESTINATION_BLANKS }),
+      row({ payableId: 'pix-nulo', paymentMethod: 'PIX', payee: NO_DESTINATION_NULLS }),
+      row({ payableId: 'pix-vazio', paymentMethod: 'PIX', payee: NO_DESTINATION_BLANKS }),
     ];
     const r = await previewRemittance({ preview: reader(rows) })({
-      documentIds: rows.map((x) => x.documentId),
+      payableIds: rows.map((x) => x.payableId),
     });
 
     assert.deepEqual(line(r, 'vazio').missing, line(r, 'nulo').missing);
@@ -155,9 +158,9 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
 
   it('distingue campo a corrigir de campo a preencher', async () => {
     const rows = [
-      row({ documentId: 'banco-nome', payee: { ...BANK_ACCOUNT_ONLY, bank: 'Bradesco S.A.' } }),
+      row({ payableId: 'banco-nome', payee: { ...BANK_ACCOUNT_ONLY, bank: 'Bradesco S.A.' } }),
     ];
-    const r = await previewRemittance({ preview: reader(rows) })({ documentIds: ['banco-nome'] });
+    const r = await previewRemittance({ preview: reader(rows) })({ payableIds: ['banco-nome'] });
 
     const l = line(r, 'banco-nome');
     assert.deepEqual(l.missing, ['payee-bank-code']);
@@ -170,14 +173,14 @@ describe('previewRemittance — os números do pré-voo', () => {
   // "18 prontos · 3 com impedimento", com total líquido dos dois lados.
   it('conta e soma os dois lados separadamente', async () => {
     const rows = [
-      row({ documentId: 'a', netValueCents: 10_000 }),
-      row({ documentId: 'b', netValueCents: 25_000 }),
-      row({ documentId: 'c', netValueCents: 7_000, payee: NO_DESTINATION_NULLS }),
-      row({ documentId: 'd', netValueCents: 3_000, payee: NO_DESTINATION_NULLS }),
-      row({ documentId: 'e', netValueCents: 99_000, paymentMethod: 'Cambio' }),
+      row({ payableId: 'a', valueCents: 10_000 }),
+      row({ payableId: 'b', valueCents: 25_000 }),
+      row({ payableId: 'c', valueCents: 7_000, payee: NO_DESTINATION_NULLS }),
+      row({ payableId: 'd', valueCents: 3_000, payee: NO_DESTINATION_NULLS }),
+      row({ payableId: 'e', valueCents: 99_000, paymentMethod: 'Cambio' }),
     ];
     const r = await previewRemittance({ preview: reader(rows) })({
-      documentIds: ['a', 'b', 'c', 'd', 'e'],
+      payableIds: ['a', 'b', 'c', 'd', 'e'],
     });
     assert.ok(isOk(r));
 
@@ -196,23 +199,23 @@ describe('previewRemittance — o que não pode sumir', () => {
   // Documento selecionado que o reader não devolve. Omitir a linha seria repetir o defeito que
   // este pré-voo existe para corrigir: o operador selecionou, e some sem explicação.
   it('reporta o documento inexistente em vez de omiti-lo', async () => {
-    const r = await previewRemittance({ preview: reader([row({ documentId: 'existe' })]) })({
-      documentIds: ['existe', 'fantasma'],
+    const r = await previewRemittance({ preview: reader([row({ payableId: 'existe' })]) })({
+      payableIds: ['existe', 'fantasma'],
     });
     assert.ok(isOk(r));
     assert.equal(r.value.lines.length, 2);
     assert.equal(line(r, 'fantasma').status, 'not-found');
-    assert.equal(line(r, 'fantasma').netValueCents, 0);
+    assert.equal(line(r, 'fantasma').valueCents, 0);
   });
 
   it('preserva a ordem em que o operador selecionou', async () => {
-    const rows = [row({ documentId: 'x' }), row({ documentId: 'y' }), row({ documentId: 'z' })];
+    const rows = [row({ payableId: 'x' }), row({ payableId: 'y' }), row({ payableId: 'z' })];
     const r = await previewRemittance({ preview: reader(rows) })({
-      documentIds: ['z', 'x', 'y'],
+      payableIds: ['z', 'x', 'y'],
     });
     assert.ok(isOk(r));
     assert.deepEqual(
-      r.value.lines.map((l) => l.documentId),
+      r.value.lines.map((l) => l.payableId),
       ['z', 'x', 'y'],
     );
   });
@@ -223,11 +226,11 @@ describe('previewRemittance — o que não pode sumir', () => {
   // ainda é não-aprovado, e é isso que ele precisa ler.
   it('título não aprovado (Draft/Open) vira not-approved, mesmo com cadastro apto', async () => {
     const rows = [
-      row({ documentId: 'draft', status: 'Draft', paymentMethod: null }),
-      row({ documentId: 'open', status: 'Open', payee: BANK_ACCOUNT_ONLY }),
+      row({ payableId: 'draft', status: 'Draft', paymentMethod: null }),
+      row({ payableId: 'open', status: 'Open', payee: BANK_ACCOUNT_ONLY }),
     ];
     const r = await previewRemittance({ preview: reader(rows) })({
-      documentIds: ['draft', 'open'],
+      payableIds: ['draft', 'open'],
     });
     assert.ok(isOk(r));
     assert.equal(line(r, 'draft').status, 'not-approved');
@@ -238,7 +241,7 @@ describe('previewRemittance — o que não pode sumir', () => {
   });
 
   it('seleção vazia devolve pré-voo vazio, não erro', async () => {
-    const r = await previewRemittance({ preview: reader([]) })({ documentIds: [] });
+    const r = await previewRemittance({ preview: reader([]) })({ payableIds: [] });
     assert.ok(isOk(r));
     assert.deepEqual(r.value.lines, []);
     assert.equal(r.value.readyCount, 0);
@@ -250,7 +253,7 @@ describe('previewRemittance — o que não pode sumir', () => {
     const broken: RemittancePreviewReader = {
       loadPreviewRows: () => Promise.resolve(err('remittance-preview-reader-unavailable' as const)),
     };
-    const r = await previewRemittance({ preview: broken })({ documentIds: ['a'] });
+    const r = await previewRemittance({ preview: broken })({ payableIds: ['a'] });
     assert.ok(isErr(r));
     assert.equal(r.error, 'remittance-preview-unavailable');
   });

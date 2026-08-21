@@ -2,7 +2,7 @@ import { type Result, ok } from '../../../../../shared/primitives/result.ts';
 import type { Remittance } from '../../../domain/remittance/types.ts';
 import type { RemittanceEvent } from '../../../domain/remittance/events.ts';
 import type { RemittanceId } from '../../../domain/remittance/remittance-id.ts';
-import { holdsDocuments } from '../../../domain/remittance/remittance.ts';
+import { holdsPayables } from '../../../domain/remittance/remittance.ts';
 import type {
   RemittanceRepository,
   RemittanceRepositoryError,
@@ -41,17 +41,17 @@ export const createInMemoryRemittanceRepository = (): RemittanceRepository &
       Promise.resolve(ok([...remittances.values()].find((r) => r.fileName === fileName) ?? null)),
 
     // Espelha a semântica do adapter real: só remessas que PRENDEM contam. `Discarded` não prende —
-    // é o único estado que devolve o documento para a fila, e depende de decisão humana.
-    findHeldDocumentIds: async (
-      documentIds: readonly string[],
+    // é o único estado que devolve o título para a fila, e depende de decisão humana.
+    findHeldPayableIds: async (
+      payableIds: readonly string[],
     ): Promise<Result<readonly string[], RemittanceRepositoryError>> => {
-      const wanted = new Set(documentIds);
+      const wanted = new Set(payableIds);
       const held = new Set<string>();
 
       for (const remittance of remittances.values()) {
-        if (!holdsDocuments(remittance)) continue;
-        for (const { documentId } of remittance.documents) {
-          if (wanted.has(documentId)) held.add(documentId);
+        if (!holdsPayables(remittance)) continue;
+        for (const { payableId } of remittance.payables) {
+          if (wanted.has(payableId)) held.add(payableId);
         }
       }
 

@@ -62,6 +62,7 @@ const bearer = (perms: string) => ({ authorization: `Bearer ${perms}` });
 
 const payments = createInMemoryRemittancePaymentReader([
   {
+    payableId: DOC_A,
     documentId: DOC_A,
     route: 'transfer',
     payee: {
@@ -78,6 +79,7 @@ const payments = createInMemoryRemittancePaymentReader([
     paymentDate: PAYMENT_DATE,
   },
   {
+    payableId: DOC_B,
     documentId: DOC_B,
     route: 'billet',
     barcode: '23791234500000150000123456789012345678901234',
@@ -87,12 +89,14 @@ const payments = createInMemoryRemittancePaymentReader([
     paymentDate: PAYMENT_DATE,
   },
   {
+    payableId: DOC_PIX,
     documentId: DOC_PIX,
     route: 'pix',
     valueCents: 40_00,
     paymentDate: PAYMENT_DATE,
   },
   {
+    payableId: DOC_LIVRE,
     documentId: DOC_LIVRE,
     route: 'billet',
     barcode: '23791234500000200000123456789012345678901234',
@@ -102,6 +106,7 @@ const payments = createInMemoryRemittancePaymentReader([
     paymentDate: PAYMENT_DATE,
   },
   {
+    payableId: DOC_NAO_APROVADO,
     documentId: DOC_NAO_APROVADO,
     route: 'billet',
     barcode: '23791234500000250000123456789012345678901234',
@@ -172,12 +177,12 @@ after(async () => {
   await handle.teardown();
 });
 
-const generate = async (documentIds: readonly string[], perms = GENERATOR) =>
+const generate = async (payableIds: readonly string[], perms = GENERATOR) =>
   handle.app.inject({
     method: 'POST',
     url: URL,
     headers: bearer(perms),
-    payload: { cedenteAccountId, documentIds },
+    payload: { cedenteAccountId, payableIds },
   });
 
 describe('financial/http — POST /remittances (#720) · RBAC', () => {
@@ -185,7 +190,7 @@ describe('financial/http — POST /remittances (#720) · RBAC', () => {
     const res = await handle.app.inject({
       method: 'POST',
       url: URL,
-      payload: { cedenteAccountId, documentIds: [DOC_A] },
+      payload: { cedenteAccountId, payableIds: [DOC_A] },
     });
     assert.equal(res.statusCode, 401, res.body);
   });
@@ -268,7 +273,7 @@ describe('financial/http — POST /remittances (#720) · borda', () => {
       method: 'POST',
       url: URL,
       headers: bearer(GENERATOR),
-      payload: { cedenteAccountId: 'nao-e-uuid', documentIds: [DOC_A] },
+      payload: { cedenteAccountId: 'nao-e-uuid', payableIds: [DOC_A] },
     });
     assert.equal(res.statusCode, 400, res.body);
   });
@@ -280,7 +285,7 @@ describe('financial/http — POST /remittances (#720) · borda', () => {
       method: 'POST',
       url: URL,
       headers: bearer(GENERATOR),
-      payload: { cedenteAccountId, documentIds: [DOC_A], launchForm: '41' },
+      payload: { cedenteAccountId, payableIds: [DOC_A], launchForm: '41' },
     });
     assert.equal(res.statusCode, 400, res.body);
   });
@@ -319,7 +324,7 @@ describe('financial/http — POST /remittances · conta-cedente sem convênio (#
       method: 'POST',
       url: URL,
       headers: bearer(GENERATOR),
-      payload: { cedenteAccountId: accountId, documentIds: [DOC_LIVRE] },
+      payload: { cedenteAccountId: accountId, payableIds: [DOC_LIVRE] },
     });
 
     // 422, não 503: é dado a corrigir, não defeito nosso.
@@ -344,7 +349,7 @@ describe('financial/http — POST /remittances · conta-cedente sem convênio (#
         method: 'POST',
         url: URL,
         headers: bearer(GENERATOR),
-        payload: { cedenteAccountId: accountId, documentIds: [DOC_LIVRE] },
+        payload: { cedenteAccountId: accountId, payableIds: [DOC_LIVRE] },
       });
       assert.equal(frustrada.statusCode, 422, frustrada.body);
     }
@@ -361,7 +366,7 @@ describe('financial/http — POST /remittances · conta-cedente sem convênio (#
       method: 'POST',
       url: URL,
       headers: bearer(GENERATOR),
-      payload: { cedenteAccountId: accountId, documentIds: [DOC_LIVRE] },
+      payload: { cedenteAccountId: accountId, payableIds: [DOC_LIVRE] },
     });
     assert.equal(res.statusCode, 201, res.body);
     assert.equal((res.json() as { nsa: number }).nsa, 1);
@@ -408,7 +413,7 @@ describe('financial/http — POST /remittances (#720) · guarda do bypass (#634)
     const res = await handle.app.inject({
       method: 'POST',
       url: URL,
-      payload: { cedenteAccountId, documentIds: [DOC_B] },
+      payload: { cedenteAccountId, payableIds: [DOC_B] },
     });
     assert.equal(res.statusCode, 503, res.body);
   });
@@ -420,7 +425,10 @@ describe('financial/http — POST /remittances (#720) · guarda do bypass (#634)
       method: 'POST',
       url: '/api/v2/financial/remittances:preview',
       headers: bearer(READER_ONLY),
-      payload: { documentIds: [DOC_A] },
+      // O pré-voo recebe TÍTULOS. Este caso mede a guarda de bypass, não o conteúdo da resposta:
+      // um id que não existe volta como linha `not-found` e a chamada segue 200, que é o que se
+      // afirma aqui.
+      payload: { payableIds: [DOC_A] },
     });
     assert.equal(res.statusCode, 200, res.body);
   });

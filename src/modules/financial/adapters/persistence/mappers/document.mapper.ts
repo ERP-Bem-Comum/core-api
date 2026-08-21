@@ -618,6 +618,7 @@ export const mapPayableRows = (
       value: valueR.value,
       dueDate: row.dueDate,
       paymentMethod: row.paymentMethod,
+      paymentDetail: row.paymentDetail,
       paidAt: row.paidAt,
     };
     return ok(payable);
@@ -757,6 +758,7 @@ export const mapPayablesToRows = (
     value: p.value.cents,
     dueDate: p.dueDate,
     paymentMethod: p.paymentMethod,
+    paymentDetail: p.paymentDetail,
     paidAt: p.paidAt,
     createdAt: now,
   });

@@ -32,6 +32,7 @@ import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/
 import { createDrizzleDocumentRepository } from '#src/modules/financial/adapters/persistence/repos/document-repository.drizzle.ts';
 import { createDrizzleTimelineRepository } from '#src/modules/financial/adapters/persistence/repos/timeline-repository.drizzle.ts';
 import { bulkUpdateDueDate } from '#src/modules/financial/application/use-cases/bulk-update-due-date.ts';
+import { createInMemoryRemittanceRepository } from '#src/modules/financial/adapters/persistence/repos/remittance-repository.in-memory.ts';
 import { ClockReal } from '#src/shared/adapters/clock-real.ts';
 import { finSupplierView } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
@@ -643,7 +644,13 @@ if (!process.env['MYSQL_INTEGRATION']) {
 
       it('CA5: lote misto — item stale → version-conflict; válido → aplicado (real MySQL)', async () => {
         const repo = createDrizzleDocumentRepository(handle);
-        const run = bulkUpdateDueDate({ repo, clock: ClockReal() });
+        // O lote só percorre o caminho leve (dueDate), que não consulta hold — mas `bulkUpdateDueDate`
+        // delega a `adjustDocument` e por isso carrega a mesma dep. Fake vazio: nada preso.
+        const run = bulkUpdateDueDate({
+          repo,
+          clock: ClockReal(),
+          remittances: createInMemoryRemittanceRepository(),
+        });
         const a = buildDoc('BULK-X-A');
         const b = buildDoc('BULK-X-B');
         for (const d of [a, b]) {

@@ -13,7 +13,7 @@ import {
 } from '#src/modules/financial/domain/remittance/remittance.ts';
 
 let seq = 0;
-const build = (documentIds: readonly string[]) => {
+const build = (payableIds: readonly string[]) => {
   seq += 1;
   const r = create({
     id: RemittanceId.generate(),
@@ -23,8 +23,11 @@ const build = (documentIds: readonly string[]) => {
     contentHash: 'a'.repeat(64),
     // A referência de G064 (#752) sai de NSA + posição. Derivada aqui do mesmo `seq` que numera a
     // remessa, para que duas remessas do fixture nunca colidam — que é a invariante do CA4.
-    documents: documentIds.map((documentId, i) => ({
-      documentId,
+    // Cada id do fixture nomeia UM título; a nota de origem recebe o mesmo valor porque estes casos
+    // medem o vínculo remessa→título, não o agrupamento por nota.
+    payables: payableIds.map((payableId, i) => ({
+      payableId,
+      documentId: payableId,
       yourNumber: `${String(seq).padStart(6, '0')}${String(i + 1).padStart(6, '0')}`,
     })),
     generatedAt: '2026-08-11T14:00:00.000Z',
@@ -57,7 +60,7 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
     const repo = createInMemoryRemittanceRepository();
     await repo.save(build(['doc-1', 'doc-2']));
 
-    const held = await repo.findHeldDocumentIds(['doc-1', 'doc-2', 'doc-3']);
+    const held = await repo.findHeldPayableIds(['doc-1', 'doc-2', 'doc-3']);
     assert.ok(isOk(held));
     assert.deepEqual(held.value, ['doc-1', 'doc-2']);
   });
@@ -69,7 +72,7 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
     assert.ok(isOk(t));
     await repo.save(t.value.remittance, t.value.events);
 
-    const held = await repo.findHeldDocumentIds(['doc-1']);
+    const held = await repo.findHeldPayableIds(['doc-1']);
     assert.ok(isOk(held) && held.value.length === 1);
   });
 
@@ -80,7 +83,7 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
     assert.ok(isOk(f));
     await repo.save(f.value.remittance, f.value.events);
 
-    const held = await repo.findHeldDocumentIds(['doc-1']);
+    const held = await repo.findHeldPayableIds(['doc-1']);
     assert.ok(isOk(held) && held.value.length === 1);
   });
 
@@ -96,14 +99,14 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
     assert.ok(isOk(d));
     await repo.save(d.value.remittance, d.value.events);
 
-    const held = await repo.findHeldDocumentIds(['doc-1']);
+    const held = await repo.findHeldPayableIds(['doc-1']);
     assert.ok(isOk(held));
     assert.deepEqual(held.value, []);
   });
 
   it('lista vazia não consulta nada e devolve vazio', async () => {
     const repo = createInMemoryRemittanceRepository();
-    const held = await repo.findHeldDocumentIds([]);
+    const held = await repo.findHeldPayableIds([]);
     assert.ok(isOk(held));
     assert.deepEqual(held.value, []);
   });

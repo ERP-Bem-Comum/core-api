@@ -31,7 +31,7 @@ const setup = async (over: Partial<{ content: string; hash: string }> = {}) => {
     nsa: 1,
     fileName: FILE,
     contentHash: over.hash ?? fakeHash(over.content ?? CONTENT),
-    documents: [{ documentId: 'doc-a', yourNumber: '000001000001' }],
+    payables: [{ payableId: 'pay-a', documentId: 'doc-a', yourNumber: '000001000001' }],
     generatedAt: '2026-08-11T14:26:05Z',
   });
   assert.ok(isOk(remittance));

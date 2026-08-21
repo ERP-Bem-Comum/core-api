@@ -10,7 +10,10 @@ import type { RemittancePaymentInput } from './cnab-remittance-translator.ts';
 // É o pagamento do tradutor mais a identidade do documento — uma união só, definida num lugar só.
 // Reescrever aqui os membros por rota criaria a segunda definição do mesmo vocabulário, e duas
 // definições divergem no dia em que uma rota ganhar campo.
-export type RemittancePaymentData = Readonly<{ documentId: string }> & RemittancePaymentInput;
+// O grão é o TÍTULO. `documentId` viaja junto porque o favorecido é da nota e porque o vínculo
+// gravado na emissão precisa dele — mas quem se paga, e quem o retorno vai confirmar, é o título.
+export type RemittancePaymentData = Readonly<{ payableId: string; documentId: string }> &
+  RemittancePaymentInput;
 
 export type RemittancePaymentReaderError =
   | 'remittance-payment-reader-unavailable'
@@ -20,9 +23,9 @@ export type RemittancePaymentReaderError =
   | 'document-not-approved';
 
 export type RemittancePaymentReader = Readonly<{
-  // Devolve UM item por documento pedido. Faltar algum é erro, nunca silêncio: montar remessa com
+  // Devolve UM item por TÍTULO pedido. Faltar algum é erro, nunca silêncio: montar remessa com
   // menos pagamentos do que o operador selecionou é pagar parte e calar sobre o resto.
   loadPayments: (
-    documentIds: readonly string[],
+    payableIds: readonly string[],
   ) => Promise<Result<readonly RemittancePaymentData[], RemittancePaymentReaderError>>;
 }>;

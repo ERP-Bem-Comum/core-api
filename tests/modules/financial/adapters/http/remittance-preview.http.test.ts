@@ -27,10 +27,13 @@ const TEST_USER_ID = '99999999-9999-4999-8999-999999999999';
 
 const URL = '/api/v2/financial/remittances:preview';
 
-const DOC_BOLETO = '11111111-1111-4111-8111-111111111111';
-const DOC_PIX_SEM_CHAVE = '22222222-2222-4222-8222-222222222222';
-const DOC_CAMBIO = '33333333-3333-4333-8333-333333333333';
-const DOC_SUMIDO = '44444444-4444-4444-8444-444444444444';
+// UMA nota, TRÊS títulos, TRÊS formas — o arranjo que a fatia existe para suportar. O pai sai por
+// boleto, um irmão por PIX e outro por câmbio (fora da VAN), e o pré-voo responde por título.
+const DOC_ORIGEM = '99999999-9999-4999-8999-999999999999';
+const PAY_BOLETO = '11111111-1111-4111-8111-111111111111';
+const PAY_PIX_SEM_CHAVE = '22222222-2222-4222-8222-222222222222';
+const PAY_CAMBIO = '33333333-3333-4333-8333-333333333333';
+const PAY_SUMIDO = '44444444-4444-4444-8444-444444444444';
 
 const requireAuth: preHandlerAsyncHookHandler = async (req, reply) => {
   const auth = req.headers.authorization;
@@ -57,28 +60,31 @@ const bearer = (perms: string) => ({ authorization: `Bearer ${perms}` });
 // entra sem bloco algum (#708, CA5).
 const reader = createInMemoryRemittancePreviewReader([
   {
-    documentId: DOC_BOLETO,
+    documentId: DOC_ORIGEM,
+    payableId: PAY_BOLETO,
     status: 'Approved',
     paymentMethod: 'Boleto',
     // 44 dígitos EXATOS — é o código de barras (G063), não a linha digitável de 47.
     paymentDetail: '23791234500000150000123456789012345678901234',
-    netValueCents: 150_00,
+    valueCents: 150_00,
     payee: { bank: null, agency: null, accountNumber: null, checkDigit: null, pixKey: null },
   },
   {
-    documentId: DOC_PIX_SEM_CHAVE,
+    documentId: DOC_ORIGEM,
+    payableId: PAY_PIX_SEM_CHAVE,
     status: 'Approved',
     paymentMethod: 'PIX',
     paymentDetail: null,
-    netValueCents: 80_00,
+    valueCents: 80_00,
     payee: { bank: null, agency: null, accountNumber: null, checkDigit: null, pixKey: null },
   },
   {
-    documentId: DOC_CAMBIO,
+    documentId: DOC_ORIGEM,
+    payableId: PAY_CAMBIO,
     status: 'Approved',
     paymentMethod: 'Cambio',
     paymentDetail: null,
-    netValueCents: 500_00,
+    valueCents: 500_00,
     payee: null,
   },
 ]);
@@ -91,12 +97,13 @@ let handle: AppHandle;
 
 type PreviewBody = Readonly<{
   lines: readonly Readonly<{
-    documentId: string;
+    payableId: string;
+    documentId: string | null;
     status: string;
     route: string | null;
     missing: readonly string[];
     gaps: readonly Readonly<{ field: string; reason: string }>[];
-    netValueCents: string;
+    valueCents: string;
   }>[];
   readyCount: number;
   blockedCount: number;
@@ -129,34 +136,34 @@ after(async () => {
   await handle.teardown();
 });
 
-const preview = async (documentIds: readonly string[], perms = READER) =>
-  handle.app.inject({ method: 'POST', url: URL, headers: bearer(perms), payload: { documentIds } });
+const preview = async (payableIds: readonly string[], perms = READER) =>
+  handle.app.inject({ method: 'POST', url: URL, headers: bearer(perms), payload: { payableIds } });
 
 describe('financial/http — POST /remittances:preview (#720) · RBAC', () => {
   it('sem Authorization → 401', async () => {
     const res = await handle.app.inject({
       method: 'POST',
       url: URL,
-      payload: { documentIds: [DOC_BOLETO] },
+      payload: { payableIds: [PAY_BOLETO] },
     });
     assert.equal(res.statusCode, 401, res.body);
   });
 
   // A permissão é de LEITURA, não a de disparo: conferir o que sai não é mandar dinheiro ao banco.
   it('token sem remittance:read → 403', async () => {
-    const res = await preview([DOC_BOLETO], PLAIN);
+    const res = await preview([PAY_BOLETO], PLAIN);
     assert.equal(res.statusCode, 403, res.body);
   });
 
   it('a permissão de geração não vale como leitura', async () => {
-    const res = await preview([DOC_BOLETO], 'remittance:generate');
+    const res = await preview([PAY_BOLETO], 'remittance:generate');
     assert.equal(res.statusCode, 403, res.body);
   });
 });
 
 describe('financial/http — POST /remittances:preview (#720) · o que o operador vê', () => {
   it('CA1: boleto com código de barras sai, sem depender de conta bancária', async () => {
-    const res = await preview([DOC_BOLETO]);
+    const res = await preview([PAY_BOLETO]);
     assert.equal(res.statusCode, 200, res.body);
 
     const body = res.json() as PreviewBody;
@@ -170,7 +177,7 @@ describe('financial/http — POST /remittances:preview (#720) · o que o operado
   });
 
   it('CA1: PIX sem chave é impedido, e a resposta diz QUAL campo falta', async () => {
-    const res = await preview([DOC_PIX_SEM_CHAVE]);
+    const res = await preview([PAY_PIX_SEM_CHAVE]);
     assert.equal(res.statusCode, 200, res.body);
 
     const body = res.json() as PreviewBody;
@@ -185,7 +192,7 @@ describe('financial/http — POST /remittances:preview (#720) · o que o operado
   });
 
   it('câmbio fica fora da VAN — não é impedimento, é rota que o layout não transporta', async () => {
-    const res = await preview([DOC_CAMBIO]);
+    const res = await preview([PAY_CAMBIO]);
     const body = res.json() as PreviewBody;
     const line = body.lines[0];
 
@@ -198,29 +205,31 @@ describe('financial/http — POST /remittances:preview (#720) · o que o operado
   // O id selecionado tem de voltar na resposta mesmo que o documento não exista mais. Sumir com ele
   // seria o defeito que este pré-voo existe para corrigir.
   it('documento inexistente volta como not-found, não some da resposta', async () => {
-    const res = await preview([DOC_BOLETO, DOC_SUMIDO]);
+    const res = await preview([PAY_BOLETO, PAY_SUMIDO]);
     const body = res.json() as PreviewBody;
 
     assert.equal(body.lines.length, 2);
-    assert.equal(body.lines[1]?.documentId, DOC_SUMIDO);
+    assert.equal(body.lines[1]?.payableId, PAY_SUMIDO);
+    // Sem o título lido não há nota a declarar — `null` é a resposta honesta.
+    assert.equal(body.lines[1]?.documentId, null);
     assert.equal(body.lines[1]?.status, 'not-found');
     assert.equal(body.notFoundCount, 1);
   });
 
   it('a ordem da resposta é a da seleção', async () => {
-    const res = await preview([DOC_CAMBIO, DOC_BOLETO, DOC_PIX_SEM_CHAVE]);
+    const res = await preview([PAY_CAMBIO, PAY_BOLETO, PAY_PIX_SEM_CHAVE]);
     const body = res.json() as PreviewBody;
 
     assert.deepEqual(
-      body.lines.map((l) => l.documentId),
-      [DOC_CAMBIO, DOC_BOLETO, DOC_PIX_SEM_CHAVE],
+      body.lines.map((l) => l.payableId),
+      [PAY_CAMBIO, PAY_BOLETO, PAY_PIX_SEM_CHAVE],
     );
   });
 
   // O valor fora da VAN não entra em nenhum dos dois totais: somá-lo ao impedido inflaria o número
   // que o operador usa para decidir se vale correr atrás do cadastro.
   it('os totais separam o que sai, o que está impedido e o que não pertence à VAN', async () => {
-    const res = await preview([DOC_BOLETO, DOC_PIX_SEM_CHAVE, DOC_CAMBIO]);
+    const res = await preview([PAY_BOLETO, PAY_PIX_SEM_CHAVE, PAY_CAMBIO]);
     const body = res.json() as PreviewBody;
 
     assert.equal(body.readyTotalCents, '15000');
@@ -240,7 +249,7 @@ describe('financial/http — POST /remittances:preview (#720) · borda', () => {
       method: 'POST',
       url: URL,
       headers: bearer(READER),
-      payload: { documentIds: ['nao-e-uuid'] },
+      payload: { payableIds: ['nao-e-uuid'] },
     });
     assert.equal(res.statusCode, 400, res.body);
   });
@@ -250,7 +259,7 @@ describe('financial/http — POST /remittances:preview (#720) · borda', () => {
       method: 'POST',
       url: URL,
       headers: bearer(READER),
-      payload: { documentIds: [DOC_BOLETO], gerar: true },
+      payload: { payableIds: [PAY_BOLETO], gerar: true },
     });
     assert.equal(res.statusCode, 400, res.body);
   });
@@ -261,7 +270,7 @@ describe('financial/http — POST /remittances:preview (#720) · borda', () => {
       method: 'POST',
       url: '/api/v2/financial/remittancesXYZ',
       headers: bearer(READER),
-      payload: { documentIds: [DOC_BOLETO] },
+      payload: { payableIds: [PAY_BOLETO] },
     });
     assert.equal(res.statusCode, 404, res.body);
   });

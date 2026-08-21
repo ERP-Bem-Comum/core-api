@@ -918,8 +918,12 @@ const makeDeps = (pools: Pools, clock: Clock = ClockReal()): FinancialHttpDeps =
       reader: createDocumentReader(),
       ...(resolveSupplierByCnpj !== undefined ? { resolveSupplierByCnpj } : {}),
     }),
-    adjustDocument: adjustDocument(deps),
-    bulkUpdateDueDate: bulkUpdateDueDate(deps), // #162: mesmas deps (repo + clock) do adjust
+    // O ajuste de VALOR consulta a remessa antes de decidir: título preso é dinheiro em trânsito, e
+    // mudar o valor faria o arquivo já enviado divergir do título.
+    adjustDocument: adjustDocument({ ...deps, remittances: pools.remittanceRepo }),
+    // #162: delega ao próprio `adjustDocument`, então carrega as mesmas deps — inclusive a remessa.
+    // Na prática só percorre o caminho leve (dueDate), que não consulta hold.
+    bulkUpdateDueDate: bulkUpdateDueDate({ ...deps, remittances: pools.remittanceRepo }),
     approveDocument: approveDocument(deps),
     registerManualPayment: registerManualPayment(deps),
     updatePayableDueDate: updatePayableDueDate(deps), // #270: mesmas deps (repo + clock)

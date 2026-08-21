@@ -20,7 +20,10 @@ import type {
 export type PreviewLineStatus = 'ready' | 'blocked' | 'out-of-van' | 'not-found' | 'not-approved';
 
 export type RemittancePreviewLine = Readonly<{
-  documentId: string;
+  payableId: string;
+  // A nota de origem. `null` em `not-found`: o título não foi encontrado, então não há nota a
+  // declarar — inventar uma seria afirmar vínculo que não se leu.
+  documentId: string | null;
   status: PreviewLineStatus;
   route: VanRoute | null;
   // Campos a resolver, em LISTA — é o que o front usa para apontar o input. Uma mensagem de texto
@@ -29,7 +32,9 @@ export type RemittancePreviewLine = Readonly<{
   // As lacunas com o motivo junto: `missing` pede preenchimento, `unmappable`/`malformed` pedem
   // correção do que já está lá. O operador age diferente em cada caso.
   gaps: readonly PayoutGap[];
-  netValueCents: number;
+  // Valor DO TÍTULO. Num filho de retenção não é o líquido da nota, e chamá-lo `netValue` faria a
+  // soma do lote parecer o total da nota multiplicado pelo número de retenções.
+  valueCents: number;
 }>;
 
 export type RemittancePreview = Readonly<{
@@ -45,17 +50,18 @@ export type RemittancePreview = Readonly<{
 
 export type PreviewRemittanceDeps = Readonly<{ preview: RemittancePreviewReader }>;
 
-export type PreviewRemittanceInput = Readonly<{ documentIds: readonly string[] }>;
+export type PreviewRemittanceInput = Readonly<{ payableIds: readonly string[] }>;
 
 export type PreviewRemittanceError = 'remittance-preview-unavailable';
 
-const notFoundLine = (documentId: string): RemittancePreviewLine => ({
-  documentId,
+const notFoundLine = (payableId: string): RemittancePreviewLine => ({
+  payableId,
+  documentId: null,
   status: 'not-found',
   route: null,
   missing: [],
   gaps: [],
-  netValueCents: 0,
+  valueCents: 0,
 });
 
 const toPreviewLine = (row: RemittancePreviewRow): RemittancePreviewLine => {
@@ -64,12 +70,13 @@ const toPreviewLine = (row: RemittancePreviewRow): RemittancePreviewLine => {
   // a aprovação, e é o que a linha diz. `route` fica nulo: a rota não importa antes de aprovar.
   if (!isApprovedForRemittance(row.status)) {
     return {
+      payableId: row.payableId,
       documentId: row.documentId,
       status: 'not-approved',
       route: null,
       missing: [],
       gaps: [],
-      netValueCents: row.netValueCents,
+      valueCents: row.valueCents,
     };
   }
 
@@ -77,12 +84,13 @@ const toPreviewLine = (row: RemittancePreviewRow): RemittancePreviewLine => {
   // de câmbio e cartão — não há campo do favorecido que o torne apto.
   if (row.paymentMethod === null) {
     return {
+      payableId: row.payableId,
       documentId: row.documentId,
       status: 'out-of-van',
       route: null,
       missing: [],
       gaps: [],
-      netValueCents: row.netValueCents,
+      valueCents: row.valueCents,
     };
   }
 
@@ -95,36 +103,39 @@ const toPreviewLine = (row: RemittancePreviewRow): RemittancePreviewLine => {
   switch (readiness.status) {
     case 'ready':
       return {
+        payableId: row.payableId,
         documentId: row.documentId,
         status: 'ready',
         route: readiness.route,
         missing: [],
         gaps: [],
-        netValueCents: row.netValueCents,
+        valueCents: row.valueCents,
       };
     case 'incomplete':
       return {
+        payableId: row.payableId,
         documentId: row.documentId,
         status: 'blocked',
         route: readiness.route,
         missing: readiness.gaps.map((g) => g.field),
         gaps: readiness.gaps,
-        netValueCents: row.netValueCents,
+        valueCents: row.valueCents,
       };
     case 'out-of-van':
       return {
+        payableId: row.payableId,
         documentId: row.documentId,
         status: 'out-of-van',
         route: null,
         missing: [],
         gaps: [],
-        netValueCents: row.netValueCents,
+        valueCents: row.valueCents,
       };
   }
 };
 
 const sumWhere = (lines: readonly RemittancePreviewLine[], status: PreviewLineStatus): number =>
-  lines.reduce((total, l) => (l.status === status ? total + l.netValueCents : total), 0);
+  lines.reduce((total, l) => (l.status === status ? total + l.valueCents : total), 0);
 
 const countWhere = (lines: readonly RemittancePreviewLine[], status: PreviewLineStatus): number =>
   lines.filter((l) => l.status === status).length;
@@ -134,15 +145,15 @@ export const previewRemittance =
   async (
     input: PreviewRemittanceInput,
   ): Promise<Result<RemittancePreview, PreviewRemittanceError>> => {
-    const rows = await deps.preview.loadPreviewRows(input.documentIds);
+    const rows = await deps.preview.loadPreviewRows(input.payableIds);
     if (!rows.ok) return err('remittance-preview-unavailable');
 
-    const byId = new Map(rows.value.map((r) => [r.documentId, r]));
+    const byId = new Map(rows.value.map((r) => [r.payableId, r]));
 
     // Percorre a SELEÇÃO, não o resultado da leitura: um id que o reader não devolveu tem de
-    // aparecer como `not-found`. Iterar sobre as linhas encontradas faria o documento sumir do
+    // aparecer como `not-found`. Iterar sobre as linhas encontradas faria o título sumir do
     // pré-voo sem explicação — o defeito que este use case existe para corrigir.
-    const lines = input.documentIds.map((id) => {
+    const lines = input.payableIds.map((id) => {
       const row = byId.get(id);
       return row === undefined ? notFoundLine(id) : toPreviewLine(row);
     });
