@@ -19,12 +19,13 @@ import type {
 } from '#src/modules/financial/application/ports/financial-etl-store.ts';
 import { isDocumentStatus } from '#src/modules/financial/domain/payable-view/types.ts';
 import { finDocuments } from '../schemas/mysql.ts';
+import { isDuplicateEntry } from '#src/shared/persistence/driver-error.ts';
 
-const isDupEntry = (cause: unknown): boolean =>
-  typeof cause === 'object' &&
-  cause !== null &&
-  'code' in cause &&
-  (cause as Readonly<{ code: unknown }>).code === 'ER_DUP_ENTRY';
+// Antes esta função testava `cause.code` na profundidade 0. O Drizzle embrulha todo erro de
+// query num `DrizzleQueryError`, que NÃO tem `code` — o erro do mysql2 fica em `.cause`. Logo a
+// checagem devolvia `false` para TODA duplicata, e um conflito de chave era classificado como
+// indisponibilidade do store, sempre. `isDuplicateEntry` percorre a cadeia e compara `errno`.
+const isDupEntry = isDuplicateEntry;
 
 type RefRow = Readonly<{ id: string; status: string; version: number }>;
 
