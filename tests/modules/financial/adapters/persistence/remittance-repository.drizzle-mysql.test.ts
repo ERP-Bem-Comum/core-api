@@ -12,7 +12,7 @@ import { strict as assert } from 'node:assert';
 import process from 'node:process';
 import { eq } from 'drizzle-orm';
 
-import { isOk } from '#src/shared/index.ts';
+import { isErr, isOk } from '#src/shared/index.ts';
 import { newUuid } from '#src/shared/utils/id.ts';
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
@@ -155,6 +155,18 @@ if (!process.env['MYSQL_INTEGRATION']) {
       await handle?.close();
     });
 
+    // No escopo do describe PAI porque dois blocos irmãos o consultam — o do outbox transacional e o
+    // da corrida (#789), que precisa provar que a emissão perdedora não deixou nem evento.
+    const outboxRowsOf = async (remittanceId: string) =>
+      handle.db
+        .select({
+          eventType: finOutbox.eventType,
+          aggregateType: finOutbox.aggregateType,
+          payload: finOutbox.payload,
+        })
+        .from(finOutbox)
+        .where(eq(finOutbox.aggregateId, remittanceId));
+
     it('salva cabeçalho e vínculos, e recupera os títulos junto', async () => {
       const repo = createDrizzleRemittanceRepository(handle);
       const p1 = await seedPayable();
@@ -262,16 +274,6 @@ if (!process.env['MYSQL_INTEGRATION']) {
     // ADR-0015: o evento existe se e somente se o estado foi persistido. É o que o fake não pode
     // provar — só o banco real mostra que as duas escritas caem na MESMA transação.
     describe('outbox transacional', () => {
-      const outboxRowsOf = async (remittanceId: string) =>
-        handle.db
-          .select({
-            eventType: finOutbox.eventType,
-            aggregateType: finOutbox.aggregateType,
-            payload: finOutbox.payload,
-          })
-          .from(finOutbox)
-          .where(eq(finOutbox.aggregateId, remittanceId));
-
       it('grava RemittanceTransmitted no fin_outbox junto do desfecho', async () => {
         const repo = createDrizzleRemittanceRepository(handle);
         const rem = build([await seedPayable()]);
@@ -324,6 +326,79 @@ if (!process.env['MYSQL_INTEGRATION']) {
           await outboxRowsOf(colidente.id),
           [],
           'evento não pode sobreviver ao rollback do estado',
+        );
+      });
+    });
+
+    // #789 — a corrida de verdade, e a única prova que o fake NÃO pode dar.
+    //
+    // O que se mede aqui não é lógica: é o lock do InnoDB. `findHeldPayableIds` responde sobre o
+    // passado, e entre a resposta dela e a gravação cabe a tradução CNAB inteira — duas emissões
+    // concorrentes leem "livre" antes de qualquer uma gravar (CWE-367). Nenhuma constraint recusa,
+    // porque a PK é `(remittance_id, payable_id)` e remessas distintas são chaves distintas.
+    //
+    // Quem exclui é o `SELECT … FOR UPDATE` sobre `fin_payables` dentro da transação do `save`:
+    // busca por PK trava só o registro, sem gap, e X↔X conflita — a segunda transação ESPERA a
+    // primeira commitar e então enxerga o vínculo já gravado.
+    describe('emissão concorrente — a janela TOCTOU (#789)', () => {
+      it('duas emissões do mesmo título: exatamente uma grava, a outra perde com nome próprio', async () => {
+        const repo = createDrizzleRemittanceRepository(handle);
+        const disputado = await seedPayable();
+        const soDaPrimeira = await seedPayable();
+        const soDaSegunda = await seedPayable();
+
+        const a = build([disputado, soDaPrimeira]);
+        const b = build([disputado, soDaSegunda]);
+
+        // `Promise.all` e não `await` em sequência: as duas transações precisam estar ABERTAS ao
+        // mesmo tempo, em conexões distintas do pool (`poolLimit: 4`). Em sequência, a segunda já
+        // enxergaria o commit da primeira e o teste passaria sem exercitar lock algum — provando
+        // outra coisa.
+        const [ra, rb] = await Promise.all([repo.save(a), repo.save(b)]);
+
+        const vencedoras = [ra, rb].filter((r) => r.ok);
+        const perdedoras = [ra, rb].filter((r) => !r.ok);
+
+        assert.equal(vencedoras.length, 1, 'exatamente UMA emissão pode gravar');
+        assert.equal(perdedoras.length, 1);
+        assert.equal(
+          isErr(perdedoras[0]!) ? perdedoras[0]!.error : null,
+          'remittance-payables-already-held',
+          'a perdedora sai com o erro de negócio, nunca como falha de infraestrutura',
+        );
+
+        // O veredito do banco, não o do `Result`: o título disputado aparece UMA vez.
+        const vinculos = await handle.db
+          .select({ remittanceId: finRemittancePayables.remittanceId })
+          .from(finRemittancePayables)
+          .where(eq(finRemittancePayables.payableId, disputado.payableId));
+        assert.equal(vinculos.length, 1, 'o título disputado não pode estar em duas remessas');
+      });
+
+      // O CA2 da issue. Aqui ele é satisfeito por construção — reserva e gravação são a MESMA
+      // transação, então não existe janela entre "reservei" e "gravei" onde algo possa falhar
+      // deixando título preso por remessa inexistente. O teste fixa essa propriedade: se alguém
+      // separar as duas em transações distintas, isto fica vermelho.
+      it('a emissão que perde a corrida não deixa rastro algum', async () => {
+        const repo = createDrizzleRemittanceRepository(handle);
+        const disputado = await seedPayable();
+
+        const a = build([disputado]);
+        const b = build([disputado]);
+        const [ra, rb] = await Promise.all([repo.save(a), repo.save(b)]);
+
+        const perdedora = ra.ok ? b : a;
+        assert.equal(ra.ok !== rb.ok, true, 'uma vence e a outra perde');
+
+        const cabecalho = await handle.db
+          .select({ id: finRemittances.id })
+          .from(finRemittances)
+          .where(eq(finRemittances.id, perdedora.id));
+        assert.deepEqual(cabecalho, [], 'a remessa perdedora não pode ter cabeçalho gravado');
+        assert.deepEqual(
+          await outboxRowsOf(perdedora.id),
+          [],
+          'nem evento — o rollback leva a transação inteira',
         );
       });
     });
