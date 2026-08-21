@@ -118,7 +118,14 @@ if (!process.env['MYSQL_INTEGRATION']) {
       ]);
     });
 
+    // ⚠️ Limpa também na SAÍDA — ver a nota em `remittance-repository.drizzle-mysql.test.ts`. Em
+    // resumo: com as FKs `RESTRICT`, vínculo deixado para trás faz o `delete(finDocuments)` de
+    // qualquer suíte vizinha falhar com `ER_ROW_IS_REFERENCED_2`, longe da causa.
     after(async () => {
+      await handle.db.delete(finRemittancePayables);
+      await handle.db.delete(finRemittances);
+      await handle.db.delete(finPayables);
+      await handle.db.delete(finDocuments);
       await handle?.close();
     });
 

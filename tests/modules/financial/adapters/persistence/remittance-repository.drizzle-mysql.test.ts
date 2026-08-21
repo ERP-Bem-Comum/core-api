@@ -140,7 +140,18 @@ if (!process.env['MYSQL_INTEGRATION']) {
       await handle.db.delete(finOutbox);
     });
 
+    // ⚠️ Limpa também na SAÍDA, e isto NÃO contradiz o "limpe na entrada" da rule — soma-se a ele.
+    //
+    // A entrada protege ESTE arquivo do resíduo alheio. A saída protege os VIZINHOS do resíduo
+    // deste, e virou necessária com as FKs `RESTRICT`: um vínculo deixado para trás faz o
+    // `delete(finDocuments)` de qualquer outra suíte falhar com `ER_ROW_IS_REFERENCED_2` — inclusive
+    // suítes que não conhecem remessa, porque o CASCADE nota→título esbarra na FK do vínculo. O
+    // dano aparece longe da causa, num arquivo que não tem nada a ver com o assunto.
     after(async () => {
+      await handle.db.delete(finRemittancePayables);
+      await handle.db.delete(finRemittances);
+      await handle.db.delete(finPayables);
+      await handle.db.delete(finDocuments);
       await handle?.close();
     });
 
