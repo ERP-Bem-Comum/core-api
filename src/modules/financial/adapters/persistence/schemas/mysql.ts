@@ -1194,6 +1194,36 @@ export const finRemittances = mysqlTable(
 export type FinRemittanceRow = typeof finRemittances.$inferSelect;
 export type NewFinRemittanceRow = typeof finRemittances.$inferInsert;
 
+// ─── fin_remittance_documents (DEPRECADA — aguardando o `contract`) ───────────
+//
+// ⚠️ Substituída por `fin_remittance_payables`, que vincula por TÍTULO. Não é lida nem escrita por
+// código de produção: existe apenas para que a tabela sobreviva à release que migra os vínculos.
+//
+// É o `expand` do expand/contract. A migration 0050 copia os vínculos daqui para lá com um JOIN que
+// tem predicado (`p.kind = 'Parent'`) — e JOIN com predicado não é total por construção: documento
+// sem título `Parent` simplesmente não casa e fica de fora, em silêncio. Destruir a origem na mesma
+// leva tornaria essa perda irreversível, sem cópia e sem ninguém para notar.
+//
+// O `DROP` acontece numa release POSTERIOR, depois de conferido que a tabela nova está completa.
+// Enquanto as duas coexistem, qualquer linha perdida é recuperável — que é a única coisa que
+// `DROP TABLE` não oferece, por ser DDL: não é transacional e não tem undo.
+export const finRemittanceDocuments = mysqlTable(
+  'fin_remittance_documents',
+  {
+    remittanceId: uuidKey('remittance_id').notNull(),
+    documentId: uuidKey('document_id').notNull(),
+    yourNumber: varchar('your_number', { length: 20 }).notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.remittanceId, t.documentId] }),
+    index('fin_remittance_documents_document_idx').on(t.documentId),
+    uniqueIndex('fin_remittance_documents_your_number_uk').on(t.yourNumber),
+  ],
+);
+
+export type FinRemittanceDocumentRow = typeof finRemittanceDocuments.$inferSelect;
+export type NewFinRemittanceDocumentRow = typeof finRemittanceDocuments.$inferInsert;
+
 // ─── fin_remittance_payables ──────────────────────────────────────────────────
 //
 // Vínculo remessa → TÍTULOS. É o que a seleção consulta para NÃO incluir de novo um título que já
@@ -1230,6 +1260,31 @@ export const finRemittancePayables = mysqlTable(
   },
   (t) => [
     primaryKey({ columns: [t.remittanceId, t.payableId] }),
+    // ⚠️ As três FKs são `RESTRICT`, e a de `payable_id` é a que importa: ela é o backstop mecânico
+    // do defeito que esta tabela nasceu para impedir. Enquanto o ajuste de documento regenerava os
+    // `PayableId` (hard replace, R8.1), o `DELETE FROM fin_payables` desta nota deixava a linha daqui
+    // apontando para um id que não existe mais — órfã, sem erro, sem CASCADE, sem RESTRICT. Com a
+    // FK, esse mesmo DELETE estoura `ER_ROW_IS_REFERENCED_2` em desenvolvimento, no lugar do defeito,
+    // em vez de virar pagamento em dobro meses depois.
+    //
+    // `RESTRICT` e não `CASCADE` nas três: remessa não é apagada fisicamente neste domínio (descarte
+    // é `status='Discarded'`), e cascatear apagaria justamente o rastro do que foi enviado ao banco —
+    // o oposto do propósito desta tabela.
+    foreignKey({
+      name: 'fin_remittance_payables_remittance_id_fk',
+      columns: [t.remittanceId],
+      foreignColumns: [finRemittances.id],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'fin_remittance_payables_payable_id_fk',
+      columns: [t.payableId],
+      foreignColumns: [finPayables.id],
+    }).onDelete('restrict'),
+    foreignKey({
+      name: 'fin_remittance_payables_document_id_fk',
+      columns: [t.documentId],
+      foreignColumns: [finDocuments.id],
+    }).onDelete('restrict'),
     index('fin_remittance_payables_payable_idx').on(t.payableId),
     // Consulta de apoio: "quais títulos desta nota já saíram?" — a pergunta que a tela do documento
     // faz quando a nota foi paga em parte.

@@ -45,6 +45,7 @@ describe('financial/domain/timeline/projection — diff por função pura (ADR-0
       document: before.document,
       payables: before.payables,
       changes: { grossValue: money(200000) },
+      heldPayableIds: [],
     });
     if (!adjusted.ok) throw new Error('test setup: adjust');
 
@@ -74,6 +75,7 @@ describe('financial/domain/timeline/projection — diff por função pura (ADR-0
       document: before.document,
       payables: before.payables,
       changes: { grossValue: money(150000) },
+      heldPayableIds: [],
     });
     if (!adjusted.ok) throw new Error('test setup: adjust');
 

@@ -17,4 +17,9 @@ export type DocumentError =
   // (boleto e guia). Ausente e malformado caem no mesmo erro de propósito: os dois terminam em
   // arquivo que o banco não processa, e a régua que os separa (`missing` vs `malformed`) é do
   // pré-voo, que reporta por título. Aqui a pergunta é binária — entra ou não entra.
-  | 'payable-payment-detail-invalid';
+  | 'payable-payment-detail-invalid'
+  // Ajuste de valor recusado porque algum título da nota está preso numa remessa viva — o banco já
+  // recebeu a ordem de pagamento. Mudar o valor aqui faria o arquivo enviado e o título divergirem,
+  // e a conciliação do retorno compararia coisas diferentes. Para corrigir a nota, descarta-se a
+  // remessa primeiro. O domínio não consulta remessa: recebe os ids presos como dado de entrada.
+  | 'document-has-held-payable';

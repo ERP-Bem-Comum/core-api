@@ -82,8 +82,31 @@ const retentionsAllowed = (type: DocumentType, retentions: readonly Retention[])
   return retentions.every((r) => allowed.includes(r.type));
 };
 
-// Gera os títulos em `Open`: 1 pai (valor líquido) + 1 filho por retenção. Usado por create e adjust
-// (no adjust, os filhos antigos são descartados e estes substituem — hard delete + recria, R8.1).
+// O id do filho de `type` na `occurrence`-ésima aparição, entre os títulos ANTERIORES — ou `null`
+// quando não havia um equivalente (retenção nova). Casar por `(kind, retentionType)` e consumir cada
+// anterior uma única vez dá bijeção determinística mesmo com duas retenções do mesmo tipo: a n-ésima
+// casa com a n-ésima. Retenção removida simplesmente não é procurada; o título dela deixa de existir.
+const priorChildId = (
+  prior: Payables | null,
+  type: Retention['type'],
+  occurrence: number,
+): Payable['id'] | null => {
+  if (prior === null) return null;
+  return prior.children.filter((c) => c.retentionType === type)[occurrence]?.id ?? null;
+};
+
+// Gera os títulos em `Open`: 1 pai (valor líquido) + 1 filho por retenção.
+//
+// ⚠️ `prior` é o que separa CRIAR de REAJUSTAR. Com `prior`, o título que continua existindo mantém
+// o `PayableId` — porque a identidade de uma entidade não é atributo dela, e sim o fio de
+// continuidade que a torna referenciável de fora (Evans, DDD p.49). E `fin_remittance_payables`
+// referencia exatamente esse id: regenerá-lo transformava toda remessa emitida num vínculo órfão, e
+// fazia a trava anti-dupla-emissão (`findHeldPayableIds`) deixar de reconhecer o título — pagamento
+// em duplicidade, que é o que aquela tabela existe para impedir (`schemas/mysql.ts:1199-1201`).
+//
+// Isto REVISA a R8.1: o ajuste continua regenerando VALOR, forma e complemento; deixa de regenerar
+// IDENTIDADE. A premissa original da R8.1 — nada fora do agregado referencia `Payable.id` — deixou
+// de valer quando a migration 0050 passou a apontar para dentro.
 const buildOpenPayables = (params: {
   readonly documentId: DocumentId;
   readonly retentions: readonly Retention[];
@@ -91,9 +114,11 @@ const buildOpenPayables = (params: {
   readonly dueDate: Date;
   readonly paymentMethod: PaymentMethod;
   readonly paymentDetail: string | null;
+  readonly prior: Payables | null;
 }): Payables => {
   const parent: Payable = immutable<Payable>({
-    id: PayableId.generate(),
+    // O pai é único por documento: se havia um, é o mesmo título economicamente — mudou quanto, não o quê.
+    id: params.prior?.parent.id ?? PayableId.generate(),
     origin: params.documentId,
     kind: 'Parent',
     retentionType: null,
@@ -104,9 +129,10 @@ const buildOpenPayables = (params: {
     paymentDetail: params.paymentDetail,
     paidAt: null,
   });
-  const children: readonly Payable[] = params.retentions.map((r) =>
-    immutable<Payable>({
-      id: PayableId.generate(),
+  const children: readonly Payable[] = params.retentions.map((r, index) => {
+    const occurrence = params.retentions.slice(0, index).filter((x) => x.type === r.type).length;
+    return immutable<Payable>({
+      id: priorChildId(params.prior, r.type, occurrence) ?? PayableId.generate(),
       origin: params.documentId,
       kind: 'Child',
       retentionType: r.type,
@@ -119,8 +145,8 @@ const buildOpenPayables = (params: {
       paymentMethod: params.paymentMethod,
       paymentDetail: params.paymentDetail,
       paidAt: null,
-    }),
-  );
+    });
+  });
   return immutable<Payables>({ parent, children });
 };
 
@@ -190,6 +216,8 @@ export const create = (input: CreateDocumentInput): Result<CreateDocumentOutput,
     dueDate: input.dueDate,
     paymentMethod: input.paymentMethod,
     paymentDetail: input.paymentDetail ?? null,
+    // Criação: não há título anterior de quem herdar identidade.
+    prior: null,
   });
 
   // #115: formato (44 dígitos) e obrigatoriedade na DANFE são invariantes do documento submetido.
@@ -461,6 +489,15 @@ export type AdjustDocumentInput = Readonly<{
   document: OpenDocument;
   payables: Payables;
   changes: AdjustDocumentChanges;
+  // Títulos presos numa remessa viva, resolvidos pela aplicação (`findHeldPayableIds`). O domínio
+  // não conhece remessa — recebe o fato pronto e decide sobre ele, que é o que mantém a regra aqui
+  // em vez de virar um `if` de orquestração (`.claude/rules/application.md`).
+  //
+  // `string` e não `PayableId`: são ids apurados por OUTRA parte do sistema, e o que se faz com eles
+  // aqui é comparar. Marcá-los como branded exigiria um cast — que produz um tipo que mente sobre
+  // uma validação que não aconteceu (`.claude/rules/domain.md`). Comparar string com string é o que
+  // a operação de fato é.
+  heldPayableIds: readonly string[];
 }>;
 
 export type AdjustDocumentOutput = Readonly<{
@@ -473,6 +510,17 @@ export type AdjustDocumentOutput = Readonly<{
 export const adjust = (input: AdjustDocumentInput): Result<AdjustDocumentOutput, DocumentError> => {
   const d = input.document;
   const c = input.changes;
+
+  // Guarda ANTES de qualquer cálculo: se há dinheiro em trânsito por esta nota, o ajuste de valor
+  // não acontece. A comparação é contra os títulos DESTA nota — hold de outra não trava esta.
+  const ownIds: readonly string[] = [
+    input.payables.parent.id,
+    ...input.payables.children.map((child) => child.id),
+  ];
+  if (input.heldPayableIds.some((heldId) => ownIds.includes(heldId))) {
+    return err('document-has-held-payable');
+  }
+
   const retentions = c.retentions ?? d.retentions;
   if (!retentionsAllowed(d.type, retentions)) return err('retention-not-allowed-for-type');
 
@@ -497,8 +545,12 @@ export const adjust = (input: AdjustDocumentInput): Result<AdjustDocumentOutput,
   if (!net.ok) return err(net.error);
 
   // ⚠️ `adjust` REGENERA os títulos (R8.1): forma e complemento próprios de um título são perdidos
-  // aqui, junto com o id. É o contrato do ajuste completo, não um descuido — quem quer preservar o
-  // título usa `editMetadata` ou `updatePayablePayment`.
+  // aqui. É o contrato do ajuste completo, não um descuido — quem quer preservar o complemento usa
+  // `editMetadata` ou `updatePayablePayment`.
+  //
+  // O que NÃO se perde mais é a IDENTIDADE: `prior` faz o título que continua existindo manter o
+  // `PayableId`. A R8.1 original também descartava o id, sob a premissa de que nada fora do agregado
+  // o referenciava — premissa que a migration 0050 (`fin_remittance_payables`) revogou.
   const payables = buildOpenPayables({
     documentId: d.id,
     retentions,
@@ -506,6 +558,7 @@ export const adjust = (input: AdjustDocumentInput): Result<AdjustDocumentOutput,
     dueDate,
     paymentMethod: d.paymentMethod,
     paymentDetail,
+    prior: input.payables,
   });
 
   const document: OpenDocument = immutable<OpenDocument>({

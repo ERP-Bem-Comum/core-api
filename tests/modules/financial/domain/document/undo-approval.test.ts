@@ -88,6 +88,7 @@ describe('financial/domain/document — undoApproval (US5)', () => {
       document: undone.value.document,
       payables: undone.value.payables,
       changes: { retentions: [ret('ISS', 9999)] },
+      heldPayableIds: [],
     });
     assert.equal(isOk(adjusted), true);
     if (adjusted.ok) {

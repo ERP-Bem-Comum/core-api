@@ -74,6 +74,7 @@ describe('financial/domain/document — adjust (US4: ajuste em Aberto)', () => {
         retentions: [ret('ISS', 4000), ret('IRRF', 1500), ret('INSS', 11000)],
         interest: money(500),
       },
+      heldPayableIds: [],
     });
     assert.equal(isOk(r), true);
     if (r.ok) {
@@ -91,6 +92,7 @@ describe('financial/domain/document — adjust (US4: ajuste em Aberto)', () => {
       document: open.document,
       payables: open.payables,
       changes: { retentions: [ret('IRRF', 1500)] },
+      heldPayableIds: [],
     });
     if (r.ok) assert.equal(r.value.payables.children.length, 1);
   });
@@ -101,6 +103,7 @@ describe('financial/domain/document — adjust (US4: ajuste em Aberto)', () => {
       document: open.document,
       payables: open.payables,
       changes: { retentions: [ret('ISS', 5000)] },
+      heldPayableIds: [],
     });
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'retention-not-allowed-for-type');

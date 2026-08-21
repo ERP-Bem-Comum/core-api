@@ -1,0 +1,3 @@
+ALTER TABLE `fin_remittance_payables` ADD CONSTRAINT `fin_remittance_payables_remittance_id_fk` FOREIGN KEY (`remittance_id`) REFERENCES `fin_remittances`(`id`) ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `fin_remittance_payables` ADD CONSTRAINT `fin_remittance_payables_payable_id_fk` FOREIGN KEY (`payable_id`) REFERENCES `fin_payables`(`id`) ON DELETE restrict ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE `fin_remittance_payables` ADD CONSTRAINT `fin_remittance_payables_document_id_fk` FOREIGN KEY (`document_id`) REFERENCES `fin_documents`(`id`) ON DELETE restrict ON UPDATE no action;

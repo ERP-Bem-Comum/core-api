@@ -1,7 +1,7 @@
 {
   "version": "5",
   "dialect": "mysql",
-  "id": "2c1442bd-1b46-4bda-889a-915bebeab2b6",
+  "id": "36825384-4c62-4e7a-bc70-55f4bdf027ff",
   "prevId": "8bd683da-2d35-420c-b803-c1640c23acd0",
   "tables": {
     "fin_bank_statements": {
@@ -2101,6 +2101,53 @@
       "uniqueConstraints": {},
       "checkConstraint": {}
     },
+    "fin_remittance_documents": {
+      "name": "fin_remittance_documents",
+      "columns": {
+        "remittance_id": {
+          "name": "remittance_id",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "document_id": {
+          "name": "document_id",
+          "type": "varchar(36) COLLATE utf8mb4_bin",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        },
+        "your_number": {
+          "name": "your_number",
+          "type": "varchar(20)",
+          "primaryKey": false,
+          "notNull": true,
+          "autoincrement": false
+        }
+      },
+      "indexes": {
+        "fin_remittance_documents_document_idx": {
+          "name": "fin_remittance_documents_document_idx",
+          "columns": ["document_id"],
+          "isUnique": false
+        },
+        "fin_remittance_documents_your_number_uk": {
+          "name": "fin_remittance_documents_your_number_uk",
+          "columns": ["your_number"],
+          "isUnique": true
+        }
+      },
+      "foreignKeys": {},
+      "compositePrimaryKeys": {
+        "fin_remittance_documents_remittance_id_document_id_pk": {
+          "name": "fin_remittance_documents_remittance_id_document_id_pk",
+          "columns": ["remittance_id", "document_id"]
+        }
+      },
+      "uniqueConstraints": {},
+      "checkConstraint": {}
+    },
     "fin_remittance_payables": {
       "name": "fin_remittance_payables",
       "columns": {
@@ -2150,7 +2197,35 @@
           "isUnique": true
         }
       },
-      "foreignKeys": {},
+      "foreignKeys": {
+        "fin_remittance_payables_remittance_id_fk": {
+          "name": "fin_remittance_payables_remittance_id_fk",
+          "tableFrom": "fin_remittance_payables",
+          "tableTo": "fin_remittances",
+          "columnsFrom": ["remittance_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "fin_remittance_payables_payable_id_fk": {
+          "name": "fin_remittance_payables_payable_id_fk",
+          "tableFrom": "fin_remittance_payables",
+          "tableTo": "fin_payables",
+          "columnsFrom": ["payable_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        },
+        "fin_remittance_payables_document_id_fk": {
+          "name": "fin_remittance_payables_document_id_fk",
+          "tableFrom": "fin_remittance_payables",
+          "tableTo": "fin_documents",
+          "columnsFrom": ["document_id"],
+          "columnsTo": ["id"],
+          "onDelete": "restrict",
+          "onUpdate": "no action"
+        }
+      },
       "compositePrimaryKeys": {
         "fin_remittance_payables_remittance_id_payable_id_pk": {
           "name": "fin_remittance_payables_remittance_id_payable_id_pk",

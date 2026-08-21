@@ -1,1 +1,0 @@
-DROP TABLE `fin_remittance_documents`;
