@@ -1,7 +1,7 @@
 // Teste de integração: RemittanceRepository (Drizzle + MySQL real).
 //
 // Prova o que o fake não pode: que o cabeçalho e os vínculos gravam na MESMA transação, que o
-// anti-join de documentos presos acontece no BANCO, e que os CHECKs e UNIQUEs da migration 0044
+// anti-join de títulos presos acontece no BANCO, e que os CHECKs e UNIQUEs da migration 0044
 // existem de verdade — inclusive o de NSA único por conta, que é o que impede duas remessas com o
 // mesmo número (retransmissão, aos olhos do banco).
 //
@@ -13,6 +13,7 @@ import process from 'node:process';
 import { eq } from 'drizzle-orm';
 
 import { isOk } from '#src/shared/index.ts';
+import { newUuid } from '#src/shared/utils/id.ts';
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import { createDrizzleRemittanceRepository } from '#src/modules/financial/adapters/persistence/repos/remittance-repository.drizzle.ts';
@@ -27,6 +28,8 @@ import {
 } from '#src/modules/financial/domain/remittance/remittance.ts';
 import {
   finOutbox,
+  finDocuments,
+  finPayables,
   finRemittances,
   finRemittancePayables,
 } from '#src/modules/financial/adapters/persistence/schemas/mysql.ts';
@@ -35,7 +38,10 @@ import { mysqlTestConnectionString } from '#tests/support/mysql-conn.ts';
 const account = CedenteAccountId.generate();
 let nsaSeq = 0;
 
-const build = (documentIds: readonly string[], cedente = account) => {
+/** Um título e a nota que o originou — o par que a remessa vincula. */
+type SeededPayable = Readonly<{ payableId: string; documentId: string }>;
+
+const build = (payables: readonly SeededPayable[], cedente = account) => {
   nsaSeq += 1;
   const r = create({
     id: RemittanceId.generate(),
@@ -46,11 +52,9 @@ const build = (documentIds: readonly string[], cedente = account) => {
     // #752: convênio + NSA + posição. O convênio fictício `900001` é o discriminador DESTE arquivo
     // de teste — `your_number` tem UNIQUE na tabela, e dois arquivos de integração que usassem o
     // mesmo par NSA/posição colidiriam entre si, com a falha aparecendo no vizinho.
-    // Cada id do fixture nomeia UM título; a nota recebe o mesmo valor porque estes casos medem o
-    // vínculo remessa→título, não o agrupamento por nota.
-    payables: documentIds.map((payableId, i) => ({
-      payableId,
-      documentId: payableId,
+    payables: payables.map((p, i) => ({
+      payableId: p.payableId,
+      documentId: p.documentId,
       yourNumber: `900001${String(nsaSeq).padStart(6, '0')}${String(i + 1).padStart(6, '0')}`,
     })),
     // ISO 8601 UTC — o formato que `generateRemittance` REALMENTE produz (`toISOString()`).
@@ -65,8 +69,6 @@ const build = (documentIds: readonly string[], cedente = account) => {
   if (!r.ok) throw new Error(`test setup: remittance (${r.error})`);
   return r.value;
 };
-
-const doc = (): string => CedenteAccountId.generate();
 
 if (!process.env['MYSQL_INTEGRATION']) {
   process.stdout.write('[financial:remittance-repo] MYSQL_INTEGRATION não definido — pulando.\n');
@@ -85,15 +87,56 @@ if (!process.env['MYSQL_INTEGRATION']) {
       handle = r.value;
     });
 
+    // ⚠️ Grava a NOTA e o TÍTULO de verdade, e não só ids que casem a FK.
+    //
+    // Esta fixture já foi `() => CedenteAccountId.generate()`: um UUID solto, servindo ao mesmo
+    // tempo de `payable_id` e de `document_id`, sem nunca entrar em tabela alguma. Passava porque
+    // `fin_remittance_payables` não declarava FK. Declarada a FK (`RESTRICT` → `fin_payables.id`), o
+    // INSERT do vínculo passou a dar `ER_NO_REFERENCED_ROW_2` (1452) — e o erro estava certo: a
+    // fixture montava um grafo que a aplicação não produz, com uma linha sendo nota e título ao
+    // mesmo tempo.
+    //
+    // A cura NÃO é gerar um id qualquer em `fin_payables` só para a FK aceitar: seria o mesmo
+    // defeito que o comentário do `generatedAt` acima descreve — verde descrevendo um sistema que
+    // não existe. É criar o que a aplicação cria: uma nota, e sob ela UM título `Parent`, que é
+    // exatamente o que a remessa emite (o líquido do documento).
+    const seedPayable = async (): Promise<SeededPayable> => {
+      const documentId = newUuid();
+      const payableId = newUuid();
+      await handle.db.insert(finDocuments).values({
+        id: documentId,
+        status: 'Open',
+        createdAt: new Date('2026-08-11T00:00:00.000Z'),
+      });
+      await handle.db.insert(finPayables).values({
+        id: payableId,
+        documentId,
+        kind: 'Parent',
+        status: 'Open',
+        value: 150000,
+        dueDate: new Date('2026-09-30T00:00:00.000Z'),
+        paymentMethod: 'TED',
+        createdAt: new Date('2026-08-11T00:00:00.000Z'),
+      });
+      return { payableId, documentId };
+    };
+
     // Limpa na ENTRADA, por tabela (testing.md §Contrato de isolamento).
     //
     // Passou a ser NECESSÁRIO com a #752: `your_number` ganhou UNIQUE, e `nsaSeq` reinicia a cada
     // processo — sem limpar, a SEGUNDA execução deste arquivo tentaria gravar as mesmas referências
     // e falharia na colisão, com o erro aparecendo como `save` recusado, longe da causa. É o caso
     // que a inversão de ordem não pega, e que a rule chama de "passar duas vezes seguidas".
+    //
+    // ⚠️ A ORDEM agora é obrigatória, e não estética: com as FKs `RESTRICT` de
+    // `fin_remittance_payables`, apagar título ou remessa antes do vínculo dá
+    // `ER_ROW_IS_REFERENCED_2`. Vínculo primeiro, depois o que ele referencia. `fin_payables` sai
+    // antes de `fin_documents` pela FK intra-agregado.
     beforeEach(async () => {
       await handle.db.delete(finRemittancePayables);
       await handle.db.delete(finRemittances);
+      await handle.db.delete(finPayables);
+      await handle.db.delete(finDocuments);
       await handle.db.delete(finOutbox);
     });
 
@@ -101,23 +144,23 @@ if (!process.env['MYSQL_INTEGRATION']) {
       await handle?.close();
     });
 
-    it('salva cabeçalho e vínculos, e recupera os documentos junto', async () => {
+    it('salva cabeçalho e vínculos, e recupera os títulos junto', async () => {
       const repo = createDrizzleRemittanceRepository(handle);
-      const d1 = doc();
-      const d2 = doc();
-      const rem = build([d1, d2]);
+      const p1 = await seedPayable();
+      const p2 = await seedPayable();
+      const rem = build([p1, p2]);
 
       assert.equal((await repo.save(rem)).ok, true);
 
       const back = await repo.findById(rem.id);
       assert.ok(isOk(back) && back.value !== null);
       assert.equal(back.value.status, 'Queued');
-      assert.deepEqual([...payableIdsOf(back.value)].sort(), [d1, d2].sort());
+      assert.deepEqual([...payableIdsOf(back.value)].sort(), [p1.payableId, p2.payableId].sort());
     });
 
     it('recupera por nome de arquivo — a chave de idempotência do agente', async () => {
       const repo = createDrizzleRemittanceRepository(handle);
-      const rem = build([doc()]);
+      const rem = build([await seedPayable()]);
       await repo.save(rem);
 
       const back = await repo.findByFileName(rem.fileName);
@@ -125,21 +168,21 @@ if (!process.env['MYSQL_INTEGRATION']) {
       assert.equal(back.value.id, rem.id);
     });
 
-    // O anti-join no banco. Sem ele, a seleção pegaria documento já enfileirado por outra instância.
-    it('documento em remessa viva aparece como preso; documento livre não', async () => {
+    // O anti-join no banco. Sem ele, a seleção pegaria título já enfileirado por outra instância.
+    it('título em remessa viva aparece como preso; título livre não', async () => {
       const repo = createDrizzleRemittanceRepository(handle);
-      const preso = doc();
-      const livre = doc();
+      const preso = await seedPayable();
+      const livre = await seedPayable();
       await repo.save(build([preso]));
 
-      const held = await repo.findHeldPayableIds([preso, livre]);
+      const held = await repo.findHeldPayableIds([preso.payableId, livre.payableId]);
       assert.ok(isOk(held));
-      assert.deepEqual(held.value, [preso]);
+      assert.deepEqual(held.value, [preso.payableId]);
     });
 
     it('falha prende; descarte libera', async () => {
       const repo = createDrizzleRemittanceRepository(handle);
-      const d = doc();
+      const d = await seedPayable();
       const rem = build([d]);
       await repo.save(rem);
 
@@ -147,7 +190,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       assert.ok(isOk(failed));
       await repo.save(failed.value.remittance, failed.value.events);
 
-      const aindaPreso = await repo.findHeldPayableIds([d]);
+      const aindaPreso = await repo.findHeldPayableIds([d.payableId]);
       assert.ok(isOk(aindaPreso) && aindaPreso.value.length === 1);
 
       const discarded = discard(
@@ -158,14 +201,14 @@ if (!process.env['MYSQL_INTEGRATION']) {
       assert.ok(isOk(discarded));
       await repo.save(discarded.value.remittance, discarded.value.events);
 
-      const liberado = await repo.findHeldPayableIds([d]);
+      const liberado = await repo.findHeldPayableIds([d.payableId]);
       assert.ok(isOk(liberado));
       assert.deepEqual(liberado.value, []);
     });
 
     it('save é idempotente: reprocessar o mesmo status não duplica vínculo', async () => {
       const repo = createDrizzleRemittanceRepository(handle);
-      const d = doc();
+      const d = await seedPayable();
       const rem = build([d]);
       await repo.save(rem);
 
@@ -177,17 +220,17 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const back = await repo.findById(rem.id);
       assert.ok(isOk(back) && back.value !== null);
       assert.equal(back.value.status, 'Transmitted');
-      assert.deepEqual(payableIdsOf(back.value), [d]);
+      assert.deepEqual(payableIdsOf(back.value), [d.payableId]);
     });
 
     // O UNIQUE que impede duas remessas com o mesmo NSA na mesma conta — retransmissão, para o banco.
     it('recusa NSA repetido na mesma conta-cedente', async () => {
       const repo = createDrizzleRemittanceRepository(handle);
-      const primeira = build([doc()]);
+      const primeira = build([await seedPayable()]);
       await repo.save(primeira);
 
       const colidente = {
-        ...build([doc()]),
+        ...build([await seedPayable()]),
         nsa: primeira.nsa,
         cedenteAccountId: primeira.cedenteAccountId,
       };
@@ -197,10 +240,10 @@ if (!process.env['MYSQL_INTEGRATION']) {
 
     it('recusa nome de arquivo repetido', async () => {
       const repo = createDrizzleRemittanceRepository(handle);
-      const primeira = build([doc()]);
+      const primeira = build([await seedPayable()]);
       await repo.save(primeira);
 
-      const colidente = { ...build([doc()]), fileName: primeira.fileName };
+      const colidente = { ...build([await seedPayable()]), fileName: primeira.fileName };
       const r = await repo.save(colidente);
       assert.equal(r.ok, false, 'UNIQUE (file_name) deveria barrar');
     });
@@ -220,7 +263,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
 
       it('grava RemittanceTransmitted no fin_outbox junto do desfecho', async () => {
         const repo = createDrizzleRemittanceRepository(handle);
-        const rem = build([doc()]);
+        const rem = build([await seedPayable()]);
         await repo.save(rem);
 
         const t = confirmTransmitted(rem, '2026-08-11 14:05:00.000', 'consta em BACKUP');
@@ -237,7 +280,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       // A propriedade que a varredura de 5 em 5 minutos exige: sem ela o outbox cresceria sem teto.
       it('reprocessar o mesmo status não duplica o evento', async () => {
         const repo = createDrizzleRemittanceRepository(handle);
-        const rem = build([doc()]);
+        const rem = build([await seedPayable()]);
         await repo.save(rem);
 
         const t = confirmTransmitted(rem, '2026-08-11 14:05:00.000', 'ok');
@@ -256,11 +299,11 @@ if (!process.env['MYSQL_INTEGRATION']) {
       // anunciaria um desfecho que o banco não tem.
       it('save que falha não deixa evento órfão', async () => {
         const repo = createDrizzleRemittanceRepository(handle);
-        const primeira = build([doc()]);
+        const primeira = build([await seedPayable()]);
         await repo.save(primeira);
 
         // Colide no UNIQUE de nome: o INSERT lança e a transação inteira reverte.
-        const colidente = { ...build([doc()]), fileName: primeira.fileName };
+        const colidente = { ...build([await seedPayable()]), fileName: primeira.fileName };
         const t = confirmTransmitted(colidente, '2026-08-11 14:05:00.000', 'ok');
         assert.ok(isOk(t));
         const r = await repo.save(t.value.remittance, t.value.events);
