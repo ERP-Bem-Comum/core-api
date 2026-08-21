@@ -19,6 +19,11 @@ verify:
     pattern: 'withRateLimit('
     expect:
       - 'src/modules/notifications/adapters/email/build-email-sender.ts'
+  - claim: 'o hard replace dos títulos acontece num ponto só — um segundo obriga a revisar a regra de identidade abaixo'
+    root: 'src/modules/financial'
+    pattern: 'delete(schema.finPayables)'
+    expect:
+      - 'src/modules/financial/adapters/persistence/repos/document-repository.drizzle.ts'
 ---
 
 Única camada que toca infra real (Drizzle, mysql2, S3, FS, processo externo). `ENUM` e JSON nativos são barrados por [`.semgrep/rules.yml`](../../.semgrep/rules.yml); `class` por ESLint; o prefixo de tabela por `tests/cleanup/table-prefix-isolation.test.ts`; o pool boot-scoped está em [`shared-persistence.md`](./shared-persistence.md). Nada disso se repete aqui.
@@ -37,4 +42,12 @@ verify:
 
 - **Storage e leitura fiscal têm a mesma regra de superfície.** O cliente é o SDK oficial da AWS — `@aws-sdk/client-s3` mais `@aws-sdk/s3-request-presigner` para URL assinada — sem wrapper caseiro e sem emulador custom; MinIO e S3 rodam o mesmo código, mudando só `forcePathStyle` ([ADR-0019](../../handbook/architecture/adr/0019-document-storage-s3-with-minio-dev.md)). E o `DocumentReaderPort` recebe **bytes** (`Uint8Array`), nunca URL vinda do cliente ([ADR-0050](../../handbook/architecture/adr/0050-document-reader-cascade-supersedes-0034.md)) — é anti-SSRF, e a cascata termina em **erro explícito**, nunca em valor errado silencioso.
 
-Modelagem de `mysqlTable`, índices e FKs: skill [`drizzle-schema-author`](../skills/drizzle-schema-author/SKILL.md). A lista normativa de features SQL permitidas e proibidas vive no [ADR-0020](../../handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) — abrir lá em vez de confiar em resumo.
+- **Apontar para o id de uma entidade FILHA é um contrato com o save do agregado dono — e ele pode não ter sido avisado.** O `save` de agregado aqui é *hard replace*: apaga os filhos e reinsere o lote (`document-repository.drizzle.ts`, R8.1). Enquanto ninguém referenciava aqueles ids de fora, regenerá-los era inócuo — e o domínio registrava isso por escrito, como contrato deliberado. No dia em que uma tabela nova passou a guardar `payable_id`, a premissa virou falsa **sem que a decisão que a sustentava fosse revista**: duas verdades contraditórias no mesmo repositório, nenhuma citando a outra. O resultado foi vínculo órfão em silêncio e a trava anti-dupla-emissão deixando de reconhecer o próprio título — pagamento em dobro, que era exatamente o que a tabela existia para impedir.
+
+  A pergunta a fazer **antes** de criar a coluna, e que não se responde lendo o schema: *o save do agregado dono preserva este id, ou o regenera?* Se regenera, ou o save passa a preservar, ou a referência tem de apontar para algo estável. Escolher a chave "certa" no papel — o grão do negócio — não basta se a coluna referenciada for endereço temporário em vez de identidade.
+
+- **FK cross-aggregate é `RESTRICT`; `CASCADE` é para dentro do boundary.** As FKs `CASCADE` deste repositório são todas intra-agregado — hard delete do boundary, como o topo de `schemas/mysql.ts` já explica citando Evans. Quando quem referencia é **outro** agregado, `CASCADE` é pior que a ausência de FK: troca "órfão detectável" por "linha que evaporou sem rastro", e o rastro costuma ser justamente o que a tabela existe para guardar (o que foi enviado ao banco, o que foi conciliado). `RESTRICT` transforma o `DELETE` indevido em `ER_ROW_IS_REFERENCED_2` dentro da transação do save, que o `catch` da borda já converte em `Result` — o erro aparece em desenvolvimento, no lugar do defeito, sem uma linha de código nova.
+
+  ⚠️ **Omissão de FK se justifica no comentário, ou não se distingue de esquecimento.** É assim que este repositório marca a omissão deliberada: citando o ADR que a autoriza. Uma coluna cercada de comentário explicando PK, UNIQUE e índices, e **muda** sobre FK, lê-se como descuido — e foi lida assim, corretamente, duas vezes.
+
+Identidade de entidade e por que ela não é atributo: [`domain.md`](./domain.md). Modelagem de `mysqlTable`, índices e FKs: skill [`drizzle-schema-author`](../skills/drizzle-schema-author/SKILL.md). A lista normativa de features SQL permitidas e proibidas vive no [ADR-0020](../../handbook/architecture/adr/0020-mysql-only-supersedes-dual-dialect.md) — abrir lá em vez de confiar em resumo.

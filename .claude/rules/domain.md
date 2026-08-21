@@ -24,4 +24,10 @@ O que já é cobrado por mecanismo e **não** se repete aqui: `throw` (`tests/cl
 
   > Hoje **não há** regex numérico-only em `src/`, mas **10 descrições de borda ainda dizem "14 dígitos"** (`.meta({ description })` de Zod, que vai para o OpenAPI). A validação está correta — `z.string().length(14)`, sem regex; o que engana é a documentação pública da API. É o achado `ADR-0044-C5` do inventário de decisões, que registrava 6.
 
+- **Operação que RECONSTRÓI o agregado não gera identidade nova para a entidade que continua existindo.** Recalcular valores e recriar filhos é legítimo; trocar o id de quem não deixou de existir, não — a responsabilidade mais básica de uma entidade é estabelecer continuidade, e é ela que a torna referenciável de fora (Evans, *Domain-Driven Design*, p.49). Gerar id é **efeito**: dentro de uma função de rebuild, ele silenciosamente converte uma atualização em substituição, e o domínio fica sintaticamente puro (sem I/O, sem `throw`) e semanticamente destrutivo.
+
+  O sinal de alerta é a operação já **receber** o estado anterior e ignorá-lo — foi o caso aqui: o input do ajuste carregava os títulos atuais e chamava o construtor mesmo assim. Preservar exige uma regra de correspondência explícita e determinística (casar por forma, consumindo cada anterior uma vez), não `find` ingênuo: sem ela, duas entidades irmãs do mesmo tipo casam de maneira imprevisível.
+
+  Quem sofre com a troca vive fora do domínio — FK, vínculo, read-model. O outro lado dessa moeda está em [`adapters.md`](./adapters.md); **não replicar aqui** o que é regra de schema.
+
 Modelagem de agregado, VO e evento: skill [`ts-domain-modeler`](../skills/ts-domain-modeler/SKILL.md).
