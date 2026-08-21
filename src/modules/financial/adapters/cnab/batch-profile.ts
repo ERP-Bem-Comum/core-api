@@ -94,6 +94,39 @@ export const normalizeBankCode = (raw: string): string | null => {
   return /^\d{1,3}$/.test(trimmed) ? trimmed.padStart(BANK_CODE_LENGTH, '0') : null;
 };
 
+// ─── A chave que decide se dois pagamentos dividem lote ───────────────────────────────────────
+//
+// A forma de lançamento NÃO basta: o validador oficial do Bradesco recusa lote cujos Segmentos A
+// misturem favorecidos de bancos distintos (ERP-Bem-Comum/cnab-validator#2), enquanto a forma só
+// separa o próprio banco de todo o resto — Itaú e Santander compartilham a forma `41` e cairiam
+// juntos.
+//
+// O boleto fica fora da regra porque não tem favorecido bancário: quem recebe está no código de
+// barras e o Segmento J não carrega banco de destino (#708, CA5). Para ele a forma é a chave
+// inteira — e ela já separa título do próprio banco de título de outro.
+//
+// ⚠️ VIVE AQUI, e não no montador, porque tem DOIS consumidores desde a #804: o montador do arquivo
+// e o planejador de lotes do pré-voo. Uma segunda cópia faria a tela descrever um agrupamento
+// diferente do que foi transmitido — e o pré-voo existe justamente para que os dois coincidam.
+const BATCH_KEY_SEPARATOR = ':'; // fora do domínio de G029 e de código de banco, ambos numéricos
+
+export const batchKeyFor = (
+  isTransfer: boolean,
+  launchForm: string,
+  payeeBankCode: string | null,
+): string => {
+  if (!isTransfer) return launchForm;
+
+  // O banco entra NORMALIZADO: `341` e `0341` são o mesmo destino e escrevem as mesmas posições
+  // 021-023. Chaves cruas partiriam um lote legítimo em dois, cada um válido e nenhum necessário.
+  //
+  // O fallback é inalcançável pelo montador — um banco que não normaliza já derrubou o perfil com
+  // `remittance-payee-bank-unreadable`. Fica porque a alternativa seria um `!` afirmando o mesmo
+  // sem prova, e porque agrupar pelo código cru erra menos que estourar aqui.
+  const payeeBank = payeeBankCode === null ? null : normalizeBankCode(payeeBankCode);
+  return `${launchForm}${BATCH_KEY_SEPARATOR}${payeeBank ?? String(payeeBankCode)}`;
+};
+
 // Transferência e boleto são as rotas com emissor. PIX e tributo ainda não têm — e o certo, até
 // terem, é a recusa nomeada: emiti-los pelo perfil de transferência mandaria ao banco um pagamento
 // bem-formado para a operação errada, usando dados que aquela rota sequer consulta.

@@ -553,6 +553,28 @@ export const statementSuggestionsToDto = (
  * Centavos saem como string, como no resto da borda: o valor é dado, não apresentação, e string de
  * dígitos atravessa JSON sem o risco de precisão que um `number` grande carrega.
  */
+/**
+ * Rótulo legível da forma de lançamento (G029), para a tela de confirmação (#804, CA7).
+ *
+ * Vive na BORDA, e não no adapter CNAB, porque é string ao humano — a tabela de idioma do
+ * `CLAUDE.md` põe PT-BR aqui e EN no código. O adapter devolve o código; quem o traduz é esta
+ * camada, exatamente como `error-mapping.ts` faz com os erros de domínio.
+ *
+ * O código cru viaja JUNTO na resposta, e não é redundância: é o que o operador confere contra o
+ * arquivo transmitido. Um rótulo sozinho impede a conferência; um código sozinho não significa nada
+ * na tela.
+ *
+ * Forma desconhecida cai no próprio código em vez de "—": a tela mostrando `43` é honesta sobre não
+ * saber traduzir, enquanto um traço esconderia que o emissor ganhou uma rota que a borda não
+ * acompanhou.
+ */
+const LAUNCH_FORM_LABEL: Readonly<Record<string, string>> = {
+  '01': 'Crédito em conta corrente',
+  '30': 'Boleto do próprio banco',
+  '31': 'Boleto de outro banco',
+  '41': 'TED outra titularidade',
+};
+
 export const remittancePreviewToDto = (
   preview: RemittancePreview,
 ): RemittancePreviewResponseDto => ({
@@ -572,6 +594,13 @@ export const remittancePreviewToDto = (
   notApprovedCount: preview.notApprovedCount,
   readyTotalCents: String(preview.readyTotalCents),
   blockedTotalCents: String(preview.blockedTotalCents),
+  batches: preview.batches.map((b) => ({
+    launchForm: b.launchForm,
+    launchFormLabel: LAUNCH_FORM_LABEL[b.launchForm] ?? b.launchForm,
+    payeeBankCode: b.payeeBankCode,
+    count: b.count,
+    totalCents: String(b.totalCents),
+  })),
 });
 
 /**

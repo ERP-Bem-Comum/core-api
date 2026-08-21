@@ -429,7 +429,11 @@ describe('financial/http — POST /remittances (#720) · guarda do bypass (#634)
       // O pré-voo recebe TÍTULOS. Este caso mede a guarda de bypass, não o conteúdo da resposta:
       // um id que não existe volta como linha `not-found` e a chamada segue 200, que é o que se
       // afirma aqui.
-      payload: { payableIds: [DOC_A] },
+      //
+      // A conta-cedente entrou no corpo com a #804 (CA7): a composição dos lotes depende dela, e
+      // sem o campo a chamada morre em 400 na validação do schema — antes de a guarda de bypass
+      // ser exercitada, que é justamente o que este teste mede.
+      payload: { cedenteAccountId, payableIds: [DOC_A] },
     });
     assert.equal(res.statusCode, 200, res.body);
   });

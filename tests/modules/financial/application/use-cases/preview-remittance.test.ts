@@ -9,6 +9,11 @@ import type {
   RemittancePreviewRow,
 } from '#src/modules/financial/application/ports/remittance-preview-reader.ts';
 import type { PayeePaymentTarget } from '#src/modules/financial/domain/payout/types.ts';
+import type { CedenteAccountStore } from '#src/modules/financial/application/ports/cedente-account-store.ts';
+import type { CedenteAccount } from '#src/modules/financial/domain/cedente/types.ts';
+// Padrão D (module-as-namespace), como o próprio VO documenta.
+import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
+import { createRemittanceBatchPlanner } from '#src/modules/financial/adapters/cnab/batch-planner.ts';
 
 // As fixtures espelham o que o CADASTRO produz, não o que é cômodo escrever.
 //
@@ -78,6 +83,48 @@ const reader = (rows: readonly RemittancePreviewRow[]): RemittancePreviewReader 
   loadPreviewRows: (ids) => Promise.resolve(ok(rows.filter((r) => ids.includes(r.payableId)))),
 });
 
+// ─── Conta-cedente: o pré-voo passou a exigi-la (#804, CA7) ─────────────────────────────────────
+//
+// Sem ela a forma de lançamento é INDETERMINÁVEL — crédito em conta e TED se distinguem comparando
+// o banco do favorecido com o do cedente —, e sem a forma não há como repartir a seleção em lotes.
+//
+// O banco da conta é `237`, o MESMO de `BANK_ACCOUNT_ONLY`: é o que torna visível a distinção entre
+// crédito interno e transferência interbancária nas fixtures abaixo.
+const CEDENTE_ACCOUNT_ID = CedenteAccountId.generate();
+
+const CEDENTE_ACCOUNT: CedenteAccount = {
+  id: CEDENTE_ACCOUNT_ID,
+  bankCode: '237',
+  agency: '1234',
+  accountNumber: '567890',
+  accountDigit: '1',
+  convenio: '000000',
+  document: '12345678000199',
+  status: 'Active',
+  nextNsa: 1,
+};
+
+const accountStore = (account: CedenteAccount | null): CedenteAccountStore =>
+  ({
+    findById: () => Promise.resolve(ok(account)),
+  }) as unknown as CedenteAccountStore;
+
+// Wrapper que injeta as dependências novas e o id da conta.
+//
+// Existe para que as chamadas já escritas não precisem repetir o que não estão testando: quem
+// verifica classificação de título não deveria ter de montar conta-cedente. O planejador é o
+// adapter REAL, e de propósito — um fake reimplementaria a régua de agrupamento dentro do teste, e
+// duas réguas divergem. É a mesma razão de o front não poder replicá-la.
+const runPreview = (deps: Readonly<{ preview: RemittancePreviewReader }>) => {
+  const useCase = previewRemittance({
+    preview: deps.preview,
+    cedenteAccounts: accountStore(CEDENTE_ACCOUNT),
+    batchPlanner: createRemittanceBatchPlanner(),
+  });
+  return (input: Readonly<{ payableIds: readonly string[] }>) =>
+    useCase({ cedenteAccountId: CEDENTE_ACCOUNT_ID, payableIds: input.payableIds });
+};
+
 const line = (r: Awaited<ReturnType<ReturnType<typeof previewRemittance>>>, id: string) => {
   assert.ok(isOk(r));
   const found = r.value.lines.find((l) => l.payableId === id);
@@ -103,7 +150,7 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
     ];
     const ids = rows.map((r) => r.payableId);
 
-    const r = await previewRemittance({ preview: reader(rows) })({ payableIds: ids });
+    const r = await runPreview({ preview: reader(rows) })({ payableIds: ids });
     assert.ok(isOk(r));
 
     assert.equal(line(r, 'ted-ok').status, 'ready');
@@ -121,7 +168,7 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
   // Uma string de mensagem não serve — o front precisa apontar o input.
   it('devolve os campos faltantes em lista, não em mensagem', async () => {
     const rows = [row({ payableId: 'sem-nada', payee: NO_DESTINATION_NULLS })];
-    const r = await previewRemittance({ preview: reader(rows) })({ payableIds: ['sem-nada'] });
+    const r = await runPreview({ preview: reader(rows) })({ payableIds: ['sem-nada'] });
 
     const l = line(r, 'sem-nada');
     assert.deepEqual(l.missing, [
@@ -145,7 +192,7 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
       row({ payableId: 'pix-nulo', paymentMethod: 'PIX', payee: NO_DESTINATION_NULLS }),
       row({ payableId: 'pix-vazio', paymentMethod: 'PIX', payee: NO_DESTINATION_BLANKS }),
     ];
-    const r = await previewRemittance({ preview: reader(rows) })({
+    const r = await runPreview({ preview: reader(rows) })({
       payableIds: rows.map((x) => x.payableId),
     });
 
@@ -160,7 +207,7 @@ describe('previewRemittance — responde por título, sem gerar arquivo', () => 
     const rows = [
       row({ payableId: 'banco-nome', payee: { ...BANK_ACCOUNT_ONLY, bank: 'Bradesco S.A.' } }),
     ];
-    const r = await previewRemittance({ preview: reader(rows) })({ payableIds: ['banco-nome'] });
+    const r = await runPreview({ preview: reader(rows) })({ payableIds: ['banco-nome'] });
 
     const l = line(r, 'banco-nome');
     assert.deepEqual(l.missing, ['payee-bank-code']);
@@ -179,7 +226,7 @@ describe('previewRemittance — os números do pré-voo', () => {
       row({ payableId: 'd', valueCents: 3_000, payee: NO_DESTINATION_NULLS }),
       row({ payableId: 'e', valueCents: 99_000, paymentMethod: 'Cambio' }),
     ];
-    const r = await previewRemittance({ preview: reader(rows) })({
+    const r = await runPreview({ preview: reader(rows) })({
       payableIds: ['a', 'b', 'c', 'd', 'e'],
     });
     assert.ok(isOk(r));
@@ -199,7 +246,7 @@ describe('previewRemittance — o que não pode sumir', () => {
   // Documento selecionado que o reader não devolve. Omitir a linha seria repetir o defeito que
   // este pré-voo existe para corrigir: o operador selecionou, e some sem explicação.
   it('reporta o documento inexistente em vez de omiti-lo', async () => {
-    const r = await previewRemittance({ preview: reader([row({ payableId: 'existe' })]) })({
+    const r = await runPreview({ preview: reader([row({ payableId: 'existe' })]) })({
       payableIds: ['existe', 'fantasma'],
     });
     assert.ok(isOk(r));
@@ -210,7 +257,7 @@ describe('previewRemittance — o que não pode sumir', () => {
 
   it('preserva a ordem em que o operador selecionou', async () => {
     const rows = [row({ payableId: 'x' }), row({ payableId: 'y' }), row({ payableId: 'z' })];
-    const r = await previewRemittance({ preview: reader(rows) })({
+    const r = await runPreview({ preview: reader(rows) })({
       payableIds: ['z', 'x', 'y'],
     });
     assert.ok(isOk(r));
@@ -229,7 +276,7 @@ describe('previewRemittance — o que não pode sumir', () => {
       row({ payableId: 'draft', status: 'Draft', paymentMethod: null }),
       row({ payableId: 'open', status: 'Open', payee: BANK_ACCOUNT_ONLY }),
     ];
-    const r = await previewRemittance({ preview: reader(rows) })({
+    const r = await runPreview({ preview: reader(rows) })({
       payableIds: ['draft', 'open'],
     });
     assert.ok(isOk(r));
@@ -241,7 +288,7 @@ describe('previewRemittance — o que não pode sumir', () => {
   });
 
   it('seleção vazia devolve pré-voo vazio, não erro', async () => {
-    const r = await previewRemittance({ preview: reader([]) })({ payableIds: [] });
+    const r = await runPreview({ preview: reader([]) })({ payableIds: [] });
     assert.ok(isOk(r));
     assert.deepEqual(r.value.lines, []);
     assert.equal(r.value.readyCount, 0);
@@ -253,8 +300,107 @@ describe('previewRemittance — o que não pode sumir', () => {
     const broken: RemittancePreviewReader = {
       loadPreviewRows: () => Promise.resolve(err('remittance-preview-reader-unavailable' as const)),
     };
-    const r = await previewRemittance({ preview: broken })({ payableIds: ['a'] });
+    const r = await runPreview({ preview: broken })({ payableIds: ['a'] });
     assert.ok(isErr(r));
     assert.equal(r.error, 'remittance-preview-unavailable');
+  });
+});
+
+describe('previewRemittance — a composição dos lotes (#804, CA7)', () => {
+  // O que a tela de confirmação precisa saber ANTES de o operador confirmar: quantos lotes o
+  // arquivo terá, e o total de cada um. O agrupamento é do EMISSOR, e o front não deve replicá-lo —
+  // duas réguas divergiriam e a tela mentiria sobre o que o arquivo contém.
+  const OUTRO_BANCO: PayeePaymentTarget = { ...BANK_ACCOUNT_ONLY, bank: '341' };
+  const TERCEIRO_BANCO: PayeePaymentTarget = { ...BANK_ACCOUNT_ONLY, bank: '033' };
+
+  it('reparte a seleção em lotes por forma e banco do favorecido', async () => {
+    const rows = [
+      row({ payableId: 'a', payee: OUTRO_BANCO, valueCents: 100_00 }),
+      row({ payableId: 'b', payee: TERCEIRO_BANCO, valueCents: 400_00 }),
+      row({ payableId: 'c', payee: OUTRO_BANCO, valueCents: 23_25 }),
+    ];
+    const r = await runPreview({ preview: reader(rows) })({ payableIds: ['a', 'b', 'c'] });
+
+    assert.ok(isOk(r));
+    assert.equal(r.value.batches.length, 2);
+    assert.deepEqual(
+      r.value.batches.map((b) => ({ bank: b.payeeBankCode, n: b.count, total: b.totalCents })),
+      [
+        { bank: '341', n: 2, total: 123_25 },
+        { bank: '033', n: 1, total: 400_00 },
+      ],
+    );
+  });
+
+  // O favorecido no MESMO banco do cedente recebe crédito interno, não TED — forma diferente, logo
+  // lote diferente. É a razão de o pré-voo precisar saber QUAL conta vai pagar.
+  it('separa crédito no próprio banco de transferência interbancária', async () => {
+    const rows = [
+      row({ payableId: 'interno', payee: BANK_ACCOUNT_ONLY, valueCents: 10_00 }),
+      row({ payableId: 'externo', payee: OUTRO_BANCO, valueCents: 20_00 }),
+    ];
+    const r = await runPreview({ preview: reader(rows) })({ payableIds: ['interno', 'externo'] });
+
+    assert.ok(isOk(r));
+    assert.equal(r.value.batches.length, 2);
+    assert.notEqual(r.value.batches[0]?.launchForm, r.value.batches[1]?.launchForm);
+  });
+
+  // ⚠️ Só título PRONTO entra em lote. Um `blocked` ou `not-approved` não vai no arquivo, e contá-lo
+  // faria a tela prometer um lote maior do que o que seria transmitido — exatamente o engano que o
+  // pré-voo existe para impedir.
+  it('só o que está pronto entra em lote — impedido e não-aprovado ficam de fora', async () => {
+    const rows = [
+      row({ payableId: 'ok', payee: OUTRO_BANCO, valueCents: 100_00 }),
+      row({ payableId: 'sem-banco', payee: NO_DESTINATION_NULLS, valueCents: 50_00 }),
+      row({ payableId: 'nao-aprovado', status: 'Draft', payee: OUTRO_BANCO, valueCents: 70_00 }),
+    ];
+    const r = await runPreview({ preview: reader(rows) })({
+      payableIds: ['ok', 'sem-banco', 'nao-aprovado'],
+    });
+
+    assert.ok(isOk(r));
+    assert.equal(r.value.batches.length, 1);
+    assert.equal(r.value.batches[0]?.totalCents, 100_00);
+  });
+
+  // A propriedade que faz a tela fechar: o que está nos lotes é exatamente o total `ready`. Sem
+  // isto o operador soma os lotes, compara com a seleção e não sabe explicar a diferença.
+  it('a soma dos lotes bate com o total pronto do pré-voo', async () => {
+    const rows = [
+      row({ payableId: 'a', payee: OUTRO_BANCO, valueCents: 100_00 }),
+      row({ payableId: 'b', payee: TERCEIRO_BANCO, valueCents: 250_00 }),
+      row({ payableId: 'c', payee: NO_DESTINATION_NULLS, valueCents: 999_00 }),
+    ];
+    const r = await runPreview({ preview: reader(rows) })({ payableIds: ['a', 'b', 'c'] });
+
+    assert.ok(isOk(r));
+    const inBatches = r.value.batches.reduce((sum, b) => sum + b.totalCents, 0);
+    assert.equal(inBatches, r.value.readyTotalCents);
+  });
+
+  it('seleção sem nenhum título pronto não inventa lote', async () => {
+    const rows = [row({ payableId: 'x', payee: NO_DESTINATION_NULLS })];
+    const r = await runPreview({ preview: reader(rows) })({ payableIds: ['x'] });
+
+    assert.ok(isOk(r));
+    assert.deepEqual(r.value.batches, []);
+  });
+
+  // Conta-cedente inexistente é erro NOMEADO, não silêncio: sem ela não há forma a derivar, e
+  // devolver lotes vazios faria a tela afirmar que nada seria pago.
+  it('recusa quando a conta-cedente não existe, em vez de devolver lote vazio', async () => {
+    const useCase = previewRemittance({
+      preview: reader([row({ payableId: 'a' })]),
+      cedenteAccounts: accountStore(null),
+      batchPlanner: createRemittanceBatchPlanner(),
+    });
+    const r = await useCase({
+      cedenteAccountId: CEDENTE_ACCOUNT_ID,
+      payableIds: ['a'],
+    });
+
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'cedente-account-not-found');
   });
 });

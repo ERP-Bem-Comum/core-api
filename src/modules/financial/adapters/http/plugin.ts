@@ -1202,7 +1202,15 @@ const financialRoutes =
         response: { 200: remittancePreviewResponseSchema },
       } satisfies FastifyZodOpenApiSchema,
       handler: async (req, reply) => {
-        const result = await deps.previewRemittance({ payableIds: req.body.payableIds });
+        // Mesma reidratação da geração: o Zod garante o SHAPE (uuid bem-formado), o smart
+        // constructor garante a REGRA. A dupla validação é intencional (ADR-0027).
+        const cedenteAccountId = CedenteAccountId.rehydrate(req.body.cedenteAccountId);
+        if (!cedenteAccountId.ok) return sendDomainError(reply, 'financial-ref-invalid');
+
+        const result = await deps.previewRemittance({
+          cedenteAccountId: cedenteAccountId.value,
+          payableIds: req.body.payableIds,
+        });
         if (!result.ok) return sendDomainError(reply, result.error);
         return sendResult(reply, ok(remittancePreviewToDto(result.value)), { ok: 200 });
       },

@@ -1395,6 +1395,12 @@ export type ParseDocumentResponseDto = z.infer<typeof parseDocumentResponseSchem
 
 export const remittancePreviewBodySchema = z
   .object({
+    // ⚠️ OBRIGATÓRIO desde a #804 (CA7) — mudança de contrato. A composição dos lotes depende da
+    // forma de lançamento, e a forma se decide comparando o banco do favorecido com o do CEDENTE:
+    // sem saber qual conta vai pagar, não há como repartir a seleção. É a mesma conta que a geração
+    // recebe, e é de propósito — pré-voo e arquivo respondem à mesma pergunta ou o pré-voo não
+    // serve para conferir.
+    cedenteAccountId: z.uuid(),
     // TÍTULOS, não notas: o grid de Contas a Pagar é payable-centric e é dele que a seleção sai.
     // Cada título tem forma, vencimento e ciclo de vida próprios — inclusive as retenções, que são
     // títulos a pagar como qualquer outro e podem ficar em aberto com o pai já pago.
@@ -1452,6 +1458,24 @@ export const remittancePreviewResponseSchema = z
     // O valor fora da VAN fica FORA dos dois totais: somá-lo ao impedido inflaria o número que o
     // operador usa para decidir se vale correr atrás do cadastro — e cadastro nenhum resolve câmbio.
     blockedTotalCents: centsStringSchema,
+    // Como a seleção se REPARTE no arquivo (#804, CA7). Um lote por forma de lançamento e banco do
+    // favorecido — a mesma régua do emissor, que o front NÃO deve replicar.
+    batches: z.array(
+      z
+        .object({
+          // O código CNAB cru (G029), porque é o que o operador confere contra o arquivo
+          // transmitido, e o rótulo legível ao lado. Os dois, e não só um: o código sozinho não
+          // significa nada na tela, e o rótulo sozinho impede a conferência.
+          launchForm: z.string().length(2),
+          launchFormLabel: z.string(),
+          // `null` no boleto: o Segmento J não carrega banco de destino — quem recebe está no
+          // código de barras —, então não há banco a exibir.
+          payeeBankCode: z.string().nullable(),
+          count: z.number().int().positive(),
+          totalCents: centsStringSchema,
+        })
+        .strict(),
+    ),
   })
   .strict();
 

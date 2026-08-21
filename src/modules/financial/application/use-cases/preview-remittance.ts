@@ -2,6 +2,13 @@ import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 import { isApprovedForRemittance } from '../../domain/document/remittance-approval.ts';
 import { checkPayoutReadiness } from '../../domain/payout/payout-readiness.ts';
 import type { PayoutGap, PayoutField, VanRoute } from '../../domain/payout/types.ts';
+import type { CedenteAccountId } from '../../domain/cedente/cedente-account-id.ts';
+import type { CedenteAccountStore } from '../ports/cedente-account-store.ts';
+import type {
+  PlannablePayment,
+  PlannedBatch,
+  RemittanceBatchPlanner,
+} from '../ports/remittance-batch-planner.ts';
 import type {
   RemittancePreviewReader,
   RemittancePreviewRow,
@@ -46,13 +53,35 @@ export type RemittancePreview = Readonly<{
   notApprovedCount: number;
   readyTotalCents: number;
   blockedTotalCents: number;
+  // Como a seleção se REPARTE no arquivo (#804, CA7). O agrupamento é do emissor, e o front não
+  // deve replicá-lo: duas réguas divergem, e a divergência aparece como uma tela que descreve um
+  // arquivo diferente do transmitido — pior que não ter pré-voo, porque o operador confirma
+  // acreditando ter conferido.
+  //
+  // Só título `ready` entra: um impedido não vai no arquivo, e contá-lo prometeria um lote maior do
+  // que o que seria enviado. A soma dos lotes é, por construção, `readyTotalCents`.
+  batches: readonly PlannedBatch[];
 }>;
 
-export type PreviewRemittanceDeps = Readonly<{ preview: RemittancePreviewReader }>;
+export type PreviewRemittanceDeps = Readonly<{
+  preview: RemittancePreviewReader;
+  // A conta-cedente entra porque a forma de lançamento depende dela: crédito em conta e TED se
+  // distinguem comparando o banco do favorecido com o do cedente. Sem isto não há lote a calcular.
+  cedenteAccounts: CedenteAccountStore;
+  batchPlanner: RemittanceBatchPlanner;
+}>;
 
-export type PreviewRemittanceInput = Readonly<{ payableIds: readonly string[] }>;
+export type PreviewRemittanceInput = Readonly<{
+  cedenteAccountId: CedenteAccountId;
+  payableIds: readonly string[];
+}>;
 
-export type PreviewRemittanceError = 'remittance-preview-unavailable';
+export type PreviewRemittanceError =
+  | 'remittance-preview-unavailable'
+  // Erro NOMEADO, e não lote vazio: sem a conta não há forma a derivar, e devolver `batches: []`
+  // faria a tela afirmar que nada seria pago — uma mentira tranquilizadora sobre uma seleção que o
+  // operador está prestes a confirmar.
+  | 'cedente-account-not-found';
 
 const notFoundLine = (payableId: string): RemittancePreviewLine => ({
   payableId,
@@ -140,11 +169,37 @@ const sumWhere = (lines: readonly RemittancePreviewLine[], status: PreviewLineSt
 const countWhere = (lines: readonly RemittancePreviewLine[], status: PreviewLineStatus): number =>
   lines.filter((l) => l.status === status).length;
 
+// Do título PRONTO para o mínimo que decide o agrupamento.
+//
+// `null` para tudo que não está `ready`, e é a regra inteira do que entra em lote: impedido,
+// não-aprovado e fora-da-VAN não vão no arquivo. Derivar isto da linha já classificada — em vez de
+// reclassificar aqui — é o que garante que a composição e o pré-voo nunca discordem.
+const plannableOf = (
+  line: RemittancePreviewLine,
+  row: RemittancePreviewRow,
+): PlannablePayment | null =>
+  line.status === 'ready' && line.route !== null
+    ? {
+        route: line.route,
+        payeeBankCode: row.payee?.bank ?? null,
+        // O código de barras vive em `paymentDetail` no cadastro do título — é dele que sai o banco
+        // emissor, e é o que separa boleto do próprio banco de boleto de outro.
+        barcode: row.paymentDetail,
+        valueCents: line.valueCents,
+      }
+    : null;
+
 export const previewRemittance =
   (deps: PreviewRemittanceDeps) =>
   async (
     input: PreviewRemittanceInput,
   ): Promise<Result<RemittancePreview, PreviewRemittanceError>> => {
+    // A conta ANTES da leitura dos títulos: sem ela não há composição a devolver, e falhar cedo
+    // evita percorrer a seleção inteira para descartar o resultado no fim.
+    const account = await deps.cedenteAccounts.findById(input.cedenteAccountId);
+    if (!account.ok) return err('remittance-preview-unavailable');
+    if (account.value === null) return err('cedente-account-not-found');
+
     const rows = await deps.preview.loadPreviewRows(input.payableIds);
     if (!rows.ok) return err('remittance-preview-unavailable');
 
@@ -156,6 +211,20 @@ export const previewRemittance =
     const lines = input.payableIds.map((id) => {
       const row = byId.get(id);
       return row === undefined ? notFoundLine(id) : toPreviewLine(row);
+    });
+
+    // A composição sai das MESMAS linhas já classificadas, e não de uma segunda passada sobre as
+    // rows: reclassificar aqui criaria a chance de o lote incluir um título que a linha marcou como
+    // impedido. Derivar da linha torna a concordância estrutural, não uma coincidência a manter.
+    const plannable = lines.flatMap((line) => {
+      const row = byId.get(line.payableId);
+      const p = row === undefined ? null : plannableOf(line, row);
+      return p === null ? [] : [p];
+    });
+
+    const planned = deps.batchPlanner.planBatches({
+      cedenteBankCode: account.value.bankCode,
+      payments: plannable,
     });
 
     return ok({
@@ -170,5 +239,6 @@ export const previewRemittance =
       // operador usa para decidir se vale correr atrás do cadastro — e cadastro nenhum resolve
       // câmbio.
       blockedTotalCents: sumWhere(lines, 'blocked'),
+      batches: planned.batches,
     });
   };

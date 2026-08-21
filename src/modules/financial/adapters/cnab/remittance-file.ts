@@ -12,9 +12,9 @@
 // enquanto havia uma rota só, quem chamava e quem pagava concordavam por acidente.
 import { ok, err, type Result } from '../../../../shared/primitives/result.ts';
 import {
+  batchKeyFor,
   batchProfileFor,
   clearingHouseFor,
-  normalizeBankCode,
   type BatchProfileError,
   type CnabBatchProfile,
   type ProfiledPayment,
@@ -297,20 +297,19 @@ const profiledOf = (payment: RemittancePayment): ProfiledPayment => {
 // barras e o Segmento J não carrega banco de destino (#708, CA5). Para ele a forma é a chave
 // inteira — e ela já separa título do próprio banco de título de outro.
 //
-// O banco entra NORMALIZADO, pela mesma função do perfil: `341` e `0341` são o mesmo destino e
-// escrevem as mesmas posições 021-023. Chaves cruas partiriam um lote legítimo em dois, cada um
-// válido e nenhum necessário.
-const BATCH_KEY_SEPARATOR = ':'; // fora do domínio de G029 e de código de banco, ambos numéricos
-
-const batchKeyOf = (payment: RemittancePayment, profile: CnabBatchProfile): string => {
-  if (payment.route !== 'transfer') return profile.launchForm;
-
-  // O `??` é inalcançável: um banco que não normaliza já derrubou o perfil com
-  // `remittance-payee-bank-unreadable`. Fica porque a alternativa seria um `!` afirmando o mesmo
-  // sem prova — e, se um dia divergirem, agrupar pelo código cru erra menos que estourar aqui.
-  const payeeBank = normalizeBankCode(payment.payee.bankCode) ?? payment.payee.bankCode;
-  return `${profile.launchForm}${BATCH_KEY_SEPARATOR}${payeeBank}`;
-};
+// ⚠️ A RÉGUA MUDOU DE CASA na #804 e agora vive em `batch-profile.ts`, junto de
+// `normalizeBankCode`: ela passou a ter DOIS consumidores — este montador e o planejador de lotes
+// do pré-voo (CA7). Uma segunda cópia faria a tela de confirmação descrever um agrupamento
+// diferente do que foi transmitido, que é pior que não ter pré-voo: o operador confirma
+// acreditando ter conferido.
+//
+// O que sobra aqui é a tradução do pagamento do montador para o mínimo que a régua consulta.
+const batchKeyOf = (payment: RemittancePayment, profile: CnabBatchProfile): string =>
+  batchKeyFor(
+    payment.route === 'transfer',
+    profile.launchForm,
+    payment.route === 'transfer' ? payment.payee.bankCode : null,
+  );
 
 // Agrupa os pagamentos em lotes, preservando a ordem de PRIMEIRA APARIÇÃO de cada chave na seleção.
 //

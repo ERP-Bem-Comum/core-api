@@ -113,11 +113,28 @@ type PreviewBody = Readonly<{
   blockedTotalCents: string;
 }>;
 
+// A conta-cedente que o pré-voo passou a exigir (#804, CA7). Semeada pelo próprio use case exposto
+// no `deps`, e não por um seam novo no composition: usar o caminho de criação real garante que a
+// conta existe do jeito que a aplicação a cria — inclusive o convênio de 6 dígitos que o emissor
+// agora impõe.
+let cedenteAccountId = '';
+
 before(async () => {
   const deps = await buildFinancialHttpDeps({
     driver: 'memory',
     remittancePreviewReader: reader,
   });
+
+  const account = await deps.createCedenteAccount({
+    bankCode: '237',
+    agency: '1234',
+    accountNumber: '567890',
+    accountDigit: '1',
+    convenio: '000000',
+    document: '12345678000199',
+  });
+  assert.ok(account.ok, 'não foi possível semear a conta-cedente do pré-voo');
+  cedenteAccountId = account.value.id;
   const config = readHttpConfig({ RATE_LIMIT_MAX: '10000' });
   const app = await buildApp({
     config,
@@ -137,14 +154,22 @@ after(async () => {
 });
 
 const preview = async (payableIds: readonly string[], perms = READER) =>
-  handle.app.inject({ method: 'POST', url: URL, headers: bearer(perms), payload: { payableIds } });
+  handle.app.inject({
+    method: 'POST',
+    url: URL,
+    headers: bearer(perms),
+    payload: { cedenteAccountId, payableIds },
+  });
 
 describe('financial/http — POST /remittances:preview (#720) · RBAC', () => {
+  // ⚠️ O body precisa ser VÁLIDO para este teste significar alguma coisa. O Fastify valida o schema
+  // antes do `preHandler` (`validation` → `preHandler` no ciclo), então um corpo incompleto devolve
+  // 400 e o 401 nunca é exercitado — o teste passaria a afirmar o contrário do que o nome diz.
   it('sem Authorization → 401', async () => {
     const res = await handle.app.inject({
       method: 'POST',
       url: URL,
-      payload: { payableIds: [PAY_BOLETO] },
+      payload: { cedenteAccountId, payableIds: [PAY_BOLETO] },
     });
     assert.equal(res.statusCode, 401, res.body);
   });
