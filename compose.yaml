@@ -477,6 +477,11 @@ services:
       VAN_S3_REGION: '${VAN_S3_REGION:-us-east-1}'
       VAN_S3_BUCKET: '${VAN_S3_BUCKET:-}'
       VAN_S3_ENDPOINT: '${VAN_S3_ENDPOINT:-}'
+      # Vazia por padrão: ausente, o parser infere pelo endpoint — heurística que acerta AWS e
+      # localhost. Serve a quem aponta o worker para um S3-compatível de rede interna (hostname de
+      # serviço, endpoint de VPC), onde a inferência erra. Valor ininterpretável derruba o processo
+      # em vez de virar default: o parser recusa, e o profile é fail-fast por desenho.
+      VAN_S3_FORCE_PATH_STYLE: '${VAN_S3_FORCE_PATH_STYLE:-}'
       VAN_S3_ACCESS_KEY_ID: '${VAN_S3_ACCESS_KEY_ID:-}'
       VAN_S3_SECRET_ACCESS_KEY: '${VAN_S3_SECRET_ACCESS_KEY:-}'
     entrypoint:
