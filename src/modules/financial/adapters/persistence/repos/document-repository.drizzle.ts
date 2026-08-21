@@ -62,6 +62,9 @@ import {
 } from '../mappers/document.mapper.ts';
 import { mapEntryToRows } from '../mappers/timeline.mapper.ts';
 import { appendFinOutboxInTx } from './fin-outbox-helpers.ts';
+import { describeDriverError } from '../../../../../shared/persistence/driver-error.ts';
+import { withDeadlockRetry } from '../../../../../shared/persistence/retry-on-deadlock.ts';
+import { sameRowSet, taxLikeKey, payableKey } from './child-rows-diff.ts';
 import type { DocumentEvent } from '../../../domain/document/events.ts';
 
 // Wrapper de segurança: captura qualquer exceção de I/O ou violação de
@@ -75,7 +78,7 @@ const safe = async <T>(
   try {
     return ok(await op());
   } catch (cause) {
-    process.stderr.write(`[document-repo:${ctx}] ${String(cause)}\n`);
+    process.stderr.write(`[document-repo:${ctx}] ${describeDriverError(cause)}\n`);
     return err('document-repository-failure');
   }
 };
@@ -164,7 +167,7 @@ export const createDrizzleDocumentRepository = (
       // enviou) — a versão aqui serve apenas para serialização/resposta; não altera o lock.
       return ok({ document: documentR.value, payables: payablesR.value, version: docRow.version });
     } catch (cause) {
-      process.stderr.write(`[document-repo:findById] ${String(cause)}\n`);
+      process.stderr.write(`[document-repo:findById] ${describeDriverError(cause)}\n`);
       return err('document-repository-failure');
     }
   };
@@ -224,105 +227,198 @@ export const createDrizzleDocumentRepository = (
       const { document, payables } = aggregate;
       const documentId = document.id as unknown as string;
 
-      await db.transaction(async (tx) => {
-        // 1. SELECT FOR UPDATE — serializa escritas concorrentes via next-key lock na PK.
-        const existing = await tx
-          .select({ version: schema.finDocuments.version })
-          .from(schema.finDocuments)
-          .where(eq(schema.finDocuments.id, documentId))
-          .for('update');
+      // O retry é REDE, não a correção: a causa dos deadlocks da #803 foi eliminada no bloco
+      // 2+3 abaixo. Ele cobre o resíduo que qualquer sistema OLTP concorrente tem, e repete SÓ
+      // em errno 1213 — a vítima que o InnoDB reverteu por inteiro e que nada tem de errada.
+      // A transação inteira é a unidade repetida: depois de um 1213 o `tx` está morto (o
+      // servidor desfez tudo e o Drizzle já devolveu a conexão ao pool), então repetir um
+      // statement isolado gravaria sobre um estado que não existe mais.
+      await withDeadlockRetry(async () =>
+        db.transaction(async (tx) => {
+          // 1. SELECT FOR UPDATE — serializa escritas concorrentes via next-key lock na PK.
+          const existing = await tx
+            .select({ version: schema.finDocuments.version })
+            .from(schema.finDocuments)
+            .where(eq(schema.finDocuments.id, documentId))
+            .for('update');
 
-        const currentVersion = existing[0]?.version;
+          const currentVersion = existing[0]?.version;
 
-        if (expectedVersion === undefined) {
-          // Caminho de criação: INSERT com version = 0 (default do schema).
-          // Se o doc já existe (race condition entre dois criadores), o INSERT
-          // falhará por violação de PK → capturado no catch abaixo como
-          // 'document-repository-failure' — comportamento correto.
-          const row = mapDocumentToRow(document, 0);
-          await tx.insert(schema.finDocuments).values(row);
-        } else {
-          // Caminho de mutação: UPDATE com optimistic lock enforçado no WHERE.
-          // WHERE id=? AND version=expectedVersion → só modifica se versão bate.
-          const nextVersion = expectedVersion + 1;
-          const row = mapDocumentToRow(document, nextVersion);
-          const updateResult = await tx
-            .update(schema.finDocuments)
-            .set(row)
-            .where(
-              and(
-                eq(schema.finDocuments.id, documentId),
-                eq(schema.finDocuments.version, expectedVersion),
-              ),
-            );
+          if (expectedVersion === undefined) {
+            // Caminho de criação: INSERT com version = 0 (default do schema).
+            // Se o doc já existe (race condition entre dois criadores), o INSERT
+            // falhará por violação de PK → capturado no catch abaixo como
+            // 'document-repository-failure' — comportamento correto.
+            const row = mapDocumentToRow(document, 0);
+            await tx.insert(schema.finDocuments).values(row);
+          } else {
+            // Caminho de mutação: UPDATE com optimistic lock enforçado no WHERE.
+            // WHERE id=? AND version=expectedVersion → só modifica se versão bate.
+            const nextVersion = expectedVersion + 1;
+            const row = mapDocumentToRow(document, nextVersion);
+            const updateResult = await tx
+              .update(schema.finDocuments)
+              .set(row)
+              .where(
+                and(
+                  eq(schema.finDocuments.id, documentId),
+                  eq(schema.finDocuments.version, expectedVersion),
+                ),
+              );
 
-          // mysql2 retorna [ResultSetHeader, FieldPacket[]]. Drizzle expõe o raw
-          // do driver via cast. affectedRows=0 significa que o WHERE não casou —
-          // i.e., a versão foi incrementada por outra transação antes desta.
-          const affectedRows = (updateResult as unknown as [{ affectedRows: number }])[0]
-            .affectedRows;
-          if (affectedRows === 0) {
-            // Versão divergiu. Lançamos uma sentinela ANTES do catch genérico
-            // para que o catch consiga distinguir este caso de falhas de infra.
-            // O Error é capturado imediatamente no catch abaixo.
-            throw makeVersionConflict(documentId, expectedVersion);
+            // mysql2 retorna [ResultSetHeader, FieldPacket[]]. Drizzle expõe o raw
+            // do driver via cast. affectedRows=0 significa que o WHERE não casou —
+            // i.e., a versão foi incrementada por outra transação antes desta.
+            const affectedRows = (updateResult as unknown as [{ affectedRows: number }])[0]
+              .affectedRows;
+            if (affectedRows === 0) {
+              // Versão divergiu. Lançamos uma sentinela ANTES do catch genérico
+              // para que o catch consiga distinguir este caso de falhas de infra.
+              // O Error é capturado imediatamente no catch abaixo.
+              throw makeVersionConflict(documentId, expectedVersion);
+            }
+
+            // currentVersion lida no SELECT FOR UPDATE é informativa.
+            // A checagem real é o affectedRows acima. void suprime unused warning.
+            void currentVersion;
           }
 
-          // currentVersion lida no SELECT FOR UPDATE é informativa.
-          // A checagem real é o affectedRows acima. void suprime unused warning.
-          void currentVersion;
-        }
+          // 2+3. Substituição das tabelas filhas SEM gap lock (#803).
+          //
+          // O contrato do hard replace (R8.1) NÃO muda: o estado final é o mesmo. O que muda é
+          // como se chega nele, porque o caminho anterior travava faixa de índice alheia.
+          //
+          //   ANTES: `DELETE … WHERE document_id = ?`. `document_id` é índice NÃO-único, e sob
+          //   REPEATABLE READ o InnoDB trava a FAIXA varrida — não as linhas. Como UUID v4
+          //   intercala documentos arbitrariamente na árvore, o gap travado pelo documento A é
+          //   exatamente onde o INSERT do documento B quer entrar. Medido em 21/08/2026:
+          //
+          //     index fin_retentions_document_id_idx
+          //     (1) WAITING: lock_mode X locks gap before rec insert intention waiting
+          //     (2) HOLDS:   lock_mode X locks gap before rec   ← registro de OUTRO documento
+          //
+          //   E1 — se o conjunto não mudou, não emitimos DELETE nem INSERT. A transação não toca
+          //        a tabela, e não há faixa a disputar. É o caminho comum de um PATCH de
+          //        vencimento, onde as retenções não mudam.
+          //   E2 — quando muda, o DELETE vai por PK (`id IN (…)`). Condição sobre índice único
+          //        pede apenas record lock, sem gap (Refman 8.4 §15.7.1).
+          //
+          // O SELECT que lê o estado atual é consistent read: sob REPEATABLE READ não adquire
+          // lock algum, então ler antes de decidir não custa contenção nenhuma.
+          //
+          // ⚠️ As três tabelas recebem o mesmo tratamento de propósito. O defeito é do PADRÃO,
+          // não de `fin_retentions`: corrigir só uma mudaria a tabela em que a falha aparece.
 
-        // 2. Hard replace de tabelas filhas (R8.1: ajuste recria payables inteiros).
-        //    DELETE explícito: não dependemos de CASCADE aqui — garantimos que o
-        //    INSERT em lote subsequente não colide em PK.
-        await tx.delete(schema.finPayables).where(eq(schema.finPayables.documentId, documentId));
-        await tx
-          .delete(schema.finRetentions)
-          .where(eq(schema.finRetentions.documentId, documentId));
-        await tx
-          .delete(schema.finRegisteredTaxes)
-          .where(eq(schema.finRegisteredTaxes.documentId, documentId));
+          // — fin_payables — `payables === null` significa conjunto vazio (apaga), como antes.
+          const existingPayables = await tx
+            .select({
+              id: schema.finPayables.id,
+              kind: schema.finPayables.kind,
+              retentionType: schema.finPayables.retentionType,
+              status: schema.finPayables.status,
+              value: schema.finPayables.value,
+              dueDate: schema.finPayables.dueDate,
+              paymentMethod: schema.finPayables.paymentMethod,
+              paymentDetail: schema.finPayables.paymentDetail,
+              paidAt: schema.finPayables.paidAt,
+            })
+            .from(schema.finPayables)
+            .where(eq(schema.finPayables.documentId, documentId));
 
-        // 3. INSERT em lote de filhos (1 round-trip por tabela; skip se vazio).
-        //    mysql2 lança ER_PARSE_ERROR se values([]) — guard obrigatório.
-        if (payables !== null) {
-          const payableRows = mapPayablesToRows(payables, documentId);
-          if (payableRows.length > 0) {
-            await tx.insert(schema.finPayables).values([...payableRows]);
+          const payableRows = payables !== null ? mapPayablesToRows(payables, documentId) : [];
+
+          if (!sameRowSet(existingPayables, payableRows, payableKey)) {
+            if (existingPayables.length > 0) {
+              await tx.delete(schema.finPayables).where(
+                inArray(
+                  schema.finPayables.id,
+                  existingPayables.map((r) => r.id),
+                ),
+              );
+            }
+            if (payableRows.length > 0) {
+              await tx.insert(schema.finPayables).values([...payableRows]);
+            }
           }
-        }
 
-        const retentions = document.retentions;
-        if (retentions.length > 0) {
-          const retentionRows = mapRetentionsToRows(retentions, documentId);
-          await tx.insert(schema.finRetentions).values([...retentionRows]);
-        }
+          // — fin_retentions —
+          const existingRetentions = await tx
+            .select({
+              id: schema.finRetentions.id,
+              type: schema.finRetentions.type,
+              base: schema.finRetentions.base,
+              rateBps: schema.finRetentions.rateBps,
+              value: schema.finRetentions.value,
+            })
+            .from(schema.finRetentions)
+            .where(eq(schema.finRetentions.documentId, documentId));
 
-        const registeredTaxes = document.registeredTaxes;
-        if (registeredTaxes.length > 0) {
-          const taxRows = mapRegisteredTaxesToRows(registeredTaxes, documentId);
-          await tx.insert(schema.finRegisteredTaxes).values([...taxRows]);
-        }
+          const retentionRows = mapRetentionsToRows(document.retentions, documentId);
 
-        // 4. Timeline (SC-004/NFR-001): gravar entries na MESMA transação.
-        //    Append-only (ADR-0020 §"sem UPDATE/DELETE em read-model").
-        //    mysql2 lança ER_PARSE_ERROR se values([]) — guard obrigatório.
-        if (timelineEntries.length > 0) {
-          const mapped = timelineEntries.map(mapEntryToRows);
-          const entryRows = mapped.map((m) => m.entryRow);
-          await tx.insert(schema.finDocumentTimeline).values([...entryRows]);
-
-          const changeRows = mapped.flatMap((m) => [...m.changeRows]);
-          if (changeRows.length > 0) {
-            await tx.insert(schema.finTimelineFieldChanges).values(changeRows);
+          if (!sameRowSet(existingRetentions, retentionRows, taxLikeKey)) {
+            if (existingRetentions.length > 0) {
+              await tx.delete(schema.finRetentions).where(
+                inArray(
+                  schema.finRetentions.id,
+                  existingRetentions.map((r) => r.id),
+                ),
+              );
+            }
+            if (retentionRows.length > 0) {
+              await tx.insert(schema.finRetentions).values([...retentionRows]);
+            }
           }
-        }
 
-        // 5. Outbox (#127): eventos de domínio na MESMA transação (ADR-0015). Falha aqui reverte
-        //    tudo (estado + timeline + outbox) — evento durável SSE estado persistido.
-        await appendFinOutboxInTx(tx, events ?? []);
-      });
+          // — fin_registered_taxes —
+          const existingTaxes = await tx
+            .select({
+              id: schema.finRegisteredTaxes.id,
+              type: schema.finRegisteredTaxes.type,
+              base: schema.finRegisteredTaxes.base,
+              rateBps: schema.finRegisteredTaxes.rateBps,
+              value: schema.finRegisteredTaxes.value,
+            })
+            .from(schema.finRegisteredTaxes)
+            .where(eq(schema.finRegisteredTaxes.documentId, documentId));
+
+          const taxRows = mapRegisteredTaxesToRows(document.registeredTaxes, documentId);
+
+          if (!sameRowSet(existingTaxes, taxRows, taxLikeKey)) {
+            if (existingTaxes.length > 0) {
+              await tx.delete(schema.finRegisteredTaxes).where(
+                inArray(
+                  schema.finRegisteredTaxes.id,
+                  existingTaxes.map((r) => r.id),
+                ),
+              );
+            }
+            if (taxRows.length > 0) {
+              await tx.insert(schema.finRegisteredTaxes).values([...taxRows]);
+            }
+          }
+
+          // 4. Timeline (SC-004/NFR-001): gravar entries na MESMA transação.
+          //    Append-only (ADR-0020 §"sem UPDATE/DELETE em read-model").
+          //    Guard obrigatório para lote vazio — mas quem barra é o BUILDER do Drizzle, não o
+          //    mysql2: `Error` genérico lançado sincronamente antes da query
+          //    (`mysql-core/query-builders/insert.js:20-24`), sem `errno` e sem virar
+          //    `DrizzleQueryError`. `ER_PARSE_ERROR` nunca aparece no log por este caminho.
+          if (timelineEntries.length > 0) {
+            const mapped = timelineEntries.map(mapEntryToRows);
+            const entryRows = mapped.map((m) => m.entryRow);
+            await tx.insert(schema.finDocumentTimeline).values([...entryRows]);
+
+            const changeRows = mapped.flatMap((m) => [...m.changeRows]);
+            if (changeRows.length > 0) {
+              await tx.insert(schema.finTimelineFieldChanges).values(changeRows);
+            }
+          }
+
+          // 5. Outbox (#127): eventos de domínio na MESMA transação (ADR-0015). Falha aqui reverte
+          //    tudo (estado + timeline + outbox) — evento durável SSE estado persistido.
+          await appendFinOutboxInTx(tx, events ?? []);
+        }),
+      );
 
       return ok(undefined);
     } catch (cause) {
@@ -330,7 +426,7 @@ export const createDrizzleDocumentRepository = (
       if (isVersionConflict(cause)) {
         return err('document-version-conflict');
       }
-      process.stderr.write(`[document-repo:save] ${String(cause)}\n`);
+      process.stderr.write(`[document-repo:save] ${describeDriverError(cause)}\n`);
       return err('document-repository-failure');
     }
   };
@@ -381,7 +477,7 @@ export const createDrizzleDocumentRepository = (
       if (isVersionConflict(cause)) {
         return err('document-version-conflict');
       }
-      process.stderr.write(`[document-repo:delete] ${String(cause)}\n`);
+      process.stderr.write(`[document-repo:delete] ${describeDriverError(cause)}\n`);
       return err('document-repository-failure');
     }
   };
