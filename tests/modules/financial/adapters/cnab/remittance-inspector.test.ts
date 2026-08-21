@@ -15,7 +15,7 @@ const CEDENTE: CedenteHeaderData = {
   bankCode: '237',
   documentType: '2',
   document: '12345678000199',
-  convenio: '1234567',
+  convenio: '000000',
   agency: '1234',
   agencyDigit: '5',
   accountNumber: '567890',
@@ -82,6 +82,17 @@ const multiBatchFile = (): string => {
   return r.value.content;
 };
 
+// Os REGISTROS do arquivo, sem o vazio que o terminador final produz.
+//
+// Desde a #804 todo registro termina em CRLF, o último inclusive — então `split` devolve um
+// elemento vazio no fim, e `length - 1` deixaria de apontar para o trailer de arquivo. Os índices
+// de registro são idênticos nos dois arrays; o que muda é só o tamanho, e é dele que estes testes
+// derivam a posição do trailer.
+const recordsOf = (content: string): readonly string[] => {
+  const parts = content.split(LINE_TERMINATOR);
+  return parts.at(-1) === '' ? parts.slice(0, -1) : parts;
+};
+
 // Corrompe uma linha PRESERVANDO as 240 posições, para o defeito injetado não vir acompanhado de
 // um erro de comprimento que mascararia o que está sendo testado.
 const patch = (content: string, lineIndex: number, from: number, value: string): string => {
@@ -115,7 +126,7 @@ describe('Inspetor de remessa — o que o banco recusaria', () => {
 
   it('acusa contagem de registros do arquivo que não bate com as linhas', () => {
     const file = validFile(2);
-    const lines = file.split(LINE_TERMINATOR);
+    const lines = recordsOf(file);
     // Trailer de arquivo, posições 24-29: declara 99 registros num arquivo de 8 linhas.
     const corrupted = patch(file, lines.length - 1, 24, '000099');
 
@@ -124,7 +135,7 @@ describe('Inspetor de remessa — o que o banco recusaria', () => {
 
   it('acusa contagem de registros do lote que não bate', () => {
     const file = validFile(2);
-    const lines = file.split(LINE_TERMINATOR);
+    const lines = recordsOf(file);
     const corrupted = patch(file, lines.length - 2, 18, '000099');
 
     assert.ok(codes(corrupted).includes('batch-record-count-mismatch'));
@@ -133,7 +144,7 @@ describe('Inspetor de remessa — o que o banco recusaria', () => {
   // O mais valioso: soma declarada diferente da soma real é dinheiro que não fecha.
   it('acusa somatória do lote diferente da soma dos pagamentos', () => {
     const file = validFile(2);
-    const lines = file.split(LINE_TERMINATOR);
+    const lines = recordsOf(file);
     const corrupted = patch(file, lines.length - 2, 24, '000000000000999999');
 
     assert.ok(codes(corrupted).includes('batch-total-mismatch'));
@@ -167,7 +178,7 @@ describe('Inspetor de remessa — reporta tudo, não só o primeiro', () => {
   // descobrir um defeito por rodada.
   it('acumula defeitos independentes numa única passada', () => {
     const file = validFile(2);
-    const lines = file.split(LINE_TERMINATOR);
+    const lines = recordsOf(file);
     const corrupted = patch(patch(file, lines.length - 1, 24, '000099'), 3, 9, '00009');
 
     const found = codes(corrupted);
@@ -197,7 +208,7 @@ describe('Inspetor — arquivo de vários lotes (#711, CA6)', () => {
 
   it('confere cada trailer contra o SEU lote, não contra o arquivo', () => {
     const file = multiBatchFile();
-    const lines = file.split(LINE_TERMINATOR);
+    const lines = recordsOf(file);
 
     // Estraga a somatória do PRIMEIRO trailer de lote: o segundo continua correto, e é isso que
     // separa a conferência por lote da conferência global.
@@ -210,7 +221,7 @@ describe('Inspetor — arquivo de vários lotes (#711, CA6)', () => {
 
   it('acusa lote aberto que nunca fecha', () => {
     const file = multiBatchFile();
-    const lines = file.split(LINE_TERMINATOR);
+    const lines = recordsOf(file);
     // Transforma o trailer do primeiro lote num detalhe: o lote fica aberto até o próximo header.
     const trailerIndex = lines.findIndex((l) => l.slice(7, 8) === '5');
 
@@ -219,7 +230,7 @@ describe('Inspetor — arquivo de vários lotes (#711, CA6)', () => {
 
   it('acusa detalhe fora de qualquer lote', () => {
     const file = validFile(1);
-    const lines = file.split(LINE_TERMINATOR);
+    const lines = recordsOf(file);
     // Descaracteriza o header do lote: os detalhes seguintes passam a não ter lote que os contenha.
     const corrupted = patch(file, 1, 8, '0');
 
@@ -236,7 +247,7 @@ describe('Inspetor — arquivo de vários lotes (#711, CA6)', () => {
 
   it('acusa quantidade de lotes divergente no trailer do arquivo', () => {
     const file = multiBatchFile();
-    const lines = file.split(LINE_TERMINATOR);
+    const lines = recordsOf(file);
     const corrupted = patch(file, lines.length - 1, 18, '000009');
 
     assert.ok(codes(corrupted).includes('file-batch-count-mismatch'));

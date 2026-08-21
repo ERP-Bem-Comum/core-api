@@ -147,6 +147,18 @@ export const generateRemittance =
           return err('remittance-malformed-file');
         case 'cnab-launch-form-unsupported':
           return err('remittance-launch-form-unsupported');
+        // O convênio recusado pelo emissor reusa o vocabulário do gap de cedente, em vez de ganhar
+        // um erro paralelo (#804): para quem opera, é o MESMO problema e a MESMA tela, tenha ele
+        // sido detectado na elegibilidade — antes do NSA — ou aqui, no montador. Dois nomes para o
+        // mesmo defeito obrigariam a borda a traduzir duas vezes a mesma mensagem.
+        //
+        // Chegar aqui significa que a checagem anterior não pegou: ela roda sobre a conta-cedente,
+        // esta sobre o que de fato foi escrito no registro. É a dupla verificação que o cabeçalho
+        // de `remittance-eligibility.ts` declara intencional.
+        case 'cnab-convenio-missing':
+          return err('cedente-convenio-missing');
+        case 'cnab-convenio-overflow':
+          return err('cedente-convenio-too-long');
         case 'cnab-translation-failed':
           return err('remittance-build-failed');
       }

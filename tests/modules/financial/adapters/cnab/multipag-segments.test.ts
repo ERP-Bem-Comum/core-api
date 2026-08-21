@@ -65,6 +65,18 @@ describe('Multipag — Segmento A (pagamento)', () => {
     assert.equal(at(record, 14, 14), 'A');
   });
 
+  // #804, item de governança. São DOIS campos, e confundi-los é o risco real do pedido: G060
+  // (015, 1 dígito) diz o tipo de movimento, e G061 (016-017, 2 dígitos) diz a instrução. O `09`
+  // — inclusão de registro detalhe BLOQUEADO — pertence a G061; o movimento segue sendo inclusão.
+  //
+  // ⚠️ O laudo pedia isto como `[015-016]`, campo que não existe. Escrever ali encostaria no
+  // dígito de G060 cujo valor significa EXCLUSÃO — trocaria "retido para aprovação" por outra
+  // operação inteiramente. A coordenada está conferida no layout, p. 24, campos 06.3A e 07.3A.
+  it('inclui o pagamento BLOQUEADO, aguardando liberação master no Net Empresa', () => {
+    assert.equal(at(record, 15, 15), '0'); // G060 — movimento de inclusão, inalterado
+    assert.equal(at(record, 16, 17), '09'); // G061 — inclusão de registro detalhe bloqueado
+  });
+
   it('leva o banco, a agência e a conta do FAVORECIDO — não os do cedente', () => {
     assert.equal(at(record, 21, 23), '341');
     assert.equal(at(record, 24, 28), '04321');

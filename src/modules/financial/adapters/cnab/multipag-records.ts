@@ -7,7 +7,7 @@
 //
 // Esta camada é ACL (ADR-0006): o domínio entrega `RemittanceOrder` e nunca vê "posição 143-172".
 // Aqui NÃO entram os detalhes (Segmentos A e B) — envelope e conteúdo são fatias separadas.
-import type { Result } from '../../../../shared/primitives/result.ts';
+import { err, type Result } from '../../../../shared/primitives/result.ts';
 import {
   blanks,
   cents,
@@ -21,7 +21,16 @@ import {
 import type { PositionalFieldError } from './positional.ts';
 import type { CnabBatchProfile } from './batch-profile.ts';
 
-export type CnabRecordError = PositionalFieldError;
+// O convênio tem erros PRÓPRIOS, e não um `numeric-field-*` emprestado (#804).
+//
+// Dois motivos independentes. O campo é Alfa, então "numérico estourou" descreveria mal o que
+// houve; e a ação de quem recebe a recusa é diferente em cada caso — `empty` manda cadastrar o
+// convênio, `overflow` manda conferir o que o banco cadastrou. Uma união fechada é o que faz o
+// `switch` do tradutor ser exaustivo: quando um membro novo entrar aqui, o compilador cobra o
+// mapeamento lá, em vez de deixá-lo cair num erro genérico em silêncio.
+export type ConvenioFieldError = 'convenio-field-empty' | 'convenio-field-overflow';
+
+export type CnabRecordError = PositionalFieldError | ConvenioFieldError;
 
 // Versão do layout DE ARQUIVO. Fixa por documento, não configurável: muda quando o banco publica
 // layout novo, e aí o valor vem acompanhado de um novo PDF.
@@ -32,6 +41,51 @@ export type CnabRecordError = PositionalFieldError;
 const FILE_LAYOUT_VERSION = '089';
 const REMITTANCE_CODE = '1'; // 1 = remessa (arquivo que sai daqui); 2 = retorno.
 const BATCH_TRAILER_RESERVED_LOT = '9999';
+
+// G020, colunas 167-171 — densidade de gravação em BPI. Domínio FECHADO no manual: 1600 ou 6250,
+// e mais nada. O emissor escrevia `00000`, valor fora do domínio, que o Validador Universal
+// recusa (#804, defeito 2).
+//
+// Herança de fita magnética: BPI é bits por polegada, e nada no transporte por VAN lê este número.
+// Justamente por ser inerte é que a escolha entre os dois é livre — o que NÃO é livre é ficar fora
+// do domínio. `1600` é a densidade convencional do CNAB 240; trocar para `6250` é trocar esta
+// constante, e nenhum outro ponto do emissor depende dela.
+const RECORDING_DENSITY = '01600';
+
+// G007, colunas 033-052 — o convênio, e o campo onde layout e validador NÃO concordam.
+//
+// O layout declara 20 posições Alfa (p. 15, campo 07.0), e `text(convenio, 20)` era aderente a
+// ele: alinha à esquerda, completa com brancos. Para convênio de até 6 dígitos o resultado já era
+// exatamente o que o banco quer — este emissor nunca esteve errado nesse caso.
+//
+// O que faltava era a GUARDA. O Validador Universal lê o convênio apenas em 033-038 e exige
+// 039-052 em branco (#804): um convênio mais longo não é recusado, é TRUNCADO pelo banco, que
+// processa o arquivo sob outro contrato. O laudo mostrou isso — as posições 039-040 chegaram
+// preenchidas, e o resumo do lote exibiu um convênio de 6 dígitos que não era o enviado.
+//
+// É a mesma classe de falha que `positional.ts` já trata em campo numérico: arquivo sintaticamente
+// válido e semanticamente errado, aceito pelo banco, pagando sob a identidade errada. Lá a escolha
+// foi recusar em vez de truncar, e o comentário do módulo diz por quê.
+// O conteúdo que o banco LÊ (033-038) e o resto do campo, que ele exige em branco (039-052).
+const CONVENIO_CONTENT_WIDTH = 6;
+const CONVENIO_PADDING_WIDTH = 14;
+
+// Recusa em vez de truncar, e monta o campo em DUAS peças. As duas escolhas são defesas
+// independentes contra o mesmo desfecho — remessa processada sob um convênio que não é o nosso:
+//
+//   · a guarda impede que um convênio longo seja emitido de qualquer forma;
+//   · a composição `text(6) + blanks(14)` impede o vazamento POSICIONAL mesmo sem a guarda —
+//     `alpha` corta em 6, então nada alcança a coluna 039. Um `text(raw, 20)` daria o resultado
+//     certo apenas ENQUANTO a guarda existisse, e voltaria a corromper 039-052 em silêncio no dia
+//     em que alguém a removesse num refactor. É a mesma disciplina de `segmentJ`, que valida o
+//     código de barras E usa comprimento exato.
+const convenioField = (convenio: string): Result<string, CnabRecordError> => {
+  const raw = convenio.trim();
+  if (raw === '') return err('convenio-field-empty');
+  if (raw.length > CONVENIO_CONTENT_WIDTH) return err('convenio-field-overflow');
+
+  return joinFields([text(raw, CONVENIO_CONTENT_WIDTH), blanks(CONVENIO_PADDING_WIDTH)]);
+};
 
 export type CedenteHeaderData = Readonly<{
   bankCode: string;
@@ -99,7 +153,7 @@ export const fileHeader = (input: FileHeaderInput): Result<string, CnabRecordErr
     blanks(9), // 009-017 uso FEBRABAN
     num(c.documentType, 1), // 018     tipo de inscrição
     digits(c.document, 14), // 019-032 nº de inscrição
-    text(c.convenio, 20), // 033-052 convênio
+    convenioField(c.convenio), // 033-052 convênio (G007)
     digits(c.agency, 5), // 053-057 agência
     text(c.agencyDigit, 1), // 058     DV agência
     digits(c.accountNumber, 12), // 059-070 conta
@@ -113,7 +167,7 @@ export const fileHeader = (input: FileHeaderInput): Result<string, CnabRecordErr
     timeHHMMSS(input.generatedAt), // 152-157 hora de geração
     num(input.nsa, 6), // 158-163 NSA
     num(FILE_LAYOUT_VERSION, 3), // 164-166 versão do layout de arquivo
-    num(0, 5), // 167-171 densidade
+    num(RECORDING_DENSITY, 5), // 167-171 densidade (G020)
     blanks(20), // 172-191 uso do banco
     blanks(20), // 192-211 uso da empresa
     blanks(29), // 212-240 uso FEBRABAN
@@ -133,7 +187,7 @@ export const batchHeader = (input: BatchHeaderInput): Result<string, CnabRecordE
     blanks(1), // 017     CNAB
     num(c.documentType, 1), // 018     tipo de inscrição
     digits(c.document, 14), // 019-032 nº de inscrição
-    text(c.convenio, 20), // 033-052 convênio
+    convenioField(c.convenio), // 033-052 convênio (G007)
     digits(c.agency, 5), // 053-057 agência
     text(c.agencyDigit, 1), // 058     DV agência
     digits(c.accountNumber, 12), // 059-070 conta

@@ -161,7 +161,8 @@ const seedCedenteAccount = async (): Promise<string> => {
       // ⚠️ OPCIONAL no cadastro e OBRIGATÓRIO para gerar: sem convênio o nome do arquivo não se
       // monta e a geração falha com 503 genérico, sem dizer ao operador o que corrigir. Gap
       // registrado na #722 — aqui a conta é semeada completa, para o teste medir a rota e não ele.
-      convenio: '1234567',
+      // Seis dígitos: é o máximo que o banco lê (#804), e `000000` é a máscara reservada.
+      convenio: '000000',
     },
   });
   assert.equal(res.statusCode, 201, res.body);
@@ -358,7 +359,7 @@ describe('financial/http — POST /remittances · conta-cedente sem convênio (#
       method: 'PATCH',
       url: `/api/v2/financial/cedente-accounts/${accountId}`,
       headers: bearer('bank-account:write'),
-      payload: { convenio: '7654321' },
+      payload: { convenio: '999999' },
     });
     assert.equal(fix.statusCode, 200, fix.body);
 

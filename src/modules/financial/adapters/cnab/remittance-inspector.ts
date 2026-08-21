@@ -91,7 +91,15 @@ export const inspectRemittanceFile = (content: string): readonly RemittanceDefec
     return defects;
   }
 
-  const lines = content.split(LINE_TERMINATOR);
+  // O arquivo emitido termina em CRLF — no trailer de arquivo inclusive (#804, defeito 6) — e
+  // `split` de um texto terminado devolve um elemento VAZIO no fim. Sem descartá-lo, toda remessa
+  // correta seria reprovada com `line-length` e `missing-file-trailer`, e a inspeção passaria a
+  // acusar justamente o arquivo bem formado.
+  //
+  // Descarta apenas o vazio FINAL, e apenas um: linha vazia no meio continua sendo defeito, que é
+  // o que `line-length` existe para pegar. A tolerância é ao terminador, não a arquivo furado.
+  const parts = content.split(LINE_TERMINATOR);
+  const lines = parts.at(-1) === '' ? parts.slice(0, -1) : parts;
 
   lines.forEach((line, i) => {
     if (line.length !== RECORD_LENGTH) {
