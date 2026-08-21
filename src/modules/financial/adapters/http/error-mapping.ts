@@ -29,6 +29,10 @@ const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
 const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'invalid-state-transition',
   'document-version-conflict',
+  // Fatia 1: o CAS por título não casou — outra baixa alcançou o título primeiro. É conflito de
+  // ESTADO, como `document-version-conflict`, e não erro de dado: o mesmo pedido volta a valer se o
+  // título retornar ao estado esperado.
+  'payable-state-conflict',
   // #785 — o bucket contradiz o contrato de prefixos. É 409 e não 404 de propósito: 404 significa
   // "não existe, nada a fazer", e aqui há o que fazer. E não é 5xx porque o envelope esconde o
   // código em 5xx, e este é justamente o código que precisa chegar a quem pediu.
@@ -227,6 +231,8 @@ const SLUG_MESSAGES: Record<string, string> = {
   'timeline-document-not-found': 'Documento não encontrado.',
   'document-version-conflict':
     'O documento foi modificado por outra operação. Atualize e tente novamente.',
+  'payable-state-conflict':
+    'Este título já não estava aprovado quando a baixa foi gravada — outra operação o alterou antes. Atualize e confira se a baixa já foi registrada.',
   'invalid-state-transition': 'O documento não está no estado necessário para esta operação.',
   'financial-ref-invalid': 'Referência inválida: o valor informado não é um identificador válido.',
   'partner-ref-invalid': 'Referência de fornecedor inválida.',
