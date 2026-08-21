@@ -15,7 +15,7 @@ const CEDENTE: CedenteHeaderData = {
   bankCode: '237',
   documentType: '2',
   document: '12345678000199',
-  convenio: '1234567',
+  convenio: '000000',
   agency: '1234',
   agencyDigit: '5',
   accountNumber: '567890',
@@ -75,7 +75,13 @@ const build = (payments: readonly RemittancePayment[]) => {
   return r.value;
 };
 
-const linesOf = (content: string): readonly string[] => content.split(LINE_TERMINATOR);
+// Os REGISTROS, sem o vazio que o terminador final produz (#804, defeito 6). Todo registro termina
+// em CRLF, o trailer de arquivo inclusive, então `split` devolve um elemento vazio no fim — contá-lo
+// como linha faria toda asserção de contagem e de comprimento acusar o arquivo correto.
+const linesOf = (content: string): readonly string[] => {
+  const parts = content.split(LINE_TERMINATOR);
+  return parts.at(-1) === '' ? parts.slice(0, -1) : parts;
+};
 
 // Posições que a #751 disputa. Nomeadas porque as três aparecem juntas em toda asserção daquele
 // grupo, e um deslocamento de coluna é exatamente o defeito que elas existem para pegar.
@@ -328,10 +334,18 @@ describe('Remessa Multipag — decisões que o layout NÃO especifica', () => {
     assert.ok(file.content.includes('\r\n'));
   });
 
-  it('não emite terminador após a última linha', () => {
+  // #804, defeito 6. A suposição anterior — "sem terminador na última linha" — era declarada e
+  // sabidamente frágil; o Validador Universal a derrubou. TODO registro termina em CRLF, o
+  // trailer de arquivo inclusive.
+  //
+  // ⚠️ O assert é sobre COMPRIMENTO EM BYTES, e não sobre `split(LINE_TERMINATOR)`. O inspetor
+  // interno faz `split` do que o montador faz `join`: as duas operações desfazem o mesmo erro
+  // simetricamente, e um teste escrito assim ficaria verde sem provar nada. A conta é a única
+  // testemunha que distingue N-1 terminadores de N.
+  it('emite terminador após TODAS as linhas, a última inclusive', () => {
     const file = build([payment(1, 100)]);
-    assert.ok(!file.content.endsWith(LINE_TERMINATOR));
-    assert.equal(file.content.length, 240 * 6 + LINE_TERMINATOR.length * 5);
+    assert.ok(file.content.endsWith(LINE_TERMINATOR));
+    assert.equal(file.content.length, (240 + LINE_TERMINATOR.length) * 6);
   });
 });
 
@@ -408,7 +422,7 @@ describe('Remessa Multipag — a referência do retorno (G064, #752)', () => {
     const file = build([payment(1, 1000)]);
     const [firstA] = linesOf(file.content).filter(isSegmentA);
 
-    assert.equal(yourNumberOf(firstA ?? ''), '01234567000007000001');
+    assert.equal(yourNumberOf(firstA ?? ''), '00000000000007000001');
     assert.equal(yourNumberOf(firstA ?? '').length, 20);
   });
 
@@ -416,9 +430,9 @@ describe('Remessa Multipag — a referência do retorno (G064, #752)', () => {
     const file = build([payment(1, 1000), payment(2, 2000), payment(3, 3000)]);
 
     assert.deepEqual(file.yourNumbers, [
-      '01234567000007000001',
-      '01234567000007000002',
-      '01234567000007000003',
+      '00000000000007000001',
+      '00000000000007000002',
+      '00000000000007000003',
     ]);
   });
 
@@ -441,17 +455,17 @@ describe('Remessa Multipag — a referência do retorno (G064, #752)', () => {
     // Ordem de EMISSÃO: as entradas 1 e 3 (banco 341) saem juntas, a entrada 2 (banco 033) depois —
     // logo a emissão vê 1, 3, 2, e NÃO 1, 2, 3.
     assert.deepEqual(emittedOrder, [
-      '01234567000007000001',
-      '01234567000007000003',
-      '01234567000007000002',
+      '00000000000007000001',
+      '00000000000007000003',
+      '00000000000007000002',
     ]);
     assert.notDeepEqual(emittedOrder, file.yourNumbers, 'o cenário precisa mesmo reordenar');
 
     // Ordem de ENTRADA: é o que o chamador recebe, e é o que casa com os documentIds dele.
     assert.deepEqual(file.yourNumbers, [
-      '01234567000007000001',
-      '01234567000007000002',
-      '01234567000007000003',
+      '00000000000007000001',
+      '00000000000007000002',
+      '00000000000007000003',
     ]);
 
     // E as duas são o mesmo conjunto: nenhuma referência foi inventada nem perdida na reordenação.
@@ -471,7 +485,9 @@ describe('Remessa Multipag — a referência do retorno (G064, #752)', () => {
     const b = buildRemittanceFile({ ...base, nsa: 8, payments: [payment(1, 100)] });
     const outraConta = buildRemittanceFile({
       ...base,
-      cedente: { ...CEDENTE, convenio: '7654321' },
+      // `999999` é a segunda máscara reservada, e existe para exatamente este caso: representar
+      // convênio de OUTRA conta sem inventar um número. Ver `bank-fixture-masking.test.ts`.
+      cedente: { ...CEDENTE, convenio: '999999' },
       payments: [payment(1, 100)],
     });
 
@@ -484,15 +500,22 @@ describe('Remessa Multipag — a referência do retorno (G064, #752)', () => {
     );
   });
 
-  // CA5: truncar colapsaria referências distintas na mesma string — colisão silenciosa. A recusa é
-  // nomeada para que o defeito apareça na emissão, não no retorno.
-  it('recusa o arquivo quando o convênio não cabe na referência, em vez de truncar', () => {
+  // CA5 da #752: truncar colapsaria referências distintas na mesma string — colisão silenciosa.
+  //
+  // ⚠️ A BARREIRA MUDOU DE LUGAR na #804, e este teste registra qual delas morde primeiro. O
+  // convênio agora é recusado no CAMPO, a 6 posições, antes de a referência ser sequer composta —
+  // então nenhum convênio consegue mais estourar as 8 posições que `referenceFor` lhe reserva.
+  //
+  // O erro `remittance-reference-overflow` continua existindo e continua correto: ele guarda os
+  // outros dois componentes da referência (NSA e sequencial), que não passam por esta guarda.
+  // Apagá-lo porque o convênio deixou de alcançá-lo removeria a defesa dos outros dois.
+  it('recusa o convênio no campo, antes de a referência chegar a estourar', () => {
     const r = buildRemittanceFile({
       ...base,
-      cedente: { ...CEDENTE, convenio: '123456789' }, // 9 > 8
+      cedente: { ...CEDENTE, convenio: '123456789' },
       payments: [payment(1, 100)],
     });
     assert.ok(isErr(r));
-    assert.equal(r.error, 'remittance-reference-overflow');
+    assert.equal(r.error, 'convenio-field-overflow');
   });
 });

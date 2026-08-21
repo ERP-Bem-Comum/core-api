@@ -25,6 +25,7 @@ import {
   fileHeader,
   fileTrailer,
   type CedenteHeaderData,
+  type CnabRecordError,
   type CompanyAddress,
 } from './multipag-records.ts';
 import {
@@ -40,6 +41,18 @@ import {
 // segura. Fica exportado e nomeado de propósito: se o banco recusar um arquivo bem formado, este
 // é o primeiro suspeito, e a troca é de uma constante.
 export const LINE_TERMINATOR = '\r\n';
+
+// TODO registro termina em CRLF — o trailer de arquivo inclusive (#804, defeito 6).
+//
+// A versão anterior era `lines.join(LINE_TERMINATOR)`, e `join` põe separador ENTRE elementos: N
+// registros saíam com N-1 terminadores. O Validador Universal recusou. A suposição estava
+// declarada em teste, com o aviso de que era suposição — foi o que tornou a correção uma linha.
+//
+// ⚠️ Quem for conferir isto NÃO use `split(LINE_TERMINATOR)`: `split` de um texto terminado produz
+// um elemento vazio final, e comparar contagens depois disso esconde exatamente o defeito que esta
+// função existe para não cometer. A testemunha honesta é o comprimento em bytes.
+const terminated = (lines: readonly string[]): string =>
+  lines.map((l) => `${l}${LINE_TERMINATOR}`).join('');
 
 // A câmara centralizadora NÃO entra aqui, pelo mesmo motivo que a forma de lançamento não entra:
 // ela é derivada do conteúdo (#751). Enquanto foi campo opcional, nenhum chamador a preencheu e o
@@ -102,6 +115,10 @@ export type RemittanceFileInput = Readonly<{
 
 export type RemittanceFileError =
   | CnabSegmentError
+  // O erro do ENVELOPE entra por inteiro, e não achatado num membro genérico: o convênio recusado
+  // (#804) precisa chegar ao tradutor com o nome que tinha, para o `switch` de lá poder distingui-lo
+  // de um campo numérico que estourou. Achatar aqui apagaria a informação antes de alguém usá-la.
+  | CnabRecordError
   | BatchProfileError
   | 'remittance-without-payments'
   // Um componente da referência de G064 não coube na sua largura (#752, CA5). Recusar é a única
@@ -129,10 +146,14 @@ export type RemittanceFile = Readonly<{
 //
 // Composição: convênio (8) + NSA (6) + posição do pagamento na seleção (6) = 20, o campo inteiro.
 //
-// A largura do convênio é 8 e não 6 porque o convênio real tem 7 dígitos — o layout lhe reserva 20
-// posições no header (`multipag-records.ts`, colunas 033-052), então nada garante 6. Oito é o que
-// sobra depois de NSA e posição, e cobre com folga o que a operação usa. Convênio maior que isso
-// RECUSA o arquivo, em vez de ser truncado.
+// A largura do convênio aqui é 8, e a razão registrada antes da #804 estava ERRADA: dizia que "o
+// convênio real tem 7 dígitos" e que "nada garante 6", apoiando-se nas 20 posições que o layout
+// reserva ao campo no header. O Validador Universal desmentiu as duas coisas — ele lê o convênio
+// só em 033-038, e o próprio emissor agora recusa acima de 6 (`convenioField`).
+//
+// A largura permanece 8, e permanecer é a escolha: um convênio de 6 cabe nela com zeros à esquerda,
+// e encolhê-la mudaria o formato de TODA referência G064 já emitida — quebrando o casamento dos
+// retornos que ainda vão chegar. O excedente é folga inerte, não premissa.
 //
 //   • A posição dá unicidade DENTRO do arquivo — e é a posição na ENTRADA, não o sequencial do
 //     registro no lote (G038). Este último REINICIA a cada lote, então dois pagamentos em lotes
@@ -419,7 +440,7 @@ export const buildRemittanceFile = (
   const lines = [...bodyLines, trailer.value];
 
   return ok({
-    content: lines.join(LINE_TERMINATOR),
+    content: terminated(lines),
     lineCount: lines.length,
     totalCents,
     batchCount: batches.value.length,

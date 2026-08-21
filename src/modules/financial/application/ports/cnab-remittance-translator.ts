@@ -103,6 +103,12 @@ export type CnabTranslateError =
   | 'cnab-file-name-failed'
   | 'cnab-translation-failed'
   | 'cnab-malformed-file'
+  // Convênio do cedente, e são DUAS causas porque a ação de quem corrige difere (#804): `missing`
+  // manda cadastrar o convênio; `overflow` manda conferir o que o banco cadastrou, porque acima de
+  // 6 posições o banco não recusa — ele trunca, e processa a remessa sob outro contrato. Achatá-las
+  // em `cnab-translation-failed` mandaria o operador procurar dado faltando num arquivo completo.
+  | 'cnab-convenio-missing'
+  | 'cnab-convenio-overflow'
   // Rota contratada que ainda não tem emissor. Erro PRÓPRIO, e não um `translation-failed`
   // genérico: a ação de quem recebe é diferente — não há dado a corrigir no cadastro, o arquivo é
   // que ainda não sabe emitir aquela forma.

@@ -69,9 +69,12 @@ export const text = (value: string, size: number): Result<string, PositionalFiel
 
 // Propaga o primeiro erro. Sem isto, cada registro viraria uma escada de trinta `if (isErr(...))` —
 // e a escada é onde se esquece de checar um.
-export const joinFields = (
-  fields: readonly Result<string, PositionalFieldError>[],
-): Result<string, PositionalFieldError> => {
+//
+// Genérico no ERRO de propósito (#804): concatenar campos posicionais não depende de qual erro eles
+// podem produzir, e fixar `PositionalFieldError` impedia um campo com erro próprio — o convênio —
+// de participar do mesmo registro. Com `E` inferido, um registro que mistura campos de erros
+// distintos produz a UNIÃO deles, que é exatamente o que o chamador precisa declarar.
+export const joinFields = <E>(fields: readonly Result<string, E>[]): Result<string, E> => {
   const parts: string[] = [];
   for (const field of fields) {
     if (!field.ok) return field;

@@ -23,7 +23,27 @@ export type CnabSegmentError = PositionalFieldError;
 
 const DETAIL_RECORD_TYPE = 3;
 const MOVEMENT_INCLUSION = '0'; // G060 — 0 = inclusão (remessa)
-const MOVEMENT_INSTRUCTION_NONE = '00'; // G061
+
+// G061, colunas 016-017 — a INSTRUÇÃO, campo distinto do tipo de movimento (G060, coluna 015).
+//
+// `09` = "Inclusão do Registro Detalhe Bloqueado": o pagamento entra retido, aguardando liberação
+// dos usuários master no Net Empresa. É exigência de governança da P.O. (#804), e não sintaxe: é o
+// controle que separa quem MONTA a remessa de quem AUTORIZA o pagamento. Com `00` — inclusão
+// liberada — o arquivo pagaria direto, sem a dupla checagem que o cliente contratou.
+//
+// ⚠️ Os dois campos são vizinhos e têm larguras diferentes, e confundi-los é caro: o laudo pediu
+// esta mudança como "[015-016]", coordenada que não existe no layout. Escrever ali encostaria em
+// G060, cujo domínio inclui o valor que significa EXCLUSÃO — trocando "retido para aprovação" por
+// outra operação. Conferido no layout, p. 24, campos 06.3A e 07.3A.
+const MOVEMENT_INSTRUCTION_BLOCKED = '09';
+
+// `00` = "Inclusão de Registro Detalhe Liberado" — paga sem passar por aprovação no Net Empresa.
+//
+// ⚠️ PORTA LATERAL CONHECIDA, deliberadamente não fechada aqui. A #804 pede o bloqueio para o
+// Segmento A e não menciona o J, mas boleto também é pagamento: enquanto esta constante for `00`,
+// pagar por boleto contorna a dupla checagem que o cliente exige do pagamento por transferência.
+// Fechar isto é decisão da P.O., não do emissor — e exige o teste vir antes, como o do Segmento A.
+const MOVEMENT_INSTRUCTION_RELEASED = '00';
 const CURRENCY_BRL = 'BRL'; // G040
 
 export type Payee = Readonly<{
@@ -98,8 +118,8 @@ export const segmentA = (input: SegmentAInput): Result<string, CnabSegmentError>
     num(DETAIL_RECORD_TYPE, 1), // 008     tipo de registro (detalhe)
     num(input.recordNumber, 5), // 009-013 nº do registro no lote
     text('A', 1), // 014     segmento
-    num(MOVEMENT_INCLUSION, 1), // 015     tipo de movimento
-    num(MOVEMENT_INSTRUCTION_NONE, 2), // 016-017 código da instrução
+    num(MOVEMENT_INCLUSION, 1), // 015     tipo de movimento (G060)
+    num(MOVEMENT_INSTRUCTION_BLOCKED, 2), // 016-017 instrução (G061) — entra BLOQUEADO
     num(input.clearingHouse, 3), // 018-020 câmara centralizadora
     num(p.bankCode, 3), // 021-023 banco do FAVORECIDO
     digits(p.agency, 5), // 024-028 agência do favorecido
@@ -217,8 +237,8 @@ export const segmentJ = (input: SegmentJInput): Result<string, CnabSegmentError>
     num(DETAIL_RECORD_TYPE, 1), // 008     tipo de registro (detalhe)
     num(input.recordNumber, 5), // 009-013 nº do registro no lote
     text('J', 1), // 014     segmento
-    num(MOVEMENT_INCLUSION, 1), // 015     tipo de movimento
-    num(MOVEMENT_INSTRUCTION_NONE, 2), // 016-017 código da instrução
+    num(MOVEMENT_INCLUSION, 1), // 015     tipo de movimento (G060)
+    num(MOVEMENT_INSTRUCTION_RELEASED, 2), // 016-017 instrução (G061) — ver a porta lateral acima
     num(input.barcode, 44), // 018-061 código de barras
     text(input.beneficiaryName, 30), // 062-091 nome do cedente (quem recebe)
     dateDDMMYYYY(input.dueDate), // 092-099 vencimento do título

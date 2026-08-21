@@ -15,7 +15,10 @@ const CEDENTE: CedenteHeaderData = {
   bankCode: '237',
   documentType: '2',
   document: '12345678000199',
-  convenio: '1234567',
+  // Seis dígitos, e é o máximo representável (#804): o validador do banco lê o convênio apenas em
+  // 033-038 e exige 039-052 em branco. `000000` é a máscara reservada — ver
+  // `tests/cleanup/bank-fixture-masking.test.ts`.
+  convenio: '000000',
   agency: '1234',
   agencyDigit: '5',
   accountNumber: '567890',
@@ -66,6 +69,53 @@ describe('Multipag — Header de Arquivo (tipo 0)', () => {
     assert.equal(at(record, 59, 70), '000000567890');
   });
 
+  // #804, defeito 1. O layout declara G007 com 20 posições Alfa (033-052) — e o emissor era
+  // aderente a ele. O Validador Universal, porém, lê o convênio SÓ em 033-038 e exige o resto em
+  // branco: um convênio mais longo era silenciosamente truncado pelo banco, que processava o
+  // arquivo sob outro contrato. Layout e validador divergem, e é o validador quem paga.
+  it('escreve o convênio em 033-038 e deixa 039-052 em branco', () => {
+    assert.equal(at(record, 33, 38), '000000');
+    assert.equal(at(record, 39, 52), ' '.repeat(14));
+    assert.equal(record.length, 240);
+  });
+
+  // Truncar é o modo de falha caro: o arquivo sai bem formado, o banco aceita, e o pagamento corre
+  // sob um convênio que não é o nosso. Recusar na emissão é a mesma disciplina que `positional.ts`
+  // já aplica a campo numérico que estoura.
+  it('recusa convênio que não cabe em 6 posições, em vez de deixar o banco truncar', () => {
+    const r = fileHeader({
+      cedente: { ...CEDENTE, convenio: '0000001' },
+      bankName: 'BRADESCO',
+      nsa: 42,
+      generatedAt: AT,
+    });
+    assert.ok(isErr(r));
+    // O erro tem nome PRÓPRIO, e não um `numeric-field-*` emprestado: o convênio é campo Alfa, e
+    // quem recebe a recusa precisa saber que o problema é o cadastro do convênio — não um número
+    // que estourou. É o que permite a borda dizer ao operador o que corrigir.
+    assert.equal(r.error, 'convenio-field-overflow');
+  });
+
+  // Convênio vazio produzia 20 brancos e seguia adiante: arquivo aceito pelo banco, processado sem
+  // contrato identificado. Distinto do overflow de propósito — ali há convênio e ele não cabe;
+  // aqui não há convênio, e a ação de quem corrige é outra.
+  it('recusa convênio ausente, em vez de emitir o campo em branco', () => {
+    const r = fileHeader({
+      cedente: { ...CEDENTE, convenio: '   ' },
+      bankName: 'BRADESCO',
+      nsa: 42,
+      generatedAt: AT,
+    });
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'convenio-field-empty');
+  });
+
+  // #804, defeito 2. G020 tem domínio fechado no manual, e o emissor escrevia `00000` — valor fora
+  // do domínio, que o validador recusa. Não é campo livre.
+  it('declara densidade de gravação dentro do domínio do layout', () => {
+    assert.equal(at(record, 167, 171), '01600');
+  });
+
   it('marca remessa, data, hora e NSA', () => {
     assert.equal(at(record, 143, 143), '1');
     assert.equal(at(record, 144, 151), '10082026');
@@ -95,6 +145,36 @@ describe('Multipag — Header de Lote (tipo 1)', () => {
     assert.equal(at(record, 1, 3), '237');
     assert.equal(at(record, 4, 7), '0001');
     assert.equal(at(record, 8, 8), '1');
+  });
+
+  // O convênio aparece DUAS vezes no arquivo, nas mesmas posições (033-052), e o laudo do
+  // validador acusou as duas. Corrigir só o header de arquivo deixaria metade do defeito de pé —
+  // por isso a regra é conferida aqui também, e não por herança do teste anterior.
+  it('escreve o convênio em 033-038 e deixa 039-052 em branco', () => {
+    assert.equal(at(record, 33, 38), '000000');
+    assert.equal(at(record, 39, 52), ' '.repeat(14));
+    assert.equal(record.length, 240);
+  });
+
+  it('recusa convênio que não cabe em 6 posições, em vez de deixar o banco truncar', () => {
+    const r = batchHeader({
+      cedente: { ...CEDENTE, convenio: '0000001' },
+      batchNumber: 1,
+      profile: TRANSFER_PROFILE,
+    });
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'convenio-field-overflow');
+  });
+
+  // Mesmo campo, mesmo erro, outro registro: a regra não é do header de arquivo, é do convênio.
+  it('recusa convênio ausente, em vez de emitir o campo em branco', () => {
+    const r = batchHeader({
+      cedente: { ...CEDENTE, convenio: '' },
+      batchNumber: 1,
+      profile: TRANSFER_PROFILE,
+    });
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'convenio-field-empty');
   });
 
   it('marca operação C e escreve serviço, forma e versão de layout vindos do perfil', () => {

@@ -216,6 +216,11 @@ const SLUG_MESSAGES: Record<string, string> = {
     'A conta bancária selecionada está sem o convênio. Informe-o no cadastro da conta para gerar remessas.',
   'cedente-convenio-malformed':
     'O convênio da conta bancária selecionada não é numérico. Corrija-o no cadastro da conta.',
+  // #804. A mensagem diz o limite E o motivo de propósito: acima de 6 posições o banco não recusa
+  // o arquivo — ele descarta o excedente e processa a remessa sob outro contrato. Sem essa frase, o
+  // operador tende a achar que o sistema é que está sendo restritivo, e procura contornar.
+  'cedente-convenio-too-long':
+    'O convênio da conta bancária selecionada tem mais de 6 dígitos. O banco lê apenas os 6 primeiros e descartaria o restante, processando a remessa sob outro convênio. Confirme o número junto ao banco e corrija-o no cadastro da conta.',
   'cedente-convenio-already-set':
     'Esta conta já tem convênio. Ele identifica o contrato junto ao banco e não pode ser trocado.',
   'document-not-found': 'Documento não encontrado.',

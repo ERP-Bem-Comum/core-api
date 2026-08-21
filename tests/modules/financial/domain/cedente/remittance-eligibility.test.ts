@@ -19,7 +19,7 @@ const account = (convenio: string) => ({ convenio });
 
 describe('Aptidão da conta-cedente à remessa (#722)', () => {
   it('conta com convênio numérico está apta', () => {
-    assert.ok(isOk(checkCedenteRemittanceReadiness(account('1234567'))));
+    assert.ok(isOk(checkCedenteRemittanceReadiness(account('000000'))));
   });
 
   // O caso que motivou a issue: cadastro aceito, remessa impossível.
@@ -45,7 +45,21 @@ describe('Aptidão da conta-cedente à remessa (#722)', () => {
     assert.equal(r.error, 'cedente-convenio-malformed');
   });
 
+  // #804: o Validador Universal lê o convênio só em 033-038, e acima disso o banco não recusa —
+  // TRUNCA, e processa a remessa sob outro contrato. A conferência vive aqui, e não apenas no
+  // emissor, por causa da ordem: esta função roda ANTES de alocar o NSA, e o número não volta
+  // depois de consumido. Descobrir o problema no montador queimaria um da sequência por tentativa.
+  it('convênio acima de 6 posições é recusado, em vez de o banco truncar', () => {
+    const r = checkCedenteRemittanceReadiness(account('0000001'));
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'cedente-convenio-too-long');
+  });
+
+  it('aceita convênio no limite de 6 posições', () => {
+    assert.ok(isOk(checkCedenteRemittanceReadiness(account('000000'))));
+  });
+
   it('aceita convênio com espaços em volta, sem exigir que o operador os remova', () => {
-    assert.ok(isOk(checkCedenteRemittanceReadiness(account('  1234567  '))));
+    assert.ok(isOk(checkCedenteRemittanceReadiness(account('  000000  '))));
   });
 });

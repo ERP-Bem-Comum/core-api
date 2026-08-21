@@ -15,7 +15,7 @@ const account = (nextNsa: number, status: 'Active' | 'Closed' = 'Active') => {
     agency: '1234',
     accountNumber: '567890',
     accountDigit: '1',
-    convenio: '1234567',
+    convenio: '000000',
     document: '12345678000199',
     nextNsa,
     status,
