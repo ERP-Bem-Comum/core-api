@@ -26,6 +26,7 @@ import {
   type PoolConfigError,
 } from '../../../../../shared/persistence/mysql-pool-config.ts';
 import * as schema from '../schemas/mysql.ts';
+import { describeDriverError } from '../../../../../shared/persistence/driver-error.ts';
 
 export type FinancialMysqlConnectOptions = Readonly<{
   connectionString: string;
@@ -76,7 +77,7 @@ const smokeCheck = async (pool: Pool): Promise<Result<true, FinancialMysqlDriver
     await pool.query('SELECT 1');
     return ok(true);
   } catch (cause) {
-    process.stderr.write(`[financial-mysql-driver:smoke] ${String(cause)}\n`);
+    process.stderr.write(`[financial-mysql-driver:smoke] ${describeDriverError(cause)}\n`);
     return err('financial-mysql-driver-connect-failed');
   }
 };
@@ -92,7 +93,7 @@ const createPoolSafe = (
   try {
     return ok(createPool(cfg.value));
   } catch (cause) {
-    process.stderr.write(`[financial-mysql-driver:createPool] ${String(cause)}\n`);
+    process.stderr.write(`[financial-mysql-driver:createPool] ${describeDriverError(cause)}\n`);
     return err('financial-mysql-driver-connect-failed');
   }
 };
@@ -109,7 +110,7 @@ const applyMigrationsTo = async (
     });
     return ok(true);
   } catch (cause) {
-    process.stderr.write(`[financial-mysql-driver:migrate] ${String(cause)}\n`);
+    process.stderr.write(`[financial-mysql-driver:migrate] ${describeDriverError(cause)}\n`);
     return err('financial-mysql-driver-migrate-failed');
   }
 };
