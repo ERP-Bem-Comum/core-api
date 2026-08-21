@@ -210,6 +210,27 @@ export const createDrizzleRemittanceRepository = (
 
             // Agora sob lock: a pergunta que o use case fez lá atrás, refeita no mesmo ato da
             // gravação. Quem chegou primeiro já gravou o vínculo e commitou; quem chega depois vê.
+            //
+            // ⚠️ E vê por um motivo que depende da ORDEM das leituras desta transação, não apenas
+            // do lock acima. Esta releitura NÃO trava nada — é *consistent read*, e sob REPEATABLE
+            // READ (o isolamento vigente, default do servidor) todos eles leem o snapshot fixado
+            // pelo PRIMEIRO deles: *"All consistent reads within the same transaction read the
+            // snapshot established by the first such read in that transaction"* (Refman 8.4
+            // §17.7.2.3). As duas leituras anteriores são `for('update')` — locking reads, que leem
+            // sempre a versão committed mais recente e por isso não são o "first such read" que fixa
+            // o snapshot. Logo o primeiro consistent read é ESTE, e ele só executa depois de a trava
+            // acima liberar, isto é, depois de o vencedor ter commitado.
+            //
+            // Para quem for mexer aqui: acrescentar QUALQUER `select` sem `for('update')` ANTES da
+            // trava fixa o snapshot cedo, e esta releitura volta a enxergar o estado anterior à
+            // corrida — as duas emissões gravam de novo, em silêncio. Uma leitura de auditoria, um
+            // `findById` reaproveitado dentro da `tx` ou uma checagem de conta bastam. Se algo
+            // precisar ser lido antes, leia com `for('update')`.
+            //
+            // Sob READ COMMITTED a premissa é dispensável — lá cada consistent read pega snapshot
+            // novo. Ou seja, a trava sobrevive à troca de isolamento (como o bloco acima afirma),
+            // mas por REPEATABLE READ ela depende também desta ordem. A rede mecânica é o teste
+            // `emissão concorrente — a janela TOCTOU (#789)`, que fica vermelho se isto quebrar.
             const heldNow = await tx
               .select({ payableId: finRemittancePayables.payableId })
               .from(finRemittancePayables)
