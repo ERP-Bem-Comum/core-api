@@ -15,7 +15,8 @@ import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
 
 export type VanS3ConfigError =
   | Readonly<{ tag: 'missing-env'; field: string }>
-  | Readonly<{ tag: 'invalid-prefix'; field: string; raw: string }>;
+  | Readonly<{ tag: 'invalid-prefix'; field: string; raw: string }>
+  | Readonly<{ tag: 'invalid-env'; field: string; raw: string }>;
 
 export type VanPrefixes = Readonly<{
   outbound: string;
@@ -48,7 +49,40 @@ const DEFAULT_PREFIXES: VanPrefixes = {
 
 const LOCAL_HOST = /localhost|127\.0\.0\.1|0\.0\.0\.0/;
 
+const FORCE_PATH_STYLE_VAR = 'VAN_S3_FORCE_PATH_STYLE';
+
 const isPresent = (v: string | undefined): v is string => v !== undefined && v !== '';
+
+// Traduz o valor cru de uma env booleana. `undefined` significa "não consigo interpretar isto" — e
+// quem chama transforma essa ausência em erro nomeado, nunca em default silencioso.
+//
+// Duas grafias, e só duas: `true` e `false`, sem distinção de caixa e sem se importar com espaço em
+// volta. O que se apara é ruído de transporte — o YAML do compose preserva o espaço de
+// `'${VAR:- }'`, e ninguém digita um espaço com intenção. O que NÃO se aceita é sinônimo: `1`, `yes`
+// e `on` seriam a mesma intenção escrita de outro jeito, e cada uma delas obriga o próximo leitor a
+// descobrir por leitura de código se vale ou não. Duas grafias exatas cabem na cabeça sem consulta.
+const readBoolean = (raw: string): boolean | undefined => {
+  const normalized = raw.trim().toLowerCase();
+  if (normalized === 'true') return true;
+  if (normalized === 'false') return false;
+  return undefined;
+};
+
+// `forcePathStyle` decide se o SDK monta `<bucket>.<host>` (virtual-hosted) ou `<host>/<bucket>`
+// (path-style). A heurística acerta os dois extremos — AWS real e localhost — e é cega para o meio:
+// hostname de serviço, endpoint de VPC, IP de rede interna passam por ela como se fossem a AWS.
+// A env existe para quem opera dizer o que a regex não tem como saber, e vale nos DOIS sentidos.
+const resolveForcePathStyle = (
+  raw: string | undefined,
+  endpoint: string | undefined,
+): Result<boolean, VanS3ConfigError> => {
+  if (!isPresent(raw)) return ok(isPresent(endpoint) ? LOCAL_HOST.test(endpoint) : false);
+  const explicit = readBoolean(raw);
+  if (explicit === undefined) {
+    return err({ tag: 'invalid-env', field: FORCE_PATH_STYLE_VAR, raw });
+  }
+  return ok(explicit);
+};
 
 // Prefixo tem de terminar em barra: sem ela, `saida` + `X.REM` vira `saidaX.REM` — um objeto na
 // raiz do bucket, que o agente nunca vê, e uma remessa que some sem erro algum.
@@ -97,11 +131,14 @@ export const parseVanS3Env = (
   const endpoint = env['VAN_S3_ENDPOINT'];
   const region = env['VAN_S3_REGION'] ?? '';
 
+  const forcePathStyle = resolveForcePathStyle(env[FORCE_PATH_STYLE_VAR], endpoint);
+  if (!forcePathStyle.ok) return forcePathStyle;
+
   return ok({
     bucket: env['VAN_S3_BUCKET'] ?? '',
     region,
     ...(isPresent(endpoint) ? { endpoint } : {}),
-    forcePathStyle: isPresent(endpoint) ? LOCAL_HOST.test(endpoint) : false,
+    forcePathStyle: forcePathStyle.value,
     ...(isPresent(rawKey) && isPresent(rawSecret)
       ? { credentials: { accessKeyId: rawKey, secretAccessKey: rawSecret } }
       : {}),

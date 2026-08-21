@@ -86,3 +86,70 @@ describe('VAN_S3_* — endpoint', () => {
     assert.equal(parsed({ VAN_S3_ENDPOINT: 'https://s3.exemplo.com' }).forcePathStyle, false);
   });
 });
+
+// A heurística do endpoint acerta os dois extremos — AWS e localhost — e erra tudo que fica no meio:
+// hostname de serviço Docker, endpoint de VPC, IP de rede interna. Nesses casos ela devolve `false`,
+// o SDK monta `<bucket>.<host>` e a resolução de nome falha. Quem opera precisa poder dizer o que a
+// heurística não tem como saber. O adapter de documentos já faz isso (`s3-config-aws.ts:152-155`).
+describe('VAN_S3_FORCE_PATH_STYLE — a env sobrescreve a heurística', () => {
+  it('liga path-style num endpoint que a heurística não reconhece', () => {
+    const cfg = parsed({
+      VAN_S3_ENDPOINT: 'http://minio:9000',
+      VAN_S3_FORCE_PATH_STYLE: 'true',
+    });
+    assert.equal(cfg.forcePathStyle, true);
+  });
+
+  it('ausente, preserva exatamente o comportamento de hoje', () => {
+    assert.equal(parsed({ VAN_S3_ENDPOINT: 'http://minio:9000' }).forcePathStyle, false);
+  });
+
+  // A sobrescrita vale nos DOIS sentidos. Só ligar deixaria de fora quem roda um S3 real atrás de um
+  // proxy em localhost — e obrigaria a mexer em código para desligar o que a regex ligou sozinha.
+  it('desliga path-style mesmo em endpoint local', () => {
+    const cfg = parsed({
+      VAN_S3_ENDPOINT: 'http://localhost:9000',
+      VAN_S3_FORCE_PATH_STYLE: 'false',
+    });
+    assert.equal(cfg.forcePathStyle, false);
+  });
+
+  it('sem endpoint e sem a env, produção AWS segue com path-style desligado', () => {
+    assert.equal(parsed().forcePathStyle, false);
+  });
+
+  // Cair no default seria adivinhar a intenção de quem escreveu a variável — e o preço do palpite
+  // errado é um worker falando com o host errado, achando que obedeceu. Num adapter que deposita
+  // arquivo de pagamento, recusar subir é mais barato que subir torto.
+  it('recusa valor ininterpretável em vez de cair no default', () => {
+    const r = parseVanS3Env({
+      ...base,
+      VAN_S3_ENDPOINT: 'http://minio:9000',
+      VAN_S3_FORCE_PATH_STYLE: 'talvez',
+    });
+    assert.ok(isErr(r), 'esperava err para valor ininterpretável');
+    assert.equal(r.error.tag, 'invalid-env');
+    assert.equal(r.error.field, 'VAN_S3_FORCE_PATH_STYLE');
+  });
+
+  // Caixa e espaço em volta são ruído de transporte, não intenção: o YAML do compose preserva o
+  // espaço, e ninguém digita um de propósito.
+  it('lê a grafia sem se importar com caixa nem espaço em volta', () => {
+    assert.equal(parsed({ VAN_S3_FORCE_PATH_STYLE: '  TRUE  ' }).forcePathStyle, true);
+    assert.equal(
+      parsed({ VAN_S3_ENDPOINT: 'http://localhost:9000', VAN_S3_FORCE_PATH_STYLE: 'False' })
+        .forcePathStyle,
+      false,
+    );
+  });
+
+  // Sinônimo é a mesma intenção escrita de outro jeito — e cada um aceito obriga o próximo leitor a
+  // descobrir por leitura de código quais valem. Duas grafias exatas cabem na cabeça sem consulta.
+  it('recusa sinônimo de booleano, por mais óbvio que pareça', () => {
+    for (const raw of ['1', '0', 'yes', 'no', 'on', 'off', 'sim']) {
+      const r = parseVanS3Env({ ...base, VAN_S3_FORCE_PATH_STYLE: raw });
+      assert.ok(isErr(r), `esperava err para ${raw}`);
+      assert.equal(r.error.tag, 'invalid-env');
+    }
+  });
+});
