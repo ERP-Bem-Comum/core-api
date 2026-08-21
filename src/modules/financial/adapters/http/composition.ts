@@ -72,6 +72,7 @@ import { createS3VanStorage } from '../van/van-storage.s3.ts';
 import { createInMemoryVanStorage } from '../van/van-storage.in-memory.ts';
 import { parseVanS3Env } from '../van/van-s3-config.ts';
 import { createBradescoMultipagTranslator } from '../cnab/bradesco-multipag-translator.ts';
+import { createRemittanceBatchPlanner } from '../cnab/batch-planner.ts';
 import { generateRemittance } from '../../application/use-cases/generate-remittance.ts';
 import { listRemittances } from '../../application/use-cases/list-remittances.ts';
 import { getRemittance } from '../../application/use-cases/get-remittance.ts';
@@ -1049,7 +1050,14 @@ const makeDeps = (pools: Pools, clock: Clock = ClockReal()): FinancialHttpDeps =
     },
     getPayablesSummaryByIds: pools.payableSummaryByIdsView.getPayablesSummaryByIds,
     getDocumentsSummaryByIds: pools.documentSummaryByIdsView.getDocumentsSummaryByIds,
-    previewRemittance: previewRemittance({ preview: pools.remittancePreviewReader }),
+    previewRemittance: previewRemittance({
+      preview: pools.remittancePreviewReader,
+      // A conta-cedente e o planejador entram porque o pré-voo passou a devolver a composição dos
+      // lotes (#804, CA7): a forma de lançamento depende do banco do cedente, e o agrupamento é o
+      // MESMO do emissor — o adapter reusa `batchProfileFor`, sem segunda régua.
+      cedenteAccounts: pools.cedenteStore,
+      batchPlanner: createRemittanceBatchPlanner(),
+    }),
     generateRemittance: generateRemittance({
       cedenteAccounts: pools.cedenteStore,
       remittances: pools.remittanceRepo,
