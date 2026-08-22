@@ -1286,6 +1286,17 @@ export const updatePayableDueDateBodySchema = z.object({
   version: z.number().int().min(0).max(Number.MAX_SAFE_INTEGER),
   // Novo vencimento do título alvo (date-only `YYYY-MM-DD`). Não propaga ao documento-pai nem aos irmãos.
   dueDate: z.iso.date(),
+  // Pré-condição do compare-and-swap: o vencimento que o cliente tinha na tela. A gravação só
+  // acontece se o título ainda estiver com ele — senão, 409.
+  //
+  // ⚠️ OBRIGATÓRIO de propósito. Torná-lo opcional pareceria mais gentil com o front, mas a
+  // ausência teria de cair num CAS mais fraco, e uma requisição sem o campo passaria a ter menos
+  // garantia do que aparenta — sem nada na resposta dizendo isso. Um campo exigido quebra alto e
+  // uma vez; a degradação silenciosa erra baixo e para sempre.
+  expectedDueDate: z.iso.date().meta({
+    description:
+      'Vencimento atual do título, como exibido ao usuário. A alteração é recusada com 409 se outro operador já houver reagendado este título.',
+  }),
 });
 
 // ─── #62 Ingestão de documento (POST /documents/ingest) ──────────────────────
