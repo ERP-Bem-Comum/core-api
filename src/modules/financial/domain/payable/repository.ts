@@ -49,6 +49,23 @@ export type MarkPaidInput = Readonly<{
   events: readonly DocumentEvent[];
 }>;
 
+export type RescheduleInput = Readonly<{
+  payableId: PayableId;
+  /** Novo vencimento do título alvo. */
+  dueDate: Date;
+  /**
+   * Vencimento que o cliente tinha na tela — a pré-condição do CAS.
+   *
+   * ⚠️ NÃO é o valor recém-lido pelo use case. Ancorar o CAS na leitura do próprio use case
+   * protegeria só os milissegundos entre o `findById` e o `UPDATE`; ancorá-lo no que o CLIENTE viu
+   * cobre a janela inteira — desde a tela até a gravação. É a diferença entre detectar duas
+   * requisições simultâneas e detectar que alguém reagendou enquanto o operador decidia.
+   */
+  expectedDueDate: Date;
+  timelineEntries: readonly FinancialTimelineEntry[];
+  events: readonly DocumentEvent[];
+}>;
+
 export type PayableRepository = Readonly<{
   /**
    * Baixa manual de UM título: `Approved` → `Paid` (#223).
@@ -57,4 +74,17 @@ export type PayableRepository = Readonly<{
    * estiver `Approved`. Os irmãos seguem intocados, e `fin_documents` não é escrito.
    */
   markPaid: (input: MarkPaidInput) => Promise<Result<void, PayableRepositoryError>>;
+
+  /**
+   * Reagendamento de UM título (#270): novo `dueDate`, sem tocar o documento nem os irmãos.
+   *
+   * ⚠️ A pré-condição é OUTRA, e a diferença é de natureza, não de campo. A baixa é uma TRANSIÇÃO
+   * — `Approved → Paid` acontece uma vez só, e o próprio estado de destino serve de guarda. O
+   * reagendamento é uma ATRIBUIÇÃO: reagendar duas vezes é legítimo, e nenhum estado nomeado
+   * distingue "já reagendei" de "ainda não". Por isso o CAS aqui compara o VALOR anterior.
+   *
+   * Traduzir o molde do `markPaid` campo a campo daria um `WHERE status IN (…)` que aceita a
+   * escrita sempre — last-write-wins mudo, justo onde hoje existe detecção.
+   */
+  reschedule: (input: RescheduleInput) => Promise<Result<void, PayableRepositoryError>>;
 }>;

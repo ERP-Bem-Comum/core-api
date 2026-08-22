@@ -233,6 +233,7 @@ describe('financial/application — registerManualPayment paidAt (#232)', () => 
   ): { payableRepo: PayableRepository; events: DocumentEvent[] } => {
     const events: DocumentEvent[] = [];
     const spy: PayableRepository = {
+      ...payableRepo,
       markPaid: (input) => {
         events.push(...input.events);
         return payableRepo.markPaid(input);

@@ -865,9 +865,11 @@ const financialRoutes =
         const result = await deps.updatePayableDueDate({
           documentId: req.params.id,
           payableId: req.params.payableId,
-          // Optimistic lock (FR-009): propaga `body.version` → `cmd.expectedVersion`.
+          // `version` segue no contrato, mas não protege mais esta escrita: ela não altera o
+          // documento. Quem protege é o `expectedDueDate` abaixo, comparado no próprio título.
           expectedVersion: req.body.version,
           dueDate: new Date(req.body.dueDate),
+          expectedDueDate: new Date(req.body.expectedDueDate),
         });
         if (!result.ok) return sendDomainError(reply, result.error);
         return loadAndSerialize(deps, reply, req.params.id);
