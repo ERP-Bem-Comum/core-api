@@ -99,7 +99,7 @@ export const registerManualPayment =
     });
 
     // Escreve UMA linha, por PK, com a pré-condição no `WHERE` — nem `fin_documents`, nem as
-    // tabelas de retenção e imposto são tocadas. `payable-state-conflict` volta daqui quando outra
+    // tabelas de retenção e imposto são tocadas. `payable-payment-conflict` volta daqui quando outra
     // baixa chegou primeiro (ver `payable-repository.drizzle.ts`).
     const saved = await deps.payableRepo.markPaid({
       payableId: payableId.value,

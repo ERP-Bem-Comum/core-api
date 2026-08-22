@@ -158,7 +158,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const loserErrors = results.filter((r) => !r.ok).map((r) => (r.ok ? null : r.error));
       assert.deepEqual(
         loserErrors,
-        ['payable-state-conflict'],
+        ['payable-payment-conflict'],
         'a perdedora do CAS e conflito de estado, nao falha de infra',
       );
 
@@ -253,7 +253,9 @@ if (!process.env['MYSQL_INTEGRATION']) {
         `esperava 1 vencedor, veio ${JSON.stringify(results)}`,
       );
       const loserErrors = results.filter((r) => !r.ok).map((r) => (r.ok ? null : r.error));
-      assert.deepEqual(loserErrors, ['payable-state-conflict']);
+      // O slug é o do REAGENDAMENTO, não o da baixa — é o que garante que o operador leia a
+      // mensagem da operação que ele tentou fazer.
+      assert.deepEqual(loserErrors, ['payable-reschedule-conflict']);
 
       // O vencimento gravado é o de UM dos dois, nunca uma mistura nem o valor semeado.
       const docRepo = createDrizzleDocumentRepository(handle);
@@ -280,7 +282,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const r = await reschedule(repo, seed.parentId, DUE_A, new Date('2020-01-01T00:00:00.000Z'));
 
       assert.equal(r.ok, false, 'reagendar com vencimento anterior errado nao pode gravar');
-      if (!r.ok) assert.equal(r.error, 'payable-state-conflict');
+      if (!r.ok) assert.equal(r.error, 'payable-reschedule-conflict');
 
       const docRepo = createDrizzleDocumentRepository(handle);
       const found = await docRepo.findById(seed.documentId);

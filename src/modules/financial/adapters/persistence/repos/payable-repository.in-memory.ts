@@ -51,20 +51,22 @@ export const createInMemoryPayableRepository = (
   const writeOne = async (
     args: Readonly<{
       payableId: string;
+      /** O slug do CAS desta operação — espelha o `conflictError` do adapter Drizzle. */
+      conflictError: Exclude<PayableRepositoryError, 'payable-repository-failure'>;
       holds: (target: Payable) => boolean;
       apply: (target: Payable) => Payable;
       timelineEntries: readonly FinancialTimelineEntry[];
       events: readonly DocumentEvent[];
     }>,
   ): Promise<Result<void, PayableRepositoryError>> => {
-    const { payableId, holds, apply, timelineEntries, events } = args;
+    const { payableId, conflictError, holds, apply, timelineEntries, events } = args;
     const found = locate(store, payableId);
 
     // Sem o título no store não há o que gravar. O Drizzle chega ao mesmo desfecho por outro
     // caminho — `affectedRows = 0` —, e é o mesmo slug: quando o use case leu o título e ele
     // sumiu no meio, o que mudou foi o estado.
-    if (found === null) return err('payable-state-conflict');
-    if (!holds(found.target)) return err('payable-state-conflict');
+    if (found === null) return err(conflictError);
+    if (!holds(found.target)) return err(conflictError);
 
     const mutate = (p: Payable): Payable => (String(p.id) === payableId ? apply(p) : p);
 
@@ -102,6 +104,7 @@ export const createInMemoryPayableRepository = (
     markPaid: async (input: MarkPaidInput): Promise<Result<void, PayableRepositoryError>> =>
       writeOne({
         payableId: String(input.payableId),
+        conflictError: 'payable-payment-conflict',
         // A mesma pré-condição que viaja no `WHERE status = 'Approved'` do adapter real.
         holds: (target) => target.status === 'Approved',
         apply: (p) => immutable<Payable>({ ...p, status: 'Paid', paidAt: input.paidAt }),
@@ -112,6 +115,7 @@ export const createInMemoryPayableRepository = (
     reschedule: async (input: RescheduleInput): Promise<Result<void, PayableRepositoryError>> =>
       writeOne({
         payableId: String(input.payableId),
+        conflictError: 'payable-reschedule-conflict',
         // ⚠️ Igualdade por INSTANTE, não por dia civil. É estrito de propósito: afrouxar para
         // `toISOString().slice(0,10)` faria este adapter aceitar um `Date` que o MySQL recusaria
         // (ou o contrário), e a divergência de fuso apareceria só em produção. Quem prova a

@@ -147,7 +147,7 @@ describe('financial/application — updatePayableDueDate (#270)', () => {
 // Fatia 2 — o CAS por VALOR. Estes casos não existiam porque a proteção era a `version` do
 // documento, que acusava conflito por qualquer mudança nele e nenhuma no título.
 describe('financial/application — updatePayableDueDate sob CAS por valor (Fatia 2)', () => {
-  it('reagendar com `expectedDueDate` desatualizado → payable-state-conflict', async () => {
+  it('reagendar com `expectedDueDate` desatualizado → payable-reschedule-conflict', async () => {
     const { repo, payableRepo } = makeRepo();
     const id = await seedOpen(repo);
     const reschedule = updatePayableDueDate({ repo, payableRepo, clock: CLOCK });
@@ -173,7 +173,7 @@ describe('financial/application — updatePayableDueDate sob CAS por valor (Fati
       expectedDueDate: ORIGINAL_DUE,
     });
     assert.equal(second.ok, false, 'a escrita cega de B tem de ser recusada');
-    if (!second.ok) assert.equal(second.error, 'payable-state-conflict');
+    if (!second.ok) assert.equal(second.error, 'payable-reschedule-conflict');
 
     // E o vencimento no banco continua o de A.
     const after = await repo.findById(id);

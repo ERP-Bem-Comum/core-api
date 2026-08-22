@@ -36,10 +36,23 @@ import type { FinancialTimelineEntry } from '../timeline/types.ts';
 // `timelineEntries` e `events` vão na MESMA transação do UPDATE — trilha (SC-004/NFR-001,
 // Vernon:3257) e outbox (ADR-0015): evento durável SSE estado persistido.
 
+// Os dois conflitos de CAS são slugs SEPARADOS, e não um só parametrizado.
+//
+// Um slug único (`payable-state-conflict`) existiu e durou um PR: a mensagem ao humano é escrita por
+// slug, então as duas operações compartilhavam uma frase — que falava de "baixa" e chegava a quem
+// tinha tentado REAGENDAR. O gate não pegou porque o teste da borda assere `error.code`, não o texto;
+// acoplar teste a string de UX seria pior, e por isso o erro não tinha rede.
+//
+// Neutralizar a frase para servir às duas seria a correção errada: as ações que o operador precisa
+// tomar são diferentes — "confira se a baixa já foi registrada" contra "confira o vencimento atual" —
+// e uma mensagem genérica o bastante para as duas não diz o que fazer em nenhuma. É a mensagem que
+// exige a separação; o slug apenas a carrega.
 export type PayableRepositoryError =
-  // O CAS não casou: o título não estava mais no estado que a operação pressupõe quando a escrita
-  // chegou ao banco. Análogo por-título do `document-version-conflict`.
-  'payable-state-conflict' | 'payable-repository-failure';
+  // A baixa não casou: o título não estava mais `Approved` quando a escrita chegou ao banco.
+  | 'payable-payment-conflict'
+  // O reagendamento não casou: o vencimento mudou entre a leitura do cliente e a escrita.
+  | 'payable-reschedule-conflict'
+  | 'payable-repository-failure';
 
 export type MarkPaidInput = Readonly<{
   payableId: PayableId;

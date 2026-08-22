@@ -84,7 +84,7 @@ export const updatePayableDueDate =
       actor: null,
     });
 
-    // Escreve UMA linha, por PK, com o vencimento anterior no `WHERE`. `payable-state-conflict`
+    // Escreve UMA linha, por PK, com o vencimento anterior no `WHERE`. `payable-reschedule-conflict`
     // volta daqui quando outro operador reagendou o mesmo título antes desta gravação.
     const saved = await deps.payableRepo.reschedule({
       payableId: payableId.value,

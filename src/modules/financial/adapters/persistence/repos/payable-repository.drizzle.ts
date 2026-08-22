@@ -39,24 +39,36 @@ import { appendFinOutboxInTx } from './fin-outbox-helpers.ts';
 import { describeDriverError } from '../../../../../shared/persistence/driver-error.ts';
 import { withDeadlockRetry } from '../../../../../shared/persistence/retry-on-deadlock.ts';
 
+/** Os desfechos de CAS, derivados do port: o que sobra do erro de repositório quando se tira a infra. */
+type CasConflictError = Exclude<PayableRepositoryError, 'payable-repository-failure'>;
+
 // Sentinela do conflito de CAS. Existe pela mesma razão da `VERSION_CONFLICT_SYMBOL` do
 // `document-repository`: dentro de `db.transaction` só `throw` reverte — um `return` deixaria a
-// transação seguir e gravar trilha e outbox de uma baixa que não aconteceu. E o `catch` precisa
+// transação seguir e gravar trilha e outbox de uma escrita que não aconteceu. E o `catch` precisa
 // distinguir este caso de falha de infra, que tem outro slug e outro tratamento a montante.
 // `Symbol` em vez de `class` — `no-restricted-syntax` do projeto.
-const STATE_CONFLICT_SYMBOL = Symbol('payable-state-conflict');
+//
+// ⚠️ A sentinela TRANSPORTA o slug, em vez de ser um marcador booleano. Antes ela só dizia "houve
+// conflito", e o `catch` tinha de escolher um slug sozinho — o que só funciona enquanto existir um
+// desfecho de conflito. Com dois, quem sabe qual ocorreu é o `applyUpdate` que falhou, não o `catch`.
+const CAS_CONFLICT_SYMBOL = Symbol('payable-cas-conflict');
 
-type StateConflictSentinel = Error & Readonly<{ [STATE_CONFLICT_SYMBOL]: true }>;
+type CasConflictSentinel = Error & Readonly<{ [CAS_CONFLICT_SYMBOL]: CasConflictError }>;
 
-const makeStateConflict = (payableId: string): StateConflictSentinel => {
-  const e = new Error(`payable-state-conflict:${payableId}`) as StateConflictSentinel;
-  (e as unknown as Record<symbol, boolean>)[STATE_CONFLICT_SYMBOL] = true;
+const makeCasConflict = (error: CasConflictError, payableId: string): CasConflictSentinel => {
+  const e = new Error(`${error}:${payableId}`) as CasConflictSentinel;
+  (e as unknown as Record<symbol, CasConflictError>)[CAS_CONFLICT_SYMBOL] = error;
   return e;
 };
 
-const isStateConflict = (cause: unknown): cause is StateConflictSentinel =>
-  cause instanceof Error &&
-  (cause as unknown as Record<symbol, unknown>)[STATE_CONFLICT_SYMBOL] === true;
+/** O slug do conflito, ou `null` se a causa não for uma sentinela nossa (aí é falha de infra). */
+const readCasConflict = (cause: unknown): CasConflictError | null => {
+  if (!(cause instanceof Error)) return null;
+  const slug = (cause as unknown as Record<symbol, unknown>)[CAS_CONFLICT_SYMBOL];
+  return slug === 'payable-payment-conflict' || slug === 'payable-reschedule-conflict'
+    ? slug
+    : null;
+};
 
 export const createDrizzlePayableRepository = (
   handle: FinancialMysqlHandle, // eslint-disable-line @typescript-eslint/prefer-readonly-parameter-types
@@ -79,6 +91,8 @@ export const createDrizzlePayableRepository = (
     args: Readonly<{
       ctx: string;
       payableId: string;
+      /** O slug devolvido quando o CAS desta operação não casar — é ela quem sabe qual é. */
+      conflictError: CasConflictError;
       // O `tx` do Drizzle expõe interface mutável (mesmo motivo do `handle` na assinatura abaixo):
       // o builder acumula estado interno a cada `.update()/.where()`. Não o mutamos — só o
       // encadeamos —, e não há forma read-only do tipo para declarar aqui.
@@ -88,7 +102,7 @@ export const createDrizzlePayableRepository = (
       events: readonly DocumentEvent[];
     }>,
   ): Promise<Result<void, PayableRepositoryError>> => {
-    const { ctx, payableId, applyUpdate, timelineEntries, events } = args;
+    const { ctx, payableId, conflictError, applyUpdate, timelineEntries, events } = args;
     try {
       // O retry é rede residual, não a correção: sem DELETE de faixa não há o gap lock da #803.
       // Sobra o que qualquer OLTP concorrente tem, e a unidade repetida é a transação inteira —
@@ -109,7 +123,7 @@ export const createDrizzlePayableRepository = (
             //
             // O `throw` (e não `return`) é o que reverte a transação: sem ele a callback seguiria
             // para os inserts abaixo e gravaria trilha e outbox de uma escrita que não ocorreu.
-            throw makeStateConflict(payableId);
+            throw makeCasConflict(conflictError, payableId);
           }
 
           // Trilha na MESMA transação (SC-004/NFR-001 — Vernon:3257).
@@ -130,7 +144,8 @@ export const createDrizzlePayableRepository = (
 
       return ok(undefined);
     } catch (cause) {
-      if (isStateConflict(cause)) return err('payable-state-conflict');
+      const conflict = readCasConflict(cause);
+      if (conflict !== null) return err(conflict);
       process.stderr.write(`[payable-repo:${ctx}] ${describeDriverError(cause)}\n`);
       return err('payable-repository-failure');
     }
@@ -146,6 +161,7 @@ export const createDrizzlePayableRepository = (
     return writeWithCas({
       ctx: 'markPaid',
       payableId,
+      conflictError: 'payable-payment-conflict',
       // Pré-condição de TRANSIÇÃO: `status = 'Approved'` é a mesma guarda que
       // `Document.payPayableManually` aplica em memória — aqui ela vale no instante da escrita.
       applyUpdate: async (tx) =>
@@ -170,6 +186,7 @@ export const createDrizzlePayableRepository = (
     return writeWithCas({
       ctx: 'reschedule',
       payableId,
+      conflictError: 'payable-reschedule-conflict',
       // Pré-condição de ATRIBUIÇÃO: compara o VALOR anterior, não um estado. Reagendar duas vezes é
       // legítimo, então nenhum status distingue "já reagendei" de "ainda não" — e um
       // `WHERE status IN (…)` aceitaria toda escrita, devolvendo last-write-wins mudo.
