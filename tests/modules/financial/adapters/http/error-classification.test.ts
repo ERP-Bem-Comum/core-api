@@ -77,3 +77,45 @@ describe('error-mapping — mensagem PT-BR nunca vaza o slug (#52)', () => {
     });
   }
 });
+
+// Os dois conflitos de CAS por título nasceram como UM slug só, e a mensagem — escrita para a baixa
+// — chegava a quem tinha tentado reagendar. O gate não pegou: os testes da borda asseram
+// `error.code`, e é a decisão certa (acoplar teste a string de UX é frágil). O efeito colateral é
+// que NADA neste repositório verifica se o texto ao humano corresponde à operação que ele descreve.
+//
+// Este bloco é a rede mínima dessa classe: não assere o CONTEÚDO das frases — que pode ser
+// reescrito à vontade —, e sim que elas continuam SENDO DUAS. Colapsar os slugs, apagar uma das
+// mensagens (as duas cairiam no mesmo fallback genérico) ou copiar uma sobre a outra falha aqui.
+describe('error-mapping — os dois conflitos de título falam de operações diferentes', () => {
+  const PAYMENT = 'payable-payment-conflict';
+  const RESCHEDULE = 'payable-reschedule-conflict';
+
+  it('ambos são 409 — conflito de estado, não erro de dado', () => {
+    assert.equal(writeErrorStatus(PAYMENT), 409);
+    assert.equal(writeErrorStatus(RESCHEDULE), 409);
+  });
+
+  it('ambos expõem o mesmo code público — o front distingue pelo fluxo, não pelo code', () => {
+    assert.equal(toPublicCode(PAYMENT), toPublicCode(RESCHEDULE));
+  });
+
+  it('as mensagens ao operador são DISTINTAS', () => {
+    const paymentMsg = toPublicMessage(PAYMENT);
+    const rescheduleMsg = toPublicMessage(RESCHEDULE);
+
+    assert.notEqual(
+      paymentMsg,
+      rescheduleMsg,
+      'baixa e reagendamento pedem ações diferentes do operador; uma frase só não diz o que fazer em nenhuma',
+    );
+  });
+
+  it('nenhuma das duas caiu no fallback genérico do code', () => {
+    // Se a entrada de um slug for removida do mapa, `toPublicMessage` devolve o fallback do code
+    // público — e como os dois compartilham o code, as duas mensagens voltariam a ser iguais. Este
+    // caso nomeia esse modo de falha para que a mensagem de erro aponte a causa, não o sintoma.
+    const genericForConflict = toPublicMessage('slug-que-nao-existe-no-mapa-de-conflito');
+    assert.notEqual(toPublicMessage(PAYMENT), genericForConflict);
+    assert.notEqual(toPublicMessage(RESCHEDULE), genericForConflict);
+  });
+});

@@ -147,7 +147,7 @@ describe('financial/application — registerManualPayment (#223)', () => {
 // Fatia 1 — o que muda quando a escrita passa a ser por título. Estes três casos falhariam no
 // caminho antigo (`DocumentRepository.save` com `expectedVersion`), e é por isso que existem.
 describe('financial/application — registerManualPayment por título (Fatia 1)', () => {
-  it('segunda baixa do MESMO título → payable-state-conflict (CAS por estado)', async () => {
+  it('segunda baixa do MESMO título → conflito (CAS por estado)', async () => {
     const { repo, payableRepo } = makeRepos();
     const seed = await seedApproved(repo);
     const pay = registerManualPayment({ repo, payableRepo, clock: CLOCK });
