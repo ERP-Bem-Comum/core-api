@@ -37,80 +37,86 @@ export const runOnce = async <P>(
   deps: SharedWorkerDeps<P>,
   config: WorkerConfig,
 ): Promise<Result<WorkerStats, OutboxQueryError>> => {
-  return deps.outbox.withPendingBatch(config.batchSize, async (rows, ops) => {
-    let delivered = 0;
-    let failed = 0;
-    let dlqMoved = 0;
+  // O consumidor do claim é quem entrega — `EventDelivery.consumerId` já existia e já vinha
+  // preenchido corretamente por cada delivery ('financial-supplier-view', 'partners-contract-count'
+  // …), mas só era usado em log. É ele que separa fanout de fila (#800, #824).
+  return deps.outbox.withPendingBatch(
+    deps.delivery.consumerId,
+    config.batchSize,
+    async (rows, ops) => {
+      let delivered = 0;
+      let failed = 0;
+      let dlqMoved = 0;
 
-    for (const row of rows) {
-      const mapped = deps.rowToProcessed(row);
-      if (!mapped.ok) {
-        const dlqResult = await ops.moveToDeadLetter(
-          row.eventId,
-          deps.clock.now(),
-          `mapper-error: ${mapped.error.tag}`,
-        );
-        if (!dlqResult.ok) {
-          process.stderr.write(
-            `${taggedLog(deps.tag)}moveToDeadLetter(corrupt) failed for ${row.eventId}: ${dlqResult.error.tag}\n`,
-          );
-        }
-        dlqMoved += 1;
-        continue;
-      }
-
-      const deliveryResult = await deps.delivery.deliver(mapped.value).catch((cause: unknown) => {
-        process.stderr.write(
-          `${taggedLog(deps.tag)}delivery threw for ${row.eventId}: ${String(cause)}\n`,
-        );
-        return err(deliveryUnavailable(`deliver-threw: ${String(cause)}`));
-      });
-
-      if (deliveryResult.ok) {
-        // Observabilidade: 1 linha por evento entregue (o resto do worker só loga erros).
-        process.stderr.write(
-          `${taggedLog(deps.tag)}delivered eventId=${row.eventId} (${row.eventType})\n`,
-        );
-        const markResult = await ops.markProcessed(row.eventId, deps.clock.now());
-        if (!markResult.ok) {
-          process.stderr.write(
-            `${taggedLog(deps.tag)}markProcessed failed for ${row.eventId}: ${markResult.error.tag}\n`,
-          );
-        }
-        delivered += 1;
-      } else {
-        const newAttempt = row.attempts + 1;
-        if (newAttempt >= config.maxAttempts) {
+      for (const row of rows) {
+        const mapped = deps.rowToProcessed(row);
+        if (!mapped.ok) {
           const dlqResult = await ops.moveToDeadLetter(
             row.eventId,
             deps.clock.now(),
-            `delivery-error: ${deliveryResult.error.tag}`,
+            `mapper-error: ${mapped.error.tag}`,
           );
           if (!dlqResult.ok) {
             process.stderr.write(
-              `${taggedLog(deps.tag)}moveToDeadLetter failed for ${row.eventId}: ${dlqResult.error.tag}\n`,
+              `${taggedLog(deps.tag)}moveToDeadLetter(corrupt) failed for ${row.eventId}: ${dlqResult.error.tag}\n`,
             );
           }
           dlqMoved += 1;
-        } else {
-          const failResult = await ops.markFailed(
-            row.eventId,
-            deps.clock.now(),
-            deliveryResult.error.tag,
-            newAttempt,
+          continue;
+        }
+
+        const deliveryResult = await deps.delivery.deliver(mapped.value).catch((cause: unknown) => {
+          process.stderr.write(
+            `${taggedLog(deps.tag)}delivery threw for ${row.eventId}: ${String(cause)}\n`,
           );
-          if (!failResult.ok) {
+          return err(deliveryUnavailable(`deliver-threw: ${String(cause)}`));
+        });
+
+        if (deliveryResult.ok) {
+          // Observabilidade: 1 linha por evento entregue (o resto do worker só loga erros).
+          process.stderr.write(
+            `${taggedLog(deps.tag)}delivered eventId=${row.eventId} (${row.eventType})\n`,
+          );
+          const markResult = await ops.markProcessed(row.eventId, deps.clock.now());
+          if (!markResult.ok) {
             process.stderr.write(
-              `${taggedLog(deps.tag)}markFailed failed for ${row.eventId}: ${failResult.error.tag}\n`,
+              `${taggedLog(deps.tag)}markProcessed failed for ${row.eventId}: ${markResult.error.tag}\n`,
             );
           }
-          failed += 1;
+          delivered += 1;
+        } else {
+          const newAttempt = row.attempts + 1;
+          if (newAttempt >= config.maxAttempts) {
+            const dlqResult = await ops.moveToDeadLetter(
+              row.eventId,
+              deps.clock.now(),
+              `delivery-error: ${deliveryResult.error.tag}`,
+            );
+            if (!dlqResult.ok) {
+              process.stderr.write(
+                `${taggedLog(deps.tag)}moveToDeadLetter failed for ${row.eventId}: ${dlqResult.error.tag}\n`,
+              );
+            }
+            dlqMoved += 1;
+          } else {
+            const failResult = await ops.markFailed(row.eventId, {
+              now: deps.clock.now(),
+              errorTag: deliveryResult.error.tag,
+              attempt: newAttempt,
+            });
+            if (!failResult.ok) {
+              process.stderr.write(
+                `${taggedLog(deps.tag)}markFailed failed for ${row.eventId}: ${failResult.error.tag}\n`,
+              );
+            }
+            failed += 1;
+          }
         }
       }
-    }
 
-    return { iterations: 1, delivered, failed, movedToDeadLetter: dlqMoved };
-  });
+      return { iterations: 1, delivered, failed, movedToDeadLetter: dlqMoved };
+    },
+  );
 };
 
 // ─── runLoop ──────────────────────────────────────────────────────────────────

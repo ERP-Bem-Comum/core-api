@@ -1115,10 +1115,17 @@ export type NewFinOutboxRow = typeof finOutbox.$inferInsert;
 // #307: DLQ do `fin_outbox` (o financial nunca teve consumidor; esta é a 1ª). Mirror de
 // `ctr_outbox_dead_letter`. O worker move a row pra cá após `maxAttempts` (ou payload corrupto);
 // `failed_at` + `last_error` guardam o contexto da falha. Sem `processed_at` (é terminal).
+//
+// PK composta (`consumer_id`, `event_id`) desde #800/#824: a desistência é de UM consumidor, não
+// do evento. O `fin_outbox` tem um consumidor só hoje (`payable-view-projection`), e é justamente
+// por isso que a PK muda agora — o `par_outbox` também teve um só, até o dia em que não teve, e
+// o desenho estreito não avisou. A row de origem **permanece** no outbox (ADR-0022:27-29).
 export const finOutboxDeadLetter = mysqlTable(
   'fin_outbox_dead_letter',
   {
-    eventId: uuidKey('event_id').primaryKey().notNull(),
+    // Quem desistiu. Tabela vazia em todos os ambientes medidos (21/08/2026) — sem backfill.
+    consumerId: opaqueKey('consumer_id').notNull(),
+    eventId: uuidKey('event_id').notNull(),
     aggregateId: uuidKey('aggregate_id').notNull(),
     aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
     eventType: varchar('event_type', { length: 64 }).notNull(),
@@ -1138,6 +1145,8 @@ export const finOutboxDeadLetter = mysqlTable(
       'fin_outbox_dl_aggregate_type_chk',
       sql`${t.aggregateType} IN (${aggregateTypeSqlList()})`,
     ),
+    // PK composta: a desistência é por consumidor, não do evento (#800, #824).
+    primaryKey({ columns: [t.consumerId, t.eventId] }),
     index('fin_outbox_dl_failed_at_idx').on(t.failedAt),
   ],
 );

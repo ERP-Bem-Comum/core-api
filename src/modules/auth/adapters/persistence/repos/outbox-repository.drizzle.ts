@@ -7,17 +7,25 @@
 //     (atomicidade — ADR-0015). Lanca em erro p/ o Drizzle fazer rollback; o repo pai
 //     converte o throw em Result na borda.
 //   - withPendingBatch / findPendingForUpdate / markProcessed / markFailed / moveToDeadLetter
-//     (claim com FOR UPDATE SKIP LOCKED — molde partners). Consumo pelo worker `email-dispatch`.
+//     (claim POR CONSUMIDOR — molde partners, #800/#824). Consumo pelo worker `email-dispatch`.
 //
-// DLQ SEM tabela dedicada nesta fatia: `moveToDeadLetter` marca `processed_at` (sai do pending
-// pool, preserva a row para auditoria) — `auth_outbox_dead_letter` e diferido (exigiria migration
-// destrutiva/CREATE; recorte liga+desliga nao gera migration). Mesma semantica no InMemory.
+// Claim por consumidor: a pendência de um evento não é mais `auth_outbox.processed_at` (global) —
+// é o progresso em `eventos_processados`, uma linha por par (consumidor, evento). Sob o desenho
+// antigo, dois consumidores do `auth_outbox` DIVIDIRIAM a fila; o requisito é fanout. Ver
+// `#src/shared/outbox/consumer-progress.ts`.
+//
+// DLQ SEM tabela dedicada nesta fatia: `moveToDeadLetter` marca `dead_lettered_at` no progresso
+// do consumidor (sai do pending pool DELE, preserva a row de origem para auditoria e para os
+// demais consumidores) — `auth_outbox_dead_letter` e diferido (exigiria migration destrutiva/
+// CREATE; recorte liga+desliga nao gera migration).
 //
 // ADR-0015 (outbox), ADR-0014 (auth_*), ADR-0020 (sem JSON nativo). Boundary: try/catch → Result.
 
-import { isNull, asc, eq, and } from 'drizzle-orm';
+import { asc, eq, and, or, notExists, inArray, sql, isNotNull, type SQL } from 'drizzle-orm';
 import process from 'node:process';
 
+import { eventosProcessados } from '#src/shared/persistence/schemas/eventos-processados.ts';
+import { CLAIM_ISOLATION, claimedAttempts } from '#src/shared/outbox/claim.ts';
 import { type Result, ok, err } from '#src/shared/primitives/result.ts';
 import type {
   OutboxPort,
@@ -26,6 +34,8 @@ import type {
   OutboxAppendError,
   OutboxQueryError,
   OutboxBatchOps,
+  OutboxFailure,
+  WorkerOutboxOps,
 } from '../../../application/ports/outbox.ts';
 import {
   outboxAppendUnavailable,
@@ -109,31 +119,37 @@ const safe = async <T>(ctx: string, op: () => Promise<T>): Promise<Result<T, Out
  * createDrizzleAuthOutboxRepository — OutboxPort (`append`) + auxiliares do worker para MySQL.
  *
  * O caminho atomico (save + evento) usa `appendOutboxInTx` no repo do token; este `append`
- * direto serve testes contratuais / boot sem agregado. Os helpers do worker sao consumidos
- * pelo `email-dispatch` (claim FOR UPDATE SKIP LOCKED).
+ * direto serve testes contratuais / boot sem agregado. Os helpers do worker (assinados pelo
+ * contrato canonico `WorkerOutboxOps`) sao consumidos pelo `email-dispatch` — cada `consumerId`
+ * enxerga TODOS os eventos, nunca uma fatia deles.
  */
 export const createDrizzleAuthOutboxRepository = (
   handle: AuthMysqlHandle, // eslint-disable-line @typescript-eslint/prefer-readonly-parameter-types
-): OutboxPort & {
-  withPendingBatch: <R>(
-    limit: number,
-    handler: (rows: readonly OutboxRow[], ops: OutboxBatchOps) => Promise<R>,
-  ) => Promise<Result<R, OutboxQueryError>>;
-  findPendingForUpdate: (limit: number) => Promise<Result<readonly OutboxRow[], OutboxQueryError>>;
-  markProcessed: (eventId: string, now: Date) => Promise<Result<void, OutboxQueryError>>;
-  markFailed: (
-    eventId: string,
-    now: Date,
-    errorTag: string,
-    attempt: number,
-  ) => Promise<Result<void, OutboxQueryError>>;
-  moveToDeadLetter: (
-    eventId: string,
-    now: Date,
-    errorMessage: string,
-  ) => Promise<Result<void, OutboxQueryError>>;
-} => {
+): OutboxPort & WorkerOutboxOps => {
   const { db } = handle;
+
+  // ── pendingForConsumer ────────────────────────────────────────────────────
+  //
+  // Tradução SQL de `isPendingForConsumer` (`shared/outbox/consumer-progress.ts`): "este
+  // consumidor ainda não concluiu nem desistiu deste evento". Espelho exato do adapter do
+  // `partners` — se a regra mudar, muda nos quatro lugares (predicado, e os três adapters).
+
+  const pendingForConsumer = (consumerId: string): SQL =>
+    notExists(
+      db
+        .select({ one: sql`1` })
+        .from(eventosProcessados)
+        .where(
+          and(
+            eq(eventosProcessados.consumerId, consumerId),
+            eq(eventosProcessados.eventId, schema.authOutbox.eventId),
+            or(
+              isNotNull(eventosProcessados.processedAt),
+              isNotNull(eventosProcessados.deadLetteredAt),
+            ),
+          ),
+        ),
+    );
 
   // ── append ──────────────────────────────────────────────────────────────────
 
@@ -161,14 +177,15 @@ export const createDrizzleAuthOutboxRepository = (
   // ── findPendingForUpdate ──────────────────────────────────────────────────────
 
   const findPendingForUpdate = async (
+    consumerId: string,
     limit: number,
   ): Promise<Result<readonly OutboxRow[], OutboxQueryError>> => {
     return safe('findPendingForUpdate', async () => {
       const rows = await db
         .select()
         .from(schema.authOutbox)
-        .where(isNull(schema.authOutbox.processedAt))
-        .orderBy(asc(schema.authOutbox.processedAt), asc(schema.authOutbox.occurredAt))
+        .where(pendingForConsumer(consumerId))
+        .orderBy(asc(schema.authOutbox.occurredAt))
         .limit(limit)
         .for('update', { skipLocked: true });
       return rows as readonly OutboxRow[];
@@ -176,60 +193,81 @@ export const createDrizzleAuthOutboxRepository = (
   };
 
   // ── withPendingBatch ──────────────────────────────────────────────────────────
-  // UMA transacao: trava ate `limit` rows com FOR UPDATE SKIP LOCKED, invoca `handler`
-  // com as rows + ops de marcacao ligadas a MESMA tx. O lock sobrevive ate o COMMIT.
+  // UMA transação sob READ COMMITTED (`CLAIM_ISOLATION` — sob REPEATABLE READ o `FOR UPDATE` do
+  // claim trava o gap onde o produtor insere o próximo evento e estoura `1205 Lock wait timeout`;
+  // ver `shared/outbox/claim.ts`), trava até `limit` rows com FOR UPDATE SKIP LOCKED, invoca
+  // `handler` com as rows + ops de marcação ligadas à MESMA tx. O lock sobrevive até o COMMIT.
 
   const withPendingBatch = async <R>(
+    consumerId: string,
     limit: number,
     handler: (rows: readonly OutboxRow[], ops: OutboxBatchOps) => Promise<R>,
   ): Promise<Result<R, OutboxQueryError>> => {
     try {
       const result = await db.transaction(async (tx) => {
-        const rows = (await tx
+        const claimed = (await tx
           .select()
           .from(schema.authOutbox)
-          .where(isNull(schema.authOutbox.processedAt))
-          .orderBy(asc(schema.authOutbox.processedAt), asc(schema.authOutbox.occurredAt))
+          .where(pendingForConsumer(consumerId))
+          .orderBy(asc(schema.authOutbox.occurredAt))
           .limit(limit)
           .for('update', { skipLocked: true })) as readonly OutboxRow[];
+
+        // `attempts` DESTE consumidor. Segunda query em vez de JOIN: o Drizzle não expõe
+        // `FOR UPDATE OF <tabela>`, e um JOIN sob o claim travaria `eventos_processados` junto.
+        const claimedIds = claimed.map((r) => r.eventId);
+        const progresses =
+          claimedIds.length === 0
+            ? []
+            : await tx
+                .select()
+                .from(eventosProcessados)
+                .where(
+                  and(
+                    eq(eventosProcessados.consumerId, consumerId),
+                    inArray(eventosProcessados.eventId, claimedIds),
+                  ),
+                );
+        const progressByEvent = new Map(progresses.map((p) => [p.eventId, p]));
+        const rows: readonly OutboxRow[] = claimed.map((r) => ({
+          ...r,
+          attempts: claimedAttempts(progressByEvent.get(r.eventId)),
+        }));
 
         const ops: OutboxBatchOps = {
           markProcessed: async (eventId, now) =>
             safe('withPendingBatch:markProcessed', async () => {
               await tx
-                .update(schema.authOutbox)
-                .set({ processedAt: now })
-                .where(
-                  and(
-                    eq(schema.authOutbox.eventId, eventId),
-                    isNull(schema.authOutbox.processedAt),
-                  ),
-                );
+                .insert(eventosProcessados)
+                .values({ consumerId, eventId, processedAt: now, attempts: 0 })
+                .onDuplicateKeyUpdate({ set: { processedAt: now } });
             }),
-          markFailed: async (eventId, _now, _errorTag, attempt) =>
+          markFailed: async (eventId, { errorTag, attempt }) =>
             safe('withPendingBatch:markFailed', async () => {
               await tx
-                .update(schema.authOutbox)
-                .set({ attempts: attempt })
-                .where(eq(schema.authOutbox.eventId, eventId));
+                .insert(eventosProcessados)
+                .values({ consumerId, eventId, attempts: attempt, lastError: errorTag })
+                .onDuplicateKeyUpdate({ set: { attempts: attempt, lastError: errorTag } });
             }),
-          // DLQ sem tabela: marca processed (sai do pending), preserva a row para auditoria.
-          moveToDeadLetter: async (eventId, now, _errorMessage) =>
+          // DLQ sem tabela nesta fatia: marca `dead_lettered_at` no progresso DESTE consumidor —
+          // a row de origem em `auth_outbox` segue intacta para os demais e para auditoria.
+          moveToDeadLetter: async (eventId, now, errorMessage) =>
             safe('withPendingBatch:moveToDeadLetter', async () => {
               await tx
-                .update(schema.authOutbox)
-                .set({ processedAt: now })
-                .where(
-                  and(
-                    eq(schema.authOutbox.eventId, eventId),
-                    isNull(schema.authOutbox.processedAt),
-                  ),
-                );
+                .insert(eventosProcessados)
+                .values({
+                  consumerId,
+                  eventId,
+                  attempts: claimedAttempts(progressByEvent.get(eventId)),
+                  lastError: errorMessage,
+                  deadLetteredAt: now,
+                })
+                .onDuplicateKeyUpdate({ set: { deadLetteredAt: now, lastError: errorMessage } });
             }),
         };
 
         return handler(rows, ops);
-      });
+      }, CLAIM_ISOLATION);
       return ok(result);
     } catch (cause) {
       process.stderr.write(`[auth-outbox-repo:withPendingBatch] ${String(cause)}\n`);
@@ -237,52 +275,71 @@ export const createDrizzleAuthOutboxRepository = (
     }
   };
 
-  // ── markProcessed (idempotente via WHERE processed_at IS NULL) ─────────────────
+  // ── markProcessed ─────────────────────────────────────────────────────────────
+  // Idempotência pela PK (consumer_id, event_id). A linha do `auth_outbox` não é tocada: marcá-la
+  // declararia o evento resolvido para TODOS os consumidores — o defeito de #800/#824.
 
   const markProcessed = async (
+    consumerId: string,
     eventId: string,
     now: Date,
   ): Promise<Result<void, OutboxQueryError>> => {
     return safe('markProcessed', async () => {
       await db
-        .update(schema.authOutbox)
-        .set({ processedAt: now })
-        .where(and(eq(schema.authOutbox.eventId, eventId), isNull(schema.authOutbox.processedAt)));
+        .insert(eventosProcessados)
+        .values({ consumerId, eventId, processedAt: now, attempts: 0 })
+        .onDuplicateKeyUpdate({ set: { processedAt: now } });
     });
   };
 
   // ── markFailed ────────────────────────────────────────────────────────────────
+  // Orçamento de retry por consumidor: antes, em `auth_outbox.attempts` global, a falha de um
+  // gastava as tentativas do outro.
 
   const markFailed = async (
+    consumerId: string,
     eventId: string,
-    now: Date,
-    errorTag: string,
-    attempt: number,
+    // `now` não é desestruturado: não há coluna de "hora da última falha" em `auth_outbox`.
+    { errorTag, attempt }: OutboxFailure,
   ): Promise<Result<void, OutboxQueryError>> => {
-    // `now`/`errorTag` reservados para a futura DLQ; por ora marcamos apenas `attempts`.
-    void now;
-    void errorTag;
     return safe('markFailed', async () => {
       await db
-        .update(schema.authOutbox)
-        .set({ attempts: attempt })
-        .where(eq(schema.authOutbox.eventId, eventId));
+        .insert(eventosProcessados)
+        .values({ consumerId, eventId, attempts: attempt, lastError: errorTag })
+        .onDuplicateKeyUpdate({ set: { attempts: attempt, lastError: errorTag } });
     });
   };
 
-  // ── moveToDeadLetter ──────────────────────────────────────────────────────────
-  // SEM tabela DLQ nesta fatia: marca processed (sai do pending), preserva a row para auditoria.
+  // ── moveToDeadLetter ────────────────────────────────────────────────────────────
+  // SEM tabela DLQ nesta fatia: marca `dead_lettered_at` no progresso DESTE consumidor — a row
+  // de origem em `auth_outbox` segue intacta para os demais consumidores e para auditoria.
 
   const moveToDeadLetter = async (
+    consumerId: string,
     eventId: string,
     now: Date,
-    _errorMessage: string,
+    errorMessage: string,
   ): Promise<Result<void, OutboxQueryError>> => {
     return safe('moveToDeadLetter', async () => {
+      const progress = await db
+        .select()
+        .from(eventosProcessados)
+        .where(
+          and(
+            eq(eventosProcessados.consumerId, consumerId),
+            eq(eventosProcessados.eventId, eventId),
+          ),
+        );
       await db
-        .update(schema.authOutbox)
-        .set({ processedAt: now })
-        .where(and(eq(schema.authOutbox.eventId, eventId), isNull(schema.authOutbox.processedAt)));
+        .insert(eventosProcessados)
+        .values({
+          consumerId,
+          eventId,
+          attempts: claimedAttempts(progress[0]),
+          lastError: errorMessage,
+          deadLetteredAt: now,
+        })
+        .onDuplicateKeyUpdate({ set: { deadLetteredAt: now, lastError: errorMessage } });
     });
   };
 

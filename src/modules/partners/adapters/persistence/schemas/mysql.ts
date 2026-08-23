@@ -30,6 +30,7 @@ import {
   varchar,
 } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
+import { primaryKey } from 'drizzle-orm/mysql-core';
 
 import { cnpjKey, cpfKey, opaqueKey, uuidKey } from '#src/shared/persistence/identifier-columns.ts';
 
@@ -556,15 +557,22 @@ export const parOutbox = mysqlTable(
 export type OutboxRow = typeof parOutbox.$inferSelect;
 export type NewOutboxRow = typeof parOutbox.$inferInsert;
 
-// ─── par_outbox_dead_letter — eventos que falharam N tentativas ───────────────
+// ─── par_outbox_dead_letter — eventos que UM consumidor desistiu de entregar ──
 //
-// Espelha `ctr_outbox_dead_letter`. O worker move para cá quando `attempts >=
-// MAX_ATTEMPTS`. A row é uma cópia da outbox original + `failed_at` + `last_error`.
-// Sem FK com `par_outbox` — a row original pode ser apagada da outbox.
+// Espelha `ctr_outbox_dead_letter`, PK composta inclusive. O worker move para cá quando
+// `attempts >= MAX_ATTEMPTS` **daquele consumidor** (#800, #824): o mesmo evento pode matar um
+// consumidor e ser entregue com sucesso a outro, então a desistência é indexada por quem desistiu.
+//
+// Sem FK com `par_outbox`, e a razão mudou: a row original **permanece** na outbox após a
+// desistência (ADR-0022:27-29), disponível aos demais consumidores. Antes ela era apagada — o que
+// tornava a "reconstrução reprocessando o log" de 0022:40 impossível para o evento dead-lettered.
 export const parOutboxDeadLetter = mysqlTable(
   'par_outbox_dead_letter',
   {
-    eventId: uuidKey('event_id').primaryKey().notNull(),
+    // Quem desistiu. Tabela vazia em todos os ambientes medidos (21/08/2026) — o ALTER não
+    // precisa de backfill.
+    consumerId: opaqueKey('consumer_id').notNull(),
+    eventId: uuidKey('event_id').notNull(),
     aggregateId: uuidKey('aggregate_id').notNull(),
     aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
     eventType: varchar('event_type', { length: 64 }).notNull(),
@@ -584,6 +592,8 @@ export const parOutboxDeadLetter = mysqlTable(
   (t) => [
     // Mesma restrição de aggregate_type da tabela principal.
     check('par_outbox_dlq_aggregate_type_chk', sql`${t.aggregateType} IN ('Supplier')`),
+    // PK composta: a desistência é por consumidor, não do evento (#800, #824).
+    primaryKey({ columns: [t.consumerId, t.eventId] }),
     // Índice por failed_at — monitoramento "eventos mortos nos últimos N dias".
     index('par_outbox_dlq_failed_at_idx').on(t.failedAt),
   ],

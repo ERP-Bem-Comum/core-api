@@ -54,12 +54,17 @@ interface Calls {
 
 const makeOutbox = (rows: readonly OutboxRow[]): { outbox: WorkerOutboxOps; calls: Calls } => {
   const calls: Calls = { processed: [], failed: [], dlq: [], delivered: [] };
+  // `OutboxBatchOps` (ligado ao batch, sem `consumerId`) e `WorkerOutboxOps` (top-level, com
+  // `consumerId`) deixaram de ter a mesma aridade quando o `consumerId` entrou (#800/#824) — não
+  // dá mais para reaproveitar `ops.markFailed` como o `markFailed` top-level direto. O mock aqui
+  // não distingue consumidor (isso é `tests/shared/outbox/fanout-two-consumers.test.ts`); os
+  // wrappers só descartam o `consumerId` e delegam ao mesmo `ops`.
   const ops: OutboxBatchOps = {
     markProcessed: (id) => {
       calls.processed.push(id);
       return Promise.resolve(ok(undefined));
     },
-    markFailed: (id, _now, _tag, attempt) => {
+    markFailed: (id, { attempt }) => {
       calls.failed.push({ id, attempt });
       return Promise.resolve(ok(undefined));
     },
@@ -69,11 +74,12 @@ const makeOutbox = (rows: readonly OutboxRow[]): { outbox: WorkerOutboxOps; call
     },
   };
   const outbox: WorkerOutboxOps = {
-    withPendingBatch: async (limit, handler) => ok(await handler(rows.slice(0, limit), ops)),
+    withPendingBatch: async (_consumerId, limit, handler) =>
+      ok(await handler(rows.slice(0, limit), ops)),
     findPendingForUpdate: () => Promise.resolve(ok(rows)),
-    markProcessed: ops.markProcessed,
-    markFailed: ops.markFailed,
-    moveToDeadLetter: ops.moveToDeadLetter,
+    markProcessed: (_consumerId, id, now) => ops.markProcessed(id, now),
+    markFailed: (_consumerId, id, failure) => ops.markFailed(id, failure),
+    moveToDeadLetter: (_consumerId, id, now, msg) => ops.moveToDeadLetter(id, now, msg),
   };
   return { outbox, calls };
 };
