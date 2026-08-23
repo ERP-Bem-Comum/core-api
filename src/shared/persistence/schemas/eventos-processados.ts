@@ -72,6 +72,24 @@ export const eventosProcessados = mysqlTable(
     index('eventos_processados_processed_at_idx').on(t.processedAt),
     // Suporta o anti-join do claim: "o que este consumidor ainda não concluiu".
     index('eventos_processados_consumer_pending_idx').on(t.consumerId, t.processedAt),
+    // Suporta o SELECT de candidatos do sweeper (`src/jobs/shared/outbox-sweeper/`), que agrupa
+    // por `event_id` e conta consumidores distintos resolvidos.
+    //
+    // Sem ele, o otimizador LIDERA por esta tabela — `range` sobre a PK, temporária e ordenação
+    // sobre a tabela INTEIRA — e o `LIMIT` do lote só corta no fim. O trabalho por lote passa a
+    // ser função do tamanho de `eventos_processados`, que cresce N× mais rápido que o outbox (uma
+    // linha por consumidor por evento). Com o índice, o plano inverte e lidera pelo outbox
+    // filtrado por `processed_at IS NULL`: o custo passa a acompanhar o BACKLOG — o que falta
+    // drenar — em vez de tudo que já foi processado.
+    //
+    // Medido em MySQL 8.4.11 com ~100k linhas: 611ms → 286ms, `Using temporary` eliminado. O
+    // índice em si custa 2,7s para criar (INPLACE, LOCK=NONE, zero leitura bloqueada) e +9,5 MB.
+    index('eventos_processados_event_consumer_idx').on(
+      t.eventId,
+      t.consumerId,
+      t.processedAt,
+      t.deadLetteredAt,
+    ),
     // CHECK attempts >= 0 — defesa em profundidade, espelha o das outboxes.
     check('eventos_processados_attempts_nonneg_chk', sql`${t.attempts} >= 0`),
   ],

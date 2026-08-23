@@ -1,4 +1,15 @@
-import { isNotNull, asc, eq, and, or, notExists, inArray, sql, type SQL } from 'drizzle-orm';
+import {
+  isNull,
+  isNotNull,
+  asc,
+  eq,
+  and,
+  or,
+  notExists,
+  inArray,
+  sql,
+  type SQL,
+} from 'drizzle-orm';
 import process from 'node:process';
 
 import { eventosProcessados } from '#src/shared/persistence/schemas/eventos-processados.ts';
@@ -160,21 +171,38 @@ export const createDrizzleOutboxRepository = (
   // A subquery é construída a partir de `db`, mas isso não a executa: o Drizzle só gera o SQL, e
   // quem roda é a query externa — dentro da `tx` no claim, fora dela no helper direto.
 
-  const pendingForConsumer = (consumerId: string): SQL =>
-    notExists(
-      db
-        .select({ one: sql`1` })
-        .from(eventosProcessados)
-        .where(
-          and(
-            eq(eventosProcessados.consumerId, consumerId),
-            eq(eventosProcessados.eventId, schema.ctrOutbox.eventId),
-            or(
-              isNotNull(eventosProcessados.processedAt),
-              isNotNull(eventosProcessados.deadLetteredAt),
+  // Devolve `SQL | undefined` em vez de castar para `SQL`: `.where()` do Drizzle aceita os dois,
+  // e é o idioma que o repositório já usa (`contract-repository.drizzle.ts:146` e outros). O cast
+  // caía numa contradição entre duas regras de lint — `non-nullable-type-assertion-style` pede
+  // `!` no lugar de `as`, e `no-non-null-assertion` proíbe `!`.
+  const pendingForConsumer = (consumerId: string): SQL | undefined =>
+    // `processed_at IS NULL` PRIMEIRO, e não por estilo: é o que faz o claim voltar a ser
+    // indexável. Medido em MySQL 8.4.11 com 50k retidos e 10 pendentes — sem esta cláusula, o
+    // `NOT EXISTS` sozinho não poda nada e o plano degrada de `ref` (key_len 8, 10 linhas
+    // travadas, 2ms) para `index` scan + `filesort` (100.000 linhas travadas, 115ms), acima do
+    // próprio intervalo de poll de 100ms. Índice em `eventos_processados` NÃO resolve: o gargalo
+    // não é o acesso a ela, é não haver predicado seletivo sobre o outbox.
+    //
+    // A marca é escrita pelo sweeper (`src/jobs/shared/outbox-sweeper/`), nunca pelo worker —
+    // ver ADR-0062 §3. Se o sweeper atrasar ou parar, sobram linhas não marcadas e o claim volta
+    // a ser o lento: degradação graciosa, e o `NOT EXISTS` abaixo garante que nada se perde.
+    and(
+      isNull(schema.ctrOutbox.processedAt),
+      notExists(
+        db
+          .select({ one: sql`1` })
+          .from(eventosProcessados)
+          .where(
+            and(
+              eq(eventosProcessados.consumerId, consumerId),
+              eq(eventosProcessados.eventId, schema.ctrOutbox.eventId),
+              or(
+                isNotNull(eventosProcessados.processedAt),
+                isNotNull(eventosProcessados.deadLetteredAt),
+              ),
             ),
           ),
-        ),
+      ),
     );
 
   // ── append ────────────────────────────────────────────────────────────────

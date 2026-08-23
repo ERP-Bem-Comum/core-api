@@ -42,8 +42,11 @@ fiel) para `financial` (fin_outbox), `auth` (auth_outbox) e `partners` e-mail (p
 — a armadilha central é ler `attempts`/`processedAt` da row global do outbox em vez do progresso
 por consumidor; compila e passa igual (falso-verde), só o `pnpm test` acusa.
 
-Resultado final: `pnpm run typecheck` e `pnpm exec eslint src tests` limpos em tudo que era meu;
-`pnpm test` 11326/11303/3 fail (baseline 11308/11288/0) — as 3 falhas são gates de doc/governança
-(`tests/cleanup/handbook-links.test.ts`, `handbook-refs.test.ts`, `rules-self-verify.test.ts`)
-quebrados pela extração de `eventos_processados` para `shared/` e pela criação do ADR-0062, ambos
-fora do meu escopo (arquivos do team-lead).
+Resultado final (ticket fechado, 23/08/2026): `pnpm run typecheck` e `pnpm exec eslint src tests`
+limpos; `pnpm test` **11332/11312/0 fail** — o team-lead fechou os 3 gates de doc/governança
+(handbook-links, handbook-refs, rules-self-verify) que sobravam quando reportei
+11326/11303/3 fail. Também aplicou nos dois adapters-modelo (`contracts`, `partners` principal) o
+mesmo fix `SQL | undefined` que eu tinha aplicado nos meus três — ver
+[[sql-or-undefined-where-predicate]]. O sweeper (`src/jobs/shared/outbox-sweeper/`) que volta a
+escrever `processed_at` em lote (ADR-0062 §3) segue em validação MySQL real com outro agente —
+não é código deste ticket que eu tenha tocado.

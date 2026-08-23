@@ -21,7 +21,18 @@
 //
 // ADR-0015 (outbox), ADR-0014 (auth_*), ADR-0020 (sem JSON nativo). Boundary: try/catch → Result.
 
-import { asc, eq, and, or, notExists, inArray, sql, isNotNull, type SQL } from 'drizzle-orm';
+import {
+  asc,
+  eq,
+  and,
+  or,
+  notExists,
+  inArray,
+  sql,
+  isNull,
+  isNotNull,
+  type SQL,
+} from 'drizzle-orm';
 import process from 'node:process';
 
 import { eventosProcessados } from '#src/shared/persistence/schemas/eventos-processados.ts';
@@ -134,21 +145,28 @@ export const createDrizzleAuthOutboxRepository = (
   // consumidor ainda não concluiu nem desistiu deste evento". Espelho exato do adapter do
   // `partners` — se a regra mudar, muda nos quatro lugares (predicado, e os três adapters).
 
-  const pendingForConsumer = (consumerId: string): SQL =>
-    notExists(
-      db
-        .select({ one: sql`1` })
-        .from(eventosProcessados)
-        .where(
-          and(
-            eq(eventosProcessados.consumerId, consumerId),
-            eq(eventosProcessados.eventId, schema.authOutbox.eventId),
-            or(
-              isNotNull(eventosProcessados.processedAt),
-              isNotNull(eventosProcessados.deadLetteredAt),
+  const pendingForConsumer = (consumerId: string): SQL | undefined =>
+    // `processed_at IS NULL` primeiro — é o predicado que poda pelo índice e devolve o claim ao
+    // plano `ref`. Sem ele, o `NOT EXISTS` sozinho varre e ordena o índice inteiro, travando tudo
+    // que examina (medido: 100.000 linhas travadas para entregar 10). A marca vem do sweeper, não
+    // do worker; atraso dele degrada a performance, nunca a correção. Ver ADR-0062 §3.
+    and(
+      isNull(schema.authOutbox.processedAt),
+      notExists(
+        db
+          .select({ one: sql`1` })
+          .from(eventosProcessados)
+          .where(
+            and(
+              eq(eventosProcessados.consumerId, consumerId),
+              eq(eventosProcessados.eventId, schema.authOutbox.eventId),
+              or(
+                isNotNull(eventosProcessados.processedAt),
+                isNotNull(eventosProcessados.deadLetteredAt),
+              ),
             ),
           ),
-        ),
+      ),
     );
 
   // ── append ──────────────────────────────────────────────────────────────────

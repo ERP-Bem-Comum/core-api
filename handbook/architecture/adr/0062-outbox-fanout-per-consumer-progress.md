@@ -60,7 +60,36 @@ A DLQ passa a ter PK `(consumer_id, event_id)` nas três tabelas (`ctr_`, `par_`
 
 **A linha de origem permanece no outbox em todos os casos.** Restaura `0022:27-29`.
 
-### 3. O claim roda em READ COMMITTED
+### 3. `processed_at` volta a ser escrito — por um sweeper em lote, nunca pelo worker
+
+Parar de escrever `processed_at` teve um custo que só apareceu sob volume. O índice `(processed_at, occurred_at)` funcionava porque a coluna **discriminava**: os NULLs (pendentes) ficavam agrupados e o scan era curto. Com a coluna morta, todas as linhas viraram NULL e o índice deixou de separar coisa alguma — e como a dead-letter também parou de apagar a origem (decisão 2), o outbox não esvazia sozinho.
+
+Medido em MySQL 8.4.11, com 50.000 retidos e 10 pendentes:
+
+| | claim | plano | linhas travadas |
+| --- | --- | --- | --- |
+| sem a marca | 115ms | `index` scan + `filesort` | **100.000** |
+| com a marca | **2ms** | `ref`, `key_len 8` | **10** |
+
+57× mais rápido e 10.000× menos locks. O poll do grupo `outbox` é a cada 100ms: sem isso, o claim não cabe no próprio intervalo.
+
+**Índice não resolve** — foi medido, não suposto: um covering em `eventos_processados` mantém o mesmo plano, o mesmo filesort e os mesmos 100.000 locks, e reescrever o antijoin como `LEFT JOIN` fica **mais lento** (191ms). O gargalo nunca foi o acesso à tabela de progresso; é não haver predicado seletivo sobre o outbox.
+
+**Quem escreve a marca é um job em lote** (`src/jobs/shared/outbox-sweeper/`), e não o `markProcessed`. Pôr o `UPDATE` no caminho do worker resolveria a leitura e custaria **19 deadlocks em 60 eventos**: os dois consumidores passariam a escrever na mesma linha do outbox, com ordens de aquisição que se cruzam — reintroduzindo exatamente o acoplamento entre consumidores que a decisão 1 existe para remover. O sweeper roda sozinho; ninguém compete com ele.
+
+A propriedade que torna isto seguro é a **degradação graciosa**: sweeper atrasado, parado ou nunca executado significa linhas não marcadas, e o claim volta a ser o lento — que continua **correto**, porque o `NOT EXISTS` por consumidor segue lá. Este job otimiza; jamais decide entrega.
+
+⚠️ **A lista de consumidores (`src/shared/outbox/registered-consumers.ts`) é assimétrica de propósito.** Um consumidor a mais faz a marca nunca sair (perde performance); um a menos faz a marca sair **antes** de ele processar, e ele perde o evento em silêncio. Na dúvida, sobre-declare. Um gate estrutural cobra que todo `consumerId` registrado em `src/workers/` esteja na lista.
+
+Duas restrições de implementação, ambas medidas: o lote é **pequeno** (500 — é o número de registros travados de uma vez, e 5.000 trava 5.000 sem ganho proporcional), e a seleção dos candidatos usa **JOIN, nunca subquery correlacionada** — um `UPDATE` correlacionado sobre 50k travou 117.571 linhas por 17 minutos.
+
+Validado com o código real (MySQL 8.4.11, cenário 50k/10): o claim volta a `type=ref`, `key_len=8`, `rows=10`, **filesort eliminado**, ~0ms de banco; o sweeper trava **504** registros por lote de 500; e 40 iterações de sweeper e dois workers **simultâneos** deram **0 deadlocks e 0 lock-wait timeouts** — o custo que derrubou a alternativa de marcar no worker não voltou por este caminho, porque aqui só o sweeper escreve na linha do outbox.
+
+⚠️ **O teto por execução é `batchSize × maxBatches` = 10.000 linhas.** Um backlog de 50k exige cinco execuções; `reachedLimit` no resultado é o que sinaliza que sobrou trabalho. Casar a frequência do cron com a taxa de eventos é decisão a tomar conscientemente — o default não a toma.
+
+⚠️ **O job varre as cinco tabelas por uma conexão só**, apoiado no fato de que hoje todas as `*_DATABASE_URL` apontam para o mesmo `core`. Isso não é garantido por construção: no `compose.yaml` cada uma vem de um arquivo de secret **independente**, e separar módulos em bancos distintos é o que o isolamento por prefixo existe para permitir. Sem verificação, uma URL divergente faria o sweeper varrer o banco errado e devolver `marked=0` — indistinguível de "não havia trabalho", com exit 0. O `run.ts` compara `host:porta/database` das cinco e **falha com `EX_CONFIG`** na divergência, além de registrar o alvo no log. Nenhum evento se perderia nesse cenário (o `NOT EXISTS` do claim continua correto); o que se perderia é a indexabilidade, sem ninguém saber.
+
+### 4. O claim roda em READ COMMITTED
 
 Medido em MySQL 8.4.11: sob `REPEATABLE READ` (o default deste servidor), o `FOR UPDATE` do claim trava **next-key** no índice secundário `(processed_at, occurred_at)` — 6 locks para 5 linhas, o sexto sendo o gap do supremum. Evento novo nasce com `processed_at = NULL` e cai nesse gap, então **o `INSERT` do produtor bloqueia e estoura `1205 Lock wait timeout`**. O consumidor passa a brigar com a transação de negócio.
 
@@ -68,7 +97,7 @@ Sob `READ COMMITTED` os locks viram `X,REC_NOT_GAP`, os gaps somem e o `INSERT` 
 
 O isolamento é da sessão do worker, nunca do servidor.
 
-### 4. Vale para os cinco outboxes, inclusive os de um consumidor só
+### 5. Vale para os cinco outboxes, inclusive os de um consumidor só
 
 `ctr_outbox`, `par_outbox`, `fin_outbox`, `auth_outbox` e `par_email_outbox` adotam a mesma semântica. Os três últimos têm um consumidor apenas hoje — e é exatamente por isso: o `par_outbox` também teve um só, até o dia em que não teve, e o desenho estreito não avisou. O `par_email_outbox` chegou a ser **criado** para contornar a limitação (o comentário do schema registra que colocar o evento no `par_outbox` "canibalizaria" o consumidor existente): a restrição era conhecida e foi contornada, nunca corrigida.
 
@@ -85,6 +114,10 @@ O isolamento é da sessão do worker, nunca do servidor.
 ---
 
 ## Pendências
+
+0. ⚠️ **`eventos_processados` é criada por um journal só, e agora cinco módulos dependem dela.** A tabela nasce em `contracts/0001_motionless_wind_dancer.sql:34`, mas o claim de `partners`, `financial`, `auth` e `par_email` passa a consultá-la. Medido em MySQL 8.4.11 (21/08/2026): num banco onde só `partners` e `financial` migraram, **o claim falha com a tabela ausente**. Produção não quebra — `job:migrate` roda os sete módulos —, mas **teste por módulo e deploy parcial quebram**, e a dependência atravessa em silêncio o isolamento por journal que o repositório declara. É o custo, não previsto, da exceção cross-módulo do ADR-0014: uma tabela sem dono claro entre journals. Registrado como issue própria; enquanto não houver desfecho, **`job:migrate` completo é pré-requisito de qualquer ambiente que rode worker de outbox**.
+
+0.5. **O custo do sweeper escala com `eventos_processados`, não com o lote.** Medido: drenando 49.990 linhas em lotes de 500, o `EXPLAIN` mostra o otimizador **liderando por `eventos_processados`** (`type=range`, ~100k linhas), montando temporária e ordenando antes de o `LIMIT 500` cortar — mediana de 505ms por lote. Como essa tabela cresce N× mais rápido que o outbox (uma linha por consumidor por evento), o custo escala pior que o próprio backlog. Não é bloqueante (job de fundo, fora de request, travando 504 registros), e há mitigação **medida**: um índice `(event_id, consumer_id, processed_at, dead_lettered_at)` inverte o plano para liderar por outbox, elimina a temporária e leva 611ms → **286ms** (2,1×). Ficou de fora por ser mais uma migration; entra quando o volume justificar.
 
 1. **Retenção de `eventos_processados` e das DLQs.** Nenhuma das duas tem política de expurgo, e a primeira agora cresce por consumidor. Não bloqueia a correção; bloqueia o crescimento indefinido.
 2. **Reprocessamento a partir da dead-letter.** A decisão 2 registra que hoje é manual (limpar `dead_lettered_at`). Uma ferramenta de reprocessamento dirigido — por consumidor, por evento — não existe e não foi desenhada.

@@ -118,6 +118,32 @@ describe('OUTBOX-CLAIM — pendência é por consumidor, e a origem nunca é apa
     assert.ok(declared.length >= 3, `esperado 3+ consumerId declarados, achei ${declared.length}`);
   });
 
+  it('todo consumerId registrado num worker está na lista que o sweeper usa', () => {
+    // ⚠️ A assimetria que este caso protege: o sweeper marca `processed_at` quando TODOS os
+    // consumidores de `registered-consumers.ts` resolveram um evento, e essa marca REMOVE a
+    // linha do claim de todo mundo. Consumidor a MAIS na lista só deixa o claim lento;
+    // consumidor a MENOS faz a marca sair antes de ele processar — e ele perde o evento em
+    // silêncio, que é exatamente o defeito de #800/#824 voltando por outra porta.
+    //
+    // Cobre os ids LITERAIS de `src/workers/`. Os dois loggers recebem o seu por env, e a
+    // resolução deles está espelhada em `registered-consumers.ts` — pendência 3 do ADR-0062.
+    const registered = readSource('src/shared/outbox/registered-consumers.ts');
+    const declared = walkFiles(join(PROJECT_ROOT, 'src/workers'), { ext: '.ts' }).flatMap((rel) =>
+      codeLines(rel)
+        .flatMap((l) => [...l.matchAll(/consumerId:\s*'([^']+)'/g)])
+        .map((m) => m[1] ?? ''),
+    );
+
+    const missing = [...new Set(declared)].filter((id) => !registered.includes(`'${id}'`)).sort();
+    assert.deepEqual(
+      missing,
+      [],
+      'consumerId registrado num worker mas AUSENTE de registered-consumers.ts — o sweeper ' +
+        'marcaria o evento como resolvido antes de este consumidor processá-lo, e ele o perderia ' +
+        `em silêncio: ${missing.join(', ')}`,
+    );
+  });
+
   it('o claim roda em READ COMMITTED, não no default do servidor', () => {
     // Sob REPEATABLE READ o `FOR UPDATE` do claim trava GAPS no índice `(processed_at,
     // occurred_at)`; evento novo nasce com `processed_at = NULL`, cai no gap, e o INSERT do
