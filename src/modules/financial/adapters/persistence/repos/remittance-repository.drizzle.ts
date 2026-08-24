@@ -185,23 +185,33 @@ export const createDrizzleRemittanceRepository = (
             // parcial. Sem constraint possível, a exclusão tem de vir de lock.
             //
             // ⚠️ O lock é sobre `fin_payables`, cujas linhas EXISTEM, e não sobre
-            // `fin_remittance_payables`, cujas linhas ainda não existem. A diferença decide o
-            // resultado: busca por PK (índice único, condição de igualdade) trava só o registro —
-            // *"For a unique index with a unique search condition, InnoDB locks only the index
-            // record found, not the gap before it"* (Refman 8.4 §17.7.3) —, e X↔X conflita, então a
-            // segunda transação ESPERA. Travar a tabela de vínculo pegaria GAP lock, e gap locks
-            // *"can co-exist (…) do not conflict with each other"* (§17.7.1): as duas passariam, e
-            // só colidiriam no INSERT via insert-intention — deadlock 1213 em vez de espera.
+            // `fin_remittance_payables`, cujas linhas ainda não existem. Aqui a busca ENCONTRA o
+            // registro, e é só por isso que vale *"For a unique index with a unique search
+            // condition, InnoDB locks only the index record found, not the gap before it"*
+            // (Refman 8.4 §17.7.3): X↔X conflita, e a segunda transação espera NESTA query.
             //
-            // Efeito colateral que importa: por não depender de gap, esta trava sobrevive a
+            // ⚠️ Esperar aqui não é o desfecho da emissão concorrente. Ela termina em deadlock
+            // 1213 — medido em 20/20 rodadas contra MySQL 8.4.11 real (inquiry 0031 §3.2) — e a
+            // citação acima não cobre o motivo: o passo 1 desta mesma transação busca a remessa
+            // por um id que AINDA NÃO EXISTE, e sem registro encontrado sobra o gap. As duas
+            // emissões pegam gap lock no `supremum` de `fin_remittances.PRIMARY`, que coexistem
+            // (§17.7.1: *"can co-exist (…) do not conflict with each other"*); uma fica presa no
+            // título travado aqui, e o `INSERT` da outra precisa de insert-intention, que conflita
+            // com aquele gap. O gap lock é PRÉ-EXISTENTE: o que esta reserva acrescentou foi a
+            // espera longa entre pegá-lo e chegar ao INSERT. Travar `fin_payables` ANTES de
+            // `fin_remittances` zerou os deadlocks (0 em 15 rodadas, §4.2) — qual alternativa
+            // adotar é a decisão `D1`, ainda em aberto.
+            //
+            // Efeito colateral que importa: por não depender de gap, ESTA trava sobrevive a
             // READ COMMITTED, que desliga gap locking. Uma proteção contra pagamento em dobro não
             // pode depender de um parâmetro que alguém troca sem saber o que derruba.
             //
-            // Não é preciso ordenar os ids: `IN (…)` sobre um índice único é range condition
-            // normalizada pelo otimizador — *"its output does not depend on the order in which
-            // conditions appear in WHERE clause"* (§10.2.1.2) —, e a varredura segue a ordem da
-            // chave. As duas transações adquirem os locks na mesma ordem por construção do MySQL,
-            // não por disciplina daqui.
+            // Ordenar os ids não adianta — 28 deadlocks em 15 rodadas com `payableIds` ordenados
+            // (§4.2, braço B) —, e não pelo motivo que este comentário afirmou antes: com DOIS ids
+            // o otimizador NÃO usa a PK, e sim `fin_payables_status_idx`, que cobre `SELECT id` por
+            // carregar a PK. Sob `FOR UPDATE` isso trava `supremum` + 3 registros como next-key
+            // (`lock_mode X` sem `REC_NOT_GAP`), inclusive títulos que a query não pediu (§3.8).
+            // Medido com a tabela em 3 linhas; com ela grande o otimizador pode preferir a PK.
             const payableIds = remittance.payables.map((p) => p.payableId);
             await tx
               .select({ id: finPayables.id })

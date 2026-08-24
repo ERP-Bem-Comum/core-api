@@ -254,8 +254,9 @@ O PR #814 **não deve ser mergeado** enquanto isso — o veredito da revisão fo
 - [ ] Medir o efeito colateral do braço C sobre o ramo de **update** antes de adotá-lo
 - [ ] Reforçar `a emissão que perde a corrida não deixa rastro algum` para assertir o **erro
       nomeado** — hoje passa mesmo sob deadlock (§3.7)
-- [ ] Corrigir as duas afirmações falsas no comentário de `remittance-repository.drizzle.ts`:
-      a do gap lock (§3.6) e a do plano de execução com 2 ids (§3.8)
+- [x] Corrigir as duas afirmações falsas no comentário de `remittance-repository.drizzle.ts`:
+      a do gap lock (§3.6) e a do plano de execução com 2 ids (§3.8) — feito em 2026-08-23 na
+      branch `chore/integra-frentes-abertas`
 - [ ] Issue para a superfície de lock do `fin_payables_status_idx` (§3.8) — não causa este
       deadlock, mas abre caminho para outros
 - [ ] Medir a taxa com `fin_remittances` **populada** (§7, limitação 1)
