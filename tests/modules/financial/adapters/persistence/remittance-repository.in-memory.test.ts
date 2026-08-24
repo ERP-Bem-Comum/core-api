@@ -60,9 +60,21 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
     const repo = createInMemoryRemittanceRepository();
     await repo.save(build(['doc-1', 'doc-2']));
 
-    const held = await repo.findHeldPayableIds(['doc-1', 'doc-2', 'doc-3']);
+    const held = await repo.findHeldPayables(['doc-1', 'doc-2', 'doc-3']);
     assert.ok(isOk(held));
-    assert.deepEqual(held.value, ['doc-1', 'doc-2']);
+    assert.deepEqual(
+      held.value.map((h) => h.payableId),
+      ['doc-1', 'doc-2'],
+    );
+
+    // O vínculo carrega a remessa, não só o título: é o `nsa` que o operador reconhece na tela
+    // quando o ajuste é recusado. Asserir a PROPRIEDADE (todo vínculo aponta para uma remessa
+    // identificável) e não o valor literal — o `nsa` vem do `build`, e prendê-lo aqui faria o teste
+    // quebrar por mudança de fixture em vez de por mudança de comportamento.
+    for (const vinculo of held.value) {
+      assert.ok(vinculo.remittanceId.length > 0);
+      assert.ok(Number.isInteger(vinculo.nsa) && vinculo.nsa >= 1);
+    }
   });
 
   it('remessa transmitida continua prendendo', async () => {
@@ -72,7 +84,7 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
     assert.ok(isOk(t));
     await repo.save(t.value.remittance, t.value.events);
 
-    const held = await repo.findHeldPayableIds(['doc-1']);
+    const held = await repo.findHeldPayables(['doc-1']);
     assert.ok(isOk(held) && held.value.length === 1);
   });
 
@@ -83,7 +95,7 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
     assert.ok(isOk(f));
     await repo.save(f.value.remittance, f.value.events);
 
-    const held = await repo.findHeldPayableIds(['doc-1']);
+    const held = await repo.findHeldPayables(['doc-1']);
     assert.ok(isOk(held) && held.value.length === 1);
   });
 
@@ -99,14 +111,14 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
     assert.ok(isOk(d));
     await repo.save(d.value.remittance, d.value.events);
 
-    const held = await repo.findHeldPayableIds(['doc-1']);
+    const held = await repo.findHeldPayables(['doc-1']);
     assert.ok(isOk(held));
     assert.deepEqual(held.value, []);
   });
 
   it('lista vazia não consulta nada e devolve vazio', async () => {
     const repo = createInMemoryRemittanceRepository();
-    const held = await repo.findHeldPayableIds([]);
+    const held = await repo.findHeldPayables([]);
     assert.ok(isOk(held));
     assert.deepEqual(held.value, []);
   });

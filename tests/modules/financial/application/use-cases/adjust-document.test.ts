@@ -107,6 +107,12 @@ describe('financial/application — adjustDocument', () => {
       interestCents: 100,
     });
     assert.equal(isErr(r), true);
-    if (!r.ok) assert.equal(r.error, 'invalid-state-transition');
+    // `.error.error`: o use case devolve o envelope `AdjustDocumentFailure`, e todo `kind` carrega
+    // o slug. Asserir o `kind` junto prende a variante — sem isso, uma recusa que virasse
+    // `held-payables` por engano passaria neste assert.
+    if (!r.ok) {
+      assert.equal(r.error.kind, 'plain');
+      assert.equal(r.error.error, 'invalid-state-transition');
+    }
   });
 });

@@ -4,6 +4,7 @@ import type { RemittanceEvent } from '../../../domain/remittance/events.ts';
 import type { RemittanceId } from '../../../domain/remittance/remittance-id.ts';
 import { holdsPayables } from '../../../domain/remittance/remittance.ts';
 import type {
+  HeldPayable,
   RemittanceRepository,
   RemittanceRepositoryError,
 } from '../../../application/ports/remittance-repository.ts';
@@ -42,20 +43,25 @@ export const createInMemoryRemittanceRepository = (): RemittanceRepository &
 
     // Espelha a semântica do adapter real: só remessas que PRENDEM contam. `Discarded` não prende —
     // é o único estado que devolve o título para a fila, e depende de decisão humana.
-    findHeldPayableIds: async (
+    findHeldPayables: async (
       payableIds: readonly string[],
-    ): Promise<Result<readonly string[], RemittanceRepositoryError>> => {
+    ): Promise<Result<readonly HeldPayable[], RemittanceRepositoryError>> => {
       const wanted = new Set(payableIds);
-      const held = new Set<string>();
+      const held: HeldPayable[] = [];
 
       for (const remittance of remittances.values()) {
         if (!holdsPayables(remittance)) continue;
         for (const { payableId } of remittance.payables) {
-          if (wanted.has(payableId)) held.add(payableId);
+          // Sem `Set` de deduplicação: o mesmo título em duas remessas vivas é o defeito que #789
+          // detecta, e colapsar as linhas aqui faria o fake mentir sobre o real — que também não
+          // deduplica mais.
+          if (wanted.has(payableId)) {
+            held.push({ payableId, remittanceId: remittance.id, nsa: remittance.nsa });
+          }
         }
       }
 
-      return Promise.resolve(ok([...held].sort()));
+      return Promise.resolve(ok(held.sort((a, b) => a.payableId.localeCompare(b.payableId))));
     },
 
     listByStatus: async (
