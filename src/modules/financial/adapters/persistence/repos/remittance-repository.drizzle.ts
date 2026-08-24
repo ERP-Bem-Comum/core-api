@@ -190,11 +190,18 @@ export const createDrizzleRemittanceRepository = (
           // anterior — as duas emissões gravariam de novo, em silêncio.
           //
           // Ordenar os ids não acrescenta nada — 28 deadlocks em 15 rodadas com `payableIds`
-          // ordenados (§4.2, braço B) —, e não pelo motivo que este arquivo já afirmou: com DOIS
-          // ids o otimizador NÃO usa a PK, e sim `fin_payables_status_idx`, que cobre `SELECT id`
-          // por carregar a PK. Sob `FOR UPDATE` isso trava `supremum` + 3 registros como next-key
-          // (`lock_mode X` sem `REC_NOT_GAP`), inclusive títulos que a query não pediu (§3.8).
-          // Medido com a tabela em 3 linhas; com ela grande o otimizador pode preferir a PK.
+          // ordenados (§4.2, braço B) —, e o motivo está no plano: esta busca vai pela PK, e o
+          // lock sai `X,REC_NOT_GAP` sobre exatamente os registros pedidos. Medido com
+          // `fin_payables` em 10.242 linhas (*"Covering index range scan (…) using PRIMARY"*,
+          // 2 locks de registro, nenhum gap) e confirmado no dump de deadlock com ~60 linhas, que
+          // acusa `index PRIMARY`.
+          //
+          // ⚠️ Só em fixture MÍNIMA (3 linhas) o otimizador prefere `fin_payables_status_idx`, que
+          // cobre `SELECT id` por carregar a PK, e aí o lock vira next-key sobre `supremum` mais
+          // registros que a query não pediu (§3.8). É medição de caso pequeno, não o comportamento
+          // fora dele — e a diferença importa: sem gap, a insert-intention da concorrente não tem
+          // com o que conflitar, que é por que o ramo de update não bloqueia INSERT de título novo
+          // (20/20 passaram, 0 deadlocks).
           //
           // O guard de lista vazia não é defensivo: `inArray` com `[]` é erro do builder, não
           // predicado falso. Uma remessa sem títulos não existe no domínio, mas o ramo de update

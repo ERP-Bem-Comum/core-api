@@ -389,6 +389,17 @@ if (!process.env['MYSQL_INTEGRATION']) {
       // transação, então não existe janela entre "reservei" e "gravei" onde algo possa falhar
       // deixando título preso por remessa inexistente. O teste fixa essa propriedade: se alguém
       // separar as duas em transações distintas, isto fica vermelho.
+      //
+      // ⚠️ Este teste é CEGO para deadlock, e de propósito não foi mudado. Ele verifica
+      // `ra.ok !== rb.ok` e ausência de rastro — e um rollback por deadlock 1213 satisfaz as duas
+      // coisas, então ele fica VERDE enquanto o ciclo acontece (medido: 8 rodadas de 8, com a
+      // ordem de aquisição desfeita). Quem prova o mecanismo é o irmão logo acima, `duas emissões
+      // do mesmo título: exatamente uma grava, a outra perde com nome próprio`, que exige o erro
+      // NOMINAL e fica vermelho nas mesmas 8 rodadas.
+      //
+      // Os dois não são duplicata: este fixa a atomicidade (não sobra rastro), o irmão fixa o
+      // desfecho (a recusa tem nome de negócio, não de infraestrutura). Apagar o irmão por parecer
+      // redundante deixaria a suíte incapaz de distinguir "recusou" de "deadlockou".
       it('a emissão que perde a corrida não deixa rastro algum', async () => {
         const repo = createDrizzleRemittanceRepository(handle);
         const disputado = await seedPayable();

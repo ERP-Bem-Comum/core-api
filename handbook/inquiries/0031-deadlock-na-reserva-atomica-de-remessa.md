@@ -247,12 +247,24 @@ transação do `save`, antes da busca em `fin_remittances`. É o único braço c
 O custo aceito é o do próprio braço: o ramo de **update** passa a travar `fin_payables`, ainda que
 não reserve nada. Travar não é recusar — a verificação de hold segue exclusiva da criação.
 
-⚠️ **A aplicação ainda não foi medida.** O experimento que sustenta esta escolha rodou numa cópia do
-código, não neste; e o teste que prova a corrida
-(`emissão concorrente — a janela TOCTOU (#789)`) exige `MYSQL_INTEGRATION=1` e **não roda** no gate
-padrão. O que passou aqui foram 222 testes in-memory, e fake algum exerce lock. Enquanto a suíte de
-integração não rodar contra MySQL real, o braço A está **aplicado, não verificado** — e o `D2`
-abaixo é justamente o que falta medir.
+**Verificado em 2026-08-24**, contra MySQL 8.4.11 real (lab do x99, RTT 6–7ms), no código desta
+branch e não numa cópia:
+
+| braço | rodadas | **1213** | perdedoras com `remittance-payables-already-held` |
+| :--- | ---: | ---: | :--- |
+| contrafactual (só a ordem desfeita) | 60 | **6** | 54/60 |
+| **braço A** | **40** | **0** | **40/40** |
+
+O contrafactual é o que dá valor ao zero: mesmo arquivo, mesmo harness, mesma bancada, com **apenas**
+a ordem de aquisição revertida — e ali o deadlock aparece. Um zero sem contrafactual não distingue
+"corrigido" de "instrumento cego". A contagem saiu do **delta de servidor**
+(`performance_schema.events_errors_summary_global_by_error`), não da ausência de erro no log do
+teste, e bate 1:1 com o `Result`: quando o harness acusou 2 `remittance-repository-unavailable`, o
+servidor acusou `1213=2`.
+
+O dump do contrafactual mostra o ciclo exatamente como a §4.1 o descreve: `lock_mode X locks gap
+before rec` no `PRIMARY` de `fin_remittances` de um lado, `lock_mode X locks rec but not gap
+waiting` no `PRIMARY` de `fin_payables` do outro, e a segunda transação em `inserting`.
 
 ---
 
@@ -260,15 +272,25 @@ abaixo é justamente o que falta medir.
 
 - [x] Decidir entre A / B / C / D (§4.3) e aplicar no PR #814 — **braço A**, aplicado em 2026-08-23
       na branch `chore/integra-frentes-abertas` (ver §5)
-- [ ] Medir o efeito colateral do braço C sobre o ramo de **update** antes de adotá-lo
-- [ ] Reforçar `a emissão que perde a corrida não deixa rastro algum` para assertir o **erro
-      nomeado** — hoje passa mesmo sob deadlock (§3.7)
+- [x] Medir o efeito colateral sobre o ramo de **update** — feito em 24/08: sem deadlock novo, sem
+      lock-wait, sem bloqueio de INSERT de título novo (20/20). O custo é de **cauda**: mediana
+      igual (119ms vs 103ms), pior caso ~3× (428ms vs 140ms), com N=20
+- [ ] **Falta o cenário `save` de update × `save` do documento (hard replace)** — a rota da 0032, e
+      a única em que ainda caberia ciclo novo, por ordem invertida entre `fin_documents` e
+      `fin_payables`. O lock sem gap remove a família de ciclos por gap, não esta
+- [x] Reforçar `a emissão que perde a corrida não deixa rastro algum` — **resolvido sem teste
+      novo**: o irmão dele, `duas emissões do mesmo título: exatamente uma grava, a outra perde com
+      nome próprio`, já exige o erro nominal e ficou **vermelho em 8/8 rodadas sob deadlock**
+      enquanto o cego ficava verde. O canário existe; o que faltava era dizer isso no arquivo, para
+      ninguém apagar o irmão achando duplicata
 - [x] Corrigir as duas afirmações falsas no comentário de `remittance-repository.drizzle.ts`:
       a do gap lock (§3.6) e a do plano de execução com 2 ids (§3.8) — feito em 2026-08-23 na
       branch `chore/integra-frentes-abertas`
 - [ ] Issue para a superfície de lock do `fin_payables_status_idx` (§3.8) — não causa este
       deadlock, mas abre caminho para outros
-- [ ] Medir a taxa com `fin_remittances` **populada** (§7, limitação 1)
+- [x] Medir a taxa com `fin_remittances` **populada** (§7, limitação 1) — feito em 24/08: o defeito
+      é determinístico em banco pequeno e raro em banco grande (1 em 20 com ~10k linhas); o braço A
+      zera nos dois
 - [ ] Issue [#808](https://github.com/ERP-Bem-Comum/core-api/issues/808) — corroborada, ver §7
 
 ---
@@ -280,9 +302,23 @@ abaixo é justamente o que falta medir.
    tabela cheia, dois UUID v4 caem no mesmo gap com probabilidade menor — **mas não nula**: o caso
    D da §3.5 mostra que ids distintos dentro de um intervalo compartilham um único lock struct.
    A taxa com tabela populada **não foi medida**.
+
+   > **Medida em 24/08.** Com as tabelas crescendo durante a corrida (`fin_payables` ~10k), o
+   > contrafactual caiu para **1 deadlock em 20 rodadas** — contra 100% aqui. A leitura correta dos
+   > 20/20 originais não é "sempre acontece", e sim **"é determinístico em banco pequeno"**: com a
+   > tabela quase vazia há um único vão enorme e as duas transações sempre colidem; com volume, o
+   > vão se fragmenta e a colisão fica rara. Todo teste de integração e todo ambiente novo caem no
+   > primeiro caso — inclusive o CI. O braço A dá **zero nos dois volumes**.
+
 2. **`fin_payables` tinha 3 linhas.** Com esse volume o otimizador prefere o índice secundário. Com
    a tabela grande ele poderia escolher a PK, e o lock em `fin_payables` mudaria de forma — o ciclo
    em `fin_remittances`, não.
+
+   > **Medida em 24/08, e o "poderia" era o caso.** Já em ~60 linhas o dump de deadlock acusa
+   > `index PRIMARY`; em 10.242, o plano é `Covering index range scan … using PRIMARY` e os locks
+   > saem `X,REC_NOT_GAP` sobre **exatamente os 2 registros pedidos**, sem `supremum`. A escolha do
+   > `fin_payables_status_idx` com next-key é comportamento de **fixture mínima**, não o de fora
+   > dela — e é por não haver gap aqui que o ramo de update não bloqueia INSERT de título novo.
 3. **Não foi medido sob `READ COMMITTED`.**
 4. **Sobre a #808:** ao recriar o container **com** as flags de `docker/mysql/conf.d/server.cnf` as
    migrations rodaram inteiras. Isso **corrobora** o diagnóstico, mas o `errno=1267
