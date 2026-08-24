@@ -8,3 +8,4 @@
 - [markFailed virou OutboxFailure](reference_eslint_max_params_arrow_report_line.md) — max-params resolvido com objeto `{now,errorTag,attempt}`, não eslint-disable (team-lead rejeitou a supressão)
 - [Adequar teste ≠ afrouxar (outbox fanout)](feedback_outbox_fanout_test_adequacy.md) — trocar a FONTE do dado (eventos_processados/progress), não só o argumento; moveToDeadLetter não deleta mais
 - [SQL | undefined em WHERE-builder](reference_sql_or_undefined_where_predicate.md) — `and(...) as SQL`/`!` colidem entre duas regras de lint; retornar `SQL | undefined` sem cast é o idioma certo
+- [FOR UPDATE e errno em e.cause](reference_for_update_and_error_propagation.md) — ADR-0020 não cita FOR UPDATE (só precedente); errno de deadlock/lock-timeout mora em e.cause.errno

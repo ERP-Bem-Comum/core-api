@@ -13,14 +13,27 @@ export type HeldPayable = Readonly<{
   nsa: number;
 }>;
 
+// Só o `save` pode recusar por título preso, e por isso o erro NÃO entra no union geral: um
+// `findById` que declarasse poder devolver `already-held` obrigaria todo chamador a tratar um caso
+// que não existe, e o compilador deixaria de distinguir quem realmente precisa decidir.
+export type RemittanceSaveError = RemittanceRepositoryError | 'remittance-payables-already-held';
+
 export type RemittanceRepository = Readonly<{
   // `events` (opcional/trailing, como no `DocumentRepository`): gravados no `fin_outbox` NA MESMA
   // transação do agregado. O evento existe se e somente se o desfecho foi persistido (ADR-0015) —
   // anunciar "remessa transmitida" sem ter gravado a transmissão é pior que não anunciar.
+  // ⚠️ O `save` de CRIAÇÃO é também o ponto de reserva dos títulos (#789), e não por conveniência:
+  // `findHeldPayableIds` responde sobre o passado, e entre a resposta dela e a gravação cabe a
+  // tradução CNAB inteira. Duas emissões concorrentes leem "livre" antes de qualquer uma gravar —
+  // CWE-367. Reconferir o hold no MESMO ato em que se grava é o que fecha a janela; separar as duas
+  // coisas em chamadas distintas a reabriria, menor porém real.
+  //
+  // Atualização de desfecho (confirmar, falhar, descartar) NÃO reserva: a remessa já prende os
+  // próprios títulos, e recusá-la ali travaria toda remessa transmitida sem desfecho.
   save: (
     remittance: Remittance,
     events?: readonly RemittanceEvent[],
-  ) => Promise<Result<void, RemittanceRepositoryError>>;
+  ) => Promise<Result<void, RemittanceSaveError>>;
   findById: (id: RemittanceId) => Promise<Result<Remittance | null, RemittanceRepositoryError>>;
   findByFileName: (
     fileName: string,

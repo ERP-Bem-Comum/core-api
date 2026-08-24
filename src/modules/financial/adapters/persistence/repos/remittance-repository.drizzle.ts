@@ -18,15 +18,32 @@ import type {
   HeldPayable,
   RemittanceRepository,
   RemittanceRepositoryError,
+  RemittanceSaveError,
 } from '#src/modules/financial/application/ports/remittance-repository.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
-import { finRemittances, finRemittancePayables } from '../schemas/mysql.ts';
+import { finRemittances, finRemittancePayables, finPayables } from '../schemas/mysql.ts';
 import { appendFinOutboxInTx } from './fin-outbox-helpers.ts';
 import type { FinRemittanceRow } from '../schemas/mysql.ts';
 
 const logRepo = (op: string, cause: unknown): void => {
   process.stderr.write(`[fin-remittance-repository] ${op} failed: ${String(cause)}\n`);
 };
+
+// Sentinela da reserva perdida (#789): o `catch` precisa distinguir "perdi a corrida" — desfecho
+// ESPERADO sob concorrência — de "o banco caiu", e faz isso por identidade (`===`), não por
+// mensagem, que refatoração muda sem avisar.
+//
+// Instância única e `Error` de verdade, por duas restrições que se somam: `@typescript-eslint/
+// only-throw-error` recusa lançar símbolo, e `class` é barrada neste repositório, então `instanceof`
+// de um tipo próprio está fora. Uma constante compartilhada resolve as duas.
+//
+// ⚠️ O `stack` dela aponta para a carga deste módulo, não para o ponto do `throw` — o preço de ser
+// singleton. É inofensivo porque ela nunca é logada nem propagada: o `catch` a intercepta e a
+// traduz. Se algum dia ela precisar viajar, troque por uma factory que crie o `Error` na hora.
+//
+// Sobrevive ao trajeto porque o driver relança o objeto original: `mysql2/session.js` roda o
+// ROLLBACK no `catch` e faz `throw err` do mesmo valor, sem empacotar.
+const PAYABLES_ALREADY_HELD = new Error('remittance-payables-already-held');
 
 // ─── Tradução de instante entre o domínio e a coluna `datetime` ──────────────────────────────────
 //
@@ -145,7 +162,7 @@ export const createDrizzleRemittanceRepository = (
     save: async (
       remittance: Remittance,
       events: readonly RemittanceEvent[] = [],
-    ): Promise<Result<void, RemittanceRepositoryError>> => {
+    ): Promise<Result<void, RemittanceSaveError>> => {
       try {
         await db.transaction(async (tx) => {
           const existing = await tx
@@ -155,6 +172,83 @@ export const createDrizzleRemittanceRepository = (
             .for('update');
 
           if (existing[0] === undefined) {
+            // ─── Reserva dos títulos (#789) ─────────────────────────────────────────────────
+            //
+            // `findHeldPayableIds`, no use case, responde sobre o PASSADO: entre a resposta dela e
+            // esta transação cabe a tradução CNAB inteira. Duas emissões concorrentes leem "livre"
+            // antes de qualquer uma gravar, e ambas gravam — o mesmo título em duas remessas, que é
+            // pagamento em dobro (CWE-367). A PK composta `(remittance_id, payable_id)` não recusa:
+            // remessas distintas são chaves distintas.
+            //
+            // E nenhuma UNIQUE pode recusar, porque a invariante é CONDICIONAL — "não estar em duas
+            // remessas VIVAS", com `Discarded` devolvendo o título — e o MySQL não tem índice
+            // parcial. Sem constraint possível, a exclusão tem de vir de lock.
+            //
+            // ⚠️ O lock é sobre `fin_payables`, cujas linhas EXISTEM, e não sobre
+            // `fin_remittance_payables`, cujas linhas ainda não existem. A diferença decide o
+            // resultado: busca por PK (índice único, condição de igualdade) trava só o registro —
+            // *"For a unique index with a unique search condition, InnoDB locks only the index
+            // record found, not the gap before it"* (Refman 8.4 §17.7.3) —, e X↔X conflita, então a
+            // segunda transação ESPERA. Travar a tabela de vínculo pegaria GAP lock, e gap locks
+            // *"can co-exist (…) do not conflict with each other"* (§17.7.1): as duas passariam, e
+            // só colidiriam no INSERT via insert-intention — deadlock 1213 em vez de espera.
+            //
+            // Efeito colateral que importa: por não depender de gap, esta trava sobrevive a
+            // READ COMMITTED, que desliga gap locking. Uma proteção contra pagamento em dobro não
+            // pode depender de um parâmetro que alguém troca sem saber o que derruba.
+            //
+            // Não é preciso ordenar os ids: `IN (…)` sobre um índice único é range condition
+            // normalizada pelo otimizador — *"its output does not depend on the order in which
+            // conditions appear in WHERE clause"* (§10.2.1.2) —, e a varredura segue a ordem da
+            // chave. As duas transações adquirem os locks na mesma ordem por construção do MySQL,
+            // não por disciplina daqui.
+            const payableIds = remittance.payables.map((p) => p.payableId);
+            await tx
+              .select({ id: finPayables.id })
+              .from(finPayables)
+              .where(inArray(finPayables.id, payableIds))
+              .for('update');
+
+            // Agora sob lock: a pergunta que o use case fez lá atrás, refeita no mesmo ato da
+            // gravação. Quem chegou primeiro já gravou o vínculo e commitou; quem chega depois vê.
+            //
+            // ⚠️ E vê por um motivo que depende da ORDEM das leituras desta transação, não apenas
+            // do lock acima. Esta releitura NÃO trava nada — é *consistent read*, e sob REPEATABLE
+            // READ (o isolamento vigente, default do servidor) todos eles leem o snapshot fixado
+            // pelo PRIMEIRO deles: *"All consistent reads within the same transaction read the
+            // snapshot established by the first such read in that transaction"* (Refman 8.4
+            // §17.7.2.3). As duas leituras anteriores são `for('update')` — locking reads, que leem
+            // sempre a versão committed mais recente e por isso não são o "first such read" que fixa
+            // o snapshot. Logo o primeiro consistent read é ESTE, e ele só executa depois de a trava
+            // acima liberar, isto é, depois de o vencedor ter commitado.
+            //
+            // Para quem for mexer aqui: acrescentar QUALQUER `select` sem `for('update')` ANTES da
+            // trava fixa o snapshot cedo, e esta releitura volta a enxergar o estado anterior à
+            // corrida — as duas emissões gravam de novo, em silêncio. Uma leitura de auditoria, um
+            // `findById` reaproveitado dentro da `tx` ou uma checagem de conta bastam. Se algo
+            // precisar ser lido antes, leia com `for('update')`.
+            //
+            // Sob READ COMMITTED a premissa é dispensável — lá cada consistent read pega snapshot
+            // novo. Ou seja, a trava sobrevive à troca de isolamento (como o bloco acima afirma),
+            // mas por REPEATABLE READ ela depende também desta ordem. A rede mecânica é o teste
+            // `emissão concorrente — a janela TOCTOU (#789)`, que fica vermelho se isto quebrar.
+            const heldNow = await tx
+              .select({ payableId: finRemittancePayables.payableId })
+              .from(finRemittancePayables)
+              .innerJoin(finRemittances, eq(finRemittances.id, finRemittancePayables.remittanceId))
+              .where(
+                and(
+                  inArray(finRemittancePayables.payableId, payableIds),
+                  inArray(finRemittances.status, [...HOLDING]),
+                ),
+              );
+
+            // `throw` e não `return`: só a exceção desfaz a transação (o driver roda ROLLBACK no
+            // catch e relança). O `catch` externo o reconhece e devolve o `Result` nomeado — a
+            // convenção deste repositório, em vez do `tx.rollback()` do doc oficial, que não
+            // carregaria qual erro foi.
+            if (heldNow.length > 0) throw PAYABLES_ALREADY_HELD;
+
             // Criação: INSERT puro. Violação de UNIQUE (NSA por conta, nome de arquivo) LANÇA e
             // vira `Result` de erro no catch — que é o comportamento que se quer.
             await tx.insert(finRemittances).values({
@@ -205,6 +299,9 @@ export const createDrizzleRemittanceRepository = (
         });
         return ok(undefined);
       } catch (cause) {
+        // Perder a corrida é desfecho ESPERADO sob concorrência, não avaria: sai com nome próprio e
+        // sem poluir o stderr, para que o log siga significando "algo quebrou".
+        if (cause === PAYABLES_ALREADY_HELD) return err('remittance-payables-already-held');
         logRepo('save', cause);
         return err('remittance-repository-unavailable');
       }

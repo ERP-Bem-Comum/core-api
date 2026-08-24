@@ -1,4 +1,4 @@
-import { type Result, ok } from '../../../../../shared/primitives/result.ts';
+import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
 import type { Remittance } from '../../../domain/remittance/types.ts';
 import type { RemittanceEvent } from '../../../domain/remittance/events.ts';
 import type { RemittanceId } from '../../../domain/remittance/remittance-id.ts';
@@ -7,6 +7,7 @@ import type {
   HeldPayable,
   RemittanceRepository,
   RemittanceRepositoryError,
+  RemittanceSaveError,
 } from '../../../application/ports/remittance-repository.ts';
 
 // Adapter in-memory do RemittanceRepository (testes / boot sem DB).
@@ -20,10 +21,28 @@ export const createInMemoryRemittanceRepository = (): RemittanceRepository &
   const published: RemittanceEvent[] = [];
 
   return {
+    // Espelha a SEMÂNTICA da reserva do adapter real (#789), não o mecanismo: lá a exclusão vem de
+    // `SELECT … FOR UPDATE` sobre `fin_payables`; aqui, de uma checagem síncrona. O que os dois
+    // precisam ter em comum é o veredito — um fake que aceitasse o que o banco recusa deixaria a
+    // suíte verde descrevendo produção errado.
+    //
+    // A reserva vale só na CRIAÇÃO. Na atualização a remessa encontra os próprios títulos presos,
+    // por ela mesma, e recusar ali travaria o desfecho de toda remessa transmitida.
     save: async (
       remittance: Remittance,
       events: readonly RemittanceEvent[] = [],
-    ): Promise<Result<void, RemittanceRepositoryError>> => {
+    ): Promise<Result<void, RemittanceSaveError>> => {
+      const isCreation = !remittances.has(remittance.id);
+      if (isCreation) {
+        const mine = new Set(remittance.payables.map((p) => p.payableId));
+        for (const other of remittances.values()) {
+          if (!holdsPayables(other)) continue;
+          if (other.payables.some((p) => mine.has(p.payableId))) {
+            return Promise.resolve(err('remittance-payables-already-held'));
+          }
+        }
+      }
+
       remittances.set(remittance.id, remittance);
       published.push(...events);
       return Promise.resolve(ok(undefined));
