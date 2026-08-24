@@ -39,6 +39,13 @@ const TED_CLEARING = '018';
 // dispensável era o defeito. O formato é o que `referenceFor` produz: NSA (6) + posição (6).
 const YOUR_NUMBER = '000042000001';
 
+// P011 — obrigatório desde a #813, pelo mesmo motivo que G064 e a câmara: o `?? ''` fazia toda
+// remessa sair com as cinco posições em branco. O segmento recebe o valor JÁ RESOLVIDO e não o
+// deriva; quem o deriva da forma de lançamento é `tedPurposeFor`, em `batch-profile.ts`.
+//
+// `null` significa "esta rota não tem o campo" — e é o valor da fixture de crédito em conta abaixo.
+const TED_PURPOSE = '00005';
+
 const baseA = {
   bankCode: '237',
   batchNumber: 1,
@@ -48,6 +55,7 @@ const baseA = {
   valueCents: 123456,
   clearingHouse: TED_CLEARING,
   yourNumber: YOUR_NUMBER,
+  tedPurpose: TED_PURPOSE,
 };
 
 describe('Multipag — Segmento A (pagamento)', () => {
@@ -117,6 +125,56 @@ describe('Multipag — Segmento A (pagamento)', () => {
   it('escreve a câmara que recebeu, sem valor por omissão', () => {
     assert.equal(at(record, 18, 20), TED_CLEARING);
     assert.equal(at(line(segmentA({ ...baseA, clearingHouse: '000' })), 18, 20), '000');
+  });
+
+  // #813/CA1. P011, colunas 220-224. Mesma disciplina da câmara: o segmento escreve o que recebeu e
+  // não tem opinião sobre qual finalidade é a certa — quem deriva é `tedPurposeFor`.
+  //
+  // ⚠️ A asserção é pelos cinco caracteres LITERAIS, e não por `Number(...)`: o campo é declarado
+  // Alfa e `text()` alinha à ESQUERDA. Um `'5'` chegando aqui produziria `'5    '`, que passa por
+  // qualquer comparação numérica e não é código nenhum do domínio do Bacen.
+  it('escreve a finalidade da TED nas colunas 220-224, com os zeros à esquerda', () => {
+    assert.equal(at(record, 220, 224), '00005');
+  });
+
+  // #813/CA2 — pendente do Validador Universal. Crédito em conta chega aqui com `null`, e `null` não
+  // é string vazia: é "esta rota não tem o campo". As posições saem em branco, que é o status quo
+  // que a P.O. decidiu NÃO fixar no papel — a regra vem de duas submissões ao validador.
+  //
+  // Se o validador exigir `00010` para crédito em conta, é `tedPurposeFor` que muda; este teste
+  // muda junto, e o Segmento A não é tocado. É a razão de a derivação não morar aqui.
+  it('deixa 220-224 em branco quando a rota não tem finalidade — CA2 pendente do validador', () => {
+    assert.equal(at(line(segmentA({ ...baseA, tedPurpose: null })), 220, 224), '     ');
+  });
+
+  // O vizinho de 225-226 (P013, finalidade complementar) é a #817, decisão separada. A asserção
+  // existe para que mexer numa das duas não desloque a outra em silêncio — o modo de falha do
+  // arquivo posicional é justamente o campo certo escrito na coluna errada.
+  it('não invade a finalidade complementar (225-226), que é outra decisão', () => {
+    assert.equal(at(record, 225, 226), '  ');
+  });
+
+  // #813/CA3 — coerência interna, não sanitização: nenhum valor externo alimenta o campo. O que a
+  // guarda pega é defeito do próprio emissor, e o modo de falha é o pior: `text()` alinha à
+  // ESQUERDA, então `'5'` sairia como `'5    '` — cinco posições, aparência válida, código nenhum.
+  //
+  // A recusa reusa `numeric-field-invalid` de propósito. Erro próprio nomearia uma distinção que
+  // não existe do lado de quem recebe: não há dado a corrigir num cadastro, a ação é abrir o código.
+  it('recusa finalidade fora do formato, em vez de escrever código que não existe', () => {
+    for (const invalid of ['5', '00005 ', '0000', '000005', 'ABCDE', '', '  5  ']) {
+      const r = segmentA({ ...baseA, tedPurpose: invalid });
+      assert.ok(isErr(r), `esperava recusa para '${invalid}'`);
+      assert.equal(r.error, 'numeric-field-invalid', invalid);
+    }
+  });
+
+  // ⚠️ SEM allow-list, e este teste é o que a proíbe. A tabela do Bacen é declaradamente parcial
+  // ("exemplos de algumas das finalidades"), e uma lista dos doze valores conhecidos recusaria um
+  // código legítimo fora dela — arquivo que o banco aceitaria, barrado pelo próprio emissor.
+  it('aceita qualquer código bem formado, inclusive fora dos valores hoje conhecidos', () => {
+    for (const other of ['00010', '99999', '00039', '12345']) {
+      assert.equal(at(line(segmentA({ ...baseA, tedPurpose: other })), 220, 224), other);
+    }
   });
 
   // Um valor que não cabe é recusado — truncar pagaria outro valor, e o banco aceitaria.
@@ -220,6 +278,7 @@ describe('Multipag — o par A+B de um pagamento', () => {
       valueCents: 5000,
       clearingHouse: TED_CLEARING,
       yourNumber: YOUR_NUMBER,
+      tedPurpose: TED_PURPOSE,
     });
     assert.ok(isOk(r));
     const [a, b] = r.value;
@@ -244,6 +303,7 @@ describe('Multipag — o par A+B de um pagamento', () => {
       valueCents: 1,
       clearingHouse: TED_CLEARING,
       yourNumber: YOUR_NUMBER,
+      tedPurpose: TED_PURPOSE,
     });
     assert.ok(isOk(r));
     assert.equal(r.value.length, 2);
@@ -259,6 +319,7 @@ describe('Multipag — o par A+B de um pagamento', () => {
       valueCents: 1,
       clearingHouse: TED_CLEARING,
       yourNumber: YOUR_NUMBER,
+      tedPurpose: TED_PURPOSE,
     });
     assert.ok(isErr(r));
   });

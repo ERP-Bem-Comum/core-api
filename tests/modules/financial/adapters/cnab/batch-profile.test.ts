@@ -6,6 +6,7 @@ import { isErr, isOk } from '#src/shared/index.ts';
 import {
   batchProfileFor,
   clearingHouseFor,
+  tedPurposeFor,
   type ProfiledPayment,
 } from '#src/modules/financial/adapters/cnab/batch-profile.ts';
 
@@ -138,6 +139,49 @@ describe('Câmara centralizadora — função da forma, não escolha de quem mon
   // que o default produzia.
   it('forma desconhecida sai com zeros, não com a câmara da forma vizinha', () => {
     assert.equal(clearingHouseFor('99'), '000');
+  });
+});
+
+/**
+ * Finalidade da TED (P011, Segmento A, colunas 220-224) — #813.
+ *
+ * Mesma disciplina da câmara, um elo adiante: a forma de lançamento decide, e quem monta não opina.
+ * Enquanto o campo foi opcional com `?? ''`, TODA remessa saía com as cinco posições em branco — o
+ * arquivo que o Validador Universal recusou em 21/08/2026.
+ *
+ * O que este bloco fixa é a FUNÇÃO; o valor e as fontes que o sustentam estão junto da constante,
+ * em `batch-profile.ts`.
+ */
+describe('Finalidade da TED — função da forma, como a câmara (#813)', () => {
+  // CA1. As mesmas três formas que transitam por câmara de TED são as que levam finalidade: os dois
+  // campos descrevem a mesma operação, e divergirem dentro de um registro é contradição.
+  it('as formas de TED levam a finalidade, e só elas', () => {
+    for (const tedForm of ['03', '41', '43']) assert.equal(tedPurposeFor(tedForm), '00005');
+    for (const other of ['01', '05', '30', '31', '45']) assert.equal(tedPurposeFor(other), null);
+  });
+
+  // CA2, pendente do Validador Universal. Crédito em conta (`01`) sai SEM finalidade — `null`, que
+  // significa "esta rota não tem o campo", e não "tem, e vai vazio". A decisão da P.O. (21/08) é
+  // explicitamente não fixar valor aqui até duas submissões ao validador (220-224 em branco ×
+  // preenchido) dizerem qual regra vale. Este teste guarda o status quo enquanto a resposta não vem.
+  it('crédito em conta não declara finalidade — CA2 pendente do validador', () => {
+    assert.equal(tedPurposeFor('01'), null);
+  });
+
+  // Total sobre o domínio de G029, como `clearingHouseFor`: forma nova entra pelo `else` e sai sem
+  // finalidade, nunca herdando a da forma anterior.
+  it('forma desconhecida sai sem finalidade, não com a da forma vizinha', () => {
+    assert.equal(tedPurposeFor('99'), null);
+  });
+
+  // ⚠️ A armadilha que a #813 documenta, virada teste. O campo é declarado **Alfa** no layout, mas o
+  // domínio é NUMÉRICO com zeros à esquerda: `text('5', 5)` produz `'5    '` — alinhado à esquerda,
+  // completado com brancos —, que não é código nenhum. O valor tem de sair daqui com os cinco
+  // caracteres literais, ou o campo mente com aparência de válido.
+  it('produz os cinco caracteres literais, não um número a formatar depois', () => {
+    assert.equal(tedPurposeFor('41'), '00005');
+    assert.notEqual(tedPurposeFor('41'), '5');
+    assert.equal(tedPurposeFor('41')?.length, 5);
   });
 });
 
