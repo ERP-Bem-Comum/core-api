@@ -53,7 +53,9 @@ export function parseFrontmatter(raw: string): Readonly<Record<string, string>> 
     out[key] = (kv?.[2] ?? '')
       .replace(/\s+#.*$/, '')
       .trim()
-      .replace(/^"(.*)"$/, '$1');
+      // Aspas simples E duplas: as duas são YAML válido, e o `\1` exige que a que fecha seja a
+      // mesma que abriu — senão um título que termina em apóstrofo perderia o último caractere.
+      .replace(/^(["'])(.*)\1$/, '$2');
   }
   return out;
 }

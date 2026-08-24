@@ -12,7 +12,7 @@
 <!-- BEGIN:generated -->
 
 - **Inquiries cobertas:** 11 de 32 — [0011](./0011-auditoria-fiscal-cross-periodo.md) · [0012](./0012-bff-managed-api-gateway-vs-fastify.md) · [0014](./0014-schema-legado-vs-modelo-alvo.md) · [0015](./0015-charset-drizzle-roadmap.md) · [0019](./0019-hard-delete-tripwire-sem-superficie.md) · [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0027](./0027-teses-orfas-de-branches-contaminadas.md) · [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) · [0030](./0030-deadman-switch-nunca-vigiou.md) · [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) · [0032](./0032-titulo-remetido-fronteira-do-agregado.md)
-- **Total de perguntas em aberto:** **53**
+- **Total de perguntas em aberto:** **57**
 
 As demais 21 estão `decided` (17), `deferred` (3, com gatilho declarado) ou `superseded` (1) — nenhuma
 espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
@@ -35,6 +35,7 @@ espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
 | [0028](#inquiry-0028--o-edd-da-po-m1m4--relatórios-nibo) | `open` | P.O./consultoria + spikes do TL | Escopo comercial (~470h dev + ~350h do bundle P0); M1 e M4 | 7 |
 | [0030](#inquiry-0030--o-dead-mans-switch-que-nunca-vigiou) | `open` | Ninguém — falta desenho, não decisão | Supersede do [ADR-0042](../architecture/adr/0042-deadman-switch-redundant.md); detecção de job morto segue descoberta | 2 |
 | [0031](#inquiry-0031--deadlock-na-reserva-atômica-de-remessa) | `open` | Gabriel — escolher entre 4 alternativas medidas | PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814); a proteção contra dupla emissão da [#789](https://github.com/ERP-Bem-Comum/core-api/issues/789) não entra em produção; piloto VAN (#756) | 4 |
+| [0032](#inquiry-0032--título-remetido-pertence-ao-documento) | `open` | P.O. — a forma da recusa na tela; as 4 saídas já estão decididas | ADR novo sobre a fronteira `Document`↔`Payable`; a Fatia B do ajuste de nota, cuja decisão de base era esperar o merge do PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814) — premissa vencida, ele já está integrado; a `.claude/rules/domain.md`, que passa a mentir sobre o código assim que a S1 entrar | 4 |
 
 ---
 
@@ -302,6 +303,34 @@ da escolhida. Enquanto isso o PR #814 fica aberto e a #789 segue desprotegida em
 
 > _(As duas afirmações erradas citavam o Refman **corretamente**. O erro foi aplicar a passagem certa ao
 > ramo errado — e ambas foram "verificadas" por leitura, nunca por medição. Ver §3.6 e §3.8.)_
+
+---
+
+## Inquiry-0032 — Título remetido pertence ao documento?
+
+> **Origem:** [`0032-titulo-remetido-fronteira-do-agregado.md`](./0032-titulo-remetido-fronteira-do-agregado.md) §5 e §6
+> **Aberta em:** 2026-08-23 · **Destinatário:** P.O. (decisão de produto, pendente) e Gabriel (execução das saídas decididas)
+> **Por que importa:** um título já enviado ao banco não pode ser apagado por um `save` do documento — e a
+> recusa precisa **dizer ao operador o quê e por quê**, não devolver erro genérico. A decisão de produto
+> registrada é parcial ("deixe explicado no ERRO que lançarmos que é recusa e por quê; no front a P.O.
+> poderá nos corrigir"), e a segunda pergunta — o que o operador deveria ver ao corrigir uma nota cujo
+> título já foi remetido — segue sem resposta da P.O.
+
+**Bloqueador para fechar:** as quatro saídas abaixo já estão **decididas** e esperam execução, não decisão.
+O que ainda espera terceiro é a forma da recusa na tela. A decisão de base de 23/08 — a Fatia B esperar o
+merge do PR #814, para não resolver conflito à mão na região onde a ordem dos locks se decide — **deixa de
+valer nesta branch**, onde o #814 já está integrado.
+
+- [ ] **S1.** Converter `DocumentError` inteiro para tagged error (invariante carrega evidência; validação
+      simples fica nulária). Custo medido: **4** comparações por string — `generate-remittance.ts:85` e
+      `bulk-update-due-date.ts:38,39,40`. ⚠️ Não converter pontualmente: string e objeto na mesma union
+      forçam `typeof e === 'string'` em todo consumidor e quebram o exhaustive switch.
+- [ ] **S2.** Atualizar `.claude/rules/domain.md` — ela prescreve string literal union e passaria a mentir
+      sobre o código. Não é ADR, pode ser atualizada; mas deliberadamente, não como efeito colateral.
+- [ ] **S3.** Classificar `1451` em `driver-error.ts` — o destino é o erro de recusa **com payload**, não um
+      503 genérico.
+- [ ] **S4.** `withDeadlockRetry` no `remittance-repository` — rede, não correção. ⚠️ A política atual é
+      `maxAttempts: 3` **sem jitter**: duas transações que colidiram no mesmo instante voltam juntas.
 
 ---
 

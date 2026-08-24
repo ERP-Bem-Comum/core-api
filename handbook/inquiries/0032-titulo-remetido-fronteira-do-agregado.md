@@ -3,6 +3,7 @@ inquiry: 0032
 title: "Título remetido pertence ao documento? — a fronteira de agregado por trás do deadlock"
 state: open
 opened: 2026-08-23
+last_reviewed: 2026-08-23
 ---
 
 # Inquiry-0032: Título remetido pertence ao documento? — a fronteira de agregado por trás do deadlock
