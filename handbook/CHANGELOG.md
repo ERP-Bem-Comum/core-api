@@ -4,7 +4,7 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
-## 2026-08-24 — 🏦 ADR-0065 (Proposed): a responsabilidade pela remessa termina no bucket — `Transmitted` do título na geração; download em produção sob permissão + rastro
+## 2026-08-24 — 🏦 ADR-0065 (Accepted): a responsabilidade pela remessa termina no bucket — `Transmitted` do título na geração; download em produção sob permissão + rastro
 
 **Uma decisão de produto que era, na verdade, uma decisão de fronteira.** A [#792](https://github.com/ERP-Bem-Comum/core-api/issues/792) registrava que, depois de gerar e transmitir, o título continuava "Aprovado" — `Transmitted` existia no enum e nada o atribuía. A P.O. decidiu em 24/08, num menu de trade-offs com o tech lead: o título vira **Transmitido na geração**, porque a partir do bucket a responsabilidade é da VAN e do banco (ACL — Vernon, p. 142), acompanhada pelo site da instituição.
 
@@ -12,7 +12,7 @@ Isso **revoga** a leitura de 11/08 ("só ao ler o `status/`") e a cláusula do [
 
 No mesmo ADR, a [#822](https://github.com/ERP-Bem-Comum/core-api/issues/822): o arquivo da remessa passa a ser baixável em produção — permissão dedicada `remittance:download`, 403 nomeado, log estruturado de cada acesso, bytes pela API com `contentHash`; URL assinada rejeitada pelo motivo do [ADR-0050](./architecture/adr/0050-document-reader-cascade-supersedes-0034.md). O teste que fixava o 404 em produção é invertido conscientemente.
 
-Nasce `Proposed`: a implementação (transição no `save` de criação, evento, pré-voo, read-model, `discard`, rota e permissão) só começa depois do aceite.
+Rascunhado `Proposed` e **aceito no mesmo dia** pelo Tech Lead, no PR #840 — a P.O. e ele tomaram a decisão juntos, e o texto foi revisado antes do merge. A implementação (transição no `save` de criação, evento, pré-voo, read-model, `discard`, rota e permissão) nasce como PRs próprios a partir daqui.
 
 ---
 

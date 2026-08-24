@@ -2,8 +2,8 @@
 
 # ADR-0065: A responsabilidade pela remessa termina no bucket — o título vira `Transmitted` na geração, e o arquivo é baixável em produção sob permissão dedicada e registro de acesso (supersede parcial dos ADRs 0060 e 0061)
 
-- **Status:** Proposed
-- **Date:** 2026-08-24
+- **Status:** Accepted
+- **Date:** 2026-08-24 (aceito no mesmo dia pelo Tech Lead, PR #840)
 - **Deciders:** P.O. (lekadecastro) — decisão de produto sobre o significado de "transmitido" e sobre o download em produção · Gabriel Aderaldo (Tech Lead) — aceite da fronteira e do controle · agente assistente — levantamento e redação
 - **Supersedes (parcial):** [ADR-0060](./0060-van-transport-via-s3-bucket-supersedes-0008-relay.md) `:78-79` — a cláusula _"a transição para `Transmitted` passa a depender de sinal externo"_ deixa de valer para o **título**; segue valendo para a **remessa** (estado do transporte). [ADR-0061](./0061-van-bucket-contract-supersedes-0060-pendencies.md) `:114` — _"o backend consegue decidir a transição de `Transmitted` a partir de um contrato explícito"_ passa a descrever só a remessa. **Tudo o mais nos dois ADRs — a rota por bucket, os cinco prefixos, o `status/` como única janela, a caixa do convênio — permanece vigente e é premissa deste.**
 - **Conformidade com:** [ADR-0063](./0063-payable-is-the-write-aggregate-cas-by-precondition.md) (o título é a unidade de escrita; CAS pela pré-condição da operação) · [ADR-0052](./0052-rbac-bypass-flag.md) (bypass é total; o que sobrevive a ele é o que ele não desfaz depois)
