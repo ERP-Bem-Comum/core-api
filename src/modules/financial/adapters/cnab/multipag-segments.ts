@@ -88,7 +88,14 @@ export type SegmentAInput = Readonly<{
   // Obrigatória, e sem default: o `?? ''` que existia aqui emitia arquivo válido, aceito pelo banco,
   // cujo retorno chegava sem nada a que se ligar. Quem deriva é `referenceFor`, no montador.
   yourNumber: string;
-  tedPurpose?: string; // P011
+  // P011, colunas 220-224. OBRIGATÓRIO e JÁ RESOLVIDO, pelo mesmo motivo que a câmara e o "Seu
+  // Número" (#813): enquanto foi opcional com `?? ''`, nenhum chamador o preencheu e toda remessa
+  // saiu com as cinco posições em branco — TED inclusive, que é o arquivo que o banco recusou.
+  //
+  // `null` NÃO é "sem valor": é "esta rota não tem o campo", e sai em branco. Quem deriva a
+  // finalidade da forma de lançamento é `tedPurposeFor`, em `batch-profile.ts`; este segmento
+  // escreve o que recebeu e não tem opinião sobre qual finalidade é a certa.
+  tedPurpose: string | null;
   message?: string; // G031 "Informação 2"
 }>;
 
@@ -110,12 +117,50 @@ export type PaymentRecordsInput = Readonly<{
   address?: PayeeAddress;
   clearingHouse: string; // P001 — ver `SegmentAInput`
   yourNumber: string; // ver `SegmentAInput` — obrigatório desde a #752
-  tedPurpose?: string;
+  tedPurpose: string | null; // P011 — ver `SegmentAInput`; obrigatório desde a #813
   message?: string;
 }>;
 
+// P011 tem 5 posições, e a rota SEM finalidade sai em branco — `null` traduzido aqui, no único
+// lugar que conhece a largura do campo. O valor, quando existe, vai LITERAL: `text` alinha à
+// esquerda e não completa com zeros, então quem produz o valor é quem responde pelo formato.
+const TED_PURPOSE_WIDTH = 5;
+
+// Derivado da largura, e não `^\d{5}$` literal, pelo mesmo motivo de `isBarcode`: quem mudar a
+// largura muda a guarda junto, em vez de deixar as duas divergirem em silêncio.
+const isTedPurpose = (raw: string): boolean =>
+  new RegExp(`^\\d{${String(TED_PURPOSE_WIDTH)}}$`).test(raw);
+
+const tedPurposeField = (purpose: string | null): Result<string, CnabSegmentError> =>
+  purpose === null ? blanks(TED_PURPOSE_WIDTH) : text(purpose, TED_PURPOSE_WIDTH);
+
 export const segmentA = (input: SegmentAInput): Result<string, CnabSegmentError> => {
   const { payee: p } = input;
+
+  // CA3 da #813 — guarda de COERÊNCIA INTERNA do P011, antes de montar a linha.
+  //
+  // Não é sanitização de input: com a finalidade derivada por `tedPurposeFor`, nenhum valor externo
+  // alimenta o campo. O que a guarda protege é o que o próprio emissor produz — e o modo de falha é
+  // silencioso. O campo é declarado **Alfa**, mas o domínio é numérico com zeros à esquerda: um
+  // valor sem eles (`'5'`) vira `'5    '` alinhado à esquerda, que não é código nenhum do domínio
+  // do Bacen e que o banco aceita sem reclamar.
+  //
+  // ⚠️ SEM allow-list. A tabela do Bacen é declaradamente parcial ("exemplos de algumas das
+  // finalidades"), e uma lista dos doze valores conhecidos recusaria um código legítimo fora dela.
+  // O que se verifica é o FORMATO — 5 posições, todas dígitos —, nunca a pertinência ao domínio.
+  //
+  // `null` é legítimo e passa: é a rota que não tem o campo, e ela sai em branco.
+  //
+  // O molde vive neste arquivo: `isBarcode` + `err(...)` no Segmento J, logo abaixo. E o erro é o
+  // mesmo `numeric-field-invalid`, DELIBERADAMENTE reusado em vez de ganhar membro próprio: o
+  // convênio ganhou erro próprio porque a ação de quem corrige difere — `missing` manda cadastrar,
+  // `overflow` manda conferir o que o banco registrou. Aqui não há nada a corrigir no cadastro,
+  // porque nenhum valor externo alimenta o campo: um formato inválido só é alcançável por defeito
+  // do próprio emissor, e a ação é abrir o código. Erro próprio nomearia uma distinção que não
+  // existe do lado de quem recebe.
+  if (input.tedPurpose !== null && !isTedPurpose(input.tedPurpose))
+    return err('numeric-field-invalid');
+
   return joinFields([
     num(input.bankCode, 3), // 001-003 banco do cedente
     num(input.batchNumber, 4), // 004-007 lote
@@ -149,7 +194,7 @@ export const segmentA = (input: SegmentAInput): Result<string, CnabSegmentError>
     num(0, 15), // 163-177 valor real — só no retorno
     text(input.message ?? '', 40), // 178-217 informação 2
     blanks(2), // 218-219 CNAB
-    text(input.tedPurpose ?? '', 5), // 220-224 finalidade da TED
+    tedPurposeField(input.tedPurpose), // 220-224 finalidade da TED (P011)
     blanks(2), // 225-226 finalidade complementar
     blanks(3), // 227-229 CNAB
     num(0, 1), // 230     aviso ao favorecido (0 = não emite)
@@ -275,7 +320,7 @@ export const paymentRecords = (
     valueCents: input.valueCents,
     clearingHouse: input.clearingHouse,
     yourNumber: input.yourNumber,
-    ...(input.tedPurpose !== undefined ? { tedPurpose: input.tedPurpose } : {}),
+    tedPurpose: input.tedPurpose,
     ...(input.message !== undefined ? { message: input.message } : {}),
   });
   if (!a.ok) return a;

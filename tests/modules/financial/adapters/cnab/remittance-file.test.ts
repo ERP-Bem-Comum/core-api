@@ -88,6 +88,7 @@ const linesOf = (content: string): readonly string[] => {
 const launchFormOf = (line: string): string => at(line, 12, 13); // G029, header de lote
 const clearingOf = (line: string): string => at(line, 18, 20); // P001, Segmento A
 const payeeBankOf = (line: string): string => at(line, 21, 23); // P002, Segmento A
+const tedPurposeOf = (line: string): string => at(line, 220, 224); // P011, Segmento A (#813)
 
 const isSegmentA = (line: string): boolean => at(line, 8, 8) === '3' && at(line, 14, 14) === 'A';
 
@@ -321,6 +322,74 @@ describe('Remessa Multipag — crédito em conta e câmara, pelo banco do favore
     ]);
 
     assert.equal(file.batchCount, 2);
+  });
+});
+
+/**
+ * Finalidade da TED no arquivo montado — P011, Segmento A, colunas 220-224 (#813).
+ *
+ * O defeito: `tedPurpose` era opcional no montador e ninguém o preenchia, então o `?? ''` do
+ * Segmento A escrevia cinco brancos em TODA remessa, TED inclusive. O arquivo saía bem-formado e o
+ * Validador Universal o recusou em 21/08/2026.
+ *
+ * O valor é `00005` — pagamento a fornecedores —, decisão da P.O. de 21/08 registrada na #813, com
+ * a premissa declarada junto da constante em `batch-profile.ts`. Estes testes verificam a FIAÇÃO:
+ * que o montador liga a forma do lote ao campo do detalhe, e que não liga os dois errado.
+ *
+ * ⚠️ `00007` seria ALUGUEL. O `07 - Pagamento de Fornec/Honor.` que parece a resposta certa é da
+ * tabela de DOC, de outro layout. É a armadilha que a #813 documenta, e o teste abaixo a reprova.
+ */
+describe('Remessa Multipag — a finalidade da TED sai da forma do lote (#813)', () => {
+  // CA1.
+  it('todo Segmento A de lote TED declara pagamento a fornecedores', () => {
+    const file = build([payment(1, 1000, '341'), payment(2, 2000, '341')]);
+    const segmentsA = linesOf(file.content).filter(isSegmentA);
+
+    assert.equal(segmentsA.length, 2, 'guarda contra verde por vacuidade');
+    for (const a of segmentsA) assert.equal(tedPurposeOf(a), '00005');
+  });
+
+  // CA2 — pendente do Validador Universal. Crédito em conta sai em branco, que é o status quo. A
+  // P.O. decidiu explicitamente não fixar valor aqui até duas submissões (branco × preenchido)
+  // dizerem qual regra vale; se vier `00010`, muda `tedPurposeFor` e este teste, e mais nada.
+  it('crédito em conta sai com 220-224 em branco — CA2 pendente do validador', () => {
+    const file = build([payment(1, 1000, CEDENTE.bankCode)]);
+    const [a] = linesOf(file.content).filter(isSegmentA);
+
+    assert.equal(launchFormOf(linesOf(file.content)[1] ?? ''), '01', 'a fixture precisa ser `01`');
+    assert.equal(tedPurposeOf(a ?? ''), '     ');
+  });
+
+  // O teste que pega o defeito de verdade, no molde do CA6 da #751: num arquivo MISTO, cada
+  // Segmento A tem de carregar a finalidade da SUA forma. Uma constante escrita direto no segmento
+  // passaria nos dois testes acima isoladamente e falharia aqui — que é o modo de falha real.
+  it('num arquivo misto, cada Segmento A carrega a finalidade da forma do seu lote', () => {
+    const file = build([
+      payment(1, 100, CEDENTE.bankCode),
+      payment(2, 200, '341'),
+      payment(3, 300, CEDENTE.bankCode),
+      payment(4, 400, '001'),
+    ]);
+    const segmentsA = linesOf(file.content).filter(isSegmentA);
+
+    assert.equal(segmentsA.length, 4, 'guarda contra verde por vacuidade');
+    for (const a of segmentsA) {
+      // A câmara é o testemunho independente de qual forma o lote tem: `018` é TED, `000` não é.
+      const expected = clearingOf(a) === '018' ? '00005' : '     ';
+      assert.equal(tedPurposeOf(a), expected, `banco ${payeeBankOf(a)}, câmara ${clearingOf(a)}`);
+    }
+  });
+
+  // ⚠️ A armadilha da #813, virada regressão: `00007` é ALUGUEL na tabela de TED do Bacen. O `07`
+  // que o manual Bradesco lista como "Pagamento de Fornec/Honor." é da tabela de DOC, posições
+  // 381-382 de outro layout — coordenada que sequer existe num registro de 240 posições.
+  it('nenhum Segmento A declara aluguel no lugar de pagamento a fornecedores', () => {
+    const file = build([payment(1, 100, '341'), payment(2, 200, CEDENTE.bankCode)]);
+
+    for (const a of linesOf(file.content).filter(isSegmentA)) {
+      assert.notEqual(tedPurposeOf(a), '00007', 'aluguel — a tabela errada');
+      assert.notEqual(tedPurposeOf(a), '07   ', 'código de DOC alinhado à esquerda');
+    }
   });
 });
 

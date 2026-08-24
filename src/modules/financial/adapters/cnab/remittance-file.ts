@@ -15,6 +15,7 @@ import {
   batchKeyFor,
   batchProfileFor,
   clearingHouseFor,
+  tedPurposeFor,
   type BatchProfileError,
   type CnabBatchProfile,
   type ProfiledPayment,
@@ -68,7 +69,11 @@ export type TransferPayment = Readonly<{
   // NSA e da posição do pagamento — dados que o chamador não tem: o NSA é alocado no use case,
   // depois de o reader já ter montado os pagamentos. Aceitá-la de fora reabriria o caminho para a
   // string vazia, que é o defeito original. A ausência do campo faz o compilador cobrar quem tentar.
-  tedPurpose?: string;
+  //
+  // `tedPurpose` saiu daqui pela mesma razão, e é o ponto da #813: era opcional, ninguém o
+  // preenchia — seis menções e zero usos —, e o default do Segmento A escrevia brancos em toda
+  // remessa, TED inclusive. A finalidade é DERIVADA da forma do lote (`tedPurposeFor`), como a
+  // câmara: recebê-la de fora é aceitar uma afirmação que o conteúdo do arquivo pode contradizer.
   message?: string;
 }>;
 
@@ -229,7 +234,10 @@ const detailsOf = (
         clearingHouse: clearingHouseFor(batch.launchForm),
         ...(payment.address !== undefined ? { address: payment.address } : {}),
         yourNumber,
-        ...(payment.tedPurpose !== undefined ? { tedPurpose: payment.tedPurpose } : {}),
+        // A finalidade sai da mesma forma que a câmara, e pelo mesmo motivo (#813): os dois campos
+        // descrevem a mesma operação e não podem divergir dentro de um registro. `null` é a rota
+        // que não tem o campo — crédito em conta —, e sai em branco.
+        tedPurpose: tedPurposeFor(batch.launchForm),
         ...(payment.message !== undefined ? { message: payment.message } : {}),
       });
 
