@@ -230,9 +230,20 @@ export const createDrizzleRemittanceRepository = (
             // pagamento em dobro (CWE-367). A PK composta `(remittance_id, payable_id)` não recusa:
             // remessas distintas são chaves distintas.
             //
-            // E nenhuma UNIQUE pode recusar, porque a invariante é CONDICIONAL — "não estar em duas
-            // remessas VIVAS", com `Discarded` devolvendo o título — e o MySQL não tem índice
-            // parcial. Sem constraint possível, a exclusão tem de vir de lock.
+            // A invariante é CONDICIONAL — "não estar em duas remessas VIVAS", com `Discarded`
+            // devolvendo o título — e o MySQL não tem índice parcial.
+            //
+            // ⚠️ Mas isso NÃO significa "nenhuma constraint é possível", como este comentário já
+            // afirmou. Exclusão condicional tem forma no MySQL: coluna gerada `STORED` com
+            // `CASE … ELSE NULL` mais `UNIQUE` — NULL não viola UNIQUE, então título em remessa
+            // morta não conflita. Medido em 8.4.11: a 2ª remessa viva sai com `1062`, as mortas
+            // entram em qualquer número, e sob concorrência **sem lock explícito nenhum**.
+            //
+            // A escolha pelo lock segue de pé, mas o motivo é CUSTO, não impossibilidade: a coluna
+            // gerada exige desnormalizar o status da remessa na tabela de vínculo, e como trigger é
+            // proibido (ADR-0020) a sincronia passa a depender do TS — trocar-se-ia uma corrida por
+            // um dever de consistência espalhado. Registrar isso importa porque uma justificativa
+            // falsa fecha a porta para quem, amanhã, precisar reabrir a decisão.
             //
             // O lock sobre `fin_payables` já foi adquirido no TOPO desta transação, antes da busca
             // pela remessa — ver a ordem de aquisição lá, e por que ela é o que impede o ciclo.

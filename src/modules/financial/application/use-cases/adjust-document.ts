@@ -253,7 +253,13 @@ export const adjustDocument =
       // A decisão de recusar é do domínio; a aplicação só entrega o fato apurado. O domínio recebe
       // apenas os ids — a remessa não lhe interessa para decidir, e carregá-la para dentro faria o
       // agregado `Document` conhecer um conceito de outro agregado sem necessidade.
-      heldPayableIds: held.value.map((h) => h.payableId),
+      //
+      // ÚNICOS, e é aqui que a assimetria com a evidência abaixo é deliberada: o port devolve um
+      // VÍNCULO por remessa, então um título preso em duas remessas vivas vem duas vezes. Para
+      // decidir, o que importa é o conjunto de títulos — repassar a duplicata faria qualquer
+      // contagem a jusante ler "dois títulos presos" onde há um. A evidência, ao contrário, guarda
+      // todos os vínculos: é ela que diz ao operador em QUE remessa cada um está.
+      heldPayableIds: [...new Set(held.value.map((h) => h.payableId))],
     });
     // A única recusa do fluxo que carrega evidência. `held.value` já a tem em mãos — apurada duas
     // linhas acima, contra o banco — e devolver só o slug a jogaria fora, deixando o operador sem
