@@ -21,7 +21,7 @@
 //
 // Boundary: todo `throw` vira `Result` aqui (`.claude/rules/adapters.md`).
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import process from 'node:process';
 
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
@@ -33,6 +33,7 @@ import type {
 } from '../../../domain/payable/repository.ts';
 import type { FinancialTimelineEntry } from '../../../domain/timeline/types.ts';
 import type { DocumentEvent } from '../../../domain/document/events.ts';
+import { MANUALLY_PAYABLE_STATUSES } from '../../../domain/document/document.ts';
 import type { FinancialMysqlHandle } from '../drivers/mysql-driver.ts';
 import { mapEntryToRows } from '../mappers/timeline.mapper.ts';
 import { appendFinOutboxInTx } from './fin-outbox-helpers.ts';
@@ -162,15 +163,26 @@ export const createDrizzlePayableRepository = (
       ctx: 'markPaid',
       payableId,
       conflictError: 'payable-payment-conflict',
-      // Pré-condição de TRANSIÇÃO: `status = 'Approved'` é a mesma guarda que
-      // `Document.payPayableManually` aplica em memória — aqui ela vale no instante da escrita.
+      // Pré-condição de TRANSIÇÃO: a mesma guarda que `Document.payPayableManually` aplica em
+      // memória — aqui ela vale no instante da escrita. A lista vem do DOMÍNIO, importada e não
+      // copiada: duas cópias divergiriam em silêncio, e a divergência apareceria como baixa aceita
+      // em memória e recusada no banco.
+      //
+      // ⚠️ `IN ('Approved','Transmitted')` é legítimo aqui, e o ADR-0063 é explícito sobre o porquê:
+      // ele proíbe `IN` na pré-condição de ATRIBUIÇÃO — onde comparar um conjunto aceitaria toda
+      // escrita e devolveria last-write-wins mudo (é o caso do `reschedule`, logo abaixo, que compara
+      // o VALOR anterior). Isto é TRANSIÇÃO: o conjunto é fechado, são os dois estados a partir dos
+      // quais a baixa é legítima (ADR-0065 §6), e qualquer outro continua afetando zero linhas.
       applyUpdate: async (tx) =>
         rowsAffected(
           await tx
             .update(schema.finPayables)
             .set({ status: 'Paid', paidAt: input.paidAt })
             .where(
-              and(eq(schema.finPayables.id, payableId), eq(schema.finPayables.status, 'Approved')),
+              and(
+                eq(schema.finPayables.id, payableId),
+                inArray(schema.finPayables.status, [...MANUALLY_PAYABLE_STATUSES]),
+              ),
             ),
         ),
       timelineEntries: input.timelineEntries,
