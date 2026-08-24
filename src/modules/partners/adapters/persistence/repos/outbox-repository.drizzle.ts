@@ -154,7 +154,12 @@ export const createDrizzleOutboxRepository = (
   //
   // Tradução SQL de `isPendingForConsumer` (`shared/outbox/consumer-progress.ts`): "este
   // consumidor ainda não concluiu nem desistiu deste evento". Espelho exato do adapter do
-  // `contracts` — se a regra mudar, muda nos três lugares (predicado, aqui, e lá).
+  // ⚠️ Se a regra mudar, muda em SEIS lugares: o predicado canônico
+  // (`shared/outbox/consumer-progress.ts`) e os cinco adapters que o traduzem em SQL — `contracts`,
+  // `partners` (aqui), `partners/email-outbox`, `auth` e `financial`. Este comentário já disse
+  // "três" e subcontava em dois; ele é a única defesa contra uma tradução ficar para trás, e
+  // esquecer o `isNotNull(deadLetteredAt)` em uma delas faz um evento em DLQ ser reprocessado
+  // para sempre.
 
   // `SQL | undefined` em vez de cast — `.where()` aceita, é o idioma do repositório, e evita a
   // contradição entre `non-nullable-type-assertion-style` (pede `!`) e `no-non-null-assertion`.

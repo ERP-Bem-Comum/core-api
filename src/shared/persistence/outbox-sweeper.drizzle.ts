@@ -71,13 +71,20 @@ export const createDrizzleOutboxSweeper = (
 
       // `AND processed_at IS NULL` de novo: entre o SELECT e o UPDATE nada impede outro processo
       // de ter marcado. Torna a operação idempotente e o job seguro para rodar concorrente.
-      await db.execute(sql`
+      // O retorno é tipado como ARRAY, não tupla: o formato vem do driver, e afirmar "tem
+      // exatamente um elemento" seria garantia nossa sobre algo que não controlamos. Com array, o
+      // `?.` abaixo passa a ser exigido pelo `noUncheckedIndexedAccess` — que é o correto.
+      const updated = (await db.execute(sql`
         UPDATE ${outbox}
         SET processed_at = ${now}
         WHERE event_id IN (${eventList}) AND processed_at IS NULL
-      `);
+      `)) as unknown as readonly { affectedRows?: number }[];
 
-      return ok(ids.length);
+      // `affectedRows`, e NÃO `ids.length`: sob dois sweepers concorrentes sobre o mesmo lote, o
+      // segundo marca zero — porque o `IS NULL` acima já não casa — e reportar o tamanho do SELECT
+      // diria que ele marcou 500. O número existe para auditar, e auditar com o valor errado é
+      // pior que não auditar: é a mesma classe do `pendentes = 0` que originou este trabalho.
+      return ok(updated[0]?.affectedRows ?? 0);
     } catch (cause) {
       process.stderr.write(`[outbox-sweeper] ${String(cause)}\n`);
       return err(outboxQueryUnavailable(String(cause)));

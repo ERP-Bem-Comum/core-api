@@ -105,13 +105,41 @@ O isolamento é da sessão do worker, nunca do servidor.
 
 ## Consequências
 
-**Positivas.** A perda silenciosa acaba, e com ela a necessidade de backfill periódico como paliativo. `attempts` e dead-letter passam a ser por consumidor. A garantia de reconstrução do ADR-0022 volta a valer. Um consumidor novo sobre um outbox existente deixa de ser um incidente — é o caso suportado.
+**Positivas.** A perda silenciosa acaba, e com ela a necessidade de backfill periódico como paliativo. `attempts` e dead-letter passam a ser por consumidor. A garantia de reconstrução do ADR-0022 volta a valer. Um consumidor novo sobre um outbox existente deixa de ser um incidente — **desde que o evento ainda não tenha sido marcado pelo sweeper**.
+
+⚠️ **Essa última frase tem um limite que a decisão 3 impõe, e ele precisa ser lido junto.** O sweeper marca `processed_at` quando **todos os consumidores registrados naquele momento** resolveram o evento, e o claim poda por `processed_at IS NULL`. Logo, um consumidor acrescentado **depois** nasce cego para tudo que já foi varrido: para ele, aquelas linhas não existem. Recompor o histórico dele exige **backfill próprio**, e não reprocessamento do outbox.
+
+Isso não é hipótese — é o caso do `financial-supplier-view`, e é a razão de existir `src/jobs/financial/supplier-view-backfill/`. Sem o sweeper, o fanout entregaria o histórico ao consumidor novo; com ele, entrega apenas o que ainda não foi marcado. É o preço da indexabilidade, e está sendo pago conscientemente.
 
 **Negativas / custos.** Uma consulta a mais por batch (o progresso do lote reivindicado), porque o Drizzle não expõe `FOR UPDATE OF <tabela>` e um `JOIN` sob o claim travaria `eventos_processados` junto. `eventos_processados` cresce com N consumidores × N eventos e passa a precisar de política de retenção — **pendência registrada abaixo**. Sob concorrência, o consumidor que perde o `SKIP LOCKED` espera uma rodada (500ms típicos) em vez de zero.
 
 **Limite conhecido.** `context/planning/ASYNC-MESSAGING-STRATEGY.md:176` fixa o gatilho de reavaliação: **> 3 consumidores distintos do mesmo evento, ou necessidade de replay histórico → broker**. Com 2 por tabela, o cursor por consumidor está dentro do orçamento do outbox-MySQL. A terceira projeção sobre a mesma tabela é o momento de reabrir o [ADR-0030](./0030-valkey-shared-store-deferred.md), não de empilhar mais um cursor.
 
 ---
+
+## Estado legado: o deploy congela a perda, não a conserta
+
+**Nenhuma migration converte a marca antiga em registro por consumidor**, e isso é decisão, não esquecimento. A `0019` mexe em collation, a `0020` acrescenta colunas e torna `processed_at` nullable, a `0021` cria o índice — nenhuma toca o dado.
+
+Consequência, medida em `erp-prod-sim` antes do deploy: **27 linhas de outbox, todas com `processed_at` preenchido, e `eventos_processados` vazia.** Como o claim novo poda por `processed_at IS NULL`, essas 27 ficam **invisíveis para todos os consumidores no instante em que a versão subir** — não é atraso, é poda. O fornecedor ausente da `fin_supplier_view` e o contrato ausente da `par_contract_count_view` **não voltam pelo outbox**.
+
+**A alternativa foi considerada e descartada.** Limpar `processed_at` reabriria as linhas para todo mundo — mas, como não existe registro de *quem* entregou o quê, o `par_email_outbox` (12 linhas) **reenviaria 12 e-mails transacionais**. Reprocessar entrega idempotente é barato; reenviar e-mail para uma pessoa não é.
+
+**A decisão, portanto: aceitar a perda legada e recompor por backfill.** É o caminho que os backfills já existentes cobrem, e eles são o único mecanismo de recuperação para o estado anterior ao deploy.
+
+### Os dois backfills são pré-requisito de deploy, não item de cron
+
+Em **qualquer** ambiente que tenha rodado a versão anterior:
+
+```
+job:migrate                              (completo, os sete módulos)
+job:financial:supplier-view-backfill
+job:partners:contract-count-backfill
+```
+
+⚠️ **Rodar depois do deploy, mesmo que já se tenha rodado antes.** Eles não interagem com o outbox — verificado empiricamente em 24/08: contagens de `ctr_outbox`, `par_outbox`, `fin_outbox`, `par_email_outbox` e `eventos_processados` idênticas antes e depois —, então executá-los cedo não atrapalha e conserta o que está visível. Mas o que divergir **entre** a execução e o deploy só é recolhido por uma segunda passada.
+
+Medido na mesma execução: `fin_supplier_view` foi de **11 para 12** (fonte: 12) e `par_contract_count_view` de **0 para 1** (fonte: 1). Ambos são idempotentes — `setCount` absoluto num, guard de recência por `occurred_at` no outro.
 
 ## Pendências
 
