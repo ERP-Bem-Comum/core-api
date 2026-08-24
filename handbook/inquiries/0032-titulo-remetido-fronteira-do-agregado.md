@@ -1,4 +1,11 @@
-# Inquiry-0031: Título remetido pertence ao documento? — a fronteira de agregado por trás do deadlock
+---
+inquiry: 0032
+title: "Título remetido pertence ao documento? — a fronteira de agregado por trás do deadlock"
+state: open
+opened: 2026-08-23
+---
+
+# Inquiry-0032: Título remetido pertence ao documento? — a fronteira de agregado por trás do deadlock
 
 - **Status:** Open
 - **Opened:** 2026-08-23
@@ -202,6 +209,94 @@ já saber os ids afetados — que só se descobrem no `SELECT` que roda **depois
   campo relevante. Campo novo que não entre na chave faz mudança real parecer "sem mudança", e o save
   deixa de persistir em silêncio — risco que o próprio `child-rows-diff.ts:23-26` já registra, e que o
   diff de linha **amplia**, porque a decisão passa a ser por campo.
+
+---
+
+### 2026-08-23 — Revisão adversarial do PR #814, com medição
+
+O Gabriel questionou se **manter** o #814 não deixaria "toxicidade antiga" na `dev`, e pediu que a
+recomendação de mantê-lo fosse **atacada**, não confirmada. O `suporte-infra-agent` mediu quatro
+frentes. **A conclusão sobrevive; a justificativa não.**
+
+#### O custo do descarte, medido com a mesma régua
+
+```
+save() em dev — ocorrências de finPayables/HOLDING: 0
+contrafactual, RR sem ② ...........: 2 vínculos para o mesmo título  ← PAGAMENTO EM DOBRO
+```
+
+Descartar o PR devolve o `save()` exatamente ao estado que o contrafactual mede. **Não deletar.**
+
+#### 🔴 A premissa do comentário do PR é FALSA — a exclusão declarativa existe
+
+O PR afirma que *"nenhuma UNIQUE pode recusar, porque a invariante é CONDICIONAL […] e o MySQL não
+tem índice parcial"*. Construído e medido em MySQL 8.4:
+
+```sql
+vivo_payable char(36) GENERATED ALWAYS AS (
+  CASE WHEN rem_status IN ('Queued','Transmitted','Failed') THEN payable_id ELSE NULL END
+) STORED,
+UNIQUE KEY uk_vivo (vivo_payable)
+```
+
+```
+2ª remessa VIVA, mesmo título .....: RECUSADO 1062 ER_DUP_ENTRY
+sob concorrência, SEM lock nenhum .: A=inseriu  B=1062  → vínculos vivos: 1
+```
+
+Índice parcial não existe; **exclusão condicional existe**. Funciona sem ①, sem ②, sem depender de
+ordem de statement, de isolamento ou de comentário.
+
+**Custo real, que sustenta rejeitá-la mesmo assim:** exige desnormalizar `rem_status` na tabela de
+vínculo, e descartar remessa passa a exigir `UPDATE` em massa lá. Trigger é **proibido pelo ADR-0020**
+(§"lógica de negócio vive no código TS"), então a sincronia vira responsabilidade da aplicação —
+segunda fonte de verdade para o status.
+
+**Alternativa REJEITADA POR CUSTO, não por impossibilidade.** A diferença não é semântica: "impossível"
+encerra a conversa com informação falsa; "custa uma desnormalização" convida a reavaliar quando o
+custo mudar. Uma afirmação técnica errada dentro do comentário que existe para proteger o desenho é a
+própria definição da toxicidade que a pergunta do Gabriel procurava.
+
+#### 🔴 `READ COMMITTED` resolve as três fragilidades — e a objeção contra ele era conclusão transportada
+
+```
+gap do passo (0) sob RR ........: fin_remittances.PRIMARY → X,GAP ×1
+gap do passo (0) sob RC ........: (nenhum lock de registro)
+leitura cedo injetada, sob RR ..: ② viu 0 → 2 vínculos  ← PAGAMENTO EM DOBRO
+leitura cedo injetada, sob RC ..: ② viu 1 → 1 vínculo   ← protegido
+```
+
+A afirmação "RC não cura o deadlock" vale para o caminho **documento × remessa** e continua válida
+lá. Para **este `save()`** ela não se aplica — foi conclusão aplicada fora do escopo, e o erro é meu.
+
+#### O passo (0) não é removível — a suspeita estava certa, a conclusão não
+
+Medido: com e sem o passo (0), a corrida dá resultado **idêntico** (recusa limpa, 1 vínculo). Ele
+**não contribui para a exclusão**. Mas o resultado dele decide criar vs. atualizar
+(`if (existing[0] === undefined)`), e tirar o `for('update')` o transformaria em consistent read —
+isto é, na própria "leitura cedo" que produz pagamento em dobro. **O gap é o preço de mantê-lo
+locking**, e isso não está escrito no comentário.
+
+#### A Fatia B não agrava
+
+8/8 recusa limpa com o `SELECT fin_documents … FOR UPDATE` no topo; o lock é sobre linha **existente**,
+logo `REC_NOT_GAP`, sem somar gap. ⚠️ **Lacuna:** não houve deadlock em nenhum braço, então não há
+comparação de **taxas** — só a constatação de que nenhum modo de falha novo apareceu.
+
+#### Decisão do Gabriel (23/08/2026)
+
+**O `save()` de criação de remessa passa a rodar em `READ COMMITTED`.** É a mudança de maior retorno e
+menor custo das três: remove a dependência de ordem, elimina o gap do passo (0) e torna irrelevante o
+padrão que o próprio Refman desaconselha (§17.7.2.1: *"difficult to parse"*). A exclusão é
+`REC_NOT_GAP` nos dois isolamentos, então nada se perde.
+
+⚠️ Consequência a registrar quando for aplicado: uma transação do módulo passa a divergir do default do
+servidor. Isso precisa estar escrito no ponto onde o isolamento é definido, ou vira a próxima
+divergência silenciosa.
+
+**Lacunas do laudo:** tudo com duas conexões dedicadas e corrida forçada — sem pool real nem carga. A
+UNIQUE declarativa não foi medida sob volume, nem o custo do `UPDATE` em massa; se voltar à mesa, é a
+primeira coisa a medir.
 
 ---
 
