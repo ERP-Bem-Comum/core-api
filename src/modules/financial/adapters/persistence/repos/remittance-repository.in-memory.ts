@@ -36,6 +36,12 @@ export const createInMemoryRemittanceRepository = (
     // da ausência de erro. Sem isto, "o vencedor ficou `Transmitted`" e "o perdedor ficou
     // `Approved`" seriam indistinguíveis de "nada aconteceu".
     payableStatus: (payableId: string) => DocumentStatus | undefined;
+    // Escrita direta, para encenar o que acontece FORA deste repositório entre duas chamadas dele —
+    // o caso que importa é a baixa manual (`Transmitted → Paid`, ADR-0065 §6), que vive no
+    // `PayableRepository` e precisa ser visível aqui para o CAS do descarte não devolver pagamento
+    // consumado. Sem este acesso, o teste teria de montar os dois repositórios sobre um store
+    // comum só para mover um status.
+    setPayableStatus: (payableId: string, status: DocumentStatus) => void;
   }> => {
   const remittances = new Map<string, Remittance>();
   const published: RemittanceSaveEvent[] = [];
@@ -92,6 +98,29 @@ export const createInMemoryRemittanceRepository = (
         }
       }
 
+      // A devolução do descarte (ADR-0065 §4), espelhando o CAS do adapter real:
+      // `SET status='Approved' WHERE id = ? AND status = 'Transmitted'`, restrito aos títulos que
+      // ESTA remessa segura.
+      //
+      // ⚠️ As duas restrições do `WHERE` carregam a regra inteira, e nenhuma é decorativa:
+      //
+      //  - **`AND status = 'Transmitted'`** impede que pagamento consumado volte à fila. Foi a
+      //    preocupação que a P.O. levantou — descartar uma remessa cujos títulos o banco pagou
+      //    devolveria os pagos a `Approved`, candidatos a sair de novo. O CAS já a responde: título
+      //    `Paid` não casa.
+      //  - **restrito aos títulos desta remessa** impede que um descarte alcance título que outra
+      //    remessa viva segura, que é o buraco que o #814 fechou pela porta da frente.
+      //
+      // Não é `isCreation`: o descarte é atualização de desfecho, e chega por aqui com a remessa já
+      // em `Discarded`.
+      if (!isCreation && remittance.status === 'Discarded') {
+        for (const { payableId } of remittance.payables) {
+          if (payableStatuses.get(payableId) === 'Transmitted') {
+            payableStatuses.set(payableId, 'Approved');
+          }
+        }
+      }
+
       remittances.set(remittance.id, remittance);
       published.push(...events);
       return Promise.resolve(ok(undefined));
@@ -100,6 +129,10 @@ export const createInMemoryRemittanceRepository = (
     published: () => [...published],
 
     payableStatus: (payableId: string) => payableStatuses.get(payableId),
+
+    setPayableStatus: (payableId: string, status: DocumentStatus) => {
+      payableStatuses.set(payableId, status);
+    },
 
     findById: async (
       id: RemittanceId,

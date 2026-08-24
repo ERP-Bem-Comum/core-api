@@ -117,11 +117,12 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
     const repo = repoWith('doc-1');
     const f = markFailed(build(['doc-1']), '2026-08-11T14:05:00.000Z', 'sem confirmacao');
     assert.ok(isOk(f));
-    const d = discard(
-      f.value.remittance,
-      '2026-08-11T15:00:00.000Z',
-      'confirmado com o banco que nao saiu',
-    );
+    const d = discard({
+      remittance: f.value.remittance,
+      at: '2026-08-11T15:00:00.000Z',
+      reason: 'confirmado com o banco que nao saiu',
+      fileInBucket: true,
+    });
     assert.ok(isOk(d));
     await repo.save(d.value.remittance, d.value.events);
 
@@ -177,14 +178,13 @@ describe('RemittanceRepository (fake) — o save reconfere o hold (#789)', () =>
   //
   // Até o #792, "liberar o título" era só soltar o vínculo: o hold é derivado do status da REMESSA
   // (`holdsPayables`), e descartar bastava. Agora o título tem estado próprio, e voltar à fila exige
-  // as duas coisas — o vínculo solto E o status de volta a `Approved`. O descarte já faz a primeira;
-  // a segunda é a §4 do ADR (`UPDATE … SET status='Approved' WHERE id=? AND status='Transmitted'`,
-  // restrito aos títulos que ESTA remessa segura), que ainda não tem use case nem rota.
+  // as duas coisas — o vínculo solto E o status de volta a `Approved`.
   //
-  // O assert de recusa abaixo é deliberado e temporário: ele fixa o estado REAL de hoje em vez de
-  // fingir que a devolução já existe. Quando a fatia do descarte entrar, este caso fica vermelho — e
-  // é assim que ele avisa que chegou a hora de exigir `segunda.ok === true`.
-  it('o descarte solta o vínculo; o status do título ainda não volta (ADR-0065 §4 pendente)', async () => {
+  // Este caso nasceu no PR A **afirmando a metade que faltava**: ele asseria a recusa
+  // (`remittance-payable-not-approved`), com a nota de que ficaria vermelho quando a §4 entrasse. Foi
+  // o que aconteceu, e é por isso que ele agora exige o contrário. Um teste que fixa o estado
+  // incompleto vale mais que um que finge completude: ele avisa a hora de mudar.
+  it('o descarte devolve o título — vínculo solto E status de volta a Approved (§4)', async () => {
     const repo = repoWith('doc-1');
     const primeira = build(['doc-1']);
     await repo.save(primeira);
@@ -192,11 +192,12 @@ describe('RemittanceRepository (fake) — o save reconfere o hold (#789)', () =>
 
     const f = markFailed(primeira, '2026-08-11T14:05:00.000Z', 'sem confirmacao');
     assert.ok(isOk(f));
-    const d = discard(
-      f.value.remittance,
-      '2026-08-11T15:00:00.000Z',
-      'banco confirmou que nao saiu',
-    );
+    const d = discard({
+      remittance: f.value.remittance,
+      at: '2026-08-11T15:00:00.000Z',
+      reason: 'banco confirmou que nao saiu',
+      fileInBucket: true,
+    });
     assert.ok(isOk(d));
     await repo.save(d.value.remittance, d.value.events);
 
@@ -205,14 +206,63 @@ describe('RemittanceRepository (fake) — o save reconfere o hold (#789)', () =>
     assert.ok(isOk(held));
     assert.deepEqual(held.value, [], 'remessa descartada não prende');
 
-    // 2. Mas o título segue `Transmitted`, então ainda não é candidato a remessa nova.
-    assert.equal(repo.payableStatus('doc-1'), 'Transmitted');
+    // 2. E o status voltou: o título é candidato a remessa nova de novo.
+    assert.equal(repo.payableStatus('doc-1'), 'Approved');
     const segunda = await repo.save(build(['doc-1']));
+    assert.equal(segunda.ok, true, 'o descarte devolve o título para a fila, de verdade');
+    assert.equal(repo.payableStatus('doc-1'), 'Transmitted', 'e a remessa nova o transiciona');
+  });
+
+  // ⚠️ A restrição que o ADR-0065 §4 exige por escrito: a devolução alcança só os títulos que ESTA
+  // remessa segura. Sem ela, um descarte liberaria título de outra remessa viva — e o #814 fechou
+  // exatamente esse buraco pela porta da frente.
+  it('a devolução NÃO alcança título de outra remessa', async () => {
+    const repo = repoWith('doc-1', 'doc-2');
+    const primeira = build(['doc-1']);
+    const outra = build(['doc-2']);
+    await repo.save(primeira);
+    await repo.save(outra);
+
+    const f = markFailed(primeira, '2026-08-11T14:05:00.000Z', 'sem confirmacao');
+    assert.ok(isOk(f));
+    const d = discard({
+      remittance: f.value.remittance,
+      at: '2026-08-11T15:00:00.000Z',
+      reason: 'motivo',
+      fileInBucket: true,
+    });
+    assert.ok(isOk(d));
+    await repo.save(d.value.remittance, d.value.events);
+
+    assert.equal(repo.payableStatus('doc-1'), 'Approved', 'o título desta remessa voltou');
     assert.equal(
-      isErr(segunda) ? segunda.error : null,
-      'remittance-payable-not-approved',
-      'sem a devolução da §4, o título preso pelo status não volta à fila',
+      repo.payableStatus('doc-2'),
+      'Transmitted',
+      'o da outra remessa, que segue viva, não foi tocado',
     );
+  });
+
+  // Título já PAGO não volta — o CAS é `WHERE status = 'Transmitted'`, e é a guarda que impede o
+  // cenário que a P.O. levantou: descartar uma remessa cujos títulos o banco pagou devolveria
+  // pagamento consumado à fila.
+  it('título que já virou Pago não é devolvido pelo descarte', async () => {
+    const repo = repoWith('doc-1');
+    const rem = build(['doc-1']);
+    await repo.save(rem);
+    repo.setPayableStatus('doc-1', 'Paid');
+
+    const f = markFailed(rem, '2026-08-11T14:05:00.000Z', 'sem confirmacao');
+    assert.ok(isOk(f));
+    const d = discard({
+      remittance: f.value.remittance,
+      at: '2026-08-11T15:00:00.000Z',
+      reason: 'motivo',
+      fileInBucket: true,
+    });
+    assert.ok(isOk(d));
+    await repo.save(d.value.remittance, d.value.events);
+
+    assert.equal(repo.payableStatus('doc-1'), 'Paid', 'pagamento consumado não volta para a fila');
   });
 });
 

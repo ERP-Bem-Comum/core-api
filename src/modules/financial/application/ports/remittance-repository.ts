@@ -1,7 +1,10 @@
 import type { Result } from '../../../../shared/primitives/result.ts';
 import type { Remittance } from '../../domain/remittance/types.ts';
 import type { RemittanceEvent } from '../../domain/remittance/events.ts';
-import type { PayableTransmitted } from '../../domain/document/events.ts';
+import type {
+  PayableTransmitted,
+  PayableTransmissionDiscarded,
+} from '../../domain/document/events.ts';
 import type { RemittanceId } from '../../domain/remittance/remittance-id.ts';
 
 export type RemittanceRepositoryError = 'remittance-repository-unavailable';
@@ -11,7 +14,10 @@ export type RemittanceRepositoryError = 'remittance-repository-unavailable';
 // explícita em vez de `FinancialAppendableEvent` porque este `save` não tem o que fazer com evento
 // de extrato ou de conciliação — um tipo largo demais aceitaria em silêncio o que nunca deveria
 // chegar aqui.
-export type RemittanceSaveEvent = RemittanceEvent | PayableTransmitted;
+export type RemittanceSaveEvent =
+  | RemittanceEvent
+  | PayableTransmitted
+  | PayableTransmissionDiscarded;
 
 // Um título preso e a remessa que o prende. O `nsa` viaja junto porque é o identificador que existe
 // para o operador: ele o vê na tela de remessas e no retorno do banco, enquanto o `id` é interno.
@@ -53,9 +59,19 @@ export type RemittanceRepository = Readonly<{
   // A ordem entre as duas importa: a transição vem DEPOIS da releitura do hold sob lock. Transicionar
   // antes gastaria escrita num título que a reserva ainda pode recusar.
   //
-  // Atualização de desfecho (confirmar, falhar, descartar) NÃO reserva nem transiciona: a remessa já
-  // prende os próprios títulos, e recusá-la ali travaria toda remessa transmitida sem desfecho. A
-  // devolução `Transmitted → Approved` do descarte é operação à parte (ADR-0065 §4), com CAS próprio.
+  // Atualização de desfecho (confirmar, falhar) NÃO reserva nem transiciona: a remessa já prende os
+  // próprios títulos, e recusá-la ali travaria toda remessa transmitida sem desfecho.
+  //
+  // ⚠️ **O DESCARTE é a exceção, e é simétrico à criação** (ADR-0065 §4): salvar uma remessa em
+  // `Discarded` devolve os títulos dela por CAS —
+  // `UPDATE fin_payables SET status='Approved' WHERE id IN (títulos desta remessa) AND
+  // status='Transmitted'`. As duas restrições do `WHERE` são a regra: `Transmitted` impede que
+  // pagamento já baixado volte à fila, e a lista impede que o descarte alcance título de outra
+  // remessa viva.
+  //
+  // Diferente da criação, o descarte NÃO confere a contagem: devolver menos do que se pediu é
+  // legítimo — título já pago não casa —, e transformar isso em conflito travaria o descarte de uma
+  // remessa parcialmente paga, que é o caso que a §4 existe para destravar.
   save: (
     remittance: Remittance,
     events?: readonly RemittanceSaveEvent[],

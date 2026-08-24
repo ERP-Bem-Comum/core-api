@@ -252,11 +252,12 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const aindaPreso = await repo.findHeldPayables([d.payableId]);
       assert.ok(isOk(aindaPreso) && aindaPreso.value.length === 1);
 
-      const discarded = discard(
-        failed.value.remittance,
-        '2026-08-11 15:00:00.000',
-        'confirmado com o banco',
-      );
+      const discarded = discard({
+        remittance: failed.value.remittance,
+        at: '2026-08-11 15:00:00.000',
+        reason: 'confirmado com o banco',
+        fileInBucket: true,
+      });
       assert.ok(isOk(discarded));
       await repo.save(discarded.value.remittance, discarded.value.events);
 
