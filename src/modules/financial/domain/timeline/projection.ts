@@ -68,16 +68,17 @@ export const projectEntry = (input: ProjectEntryInput): readonly FinancialTimeli
   // outbox (ver `TimelineEventType` em events.ts). O guard narrowa `eventType` para o
   // subconjunto `TimelineEventType` (sem cancelamento nem escalonamento).
   //
-  // `PayableTransmitted` (ADR-0065 §2) sai por um motivo DIFERENTE dos outros dois, e a diferença
-  // importa: ele é marco de estado do título e vai à trilha um dia — a #823 o quer no drawer, com o
-  // NSA e o nome do arquivo. Ele não passa por aqui hoje porque não chega aqui: quem o emite é o
-  // `save` da remessa, que não monta `Payables` nem chama esta projeção. Quando a #823 o trouxer, o
-  // caminho a construir é esse, não este `if`.
+  // `PayableTransmitted` e `PayableTransmissionDiscarded` (ADR-0065 §§2,4) saem por um motivo
+  // DIFERENTE dos outros dois, e a diferença importa: os dois são marcos de estado do título e vão à
+  // trilha um dia — a #823 os quer no drawer, com o NSA e o nome do arquivo. Não passam por aqui
+  // hoje porque não CHEGAM aqui: quem os emite é o `save` da remessa, que não monta `Payables` nem
+  // chama esta projeção. Quando a #823 os trouxer, o caminho a construir é esse, não este `if`.
   const eventType = input.event.type;
   if (
     eventType === 'DocumentCancelled' ||
     eventType === 'ApproverEscalated' ||
-    eventType === 'PayableTransmitted'
+    eventType === 'PayableTransmitted' ||
+    eventType === 'PayableTransmissionDiscarded'
   ) {
     return [];
   }

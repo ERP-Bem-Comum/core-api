@@ -156,29 +156,70 @@ export const markFailed = (
   return ok({ remittance: failed, events: [settled(failed, 'RemittanceFailed', at, detail)] });
 };
 
-// Único caminho que devolve os documentos para a fila. Exige motivo porque libera valor para nova
-// transmissão: sem registro do porquê, ninguém audita depois por que um pagamento saiu duas vezes.
-// Assinatura uniforme com as demais transições, mas `events` sempre vazio: o descarte ainda não tem
-// evento próprio. Não é esquecimento — é escopo. Quando houver consumidor para "estes documentos
-// voltaram à fila" (o mais consequente dos três, porque libera valor para nova transmissão), o
-// evento entra aqui sem mexer em quem chama.
-export const discard = (
-  remittance: Remittance,
-  at: string,
-  reason: string,
-): Result<RemittanceOutcome, RemittanceError> => {
+/**
+ * Único caminho que devolve os títulos para a fila (ADR-0065 §4).
+ *
+ * Exige motivo porque libera valor para nova transmissão: sem registro do porquê, ninguém audita
+ * depois por que um pagamento saiu duas vezes.
+ *
+ * **Duas portas de entrada, e a segunda é a novidade do #792:**
+ *
+ *  - **`Failed`** — o `status/` disse que o transporte não entregou. Os títulos ficaram
+ *    `Transmitted` (§4: "sem confirmação" não é "não transmitiu"), e é o operador, tendo conferido o
+ *    site do banco, quem decide tirá-los da VAN.
+ *  - **`Queued` SEM arquivo em prefixo nenhum** — a remessa que ficou registrada quando o upload
+ *    falhou depois da transação (§2). É a via que faltava para o "produtor 1" da #787: sem ela, o
+ *    título fica preso para sempre por uma remessa que nunca existiu no bucket.
+ *
+ * ⚠️ `Queued` **com** arquivo continua recusado, e é a guarda que importa: o objeto está em `saida/`
+ * significa que o agente ainda pode transmiti-lo. Devolver o título ali abriria a porta para ele
+ * entrar noutra remessa enquanto a primeira segue a caminho do banco — pagamento em dobro, que é
+ * exatamente o que a #789 fechou.
+ *
+ * O fato "o arquivo está no bucket" chega como DADO, apurado pelo use case
+ * (`storage.findRemittance`). O domínio não conhece transporte (ADR-0006), e enterrar a consulta
+ * aqui tornaria a regra impossível de testar sem infra — mas quem DECIDE com base nela é este
+ * módulo, não o use case, que só apura e encaminha.
+ */
+export type DiscardInput = Readonly<{
+  remittance: Remittance;
+  at: string;
+  reason: string;
+  /**
+   * O objeto existe em ALGUM prefixo do bucket (`saida/`, `processados/`, `falhas/`)? Só consultado
+   * quando a remessa está `Queued` — em `Failed` o transporte já se pronunciou, e onde o arquivo
+   * está deixou de decidir qualquer coisa.
+   */
+  fileInBucket: boolean;
+}>;
+
+export const discard = (input: DiscardInput): Result<RemittanceOutcome, RemittanceError> => {
+  const { remittance, at, reason, fileInBucket } = input;
+
+  // A ordem é a regra. Eliminados `Transmitted` e `Discarded`, sobram exatamente `Queued` e
+  // `Failed` — os dois estados a partir dos quais o descarte é legítimo —, e é por isso que não há
+  // um quarto `if` peneirando o resto: ele seria código morto, e o compilador o denuncia como tal.
+  // Acrescentar estado à máquina da remessa QUEBRA esta função de propósito: quem o fizer terá de
+  // decidir aqui se ele descarta, em vez de cair num `else` que decide por omissão.
   if (remittance.status === 'Transmitted') return err('remittance-already-transmitted');
   if (remittance.status === 'Discarded') return ok({ remittance, events: [] });
-  if (remittance.status !== 'Failed') return err('remittance-discard-requires-failure');
+  if (remittance.status === 'Queued' && fileInBucket) {
+    return err('remittance-discard-requires-failure');
+  }
   if (isBlank(reason)) return err('remittance-discard-requires-reason');
 
+  const discarded = immutable<Remittance>({
+    ...remittance,
+    status: 'Discarded',
+    settledAt: at,
+    detail: reason,
+  });
+
+  // O evento que faltava. O comentário anterior desta função dizia que `events` vinha vazio "até
+  // haver consumidor para 'estes documentos voltaram à fila'" — o consumidor chegou: a devolução dos
+  // títulos por CAS (§4) acontece na mesma transação, e a trilha da nota exibe o marco (#823).
   return ok({
-    remittance: immutable<Remittance>({
-      ...remittance,
-      status: 'Discarded',
-      settledAt: at,
-      detail: reason,
-    }),
-    events: [],
+    remittance: discarded,
+    events: [settled(discarded, 'RemittanceDiscarded', at, reason)],
   });
 };

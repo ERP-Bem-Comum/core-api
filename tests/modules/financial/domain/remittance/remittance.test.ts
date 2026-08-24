@@ -206,15 +206,53 @@ describe('Remittance — o que ela anuncia', () => {
     assert.deepEqual(second.value.events, []);
   });
 
-  // Escopo declarado: o descarte ainda não tem evento próprio. O teste existe para que a ausência
-  // seja deliberada e visível, em vez de descoberta como surpresa por quem consumir o outbox.
-  it('descartar ainda não emite evento', () => {
+  // ⚠️ Este caso afirmava o oposto até o #792 ("descartar ainda não emite evento"), e a ausência era
+  // escopo declarado: não havia consumidor para "estes títulos voltaram à fila". O consumidor chegou
+  // com o ADR-0065 §4 — a devolução por CAS acontece na mesma transação —, e o descarte passou a ser
+  // o mais consequente dos três desfechos, porque é o único que libera valor para nova transmissão.
+  it('descartar emite RemittanceDiscarded, com o motivo da decisão', () => {
     const failed = markFailed(queued(), LATER, 'sem confirmacao');
     assert.ok(isOk(failed));
 
-    const discarded = discard(failed.value.remittance, LATER, 'operador confirmou com o banco');
+    const discarded = discard({
+      remittance: failed.value.remittance,
+      at: LATER,
+      reason: 'operador confirmou com o banco',
+      fileInBucket: true,
+    });
     assert.ok(isOk(discarded));
-    assert.deepEqual(discarded.value.events, []);
+    assert.equal(discarded.value.events.length, 1);
+
+    const [evento] = discarded.value.events;
+    assert.equal(evento?.type, 'RemittanceDiscarded');
+    assert.equal(evento?.detail, 'operador confirmou com o banco', 'o motivo viaja no evento');
+    assert.deepEqual(
+      evento?.payableIds,
+      payableIdsOf(failed.value.remittance),
+      'anuncia QUAIS títulos voltaram — sem isso o consumidor teria de voltar ao banco',
+    );
+  });
+
+  // Reincidência não reemite: o mesmo motivo da varredura idempotente dos irmãos.
+  it('descartar de novo devolve o agregado intacto e NENHUM evento', () => {
+    const failed = markFailed(queued(), LATER, 'sem confirmacao');
+    assert.ok(isOk(failed));
+    const first = discard({
+      remittance: failed.value.remittance,
+      at: LATER,
+      reason: 'motivo',
+      fileInBucket: false,
+    });
+    assert.ok(isOk(first));
+
+    const second = discard({
+      remittance: first.value.remittance,
+      at: LATER,
+      reason: 'motivo',
+      fileInBucket: false,
+    });
+    assert.ok(isOk(second));
+    assert.deepEqual(second.value.events, []);
   });
 });
 
@@ -245,11 +283,12 @@ describe('Remittance — o que prende o documento', () => {
     const failed = markFailed(queued(), LATER, 'sem confirmacao');
     assert.ok(isOk(failed));
 
-    const discarded = discard(
-      failed.value.remittance,
-      LATER,
-      'operador confirmou com o banco que nao saiu',
-    );
+    const discarded = discard({
+      remittance: failed.value.remittance,
+      at: LATER,
+      reason: 'operador confirmou com o banco que nao saiu',
+      fileInBucket: true,
+    });
     assert.ok(isOk(discarded));
     assert.equal(discarded.value.remittance.status, 'Discarded');
     assert.equal(holdsPayables(discarded.value.remittance), false);
@@ -259,7 +298,12 @@ describe('Remittance — o que prende o documento', () => {
     const t = confirmTransmitted(queued(), LATER, 'ok');
     assert.ok(isOk(t));
 
-    const d = discard(t.value.remittance, LATER, 'engano');
+    const d = discard({
+      remittance: t.value.remittance,
+      at: LATER,
+      reason: 'engano',
+      fileInBucket: false,
+    });
     assert.ok(isErr(d));
     assert.equal(d.error, 'remittance-already-transmitted');
   });
@@ -268,8 +312,79 @@ describe('Remittance — o que prende o documento', () => {
     const failed = markFailed(queued(), LATER, 'sem confirmacao');
     assert.ok(isOk(failed));
 
-    const d = discard(failed.value.remittance, LATER, '   ');
+    const d = discard({
+      remittance: failed.value.remittance,
+      at: LATER,
+      reason: '   ',
+      fileInBucket: true,
+    });
     assert.ok(isErr(d));
     assert.equal(d.error, 'remittance-discard-requires-reason');
+  });
+});
+
+/**
+ * ADR-0065 §4 (#792) — a segunda porta de entrada do descarte.
+ *
+ * A remessa `Queued` sem arquivo é o resíduo do caminho que o §2 aceita de propósito: o `save`
+ * registra e transiciona, o upload falha depois, e sobra uma remessa que nunca existiu no bucket
+ * prendendo títulos já `Transmitted`. Sem esta porta, esses títulos ficam presos para sempre — é o
+ * "produtor 1" da #787.
+ *
+ * A guarda que separa as duas situações é o ARQUIVO, não o status: `Queued` com objeto em algum
+ * prefixo significa que o agente ainda pode transmiti-lo, e devolver o título ali o liberaria para
+ * entrar noutra remessa enquanto a primeira segue a caminho do banco.
+ */
+describe('Remittance — descarte de Queued sem arquivo (#787, ADR-0065 §4)', () => {
+  it('Queued SEM arquivo em prefixo nenhum pode ser descartada', () => {
+    const d = discard({
+      remittance: queued(),
+      at: LATER,
+      reason: 'upload falhou; nada foi ao bucket',
+      fileInBucket: false,
+    });
+    assert.ok(isOk(d));
+    assert.equal(d.value.remittance.status, 'Discarded');
+    assert.equal(holdsPayables(d.value.remittance), false);
+  });
+
+  // ⚠️ A guarda que impede pagamento em dobro. O arquivo em `saida/` é um pagamento que o agente
+  // ainda pode transmitir; liberar o título aqui o deixaria entrar noutra remessa enquanto a
+  // primeira caminha para o banco.
+  it('Queued COM arquivo é recusada — o agente ainda pode transmiti-lo', () => {
+    const d = discard({
+      remittance: queued(),
+      at: LATER,
+      reason: 'quero cancelar',
+      fileInBucket: true,
+    });
+    assert.ok(isErr(d));
+    assert.equal(d.error, 'remittance-discard-requires-failure');
+  });
+
+  // O motivo é exigido nas DUAS portas: o que torna o descarte auditável não é o estado de origem,
+  // é a decisão registrada.
+  it('Queued sem arquivo ainda exige motivo', () => {
+    const d = discard({ remittance: queued(), at: LATER, reason: '', fileInBucket: false });
+    assert.ok(isErr(d));
+    assert.equal(d.error, 'remittance-discard-requires-reason');
+  });
+
+  // `fileInBucket` é IGNORADO quando a remessa está `Failed`: ali o transporte já se pronunciou, e
+  // onde o arquivo parou (`falhas/`, `saida/`, lugar nenhum) não muda a decisão do operador.
+  it('em Failed, a presença do arquivo não decide nada', () => {
+    const failed = markFailed(queued(), LATER, 'sem confirmacao');
+    assert.ok(isOk(failed));
+
+    for (const fileInBucket of [true, false]) {
+      const d = discard({
+        remittance: failed.value.remittance,
+        at: LATER,
+        reason: 'conferido no banco',
+        fileInBucket,
+      });
+      assert.ok(isOk(d), `esperava descarte com fileInBucket=${String(fileInBucket)}`);
+      assert.equal(d.value.remittance.status, 'Discarded');
+    }
   });
 });

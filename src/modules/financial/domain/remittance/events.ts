@@ -35,7 +35,29 @@ export type RemittanceFailed = Readonly<{
   detail: string;
 }>;
 
-export type RemittanceEvent = RemittanceTransmitted | RemittanceFailed;
+// #792 / ADR-0065 §4 — decisão humana registrada: esta remessa não vale mais, e os títulos dela
+// voltam à fila. É o ÚNICO caminho que devolve título a `Approved`, e por isso o motivo é
+// obrigatório: sem registro do porquê, ninguém audita depois por que um pagamento saiu duas vezes.
+//
+// `detail` carrega o motivo, no mesmo campo em que os irmãos carregam o detalhe do transporte — os
+// três respondem "o que aconteceu com esta remessa", e separar o campo por origem obrigaria todo
+// consumidor a olhar dois lugares para a mesma pergunta.
+//
+// ⚠️ Anuncia a remessa, não os títulos. Quem quiser reagir a "este título voltou à fila" consome
+// `PayableTransmissionDiscarded` (um por título, em `domain/document/events.ts`): é o evento que
+// carrega o id do título e é projetado na trilha da nota. Os dois são emitidos na mesma transação e
+// não são duplicata — este é do lote, aquele é do item.
+export type RemittanceDiscarded = Readonly<{
+  type: 'RemittanceDiscarded';
+  remittanceId: RemittanceId;
+  nsa: number;
+  fileName: string;
+  payableIds: readonly string[];
+  settledAt: string;
+  detail: string;
+}>;
+
+export type RemittanceEvent = RemittanceTransmitted | RemittanceFailed | RemittanceDiscarded;
 
 /**
  * Fonte única dos literais de `RemittanceEvent['type']` (anti-drift), no mesmo molde de
@@ -45,4 +67,5 @@ export type RemittanceEvent = RemittanceTransmitted | RemittanceFailed;
 export const REMITTANCE_EVENT_TYPES = exhaustiveStringUnion<RemittanceEvent['type']>()([
   'RemittanceTransmitted',
   'RemittanceFailed',
+  'RemittanceDiscarded',
 ] as const);
