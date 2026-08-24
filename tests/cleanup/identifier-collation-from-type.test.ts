@@ -35,39 +35,41 @@
  *
  * ### Por que para na 36 — e o que faria valer estendê-lo
  *
- * A asserção só é possível onde a LARGURA já decide a intenção, e isso não vale para as sete
- * larguras binárias. Medido nas 60 declarações cruas que restam no repositório, por largura:
+ * A asserção só é possível onde a LARGURA já decide a intenção, e isso vale para três das nove
+ * larguras binárias. Medido nas declarações cruas que restam no repositório, por largura:
  *
- *     36    0 cruas   — UUID, e nada mais: nenhum nome, título ou descrição usa 36
- *     14    0 cruas   — CNPJ
- *     11    1 crua    — `auth.users.cpf`, identificador genuíno declarado sem `cpfKey`
- *     64   15 cruas   — `event_type` e `name` (texto) MISTURADOS com `content_hash` e `run_key`
- *    128    2 cruas   — texto
- *    255   42 cruas   — texto
+ *     36     0 cruas  — UUID, e nada mais: nenhum nome, título ou descrição usa 36
+ *     14     0 cruas  — CNPJ
+ *     11     1 crua   — `auth_user.cpf`, identificador genuíno declarado sem `cpfKey`
+ *     64    15 cruas  — `event_type` e `name` (texto) MISTURADOS com `content_hash` e `run_key`
+ *    128     2 cruas  — texto
+ *    255    42 cruas  — texto
+ *    512     0 cruas
+ *   1024     1 crua   — `auth_user.image_url`, que é URL e NÃO é chave de storage
  *
- * De 64 para cima a largura não distingue mais nada: `varchar(64)` é `opaqueKey` E `event_type`,
- * `varchar(255)` é `objectStorageKey` E `pix_key`. Decidir ali exigiria classificar pelo NOME da
- * coluna — a heurística que `tests/support/source-scan.ts:9-14` documenta como tendo invertido
- * veredito seis vezes neste repositório, duas delas em ADR. Um gate assim erra em silêncio, e erra
- * no sentido pior: aprovando o que devia barrar.
+ * As três não-ambíguas são as de formato FIXO por definição — UUID, CNPJ, CPF têm comprimento que
+ * não é escolha de quem modela. Onde a largura é escolha, ela não classifica: `varchar(64)` é
+ * `opaqueKey` E `event_type`; `varchar(255)` é `objectStorageKey` E `pix_key`. Decidir ali exigiria
+ * classificar pelo NOME da coluna — a heurística que `tests/support/source-scan.ts:9-14` documenta
+ * como tendo invertido veredito seis vezes neste repositório, duas delas em ADR. Um gate assim erra
+ * em silêncio e no sentido pior: aprovando o que devia barrar.
  *
- * As larguras 11 e 14 são tão não-ambíguas quanto a 36, e é para lá que a extensão aponta. Ela não
- * entrou aqui por uma razão de escopo, não de mérito: a única violação de 11 vive em `auth`, e este
- * gate nasceu no conserto de `ctr_documents` — puxá-la para dentro misturaria módulos e faria o
- * gate estrear vermelho por dívida de outro dono, que é como um gate novo vira `skip` em duas
- * semanas. Ela é barata (uma coluna) e cabe num ciclo próprio.
+ * ⚠️ Ganhar um helper NÃO torna uma largura confiável, e a 1024 é a prova recente: ela passou a ter
+ * `documentStorageKey` no mesmo commit que escreveu estas linhas, e continua abrigando uma coluna
+ * que é URL. Quem for estender este gate para uma largura nova precisa medir as cruas dela ANTES,
+ * não deduzir da existência do tipo.
  *
- * Acima de 64, o que destravaria não é ampliar a varredura e sim mudar o que se varre: enquanto a
- * intenção só estiver registrada onde o helper FOI usado, o gate não tem como perguntar por quem
- * não o usou. E o que sobra ali **não é dívida de forma, é dívida de julgamento** — o #637 fechou,
- * e das colunas que restam sem `bin` com nome de identificador, a maioria não deveria mesmo ser
- * binária (`pix_key` é dado de negócio, não chave opaca; `password_hash` nunca entra em predicado).
- * Nenhuma varredura decide isso: alguém precisa olhar coluna por coluna e dizer o que ela é.
+ * A extensão que se sustenta é para 11 e 14. Ela não entrou aqui por escopo, não por mérito: a
+ * única violação de 11 vive em `auth`, e este gate nasceu no conserto de `ctr_documents` — puxá-la
+ * para dentro misturaria módulos e faria o gate estrear vermelho por dívida de outro dono, que é
+ * como gate novo vira `skip` em duas semanas. É barata (uma coluna) e cabe num ciclo próprio.
  *
- * O gate por largura é, portanto, andaime — e o que o substitui não é uma varredura maior, é um
- * helper para cada intenção que ainda não tem um. Enquanto `objectStorageKey` for `varchar(255)` e
- * as chaves de S3 vivas forem `varchar(1024)` e `varchar(512)`, elas não têm como vir de tipo, e
- * nenhum gate as alcança sem virar a heurística por nome que este arquivo recusa duas vezes.
+ * Acima de 64 não há gate a escrever, porque o que sobra **não é dívida de forma, é dívida de
+ * julgamento**: o #637 fechou, e das colunas que restam sem `bin` com nome de identificador, a
+ * maioria não deveria mesmo ser binária (`pix_key` é dado de negócio e não chave opaca;
+ * `password_hash` nunca entra em predicado). Nenhuma varredura decide isso — alguém precisa olhar
+ * coluna a coluna e dizer o que ela é. O que substitui este andaime não é uma varredura maior, é um
+ * helper para cada intenção que ainda não tem um.
  */
 
 import { describe, it } from 'node:test';

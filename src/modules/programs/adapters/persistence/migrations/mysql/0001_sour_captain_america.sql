@@ -1,0 +1,1 @@
+ALTER TABLE `prg_programs` MODIFY COLUMN `logo_key` varchar(512) COLLATE utf8mb4_bin;

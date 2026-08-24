@@ -57,6 +57,7 @@ import {
 import { sql } from 'drizzle-orm';
 
 import {
+  documentStorageKey,
   opaqueKey,
   sha256HexKey,
   uuidKey,
@@ -439,7 +440,7 @@ export const ctrDocuments = mysqlTable(
     sizeBytes: bigint('size_bytes', { mode: 'number' }).notNull(),
     hashSha256: sha256HexKey('hash_sha256').notNull(),
     bucket: varchar('bucket', { length: 63 }).notNull(),
-    storageKey: varchar('storage_key', { length: 1024 }).notNull(),
+    storageKey: documentStorageKey('storage_key').notNull(),
     signedElectronically: boolean('signed_electronically').notNull().default(false),
     version: smallint('version', { unsigned: true }).notNull().default(1),
     uploadedAt: datetime('uploaded_at', { mode: 'date', fsp: 3 }).notNull(),

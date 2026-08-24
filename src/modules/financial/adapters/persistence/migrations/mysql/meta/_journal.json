@@ -372,6 +372,13 @@
       "when": 1787363797529,
       "tag": "0052_curvy_legion",
       "breakpoints": true
+    },
+    {
+      "idx": 53,
+      "version": "5",
+      "when": 1787544630028,
+      "tag": "0053_safe_grim_reaper",
+      "breakpoints": true
     }
   ]
 }
