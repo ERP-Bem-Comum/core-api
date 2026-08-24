@@ -266,6 +266,18 @@ O dump do contrafactual mostra o ciclo exatamente como a §4.1 o descreve: `lock
 before rec` no `PRIMARY` de `fin_remittances` de um lado, `lock_mode X locks rec but not gap
 waiting` no `PRIMARY` de `fin_payables` do outro, e a segunda transação em `inserting`.
 
+**O efeito colateral do braço A foi medido até o fim, e não existe.** O ramo de update trava
+`fin_payables` sem precisar — mas isso não cria ciclo contra o hard replace do documento: 0
+deadlocks em 20 rodadas, com controle positivo em 6/6 e o contrafactual `pre` dando idêntico. O ramo
+de update só executa `UPDATE fin_remittances`; como nunca insere em `fin_remittance_payables`, nunca
+pede lock em `fin_documents`, e sem essa aresta não há ciclo a fechar. O custo do braço A é o de
+cauda já registrado, e nada além dele.
+
+> **Aresta que não se enxerga lendo o código.** No ciclo do ramo de CRIAÇÃO, o lock `S` em
+> `fin_documents` não vem de `select` algum: é a **checagem de FK** do `INSERT` em
+> `fin_remittance_payables`. Nenhum gap dos dois lados — é inversão pura de ordem, e por isso
+> `READ COMMITTED` não ajudaria neste par (ao contrário do que ajuda no `save` da remessa).
+
 ---
 
 ## 6. Saídas (outputs concretos)
@@ -275,9 +287,12 @@ waiting` no `PRIMARY` de `fin_payables` do outro, e a segunda transação em `in
 - [x] Medir o efeito colateral sobre o ramo de **update** — feito em 24/08: sem deadlock novo, sem
       lock-wait, sem bloqueio de INSERT de título novo (20/20). O custo é de **cauda**: mediana
       igual (119ms vs 103ms), pior caso ~3× (428ms vs 140ms), com N=20
-- [ ] **Falta o cenário `save` de update × `save` do documento (hard replace)** — a rota da 0032, e
-      a única em que ainda caberia ciclo novo, por ordem invertida entre `fin_documents` e
-      `fin_payables`. O lock sem gap remove a família de ciclos por gap, não esta
+- [x] Cenário `save` de update × `save` do documento (hard replace) — **medido em 24/08 e
+      REFUTADO**: 0 deadlocks em 20 rodadas, com controle positivo dando 6/6 na mesma bancada e o
+      contrafactual `pre` (que não trava `fin_payables` no update) dando o mesmo resultado. O braço
+      A não mudou nada neste caminho. O mecanismo é direto: o ramo de update só faz
+      `UPDATE fin_remittances`, nunca insere em `fin_remittance_payables`, e por isso jamais pede
+      lock em `fin_documents` — sem essa aresta não há ciclo. **O ciclo é privativo da criação**
 - [x] Reforçar `a emissão que perde a corrida não deixa rastro algum` — **resolvido sem teste
       novo**: o irmão dele, `duas emissões do mesmo título: exatamente uma grava, a outra perde com
       nome próprio`, já exige o erro nominal e ficou **vermelho em 8/8 rodadas sob deadlock**

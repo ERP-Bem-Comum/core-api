@@ -684,6 +684,23 @@ remessa, não do save.
 
 ---
 
+### Mitigação que ninguém tinha escrito: o hard replace é CONDICIONAL
+
+Medido em 24/08, e vale para toda esta inquiry: `document-repository.drizzle.ts:330` só executa o
+`DELETE`+`INSERT` dos títulos quando o conjunto **muda** —
+`if (!sameRowSet(existingPayables, payableRows, payableKey))`. Re-salvar o documento com os mesmos
+títulos pula o hard replace inteiro.
+
+Consequência prática: **a janela do ciclo só abre quando o usuário muda de fato os títulos** —
+valor, vencimento, retenção. Salvar um documento sem mexer neles não passa perto do caminho
+perigoso. Isso reduz a exposição real, e não estava registrado em lugar nenhum.
+
+> É também uma armadilha de medição: três tentativas do harness de 24/08 deram "0 de tudo" e quase
+> viraram um "não reproduz" — o que acontecia é que, sem mutar o valor, o hard replace **nunca
+> disparava**. Ausência de defeito e ausência de execução se parecem no relatório.
+
+---
+
 ## 6. Saídas (outputs concretos)
 
 Ordenados por dependência. Os três primeiros são independentes entre si.
