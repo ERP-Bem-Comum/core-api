@@ -290,6 +290,32 @@ services:
       # reports é read-only e não tem writer próprio: as URLs dele caem no *_DATABASE_URL do
       # módulo-fonte (server.ts:247-249) — basta o driver, sem secret novo.
       REPORTS_DRIVER: mysql
+      # ── Storage de logo de programa (#516) — exigido no boot em produção (#842) ──────────
+      # Sob NODE_ENV=production, ENDPOINT ou BUCKET ausente FALHA o boot com exit 78
+      # (`programs/adapters/http/logo-storage-config.ts`, mensagem "storage de logo nao
+      # configurado em producao"). Aqui, com NODE_ENV=development, ausentes degradam para storage
+      # EM MEMÓRIA **com aviso** — o logo não sobrevive ao restart.
+      # Declaradas mesmo vazias porque este compose é a planta que os taskdefs traduzem: foi a
+      # ausência delas NO AMBIENTE que derrubou o PBE por 4h20 em 24/08/2026 (#842).
+      # ⚠️ As duas credenciais vão JUNTAS ou NENHUMA — metade definida é erro explícito de boot.
+      # NENHUMA é o caminho de produção: provider chain / IAM Role da task no ECS.
+      # ⚠️ FORCE_PATH_STYLE aqui NÃO tem a inferência por endpoint das `VAN_S3_*` abaixo: o
+      # código é `!== 'false'`, então **ausente ou vazio ⇒ true**. Serve a MinIO; contra S3 real
+      # da AWS tem de ser explicitamente `false`, ou as chamadas saem em path-style.
+      PROGRAMS_LOGO_S3_REGION: '${PROGRAMS_LOGO_S3_REGION:-us-east-1}'
+      PROGRAMS_LOGO_S3_BUCKET: '${PROGRAMS_LOGO_S3_BUCKET:-}'
+      PROGRAMS_LOGO_S3_ENDPOINT: '${PROGRAMS_LOGO_S3_ENDPOINT:-}'
+      PROGRAMS_LOGO_S3_FORCE_PATH_STYLE: '${PROGRAMS_LOGO_S3_FORCE_PATH_STYLE:-}'
+      PROGRAMS_LOGO_S3_ACCESS_KEY_ID: '${PROGRAMS_LOGO_S3_ACCESS_KEY_ID:-}'
+      PROGRAMS_LOGO_S3_SECRET_ACCESS_KEY: '${PROGRAMS_LOGO_S3_SECRET_ACCESS_KEY:-}'
+      # ── Base URLs dos links de e-mail transacional (#331/#332) — as TRÊS obrigatórias em
+      # produção (`shared/http/email-link-base-urls.ts`): boot falha em vez de enviar e-mail
+      # com link quebrado. Presente exige URL absoluta http(s); relativa o SPA descarta.
+      # Produção já as declara fora deste arquivo (drift autorizado pelo runbook, §7); declarar
+      # aqui torna o taskdef gerado honesto (#842).
+      AUTH_RESET_BASE_URL: '${AUTH_RESET_BASE_URL:-}'
+      AUTH_ACTIVATION_BASE_URL: '${AUTH_ACTIVATION_BASE_URL:-}'
+      PARTNERS_SELF_REGISTRATION_BASE_URL: '${PARTNERS_SELF_REGISTRATION_BASE_URL:-}'
       # ⚠️⚠️⚠️ TEMPORÁRIO — LIBERAÇÃO TOTAL DE ACESSO (ADR-0052) ⚠️⚠️⚠️
       # AUTH_RBAC_MODE=bypass → autorização por permissão DESLIGADA: todo usuário AUTENTICADO é
       # super-usuário e vê 100% das ferramentas/relatórios/campos, INCLUSIVE dados sensíveis
