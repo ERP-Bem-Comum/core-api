@@ -10,7 +10,7 @@
 import { describe, it, before, beforeEach, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 
 import { isErr, isOk } from '#src/shared/index.ts';
 import { newUuid } from '#src/shared/utils/id.ts';
@@ -420,6 +420,94 @@ if (!process.env['MYSQL_INTEGRATION']) {
           await outboxRowsOf(perdedora.id),
           [],
           'nem evento — o rollback leva a transação inteira',
+        );
+      });
+    });
+
+    // PAY-01 — a invariante do #789 vista do ESTADO, não do caminho.
+    //
+    // Os testes acima provam que o `save` recusa a segunda emissão. Este pergunta outra coisa: se,
+    // por qualquer via, o banco chegou a um estado em que um título está preso por duas remessas
+    // vivas. É a única rede que sobra no dia em que o lock falhar — e nenhuma constraint do MySQL a
+    // substitui, porque a invariante é CONDICIONAL (`Discarded` devolve o título) e índice parcial
+    // não existe neste dialeto.
+    describe('PAY-01 — invariante: nenhum título preso por duas remessas vivas', () => {
+      // TODO(human): decidir de onde esta lista vem.
+      //
+      // Ela precisa ser a MESMA de `HOLDING` em `remittance-repository.drizzle.ts:96`
+      // (`['Queued','Transmitted','Failed']` — `Discarded` fica de fora porque devolve o título).
+      // Duas saídas, e o trade-off é real:
+      //
+      //   (a) importar `HOLDING` do adapter — impossível divergir, mas o teste passa a depender de
+      //       o adapter exportar a constante, e um `export` criado só para teste é acoplamento que
+      //       o repositório costuma recusar;
+      //   (b) manter a cópia local — teste independente do adapter, mas a lista passa a existir em
+      //       dois lugares, e no dia em que um status novo entrar em `HOLDING` esta invariante fica
+      //       silenciosamente incompleta. Vigiar uma regra com uma cópia dela é como este
+      //       repositório já produziu divergência antes.
+      //
+      // Escolha uma e deixe o motivo no comentário — a lista abaixo é o ponto de edição.
+      const VIVAS: readonly string[] = ['Queued', 'Transmitted', 'Failed'];
+
+      const titulosEmDuasRemessasVivas = async (): Promise<number> => {
+        const rows = await handle.db
+          .select({
+            payableId: finRemittancePayables.payableId,
+            remittanceId: finRemittancePayables.remittanceId,
+          })
+          .from(finRemittancePayables)
+          .innerJoin(finRemittances, eq(finRemittances.id, finRemittancePayables.remittanceId))
+          .where(inArray(finRemittances.status, [...VIVAS]));
+        // Conta REMESSAS DISTINTAS por título: a mesma dupla repetida na tabela de vínculo é outro
+        // defeito (e a PK composta já o impede), não este.
+        const porTitulo = new Map<string, Set<string>>();
+        for (const r of rows) {
+          const atual = porTitulo.get(r.payableId) ?? new Set<string>();
+          atual.add(r.remittanceId);
+          porTitulo.set(r.payableId, atual);
+        }
+        return [...porTitulo.values()].filter((remessas) => remessas.size > 1).length;
+      };
+
+      it('o caminho normal não produz o estado proibido', async () => {
+        const disputado = await seedPayable();
+        const a = build([disputado]);
+        const b = build([disputado]);
+        const repo = createDrizzleRemittanceRepository(handle);
+
+        const [ra, rb] = await Promise.all([repo.save(a), repo.save(b)]);
+        assert.notEqual(ra.ok, rb.ok, 'exatamente uma das emissões deve gravar');
+        assert.equal(await titulosEmDuasRemessasVivas(), 0);
+      });
+
+      it('a invariante ACUSA o estado proibido (guarda contra verde por vacuidade)', async () => {
+        // Forjado por INSERT direto, contornando o `save` — de propósito: o `save` recusa, e é
+        // justamente essa recusa que este caso não pode usar. Sem plantar o defeito, um `0` não
+        // distingue "não aconteceu" de "a consulta não olha".
+        const disputado = await seedPayable();
+        const duas = [build([disputado]), build([disputado])];
+        for (const r of duas) {
+          await handle.db.insert(finRemittances).values({
+            id: r.id,
+            cedenteAccountId: r.cedenteAccountId,
+            nsa: r.nsa,
+            fileName: r.fileName,
+            contentHash: r.contentHash,
+            status: 'Queued',
+            generatedAt: r.generatedAt,
+          });
+          await handle.db.insert(finRemittancePayables).values({
+            remittanceId: r.id,
+            payableId: disputado.payableId,
+            documentId: disputado.documentId,
+            yourNumber: `${r.nsa}`.padStart(20, '0'),
+          });
+        }
+
+        assert.equal(
+          await titulosEmDuasRemessasVivas(),
+          1,
+          'a invariante não enxergou um título plantado em duas remessas vivas',
         );
       });
     });
