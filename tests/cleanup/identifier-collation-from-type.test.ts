@@ -21,6 +21,55 @@
  *
  * A fonte da verdade é o SQL das migrations, não o snapshot: o snapshot descreve o que o Drizzle
  * acha que existe, e foi justamente ele que divergiu quando a edição manual começou.
+ *
+ * ## A direção inversa, e onde ela para
+ *
+ * O gate acima é cego a quem **nunca** teve `bin`. Foi assim que `ctr_documents.deleted_by` e
+ * `.superseded_by` atravessaram a migration `0019` — que existia justamente para corrigir collation
+ * nessa tabela, e tocou as cinco colunas vizinhas. Não houve descuido de revisão: as duas estavam
+ * declaradas com `char(…, { length: 36 })` cru, então `drizzle-kit generate` não tinha diff para
+ * emitir. O defeito era invisível ao diff de migration, e só um gate que lê o SCHEMA o alcança.
+ *
+ * Os dois casos abaixo fecham esse flanco pela largura 36 — ver {@link UUID_WIDTH} para a medição
+ * que torna essa largura não-ambígua.
+ *
+ * ### Por que para na 36 — e o que faria valer estendê-lo
+ *
+ * A asserção só é possível onde a LARGURA já decide a intenção, e isso vale para três das nove
+ * larguras binárias. Medido nas declarações cruas que restam no repositório, por largura:
+ *
+ *     36     0 cruas  — UUID, e nada mais: nenhum nome, título ou descrição usa 36
+ *     14     0 cruas  — CNPJ
+ *     11     1 crua   — `auth_user.cpf`, identificador genuíno declarado sem `cpfKey`
+ *     64    15 cruas  — `event_type` e `name` (texto) MISTURADOS com `content_hash` e `run_key`
+ *    128     2 cruas  — texto
+ *    255    42 cruas  — texto
+ *    512     0 cruas
+ *   1024     1 crua   — `auth_user.image_url`, que é URL e NÃO é chave de storage
+ *
+ * As três não-ambíguas são as de formato FIXO por definição — UUID, CNPJ, CPF têm comprimento que
+ * não é escolha de quem modela. Onde a largura é escolha, ela não classifica: `varchar(64)` é
+ * `opaqueKey` E `event_type`; `varchar(255)` é `objectStorageKey` E `pix_key`. Decidir ali exigiria
+ * classificar pelo NOME da coluna — a heurística que `tests/support/source-scan.ts:9-14` documenta
+ * como tendo invertido veredito seis vezes neste repositório, duas delas em ADR. Um gate assim erra
+ * em silêncio e no sentido pior: aprovando o que devia barrar.
+ *
+ * ⚠️ Ganhar um helper NÃO torna uma largura confiável, e a 1024 é a prova recente: ela passou a ter
+ * `documentStorageKey` no mesmo commit que escreveu estas linhas, e continua abrigando uma coluna
+ * que é URL. Quem for estender este gate para uma largura nova precisa medir as cruas dela ANTES,
+ * não deduzir da existência do tipo.
+ *
+ * A extensão que se sustenta é para 11 e 14. Ela não entrou aqui por escopo, não por mérito: a
+ * única violação de 11 vive em `auth`, e este gate nasceu no conserto de `ctr_documents` — puxá-la
+ * para dentro misturaria módulos e faria o gate estrear vermelho por dívida de outro dono, que é
+ * como gate novo vira `skip` em duas semanas. É barata (uma coluna) e cabe num ciclo próprio.
+ *
+ * Acima de 64 não há gate a escrever, porque o que sobra **não é dívida de forma, é dívida de
+ * julgamento**: o #637 fechou, e das colunas que restam sem `bin` com nome de identificador, a
+ * maioria não deveria mesmo ser binária (`pix_key` é dado de negócio e não chave opaca;
+ * `password_hash` nunca entra em predicado). Nenhuma varredura decide isso — alguém precisa olhar
+ * coluna a coluna e dizer o que ela é. O que substitui este andaime não é uma varredura maior, é um
+ * helper para cada intenção que ainda não tem um.
  */
 
 import { describe, it } from 'node:test';
@@ -100,6 +149,21 @@ const binColumnsOf = (mod: string): Map<string, string> => {
   return out;
 };
 
+/**
+ * Largura canônica do UUID textual — 36 é o comprimento do UUID com hífens, e não é largura
+ * natural de nome nem de descrição. Nenhuma coluna de texto humano deste repositório a usa; ver a
+ * medição por largura no docblock do topo.
+ *
+ * É essa exclusividade que permite cobrar a direção INVERSA à do gate acima sem colidir com o
+ * #637: aqui não se pergunta "esta coluna tem bin?", e sim "esta coluna é UUID?". A resposta vem
+ * da largura, não do DDL aplicado — então a asserção alcança a coluna que **nunca** teve `bin`,
+ * que é exatamente o ponto cego que deixou `ctr_documents.deleted_by` passar pela migration 0019.
+ */
+const UUID_WIDTH = 36;
+
+/** `deletedBy: char('deleted_by', { length: 36 })` — a declaração crua que este gate proíbe. */
+const RAW_UUID_COLUMN = /(?:var)?char\(\s*'([a-z_0-9]+)'\s*,\s*\{\s*length:\s*36\s*\}/g;
+
 /** Fatia o schema por bloco de `mysqlTable`, porque `id` existe em várias tabelas. */
 const blocksOf = (mod: string): Map<string, string> => {
   const src = readSource(`src/modules/${mod}/adapters/persistence/schemas/mysql.ts`);
@@ -136,6 +200,48 @@ describe('IDENTIFIER-COLLATION-FROM-TYPE — a collation binária vem do tipo', 
       [],
       'coluna com utf8mb4_bin declarada como varchar/char cru — a collation voltaria a depender de ' +
         'edição manual da migration, e o esquecimento é silencioso:\n' +
+        offenders.join('\n'),
+    );
+  });
+
+  it('nenhuma coluna de largura 36 é declarada com char/varchar cru — 36 é UUID', () => {
+    const offenders: string[] = [];
+    for (const mod of MODULES) {
+      for (const [table, block] of blocksOf(mod)) {
+        for (const m of block.matchAll(RAW_UUID_COLUMN)) {
+          if (m[1] !== undefined) offenders.push(`${mod} ${table}.${m[1]}`);
+        }
+      }
+    }
+    assert.deepEqual(
+      offenders,
+      [],
+      `coluna de ${UUID_WIDTH} declarada com char/varchar cru. A largura ${UUID_WIDTH} é o UUID ` +
+        'textual e nada mais neste repositório, então a coluna É identificador e precisa de ' +
+        '`uuidKey`/`uuidKeyFixed` — o tipo cru a faz herdar o default da tabela em silêncio, e o ' +
+        'gate acima não a alcança porque ele só olha quem JÁ tem `bin` no DDL:\n' +
+        offenders.join('\n'),
+    );
+  });
+
+  it('toda coluna de largura 36 no DDL aplicado tem COLLATE utf8mb4_bin', () => {
+    const offenders: string[] = [];
+    for (const mod of MODULES) {
+      for (const [key, { type, bin }] of ddlStateOf(mod)) {
+        if (type === `char(${UUID_WIDTH})` || type === `varchar(${UUID_WIDTH})`) {
+          if (!bin) offenders.push(`${mod} ${key} ${type}`);
+        }
+      }
+    }
+    assert.deepEqual(
+      offenders,
+      [],
+      `coluna de ${UUID_WIDTH} sem \`COLLATE utf8mb4_bin\` no DDL aplicado. Ela herda ` +
+        '`@@collation_server` no `CREATE TABLE`, então a comparação passa a depender de ' +
+        'configuração externa correta — é o modo de falha do #808, onde um MySQL no default do ' +
+        'produto (`utf8mb4_0900_ai_ci`) derrubou a migration com errno 1267. E enquanto isso a ' +
+        'busca por igualdade casa por CAIXA, porque `_ci` compara `A` igual a `a` num valor que ' +
+        'é opaco por definição:\n' +
         offenders.join('\n'),
     );
   });

@@ -23,7 +23,11 @@ import {
 } from 'drizzle-orm/mysql-core';
 import { sql } from 'drizzle-orm';
 
-import { uuidKey, uuidKeyFixed } from '#src/shared/persistence/identifier-columns.ts';
+import {
+  imageStorageKey,
+  uuidKey,
+  uuidKeyFixed,
+} from '#src/shared/persistence/identifier-columns.ts';
 
 export const programs = mysqlTable(
   'prg_programs',
@@ -34,7 +38,7 @@ export const programs = mysqlTable(
     sigla: varchar('sigla', { length: 20 }).notNull(),
     director: varchar('director', { length: 255 }),
     generalCharacteristics: varchar('general_characteristics', { length: 2000 }),
-    logoKey: varchar('logo_key', { length: 512 }),
+    logoKey: imageStorageKey('logo_key'),
     status: varchar('status', { length: 16 }).notNull(),
     version: int('version').notNull(),
     createdAt: datetime('created_at', { mode: 'date', fsp: 3 }).notNull(),

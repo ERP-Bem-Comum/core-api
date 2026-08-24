@@ -1,0 +1,1 @@
+ALTER TABLE `fin_documents` MODIFY COLUMN `source_file_key` varchar(1024) COLLATE utf8mb4_bin;
