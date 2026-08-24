@@ -1,9 +1,16 @@
 // SCH-01 — nenhuma coluna do schema carrega collation fora do par canônico.
 //
 // A classe de defeito que esta invariante vigia já custou uma migration: a `0050` morreu com
-// `1267 ER_CANT_AGGREGATE_2COLLATIONS` ao juntar duas colunas de collation diferente, e virou a
-// issue #808. O diagnóstico de lá terminou com a proposta de uma camada de verificação que nunca
-// foi instalada — é esta.
+// `1267 ER_CANT_AGGREGATE_2COLLATIONS`, e virou a issue #808. O diagnóstico de lá terminou com a
+// proposta de uma camada de verificação que nunca foi instalada — é esta.
+//
+// ⚠️ **Nem toda mistura de collations dá 1267, e a distinção é o que esta invariante vigia.** Pelo
+// Refman 8.4 §12.8.4, operandos do mesmo charset em que um lado é `_bin` resolvem PARA o `_bin`, em
+// silêncio — `utf8mb4_unicode_ci` contra `utf8mb4_bin` não levanta erro nenhum. O `1267` nasce do
+// outro triângulo: duas collations **ambas `_ci`** do mesmo charset e mesma coercibilidade, sem
+// desempate possível (`utf8mb4_0900_ai_ci` × `utf8mb4_unicode_ci`, que é o caso da #808). É
+// exatamente esse triângulo que uma collation TERCEIRA no schema cria — e é por isso que a lista de
+// aceitos aqui tem dois valores, não um.
 //
 // O tamanho da classe é o argumento: medido em 21/08/2026 contra o schema completo, **174** colunas
 // estão em `utf8mb4_unicode_ci` sem `COLLATE` escrito em lugar nenhum (herdam do servidor) e 114 em
@@ -11,10 +18,13 @@
 // estar configurado como `docker/mysql/conf.d/server.cnf` manda. Uma query responde se está.
 //
 // ⚠️ O QUE ESTA INVARIANTE **NÃO** PEGA, e é deliberado: coluna que *deveria* ser `utf8mb4_bin` e
-// ficou `utf8mb4_unicode_ci` passa verde aqui — os dois valores são aceitos. Esse é o defeito SCH-02
-// (identificador comparando case-insensitive), que é estrutural do schema e vive noutro gate. As
-// duas são complementares e nenhuma cobre a outra; concluir "collation está fechada" com só esta
-// instalada seria o erro.
+// ficou `utf8mb4_unicode_ci` passa verde aqui — os dois valores são aceitos. Esse é o defeito
+// `SCH-02` (PR #834), estrutural do schema, e o dano dele **não** é erro de JOIN, pela regra do
+// parágrafo acima: é a comparação que não envolve um lado `_bin` — busca por literal, `UNIQUE`,
+// índice — passar a tratar como iguais dois valores que diferem só na caixa. Num identificador isso
+// é errado; numa chave de objeto de storage é ativo, porque no bucket os dois são arquivos
+// distintos. As duas invariantes são complementares e nenhuma cobre a outra; concluir "collation
+// está fechada" com só esta instalada seria o erro.
 //
 // GATE: só roda com `MYSQL_INTEGRATION=1` — consulta o BANCO, não o fonte. É a diferença desta para
 // as demais invariantes de `tests/cleanup/`, que perguntam ao git.
