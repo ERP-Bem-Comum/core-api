@@ -11,8 +11,8 @@
 
 <!-- BEGIN:generated -->
 
-- **Inquiries cobertas:** 10 de 31 — [0011](./0011-auditoria-fiscal-cross-periodo.md) · [0012](./0012-bff-managed-api-gateway-vs-fastify.md) · [0014](./0014-schema-legado-vs-modelo-alvo.md) · [0015](./0015-charset-drizzle-roadmap.md) · [0019](./0019-hard-delete-tripwire-sem-superficie.md) · [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0027](./0027-teses-orfas-de-branches-contaminadas.md) · [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) · [0030](./0030-deadman-switch-nunca-vigiou.md) · [0032](./0032-titulo-remetido-fronteira-do-agregado.md)
-- **Total de perguntas em aberto:** **49**
+- **Inquiries cobertas:** 11 de 32 — [0011](./0011-auditoria-fiscal-cross-periodo.md) · [0012](./0012-bff-managed-api-gateway-vs-fastify.md) · [0014](./0014-schema-legado-vs-modelo-alvo.md) · [0015](./0015-charset-drizzle-roadmap.md) · [0019](./0019-hard-delete-tripwire-sem-superficie.md) · [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0027](./0027-teses-orfas-de-branches-contaminadas.md) · [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) · [0030](./0030-deadman-switch-nunca-vigiou.md) · [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) · [0032](./0032-titulo-remetido-fronteira-do-agregado.md)
+- **Total de perguntas em aberto:** **53**
 
 As demais 21 estão `decided` (17), `deferred` (3, com gatilho declarado) ou `superseded` (1) — nenhuma
 espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
@@ -34,6 +34,7 @@ espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
 | [0027](#inquiry-0027--teses-órfãs-de-branches-contaminadas) | `open` | Dono do repo — escolher o que vira trabalho | Descarte das 7 branches; 2 ADRs novos; ticket de auto-expire | 6 |
 | [0028](#inquiry-0028--o-edd-da-po-m1m4--relatórios-nibo) | `open` | P.O./consultoria + spikes do TL | Escopo comercial (~470h dev + ~350h do bundle P0); M1 e M4 | 7 |
 | [0030](#inquiry-0030--o-dead-mans-switch-que-nunca-vigiou) | `open` | Ninguém — falta desenho, não decisão | Supersede do [ADR-0042](../architecture/adr/0042-deadman-switch-redundant.md); detecção de job morto segue descoberta | 2 |
+| [0031](#inquiry-0031--deadlock-na-reserva-atômica-de-remessa) | `open` | Gabriel — escolher entre 4 alternativas medidas | PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814); a proteção contra dupla emissão da [#789](https://github.com/ERP-Bem-Comum/core-api/issues/789) não entra em produção; piloto VAN (#756) | 4 |
 
 ---
 
@@ -263,6 +264,44 @@ decidimos parar de manter um mecanismo que nunca detectou. O ponto cego fica des
 > _(A §5 da inquiry pede explicitamente para reabrir a rejeição de SaaS de heartbeat: o ADR-0042 a
 > descartou pesando controle, custo e privacidade contra um custo de construção que se assumiu pagável — e
 > que, medido agora, nunca foi pago.)_
+
+---
+
+## Inquiry-0031 — Deadlock na reserva atômica de remessa
+
+> **Origem:** [`0031-deadlock-na-reserva-atomica-de-remessa.md`](./0031-deadlock-na-reserva-atomica-de-remessa.md) §4 e §6
+> **Aberta em:** 2026-08-21 · **Destinatário:** Gabriel — não espera resposta de terceiro, espera **escolha** entre quatro alternativas já medidas
+> **Por que importa:** a reserva do PR #814 fecha a janela TOCTOU da #789 (mesmo título em duas remessas =
+> pagamento em dobro), mas duas emissões concorrentes entram em **deadlock 1213** — medido em **20/20
+> rodadas** contra MySQL 8.4.11 real. A causa é o `SELECT … FROM fin_remittances WHERE id = ? FOR UPDATE`
+> do ramo de criação, que busca uma linha **inexistente** e por isso trava o **vão** (gap lock) em vez do
+> registro; o `INSERT` da concorrente precisa de _insert-intention_, que conflita com esse vão. O código do
+> gap lock é **pré-existente** — o PR só alongou a espera entre pegá-lo e chegar ao INSERT. Comportamento é
+> **fail-safe** (nenhuma gravação dupla em 35 rodadas), mas o operador recebe "banco indisponível" em vez de
+> "o título já está em outra remessa", e emissão legítima morre por ruído de concorrência.
+
+**Bloqueador para fechar:** nenhuma pergunta em aberto e nenhum terceiro a consultar — o diagnóstico está
+fechado com medição, incluindo o experimento causal (travar `fin_payables` **antes** de `fin_remittances`
+zerou os deadlocks: 0 em 15 rodadas). Falta **decidir** qual alternativa adotar, e medir o efeito colateral
+da escolhida. Enquanto isso o PR #814 fica aberto e a #789 segue desprotegida em produção.
+
+- [ ] **D1.** Escolher entre as quatro alternativas da §4.3 da inquiry: **(A)** inverter a ordem de
+      aquisição — único braço com 0 deadlocks medidos; **(B)** inverter + `withDeadlockRetry` (o helper da
+      #803 já existe e o `document-repository` já o usa); **(C)** só o retry, sem mexer na ordem — trata o
+      sintoma num caminho que é 100% reprodutível, não raro; **(D)** redesenho, com o hold virando estado do
+      próprio título, como a própria #789 sugeriu.
+- [ ] **D2.** Medir o efeito colateral do braço (A)/(B) **antes** de adotá-lo: inverter a ordem passa a
+      travar `fin_payables` também no ramo de **update**, e isso não foi medido.
+- [ ] **D3.** Reforçar o teste `a emissão que perde a corrida não deixa rastro algum` para assertir o **erro
+      nomeado**. Hoje ele passa **mesmo sob deadlock**, porque só verifica `ra.ok !== rb.ok` e ausência de
+      rastro — e um rollback satisfaz as duas coisas. Ele não é imune ao defeito; é **cego** para ele.
+- [ ] **D4.** Corrigir as duas afirmações falsas no comentário de `remittance-repository.drizzle.ts`: a do
+      gap lock (a citação do Refman §17.7.3 pressupõe registro **encontrado**, o que não vale na criação) e
+      a do plano de execução (com 2 ids o otimizador usa `fin_payables_status_idx`, não a PK, travando
+      `supremum + 3 registros` com next-key — superfície bem maior do que o texto promete).
+
+> _(As duas afirmações erradas citavam o Refman **corretamente**. O erro foi aplicar a passagem certa ao
+> ramo errado — e ambas foram "verificadas" por leitura, nunca por medição. Ver §3.6 e §3.8.)_
 
 ---
 
