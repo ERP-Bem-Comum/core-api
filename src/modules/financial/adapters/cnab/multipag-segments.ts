@@ -35,15 +35,19 @@ const MOVEMENT_INCLUSION = '0'; // G060 — 0 = inclusão (remessa)
 // esta mudança como "[015-016]", coordenada que não existe no layout. Escrever ali encostaria em
 // G060, cujo domínio inclui o valor que significa EXCLUSÃO — trocando "retido para aprovação" por
 // outra operação. Conferido no layout, p. 24, campos 06.3A e 07.3A.
+//
+// A instrução vale para TODO pagamento — Segmento A (transferência) e Segmento J (boleto). É a
+// decisão da P.O. em 24/08/2026 (#805): não existe rota que saia liberada. A liberação master no
+// Net Empresa passa a cobrir boleto também, um passo a mais por remessa — preço escolhido para não
+// existir porta lateral.
+//
+// Até então o J saía com `00` — "Inclusão de Registro Detalhe Liberado" —, e pagar por boleto
+// contornava a dupla checagem que a transferência exige: mesmo dinheiro, mesma conta, sem o
+// segundo par de olhos. O que impede a porta de voltar a abrir é o teste que lê A e J da MESMA
+// remessa e cobra a instrução dos dois (`remittance-file.test.ts`, #805); enquanto os dois forem
+// medidos juntos, a divergência aparece aqui, e não no extrato.
 const MOVEMENT_INSTRUCTION_BLOCKED = '09';
 
-// `00` = "Inclusão de Registro Detalhe Liberado" — paga sem passar por aprovação no Net Empresa.
-//
-// ⚠️ PORTA LATERAL CONHECIDA, deliberadamente não fechada aqui. A #804 pede o bloqueio para o
-// Segmento A e não menciona o J, mas boleto também é pagamento: enquanto esta constante for `00`,
-// pagar por boleto contorna a dupla checagem que o cliente exige do pagamento por transferência.
-// Fechar isto é decisão da P.O., não do emissor — e exige o teste vir antes, como o do Segmento A.
-const MOVEMENT_INSTRUCTION_RELEASED = '00';
 const CURRENCY_BRL = 'BRL'; // G040
 
 export type Payee = Readonly<{
@@ -283,7 +287,7 @@ export const segmentJ = (input: SegmentJInput): Result<string, CnabSegmentError>
     num(input.recordNumber, 5), // 009-013 nº do registro no lote
     text('J', 1), // 014     segmento
     num(MOVEMENT_INCLUSION, 1), // 015     tipo de movimento (G060)
-    num(MOVEMENT_INSTRUCTION_RELEASED, 2), // 016-017 instrução (G061) — ver a porta lateral acima
+    num(MOVEMENT_INSTRUCTION_BLOCKED, 2), // 016-017 instrução (G061) — entra BLOQUEADO, como o A
     num(input.barcode, 44), // 018-061 código de barras
     text(input.beneficiaryName, 30), // 062-091 nome do cedente (quem recebe)
     dateDDMMYYYY(input.dueDate), // 092-099 vencimento do título
