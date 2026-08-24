@@ -93,7 +93,15 @@ export const toIsoDateTime = (stored: string): string =>
 // Estados que PRENDEM o documento. `Discarded` fica de fora — é o único que devolve o documento
 // para a fila, e exige decisão humana. Espelha `holdsDocuments` do domínio; a lista está aqui
 // porque o filtro precisa ir para o SQL, não para a memória.
-const HOLDING: readonly RemittanceStatus[] = ['Queued', 'Transmitted', 'Failed'];
+//
+// ⚠️ `export` deliberado, e não é vazamento de detalhe: a invariante `PAY-01`
+// (`tests/modules/financial/adapters/persistence/remittance-repository.drizzle-mysql.test.ts`)
+// vigia o estado que esta lista define — nenhum título preso por duas remessas VIVAS —, e é a
+// última rede do #789 no dia em que o lock falhar. Uma cópia da lista no teste faria a rede
+// envelhecer em silêncio no primeiro status novo que entrasse aqui: ela seguiria verde vigiando
+// uma regra que deixou de ser esta. Quem acrescentar estado a `HOLDING` acrescenta à vigilância no
+// mesmo ato — que é a única forma de as duas não divergirem.
+export const HOLDING: readonly RemittanceStatus[] = ['Queued', 'Transmitted', 'Failed'];
 
 const toDomain = (
   row: Readonly<FinRemittanceRow>,

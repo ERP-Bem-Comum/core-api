@@ -16,7 +16,10 @@ import { isErr, isOk } from '#src/shared/index.ts';
 import { newUuid } from '#src/shared/utils/id.ts';
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
-import { createDrizzleRemittanceRepository } from '#src/modules/financial/adapters/persistence/repos/remittance-repository.drizzle.ts';
+import {
+  createDrizzleRemittanceRepository,
+  HOLDING,
+} from '#src/modules/financial/adapters/persistence/repos/remittance-repository.drizzle.ts';
 import * as RemittanceId from '#src/modules/financial/domain/remittance/remittance-id.ts';
 import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
 import {
@@ -432,23 +435,13 @@ if (!process.env['MYSQL_INTEGRATION']) {
     // substitui, porque a invariante é CONDICIONAL (`Discarded` devolve o título) e índice parcial
     // não existe neste dialeto.
     describe('PAY-01 — invariante: nenhum título preso por duas remessas vivas', () => {
-      // TODO(human): decidir de onde esta lista vem.
+      // A lista vem do ADAPTER, importada, e não copiada para cá.
       //
-      // Ela precisa ser a MESMA de `HOLDING` em `remittance-repository.drizzle.ts:96`
-      // (`['Queued','Transmitted','Failed']` — `Discarded` fica de fora porque devolve o título).
-      // Duas saídas, e o trade-off é real:
-      //
-      //   (a) importar `HOLDING` do adapter — impossível divergir, mas o teste passa a depender de
-      //       o adapter exportar a constante, e um `export` criado só para teste é acoplamento que
-      //       o repositório costuma recusar;
-      //   (b) manter a cópia local — teste independente do adapter, mas a lista passa a existir em
-      //       dois lugares, e no dia em que um status novo entrar em `HOLDING` esta invariante fica
-      //       silenciosamente incompleta. Vigiar uma regra com uma cópia dela é como este
-      //       repositório já produziu divergência antes.
-      //
-      // Escolha uma e deixe o motivo no comentário — a lista abaixo é o ponto de edição.
-      const VIVAS: readonly string[] = ['Queued', 'Transmitted', 'Failed'];
-
+      // O acoplamento é o ponto: esta invariante vigia o estado que `HOLDING` define, e uma cópia
+      // ficaria verde vigiando a regra errada no primeiro status novo que entrasse lá. Como ela é a
+      // última rede do #789 — o que ela deixar passar, ninguém mais pega —, uma vigilância
+      // silenciosamente desatualizada é pior que a dependência de um `export`. Quem mexer em
+      // `HOLDING` mexe na vigilância no mesmo ato.
       const titulosEmDuasRemessasVivas = async (): Promise<number> => {
         const rows = await handle.db
           .select({
@@ -457,7 +450,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
           })
           .from(finRemittancePayables)
           .innerJoin(finRemittances, eq(finRemittances.id, finRemittancePayables.remittanceId))
-          .where(inArray(finRemittances.status, [...VIVAS]));
+          .where(inArray(finRemittances.status, [...HOLDING]));
         // Conta REMESSAS DISTINTAS por título: a mesma dupla repetida na tabela de vínculo é outro
         // defeito (e a PK composta já o impede), não este.
         const porTitulo = new Map<string, Set<string>>();
