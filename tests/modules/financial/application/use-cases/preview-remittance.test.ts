@@ -287,6 +287,59 @@ describe('previewRemittance — o que não pode sumir', () => {
     assert.equal(r.value.notApprovedCount, 2);
   });
 
+  // #792 / ADR-0065 §5 (CA2 da issue) — o título que JÁ saiu numa remessa.
+  //
+  // Este é o caso que a issue existe para corrigir: antes, o operador selecionava um título já
+  // enviado, o pré-voo dizia `ready`, e a recusa (`remittance-payables-already-held`) só chegava no
+  // último clique — depois de ele confirmar acreditando ter conferido.
+  it('título já transmitido vira `transmitted` — nunca `ready`, nunca `not-approved`', async () => {
+    const rows = [
+      row({ payableId: 'ja-foi', status: 'Transmitted', payee: BANK_ACCOUNT_ONLY }),
+      row({ payableId: 'pode-ir', status: 'Approved', payee: BANK_ACCOUNT_ONLY }),
+    ];
+    const r = await runPreview({ preview: reader(rows) })({
+      payableIds: ['ja-foi', 'pode-ir'],
+    });
+    assert.ok(isOk(r));
+
+    assert.equal(line(r, 'ja-foi').status, 'transmitted');
+    assert.notEqual(
+      line(r, 'ja-foi').status,
+      'ready',
+      'prometer `ready` faria a recusa chegar no último clique — o defeito da #792',
+    );
+    assert.notEqual(
+      line(r, 'ja-foi').status,
+      'not-approved',
+      'mandaria o operador aprovar um título que já está aprovado e já foi ao banco',
+    );
+    assert.equal(r.value.transmittedCount, 1);
+    assert.equal(r.value.notApprovedCount, 0, 'o balde de não-aprovado não absorve o transmitido');
+  });
+
+  // O contraste que impede alguém de "simplificar" fundindo as duas checagens: o título transmitido
+  // não entra no lote, e o aprovado ao lado dele continua entrando normalmente.
+  it('o transmitido fica fora do lote, e não contamina o título que pode ir', async () => {
+    const rows = [
+      row({ payableId: 'ja-foi', status: 'Transmitted', payee: BANK_ACCOUNT_ONLY }),
+      row({ payableId: 'pode-ir', status: 'Approved', payee: BANK_ACCOUNT_ONLY }),
+    ];
+    const r = await runPreview({ preview: reader(rows) })({
+      payableIds: ['ja-foi', 'pode-ir'],
+    });
+    assert.ok(isOk(r));
+
+    assert.equal(line(r, 'pode-ir').status, 'ready');
+    assert.equal(r.value.readyCount, 1);
+    assert.equal(
+      r.value.readyTotalCents,
+      line(r, 'pode-ir').valueCents,
+      'o valor do transmitido não entra no total do que seria enviado',
+    );
+    // `route` nulo pelo mesmo motivo do não-aprovado: a rota não importa para quem já foi.
+    assert.equal(line(r, 'ja-foi').route, null);
+  });
+
   it('seleção vazia devolve pré-voo vazio, não erro', async () => {
     const r = await runPreview({ preview: reader([]) })({ payableIds: [] });
     assert.ok(isOk(r));

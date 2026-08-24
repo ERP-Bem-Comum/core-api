@@ -592,6 +592,7 @@ export const remittancePreviewToDto = (
   outOfVanCount: preview.outOfVanCount,
   notFoundCount: preview.notFoundCount,
   notApprovedCount: preview.notApprovedCount,
+  transmittedCount: preview.transmittedCount,
   readyTotalCents: String(preview.readyTotalCents),
   blockedTotalCents: String(preview.blockedTotalCents),
   batches: preview.batches.map((b) => ({

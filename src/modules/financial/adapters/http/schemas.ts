@@ -1451,7 +1451,17 @@ export const remittancePreviewResponseSchema = z
           // `not-found` é status de linha, não erro da chamada: o id que o operador selecionou tem
           // de aparecer na resposta, ainda que o título não exista mais. `not-approved` (#736) é
           // distinto de `blocked`: falta aprovar, não falta dado do cadastro.
-          status: z.enum(['ready', 'blocked', 'out-of-van', 'not-found', 'not-approved']),
+          // `transmitted` (#792, ADR-0065 §5): o título já saiu numa remessa. Nunca `ready` — a
+          // recusa deixaria de chegar no último clique — e nunca `not-approved`, que mandaria o
+          // operador aprovar o que já foi ao banco.
+          status: z.enum([
+            'ready',
+            'blocked',
+            'out-of-van',
+            'not-found',
+            'not-approved',
+            'transmitted',
+          ]),
           route: z.enum(['pix', 'transfer', 'billet', 'tax-guide']).nullable(),
           missing: z.array(payoutGapSchema.shape.field),
           gaps: z.array(payoutGapSchema),
@@ -1465,6 +1475,7 @@ export const remittancePreviewResponseSchema = z
     outOfVanCount: z.number().int().nonnegative(),
     notFoundCount: z.number().int().nonnegative(),
     notApprovedCount: z.number().int().nonnegative(),
+    transmittedCount: z.number().int().nonnegative(),
     readyTotalCents: centsStringSchema,
     // O valor fora da VAN fica FORA dos dois totais: somá-lo ao impedido inflaria o número que o
     // operador usa para decidir se vale correr atrás do cadastro — e cadastro nenhum resolve câmbio.
