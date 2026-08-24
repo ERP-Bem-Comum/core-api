@@ -9,13 +9,13 @@
 
 | Estado | Quantas | Quem destrava |
 | :--- | ---: | :--- |
-| `open` | 4 | quem trabalha nela |
+| `open` | 6 | quem trabalha nela |
 | `blocked` | 5 | terceiro (banca, upstream, P.O.) |
 | `decided` | 17 | ninguém — fechada |
 | `deferred` | 3 | o gatilho declarado |
 | `superseded` | 1 | — |
 
-Total: **30**.
+Total: **32**.
 
 ---
 
@@ -27,6 +27,8 @@ Total: **30**.
 | [0027](./0027-teses-orfas-de-branches-contaminadas.md) | Teses órfãs — o que 7 branches contaminadas tentavam provar | 2026-08-06 |  |
 | [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) | O EDD da P.O. (M1–M4 + relatórios Nibo) — o que sobrevive à verificação | 2026-08-06 |  |
 | [0030](./0030-deadman-switch-nunca-vigiou.md) | O dead-man's switch que nunca vigiou — o ADR-0042 sai do código sem ser superado | 2026-08-17 |  |
+| [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) | A reserva que trava o vão antes do registro — deadlock 1213 na emissão concorrente de remessa | 2026-08-21 |  |
+| [0032](./0032-titulo-remetido-fronteira-do-agregado.md) | Título remetido pertence ao documento? — a fronteira de agregado por trás do deadlock | 2026-08-23 |  |
 
 ---
 

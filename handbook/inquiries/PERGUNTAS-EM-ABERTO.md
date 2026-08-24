@@ -11,8 +11,8 @@
 
 <!-- BEGIN:generated -->
 
-- **Inquiries cobertas:** 9 de 30 — [0011](./0011-auditoria-fiscal-cross-periodo.md) · [0012](./0012-bff-managed-api-gateway-vs-fastify.md) · [0014](./0014-schema-legado-vs-modelo-alvo.md) · [0015](./0015-charset-drizzle-roadmap.md) · [0019](./0019-hard-delete-tripwire-sem-superficie.md) · [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0027](./0027-teses-orfas-de-branches-contaminadas.md) · [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) · [0030](./0030-deadman-switch-nunca-vigiou.md)
-- **Total de perguntas em aberto:** **49**
+- **Inquiries cobertas:** 11 de 32 — [0011](./0011-auditoria-fiscal-cross-periodo.md) · [0012](./0012-bff-managed-api-gateway-vs-fastify.md) · [0014](./0014-schema-legado-vs-modelo-alvo.md) · [0015](./0015-charset-drizzle-roadmap.md) · [0019](./0019-hard-delete-tripwire-sem-superficie.md) · [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0027](./0027-teses-orfas-de-branches-contaminadas.md) · [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) · [0030](./0030-deadman-switch-nunca-vigiou.md) · [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) · [0032](./0032-titulo-remetido-fronteira-do-agregado.md)
+- **Total de perguntas em aberto:** **53**
 
 As demais 21 estão `decided` (17), `deferred` (3, com gatilho declarado) ou `superseded` (1) — nenhuma
 espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
@@ -34,6 +34,8 @@ espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
 | [0027](#inquiry-0027--teses-órfãs-de-branches-contaminadas) | `open` | Dono do repo — escolher o que vira trabalho | Descarte das 7 branches; 2 ADRs novos; ticket de auto-expire | 6 |
 | [0028](#inquiry-0028--o-edd-da-po-m1m4--relatórios-nibo) | `open` | P.O./consultoria + spikes do TL | Escopo comercial (~470h dev + ~350h do bundle P0); M1 e M4 | 7 |
 | [0030](#inquiry-0030--o-dead-mans-switch-que-nunca-vigiou) | `open` | Ninguém — falta desenho, não decisão | Supersede do [ADR-0042](../architecture/adr/0042-deadman-switch-redundant.md); detecção de job morto segue descoberta | 2 |
+| [0031](#inquiry-0031--deadlock-na-reserva-atômica-de-remessa) | `open` | **Nada — o gatilho de fechamento está cumprido.** Falta decidir se vira `decided` | PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814); a proteção contra dupla emissão da [#789](https://github.com/ERP-Bem-Comum/core-api/issues/789) não entra em produção; piloto VAN (#756) | 0 |
+| [0032](#inquiry-0032--título-remetido-pertence-ao-documento) | `open` | P.O. — a forma da recusa na tela; as 4 saídas já estão decididas | ADR novo sobre a fronteira `Document`↔`Payable`; a Fatia B do ajuste de nota, cuja decisão de base era esperar o merge do PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814) — premissa vencida, ele já está integrado; a `.claude/rules/domain.md`, que passa a mentir sobre o código assim que a S1 entrar | 4 |
 
 ---
 
@@ -263,6 +265,100 @@ decidimos parar de manter um mecanismo que nunca detectou. O ponto cego fica des
 > _(A §5 da inquiry pede explicitamente para reabrir a rejeição de SaaS de heartbeat: o ADR-0042 a
 > descartou pesando controle, custo e privacidade contra um custo de construção que se assumiu pagável — e
 > que, medido agora, nunca foi pago.)_
+
+---
+
+## Inquiry-0031 — Deadlock na reserva atômica de remessa
+
+> **Origem:** [`0031-deadlock-na-reserva-atomica-de-remessa.md`](./0031-deadlock-na-reserva-atomica-de-remessa.md) §4 e §6
+> **Aberta em:** 2026-08-21 · **Destinatário:** Gabriel — não espera resposta de terceiro, espera **escolha** entre quatro alternativas já medidas
+> **Por que importa:** a reserva do PR #814 fecha a janela TOCTOU da #789 (mesmo título em duas remessas =
+> pagamento em dobro), mas duas emissões concorrentes entram em **deadlock 1213** — medido em **20/20
+> rodadas** contra MySQL 8.4.11 real. A causa é o `SELECT … FROM fin_remittances WHERE id = ? FOR UPDATE`
+> do ramo de criação, que busca uma linha **inexistente** e por isso trava o **vão** (gap lock) em vez do
+> registro; o `INSERT` da concorrente precisa de _insert-intention_, que conflita com esse vão. O código do
+> gap lock é **pré-existente** — o PR só alongou a espera entre pegá-lo e chegar ao INSERT. Comportamento é
+> **fail-safe** (nenhuma gravação dupla em 35 rodadas), mas o operador recebe "banco indisponível" em vez de
+> "o título já está em outra remessa", e emissão legítima morre por ruído de concorrência.
+
+**Bloqueador para fechar: nenhum.** O gatilho declarado no cabeçalho da inquiry era *"existir decisão
+sobre qual das quatro alternativas adotar, com o efeito colateral do braço escolhido medido"* — e as duas
+partes estão cumpridas desde 24/08: braço **A** decidido e aplicado, verificado com contrafactual (40
+rodadas, 0 deadlocks), efeito colateral medido no ramo de update (sem ciclo novo; custo só de cauda) e a
+rota contra o hard replace refutada. **Todas as caixas fechadas.**
+
+⚠️ **Uma inquiry `open` com zero perguntas é uma contradição a resolver, não um estado.** O que falta é a
+decisão editorial de promovê-la a `decided` — e as duas lacunas que restam pertencem a outros lugares: o
+`delete()` com `CASCADE` (não medido, rota distinta) e a classificação do `1451`, que já é a `S3` da
+[0032](#inquiry-0032--título-remetido-pertence-ao-documento).
+
+- [x] **D1.** ~~Escolher entre as quatro alternativas da §4.3~~ — **braço A** (inverter a ordem de
+      aquisição), decidido e aplicado em 2026-08-23 na branch `chore/integra-frentes-abertas`: o
+      `FOR UPDATE` sobre `fin_payables` subiu para o topo da transação do `save`, antes da busca em
+      `fin_remittances`. **Verificado em 2026-08-24** contra MySQL 8.4.11 real: 40 rodadas, **0
+      deadlocks**, 40/40 perdedoras com o erro de negócio — e o contrafactual (só a ordem desfeita)
+      deadlockando no mesmo instrumento, que é o que autoriza ler o zero como correção.
+- [x] **D2.** ~~Medir o efeito colateral do braço (A)/(B)~~ — **medido em 2026-08-24**. O ramo de
+      **update** travando `fin_payables` não cria deadlock novo, não gera lock-wait e não bloqueia o
+      INSERT de um título novo (20/20 passaram). O custo é de **cauda**: mediana igual (119ms vs
+      103ms), pior caso ~3× (428ms vs 140ms) — com N=20, ordem de grandeza, não número fino. A razão
+      é o modo do lock: `X,REC_NOT_GAP` sobre os registros pedidos, sem gap com que a
+      insert-intention da concorrente pudesse conflitar.
+- [x] **D5.** ~~Medir o `save` de update × hard replace do documento~~ — **medido em 24/08 e
+      REFUTADO**. 0 deadlocks em 20 rodadas, controle positivo em 6/6 na mesma bancada, e o
+      contrafactual `pre` (sem lock algum em `fin_payables` no update) dando resultado idêntico: o
+      braço A não mudou nada neste caminho. O ramo de update só faz `UPDATE fin_remittances` e nunca
+      insere em `fin_remittance_payables`, logo nunca pede lock em `fin_documents` — sem essa aresta
+      não há ciclo. **O ciclo é privativo do ramo de criação**, e o efeito colateral do braço A está
+      medido até o fim.
+- [x] **D3.** ~~Reforçar o teste `a emissão que perde a corrida não deixa rastro algum`~~ — a cegueira
+      foi **confirmada** (verde em 8 de 8 rodadas com deadlock acontecendo), mas o remédio já existia:
+      o irmão `duas emissões do mesmo título: exatamente uma grava, a outra perde com nome próprio`
+      exige o erro nominal e ficou **vermelho nas mesmas 8**. Em vez de teste novo, os dois ganharam
+      a anotação de que **não são duplicata** — um fixa atomicidade, o outro fixa o desfecho.
+- [x] **D4.** ~~Corrigir as duas afirmações falsas no comentário de `remittance-repository.drizzle.ts`~~ —
+      **feito em 2026-08-23**, na branch `chore/integra-frentes-abertas`. O comentário agora diz que a
+      citação do Refman §17.7.3 só vale porque **aqui** o registro é encontrado, atribui o deadlock ao gap
+      do passo 1 (id inexistente) e troca a promessa sobre o plano de execução pelo que foi medido:
+      `fin_payables_status_idx`, `supremum + 3 registros` com next-key.
+
+> _(As duas afirmações erradas citavam o Refman **corretamente**. O erro foi aplicar a passagem certa ao
+> ramo errado — e ambas foram "verificadas" por leitura, nunca por medição. Ver §3.6 e §3.8.)_
+
+---
+
+## Inquiry-0032 — Título remetido pertence ao documento?
+
+> **Origem:** [`0032-titulo-remetido-fronteira-do-agregado.md`](./0032-titulo-remetido-fronteira-do-agregado.md) §5 e §6
+> **Aberta em:** 2026-08-23 · **Destinatário:** P.O. (decisão de produto, pendente) e Gabriel (execução das saídas decididas)
+> **Por que importa:** um título já enviado ao banco não pode ser apagado por um `save` do documento — e a
+> recusa precisa **dizer ao operador o quê e por quê**, não devolver erro genérico. A decisão de produto
+> registrada é parcial ("deixe explicado no ERRO que lançarmos que é recusa e por quê; no front a P.O.
+> poderá nos corrigir"), e a segunda pergunta — o que o operador deveria ver ao corrigir uma nota cujo
+> título já foi remetido — segue sem resposta da P.O.
+
+**Bloqueador para fechar:** as quatro saídas abaixo já estão **decididas** e esperam execução, não decisão.
+O que ainda espera terceiro é a forma da recusa na tela. A decisão de base de 23/08 — a Fatia B esperar o
+merge do PR #814, para não resolver conflito à mão na região onde a ordem dos locks se decide — **deixa de
+valer nesta branch**, onde o #814 já está integrado.
+
+- [ ] **S1.** Converter `DocumentError` inteiro para tagged error (invariante carrega evidência; validação
+      simples fica nulária). Custo medido: **4** comparações por string — `generate-remittance.ts:85` e
+      `bulk-update-due-date.ts:38,39,40`. ⚠️ Não converter pontualmente: string e objeto na mesma union
+      forçam `typeof e === 'string'` em todo consumidor e quebram o exhaustive switch.
+- [ ] **S2.** Atualizar `.claude/rules/domain.md` — ela prescreve string literal union e passaria a mentir
+      sobre o código. Não é ADR, pode ser atualizada; mas deliberadamente, não como efeito colateral.
+- [ ] **S3.** Classificar `1451` em `driver-error.ts` — o destino é o erro de recusa **com payload**, não um
+      503 genérico. **Medido em 24/08:** chamando o repositório direto, o hard replace de documento com
+      título em remessa viva falha `1451` **10 de 10 sem concorrência alguma** — é estado, não corrida.
+      `driver-error.ts` declara `1213` e `1062`, não `1451` (conferido). ⚠️ O caminho HTTP **está
+      guardado** (`adjust-document.ts:246` consulta e o domínio recusa com nome próprio), então o que
+      resta é a janela entre a guarda, que roda FORA da transação, e o `DELETE`: se uma remessa nascer
+      sobre aquele título nesse intervalo, o operador recebe `document-repository-failure` genérico
+      existindo uma recusa nomeada a dois passos. **Severidade: média, latente — perde-se a mensagem,
+      nunca o dado.**
+- [ ] **S4.** `withDeadlockRetry` no `remittance-repository` — rede, não correção. ⚠️ A política atual é
+      `maxAttempts: 3` **sem jitter**: duas transações que colidiram no mesmo instante voltam juntas.
 
 ---
 

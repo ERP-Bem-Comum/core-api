@@ -71,7 +71,7 @@ export const generateRemittance =
 
     // 1. Quem já está preso. A pergunta vai ao BANCO porque outra instância pode ter enfileirado o
     // mesmo título há segundos — e incluir de novo é pagar duas vezes.
-    const held = await deps.remittances.findHeldPayableIds(input.payableIds);
+    const held = await deps.remittances.findHeldPayables(input.payableIds);
     if (!held.ok) return err('remittance-persist-failed');
     if (held.value.length > 0) return err('remittance-payables-already-held');
 
@@ -203,8 +203,23 @@ export const generateRemittance =
     //
     // Nesta ordem, o pior caso é uma remessa `Queued` sem arquivo: visível, recuperável, e já
     // prendendo os documentos. Erra-se para menos, como no resto do fluxo.
+    // A reserva acontece DENTRO desta gravação (#789), e é aqui que a corrida se decide. A consulta
+    // do passo 1 continua valendo — ela recusa cedo, antes de queimar NSA e montar arquivo, e é o
+    // que dá ao operador uma resposta rápida no caso comum. O que ela não pode fazer é ser a única
+    // barreira: entre ela e esta linha coube a tradução CNAB inteira.
+    //
+    // Perder a corrida devolve o MESMO erro da recusa antecipada, e de propósito: para quem opera, o
+    // fato é um só — o título já está em outra remessa. Que a descoberta tenha vindo de uma consulta
+    // ou de um lock é detalhe de implementação, e inventar um segundo nome faria a tela ter de
+    // explicar uma diferença que não muda a ação de ninguém.
     const persisted = await deps.remittances.save(remittance.value);
-    if (!persisted.ok) return err('remittance-persist-failed');
+    if (!persisted.ok) {
+      return err(
+        persisted.error === 'remittance-payables-already-held'
+          ? 'remittance-payables-already-held'
+          : 'remittance-persist-failed',
+      );
+    }
 
     const uploaded = await deps.storage.putRemittance(
       translated.value.fileName,

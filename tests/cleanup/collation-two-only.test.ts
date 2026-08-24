@@ -27,6 +27,15 @@
  *
  * Lentidão sem erro, longe da causa, e que cresce com o volume.
  *
+ * ⚠️ **O full scan não é incondicional — depende de QUAL lado tem o índice** (remedido em
+ * 24/08/2026, 20.000 linhas por tabela, `ANALYZE TABLE` antes: `EXPLAIN` sobre fixture pequena não
+ * responde pergunta de plano). A collation vencedora é a `bin`, e um índice declarado NELA segue
+ * utilizável: com o lado `bin` indexado, o mesmo `bin↔ci` casou por `eq_ref` e não degradou. O
+ * `ALL` da tabela acima aparece quando o índice de que o plano precisaria está do lado que PERDE —
+ * aí ele é inservível e sobra "Range checked for each record", contra `ref` no braço de controle.
+ * Prognóstico exato: **full scan do lado cuja collation perde**, não full scan sempre. Não muda o
+ * veredito (segue mudo, segue caro), muda o que procurar no `EXPLAIN`.
+ *
  * **O segundo par é o que uma TERCEIRA collation produz, e ele é RUIDOSO** — é a razão de este
  * gate existir. A [#808](https://github.com/ERP-Bem-Comum/core-api/issues/808) colheu
  * `1267 ER_CANT_AGGREGATE_2COLLATIONS` num `=` de backfill entre `utf8mb4_0900_ai_ci` e
@@ -53,6 +62,18 @@
  *  1. **250 de 439** colunas de texto NÃO declaram `COLLATE` e herdam o default da tabela (remedido
  *     em 24/08/2026; a pesquisa original lia 293 de 428). Um gate de "collation explícita por
  *     coluna" nasceria com 250 violações — é projeto de migração, não gate.
+ *
+ *     ⚠️ **Contagem de DDL e contagem de banco não são o mesmo recorte, e confundi-las já custou
+ *     caro.** Este item conta o DDL das migrations, que é histórico: coluna criada e depois
+ *     removida por migration posterior ainda conta. Sobre o schema APLICADO,
+ *     `information_schema` devolve 433 colunas de texto — 251 `unicode_ci`, 182 `bin`, zero
+ *     divergentes (medido em 24/08/2026, pré-#834). Os dois números estão certos e medem coisas
+ *     diferentes; o que não pode é um citar o outro como se fosse o mesmo. A armadilha pior é o
+ *     recorte do BANCO: o "174 `unicode_ci` / 114 `bin`" que circulou — e chegou à #808 como
+ *     tamanho da classe — saiu de um banco com **41 das 73 tabelas**, rotulado "schema completo".
+ *     Reproduz exato hoje, e mede outra coisa. Quem for medir confira
+ *     `SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE()` antes de
+ *     chamar o banco de completo.
  *  2. **A collation dependia de EDIÇÃO MANUAL da migration gerada — não depende mais (#636).** O
  *     `varchar()` do Drizzle não tem opção de collate, mas `customType` tem: `dataType()` é emitido
  *     VERBATIM no DDL. Os tipos de `src/shared/persistence/identifier-columns.ts` carregam o

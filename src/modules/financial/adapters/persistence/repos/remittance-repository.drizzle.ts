@@ -15,17 +15,35 @@ import type { RemittanceEvent } from '#src/modules/financial/domain/remittance/e
 import * as RemittanceId from '#src/modules/financial/domain/remittance/remittance-id.ts';
 import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
 import type {
+  HeldPayable,
   RemittanceRepository,
   RemittanceRepositoryError,
+  RemittanceSaveError,
 } from '#src/modules/financial/application/ports/remittance-repository.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
-import { finRemittances, finRemittancePayables } from '../schemas/mysql.ts';
+import { finRemittances, finRemittancePayables, finPayables } from '../schemas/mysql.ts';
 import { appendFinOutboxInTx } from './fin-outbox-helpers.ts';
 import type { FinRemittanceRow } from '../schemas/mysql.ts';
 
 const logRepo = (op: string, cause: unknown): void => {
   process.stderr.write(`[fin-remittance-repository] ${op} failed: ${String(cause)}\n`);
 };
+
+// Sentinela da reserva perdida (#789): o `catch` precisa distinguir "perdi a corrida" — desfecho
+// ESPERADO sob concorrência — de "o banco caiu", e faz isso por identidade (`===`), não por
+// mensagem, que refatoração muda sem avisar.
+//
+// Instância única e `Error` de verdade, por duas restrições que se somam: `@typescript-eslint/
+// only-throw-error` recusa lançar símbolo, e `class` é barrada neste repositório, então `instanceof`
+// de um tipo próprio está fora. Uma constante compartilhada resolve as duas.
+//
+// ⚠️ O `stack` dela aponta para a carga deste módulo, não para o ponto do `throw` — o preço de ser
+// singleton. É inofensivo porque ela nunca é logada nem propagada: o `catch` a intercepta e a
+// traduz. Se algum dia ela precisar viajar, troque por uma factory que crie o `Error` na hora.
+//
+// Sobrevive ao trajeto porque o driver relança o objeto original: `mysql2/session.js` roda o
+// ROLLBACK no `catch` e faz `throw err` do mesmo valor, sem empacotar.
+const PAYABLES_ALREADY_HELD = new Error('remittance-payables-already-held');
 
 // ─── Tradução de instante entre o domínio e a coluna `datetime` ──────────────────────────────────
 //
@@ -75,7 +93,15 @@ export const toIsoDateTime = (stored: string): string =>
 // Estados que PRENDEM o documento. `Discarded` fica de fora — é o único que devolve o documento
 // para a fila, e exige decisão humana. Espelha `holdsDocuments` do domínio; a lista está aqui
 // porque o filtro precisa ir para o SQL, não para a memória.
-const HOLDING: readonly RemittanceStatus[] = ['Queued', 'Transmitted', 'Failed'];
+//
+// ⚠️ `export` deliberado, e não é vazamento de detalhe: a invariante `PAY-01`
+// (`tests/modules/financial/adapters/persistence/remittance-repository.drizzle-mysql.test.ts`)
+// vigia o estado que esta lista define — nenhum título preso por duas remessas VIVAS —, e é a
+// última rede do #789 no dia em que o lock falhar. Uma cópia da lista no teste faria a rede
+// envelhecer em silêncio no primeiro status novo que entrasse aqui: ela seguiria verde vigiando
+// uma regra que deixou de ser esta. Quem acrescentar estado a `HOLDING` acrescenta à vigilância no
+// mesmo ato — que é a única forma de as duas não divergirem.
+export const HOLDING: readonly RemittanceStatus[] = ['Queued', 'Transmitted', 'Failed'];
 
 const toDomain = (
   row: Readonly<FinRemittanceRow>,
@@ -144,9 +170,59 @@ export const createDrizzleRemittanceRepository = (
     save: async (
       remittance: Remittance,
       events: readonly RemittanceEvent[] = [],
-    ): Promise<Result<void, RemittanceRepositoryError>> => {
+    ): Promise<Result<void, RemittanceSaveError>> => {
       try {
         await db.transaction(async (tx) => {
+          // ─── Ordem de aquisição: `fin_payables` ANTES de `fin_remittances` (0031, braço A) ───
+          //
+          // Não é preferência de estilo — é o que quebra um ciclo medido. A busca abaixo procura a
+          // remessa por um id que, na CRIAÇÃO, ainda não existe; busca que não encontra registro
+          // não tem o que travar e fica com o VÃO (gap lock no `supremum` da PK). Gap locks
+          // coexistem — *"can co-exist (…) do not conflict with each other"* (Refman 8.4 §17.7.1)
+          // —, então as duas emissões passavam por ali sem esperar; uma prendia o título que a
+          // outra queria, e o `INSERT` da que seguia precisava de insert-intention, que conflita
+          // com o gap da primeira. Ciclo fechado: deadlock 1213 em 20/20 rodadas contra MySQL
+          // 8.4.11 real (§3.2), com o operador lendo "banco indisponível" numa emissão legítima.
+          //
+          // Com UMA ordem global entre as duas tabelas não há ciclo: quem chega depois espera no
+          // título e só alcança o gap quando o primeiro já commitou. Medido: 0 deadlocks em 15
+          // rodadas (§4.2, braço C) — a causalidade que sustenta esta escolha.
+          //
+          // ⚠️ Trava também no ramo de UPDATE, onde reserva alguma é necessária: é o custo aceito
+          // do braço A, e o efeito sob carga NÃO foi medido (`D2` da 0031). Confirmar ou descartar
+          // uma remessa passa a travar os títulos dela por instantes. Travar não é recusar — a
+          // verificação de hold segue exclusiva da criação, como o port declara.
+          //
+          // ⚠️ Locking read, jamais `select` puro: um consistent read AQUI fixaria o snapshot da
+          // transação antes da corrida, e a releitura lá adiante voltaria a enxergar o estado
+          // anterior — as duas emissões gravariam de novo, em silêncio.
+          //
+          // Ordenar os ids não acrescenta nada — 28 deadlocks em 15 rodadas com `payableIds`
+          // ordenados (§4.2, braço B) —, e o motivo está no plano: esta busca vai pela PK, e o
+          // lock sai `X,REC_NOT_GAP` sobre exatamente os registros pedidos. Medido com
+          // `fin_payables` em 10.242 linhas (*"Covering index range scan (…) using PRIMARY"*,
+          // 2 locks de registro, nenhum gap) e confirmado no dump de deadlock com ~60 linhas, que
+          // acusa `index PRIMARY`.
+          //
+          // ⚠️ Só em fixture MÍNIMA (3 linhas) o otimizador prefere `fin_payables_status_idx`, que
+          // cobre `SELECT id` por carregar a PK, e aí o lock vira next-key sobre `supremum` mais
+          // registros que a query não pediu (§3.8). É medição de caso pequeno, não o comportamento
+          // fora dele — e a diferença importa: sem gap, a insert-intention da concorrente não tem
+          // com o que conflitar, que é por que o ramo de update não bloqueia INSERT de título novo
+          // (20/20 passaram, 0 deadlocks).
+          //
+          // O guard de lista vazia não é defensivo: `inArray` com `[]` é erro do builder, não
+          // predicado falso. Uma remessa sem títulos não existe no domínio, mas o ramo de update
+          // chega aqui com o agregado que o chamador montou.
+          const payableIds = remittance.payables.map((p) => p.payableId);
+          if (payableIds.length > 0) {
+            await tx
+              .select({ id: finPayables.id })
+              .from(finPayables)
+              .where(inArray(finPayables.id, payableIds))
+              .for('update');
+          }
+
           const existing = await tx
             .select({ id: finRemittances.id })
             .from(finRemittances)
@@ -154,6 +230,73 @@ export const createDrizzleRemittanceRepository = (
             .for('update');
 
           if (existing[0] === undefined) {
+            // ─── Reserva dos títulos (#789) ─────────────────────────────────────────────────
+            //
+            // `findHeldPayables`, no use case, responde sobre o PASSADO: entre a resposta dela e
+            // esta transação cabe a tradução CNAB inteira. Duas emissões concorrentes leem "livre"
+            // antes de qualquer uma gravar, e ambas gravam — o mesmo título em duas remessas, que é
+            // pagamento em dobro (CWE-367). A PK composta `(remittance_id, payable_id)` não recusa:
+            // remessas distintas são chaves distintas.
+            //
+            // A invariante é CONDICIONAL — "não estar em duas remessas VIVAS", com `Discarded`
+            // devolvendo o título — e o MySQL não tem índice parcial.
+            //
+            // ⚠️ Mas isso NÃO significa "nenhuma constraint é possível", como este comentário já
+            // afirmou. Exclusão condicional tem forma no MySQL: coluna gerada `STORED` com
+            // `CASE … ELSE NULL` mais `UNIQUE` — NULL não viola UNIQUE, então título em remessa
+            // morta não conflita. Medido em 8.4.11: a 2ª remessa viva sai com `1062`, as mortas
+            // entram em qualquer número, e sob concorrência **sem lock explícito nenhum**.
+            //
+            // A escolha pelo lock segue de pé, mas o motivo é CUSTO, não impossibilidade: a coluna
+            // gerada exige desnormalizar o status da remessa na tabela de vínculo, e como trigger é
+            // proibido (ADR-0020) a sincronia passa a depender do TS — trocar-se-ia uma corrida por
+            // um dever de consistência espalhado. Registrar isso importa porque uma justificativa
+            // falsa fecha a porta para quem, amanhã, precisar reabrir a decisão.
+            //
+            // O lock sobre `fin_payables` já foi adquirido no TOPO desta transação, antes da busca
+            // pela remessa — ver a ordem de aquisição lá, e por que ela é o que impede o ciclo.
+            // Aqui só se refaz, sob ele, a pergunta que o use case fez lá atrás.
+
+            // Agora sob lock: a pergunta que o use case fez lá atrás, refeita no mesmo ato da
+            // gravação. Quem chegou primeiro já gravou o vínculo e commitou; quem chega depois vê.
+            //
+            // ⚠️ E vê por um motivo que depende da ORDEM das leituras desta transação, não apenas
+            // do lock acima. Esta releitura NÃO trava nada — é *consistent read*, e sob REPEATABLE
+            // READ (o isolamento vigente, default do servidor) todos eles leem o snapshot fixado
+            // pelo PRIMEIRO deles: *"All consistent reads within the same transaction read the
+            // snapshot established by the first such read in that transaction"* (Refman 8.4
+            // §17.7.2.3). As duas leituras anteriores são `for('update')` — locking reads, que leem
+            // sempre a versão committed mais recente e por isso não são o "first such read" que fixa
+            // o snapshot. Logo o primeiro consistent read é ESTE, e ele só executa depois de a trava
+            // acima liberar, isto é, depois de o vencedor ter commitado.
+            //
+            // Para quem for mexer aqui: acrescentar QUALQUER `select` sem `for('update')` ANTES da
+            // trava fixa o snapshot cedo, e esta releitura volta a enxergar o estado anterior à
+            // corrida — as duas emissões gravam de novo, em silêncio. Uma leitura de auditoria, um
+            // `findById` reaproveitado dentro da `tx` ou uma checagem de conta bastam. Se algo
+            // precisar ser lido antes, leia com `for('update')`.
+            //
+            // Sob READ COMMITTED a premissa é dispensável — lá cada consistent read pega snapshot
+            // novo. Ou seja, a trava sobrevive à troca de isolamento (como o bloco acima afirma),
+            // mas por REPEATABLE READ ela depende também desta ordem. A rede mecânica é o teste
+            // `emissão concorrente — a janela TOCTOU (#789)`, que fica vermelho se isto quebrar.
+            const heldNow = await tx
+              .select({ payableId: finRemittancePayables.payableId })
+              .from(finRemittancePayables)
+              .innerJoin(finRemittances, eq(finRemittances.id, finRemittancePayables.remittanceId))
+              .where(
+                and(
+                  inArray(finRemittancePayables.payableId, payableIds),
+                  inArray(finRemittances.status, [...HOLDING]),
+                ),
+              );
+
+            // `throw` e não `return`: só a exceção desfaz a transação (o driver roda ROLLBACK no
+            // catch e relança). O `catch` externo o reconhece e devolve o `Result` nomeado — a
+            // convenção deste repositório, em vez do `tx.rollback()` do doc oficial, que não
+            // carregaria qual erro foi.
+            if (heldNow.length > 0) throw PAYABLES_ALREADY_HELD;
+
             // Criação: INSERT puro. Violação de UNIQUE (NSA por conta, nome de arquivo) LANÇA e
             // vira `Result` de erro no catch — que é o comportamento que se quer.
             await tx.insert(finRemittances).values({
@@ -204,6 +347,9 @@ export const createDrizzleRemittanceRepository = (
         });
         return ok(undefined);
       } catch (cause) {
+        // Perder a corrida é desfecho ESPERADO sob concorrência, não avaria: sai com nome próprio e
+        // sem poluir o stderr, para que o log siga significando "algo quebrou".
+        if (cause === PAYABLES_ALREADY_HELD) return err('remittance-payables-already-held');
         logRepo('save', cause);
         return err('remittance-repository-unavailable');
       }
@@ -261,14 +407,20 @@ export const createDrizzleRemittanceRepository = (
     // ⚠️ Pergunta por TÍTULO. Filtrar por documento prenderia os irmãos junto: com o pai numa
     // remessa viva, a retenção da mesma nota apareceria como presa e o operador não conseguiria
     // pagá-la — o oposto da premissa de que cada título tem ciclo de vida próprio.
-    findHeldPayableIds: async (
+    findHeldPayables: async (
       payableIds: readonly string[],
-    ): Promise<Result<readonly string[], RemittanceRepositoryError>> => {
+    ): Promise<Result<readonly HeldPayable[], RemittanceRepositoryError>> => {
       if (payableIds.length === 0) return ok([]);
 
       try {
+        // O `innerJoin` já existia para filtrar por status; `nsa` e `remittanceId` só entram na
+        // projeção. Nenhuma junção nova, nenhum índice a mais.
         const rows = await db
-          .select({ payableId: finRemittancePayables.payableId })
+          .select({
+            payableId: finRemittancePayables.payableId,
+            remittanceId: finRemittances.id,
+            nsa: finRemittances.nsa,
+          })
           .from(finRemittancePayables)
           .innerJoin(finRemittances, eq(finRemittances.id, finRemittancePayables.remittanceId))
           .where(
@@ -278,9 +430,13 @@ export const createDrizzleRemittanceRepository = (
             ),
           );
 
-        return ok([...new Set(rows.map((r) => r.payableId))].sort());
+        // Ordem estável por título: a resposta alimenta mensagem ao operador e assert de teste, e
+        // ordem de linha do MySQL sem `ORDER BY` não é contrato. A deduplicação de antes some de
+        // propósito — o mesmo título em duas remessas vivas é o defeito que #789 existe para
+        // detectar, e colapsar as linhas aqui o esconderia.
+        return ok([...rows].sort((a, b) => a.payableId.localeCompare(b.payableId)));
       } catch (cause) {
-        logRepo('findHeldPayableIds', cause);
+        logRepo('findHeldPayables', cause);
         return err('remittance-repository-unavailable');
       }
     },

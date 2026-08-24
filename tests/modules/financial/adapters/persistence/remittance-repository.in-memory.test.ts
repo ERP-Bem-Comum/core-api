@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test';
 import { strict as assert } from 'node:assert';
 
-import { isOk } from '#src/shared/index.ts';
+import { isErr, isOk } from '#src/shared/index.ts';
 import { createInMemoryRemittanceRepository } from '#src/modules/financial/adapters/persistence/repos/remittance-repository.in-memory.ts';
 import * as RemittanceId from '#src/modules/financial/domain/remittance/remittance-id.ts';
 import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
@@ -60,9 +60,21 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
     const repo = createInMemoryRemittanceRepository();
     await repo.save(build(['doc-1', 'doc-2']));
 
-    const held = await repo.findHeldPayableIds(['doc-1', 'doc-2', 'doc-3']);
+    const held = await repo.findHeldPayables(['doc-1', 'doc-2', 'doc-3']);
     assert.ok(isOk(held));
-    assert.deepEqual(held.value, ['doc-1', 'doc-2']);
+    assert.deepEqual(
+      held.value.map((h) => h.payableId),
+      ['doc-1', 'doc-2'],
+    );
+
+    // O vínculo carrega a remessa, não só o título: é o `nsa` que o operador reconhece na tela
+    // quando o ajuste é recusado. Asserir a PROPRIEDADE (todo vínculo aponta para uma remessa
+    // identificável) e não o valor literal — o `nsa` vem do `build`, e prendê-lo aqui faria o teste
+    // quebrar por mudança de fixture em vez de por mudança de comportamento.
+    for (const vinculo of held.value) {
+      assert.ok(vinculo.remittanceId.length > 0);
+      assert.ok(Number.isInteger(vinculo.nsa) && vinculo.nsa >= 1);
+    }
   });
 
   it('remessa transmitida continua prendendo', async () => {
@@ -72,7 +84,7 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
     assert.ok(isOk(t));
     await repo.save(t.value.remittance, t.value.events);
 
-    const held = await repo.findHeldPayableIds(['doc-1']);
+    const held = await repo.findHeldPayables(['doc-1']);
     assert.ok(isOk(held) && held.value.length === 1);
   });
 
@@ -83,7 +95,7 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
     assert.ok(isOk(f));
     await repo.save(f.value.remittance, f.value.events);
 
-    const held = await repo.findHeldPayableIds(['doc-1']);
+    const held = await repo.findHeldPayables(['doc-1']);
     assert.ok(isOk(held) && held.value.length === 1);
   });
 
@@ -99,15 +111,70 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
     assert.ok(isOk(d));
     await repo.save(d.value.remittance, d.value.events);
 
-    const held = await repo.findHeldPayableIds(['doc-1']);
+    const held = await repo.findHeldPayables(['doc-1']);
     assert.ok(isOk(held));
     assert.deepEqual(held.value, []);
   });
 
   it('lista vazia não consulta nada e devolve vazio', async () => {
     const repo = createInMemoryRemittanceRepository();
-    const held = await repo.findHeldPayableIds([]);
+    const held = await repo.findHeldPayables([]);
     assert.ok(isOk(held));
     assert.deepEqual(held.value, []);
+  });
+});
+
+// #789 — a trava anti-dupla-emissão não pode viver só na consulta do use case.
+//
+// `findHeldPayableIds` responde sobre o passado: entre a resposta dela e a gravação cabe a tradução
+// CNAB inteira, e duas emissões concorrentes leem "livre" antes de qualquer uma gravar. Quem fecha a
+// janela é o próprio `save`, que reconfere o hold no mesmo ato em que grava.
+//
+// O fake espelha a SEMÂNTICA, não o mecanismo: no adapter real a exclusão vem de lock de linha, aqui
+// de uma checagem síncrona. Um fake que aceitasse o que o banco recusa deixaria a suíte verde
+// descrevendo produção errado — que é o motivo de este describe existir.
+describe('RemittanceRepository (fake) — o save reconfere o hold (#789)', () => {
+  it('recusa criar remessa com título já preso por outra remessa viva', async () => {
+    const repo = createInMemoryRemittanceRepository();
+    await repo.save(build(['doc-1', 'doc-2']));
+
+    // A segunda emissão passou pela consulta antes da primeira gravar — é exatamente o cenário da
+    // corrida, encenado em sequência.
+    const segunda = await repo.save(build(['doc-2', 'doc-3']));
+    assert.equal(segunda.ok, false, 'esperava recusa: doc-2 já está preso');
+    assert.equal(isErr(segunda) ? segunda.error : null, 'remittance-payables-already-held');
+  });
+
+  // ⚠️ O caso que uma reconferência ingênua quebraria. Ao confirmar, mudar status ou descartar, a
+  // remessa encontra os PRÓPRIOS títulos presos — por ela mesma. Recusar aqui travaria o
+  // `confirmRemittance` e deixaria toda remessa transmitida sem desfecho.
+  it('permite atualizar uma remessa existente, cujos títulos ela mesma prende', async () => {
+    const repo = createInMemoryRemittanceRepository();
+    const rem = build(['doc-1']);
+    await repo.save(rem);
+
+    const t = confirmTransmitted(rem, '2026-08-11T14:05:00.000Z', 'ok');
+    assert.ok(isOk(t));
+    const atualizacao = await repo.save(t.value.remittance, t.value.events);
+    assert.equal(atualizacao.ok, true, 'atualização de desfecho não passa pela reserva');
+  });
+
+  it('libera o título depois que a remessa que o prendia foi descartada', async () => {
+    const repo = createInMemoryRemittanceRepository();
+    const primeira = build(['doc-1']);
+    await repo.save(primeira);
+
+    const f = markFailed(primeira, '2026-08-11T14:05:00.000Z', 'sem confirmacao');
+    assert.ok(isOk(f));
+    const d = discard(
+      f.value.remittance,
+      '2026-08-11T15:00:00.000Z',
+      'banco confirmou que nao saiu',
+    );
+    assert.ok(isOk(d));
+    await repo.save(d.value.remittance, d.value.events);
+
+    const segunda = await repo.save(build(['doc-1']));
+    assert.equal(segunda.ok, true, 'descarte devolve o título para a fila');
   });
 });

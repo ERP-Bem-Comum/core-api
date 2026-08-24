@@ -10,13 +10,17 @@
 import { describe, it, before, beforeEach, after } from 'node:test';
 import { strict as assert } from 'node:assert';
 import process from 'node:process';
-import { eq } from 'drizzle-orm';
+import { eq, inArray } from 'drizzle-orm';
 
-import { isOk } from '#src/shared/index.ts';
+import { isErr, isOk } from '#src/shared/index.ts';
 import { newUuid } from '#src/shared/utils/id.ts';
 import { openMysqlFinancial } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
 import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persistence/drivers/mysql-driver.ts';
-import { createDrizzleRemittanceRepository } from '#src/modules/financial/adapters/persistence/repos/remittance-repository.drizzle.ts';
+import {
+  createDrizzleRemittanceRepository,
+  HOLDING,
+  toMysqlDateTime,
+} from '#src/modules/financial/adapters/persistence/repos/remittance-repository.drizzle.ts';
 import * as RemittanceId from '#src/modules/financial/domain/remittance/remittance-id.ts';
 import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
 import {
@@ -155,6 +159,18 @@ if (!process.env['MYSQL_INTEGRATION']) {
       await handle?.close();
     });
 
+    // No escopo do describe PAI porque dois blocos irmãos o consultam — o do outbox transacional e o
+    // da corrida (#789), que precisa provar que a emissão perdedora não deixou nem evento.
+    const outboxRowsOf = async (remittanceId: string) =>
+      handle.db
+        .select({
+          eventType: finOutbox.eventType,
+          aggregateType: finOutbox.aggregateType,
+          payload: finOutbox.payload,
+        })
+        .from(finOutbox)
+        .where(eq(finOutbox.aggregateId, remittanceId));
+
     it('salva cabeçalho e vínculos, e recupera os títulos junto', async () => {
       const repo = createDrizzleRemittanceRepository(handle);
       const p1 = await seedPayable();
@@ -186,9 +202,19 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const livre = await seedPayable();
       await repo.save(build([preso]));
 
-      const held = await repo.findHeldPayableIds([preso.payableId, livre.payableId]);
+      const held = await repo.findHeldPayables([preso.payableId, livre.payableId]);
       assert.ok(isOk(held));
-      assert.deepEqual(held.value, [preso.payableId]);
+      assert.deepEqual(
+        held.value.map((h) => h.payableId),
+        [preso.payableId],
+      );
+
+      // Contra MySQL real: a projeção traz a remessa junto, e o `nsa` chega como INTEIRO — não como
+      // string. É o que o `int()` do schema promete, e o único lugar onde essa promessa é medida.
+      const vinculo = held.value[0];
+      assert.ok(vinculo !== undefined);
+      assert.equal(typeof vinculo.nsa, 'number');
+      assert.ok(Number.isInteger(vinculo.nsa));
     });
 
     it('falha prende; descarte libera', async () => {
@@ -201,7 +227,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       assert.ok(isOk(failed));
       await repo.save(failed.value.remittance, failed.value.events);
 
-      const aindaPreso = await repo.findHeldPayableIds([d.payableId]);
+      const aindaPreso = await repo.findHeldPayables([d.payableId]);
       assert.ok(isOk(aindaPreso) && aindaPreso.value.length === 1);
 
       const discarded = discard(
@@ -212,7 +238,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       assert.ok(isOk(discarded));
       await repo.save(discarded.value.remittance, discarded.value.events);
 
-      const liberado = await repo.findHeldPayableIds([d.payableId]);
+      const liberado = await repo.findHeldPayables([d.payableId]);
       assert.ok(isOk(liberado));
       assert.deepEqual(liberado.value, []);
     });
@@ -262,16 +288,6 @@ if (!process.env['MYSQL_INTEGRATION']) {
     // ADR-0015: o evento existe se e somente se o estado foi persistido. É o que o fake não pode
     // provar — só o banco real mostra que as duas escritas caem na MESMA transação.
     describe('outbox transacional', () => {
-      const outboxRowsOf = async (remittanceId: string) =>
-        handle.db
-          .select({
-            eventType: finOutbox.eventType,
-            aggregateType: finOutbox.aggregateType,
-            payload: finOutbox.payload,
-          })
-          .from(finOutbox)
-          .where(eq(finOutbox.aggregateId, remittanceId));
-
       it('grava RemittanceTransmitted no fin_outbox junto do desfecho', async () => {
         const repo = createDrizzleRemittanceRepository(handle);
         const rem = build([await seedPayable()]);
@@ -324,6 +340,182 @@ if (!process.env['MYSQL_INTEGRATION']) {
           await outboxRowsOf(colidente.id),
           [],
           'evento não pode sobreviver ao rollback do estado',
+        );
+      });
+    });
+
+    // #789 — a corrida de verdade, e a única prova que o fake NÃO pode dar.
+    //
+    // O que se mede aqui não é lógica: é o lock do InnoDB. `findHeldPayableIds` responde sobre o
+    // passado, e entre a resposta dela e a gravação cabe a tradução CNAB inteira — duas emissões
+    // concorrentes leem "livre" antes de qualquer uma gravar (CWE-367). Nenhuma constraint recusa,
+    // porque a PK é `(remittance_id, payable_id)` e remessas distintas são chaves distintas.
+    //
+    // Quem exclui é o `SELECT … FOR UPDATE` sobre `fin_payables` dentro da transação do `save`:
+    // busca por PK trava só o registro, sem gap, e X↔X conflita — a segunda transação ESPERA a
+    // primeira commitar e então enxerga o vínculo já gravado.
+    describe('emissão concorrente — a janela TOCTOU (#789)', () => {
+      it('duas emissões do mesmo título: exatamente uma grava, a outra perde com nome próprio', async () => {
+        const repo = createDrizzleRemittanceRepository(handle);
+        const disputado = await seedPayable();
+        const soDaPrimeira = await seedPayable();
+        const soDaSegunda = await seedPayable();
+
+        const a = build([disputado, soDaPrimeira]);
+        const b = build([disputado, soDaSegunda]);
+
+        // `Promise.all` e não `await` em sequência: as duas transações precisam estar ABERTAS ao
+        // mesmo tempo, em conexões distintas do pool (`poolLimit: 4`). Em sequência, a segunda já
+        // enxergaria o commit da primeira e o teste passaria sem exercitar lock algum — provando
+        // outra coisa.
+        const [ra, rb] = await Promise.all([repo.save(a), repo.save(b)]);
+
+        const vencedoras = [ra, rb].filter((r) => r.ok);
+        const perdedoras = [ra, rb].filter((r) => !r.ok);
+
+        assert.equal(vencedoras.length, 1, 'exatamente UMA emissão pode gravar');
+        assert.equal(perdedoras.length, 1);
+        assert.equal(
+          isErr(perdedoras[0]!) ? perdedoras[0]!.error : null,
+          'remittance-payables-already-held',
+          'a perdedora sai com o erro de negócio, nunca como falha de infraestrutura',
+        );
+
+        // O veredito do banco, não o do `Result`: o título disputado aparece UMA vez.
+        const vinculos = await handle.db
+          .select({ remittanceId: finRemittancePayables.remittanceId })
+          .from(finRemittancePayables)
+          .where(eq(finRemittancePayables.payableId, disputado.payableId));
+        assert.equal(vinculos.length, 1, 'o título disputado não pode estar em duas remessas');
+      });
+
+      // O CA2 da issue. Aqui ele é satisfeito por construção — reserva e gravação são a MESMA
+      // transação, então não existe janela entre "reservei" e "gravei" onde algo possa falhar
+      // deixando título preso por remessa inexistente. O teste fixa essa propriedade: se alguém
+      // separar as duas em transações distintas, isto fica vermelho.
+      //
+      // ⚠️ Este teste é CEGO para deadlock, e de propósito não foi mudado. Ele verifica
+      // `ra.ok !== rb.ok` e ausência de rastro — e um rollback por deadlock 1213 satisfaz as duas
+      // coisas, então ele fica VERDE enquanto o ciclo acontece (medido: 8 rodadas de 8, com a
+      // ordem de aquisição desfeita). Quem prova o mecanismo é o irmão logo acima, `duas emissões
+      // do mesmo título: exatamente uma grava, a outra perde com nome próprio`, que exige o erro
+      // NOMINAL e fica vermelho nas mesmas 8 rodadas.
+      //
+      // Os dois não são duplicata: este fixa a atomicidade (não sobra rastro), o irmão fixa o
+      // desfecho (a recusa tem nome de negócio, não de infraestrutura). Apagar o irmão por parecer
+      // redundante deixaria a suíte incapaz de distinguir "recusou" de "deadlockou".
+      it('a emissão que perde a corrida não deixa rastro algum', async () => {
+        const repo = createDrizzleRemittanceRepository(handle);
+        const disputado = await seedPayable();
+
+        const a = build([disputado]);
+        const b = build([disputado]);
+        const [ra, rb] = await Promise.all([repo.save(a), repo.save(b)]);
+
+        const perdedora = ra.ok ? b : a;
+        assert.equal(ra.ok !== rb.ok, true, 'uma vence e a outra perde');
+
+        const cabecalho = await handle.db
+          .select({ id: finRemittances.id })
+          .from(finRemittances)
+          .where(eq(finRemittances.id, perdedora.id));
+        assert.deepEqual(cabecalho, [], 'a remessa perdedora não pode ter cabeçalho gravado');
+        assert.deepEqual(
+          await outboxRowsOf(perdedora.id),
+          [],
+          'nem evento — o rollback leva a transação inteira',
+        );
+      });
+    });
+
+    // PAY-01 — a invariante do #789 vista do ESTADO, não do caminho.
+    //
+    // Os testes acima provam que o `save` recusa a segunda emissão. Este pergunta outra coisa: se,
+    // por qualquer via, o banco chegou a um estado em que um título está preso por duas remessas
+    // vivas. É a única rede que sobra no dia em que o lock falhar — e nenhuma constraint do MySQL a
+    // substitui, porque a invariante é CONDICIONAL (`Discarded` devolve o título) e índice parcial
+    // não existe neste dialeto.
+    describe('PAY-01 — invariante: nenhum título preso por duas remessas vivas', () => {
+      // A lista vem do ADAPTER, importada, e não copiada para cá.
+      //
+      // O acoplamento é o ponto: esta invariante vigia o estado que `HOLDING` define, e uma cópia
+      // ficaria verde vigiando a regra errada no primeiro status novo que entrasse lá. Como ela é a
+      // última rede do #789 — o que ela deixar passar, ninguém mais pega —, uma vigilância
+      // silenciosamente desatualizada é pior que a dependência de um `export`. Quem mexer em
+      // `HOLDING` mexe na vigilância no mesmo ato.
+      const titulosEmDuasRemessasVivas = async (): Promise<number> => {
+        const rows = await handle.db
+          .select({
+            payableId: finRemittancePayables.payableId,
+            remittanceId: finRemittancePayables.remittanceId,
+          })
+          .from(finRemittancePayables)
+          .innerJoin(finRemittances, eq(finRemittances.id, finRemittancePayables.remittanceId))
+          .where(inArray(finRemittances.status, [...HOLDING]));
+        // Conta REMESSAS DISTINTAS por título: a mesma dupla repetida na tabela de vínculo é outro
+        // defeito (e a PK composta já o impede), não este.
+        //
+        // O agrupamento acontece em memória, e é decisão consciente para banco de TESTE: traz as
+        // linhas e agrupa aqui. ⚠️ Se alguém apontar esta função para volume de produção, ela
+        // materializa todo o vínculo vivo — o equivalente com `GROUP BY … HAVING COUNT(DISTINCT …)`
+        // faz o mesmo trabalho no servidor e é o que deve ser usado lá.
+        const porTitulo = new Map<string, Set<string>>();
+        for (const r of rows) {
+          const atual = porTitulo.get(r.payableId) ?? new Set<string>();
+          atual.add(r.remittanceId);
+          porTitulo.set(r.payableId, atual);
+        }
+        return [...porTitulo.values()].filter((remessas) => remessas.size > 1).length;
+      };
+
+      it('o caminho normal não produz o estado proibido', async () => {
+        const disputado = await seedPayable();
+        const a = build([disputado]);
+        const b = build([disputado]);
+        const repo = createDrizzleRemittanceRepository(handle);
+
+        const [ra, rb] = await Promise.all([repo.save(a), repo.save(b)]);
+        assert.notEqual(ra.ok, rb.ok, 'exatamente uma das emissões deve gravar');
+        assert.equal(await titulosEmDuasRemessasVivas(), 0);
+      });
+
+      it('a invariante ACUSA o estado proibido (guarda contra verde por vacuidade)', async () => {
+        // Forjado por INSERT direto, contornando o `save` — de propósito: o `save` recusa, e é
+        // justamente essa recusa que este caso não pode usar. Sem plantar o defeito, um `0` não
+        // distingue "não aconteceu" de "a consulta não olha".
+        const disputado = await seedPayable();
+        const duas = [build([disputado]), build([disputado])];
+        for (const r of duas) {
+          await handle.db.insert(finRemittances).values({
+            id: r.id,
+            cedenteAccountId: r.cedenteAccountId,
+            nsa: r.nsa,
+            fileName: r.fileName,
+            contentHash: r.contentHash,
+            status: 'Queued',
+            // Convertido AQUI porque este INSERT pula o `save` — e com ele pula a conversão que o
+            // adapter faz antes de gravar. `build()` produz ISO de propósito (é o que
+            // `generateRemittance` gera de verdade), a coluna é `datetime` em `mode: 'string'`, e o
+            // Drizzle repassa a string crua: sem isto, `STRICT_ALL_TABLES` recusa com 1292.
+            //
+            // O comentário de `build()` acima documenta este mesmo tropeço na direção oposta — a
+            // fixture já esteve no formato do MySQL escrito à mão, e o teste passava contra banco
+            // real enquanto o `POST` falhava com 1292. Contornar o adapter é legítimo aqui (o `save`
+            // recusaria o estado que se quer plantar), mas o que ele fazia por nós vem junto.
+            generatedAt: toMysqlDateTime(r.generatedAt),
+          });
+          await handle.db.insert(finRemittancePayables).values({
+            remittanceId: r.id,
+            payableId: disputado.payableId,
+            documentId: disputado.documentId,
+            yourNumber: `${r.nsa}`.padStart(20, '0'),
+          });
+        }
+
+        assert.equal(
+          await titulosEmDuasRemessasVivas(),
+          1,
+          'a invariante não enxergou um título plantado em duas remessas vivas',
         );
       });
     });

@@ -82,8 +82,20 @@ const build = (id: string, nsa: number, generatedAt: string, documentIds: readon
   return r.value;
 };
 
+// ⚠️ Um título por remessa, sem compartilhamento — e isso é invariante, não arrumação.
+//
+// Até a #789 esta fixture semeava DOC_A em duas remessas vivas e DOC_B em outras duas, montando o
+// estado que a trava anti-dupla-emissão existe justamente para impedir: o mesmo título a caminho do
+// banco duas vezes. Passava porque o `save` aceitava tudo; com a reserva no `save`, o próprio setup
+// passou a ser recusado — que é o sinal correto.
+//
+// Nenhum destes casos precisava do compartilhamento: eles medem ordenação, paginação, contagem e
+// detalhe. O que a fixture precisa entregar é uma remessa com DOIS títulos (para `payableCount`), e
+// isso se faz com dois títulos PRÓPRIOS.
 const DOC_A = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const DOC_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const DOC_C = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const DOC_D = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 
 interface AppHandle {
   app: Awaited<ReturnType<typeof buildApp>>;
@@ -117,10 +129,10 @@ before(async () => {
   const repo = createInMemoryRemittanceRepository();
 
   await repo.save(build(REM_OLDEST, 1, '2026-08-11T14:00:00.000Z', [DOC_A]));
-  await repo.save(build(REM_MIDDLE, 2, '2026-08-12T14:00:00.000Z', [DOC_A, DOC_B]));
+  await repo.save(build(REM_MIDDLE, 2, '2026-08-12T14:00:00.000Z', [DOC_B, DOC_C]));
 
   // A mais recente é transmitida → carrega settledAt/detail (não-null no contrato).
-  const newest = build(REM_NEWEST, 3, '2026-08-13T14:00:00.000Z', [DOC_B]);
+  const newest = build(REM_NEWEST, 3, '2026-08-13T14:00:00.000Z', [DOC_D]);
   const transmitted = confirmTransmitted(newest, '2026-08-13T15:00:00.000Z', 'consta em BACKUP');
   assert.ok(isOk(transmitted));
   await repo.save(transmitted.value.remittance, transmitted.value.events);
@@ -235,7 +247,7 @@ describe('financial/http — GET /remittances/:id (#728) · detalhe', () => {
     const body = res.json() as DetailBody;
     assert.equal(body.remittanceId, REM_MIDDLE);
     assert.equal(body.payableCount, 2);
-    assert.deepEqual([...body.payableIds].sort(), [DOC_A, DOC_B].sort());
+    assert.deepEqual([...body.payableIds].sort(), [DOC_B, DOC_C].sort());
   });
 
   it('remessa inexistente → 404', async () => {
