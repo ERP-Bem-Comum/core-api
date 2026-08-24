@@ -433,6 +433,47 @@ describe('financial/http — POST /remittances (#720) · guarda do bypass (#634)
     assert.equal(res.statusCode, 503, res.body);
   });
 
+  /**
+   * ⚠️ O CONTRASTE que impede alguém de "corrigir a inconsistência" (#792, ADR-0065 §4).
+   *
+   * Ler as duas rotas lado a lado dá vontade de uniformizá-las: a geração recusa sob bypass, o
+   * descarte não. A assimetria é decisão do Gabriel (24/08) e tem razão de ser — **gerar enfileira
+   * pagamento no banco; descartar desfaz um registro nosso.** A geração precisa da guarda mecânica
+   * porque o efeito dela é irreversível do lado de lá da fronteira; o descarte precisa do oposto,
+   * porque é a operação de CORREÇÃO e tem de funcionar exatamente onde o ambiente está em bypass —
+   * que é como a demo roda.
+   *
+   * Copiar `refuseUnderRbacBypass` para o descarte deixaria o operador sem via de saída justo
+   * quando ele mais precisa dela: com títulos presos por uma remessa que não saiu. Este teste existe
+   * para que essa "correção" fique vermelha.
+   */
+  it('o DESCARTE responde sob bypass — a assimetria com a geração é deliberada', async () => {
+    // Mesma chamada, mesmo ambiente em bypass, resultado oposto ao da geração acima. O 404 (remessa
+    // inexistente) é suficiente e é o ponto: a requisição ATRAVESSOU as guardas e chegou ao use
+    // case. Se `refuseUnderRbacBypass` estivesse aqui, o desfecho seria 503 antes disso.
+    const res = await handle.app.inject({
+      method: 'POST',
+      url: `${URL}/11111111-1111-4111-8111-111111111111/discard`,
+      headers: bearer(GENERATOR),
+      payload: { reason: 'remessa presa; devolvendo os titulos' },
+    });
+
+    assert.notEqual(
+      res.statusCode,
+      503,
+      `a rota de descarte NÃO pode recusar sob bypass: ${res.body}`,
+    );
+    assert.equal(res.statusCode, 404, res.body);
+
+    // O envelope normaliza o 404 para o code genérico `not-found` — diferente do 503 da guarda de
+    // bypass logo acima, que preserva o slug próprio (`remittance-disabled-under-rbac-bypass`). A
+    // asserção que carrega o sentido deste teste é o **404 em vez de 503**: significa que a
+    // requisição atravessou as guardas e morreu no use case, por não achar a remessa. Se
+    // `refuseUnderRbacBypass` estivesse nesta rota, ela pararia antes, com 503.
+    const body = res.json() as { error: { code: string } };
+    assert.equal(body.error.code, 'not-found');
+  });
+
   // O pré-voo NÃO é afetado: ele não move dinheiro, e travá-lo tiraria do operador justamente a
   // ferramenta de diagnóstico enquanto o ambiente está em bypass.
   it('o pré-voo continua respondendo sob bypass', async () => {

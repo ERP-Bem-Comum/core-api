@@ -42,6 +42,21 @@ const CONFLICT_CODES: ReadonlySet<string> = new Set([
   // "não existe, nada a fazer", e aqui há o que fazer. E não é 5xx porque o envelope esconde o
   // código em 5xx, e este é justamente o código que precisa chegar a quem pediu.
   'remittance-file-prefix-drift',
+  // Descarte da remessa (#792, ADR-0065 §4). Os dois são conflito de ESTADO, não dado inválido:
+  //
+  //  - `requires-failure` — a remessa não está num estado descartável. Cobre a `Transmitted` (o
+  //    agente entregou; não há o que devolver) e a `Queued` COM arquivo no bucket — esta última é a
+  //    guarda que importa, porque o objeto em `saida/` é um pagamento que o agente ainda pode
+  //    transmitir, e devolver o título ali o liberaria para entrar noutra remessa enquanto a
+  //    primeira caminha para o banco.
+  //  - `requires-reason` — descartar sem motivo registrado. É 409 e não 422 porque o pedido está
+  //    bem-formado (o Zod já exigiu a string); o que falta é conteúdo de DECISÃO, e a operação
+  //    inteira existe para deixar rastro de quem liberou valor para nova transmissão.
+  'remittance-discard-requires-failure',
+  'remittance-discard-requires-reason',
+  // A remessa que o agente JÁ transmitiu não é descartável nem rebaixável — o desfecho positivo é o
+  // mais caro de perder, e a ordem de chegada dos objetos de status não é garantida.
+  'remittance-already-transmitted',
   // Conciliação: pré-condições de estado.
   'transaction-already-reconciled',
   'reconciliation-already-undone',
@@ -210,6 +225,15 @@ const SLUG_MESSAGES: Record<string, string> = {
     'Há título não aprovado na seleção. Só títulos aprovados podem entrar em remessa — confira o pré-voo.',
   // Acompanhamento de remessa (#728).
   'remittance-not-found': 'Remessa não encontrada.',
+  // Descarte (#792, ADR-0065 §4). As mensagens dizem O QUE FAZER, porque o operador tem ação em
+  // ambos os casos — e a primeira precisa explicar por que o sistema está recusando algo que parece
+  // razoável ("quero cancelar esta remessa que ainda não saiu").
+  'remittance-discard-requires-failure':
+    'Esta remessa não pode ser descartada agora. O arquivo ainda está no armazenamento da VAN e pode ser transmitido a qualquer momento — descartar liberaria os títulos para outra remessa enquanto o pagamento segue para o banco. Aguarde o desfecho do transporte.',
+  'remittance-discard-requires-reason':
+    'Informe o motivo do descarte. Descartar devolve os títulos para a fila, e o motivo é o que permite auditar depois por que um pagamento foi refeito.',
+  'remittance-already-transmitted':
+    'O agente já transmitiu esta remessa — ela não pode ser descartada. Confira o pagamento no site da instituição e, se algum título precisar sair da VAN, use a baixa manual.',
   'remittance-file-not-found':
     'O arquivo desta remessa não está no armazenamento da VAN — provavelmente é uma remessa antiga, já expurgada.',
   'remittance-file-prefix-drift':

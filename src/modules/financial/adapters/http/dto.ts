@@ -12,12 +12,14 @@ import * as Competencia from '../../domain/document/competencia.ts';
 import type { ParseDocumentOutput } from '../../application/use-cases/parse-document.ts';
 import type { RemittancePreview } from '../../application/use-cases/preview-remittance.ts';
 import type { GenerateRemittanceOutput } from '../../application/use-cases/generate-remittance.ts';
+import type { DiscardRemittanceOutput } from '../../application/use-cases/discard-remittance.ts';
 import type { Remittance } from '../../domain/remittance/types.ts';
 import { documentIdsOf, payableIdsOf } from '../../domain/remittance/remittance.ts';
 import type {
   ParseDocumentResponseDto,
   RemittancePreviewResponseDto,
   GenerateRemittanceResponseDto,
+  DiscardRemittanceResponseDto,
   RemittanceListResponseDto,
   RemittanceDetailResponseDto,
 } from './schemas.ts';
@@ -619,6 +621,21 @@ export const generatedRemittanceToDto = (
   nsa: out.nsa,
   totalCents: String(out.totalCents),
   lineCount: out.lineCount,
+});
+
+/**
+ * Serializa o resultado do descarte (#792, ADR-0065 §4).
+ *
+ * `releasedPayableIds` sai no corpo pelo mesmo motivo que o NSA sai no da geração: é o dado com que
+ * o operador continua o trabalho. Descartar não fecha nada — é o passo 3 de cinco (falha → confere o
+ * banco → **devolve o título** → paga no internet banking → baixa manual), e ele precisa saber quais
+ * títulos acabou de liberar para seguir aos dois últimos.
+ */
+export const discardedRemittanceToDto = (
+  out: DiscardRemittanceOutput,
+): DiscardRemittanceResponseDto => ({
+  remittanceId: out.remittanceId,
+  releasedPayableIds: [...out.releasedPayableIds],
 });
 
 /**

@@ -75,6 +75,7 @@ import { parseVanS3Env } from '../van/van-s3-config.ts';
 import { createBradescoMultipagTranslator } from '../cnab/bradesco-multipag-translator.ts';
 import { createRemittanceBatchPlanner } from '../cnab/batch-planner.ts';
 import { generateRemittance } from '../../application/use-cases/generate-remittance.ts';
+import { discardRemittance } from '../../application/use-cases/discard-remittance.ts';
 import { listRemittances } from '../../application/use-cases/list-remittances.ts';
 import { getRemittance } from '../../application/use-cases/get-remittance.ts';
 import { downloadRemittanceFile } from '../../application/use-cases/download-remittance-file.ts';
@@ -393,6 +394,7 @@ export type FinancialHttpDeps = Readonly<{
    * (ADR-0060), então esta é a única rota do módulo cuja chamada move dinheiro.
    */
   generateRemittance: ReturnType<typeof generateRemittance>;
+  discardRemittance: ReturnType<typeof discardRemittance>;
   /**
    * #728 · Acompanhamento — GET /financial/remittances (lista paginada) e
    * GET /financial/remittances/:id (detalhe). Read-only: leem o registro que o generate/worker já
@@ -1077,6 +1079,14 @@ const makeDeps = (pools: Pools, clock: Clock = ClockReal()): FinancialHttpDeps =
       now: () => clock.now(),
       newRemittanceId: RemittanceIdVo.generate,
       hashContent: sha256Hex,
+    }),
+    // O MESMO `vanStorage` da geração, e não é detalhe: o descarte decide olhando se o objeto está
+    // no bucket, então os dois têm de enxergar o mesmo armazenamento. Dois storages diferentes
+    // fariam o descarte concluir "não há arquivo" sobre um bucket em que ele está.
+    discardRemittance: discardRemittance({
+      remittances: pools.remittanceRepo,
+      storage: pools.vanStorage,
+      now: () => clock.now(),
     }),
     listRemittances: listRemittances({ remittances: pools.remittanceRepo }),
     getRemittance: getRemittance({ remittances: pools.remittanceRepo }),
