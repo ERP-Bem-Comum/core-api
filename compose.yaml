@@ -311,8 +311,9 @@ services:
       # ── Base URLs dos links de e-mail transacional (#331/#332) — as TRÊS obrigatórias em
       # produção (`shared/http/email-link-base-urls.ts`): boot falha em vez de enviar e-mail
       # com link quebrado. Presente exige URL absoluta http(s); relativa o SPA descarta.
-      # Produção já as declara fora deste arquivo (drift autorizado pelo runbook, §7); declarar
-      # aqui torna o taskdef gerado honesto (#842).
+      # Obrigatórias em produção e ausentes do taskdef até a #842 — declarar aqui torna o
+      # taskdef gerado honesto. O ambiente de homologação já as declara (ERP-INFRA
+      # platform/vps-qa/compose.yaml); produção não foi medida.
       AUTH_RESET_BASE_URL: '${AUTH_RESET_BASE_URL:-}'
       AUTH_ACTIVATION_BASE_URL: '${AUTH_ACTIVATION_BASE_URL:-}'
       PARTNERS_SELF_REGISTRATION_BASE_URL: '${PARTNERS_SELF_REGISTRATION_BASE_URL:-}'
