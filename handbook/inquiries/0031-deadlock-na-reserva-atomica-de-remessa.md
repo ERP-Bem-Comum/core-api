@@ -222,7 +222,7 @@ aquisição entre as duas tabelas elimina 100% dos deadlocks, e a suíte fica in
 
 | Alternativa | Prós | Contras | Veredito |
 | :--- | :--- | :--- | :--- |
-| **A** — inverter a ordem (travar `fin_payables` antes de `fin_remittances`) + reforçar o teste cego | 0 deadlocks em 15 rodadas, medido; ataca a causa; não remove proteção alguma; segue locking read, então a premissa do snapshot do passo 3 não é tocada | passa a travar `fin_payables` também no ramo de **update** — efeito colateral **não medido** | **PENDENTE** |
+| **A** — inverter a ordem (travar `fin_payables` antes de `fin_remittances`) + reforçar o teste cego | 0 deadlocks em 15 rodadas, medido; ataca a causa; não remove proteção alguma; segue locking read, então a premissa do snapshot do passo 3 não é tocada | passa a travar `fin_payables` também no ramo de **update** — efeito colateral **não medido** | **ADOTADO** (2026-08-23) |
 | **B** — inverter a ordem + `withDeadlockRetry` | defesa em profundidade; o helper já existe (`src/shared/persistence/retry-on-deadlock.ts`, criado pela #803) e o `document-repository.drizzle.ts:236` já o usa | mais superfície num PR já grande; risco de mascarar o próximo defeito de ordem | **PENDENTE** |
 | **C** — só `withDeadlockRetry`, sem mexer na ordem | menor diff; CI fica verde | trata o sintoma; o ciclo continua acontecendo a **cada** emissão concorrente (100%, não raro), e repetir a transação inteira é caro | **PENDENTE** |
 | **D** — redesenho: o hold vira **estado do próprio título**, não derivado por consulta à tabela de vínculo (sugerido na própria #789) | resolve corrida e regra de negócio pelo mesmo mecanismo; não depende de ordem de trava entre duas tabelas | redesenho; adia a proteção contra pagamento em dobro | **PENDENTE** |
@@ -239,18 +239,27 @@ e uma emissão legítima morrer por ruído de concorrência.
 
 ## 5. Decisão final
 
-**PENDENTE.** O diagnóstico está fechado com medição; a escolha entre as quatro alternativas da
-§4.3 não. Bloqueador declarado: decisão do Gabriel, que pediu para aprofundar a pesquisa antes de
-escolher.
+**Braço A — inverter a ordem de aquisição.** Decidido pelo Gabriel em 2026-08-23 e aplicado na
+branch `chore/integra-frentes-abertas`: o `FOR UPDATE` sobre `fin_payables` subiu para o topo da
+transação do `save`, antes da busca em `fin_remittances`. É o único braço com causalidade medida
+(§4.2, braço C: 0 deadlocks em 15 rodadas), e o único que ataca a causa em vez do sintoma.
 
-O PR #814 **não deve ser mergeado** enquanto isso — o veredito da revisão foi corrigido de
-`APPROVED` para `REJECTED` depois desta medição.
+O custo aceito é o do próprio braço: o ramo de **update** passa a travar `fin_payables`, ainda que
+não reserve nada. Travar não é recusar — a verificação de hold segue exclusiva da criação.
+
+⚠️ **A aplicação ainda não foi medida.** O experimento que sustenta esta escolha rodou numa cópia do
+código, não neste; e o teste que prova a corrida
+(`emissão concorrente — a janela TOCTOU (#789)`) exige `MYSQL_INTEGRATION=1` e **não roda** no gate
+padrão. O que passou aqui foram 222 testes in-memory, e fake algum exerce lock. Enquanto a suíte de
+integração não rodar contra MySQL real, o braço A está **aplicado, não verificado** — e o `D2`
+abaixo é justamente o que falta medir.
 
 ---
 
 ## 6. Saídas (outputs concretos)
 
-- [ ] Decidir entre A / B / C / D (§4.3) e aplicar no PR #814
+- [x] Decidir entre A / B / C / D (§4.3) e aplicar no PR #814 — **braço A**, aplicado em 2026-08-23
+      na branch `chore/integra-frentes-abertas` (ver §5)
 - [ ] Medir o efeito colateral do braço C sobre o ramo de **update** antes de adotá-lo
 - [ ] Reforçar `a emissão que perde a corrida não deixa rastro algum` para assertir o **erro
       nomeado** — hoje passa mesmo sob deadlock (§3.7)

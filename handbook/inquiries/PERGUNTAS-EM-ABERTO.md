@@ -12,7 +12,7 @@
 <!-- BEGIN:generated -->
 
 - **Inquiries cobertas:** 11 de 32 — [0011](./0011-auditoria-fiscal-cross-periodo.md) · [0012](./0012-bff-managed-api-gateway-vs-fastify.md) · [0014](./0014-schema-legado-vs-modelo-alvo.md) · [0015](./0015-charset-drizzle-roadmap.md) · [0019](./0019-hard-delete-tripwire-sem-superficie.md) · [0026](./0026-async-human-in-the-loop-and-drizzle-1-0.md) · [0027](./0027-teses-orfas-de-branches-contaminadas.md) · [0028](./0028-edd-da-po-melhorias-m1-m4-e-relatorios-nibo.md) · [0030](./0030-deadman-switch-nunca-vigiou.md) · [0031](./0031-deadlock-na-reserva-atomica-de-remessa.md) · [0032](./0032-titulo-remetido-fronteira-do-agregado.md)
-- **Total de perguntas em aberto:** **56**
+- **Total de perguntas em aberto:** **55**
 
 As demais 21 estão `decided` (17), `deferred` (3, com gatilho declarado) ou `superseded` (1) — nenhuma
 espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
@@ -34,7 +34,7 @@ espera resposta de alguém. Ver [`INDEX.md`](./INDEX.md).
 | [0027](#inquiry-0027--teses-órfãs-de-branches-contaminadas) | `open` | Dono do repo — escolher o que vira trabalho | Descarte das 7 branches; 2 ADRs novos; ticket de auto-expire | 6 |
 | [0028](#inquiry-0028--o-edd-da-po-m1m4--relatórios-nibo) | `open` | P.O./consultoria + spikes do TL | Escopo comercial (~470h dev + ~350h do bundle P0); M1 e M4 | 7 |
 | [0030](#inquiry-0030--o-dead-mans-switch-que-nunca-vigiou) | `open` | Ninguém — falta desenho, não decisão | Supersede do [ADR-0042](../architecture/adr/0042-deadman-switch-redundant.md); detecção de job morto segue descoberta | 2 |
-| [0031](#inquiry-0031--deadlock-na-reserva-atômica-de-remessa) | `open` | Gabriel — escolher entre 4 alternativas medidas | PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814); a proteção contra dupla emissão da [#789](https://github.com/ERP-Bem-Comum/core-api/issues/789) não entra em produção; piloto VAN (#756) | 3 |
+| [0031](#inquiry-0031--deadlock-na-reserva-atômica-de-remessa) | `open` | Gabriel — escolher entre 4 alternativas medidas | PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814); a proteção contra dupla emissão da [#789](https://github.com/ERP-Bem-Comum/core-api/issues/789) não entra em produção; piloto VAN (#756) | 2 |
 | [0032](#inquiry-0032--título-remetido-pertence-ao-documento) | `open` | P.O. — a forma da recusa na tela; as 4 saídas já estão decididas | ADR novo sobre a fronteira `Document`↔`Payable`; a Fatia B do ajuste de nota, cuja decisão de base era esperar o merge do PR [#814](https://github.com/ERP-Bem-Comum/core-api/pull/814) — premissa vencida, ele já está integrado; a `.claude/rules/domain.md`, que passa a mentir sobre o código assim que a S1 entrar | 4 |
 
 ---
@@ -286,11 +286,11 @@ fechado com medição, incluindo o experimento causal (travar `fin_payables` **a
 zerou os deadlocks: 0 em 15 rodadas). Falta **decidir** qual alternativa adotar, e medir o efeito colateral
 da escolhida. Enquanto isso o PR #814 fica aberto e a #789 segue desprotegida em produção.
 
-- [ ] **D1.** Escolher entre as quatro alternativas da §4.3 da inquiry: **(A)** inverter a ordem de
-      aquisição — único braço com 0 deadlocks medidos; **(B)** inverter + `withDeadlockRetry` (o helper da
-      #803 já existe e o `document-repository` já o usa); **(C)** só o retry, sem mexer na ordem — trata o
-      sintoma num caminho que é 100% reprodutível, não raro; **(D)** redesenho, com o hold virando estado do
-      próprio título, como a própria #789 sugeriu.
+- [x] **D1.** ~~Escolher entre as quatro alternativas da §4.3~~ — **braço A** (inverter a ordem de
+      aquisição), decidido e aplicado em 2026-08-23 na branch `chore/integra-frentes-abertas`: o
+      `FOR UPDATE` sobre `fin_payables` subiu para o topo da transação do `save`, antes da busca em
+      `fin_remittances`. ⚠️ **Aplicado, não verificado** — o teste que prova a corrida exige
+      `MYSQL_INTEGRATION=1` e não roda no gate padrão. Ver `D2`.
 - [ ] **D2.** Medir o efeito colateral do braço (A)/(B) **antes** de adotá-lo: inverter a ordem passa a
       travar `fin_payables` também no ramo de **update**, e isso não foi medido.
 - [ ] **D3.** Reforçar o teste `a emissão que perde a corrida não deixa rastro algum` para assertir o **erro

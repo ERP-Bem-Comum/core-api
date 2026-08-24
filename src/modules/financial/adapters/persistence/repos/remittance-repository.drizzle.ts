@@ -165,6 +165,49 @@ export const createDrizzleRemittanceRepository = (
     ): Promise<Result<void, RemittanceSaveError>> => {
       try {
         await db.transaction(async (tx) => {
+          // ─── Ordem de aquisição: `fin_payables` ANTES de `fin_remittances` (0031, braço A) ───
+          //
+          // Não é preferência de estilo — é o que quebra um ciclo medido. A busca abaixo procura a
+          // remessa por um id que, na CRIAÇÃO, ainda não existe; busca que não encontra registro
+          // não tem o que travar e fica com o VÃO (gap lock no `supremum` da PK). Gap locks
+          // coexistem — *"can co-exist (…) do not conflict with each other"* (Refman 8.4 §17.7.1)
+          // —, então as duas emissões passavam por ali sem esperar; uma prendia o título que a
+          // outra queria, e o `INSERT` da que seguia precisava de insert-intention, que conflita
+          // com o gap da primeira. Ciclo fechado: deadlock 1213 em 20/20 rodadas contra MySQL
+          // 8.4.11 real (§3.2), com o operador lendo "banco indisponível" numa emissão legítima.
+          //
+          // Com UMA ordem global entre as duas tabelas não há ciclo: quem chega depois espera no
+          // título e só alcança o gap quando o primeiro já commitou. Medido: 0 deadlocks em 15
+          // rodadas (§4.2, braço C) — a causalidade que sustenta esta escolha.
+          //
+          // ⚠️ Trava também no ramo de UPDATE, onde reserva alguma é necessária: é o custo aceito
+          // do braço A, e o efeito sob carga NÃO foi medido (`D2` da 0031). Confirmar ou descartar
+          // uma remessa passa a travar os títulos dela por instantes. Travar não é recusar — a
+          // verificação de hold segue exclusiva da criação, como o port declara.
+          //
+          // ⚠️ Locking read, jamais `select` puro: um consistent read AQUI fixaria o snapshot da
+          // transação antes da corrida, e a releitura lá adiante voltaria a enxergar o estado
+          // anterior — as duas emissões gravariam de novo, em silêncio.
+          //
+          // Ordenar os ids não acrescenta nada — 28 deadlocks em 15 rodadas com `payableIds`
+          // ordenados (§4.2, braço B) —, e não pelo motivo que este arquivo já afirmou: com DOIS
+          // ids o otimizador NÃO usa a PK, e sim `fin_payables_status_idx`, que cobre `SELECT id`
+          // por carregar a PK. Sob `FOR UPDATE` isso trava `supremum` + 3 registros como next-key
+          // (`lock_mode X` sem `REC_NOT_GAP`), inclusive títulos que a query não pediu (§3.8).
+          // Medido com a tabela em 3 linhas; com ela grande o otimizador pode preferir a PK.
+          //
+          // O guard de lista vazia não é defensivo: `inArray` com `[]` é erro do builder, não
+          // predicado falso. Uma remessa sem títulos não existe no domínio, mas o ramo de update
+          // chega aqui com o agregado que o chamador montou.
+          const payableIds = remittance.payables.map((p) => p.payableId);
+          if (payableIds.length > 0) {
+            await tx
+              .select({ id: finPayables.id })
+              .from(finPayables)
+              .where(inArray(finPayables.id, payableIds))
+              .for('update');
+          }
+
           const existing = await tx
             .select({ id: finRemittances.id })
             .from(finRemittances)
@@ -174,7 +217,7 @@ export const createDrizzleRemittanceRepository = (
           if (existing[0] === undefined) {
             // ─── Reserva dos títulos (#789) ─────────────────────────────────────────────────
             //
-            // `findHeldPayableIds`, no use case, responde sobre o PASSADO: entre a resposta dela e
+            // `findHeldPayables`, no use case, responde sobre o PASSADO: entre a resposta dela e
             // esta transação cabe a tradução CNAB inteira. Duas emissões concorrentes leem "livre"
             // antes de qualquer uma gravar, e ambas gravam — o mesmo título em duas remessas, que é
             // pagamento em dobro (CWE-367). A PK composta `(remittance_id, payable_id)` não recusa:
@@ -184,40 +227,9 @@ export const createDrizzleRemittanceRepository = (
             // remessas VIVAS", com `Discarded` devolvendo o título — e o MySQL não tem índice
             // parcial. Sem constraint possível, a exclusão tem de vir de lock.
             //
-            // ⚠️ O lock é sobre `fin_payables`, cujas linhas EXISTEM, e não sobre
-            // `fin_remittance_payables`, cujas linhas ainda não existem. Aqui a busca ENCONTRA o
-            // registro, e é só por isso que vale *"For a unique index with a unique search
-            // condition, InnoDB locks only the index record found, not the gap before it"*
-            // (Refman 8.4 §17.7.3): X↔X conflita, e a segunda transação espera NESTA query.
-            //
-            // ⚠️ Esperar aqui não é o desfecho da emissão concorrente. Ela termina em deadlock
-            // 1213 — medido em 20/20 rodadas contra MySQL 8.4.11 real (inquiry 0031 §3.2) — e a
-            // citação acima não cobre o motivo: o passo 1 desta mesma transação busca a remessa
-            // por um id que AINDA NÃO EXISTE, e sem registro encontrado sobra o gap. As duas
-            // emissões pegam gap lock no `supremum` de `fin_remittances.PRIMARY`, que coexistem
-            // (§17.7.1: *"can co-exist (…) do not conflict with each other"*); uma fica presa no
-            // título travado aqui, e o `INSERT` da outra precisa de insert-intention, que conflita
-            // com aquele gap. O gap lock é PRÉ-EXISTENTE: o que esta reserva acrescentou foi a
-            // espera longa entre pegá-lo e chegar ao INSERT. Travar `fin_payables` ANTES de
-            // `fin_remittances` zerou os deadlocks (0 em 15 rodadas, §4.2) — qual alternativa
-            // adotar é a decisão `D1`, ainda em aberto.
-            //
-            // Efeito colateral que importa: por não depender de gap, ESTA trava sobrevive a
-            // READ COMMITTED, que desliga gap locking. Uma proteção contra pagamento em dobro não
-            // pode depender de um parâmetro que alguém troca sem saber o que derruba.
-            //
-            // Ordenar os ids não adianta — 28 deadlocks em 15 rodadas com `payableIds` ordenados
-            // (§4.2, braço B) —, e não pelo motivo que este comentário afirmou antes: com DOIS ids
-            // o otimizador NÃO usa a PK, e sim `fin_payables_status_idx`, que cobre `SELECT id` por
-            // carregar a PK. Sob `FOR UPDATE` isso trava `supremum` + 3 registros como next-key
-            // (`lock_mode X` sem `REC_NOT_GAP`), inclusive títulos que a query não pediu (§3.8).
-            // Medido com a tabela em 3 linhas; com ela grande o otimizador pode preferir a PK.
-            const payableIds = remittance.payables.map((p) => p.payableId);
-            await tx
-              .select({ id: finPayables.id })
-              .from(finPayables)
-              .where(inArray(finPayables.id, payableIds))
-              .for('update');
+            // O lock sobre `fin_payables` já foi adquirido no TOPO desta transação, antes da busca
+            // pela remessa — ver a ordem de aquisição lá, e por que ela é o que impede o ciclo.
+            // Aqui só se refaz, sob ele, a pergunta que o use case fez lá atrás.
 
             // Agora sob lock: a pergunta que o use case fez lá atrás, refeita no mesmo ato da
             // gravação. Quem chegou primeiro já gravou o vínculo e commitou; quem chega depois vê.
