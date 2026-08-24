@@ -12,10 +12,18 @@
 // exatamente esse triângulo que uma collation TERCEIRA no schema cria — e é por isso que a lista de
 // aceitos aqui tem dois valores, não um.
 //
-// O tamanho da classe é o argumento: medido em 21/08/2026 contra o schema completo, **174** colunas
-// estão em `utf8mb4_unicode_ci` sem `COLLATE` escrito em lugar nenhum (herdam do servidor) e 114 em
-// `utf8mb4_bin` (declaradas pelo helper). Ou seja: a correção de 174 colunas depende de o servidor
-// estar configurado como `docker/mysql/conf.d/server.cnf` manda. Uma query responde se está.
+// O tamanho da classe é o argumento, e ele não depende do número exato: a maior parte das colunas
+// de texto do schema **não declara `COLLATE`** e herda a do servidor. Ou seja, a correção delas
+// depende de o servidor estar configurado como `docker/mysql/conf.d/server.cnf` manda — e é isso
+// que uma query responde e uma leitura de código não.
+//
+// ⚠️ **Divergência de medição, registrada e não resolvida.** Duas varreduras contra este schema não
+// batem: 21/08 contou **114** colunas em `utf8mb4_bin`; 24/08 contou **183** (excluídas as 5 que o
+// PR #834 acrescenta). A diferença é grande demais para ser diff de branch, então uma das duas tem
+// recorte ou defeito de contagem — provavelmente perder o que nasceu de `ALTER … ADD` em vez de
+// `CREATE TABLE`, que é subcontagem já vista duas vezes neste repositório. **Nenhuma asserção aqui
+// depende desses números**, deliberadamente: contagem em gate envelhece no próximo schema, e a
+// propriedade que esta invariante fixa — nada fora do par canônico — não muda com o tamanho.
 //
 // ⚠️ O QUE ESTA INVARIANTE **NÃO** PEGA, e é deliberado: coluna que *deveria* ser `utf8mb4_bin` e
 // ficou `utf8mb4_unicode_ci` passa verde aqui — os dois valores são aceitos. Esse é o defeito
