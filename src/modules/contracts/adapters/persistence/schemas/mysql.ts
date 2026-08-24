@@ -42,7 +42,6 @@
 import {
   bigint,
   boolean,
-  char,
   check,
   date,
   datetime,
@@ -449,11 +448,11 @@ export const ctrDocuments = mysqlTable(
     status: varchar('status', { length: 16 }).notNull().default('Active'),
     // CTR-USECASE-DELETE-DOCUMENT: campos audit de exclusao logica (RN-11).
     deletedAt: datetime('deleted_at', { mode: 'date', fsp: 3 }),
-    deletedBy: char('deleted_by', { length: 36 }),
+    deletedBy: uuidKeyFixed('deleted_by'),
     deletedReason: varchar('deleted_reason', { length: 500 }),
     // CTR-USECASE-SUPERSEDE-DOCUMENT: campos audit de substituicao (RN-AS-02).
     supersededAt: datetime('superseded_at', { mode: 'date', fsp: 3 }),
-    supersededBy: char('superseded_by', { length: 36 }),
+    supersededBy: uuidKeyFixed('superseded_by'),
     supersededByDocumentId: uuidKeyFixed('superseded_by_document_id'),
   },
   (t) => [
