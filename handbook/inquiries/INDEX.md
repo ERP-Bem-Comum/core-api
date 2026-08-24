@@ -15,7 +15,7 @@
 | `deferred` | 3 | o gatilho declarado |
 | `superseded` | 1 | — |
 
-Total: **30**.
+Total: **31**.
 
 ---
 
