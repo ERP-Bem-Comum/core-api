@@ -104,6 +104,9 @@ describe('decomposePayeeAccount — o que passa cabe no segmento A', () => {
           // P001 — exigida desde a #751. Aqui é fixture: o que este teste mede é a LARGURA dos
           // campos decompostos, não a escolha da câmara.
           clearingHouse: '018',
+          // P011 — exigida desde a #813, pela mesma razão e com o mesmo papel de fixture. `'00005'`
+          // acompanha a câmara de TED acima; quem decide o par forma↔finalidade é `tedPurposeFor`.
+          tedPurpose: '00005',
         });
         assert.ok(isOk(line), `segmento A recusou cadastro aprovado: ${agency} / ${accountNumber}`);
         assert.equal(line.value.length, 240);

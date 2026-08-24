@@ -70,6 +70,57 @@ const TED_LAUNCH_FORMS: ReadonlySet<string> = new Set(['03', '41', '43']);
 export const clearingHouseFor = (launchForm: string): string =>
   TED_LAUNCH_FORMS.has(launchForm) ? CLEARING_TED : CLEARING_NONE;
 
+// ─── Finalidade da TED (P011, Segmento A, colunas 220-224) ────────────────────────────────────
+//
+// Mesma disciplina da câmara, um elo adiante — e pela mesma razão: enquanto o campo foi opcional com
+// default de string vazia, TODA remessa saiu com as cinco posições em branco, TED inclusive. É o
+// arquivo que o Validador Universal recusou em 21/08/2026 (#813).
+//
+// ⚠️ O DOMÍNIO DE VALORES É EXTERNO a este repositório, e a fonte primária diz isso explicitamente.
+// O layout FEBRABAN **público** (campo 26.3A) afirma sobre P011 exatamente o mesmo que o manual sob
+// restrição de redistribuição, palavra por palavra: o domínio é delegado aos Dicionários de Domínios
+// para o SPB, do Banco Central. O que o Bacen publica é o XSD do dicionário — só a ESTRUTURA, zero
+// enumeração; o XML com os valores é distribuído pela RSFN aos participantes do SPB, e um ERP não é
+// participante. Não há versão a citar, e isso é declaração do próprio Bacen: o dicionário não é
+// sujeito a controle de versão e pode mudar sem aviso prévio.
+//
+// A consulta externa que levantou a tabela está registrada na #813 (21/08/2026), e a fonte a rotula
+// DECLARADAMENTE PARCIAL — "exemplos de algumas das finalidades". É por isso que não existe
+// allow-list aqui: uma lista dos doze valores conhecidos recusaria um código legítimo fora dela.
+//
+// ⚠️ `00007` é ALUGUEL, e este é o erro provável. O `07 - Pagamento de Fornec/Honor.` que parece a
+// resposta perfeita pertence à tabela de **DOC** do manual Bradesco — outro layout, outras posições
+// (381-382, coordenada que sequer existe num registro de 240). As duas tabelas não compartilham
+// numeração: no domínio de TED, `05` é pagamento a fornecedores e `07` é aluguel. Escrever o código
+// de uma na outra produz arquivo aceito declarando ao Banco Central a finalidade errada.
+//
+// PREMISSA DECLARADA (decisão da P.O., 21/08/2026, na #813): **este cliente paga exclusivamente
+// fornecedor PJ**. É o que sustenta ser constante do emissor em vez de campo por título — hoje 100%
+// dos títulos produziriam o mesmo valor, e a constante tem a virtude de o chamador não poder
+// contradizê-la. O que DERRUBA a premissa, e obriga a revê-la: entrar cliente com perfil de
+// pagamento misto, ou o Bacen/Bradesco passarem a cobrar granularidade por título.
+//
+// O `00008` (duplicatas e títulos) foi considerado e recusado: nem todo pagamento a fornecedor tem
+// duplicata — nota de serviço, recibo e RPA não têm. O `00006` (honorários) está fora por
+// impossibilidade, não por preferência: o cadastro não distingue fornecedor de prestador.
+const TED_PURPOSE_SUPPLIER_PAYMENT = '00005'; // Pagamento a fornecedores — casa com o serviço `20`
+
+// `null`, e não string vazia, pelo mesmo motivo de `paymentIndicator` acima: significa "esta rota
+// NÃO tem o campo", e as posições saem em branco — diferente de "tem o campo, e o valor é vazio".
+// Quem escreve a linha é que traduz `null` em brancos.
+//
+// ⚠️ CA2 PENDENTE DO VALIDADOR. Crédito em conta (`01`) cai aqui e sai sem finalidade — e isso é
+// decisão de NÃO decidir, não omissão. Os dois candidatos têm argumento e nenhum tem fonte: branco é
+// simétrico com o campo vizinho (225-226 sai em branco fora de TED, #817) e o campo se chama
+// literalmente "Finalidade da TED"; já `00010` existe no domínio e descreve "crédito em conta". O
+// layout não resolve o empate, e o Validador Universal resolve em uma submissão — dois arquivos de
+// crédito em conta, um com 220-224 em branco e outro preenchido (P.O., 21/08). Até o laudo voltar,
+// vale o status quo: agora explícito, em vez de efeito colateral de um default.
+//
+// Total sobre G029, como `clearingHouseFor`: forma nova entra pelo `else` e sai sem finalidade.
+export const tedPurposeFor = (launchForm: string): string | null =>
+  TED_LAUNCH_FORMS.has(launchForm) ? TED_PURPOSE_SUPPLIER_PAYMENT : null;
+
 // Os três primeiros dígitos do código de barras são o banco emissor do título (Carta-Circular Bacen
 // 2.926) — é o que separa liquidação de título do próprio banco de título de outro banco.
 //
