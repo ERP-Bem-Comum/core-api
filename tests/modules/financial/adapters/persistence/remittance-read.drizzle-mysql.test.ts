@@ -78,19 +78,27 @@ if (!process.env['MYSQL_INTEGRATION']) {
     // alguma; com a FK `RESTRICT` de `fin_remittance_payables.payable_id` isso vira
     // `ER_NO_REFERENCED_ROW_2`. Criar linha só para a FK aceitar repetiria o defeito por outro
     // caminho — o certo é montar o que a aplicação monta: uma nota, e sob ela um título `Parent`.
+    //
+    // ⚠️ `Approved`, e não `Open` como era até o #792 — pelo mesmo motivo da nota acima, levado um
+    // passo adiante: só título `Approved` entra em remessa (#736), e desde o ADR-0065 §2 o `save` de
+    // criação **transiciona** `Approved → Transmitted` por CAS. Com a fixture em `Open` o `UPDATE`
+    // casa zero linhas e TODA remessa deste arquivo sai como `remittance-payable-not-approved` — as
+    // três leituras abaixo passam a medir um banco vazio. Foi exatamente assim que o CI ficou
+    // vermelho na primeira tentativa do #792, e o sintoma (`listPaged` devolvendo 0) apontava para
+    // longe da causa.
     const seedPayable = async (): Promise<SeededPayable> => {
       const documentId = newUuid();
       const payableId = newUuid();
       await handle.db.insert(finDocuments).values({
         id: documentId,
-        status: 'Open',
+        status: 'Approved',
         createdAt: new Date('2026-08-11T00:00:00.000Z'),
       });
       await handle.db.insert(finPayables).values({
         id: payableId,
         documentId,
         kind: 'Parent',
-        status: 'Open',
+        status: 'Approved',
         value: 150000,
         dueDate: new Date('2026-09-30T00:00:00.000Z'),
         paymentMethod: 'TED',
