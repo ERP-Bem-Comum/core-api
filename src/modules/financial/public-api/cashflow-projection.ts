@@ -3,11 +3,19 @@
  *
  * Agrega `fin_payable_view` (#235) na grão Categoria × Subcategoria em 2 baldes (decisão da P.O.,
  * #590), derivados direto do status REDUZIDO do payable-view (sem join no `fin_documents` para os
- * baldes — a redução 8→4 já implementa a intenção):
- *  - EXPECTED (Previsto)  = Σ(value_cents) WHERE status IN ('Open','Approved')
+ * baldes — a redução 8→5 já implementa a intenção):
+ *  - EXPECTED (Previsto)  = Σ(value_cents) WHERE status IN ('Open','Approved','Transmitted')
  *  - REALIZED (Realizado) = Σ(value_cents) WHERE status = 'Paid'
  * `Cancelled` é sempre excluído (WHERE `status != 'Cancelled'`); como os CASE só somam
- * Open/Approved/Paid, ele naturalmente não conta — o `ne` fica por clareza/consistência com os REPs.
+ * Open/Approved/Transmitted/Paid, ele naturalmente não conta — o `ne` fica por clareza/consistência
+ * com os REPs.
+ *
+ * ⚠️ `Transmitted` no EXPECTED entrou com o ADR-0065 §5 (#792), e é **correção de regressão**: até a
+ * #792 o read-model colapsava `Transmitted` em `Approved`, e o título transmitido já contava como
+ * Previsto sem que ninguém decidisse. Retirado o colapso, ele sairia dos DOIS baldes e sumiria do
+ * fluxo de caixa — dinheiro comprometido, a caminho do banco, invisível no relatório que existe para
+ * projetar saída de caixa. Ele é Previsto e não Realizado porque `Pago` é baixa manual conferida no
+ * site do banco (decisão da P.O. na #59): entregue à VAN não é dinheiro que saiu.
  *
  * Agrupamento por `category_ref` × `subcategory_ref` (subcategoria = folha auto-referente da
  * taxonomia — SELF-JOIN `fin_categories AS fin_subcategories`, molde do Relatório Geral #442).
@@ -20,8 +28,11 @@
  *  - refs em `fin_payable_view` (program/budget-plan/debit-account/cost-center/category/subcategory/
  *    supplier) + janela half-open [dueFrom, dueTo) sobre `due_date`;
  *  - `status` (1 dos 6 granulares) filtra o status VIVO em `fin_documents` via LEFT JOIN — o status
- *    do payable-view é reduzido a 4 e não distingue Transmitted/PartiallyReconciled/Reconciled.
- *    Restringe a POPULAÇÃO antes dos CASE. Validação dos 6 valores é feita na borda HTTP.
+ *    do payable-view é reduzido a 5 e não distingue `PartiallyReconciled`/`Reconciled`, colapsados
+ *    em `Paid`. Restringe a POPULAÇÃO antes dos CASE. Validação dos 6 valores na borda HTTP.
+ *    ⚠️ Filtrar por `Transmitted` aqui devolve vazio, e o defeito é anterior à #792: quem transiciona
+ *    para `Transmitted` é o TÍTULO, e esta comparação é contra o DOCUMENTO, que o ADR-0065 §2 manteve
+ *    reservado. Registrado na #845 — o conserto pertence ao épico de relatórios (#114), congelado.
  *
  * ADR-0020 §"Features permitidas": GROUP BY/agregação, LEFT JOIN, CASE.
  */
@@ -91,7 +102,7 @@ export const openCashflowReader = async (
   const subcategory = alias(finCategories, 'fin_subcategories');
 
   // mysql2 devolve SUM (DECIMAL) como string → Number() no mapper. Mesmos baldes para tabela e série.
-  const expectedCents = sql<string>`sum(case when ${finPayableView.status} in ('Open','Approved') then ${finPayableView.valueCents} else 0 end)`;
+  const expectedCents = sql<string>`sum(case when ${finPayableView.status} in ('Open','Approved','Transmitted') then ${finPayableView.valueCents} else 0 end)`;
   const realizedCents = sql<string>`sum(case when ${finPayableView.status} = 'Paid' then ${finPayableView.valueCents} else 0 end)`;
 
   // Cláusula de filtro COMPARTILHADA entre `list` (tabela) e `listChart` (série temporal): os mesmos

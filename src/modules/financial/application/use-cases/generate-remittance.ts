@@ -202,7 +202,9 @@ export const generateRemittance =
     // documentos continuariam livres para entrar noutra remessa.
     //
     // Nesta ordem, o pior caso é uma remessa `Queued` sem arquivo: visível, recuperável, e já
-    // prendendo os documentos. Erra-se para menos, como no resto do fluxo.
+    // prendendo os documentos — com os títulos dela já `Transmitted` (ADR-0065 §2). Erra-se para
+    // menos, como no resto do fluxo: título preso por remessa que não saiu é visível e tem saída (o
+    // descarte da §4); título livre com arquivo a caminho do banco não é nem uma coisa nem outra.
     // A reserva acontece DENTRO desta gravação (#789), e é aqui que a corrida se decide. A consulta
     // do passo 1 continua valendo — ela recusa cedo, antes de queimar NSA e montar arquivo, e é o
     // que dá ao operador uma resposta rápida no caso comum. O que ela não pode fazer é ser a única
@@ -212,13 +214,40 @@ export const generateRemittance =
     // fato é um só — o título já está em outra remessa. Que a descoberta tenha vindo de uma consulta
     // ou de um lock é detalhe de implementação, e inventar um segundo nome faria a tela ter de
     // explicar uma diferença que não muda a ação de ninguém.
-    const persisted = await deps.remittances.save(remittance.value);
+    // Um evento por TÍTULO (ADR-0065 §2), gravados na MESMA transação da reserva e da transição —
+    // é o `save` quem os põe no outbox, e é por isso que eles descem daqui em vez de serem
+    // publicados depois: o evento existe se e somente se a transição foi persistida (ADR-0015). Se o
+    // CAS recusar qualquer título, a transação desfaz e nenhum destes chega ao outbox.
+    //
+    // Por título, nunca por nota: uma nota pode ter saído em parte — o pai no arquivo e a retenção
+    // ainda em aberto —, e anunciar a nota diria que ela foi paga inteira. É a mesma razão pela qual
+    // os eventos da remessa carregam `payableIds`, e não `documentIds`.
+    const transmittedEvents = remittance.value.payables.map((p) => ({
+      type: 'PayableTransmitted' as const,
+      documentId: p.documentId,
+      payableId: p.payableId,
+      remittanceId: remittance.value.id,
+      nsa: nsa.value,
+      fileName: translated.value.fileName,
+      occurredAt: generatedAt,
+    }));
+
+    const persisted = await deps.remittances.save(remittance.value, transmittedEvents);
     if (!persisted.ok) {
-      return err(
-        persisted.error === 'remittance-payables-already-held'
-          ? 'remittance-payables-already-held'
-          : 'remittance-persist-failed',
-      );
+      switch (persisted.error) {
+        case 'remittance-payables-already-held':
+          return err('remittance-payables-already-held');
+        // Título que deixou de ser `Approved` entre o pré-voo e a gravação reusa o slug do #736, e
+        // não ganha um segundo nome. Para quem opera o fato é o mesmo — "um título da seleção não
+        // está aprovado" — e a ação é a mesma: ir ao fluxo de aprovação. É o raciocínio que o
+        // parágrafo acima já aplica ao título preso: que a descoberta tenha vindo do reader ou do
+        // CAS é implementação, e inventar um nome por origem obrigaria a tela a explicar uma
+        // diferença que não muda a ação de ninguém.
+        case 'remittance-payable-not-approved':
+          return err('document-not-approved');
+        case 'remittance-repository-unavailable':
+          return err('remittance-persist-failed');
+      }
     }
 
     const uploaded = await deps.storage.putRemittance(

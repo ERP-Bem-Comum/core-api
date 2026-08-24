@@ -61,12 +61,44 @@ const createdNfse = (): Document.CreateDocumentOutput => {
 // Leitura e escrita moram em ports distintos desde a Fatia 1, mas compartilham o MESMO
 // `DocumentStore` — é o que o driver `memory` do composition root faz, e sem isso o teste
 // semearia num store e leria de outro.
-type Repos = Readonly<{ repo: DocumentRepository; payableRepo: PayableRepository }>;
+type Repos = Readonly<{
+  repo: DocumentRepository;
+  payableRepo: PayableRepository;
+  // Exposto para os casos do ADR-0065 §6: `Transmitted` não tem operação de domínio que o produza —
+  // a transição vive no CAS do repositório da REMESSA (`save` de criação, §2), e trazer o
+  // `generateRemittance` inteiro para cá só para preparar um estado tornaria este arquivo refém de
+  // um fluxo que ele não mede. Semear pelo store é o caminho honesto.
+  store: DocumentStore;
+}>;
 
 const makeRepos = (): Repos => {
   const store: DocumentStore = new Map();
   const repo = createInMemoryDocumentRepository(undefined, undefined, undefined, store);
-  return { repo, payableRepo: createInMemoryPayableRepository(store) };
+  return { repo, payableRepo: createInMemoryPayableRepository(store), store };
+};
+
+// Leva UM título de `Approved` para `Transmitted`, como a geração da remessa faria. Só o título
+// nomeado muda: os irmãos ficam onde estavam, que é o cenário real de uma nota cujo pai foi para a
+// remessa e cuja retenção não.
+const transmitPayable = (store: DocumentStore, documentId: string, payableId: string): void => {
+  const entry = store.get(documentId);
+  if (entry === undefined) throw new Error('setup: documento nao semeado');
+  const payables = entry.aggregate.payables;
+  if (payables === null) throw new Error('setup: documento sem titulos');
+
+  const move = <P extends { id: unknown }>(p: P): P =>
+    String(p.id) === payableId ? { ...p, status: 'Transmitted' as const } : p;
+
+  store.set(documentId, {
+    version: entry.version,
+    aggregate: {
+      document: entry.aggregate.document,
+      payables: {
+        parent: move(payables.parent),
+        children: payables.children.map(move),
+      },
+    },
+  });
 };
 
 const seedApproved = async (
@@ -141,6 +173,101 @@ describe('financial/application — registerManualPayment (#223)', () => {
     });
     assert.equal(isErr(r), true);
     if (!r.ok) assert.equal(r.error, 'payable-not-found');
+  });
+});
+
+/**
+ * ADR-0065 §6 (#792) — a baixa manual passa a ter DUAS origens.
+ *
+ * `Approved` é o pagamento feito fora da VAN (cheque, caixa, boleto avulso). `Transmitted` é o
+ * pagamento que saiu pela remessa e que o operador conferiu no site do banco — a P.O. decidiu na #59
+ * que `Pago` continua manual, porque o efeito do retorno (#690) não existe e quem afirma que o
+ * dinheiro saiu é a pessoa que olhou o extrato.
+ *
+ * É a MESMA ação humana: mesmo slug de erro, mesmo evento, mesma rota. O que muda é de onde ela
+ * parte — e é justamente por isso que estes casos existem: sem eles, o operador que gerou a remessa
+ * ficaria sem via nenhuma para dar baixa, porque o título deixou de ser `Approved` no instante em que
+ * a remessa foi gerada.
+ */
+describe('financial/application — registerManualPayment com origem VAN (ADR-0065 §6)', () => {
+  it('título Transmitido vira Pago pela mesma rota, sem slug próprio', async () => {
+    const { repo, payableRepo, store } = makeRepos();
+    const seed = await seedApproved(repo);
+    transmitPayable(store, seed.documentId, seed.parentId);
+
+    const r = await registerManualPayment({ repo, payableRepo, clock: CLOCK })({
+      documentId: seed.documentId,
+      payableId: seed.parentId,
+      paidBy: USER,
+    });
+
+    assert.equal(isOk(r), true, JSON.stringify(r));
+    const found = await repo.findById(seed.documentId as never);
+    assert.ok(found.ok);
+    assert.equal(found.value.payables?.parent.status, 'Paid');
+  });
+
+  // O irmão que NÃO foi na remessa segue pagável pelo caminho de sempre. É o cenário real de uma nota
+  // cujo pai entrou no arquivo e cuja retenção não — os dois estados convivendo na mesma nota.
+  it('o irmão que ficou Aprovado continua pagável pelo caminho de sempre', async () => {
+    const { repo, payableRepo, store } = makeRepos();
+    const seed = await seedApproved(repo);
+    transmitPayable(store, seed.documentId, seed.parentId);
+
+    const pay = registerManualPayment({ repo, payableRepo, clock: CLOCK });
+    assert.equal(
+      isOk(await pay({ documentId: seed.documentId, payableId: seed.childId, paidBy: USER })),
+      true,
+    );
+
+    const found = await repo.findById(seed.documentId as never);
+    assert.ok(found.ok);
+    assert.equal(found.value.payables?.parent.status, 'Transmitted', 'o pai não foi tocado');
+    assert.equal(found.value.payables?.children[0]?.status, 'Paid');
+  });
+
+  // ⚠️ A barreira que NÃO pode ter sido afrouxada junto: uma nota sem aprovação não vira paga.
+  //
+  // Este caso a exercita no nível do DOCUMENTO — `invalid-state-transition` vem de `requireApproved`
+  // (`document.ts`), que roda antes de o título ser sequer olhado. Vale dizer com precisão porque a
+  // guarda que eu mexi é outra, a de `MANUALLY_PAYABLE_STATUSES` sobre o TÍTULO, e ela não chega a
+  // ser consultada aqui. Quem a exercita é o caso seguinte (segunda baixa): lá o documento está
+  // `Approved` e é o título, já `Paid`, que fica fora da lista. As duas guardas são independentes, e
+  // precisam dos dois testes.
+  it('Draft/Open seguem recusados pela guarda do DOCUMENTO', async () => {
+    const { repo, payableRepo } = makeRepos();
+    const documentId = await seedOpen(repo);
+    const found = await repo.findById(documentId as never);
+    const payableId = found.ok ? String(found.value.payables?.parent.id) : '';
+
+    const r = await registerManualPayment({ repo, payableRepo, clock: CLOCK })({
+      documentId,
+      payableId,
+      paidBy: USER,
+    });
+
+    assert.equal(isErr(r), true);
+    if (!r.ok) assert.equal(r.error, 'invalid-state-transition');
+  });
+
+  // Depois de paga, a segunda baixa conflita igual — a origem VAN não cria um caminho que escape do
+  // CAS. `Paid` não está em `MANUALLY_PAYABLE_STATUSES`, e é a lista que decide.
+  it('segunda baixa de um título vindo da VAN conflita igual', async () => {
+    const { repo, payableRepo, store } = makeRepos();
+    const seed = await seedApproved(repo);
+    transmitPayable(store, seed.documentId, seed.parentId);
+    const pay = registerManualPayment({ repo, payableRepo, clock: CLOCK });
+
+    assert.equal(
+      isOk(await pay({ documentId: seed.documentId, payableId: seed.parentId, paidBy: USER })),
+      true,
+    );
+    const segunda = await pay({
+      documentId: seed.documentId,
+      payableId: seed.parentId,
+      paidBy: USER,
+    });
+    assert.equal(isErr(segunda), true, 'pagar duas vezes o mesmo título continua sendo conflito');
   });
 });
 

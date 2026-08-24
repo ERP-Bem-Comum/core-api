@@ -95,14 +95,22 @@ export const includes = (remittance: Remittance, payableId: string): boolean =>
   remittance.payables.some((p) => p.payableId === payableId);
 
 // A pergunta que a seleção de títulos faz. Enquanto a remessa "prende", nenhum dos seus títulos
-// pode entrar noutra — é o que substitui a transição imediata para `Transmitted`.
+// pode entrar noutra.
+//
+// ⚠️ Este comentário dizia que o hold "substitui a transição imediata para `Transmitted`". Deixou de
+// ser verdade no ADR-0065 §2: a transição existe, acontece na geração, e o hold NÃO foi substituído
+// por ela — os dois convivem, medindo coisas diferentes. O hold é do VÍNCULO e é derivado do status
+// da remessa; a transição é do TÍTULO e vive em `fin_payables.status`. Depois do descarte o vínculo
+// solta na hora, mas o status só volta a `Approved` pela devolução da §4 — é por isso que "liberar o
+// título" passou a exigir duas coisas, e não uma.
 //
 // ⚠️ Prende o TÍTULO, não a nota: com o pai numa remessa, a retenção da mesma nota segue livre para
 // entrar noutra. É o que a premissa do negócio pede — pagar o pai sem pagar o filho — e o que
 // prender por documento impediria.
 //
-// `Failed` prende. "Sem confirmação" não é "não transmitiu", e liberar por conta própria reabriria
-// o caminho para pagamento em dobro. Só `Discarded` — decisão humana registrada — libera.
+// `Failed` prende, e os títulos dele permanecem `Transmitted` (ADR-0065 §4). "Sem confirmação" não é
+// "não transmitiu", e liberar por conta própria reabriria o caminho para pagamento em dobro. Só
+// `Discarded` — decisão humana registrada — libera.
 export const holdsPayables = (remittance: Remittance): boolean => remittance.status !== 'Discarded';
 
 // Idempotente por desenho: o agente não apaga nada e a varredura pode reler o mesmo objeto de

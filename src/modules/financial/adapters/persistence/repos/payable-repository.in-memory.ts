@@ -9,6 +9,7 @@ import type {
 } from '#src/modules/financial/domain/payable/repository.ts';
 import type { FinancialTimelineEntry } from '#src/modules/financial/domain/timeline/types.ts';
 import type { DocumentEvent } from '#src/modules/financial/domain/document/events.ts';
+import { MANUALLY_PAYABLE_STATUSES } from '#src/modules/financial/domain/document/document.ts';
 import type { FinancialOutbox } from '#src/modules/financial/application/ports/outbox.ts';
 import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
 import type { DocumentStore, StoreEntry } from './document-repository.in-memory.ts';
@@ -105,8 +106,10 @@ export const createInMemoryPayableRepository = (
       writeOne({
         payableId: String(input.payableId),
         conflictError: 'payable-payment-conflict',
-        // A mesma pré-condição que viaja no `WHERE status = 'Approved'` do adapter real.
-        holds: (target) => target.status === 'Approved',
+        // A mesma pré-condição que viaja no `WHERE status IN (…)` do adapter real — e literalmente a
+        // mesma lista, importada do domínio (ADR-0065 §6): `Approved` (pagamento fora da VAN) e
+        // `Transmitted` (VAN, conferido no site do banco).
+        holds: (target) => MANUALLY_PAYABLE_STATUSES.includes(target.status),
         apply: (p) => immutable<Payable>({ ...p, status: 'Paid', paidAt: input.paidAt }),
         timelineEntries: input.timelineEntries,
         events: input.events,

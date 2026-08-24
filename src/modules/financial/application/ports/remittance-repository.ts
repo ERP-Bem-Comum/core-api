@@ -1,9 +1,17 @@
 import type { Result } from '../../../../shared/primitives/result.ts';
 import type { Remittance } from '../../domain/remittance/types.ts';
 import type { RemittanceEvent } from '../../domain/remittance/events.ts';
+import type { PayableTransmitted } from '../../domain/document/events.ts';
 import type { RemittanceId } from '../../domain/remittance/remittance-id.ts';
 
 export type RemittanceRepositoryError = 'remittance-repository-unavailable';
+
+// O `save` grava eventos de DOIS agregados, e é consequência direta de ele escrever em dois
+// (ADR-0065 §2): o desfecho da remessa e a transição de cada título que ela leva. A união é
+// explícita em vez de `FinancialAppendableEvent` porque este `save` não tem o que fazer com evento
+// de extrato ou de conciliação — um tipo largo demais aceitaria em silêncio o que nunca deveria
+// chegar aqui.
+export type RemittanceSaveEvent = RemittanceEvent | PayableTransmitted;
 
 // Um título preso e a remessa que o prende. O `nsa` viaja junto porque é o identificador que existe
 // para o operador: ele o vê na tela de remessas e no retorno do banco, enquanto o `id` é interno.
@@ -16,23 +24,41 @@ export type HeldPayable = Readonly<{
 // Só o `save` pode recusar por título preso, e por isso o erro NÃO entra no union geral: um
 // `findById` que declarasse poder devolver `already-held` obrigaria todo chamador a tratar um caso
 // que não existe, e o compilador deixaria de distinguir quem realmente precisa decidir.
-export type RemittanceSaveError = RemittanceRepositoryError | 'remittance-payables-already-held';
+// `remittance-payable-not-approved` é irmão de `already-held` e sai pelo mesmo motivo: os dois
+// nascem da reserva, e nenhum outro método pode devolvê-los. São desfechos DISTINTOS de propósito —
+// "já está em outra remessa" manda o operador à lista de remessas; "não está aprovado" o manda ao
+// fluxo de aprovação. Colapsá-los num erro só faria a tela mandar metade dos casos ao lugar errado.
+export type RemittanceSaveError =
+  | RemittanceRepositoryError
+  | 'remittance-payables-already-held'
+  | 'remittance-payable-not-approved';
 
 export type RemittanceRepository = Readonly<{
   // `events` (opcional/trailing, como no `DocumentRepository`): gravados no `fin_outbox` NA MESMA
   // transação do agregado. O evento existe se e somente se o desfecho foi persistido (ADR-0015) —
   // anunciar "remessa transmitida" sem ter gravado a transmissão é pior que não anunciar.
-  // ⚠️ O `save` de CRIAÇÃO é também o ponto de reserva dos títulos (#789), e não por conveniência:
-  // `findHeldPayableIds` responde sobre o passado, e entre a resposta dela e a gravação cabe a
-  // tradução CNAB inteira. Duas emissões concorrentes leem "livre" antes de qualquer uma gravar —
-  // CWE-367. Reconferir o hold no MESMO ato em que se grava é o que fecha a janela; separar as duas
-  // coisas em chamadas distintas a reabriria, menor porém real.
+  // ⚠️ O `save` de CRIAÇÃO reserva os títulos (#789) **e os transiciona** para `Transmitted`
+  // (ADR-0065 §2). São duas escritas, uma transação, e nenhuma das duas é conveniência:
   //
-  // Atualização de desfecho (confirmar, falhar, descartar) NÃO reserva: a remessa já prende os
-  // próprios títulos, e recusá-la ali travaria toda remessa transmitida sem desfecho.
+  // 1. **Reserva.** `findHeldPayables` responde sobre o passado, e entre a resposta dela e a
+  //    gravação cabe a tradução CNAB inteira. Duas emissões concorrentes leem "livre" antes de
+  //    qualquer uma gravar — CWE-367. Reconferir o hold no MESMO ato em que se grava é o que fecha a
+  //    janela; separar as duas coisas em chamadas distintas a reabriria, menor porém real.
+  // 2. **Transição.** `UPDATE fin_payables SET status='Transmitted' WHERE id=? AND status='Approved'`
+  //    por título — CAS pela pré-condição da operação (ADR-0063 §2), sem coluna de versão. Se
+  //    `affectedRows` divergir da quantidade reservada, o desfecho é `remittance-payable-not-approved`
+  //    e a transação inteira desfaz — inclusive a reserva. O NSA já consumido NÃO volta, em nenhum
+  //    caminho: gap na sequência é inofensivo, reusar número é retransmissão aos olhos do banco.
+  //
+  // A ordem entre as duas importa: a transição vem DEPOIS da releitura do hold sob lock. Transicionar
+  // antes gastaria escrita num título que a reserva ainda pode recusar.
+  //
+  // Atualização de desfecho (confirmar, falhar, descartar) NÃO reserva nem transiciona: a remessa já
+  // prende os próprios títulos, e recusá-la ali travaria toda remessa transmitida sem desfecho. A
+  // devolução `Transmitted → Approved` do descarte é operação à parte (ADR-0065 §4), com CAS próprio.
   save: (
     remittance: Remittance,
-    events?: readonly RemittanceEvent[],
+    events?: readonly RemittanceSaveEvent[],
   ) => Promise<Result<void, RemittanceSaveError>>;
   findById: (id: RemittanceId) => Promise<Result<Remittance | null, RemittanceRepositoryError>>;
   findByFileName: (

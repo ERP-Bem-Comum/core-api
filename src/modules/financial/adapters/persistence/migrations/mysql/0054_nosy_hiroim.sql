@@ -1,0 +1,2 @@
+ALTER TABLE `fin_payable_view` DROP CONSTRAINT `fin_payable_view_status_chk`;--> statement-breakpoint
+ALTER TABLE `fin_payable_view` ADD CONSTRAINT `fin_payable_view_status_chk` CHECK (`fin_payable_view`.`status` IN ('Open','Approved','Transmitted','Paid','Cancelled'));

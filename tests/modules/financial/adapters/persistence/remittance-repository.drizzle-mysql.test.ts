@@ -104,25 +104,47 @@ if (!process.env['MYSQL_INTEGRATION']) {
     // defeito que o comentário do `generatedAt` acima descreve — verde descrevendo um sistema que
     // não existe. É criar o que a aplicação cria: uma nota, e sob ela UM título `Parent`, que é
     // exatamente o que a remessa emite (o líquido do documento).
-    const seedPayable = async (): Promise<SeededPayable> => {
+    //
+    // ⚠️ O título nasce `Approved`, e não `Open` como nasceu até o #792. O motivo é o mesmo do
+    // parágrafo acima — criar o que a aplicação cria: só título `Approved` entra em remessa
+    // (`isApprovedForRemittance`, #736), e desde o ADR-0065 §2 o `save` de criação **transiciona**
+    // `Approved → Transmitted` por CAS. Com a fixture em `Open` o `UPDATE` casaria zero linhas e
+    // TODA emissão deste arquivo sairia como `remittance-payable-not-approved` — a suíte inteira
+    // vermelha, descrevendo um estado que a aplicação nunca monta.
+    //
+    // O parâmetro existe para o caso que mede a recusa: ele precisa de um título que o CAS rejeite,
+    // e o valor tem de ser explícito ali para o cenário se explicar sozinho.
+    const seedPayable = async (
+      status: 'Approved' | 'Open' = 'Approved',
+    ): Promise<SeededPayable> => {
       const documentId = newUuid();
       const payableId = newUuid();
       await handle.db.insert(finDocuments).values({
         id: documentId,
-        status: 'Open',
+        status,
         createdAt: new Date('2026-08-11T00:00:00.000Z'),
       });
       await handle.db.insert(finPayables).values({
         id: payableId,
         documentId,
         kind: 'Parent',
-        status: 'Open',
+        status,
         value: 150000,
         dueDate: new Date('2026-09-30T00:00:00.000Z'),
         paymentMethod: 'TED',
         createdAt: new Date('2026-08-11T00:00:00.000Z'),
       });
       return { payableId, documentId };
+    };
+
+    // O status do título como o BANCO o vê. As asserções do ADR-0065 §2 são sobre o efeito da
+    // transação, e lê-lo pelo agregado devolveria o que o teste montou, não o que foi gravado.
+    const statusDoTitulo = async (payableId: string): Promise<string | undefined> => {
+      const rows = await handle.db
+        .select({ status: finPayables.status })
+        .from(finPayables)
+        .where(eq(finPayables.id, payableId));
+      return rows[0]?.status;
     };
 
     // Limpa na ENTRADA, por tabela (testing.md §Contrato de isolamento).
@@ -387,6 +409,23 @@ if (!process.env['MYSQL_INTEGRATION']) {
           .from(finRemittancePayables)
           .where(eq(finRemittancePayables.payableId, disputado.payableId));
         assert.equal(vinculos.length, 1, 'o título disputado não pode estar em duas remessas');
+
+        // ADR-0065 §2 — a transição segue a MESMA sorte da reserva, título a título.
+        //
+        // Qual das duas venceu é indeterminado (é uma corrida), então a asserção deriva o esperado
+        // do desfecho em vez de fixá-lo: o título exclusivo da vencedora sai `Transmitted`; o da
+        // perdedora fica intocado em `Approved`. É o caso que uma transição feita FORA da transação
+        // da reserva quebraria em silêncio — o título da perdedora sairia `Transmitted`, preso por
+        // uma remessa que nunca existiu, e nenhuma outra asserção deste arquivo perceberia.
+        const soDaVencedora = ra.ok ? soDaPrimeira : soDaSegunda;
+        const soDaPerdedora = ra.ok ? soDaSegunda : soDaPrimeira;
+
+        assert.equal(await statusDoTitulo(soDaVencedora.payableId), 'Transmitted');
+        assert.equal(
+          await statusDoTitulo(soDaPerdedora.payableId),
+          'Approved',
+          'quem perde a corrida não escreve nada — nem o status do próprio título',
+        );
       });
 
       // O CA2 da issue. Aqui ele é satisfeito por construção — reserva e gravação são a MESMA
@@ -424,6 +463,16 @@ if (!process.env['MYSQL_INTEGRATION']) {
           await outboxRowsOf(perdedora.id),
           [],
           'nem evento — o rollback leva a transação inteira',
+        );
+
+        // ADR-0065 §2: o título disputado ficou `Transmitted` — UMA vez, pela vencedora. Sem esta
+        // asserção, "não deixa rastro" seria cego para a escrita mais importante que a transação
+        // faz agora: o rollback tem de levar a transição junto, e um título que saísse
+        // `Transmitted` pela perdedora estaria preso por uma remessa que não existe.
+        assert.equal(
+          await statusDoTitulo(disputado.payableId),
+          'Transmitted',
+          'a vencedora transicionou o título, e só ela',
         );
       });
     });
@@ -477,6 +526,111 @@ if (!process.env['MYSQL_INTEGRATION']) {
         const [ra, rb] = await Promise.all([repo.save(a), repo.save(b)]);
         assert.notEqual(ra.ok, rb.ok, 'exatamente uma das emissões deve gravar');
         assert.equal(await titulosEmDuasRemessasVivas(), 0);
+      });
+
+      // ─── PAY-01 estendida (#792, ADR-0065 §2) ─────────────────────────────────────────────
+      //
+      // A invariante acima vigia o VÍNCULO. Com o título ganhando estado próprio, uma segunda
+      // invariante nasce ao lado dela e não a substitui: **`fin_payables.status = 'Transmitted'` se e
+      // somente se o título é seguro por uma remessa viva.**
+      //
+      // Os dois lados falham de formas diferentes, e por isso são medidos separadamente:
+      //
+      //  - **`Transmitted` sem remessa viva** — o título está preso na tela e ninguém o vê preso. O
+      //    operador não consegue pagá-lo, não consegue selecioná-lo, e a lista de remessas não
+      //    explica por quê. Só o descarte (§4) devolveria, mas não há remessa a descartar.
+      //  - **Seguro por remessa viva sem `Transmitted`** — o inverso, e o pior: o grid diz
+      //    "Aprovado" sobre um título cujo pagamento já está a caminho do banco. É exatamente o
+      //    defeito que a #792 existe para corrigir, de volta pela porta dos fundos.
+      const divergenciasEntreStatusEHold = async (): Promise<
+        readonly Readonly<{ payableId: string; status: string; segurado: boolean }>[]
+      > => {
+        const titulos = await handle.db
+          .select({ id: finPayables.id, status: finPayables.status })
+          .from(finPayables);
+
+        const seguros = new Set(
+          (
+            await handle.db
+              .select({ payableId: finRemittancePayables.payableId })
+              .from(finRemittancePayables)
+              .innerJoin(finRemittances, eq(finRemittances.id, finRemittancePayables.remittanceId))
+              .where(inArray(finRemittances.status, [...HOLDING]))
+          ).map((r) => r.payableId),
+        );
+
+        return titulos
+          .map((t) => ({ payableId: t.id, status: t.status, segurado: seguros.has(t.id) }))
+          .filter((t) => (t.status === 'Transmitted') !== t.segurado);
+      };
+
+      it('emissão bem-sucedida deixa status e hold de acordo', async () => {
+        const repo = createDrizzleRemittanceRepository(handle);
+        const um = await seedPayable();
+        const outro = await seedPayable();
+
+        assert.equal((await repo.save(build([um, outro]))).ok, true);
+
+        assert.deepEqual(await divergenciasEntreStatusEHold(), []);
+        assert.equal(await statusDoTitulo(um.payableId), 'Transmitted');
+      });
+
+      // Guarda contra verde por vacuidade, no molde do caso irmão logo abaixo: se a consulta não
+      // olhasse de verdade, um `[]` seria indistinguível de "nada a achar".
+      it('a invariante ACUSA título Transmitido sem remessa que o segure', async () => {
+        const orfao = await seedPayable();
+        // Forjado por UPDATE direto, contornando o `save`: ele nunca produz este estado, e é
+        // justamente por isso que não serve para plantá-lo.
+        await handle.db
+          .update(finPayables)
+          .set({ status: 'Transmitted' })
+          .where(eq(finPayables.id, orfao.payableId));
+
+        const divergencias = await divergenciasEntreStatusEHold();
+        assert.equal(divergencias.length, 1);
+        assert.equal(divergencias[0]?.payableId, orfao.payableId);
+        assert.equal(divergencias[0]?.segurado, false);
+      });
+
+      it('a invariante ACUSA título seguro por remessa viva que ficou Aprovado', async () => {
+        const repo = createDrizzleRemittanceRepository(handle);
+        const preso = await seedPayable();
+        assert.equal((await repo.save(build([preso]))).ok, true);
+
+        // O estado que existiria se a transição fosse desfeita sem soltar o vínculo — o defeito
+        // original da #792, encenado.
+        await handle.db
+          .update(finPayables)
+          .set({ status: 'Approved' })
+          .where(eq(finPayables.id, preso.payableId));
+
+        const divergencias = await divergenciasEntreStatusEHold();
+        assert.equal(divergencias.length, 1);
+        assert.equal(divergencias[0]?.payableId, preso.payableId);
+        assert.equal(divergencias[0]?.segurado, true);
+      });
+
+      // A recusa vista do BANCO. O fake já prova o veredito; aqui prova-se que a transação inteira
+      // reverte contra MySQL real — incluindo o título que PODIA transicionar.
+      it('um título não-aprovado na seleção reverte a transação inteira', async () => {
+        const repo = createDrizzleRemittanceRepository(handle);
+        const aprovado = await seedPayable();
+        const naoAprovado = await seedPayable('Open');
+
+        const r = await repo.save(build([aprovado, naoAprovado]));
+
+        assert.equal(
+          isErr(r) ? r.error : null,
+          'remittance-payable-not-approved',
+          'erro de negócio com nome próprio, não falha de infraestrutura',
+        );
+        assert.equal(
+          await statusDoTitulo(aprovado.payableId),
+          'Approved',
+          'o título que podia transicionar NÃO transicionou: a transação desfaz tudo',
+        );
+        assert.equal(await statusDoTitulo(naoAprovado.payableId), 'Open');
+        assert.deepEqual(await divergenciasEntreStatusEHold(), []);
       });
 
       it('a invariante ACUSA o estado proibido (guarda contra verde por vacuidade)', async () => {

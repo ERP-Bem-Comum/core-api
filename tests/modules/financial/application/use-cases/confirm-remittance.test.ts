@@ -39,12 +39,26 @@ const envelope = (
   });
 
 const setup = async (over: Partial<{ files: readonly string[] }> = {}) => {
-  const remittances = createInMemoryRemittanceRepository();
+  const files = over.files ?? [FILE];
+
+  // Os títulos de cada remessa da fixture nascem `Approved`: o `save` de criação os transiciona por
+  // CAS (ADR-0065 §2), e título não declarado seria recusado — a fixture não chegaria a existir.
+  // Este arquivo mede a CONFIRMAÇÃO pelo `status/`, que é atualização de desfecho e não reserva nem
+  // transiciona; o que o `Failed` faz com os títulos (nada — eles permanecem `Transmitted`, §4) é
+  // decisão do ADR, não efeito deste seed.
+  const remittances = createInMemoryRemittanceRepository({
+    payableStatuses: Object.fromEntries(
+      files.flatMap((_, i) => [
+        [`doc-${String(i)}-a`, 'Approved' as const],
+        [`doc-${String(i)}-b`, 'Approved' as const],
+      ]),
+    ),
+  });
   const storage = createInMemoryVanStorage();
 
   const cedenteAccountId = CedenteAccountId.generate();
 
-  for (const [i, fileName] of (over.files ?? [FILE]).entries()) {
+  for (const [i, fileName] of files.entries()) {
     const remittance = createRemittance({
       id: RemittanceId.generate(),
       cedenteAccountId,

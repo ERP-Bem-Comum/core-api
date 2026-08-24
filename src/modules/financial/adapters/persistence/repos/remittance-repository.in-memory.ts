@@ -1,13 +1,14 @@
 import { type Result, ok, err } from '../../../../../shared/primitives/result.ts';
 import type { Remittance } from '../../../domain/remittance/types.ts';
-import type { RemittanceEvent } from '../../../domain/remittance/events.ts';
 import type { RemittanceId } from '../../../domain/remittance/remittance-id.ts';
 import { holdsPayables } from '../../../domain/remittance/remittance.ts';
+import type { DocumentStatus } from '../../../domain/document/types.ts';
 import type {
   HeldPayable,
   RemittanceRepository,
   RemittanceRepositoryError,
   RemittanceSaveError,
+  RemittanceSaveEvent,
 } from '../../../application/ports/remittance-repository.ts';
 
 // Adapter in-memory do RemittanceRepository (testes / boot sem DB).
@@ -15,10 +16,32 @@ import type {
 // Guarda os eventos publicados junto do estado, e não porque o teste precisa espiar: o adapter real
 // grava os dois na MESMA transação, e um fake que aceitasse o evento e o jogasse fora deixaria
 // passar verde um caminho que em produção não publica nada.
-export const createInMemoryRemittanceRepository = (): RemittanceRepository &
-  Readonly<{ published: () => readonly RemittanceEvent[] }> => {
+//
+// ⚠️ Desde o ADR-0065 §2 o `save` de criação escreve em DOIS agregados: reserva a remessa e
+// transiciona cada título `Approved → Transmitted`. Este fake precisa espelhar as duas coisas, e o
+// segundo efeito não tinha onde morar — o fake da remessa e o de payables (`payable-repository.
+// in-memory.ts`) nunca compartilharam estado. `payableStatuses` é esse lugar: o teste semeia o
+// estado dos títulos, o `save` o lê como pré-condição e o reescreve como efeito.
+//
+// O veredito é por CONTAGEM, como manda o ADR-0065 §2: ou TODOS os títulos da remessa estão
+// `Approved` e todos transicionam, ou nenhum transiciona e o `save` recusa com
+// `remittance-payable-not-approved`. Título que o `seed` não declarou conta como recusado — no banco
+// ele afetaria zero linhas, que é o mesmo conflito.
+export const createInMemoryRemittanceRepository = (
+  seed: Readonly<{ payableStatuses?: Readonly<Record<string, DocumentStatus>> }> = {},
+): RemittanceRepository &
+  Readonly<{
+    published: () => readonly RemittanceSaveEvent[];
+    // Leitura do estado dos títulos, para o teste asserir o EFEITO da transição em vez de inferi-lo
+    // da ausência de erro. Sem isto, "o vencedor ficou `Transmitted`" e "o perdedor ficou
+    // `Approved`" seriam indistinguíveis de "nada aconteceu".
+    payableStatus: (payableId: string) => DocumentStatus | undefined;
+  }> => {
   const remittances = new Map<string, Remittance>();
-  const published: RemittanceEvent[] = [];
+  const published: RemittanceSaveEvent[] = [];
+  const payableStatuses = new Map<string, DocumentStatus>(
+    Object.entries(seed.payableStatuses ?? {}),
+  );
 
   return {
     // Espelha a SEMÂNTICA da reserva do adapter real (#789), não o mecanismo: lá a exclusão vem de
@@ -30,7 +53,7 @@ export const createInMemoryRemittanceRepository = (): RemittanceRepository &
     // por ela mesma, e recusar ali travaria o desfecho de toda remessa transmitida.
     save: async (
       remittance: Remittance,
-      events: readonly RemittanceEvent[] = [],
+      events: readonly RemittanceSaveEvent[] = [],
     ): Promise<Result<void, RemittanceSaveError>> => {
       const isCreation = !remittances.has(remittance.id);
       if (isCreation) {
@@ -41,6 +64,32 @@ export const createInMemoryRemittanceRepository = (): RemittanceRepository &
             return Promise.resolve(err('remittance-payables-already-held'));
           }
         }
+
+        // A transição `Approved → Transmitted` (ADR-0065 §2), na mesma "transação" da reserva. No
+        // adapter real ela é um `UPDATE … WHERE id IN (…) AND status = 'Approved'` cuja contagem de
+        // linhas é o veredito; aqui o mecanismo é outro, mas o VEREDITO tem de ser o mesmo — um fake
+        // que aceitasse o que o banco recusa deixaria a suíte verde descrevendo produção errado.
+        //
+        // ⚠️ Título AUSENTE de `payableStatuses` é recusado, igual a título não-aprovado. Não é
+        // rigor inventado para o fake: é o que o banco faz. Lá o CAS casa `id = ? AND status =
+        // 'Approved'`, e um id que a tabela não conhece afeta ZERO linhas — que já é
+        // `affectedRows ≠ n`, conflito, transação inteira desfeita. Desconhecido e não-aprovado são
+        // o MESMO desfecho no adapter real, e um fake que os separasse estaria prometendo o que o
+        // banco não promete (o defeito de `b1973f86`, no casamento do retorno).
+        //
+        // O preço é que todo cenário que cria remessa por aqui semeia `payableStatuses` — ver o
+        // parâmetro `seed`. É preço justo: um teste que não diz em que estado o título estava não
+        // descreve produção, e a entrada do use case já exige `Approved` desde o #740.
+        if (remittance.payables.some((p) => payableStatuses.get(p.payableId) !== 'Approved')) {
+          return Promise.resolve(err('remittance-payable-not-approved'));
+        }
+
+        // Só DEPOIS do veredito fechado para todos os títulos. O adapter real desfaz o que escreveu
+        // quando a contagem diverge; o fake não tem rollback — o que ele tem é a opção de não
+        // começar, e é ela que preserva o "nada persistido" que o teste do caminho recusado assere.
+        for (const { payableId } of remittance.payables) {
+          payableStatuses.set(payableId, 'Transmitted');
+        }
       }
 
       remittances.set(remittance.id, remittance);
@@ -49,6 +98,8 @@ export const createInMemoryRemittanceRepository = (): RemittanceRepository &
     },
 
     published: () => [...published],
+
+    payableStatus: (payableId: string) => payableStatuses.get(payableId),
 
     findById: async (
       id: RemittanceId,

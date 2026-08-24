@@ -123,8 +123,14 @@ export type PaymentPositionResponseDto = z.infer<typeof paymentPositionResponseS
 // REP-4 (#588) — filtros da "Posição de Pagamentos": todos OPCIONAIS, ausente = sem restrição,
 // combinação = AND. Refs aplicam direto em `fin_payable_view`; `status` (6 valores granulares)
 // filtra o status VIVO em `fin_documents` via LEFT JOIN — o status do payable-view é reduzido a
-// 4 (Open/Approved/Paid/Cancelled) e não distingue Transmitted/PartiallyReconciled/Reconciled.
-// Os 6 valores = `DocumentStatus` do domínio MENOS Draft e Refused (decisão da P.O.).
+// 5 (Open/Approved/Transmitted/Paid/Cancelled) e não distingue PartiallyReconciled/Reconciled,
+// colapsados em `Paid`. Os 6 valores = `DocumentStatus` do domínio MENOS Draft e Refused (P.O.).
+//
+// ⚠️ `Transmitted` desta lista NUNCA casa, e não é consequência da #792 — é anterior a ela. A
+// comparação é contra `fin_documents.status`, e quem transiciona para `Transmitted` é o TÍTULO
+// (`fin_payables.status`); o ADR-0065 §2 manteve o valor do documento reservado, de propósito. Desde
+// a #792 o read-model passou a ter o valor, então a correção virou alcançável — registrada na #845,
+// para o épico de relatórios (#114). Até lá, este filtro responde 200 com lista vazia.
 export const paymentPositionStatusValues = [
   'Open',
   'Approved',

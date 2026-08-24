@@ -1,5 +1,8 @@
 import { type Result, ok, err } from '../../../../shared/primitives/result.ts';
-import { isApprovedForRemittance } from '../../domain/document/remittance-approval.ts';
+import {
+  isApprovedForRemittance,
+  isTransmittedToVan,
+} from '../../domain/document/remittance-approval.ts';
 import { checkPayoutReadiness } from '../../domain/payout/payout-readiness.ts';
 import type { PayoutGap, PayoutField, VanRoute } from '../../domain/payout/types.ts';
 import type { CedenteAccountId } from '../../domain/cedente/cedente-account-id.ts';
@@ -21,10 +24,23 @@ import type {
 // é a que responde aqui — não uma segunda regra "de tela". Duas regras divergem, e a divergência
 // aparece como título que o pré-voo aprova e o arquivo recusa, que é pior que não ter pré-voo.
 
-// `not-approved` é distinto de `blocked` de propósito (#736): `blocked` diz "falta dado do
-// cadastro" e manda o operador ao cadastro; `not-approved` diz "falta aprovar" e o manda ao fluxo
-// de aprovação. Ação diferente, status diferente.
-export type PreviewLineStatus = 'ready' | 'blocked' | 'out-of-van' | 'not-found' | 'not-approved';
+// Cada status manda o operador a um lugar DIFERENTE, e é essa a régua que decide se um valor novo se
+// justifica (#736): `blocked` diz "falta dado do cadastro" e o manda ao cadastro; `not-approved` diz
+// "falta aprovar" e o manda ao fluxo de aprovação; `transmitted` (#792, ADR-0065 §5) diz "este já
+// foi" e o manda à lista de remessas.
+//
+// ⚠️ `transmitted` não é preciosismo: sem ele um título já enviado cairia em `not-approved`, porque
+// só `Approved` satisfaz `isApprovedForRemittance`. Seria verdade formal com mensagem errada — o
+// operador iria aprovar um título que já está aprovado e cujo pagamento já saiu para o banco. E
+// jamais `ready`: a recusa por `remittance-payables-already-held` chegaria no último clique, que é
+// exatamente o defeito que o pré-voo existe para evitar (CA2 da #792).
+export type PreviewLineStatus =
+  | 'ready'
+  | 'blocked'
+  | 'out-of-van'
+  | 'not-found'
+  | 'not-approved'
+  | 'transmitted';
 
 export type RemittancePreviewLine = Readonly<{
   payableId: string;
@@ -51,6 +67,9 @@ export type RemittancePreview = Readonly<{
   outOfVanCount: number;
   notFoundCount: number;
   notApprovedCount: number;
+  // #792: quantos da seleção já saíram numa remessa. Contador próprio, e não somado a
+  // `notApprovedCount`, porque a ação do operador é outra — conferir a remessa, não aprovar.
+  transmittedCount: number;
   readyTotalCents: number;
   blockedTotalCents: number;
   // Como a seleção se REPARTE no arquivo (#804, CA7). O agrupamento é do emissor, e o front não
@@ -94,6 +113,21 @@ const notFoundLine = (payableId: string): RemittancePreviewLine => ({
 });
 
 const toPreviewLine = (row: RemittancePreviewRow): RemittancePreviewLine => {
+  // "Já foi" ANTES de "não está aprovado" (ADR-0065 §5), e a ordem é a mensagem: `Transmitted` não
+  // satisfaz `isApprovedForRemittance`, então sem este ramo o título cairia logo abaixo em
+  // `not-approved` — mandando o operador aprovar o que já está aprovado e já saiu para o banco.
+  if (isTransmittedToVan(row.status)) {
+    return {
+      payableId: row.payableId,
+      documentId: row.documentId,
+      status: 'transmitted',
+      route: null,
+      missing: [],
+      gaps: [],
+      valueCents: row.valueCents,
+    };
+  }
+
   // Aprovação ANTES de tudo (#736): só título `Approved` entra em remessa. Vem primeiro porque um
   // não-aprovado não deve mandar o operador procurar cadastro nem forma de pagamento — o que falta é
   // a aprovação, e é o que a linha diz. `route` fica nulo: a rota não importa antes de aprovar.
@@ -234,6 +268,7 @@ export const previewRemittance =
       outOfVanCount: countWhere(lines, 'out-of-van'),
       notFoundCount: countWhere(lines, 'not-found'),
       notApprovedCount: countWhere(lines, 'not-approved'),
+      transmittedCount: countWhere(lines, 'transmitted'),
       readyTotalCents: sumWhere(lines, 'ready'),
       // O valor fora da VAN fica FORA dos dois totais. Somá-lo ao impedido inflaria o número que o
       // operador usa para decidir se vale correr atrás do cadastro — e cadastro nenhum resolve

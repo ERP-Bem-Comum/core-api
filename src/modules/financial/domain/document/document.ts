@@ -25,6 +25,7 @@ import type {
   ApprovedDocument,
   DraftDocument,
   Document,
+  DocumentStatus,
 } from './types.ts';
 import type { Payable, Payables } from '../payable/types.ts';
 import type { DocumentEvent, PayableSnapshot } from './events.ts';
@@ -332,16 +333,35 @@ export type PayPayableManuallyOutput = Readonly<{
   events: readonly DocumentEvent[];
 }>;
 
-// #223: baixa manual de UM título (Aprovado→Pago), por título (#201). Relaxa a invariante
-// "payable espelha documento": um título pode ficar Pago enquanto os irmãos seguem Aprovados. O
-// documento permanece Approved (rollup do documento p/ Pago é fatia futura). Só Approved vira Pago.
+// As DUAS origens de uma baixa manual (ADR-0065 §6), e a fonte única da pré-condição.
+//
+//  - `Approved`    — pagamento feito FORA da VAN: cheque, caixa, boleto avulso. O caminho de sempre.
+//  - `Transmitted` — pagamento que saiu pela VAN e que o operador conferiu no site do banco. A P.O.
+//    decidiu na #59 que `Pago` continua manual: o retorno do banco (#690) não existe, então quem
+//    afirma que o dinheiro saiu é a pessoa que olhou o extrato.
+//
+// É a MESMA ação humana, e por isso não há slug distinto por origem — inventar um obrigaria a tela a
+// explicar uma diferença que não muda o que ninguém faz.
+//
+// ⚠️ Exportada porque o CAS do adapter (`payable-repository.drizzle.ts`) precisa da mesma lista: lá a
+// pré-condição vale no INSTANTE da escrita, aqui vale sobre o agregado que se leu. Duas listas
+// divergiriam em silêncio, e a divergência apareceria como baixa aceita em memória e recusada no
+// banco — ou pior, o contrário.
+export const MANUALLY_PAYABLE_STATUSES: readonly DocumentStatus[] = ['Approved', 'Transmitted'];
+
+// #223: baixa manual de UM título (→Pago), por título (#201). Relaxa a invariante "payable espelha
+// documento": um título pode ficar Pago enquanto os irmãos seguem Aprovados. O documento permanece
+// Approved (rollup do documento p/ Pago é fatia futura).
 export const payPayableManually = (
   input: PayPayableManuallyInput,
 ): Result<PayPayableManuallyOutput, DocumentError> => {
   const all = [input.payables.parent, ...input.payables.children];
   const target = all.find((p) => p.id === input.payableId);
   if (target === undefined) return err('payable-not-found');
-  if (target.status !== 'Approved') return err('payable-not-approved');
+  // O slug continua `payable-not-approved` mesmo agora que `Transmitted` também serve: ele nomeia o
+  // que o operador precisa fazer (aprovar), e `Draft`/`Open` — os únicos que chegam aqui recusados —
+  // são exatamente os que ainda não passaram pela aprovação.
+  if (!MANUALLY_PAYABLE_STATUSES.includes(target.status)) return err('payable-not-approved');
 
   const pay = (p: Payable): Payable =>
     p.id === input.payableId ? immutable<Payable>({ ...p, status: 'Paid', paidAt: input.at }) : p;

@@ -27,10 +27,20 @@ export type PaymentMethod =
   | 'GuiaRecolhimento'
   | 'Outro';
 
-// 7 valores desde já (ADR-0005): só Draft/Open/Approved têm transição nesta fatia;
-// Transmitted/Refused/Paid/Reconciled são reservados (sem transição).
-// PartiallyReconciled (#141/#247): título com pagamento parcial conciliado (saldo aberto remanescente);
-// status DERIVADO da soma conciliada (ver domain/payable/reconciled-status.ts).
+// 7 valores desde já (ADR-0005). O enum é compartilhado pelo DOCUMENTO e pelo TÍTULO, e desde o
+// ADR-0065 §2 os dois não têm mais as mesmas transições — ler esta lista como se fosse uma só é o
+// engano que o ADR existe para desfazer:
+//
+//   - **Título** (`fin_payables.status`): `Draft/Open/Approved` transicionam como sempre, e
+//     `Approved → Transmitted` acontece na geração da remessa, na mesma transação da reserva. De
+//     `Transmitted` sai para `Paid` (baixa manual, §6) ou de volta a `Approved` (descarte, §4).
+//   - **Documento** (`fin_documents.status`): segue `Draft | Open | Approved`. `Transmitted` continua
+//     RESERVADO e sem transição — "documento transmitido" é leitura derivada de todos os títulos
+//     transmitidos, no mesmo molde em que `Reconciled` já é derivado.
+//
+// `Refused` segue reservado para os dois: ele nasce do retorno do banco (#690), que não existe.
+// `PartiallyReconciled` (#141/#247): título com pagamento parcial conciliado (saldo aberto
+// remanescente); status DERIVADO da soma conciliada (ver domain/payable/reconciled-status.ts).
 export type DocumentStatus =
   | 'Draft'
   | 'Open'

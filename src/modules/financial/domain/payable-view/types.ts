@@ -3,7 +3,11 @@
 
 import type { DocumentStatus } from '../document/types.ts';
 
-export type PayableViewStatus = 'Open' | 'Approved' | 'Paid' | 'Cancelled';
+// `Transmitted` entrou no ADR-0065 §5 (#792, CA4): o read-model DEIXOU de colapsá-lo em `Approved`.
+// O colapso era o defeito visível da issue — o operador gerava a remessa, o pagamento saía para o
+// banco, e o grid continuava dizendo "Aprovado". Um balde próprio é o que faz a tela distinguir
+// "posso pagar" de "já mandei pagar".
+export type PayableViewStatus = 'Open' | 'Approved' | 'Transmitted' | 'Paid' | 'Cancelled';
 
 const DOCUMENT_STATUSES: readonly DocumentStatus[] = [
   'Draft',
@@ -19,18 +23,28 @@ const DOCUMENT_STATUSES: readonly DocumentStatus[] = [
 export const isDocumentStatus = (v: string): v is DocumentStatus =>
   (DOCUMENT_STATUSES as readonly string[]).includes(v);
 
-// #307 (m2): mapa EXPLÍCITO e exaustivo DocumentStatus → PayableViewStatus (o read-model tem 4
+// #307 (m2): mapa EXPLÍCITO e exaustivo DocumentStatus → PayableViewStatus (o read-model tem 5
 // status; o documento tem 8). Switch sem default → o compilador exige cobrir todo status novo
 // (fecha o buraco de "reject silencioso" apontado no W2 do #235). Semântica: settled→Paid,
-// em-trânsito→Approved, recusado→Cancelled, rascunho→Open.
+// recusado→Cancelled, rascunho→Open.
+//
+// ⚠️ `Transmitted` NÃO colapsa mais em `Approved` (ADR-0065 §5). O colapso era deliberado quando o
+// título não tinha transição — `Transmitted` era valor morto do enum, e mapeá-lo era só defesa. Ele
+// virou defeito no instante em que a transição passou a existir (#792): o grid dizia "Aprovado"
+// sobre um pagamento já entregue à VAN, e o operador não tinha como saber que o arquivo saiu.
+//
+// `PartiallyReconciled`/`Reconciled` seguem colapsando em `Paid`, e isso NÃO é a mesma coisa: eles
+// são refinamentos de "já foi pago", e o read-model não promete distingui-los. `Transmitted` é outro
+// momento do ciclo, não um refinamento de `Approved`.
 export const documentStatusToViewStatus = (s: DocumentStatus): PayableViewStatus => {
   switch (s) {
     case 'Draft':
     case 'Open':
       return 'Open';
     case 'Approved':
-    case 'Transmitted':
       return 'Approved';
+    case 'Transmitted':
+      return 'Transmitted';
     case 'Refused':
       return 'Cancelled';
     case 'Paid':

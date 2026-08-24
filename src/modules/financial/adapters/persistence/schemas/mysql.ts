@@ -584,7 +584,9 @@ export const finPayableView = mysqlTable(
     programRef: uuidKey('program_ref'),
     valueCents: bigint('value_cents', { mode: 'number' }).notNull(),
     dueDate: date('due_date', { mode: 'string' }).notNull(),
-    status: varchar('status', { length: 12 }).notNull(), // Open|Approved|Paid|Cancelled
+    // Open|Approved|Transmitted|Paid|Cancelled — `Transmitted` entrou no ADR-0065 §5 (#792), quando
+    // o read-model deixou de colapsá-lo em `Approved`. `varchar(12)` já comportava os 11 caracteres.
+    status: varchar('status', { length: 12 }).notNull(),
     // #239: conta-débito (de qual conta cedente saiu) + data do pagamento (só quando Paid).
     debitAccountRef: uuidKey('debit_account_ref'),
     paidAt: date('paid_at', { mode: 'string' }),
@@ -605,7 +607,7 @@ export const finPayableView = mysqlTable(
     check('fin_payable_view_kind_chk', sql`${t.kind} IN ('Parent','Child')`),
     check(
       'fin_payable_view_status_chk',
-      sql`${t.status} IN ('Open','Approved','Paid','Cancelled')`,
+      sql`${t.status} IN ('Open','Approved','Transmitted','Paid','Cancelled')`,
     ),
     check(
       'fin_payable_view_retention_type_chk',
@@ -1157,12 +1159,22 @@ export type NewFinOutboxDeadLetterRow = typeof finOutboxDeadLetter.$inferInsert;
 
 // ─── fin_remittances ──────────────────────────────────────────────────────────
 //
-// Lote de comunicação: UM arquivo de remessa por conta-cedente (016). Existe porque o documento só
-// vira `Transmitted` quando o `status/` do agente confirma (ADR-0061): entre gravar no bucket e
-// confirmar há uma janela de até 5 minutos, e é esta linha que segura os documentos nela.
+// Lote de comunicação: UM arquivo de remessa por conta-cedente (016). Esta linha é o registro do
+// TRANSPORTE — o que o agente fez com o arquivo —, e o `status` dela responde por isso: `Queued` até
+// o envelope do `status/` chegar, depois `Transmitted` ou `Failed` (ADR-0060/0061). Essa parte não
+// mudou.
 //
-// `status` em varchar+CHECK (ADR-0020, sem ENUM nativo). `Failed` NÃO libera os documentos — só
-// `Discarded`, que exige decisão humana registrada em `detail`.
+// ⚠️ O que mudou: este comentário afirmava que a tabela existe "porque o documento só vira
+// `Transmitted` quando o `status/` confirma". O ADR-0065 §§2-3 supersedeu essa cláusula para o
+// TÍTULO — ele passa a `Transmitted` na geração, na mesma transação da reserva, em
+// `fin_payables.status`. São dois fatos com o mesmo nome: `fin_remittances.status = 'Transmitted'`
+// diz "o agente transmitiu"; `fin_payables.status = 'Transmitted'` diz "saiu da nossa alçada".
+// Tratá-los como um só era o defeito que a #792 corrigiu. O que esta linha segura continua sendo o
+// VÍNCULO (o hold), não o estado do título.
+//
+// `status` em varchar+CHECK (ADR-0020, sem ENUM nativo). `Failed` NÃO libera os títulos — nem o
+// vínculo, nem o status deles (ADR-0065 §4). Só `Discarded`, que exige decisão humana registrada em
+// `detail`, e que devolve o título a `Approved` por CAS.
 //
 // ⚠️ CHARSET/COLLATE — inserir manualmente na migration gerada (limitação Drizzle 0.45.x):
 //   ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci; coluna `id` em utf8mb4_bin.
