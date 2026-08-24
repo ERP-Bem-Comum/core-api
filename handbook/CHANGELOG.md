@@ -4,6 +4,18 @@ Mudanças relevantes na documentação do projeto. Formato baseado em [Keep a Ch
 
 ---
 
+## 2026-08-24 — 🏦 ADR-0065 (Proposed): a responsabilidade pela remessa termina no bucket — `Transmitted` do título na geração; download em produção sob permissão + rastro
+
+**Uma decisão de produto que era, na verdade, uma decisão de fronteira.** A [#792](https://github.com/ERP-Bem-Comum/core-api/issues/792) registrava que, depois de gerar e transmitir, o título continuava "Aprovado" — `Transmitted` existia no enum e nada o atribuía. A P.O. decidiu em 24/08, num menu de trade-offs com o tech lead: o título vira **Transmitido na geração**, porque a partir do bucket a responsabilidade é da VAN e do banco (ACL — Vernon, p. 142), acompanhada pelo site da instituição.
+
+Isso **revoga** a leitura de 11/08 ("só ao ler o `status/`") e a cláusula do [ADR-0060](./architecture/adr/0060-van-transport-via-s3-bucket-supersedes-0008-relay.md) `:78-79` **quando aplicada ao título** — daí um ADR que `supersedes` em vez de edição. O [ADR-0065](./architecture/adr/0065-remittance-responsibility-boundary-supersedes-0060-0061-transmitted.md) separa os dois fatos que os ADRs anteriores tratavam como um: "saiu da nossa alçada" (título, transacional com a reserva, CAS do [ADR-0063](./architecture/adr/0063-payable-is-the-write-aggregate-cas-by-precondition.md)) e "o agente transmitiu" (remessa, pelo `status/`). `Failed` não devolve o título; `discard` devolve. `Pago` segue manual ([#59](https://github.com/ERP-Bem-Comum/core-api/issues/59)).
+
+No mesmo ADR, a [#822](https://github.com/ERP-Bem-Comum/core-api/issues/822): o arquivo da remessa passa a ser baixável em produção — permissão dedicada `remittance:download`, 403 nomeado, log estruturado de cada acesso, bytes pela API com `contentHash`; URL assinada rejeitada pelo motivo do [ADR-0050](./architecture/adr/0050-document-reader-cascade-supersedes-0034.md). O teste que fixava o 404 em produção é invertido conscientemente.
+
+Nasce `Proposed`: a implementação (transição no `save` de criação, evento, pré-voo, read-model, `discard`, rota e permissão) só começa depois do aceite.
+
+---
+
 ## 2026-08-07 — 🏷️ Higienização (3 e 4/4): `interviews/` fica intacta, e `api_documentations/` passa a dizer que é do LEGADO
 
 **Duas frentes, dois vereditos de "não mexer" — e o segundo por muito pouco.**
