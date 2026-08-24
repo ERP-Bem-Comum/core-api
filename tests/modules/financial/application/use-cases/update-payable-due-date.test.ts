@@ -15,9 +15,14 @@ import { SupplierRef } from '#src/modules/partners/public-api/refs.ts';
 import { DocumentId, PayableId } from '#src/modules/financial/domain/shared/ids.ts';
 import * as Retention from '#src/modules/financial/domain/shared/retention.ts';
 import * as Document from '#src/modules/financial/domain/document/document.ts';
-import { createInMemoryDocumentRepository } from '#src/modules/financial/adapters/persistence/repos/document-repository.in-memory.ts';
+import {
+  createInMemoryDocumentRepository,
+  type DocumentStore,
+} from '#src/modules/financial/adapters/persistence/repos/document-repository.in-memory.ts';
+import { createInMemoryPayableRepository } from '#src/modules/financial/adapters/persistence/repos/payable-repository.in-memory.ts';
 import { createInMemoryOutbox } from '#src/modules/financial/adapters/outbox/outbox.in-memory.ts';
 import type { DocumentRepository } from '#src/modules/financial/domain/document/repository.ts';
+import type { PayableRepository } from '#src/modules/financial/domain/payable/repository.ts';
 import { updatePayableDueDate } from '#src/modules/financial/application/use-cases/update-payable-due-date.ts';
 
 const SUP = '11111111-1111-4111-8111-111111111111';
@@ -60,9 +65,17 @@ const createdNfse = (): Document.CreateDocumentOutput => {
   return r.value;
 };
 
-const makeRepo = (): DocumentRepository => {
+// Leitura e escrita em ports distintos (Fatia 1), sobre o MESMO store e o MESMO outbox — é o que
+// o driver `memory` do composition root monta.
+type Repos = Readonly<{ repo: DocumentRepository; payableRepo: PayableRepository }>;
+
+const makeRepo = (): Repos => {
   const outbox = createInMemoryOutbox();
-  return createInMemoryDocumentRepository(undefined, undefined, outbox.port);
+  const store: DocumentStore = new Map();
+  return {
+    repo: createInMemoryDocumentRepository(undefined, undefined, outbox.port, store),
+    payableRepo: createInMemoryPayableRepository(store, undefined, outbox.port),
+  };
 };
 const seedOpen = async (repo: DocumentRepository) => {
   const c = createdNfse();
@@ -73,18 +86,19 @@ const iso = (d: Date): string => d.toISOString();
 
 describe('financial/application — updatePayableDueDate (#270)', () => {
   it('CA1: altera só o título alvo e persiste; pai/irmãos/documento inalterados', async () => {
-    const repo = makeRepo();
+    const { repo, payableRepo } = makeRepo();
     const id = await seedOpen(repo);
     const found0 = await repo.findById(id);
     assert.equal(found0.ok, true);
     if (!found0.ok || found0.value.payables === null) return assert.fail('setup reload');
     const child = found0.value.payables.children[0]!;
 
-    const r = await updatePayableDueDate({ repo, clock: CLOCK })({
+    const r = await updatePayableDueDate({ repo, payableRepo, clock: CLOCK })({
       documentId: String(id),
       payableId: String(child.id),
       expectedVersion: 0,
       dueDate: NEW_DUE,
+      expectedDueDate: ORIGINAL_DUE,
     });
     assert.equal(r.ok, true, JSON.stringify(r));
 
@@ -101,12 +115,13 @@ describe('financial/application — updatePayableDueDate (#270)', () => {
   });
 
   it('CA3: documento inexistente → document-not-found', async () => {
-    const repo = makeRepo();
-    const r = await updatePayableDueDate({ repo, clock: CLOCK })({
+    const { repo, payableRepo } = makeRepo();
+    const r = await updatePayableDueDate({ repo, payableRepo, clock: CLOCK })({
       documentId: String(DocumentId.generate()),
       payableId: String(PayableId.generate()),
       expectedVersion: 0,
       dueDate: NEW_DUE,
+      expectedDueDate: ORIGINAL_DUE,
     });
     assert.equal(r.ok, false);
     if (r.ok) return;
@@ -114,16 +129,103 @@ describe('financial/application — updatePayableDueDate (#270)', () => {
   });
 
   it('CA3: título não pertencente ao documento → payable-not-found', async () => {
-    const repo = makeRepo();
+    const { repo, payableRepo } = makeRepo();
     const id = await seedOpen(repo);
-    const r = await updatePayableDueDate({ repo, clock: CLOCK })({
+    const r = await updatePayableDueDate({ repo, payableRepo, clock: CLOCK })({
       documentId: String(id),
       payableId: String(PayableId.generate()),
       expectedVersion: 0,
       dueDate: NEW_DUE,
+      expectedDueDate: ORIGINAL_DUE,
     });
     assert.equal(r.ok, false);
     if (r.ok) return;
     assert.equal(r.error, 'payable-not-found');
+  });
+});
+
+// Fatia 2 — o CAS por VALOR. Estes casos não existiam porque a proteção era a `version` do
+// documento, que acusava conflito por qualquer mudança nele e nenhuma no título.
+describe('financial/application — updatePayableDueDate sob CAS por valor (Fatia 2)', () => {
+  it('reagendar com `expectedDueDate` desatualizado → payable-reschedule-conflict', async () => {
+    const { repo, payableRepo } = makeRepo();
+    const id = await seedOpen(repo);
+    const reschedule = updatePayableDueDate({ repo, payableRepo, clock: CLOCK });
+    const found = await repo.findById(id);
+    if (!found.ok || found.value.payables === null) return assert.fail('setup reload');
+    const target = String(found.value.payables.parent.id);
+
+    // Operador A reagenda. O título sai de ORIGINAL_DUE.
+    const first = await reschedule({
+      documentId: String(id),
+      payableId: target,
+      dueDate: NEW_DUE,
+      expectedDueDate: ORIGINAL_DUE,
+    });
+    assert.equal(first.ok, true, JSON.stringify(first));
+
+    // Operador B ainda tem ORIGINAL_DUE na tela e tenta reagendar para outra data. O CAS recusa —
+    // sem ele, B apagaria a decisão de A sem que ninguém soubesse.
+    const second = await reschedule({
+      documentId: String(id),
+      payableId: target,
+      dueDate: new Date('2028-01-20'),
+      expectedDueDate: ORIGINAL_DUE,
+    });
+    assert.equal(second.ok, false, 'a escrita cega de B tem de ser recusada');
+    if (!second.ok) assert.equal(second.error, 'payable-reschedule-conflict');
+
+    // E o vencimento no banco continua o de A.
+    const after = await repo.findById(id);
+    if (!after.ok || after.value.payables === null) return assert.fail('reload');
+    assert.equal(iso(after.value.payables.parent.dueDate), iso(NEW_DUE));
+  });
+
+  it('reagendar títulos IRMÃOS: as duas passam (sem conflito de versão)', async () => {
+    const { repo, payableRepo } = makeRepo();
+    const id = await seedOpen(repo);
+    const reschedule = updatePayableDueDate({ repo, payableRepo, clock: CLOCK });
+    const found = await repo.findById(id);
+    if (!found.ok || found.value.payables === null) return assert.fail('setup reload');
+    const child = found.value.payables.children[0]!;
+
+    const first = await reschedule({
+      documentId: String(id),
+      payableId: String(found.value.payables.parent.id),
+      expectedVersion: 0,
+      dueDate: NEW_DUE,
+      expectedDueDate: ORIGINAL_DUE,
+    });
+    // Mesmo `expectedVersion: 0` das duas — no caminho antigo a segunda receberia
+    // `document-version-conflict`, porque a primeira teria incrementado a versão do documento.
+    const second = await reschedule({
+      documentId: String(id),
+      payableId: String(child.id),
+      expectedVersion: 0,
+      dueDate: NEW_DUE,
+      expectedDueDate: ORIGINAL_DUE,
+    });
+
+    assert.equal(first.ok, true, JSON.stringify(first));
+    assert.equal(second.ok, true, `irmaos nao disputam entre si: ${JSON.stringify(second)}`);
+  });
+
+  it('o reagendamento não move a version do documento', async () => {
+    const { repo, payableRepo } = makeRepo();
+    const id = await seedOpen(repo);
+    const before = await repo.findById(id);
+    const versionBefore = before.ok ? before.value.version : -1;
+    if (!before.ok || before.value.payables === null) return assert.fail('setup reload');
+
+    const r = await updatePayableDueDate({ repo, payableRepo, clock: CLOCK })({
+      documentId: String(id),
+      payableId: String(before.value.payables.parent.id),
+      dueDate: NEW_DUE,
+      expectedDueDate: ORIGINAL_DUE,
+    });
+    assert.equal(r.ok, true, JSON.stringify(r));
+
+    const after = await repo.findById(id);
+    if (after.ok) assert.equal(after.value.version, versionBefore);
   });
 });

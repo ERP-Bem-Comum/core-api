@@ -29,6 +29,15 @@ const NOT_FOUND_CODES: ReadonlySet<string> = new Set([
 const CONFLICT_CODES: ReadonlySet<string> = new Set([
   'invalid-state-transition',
   'document-version-conflict',
+  // O CAS por título não casou — outra escrita alcançou o título primeiro. É conflito de ESTADO,
+  // como `document-version-conflict`, e não erro de dado: o mesmo pedido volta a valer se o título
+  // retornar à pré-condição esperada.
+  //
+  // ⚠️ São DOIS slugs porque são duas mensagens ao operador, com ações diferentes — ver
+  // `domain/payable/repository.ts`. Colapsá-los de volta num só reintroduz a frase que fala de
+  // "baixa" para quem tentou reagendar.
+  'payable-payment-conflict',
+  'payable-reschedule-conflict',
   // #785 — o bucket contradiz o contrato de prefixos. É 409 e não 404 de propósito: 404 significa
   // "não existe, nada a fazer", e aqui há o que fazer. E não é 5xx porque o envelope esconde o
   // código em 5xx, e este é justamente o código que precisa chegar a quem pediu.
@@ -227,6 +236,13 @@ const SLUG_MESSAGES: Record<string, string> = {
   'timeline-document-not-found': 'Documento não encontrado.',
   'document-version-conflict':
     'O documento foi modificado por outra operação. Atualize e tente novamente.',
+  // As duas frases abaixo existem separadas de propósito: elas terminam em AÇÕES diferentes, e é a
+  // ação que o operador precisa ler. Uma mensagem única que servisse às duas não diria o que fazer
+  // em nenhuma — foi o que aconteceu enquanto o slug era um só, e quem reagendava lia sobre baixa.
+  'payable-payment-conflict':
+    'Este título já não estava aprovado quando a baixa foi gravada — outra operação o alterou antes. Atualize e confira se a baixa já foi registrada.',
+  'payable-reschedule-conflict':
+    'O vencimento deste título foi alterado por outra operação depois que esta tela foi carregada. Atualize e confira o vencimento atual antes de reagendar.',
   'invalid-state-transition': 'O documento não está no estado necessário para esta operação.',
   'financial-ref-invalid': 'Referência inválida: o valor informado não é um identificador válido.',
   'partner-ref-invalid': 'Referência de fornecedor inválida.',

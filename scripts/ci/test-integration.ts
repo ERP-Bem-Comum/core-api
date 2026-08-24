@@ -173,6 +173,10 @@ const SUITES: Readonly<Record<string, Suite>> = {
     // nesta janela (#500); registrado para o ritual manual / quando o runner de integração fechar.
     'tests/modules/financial/adapters/persistence/manual-entry-taxonomy.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/manual-payment.drizzle-mysql.test.ts',
+    // Fatia 1 — concorrência da escrita por título (CAS). Sem MySQL real este arquivo não prova
+    // nada: o que ele mede é o InnoDB sob escrita simultânea, e um fake responderia o que o autor
+    // do fake imaginou.
+    'tests/modules/financial/adapters/persistence/payable-cas-concurrency.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/reconciliation-period.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/category-read.drizzle-mysql.test.ts',
     'tests/modules/financial/adapters/persistence/cost-center-read.drizzle-mysql.test.ts',

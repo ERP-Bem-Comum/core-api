@@ -20,6 +20,7 @@ import {
   createInMemoryDocumentRepository,
   type DocumentStore,
 } from '../persistence/repos/document-repository.in-memory.ts';
+import { createInMemoryPayableRepository } from '../persistence/repos/payable-repository.in-memory.ts';
 import {
   createInMemoryPayableListView,
   derivePayableListItems,
@@ -148,6 +149,7 @@ import { createProgramsApiReadStore } from '../persistence/repos/program-read.fr
 import { buildProgramsReadPort } from '#src/modules/programs/public-api/index.ts';
 import type { ProgramReadPort, ProgramView } from '../../application/ports/program-read.ts';
 import { createDrizzleDocumentRepository } from '../persistence/repos/document-repository.drizzle.ts';
+import { createDrizzlePayableRepository } from '../persistence/repos/payable-repository.drizzle.ts';
 import { createDrizzleTimelineRepository } from '../persistence/repos/timeline-repository.drizzle.ts';
 import { createDrizzleBankStatementRepository } from '../persistence/repos/bank-statement-repository.drizzle.ts';
 import { createDrizzlePayableReconciliationView } from '../persistence/repos/payable-reconciliation-view.drizzle.ts';
@@ -212,6 +214,7 @@ import { listReconciliationPeriods } from '../../application/use-cases/list-reco
 import { getStatementSuggestions } from '../../application/use-cases/get-statement-suggestions.ts';
 import { createStatementBackedAccountHistory } from '../persistence/repos/cedente-account-history.from-statements.ts';
 import type { DocumentRepository, LoadedDocument } from '../../domain/document/repository.ts';
+import type { PayableRepository } from '../../domain/payable/repository.ts';
 import type { PayeeKind } from '../../domain/document/types.ts';
 import type { FinancialTimelineRepository } from '../../domain/timeline/repository.ts';
 import type { FinancialTimelineEntry } from '../../domain/timeline/types.ts';
@@ -422,6 +425,9 @@ type Pools = Readonly<{
   // mysql: read-port de contracts na MESMA conexão (ctr_* no mesmo DB do monólito).
   contractCategorizationReader: ContractCategorizationReadPort;
   repo: DocumentRepository;
+  // Fatia 1: escrita POR TÍTULO, separada do `repo`. Quem só muda um título não passa pelo `save`
+  // do documento — ver `domain/payable/repository.ts`.
+  payableRepo: PayableRepository;
   documentStorage: SourceFileStoragePort; // #62: storage do comprovante-fonte
   payableListView: PayableListView;
   // Repo de LEITURA da trilha. Na escrita, o `save` do DocumentRepository grava a trilha
@@ -602,6 +608,8 @@ const buildMemoryPools = (
     costCenterReader,
     programReader,
     repo,
+    // Mesmo `documentStore` do `repo` — o title escrito aqui é o que o `findById` lê (#222).
+    payableRepo: createInMemoryPayableRepository(documentStore, timelineStore),
     payableListView: createInMemoryPayableListView(documentSource),
     timelineRepo,
     statementRepo,
@@ -801,6 +809,7 @@ const buildMysqlPools = async (config: FinancialCompositionConfig): Promise<Pool
   return {
     contractCategorizationReader: contractsReadPort,
     repo: createDrizzleDocumentRepository(handle),
+    payableRepo: createDrizzlePayableRepository(handle),
     documentStorage: buildDocumentStorage(),
     payableListView: createDrizzlePayableListView(handle),
     // Leitura da trilha via pool (a escrita é feita dentro da tx do document-repo.save).
@@ -874,6 +883,7 @@ const makeDeps = (pools: Pools, clock: Clock = ClockReal()): FinancialHttpDeps =
   const deps = {
     cedenteAccountStore: pools.cedenteStore,
     repo: pools.repo,
+    payableRepo: pools.payableRepo,
     clock,
     contractCategorizationReader: pools.contractCategorizationReader,
     ...(approverAuthorityReader !== undefined ? { approverAuthorityReader } : {}),

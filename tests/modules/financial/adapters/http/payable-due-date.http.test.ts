@@ -147,7 +147,11 @@ describe('financial/http — PATCH due-date isolado (#270)', () => {
     const target = children[0]!;
     const sibling = children[1]!;
 
-    const res = await patchDue(id, target.payableId, { dueDate: NEW_DUE, version: 0 });
+    const res = await patchDue(id, target.payableId, {
+      dueDate: NEW_DUE,
+      version: 0,
+      expectedDueDate: ORIGINAL_DUE,
+    });
     assert.equal(res.statusCode, 200, res.body);
 
     const rows = await titlesOf(id);
@@ -170,7 +174,12 @@ describe('financial/http — PATCH due-date isolado (#270)', () => {
 
   it('CA-RBAC: sem Authorization → 401', async () => {
     const { id, children } = await seedDoc();
-    const res = await patchDue(id, children[0]!.payableId, { dueDate: NEW_DUE, version: 0 }, null);
+    const res = await patchDue(
+      id,
+      children[0]!.payableId,
+      { dueDate: NEW_DUE, version: 0, expectedDueDate: ORIGINAL_DUE },
+      null,
+    );
     assert.equal(res.statusCode, 401, res.body);
   });
 
@@ -179,7 +188,7 @@ describe('financial/http — PATCH due-date isolado (#270)', () => {
     const res = await patchDue(
       id,
       children[0]!.payableId,
-      { dueDate: NEW_DUE, version: 0 },
+      { dueDate: NEW_DUE, version: 0, expectedDueDate: ORIGINAL_DUE },
       READER,
     );
     assert.equal(res.statusCode, 403, res.body);
@@ -187,15 +196,59 @@ describe('financial/http — PATCH due-date isolado (#270)', () => {
 
   it('CA2: dueDate mal-formado → 400', async () => {
     const { id, children } = await seedDoc();
-    const res = await patchDue(id, children[0]!.payableId, { dueDate: '31-12-2026', version: 0 });
+    const res = await patchDue(id, children[0]!.payableId, {
+      dueDate: '31-12-2026',
+      version: 0,
+      expectedDueDate: ORIGINAL_DUE,
+    });
     assert.equal(res.statusCode, 400, res.body);
+  });
+
+  // Fatia 2 — o CAS por valor na borda.
+  it('CA4: `expectedDueDate` ausente → 400 (o campo é obrigatório, e de propósito)', async () => {
+    const { id, children } = await seedDoc();
+    // Este caso fixa o contrato por escrito: um cliente que não mande o vencimento anterior é
+    // recusado na borda, não atendido com uma garantia menor. Se um dia alguém tornar o campo
+    // opcional "para não quebrar o front", é aqui que a decisão volta à mesa.
+    const res = await patchDue(id, children[0]!.payableId, { dueDate: NEW_DUE, version: 0 });
+    assert.equal(res.statusCode, 400, res.body);
+  });
+
+  it('CA5: `expectedDueDate` desatualizado → 409 (outro operador reagendou antes)', async () => {
+    const { id, children } = await seedDoc();
+    const target = children[0]!.payableId;
+
+    const first = await patchDue(id, target, {
+      dueDate: NEW_DUE,
+      version: 0,
+      expectedDueDate: ORIGINAL_DUE,
+    });
+    assert.equal(first.statusCode, 200, first.body);
+
+    // Segundo operador, mesma tela antiga: ainda acha que o título vence em ORIGINAL_DUE.
+    const second = await patchDue(id, target, {
+      dueDate: '2028-01-20',
+      version: 0,
+      expectedDueDate: ORIGINAL_DUE,
+    });
+    assert.equal(second.statusCode, 409, second.body);
+    const body = second.json() as { error?: { code?: string } };
+    assert.equal(body.error?.code, 'conflict');
+
+    // E o vencimento gravado continua o do primeiro.
+    const rows = await titlesOf(id);
+    assert.equal(rows.find((r) => r.payableId === target)!.dueDate, NEW_DUE);
   });
 
   // O notFound handler do app também devolve { error.code: 'not-found', message: 'Route not found' };
   // por isso o CA3 ancora na MENSAGEM de domínio (toPublicMessage), distinguindo rota-ausente do
   // not-found de negócio — senão o teste passaria trivialmente sem a rota montada.
   it('CA3: documento inexistente → 404 not-found de domínio (não rota-ausente)', async () => {
-    const res = await patchDue(MISSING_UUID, MISSING_UUID, { dueDate: NEW_DUE, version: 0 });
+    const res = await patchDue(MISSING_UUID, MISSING_UUID, {
+      dueDate: NEW_DUE,
+      version: 0,
+      expectedDueDate: ORIGINAL_DUE,
+    });
     assert.equal(res.statusCode, 404, res.body);
     const body = res.json() as { error?: { code?: string; message?: string } };
     assert.equal(body.error?.code, 'not-found');
@@ -204,7 +257,11 @@ describe('financial/http — PATCH due-date isolado (#270)', () => {
 
   it('CA3: título inexistente no documento → 404 payable-not-found de domínio', async () => {
     const { id } = await seedDoc();
-    const res = await patchDue(id, MISSING_UUID, { dueDate: NEW_DUE, version: 0 });
+    const res = await patchDue(id, MISSING_UUID, {
+      dueDate: NEW_DUE,
+      version: 0,
+      expectedDueDate: ORIGINAL_DUE,
+    });
     assert.equal(res.statusCode, 404, res.body);
     const body = res.json() as { error?: { code?: string; message?: string } };
     assert.equal(body.error?.code, 'not-found');
