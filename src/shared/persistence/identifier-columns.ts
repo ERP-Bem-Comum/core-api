@@ -82,3 +82,22 @@ export const permissionKey = binaryText('varchar(128) COLLATE utf8mb4_bin');
  * (`VAN_S3_PREFIX_*`) e o nome vem do banco — 64 não é margem, é aposta.
  */
 export const objectStorageKey = binaryText('varchar(255) COLLATE utf8mb4_bin');
+
+/**
+ * Chave de DOCUMENTO em object storage — o PDF/XML assinado ou lido, e não o arquivo de troca
+ * bancária de {@link objectStorageKey}.
+ *
+ * Mesma razão para ser binária: a chave é case-sensitive no S3. A largura difere porque o caminho
+ * difere — a chave de documento carrega hierarquia de contrato/aditivo/competência, enquanto a da
+ * VAN é `prefixo/nome` de um arquivo só. 1024 é o que `ctr_documents.storage_key` e
+ * `fin_documents.source_file_key` já têm em produção, e é preservado para que a adoção do tipo
+ * altere a collation sem mexer na largura.
+ */
+export const documentStorageKey = binaryText('varchar(1024) COLLATE utf8mb4_bin');
+
+/**
+ * Chave de IMAGEM em object storage — logotipo e afins, exibidos ao usuário.
+ *
+ * Binária pelo mesmo motivo das duas acima. Largura preservada de `prg_programs.logo_key`.
+ */
+export const imageStorageKey = binaryText('varchar(512) COLLATE utf8mb4_bin');

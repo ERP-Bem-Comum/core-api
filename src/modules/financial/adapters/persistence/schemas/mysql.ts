@@ -49,6 +49,7 @@ import {
 import { sql, type SQL } from 'drizzle-orm';
 
 import {
+  documentStorageKey,
   objectStorageKey,
   opaqueKey,
   sha256HexKey,
@@ -140,7 +141,7 @@ export const finDocuments = mysqlTable(
 
     // #62: comprovante-fonte (PDF/XML lido) guardado no storage — todas nullable (opcional + back-compat).
     sourceFileBucket: varchar('source_file_bucket', { length: 63 }),
-    sourceFileKey: varchar('source_file_key', { length: 1024 }),
+    sourceFileKey: documentStorageKey('source_file_key'),
     sourceFileHashSha256: opaqueKey('source_file_hash_sha256'),
     sourceFileSizeBytes: bigint('source_file_size_bytes', { mode: 'number' }),
     sourceFileMime: varchar('source_file_mime', { length: 127 }),
