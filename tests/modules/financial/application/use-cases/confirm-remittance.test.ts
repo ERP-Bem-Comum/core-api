@@ -130,9 +130,13 @@ describe('confirmRemittance — o que resolve uma remessa', () => {
     assert.equal(remittance.status, 'Failed');
 
     const payableIds = payableIdsOf(remittance);
-    const held = await s.remittances.findHeldPayableIds(payableIds);
+    const held = await s.remittances.findHeldPayables(payableIds);
     assert.ok(isOk(held));
-    assert.deepEqual(held.value, [...payableIds].sort(), 'Failed segue prendendo');
+    assert.deepEqual(
+      held.value.map((h) => h.payableId),
+      [...payableIds].sort(),
+      'Failed segue prendendo',
+    );
   });
 
   // O veredito vem de evidência física (arquivo em BACKUP), não de código de retorno.

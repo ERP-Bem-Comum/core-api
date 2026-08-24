@@ -186,9 +186,19 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const livre = await seedPayable();
       await repo.save(build([preso]));
 
-      const held = await repo.findHeldPayableIds([preso.payableId, livre.payableId]);
+      const held = await repo.findHeldPayables([preso.payableId, livre.payableId]);
       assert.ok(isOk(held));
-      assert.deepEqual(held.value, [preso.payableId]);
+      assert.deepEqual(
+        held.value.map((h) => h.payableId),
+        [preso.payableId],
+      );
+
+      // Contra MySQL real: a projeção traz a remessa junto, e o `nsa` chega como INTEIRO — não como
+      // string. É o que o `int()` do schema promete, e o único lugar onde essa promessa é medida.
+      const vinculo = held.value[0];
+      assert.ok(vinculo !== undefined);
+      assert.equal(typeof vinculo.nsa, 'number');
+      assert.ok(Number.isInteger(vinculo.nsa));
     });
 
     it('falha prende; descarte libera', async () => {
@@ -201,7 +211,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       assert.ok(isOk(failed));
       await repo.save(failed.value.remittance, failed.value.events);
 
-      const aindaPreso = await repo.findHeldPayableIds([d.payableId]);
+      const aindaPreso = await repo.findHeldPayables([d.payableId]);
       assert.ok(isOk(aindaPreso) && aindaPreso.value.length === 1);
 
       const discarded = discard(
@@ -212,7 +222,7 @@ if (!process.env['MYSQL_INTEGRATION']) {
       assert.ok(isOk(discarded));
       await repo.save(discarded.value.remittance, discarded.value.events);
 
-      const liberado = await repo.findHeldPayableIds([d.payableId]);
+      const liberado = await repo.findHeldPayables([d.payableId]);
       assert.ok(isOk(liberado));
       assert.deepEqual(liberado.value, []);
     });

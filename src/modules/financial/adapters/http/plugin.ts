@@ -796,7 +796,12 @@ const financialRoutes =
           // #273 US2: null apaga; undefined preserva (exactOptionalPropertyTypes).
           ...(body.paymentDetail !== undefined ? { paymentDetail: body.paymentDetail } : {}),
         });
-        if (!result.ok) return sendDomainError(reply, result.error);
+        // `.error.error` é o preço do envelope discriminado (`AdjustDocumentFailure`): ambos os
+        // `kind` carregam o slug, então o mapeamento atual segue valendo sem ramificar. Quando a
+        // evidência da recusa por título preso for ligada, é aqui que `kind === 'held-payables'`
+        // ganha tratamento próprio — e é aqui que a exceção à regra de não vazar detalhe no body
+        // (linhas 201-202) precisará da justificativa por escrito, ao lado dela.
+        if (!result.ok) return sendDomainError(reply, result.error.error);
         return loadAndSerialize(deps, reply, req.params.id);
       },
     });

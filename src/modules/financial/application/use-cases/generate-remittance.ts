@@ -71,7 +71,7 @@ export const generateRemittance =
 
     // 1. Quem já está preso. A pergunta vai ao BANCO porque outra instância pode ter enfileirado o
     // mesmo título há segundos — e incluir de novo é pagar duas vezes.
-    const held = await deps.remittances.findHeldPayableIds(input.payableIds);
+    const held = await deps.remittances.findHeldPayables(input.payableIds);
     if (!held.ok) return err('remittance-persist-failed');
     if (held.value.length > 0) return err('remittance-payables-already-held');
 

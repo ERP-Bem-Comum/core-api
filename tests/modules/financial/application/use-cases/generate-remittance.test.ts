@@ -120,9 +120,12 @@ describe('generateRemittance — caminho feliz', () => {
     assert.ok(isOk(saved) && saved.value !== null);
     assert.equal(saved.value.status, 'Queued');
 
-    const held = await s.remittances.findHeldPayableIds(s.docs);
+    const held = await s.remittances.findHeldPayables(s.docs);
     assert.ok(isOk(held));
-    assert.deepEqual(held.value, [...s.docs].sort());
+    assert.deepEqual(
+      held.value.map((h) => h.payableId),
+      [...s.docs].sort(),
+    );
   });
 
   it('consome o NSA da conta', async () => {
@@ -260,7 +263,7 @@ describe('generateRemittance — a ordem importa mais que o resultado', () => {
     assert.ok(isErr(r));
     assert.equal(r.error, 'remittance-upload-failed');
 
-    const held = await s.remittances.findHeldPayableIds(s.docs);
+    const held = await s.remittances.findHeldPayables(s.docs);
     assert.ok(isOk(held));
     assert.equal(held.value.length, 2, 'documentos seguem presos, não voltam para a fila');
   });

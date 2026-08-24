@@ -15,6 +15,7 @@ import type { RemittanceEvent } from '#src/modules/financial/domain/remittance/e
 import * as RemittanceId from '#src/modules/financial/domain/remittance/remittance-id.ts';
 import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
 import type {
+  HeldPayable,
   RemittanceRepository,
   RemittanceRepositoryError,
 } from '#src/modules/financial/application/ports/remittance-repository.ts';
@@ -261,14 +262,20 @@ export const createDrizzleRemittanceRepository = (
     // ⚠️ Pergunta por TÍTULO. Filtrar por documento prenderia os irmãos junto: com o pai numa
     // remessa viva, a retenção da mesma nota apareceria como presa e o operador não conseguiria
     // pagá-la — o oposto da premissa de que cada título tem ciclo de vida próprio.
-    findHeldPayableIds: async (
+    findHeldPayables: async (
       payableIds: readonly string[],
-    ): Promise<Result<readonly string[], RemittanceRepositoryError>> => {
+    ): Promise<Result<readonly HeldPayable[], RemittanceRepositoryError>> => {
       if (payableIds.length === 0) return ok([]);
 
       try {
+        // O `innerJoin` já existia para filtrar por status; `nsa` e `remittanceId` só entram na
+        // projeção. Nenhuma junção nova, nenhum índice a mais.
         const rows = await db
-          .select({ payableId: finRemittancePayables.payableId })
+          .select({
+            payableId: finRemittancePayables.payableId,
+            remittanceId: finRemittances.id,
+            nsa: finRemittances.nsa,
+          })
           .from(finRemittancePayables)
           .innerJoin(finRemittances, eq(finRemittances.id, finRemittancePayables.remittanceId))
           .where(
@@ -278,9 +285,13 @@ export const createDrizzleRemittanceRepository = (
             ),
           );
 
-        return ok([...new Set(rows.map((r) => r.payableId))].sort());
+        // Ordem estável por título: a resposta alimenta mensagem ao operador e assert de teste, e
+        // ordem de linha do MySQL sem `ORDER BY` não é contrato. A deduplicação de antes some de
+        // propósito — o mesmo título em duas remessas vivas é o defeito que #789 existe para
+        // detectar, e colapsar as linhas aqui o esconderia.
+        return ok([...rows].sort((a, b) => a.payableId.localeCompare(b.payableId)));
       } catch (cause) {
-        logRepo('findHeldPayableIds', cause);
+        logRepo('findHeldPayables', cause);
         return err('remittance-repository-unavailable');
       }
     },
