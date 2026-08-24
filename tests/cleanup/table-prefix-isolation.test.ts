@@ -23,7 +23,7 @@ import { strict as assert } from 'node:assert';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { PROJECT_ROOT, filesUsing, readSource } from '../support/source-scan.ts';
+import { PROJECT_ROOT, filesUsing, readSource, walkFiles } from '../support/source-scan.ts';
 
 /** Prefixo canônico de cada módulo que tem schema próprio. */
 const MODULE_PREFIX: Readonly<Record<string, string>> = {
@@ -45,6 +45,22 @@ const CROSS_MODULE_TABLES: readonly string[] = [
 ];
 
 const TABLE_DECL = /mysqlTable\(\s*'([a-z_0-9]+)'/g;
+
+/**
+ * Tabelas declaradas em `src/shared/persistence/schemas/` — fora de qualquer módulo.
+ *
+ * Varre o disco, e não o git, de propósito: aqui não se decide "este caminho existe" (o caso que
+ * a rule de gate estrutural endereça, de alvo deliberadamente gitignored), e sim se enumera fonte
+ * para ler o conteúdo. Um gate que consultasse `git ls-files` reprovaria schema recém-escrito e
+ * ainda não commitado — exatamente o momento em que ele precisa avisar.
+ */
+const sharedDeclaredTables = (): readonly string[] => {
+  const dir = join(PROJECT_ROOT, 'src/shared/persistence/schemas');
+  if (!existsSync(dir)) return [];
+  return walkFiles(dir, { ext: '.ts' }).flatMap((rel) =>
+    [...readSource(rel).matchAll(TABLE_DECL)].map((m) => m[1] ?? '').filter((t) => t !== ''),
+  );
+};
 
 const declaredTables = (moduleName: string): readonly string[] => {
   const schema = join(
@@ -95,6 +111,42 @@ describe('TABLE-PREFIX — o prefixo é a única fronteira física entre módulo
 
   it('a allowlist de tabelas cross-módulo está pinada', () => {
     assert.deepEqual([...CROSS_MODULE_TABLES].sort(), ['eventos_processados']);
+  });
+
+  // A declaração de `eventos_processados` saiu do schema do `contracts` e foi para
+  // `src/shared/persistence/schemas/` (#800, #824): mais de um módulo lê a tabela, e declará-la
+  // em dois `schemas/mysql.ts` faria `drizzle-kit generate` emitir dois `CREATE TABLE` para a
+  // mesma tabela física.
+  //
+  // Isso abriu um buraco NESTE gate, que só varre `src/modules/*/adapters/persistence/schemas/`:
+  // qualquer tabela declarada em `shared/` passaria despercebida — inclusive uma com prefixo
+  // alheio, que é exatamente o que o arquivo existe para impedir. As duas asserções abaixo fecham
+  // o buraco: `shared/` só pode declarar o que está na allowlist, e a allowlist tem de estar
+  // efetivamente declarada em algum lugar (senão vira entrada morta e o pin acima passa a
+  // aprovar uma lista que não descreve nada).
+  it('shared/persistence/schemas só declara tabela da allowlist cross-módulo', () => {
+    const offenders = sharedDeclaredTables()
+      .filter((t) => !CROSS_MODULE_TABLES.includes(t))
+      .sort();
+    assert.deepEqual(
+      offenders,
+      [],
+      `Tabela declarada em src/shared/persistence/schemas/ fora da allowlist cross-módulo — ` +
+        `"shared" não é escapatória do isolamento por prefixo (ADR-0014): ${offenders.join(', ')}`,
+    );
+  });
+
+  it('toda tabela da allowlist está declarada em algum schema (sem entrada morta)', () => {
+    const declared = new Set([
+      ...Object.keys(MODULE_PREFIX).flatMap((m) => declaredTables(m)),
+      ...sharedDeclaredTables(),
+    ]);
+    const dead = CROSS_MODULE_TABLES.filter((t) => !declared.has(t)).sort();
+    assert.deepEqual(
+      dead,
+      [],
+      `Allowlist cita tabela que nenhum schema declara: ${dead.join(', ')}`,
+    );
   });
 
   // `ADR-0014-C7`, promovida a `accepted` em 2026-08-05. A metade PROIBITIVA da norma — "nenhuma

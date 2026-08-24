@@ -15,6 +15,7 @@ export type {
   OutboxQueryUnavailable,
   OutboxEventNotFound,
   OutboxBatchOps,
+  OutboxFailure,
   WorkerOutboxOps,
 } from '#src/shared/outbox/index.ts';
 export { outboxQueryUnavailable, outboxEventNotFound } from '#src/shared/outbox/index.ts';

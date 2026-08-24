@@ -134,6 +134,13 @@
       "when": 1785969688500,
       "tag": "0018_dapper_rocket_racer",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "5",
+      "when": 1787363790665,
+      "tag": "0019_sturdy_inhumans",
+      "breakpoints": true
     }
   ]
 }

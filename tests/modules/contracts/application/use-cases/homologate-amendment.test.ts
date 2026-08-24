@@ -534,7 +534,9 @@ describe('InMemoryOutbox', () => {
     assert.equal(all[0]?.eventType, 'AmendmentHomologated');
     assert.equal(all[1]?.eventType, 'ContractStateUpdated');
 
-    const pending = outbox.pending();
+    // `pending()` virou `pendingFor(consumerId)` (#800/#824): pendência é por consumidor, não
+    // global. Id arbitrário aqui — o teste só checa que os dois eventos nasceram pendentes.
+    const pending = outbox.pendingFor('test-consumer');
     assert.equal(pending.length, 2);
   });
 

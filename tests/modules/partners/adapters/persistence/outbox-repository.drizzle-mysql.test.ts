@@ -141,7 +141,10 @@ if (integrationEnabled()) {
           set1 = locked.map((r) => r.eventId);
           assert.equal(set1.length, 2);
 
-          const pending2 = await repo2.findPendingForUpdate(2);
+          // consumidor fresco: nada em `eventos_processados` ainda para ele, então os 4 eventos
+          // seguem pendentes — o universo elegível não muda em relação ao antigo `processed_at
+          // IS NULL` (#800/#824).
+          const pending2 = await repo2.findPendingForUpdate('worker-2', 2);
           assert.equal(isOk(pending2), true);
           if (!pending2.ok) return;
           set2 = pending2.value.map((r) => r.eventId);
@@ -173,7 +176,7 @@ if (integrationEnabled()) {
       assert.equal(rows.length, 0, 'nenhuma row deve ser persistida');
     });
 
-    it('moveToDeadLetter move row para a DLQ atomicamente', async () => {
+    it('moveToDeadLetter registra a DLQ e RETÉM a row de origem', async () => {
       if (handle === null) throw new Error('handle não inicializado');
       const h = handle;
       const repo = createDrizzleOutboxRepository(h);
@@ -181,10 +184,14 @@ if (integrationEnabled()) {
       await repo.append([msg]);
 
       const failedAt = new Date('2026-05-21T12:00:00.000Z');
-      const moved = await repo.moveToDeadLetter(msg.eventId, failedAt, 'max-retries');
+      const moved = await repo.moveToDeadLetter('worker-dlq', msg.eventId, failedAt, 'max-retries');
       assert.equal(isOk(moved), true);
 
-      assert.equal((await h.db.select().from(h.schema.parOutbox)).length, 0);
+      // A row de origem PERMANECE em `par_outbox` (#800/#824, ADR-0022:27-29: "o outbox retém as
+      // entradas após a entrega… não deleta") — outros consumidores ainda precisam vê-la. Antes
+      // do fanout, `moveToDeadLetter` fazia DELETE e este teste afirmava 0 rows; era o próprio
+      // defeito que a mudança corrige.
+      assert.equal((await h.db.select().from(h.schema.parOutbox)).length, 1);
       const dlq = await h.db.select().from(h.schema.parOutboxDeadLetter);
       assert.equal(dlq.length, 1);
       const dlqRow = dlq[0];

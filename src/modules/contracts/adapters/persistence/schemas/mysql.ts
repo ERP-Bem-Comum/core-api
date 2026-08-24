@@ -371,15 +371,26 @@ export const ctrOutbox = mysqlTable(
   ],
 );
 
-// ─── ctr_outbox_dead_letter — eventos que falharam N tentativas ───────────────
+// ─── ctr_outbox_dead_letter — eventos que UM consumidor desistiu de entregar ──
 //
-// O worker move para cá quando `attempts >= MAX_ATTEMPTS`. A row é uma cópia
-// da outbox original + `failed_at` + `last_error`.
-// Sem FK com `ctr_outbox` — a row original pode ser apagada da outbox.
+// O worker move para cá quando `attempts >= MAX_ATTEMPTS` **daquele consumidor**. A row é uma
+// cópia da outbox original + `consumer_id` + `failed_at` + `last_error`.
+//
+// A PK é composta (`consumer_id`, `event_id`) desde #800/#824: sob fanout, o mesmo evento pode
+// esgotar as tentativas de um consumidor e ser entregue com sucesso a outro — com PK só de
+// `event_id`, a segunda desistência colidiria com a primeira.
+//
+// Sem FK com `ctr_outbox`, e agora por um motivo mais forte do que antes: a linha de origem
+// **permanece** na outbox depois da desistência (ADR-0022:27-29 — o outbox retém as entradas),
+// justamente para seguir disponível aos demais consumidores e à reconstrução de 0022:40.
 export const ctrOutboxDeadLetter = mysqlTable(
   'ctr_outbox_dead_letter',
   {
-    eventId: uuidKeyFixed('event_id').primaryKey().notNull(),
+    // Quem desistiu. Sem DEFAULT: as linhas existentes receberiam string vazia num ALTER — o que
+    // é inócuo aqui porque a tabela está vazia em todos os ambientes medidos (21/08/2026), e é
+    // por isso que a migration não precisa de backfill dirigido.
+    consumerId: opaqueKey('consumer_id').notNull(),
+    eventId: uuidKeyFixed('event_id').notNull(),
     aggregateId: uuidKeyFixed('aggregate_id').notNull(),
     aggregateType: varchar('aggregate_type', { length: 32 }).notNull(),
     eventType: varchar('event_type', { length: 64 }).notNull(),
@@ -403,15 +414,15 @@ export const ctrOutboxDeadLetter = mysqlTable(
       'ctr_outbox_dlq_aggregate_type_chk',
       sql`${t.aggregateType} IN ('Contract', 'Amendment', 'Document')`,
     ),
+    // PK composta: a desistência é por consumidor, não do evento (#800, #824).
+    primaryKey({ columns: [t.consumerId, t.eventId] }),
     // Índice por failed_at — suporta monitoramento "eventos mortos nos últimos N dias".
     index('ctr_outbox_dlq_failed_at_idx').on(t.failedAt),
   ],
 );
 
-// ─── eventos_processados — idempotência do consumer ───────────────────────────
+// ─── ctr_documents — agregado DocumentoContratual (CTR-DOCUMENT-AGGREGATE) ────
 //
-// Nota linguística: nome PT-BR é exceção justificada por ADR-0015 §"Idempotência".
-// ctr_documents — agregado DocumentoContratual (CTR-DOCUMENT-AGGREGATE).
 //
 // Parent polimórfico: parent_type ∈ {Contract, Amendment} + parent_id (sem FK,
 // convenção do projeto). Status reservado com 3 valores (Active hoje;
@@ -480,27 +491,16 @@ export const ctrDocuments = mysqlTable(
   ],
 );
 
-// Tabela cross-módulo (sem prefix `ctr_*` — ADR-0014 §"Exceção linguística").
+// ─── eventos_processados — progresso de consumo POR CONSUMIDOR ────────────────
 //
-// Consumer verifica event_id antes de processar. Se presente → ignorar.
-// INSERT feito na mesma transação que o processamento do evento (idempotência).
-export const eventosProcessados = mysqlTable(
-  'eventos_processados',
-  {
-    // Identificador do consumidor (ex.: 'logger-default', 'financial-module').
-    consumerId: opaqueKey('consumer_id').notNull(),
-    // UUID v4 do evento (não é FK — tabela cross-módulo sem acoplamento direto).
-    eventId: uuidKeyFixed('event_id').notNull(),
-    // Timestamp de quando este consumer processou o evento.
-    processedAt: datetime('processed_at', { mode: 'date', fsp: 3 }).notNull(),
-  },
-  (t) => [
-    // PK composta: cada consumer registra o event_id independentemente.
-    primaryKey({ columns: [t.consumerId, t.eventId] }),
-    // Índice temporal — suporta auditoria "eventos processados nas últimas N horas".
-    index('eventos_processados_processed_at_idx').on(t.processedAt),
-  ],
-);
+// Tabela cross-módulo (sem prefix `ctr_*` — ADR-0014 §"Exceção linguística"), declarada em
+// `shared/persistence/schemas/eventos-processados.ts` porque o adapter de outbox de MAIS DE UM
+// módulo a lê (`contracts` e `partners`) — declarar nos dois schemas emitiria dois `CREATE TABLE`
+// para a mesma tabela física. O `contracts` segue sendo o DONO das migrations dela, desde a
+// `0001`, e é por este re-export que `drizzle-kit generate --config db/drizzle/contracts.ts`
+// continua a enxergando. A razão de a tabela existir e o significado de cada coluna estão no
+// arquivo de origem — não duplicar aqui.
+export { eventosProcessados } from '#src/shared/persistence/schemas/eventos-processados.ts';
 
 // ─── ctr_job_runs ───────────────────────────────────────────────────────────────
 //

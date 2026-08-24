@@ -40,6 +40,11 @@ const mkMessage = (over: Partial<OutboxMessage> = {}): OutboxMessage => ({
 
 // ─── suite ──────────────────────────────────────────────────────────────────
 
+// Pendência é por consumidor desde #800/#824 — id fixo de teste, sem semântica de fanout aqui
+// (o comportamento com múltiplos consumidores é coberto em
+// `tests/shared/outbox/fanout-two-consumers.test.ts`).
+const CONSUMER_ID = 'par-outbox-in-memory-test';
+
 describe('PAR-OUTBOX-INFRA — InMemoryOutbox', () => {
   let outbox: ReturnType<typeof InMemoryOutbox>;
 
@@ -76,7 +81,7 @@ describe('PAR-OUTBOX-INFRA — InMemoryOutbox', () => {
     const m2 = mkMessage({ eventType: 'SupplierEdited' });
     await outbox.port.append([m1, m2]);
     assert.equal(outbox.all().length, 2);
-    assert.equal(outbox.pending().length, 2);
+    assert.equal(outbox.pendingFor(CONSUMER_ID).length, 2);
   });
 
   it('append com eventId duplicado retorna err OutboxAppendDuplicateEventId', async () => {
@@ -98,7 +103,7 @@ describe('PAR-OUTBOX-INFRA — InMemoryOutbox', () => {
     const m2 = mkMessage({ occurredAt: new Date('2026-01-15T10:01:00.000Z') });
     await outbox.port.append([m1, m2]);
 
-    const r = await outbox.withPendingBatch(10, async (rows, ops) => {
+    const r = await outbox.withPendingBatch(CONSUMER_ID, 10, async (rows, ops) => {
       assert.equal(rows.length, 2);
       // entrega o primeiro
       const first = rows[0];
@@ -113,20 +118,30 @@ describe('PAR-OUTBOX-INFRA — InMemoryOutbox', () => {
     assert.equal(isOk(r), true);
     if (r.ok) assert.equal(r.value, 2);
 
-    // após marcar 1, só resta 1 pendente
-    assert.equal(outbox.pending().length, 1);
+    // após marcar 1, só resta 1 pendente PARA ESTE CONSUMIDOR (#800/#824).
+    assert.equal(outbox.pendingFor(CONSUMER_ID).length, 1);
   });
 
-  it('moveToDeadLetter move a row da outbox para a DLQ', async () => {
+  it('moveToDeadLetter registra a DLQ e RETÉM a row de origem', async () => {
     const msg = mkMessage();
     await outbox.port.append([msg]);
     assert.equal(outbox.all().length, 1);
 
     const failedAt = new Date('2026-01-15T13:00:00.000Z');
-    const moved = await outbox.moveToDeadLetter(msg.eventId, failedAt, 'max-retries-exceeded');
+    const moved = await outbox.moveToDeadLetter(
+      CONSUMER_ID,
+      msg.eventId,
+      failedAt,
+      'max-retries-exceeded',
+    );
     assert.equal(isOk(moved), true);
 
-    assert.equal(outbox.all().length, 0, 'row sai da outbox');
+    // A row de origem PERMANECE em `all()` (#800/#824, ADR-0022:27-29: "o outbox retém as
+    // entradas após a entrega… não deleta") — outros consumidores ainda precisam vê-la. Antes do
+    // fanout, `moveToDeadLetter` fazia `rows.splice` e este teste afirmava 0 rows; era o próprio
+    // defeito que a mudança corrige. O que sai é a pendência DESTE consumidor.
+    assert.equal(outbox.all().length, 1, 'row de origem permanece na outbox');
+    assert.equal(outbox.pendingFor(CONSUMER_ID).length, 0, 'sai da fila deste consumidor');
     const dlq = outbox.deadLetter();
     assert.equal(dlq.length, 1, 'row entra na DLQ');
     const dlqRow = dlq[0];
@@ -137,12 +152,18 @@ describe('PAR-OUTBOX-INFRA — InMemoryOutbox', () => {
     assert.equal(dlqRow.payload, msg.payload);
   });
 
-  it('markFailed incrementa attempts da row pendente', async () => {
+  it('markFailed incrementa attempts da row pendente PARA ESTE CONSUMIDOR', async () => {
     const msg = mkMessage();
     await outbox.port.append([msg]);
-    const r = await outbox.markFailed(msg.eventId, new Date(), 'DeliveryUnavailable', 2);
+    const r = await outbox.markFailed(CONSUMER_ID, msg.eventId, {
+      now: new Date(),
+      errorTag: 'DeliveryUnavailable',
+      attempt: 2,
+    });
     assert.equal(isOk(r), true);
-    const row = outbox.all().find((x) => x.eventId === msg.eventId);
+    // #800/#824: `attempts` deixou de viver na row global (`all()` sempre mostra 0 — nunca mais
+    // é escrita); o progresso é por consumidor e só aparece em `pendingFor`.
+    const row = outbox.pendingFor(CONSUMER_ID).find((x) => x.eventId === msg.eventId);
     assert.ok(row !== undefined);
     assert.equal(row.attempts, 2);
   });

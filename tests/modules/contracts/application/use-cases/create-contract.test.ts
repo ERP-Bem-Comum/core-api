@@ -51,7 +51,9 @@ describe('createContract — happy path', () => {
     assert.equal(contractRepo.store().length, 1);
     // CA7 — evento vai para o outbox, não para um EventBus separado
     assert.equal(outbox.all().length, 1);
-    assert.equal(outbox.pending().length, 1);
+    // `pending()` virou `pendingFor(consumerId)` (#800/#824): pendência é por consumidor, não
+    // global. Id arbitrário aqui — o teste só checa que o evento nasceu pendente para alguém.
+    assert.equal(outbox.pendingFor('test-consumer').length, 1);
     assert.equal(outbox.all()[0]?.eventType, 'ContractCreated');
   });
 

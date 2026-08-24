@@ -22,7 +22,14 @@ export type OutboxRow = Readonly<{
   schemaVersion: number;
   occurredAt: Date;
   enqueuedAt: Date;
+  /**
+   * ⚠️ Coluna GLOBAL da linha do outbox — não diz nada sobre um consumidor específico. Sob fanout
+   * ela é, no máximo, "alguém já processou". A pergunta que importa ("ESTE consumidor já
+   * processou?") se responde em `eventos_processados`, via `isPendingForConsumer`. Foi confundir
+   * as duas que produziu `pendentes = 0` com linha faltando na projeção.
+   */
   processedAt: Date | null;
+  /** Tentativas DESTE consumidor, lidas do progresso — nunca o contador global da linha. */
   attempts: number;
   payload: string;
 }>;
@@ -44,14 +51,24 @@ export const outboxEventNotFound = (eventId: string): OutboxEventNotFound => ({
 
 // ─── Contrato de consumo do outbox (worker) ───────────────────────────────────
 
+/**
+ * Dados de uma entrega malsucedida, agrupados.
+ *
+ * Existem como objeto, e não como três parâmetros soltos, porque `markFailed` passou a levar
+ * também o `consumerId` (#800, #824) e chegou a cinco posicionais — acima do `max-params` do
+ * projeto. A saída fácil seria `eslint-disable`; a regra, porém, estava certa: `(consumerId,
+ * eventId, now, errorTag, attempt)` é uma sequência de três valores do mesmo tipo primitivo em
+ * que trocar dois de lugar compila e falha em silêncio. Nomeados, não trocam.
+ */
+export type OutboxFailure = Readonly<{
+  now: Date;
+  errorTag: string;
+  attempt: number;
+}>;
+
 export type OutboxBatchOps = Readonly<{
   markProcessed: (eventId: string, now: Date) => Promise<Result<void, OutboxQueryError>>;
-  markFailed: (
-    eventId: string,
-    now: Date,
-    errorTag: string,
-    attempt: number,
-  ) => Promise<Result<void, OutboxQueryError>>;
+  markFailed: (eventId: string, failure: OutboxFailure) => Promise<Result<void, OutboxQueryError>>;
   moveToDeadLetter: (
     eventId: string,
     now: Date,
@@ -59,20 +76,37 @@ export type OutboxBatchOps = Readonly<{
   ) => Promise<Result<void, OutboxQueryError>>;
 }>;
 
+/**
+ * Operações de consumo do outbox. **Toda** entrada leva `consumerId` (#800, #824): a pendência de
+ * um evento não é global, é por consumidor — dois consumidores sobre a mesma tabela precisam,
+ * cada um, de TODOS os eventos, e o desenho anterior os fazia dividir a fila.
+ *
+ * As ops de dentro de `withPendingBatch` (`OutboxBatchOps`) NÃO repetem o `consumerId`: elas já
+ * nascem ligadas ao consumidor daquele batch. Repeti-lo lá abriria a porta para marcar o
+ * progresso de um consumidor com o id de outro — um erro que o tipo não pegaria.
+ */
 export type WorkerOutboxOps = Readonly<{
   withPendingBatch: <R>(
+    consumerId: string,
     limit: number,
     handler: (rows: readonly OutboxRow[], ops: OutboxBatchOps) => Promise<R>,
   ) => Promise<Result<R, OutboxQueryError>>;
-  findPendingForUpdate: (limit: number) => Promise<Result<readonly OutboxRow[], OutboxQueryError>>;
-  markProcessed: (eventId: string, now: Date) => Promise<Result<void, OutboxQueryError>>;
-  markFailed: (
+  findPendingForUpdate: (
+    consumerId: string,
+    limit: number,
+  ) => Promise<Result<readonly OutboxRow[], OutboxQueryError>>;
+  markProcessed: (
+    consumerId: string,
     eventId: string,
     now: Date,
-    errorTag: string,
-    attempt: number,
+  ) => Promise<Result<void, OutboxQueryError>>;
+  markFailed: (
+    consumerId: string,
+    eventId: string,
+    failure: OutboxFailure,
   ) => Promise<Result<void, OutboxQueryError>>;
   moveToDeadLetter: (
+    consumerId: string,
     eventId: string,
     now: Date,
     errorMessage: string,

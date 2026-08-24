@@ -9,11 +9,11 @@ verify:
     expect:
       - 'src/modules/contracts/adapters/http/composition.ts'
       - 'src/modules/partners/adapters/http/composition.ts'
-  - claim: 'a tabela cross-módulo sem prefixo é uma só'
-    root: 'src/modules'
+  - claim: 'a tabela cross-módulo sem prefixo é uma só, e é declarada fora dos módulos'
+    root: 'src'
     pattern: "mysqlTable(\n  'eventos_processados'"
     expect:
-      - 'src/modules/contracts/adapters/persistence/schemas/mysql.ts'
+      - 'src/shared/persistence/schemas/eventos-processados.ts'
   - claim: 'existe UM único ponto que compõe os decorators do EmailSender'
     root: 'src/modules/notifications'
     pattern: 'withRateLimit('
@@ -36,7 +36,9 @@ verify:
 
 - **Comportamento transversal de envio é decorator, nunca código dentro do provedor.** Rate limit, redirecionamento de sandbox e retry envolvem o `EmailSender` preservando a assinatura do port (`(sender, …) => EmailSender`) e são compostos num ponto só — `buildEmailSender` em `adapters/email/build-email-sender.ts`, na ordem base → sandbox → rate limit. Embutir qualquer um deles em `nodemailer.ts` ou `resend.ts` faz o comportamento valer para UM provedor: o `in-memory` que os testes usam não o teria, e a suíte ficaria verde descrevendo produção errado. O [ADR-0010](../../handbook/architecture/adr/0010-email-port-adapter-pattern.md) previu `withRetry`/`withLogging`, que não existem — o que pegou foi a convenção `with*`, e é ela que vale para o próximo.
 
-- **`eventos_processados` é a única tabela sem prefixo de módulo — e é deliberada.** Cross-módulo por desenho (ADR-0014 §"Exceção linguística"), com nome em PT-BR justificado no ADR-0015 §"Idempotência". É a única entrada da allowlist do gate de prefixo; qualquer outra tabela sem `<mod>_` é engano.
+- **`eventos_processados` é a única tabela sem prefixo de módulo — e é deliberada.** Cross-módulo por desenho (ADR-0014 §"Exceção linguística"), com nome em PT-BR justificado no ADR-0015 §"Idempotência". É a única entrada da allowlist do gate de prefixo; qualquer outra tabela sem `<mod>_` é engano. **A declaração vive em `src/shared/persistence/schemas/`, fora de qualquer módulo** ([ADR-0064](../../handbook/architecture/adr/0064-outbox-fanout-per-consumer-progress.md)): mais de um adapter de outbox a lê, e declará-la em dois `schemas/mysql.ts` faria `drizzle-kit generate` emitir dois `CREATE TABLE` para a mesma tabela física. O `contracts` re-exporta e segue dono das migrations dela.
+
+- **A pendência de um evento no outbox é POR CONSUMIDOR, nunca da linha.** O claim faz anti-join com `eventos_processados` (`consumer_id` + `event_id`), e `markProcessed` grava ali — **a coluna `processed_at` da própria outbox não é mais escrita**. Reivindicar por `WHERE processed_at IS NULL` é o que transformava fanout em fila: dois consumidores com propósitos distintos dividiam os eventos sob `FOR UPDATE SKIP LOCKED`, e a projeção perdia em silêncio o que o outro consumisse primeiro ([ADR-0064](../../handbook/architecture/adr/0064-outbox-fanout-per-consumer-progress.md)). Duas consequências que não se descobre lendo o adapter: **`moveToDeadLetter` não apaga a linha de origem** (a desistência é de um consumidor só, e o ADR-0022 exige que o log retenha a entrada), e a transação de claim roda em **READ COMMITTED** — sob o `REPEATABLE READ` default, o gap lock no índice `(processed_at, occurred_at)` faz o `INSERT` do **produtor** estourar `1205`. O predicado canônico é `isPendingForConsumer`; o SQL de cada adapter é tradução dele, e `tests/cleanup/outbox-claim-per-consumer.test.ts` cobra os dois.
 
 - **Payload de evento de integração é montado no adapter, a partir do snapshot do agregado** — nunca do evento de domínio, que não muda para servir integração ([ADR-0043](../../handbook/architecture/adr/0043-partners-supplier-integration-events.md) §Opção A). Serializado com `JSON.stringify` em `varchar`. **Campo aditivo nunca quebra `schema_version = 1`**: acrescentar não exige bump, porque o consumidor ignora campo desconhecido ([ADR-0046](../../handbook/architecture/adr/0046-contracts-contractor-ref-integration-events.md)).
 
