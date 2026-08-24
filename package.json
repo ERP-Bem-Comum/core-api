@@ -47,6 +47,7 @@
     "job:financial:supplier-view-backfill": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/financial/supplier-view-backfill/run.ts",
     "job:financial:payable-view-backfill": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/financial/payable-view-backfill/run.ts",
     "job:partners:contract-count-backfill": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/partners/contract-count-backfill/run.ts",
+    "job:outbox-sweeper": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/shared/outbox-sweeper/run.ts",
     "job:migrate": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/migrate/run.ts",
     "job:auth:sync-permissions": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/auth/sync-permissions/run.ts",
     "secrets:setup": "node --experimental-strip-types --enable-source-maps --no-warnings ./scripts/setup/secrets.ts",
