@@ -19,6 +19,7 @@ import type { FinancialMysqlHandle } from '#src/modules/financial/adapters/persi
 import {
   createDrizzleRemittanceRepository,
   HOLDING,
+  toMysqlDateTime,
 } from '#src/modules/financial/adapters/persistence/repos/remittance-repository.drizzle.ts';
 import * as RemittanceId from '#src/modules/financial/domain/remittance/remittance-id.ts';
 import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
@@ -453,6 +454,11 @@ if (!process.env['MYSQL_INTEGRATION']) {
           .where(inArray(finRemittances.status, [...HOLDING]));
         // Conta REMESSAS DISTINTAS por título: a mesma dupla repetida na tabela de vínculo é outro
         // defeito (e a PK composta já o impede), não este.
+        //
+        // O agrupamento acontece em memória, e é decisão consciente para banco de TESTE: traz as
+        // linhas e agrupa aqui. ⚠️ Se alguém apontar esta função para volume de produção, ela
+        // materializa todo o vínculo vivo — o equivalente com `GROUP BY … HAVING COUNT(DISTINCT …)`
+        // faz o mesmo trabalho no servidor e é o que deve ser usado lá.
         const porTitulo = new Map<string, Set<string>>();
         for (const r of rows) {
           const atual = porTitulo.get(r.payableId) ?? new Set<string>();
@@ -487,7 +493,16 @@ if (!process.env['MYSQL_INTEGRATION']) {
             fileName: r.fileName,
             contentHash: r.contentHash,
             status: 'Queued',
-            generatedAt: r.generatedAt,
+            // Convertido AQUI porque este INSERT pula o `save` — e com ele pula a conversão que o
+            // adapter faz antes de gravar. `build()` produz ISO de propósito (é o que
+            // `generateRemittance` gera de verdade), a coluna é `datetime` em `mode: 'string'`, e o
+            // Drizzle repassa a string crua: sem isto, `STRICT_ALL_TABLES` recusa com 1292.
+            //
+            // O comentário de `build()` acima documenta este mesmo tropeço na direção oposta — a
+            // fixture já esteve no formato do MySQL escrito à mão, e o teste passava contra banco
+            // real enquanto o `POST` falhava com 1292. Contornar o adapter é legítimo aqui (o `save`
+            // recusaria o estado que se quer plantar), mas o que ele fazia por nós vem junto.
+            generatedAt: toMysqlDateTime(r.generatedAt),
           });
           await handle.db.insert(finRemittancePayables).values({
             remittanceId: r.id,
