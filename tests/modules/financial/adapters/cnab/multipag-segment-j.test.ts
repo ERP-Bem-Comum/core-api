@@ -60,9 +60,12 @@ describe('Multipag — Segmento J (pagamento de título de cobrança)', () => {
     assert.equal(at(record, 14, 14), 'J'); // 05.3J segmento
   });
 
-  it('declara movimento de inclusão sem instrução', () => {
-    assert.equal(at(record, 15, 15), '0'); // 06.3J tipo de movimento
-    assert.equal(at(record, 16, 17), '00'); // 07.3J código da instrução
+  // #805. O boleto entra sob a MESMA instrução da transferência: G061 = '09'. Enquanto o J saía
+  // '00' — inclusão liberada — pagar por boleto contornava a dupla checagem que o Segmento A exige.
+  // O campo é G061 (016-017), vizinho de G060 (015) e independente dele: o movimento segue inclusão.
+  it('entra BLOQUEADO para liberação master, como o Segmento A (#805)', () => {
+    assert.equal(at(record, 15, 15), '0'); // 06.3J tipo de movimento (G060) — inclusão, inalterado
+    assert.equal(at(record, 16, 17), '09'); // 07.3J instrução (G061) — '09' = inclusão bloqueada
   });
 
   // O campo central: 44 posições numéricas, 18-61.

@@ -519,3 +519,63 @@ describe('Remessa Multipag — a referência do retorno (G064, #752)', () => {
     assert.equal(r.error, 'convenio-field-overflow');
   });
 });
+
+/**
+ * A instrução G061, medida no arquivo pronto — que é onde a divergência entre as rotas aparecia.
+ *
+ * Decisão da P.O. em 24/08/2026 (#805): TODO pagamento entra bloqueado, aguardando liberação dos
+ * usuários master no Net Empresa. Antes disto o Segmento A saía `09` e o J saía `00`, então pagar
+ * por boleto contornava a dupla checagem que a transferência exige — mesmo dinheiro, mesma conta,
+ * sem o segundo par de olhos.
+ *
+ * ⚠️ Esta suíte é o que impede a porta lateral de voltar a abrir, e por isso lê as DUAS rotas do
+ * MESMO arquivo. Medir cada segmento na sua suíte de unidade não pega a divergência: as duas
+ * passavam, cada uma descrevendo corretamente a política errada da outra.
+ */
+describe('Remessa Multipag — todo pagamento entra BLOQUEADO para liberação master (#805)', () => {
+  const movementOf = (line: string): string => at(line, 15, 15); // G060
+  const instructionOf = (line: string): string => at(line, 16, 17); // G061
+  const segmentOf = (line: string): string => at(line, 14, 14);
+  const sequenceOf = (line: string): string => at(line, 9, 13);
+
+  // Os detalhes que representam um PAGAMENTO: A (transferência) e J (boleto). O B fica de fora de
+  // propósito — é o complemento de endereço do favorecido, e ali 015-017 é CNAB em branco.
+  const isPaymentDetail = (line: string): boolean =>
+    at(line, 8, 8) === '3' && (segmentOf(line) === 'A' || segmentOf(line) === 'J');
+
+  it('grava a instrução 09 em TODO detalhe de pagamento, seja transferência ou boleto', () => {
+    // Duas formas na mesma seleção, logo dois lotes: sem as duas rotas no arquivo, o caso não
+    // compara política nenhuma.
+    const file = build([payment(1, 10_000), billet(2, 5_000), payment(3, 7_500), billet(4, 2_000)]);
+    const details = linesOf(file.content).filter(isPaymentDetail);
+
+    // Guarda contra verde por vacuidade: sem os dois segmentos presentes, o laço abaixo aprova
+    // qualquer coisa — inclusive um arquivo em que uma das rotas simplesmente não saiu.
+    const countOf = (segment: string): number =>
+      details.filter((l) => segmentOf(l) === segment).length;
+    assert.ok(countOf('A') >= 1, 'o cenário precisa de ao menos um Segmento A');
+    assert.ok(countOf('J') >= 1, 'o cenário precisa de ao menos um Segmento J');
+
+    for (const line of details) {
+      const where = `segmento ${segmentOf(line)}, detalhe ${sequenceOf(line)}`;
+      assert.equal(instructionOf(line), '09', `${where}: instrução liberada é porta lateral`);
+      assert.equal(movementOf(line), '0', `${where}: G060 tem de seguir inclusão`);
+    }
+  });
+
+  // O contrapeso: G060 e G061 são vizinhos de coluna, e o Segmento B começa com três posições de
+  // CNAB em branco justamente onde os outros dois gravam movimento e instrução. Sem esta asserção,
+  // a "correção" preguiçosa — carimbar `09` em todo registro de detalhe — passaria no caso acima e
+  // produziria um B com dado onde o layout manda branco.
+  it('não escreve instrução no Segmento B, cujas posições 015-017 são CNAB em branco', () => {
+    const file = build([payment(1, 10_000), billet(2, 5_000)]);
+    const segmentsB = linesOf(file.content).filter(
+      (l) => at(l, 8, 8) === '3' && segmentOf(l) === 'B',
+    );
+
+    assert.equal(segmentsB.length, 1, 'guarda contra verde por vacuidade');
+    for (const line of segmentsB) {
+      assert.equal(at(line, 15, 17), '   ', `detalhe ${sequenceOf(line)}`);
+    }
+  });
+});
