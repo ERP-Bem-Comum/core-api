@@ -184,7 +184,7 @@ export const createDrizzleOutboxRepository = (
     // não é o acesso a ela, é não haver predicado seletivo sobre o outbox.
     //
     // A marca é escrita pelo sweeper (`src/jobs/shared/outbox-sweeper/`), nunca pelo worker —
-    // ver ADR-0062 §3. Se o sweeper atrasar ou parar, sobram linhas não marcadas e o claim volta
+    // ver ADR-0064 §3. Se o sweeper atrasar ou parar, sobram linhas não marcadas e o claim volta
     // a ser o lento: degradação graciosa, e o `NOT EXISTS` abaixo garante que nada se perde.
     and(
       isNull(schema.ctrOutbox.processedAt),

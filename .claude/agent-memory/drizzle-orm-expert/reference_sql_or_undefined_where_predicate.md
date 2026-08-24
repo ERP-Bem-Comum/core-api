@@ -23,7 +23,7 @@ diretamente (`undefined` = sem filtro). Precedentes: `contract-repository.drizzl
 
 Achado durante o ticket outbox-fanout (#800/#824, 23/08/2026): o team-lead aplicou
 `and(isNull(...), notExists(...)) as SQL` em `pendingForConsumer` (contracts e partners) como
-parte do ADR-0062 §3 (índice `processed_at IS NULL` precisa vir primeiro, sweeper em lote marca a
+parte do ADR-0064 §3 (índice `processed_at IS NULL` precisa vir primeiro, sweeper em lote marca a
 coluna — ver [[project-outbox-fanout-consumer-id]]); reproduzi o `as SQL` nos meus três adapters
 e o lint reprovou. Troquei a assinatura para `SQL | undefined` e removi o cast — os dois arquivos
 dele mantêm o `as SQL` com a mesma pendência, fora do meu escopo corrigir.

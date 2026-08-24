@@ -272,7 +272,7 @@ if (integrationEnabled()) {
 
       await assert.rejects(
         async () =>
-          // `consumer_id` entrou na DLQ com a PK composta (#800, #824 / ADR-0062): a desistência
+          // `consumer_id` entrou na DLQ com a PK composta (#800, #824 / ADR-0064): a desistência
           // é de UM consumidor, não do evento. Sem ele o INSERT morre em 1364 ("doesn't have a
           // default value") ANTES de alcançar o CHECK que este caso existe para exercitar — o
           // teste passaria a falhar pelo motivo errado, e continuaria vermelho depois de o CHECK

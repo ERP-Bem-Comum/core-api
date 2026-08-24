@@ -149,7 +149,7 @@ export const createDrizzleAuthOutboxRepository = (
     // `processed_at IS NULL` primeiro — é o predicado que poda pelo índice e devolve o claim ao
     // plano `ref`. Sem ele, o `NOT EXISTS` sozinho varre e ordena o índice inteiro, travando tudo
     // que examina (medido: 100.000 linhas travadas para entregar 10). A marca vem do sweeper, não
-    // do worker; atraso dele degrada a performance, nunca a correção. Ver ADR-0062 §3.
+    // do worker; atraso dele degrada a performance, nunca a correção. Ver ADR-0064 §3.
     and(
       isNull(schema.authOutbox.processedAt),
       notExists(

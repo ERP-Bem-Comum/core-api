@@ -1,6 +1,6 @@
 /**
  * Sweep do outbox — marca `processed_at` nas linhas já resolvidas por TODOS os consumidores
- * (ADR-0062 §3). Lógica pura do job; o SQL vive no adapter por trás do port.
+ * (ADR-0064 §3). Lógica pura do job; o SQL vive no adapter por trás do port.
  *
  * ## Por que este job existe
  *

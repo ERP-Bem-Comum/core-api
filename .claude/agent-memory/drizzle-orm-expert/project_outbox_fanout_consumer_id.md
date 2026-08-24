@@ -48,5 +48,5 @@ limpos; `pnpm test` **11332/11312/0 fail** — o team-lead fechou os 3 gates de 
 11326/11303/3 fail. Também aplicou nos dois adapters-modelo (`contracts`, `partners` principal) o
 mesmo fix `SQL | undefined` que eu tinha aplicado nos meus três — ver
 [[sql-or-undefined-where-predicate]]. O sweeper (`src/jobs/shared/outbox-sweeper/`) que volta a
-escrever `processed_at` em lote (ADR-0062 §3) segue em validação MySQL real com outro agente —
+escrever `processed_at` em lote (ADR-0064 §3) segue em validação MySQL real com outro agente —
 não é código deste ticket que eu tenha tocado.

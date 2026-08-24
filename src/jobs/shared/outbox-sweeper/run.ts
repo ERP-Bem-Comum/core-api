@@ -1,4 +1,4 @@
-// Entrypoint one-shot do sweep de outbox (ADR-0062 §3).
+// Entrypoint one-shot do sweep de outbox (ADR-0064 §3).
 //
 // Marca `processed_at` nas linhas já resolvidas por TODOS os consumidores registrados, devolvendo
 // ao claim o predicado que o torna indexável. É OTIMIZAÇÃO: se este job nunca rodar, o claim volta
@@ -35,7 +35,7 @@ import { runOutboxSweep } from './sweep.ts';
 const EX_CONFIG = 78;
 
 /**
- * Lote pequeno de propósito: é o número de registros travados de uma vez (ADR-0062 §3).
+ * Lote pequeno de propósito: é o número de registros travados de uma vez (ADR-0064 §3).
  *
  * ⚠️ `batchSize × maxBatches` é o teto por EXECUÇÃO — 10.000 linhas aqui. Um backlog de 50k
  * precisa de cinco execuções, e `reachedLimit` no resultado é o que avisa que sobrou trabalho.
@@ -96,7 +96,7 @@ const main = async (): Promise<number> => {
     process.stderr.write(
       `[outbox-sweeper] as *_DATABASE_URL apontam para bancos DIFERENTES, e este job varre as ` +
         `cinco tabelas por uma conexão só: ${detail}\n` +
-        '[outbox-sweeper] com bancos separados, o sweep precisa de um pool por URL — ver ADR-0062 §3\n',
+        '[outbox-sweeper] com bancos separados, o sweep precisa de um pool por URL — ver ADR-0064 §3\n',
     );
     return EX_CONFIG;
   }

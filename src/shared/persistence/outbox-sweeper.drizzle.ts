@@ -1,5 +1,5 @@
 /**
- * Adapter Drizzle do `OutboxSweepPort` — genérico sobre a tabela de outbox (ADR-0062 §3).
+ * Adapter Drizzle do `OutboxSweepPort` — genérico sobre a tabela de outbox (ADR-0064 §3).
  *
  * Um adapter só para as cinco tabelas: todas expõem `event_id` e `processed_at`, que é tudo de que
  * o sweep precisa. Escrever cinco cópias seria repetir a mesma consulta com o nome trocado — e

@@ -101,7 +101,7 @@ describe('OUTBOX-CLAIM — pendência é por consumidor, e a origem nunca é apa
     //
     // Cobre os ids LITERAIS das deliveries de projeção. Os dois loggers recebem o seu por env
     // (`OUTBOX_CONSUMER_ID`, `compose.yaml:387` = `worker-outbox`) e escapam desta varredura —
-    // registrado como pendência no ADR-0062, porque uma guarda de runtime no worker-runner é o
+    // registrado como pendência no ADR-0064, porque uma guarda de runtime no worker-runner é o
     // lugar certo para isso e é trabalho à parte.
     const declared = walkFiles(join(PROJECT_ROOT, 'src/workers'), { ext: '.ts' }).flatMap((rel) =>
       codeLines(rel)
@@ -126,7 +126,7 @@ describe('OUTBOX-CLAIM — pendência é por consumidor, e a origem nunca é apa
     // silêncio, que é exatamente o defeito de #800/#824 voltando por outra porta.
     //
     // Cobre os ids LITERAIS de `src/workers/`. Os dois loggers recebem o seu por env, e a
-    // resolução deles está espelhada em `registered-consumers.ts` — pendência 3 do ADR-0062.
+    // resolução deles está espelhada em `registered-consumers.ts` — pendência 3 do ADR-0064.
     const registered = readSource('src/shared/outbox/registered-consumers.ts');
     const declared = walkFiles(join(PROJECT_ROOT, 'src/workers'), { ext: '.ts' }).flatMap((rel) =>
       codeLines(rel)

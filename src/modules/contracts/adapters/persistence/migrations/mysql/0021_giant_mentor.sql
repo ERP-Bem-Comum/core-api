@@ -1,4 +1,4 @@
--- Índice do SELECT de candidatos do sweeper de outbox (ADR-0062 §3).
+-- Índice do SELECT de candidatos do sweeper de outbox (ADR-0064 §3).
 --
 -- Sem ele, o otimizador lidera por `eventos_processados` (`range` sobre a PK) e monta temporária
 -- + filesort sobre a tabela INTEIRA antes de o `LIMIT` do lote cortar. O trabalho por lote vira

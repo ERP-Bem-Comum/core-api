@@ -1,6 +1,6 @@
 [← Voltar para ADRs](./README.md)
 
-# ADR-0062: O outbox entrega a N consumidores — progresso por consumidor, DLQ por consumidor, origem preservada (estende ADR-0015 e ADR-0022)
+# ADR-0064: O outbox entrega a N consumidores — progresso por consumidor, DLQ por consumidor, origem preservada (estende ADR-0015 e ADR-0022)
 
 - **Status:** Accepted
 - **Date:** 2026-08-21

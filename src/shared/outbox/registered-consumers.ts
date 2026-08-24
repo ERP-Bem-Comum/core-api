@@ -1,6 +1,6 @@
 /**
  * Quem consome cada outbox — a lista que o sweeper usa para decidir que um evento já foi
- * resolvido por TODOS (ADR-0062 §3).
+ * resolvido por TODOS (ADR-0064 §3).
  *
  * ## Por que esta lista existe, e por que errá-la para MENOS é perigoso
  *
@@ -12,7 +12,7 @@
  *     O claim volta a ser o lento. **Perde performance, nunca evento.**
  *   - consumidor a MENOS (existe e não está aqui) → a linha é marcada sem que ele tenha
  *     processado, e ele **deixa de recebê-la**. Perda silenciosa — exatamente o defeito que o
- *     ADR-0062 fecha.
+ *     ADR-0064 fecha.
  *
  * A assimetria é deliberada: na dúvida, sobre-declare. `tests/cleanup/outbox-claim-per-consumer.test.ts`
  * cobra que todo `consumerId` literal registrado em `src/workers/` esteja aqui.
@@ -21,7 +21,7 @@
  *
  * Os dois `LoggerEventDelivery` recebem o id por env (`OUTBOX_CONSUMER_ID`) — o mesmo nome de
  * variável para os dois, com defaults distintos. É frágil e está registrado como pendência 3 do
- * ADR-0062. Aqui a resolução **repete exatamente** a dos `worker/config.ts` de cada módulo, para
+ * ADR-0064. Aqui a resolução **repete exatamente** a dos `worker/config.ts` de cada módulo, para
  * que sweeper e worker nunca discordem sobre quem é o consumidor; se aquela mudar, esta muda
  * junto, e o gate acima acusa.
  */

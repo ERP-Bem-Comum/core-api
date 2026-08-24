@@ -1,10 +1,10 @@
 /**
- * `runOutboxSweep` — o laço em lotes do sweep de outbox (ADR-0062 §3).
+ * `runOutboxSweep` — o laço em lotes do sweep de outbox (ADR-0064 §3).
  *
  * O que este arquivo protege não é a performance (isso é EXPLAIN, e vive na validação em MySQL
  * real): é a **propriedade de segurança** do job. O sweep marca `processed_at`, e essa marca
  * REMOVE a linha do claim de todos os consumidores. Marcar cedo demais é perda silenciosa de
- * evento — o defeito que o ADR-0062 fecha. Por isso o caso mais importante aqui é o mais
+ * evento — o defeito que o ADR-0064 fecha. Por isso o caso mais importante aqui é o mais
  * chato: com lista de consumidores vazia, não marcar NADA.
  */
 import { describe, it } from 'node:test';
