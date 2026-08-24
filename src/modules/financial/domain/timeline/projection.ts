@@ -67,8 +67,20 @@ export const projectEntry = (input: ProjectEntryInput): readonly FinancialTimeli
   // `ApproverEscalated` (#289/CASCADE) também não é marco de estado do Document — vai só pro
   // outbox (ver `TimelineEventType` em events.ts). O guard narrowa `eventType` para o
   // subconjunto `TimelineEventType` (sem cancelamento nem escalonamento).
+  //
+  // `PayableTransmitted` (ADR-0065 §2) sai por um motivo DIFERENTE dos outros dois, e a diferença
+  // importa: ele é marco de estado do título e vai à trilha um dia — a #823 o quer no drawer, com o
+  // NSA e o nome do arquivo. Ele não passa por aqui hoje porque não chega aqui: quem o emite é o
+  // `save` da remessa, que não monta `Payables` nem chama esta projeção. Quando a #823 o trouxer, o
+  // caminho a construir é esse, não este `if`.
   const eventType = input.event.type;
-  if (eventType === 'DocumentCancelled' || eventType === 'ApproverEscalated') return [];
+  if (
+    eventType === 'DocumentCancelled' ||
+    eventType === 'ApproverEscalated' ||
+    eventType === 'PayableTransmitted'
+  ) {
+    return [];
+  }
 
   const documentId = input.after.id;
   const entries: FinancialTimelineEntry[] = [

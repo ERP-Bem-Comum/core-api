@@ -20,6 +20,7 @@ import {
   buildFinancialHttpDeps,
 } from '#src/modules/financial/public-api/http.ts';
 import { createInMemoryRemittancePaymentReader } from '#src/modules/financial/adapters/persistence/repos/remittance-payment-reader.in-memory.ts';
+import { createInMemoryRemittanceRepository } from '#src/modules/financial/adapters/persistence/repos/remittance-repository.in-memory.ts';
 
 const GENERATOR = 'remittance:generate';
 const READER_ONLY = 'remittance:read';
@@ -128,6 +129,19 @@ const buildHandle = async (): Promise<AppHandle> => {
   const deps = await buildFinancialHttpDeps({
     driver: 'memory',
     remittancePaymentReader: payments,
+    // O repositório precisa vir pelo seam desde o ADR-0065 §2: o `save` de criação transiciona os
+    // títulos `Approved → Transmitted` por CAS, e o fallback do composition root nasce sem conhecer
+    // título nenhum — toda geração cairia em `document-not-approved`, que é o veredito certo para um
+    // repositório que não sabe de nada.
+    //
+    // `DOC_NAO_APROVADO` fica FORA de propósito: o cenário do #736 o recusa no reader
+    // (`payments.setNotApproved`), antes de chegar aqui, e semeá-lo como aprovado não mudaria o
+    // desfecho — só apagaria a razão pela qual ele existe.
+    remittanceRepo: createInMemoryRemittanceRepository({
+      payableStatuses: Object.fromEntries(
+        [DOC_A, DOC_B, DOC_PIX, DOC_LIVRE].map((id) => [id, 'Approved' as const]),
+      ),
+    }),
   });
   const config = readHttpConfig({ RATE_LIMIT_MAX: '10000' });
   const app = await buildApp({

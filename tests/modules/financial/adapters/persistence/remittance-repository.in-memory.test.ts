@@ -12,6 +12,18 @@ import {
   confirmTransmitted,
 } from '#src/modules/financial/domain/remittance/remittance.ts';
 
+// Desde o ADR-0065 §2 o `save` de criação transiciona `Approved → Transmitted` por CAS, e o fake
+// espelha o veredito por contagem: ou todos os títulos estão `Approved`, ou nenhum transiciona e o
+// `save` recusa. Título que o repositório não conhece afeta zero linhas no banco — o mesmo conflito.
+//
+// Estes casos usam ids fictícios (`doc-1`) que não vêm de fixture de título nenhuma, então o estado
+// deles precisa ser declarado aqui. `repoWith` é o construtor de todos os casos do arquivo: quem
+// criar caso novo semeia junto, em vez de descobrir a recusa como falha misteriosa.
+const repoWith = (...approvedIds: readonly string[]) =>
+  createInMemoryRemittanceRepository({
+    payableStatuses: Object.fromEntries(approvedIds.map((id) => [id, 'Approved' as const])),
+  });
+
 let seq = 0;
 const build = (payableIds: readonly string[]) => {
   seq += 1;
@@ -38,7 +50,7 @@ const build = (payableIds: readonly string[]) => {
 
 describe('RemittanceRepository (fake) — round-trip', () => {
   it('salva e recupera por id e por nome de arquivo', async () => {
-    const repo = createInMemoryRemittanceRepository();
+    const repo = repoWith('doc-1');
     const rem = build(['doc-1']);
 
     assert.equal((await repo.save(rem)).ok, true);
@@ -54,10 +66,12 @@ describe('RemittanceRepository (fake) — round-trip', () => {
 });
 
 describe('RemittanceRepository (fake) — quem está preso', () => {
-  // A consulta que a SELEÇÃO faz antes de montar remessa nova. É ela que substitui a transição
-  // imediata para `Transmitted` e impede o mesmo documento de sair duas vezes.
+  // A consulta que a SELEÇÃO faz antes de montar remessa nova: impede o mesmo título de sair duas
+  // vezes. Ela NÃO substitui mais a transição para `Transmitted` — desde o ADR-0065 §2 a transição
+  // existe e acontece na mesma gravação. O hold responde "está em alguma remessa viva?"; o status do
+  // título responde "saiu da nossa alçada?". Os casos deste describe medem o primeiro.
   it('remessa enfileirada prende seus documentos', async () => {
-    const repo = createInMemoryRemittanceRepository();
+    const repo = repoWith('doc-1', 'doc-2');
     await repo.save(build(['doc-1', 'doc-2']));
 
     const held = await repo.findHeldPayables(['doc-1', 'doc-2', 'doc-3']);
@@ -78,7 +92,7 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
   });
 
   it('remessa transmitida continua prendendo', async () => {
-    const repo = createInMemoryRemittanceRepository();
+    const repo = repoWith('doc-1');
     const rem = build(['doc-1']);
     const t = confirmTransmitted(rem, '2026-08-11T14:05:00.000Z', 'ok');
     assert.ok(isOk(t));
@@ -90,7 +104,7 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
 
   // "Sem confirmação" não é "não transmitiu": o arquivo pode ter saído e o status ter se perdido.
   it('remessa em FALHA continua prendendo', async () => {
-    const repo = createInMemoryRemittanceRepository();
+    const repo = repoWith('doc-1');
     const f = markFailed(build(['doc-1']), '2026-08-11T14:05:00.000Z', 'sem confirmacao');
     assert.ok(isOk(f));
     await repo.save(f.value.remittance, f.value.events);
@@ -100,7 +114,7 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
   });
 
   it('só o descarte devolve o documento para a fila', async () => {
-    const repo = createInMemoryRemittanceRepository();
+    const repo = repoWith('doc-1');
     const f = markFailed(build(['doc-1']), '2026-08-11T14:05:00.000Z', 'sem confirmacao');
     assert.ok(isOk(f));
     const d = discard(
@@ -117,7 +131,7 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
   });
 
   it('lista vazia não consulta nada e devolve vazio', async () => {
-    const repo = createInMemoryRemittanceRepository();
+    const repo = repoWith();
     const held = await repo.findHeldPayables([]);
     assert.ok(isOk(held));
     assert.deepEqual(held.value, []);
@@ -135,7 +149,7 @@ describe('RemittanceRepository (fake) — quem está preso', () => {
 // descrevendo produção errado — que é o motivo de este describe existir.
 describe('RemittanceRepository (fake) — o save reconfere o hold (#789)', () => {
   it('recusa criar remessa com título já preso por outra remessa viva', async () => {
-    const repo = createInMemoryRemittanceRepository();
+    const repo = repoWith('doc-1', 'doc-2', 'doc-3');
     await repo.save(build(['doc-1', 'doc-2']));
 
     // A segunda emissão passou pela consulta antes da primeira gravar — é exatamente o cenário da
@@ -149,7 +163,7 @@ describe('RemittanceRepository (fake) — o save reconfere o hold (#789)', () =>
   // remessa encontra os PRÓPRIOS títulos presos — por ela mesma. Recusar aqui travaria o
   // `confirmRemittance` e deixaria toda remessa transmitida sem desfecho.
   it('permite atualizar uma remessa existente, cujos títulos ela mesma prende', async () => {
-    const repo = createInMemoryRemittanceRepository();
+    const repo = repoWith('doc-1');
     const rem = build(['doc-1']);
     await repo.save(rem);
 
@@ -159,10 +173,22 @@ describe('RemittanceRepository (fake) — o save reconfere o hold (#789)', () =>
     assert.equal(atualizacao.ok, true, 'atualização de desfecho não passa pela reserva');
   });
 
-  it('libera o título depois que a remessa que o prendia foi descartada', async () => {
-    const repo = createInMemoryRemittanceRepository();
+  // ⚠️ Este caso mede DUAS coisas que o ADR-0065 separou, e que antes dele eram uma só.
+  //
+  // Até o #792, "liberar o título" era só soltar o vínculo: o hold é derivado do status da REMESSA
+  // (`holdsPayables`), e descartar bastava. Agora o título tem estado próprio, e voltar à fila exige
+  // as duas coisas — o vínculo solto E o status de volta a `Approved`. O descarte já faz a primeira;
+  // a segunda é a §4 do ADR (`UPDATE … SET status='Approved' WHERE id=? AND status='Transmitted'`,
+  // restrito aos títulos que ESTA remessa segura), que ainda não tem use case nem rota.
+  //
+  // O assert de recusa abaixo é deliberado e temporário: ele fixa o estado REAL de hoje em vez de
+  // fingir que a devolução já existe. Quando a fatia do descarte entrar, este caso fica vermelho — e
+  // é assim que ele avisa que chegou a hora de exigir `segunda.ok === true`.
+  it('o descarte solta o vínculo; o status do título ainda não volta (ADR-0065 §4 pendente)', async () => {
+    const repo = repoWith('doc-1');
     const primeira = build(['doc-1']);
     await repo.save(primeira);
+    assert.equal(repo.payableStatus('doc-1'), 'Transmitted', 'a emissão transicionou o título');
 
     const f = markFailed(primeira, '2026-08-11T14:05:00.000Z', 'sem confirmacao');
     assert.ok(isOk(f));
@@ -174,7 +200,69 @@ describe('RemittanceRepository (fake) — o save reconfere o hold (#789)', () =>
     assert.ok(isOk(d));
     await repo.save(d.value.remittance, d.value.events);
 
+    // 1. O vínculo está solto — a remessa descartada não prende mais.
+    const held = await repo.findHeldPayables(['doc-1']);
+    assert.ok(isOk(held));
+    assert.deepEqual(held.value, [], 'remessa descartada não prende');
+
+    // 2. Mas o título segue `Transmitted`, então ainda não é candidato a remessa nova.
+    assert.equal(repo.payableStatus('doc-1'), 'Transmitted');
     const segunda = await repo.save(build(['doc-1']));
-    assert.equal(segunda.ok, true, 'descarte devolve o título para a fila');
+    assert.equal(
+      isErr(segunda) ? segunda.error : null,
+      'remittance-payable-not-approved',
+      'sem a devolução da §4, o título preso pelo status não volta à fila',
+    );
+  });
+});
+
+// ADR-0065 §2 — a transição que este ticket existe para criar.
+//
+// O `save` de criação escreve em dois agregados na mesma transação: registra a remessa e move cada
+// título de `Approved` para `Transmitted`. O veredito é por CONTAGEM — ou todos transicionam, ou
+// nenhum e a operação inteira é recusada. É o mesmo que o CAS faz no banco com `affectedRows`.
+describe('RemittanceRepository (fake) — a transição do título na reserva (#792)', () => {
+  it('a criação move para Transmitted todos os títulos da remessa', async () => {
+    const repo = repoWith('doc-1', 'doc-2');
+    assert.equal((await repo.save(build(['doc-1', 'doc-2']))).ok, true);
+
+    assert.equal(repo.payableStatus('doc-1'), 'Transmitted');
+    assert.equal(repo.payableStatus('doc-2'), 'Transmitted');
+  });
+
+  it('recusa a remessa inteira quando UM título não está aprovado, e não transiciona nenhum', async () => {
+    // `doc-2` fica de fora do seed: no banco ele afetaria zero linhas no CAS, que é o mesmo
+    // conflito de um título não-aprovado.
+    const repo = repoWith('doc-1');
+    const r = await repo.save(build(['doc-1', 'doc-2']));
+
+    assert.equal(isErr(r) ? r.error : null, 'remittance-payable-not-approved');
+    assert.equal(
+      repo.payableStatus('doc-1'),
+      'Approved',
+      'o título aprovado NÃO pode ter transicionado: a transação desfaz tudo',
+    );
+  });
+
+  it('a recusa não deixa rastro: nem remessa, nem evento', async () => {
+    const repo = repoWith('doc-1');
+    const rem = build(['doc-1', 'doc-2']);
+    const r = await repo.save(rem);
+    assert.equal(r.ok, false);
+
+    const found = await repo.findById(rem.id);
+    assert.ok(isOk(found));
+    assert.equal(found.value, null, 'remessa recusada não fica registrada');
+    assert.deepEqual(repo.published(), [], 'evento existe se e somente se o estado foi persistido');
+  });
+
+  // O perdedor da corrida do #789 não pode sair transicionado: quem perde não escreveu nada.
+  it('o perdedor da corrida por título preso fica com o status intocado', async () => {
+    const repo = repoWith('doc-1', 'doc-2', 'doc-3');
+    await repo.save(build(['doc-1', 'doc-2']));
+
+    const perdedora = await repo.save(build(['doc-2', 'doc-3']));
+    assert.equal(isErr(perdedora) ? perdedora.error : null, 'remittance-payables-already-held');
+    assert.equal(repo.payableStatus('doc-3'), 'Approved', 'título da remessa perdedora não muda');
   });
 });

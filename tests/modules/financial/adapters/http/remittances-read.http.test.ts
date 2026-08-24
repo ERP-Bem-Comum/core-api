@@ -126,7 +126,14 @@ type DetailBody = ListItem &
   Readonly<{ payableIds: readonly string[]; documentIds: readonly string[] }>;
 
 before(async () => {
-  const repo = createInMemoryRemittanceRepository();
+  // As remessas da fixture são criadas pelo `save`, que desde o ADR-0065 §2 transiciona os títulos
+  // por CAS — título não declarado seria recusado, e não haveria remessa nenhuma a listar. Este
+  // arquivo mede a LEITURA (lista e detalhe); o estado dos títulos é pressuposto, não objeto.
+  const repo = createInMemoryRemittanceRepository({
+    payableStatuses: Object.fromEntries(
+      [DOC_A, DOC_B, DOC_C, DOC_D].map((id) => [id, 'Approved' as const]),
+    ),
+  });
 
   await repo.save(build(REM_OLDEST, 1, '2026-08-11T14:00:00.000Z', [DOC_A]));
   await repo.save(build(REM_MIDDLE, 2, '2026-08-12T14:00:00.000Z', [DOC_B, DOC_C]));

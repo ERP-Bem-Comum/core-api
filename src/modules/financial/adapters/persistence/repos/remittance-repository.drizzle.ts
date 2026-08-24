@@ -11,7 +11,7 @@ import type {
   RemittancePayable,
   RemittanceStatus,
 } from '#src/modules/financial/domain/remittance/types.ts';
-import type { RemittanceEvent } from '#src/modules/financial/domain/remittance/events.ts';
+import type { RemittanceSaveEvent } from '#src/modules/financial/application/ports/remittance-repository.ts';
 import * as RemittanceId from '#src/modules/financial/domain/remittance/remittance-id.ts';
 import * as CedenteAccountId from '#src/modules/financial/domain/cedente/cedente-account-id.ts';
 import type {
@@ -44,6 +44,25 @@ const logRepo = (op: string, cause: unknown): void => {
 // Sobrevive ao trajeto porque o driver relança o objeto original: `mysql2/session.js` roda o
 // ROLLBACK no `catch` e faz `throw err` do mesmo valor, sem empacotar.
 const PAYABLES_ALREADY_HELD = new Error('remittance-payables-already-held');
+
+// Sentinela da transição recusada (ADR-0065 §2), pelas MESMAS restrições da de cima: identidade por
+// `===`, `Error` de verdade, instância única.
+//
+// Distinta de `PAYABLES_ALREADY_HELD` de propósito. As duas nascem no mesmo bloco e desfazem a mesma
+// transação, mas dizem coisas diferentes ao operador: "está em outra remessa" o manda à lista de
+// remessas; "não está aprovado" o manda ao fluxo de aprovação. Uma sentinela só forçaria a borda a
+// adivinhar qual das duas telas abrir.
+const PAYABLE_NOT_APPROVED = new Error('remittance-payable-not-approved');
+
+// mysql2 devolve `[ResultSetHeader, FieldPacket[]]`; o Drizzle expõe o raw do driver via cast.
+//
+// ⚠️ SEXTA ocorrência deste cast no repositório, em duas formas divergentes — `document-repository`
+// (×2), `financial-etl-store`, `payable-repository` (sem o `as unknown as`), `reconciliation-
+// repository` e esta. Fica local porque extraí-lo tocaria cinco arquivos fora do escopo do #792;
+// a concentração num helper de `shared/persistence` está registrada na **#844**, com o gate que
+// impede a sétima. Anotar a repetição é o que a impede de parecer inevitável.
+const affectedRowsOf = (result: unknown): number =>
+  (result as unknown as [{ affectedRows: number }])[0].affectedRows;
 
 // ─── Tradução de instante entre o domínio e a coluna `datetime` ──────────────────────────────────
 //
@@ -169,7 +188,7 @@ export const createDrizzleRemittanceRepository = (
     // de integração pegou.
     save: async (
       remittance: Remittance,
-      events: readonly RemittanceEvent[] = [],
+      events: readonly RemittanceSaveEvent[] = [],
     ): Promise<Result<void, RemittanceSaveError>> => {
       try {
         await db.transaction(async (tx) => {
@@ -297,6 +316,43 @@ export const createDrizzleRemittanceRepository = (
             // carregaria qual erro foi.
             if (heldNow.length > 0) throw PAYABLES_ALREADY_HELD;
 
+            // ─── Transição dos títulos (ADR-0065 §2) ────────────────────────────────────────
+            //
+            // Aqui o título deixa a alçada do core-api. A P.O. decidiu em 24/08 que "transmitido" é
+            // um fato NOSSO — a remessa saiu daqui —, e não um fato do banco: o que o banco fez com
+            // o arquivo é dado do retorno. É a Anticorruption Layer de Vernon (IDDD p.142) aplicada
+            // ao vocabulário, e o ADR-0065 supersede a cláusula do 0060 que atrelava ESTE estado ao
+            // sinal externo. O `Transmitted` da REMESSA continua dependendo do `status/` — são dois
+            // fatos, e é o §3 do ADR que os separa.
+            //
+            // CAS pela pré-condição da operação (ADR-0063 §2): a guarda é a cláusula `WHERE`, não um
+            // `if` que leu antes e decidiu depois. Não há coluna de versão, e não precisa haver — o
+            // estado anterior É a pré-condição.
+            //
+            // ⚠️ `IN (…) AND status = 'Approved'` é UMA sentença, não N. O ADR escreve o SQL por
+            // título; o que ele exige é o CAS e o veredito por contagem, e os dois valem igual em
+            // lote. Em lote são menos round-trips DENTRO da transação que decide a corrida — e a
+            // linha do `IN` já está travada pelo `FOR UPDATE` do topo, então nenhum lock novo entra.
+            // O ADR-0063 proíbe `IN` para ATRIBUIÇÃO (onde ele aceitaria toda escrita e devolveria
+            // last-write-wins mudo); aqui é transição, e a contagem é o que a torna exata.
+            //
+            // Divergiu a contagem, algum título não estava `Approved` — e a transação inteira desfaz,
+            // inclusive a reserva. Qual deles falhou não viaja no erro de propósito: o pré-voo
+            // (`previewRemittance`) é quem responde isso, ANTES de queimar NSA, e duplicar a resposta
+            // aqui criaria uma segunda régua para a mesma pergunta.
+            //
+            // O NSA já consumido NÃO volta. É a regra vigente do use case, e vale igual neste
+            // caminho: gap na sequência é inofensivo, reusar número é retransmissão para o banco.
+            //
+            // `inArray` com lista vazia é erro do builder, não predicado falso — e não é alcançável
+            // aqui: `create` do agregado recusa remessa sem título, e este ramo é só o de criação.
+            const transitioned = await tx
+              .update(finPayables)
+              .set({ status: 'Transmitted' })
+              .where(and(inArray(finPayables.id, payableIds), eq(finPayables.status, 'Approved')));
+
+            if (affectedRowsOf(transitioned) !== payableIds.length) throw PAYABLE_NOT_APPROVED;
+
             // Criação: INSERT puro. Violação de UNIQUE (NSA por conta, nome de arquivo) LANÇA e
             // vira `Result` de erro no catch — que é o comportamento que se quer.
             await tx.insert(finRemittances).values({
@@ -348,8 +404,11 @@ export const createDrizzleRemittanceRepository = (
         return ok(undefined);
       } catch (cause) {
         // Perder a corrida é desfecho ESPERADO sob concorrência, não avaria: sai com nome próprio e
-        // sem poluir o stderr, para que o log siga significando "algo quebrou".
+        // sem poluir o stderr, para que o log siga significando "algo quebrou". Vale igual para a
+        // transição recusada: título que deixou de ser `Approved` entre o pré-voo e a gravação é
+        // conflito legítimo, não falha de infraestrutura.
         if (cause === PAYABLES_ALREADY_HELD) return err('remittance-payables-already-held');
+        if (cause === PAYABLE_NOT_APPROVED) return err('remittance-payable-not-approved');
         logRepo('save', cause);
         return err('remittance-repository-unavailable');
       }

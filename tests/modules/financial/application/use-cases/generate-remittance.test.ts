@@ -47,9 +47,18 @@ const reader = (docs: readonly string[]): RemittancePaymentReader => ({
     ),
 });
 
+// Os títulos da fixture nascem `Approved`, e declarar isso é obrigatório desde o ADR-0065 §2: o
+// `save` de criação transiciona `Approved → Transmitted` por CAS, e título de que o repositório
+// nunca ouviu falar afeta zero linhas no banco — mesmo veredito que não-aprovado. Semear é dizer de
+// que estado o cenário parte; antes, todo caso supunha `Approved` sem escrever em lugar nenhum.
+const approved = (ids: readonly string[]): Readonly<Record<string, 'Approved'>> =>
+  Object.fromEntries(ids.map((id) => [id, 'Approved' as const]));
+
 const setup = async (over: Partial<{ docs: readonly string[] }> = {}) => {
+  const docs = over.docs ?? ['doc-1', 'doc-2'];
+
   const accounts = createInMemoryCedenteAccountStore();
-  const remittances = createInMemoryRemittanceRepository();
+  const remittances = createInMemoryRemittanceRepository({ payableStatuses: approved(docs) });
   const storage = createInMemoryVanStorage();
 
   const id = CedenteAccountId.generate();
@@ -65,8 +74,6 @@ const setup = async (over: Partial<{ docs: readonly string[] }> = {}) => {
   });
   assert.ok(isOk(acc));
   await accounts.save(acc.value);
-
-  const docs = over.docs ?? ['doc-1', 'doc-2'];
 
   return {
     accounts,
@@ -219,6 +226,95 @@ describe('generateRemittance — o que ele recusa', () => {
     const r = await generateRemittance(s.deps)(input(s.cedenteAccountId, ['doc-1', 'doc-ausente']));
     assert.ok(isErr(r));
     assert.equal(r.error, 'remittance-payments-unavailable');
+  });
+});
+
+/**
+ * ADR-0065 §2 — o título vira `Transmitted` na geração, e não quando o `status/` confirma.
+ *
+ * A fronteira que a P.O. decidiu em 24/08: gerar a remessa é entregá-la à VAN, e daí em diante a
+ * responsabilidade é de terceiros. `Transmitted` do TÍTULO diz "saiu da nossa alçada"; `Transmitted`
+ * da REMESSA continua dizendo "o agente transmitiu". São dois fatos — o §3 do ADR existe porque
+ * tratá-los como um só era o defeito.
+ */
+describe('generateRemittance — o título sai da nossa alçada (#792, ADR-0065 §2)', () => {
+  it('cada título da remessa fica Transmitido depois da geração', async () => {
+    const s = await setup();
+    const r = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
+    assert.ok(isOk(r), `esperava ok, veio ${isErr(r) ? r.error : '?'}`);
+
+    for (const id of s.docs) {
+      assert.equal(s.remittances.payableStatus(id), 'Transmitted', `título ${id}`);
+    }
+  });
+
+  // Por TÍTULO, nunca por nota: uma nota pode sair pela metade — o pai no arquivo e a retenção ainda
+  // em aberto —, e um evento por nota diria que ela foi paga inteira.
+  it('emite um PayableTransmitted por título, com a remessa em que ele foi', async () => {
+    const s = await setup();
+    const r = await generateRemittance(s.deps)(input(s.cedenteAccountId, s.docs));
+    assert.ok(isOk(r));
+
+    const eventos = s.remittances.published().filter((e) => e.type === 'PayableTransmitted');
+    assert.equal(eventos.length, s.docs.length, 'um evento por título, nem mais nem menos');
+    assert.deepEqual(
+      eventos.map((e) => e.payableId).sort(),
+      [...s.docs].sort(),
+      'os títulos anunciados são os que saíram',
+    );
+
+    // O evento responde "em qual remessa o título foi" sem obrigar o consumidor a voltar ao banco —
+    // é o pré-requisito da #823. Asserir a PROPRIEDADE (aponta para a remessa que acabou de sair) e
+    // não o literal, que mudaria com a fixture.
+    for (const e of eventos) {
+      assert.equal(e.remittanceId, r.value.remittanceId);
+      assert.equal(e.nsa, r.value.nsa);
+      assert.equal(e.fileName, r.value.fileName);
+      assert.ok(e.documentId.length > 0, 'a nota de origem viaja junto: é ela que exibe a trilha');
+    }
+  });
+
+  // O evento existe se e somente se o estado foi persistido (ADR-0015). O caminho que falha DEPOIS
+  // da transação é o do upload — e ali a transição já valeu, de propósito: título preso por remessa
+  // que não saiu é visível e recuperável; título livre com arquivo a caminho do banco não é.
+  it('a falha no upload NÃO desfaz a transição — erra-se para menos', async () => {
+    const s = await setup();
+    const deps = {
+      ...s.deps,
+      storage: {
+        ...s.storage,
+        putRemittance: async () => Promise.resolve(err('van-storage-unavailable' as const)),
+      },
+    };
+
+    const r = await generateRemittance(deps)(input(s.cedenteAccountId, s.docs));
+    assert.ok(isErr(r) && r.error === 'remittance-upload-failed');
+
+    for (const id of s.docs) {
+      assert.equal(
+        s.remittances.payableStatus(id),
+        'Transmitted',
+        `título ${id} segue transmitido`,
+      );
+    }
+  });
+
+  // O CAS recusa, e o operador recebe o vocabulário que ele já conhece do #736 — a ação é a mesma
+  // (ir aprovar), tenha a recusa vindo do reader ou da corrida na gravação.
+  it('título que deixou de ser Approved recusa a remessa inteira, com o slug do #736', async () => {
+    const s = await setup();
+    // Encena a janela entre o pré-voo e a gravação: o repositório só conhece `doc-1` como aprovado.
+    const deps = {
+      ...s.deps,
+      remittances: createInMemoryRemittanceRepository({ payableStatuses: approved(['doc-1']) }),
+    };
+
+    const r = await generateRemittance(deps)(input(s.cedenteAccountId, s.docs));
+    assert.equal(isErr(r) ? r.error : null, 'document-not-approved');
+
+    // Nada foi enfileirado: a recusa acontece ANTES do upload, e é a transação que a garante.
+    const anySaida = await s.storage.getText('saida/PAG_000000.11082026142605_000001.REM');
+    assert.ok(isErr(anySaida), 'remessa recusada não deposita arquivo');
   });
 });
 

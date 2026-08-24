@@ -21,7 +21,12 @@ const CONTENT = '0'.repeat(240) + '\r\n' + '1'.repeat(240);
 const fakeHash = (content: string): string => `h:${String(content.length)}:${content.slice(0, 8)}`;
 
 const setup = async (over: Partial<{ content: string; hash: string }> = {}) => {
-  const remittances = createInMemoryRemittanceRepository();
+  // A remessa da fixture é criada pelo `save`, que desde o ADR-0065 §2 transiciona os títulos por
+  // CAS — título não declarado aqui seria recusado, e a fixture nunca chegaria a existir. Este
+  // arquivo mede o DOWNLOAD; a remessa é só o pressuposto dele.
+  const remittances = createInMemoryRemittanceRepository({
+    payableStatuses: { 'pay-a': 'Approved' },
+  });
   const storage = createInMemoryVanStorage();
 
   const id = RemittanceId.generate();
