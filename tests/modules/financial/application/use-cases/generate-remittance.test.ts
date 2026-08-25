@@ -70,7 +70,9 @@ const setup = async (over: Partial<{ docs: readonly string[] }> = {}) => {
     accountDigit: '1',
     convenio: '000000',
     document: '12345678000199',
-    bankName: 'ASSOCIACAO BEM COMUM',
+    // O nome do BANCO, que é o que este campo significa. Enquanto ele guardava a razão social, o
+    // emissor produzia o header certo por acidente — e o defeito ficava invisível na suíte.
+    bankName: 'BRADESCO',
   });
   assert.ok(isOk(acc));
   await accounts.save(acc.value);
