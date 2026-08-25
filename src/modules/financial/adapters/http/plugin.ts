@@ -437,6 +437,33 @@ const sanitizeFilename = (name: string): string => {
 //   return sendDomainError(reply, 'remittance-disabled-under-rbac-bypass');
 // };
 
+/**
+ * Força o registro de `GET /financial/remittances/:id/file` em TODO ambiente — decisão do dono
+ * (Gabriel, 24/08/2026), risco assumido.
+ *
+ * MECANISMO, e a razão de ele ser um OR: a condição original (`!isProductionEnv`) fica **intacta**
+ * logo ao lado. Para desfazer, apaga-se esta constante e o `|| FORCE_REMITTANCE_FILE_ROUTE` do `if`
+ * — a validação de origem volta a valer sozinha, sem ninguém precisar reconstruí-la de memória.
+ *
+ * POR QUE existe: o comentário da rota promete "homologação apenas", mas o discriminador é o
+ * `NODE_ENV`, e `Dockerfile:96` fixa `NODE_ENV=production` em toda imagem. Para o helper,
+ * homologação **é** produção — então a rota não existia em nenhum ambiente containerizado, só em dev
+ * local. O front recebia `404 Route not found` e o operador via o texto cru em inglês.
+ *
+ * ⚠️ O QUE ISSO ABRE: a rota passa a existir em produção, e serve um arquivo com o cadastro bancário
+ * de TODOS os favorecidos do lote. O `authorize(remittanceRead)` dela não segura mais nada enquanto
+ * `resolveRbacMode` estiver fixo em `bypass` — e o comentário da própria rota (logo abaixo) dizia que
+ * não-registrar era a defesa justamente contra isso. Enquanto este toggle estiver `true`, não há
+ * defesa nenhuma nessa rota. A via segura é território da #822.
+ *
+ * O `eslint-disable` no ponto de uso é parte do mecanismo, não descuido: o TS estreita esta const
+ * para o literal `true`, e o `no-unnecessary-condition` está CERTO ao dizer que o OR é sempre
+ * verdadeiro — é exatamente o que se quer aqui. Anotar `: boolean` para escapar dele apenas troca o
+ * erro pelo `no-inferrable-types`. O disable fica como marcador visível da dívida e sai junto com o
+ * resto do toggle.
+ */
+const FORCE_REMITTANCE_FILE_ROUTE = true;
+
 const financialRoutes =
   (deps: FinancialHttpDeps, hooks: FinancialHttpHooks): FastifyPluginAsyncZodOpenApi =>
   async (scope) => {
@@ -1328,21 +1355,33 @@ const financialRoutes =
       },
     });
 
-    // GET /financial/remittances/:id/file — baixa o arquivo QUE FOI AO BANCO. **Homologação apenas.**
+    // GET /financial/remittances/:id/file — baixa o arquivo QUE FOI AO BANCO.
     //
-    // Não existe em produção: a rota nem é registrada, então lá o caminho é 404 por ausência, não 403
-    // por decisão. É o mesmo mecanismo do Swagger em `shared/http/app.ts:148` e a diferença importa —
-    // um 403 confirma que o recurso existe, e a superfície que não se registra não tem como vazar por
-    // erro de permissão, de ordem de preHandler ou de bypass de RBAC (ADR-0052).
+    // ⚠️ A restrição descrita abaixo está SUSPENSA por `FORCE_REMITTANCE_FILE_ROUTE` (ver o docblock
+    // da constante). Hoje a rota é registrada em TODO ambiente, produção inclusive. O texto original
+    // segue aqui porque é a intenção de origem e volta a valer inteira quando o toggle sair — não é
+    // descrição do comportamento atual.
     //
-    // Por que homologação: o arquivo carrega o cadastro bancário de todos os favorecidos do lote. Em
-    // homologação o dado é sintético e baixá-lo é como se confere layout com o banco; em produção o
-    // mesmo GET é uma exportação de dados de pagamento por HTTP, e isso pede decisão de negócio e
-    // trilha de auditoria que esta rota não tem.
+    // [intenção original] **Homologação apenas.** Não existe em produção: a rota nem é registrada,
+    // então lá o caminho é 404 por ausência, não 403 por decisão. É o mesmo mecanismo do Swagger em
+    // `shared/http/app.ts:148` e a diferença importa — um 403 confirma que o recurso existe, e a
+    // superfície que não se registra não tem como vazar por erro de permissão, de ordem de preHandler
+    // ou de bypass de RBAC (ADR-0052).
+    //
+    // [intenção original] Por que homologação: o arquivo carrega o cadastro bancário de todos os
+    // favorecidos do lote. Em homologação o dado é sintético e baixá-lo é como se confere layout com
+    // o banco; em produção o mesmo GET é uma exportação de dados de pagamento por HTTP, e isso pede
+    // decisão de negócio e trilha de auditoria que esta rota não tem.
+    //
+    // ⚠️ O discriminador nunca cumpriu a promessa, e é por isso que o toggle existe: `isProductionEnv`
+    // lê o `NODE_ENV`, e `Dockerfile:96` fixa `NODE_ENV=production` em toda imagem. Homologação, PBE e
+    // demo são `production` para o helper — a rota só existia em dev local. Corrigir de verdade é
+    // escolher um discriminador que saiba o que o `NODE_ENV` não sabe, e isso é a #822.
     //
     // Serve BYTES do objeto, nunca regeração (ver o docblock do use case) e nunca URL assinada
     // (ADR-0050) — o backend lê do storage privado e repassa, como o proxy do comprovante-fonte.
-    if (!isProductionEnv(process.env)) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- o OR é sempre verdadeiro DE PROPÓSITO; ver FORCE_REMITTANCE_FILE_ROUTE
+    if (!isProductionEnv(process.env) || FORCE_REMITTANCE_FILE_ROUTE) {
       scope.route({
         method: 'GET',
         url: '/financial/remittances/:id/file',
