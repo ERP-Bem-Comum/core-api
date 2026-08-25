@@ -1,7 +1,12 @@
 {
   "name": "core-api",
   "version": "0.1.0",
-  "description": "Modular Monolith do ERP Bem Comum. Fase 1: módulo Contratos.",
+  "description": "Backend do ERP Bem Comum — modular monolith em Node.js e TypeScript, com borda HTTP em Fastify e persistência MySQL via Drizzle.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ERP-Bem-Comum/core-api.git"
+  },
   "private": true,
   "type": "module",
   "engines": {
@@ -34,6 +39,7 @@
     "docs:links": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/handbook/link-scan.ts",
     "cnab:index": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/financial/cnab-manual-index.ts",
     "logbook": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/claude/logbook.ts",
+    "release:notes": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/release-notes.ts",
     "audit": "pnpm audit --prod --audit-level=high",
     "audit:all": "pnpm audit --audit-level=high",
     "test": "node --test --experimental-strip-types --enable-source-maps --no-warnings 'tests/**/*.test.ts'",
@@ -51,7 +57,7 @@
     "job:outbox-sweeper": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/shared/outbox-sweeper/run.ts",
     "job:migrate": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/migrate/run.ts",
     "job:auth:sync-permissions": "node --experimental-strip-types --enable-source-maps --no-warnings src/jobs/auth/sync-permissions/run.ts",
-    "secrets:setup": "node --experimental-strip-types --enable-source-maps --no-warnings ./scripts/setup/secrets.ts",
+    "secrets:setup": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/setup/secrets.ts",
     "test:integration:infra": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts infra",
     "test:integration:notifications": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts notifications",
     "test:integration:storage": "node --experimental-strip-types --enable-source-maps --no-warnings scripts/ci/test-integration.ts storage",
