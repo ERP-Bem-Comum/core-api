@@ -227,6 +227,20 @@ describe('discardRemittance — o que ele não pode alcançar', () => {
   // Título já pago não volta: o CAS é `WHERE status='Transmitted'`. É a resposta à preocupação que a
   // P.O. levantou — descartar uma remessa cujos títulos o banco pagou devolveria pagamento
   // consumado à fila, candidato a sair de novo.
+  //
+  // ⚠️ ACHADO FORA DE ESCOPO, registrado e NÃO corrigido aqui (#792): a linha abaixo monta um estado
+  // que **o MySQL recusa**. O CHECK `fin_payables_paid_at_chk` (#383, `schemas/mysql.ts`) exige
+  // `status <> 'Paid' OR paid_at IS NOT NULL`, e o fake `payableStatuses`
+  // (`remittance-repository.in-memory.ts`) guarda só o status — aceita `Paid` sem data, calado.
+  // Contra banco real o mesmo UPDATE sai com 3819 (`ER_CHECK_CONSTRAINT_VIOLATED`), como este PR
+  // mediu no x99.
+  //
+  // Não invalida o caso: o que ele afere é o CAS ignorar quem não está `Transmitted`, e para isso o
+  // `Paid` sem data serve. Mas é a classe de divergência que a `rules/testing.md` existe para caçar —
+  // um fake que aceita o que o banco recusa —, com o agravante de o invariante viver **só no
+  // schema**: nem o agregado, nem o port, nem o fake o mencionam, então nenhuma disciplina de
+  // espelhamento o alcança. O caminho real não passa por aqui (a baixa manual grava `paidAt` junto,
+  // §6), e por isso não é bloqueio. Corrigir o fake é escopo próprio, fora deste PR.
   it('não devolve título que já foi pago', async () => {
     const s = await setup({ payableIds: ['pago', 'pendente'] });
     s.remittances.setPayableStatus('pago', 'Paid');
