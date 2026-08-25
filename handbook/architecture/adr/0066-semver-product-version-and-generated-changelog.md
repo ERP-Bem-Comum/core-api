@@ -58,9 +58,18 @@ O motivo é concreto: mergear `1.0.0-rc.1` na `dev` faria a `dev` declarar-se um
 
 **D9 — Este ADR não autoriza a promoção a produção.** A `1.0.0-rc.1` marcará a árvore candidata; o que a libera para `main` são os critérios da [#873](https://github.com/ERP-Bem-Comum/core-api/issues/873), incluindo o CA0 — se o RBAC vai a produção em `bypass` (hoje fixado em `src/server.ts:161`) ou `enforced`.
 
-**D10 — O que promove `-rc.N` a GA é a cerimônia de validação, não o calendário.** O `1.0.0` é publicado quando a **cerimônia de validação da release** demonstrar a conexão **ponta a ponta, do sistema até a VAN**. É esse evento que resolve o CA0 da #873 e que data a promoção — o critério de aceite não é uma espera indefinida por decisão de negócio, e descrevê-lo como tal informa mal o estado do projeto.
+**D10 — A cerimônia de validação roda EM PRODUÇÃO, e por isso a promoção a `main` a precede.** É decisão da equipe de negócio que a conexão **ponta a ponta — do sistema até a VAN** — seja demonstrada no ambiente de produção. Isso fixa a sequência, e ela é o inverso da leitura intuitiva:
 
-A escada de pré-lançamento de D1 existe exatamente para isto: `-rc.N` significa, por definição, **candidato aguardando validação**, e a cerimônia é a validação. Se ela reprovar, o recuo tem nome — `-rc.2` — em vez de queimar o `1.0.0`, que é o argumento de D3 com um evento concreto por trás. Aprovada, o GA é bump e tag **sem tocar em `src/`**: a árvore validada é exatamente a publicada, e é essa identidade que a cerimônia certifica.
+1. **Resolver o CA0 da #873** — o RBAC vai a produção em `bypass` ou `enforced`.
+2. **Promover a `-rc.N` para `main`**, que é o deploy de produção (`compose.yaml` gera os taskdefs; job `migrate` antes de promover os Services, invariante do ADR-0003).
+3. **Executar a cerimônia em produção**, demonstrando o caminho completo até a VAN.
+4. **Declarar o GA** — bump para `1.0.0` e tag, sobre a **mesma árvore** que a cerimônia validou.
+
+A cerimônia **não é pré-condição da promoção; a promoção é pré-condição da cerimônia.** Quem lê "validação antes de publicar" e inverte a ordem planeja o release errado.
+
+É exatamente para isto que a escada de pré-lançamento de D1 existe. Uma release candidate **vai a produção sendo candidata** — é o que a distingue de um GA prematuro: o que está no ar tem nome que declara "ainda não validado". Se a cerimônia reprovar, o recuo se chama `-rc.2` e o `1.0.0` continua intacto (§D3). Aprovada, o passo 4 não toca `src/`, de modo que a árvore validada seja **byte a byte** a publicada — é essa identidade que a cerimônia certifica, e ela se perde se o código andar entre os passos 3 e 4.
+
+> ⚠️ **Duas consequências que a ordem acima torna inevitáveis, e que o §D9 apenas apontava.** Como o passo 2 põe o sistema em produção *antes* da validação, o CA0 deixa de ser questão de release e vira **pré-requisito de deploy**: com `bypass`, todo usuário autenticado em produção é super-usuário em toda rota, inclusive a que enfileira pagamento. E a cerimônia do passo 3, sendo *ponta a ponta até a VAN* em produção, esbarra no CA2 da [#873](https://github.com/ERP-Bem-Comum/core-api/issues/873): gravar no `saida/` do bucket **é** enfileirar pagamento ([ADR-0060](./0060-van-transport-via-s3-bucket-supersedes-0008-relay.md)). Uma demonstração ponta a ponta real precisa de combinação prévia sobre valor, favorecido e reversão — não é um teste que se decide na hora.
 
 ## Consequências
 
