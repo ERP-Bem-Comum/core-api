@@ -31,10 +31,131 @@ export const num = (value: number | string, size: number): Result<string, Positi
 
 // Acento não sobrevive ao trânsito até o mainframe do banco; a normalização acontece aqui, na
 // fronteira, e não no domínio — que continua guardando o nome como o humano escreveu.
-const stripDiacritics = (value: string): string => value.normalize('NFD').replace(/[̀-ͯ]/g, '');
+//
+// ⚠️ POR QUE `NFD` SOZINHO NÃO BASTAVA (#862), e por que "simplificar" de volta reintroduz o
+// defeito: `normalize('NFD')` aplica equivalência CANÔNICA — separa letra e DIACRÍTICO COMBINANTE
+// (faixa U+0300–U+036F), que o `replace` abaixo apaga. Isso resolve `Á`, `Ç`, `Ñ`, e só isso. `º`,
+// `ª`, `–`, `—`, `½`, `“`, `”` NÃO são letra com acento: são caracteres PRÓPRIOS, sem decomposição
+// canônica. O `NFD` os devolve intactos, e eles atravessavam `alpha()` inteiros.
+//
+// O custo de deixá-los passar não era o banco recusar — era `remittance-inspector.ts` acusar
+// `non-ascii-character` DEPOIS de `generate-remittance.ts` ter consumido o NSA sob lock, que por
+// desenho não volta. Um `Nº` no logradouro queimava um número de sequência de arquivo, e o operador
+// recebia uma recusa que não aponta campo nenhum.
+//
+// E `NFKD` (equivalência de COMPATIBILIDADE) não é a correção mais curta que parece: resolveria
+// `º`→`o`, mas devolve `½` como `1⁄2` — com U+2044, ainda não-ASCII — e reescreve o que ninguém
+// pediu (`㎏`→`kg`, `Ⅻ`→`XII`). Para um arquivo cuja única validação real é produção, tabela
+// explícita e auditável vale mais que regra genérica com efeito colateral.
+const stripCombiningMarks = (value: string): string => value.normalize('NFD').replace(/[̀-ͯ]/g, '');
 
+// Preenchedor do que não tem transliteração legível — `€`, `→`, emoji, ideograma (CA5 da #862).
+//
+// É BRANCO, e a escolha é declarada: o campo alfanumérico do layout já é preenchido com brancos em
+// toda posição não usada (o `padEnd` de `alpha`), então é o único caractere comprovadamente aceito
+// em qualquer posição alfa deste arquivo. `?` também é ASCII e passaria o inspetor, mas seria um
+// caractere ESTREANDO num arquivo que só se valida em produção — e aqui já se viu campo aderente ao
+// layout ser recusado pelo Validador Universal (#804). Não se estreia caractere sem evidência.
+const UNTRANSLITERABLE = ' ';
+
+// Transliteração do não-ASCII que o `NFD` não decompõe. O critério de entrada é o CA2 da #862: o
+// campo é lido por HUMANO na outra ponta, então `RUA 1º DE MAIO` tem de chegar `RUA 1O DE MAIO` —
+// legível, não um branco nem um `?` no lugar do caractere.
+//
+// Cobre o que de fato aparece em cadastro brasileiro: ordinal (`Nº`, `1ª`), travessão e aspas
+// tipográficas — que entram por copiar-e-colar de editor de texto —, fração, e as poucas letras
+// latinas que não são base + acento. O que não estiver aqui vira `UNTRANSLITERABLE`.
+//
+// Escrita em CAIXA ALTA de propósito: `toUpperCase()` roda ANTES da tabela, então minúscula nunca
+// chega até aqui — e `ß`→`SS`, `ﬁ`→`FI`, `æ`→`Æ` já são resolvidos pela própria conversão de caixa.
+const TRANSLITERATIONS: ReadonlyMap<string, string> = new Map([
+  // Ordinal e grau. O grau entra porque o teclado produz `°` no lugar de `º` o tempo todo.
+  ['º', 'O'], // º ordinal masculino
+  ['ª', 'A'], // ª ordinal feminino
+  ['°', 'O'], // ° sinal de grau
+  ['№', 'NO'], // № abreviatura de número
+  // Traços que não são o hífen ASCII.
+  ['‐', '-'], // ‐ hífen
+  ['‑', '-'], // ‑ hífen não-quebrável
+  ['‒', '-'], // ‒ traço de dígito
+  ['–', '-'], // – meia-risca
+  ['—', '-'], // — travessão
+  ['―', '-'], // ― barra horizontal
+  ['−', '-'], // − sinal de menos
+  // Aspas e apóstrofos tipográficos.
+  ['‘', "'"], // ‘
+  ['’', "'"], // ’
+  ['‚', "'"], // ‚
+  ['‛', "'"], // ‛
+  ['´', "'"], // ´ acento agudo solto
+  ['“', '"'], // “
+  ['”', '"'], // ”
+  ['„', '"'], // „
+  ['‟', '"'], // ‟
+  ['«', '"'], // «
+  ['»', '"'], // »
+  // Espaços que não são o branco ASCII — invisíveis no cadastro e no diff, e por isso os piores de
+  // diagnosticar: o defeito aparece como "acento" numa posição que parece vazia.
+  //
+  // Declarados por CODE POINT, e não pelo caractere. Escrito literalmente, qualquer normalização de
+  // whitespace — editor, formatador, um copiar-e-colar — converteria a chave em branco ASCII em
+  // silêncio, desligando a linha sem quebrar nada que o gate perceba. `tests/…/positional.test.ts`
+  // cobra o caso do não-quebrável justamente porque a regressão seria invisível na revisão.
+  [String.fromCodePoint(0x00a0), ' '], // espaço não-quebrável
+  [String.fromCodePoint(0x2007), ' '], // espaço de figura
+  [String.fromCodePoint(0x2009), ' '], // espaço fino
+  [String.fromCodePoint(0x202f), ' '], // espaço estreito não-quebrável
+  [String.fromCodePoint(0x3000), ' '], // espaço ideográfico
+  // Pontuação.
+  ['…', '...'], // …
+  ['·', '.'], // ·
+  ['•', '.'], // •
+  // Frações.
+  ['½', '1/2'], // ½
+  ['¼', '1/4'], // ¼
+  ['¾', '3/4'], // ¾
+  ['⅓', '1/3'], // ⅓
+  ['⅔', '2/3'], // ⅔
+  // Letras latinas sem decomposição canônica — o traço é parte do desenho, não sobreposto.
+  ['Ø', 'O'], // Ø
+  ['Æ', 'AE'], // Æ
+  ['Œ', 'OE'], // Œ
+  ['Ð', 'D'], // Ð
+  ['Đ', 'D'], // Đ
+  ['Þ', 'TH'], // Þ
+  ['Ł', 'L'], // Ł
+  // Símbolos que aparecem em razão social.
+  ['×', 'X'], // ×
+  ['÷', '/'], // ÷
+  ['©', '(C)'], // ©
+  ['®', '(R)'], // ®
+  ['™', 'TM'], // ™
+]);
+
+const ASCII_PRINTABLE = /^[\x20-\x7E]$/;
+
+// Varre por CODE POINT, não por unidade UTF-16 — e as duas flags do regex são o que garante isso:
+//
+//   · `u` faz `.` casar o par substituto inteiro. Sem ela, um caractere fora do BMP viraria DOIS
+//     preenchedores, e o campo cresceria uma posição — num arquivo posicional, isso desloca tudo
+//     o que vem depois.
+//   · `s` faz `.` casar quebra de linha. Sem ela, `\n` e `\r` passariam INTACTOS, que é o pior
+//     resultado possível aqui: um `\n` colado num nome de cadastro parte o registro em duas linhas
+//     de comprimento errado, e o defeito chega como `line-length` — longe do campo que o causou.
+//
+// `[...value]` daria a mesma granularidade e é barrado por `no-misused-spread`, com razão: ele
+// decompõe emoji composto por ZWJ em seus componentes. Aqui o efeito seria inofensivo — cada
+// componente vira um branco e o `padEnd` recompõe o tamanho —, mas não vale gastar a exceção.
+const toPrintableAscii = (value: string): string =>
+  value.replace(
+    /./gsu,
+    (char) => TRANSLITERATIONS.get(char) ?? (ASCII_PRINTABLE.test(char) ? char : UNTRANSLITERABLE),
+  );
+
+// A ordem das três etapas é o que mantém a tabela pequena: tirar o combinante primeiro (`Á`→`A`),
+// subir a caixa depois (`ß`→`SS`, `ﬁ`→`FI`), e só então transliterar o que sobrou.
 export const alpha = (value: string, size: number): string =>
-  stripDiacritics(value).toUpperCase().slice(0, size).padEnd(size, ' ');
+  toPrintableAscii(stripCombiningMarks(value).toUpperCase()).slice(0, size).padEnd(size, ' ');
 
 // Money no domínio já é bigint/number de centavos (ADR-0020); aqui só vira dígito sem separador.
 export const cents = (valueCents: number, size: number): Result<string, PositionalFieldError> =>
