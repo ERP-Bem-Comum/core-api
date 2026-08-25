@@ -257,9 +257,23 @@ Códigos de **finalidade cliente** do Banco Central. O manual não reproduz a ta
 bcb.gov.br → Sistema de Pagamentos Brasileiro → Transferência de Arquivos → Dicionários de
 Domínios para o SPB.
 
-**Não invente código aqui.** Se precisar de um valor específico, aponte a fonte oficial.
-Observe que a numeração espelha a tabela do P005, então `00005` significa mensalidade escolar —
-incompatível com Tipo de Serviço `20` (Pagamento Fornecedor).
+**Não invente código aqui.** Consulte a Tabela de Domínio do SPB, que vive local:
+`bun .claude/skills/cnab240-bradesco/dominios/dominio.ts FinlddIF <codigo>` — e **leia a vigência**.
+
+⚠️ **`P011` tem domínio PRÓPRIO e NÃO espelha o `P005`.** Este parágrafo afirmava o contrário até
+25/08/2026, concluindo que `00005` seria "mensalidade escolar" e incompatível com Pagamento
+Fornecedor. **É falso**, e a afirmação já produziu um falso suspeito num diagnóstico de recusa real.
+
+No domínio de TED, `FinlddIF/5` é **"Pagamento a Fornecedor"**, vigente desde 2003 — consultado na
+tabela do Bacen, não inferido. É o valor que casa com o Tipo de Serviço `20`; `07` ali é aluguel.
+
+**Medido em 25/08/2026** ([inquiry-0033](../../../../handbook/inquiries/0033-cnab-multipag-bisseccao-validador.md)
+§4.1): em TED o campo é obrigatório e `00007` também foi aceito; **fora de TED, 220-224 vai em
+BRANCOS — preencher com zeros é recusa.**
+
+⚠️ A mesma afirmação falsa vivia em `05-armadilhas-e-divergencias.md` e foi corrigida lá primeiro,
+**sobrevivendo aqui a duas revisões independentes que a tinham como alvo**. Ao achar premissa falsa
+nestas referências, faça `grep` pelo CONCEITO em todo o diretório antes de dar por corrigida.
 
 ## P013 — Código Finalidade Complementar (segmento A, pos. 225-226)
 
