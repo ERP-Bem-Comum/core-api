@@ -23,6 +23,7 @@ import {
   buildAuthHttpDeps,
   makeRequireAuth,
   resolveRbacMode,
+  type RbacMode,
   readAuthJwtKeys,
   rbacBypassBanner,
   parseE2eAuthSeed,
@@ -143,9 +144,35 @@ const main = async (): Promise<void> => {
   for (const warning of programsLogo.value.warnings) process.stderr.write(`server: ${warning}\n`);
   // ADR-0052 — modo do RBAC. `bypass` desliga a autorização por permissão (todo autenticado é
   // super-usuário). NÃO pode ser silencioso: um banner gritante no boot torna o estado inconfundível.
-  const rbacMode = resolveRbacMode(process.env);
-  if (rbacMode === 'bypass') {
-    process.stderr.write(rbacBypassBanner(process.env['NODE_ENV'] ?? 'undefined'));
+  //
+  // ⚠️ FIXADO EM `bypass` — decisão do dono (Gabriel, 24/08/2026), risco assumido por escrito: a
+  // homologação sancionada é da Codebit (AWS/ECS) e ninguém aqui tem alçada sobre a env de lá, então
+  // o modo é fixado por código até o aceite da VAN (#634). O compromisso de religar continua sendo
+  // dele, e passou a custar um deploy.
+  //
+  // O hardcode mora AQUI, e não dentro de `resolveRbacMode`, porque as duas coisas são de naturezas
+  // diferentes: a função responde o que a CONFIGURAÇÃO diz — e é fail-secure, com 11 casos provando
+  // que typo de env não abre a autorização —, enquanto o composition root escolhe COMO este processo
+  // roda. Fixar dentro da função apagou aquela propriedade junto, e derrubou os 11 testes que a
+  // guardavam sem ter relação alguma com o objetivo da mudança.
+  //
+  // Para religar: apague a linha marcada abaixo. `AUTH_RBAC_MODE` volta a valer sozinha.
+  const configuredRbacMode = resolveRbacMode(process.env);
+  const rbacMode: RbacMode = 'bypass'; // ← religar: apagar e usar `configuredRbacMode` abaixo
+
+  // O banner sai INCONDICIONALMENTE, e é a forma honesta enquanto a linha acima existir: envolvê-lo
+  // num `if (rbacMode === 'bypass')` seria escrever uma condição que o compilador prova sempre
+  // verdadeira — o ESLint recusa, e com razão. Ao religar, o `if` volta junto com o modo dinâmico.
+  process.stderr.write(rbacBypassBanner(process.env['NODE_ENV'] ?? 'undefined'));
+
+  // A divergência entre o CONFIGURADO e o EFETIVO é o que o operador não consegue deduzir do banner:
+  // sem esta linha, quem põe `AUTH_RBAC_MODE=enforced` e vê o bypass ligado conclui que a env não
+  // pegou, e vai procurar defeito na infraestrutura em vez de no código.
+  if (configuredRbacMode !== 'bypass') {
+    process.stderr.write(
+      `server: AUTH_RBAC_MODE resolve para "${configuredRbacMode}", mas o modo está FIXADO em ` +
+        '"bypass" no composition root (decisão do dono, #634). A env não tem efeito até isso sair.\n',
+    );
   }
   const authDeps = await buildAuthHttpDeps({
     driver: modules.auth.driver,

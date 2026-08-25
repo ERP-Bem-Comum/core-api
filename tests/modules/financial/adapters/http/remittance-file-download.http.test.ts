@@ -1,10 +1,20 @@
 /**
- * Borda HTTP: GET /financial/remittances/:id/file — o arquivo que foi ao banco, **em homologação**.
+ * Borda HTTP: GET /financial/remittances/:id/file — o arquivo que foi ao banco, em TODO ambiente.
  *
- * O caso que dá nome a esta suíte é o do ambiente. A rota não é registrada em produção, então lá o
- * caminho é 404 **por ausência** — e provar isso exige distinguir "a rota não existe" de "a rota
- * existe e o recurso não". O discriminador é um id MALFORMADO: com a rota registrada ele é 400
- * (`remittance-id-invalid`); sem ela, 404. Comparar 404 com 404 não provaria nada.
+ * ⚠️ A rota JÁ NÃO é restrita a fora de produção, e este arquivo mede as duas montagens porque a
+ * mudança é recente: `FORCE_REMITTANCE_FILE_ROUTE` a registra também em produção (commit `9ab19f22`,
+ * #822), por exigência da equipe de negócio — o arquivo é o comprovante do que foi transmitido, e
+ * sem ele a conferência de um pagamento contestado depende de pedi-lo a quem o gerou.
+ *
+ * O discriminador de ambiente continua sendo um id MALFORMADO, e continua útil: com a rota
+ * registrada ele responde **400** (o handler rodou e recusou o id); sem ela, **404** por ausência.
+ * Comparar 404 com 404 não provaria nada. Hoje as duas montagens respondem 400 — e é exatamente
+ * isso que os casos abaixo fixam.
+ *
+ * A proteção do arquivo deixou de ser TOPOLÓGICA ("a rota não existe") e passou a ser de
+ * AUTORIZAÇÃO ("existe, exige token e a permissão `remittance:read`"), o que é mais fraco por
+ * desenho — ver ADR-0065. Por isso os casos de 401 e 403 em produção não são decoração: são o que
+ * sobrou.
  */
 
 import { describe, it, before, after } from 'node:test';
@@ -136,27 +146,63 @@ describe('financial/http — download da remessa existe FORA de produção', () 
   });
 });
 
-describe('financial/http — em produção a rota NÃO EXISTE', () => {
-  // Ausência, não proibição. Um 403 confirmaria que o recurso existe; a superfície que não se
-  // registra não vaza por erro de permissão, por ordem de preHandler nem por bypass de RBAC.
-  it('o mesmo id malformado que dá 400 em homologação dá 404 em produção', async () => {
+describe('financial/http — a rota de download EXISTE em produção (#822)', () => {
+  // ⚠️ ESTE BLOCO AFIRMAVA O CONTRÁRIO até 24/08/2026, e a inversão é decisão de NEGÓCIO.
+  //
+  // O desenho original registrava `GET /financial/remittances/:id/file` apenas fora de produção, e o
+  // argumento era bom: ausência é mais forte que proibição — uma superfície que não se registra não
+  // vaza por erro de permissão, por ordem de preHandler nem por bypass de RBAC. O arquivo carrega o
+  // cadastro bancário de todos os favorecidos do lote.
+  //
+  // O que mudou: a equipe de negócio exige acesso ao arquivo que foi ao banco em TODO ambiente —
+  // é o comprovante do que foi transmitido, e sem ele a conferência de um pagamento contestado
+  // depende de pedir o arquivo a quem o gerou. `FORCE_REMITTANCE_FILE_ROUTE` implementa isso
+  // (`plugin.ts`, commit `9ab19f22`), e o ADR-0065 sustenta a fronteira: o download vive sob
+  // permissão dedicada (`remittance:read`) e registro de acesso, não sob ausência de rota.
+  //
+  // O que NÃO mudou, e os casos abaixo continuam cobrando: a rota exige token, exige a permissão
+  // certa, e valida o id antes de tocar em qualquer storage. A proteção deixou de ser topológica
+  // ("não existe") e passou a ser de autorização ("existe, e cobra") — que é mais fraca por
+  // desenho, e por isso os três casos precisam continuar verdes juntos.
+  it('em produção o id malformado dá 400, como em homologação — a rota responde', async () => {
     const res = await producao.app.inject({
       method: 'GET',
       url: `/api/v2/financial/remittances/${MALFORMED_ID}/file`,
       headers: { authorization: `Bearer ${READER}` },
     });
 
-    assert.equal(
-      res.statusCode,
-      404,
-      'a rota respondeu em produção — o gate de ambiente não pegou',
-    );
-    assert.doesNotMatch(res.body, /remittance-id-invalid/, 'o handler não pode ter rodado');
+    // Só o STATUS, como o caso irmão de homologação: o slug interno (`remittance-id-invalid`) não
+    // vai no envelope público — é a política do módulo desde o #52 (OWASP API8:2023). O 400 já é o
+    // discriminador que importa: com a rota ausente a resposta seria 404, e o handler não teria
+    // rodado para recusar o id.
+    assert.equal(res.statusCode, 400, 'a rota tem de existir em produção (#822)');
   });
 
-  // Guarda contra verde por vacuidade: se o plugin parasse de registrar a rota em QUALQUER ambiente,
-  // o caso acima continuaria passando e a suíte inteira viraria decoração.
-  it('a rota IRMÃ continua registrada em produção — o gate é só desta', async () => {
+  it('em produção a rota continua exigindo a permissão — 403 sem ela', async () => {
+    // O que substituiu a ausência da rota. Se este caso ficar vermelho, o arquivo com o cadastro
+    // bancário de todos os favorecidos ficou acessível a qualquer autenticado em PRODUÇÃO.
+    const res = await producao.app.inject({
+      method: 'GET',
+      url: `/api/v2/financial/remittances/${REMITTANCE_ID}/file`,
+      headers: { authorization: 'Bearer document:read' },
+    });
+
+    assert.equal(res.statusCode, 403);
+  });
+
+  it('em produção a rota continua exigindo token — 401 sem ele', async () => {
+    const res = await producao.app.inject({
+      method: 'GET',
+      url: `/api/v2/financial/remittances/${REMITTANCE_ID}/file`,
+    });
+
+    assert.equal(res.statusCode, 401);
+  });
+
+  // Guarda contra verde por vacuidade, preservada da versão anterior deste bloco: se o plugin
+  // parasse de registrar as rotas de remessa em produção, os casos acima passariam a medir o app
+  // errado. A irmã prova que o ambiente de produção do teste está montado e servindo.
+  it('a rota IRMÃ de detalhe também responde em produção', async () => {
     const res = await producao.app.inject({
       method: 'GET',
       url: `/api/v2/financial/remittances/${REMITTANCE_ID}`,
@@ -167,7 +213,7 @@ describe('financial/http — em produção a rota NÃO EXISTE', () => {
     assert.match(
       res.body,
       /Remessa não encontrada/,
-      'a rota de detalhe tem de responder em produção — 404 vazio aqui significaria que o gate pegou demais',
+      '404 VAZIO aqui significaria app mal montado, não remessa inexistente',
     );
   });
 });

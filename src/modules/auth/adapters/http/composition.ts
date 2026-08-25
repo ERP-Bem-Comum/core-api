@@ -172,6 +172,7 @@ export type AuthHttpDeps = Readonly<{
    * Fábrica de preHandler RBAC por NOME de permissão (C1 D1). Recebe `string` (não o VO
    * `Permission`) para não vazar `auth/domain` a outros módulos (ADR-0006); valida internamente.
    */
+  /** Fábrica de preHandler RBAC. Sob `bypass` vira no-op — em todas as rotas, sem exceção. */
   authorize: (permissionName: string) => preHandlerAsyncHookHandler;
   /**
    * Checagem CONSULTÁVEL de permissão (não-preHandler): `(req, permissionName) => Promise<boolean>`.
@@ -594,6 +595,12 @@ export const buildAuthHttpDeps = async (config: AuthCompositionConfig): Promise<
     // Em `bypass`, a autorização por permissão é neutralizada; a autenticação (`requireAuth`, injetado
     // à parte) permanece. A validação do nome da permissão continua no wiring mesmo no bypass — um
     // nome inválido é bug de código, não de runtime, e deve estourar no boot em qualquer modo.
+    //
+    // ⚠️ SEM EXCEÇÃO — nem para a rota que move dinheiro. Decisão do dono (Gabriel, 25/08/2026):
+    // enquanto o modelo de permissões não for validado com a gerência e o time de negócio, TODO
+    // usuário autenticado é super-usuário em TODA rota, inclusive `POST /financial/remittances`.
+    // Colocar permissão numa rota antes desse acordo é fixar em código um desenho que ainda vai
+    // mudar. O gatilho para reabrir é o aceite de negócio, não uma decisão técnica.
     authorize: (permissionName: string): preHandlerAsyncHookHandler => {
       const parsed = Permission.parse(permissionName);
       if (!parsed.ok) {
