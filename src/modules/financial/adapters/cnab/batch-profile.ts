@@ -109,13 +109,15 @@ const TED_PURPOSE_SUPPLIER_PAYMENT = '00005'; // Pagamento a fornecedores — ca
 // NÃO tem o campo", e as posições saem em branco — diferente de "tem o campo, e o valor é vazio".
 // Quem escreve a linha é que traduz `null` em brancos.
 //
-// ⚠️ CA2 PENDENTE DO VALIDADOR. Crédito em conta (`01`) cai aqui e sai sem finalidade — e isso é
-// decisão de NÃO decidir, não omissão. Os dois candidatos têm argumento e nenhum tem fonte: branco é
-// simétrico com o campo vizinho (225-226 sai em branco fora de TED, #817) e o campo se chama
-// literalmente "Finalidade da TED"; já `00010` existe no domínio e descreve "crédito em conta". O
-// layout não resolve o empate, e o Validador Universal resolve em uma submissão — dois arquivos de
-// crédito em conta, um com 220-224 em branco e outro preenchido (P.O., 21/08). Até o laudo voltar,
-// vale o status quo: agora explícito, em vez de efeito colateral de um default.
+// ✅ CA2 RESPONDIDA PELO VALIDADOR em 25/08/2026 — inquiry-0033. O empate era real e foi decidido
+// pela única fonte que podia: os dois arquivos de crédito em conta que esta CA2 pedia foram gerados
+// e submetidos. Preenchido (zeros em 220-224) → RECUSADO, "Código Finalidade para TED. Inválido para
+// Crédito em Conta". Em branco → ACEITO. **O `null` daqui estava certo**, e o argumento da simetria
+// com o campo vizinho é que era o bom: fora de TED, 225-226 também é recusado quando preenchido.
+//
+// ⚠️ A regra INVERTE por forma, e é isso que impede o campo de virar parâmetro: em TED os dois campos
+// são obrigatórios; em crédito em conta os dois são PROIBIDOS. Um chamador com liberdade de preencher
+// `220-224` num lote `01` produz arquivo recusado — o mesmo desenho que a câmara já resolveu (#751).
 //
 // Total sobre G029, como `clearingHouseFor`: forma nova entra pelo `else` e sai sem finalidade.
 export const tedPurposeFor = (launchForm: string): string | null =>
