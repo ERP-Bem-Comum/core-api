@@ -416,12 +416,22 @@ describe('financial/http — POST /remittances (#720) · guarda do bypass (#634)
     else process.env['AUTH_RBAC_MODE'] = originalMode;
   });
 
-  it('CA4: a rota recusa com 503 e código próprio enquanto o bypass estiver ligado', async () => {
+  // ⚠️ Este caso asseria o slug `remittance-disabled-under-rbac-bypass` NO BODY até o #792. Deixou de
+  // valer quando a guarda passou a sair por `sendDomainError`: o slug interno não vai em 5xx, fica só
+  // no log do servidor (OWASP API8:2023, #52). Era a última exceção do módulo a essa política — e o
+  // discriminador correto sempre foi o **status**, não o slug.
+  it('CA4: a rota recusa com 503 enquanto o bypass estiver ligado', async () => {
     const res = await generate([DOC_B]);
     assert.equal(res.statusCode, 503, res.body);
 
-    const body = res.json() as { error: { code: string } };
-    assert.equal(body.error.code, 'remittance-disabled-under-rbac-bypass');
+    // O envelope é o mesmo de todo 5xx do módulo, `requestId` inclusive — que é o contrato de
+    // `shared/http/errors.ts` e o que esta guarda não cumpria enquanto montava a resposta à mão.
+    const body = res.json() as { error: { code: string; requestId?: string } };
+    assert.equal(body.error.code, 'internal', 'slug interno não vaza em 5xx');
+    assert.ok(
+      typeof body.error.requestId === 'string' && body.error.requestId.length > 0,
+      'requestId presente: é por ele que se acha o slug real no log',
+    );
   });
 
   it('a recusa vem ANTES da autenticação — nem com token válido a rota opera', async () => {
@@ -431,6 +441,53 @@ describe('financial/http — POST /remittances (#720) · guarda do bypass (#634)
       payload: { cedenteAccountId, payableIds: [DOC_B] },
     });
     assert.equal(res.statusCode, 503, res.body);
+  });
+
+  /**
+   * ⚠️ O CONTRASTE que impede alguém de "corrigir a inconsistência" (#792, ADR-0065 §4).
+   *
+   * Ler as duas rotas lado a lado dá vontade de uniformizá-las: a geração recusa sob bypass, o
+   * descarte não. A assimetria é decisão do Gabriel (24/08) e tem razão de ser — **gerar enfileira
+   * pagamento no banco; descartar desfaz um registro nosso.** A geração precisa da guarda mecânica
+   * porque o efeito dela é irreversível do lado de lá da fronteira; o descarte precisa do oposto,
+   * porque é a operação de CORREÇÃO e tem de funcionar exatamente onde o ambiente está em bypass —
+   * que é como a demo roda.
+   *
+   * Copiar `refuseUnderRbacBypass` para o descarte deixaria o operador sem via de saída justo
+   * quando ele mais precisa dela: com títulos presos por uma remessa que não saiu. Este teste existe
+   * para que essa "correção" fique vermelha.
+   */
+  it('o DESCARTE responde sob bypass — a assimetria com a geração é deliberada', async () => {
+    // Mesma chamada, mesmo ambiente em bypass, resultado oposto ao da geração acima. O 404 (remessa
+    // inexistente) é suficiente e é o ponto: a requisição ATRAVESSOU as guardas e chegou ao use
+    // case. Se `refuseUnderRbacBypass` estivesse aqui, o desfecho seria 503 antes disso.
+    const res = await handle.app.inject({
+      method: 'POST',
+      url: `${URL}/11111111-1111-4111-8111-111111111111/discard`,
+      headers: bearer(GENERATOR),
+      payload: { reason: 'remessa presa; devolvendo os titulos' },
+    });
+
+    assert.notEqual(
+      res.statusCode,
+      503,
+      `a rota de descarte NÃO pode recusar sob bypass: ${res.body}`,
+    );
+    assert.equal(res.statusCode, 404, res.body);
+
+    // O discriminador é o **status**, e não o code: desde o #792 nenhum dos dois lados expõe slug
+    // interno — 4xx e 5xx colapsam no envelope público (OWASP API8:2023, #52). `404` significa que a
+    // requisição atravessou as guardas e morreu no use case, por não achar a remessa; se
+    // `refuseUnderRbacBypass` estivesse nesta rota, ela pararia antes, com 503.
+    //
+    // `requestId` nos dois lados é o que torna o par auditável: qualquer que seja o desfecho, o slug
+    // real está no log e é por ele que se chega lá.
+    const body = res.json() as { error: { code: string; requestId?: string } };
+    assert.equal(body.error.code, 'not-found');
+    assert.ok(
+      typeof body.error.requestId === 'string' && body.error.requestId.length > 0,
+      'requestId presente também no 404 — o contrato do envelope vale nos dois lados',
+    );
   });
 
   // O pré-voo NÃO é afetado: ele não move dinheiro, e travá-lo tiraria do operador justamente a

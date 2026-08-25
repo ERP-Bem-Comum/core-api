@@ -391,6 +391,37 @@ export const createDrizzleRemittanceRepository = (
                 detail: remittance.detail ?? null,
               })
               .where(eq(finRemittances.id, remittance.id));
+
+            // ─── Devolução dos títulos no descarte (ADR-0065 §4) ──────────────────────────────
+            //
+            // O inverso exato da transição da criação, e pelo mesmo mecanismo: CAS pela
+            // pré-condição, na MESMA transação em que a remessa vira `Discarded`. O descarte é a
+            // ÚNICA operação que devolve título a `Approved` — é ela que o torna candidato a nova
+            // remessa, e por isso o domínio exige motivo registrado.
+            //
+            // ⚠️ As duas restrições do `WHERE` carregam a regra inteira:
+            //
+            //  - **`AND status = 'Transmitted'`** — impede que pagamento consumado volte à fila. É a
+            //    preocupação que a P.O. levantou ao confirmar que a liberação é por título: numa
+            //    remessa cujos títulos o banco pagou, devolver os `Paid` a `Approved` os tornaria
+            //    candidatos a sair de novo. O CAS já responde — `Paid` não casa, e nenhum `if` no
+            //    application precisa saber disso.
+            //  - **`IN (títulos desta remessa)`** — impede que um descarte alcance título que outra
+            //    remessa viva segura. Sem ele, o conserto abriria pela porta da frente o buraco que
+            //    o #814 fechou.
+            //
+            // Diferente da criação, aqui NÃO se confere a contagem: devolver menos do que se pediu é
+            // desfecho legítimo e esperado — títulos já pagos ou já devolvidos simplesmente não
+            // casam, e transformar isso em conflito travaria o descarte de uma remessa parcialmente
+            // paga, que é justamente o caso que a §4 existe para destravar.
+            if (remittance.status === 'Discarded' && payableIds.length > 0) {
+              await tx
+                .update(finPayables)
+                .set({ status: 'Approved' })
+                .where(
+                  and(inArray(finPayables.id, payableIds), eq(finPayables.status, 'Transmitted')),
+                );
+            }
           }
 
           // Estado e evento na MESMA transação (ADR-0015): o evento existe se e somente se o

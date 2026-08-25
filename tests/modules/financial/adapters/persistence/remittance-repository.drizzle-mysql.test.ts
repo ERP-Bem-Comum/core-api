@@ -252,11 +252,12 @@ if (!process.env['MYSQL_INTEGRATION']) {
       const aindaPreso = await repo.findHeldPayables([d.payableId]);
       assert.ok(isOk(aindaPreso) && aindaPreso.value.length === 1);
 
-      const discarded = discard(
-        failed.value.remittance,
-        '2026-08-11 15:00:00.000',
-        'confirmado com o banco',
-      );
+      const discarded = discard({
+        remittance: failed.value.remittance,
+        at: '2026-08-11 15:00:00.000',
+        reason: 'confirmado com o banco',
+        fileInBucket: true,
+      });
       assert.ok(isOk(discarded));
       await repo.save(discarded.value.remittance, discarded.value.events);
 
@@ -671,6 +672,192 @@ if (!process.env['MYSQL_INTEGRATION']) {
           1,
           'a invariante não enxergou um título plantado em duas remessas vivas',
         );
+      });
+    });
+
+    /**
+     * A devolução do descarte contra MySQL real (#792, ADR-0065 §4).
+     *
+     * O fake já prova o veredito; o que só o banco prova é que as duas restrições do `WHERE` estão
+     * MESMO na sentença que roda — e são elas que carregam a regra inteira:
+     *
+     *     UPDATE fin_payables SET status = 'Approved'
+     *      WHERE id IN (títulos desta remessa) AND status = 'Transmitted'
+     *
+     * Um `WHERE` sem a segunda cláusula devolveria pagamento consumado à fila; sem a primeira,
+     * alcançaria título de outra remessa viva. Nenhum dos dois defeitos quebra teste em memória com
+     * um fake que espelhe o SQL errado — por isso este bloco existe, e por isso ele mede o ESTADO no
+     * banco, nunca o `Result` do repositório.
+     */
+    describe('descarte devolve os títulos — o CAS visto do banco (#792, §4)', () => {
+      // Leva a remessa a `Failed` e a descarta, que é o caminho do operador depois de conferir o
+      // banco. Devolve o agregado descartado para quem quiser asserir sobre ele.
+      const failAndDiscard = async (
+        repo: ReturnType<typeof createDrizzleRemittanceRepository>,
+        rem: ReturnType<typeof build>,
+      ) => {
+        const failed = markFailed(rem, '2026-08-11 15:00:00.000', 'sem confirmacao');
+        assert.ok(isOk(failed));
+        assert.equal((await repo.save(failed.value.remittance, failed.value.events)).ok, true);
+
+        const discarded = discard({
+          remittance: failed.value.remittance,
+          at: '2026-08-11 16:00:00.000',
+          reason: 'operador conferiu no banco: nao saiu',
+          fileInBucket: true,
+        });
+        assert.ok(isOk(discarded));
+        assert.equal(
+          (await repo.save(discarded.value.remittance, discarded.value.events)).ok,
+          true,
+        );
+        return discarded.value.remittance;
+      };
+
+      it('o título volta a Approved e o hold é liberado', async () => {
+        const repo = createDrizzleRemittanceRepository(handle);
+        const titulo = await seedPayable();
+        const rem = build([titulo]);
+        assert.equal((await repo.save(rem)).ok, true);
+        assert.equal(await statusDoTitulo(titulo.payableId), 'Transmitted');
+
+        await failAndDiscard(repo, rem);
+
+        assert.equal(await statusDoTitulo(titulo.payableId), 'Approved');
+        const held = await repo.findHeldPayables([titulo.payableId]);
+        assert.ok(isOk(held));
+        assert.deepEqual(held.value, [], 'remessa descartada não prende');
+      });
+
+      // O efeito completo: devolvido o título, ele entra numa remessa NOVA. É o passo que fecha o
+      // ciclo da #787 — sem ele, "voltou a Approved" seria afirmação sobre uma coluna, não sobre a
+      // operação que o operador precisa fazer em seguida.
+      it('o título devolvido entra numa remessa nova', async () => {
+        const repo = createDrizzleRemittanceRepository(handle);
+        const titulo = await seedPayable();
+
+        const primeira = build([titulo]);
+        assert.equal((await repo.save(primeira)).ok, true);
+        await failAndDiscard(repo, primeira);
+
+        // A segunda emissão do MESMO título só passa porque as DUAS condições foram desfeitas: o
+        // hold (a remessa descartada não prende) e o status (o CAS o devolveu a `Approved`). Faltando
+        // qualquer uma delas, o `save` recusaria — com `already-held` ou com `payable-not-approved`,
+        // e a mensagem do assert diz qual, que é o que aponta o defeito no dia em que quebrar.
+        const segunda = await repo.save(build([titulo]));
+        assert.equal(
+          segunda.ok,
+          true,
+          `esperava aceitar, veio ${isErr(segunda) ? segunda.error : '?'}`,
+        );
+        assert.equal(await statusDoTitulo(titulo.payableId), 'Transmitted');
+      });
+
+      // ⚠️ `AND status = 'Transmitted'` — a cláusula que protege o pagamento consumado. É a
+      // preocupação que a P.O. levantou ao confirmar que a liberação é POR TÍTULO: numa remessa cujos
+      // títulos o banco pagou, devolver os `Paid` a `Approved` os tornaria candidatos a sair de novo.
+      it('título que já virou Paid NÃO é devolvido', async () => {
+        const repo = createDrizzleRemittanceRepository(handle);
+        const pago = await seedPayable();
+        const pendente = await seedPayable();
+        const rem = build([pago, pendente]);
+        assert.equal((await repo.save(rem)).ok, true);
+
+        // A baixa manual acontece FORA deste repositório (`PayableRepository.markPaid`, §6); o que
+        // importa aqui é o estado com que o CAS do descarte se depara.
+        //
+        // ⚠️ `paidAt` vai JUNTO, e não é zelo: o CHECK `fin_payables_paid_at_chk` (#383) exige
+        // `status <> 'Paid' OR paid_at IS NOT NULL`, e sem a data este UPDATE morre com
+        // `ER_CHECK_CONSTRAINT_VIOLATED` (3819). O fake in-memory **aceita** o estado sem data — foi
+        // este run contra MySQL real que o denunciou, e é a razão de este arquivo existir.
+        await handle.db
+          .update(finPayables)
+          .set({ status: 'Paid', paidAt: new Date('2026-08-11T00:00:00.000Z') })
+          .where(eq(finPayables.id, pago.payableId));
+
+        await failAndDiscard(repo, rem);
+
+        assert.equal(
+          await statusDoTitulo(pago.payableId),
+          'Paid',
+          'pagamento consumado não volta para a fila',
+        );
+        assert.equal(await statusDoTitulo(pendente.payableId), 'Approved');
+      });
+
+      // ⚠️ `IN (títulos desta remessa)` — a cláusula que impede o descarte de alcançar título alheio.
+      // Sem ela, o conserto da §4 abriria pela porta da frente o buraco que o #814 fechou.
+      it('título preso por OUTRA remessa viva não é tocado', async () => {
+        const repo = createDrizzleRemittanceRepository(handle);
+        const meu = await seedPayable();
+        const alheio = await seedPayable();
+
+        const minha = build([meu]);
+        const outra = build([alheio]);
+        assert.equal((await repo.save(minha)).ok, true);
+        assert.equal((await repo.save(outra)).ok, true);
+
+        await failAndDiscard(repo, minha);
+
+        assert.equal(await statusDoTitulo(meu.payableId), 'Approved');
+        assert.equal(
+          await statusDoTitulo(alheio.payableId),
+          'Transmitted',
+          'a outra remessa segue viva e segue prendendo o título dela',
+        );
+
+        const aindaPreso = await repo.findHeldPayables([alheio.payableId]);
+        assert.ok(isOk(aindaPreso) && aindaPreso.value.length === 1);
+      });
+
+      // Os DOIS eventos, na mesma transação do estado (ADR-0015). `RemittanceDiscarded` vai para o
+      // agregado da remessa; os `PayableTransmissionDiscarded` (um por título) vão para o do
+      // DOCUMENTO, porque carregam `documentId` — é a trilha da nota que os exibe (#823).
+      it('grava RemittanceDiscarded no outbox, na mesma transação', async () => {
+        const repo = createDrizzleRemittanceRepository(handle);
+        const titulo = await seedPayable();
+        const rem = build([titulo]);
+        assert.equal((await repo.save(rem)).ok, true);
+
+        await failAndDiscard(repo, rem);
+
+        const eventos = await outboxRowsOf(rem.id);
+        const tipos = eventos.map((e) => e.eventType);
+        assert.ok(
+          tipos.includes('RemittanceDiscarded'),
+          `esperava RemittanceDiscarded no outbox, veio ${tipos.join(', ')}`,
+        );
+      });
+
+      // Reincidência é no-op: o domínio devolve o agregado intacto e NENHUM evento, e o CAS não acha
+      // mais nada em `Transmitted`. O outbox não pode crescer a cada tentativa.
+      it('descartar duas vezes não devolve de novo nem duplica evento', async () => {
+        const repo = createDrizzleRemittanceRepository(handle);
+        const titulo = await seedPayable();
+        const rem = build([titulo]);
+        assert.equal((await repo.save(rem)).ok, true);
+
+        const descartada = await failAndDiscard(repo, rem);
+        const depoisDoPrimeiro = (await outboxRowsOf(rem.id)).filter(
+          (e) => e.eventType === 'RemittanceDiscarded',
+        ).length;
+
+        const segunda = discard({
+          remittance: descartada,
+          at: '2026-08-11 17:00:00.000',
+          reason: 'de novo',
+          fileInBucket: true,
+        });
+        assert.ok(isOk(segunda));
+        assert.deepEqual(segunda.value.events, [], 'o domínio não reemite');
+        assert.equal((await repo.save(segunda.value.remittance, segunda.value.events)).ok, true);
+
+        assert.equal(
+          (await outboxRowsOf(rem.id)).filter((e) => e.eventType === 'RemittanceDiscarded').length,
+          depoisDoPrimeiro,
+          'o outbox não cresce a cada tentativa',
+        );
+        assert.equal(await statusDoTitulo(titulo.payableId), 'Approved');
       });
     });
   });

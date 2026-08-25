@@ -76,6 +76,7 @@ import {
   documentBatchItemToDto,
   remittancePreviewToDto,
   generatedRemittanceToDto,
+  discardedRemittanceToDto,
   remittanceToListItemDto,
   remittanceToDetailDto,
 } from './dto.ts';
@@ -116,6 +117,8 @@ import {
   remittanceListResponseSchema,
   remittanceDetailResponseSchema,
   remittanceIdParamSchema,
+  discardRemittanceBodySchema,
+  discardRemittanceResponseSchema,
   documentTimelineResponseSchema,
   importBankStatementBodySchema,
   importBankStatementResponseSchema,
@@ -403,17 +406,20 @@ const sanitizeFilename = (name: string): string => {
  *
  * 503, não 403: não é o requisitante que está proibido — é o servidor que não deve oferecer esta
  * operação nesta configuração.
+ *
+ * ⚠️ Sai por `sendDomainError` como todo o resto do módulo (#792), e não por um `reply.send` próprio.
+ * Até aqui esta guarda montava o envelope à mão — era o ÚNICO 5xx do `financial` a expor slug
+ * interno no body, e o único a sair sem `requestId`, que `shared/http/errors.ts` declara como
+ * contrato. Duas fugas da mesma política (OWASP API8:2023, #52), num lugar onde ninguém procuraria.
+ *
+ * **O preço, aceito explicitamente pelo Gabriel:** a mensagem PT-BR que explicava ao operador POR QUE
+ * a geração está desligada some do body. Sob bypass — que é como a demo roda — o front passa a
+ * mostrar erro genérico ao gerar. O slug segue no log do servidor
+ * (`financial-domain-error-5xx`), que é onde ele podia estar desde sempre.
  */
 const refuseUnderRbacBypass: preHandlerAsyncHookHandler = async (_req, reply) => {
   if (resolveRbacMode(process.env) !== 'bypass') return undefined;
-
-  return reply.code(503).send({
-    error: {
-      code: 'remittance-disabled-under-rbac-bypass',
-      message:
-        'Geração de remessa indisponível: a autorização por permissão está desligada neste ambiente.',
-    },
-  });
+  return sendDomainError(reply, 'remittance-disabled-under-rbac-bypass');
 };
 
 const financialRoutes =
@@ -1190,6 +1196,41 @@ const financialRoutes =
         if (!result.ok) return sendDomainError(reply, result.error);
 
         return sendResult(reply, ok(generatedRemittanceToDto(result.value)), { ok: 201 });
+      },
+    });
+
+    // POST /financial/remittances/:id/discard — DESCARTA a remessa e devolve os títulos (#792,
+    // ADR-0065 §4).
+    //
+    // ⚠️ **A assimetria com a geração, logo acima, é deliberada — não a "corrija".** A geração leva
+    // `refuseUnderRbacBypass` porque gravar em `saida/` é enfileirar pagamento no banco (ADR-0060), e
+    // sob `AUTH_RBAC_MODE=bypass` todo autenticado é super-usuário (ADR-0052): a rota se recusa
+    // sozinha em vez de confiar na disciplina de deploy.
+    //
+    // O descarte NÃO tem essa guarda, por decisão do Gabriel (24/08): ele **desfaz** um registro
+    // nosso e devolve títulos a `Approved` — nenhum efeito no banco, nenhum dinheiro em movimento —,
+    // e precisa funcionar em ambiente com bypass, que é como a demo roda. Copiar a guarda para cá
+    // deixaria a operação de correção indisponível justamente onde ela é mais necessária.
+    //
+    // A alçada é a MESMA da geração (`remittance:generate`), e não uma permissão nova: descartar
+    // libera título para entrar em remessa nova, então quem pode descartar é quem já pode disparar.
+    // Uma `remittance:discard` própria exigiria semeadura (#462/#496) sem separar poder algum.
+    scope.route({
+      method: 'POST',
+      url: '/financial/remittances/:id/discard',
+      preHandler: [hooks.requireAuth, hooks.authorize(FINANCIAL_PERMISSION.remittanceGenerate)],
+      schema: {
+        params: remittanceIdParamSchema,
+        body: discardRemittanceBodySchema,
+        response: { 200: discardRemittanceResponseSchema },
+      } satisfies FastifyZodOpenApiSchema,
+      handler: async (req, reply) => {
+        const result = await deps.discardRemittance({
+          remittanceId: req.params.id,
+          reason: req.body.reason,
+        });
+        if (!result.ok) return sendDomainError(reply, result.error);
+        return sendResult(reply, ok(discardedRemittanceToDto(result.value)), { ok: 200 });
       },
     });
 

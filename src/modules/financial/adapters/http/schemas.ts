@@ -1623,3 +1623,32 @@ export type RemittanceDetailResponseDto = z.infer<typeof remittanceDetailRespons
 export const remittanceIdParamSchema = z.object({
   id: z.uuid().meta({ description: 'UUID da remessa' }),
 });
+
+// ─── POST /financial/remittances/:id/discard (#792, ADR-0065 §4) ─────────────
+//
+// Descarta a remessa e devolve os títulos dela a `Aprovado`. É a via de saída da VAN: depois de uma
+// transmissão que falhou, o padrão do setor não é retentar pelo mesmo canal (o banco bloqueia
+// duplicidade) — é tirar o título da remessa e pagá-lo à mão, registrando depois com a baixa manual.
+export const discardRemittanceBodySchema = z
+  .object({
+    // Motivo OBRIGATÓRIO, e o `min(1)` depois do `trim` é a metade que importa: o descarte libera
+    // valor para nova transmissão, e um motivo em branco tornaria a operação inauditável — que é
+    // justamente o oposto do que ela existe para garantir. O domínio recusa de novo (`isBlank`); a
+    // dupla validação é intencional (ADR-0027).
+    reason: z.string().trim().min(1).max(500).meta({
+      description: 'Por que a remessa está sendo descartada (fica na trilha de auditoria)',
+    }),
+  })
+  .strict();
+
+export const discardRemittanceResponseSchema = z
+  .object({
+    remittanceId: z.uuid(),
+    // Os títulos que voltaram à fila. Devolver a lista, e não só um `ok`, é o que permite ao front
+    // levar o operador ao passo seguinte (pagar fora da VAN e dar baixa manual) sem uma segunda
+    // consulta — e é a lista que ele confere contra o que esperava liberar.
+    releasedPayableIds: z.array(z.uuid()),
+  })
+  .strict();
+
+export type DiscardRemittanceResponseDto = z.infer<typeof discardRemittanceResponseSchema>;

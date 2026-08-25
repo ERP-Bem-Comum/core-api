@@ -102,6 +102,25 @@ export type PayableTransmitted = Readonly<{
   occurredAt: Date;
 }>;
 
+// #792 / ADR-0065 §4: o título VOLTOU da VAN por decisão humana — o inverso exato de
+// `PayableTransmitted`, emitido na mesma transação em que a remessa vira `Discarded`.
+//
+// `reason` é obrigatório e vem da decisão, não do sistema: descartar libera o título para entrar
+// noutra remessa, e é a única operação do fluxo que pode levar ao mesmo pagamento sair duas vezes se
+// a decisão for errada. Sem o porquê registrado, a auditoria não tem por onde começar.
+//
+// Mesma forma do irmão pelos mesmos motivos: `documentId` faz o outbox classificá-lo no agregado
+// `Document` (é a trilha da nota que o exibe), e os ids são `string` porque nascem do agregado
+// `Remittance`, que referencia título e nota por identidade opaca.
+export type PayableTransmissionDiscarded = Readonly<{
+  type: 'PayableTransmissionDiscarded';
+  documentId: string;
+  payableId: string;
+  remittanceId: RemittanceId;
+  reason: string;
+  occurredAt: Date;
+}>;
+
 // #289 (CASCADE/US3): a cascata escalou o aprovador indicado p/ outro com alçada suficiente.
 // Não compõe a trilha (não há marco de estado do Document) — vai só pro outbox.
 export type ApproverEscalated = Readonly<{
@@ -119,6 +138,7 @@ export type DocumentEvent =
   | DocumentCancelled
   | PayableManuallyPaid
   | PayableTransmitted
+  | PayableTransmissionDiscarded
   | ApproverEscalated;
 
 /**
@@ -140,6 +160,7 @@ export const DOCUMENT_EVENT_TYPES = exhaustiveStringUnion<DocumentEvent['type']>
   'DocumentCancelled',
   'PayableManuallyPaid',
   'PayableTransmitted',
+  'PayableTransmissionDiscarded',
   'ApproverEscalated',
 ] as const);
 
@@ -161,7 +182,7 @@ export const DOCUMENT_EVENT_TYPES = exhaustiveStringUnion<DocumentEvent['type']>
  */
 export type TimelineEventType = Exclude<
   DocumentEvent['type'],
-  'DocumentCancelled' | 'ApproverEscalated' | 'PayableTransmitted'
+  'DocumentCancelled' | 'ApproverEscalated' | 'PayableTransmitted' | 'PayableTransmissionDiscarded'
 >;
 
 export const TIMELINE_EVENT_TYPES = exhaustiveStringUnion<TimelineEventType>()([
