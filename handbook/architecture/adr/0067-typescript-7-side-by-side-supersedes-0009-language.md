@@ -2,9 +2,9 @@
 
 # ADR-0067: TypeScript 7 nativo como compilador de tipos, com TS 6 retido **apenas** para o `typescript-eslint` — side-by-side por alias, e `@typescript/native-preview` sai (supersede parcial do ADR-0009, parte "Linguagem")
 
-- **Status:** Proposed
-- **Date:** 2026-08-25
-- **Deciders:** Gabriel Aderaldo (Tech Lead) — decisão de levar o TS 7 na release `1.0.0` · agente assistente — medição e redação
+- **Status:** Accepted
+- **Date:** 2026-08-25 (aceito no mesmo dia pelo Tech Lead, PR #875)
+- **Deciders:** Gabriel Aderaldo (Tech Lead) — decisão de levar o TS 7 na release `1.0.0`, e aceite da política · agente assistente — medição e redação
 - **Supersedes (parcial):** [ADR-0009](./0009-node-24-typescript-6-with-7-roadmap.md) — as seções **"Linguagem"** (`:32-34`) e **"Plano de migração TS 6.0 → 7.0"** (`:36-42`). **Tudo o mais no ADR-0009 permanece vigente**, inclusive a escolha de runtime, o `tsconfig` strict total desde o dia 1 e o "Estilo de código alinhado" (`:44-48`). A forma de fixar a versão do runtime já havia sido superseded pelo [ADR-0058](./0058-runtime-tracks-recommended-lts.md).
 - **Conformidade com:** [ADR-0011](./0011-supply-chain-hardening.md) §5 (checklist de dependência nova) · [ADR-0029](./0029-pnpm-11-supply-chain-defaults.md) (quarentena e `trustPolicy`)
 - **Origem:** [Inquiry-0023](../../inquiries/0023-typescript-7-native-spike.md) §5 e §6.1, `decided` em 2026-07-31
