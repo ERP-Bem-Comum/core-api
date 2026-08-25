@@ -32,6 +32,24 @@ export type GenerateRemittanceInput = Readonly<{
   payableIds: readonly string[];
 }>;
 
+// Razão social do cedente — posições 073-102 do header de arquivo E do header de lote.
+//
+// Vinha de `account.bankName`, que é o nome do BANCO: `export-reconciliation-nibo.ts` compõe
+// `${bankCode} ${bankName}` com o mesmo campo. O emissor mandava ao Bradesco o mesmo valor nas
+// posições 073-102 (nome da empresa) e 103-132 (nome do banco) — e 30 brancos nas duas quando a
+// conta veio do ETL, que nunca preenche `bankName` (`scripts/etl/financial/mapper.ts`).
+//
+// CONSTANTE, e não coluna, porque o dado é da ORGANIZAÇÃO emissora: um só, igual para todas as
+// contas-cedente. Uma coluna criaria uma cópia por conta, livre para divergir — foi exatamente
+// assim que `bankName` virou a segunda casa de um dado que não tinha casa nenhuma.
+//
+// Não é segredo: é público na Receita e já aparece versionado (`scripts/seed/partners.ts`). O que
+// NÃO cabe aqui é dado bancário por conta — agência, conta e DV vêm da linha, e hard-codá-los
+// repetiria o defeito que esta constante corrige.
+//
+// ⚠️ `alpha()` trunca em 30 posições sem avisar. Este valor tem 20 — mudá-lo pede conferir o novo.
+const CEDENTE_COMPANY_NAME = 'ASSOCIACAO BEM COMUM';
+
 export type GenerateRemittanceOutput = Readonly<{
   remittanceId: RemittanceId;
   fileName: string;
@@ -130,7 +148,11 @@ export const generateRemittance =
         accountNumber: account.value.accountNumber,
         accountDigit: account.value.accountDigit,
         accountAgencyDigit: '',
-        companyName: account.value.bankName ?? '',
+        companyName: CEDENTE_COMPANY_NAME,
+        // ⚠️ Continua saindo com 30 brancos sempre que a coluna é NULL — o caso de TODA conta vinda
+        // do ETL, que nunca preenche o campo. Fica assim de propósito: o destinatário do arquivo é o
+        // próprio banco, e afirmar que o branco é inofensivo exige o layout, não dedução. Registrado
+        // na #856 junto com os DVs de 058/072 e o tipo de inscrição.
         bankName: account.value.bankName ?? '',
       },
       nsa: nsa.value,
