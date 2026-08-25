@@ -96,6 +96,11 @@ export type SegmentAInput = Readonly<{
   // finalidade da forma de lançamento é `tedPurposeFor`, em `batch-profile.ts`; este segmento
   // escreve o que recebeu e não tem opinião sobre qual finalidade é a certa.
   tedPurpose: string | null;
+  // P013, colunas 225-226 — tipo da conta do favorecido (`CC`/`PP`). Mesma semântica do `tedPurpose`
+  // acima e pelo mesmo motivo: `null` é "esta rota não tem o campo", e sai em branco. Quem deriva da
+  // forma do lote é `complementPurposeFor`, em `batch-profile.ts`; este segmento escreve o que
+  // recebeu e não tem opinião sobre qual tipo de conta é o certo.
+  complementPurpose: string | null;
   message?: string; // G031 "Informação 2"
 }>;
 
@@ -135,6 +140,7 @@ export type PaymentRecordsInput = Readonly<{
   clearingHouse: string; // P001 — ver `SegmentAInput`
   yourNumber: string; // ver `SegmentAInput` — obrigatório desde a #752
   tedPurpose: string | null; // P011 — ver `SegmentAInput`; obrigatório desde a #813
+  complementPurpose: string | null; // P013 — ver `SegmentAInput`; obrigatório desde a inquiry-0033
   message?: string;
 }>;
 
@@ -150,6 +156,19 @@ const isTedPurpose = (raw: string): boolean =>
 
 const tedPurposeField = (purpose: string | null): Result<string, CnabSegmentError> =>
   purpose === null ? blanks(TED_PURPOSE_WIDTH) : text(purpose, TED_PURPOSE_WIDTH);
+
+// P013 tem 2 posições e a rota SEM o campo sai em branco — mesmo molde do P011 acima.
+const COMPLEMENT_PURPOSE_WIDTH = 2;
+
+// ⚠️ AQUI a allow-list é legítima, e a diferença para o P011 é a fonte, não o gosto. O domínio do
+// P011 vem do dicionário do Bacen, que a própria fonte rotula DECLARADAMENTE PARCIAL — listar os
+// doze valores conhecidos recusaria um código legítimo fora deles. O domínio do P013 é FECHADO e o
+// banco o enunciou por extenso na crítica de 21/08: "'CC' - Corrente ou 'PP' - Poupança". Dois
+// valores, sem terceiro possível.
+const COMPLEMENT_PURPOSES: ReadonlySet<string> = new Set(['CC', 'PP']);
+
+const complementPurposeField = (purpose: string | null): Result<string, CnabSegmentError> =>
+  purpose === null ? blanks(COMPLEMENT_PURPOSE_WIDTH) : text(purpose, COMPLEMENT_PURPOSE_WIDTH);
 
 export const segmentA = (input: SegmentAInput): Result<string, CnabSegmentError> => {
   const { payee: p } = input;
@@ -176,6 +195,14 @@ export const segmentA = (input: SegmentAInput): Result<string, CnabSegmentError>
   // do próprio emissor, e a ação é abrir o código. Erro próprio nomearia uma distinção que não
   // existe do lado de quem recebe.
   if (input.tedPurpose !== null && !isTedPurpose(input.tedPurpose))
+    return err('numeric-field-invalid');
+
+  // Mesma guarda, mesmo motivo, mesmo erro reusado: nenhum valor externo alimenta o P013 — ele vem
+  // de `complementPurposeFor` —, então formato inválido só é alcançável por defeito do próprio
+  // emissor, e a ação é abrir o código, não o cadastro. O modo de falha é o mesmo do P011: o campo é
+  // Alfa, e um valor fora do domínio (`'C'`, `'cc'`) sai alinhado à esquerda e o banco o recusa
+  // apontando a coluna, sem dizer o que era esperado.
+  if (input.complementPurpose !== null && !COMPLEMENT_PURPOSES.has(input.complementPurpose))
     return err('numeric-field-invalid');
 
   return joinFields([
@@ -212,7 +239,7 @@ export const segmentA = (input: SegmentAInput): Result<string, CnabSegmentError>
     text(input.message ?? '', 40), // 178-217 informação 2
     blanks(2), // 218-219 CNAB
     tedPurposeField(input.tedPurpose), // 220-224 finalidade da TED (P011)
-    blanks(2), // 225-226 finalidade complementar
+    complementPurposeField(input.complementPurpose), // 225-226 tipo da conta do favorecido (P013)
     blanks(3), // 227-229 CNAB
     num(0, 1), // 230     aviso ao favorecido (0 = não emite)
     blanks(10), // 231-240 ocorrências — preenchidas no retorno
@@ -339,6 +366,7 @@ export const paymentRecords = (
     payee: input.payee,
     paymentDate: input.paymentDate,
     valueCents: input.valueCents,
+    complementPurpose: input.complementPurpose,
     clearingHouse: input.clearingHouse,
     yourNumber: input.yourNumber,
     tedPurpose: input.tedPurpose,

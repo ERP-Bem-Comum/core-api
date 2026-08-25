@@ -16,6 +16,7 @@ import {
   batchProfileFor,
   clearingHouseFor,
   tedPurposeFor,
+  complementPurposeFor,
   type BatchProfileError,
   type CnabBatchProfile,
   type ProfiledPayment,
@@ -238,6 +239,10 @@ const detailsOf = (
         // descrevem a mesma operação e não podem divergir dentro de um registro. `null` é a rota
         // que não tem o campo — crédito em conta —, e sai em branco.
         tedPurpose: tedPurposeFor(batch.launchForm),
+        // P013 acompanha a finalidade pela MESMA razão: campos vizinhos que descrevem a mesma
+        // operação e invertem juntos por forma. Derivar um da forma e o outro de um parâmetro
+        // abriria a porta para o par divergir dentro do registro.
+        complementPurpose: complementPurposeFor(batch.launchForm),
         ...(payment.message !== undefined ? { message: payment.message } : {}),
       });
 

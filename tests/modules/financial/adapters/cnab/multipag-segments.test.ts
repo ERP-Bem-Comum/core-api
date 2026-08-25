@@ -54,6 +54,10 @@ const YOUR_NUMBER = '000042000001';
 // `null` significa "esta rota não tem o campo" — e é o valor da fixture de crédito em conta abaixo.
 const TED_PURPOSE = '00005';
 
+// P013 (225-226) — o irmão do P011: mesma inversão por forma, mesma semântica de `null`. Em TED é
+// obrigatório (`CC`/`PP`); fora de TED é PROIBIDO. Quem deriva é `complementPurposeFor`.
+const COMPLEMENT_PURPOSE = 'CC';
+
 const baseA = {
   bankCode: '237',
   batchNumber: 1,
@@ -64,6 +68,7 @@ const baseA = {
   clearingHouse: TED_CLEARING,
   yourNumber: YOUR_NUMBER,
   tedPurpose: TED_PURPOSE,
+  complementPurpose: COMPLEMENT_PURPOSE,
 };
 
 describe('Multipag — Segmento A (pagamento)', () => {
@@ -155,11 +160,35 @@ describe('Multipag — Segmento A (pagamento)', () => {
     assert.equal(at(line(segmentA({ ...baseA, tedPurpose: null })), 220, 224), '     ');
   });
 
-  // O vizinho de 225-226 (P013, finalidade complementar) é a #817, decisão separada. A asserção
-  // existe para que mexer numa das duas não desloque a outra em silêncio — o modo de falha do
-  // arquivo posicional é justamente o campo certo escrito na coluna errada.
-  it('não invade a finalidade complementar (225-226), que é outra decisão', () => {
-    assert.equal(at(record, 225, 226), '  ');
+  // ⚠️ ESTE TESTE MUDOU em 25/08 (inquiry-0033), e a mudança é o ponto: 225-226 saía em branco
+  // "porque era outra decisão", e o Validador Universal decidiu — em TED o campo é OBRIGATÓRIO, e o
+  // branco era a crítica de 21/08 ("colunas 225 a 226, Código finalidade complementar inválido").
+  //
+  // O par 220-224 / 225-226 continua sendo verificado JUNTO pela razão de sempre: o modo de falha do
+  // arquivo posicional é o campo certo escrito na coluna errada, e um deslocamento de duas posições
+  // não aparece em nenhum outro teste.
+  it('escreve o tipo da conta do favorecido em 225-226, ao lado da finalidade', () => {
+    assert.equal(at(record, 220, 224), '00005');
+    assert.equal(at(record, 225, 226), 'CC');
+  });
+
+  // Fora de TED o campo é PROIBIDO — preenchido → recusa, medido no validador. `null` significa
+  // "esta rota não tem o campo", exatamente como no vizinho.
+  it('deixa 225-226 em branco quando a rota não tem o campo', () => {
+    assert.equal(at(line(segmentA({ ...baseA, complementPurpose: null })), 225, 226), '  ');
+  });
+
+  // Domínio FECHADO, ao contrário do P011: o banco o enunciou por extenso na crítica de 21/08 —
+  // "'CC' - Corrente ou 'PP' - Poupança". Dois valores, sem terceiro. Por isso aqui a allow-list é
+  // legítima, e o teste do P011 logo abaixo (que PROÍBE allow-list) não se contradiz com este: as
+  // fontes é que são diferentes, uma parcial e outra completa.
+  it('aceita PP, e recusa qualquer coisa fora do domínio de dois valores', () => {
+    assert.equal(at(line(segmentA({ ...baseA, complementPurpose: 'PP' })), 225, 226), 'PP');
+    for (const invalid of ['C', 'cc', 'CC ', 'XX', '', '00']) {
+      const r = segmentA({ ...baseA, complementPurpose: invalid });
+      assert.ok(isErr(r), `esperava recusa para '${invalid}'`);
+      assert.equal(r.error, 'numeric-field-invalid', invalid);
+    }
   });
 
   // #813/CA3 — coerência interna, não sanitização: nenhum valor externo alimenta o campo. O que a
@@ -339,6 +368,7 @@ describe('Multipag — o par A+B de um pagamento', () => {
       clearingHouse: TED_CLEARING,
       yourNumber: YOUR_NUMBER,
       tedPurpose: TED_PURPOSE,
+      complementPurpose: COMPLEMENT_PURPOSE,
     });
     assert.ok(isOk(r));
     const [a, b] = r.value;
@@ -373,6 +403,7 @@ describe('Multipag — o par A+B de um pagamento', () => {
       clearingHouse: TED_CLEARING,
       yourNumber: YOUR_NUMBER,
       tedPurpose: TED_PURPOSE,
+      complementPurpose: COMPLEMENT_PURPOSE,
     });
     assert.ok(isOk(r));
     const [a, b] = r.value;
@@ -400,6 +431,7 @@ describe('Multipag — o par A+B de um pagamento', () => {
       clearingHouse: TED_CLEARING,
       yourNumber: YOUR_NUMBER,
       tedPurpose: TED_PURPOSE,
+      complementPurpose: COMPLEMENT_PURPOSE,
     });
     assert.ok(isOk(r));
     assert.equal(r.value.length, 2);
@@ -416,6 +448,7 @@ describe('Multipag — o par A+B de um pagamento', () => {
       clearingHouse: TED_CLEARING,
       yourNumber: YOUR_NUMBER,
       tedPurpose: TED_PURPOSE,
+      complementPurpose: COMPLEMENT_PURPOSE,
     });
     assert.ok(isErr(r));
   });
