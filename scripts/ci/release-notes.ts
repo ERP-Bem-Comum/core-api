@@ -179,20 +179,45 @@ export function groupBySection(
   return grouped;
 }
 
-const REPO_URL = 'https://github.com/ERP-Bem-Comum/core-api';
+/** Usada só quando o manifesto não declara `repository` — o valor de verdade vive lá. */
+const FALLBACK_REPO_URL = 'https://github.com/ERP-Bem-Comum/core-api';
 
-function renderEntry(entry: ReleaseEntry): string {
+/**
+ * Normaliza o `repository.url` do `package.json` para a forma navegável:
+ * `git+https://github.com/org/repo.git` → `https://github.com/org/repo`.
+ *
+ * O prefixo `git+` e o sufixo `.git` são convenção de clone e quebram o link no Markdown.
+ */
+export function repoUrlFrom(raw: unknown): string {
+  const url = typeof raw === 'string' ? raw : undefined;
+  if (url === undefined || url.trim() === '') return FALLBACK_REPO_URL;
+  return url
+    .trim()
+    .replace(/^git\+/, '')
+    .replace(/\.git$/, '');
+}
+
+function renderEntry(entry: ReleaseEntry, repoUrl: string): string {
   const scope = entry.scope === null ? '' : `**${entry.scope}:** `;
-  const ref = entry.pr === null ? '' : ` ([#${entry.pr}](${REPO_URL}/pull/${entry.pr}))`;
+  const ref = entry.pr === null ? '' : ` ([#${entry.pr}](${repoUrl}/pull/${entry.pr}))`;
   return `- ${scope}${entry.description}${ref}`;
+}
+
+export interface RenderOptions {
+  /** Merges que nenhuma linha convencional descreveu. Saem nomeados no documento. */
+  readonly skipped?: readonly { readonly sha: string; readonly subject: string }[];
+  /** Base dos links de PR. Vem do `repository` do manifesto — ver `repoUrlFrom`. */
+  readonly repoUrl?: string;
 }
 
 export function renderChangelog(
   version: string,
   date: string,
   entries: readonly ReleaseEntry[],
-  skipped: readonly { readonly sha: string; readonly subject: string }[] = [],
+  options: RenderOptions = {},
 ): string {
+  const skipped = options.skipped ?? [];
+  const repoUrl = options.repoUrl ?? FALLBACK_REPO_URL;
   // Entrada `breaking` sai UMA vez, na seção de destaque — repeti-la na seção temática seria ruído
   // exatamente onde o leitor precisa de sinal.
   const grouped = groupBySection(entries.filter((entry) => !entry.breaking));
@@ -212,7 +237,7 @@ export function renderChangelog(
   const breaking = entries.filter((entry) => entry.breaking);
   if (breaking.length > 0) {
     lines.push('### ⚠️ Mudanças incompatíveis', '');
-    for (const entry of breaking) lines.push(renderEntry(entry));
+    for (const entry of breaking) lines.push(renderEntry(entry, repoUrl));
     lines.push('');
   }
 
@@ -220,7 +245,7 @@ export function renderChangelog(
     const bucket = grouped.get(section);
     if (bucket === undefined || bucket.length === 0) continue;
     lines.push(`### ${section}`, '');
-    for (const entry of bucket) lines.push(renderEntry(entry));
+    for (const entry of bucket) lines.push(renderEntry(entry, repoUrl));
     lines.push('');
   }
 
@@ -287,11 +312,20 @@ export function readEntries(range: string): ReadResult {
 function main(): void {
   const range = process.argv[2] ?? 'origin/main..HEAD';
   const root = fileURLToPath(new URL('../..', import.meta.url));
-  const manifest: unknown = JSON.parse(readFileSync(`${root}/package.json`, 'utf8'));
-  const version =
-    typeof manifest === 'object' && manifest !== null && 'version' in manifest
-      ? String((manifest as { version: unknown }).version)
-      : 'desconhecida';
+  const parsed: unknown = JSON.parse(readFileSync(`${root}/package.json`, 'utf8'));
+  const manifest: Record<string, unknown> =
+    typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : {};
+
+  const version = 'version' in manifest ? String(manifest['version']) : 'desconhecida';
+
+  // A URL dos links de PR sai do manifesto, e não de constante daqui: duplicar o endereço do
+  // repositório em dois arquivos é como o segundo passa a mentir quando o primeiro muda.
+  const repository = manifest['repository'];
+  const repoUrl = repoUrlFrom(
+    typeof repository === 'object' && repository !== null
+      ? (repository as { url?: unknown }).url
+      : repository,
+  );
 
   // A data vem do ÚLTIMO COMMIT do range, não do relógio: assim rodar o gerador duas vezes no mesmo
   // conteúdo produz o mesmo arquivo, e o diff só muda quando a entrega muda.
@@ -300,7 +334,11 @@ function main(): void {
     .slice(0, 10);
 
   const { entries, skipped } = readEntries(range);
-  writeFileSync(`${root}/CHANGELOG.md`, renderChangelog(version, date, entries, skipped), 'utf8');
+  writeFileSync(
+    `${root}/CHANGELOG.md`,
+    renderChangelog(version, date, entries, { skipped, repoUrl }),
+    'utf8',
+  );
   for (const merge of skipped) {
     process.stderr.write(`  nao classificado: ${merge.sha.slice(0, 8)} ${merge.subject}\n`);
   }

@@ -23,6 +23,7 @@ import {
   parseEntry,
   sectionFor,
   renderChangelog,
+  repoUrlFrom,
   type ReleaseEntry,
 } from '#scripts/ci/release-notes.ts';
 
@@ -169,29 +170,62 @@ describe('renderChangelog — o documento não esconde o que não soube classifi
   });
 
   it('os merges não classificados aparecem NOMEADOS no documento, não só no stderr', () => {
-    const md = renderChangelog(
-      '1.0.0-rc.1',
-      '2026-08-25',
-      [entry({ type: 'feat' })],
-      [
+    const md = renderChangelog('1.0.0-rc.1', '2026-08-25', [entry({ type: 'feat' })], {
+      skipped: [
         {
           sha: 'b0c63e6f1122',
           subject: 'Merge pull request #835 from ERP-Bem-Comum/chore/integra',
         },
       ],
-    );
+    });
     assert.match(md, /### Não classificado/u);
     assert.match(md, /b0c63e6f/u);
     assert.match(md, /#835/u);
   });
 
   it('sem descartes, a seção de não classificados não existe', () => {
-    const md = renderChangelog('1.0.0-rc.1', '2026-08-25', [entry({ type: 'feat' })], []);
+    const md = renderChangelog('1.0.0-rc.1', '2026-08-25', [entry({ type: 'feat' })], {
+      skipped: [],
+    });
     assert.ok(!md.includes('Não classificado'));
+  });
+
+  it('o link do PR usa a URL passada, não uma constante do gerador', () => {
+    const md = renderChangelog('1.0.0-rc.1', '2026-08-25', [entry({ type: 'feat', pr: 42 })], {
+      repoUrl: 'https://github.com/exemplo/outro-repo',
+    });
+    assert.match(md, /\(\[#42\]\(https:\/\/github\.com\/exemplo\/outro-repo\/pull\/42\)\)/u);
   });
 
   it('carimba a versão e a data recebidas — a data é a do commit, não a do relógio', () => {
     const md = renderChangelog('1.0.0-rc.1', '2026-08-25', [entry({ type: 'feat' })]);
     assert.match(md, /## \[1\.0\.0-rc\.1\] — 2026-08-25/u);
+  });
+});
+
+/**
+ * O endereço do repositório vive no `package.json`, não numa constante do gerador. Duplicá-lo em
+ * dois arquivos é como o segundo passa a mentir no dia em que o primeiro muda — o mesmo mecanismo
+ * que este gerador existe para evitar no CHANGELOG.
+ */
+describe('repoUrlFrom — a URL de link sai do manifesto', () => {
+  it('descasca a convenção de clone: `git+` na frente e `.git` no fim', () => {
+    assert.equal(
+      repoUrlFrom('git+https://github.com/ERP-Bem-Comum/core-api.git'),
+      'https://github.com/ERP-Bem-Comum/core-api',
+    );
+  });
+
+  it('deixa intacta a URL que já é navegável', () => {
+    assert.equal(
+      repoUrlFrom('https://github.com/ERP-Bem-Comum/core-api'),
+      'https://github.com/ERP-Bem-Comum/core-api',
+    );
+  });
+
+  it('cai no fallback quando o manifesto não declara repository', () => {
+    for (const ausente of [undefined, null, '', '   ', 42, {}]) {
+      assert.equal(repoUrlFrom(ausente), 'https://github.com/ERP-Bem-Comum/core-api');
+    }
   });
 });
