@@ -7,6 +7,7 @@ import {
   batchProfileFor,
   clearingHouseFor,
   tedPurposeFor,
+  complementPurposeFor,
   type ProfiledPayment,
 } from '#src/modules/financial/adapters/cnab/batch-profile.ts';
 
@@ -182,6 +183,50 @@ describe('Finalidade da TED — função da forma, como a câmara (#813)', () =>
     assert.equal(tedPurposeFor('41'), '00005');
     assert.notEqual(tedPurposeFor('41'), '5');
     assert.equal(tedPurposeFor('41')?.length, 5);
+  });
+});
+
+describe('P013 (225-226) — tipo da conta do favorecido, irmão da finalidade (inquiry-0033)', () => {
+  // Medido no Validador Universal em 25/08: em TED o campo é obrigatório (`CC`/`PP`); em crédito em
+  // conta é PROIBIDO — preenchido → recusa. As mesmas formas da câmara e da finalidade, pelo mesmo
+  // motivo: os três campos descrevem a mesma operação e não podem divergir dentro de um registro.
+  it('as formas de TED levam o tipo de conta, e só elas', () => {
+    for (const tedForm of ['03', '41', '43']) assert.equal(complementPurposeFor(tedForm), 'CC');
+    for (const other of ['01', '05', '30', '31', '45'])
+      assert.equal(complementPurposeFor(other), null);
+  });
+
+  // ⚠️ ESTE é o teste que guarda a premissa, e ele existe para FALHAR quando a #817 entrar: quando o
+  // cadastro do favorecido passar a guardar o tipo de conta, o valor deixa de ser constante e este
+  // teste tem de ser reescrito — de propósito. Enquanto ele passa, a premissa está em vigor.
+  //
+  // PREMISSA (P.O., 25/08): conta corrente. O que a sustenta não é a raridade da poupança — é o
+  // processo: o operador confere a classificação ANTES de gerar, e o título com tipo errado volta
+  // RECUSADO do banco, com pagamento refeito fora da remessa. Erro detectável, com caminho de volta.
+  it('a constante é a premissa vigente: conta corrente', () => {
+    assert.equal(complementPurposeFor('41'), 'CC');
+    assert.notEqual(complementPurposeFor('41'), 'PP');
+  });
+
+  // Total sobre o domínio, como os dois vizinhos: forma nova entra pelo `else` e sai SEM o campo,
+  // nunca herdando o da forma anterior — e sair sem ele é o certo, porque fora de TED é proibido.
+  it('forma desconhecida sai sem o campo, não com o da forma vizinha', () => {
+    assert.equal(complementPurposeFor('99'), null);
+  });
+
+  // O campo é Alfa(2) e o domínio é fechado — `CC` ou `PP`, enunciados pelo banco na crítica de
+  // 21/08. Duas posições exatas: `'C'` sairia `'C '` e o banco recusa apontando a coluna.
+  it('produz exatamente dois caracteres', () => {
+    assert.equal(complementPurposeFor('41')?.length, 2);
+  });
+
+  // A invariante que amarra os três campos: quem tem câmara de TED tem finalidade E tipo de conta.
+  // Um trio que divergisse produziria arquivo recusado — foi assim que a #751 nasceu.
+  it('câmara, finalidade e tipo de conta andam juntos — os três ou nenhum', () => {
+    for (const form of ['01', '03', '05', '30', '31', '41', '43', '45', '99']) {
+      const temFinalidade = tedPurposeFor(form) !== null;
+      assert.equal(complementPurposeFor(form) !== null, temFinalidade);
+    }
   });
 });
 

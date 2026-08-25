@@ -123,6 +123,41 @@ const TED_PURPOSE_SUPPLIER_PAYMENT = '00005'; // Pagamento a fornecedores — ca
 export const tedPurposeFor = (launchForm: string): string | null =>
   TED_LAUNCH_FORMS.has(launchForm) ? TED_PURPOSE_SUPPLIER_PAYMENT : null;
 
+// ── P013 (225-226) — finalidade complementar: tipo da conta do favorecido ──────────────────────────
+//
+// Irmão gêmeo de `tedPurposeFor`, e é assim de propósito: os dois campos vivem no mesmo par de
+// posições vizinhas, obedecem à MESMA inversão por forma, e a inquiry-0033 §5.2 fixou que P013
+// "deriva da forma do lote, com a mesma semântica de `null`". Separá-los em desenhos diferentes
+// deixaria dois campos que sempre variam juntos livres para divergir.
+//
+// MEDIDO no Validador Universal em 25/08/2026 (inquiry-0033, 18 remessas):
+//   - TED (`41`): `CC` ou `PP` OBRIGATÓRIO. Em branco → recusa, que foi a crítica de 21/08
+//     ("colunas 225 a 226, Código finalidade complementar inválido").
+//   - Crédito em conta (`01`): PROIBIDO. Preenchido → recusa.
+// É por isso que o valor não pode ser parâmetro do chamador: preenchê-lo num lote `01` produz
+// arquivo recusado, exatamente como em `220-224`.
+//
+// PREMISSA DECLARADA (decisão da P.O., 25/08/2026): **conta corrente**. Difere da premissa do
+// `00005` acima num ponto que importa e que foi levantado antes de decidir — a finalidade é
+// propriedade do PAGAMENTO (e "todo pagamento aqui é a fornecedor" é estruturalmente verdadeiro),
+// enquanto o tipo de conta é propriedade do FAVORECIDO, e um favorecido PJ pode ter poupança.
+//
+// O que sustenta a premissa NÃO é a raridade da poupança — é o PROCESSO, e a P.O. o descreveu:
+//   1. o operador confere a classificação das contas ANTES de gerar a remessa;
+//   2. se ainda assim for errado, o título não processa e volta RECUSADO;
+//   3. o pagamento é refeito fora da remessa, e a baixa é manual.
+// Ou seja, o erro tem detecção e caminho de volta — não é falha silenciosa. Foi essa a razão de a
+// constante ser aceitável aqui, e é ela que cai se o processo mudar.
+//
+// O que DERRUBA a premissa, e obriga a revê-la: o cadastro do favorecido passar a guardar o tipo de
+// conta (**#817** — a modelagem não existe em camada nenhuma hoje), ou entrar cliente cujo operador
+// não faça a conferência prévia. Quando a #817 entrar, esta constante vira leitura do cadastro e a
+// `PayoutField` ganha `payee-account-type`; o formato desta função não muda.
+const PAYEE_ACCOUNT_TYPE_CHECKING = 'CC'; // Conta Corrente — `PP` seria Poupança
+
+export const complementPurposeFor = (launchForm: string): string | null =>
+  TED_LAUNCH_FORMS.has(launchForm) ? PAYEE_ACCOUNT_TYPE_CHECKING : null;
+
 // Os três primeiros dígitos do código de barras são o banco emissor do título (Carta-Circular Bacen
 // 2.926) — é o que separa liquidação de título do próprio banco de título de outro banco.
 //
