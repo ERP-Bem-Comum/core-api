@@ -9,3 +9,5 @@
 - [Adequar teste ≠ afrouxar (outbox fanout)](feedback_outbox_fanout_test_adequacy.md) — trocar a FONTE do dado (eventos_processados/progress), não só o argumento; moveToDeadLetter não deleta mais
 - [SQL | undefined em WHERE-builder](reference_sql_or_undefined_where_predicate.md) — `and(...) as SQL`/`!` colidem entre duas regras de lint; retornar `SQL | undefined` sem cast é o idioma certo
 - [FOR UPDATE e errno em e.cause](reference_for_update_and_error_propagation.md) — ADR-0020 não cita FOR UPDATE (só precedente); errno de deadlock/lock-timeout mora em e.cause.errno
+- [Erro e transação no Drizzle 0.45.2](reference_drizzle_error_and_tx_semantics.md) — errno em `.cause` profundidade 1 p/ TODA query (não só db.execute); tx faz rollback+release, sem retry; `values([])` é erro do builder
+- [Document hard replace vs ordem de lock](project_fin_document_hard_replace_lock_order.md) — child-rows-diff JÁ cobre fin_payables; diff de linha não fecha deadlock de ORDEM contra fin_remittance_payables

@@ -125,7 +125,14 @@ interface AppHandle {
 let handle: AppHandle;
 let cedenteAccountId = ACCOUNT_ID;
 
-const buildHandle = async (): Promise<AppHandle> => {
+/**
+ * `authorizeHook` parametrizável para o bloco da guarda (#634): ele precisa de um app cujo
+ * `authorize` SIMULE o bypass — no-op salvo `{ strict: true }` —, e o fake do topo cobra a permissão
+ * sempre. Default preserva o comportamento de todos os outros casos deste arquivo.
+ */
+const buildHandle = async (
+  authorizeHook: (permissionName: string) => preHandlerAsyncHookHandler = authorize,
+): Promise<AppHandle> => {
   const deps = await buildFinancialHttpDeps({
     driver: 'memory',
     remittancePaymentReader: payments,
@@ -146,7 +153,7 @@ const buildHandle = async (): Promise<AppHandle> => {
   const config = readHttpConfig({ RATE_LIMIT_MAX: '10000' });
   const app = await buildApp({
     config,
-    routes: [financialHttpPlugin(deps, { requireAuth, authorize })],
+    routes: [financialHttpPlugin(deps, { requireAuth, authorize: authorizeHook })],
   });
   return {
     app,
@@ -416,31 +423,83 @@ describe('financial/http — POST /remittances (#720) · guarda do bypass (#634)
     else process.env['AUTH_RBAC_MODE'] = originalMode;
   });
 
-  // ⚠️ Este caso asseria o slug `remittance-disabled-under-rbac-bypass` NO BODY até o #792. Deixou de
-  // valer quando a guarda passou a sair por `sendDomainError`: o slug interno não vai em 5xx, fica só
-  // no log do servidor (OWASP API8:2023, #52). Era a última exceção do módulo a essa política — e o
-  // discriminador correto sempre foi o **status**, não o slug.
-  it('CA4: a rota recusa com 503 enquanto o bypass estiver ligado', async () => {
-    const res = await generate([DOC_B]);
-    assert.equal(res.statusCode, 503, res.body);
+  // ⚠️ NÃO HÁ GUARDA — e estes casos existem para que a ausência seja VISÍVEL, não para escondê-la.
+  //
+  // Histórico, porque o status esperado aqui já mudou duas vezes e vai tentar mudar de novo:
+  //
+  //   · até 24/08/2026 — `refuseUnderRbacBypass` devolvia **503** sempre que o modo fosse `bypass`,
+  //     e este bloco cobrava isso. A guarda foi retirada quando o bypass virou o modo permanente da
+  //     homologação: a condição deixou de discriminar, e ela recusaria em todo ambiente;
+  //   · 25/08/2026 — uma guarda por PERMISSÃO (`authorize` cobrando `remittance:generate` mesmo sob
+  //     bypass) foi desenhada, medida e **recusada pelo dono**: enquanto o modelo de permissões não
+  //     for validado com a gerência e o time de negócio, nenhuma rota exige permissão — a que move
+  //     dinheiro inclusive. Todo usuário autenticado é super-usuário, de propósito.
+  //
+  // O gatilho para reabrir é de NEGÓCIO: o aceite do modelo de permissões. Até lá, o que estes casos
+  // fixam é o estado real, para que a ausência de proteção não passe por engano nem por descuido.
+  // Réplica fiel do `authorize` real sob bypass (`auth/adapters/http/composition.ts`): devolve um
+  // preHandler que não faz nada. Sem `async` porque não há o que aguardar — o hook do Fastify aceita
+  // a Promise resolvida, e um `async` vazio só existiria para satisfazer a forma.
+  const bypassAuthorize = (): preHandlerAsyncHookHandler => (): Promise<undefined> =>
+    Promise.resolve(undefined);
 
-    // O envelope é o mesmo de todo 5xx do módulo, `requestId` inclusive — que é o contrato de
-    // `shared/http/errors.ts` e o que esta guarda não cumpria enquanto montava a resposta à mão.
-    const body = res.json() as { error: { code: string; requestId?: string } };
-    assert.equal(body.error.code, 'internal', 'slug interno não vaza em 5xx');
-    assert.ok(
-      typeof body.error.requestId === 'string' && body.error.requestId.length > 0,
-      'requestId presente: é por ele que se acha o slug real no log',
-    );
+  let bypassHandle: AppHandle;
+  let bypassAccountId: string;
+
+  before(async () => {
+    bypassHandle = await buildHandle(bypassAuthorize);
+    const seeded = await bypassHandle.app.inject({
+      method: 'POST',
+      url: '/api/v2/financial/cedente-accounts',
+      headers: bearer('sem-permissao-alguma'),
+      payload: {
+        bankCode: '237',
+        bankName: 'Bradesco',
+        type: 'corrente',
+        agency: '1234',
+        accountNumber: '567890',
+        accountDigit: '1',
+        document: '12345678000190',
+        nickname: 'Conta bypass',
+        convenio: '000000',
+      },
+    });
+    assert.equal(seeded.statusCode, 201, seeded.body);
+    bypassAccountId = (seeded.json() as { id: string }).id;
   });
 
-  it('a recusa vem ANTES da autenticação — nem com token válido a rota opera', async () => {
-    const res = await handle.app.inject({
+  after(async () => {
+    await bypassHandle.teardown();
+  });
+
+  it('sob bypass, QUALQUER autenticado gera remessa — inclusive sem a permissão', async () => {
+    // O bearer não apresenta `remittance:generate`. A rota opera assim mesmo, porque `authorize` é
+    // no-op. Este caso é o registro executável da consequência aceita em #634: entre "autenticado" e
+    // "pagamento enfileirado no banco" não existe mais nenhuma porta.
+    const res = await bypassHandle.app.inject({
       method: 'POST',
       url: URL,
-      payload: { cedenteAccountId, payableIds: [DOC_B] },
+      headers: bearer('nenhuma-permissao'),
+      payload: { cedenteAccountId: bypassAccountId, payableIds: [DOC_B] },
     });
-    assert.equal(res.statusCode, 503, res.body);
+
+    assert.ok(
+      res.statusCode === 201 || res.statusCode === 409,
+      `esperado 201 ou 409, veio ${String(res.statusCode)}: ${res.body}`,
+    );
+    assert.notEqual(res.statusCode, 403, 'sob bypass a permissão NÃO é cobrada — por decisão');
+  });
+
+  it('a autenticação SOBREVIVE ao bypass — sem token continua 401', async () => {
+    // A única porta que restou, e a que o ADR-0052 garante que o bypass não toca: `requireAuth`.
+    // Se este caso ficar vermelho, a rota virou pública — que é diferente de "aberta a autenticados".
+    const res = await bypassHandle.app.inject({
+      method: 'POST',
+      url: URL,
+      payload: { cedenteAccountId: bypassAccountId, payableIds: [DOC_B] },
+    });
+
+    assert.equal(res.statusCode, 401, res.body);
   });
 
   /**
