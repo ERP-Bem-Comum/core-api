@@ -222,7 +222,17 @@ TXID é opcional no QR-Code Estático e limitado a 30 posições.
 | `009` | Pix (SPI) |
 | zeros | demais modalidades |
 
-## P005 — Complemento do Tipo de Serviço (segmento A, pos. 218-219)
+## P005 — Complemento do Tipo de Serviço (segmento A, pos. 218-219) — ⚠️ CAMPO EXTINTO
+
+> **NÃO ESCREVER NENHUM DESTES VALORES em 218-219.** O campo foi **excluído do manual** com a
+> descontinuidade da modalidade DOC (fev/2024); a posição hoje é `G004` — Uso Exclusivo
+> FEBRABAN/CNAB, default Brancos. Um código deste domínio ali é **recusa nomeada** pelo validador:
+> _"Quando TED, não informar finalidade complementar DOC"_. Medido em 25/08/2026 —
+> [inquiry-0033](../../../../handbook/inquiries/0033-cnab-multipag-bisseccao-validador.md).
+>
+> A tabela fica **como referência histórica**, para ler arquivo antigo e para reconhecer o domínio
+> quando alguém o citar — nunca para gerar. O `07` daqui já foi confundido com o `07` da tabela de
+> TED, que é **aluguel**: as duas tabelas não compartilham numeração.
 
 | | |
 |---|---|

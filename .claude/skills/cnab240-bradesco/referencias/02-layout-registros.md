@@ -122,12 +122,24 @@ PDF** antes de escrever código: uma posição errada gera arquivo que o banco r
 | 155-162 | 8 | Data Real da Efetivação | Num | Zeros na remessa | | P003 |
 | 163-177 | 15 | Valor Real da Efetivação | Num | Zeros na remessa | | P004 |
 | 178-217 | 40 | Informação 2 (Mensagem) | Alfa | | * | G031 |
-| 218-219 | 2 | Complemento do Tipo de Serviço | Alfa | | * | P005 |
+| 218-219 | 2 | Uso Exclusivo FEBRABAN/CNAB ⚠️ | Alfa | Brancos | | G004 |
 | 220-224 | 5 | Código de Finalidade da TED | Alfa | | * | P011 |
-| 225-226 | 2 | Código Finalidade Complementar | Alfa | | | P013 |
+| 225-226 | 2 | Código Finalidade Complementar ⚠️ | Alfa | | * | P013 |
 | 227-229 | 3 | Uso Exclusivo FEBRABAN/CNAB | Alfa | Brancos | | G004 |
 | 230 | 1 | Aviso ao Favorecido | Num | | * | P006 |
 | 231-240 | 10 | Códigos das Ocorrências p/ Retorno | Alfa | | * | G059 |
+
+⚠️ **As duas linhas com ⚠️ acima foram corrigidas em 25/08/2026 e valem por si**
+([inquiry-0033](../../../../handbook/inquiries/0033-cnab-multipag-bisseccao-validador.md), 18 submissões ao validador):
+
+- **218-219 NÃO é mais `P005`.** Este arquivo listava ali "Complemento do Tipo de Serviço" **com
+  asterisco**, e o campo foi **excluído do manual** com a descontinuidade do DOC (fev/2024). No
+  layout vigente a posição é `G004`, default Brancos. Preencher com código do domínio DOC é
+  **recusa nomeada**: _"Quando TED, não informar finalidade complementar DOC"_. Foi esta linha que
+  induziu 8 das críticas do experimento.
+- **225-226 (`P013`) É crítica**, e não tinha asterisco aqui. Em TED exige `CC` ou `PP`; branco é
+  recusado. **Fora de TED é o inverso: preenchido é recusado.** O manual não o marca com asterisco
+  e a G059 não tem código para ele — é o caso exemplar de "sem asterisco ≠ opcional".
 
 ---
 
@@ -163,8 +175,8 @@ PDF** antes de escrever código: uma posição errada gera arquivo que o banco r
 | 118-122 | 5 | CEP | Num | `AX` |
 | 123-125 | 3 | Complemento do CEP | Alfa | `AX` |
 | 126-127 | 2 | Sigla do Estado (UF) | Alfa | `AY` |
-| 128-135 | 8 | Data do Vencimento (nominal) | Num | |
-| 136-150 | 15 | Valor do Documento (nominal) | Num | |
+| 128-135 | 8 | Data do Vencimento (nominal) ⚠️ | Num | crítica, sem código |
+| 136-150 | 15 | Valor do Documento (nominal) ⚠️ | Num | crítica, sem código |
 | 151-165 | 15 | Valor do Abatimento | Num | |
 | 166-180 | 15 | Valor do Desconto | Num | |
 | 181-195 | 15 | Valor da Mora | Num | |

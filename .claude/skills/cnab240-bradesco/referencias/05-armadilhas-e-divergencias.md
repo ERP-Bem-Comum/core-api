@@ -149,13 +149,33 @@ Finalidade TED (220-224), Finalidade Complementar (225-226), Código/Documento d
 
 ---
 
-## 9. Finalidade TED e Finalidade Complementar em branco
+## 9. Finalidade TED e Finalidade Complementar — MEDIDO, e a regra inverte por forma
 
-Dois campos do Segmento A que ficam em branco por omissão do gerador:
+⚠️ **Esta seção afirmava, até 25/08/2026, que 218-219 era `*P005` e que "o coerente é `07`". As
+duas afirmações são falsas, e a segunda produziu recusa real** — um script de bisseção seguiu a
+recomendação e cada arquivo que o fez levou 2 críticas
+([inquiry-0033](../../../../handbook/inquiries/0033-cnab-multipag-bisseccao-validador.md), 18 submissões).
 
-- **218-219, Complemento do Tipo de Serviço (`*P005`)** — marcado com asterisco na tabela da
-  pág. 18. Para Tipo de Serviço `20` (Pagamento Fornecedor), o coerente é `07`.
-- **225-226, Código Finalidade Complementar (`P013`)** — domínio fechado `CC` ou `PP` para TED.
+- **218-219 é `G004` — Uso Exclusivo FEBRABAN/CNAB, default Brancos.** O `P005` foi **excluído do
+  manual** junto com a modalidade DOC (fev/2024; o histórico de versões registra a exclusão pelo
+  nome). Escrever ali qualquer código do domínio DOC é recusa nomeada: _"Quando TED, não informar
+  finalidade complementar DOC"_. **Zeros passam**; só o domínio DOC recusa — mas emitir brancos é
+  o que o layout declara.
+- **225-226 (`P013`) e 220-224 (`P011`) INVERTEM de regra conforme a forma de lançamento.** É a
+  armadilha central deste par, e nenhuma tabela do manual a expressa:
+
+  | | TED (`41`) | Crédito em conta (`01`) |
+  | :--- | :--- | :--- |
+  | `220-224` `P011` | finalidade obrigatória | **brancos** — zeros é recusa |
+  | `225-226` `P013` | `CC` ou `PP` obrigatório | **brancos** — preenchido é recusa |
+
+  Fora de TED o banco devolve _"Código Finalidade Complementar (para TED). Inválido para Crédito
+  em Conta"_ e _"Código Finalidade para TED. Inválido para Crédito em Conta"_. `CC` e `PP` foram
+  ambos aceitos em TED.
+
+  ⚠️ **É por isso que nenhum dos dois pode ser parâmetro do adapter**: não existe valor certo
+  independente da forma. Em `batch-profile.ts`, `tedPurposeFor` já retorna `null` fora de TED — e
+  essa decisão, que estava registrada ali como empate sem fonte, foi confirmada pelo validador.
 
 ⚠️ **220-224 (Finalidade da TED, `P011`) tem domínio PRÓPRIO — não espelha o P005.** Uma revisão
 anterior deste arquivo afirmava o contrário, que `00005` seria "mensalidade escolar" e portanto
