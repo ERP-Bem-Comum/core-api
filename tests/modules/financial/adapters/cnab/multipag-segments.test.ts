@@ -23,6 +23,14 @@ const PAYEE: Payee = {
 
 const PAY_DATE = new Date(Date.UTC(2026, 7, 12));
 
+// G044, o vencimento NOMINAL do título — campo do Segmento B, distinto da data de pagamento do A.
+//
+// Deliberadamente DIFERENTE de `PAY_DATE` nos testes do `segmentB` isolado. No par A+B as duas
+// coincidem hoje, por decisão de negócio (ver `paymentRecords`), e um teste que usasse a mesma data
+// nos dois campos passaria igual se alguém os trocasse entre si — provaria nada. Aqui elas divergem
+// para que a posição 128-135 tenha de trazer o vencimento, e não a outra data.
+const DUE_DATE = new Date(Date.UTC(2026, 8, 3));
+
 // Campo do CNAB é 1-indexed e inclusivo nas duas pontas — o helper fala a língua do layout.
 const at = (line: string, from: number, to: number): string => line.slice(from - 1, to);
 
@@ -200,13 +208,19 @@ describe('Multipag — Segmento A (pagamento)', () => {
   });
 });
 
+const baseB = {
+  bankCode: '237',
+  batchNumber: 1,
+  recordNumber: 2,
+  payee: PAYEE,
+  dueDate: DUE_DATE,
+  titleValueCents: 123456,
+};
+
 describe('Multipag — Segmento B (dados complementares do favorecido)', () => {
   const record = line(
     segmentB({
-      bankCode: '237',
-      batchNumber: 1,
-      recordNumber: 2,
-      payee: PAYEE,
+      ...baseB,
       address: {
         street: 'RUA DAS FLORES',
         number: 100,
@@ -243,27 +257,73 @@ describe('Multipag — Segmento B (dados complementares do favorecido)', () => {
   });
 
   it('funciona sem endereço — o layout aceita brancos, e o domínio pode não ter o dado', () => {
-    const r = segmentB({ bankCode: '237', batchNumber: 1, recordNumber: 2, payee: PAYEE });
-    assert.equal(line(r).length, 240);
+    assert.equal(line(segmentB(baseB)).length, 240);
   });
 
   // Documento vindo do ETL legado pode carregar máscara; a ACL traduz o formato em vez de recusar
   // a remessa inteira por causa de um ponto.
   it('aceita CNPJ mascarado e produz o mesmo registro que o sem máscara', () => {
     const masked = line(
-      segmentB({
-        bankCode: '237',
-        batchNumber: 1,
-        recordNumber: 2,
-        payee: { ...PAYEE, document: '98.765.432/0001-11' },
-      }),
+      segmentB({ ...baseB, payee: { ...PAYEE, document: '98.765.432/0001-11' } }),
     );
-    const plain = line(
-      segmentB({ bankCode: '237', batchNumber: 1, recordNumber: 2, payee: PAYEE }),
-    );
+    const plain = line(segmentB(baseB));
 
     assert.equal(at(masked, 19, 32), '98765432000111');
     assert.equal(masked, plain);
+  });
+
+  // ─── #812 — vencimento e valor NOMINAIS ────────────────────────────────────────────────────
+  //
+  // Esta é a única recusa da fila confirmada POR ESCRITO pelo banco. O laudo do Validador Universal
+  // (#804, defeito 5) traz as duas frases literais: "Data de vencimento (nominal) não informada ou
+  // inválida" e "Valor do documento (nominal) não informado ou inválido". O G059 §'AP' (p.107)
+  // enumera o caso do campo de data ZERADO.
+  //
+  // Fonte primária conferida no PDF, p.25: `17.3B Vencimento (Nominal) 128-135 Num G044` e
+  // `18.3B Valor Docum. (Nominal) 136-150 13+2 Num G042`, no registro declarado **Obrigatório –
+  // Remessa / Retorno**. G044, p.103, manda o formato `DDMMAAAA` com todas as letras.
+  //
+  // Antes disto as asserções do Segmento B paravam em 126-127: as duas faixas nunca foram tocadas,
+  // nem os zeros estavam fixados. O gate não teria pego a regressão, e não pegou o defeito.
+
+  // CA1. A asserção é pelo valor DDMMAAAA de `DUE_DATE`, não por "≠ 00000000": um campo que saísse
+  // com a data errada satisfaria a negação e continuaria sendo recusado pelo banco.
+  it('CA1 — 128-135 traz o vencimento nominal em DDMMAAAA, nunca zerado', () => {
+    assert.equal(at(record, 128, 135), '03092026');
+  });
+
+  // CA2. 13 inteiros + 2 decimais = 15 posições em centavos, sem separador. O mesmo `cents()` do
+  // valor do pagamento no Segmento A — a unidade do domínio já é centavo (ADR-0020).
+  it('CA2 — 136-150 traz o valor nominal em centavos, nunca zerado', () => {
+    assert.equal(at(record, 136, 150), '000000000123456');
+  });
+
+  // CA3. Truncar valor monetário é o pior defeito possível aqui: produz arquivo que o banco ACEITA
+  // e paga outro valor. `cents()` delega a `num()`, que erra em overflow por desenho.
+  it('CA3 — recusa valor nominal que estoura as 15 posições, em vez de truncar', () => {
+    const r = segmentB({ ...baseB, titleValueCents: 10 ** 16 });
+    assert.ok(isErr(r));
+    assert.equal(r.error, 'numeric-field-overflow');
+  });
+
+  // ⚠️ A guarda contra DESLOCAMENTO, que é o modo de falha próprio do arquivo posicional: dois
+  // campos novos escritos entre uma corrida de brancos e uma de zeros deslocam tudo à frente sem
+  // mudar o comprimento da linha.
+  //
+  // A testemunha é a BORDA — onde a classe de caractere muda —, nunca a contagem dentro da corrida
+  // homogênea: 126-127 é alfa, 128-150 passa a ser dígito significativo, e 151-165 volta a ser zero.
+  // As três medidas juntas fixam as duas fronteiras.
+  it('não desloca os vizinhos: o estado antes, o abatimento depois', () => {
+    assert.equal(at(record, 126, 127), 'CE');
+    assert.equal(at(record, 151, 165), '000000000000000');
+    assert.equal(record.length, 240);
+  });
+
+  // Abatimento, desconto, mora e multa (151-210) seguem zerados, e é decisão, não omissão: não se
+  // aplicam a crédito em conta e o `RemittanceTransferPayment` não os modela. Ficam fixados aqui
+  // para que preenchê-los seja uma escolha visível, e não um efeito colateral (fora da #812).
+  it('mantém abatimento, desconto, mora e multa zerados — não se aplicam a crédito em conta', () => {
+    assert.equal(at(record, 151, 210), '0'.repeat(60));
   });
 });
 
@@ -289,6 +349,42 @@ describe('Multipag — o par A+B de um pagamento', () => {
     assert.equal(at(a ?? '', 9, 13), '00005');
     assert.equal(at(b ?? '', 9, 13), '00006');
     assert.ok(r.value.every((rec) => rec.length === 240));
+  });
+
+  // #812 — a coincidência entre os dois pares é AFIRMAÇÃO DE NEGÓCIO, não repasse acidental.
+  //
+  // Segmento A 094-101 (P009, data do pagamento) e Segmento B 128-135 (G044, vencimento nominal)
+  // saem IDÊNTICOS; idem A 120-134 (P010, valor pago) e B 136-150 (G042, valor nominal). É correto
+  // no modelo de hoje: a remessa é gerada POR vencimento (#711), paga-se no vencimento, e
+  // `RemittanceTransferPayment` não modela desconto, abatimento nem mora.
+  //
+  // ⚠️ O layout distingue os dois pares POR DESENHO — se fossem a mesma coisa, os campos do B não
+  // existiriam. O que derruba a coincidência: pagamento fora do vencimento, ou título com desconto
+  // ou mora. Este teste existe para que esse dia apareça como vermelho nomeado, e não como um
+  // arquivo aceito pelo banco declarando um vencimento que não é o do título.
+  it('repassa vencimento e valor ao B, hoje iguais aos do A — e é decisão, não acaso', () => {
+    const r = paymentRecords({
+      bankCode: '237',
+      batchNumber: 1,
+      firstRecordNumber: 5,
+      payee: PAYEE,
+      paymentDate: PAY_DATE,
+      valueCents: 5000,
+      clearingHouse: TED_CLEARING,
+      yourNumber: YOUR_NUMBER,
+      tedPurpose: TED_PURPOSE,
+    });
+    assert.ok(isOk(r));
+    const [a, b] = r.value;
+
+    // Os campos do B saem preenchidos — é o defeito da #812 que o banco recusou.
+    assert.equal(at(b ?? '', 128, 135), '12082026');
+    assert.equal(at(b ?? '', 136, 150), '000000000005000');
+
+    // E hoje coincidem com os do A. A igualdade é asserida contra o próprio A, e não contra um
+    // literal repetido: se a origem de um dos dois mudar, é aqui que aparece.
+    assert.equal(at(b ?? '', 128, 135), at(a ?? '', 94, 101));
+    assert.equal(at(b ?? '', 136, 150), at(a ?? '', 120, 134));
   });
 
   // O B é obrigatório no Multipag (layout p.25). Emitir só o A é o erro que a transcrição
