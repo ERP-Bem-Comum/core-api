@@ -11,11 +11,11 @@
 | :--- | ---: | :--- |
 | `open` | 6 | quem trabalha nela |
 | `blocked` | 5 | terceiro (banca, upstream, P.O.) |
-| `decided` | 17 | ninguém — fechada |
+| `decided` | 18 | ninguém — fechada |
 | `deferred` | 3 | o gatilho declarado |
 | `superseded` | 1 | — |
 
-Total: **32**.
+Total: **33**.
 
 ---
 
@@ -65,6 +65,7 @@ Total: **32**.
 | [0023](./0023-typescript-7-native-spike.md) | TypeScript 7 nativo — spike medido e diagnóstico de lentidão do `core-api` | 2026-07-31 | 2026-07-31 |
 | [0024](./0024-adr-format-for-llm-agents.md) | Inquiry 0024 — ADR como contexto de agente: o que o campo convergiu, e onde estamos fora |  |  |
 | [0029](./0029-linter-type-aware-sob-typescript-7.md) | Linter type-aware sob TypeScript 7 — oxlint/tsgolint · Biome · ESLint pinado | 2026-08-06 | 2026-08-06 |
+| [0033](./0033-cnab-multipag-bisseccao-validador.md) | O que o Bradesco realmente exige — bisseção de 18 remessas contra o Validador Universal | 2026-08-25 |  |
 
 ---
 
