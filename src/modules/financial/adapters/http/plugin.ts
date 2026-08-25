@@ -37,7 +37,7 @@ import type {
 import process from 'node:process';
 
 import { ok } from '#src/shared/primitives/result.ts';
-import { resolveRbacMode } from '#src/modules/auth/public-api/http.ts';
+// import { resolveRbacMode } from '#src/modules/auth/public-api/http.ts';  ← descomentar junto com a guarda
 import { sendResult } from '#src/shared/http/reply.ts';
 import { toErrorEnvelope } from '#src/shared/http/errors.ts';
 import { currentCorrelationId } from '#src/shared/observability/correlation.ts';
@@ -393,34 +393,49 @@ const sanitizeFilename = (name: string): string => {
 
 // ─── Rotas ───────────────────────────────────────────────────────────────────
 
-/**
- * Recusa a rota que MOVE DINHEIRO enquanto a autorização estiver desligada (#634 / ADR-0052).
- *
- * Sob `AUTH_RBAC_MODE=bypass` todo usuário autenticado é super-usuário — `authorize` deixa passar
- * qualquer um. Para leitura isso é uma escolha operacional consciente; para disparar pagamento ao
- * banco, não é escolha nenhuma.
- *
- * Lê o modo do ambiente em vez de recebê-lo por injeção, e isso é deliberado: uma guarda de
- * segurança que depende de fiação correta falha exatamente quando a fiação estiver errada. Aqui,
- * esquecer de passar o parâmetro não abre a rota.
- *
- * 503, não 403: não é o requisitante que está proibido — é o servidor que não deve oferecer esta
- * operação nesta configuração.
- *
- * ⚠️ Sai por `sendDomainError` como todo o resto do módulo (#792), e não por um `reply.send` próprio.
- * Até aqui esta guarda montava o envelope à mão — era o ÚNICO 5xx do `financial` a expor slug
- * interno no body, e o único a sair sem `requestId`, que `shared/http/errors.ts` declara como
- * contrato. Duas fugas da mesma política (OWASP API8:2023, #52), num lugar onde ninguém procuraria.
- *
- * **O preço, aceito explicitamente pelo Gabriel:** a mensagem PT-BR que explicava ao operador POR QUE
- * a geração está desligada some do body. Sob bypass — que é como a demo roda — o front passa a
- * mostrar erro genérico ao gerar. O slug segue no log do servidor
- * (`financial-domain-error-5xx`), que é onde ele podia estar desde sempre.
- */
-const refuseUnderRbacBypass: preHandlerAsyncHookHandler = async (_req, reply) => {
-  if (resolveRbacMode(process.env) !== 'bypass') return undefined;
-  return sendDomainError(reply, 'remittance-disabled-under-rbac-bypass');
-};
+// ⚠️ GUARDA DESATIVADA — decisão do dono (Gabriel, 24/08/2026), risco assumido por escrito.
+// Comentada em vez de removida, a pedido dele: religar é descomentar os dois pontos (esta definição
+// e a entrada no `preHandler` da rota `POST /financial/remittances`, mais abaixo).
+//
+// POR QUE saiu agora: `resolveRbacMode` passou a devolver `bypass` incondicionalmente
+// (`src/modules/auth/adapters/http/rbac-mode.ts`). Com a guarda ativa, a condição abaixo nunca mais
+// retornaria cedo — a única rota que MOVE DINHEIRO responderia 503 em TODO ambiente, o tempo todo,
+// inclusive onde hoje funciona. É o oposto do objetivo (destravar a geração para a homologação).
+//
+// ⚠️ ENQUANTO ESTIVER COMENTADA: qualquer usuário autenticado gera remessa — consome NSA, prende os
+// documentos e grava em `saida/`, que é enfileirar pagamento no banco (ADR-0060) — em qualquer
+// ambiente, INCLUSIVE produção. Impedir exatamente isso era a razão de a guarda existir
+// (#634 / ADR-0052 / PR #723). Territorio da #846, que decide o destino definitivo dela.
+//
+// ─── código original preservado ──────────────────────────────────────────────
+// /**
+//  * Recusa a rota que MOVE DINHEIRO enquanto a autorização estiver desligada (#634 / ADR-0052).
+//  *
+//  * Sob `AUTH_RBAC_MODE=bypass` todo usuário autenticado é super-usuário — `authorize` deixa passar
+//  * qualquer um. Para leitura isso é uma escolha operacional consciente; para disparar pagamento ao
+//  * banco, não é escolha nenhuma.
+//  *
+//  * Lê o modo do ambiente em vez de recebê-lo por injeção, e isso é deliberado: uma guarda de
+//  * segurança que depende de fiação correta falha exatamente quando a fiação estiver errada. Aqui,
+//  * esquecer de passar o parâmetro não abre a rota.
+//  *
+//  * 503, não 403: não é o requisitante que está proibido — é o servidor que não deve oferecer esta
+//  * operação nesta configuração.
+//  *
+//  * ⚠️ Sai por `sendDomainError` como todo o resto do módulo (#792), e não por um `reply.send` próprio.
+//  * Até aqui esta guarda montava o envelope à mão — era o ÚNICO 5xx do `financial` a expor slug
+//  * interno no body, e o único a sair sem `requestId`, que `shared/http/errors.ts` declara como
+//  * contrato. Duas fugas da mesma política (OWASP API8:2023, #52), num lugar onde ninguém procuraria.
+//  *
+//  * **O preço, aceito explicitamente pelo Gabriel:** a mensagem PT-BR que explicava ao operador POR QUE
+//  * a geração está desligada some do body. Sob bypass — que é como a demo roda — o front passa a
+//  * mostrar erro genérico ao gerar. O slug segue no log do servidor
+//  * (`financial-domain-error-5xx`), que é onde ele podia estar desde sempre.
+//  */
+// const refuseUnderRbacBypass: preHandlerAsyncHookHandler = async (_req, reply) => {
+//   if (resolveRbacMode(process.env) !== 'bypass') return undefined;
+//   return sendDomainError(reply, 'remittance-disabled-under-rbac-bypass');
+// };
 
 const financialRoutes =
   (deps: FinancialHttpDeps, hooks: FinancialHttpHooks): FastifyPluginAsyncZodOpenApi =>
@@ -1169,15 +1184,17 @@ const financialRoutes =
     // ⚠️ Única rota do módulo cuja chamada MOVE DINHEIRO: consome NSA, prende os documentos e grava
     // em `saida/`, e gravar ali é enfileirar pagamento no banco (ADR-0060).
     //
-    // A guarda contra o bypass vem ANTES da autorização de propósito. Sob `AUTH_RBAC_MODE=bypass`
-    // todo usuário autenticado é super-usuário (ADR-0052) — e `authorize` deixaria passar qualquer
-    // um. Deixar isso por conta da disciplina de deploy é apostar que ninguém esquecerá; a rota
-    // recusa sozinha, e a #634 deixa de ser um item de checklist.
+    // ⚠️ A guarda contra o bypass está DESATIVADA (comentada) por decisão do dono, 24/08/2026 — ver o
+    // bloco `refuseUnderRbacBypass` acima. Ela vinha ANTES da autorização de propósito, porque sob
+    // bypass todo autenticado é super-usuário (ADR-0052) e `authorize` deixa passar qualquer um.
+    // Com `resolveRbacMode` fixado em `bypass`, `authorize` NÃO barra ninguém aqui: esta rota está
+    // aberta a qualquer usuário autenticado, inclusive em produção. A #634 volta a ser item de
+    // checklist humano, que é precisamente o que a guarda existia para evitar.
     scope.route({
       method: 'POST',
       url: '/financial/remittances',
       preHandler: [
-        refuseUnderRbacBypass,
+        // refuseUnderRbacBypass,  ← descomentar junto com a definição para religar a guarda
         hooks.requireAuth,
         hooks.authorize(FINANCIAL_PERMISSION.remittanceGenerate),
       ],

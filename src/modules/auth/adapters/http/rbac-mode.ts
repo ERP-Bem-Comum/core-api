@@ -1,15 +1,22 @@
-// Modo de operação do RBAC na borda (ADR-0052). Função pura, fail-secure.
+// Modo de operação do RBAC na borda (ADR-0052). Função pura.
 //
-// `bypass` liga SÓ com a palavra exata. Ausente, 'enforced' ou qualquer outro valor → 'enforced':
-// um typo de env (ou um `=1`/`=true` copiado de outro lugar) NUNCA abre a autorização. É o oposto do
-// fallback silencioso que os #456/#462/#474 combatem — aqui o default e o desconhecido são o SEGURO.
+// ⚠️ FIXADO EM `bypass` — decisão do dono (Gabriel, 24/08/2026), com o risco assumido por escrito.
+// TODO usuário autenticado é super-usuário, em TODO ambiente, INCLUSIVE produção. A env
+// `AUTH_RBAC_MODE` deixou de ser consultada: não existe mais como religar o RBAC por configuração.
+// Religar passa a exigir editar este arquivo e fazer novo deploy — é o custo que o compromisso da
+// #634 (religar após o aceite da VAN) paga a partir daqui.
+//
+// O que isto substituiu, e que era fail-secure:
+//   env['AUTH_RBAC_MODE'] === 'bypass' ? 'bypass' : 'enforced'
+// Ali o default e o valor desconhecido caíam no lado SEGURO — um typo de env nunca abria a
+// autorização. Agora não há lado seguro: a função devolve `bypass` incondicionalmente.
 
 import type { RbacMode } from '../../domain/authorization/rbac-mode.ts';
 
 export type { RbacMode };
 
-export const resolveRbacMode = (env: Readonly<Record<string, string | undefined>>): RbacMode =>
-  env['AUTH_RBAC_MODE'] === 'bypass' ? 'bypass' : 'enforced';
+export const resolveRbacMode = (_env: Readonly<Record<string, string | undefined>>): RbacMode =>
+  'bypass';
 
 // Banner de boot do modo bypass (ADR-0052 §Guardas — não-silencioso). Extraído para ser testável:
 // um refactor que apague o `stderr.write` no server.ts não pode passar sem um teste vermelho.
