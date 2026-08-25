@@ -3,6 +3,7 @@ import { strict as assert } from 'node:assert';
 
 import { isErr, isOk } from '#src/shared/index.ts';
 import { createBradescoMultipagTranslator } from '#src/modules/financial/adapters/cnab/bradesco-multipag-translator.ts';
+import { inspectRemittanceFile } from '#src/modules/financial/adapters/cnab/remittance-inspector.ts';
 import type {
   RemittanceCedenteData,
   RemittancePaymentInput,
@@ -28,18 +29,20 @@ const CEDENTE: RemittanceCedenteData = {
   bankName: 'BRADESCO',
 };
 
+const PAYEE = {
+  name: 'FORNECEDOR EXEMPLO LTDA',
+  documentType: '2',
+  document: '98765432000111',
+  bankCode: '341',
+  agency: '4321',
+  agencyDigit: '0',
+  accountNumber: '112233',
+  accountDigit: '4',
+} as const;
+
 const PAYMENT: RemittancePaymentInput = {
   route: 'transfer',
-  payee: {
-    name: 'FORNECEDOR EXEMPLO LTDA',
-    documentType: '2',
-    document: '98765432000111',
-    bankCode: '341',
-    agency: '4321',
-    agencyDigit: '0',
-    accountNumber: '112233',
-    accountDigit: '4',
-  },
+  payee: PAYEE,
   valueCents: 123456,
   paymentDate: new Date(Date.UTC(2026, 7, 12)),
 };
@@ -69,6 +72,26 @@ describe('Tradutor Multipag — o caminho feliz', () => {
     const r = translate();
     assert.ok(isOk(r));
     assert.equal(r.value.content.length, (240 + 2) * r.value.lineCount);
+  });
+
+  // #862, CA4. Este é o caso ponta a ponta que a primitiva sozinha não prova: o tradutor roda o
+  // `inspectRemittanceFile` internamente e transforma qualquer defeito em `cnab-malformed-file` —
+  // então um `º` que sobrevivesse a `alpha()` chegaria ao operador como recusa da remessa INTEIRA,
+  // sem apontar campo, e com o NSA já consumido lá atrás por `generate-remittance`.
+  //
+  // A asserção é dupla de propósito: `isOk` prova que a remessa é gerada, e o inspetor devolvendo
+  // `[]` prova que ela é gerada LIMPA — não que o defeito foi tolerado em algum lugar.
+  it('gera arquivo limpo com favorecido cuja razão social tem não-ASCII', () => {
+    const r = translate({
+      payments: [{ ...PAYMENT, payee: { ...PAYEE, name: 'ACOUGUE Nº 12 – CENTRO LTDA' } }],
+    });
+
+    assert.ok(isOk(r), `esperava ok, veio ${isErr(r) ? r.error : '?'}`);
+    assert.deepEqual(inspectRemittanceFile(r.value.content), []);
+    assert.ok(
+      r.value.content.includes('ACOUGUE NO 12 - CENTRO LTDA'),
+      'o nome tem de chegar ao banco legível, não apagado',
+    );
   });
 });
 

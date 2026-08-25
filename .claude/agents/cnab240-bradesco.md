@@ -65,7 +65,7 @@ recebe dados já resolvidos, não conhece agregado nem repositório.
 
 | Arquivo | Responsabilidade |
 | :--- | :--- |
-| `positional.ts` | Primitivas de campo: `num`, `alpha`, `cents`, `digits`, `dateDDMMYYYY`, `joinFields`. Numérico que estoura é **erro**; alfa que estoura **trunca** — assimetria deliberada. |
+| `positional.ts` | Primitivas de campo: `num`, `alpha`, `cents`, `digits`, `dateDDMMYYYY`, `joinFields`. Numérico que estoura é **erro**; alfa que estoura **trunca** — assimetria deliberada. `alpha` é também a **única** redução a ASCII imprimível: `NFD` → caixa alta → tabela de transliteração → branco. |
 | `positional-read.ts` | As mesmas posições, na direção da leitura. O parser de retorno depende delas. |
 | `multipag-records.ts` | Envelope: header/trailer de arquivo e de lote. |
 | `multipag-segments.ts` | Detalhe: Segmentos A, B e J. `paymentRecords` é o ponto de entrada — um pagamento é o **par A+B**. |
@@ -123,8 +123,12 @@ Cada um tem origem rastreável. Se um deles parecer errado, **abra a issue e lei
 - **Totalizadores derivados das linhas emitidas**, nunca informados pelo chamador.
 - **Par A+B por pagamento.** `segmentA` isolado monta arquivo que o banco recusa.
 - **Sequencial de detalhe reinicia em `00001` por lote**; o arquivo é multi-lote desde #711.
-- **Normalização na borda, não no domínio.** Acento morre em `positional.ts`; o domínio guarda o
-  nome como o humano escreveu.
+- **Normalização na borda, não no domínio.** O domínio guarda o nome como o humano escreveu; quem
+  o traduz para o que o mainframe aceita é `positional.ts`. ⚠️ O invariante é **todo caractere fora
+  de `\x20-\x7E`**, e não "acento" — dizer "o `alpha` tira acento" é a descrição imprecisa que
+  deixou `º ª – ½` atravessarem inteiros por meses (#862). Ao escrever ou revisar campo de texto
+  livre, o teste tem de incluir **não-ASCII que não é letra acentuada**; um caso com `Á` e `Ç` passa
+  verde sobre o defeito, porque esses o `NFD` resolve e os outros não.
 
 **Hierarquia quando duas fontes discordam:**
 
@@ -198,10 +202,16 @@ Não altere arquivo nenhum neste modo. Diagnostique.
    ponto de partida.
 2. **Constante nomeada com o código do campo em comentário** (`// G029 — Forma de Lançamento`),
    nunca literal solto no meio da concatenação.
-3. **Normalização de texto passa por `positional.ts`, sempre.** Remover acento, forçar caixa alta,
-   truncar no tamanho do campo e completar com o preenchedor do tipo é responsabilidade de `alpha`
-   e `num` — não de quem chama. Uma segunda normalização espalhada pelo montador é a cópia que
-   diverge no dia em que a regra mudar.
+3. **Normalização de texto passa por `positional.ts`, sempre.** Reduzir a ASCII imprimível, forçar
+   caixa alta, truncar no tamanho do campo e completar com o preenchedor do tipo é responsabilidade
+   de `alpha` e `num` — não de quem chama. Uma segunda normalização espalhada pelo montador é a
+   cópia que diverge no dia em que a regra mudar, e `cnab.md` a cobra por gate.
+
+   ⚠️ **Caractere sem transliteração na tabela vira BRANCO, em silêncio.** É a escolha declarada em
+   `positional.ts` (#862), e o efeito colateral é que campo novo com alfabeto que a tabela não cobre
+   sai vazio sem ninguém acusar — o inspetor aprova branco. Ao introduzir campo de texto livre,
+   **verifique o resultado, não só a ausência de defeito**: `inspectRemittanceFile` devolvendo `[]`
+   é compatível com um campo inteiramente apagado.
 4. **Derive o que é derivável.** Ver §"O princípio da derivação" antes de aceitar um parâmetro novo.
 5. **Estenda `remittance-inspector.ts`** se a mudança criar um defeito que ele ainda não pega.
 6. **Teste que fatia a posição exata** de cada campo alterado, mais os invariantes (240, `CRLF`,

@@ -17,6 +17,16 @@ verify:
     root: 'src/modules/financial/application/ports'
     pattern: 'street'
     expect: []
+  - claim: 'o inspetor JÁ acusa não-ASCII — e acusa DEPOIS do NSA consumido, por isso normalizar é de alpha()'
+    root: 'src/modules/financial/adapters/cnab'
+    pattern: "'non-ascii-character'"
+    expect:
+      - 'src/modules/financial/adapters/cnab/remittance-inspector.ts'
+  - claim: 'a transliteração para ASCII vive só na primitiva — uma segunda cópia no montador é o drift (#862)'
+    root: 'src/modules/financial/adapters/cnab'
+    pattern: 'TRANSLITERATIONS'
+    expect:
+      - 'src/modules/financial/adapters/cnab/positional.ts'
 ---
 
 Emissor e parser do CNAB 240 Multipag Bradesco. É **ACL** ([ADR-0006](../../handbook/architecture/adr/0006-modular-monolith-core-api.md)): recebe dado resolvido, não conhece agregado nem repositório. A norma do banco vive na skill [`cnab240-bradesco`](../skills/cnab240-bradesco/SKILL.md) e o procedimento no agente [homônimo](../agents/cnab240-bradesco.md) — nada dos dois se repete aqui.
@@ -35,7 +45,9 @@ Emissor e parser do CNAB 240 Multipag Bradesco. É **ACL** ([ADR-0006](../../han
 
 - **Não conte caracteres dentro de corrida homogênea para afirmar deslocamento.** Um bloco de zeros ou brancos não tem marco: contar posição dentro dele produz laudo confiante e falso. Foi assim que os 83 zeros das posições `128-210` do Segmento B — que são o layout não-Pix correto (vencimento 8 + valor 15 + abatimento 15 + desconto 15 + mora 15 + multa 15) — viraram diagnóstico de "offset de 10 posições" numa análise que ninguém conseguiu refutar de cabeça. **A testemunha honesta é a borda**: onde a classe de caractere muda, e o que o layout diz que muda ali. Toda afirmação de deslocamento cita as duas.
 
-- **`remittance-inspector.ts` valida FORMA, e a lista do que ele não vê é curta o bastante para caber aqui.** Ele cobre comprimento, sequência, par A+B e os quatro totalizadores, acumulando todos os defeitos numa passada. Fora do alcance dele: **ASCII e caixa alta**, **campo Alfa preenchido com zeros**, **DV de CPF/CNPJ**, e o **endereço do Segmento B** (#858). Um arquivo que ele aprova pode ser recusado por qualquer um desses — e "zero defeitos" no inspetor nunca significou "o pagamento está correto", só "o banco não recusa por forma".
+- **`remittance-inspector.ts` valida FORMA, e a lista do que ele não vê é curta o bastante para caber aqui.** Ele cobre comprimento, sequência, par A+B, os quatro totalizadores **e — desde a mesma mudança que escreveu esta rule — ASCII e caixa alta**, acumulando todos os defeitos numa passada. Fora do alcance dele: **campo Alfa preenchido com zeros**, **DV de CPF/CNPJ**, e o **endereço do Segmento B** (#858). Um arquivo que ele aprova pode ser recusado por qualquer um desses — e "zero defeitos" no inspetor nunca significou "o pagamento está correto", só "o banco não recusa por forma".
+
+  ⚠️ **A checagem de ASCII acende TARDE, e essa é a parte que o código não conta.** `generate-remittance.ts` consome o NSA sob lock **antes** de mandar montar o arquivo, e o número não volta por desenho — gap na sequência é inofensivo, reusar número é retransmissão aos olhos do banco. Então um caractere não-ASCII vindo do cadastro não vira aviso: vira `cnab-malformed-file` **com um NSA já queimado**, e a mensagem ao operador não aponta campo nenhum. **A consequência para quem escreve campo novo:** normalizar é responsabilidade de `alpha()`, na ENTRADA — o inspetor é a rede de segurança contra regressão, nunca o lugar onde o dado sujo é tratado. Foi assim que `º ª – ½` viveram meses atravessando `alpha()` inteiros ([#862](https://github.com/ERP-Bem-Comum/core-api/issues/862)): `normalize('NFD')` decompõe letra + diacrítico **combinante**, e eles são caracteres próprios, sem decomposição canônica. Dizer "o `alpha` tira acento" é a descrição que deixou o defeito passar; o invariante é **todo caractere fora de `\x20-\x7E`**.
 
 - **Não existe `.REM` de referência que o banco tenha aceitado.** Não há base de diff, e procurar uma custa tempo. Também não há ambiente de homologação para remessa de pagamento: a única conexão é produção, no convênio real, onde arquivo de teste vira pagamento de verdade ([ADR-0061](../../handbook/architecture/adr/0061-van-bucket-contract-supersedes-0060-pendencies.md)). Validar a forma é o mais longe que se vai sem mover dinheiro — **nunca transmita para "testar"**.
 
