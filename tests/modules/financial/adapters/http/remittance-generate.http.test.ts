@@ -416,12 +416,22 @@ describe('financial/http — POST /remittances (#720) · guarda do bypass (#634)
     else process.env['AUTH_RBAC_MODE'] = originalMode;
   });
 
-  it('CA4: a rota recusa com 503 e código próprio enquanto o bypass estiver ligado', async () => {
+  // ⚠️ Este caso asseria o slug `remittance-disabled-under-rbac-bypass` NO BODY até o #792. Deixou de
+  // valer quando a guarda passou a sair por `sendDomainError`: o slug interno não vai em 5xx, fica só
+  // no log do servidor (OWASP API8:2023, #52). Era a última exceção do módulo a essa política — e o
+  // discriminador correto sempre foi o **status**, não o slug.
+  it('CA4: a rota recusa com 503 enquanto o bypass estiver ligado', async () => {
     const res = await generate([DOC_B]);
     assert.equal(res.statusCode, 503, res.body);
 
-    const body = res.json() as { error: { code: string } };
-    assert.equal(body.error.code, 'remittance-disabled-under-rbac-bypass');
+    // O envelope é o mesmo de todo 5xx do módulo, `requestId` inclusive — que é o contrato de
+    // `shared/http/errors.ts` e o que esta guarda não cumpria enquanto montava a resposta à mão.
+    const body = res.json() as { error: { code: string; requestId?: string } };
+    assert.equal(body.error.code, 'internal', 'slug interno não vaza em 5xx');
+    assert.ok(
+      typeof body.error.requestId === 'string' && body.error.requestId.length > 0,
+      'requestId presente: é por ele que se acha o slug real no log',
+    );
   });
 
   it('a recusa vem ANTES da autenticação — nem com token válido a rota opera', async () => {
@@ -465,13 +475,19 @@ describe('financial/http — POST /remittances (#720) · guarda do bypass (#634)
     );
     assert.equal(res.statusCode, 404, res.body);
 
-    // O envelope normaliza o 404 para o code genérico `not-found` — diferente do 503 da guarda de
-    // bypass logo acima, que preserva o slug próprio (`remittance-disabled-under-rbac-bypass`). A
-    // asserção que carrega o sentido deste teste é o **404 em vez de 503**: significa que a
-    // requisição atravessou as guardas e morreu no use case, por não achar a remessa. Se
+    // O discriminador é o **status**, e não o code: desde o #792 nenhum dos dois lados expõe slug
+    // interno — 4xx e 5xx colapsam no envelope público (OWASP API8:2023, #52). `404` significa que a
+    // requisição atravessou as guardas e morreu no use case, por não achar a remessa; se
     // `refuseUnderRbacBypass` estivesse nesta rota, ela pararia antes, com 503.
-    const body = res.json() as { error: { code: string } };
+    //
+    // `requestId` nos dois lados é o que torna o par auditável: qualquer que seja o desfecho, o slug
+    // real está no log e é por ele que se chega lá.
+    const body = res.json() as { error: { code: string; requestId?: string } };
     assert.equal(body.error.code, 'not-found');
+    assert.ok(
+      typeof body.error.requestId === 'string' && body.error.requestId.length > 0,
+      'requestId presente também no 404 — o contrato do envelope vale nos dois lados',
+    );
   });
 
   // O pré-voo NÃO é afetado: ele não move dinheiro, e travá-lo tiraria do operador justamente a
