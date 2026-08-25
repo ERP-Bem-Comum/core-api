@@ -252,4 +252,86 @@ describe('Inspetor — arquivo de vários lotes (#711, CA6)', () => {
 
     assert.ok(codes(corrupted).includes('file-batch-count-mismatch'));
   });
+
+  // ─── ASCII e caixa alta ──────────────────────────────────────────────────────────────────────
+  //
+  // `alpha()` já normaliza tudo que passa pelos combinadores, então estes casos não descrevem o
+  // fluxo normal: descrevem a REGRESSÃO em que alguém monta uma linha à mão, ou acrescenta um campo
+  // esquecendo `text()`. Sem eles, o defeito viaja até o banco.
+
+  it('acusa caractere não-ASCII e diz em que posição está', () => {
+    const found = inspectRemittanceFile(patch(validFile(1), 2, 44, 'JOSÉ')).filter(
+      (d) => d.code === 'non-ascii-character',
+    );
+
+    assert.equal(found.length, 1);
+    // A POSIÇÃO no detalhe é o ponto. "Tem acento nesta linha" devolve o operador a contar
+    // caractere a olho — que é o que produz laudo confiante e falso dentro de corrida homogênea.
+    assert.match(found[0]?.detail ?? '', /posição 47/);
+  });
+
+  it('acusa minúscula e diz em que posição está', () => {
+    const found = inspectRemittanceFile(patch(validFile(1), 2, 44, 'jose')).filter(
+      (d) => d.code === 'lowercase-character',
+    );
+
+    assert.equal(found.length, 1);
+    assert.match(found[0]?.detail ?? '', /posição 44/);
+  });
+
+  it('não acusa ASCII nem caixa no arquivo bem formado', () => {
+    const found = codes(validFile(2));
+
+    assert.ok(!found.includes('non-ascii-character'));
+    assert.ok(!found.includes('lowercase-character'));
+  });
+
+  // ─── Registro-régua ──────────────────────────────────────────────────────────────────────────
+
+  it('REGISTRO-RÉGUA: cada campo com valor distinto, porque registro zerado não prova alinhamento', () => {
+    // A armadilha que este caso existe para fechar: um arquivo cujos campos vizinhos carregam o
+    // MESMO conteúdo — zeros, brancos, ou o mesmo dígito — passa por qualquer asserção de posição,
+    // inclusive por uma que esteja lendo a coluna errada. Duas leituras deslocadas devolvem o
+    // mesmo texto, e o teste fica verde descrevendo um layout que não existe.
+    //
+    // A régua elimina a coincidência: cada campo recebe um valor RECONHECÍVEL e diferente dos
+    // vizinhos, de modo que ler uma posição adjacente devolva outra coisa. É o mesmo princípio do
+    // laudo — a testemunha honesta é a BORDA, onde o conteúdo muda.
+    const file = buildRemittanceFile({
+      cedente: { ...CEDENTE, agency: '1111', agencyDigit: '2', accountNumber: '333333' },
+      bankName: 'BRADESCO',
+      nsa: 7,
+      generatedAt: new Date(Date.UTC(2026, 7, 10, 14, 5, 9)),
+      payments: [
+        {
+          route: 'transfer' as const,
+          payee: {
+            ...payee(1),
+            agency: '4444',
+            agencyDigit: '5',
+            accountNumber: '666666',
+            accountDigit: '7',
+          },
+          paymentDate: new Date(Date.UTC(2026, 7, 12)),
+          valueCents: 123456,
+        },
+      ],
+    });
+    assert.ok(isOk(file));
+
+    const segmentA = recordsOf(file.value.content)[2] ?? '';
+    const at = (from: number, to: number): string => segmentA.slice(from - 1, to);
+
+    // Agência do favorecido, DV, conta e DV — quatro campos contíguos, quatro valores distintos.
+    // Se qualquer um estiver deslocado de uma posição, um destes quatro muda.
+    assert.equal(at(24, 28), '04444', 'agência do favorecido, 024-028');
+    assert.equal(at(29, 29), '5', 'DV da agência, 029 — a posição que o G059 AM cobra');
+    assert.equal(at(30, 41), '000000666666', 'conta do favorecido, 030-041');
+    assert.equal(at(42, 42), '7', 'DV da conta, 042');
+
+    // E o valor, que é o campo cujo deslocamento custa dinheiro.
+    assert.equal(at(120, 134), '000000000123456', 'valor do pagamento, 120-134');
+
+    assert.deepEqual(inspectRemittanceFile(file.value.content), []);
+  });
 });

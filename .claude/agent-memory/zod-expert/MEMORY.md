@@ -1,0 +1,1 @@
+- [edit-use-cases-skip-smart-constructor](reference_edit-use-cases-skip-smart-constructor.md) — PATCH use cases (ex. cedente-account) fazem spread sem chamar create(); invariante novo não protege edição

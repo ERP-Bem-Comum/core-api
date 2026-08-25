@@ -25,6 +25,8 @@ import { RECORD_LENGTH, at, detailSequence, recordType, segment } from './positi
 export type RemittanceDefectCode =
   | 'empty-file'
   | 'line-length'
+  | 'non-ascii-character'
+  | 'lowercase-character'
   | 'unknown-record-type'
   | 'unknown-segment'
   | 'missing-file-header'
@@ -71,6 +73,28 @@ const paymentCentsOf = (line: string): number | null => {
   }
 };
 
+// O arquivo é ASCII 7 bits em caixa alta (layout, pág. 10). Espaço e dígito passam; qualquer coisa
+// acima de `0x7E` é acento ou caractere de controle que não sobrevive ao trânsito até o mainframe.
+const NON_ASCII = /[^\x20-\x7E]/;
+const LOWERCASE = /[a-z]/;
+
+// ⚠️ O QUE ESTA INSPEÇÃO DELIBERADAMENTE NÃO FAZ, e por quê — porque cada um trava a emissão
+// inteira, e travar é pior que o defeito enquanto a causa não está corrigida:
+//
+//   · DV de CPF/CNPJ. É crítica de recusa real (G059 'AT'), mas o CNPJ do seed local reprova no
+//     dígito (#804, §"não são defeitos — é dado de teste"): ligar a checagem aqui deixaria o
+//     ambiente de desenvolvimento sem conseguir gerar remessa nenhuma. Entra junto com a limpeza do
+//     seed, não antes.
+//
+//   · Endereço do favorecido no Segmento B (G059 'AU'/'AV'/'AW'/'AX'/'AY'). O campo não existe no
+//     port do tradutor, então sai em branco em 100% das remessas (#858). Acusá-lo aqui hoje
+//     bloquearia toda emissão — o gate tem de entrar na MESMA mudança que passa a preencher o
+//     campo, e é isso que a #858 registra.
+//
+// A regra que as duas omissões compartilham: gate blocking só se acende quando o caminho verde já
+// existe. Antes disso ele não protege ninguém — só troca um arquivo recusado pelo banco por uma
+// operação parada, e o registro do defeito é a issue, não o `throw`.
+
 // Estado do lote em aberto durante a varredura. Mutável de propósito e confinado a esta função: é
 // um acumulador, não um valor de domínio.
 interface OpenBatch {
@@ -108,6 +132,24 @@ export const inspectRemittanceFile = (content: string): readonly RemittanceDefec
         'line-length',
         `${String(line.length)} posições, esperado ${String(RECORD_LENGTH)}`,
       );
+    }
+
+    // ASCII e caixa alta. `alpha()` já normaliza tudo que passa por ele — acento removido, caixa
+    // forçada —, então uma linha que chega aqui suja veio por outro caminho: literal montada à mão,
+    // concatenação fora dos combinadores, ou um campo novo que esqueceu `text()`. É defesa em
+    // profundidade contra a regressão, não contra o fluxo normal.
+    //
+    // ⚠️ A posição do PRIMEIRO caractere ofensor vai no detalhe. Sem ela, o operador recebe "tem
+    // acento nesta linha" e volta a contar caractere a olho — que é justamente o que produz laudo
+    // confiante e falso dentro de corrida homogênea.
+    const nonAscii = line.search(NON_ASCII);
+    if (nonAscii !== -1) {
+      add(i + 1, 'non-ascii-character', `caractere não-ASCII na posição ${String(nonAscii + 1)}`);
+    }
+
+    const lower = line.search(LOWERCASE);
+    if (lower !== -1) {
+      add(i + 1, 'lowercase-character', `minúscula na posição ${String(lower + 1)}`);
     }
   });
 
