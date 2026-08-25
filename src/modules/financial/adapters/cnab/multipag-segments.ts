@@ -104,6 +104,23 @@ export type SegmentBInput = Readonly<{
   batchNumber: number;
   recordNumber: number;
   payee: Payee;
+  // G044 e G042, colunas 128-135 e 136-150 — o VENCIMENTO e o VALOR NOMINAIS do título, no grupo
+  // "Dados Complementares – Pagamento" (layout p.25, campos 17.3B e 18.3B; descrições na p.103).
+  // Ambos declarados **Obrigatório – Remessa / Retorno**, e ambos saíam zerados: é o defeito 5 da
+  // #804 — a única recusa da fila confirmada POR ESCRITO pelo banco, com as frases literais "Data
+  // de vencimento (nominal) não informada ou inválida" e "Valor do documento (nominal) não
+  // informado ou inválido". G059 §'AP' (p.107) enumera o caso do campo de data ZERADO.
+  //
+  // OBRIGATÓRIOS: sem `?`, sem default. Um `dueDate?` com `?? 0` compilaria em todo chamador e
+  // reproduziria o defeito que esta mudança corrige — é o padrão que a rule `cnab.md` registra em
+  // cinco casos, e o quarto deles (`address?`, logo abaixo) segue aberto na #858, emitindo branco em
+  // 100% das remessas. Aqui o compilador cobra quem esquecer.
+  //
+  // Os nomes espelham `SegmentJInput`: mesmos códigos G, mesmo significado, mesmo nome. A rota de
+  // BOLETO sempre distinguiu `dueDate`/`titleValueCents` de `paymentDate`/`paymentValueCents` — a
+  // assimetria era a transferência não declarar o que o layout separa por desenho.
+  dueDate: Date;
+  titleValueCents: number;
   address?: PayeeAddress;
 }>;
 
@@ -221,8 +238,12 @@ export const segmentB = (input: SegmentBInput): Result<string, CnabSegmentError>
     digits(a?.zipCode ?? '0', 5), // 118-122 CEP
     text(a?.zipSuffix ?? '', 3), // 123-125 complemento do CEP
     text(a?.state ?? '', 2), // 126-127 estado
-    num(0, 8), // 128-135 vencimento nominal
-    num(0, 15), // 136-150 valor do documento nominal
+    dateDDMMYYYY(input.dueDate), // 128-135 vencimento nominal (G044) — DDMMAAAA, p.103
+    cents(input.titleValueCents, 15), // 136-150 valor do documento nominal (G042) — 13 + 2
+    // 151-210 abatimento, desconto, mora e multa (G045-G048). Zerados por DECISÃO, não por omissão:
+    // não se aplicam a crédito em conta, e `RemittanceTransferPayment` não os modela. É a mesma
+    // fronteira do parágrafo de `paymentRecords` — o dia em que houver desconto ou mora é o dia em
+    // que o Segmento B precisa de fonte própria, e estes quatro campos deixam de ser zero junto.
     num(0, 15), // 151-165 abatimento
     num(0, 15), // 166-180 desconto
     num(0, 15), // 181-195 mora
@@ -325,11 +346,33 @@ export const paymentRecords = (
   });
   if (!a.ok) return a;
 
+  // ⚠️ AQUI MORA UMA AFIRMAÇÃO SOBRE O NEGÓCIO, não uma consequência técnica — e ela tem efeito
+  // visível: o Segmento B 128-135 sai IDÊNTICO ao Segmento A 094-101, e o B 136-150 idêntico ao A
+  // 120-134. Quem ler os dois pares vai achar que é bug. Não é, e o layout separa os dois POR
+  // DESENHO: se fossem a mesma coisa, os campos do B não existiriam.
+  //
+  // O QUE A SUSTENTA, hoje: a remessa é gerada POR VENCIMENTO (decisão da P.O., #711); o reader
+  // colapsa vencimento e data de pagamento numa variável só de propósito, para o arquivo citar a
+  // mesma data que o operador vê na tela (`remittance-payment-reader.drizzle.ts`, #270); e
+  // `RemittanceTransferPayment` não modela desconto, abatimento nem mora. Paga-se o valor do
+  // título, no dia do vencimento — logo nominal e pago coincidem.
+  //
+  // O QUE A DERRUBA: pagamento fora do vencimento (antecipação ou atraso), ou título com desconto
+  // ou mora. Nesse dia 094-101 e 128-135 divergem, e manter o repasse faz o arquivo declarar como
+  // vencimento uma data que não é a do título. ⚠️ O banco ACEITA esse arquivo — o defeito não seria
+  // recusado como este foi, seria pago em silêncio com o título constando errado.
+  //
+  // O caminho para lá já está aberto: `SegmentBInput` declara os campos SEPARADOS, então basta
+  // `PaymentRecordsInput` passar a carregá-los e o port `RemittanceTransferPayment` ganhar
+  // `dueDate` — que `RemittanceBilletPayment` já tem. É a opção (B) da #812, deixada de fora do
+  // escopo por escolha, não por descuido.
   const b = segmentB({
     bankCode: input.bankCode,
     batchNumber: input.batchNumber,
     recordNumber: input.firstRecordNumber + 1,
     payee: input.payee,
+    dueDate: input.paymentDate,
+    titleValueCents: input.valueCents,
     ...(input.address !== undefined ? { address: input.address } : {}),
   });
   if (!b.ok) return b;
